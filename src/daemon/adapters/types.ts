@@ -47,6 +47,13 @@ export interface TaskSpec {
   sandbox: SandboxMode;
   /** Whether the child may reach the network (ADR-0006 default: on). */
   network: boolean;
+  /**
+   * The task's `--answer-timeout` in ms (the daemon default when unset). Adapters
+   * that route `ask_orchestrator` through the vendor's MCP client must raise the
+   * vendor's per-tool timeout above this, or a blocking question is killed before
+   * the orchestrator can answer (codex's `tool_timeout_sec` defaults to 60s).
+   */
+  answerTimeoutMs: number;
   /** Persisted vendor session id — set when resuming a stalled task. */
   sessionId?: string;
 }
@@ -83,6 +90,13 @@ export interface SpawnPlan {
 export interface VendorEvent {
   kind: "message" | "command" | "file_change" | "error" | "session_meta";
   text?: string;
+  /**
+   * On `error` events: true when the vendor reported a run-terminal failure
+   * (codex `turn.failed` / top-level `error`), as opposed to a recoverable
+   * mid-run error item the agent may work past. Only fatal errors are surfaced
+   * as task failure detail — vendor exit codes are often opaque (codex: 0/1).
+   */
+  fatal?: boolean;
   session_id?: string;
   usage?: Record<string, number>;
 }

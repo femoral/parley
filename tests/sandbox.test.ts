@@ -98,6 +98,7 @@ describe("posture survives resume", () => {
       cwd: "/tmp",
       sandbox: "read-only",
       network: false,
+      answerTimeoutMs: 1_800_000,
       sessionId: "sess-1",
     };
 
