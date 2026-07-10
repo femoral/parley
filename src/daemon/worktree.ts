@@ -110,6 +110,38 @@ function appendExclude(wt: string, entries: string[]): void {
   git(["-C", wt, "config", "--worktree", "core.excludesFile", excludePath]);
 }
 
+/**
+ * Git-exclude vendor-materialized files (e.g. grok's `.grok/config.toml`) from a
+ * worktree, so parley plumbing never shows in the child's `git status`, never
+ * counts as "modified" (which would block auto-remove), and can never be staged
+ * by the child. Each file is excluded by its exact rooted path — never a whole
+ * directory, which could hide unrelated child-authored files sharing that dir
+ * (and let real work be auto-removed as "untouched"). Called by the engine
+ * before spawning a worktree task, on fresh runs and resumes alike: entries
+ * already present in the exclude file are skipped, so respawns don't grow it.
+ * Additive to the same worktree-scoped exclude file `translateConfig`'s entries
+ * live in; a `--cwd` task has no parley worktree to manage.
+ */
+export function excludeMaterializedFiles(wtPath: string, relPaths: string[]): void {
+  const entries = [
+    ...new Set(
+      relPaths
+        .map((rel) => rel.replace(/^\/+/, ""))
+        .filter((rel) => rel !== "")
+        .map((rel) => `/${rel}`),
+    ),
+  ];
+  const gitDir = git(["-C", wtPath, "rev-parse", "--absolute-git-dir"]);
+  const excludePath = path.join(gitDir, "parley-exclude");
+  let existing: Set<string> = new Set();
+  try {
+    existing = new Set(fs.readFileSync(excludePath, "utf8").split("\n"));
+  } catch {
+    /* no exclude file yet */
+  }
+  appendExclude(wtPath, entries.filter((entry) => !existing.has(entry)));
+}
+
 export interface CreateWorktreeOptions {
   /** Top-level of the source repository (from `repoRoot`). */
   repoRoot: string;
