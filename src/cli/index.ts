@@ -1,6 +1,7 @@
 import { homePathsFromEnv } from "../home.js";
 import { type CliContext } from "./context.js";
 import { HelpRequested, UsageError } from "./errors.js";
+import { runClean } from "./commands/clean.js";
 import { runDaemon } from "./commands/daemon.js";
 import { runDelegate } from "./commands/delegate.js";
 import { runLogs } from "./commands/logs.js";
@@ -13,11 +14,14 @@ Usage:
     -v --vendor <id>   Vendor adapter (required)
     -m --model <id>    Model, passed through to the vendor
     -n --name <label>  Human label; usable wherever a task id is
-    --cwd <path>       Working directory for the child (default: here)
+    --cwd <path>       Run in this dir directly (skips worktree creation)
+    --base-ref <ref>   Branch the worktree from <ref> (default: HEAD)
     --wait             Block until terminal state; print report envelope
   parley [list]                 Show the task table (alias for bare status)
   parley status [task] [--json] Show all tasks, or one (id or name)
   parley logs <task> [--follow] Print the raw captured vendor stream
+  parley clean <task>           Remove a finished task's worktree (keeps branch)
+  parley clean --all-terminal   Sweep worktrees of all terminal-state tasks
   parley daemon start           Start the background daemon
   parley daemon stop            Stop the background daemon
   parley daemon status          Report daemon port/pid
@@ -52,6 +56,8 @@ export async function run(argv: string[], ctx: CliContext): Promise<number> {
       return runStatus(ctx, rest);
     case "logs":
       return runLogs(ctx, rest);
+    case "clean":
+      return runClean(ctx, rest);
     case "daemon":
       return runDaemon(ctx, rest);
     default:

@@ -40,6 +40,7 @@ export async function runDelegate(ctx: CliContext, args: string[]): Promise<numb
     "--model": { aliases: ["-m"], value: true },
     "--name": { aliases: ["-n"], value: true },
     "--cwd": { value: true },
+    "--base-ref": { value: true },
     "--wait": {},
     "--json": {},
   });
@@ -57,6 +58,12 @@ export async function runDelegate(ctx: CliContext, args: string[]): Promise<numb
     throw new UsageError("delegate: a vendor is required (-v/--vendor)");
   }
 
+  // `--cwd` runs the child directly in that directory (no worktree). Its
+  // absence is the default path: parley cuts an isolated worktree from the
+  // repo the caller is in, which the daemon detects at the invocation cwd.
+  const explicitCwd = typeof flags["--cwd"] === "string";
+  const cwd = explicitCwd ? (flags["--cwd"] as string) : process.cwd();
+
   const discovery = await ensureDaemon(ctx.paths, ctx.env);
   let ack: DelegateAck;
   try {
@@ -65,7 +72,9 @@ export async function runDelegate(ctx: CliContext, args: string[]): Promise<numb
       vendor,
       model: flags["--model"] ?? null,
       name: flags["--name"] ?? null,
-      cwd: flags["--cwd"] ?? process.cwd(),
+      cwd,
+      use_worktree: !explicitCwd,
+      base_ref: flags["--base-ref"] ?? null,
     });
   } catch (err) {
     // Daemon-side request rejections (unknown vendor, bad cwd) are usage errors.

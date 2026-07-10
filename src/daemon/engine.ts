@@ -8,6 +8,7 @@ import {
   getTask,
   insertTask,
   listTasks,
+  nextTaskId,
   resolveTask,
   updateTask,
   TERMINAL_STATES,
@@ -16,6 +17,12 @@ import {
 } from "./db.js";
 import { taskLogDir } from "./discovery.js";
 import { validateReport, type Report } from "./report.js";
+import {
+  createWorktree,
+  isWorktreeModified,
+  removeWorktree,
+  repoRoot,
+} from "./worktree.js";
 
 /** Correlation header children send on every MCP request (ADR-0003). */
 export const TASK_HEADER = "x-parley-task";
@@ -25,12 +32,25 @@ export class DelegateError extends Error {
   override readonly name = "DelegateError";
 }
 
+/** Best-effort message from a thrown value (git errors arrive as `Error`). */
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
 export interface DelegateRequest {
   prompt: string;
   vendor: string;
   model: string | null;
   name: string | null;
+  /** The invocation directory: an explicit `--cwd`, else the caller's cwd. */
   cwd: string;
+  /**
+   * Whether to create an isolated worktree (default path). False when the
+   * caller passed `--cwd`, which runs the child directly in that directory.
+   */
+  useWorktree: boolean;
+  /** Ref to branch the worktree from; null means the repo's current HEAD. */
+  baseRef: string | null;
 }
 
 /**
@@ -94,20 +114,120 @@ export class TaskEngine {
       throw new DelegateError(`cwd is not a directory: ${cwd}`);
     }
 
+    // `--cwd` runs the child directly in that directory (no worktree); the
+    // default path creates a parley-owned worktree from the repo's HEAD.
+    let repo = cwd;
+    let workingDir = cwd;
+    let worktreePath: string | null = null;
+    let branch: string | null = null;
+    let baseSha: string | null = null;
+
+    // The branch name embeds the id, so the id is allocated before the row.
+    const id = nextTaskId(this.db);
+
+    if (request.useWorktree) {
+      const root = repoRoot(cwd);
+      if (root === null) {
+        throw new DelegateError(
+          `not a git repository: ${cwd} — pass --cwd to delegate outside a worktree`,
+        );
+      }
+      let info;
+      try {
+        info = createWorktree({
+          repoRoot: root,
+          worktreesDir: this.paths.worktrees,
+          taskId: id,
+          name: request.name,
+          baseRef: request.baseRef,
+        });
+      } catch (err) {
+        throw new DelegateError(`failed to create worktree: ${errorMessage(err)}`);
+      }
+      repo = root;
+      workingDir = info.path;
+      worktreePath = info.path;
+      branch = info.branch;
+      baseSha = info.baseSha;
+    }
+
     const row = insertTask(this.db, {
+      id,
       name: request.name,
       vendor: request.vendor,
       model: request.model,
-      // No worktrees yet (#19): the task is tagged with its working directory.
-      repo: cwd,
-      cwd,
+      repo,
+      cwd: workingDir,
       prompt: request.prompt,
+      worktree: worktreePath,
+      branch,
+      base_sha: baseSha,
     });
 
     void this.run(row, adapter).catch((err: unknown) => {
       this.fail(row.id, `task runner crashed: ${String(err)}`);
     });
     return row;
+  }
+
+  /**
+   * Remove a task's worktree (keeping its branch — parley never merges). Refuses
+   * tasks that are not in a terminal state. A `--cwd` task (no worktree) is a
+   * no-op. Throws `DelegateError` (→ exit 2) on refusal or an unknown ref.
+   */
+  clean(ref: string): { task_id: string; worktree: string | null; removed: boolean } {
+    const task = resolveTask(this.db, ref);
+    if (!task) throw new DelegateError(`no such task: ${ref}`);
+    if (!TERMINAL_STATES.has(task.state)) {
+      throw new DelegateError(
+        `task ${task.id} is ${task.state}; refusing to clean a task that is still running`,
+      );
+    }
+    if (task.worktree === null) return { task_id: task.id, worktree: null, removed: false };
+    try {
+      this.removeTaskWorktree(task);
+    } catch (err) {
+      throw new DelegateError(`failed to remove worktree: ${errorMessage(err)}`);
+    }
+    return { task_id: task.id, worktree: task.worktree, removed: true };
+  }
+
+  /**
+   * Sweep worktrees for every terminal-state task; running tasks are skipped.
+   * Removal failures are reported (not silently dropped) and retried next sweep.
+   */
+  cleanAllTerminal(): {
+    cleaned: { task_id: string; worktree: string }[];
+    failed: { task_id: string; worktree: string; error: string }[];
+  } {
+    const cleaned: { task_id: string; worktree: string }[] = [];
+    const failed: { task_id: string; worktree: string; error: string }[] = [];
+    for (const task of listTasks(this.db)) {
+      if (!TERMINAL_STATES.has(task.state) || task.worktree === null) continue;
+      try {
+        this.removeTaskWorktree(task);
+        cleaned.push({ task_id: task.id, worktree: task.worktree });
+      } catch (err) {
+        failed.push({ task_id: task.id, worktree: task.worktree, error: errorMessage(err) });
+      }
+    }
+    return { cleaned, failed };
+  }
+
+  /**
+   * Remove a task's worktree from disk and clear its `worktree` column (the
+   * branch is always kept). Throws on git failure — callers choose whether
+   * that's fatal (clean), reported (sweep), or best-effort (auto-remove).
+   */
+  private removeTaskWorktree(task: TaskRow): void {
+    if (task.worktree === null) return;
+    if (task.repo === null) {
+      // Worktree tasks always record their source repo; a null here is a
+      // corrupt row, and silently nulling the worktree would orphan the dir.
+      throw new Error(`task ${task.id} has a worktree but no repo recorded`);
+    }
+    removeWorktree(task.repo, task.worktree);
+    updateTask(this.db, task.id, { worktree: null });
   }
 
   /**
@@ -168,6 +288,23 @@ export class TaskEngine {
     if (!set) return;
     this.waiters.delete(taskId);
     for (const wake of set) wake();
+  }
+
+  /**
+   * Auto-remove the task's worktree once its child has exited, but only when it
+   * is untouched (no new commits, clean tree). Modified worktrees are kept so
+   * the orchestrator can review and merge; `--cwd` tasks have no worktree.
+   */
+  private maybeAutoRemoveWorktree(taskId: string): void {
+    const task = getTask(this.db, taskId);
+    if (!task || !TERMINAL_STATES.has(task.state)) return;
+    if (task.worktree === null || task.base_sha === null) return;
+    if (isWorktreeModified(task.worktree, task.base_sha)) return;
+    try {
+      this.removeTaskWorktree(task);
+    } catch {
+      // leave it in place if git refuses; `parley clean` can retry
+    }
   }
 
   private fail(taskId: string, error: string): void {
@@ -269,6 +406,10 @@ export class TaskEngine {
           // without one is a failure, whatever the exit code says.
           this.fail(task.id, `vendor child exited (code ${code ?? "?"}) without submitting a report`);
         }
+        // The child has exited, so its worktree is free to reclaim: an untouched
+        // one is auto-removed; any new commits or dirty files retain it for the
+        // orchestrator to review (spec §6).
+        this.maybeAutoRemoveWorktree(task.id);
         resolve();
       });
     });

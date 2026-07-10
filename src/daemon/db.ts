@@ -41,16 +41,27 @@ export interface TaskRow {
   error: string | null;
   started_at: string | null;
   completed_at: string | null;
+  /** Absolute path to the parley-created worktree; null when `--cwd` bypassed it. */
+  worktree: string | null;
+  /** The branch parley created for the task (`parley/<id>-<name>`). */
+  branch: string | null;
+  /** The commit the worktree branched from — the baseline for auto-remove. */
+  base_sha: string | null;
 }
 
 /** Fields the daemon writes when creating a task. */
 export interface NewTask {
+  /** Pre-allocated short id (worktree creation needs it before insert). */
+  id: string;
   name: string | null;
   vendor: string;
   model: string | null;
   repo: string | null;
   cwd: string;
   prompt: string;
+  worktree: string | null;
+  branch: string | null;
+  base_sha: string | null;
 }
 
 /**
@@ -83,6 +94,11 @@ const MIGRATIONS: string[] = [
      name  TEXT PRIMARY KEY,
      value INTEGER NOT NULL
    );`,
+  // #19: worktree lifecycle — the parley-created worktree path, its branch, and
+  // the commit it branched from (the baseline for untouched auto-remove).
+  `ALTER TABLE tasks ADD COLUMN worktree TEXT;
+   ALTER TABLE tasks ADD COLUMN branch TEXT;
+   ALTER TABLE tasks ADD COLUMN base_sha TEXT;`,
 ];
 
 function migrate(db: DatabaseHandle): void {
@@ -111,7 +127,8 @@ export function openDatabase(paths: HomePaths): DatabaseHandle {
 }
 
 const TASK_COLUMNS = `id, name, vendor, model, repo, state, created_at, updated_at,
-   cwd, prompt, session_id, usage, report, error, started_at, completed_at`;
+   cwd, prompt, session_id, usage, report, error, started_at, completed_at,
+   worktree, branch, base_sha`;
 
 /** List all tasks, newest first. */
 export function listTasks(db: DatabaseHandle): TaskRow[] {
@@ -154,15 +171,33 @@ export function nextTaskId(db: DatabaseHandle): string {
   return `t${row.value}`;
 }
 
-/** Insert a new task in `pending` state and return its row. */
+/**
+ * Insert a new task in `pending` state and return its row. The id is allocated
+ * by the caller (via `nextTaskId`) because worktree creation — which names its
+ * branch `parley/<id>-…` — must happen before the row exists.
+ */
 export function insertTask(db: DatabaseHandle, task: NewTask): TaskRow {
-  const id = nextTaskId(db);
   const now = new Date().toISOString();
   db.prepare(
-    `INSERT INTO tasks (id, name, vendor, model, repo, state, created_at, updated_at, cwd, prompt)
-     VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?)`,
-  ).run(id, task.name, task.vendor, task.model, task.repo, now, now, task.cwd, task.prompt);
-  return getTask(db, id)!;
+    `INSERT INTO tasks
+       (id, name, vendor, model, repo, state, created_at, updated_at,
+        cwd, prompt, worktree, branch, base_sha)
+     VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    task.id,
+    task.name,
+    task.vendor,
+    task.model,
+    task.repo,
+    now,
+    now,
+    task.cwd,
+    task.prompt,
+    task.worktree,
+    task.branch,
+    task.base_sha,
+  );
+  return getTask(db, task.id)!;
 }
 
 /** Patch mutable task fields; bumps `updated_at`. */
@@ -172,7 +207,14 @@ export function updateTask(
   patch: Partial<
     Pick<
       TaskRow,
-      "state" | "session_id" | "usage" | "report" | "error" | "started_at" | "completed_at"
+      | "state"
+      | "session_id"
+      | "usage"
+      | "report"
+      | "error"
+      | "started_at"
+      | "completed_at"
+      | "worktree"
     >
   >,
 ): void {

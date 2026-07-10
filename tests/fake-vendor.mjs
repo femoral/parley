@@ -11,12 +11,15 @@
  *   { "emit": {...} }                       print a JSONL event line
  *   { "emit_raw": "text" }                  print a raw (non-JSON) line
  *   { "sleep": 250 }                        wait ms
+ *   { "write_file": { "path": "...", "contents": "..." } }  write a file in cwd
+ *   { "git_commit": { "message": "..." } }  stage all + commit in cwd
  *   { "submit_report": {...} }              MCP tools/call submit_report
  *   { "call_tool": { "name": "...", "args": {...} } }
  *   { "exit": 0 }                           exit early with code
  * The result of each tool call is echoed to stdout as a JSONL event
  * ({"type":"tool_result", ...}) so tests can observe validation bounces.
  */
+import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -94,6 +97,16 @@ async function main() {
     if (action.emit !== undefined) emit(action.emit);
     else if (action.emit_raw !== undefined) process.stdout.write(`${action.emit_raw}\n`);
     else if (action.sleep !== undefined) await sleep(action.sleep);
+    else if (action.write_file !== undefined) {
+      const target = path.join(process.cwd(), action.write_file.path);
+      fs.mkdirSync(path.dirname(target), { recursive: true });
+      fs.writeFileSync(target, action.write_file.contents ?? "");
+    } else if (action.git_commit !== undefined) {
+      execFileSync("git", ["add", "-A"], { cwd: process.cwd() });
+      execFileSync("git", ["commit", "-m", action.git_commit.message ?? "child commit"], {
+        cwd: process.cwd(),
+      });
+    }
     else if (action.submit_report !== undefined) await callTool("submit_report", action.submit_report);
     else if (action.call_tool !== undefined) await callTool(action.call_tool.name, action.call_tool.args ?? {});
     else if (action.exit !== undefined) process.exit(action.exit);
