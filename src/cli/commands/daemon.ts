@@ -1,3 +1,4 @@
+import { parseArgs } from "../args.js";
 import { type CliContext, printJson } from "../context.js";
 import { UsageError } from "../errors.js";
 import {
@@ -113,11 +114,10 @@ function daemonStatus(ctx: CliContext, json: boolean): number {
 }
 
 /** Dispatch `parley daemon <start|stop|status>`. */
-export async function runDaemon(
-  ctx: CliContext,
-  sub: string | undefined,
-  json: boolean,
-): Promise<number> {
+export async function runDaemon(ctx: CliContext, args: string[]): Promise<number> {
+  const { positionals, flags } = parseArgs(args, { "--json": {} });
+  const sub = positionals[0];
+  const json = flags["--json"] === true;
   switch (sub) {
     case "start":
       return daemonStart(ctx, json);

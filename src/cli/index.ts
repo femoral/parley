@@ -1,14 +1,23 @@
 import { homePathsFromEnv } from "../home.js";
 import { type CliContext } from "./context.js";
-import { UsageError } from "./errors.js";
+import { HelpRequested, UsageError } from "./errors.js";
 import { runDaemon } from "./commands/daemon.js";
+import { runDelegate } from "./commands/delegate.js";
+import { runLogs } from "./commands/logs.js";
 import { runStatus } from "./commands/tasks.js";
 
 const HELP = `parley — delegate tasks to agent CLIs
 
 Usage:
+  parley delegate [flags] "<prompt>"  Delegate a task ('-' reads stdin)
+    -v --vendor <id>   Vendor adapter (required)
+    -m --model <id>    Model, passed through to the vendor
+    -n --name <label>  Human label; usable wherever a task id is
+    --cwd <path>       Working directory for the child (default: here)
+    --wait             Block until terminal state; print report envelope
   parley [list]                 Show the task table (alias for bare status)
-  parley status [task] [--json] Show all tasks, or one
+  parley status [task] [--json] Show all tasks, or one (id or name)
+  parley logs <task> [--follow] Print the raw captured vendor stream
   parley daemon start           Start the background daemon
   parley daemon stop            Stop the background daemon
   parley daemon status          Report daemon port/pid
@@ -17,55 +26,34 @@ Usage:
 Global flags:
   --json    Emit machine-readable JSON
   -h,--help Show this help
+
+Exit codes (delegate --wait): 0 completed · 1 failed · 2 usage · 3 question ·
+4 stalled · 5 cancelled.
 `;
-
-interface ParsedArgs {
-  positionals: string[];
-  json: boolean;
-  help: boolean;
-}
-
-function parseArgs(argv: string[]): ParsedArgs {
-  const positionals: string[] = [];
-  let json = false;
-  let help = false;
-
-  for (const arg of argv) {
-    if (arg === "--json") {
-      json = true;
-    } else if (arg === "-h" || arg === "--help") {
-      help = true;
-    } else if (arg.startsWith("-") && arg !== "-") {
-      throw new UsageError(`unknown flag: ${arg}`);
-    } else {
-      positionals.push(arg);
-    }
-  }
-
-  return { positionals, json, help };
-}
 
 /**
  * Parse and dispatch a parley command line. Returns the process exit code.
  * Throws `UsageError` for bad invocations (mapped to exit 2 by the caller).
  */
 export async function run(argv: string[], ctx: CliContext): Promise<number> {
-  const { positionals, json, help } = parseArgs(argv);
-
-  if (help) {
-    ctx.stdout(HELP);
-    return 0;
-  }
-
-  const command = positionals[0] ?? "list";
+  const first = argv[0];
+  // A leading flag means the implicit `list` command (`parley --json`); each
+  // command's own parser handles -h/--help (raising HelpRequested) so flag
+  // *values* that merely look like --help are never hijacked.
+  const bareFlags = first !== undefined && first.startsWith("-") && first !== "-";
+  const command = bareFlags || first === undefined ? "list" : first;
+  const rest = bareFlags ? argv : argv.slice(1);
 
   switch (command) {
+    case "delegate":
+      return runDelegate(ctx, rest);
     case "list":
-      return runStatus(ctx, undefined, json);
     case "status":
-      return runStatus(ctx, positionals[1], json);
+      return runStatus(ctx, rest);
+    case "logs":
+      return runLogs(ctx, rest);
     case "daemon":
-      return runDaemon(ctx, positionals[1], json);
+      return runDaemon(ctx, rest);
     default:
       throw new UsageError(`unknown command: ${command}`);
   }
@@ -83,6 +71,11 @@ async function main(): Promise<void> {
     const code = await run(process.argv.slice(2), ctx);
     process.exitCode = code;
   } catch (err) {
+    if (err instanceof HelpRequested) {
+      ctx.stdout(HELP);
+      process.exitCode = 0;
+      return;
+    }
     if (err instanceof UsageError) {
       ctx.stderr(`error: ${err.message}\n`);
       process.exitCode = 2;

@@ -1,0 +1,107 @@
+import type http from "node:http";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import { z } from "zod";
+import { TASK_HEADER, type TaskEngine } from "./engine.js";
+
+/**
+ * The daemon-served streamable-HTTP MCP endpoint children report through
+ * (ADR-0003). Correlation is header-based: every request carries the
+ * per-task `x-parley-task` header injected by the adapter's SpawnPlan, so
+ * concurrent children on the one endpoint can never cross streams.
+ *
+ * Exactly two tools (spec §4): `submit_report` (this ticket) and
+ * `ask_orchestrator` (registered as a stub; behavior lands with #16).
+ */
+
+function buildMcpServer(engine: TaskEngine, taskId: string): McpServer {
+  const server = new McpServer({ name: "parley", version: "0.0.0" });
+
+  server.registerTool(
+    "submit_report",
+    {
+      description:
+        "Submit the final task report. Required before finishing: a task only " +
+        "completes when a schema-valid report is submitted. Default schema: " +
+        '{ summary: string (markdown), outcome: "success" | "partial" | "blocked", ' +
+        "files_changed: string[] }.",
+      // Deliberately loose at the MCP layer: report validation happens in the
+      // engine (against the task's report schema) so violations come back as
+      // tool errors the child can retry on, not protocol errors.
+      inputSchema: z.looseObject({}),
+    },
+    (args: Record<string, unknown>) => {
+      // Validation errors bounce back as tool errors so the child retries.
+      const errors = engine.submitReport(taskId, args);
+      if (errors !== null) {
+        return {
+          isError: true,
+          content: [{ type: "text" as const, text: `report rejected:\n- ${errors.join("\n- ")}` }],
+        };
+      }
+      return {
+        content: [{ type: "text" as const, text: "report accepted; task completed" }],
+      };
+    },
+  );
+
+  server.registerTool(
+    "ask_orchestrator",
+    {
+      description:
+        "Ask the orchestrator a blocking question when stuck. (Not yet available.)",
+    },
+    () => ({
+      isError: true,
+      content: [
+        {
+          type: "text" as const,
+          text: "ask_orchestrator is not implemented yet (parley #16); proceed with your best judgment and note the open question in your report summary",
+        },
+      ],
+    }),
+  );
+
+  return server;
+}
+
+/**
+ * Handle one HTTP request on the `/mcp` route. Stateless streamable HTTP: a
+ * fresh transport/server pair per request, bound to the task named by the
+ * correlation header.
+ */
+export async function handleMcpRequest(
+  engine: TaskEngine,
+  req: http.IncomingMessage,
+  res: http.ServerResponse,
+  body: unknown,
+): Promise<void> {
+  const header = req.headers[TASK_HEADER];
+  const taskId = Array.isArray(header) ? header[0] : header;
+  if (!taskId || !engine.get(taskId)) {
+    res.writeHead(400, { "content-type": "application/json" });
+    res.end(
+      JSON.stringify({
+        jsonrpc: "2.0",
+        error: {
+          code: -32000,
+          message: `missing or unknown ${TASK_HEADER} header — MCP requests must be task-correlated`,
+        },
+        id: null,
+      }),
+    );
+    return;
+  }
+
+  const server = buildMcpServer(engine, taskId);
+  const transport = new StreamableHTTPServerTransport({
+    sessionIdGenerator: undefined, // stateless — correlation lives in the header
+    enableJsonResponse: true,
+  });
+  res.on("close", () => {
+    void transport.close();
+    void server.close();
+  });
+  await server.connect(transport);
+  await transport.handleRequest(req, res, body);
+}

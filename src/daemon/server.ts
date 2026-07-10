@@ -1,6 +1,10 @@
 import http from "node:http";
 import type { HomePaths } from "../home.js";
-import { listTasks, openDatabase, type DatabaseHandle } from "./db.js";
+import { createAdapterRegistry } from "./adapters/index.js";
+import { openDatabase } from "./db.js";
+import { DelegateError, TaskEngine } from "./engine.js";
+import { handleMcpRequest } from "./mcp.js";
+import { buildEnvelope } from "./report.js";
 
 export interface DaemonServer {
   /** The port the server is listening on. */
@@ -8,6 +12,9 @@ export interface DaemonServer {
   /** Close the server and its database. */
   close: () => Promise<void>;
 }
+
+/** How long one `/events?wait=true` long-poll blocks before the CLI re-polls. */
+const LONG_POLL_WINDOW_MS = 25_000;
 
 function sendJson(res: http.ServerResponse, status: number, body: unknown): void {
   const payload = JSON.stringify(body);
@@ -18,40 +25,171 @@ function sendJson(res: http.ServerResponse, status: number, body: unknown): void
   res.end(payload);
 }
 
-/**
- * Build the daemon's HTTP request handler — the CLI plane (REST). v1 exposes
- * only the read surface needed by this ticket; the delegate/answer/cancel
- * endpoints and the MCP child channel slot in here in later tickets without
- * changing the daemon lifecycle.
- */
-function createHandler(db: DatabaseHandle): http.RequestListener {
-  return (req, res) => {
-    const method = req.method ?? "GET";
-    const url = new URL(req.url ?? "/", "http://127.0.0.1");
-    const route = `${method} ${url.pathname}`;
+/** A client mistake at the HTTP layer, reported as its status (not a 500). */
+class HttpError extends Error {
+  constructor(
+    readonly status: number,
+    message: string,
+  ) {
+    super(message);
+    this.name = "HttpError";
+  }
+}
 
-    switch (route) {
-      case "GET /health":
+async function readBody(req: http.IncomingMessage): Promise<unknown> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of req) chunks.push(chunk as Buffer);
+  const raw = Buffer.concat(chunks).toString("utf8");
+  if (raw.trim() === "") return undefined;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    throw new HttpError(400, "request body is not valid JSON");
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function optionalString(value: unknown): string | null {
+  return typeof value === "string" && value !== "" ? value : null;
+}
+
+/** `POST /tasks` — the delegate endpoint. */
+function handleDelegate(engine: TaskEngine, res: http.ServerResponse, body: unknown): void {
+  if (!isRecord(body)) {
+    sendJson(res, 400, { error: "request body must be a JSON object" });
+    return;
+  }
+  const prompt = body.prompt;
+  const vendor = body.vendor;
+  const cwd = body.cwd;
+  if (typeof prompt !== "string" || prompt.trim() === "") {
+    sendJson(res, 400, { error: "prompt is required" });
+    return;
+  }
+  if (typeof vendor !== "string" || vendor === "") {
+    sendJson(res, 400, { error: "vendor is required" });
+    return;
+  }
+  if (typeof cwd !== "string" || cwd === "") {
+    sendJson(res, 400, { error: "cwd is required" });
+    return;
+  }
+  try {
+    const task = engine.delegate({
+      prompt,
+      vendor,
+      cwd,
+      model: optionalString(body.model),
+      name: optionalString(body.name),
+    });
+    sendJson(res, 201, { task_id: task.id, name: task.name, state: task.state });
+  } catch (err) {
+    if (err instanceof DelegateError) {
+      sendJson(res, 400, { error: err.message });
+      return;
+    }
+    throw err;
+  }
+}
+
+/**
+ * `GET /tasks/:ref/events?wait=true` — long-poll until the task reaches a
+ * terminal state (or the poll window elapses; the CLI re-polls). Responds with
+ * the event name and the task's report envelope.
+ */
+async function handleEvents(
+  engine: TaskEngine,
+  res: http.ServerResponse,
+  ref: string,
+  wait: boolean,
+): Promise<void> {
+  const task = engine.resolve(ref);
+  if (!task) {
+    sendJson(res, 404, { error: `no such task: ${ref}` });
+    return;
+  }
+  const row = wait ? await engine.waitForTerminal(task.id, LONG_POLL_WINDOW_MS) : task;
+  if (!row) {
+    sendJson(res, 404, { error: `no such task: ${ref}` });
+    return;
+  }
+  const envelope = buildEnvelope(row);
+  const event = ["completed", "failed", "cancelled", "stalled"].includes(row.state)
+    ? `task.${row.state}`
+    : null; // null = poll window elapsed while still live; caller re-polls
+  sendJson(res, 200, { event, task: envelope });
+}
+
+/**
+ * Build the daemon's HTTP request handler: the CLI plane (REST, spec §3) plus
+ * the MCP child channel on `/mcp` (spec §4).
+ */
+function createHandler(engine: TaskEngine): http.RequestListener {
+  return (req, res) => {
+    void (async () => {
+      const method = req.method ?? "GET";
+      const url = new URL(req.url ?? "/", "http://127.0.0.1");
+      const segments = url.pathname.split("/").filter((s) => s !== "");
+
+      if (url.pathname === "/mcp") {
+        const body = method === "POST" ? await readBody(req) : undefined;
+        await handleMcpRequest(engine, req, res, body);
+        return;
+      }
+
+      if (method === "GET" && url.pathname === "/health") {
         sendJson(res, 200, { status: "ok", pid: process.pid });
         return;
-      case "GET /tasks":
-        sendJson(res, 200, { tasks: listTasks(db) });
-        return;
-      default:
-        sendJson(res, 404, { error: "not_found", route });
-        return;
-    }
+      }
+
+      if (segments[0] === "tasks") {
+        if (method === "GET" && segments.length === 1) {
+          sendJson(res, 200, { tasks: engine.list() });
+          return;
+        }
+        if (method === "POST" && segments.length === 1) {
+          handleDelegate(engine, res, await readBody(req));
+          return;
+        }
+        const ref = decodeURIComponent(segments[1] ?? "");
+        if (method === "GET" && segments.length === 2) {
+          const task = engine.resolve(ref);
+          if (!task) sendJson(res, 404, { error: `no such task: ${ref}` });
+          else sendJson(res, 200, { task: buildEnvelope(task), row: task });
+          return;
+        }
+        if (method === "GET" && segments.length === 3 && segments[2] === "events") {
+          await handleEvents(engine, res, ref, url.searchParams.get("wait") === "true");
+          return;
+        }
+      }
+
+      sendJson(res, 404, { error: "not_found", route: `${method} ${url.pathname}` });
+    })().catch((err: unknown) => {
+      if (!res.headersSent) {
+        const status = err instanceof HttpError ? err.status : 500;
+        const message = err instanceof HttpError ? err.message : String(err);
+        sendJson(res, status, { error: message });
+      } else {
+        res.end();
+      }
+    });
   };
 }
 
 /**
- * Start the daemon HTTP server bound to `127.0.0.1:0` (ephemeral port) and open
- * the task-state database. Does not touch the discovery file — the daemon entry
- * point publishes discovery once the port is known.
+ * Start the daemon HTTP server bound to `127.0.0.1:0` (ephemeral port), open
+ * the task-state database, and wire up the task engine. Does not touch the
+ * discovery file — the daemon entry point publishes discovery once the port is
+ * known.
  */
 export function startServer(paths: HomePaths): Promise<DaemonServer> {
   const db = openDatabase(paths);
-  const server = http.createServer(createHandler(db));
+  const engine = new TaskEngine(db, paths, createAdapterRegistry());
+  const server = http.createServer(createHandler(engine));
 
   return new Promise<DaemonServer>((resolve, reject) => {
     const failed = (err: Error): void => {
@@ -67,6 +205,7 @@ export function startServer(paths: HomePaths): Promise<DaemonServer> {
         return;
       }
       const port = address.port;
+      engine.setHubPort(port);
       const close = () =>
         new Promise<void>((resolveClose, rejectClose) => {
           server.close((err) => {

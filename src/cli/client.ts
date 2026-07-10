@@ -68,13 +68,64 @@ export async function ensureDaemon(paths: HomePaths, env: NodeJS.ProcessEnv): Pr
   });
 }
 
-/** Issue a GET against the running daemon and parse the JSON response. */
-export async function daemonGet<T>(discovery: Discovery, pathname: string): Promise<T> {
-  const res = await fetch(`http://127.0.0.1:${discovery.port}${pathname}`, {
-    signal: AbortSignal.timeout(5000),
-  });
-  if (!res.ok) {
-    throw new Error(`daemon request ${pathname} failed with status ${res.status}`);
+/** A non-2xx daemon response; 400s map to usage errors at the command layer. */
+export class DaemonRequestError extends Error {
+  constructor(
+    readonly status: number,
+    message: string,
+  ) {
+    super(message);
+    this.name = "DaemonRequestError";
   }
-  return (await res.json()) as T;
+}
+
+async function daemonFetch<T>(
+  discovery: Discovery,
+  pathname: string,
+  init: RequestInit,
+): Promise<T> {
+  const res = await fetch(`http://127.0.0.1:${discovery.port}${pathname}`, init);
+  const raw = await res.text();
+  if (!res.ok) {
+    let detail = `daemon request ${pathname} failed with status ${res.status}`;
+    try {
+      const body: unknown = JSON.parse(raw);
+      if (typeof body === "object" && body !== null && "error" in body) {
+        detail = String((body as { error: unknown }).error);
+      }
+    } catch {
+      /* keep the generic detail */
+    }
+    throw new DaemonRequestError(res.status, detail);
+  }
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    throw new Error(`daemon sent a malformed response for ${pathname}: ${raw.slice(0, 200)}`);
+  }
+}
+
+/** Issue a GET against the running daemon and parse the JSON response. */
+export async function daemonGet<T>(
+  discovery: Discovery,
+  pathname: string,
+  timeoutMs = 5000,
+): Promise<T> {
+  return daemonFetch<T>(discovery, pathname, {
+    signal: AbortSignal.timeout(timeoutMs),
+  });
+}
+
+/** Issue a POST with a JSON body against the running daemon. */
+export async function daemonPost<T>(
+  discovery: Discovery,
+  pathname: string,
+  body: unknown,
+): Promise<T> {
+  return daemonFetch<T>(discovery, pathname, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(10_000),
+  });
 }

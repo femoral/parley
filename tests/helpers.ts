@@ -9,6 +9,9 @@ const CLI_ENTRY = fileURLToPath(new URL("../src/cli/index.ts", import.meta.url))
 // where tsx is installed. Avoids import.meta.resolve, unavailable in SSR transform.
 const TSX_LOADER = "tsx";
 
+/** The fake vendor CLI — the suite's only test double (see fake-vendor.mjs). */
+export const FAKE_VENDOR_BIN = fileURLToPath(new URL("./fake-vendor.mjs", import.meta.url));
+
 export interface CliResult {
   code: number;
   stdout: string;
@@ -24,22 +27,73 @@ export function runCli(
   home: string,
   extraEnv: NodeJS.ProcessEnv = {},
 ): Promise<CliResult> {
-  return new Promise((resolve, reject) => {
-    const child = spawn(
-      process.execPath,
-      ["--import", TSX_LOADER, CLI_ENTRY, ...args],
-      {
-        env: { ...process.env, PARLEY_HOME: home, ...extraEnv },
-        stdio: ["ignore", "pipe", "pipe"],
-      },
-    );
-    let stdout = "";
-    let stderr = "";
-    child.stdout.on("data", (d: Buffer) => (stdout += d.toString()));
-    child.stderr.on("data", (d: Buffer) => (stderr += d.toString()));
+  return startCli(args, home, extraEnv).result;
+}
+
+/**
+ * Spawn a parley CLI invocation and return the live child plus a promise for
+ * its result — for commands that stream (e.g. `logs --follow`).
+ */
+export function startCli(
+  args: string[],
+  home: string,
+  extraEnv: NodeJS.ProcessEnv = {},
+): { child: ReturnType<typeof spawn>; result: Promise<CliResult>; stdoutSoFar: () => string } {
+  const child = spawn(process.execPath, ["--import", TSX_LOADER, CLI_ENTRY, ...args], {
+    env: {
+      ...process.env,
+      PARLEY_HOME: home,
+      PARLEY_FAKE_VENDOR_BIN: FAKE_VENDOR_BIN,
+      ...extraEnv,
+    },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  let stdout = "";
+  let stderr = "";
+  child.stdout!.on("data", (d: Buffer) => (stdout += d.toString()));
+  child.stderr!.on("data", (d: Buffer) => (stderr += d.toString()));
+  const result = new Promise<CliResult>((resolve, reject) => {
     child.on("error", reject);
     child.on("close", (code) => resolve({ code: code ?? -1, stdout, stderr }));
   });
+  return { child, result, stdoutSoFar: () => stdout };
+}
+
+/**
+ * Fake-vendor action script (see fake-vendor.mjs for the action vocabulary).
+ */
+export type FakeVendorAction = Record<string, unknown>;
+
+/**
+ * Create a task working directory containing a `.fake-vendor.json` script that
+ * drives the fake vendor's behavior for that task.
+ */
+export function makeTaskDir(actions: FakeVendorAction[]): string {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "parley-task-"));
+  fs.writeFileSync(path.join(dir, ".fake-vendor.json"), JSON.stringify(actions, null, 2));
+  return dir;
+}
+
+/** Poll `parley status <task> --json` until the task reaches `state`. */
+export async function waitForState(
+  home: string,
+  task: string,
+  state: string,
+  timeoutMs = 15_000,
+): Promise<Record<string, unknown>> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const res = await runCli(["status", task, "--json"], home);
+    const rows = JSON.parse(res.stdout) as Record<string, unknown>[];
+    const row = rows[0];
+    if (row && row.state === state) return row;
+    if (Date.now() >= deadline) {
+      throw new Error(
+        `task ${task} did not reach state ${state} within ${timeoutMs}ms (last: ${JSON.stringify(row)})`,
+      );
+    }
+    await new Promise((r) => setTimeout(r, 100));
+  }
 }
 
 /** Create a fresh isolated parley home directory. */

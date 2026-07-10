@@ -1,6 +1,8 @@
+import { parseArgs } from "../args.js";
 import { type CliContext, printJson } from "../context.js";
 import { daemonGet, ensureDaemon } from "../client.js";
 import type { TaskRow } from "../../daemon/db.js";
+import { parseJsonColumn } from "../../daemon/report.js";
 
 interface TasksResponse {
   tasks: TaskRow[];
@@ -28,22 +30,28 @@ function renderTable(ctx: CliContext, tasks: TaskRow[]): void {
   for (const row of rows) ctx.stdout(`${format(row)}\n`);
 }
 
+/** Present a task row for `--json` output: JSON columns become objects. */
+function presentRow(row: TaskRow): Record<string, unknown> {
+  return { ...row, usage: parseJsonColumn(row.usage), report: parseJsonColumn(row.report) };
+}
+
 /**
  * `parley status [task] [--json]` (and its `parley list` alias). Auto-spawns the
- * daemon, fetches the task table over the CLI plane, and renders it. Exits 0
- * with an empty listing when no tasks exist.
+ * daemon, fetches the task table over the CLI plane, and renders it. A task
+ * reference may be a short id or a `--name` label. Exits 0 with an empty
+ * listing when no tasks exist.
  */
-export async function runStatus(
-  ctx: CliContext,
-  taskId: string | undefined,
-  json: boolean,
-): Promise<number> {
+export async function runStatus(ctx: CliContext, args: string[]): Promise<number> {
+  const { positionals, flags } = parseArgs(args, { "--json": {} });
+  const ref = positionals[0];
+  const json = flags["--json"] === true;
+
   const discovery = await ensureDaemon(ctx.paths, ctx.env);
   const { tasks } = await daemonGet<TasksResponse>(discovery, "/tasks");
-  const filtered = taskId ? tasks.filter((t) => t.id === taskId || t.name === taskId) : tasks;
+  const filtered = ref ? tasks.filter((t) => t.id === ref || t.name === ref) : tasks;
 
   if (json) {
-    printJson(ctx, filtered);
+    printJson(ctx, filtered.map(presentRow));
   } else {
     renderTable(ctx, filtered);
   }
