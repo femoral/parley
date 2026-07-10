@@ -47,6 +47,10 @@ export interface Envelope {
   task_id: string;
   name: string | null;
   repo: string | null;
+  /** The parley worktree path; null when `--cwd` bypassed worktree creation. */
+  worktree: string | null;
+  /** The branch parley created; the child's commits live here (parley never merges). */
+  branch: string | null;
   vendor: string | null;
   model: string | null;
   session_id: string | null;
@@ -81,6 +85,8 @@ export function buildEnvelope(task: TaskRow): Envelope {
     task_id: task.id,
     name: task.name,
     repo: task.repo,
+    worktree: task.worktree,
+    branch: task.branch,
     vendor: task.vendor,
     model: task.model,
     session_id: task.session_id,

@@ -84,8 +84,41 @@ function handleDelegate(engine: TaskEngine, res: http.ServerResponse, body: unkn
       cwd,
       model: optionalString(body.model),
       name: optionalString(body.name),
+      // Absent/non-boolean defaults to bypass (old `--cwd`-only behaviour).
+      useWorktree: body.use_worktree === true,
+      baseRef: optionalString(body.base_ref),
     });
     sendJson(res, 201, { task_id: task.id, name: task.name, state: task.state });
+  } catch (err) {
+    if (err instanceof DelegateError) {
+      sendJson(res, 400, { error: err.message });
+      return;
+    }
+    throw err;
+  }
+}
+
+/**
+ * `POST /clean` — remove worktrees. `{ task }` cleans one terminal task
+ * (refusing a running one); `{ all_terminal: true }` sweeps every terminal task.
+ * Branches are always kept — parley never merges.
+ */
+function handleClean(engine: TaskEngine, res: http.ServerResponse, body: unknown): void {
+  if (!isRecord(body)) {
+    sendJson(res, 400, { error: "request body must be a JSON object" });
+    return;
+  }
+  try {
+    if (body.all_terminal === true) {
+      sendJson(res, 200, engine.cleanAllTerminal());
+      return;
+    }
+    const ref = body.task;
+    if (typeof ref !== "string" || ref === "") {
+      sendJson(res, 400, { error: "clean requires a task ref or all_terminal: true" });
+      return;
+    }
+    sendJson(res, 200, engine.clean(ref));
   } catch (err) {
     if (err instanceof DelegateError) {
       sendJson(res, 400, { error: err.message });
@@ -174,6 +207,11 @@ function createHandler(engine: TaskEngine): http.RequestListener {
 
       if (method === "GET" && url.pathname === "/health") {
         sendJson(res, 200, { status: "ok", pid: process.pid });
+        return;
+      }
+
+      if (method === "POST" && url.pathname === "/clean") {
+        handleClean(engine, res, await readBody(req));
         return;
       }
 
