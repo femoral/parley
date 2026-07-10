@@ -55,6 +55,10 @@ export interface Envelope {
   state: string;
   report: Report | null;
   error: string | null;
+  /** The outstanding question id while `awaiting_answer` (else null). */
+  question_id: string | null;
+  /** The outstanding question text while `awaiting_answer` (else null). */
+  question: string | null;
 }
 
 /** Parse a nullable JSON text column; malformed content reads as null. */
@@ -85,5 +89,7 @@ export function buildEnvelope(task: TaskRow): Envelope {
     state: task.state,
     report: parseJsonColumn<Report>(task.report),
     error: task.error,
+    question_id: task.question_id,
+    question: task.question,
   };
 }

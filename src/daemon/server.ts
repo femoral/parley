@@ -111,16 +111,48 @@ async function handleEvents(
     sendJson(res, 404, { error: `no such task: ${ref}` });
     return;
   }
-  const row = wait ? await engine.waitForTerminal(task.id, LONG_POLL_WINDOW_MS) : task;
+  const row = wait ? await engine.waitForEvent(task.id, LONG_POLL_WINDOW_MS) : task;
   if (!row) {
     sendJson(res, 404, { error: `no such task: ${ref}` });
     return;
   }
-  const envelope = buildEnvelope(row);
-  const event = ["completed", "failed", "cancelled", "stalled"].includes(row.state)
-    ? `task.${row.state}`
-    : null; // null = poll window elapsed while still live; caller re-polls
-  sendJson(res, 200, { event, task: envelope });
+  sendJson(res, 200, { event: eventFor(row.state), task: buildEnvelope(row) });
+}
+
+/**
+ * Map a task state to its CLI event name (spec §3), or null when the state is
+ * not itself an event (the poll window elapsed while the task is still live —
+ * the caller re-polls).
+ */
+function eventFor(state: string): string | null {
+  if (state === "awaiting_answer") return "task.question";
+  if (["completed", "failed", "cancelled", "stalled"].includes(state)) {
+    return `task.${state}`;
+  }
+  return null;
+}
+
+/** `POST /tasks/:ref/answer` — deliver an answer to a task's pending question. */
+function handleAnswer(
+  engine: TaskEngine,
+  res: http.ServerResponse,
+  ref: string,
+  body: unknown,
+): void {
+  if (!isRecord(body) || typeof body.text !== "string") {
+    sendJson(res, 400, { error: "answer text is required" });
+    return;
+  }
+  try {
+    const row = engine.answer(ref, body.text);
+    sendJson(res, 200, { task_id: row.id, name: row.name, state: row.state });
+  } catch (err) {
+    if (err instanceof DelegateError) {
+      sendJson(res, 400, { error: err.message });
+      return;
+    }
+    throw err;
+  }
 }
 
 /**
@@ -163,6 +195,10 @@ function createHandler(engine: TaskEngine): http.RequestListener {
         }
         if (method === "GET" && segments.length === 3 && segments[2] === "events") {
           await handleEvents(engine, res, ref, url.searchParams.get("wait") === "true");
+          return;
+        }
+        if (method === "POST" && segments.length === 3 && segments[2] === "answer") {
+          handleAnswer(engine, res, ref, await readBody(req));
           return;
         }
       }

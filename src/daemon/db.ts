@@ -41,6 +41,10 @@ export interface TaskRow {
   error: string | null;
   started_at: string | null;
   completed_at: string | null;
+  /** The outstanding `ask_orchestrator` question id while `awaiting_answer`. */
+  question_id: string | null;
+  /** The outstanding question text while `awaiting_answer`. */
+  question: string | null;
 }
 
 /** Fields the daemon writes when creating a task. */
@@ -83,6 +87,12 @@ const MIGRATIONS: string[] = [
      name  TEXT PRIMARY KEY,
      value INTEGER NOT NULL
    );`,
+  // #16: Q&A channel — the one outstanding `ask_orchestrator` question per task
+  // while it sits `awaiting_answer` (cleared on answer). The blocking child call
+  // itself lives in daemon memory; these columns make the question visible to
+  // `status` and the long-poll event stream.
+  `ALTER TABLE tasks ADD COLUMN question_id TEXT;
+   ALTER TABLE tasks ADD COLUMN question TEXT;`,
 ];
 
 function migrate(db: DatabaseHandle): void {
@@ -111,7 +121,8 @@ export function openDatabase(paths: HomePaths): DatabaseHandle {
 }
 
 const TASK_COLUMNS = `id, name, vendor, model, repo, state, created_at, updated_at,
-   cwd, prompt, session_id, usage, report, error, started_at, completed_at`;
+   cwd, prompt, session_id, usage, report, error, started_at, completed_at,
+   question_id, question`;
 
 /** List all tasks, newest first. */
 export function listTasks(db: DatabaseHandle): TaskRow[] {
@@ -142,16 +153,26 @@ export function resolveTask(db: DatabaseHandle, ref: string): TaskRow | undefine
     .get(ref) as TaskRow | undefined;
 }
 
-/** Allocate the next daemon-assigned short task id (`t1`, `t2`, …). */
-export function nextTaskId(db: DatabaseHandle): string {
+/** Atomically bump (creating on first use) a named monotonic counter. */
+function nextCounter(db: DatabaseHandle, name: string): number {
   const row = db
     .prepare(
-      `INSERT INTO counters (name, value) VALUES ('task_id', 1)
+      `INSERT INTO counters (name, value) VALUES (?, 1)
        ON CONFLICT(name) DO UPDATE SET value = value + 1
        RETURNING value`,
     )
-    .get() as { value: number };
-  return `t${row.value}`;
+    .get(name) as { value: number };
+  return row.value;
+}
+
+/** Allocate the next daemon-assigned short task id (`t1`, `t2`, …). */
+export function nextTaskId(db: DatabaseHandle): string {
+  return `t${nextCounter(db, "task_id")}`;
+}
+
+/** Allocate the next question id (`q1`, `q2`, …) — unique across all tasks. */
+export function nextQuestionId(db: DatabaseHandle): string {
+  return `q${nextCounter(db, "question_id")}`;
 }
 
 /** Insert a new task in `pending` state and return its row. */
@@ -172,7 +193,15 @@ export function updateTask(
   patch: Partial<
     Pick<
       TaskRow,
-      "state" | "session_id" | "usage" | "report" | "error" | "started_at" | "completed_at"
+      | "state"
+      | "session_id"
+      | "usage"
+      | "report"
+      | "error"
+      | "started_at"
+      | "completed_at"
+      | "question_id"
+      | "question"
     >
   >,
 ): void {

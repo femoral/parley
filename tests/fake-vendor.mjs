@@ -12,6 +12,9 @@
  *   { "emit_raw": "text" }                  print a raw (non-JSON) line
  *   { "sleep": 250 }                        wait ms
  *   { "submit_report": {...} }              MCP tools/call submit_report
+ *   { "ask": "question text" }              MCP ask_orchestrator; blocks until
+ *                                           `parley answer` delivers the answer,
+ *                                           echoed as a tool_result, then continues
  *   { "call_tool": { "name": "...", "args": {...} } }
  *   { "exit": 0 }                           exit early with code
  * The result of each tool call is echoed to stdout as a JSONL event
@@ -95,6 +98,7 @@ async function main() {
     else if (action.emit_raw !== undefined) process.stdout.write(`${action.emit_raw}\n`);
     else if (action.sleep !== undefined) await sleep(action.sleep);
     else if (action.submit_report !== undefined) await callTool("submit_report", action.submit_report);
+    else if (action.ask !== undefined) await callTool("ask_orchestrator", { question: action.ask });
     else if (action.call_tool !== undefined) await callTool(action.call_tool.name, action.call_tool.args ?? {});
     else if (action.exit !== undefined) process.exit(action.exit);
     else throw new Error(`unknown action: ${JSON.stringify(action)}`);

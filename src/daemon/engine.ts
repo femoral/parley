@@ -8,6 +8,7 @@ import {
   getTask,
   insertTask,
   listTasks,
+  nextQuestionId,
   resolveTask,
   updateTask,
   TERMINAL_STATES,
@@ -19,6 +20,20 @@ import { validateReport, type Report } from "./report.js";
 
 /** Correlation header children send on every MCP request (ADR-0003). */
 export const TASK_HEADER = "x-parley-task";
+
+/**
+ * States a long-poll waiter wakes on — a task has produced a CLI event (spec
+ * §3). Terminal outcomes plus `awaiting_answer` (a question) and `stalled`.
+ */
+function isEventState(state: string): boolean {
+  return TERMINAL_STATES.has(state) || state === "awaiting_answer" || state === "stalled";
+}
+
+/** A blocking `ask_orchestrator` call parked in daemon memory until answered. */
+interface PendingQuestion {
+  questionId: string;
+  resolve: (answer: string) => void;
+}
 
 /** A caller mistake surfaced to the CLI plane as HTTP 400 → exit code 2. */
 export class DelegateError extends Error {
@@ -43,6 +58,13 @@ export interface DelegateRequest {
  */
 export class TaskEngine {
   private readonly waiters = new Map<string, Set<() => void>>();
+  /**
+   * Live `ask_orchestrator` calls, keyed by task id. The value's `resolve`
+   * unblocks the child's MCP request with the answer text. One per task by
+   * construction (the child blocks while asking). These live only in memory —
+   * a daemon restart abandons them (the resume story lands with #17/#18).
+   */
+  private readonly pending = new Map<string, PendingQuestion>();
   /** MCP endpoint port — published by the server once it has bound. */
   private hubPort: number | null = null;
 
@@ -134,12 +156,68 @@ export class TaskEngine {
   }
 
   /**
-   * Resolve when the task reaches a terminal state, or after `timeoutMs` (the
-   * long-poll window — the CLI re-polls). Returns the current row either way.
+   * Handle an `ask_orchestrator` MCP call: record the question, move the task
+   * to `awaiting_answer`, wake long-poll waiters, and block until `parley
+   * answer` delivers the text (ADR-0003). Returns the answer as the tool
+   * result, or an error string (bounced to the child as a tool error).
+   *
+   * Answer-timeout / stall (#18) is out of scope here: an unanswered question
+   * simply blocks. The parked promise lives only in memory.
    */
-  async waitForTerminal(taskId: string, timeoutMs: number): Promise<TaskRow | undefined> {
+  async askOrchestrator(taskId: string, question: string): Promise<{ answer: string } | { error: string }> {
     const task = getTask(this.db, taskId);
-    if (!task || TERMINAL_STATES.has(task.state)) return task;
+    if (!task) return { error: `unknown task: ${taskId}` };
+    if (TERMINAL_STATES.has(task.state)) {
+      return { error: `task ${taskId} is already ${task.state}` };
+    }
+    // One outstanding question per task holds by construction (the child blocks
+    // while asking); guard anyway against a misbehaving child.
+    if (this.pending.has(taskId)) {
+      return { error: `task ${taskId} already has a pending question` };
+    }
+
+    const questionId = nextQuestionId(this.db);
+    updateTask(this.db, taskId, {
+      state: "awaiting_answer",
+      question_id: questionId,
+      question,
+    });
+    const answer = await new Promise<string>((resolve) => {
+      this.pending.set(taskId, { questionId, resolve });
+      // Wake the waiting `delegate --wait` / `answer --wait` long-poll.
+      this.notify(taskId);
+    });
+    return { answer };
+  }
+
+  /**
+   * Deliver an answer to a task's outstanding question: unblock the child's
+   * `ask_orchestrator` call with the text and move the task back to `running`.
+   * Throws `DelegateError` (→ exit 2) when the ref is unknown or the task has
+   * no pending question. Answers correlate to the single outstanding question
+   * by construction.
+   */
+  answer(ref: string, text: string): TaskRow {
+    const task = resolveTask(this.db, ref);
+    if (!task) throw new DelegateError(`no such task: ${ref}`);
+    const pending = this.pending.get(task.id);
+    if (!pending) {
+      throw new DelegateError(`task ${task.id} has no pending question to answer`);
+    }
+    this.pending.delete(task.id);
+    updateTask(this.db, task.id, { state: "running", question_id: null, question: null });
+    pending.resolve(text);
+    return getTask(this.db, task.id)!;
+  }
+
+  /**
+   * Resolve when the task reaches an event state — terminal, `awaiting_answer`
+   * (a question), or `stalled` — or after `timeoutMs` (the long-poll window,
+   * the CLI re-polls). Returns the current row either way.
+   */
+  async waitForEvent(taskId: string, timeoutMs: number): Promise<TaskRow | undefined> {
+    const task = getTask(this.db, taskId);
+    if (!task || isEventState(task.state)) return task;
 
     await new Promise<void>((resolve) => {
       const timer = setTimeout(() => {
@@ -156,9 +234,10 @@ export class TaskEngine {
         this.waiters.set(taskId, set);
       }
       set.add(wake);
-      // Re-check after registering: the task may have completed in between.
+      // Re-check after registering: the task may have reached an event state
+      // (completed, question, …) in between.
       const now = getTask(this.db, taskId);
-      if (!now || TERMINAL_STATES.has(now.state)) wake();
+      if (!now || isEventState(now.state)) wake();
     });
     return getTask(this.db, taskId);
   }

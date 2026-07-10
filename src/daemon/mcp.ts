@@ -49,17 +49,37 @@ function buildMcpServer(engine: TaskEngine, taskId: string): McpServer {
     "ask_orchestrator",
     {
       description:
-        "Ask the orchestrator a blocking question when stuck. (Not yet available.)",
+        "Ask the orchestrator a blocking question when stuck. Blocks until the " +
+        "orchestrator answers; the answer is returned as the tool result. Use " +
+        "only when you genuinely cannot proceed. Argument: { question: string }.",
+      // Loose at the MCP layer (see submit_report): argument validation happens
+      // in the handler so violations bounce back as retryable tool errors.
+      inputSchema: z.looseObject({}),
     },
-    () => ({
-      isError: true,
-      content: [
-        {
-          type: "text" as const,
-          text: "ask_orchestrator is not implemented yet (parley #16); proceed with your best judgment and note the open question in your report summary",
-        },
-      ],
-    }),
+    async (args: Record<string, unknown>) => {
+      const question = args.question;
+      if (typeof question !== "string" || question.trim() === "") {
+        return {
+          isError: true,
+          content: [
+            {
+              type: "text" as const,
+              text: "ask_orchestrator requires a non-empty 'question' string",
+            },
+          ],
+        };
+      }
+      const result = await engine.askOrchestrator(taskId, question);
+      if ("error" in result) {
+        return {
+          isError: true,
+          content: [{ type: "text" as const, text: result.error }],
+        };
+      }
+      return {
+        content: [{ type: "text" as const, text: result.answer }],
+      };
+    },
   );
 
   return server;

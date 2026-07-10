@@ -1,6 +1,7 @@
 import { homePathsFromEnv } from "../home.js";
 import { type CliContext } from "./context.js";
 import { HelpRequested, UsageError } from "./errors.js";
+import { runAnswer } from "./commands/answer.js";
 import { runDaemon } from "./commands/daemon.js";
 import { runDelegate } from "./commands/delegate.js";
 import { runLogs } from "./commands/logs.js";
@@ -15,6 +16,8 @@ Usage:
     -n --name <label>  Human label; usable wherever a task id is
     --cwd <path>       Working directory for the child (default: here)
     --wait             Block until terminal state; print report envelope
+  parley answer <task> "<text>" Answer a child's question ('-' reads stdin)
+    --wait             Re-block after delivering; return on next question/terminal
   parley [list]                 Show the task table (alias for bare status)
   parley status [task] [--json] Show all tasks, or one (id or name)
   parley logs <task> [--follow] Print the raw captured vendor stream
@@ -47,6 +50,8 @@ export async function run(argv: string[], ctx: CliContext): Promise<number> {
   switch (command) {
     case "delegate":
       return runDelegate(ctx, rest);
+    case "answer":
+      return runAnswer(ctx, rest);
     case "list":
     case "status":
       return runStatus(ctx, rest);

@@ -1,19 +1,9 @@
 import fs from "node:fs";
 import { parseArgs } from "../args.js";
-import { DaemonRequestError, daemonGet, daemonPost, ensureDaemon } from "../client.js";
+import { DaemonRequestError, daemonPost, ensureDaemon } from "../client.js";
 import { type CliContext, printJson } from "../context.js";
 import { UsageError } from "../errors.js";
-import type { Envelope } from "../../daemon/report.js";
-
-/** The blocking contract's exit codes (spec §5). Only 0 and 2 are reachable
- *  in this ticket; the rest are wired so later tickets only add states. */
-const EXIT_CODES: Record<string, number> = {
-  completed: 0,
-  failed: 1,
-  awaiting_answer: 3,
-  stalled: 4,
-  cancelled: 5,
-};
+import { waitForOutcome } from "../wait.js";
 
 interface DelegateAck {
   task_id: string;
@@ -21,18 +11,11 @@ interface DelegateAck {
   state: string;
 }
 
-interface EventsResponse {
-  event: string | null;
-  task: Envelope;
-}
-
-/** How long each long-poll request may take; must exceed the daemon's window. */
-const LONG_POLL_TIMEOUT_MS = 60_000;
-
 /**
- * `parley delegate [flags] "<prompt>"` — create a task; with `--wait`, block
- * until it reaches a terminal state and print the report envelope, exiting
- * with the typed code for that state.
+ * `parley delegate [flags] "<prompt>"` — create a task; with `--wait`, block on
+ * the task's event stream and return the first outcome: a question (exit 3 with
+ * `{task_id, name, question_id, question}`) or a terminal state (report envelope
+ * + its typed code). See `waitForOutcome` for the shared blocking contract.
  */
 export async function runDelegate(ctx: CliContext, args: string[]): Promise<number> {
   const { positionals, flags } = parseArgs(args, {
@@ -80,14 +63,5 @@ export async function runDelegate(ctx: CliContext, args: string[]): Promise<numb
     return 0;
   }
 
-  for (;;) {
-    const { event, task } = await daemonGet<EventsResponse>(
-      discovery,
-      `/tasks/${encodeURIComponent(ack.task_id)}/events?wait=true`,
-      LONG_POLL_TIMEOUT_MS,
-    );
-    if (event === null) continue; // poll window elapsed, task still live
-    printJson(ctx, task);
-    return EXIT_CODES[task.state] ?? 1;
-  }
+  return waitForOutcome(ctx, discovery, ack.task_id);
 }
