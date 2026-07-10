@@ -600,7 +600,11 @@ export class TaskEngine {
   private async resume(task: TaskRow, adapter: VendorAdapter, answer: string): Promise<void> {
     const spec: TaskSpec = { ...this.buildSpec(task), prompt: answer };
     const plan = await adapter.resume(spec, this.hubFor(task.id));
-    await this.runChild(task, adapter, plan, { state: "running" });
+    await this.runChild(task, adapter, plan, {
+      state: "running",
+      // Kept from the original run; stamped here only if that never happened.
+      ...(task.started_at === null ? { started_at: new Date().toISOString() } : {}),
+    });
   }
 
   /** Spawn a planned vendor child and pump its stream until exit. */
