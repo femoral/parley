@@ -1,0 +1,299 @@
+import type {
+  HubInfo,
+  MaterializedFile,
+  SpawnPlan,
+  TaskSpec,
+  VendorAdapter,
+  VendorEvent,
+} from "./types.js";
+
+/**
+ * The `grok` vendor adapter — real delegation to Grok Build (`grok` binary,
+ * spec §9, ADR-0004/0006). Verified against grok 0.2.93 (2026-07-09); see
+ * `docs/research/grok-build-cli-automation.md` for the surface and the
+ * deviations noted below.
+ *
+ * Grok has no per-invocation MCP flag, so the hub is injected by materializing
+ * `.grok/config.toml` into the task cwd via `SpawnPlan.files` (the daemon writes
+ * it pre-spawn and git-excludes it from the worktree). Sandbox posture maps to
+ * `GROK_SANDBOX` env profiles; approvals are force-disabled with
+ * `--always-approve`; the Claude/Cursor config scanners are turned off per child
+ * so the user's Claude setup never bleeds into the delegated task.
+ *
+ * The streaming-json event schema and exit codes are undocumented and the binary
+ * auto-updates ~daily, so `--no-auto-update` pins the version and `parseEvent` is
+ * deliberately tolerant: any unknown or changed line yields `[]` and the raw
+ * JSONL log (the durable record) keeps it. Golden fixtures under
+ * `tests/fixtures/grok/` pin the observed 0.2.93 shape.
+ */
+
+/** Default binary; override via `PARLEY_GROK_BIN` (smoke tests, custom installs). */
+const DEFAULT_GROK_BIN = "grok";
+
+/**
+ * Claude-config scanners, all defaulting **on** in grok (verified in the 0.2.93
+ * binary). Disabled per child so the orchestrator's own Claude Code config
+ * (`~/.claude.json` MCP servers, `.claude/` rules/skills/agents/hooks) never
+ * leaks into the delegated task. Parley's own canonical surface reaches grok via
+ * the worktree's `AGENTS.md`/`.agents` (translated in worktree.ts), which grok
+ * reads natively regardless of these flags.
+ */
+const CLAUDE_SCANNER_VARS = [
+  "GROK_CLAUDE_SKILLS_ENABLED",
+  "GROK_CLAUDE_RULES_ENABLED",
+  "GROK_CLAUDE_AGENTS_ENABLED",
+  "GROK_CLAUDE_MCPS_ENABLED",
+  "GROK_CLAUDE_HOOKS_ENABLED",
+] as const;
+
+/**
+ * Grok honours Claude's `MCP_TIMEOUT` (ms) env **before** its own
+ * `GROK_MCP_STARTUP_TIMEOUT_SECS`, so a value the orchestrator exported for its
+ * own Claude MCP setup would silently govern grok children's hub-connect
+ * timeout. We pin it to a deterministic value (grok's own 30s startup default)
+ * so the parent's value can never leak in — the engine spreads `SpawnPlan.env`
+ * over `process.env`, so overriding is the only way to neutralize it (env values
+ * are strings; there is no "unset").
+ */
+const MCP_STARTUP_TIMEOUT_MS = "30000";
+
+/** The name of the custom no-network sandbox profile materialized per child. */
+const NO_NETWORK_PROFILE = "parley-restricted";
+
+/**
+ * Map the normalized posture (spec §8, ADR-0006 matrix) to grok's `GROK_SANDBOX`
+ * mechanism. `full` maps to `off` (danger-full-access) and is inherently
+ * network-on. For the other modes, `network:false` is enforced with a custom
+ * profile (materialized as `.grok/sandbox.toml`) that extends the base built-in
+ * and sets `restrict_network` — the only lever grok exposes for network
+ * isolation. A custom profile is fail-closed: on a host whose kernel can't apply
+ * the sandbox (e.g. no bwrap on Linux) grok refuses to start rather than run
+ * unsandboxed, which is the correct posture when isolation was explicitly asked
+ * for. Built-in profiles fail open (warn and continue), so the default
+ * workspace+network path keeps working everywhere.
+ */
+function sandboxEnv(task: TaskSpec): {
+  env: Record<string, string>;
+  /** The built-in profile a custom no-network profile should extend, if any. */
+  base: string | null;
+} {
+  switch (task.sandbox) {
+    case "read-only":
+      // Read-only worktree; `GROK_WRITE_FILE=0` is belt-and-braces on top of the
+      // sandbox profile.
+      return { env: { GROK_SANDBOX: "read-only", GROK_WRITE_FILE: "0" }, base: "read-only" };
+    case "full":
+      // Full access — no sandbox. Network is unrestricted; `network:false` does
+      // not apply to `full` (matches the spec §8 matrix, which maps full → off).
+      return { env: { GROK_SANDBOX: "off" }, base: null };
+    case "workspace":
+    default:
+      // Write to the worktree, read elsewhere; skip the in-sandbox bash approval
+      // prompt (approvals are already force-disabled).
+      return {
+        env: { GROK_SANDBOX: "workspace", GROK_SANDBOX_AUTO_ALLOW_BASH: "1" },
+        base: "workspace",
+      };
+  }
+}
+
+/**
+ * TOML basic-string literal. Escapes backslash, quote, and control characters —
+ * a raw newline/tab in a hub URL or header value would otherwise emit invalid
+ * TOML (or, worse, inject an extra config line).
+ */
+function tomlString(value: string): string {
+  const escaped = value
+    .replace(/\\/g, "\\\\")
+    .replace(/"/g, '\\"')
+    // TOML basic strings forbid literal control characters (U+0000–U+001F, U+007F).
+    // eslint-disable-next-line no-control-regex
+    .replace(/[\u0000-\u001f\u007f]/g, (ch) => `\\u${ch.charCodeAt(0).toString(16).padStart(4, "0")}`);
+  return `"${escaped}"`;
+}
+
+/**
+ * The `.grok/config.toml` injected into the task cwd (project scope allows
+ * `[mcp_servers]`, `[plugins]`, `[permission]`). Carries the daemon's MCP hub as
+ * an HTTP server with the correlation header(s), disables grok's own worktree
+ * creation (parley owns the worktree), and pins the approval posture (the CLI
+ * `--always-approve` is authoritative; this is belt-and-braces).
+ */
+function configToml(hub: HubInfo): string {
+  const lines = [
+    "# Generated by parley — do not edit; regenerated on every (re)spawn.",
+    'new_session_worktree_mode = "never"',
+    'permission_mode = "always-approve"',
+    "",
+    "[mcp_servers.parley]",
+    'type = "http"',
+    `url = ${tomlString(hub.url)}`,
+  ];
+  const headers = Object.entries(hub.headers);
+  if (headers.length > 0) {
+    lines.push("", "[mcp_servers.parley.headers]");
+    for (const [key, value] of headers) {
+      lines.push(`${tomlString(key)} = ${tomlString(value)}`);
+    }
+  }
+  return lines.join("\n") + "\n";
+}
+
+/**
+ * A custom sandbox profile that adds `restrict_network` on top of a built-in
+ * base — materialized only when the posture demands network isolation.
+ */
+function sandboxToml(base: string): string {
+  return [
+    "# Generated by parley — no-network posture (spec §8).",
+    `[profiles.${NO_NETWORK_PROFILE}]`,
+    `extends = ${tomlString(base)}`,
+    "restrict_network = true",
+    "",
+  ].join("\n");
+}
+
+export function createGrokAdapter(env: NodeJS.ProcessEnv = process.env): VendorAdapter {
+  const bin = env.PARLEY_GROK_BIN ?? DEFAULT_GROK_BIN;
+
+  /** The env shared by fresh runs and resumes: auth, sandbox, scanner posture. */
+  function baseEnv(task: TaskSpec): Record<string, string> {
+    const { env: sandbox } = sandboxEnv(task);
+    const result: Record<string, string> = {
+      ...sandbox,
+      // Pin the MCP startup timeout so a Claude-oriented parent value can't leak.
+      MCP_TIMEOUT: MCP_STARTUP_TIMEOUT_MS,
+    };
+    // If the no-network posture applies, point GROK_SANDBOX at the custom profile
+    // (whose sandbox.toml `files()` materializes).
+    if (!task.network && task.sandbox !== "full") {
+      result.GROK_SANDBOX = NO_NETWORK_PROFILE;
+    }
+    // Turn off every Claude-config scanner (they default on).
+    for (const key of CLAUDE_SCANNER_VARS) result[key] = "0";
+    // Auth passes through opaquely (per-token billing); only when the parent set it.
+    if (env.XAI_API_KEY !== undefined) result.XAI_API_KEY = env.XAI_API_KEY;
+    return result;
+  }
+
+  /** Files materialized pre-spawn: the MCP config, plus a no-network profile. */
+  function files(task: TaskSpec, hub: HubInfo): MaterializedFile[] {
+    const materialized: MaterializedFile[] = [
+      { path: ".grok/config.toml", contents: configToml(hub) },
+    ];
+    if (!task.network && task.sandbox !== "full") {
+      const { base } = sandboxEnv(task);
+      if (base !== null) {
+        materialized.push({ path: ".grok/sandbox.toml", contents: sandboxToml(base) });
+      }
+    }
+    return materialized;
+  }
+
+  /** Flags shared by fresh runs and resumes (headless streaming JSONL, pinned). */
+  function commonArgv(task: TaskSpec): string[] {
+    const argv = [
+      "--output-format",
+      "streaming-json",
+      "--no-auto-update",
+      "--always-approve",
+      "--cwd",
+      task.cwd,
+    ];
+    if (task.model !== null) argv.push("-m", task.model);
+    return argv;
+  }
+
+  return {
+    id: "grok",
+
+    prepare(task, hub): Promise<SpawnPlan> {
+      // Fresh single-turn run: `grok -p <prompt> …`. The session id is captured
+      // from the terminal `end` event and persisted for resume.
+      return Promise.resolve({
+        argv: [bin, "-p", task.prompt, ...commonArgv(task)],
+        env: baseEnv(task),
+        files: files(task, hub),
+        cwd: task.cwd,
+      });
+    },
+
+    resume(task, hub): Promise<SpawnPlan> {
+      // Spawn-per-turn resume (ADR-0004): `-r <session-id>` resumes the persisted
+      // grok session; `task.prompt` is the orchestrator's answer, delivered as
+      // the conversation's continuation. The config is re-materialized so the hub
+      // and posture are present on the respawn too.
+      //
+      // NB: verified against grok 0.2.93 — resume is `-r/--resume`, NOT `-s`
+      // (which now *creates* a new session with a fixed UUID). The spec §9 table
+      // and research doc (written against ~0.2.73) say `-s`; the installed binary
+      // is authoritative.
+      if (task.sessionId === undefined) {
+        // Without `-r` grok would start a brand-new session, silently delivering
+        // the answer to an agent with no conversation context. Fail loudly
+        // instead — the engine reruns session-less stalled tasks via prepare().
+        return Promise.reject(new Error(`grok resume for task ${task.id} has no session id`));
+      }
+      return Promise.resolve({
+        argv: [bin, "-p", task.prompt, "-r", task.sessionId, ...commonArgv(task)],
+        env: baseEnv(task),
+        files: files(task, hub),
+        cwd: task.cwd,
+      });
+    },
+
+    parseEvent(line: string): VendorEvent[] {
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(line);
+      } catch {
+        return []; // opaque non-JSON vendor noise — the raw log keeps it
+      }
+      if (typeof parsed !== "object" || parsed === null) return [];
+      const event = parsed as Record<string, unknown>;
+      switch (event.type) {
+        case "text":
+          // The assistant's visible output, streamed token-by-token.
+          return typeof event.data === "string" ? [{ kind: "message", text: event.data }] : [];
+        case "thought":
+          // Reasoning chunks — opaque for display; the raw log retains them.
+          return [];
+        case "end":
+          // Terminal event: carries `sessionId` (camelCase), used for resume.
+          return [
+            {
+              kind: "session_meta",
+              session_id: typeof event.sessionId === "string" ? event.sessionId : undefined,
+            },
+          ];
+        case "error":
+        case "fatal":
+          return [
+            {
+              kind: "error",
+              text:
+                typeof event.message === "string"
+                  ? event.message
+                  : typeof event.data === "string"
+                    ? event.data
+                    : "",
+            },
+          ];
+        default:
+          // Unknown/changed shapes must never fail the task (schema is
+          // undocumented and drifts across releases).
+          return [];
+      }
+    },
+
+    sessionId(events: VendorEvent[]): string | undefined {
+      for (let i = events.length - 1; i >= 0; i--) {
+        const event = events[i];
+        if (event?.kind === "session_meta" && event.session_id !== undefined) {
+          return event.session_id;
+        }
+      }
+      return undefined;
+    },
+  };
+}

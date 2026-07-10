@@ -39,6 +39,7 @@ import {
 import { formatDuration } from "../util/time.js";
 import {
   createWorktree,
+  excludeMaterializedFiles,
   isWorktreeModified,
   removeWorktree,
   repoRoot,
@@ -781,6 +782,23 @@ export class TaskEngine {
     // child for an already-terminal task.
     const beforeSpawn = getTask(this.db, task.id);
     if (!beforeSpawn || TERMINAL_STATES.has(beforeSpawn.state)) return;
+
+    // Git-exclude vendor plumbing before writing it, so a worktree task's
+    // `git status` stays clean, the files never count as "modified" (which would
+    // block auto-remove of an otherwise-untouched worktree), and the child can
+    // never stage them. A `--cwd` task has no parley worktree to manage.
+    if (plan.files.length > 0 && task.worktree !== null) {
+      try {
+        excludeMaterializedFiles(task.worktree, plan.files.map((file) => file.path));
+      } catch (err) {
+        // Best-effort: a git failure here must not stop the task from running —
+        // but it leaves plumbing visible as untracked (blocking auto-remove of
+        // an untouched worktree), so record it in the daemon log, don't hide it.
+        console.error(
+          `task ${task.id}: failed to git-exclude vendor files in ${task.worktree}: ${errorMessage(err)}`,
+        );
+      }
+    }
 
     for (const file of plan.files) {
       const target = path.join(plan.cwd, file.path);

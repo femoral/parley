@@ -1,0 +1,7 @@
+{"type":"thought","data":"The"}
+{"type":"thought","data":" user"}
+{"type":"thought","data":" wants a greeting."}
+{"type":"text","data":"Hi"}
+{"type":"text","data":"."}
+{"type":"text","data":" How can I help?"}
+{"type":"end","stopReason":"EndTurn","sessionId":"019f49ce-3e6a-72b2-b5a3-2ed48e513384","requestId":"0df4acca-050d-4361-ae8a-67459105437d"}
