@@ -22,6 +22,13 @@ export const TERMINAL_STATES: ReadonlySet<string> = new Set([
   "cancelled",
 ]);
 
+/**
+ * States where the task's child is gone and nothing a child says may move the
+ * task: the terminal states plus `stalled` (child stopped; only a `parley
+ * answer` resume revives it). MCP calls and child exits check against this.
+ */
+export const SETTLED_STATES: ReadonlySet<string> = new Set([...TERMINAL_STATES, "stalled"]);
+
 /** A task row as surfaced to the CLI plane (`status` / `list`). */
 export interface TaskRow {
   id: string;
@@ -56,6 +63,8 @@ export interface TaskRow {
   sandbox: SandboxMode;
   /** Network access, stored as SQLite 0/1; 1 (on) is the ADR-0006 default. */
   network: number;
+  /** Per-task `--answer-timeout` in ms; null means the daemon default (30m). */
+  answer_timeout_ms: number | null;
 }
 
 /** Fields the daemon writes when creating a task. */
@@ -75,6 +84,7 @@ export interface NewTask {
   sandbox: SandboxMode;
   /** Whether the child may reach the network (ADR-0006 default: true). */
   network: boolean;
+  answer_timeout_ms: number | null;
 }
 
 /**
@@ -123,6 +133,8 @@ const MIGRATIONS: string[] = [
   // network on. Adapters map these to vendor mechanisms in their own tickets.
   `ALTER TABLE tasks ADD COLUMN sandbox TEXT NOT NULL DEFAULT 'workspace';
    ALTER TABLE tasks ADD COLUMN network INTEGER NOT NULL DEFAULT 1;`,
+  // #18: stall/resume — the per-task answer timeout (null = daemon default).
+  `ALTER TABLE tasks ADD COLUMN answer_timeout_ms INTEGER;`,
 ];
 
 function migrate(db: DatabaseHandle): void {
@@ -152,7 +164,8 @@ export function openDatabase(paths: HomePaths): DatabaseHandle {
 
 const TASK_COLUMNS = `id, name, vendor, model, repo, state, created_at, updated_at,
    cwd, prompt, session_id, usage, report, error, started_at, completed_at,
-   question_id, question, worktree, branch, base_sha, sandbox, network`;
+   question_id, question, worktree, branch, base_sha, sandbox, network,
+   answer_timeout_ms`;
 
 /** List all tasks, newest first. */
 export function listTasks(db: DatabaseHandle): TaskRow[] {
@@ -215,8 +228,8 @@ export function insertTask(db: DatabaseHandle, task: NewTask): TaskRow {
   db.prepare(
     `INSERT INTO tasks
        (id, name, vendor, model, repo, state, created_at, updated_at,
-        cwd, prompt, worktree, branch, base_sha, sandbox, network)
-     VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        cwd, prompt, worktree, branch, base_sha, sandbox, network, answer_timeout_ms)
+     VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     task.id,
     task.name,
@@ -232,30 +245,54 @@ export function insertTask(db: DatabaseHandle, task: NewTask): TaskRow {
     task.base_sha,
     task.sandbox,
     task.network ? 1 : 0,
+    task.answer_timeout_ms,
   );
   return getTask(db, task.id)!;
 }
 
+/**
+ * Startup crash sweep (spec §3): tasks recorded live (`pending`, `running`,
+ * `awaiting_answer`) when the previous daemon died are marked `stalled` — their
+ * children ran in the daemon's process group and died with it. Terminal and
+ * already-stalled tasks are untouched. Questions stay recorded; a stalled task
+ * resumes via `parley answer` like any other. Returns the number swept.
+ */
+export function sweepInterruptedTasks(db: DatabaseHandle): number {
+  // "Live" is defined as the complement of the settled states, so a future
+  // state is swept by default rather than surviving restarts as a zombie.
+  const placeholders = [...SETTLED_STATES].map(() => "?").join(", ");
+  const result = db
+    .prepare(
+      `UPDATE tasks SET state = 'stalled', error = ?, updated_at = ?
+       WHERE state NOT IN (${placeholders})`,
+    )
+    .run(
+      "daemon restarted while the task was live; the child died with the daemon's process group",
+      new Date().toISOString(),
+      ...SETTLED_STATES,
+    );
+  return result.changes;
+}
+
+/** The mutable task fields `updateTask` accepts. */
+export type TaskPatch = Partial<
+  Pick<
+    TaskRow,
+    | "state"
+    | "session_id"
+    | "usage"
+    | "report"
+    | "error"
+    | "started_at"
+    | "completed_at"
+    | "question_id"
+    | "question"
+    | "worktree"
+  >
+>;
+
 /** Patch mutable task fields; bumps `updated_at`. */
-export function updateTask(
-  db: DatabaseHandle,
-  id: string,
-  patch: Partial<
-    Pick<
-      TaskRow,
-      | "state"
-      | "session_id"
-      | "usage"
-      | "report"
-      | "error"
-      | "started_at"
-      | "completed_at"
-      | "question_id"
-      | "question"
-      | "worktree"
-    >
-  >,
-): void {
+export function updateTask(db: DatabaseHandle, id: string, patch: TaskPatch): void {
   const fields = Object.keys(patch);
   if (fields.length === 0) return;
   const assignments = fields.map((f) => `${f} = ?`).join(", ");

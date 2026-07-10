@@ -3,6 +3,7 @@ import { parseArgs } from "../args.js";
 import { DaemonRequestError, daemonPost, ensureDaemon } from "../client.js";
 import { type CliContext, printJson } from "../context.js";
 import { UsageError } from "../errors.js";
+import { parseDuration } from "../../util/time.js";
 import { waitForOutcome } from "../wait.js";
 import { DEFAULT_SANDBOX, SANDBOX_MODES, isSandboxMode } from "../../daemon/adapters/types.js";
 
@@ -29,6 +30,7 @@ export async function runDelegate(ctx: CliContext, args: string[]): Promise<numb
     "--no-network": {},
     "--wait": {},
     "--json": {},
+    "--answer-timeout": { value: true },
   });
 
   let prompt = positionals[0];
@@ -42,6 +44,19 @@ export async function runDelegate(ctx: CliContext, args: string[]): Promise<numb
   const vendor = flags["--vendor"];
   if (typeof vendor !== "string") {
     throw new UsageError("delegate: a vendor is required (-v/--vendor)");
+  }
+  // An unanswered question at this timeout stalls the task (spec §2). Omitted
+  // means the daemon default (30m).
+  let answerTimeoutMs: number | null = null;
+  const timeoutFlag = flags["--answer-timeout"];
+  if (typeof timeoutFlag === "string") {
+    const parsed = parseDuration(timeoutFlag);
+    if (parsed === null || parsed <= 0) {
+      throw new UsageError(
+        `delegate: invalid --answer-timeout: ${timeoutFlag} (expected e.g. 30m, 90s, 250ms)`,
+      );
+    }
+    answerTimeoutMs = parsed;
   }
 
   // `--cwd` runs the child directly in that directory (no worktree). Its
@@ -73,6 +88,7 @@ export async function runDelegate(ctx: CliContext, args: string[]): Promise<numb
       base_ref: flags["--base-ref"] ?? null,
       sandbox,
       network,
+      answer_timeout_ms: answerTimeoutMs,
     });
   } catch (err) {
     // Daemon-side request rejections (unknown vendor, bad cwd) are usage errors.

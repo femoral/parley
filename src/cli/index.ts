@@ -18,7 +18,10 @@ Usage:
     --cwd <path>       Run in this dir directly (skips worktree creation)
     --base-ref <ref>   Branch the worktree from <ref> (default: HEAD)
     --wait             Block until terminal state; print report envelope
-  parley answer <task> "<text>" Answer a child's question ('-' reads stdin)
+    --answer-timeout <dur>  Stall the task when a question goes unanswered
+                            this long (default 30m; e.g. 90s, 250ms)
+  parley answer <task> "<text>" Answer a child's question ('-' reads stdin);
+                                on a stalled task, resume it with the text
     --wait             Re-block after delivering; return on next question/terminal
   parley [list]                 Show the task table (alias for bare status)
   parley status [task] [--json] Show all tasks, or one (id or name)
