@@ -28,7 +28,6 @@ export function createFakeAdapter(env: NodeJS.ProcessEnv = process.env): VendorA
         FAKE_MCP_HEADERS: JSON.stringify(hub.headers),
         // Model passes through opaquely — the adapter never interprets it.
         ...(task.model !== null ? { FAKE_MODEL: task.model } : {}),
-        ...(task.sessionId !== undefined ? { FAKE_RESUME_SESSION: task.sessionId } : {}),
       },
       files: [],
       cwd: task.cwd,
@@ -43,9 +42,15 @@ export function createFakeAdapter(env: NodeJS.ProcessEnv = process.env): VendorA
     },
 
     resume(task, hub) {
-      // Spawn-per-turn resume (ADR-0004): respawn with the persisted session id.
-      // Exercised by the stalled-task tickets (#16/#17).
-      return Promise.resolve(plan(task, hub));
+      // Spawn-per-turn resume (ADR-0004): respawn with the persisted vendor
+      // session id; the task's prompt is the resume prompt (the orchestrator's
+      // answer). FAKE_RESUME_SESSION marks the run as a resume — the fake
+      // vendor emits a `resumed` event and switches to its post-resume script.
+      const base = plan(task, hub);
+      return Promise.resolve({
+        ...base,
+        env: { ...base.env, FAKE_RESUME_SESSION: task.sessionId ?? "" },
+      });
     },
 
     parseEvent(line: string): VendorEvent[] {

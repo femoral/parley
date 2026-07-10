@@ -66,12 +66,66 @@ export type FakeVendorAction = Record<string, unknown>;
 
 /**
  * Create a task working directory containing a `.fake-vendor.json` script that
- * drives the fake vendor's behavior for that task.
+ * drives the fake vendor's behavior for that task. `resumeActions`, when given,
+ * are written as `.fake-vendor.resume.json` — the script the fake vendor runs
+ * when respawned via the adapter's `resume()` (stall/crash recovery, #18).
  */
-export function makeTaskDir(actions: FakeVendorAction[]): string {
+export function makeTaskDir(
+  actions: FakeVendorAction[],
+  resumeActions?: FakeVendorAction[],
+): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "parley-task-"));
   fs.writeFileSync(path.join(dir, ".fake-vendor.json"), JSON.stringify(actions, null, 2));
+  if (resumeActions !== undefined) {
+    fs.writeFileSync(
+      path.join(dir, ".fake-vendor.resume.json"),
+      JSON.stringify(resumeActions, null, 2),
+    );
+  }
   return dir;
+}
+
+/**
+ * Read the fake vendor child's pid from the `hello` event it emits first thing
+ * on spawn (captured in the task's raw vendor log). Polls: the child writes it
+ * asynchronously right after spawn.
+ */
+export async function waitForChildPid(
+  home: string,
+  taskId: string,
+  timeoutMs = 10_000,
+): Promise<number> {
+  const logPath = path.join(home, "tasks", taskId, "vendor.jsonl");
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    try {
+      const line = fs
+        .readFileSync(logPath, "utf8")
+        .split("\n")
+        .find((l) => l.includes('"hello"'));
+      if (line) {
+        const hello = JSON.parse(line) as { pid?: number };
+        if (typeof hello.pid === "number") return hello.pid;
+      }
+    } catch {
+      /* log not written yet */
+    }
+    if (Date.now() >= deadline) {
+      throw new Error(`no fake-vendor hello pid for ${taskId} within ${timeoutMs}ms`);
+    }
+    await new Promise((r) => setTimeout(r, 50));
+  }
+}
+
+/** Poll until a pid is gone; throws if it is still alive at the deadline. */
+export async function waitUntilDead(pid: number, timeoutMs = 10_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (isAlive(pid)) {
+    if (Date.now() >= deadline) {
+      throw new Error(`process ${pid} still alive after ${timeoutMs}ms`);
+    }
+    await new Promise((r) => setTimeout(r, 50));
+  }
 }
 
 /** Poll `parley status <task> --json` until the task reaches `state`. */
@@ -129,9 +183,16 @@ export function cleanupHome(home: string): void {
   const discovery = readDiscovery(home);
   if (discovery && isAlive(discovery.pid)) {
     try {
-      process.kill(discovery.pid, "SIGKILL");
+      // The daemon is a session/process-group leader (spawned detached) and its
+      // vendor children share the group — kill the whole group so no test child
+      // outlives its daemon. Fall back to the pid alone if the group is gone.
+      process.kill(-discovery.pid, "SIGKILL");
     } catch {
-      /* already gone */
+      try {
+        process.kill(discovery.pid, "SIGKILL");
+      } catch {
+        /* already gone */
+      }
     }
   }
   fs.rmSync(home, { recursive: true, force: true });

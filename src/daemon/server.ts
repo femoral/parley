@@ -1,7 +1,7 @@
 import http from "node:http";
 import type { HomePaths } from "../home.js";
 import { createAdapterRegistry } from "./adapters/index.js";
-import { openDatabase } from "./db.js";
+import { openDatabase, sweepInterruptedTasks } from "./db.js";
 import { DelegateError, TaskEngine } from "./engine.js";
 import { handleMcpRequest } from "./mcp.js";
 import { buildEnvelope } from "./report.js";
@@ -13,8 +13,16 @@ export interface DaemonServer {
   close: () => Promise<void>;
 }
 
-/** How long one `/events?wait=true` long-poll blocks before the CLI re-polls. */
-const LONG_POLL_WINDOW_MS = 25_000;
+/**
+ * How long one `/events?wait=true` long-poll blocks before the CLI re-polls.
+ * `PARLEY_LONG_POLL_MS` overrides it — tests shrink the window to exercise
+ * re-poll behavior (e.g. a waiter observing a stall after missing the
+ * question event) without 25s waits.
+ */
+const LONG_POLL_WINDOW_MS = (() => {
+  const parsed = Number(process.env.PARLEY_LONG_POLL_MS ?? "");
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 25_000;
+})();
 
 function sendJson(res: http.ServerResponse, status: number, body: unknown): void {
   const payload = JSON.stringify(body);
@@ -77,6 +85,15 @@ function handleDelegate(engine: TaskEngine, res: http.ServerResponse, body: unkn
     sendJson(res, 400, { error: "cwd is required" });
     return;
   }
+  const timeoutRaw = body.answer_timeout_ms;
+  let answerTimeoutMs: number | null = null;
+  if (timeoutRaw !== undefined && timeoutRaw !== null) {
+    if (typeof timeoutRaw !== "number" || !Number.isFinite(timeoutRaw) || timeoutRaw <= 0) {
+      sendJson(res, 400, { error: "answer_timeout_ms must be a positive number" });
+      return;
+    }
+    answerTimeoutMs = Math.round(timeoutRaw);
+  }
   try {
     const task = engine.delegate({
       prompt,
@@ -84,6 +101,7 @@ function handleDelegate(engine: TaskEngine, res: http.ServerResponse, body: unkn
       cwd,
       model: optionalString(body.model),
       name: optionalString(body.name),
+      answerTimeoutMs,
     });
     sendJson(res, 201, { task_id: task.id, name: task.name, state: task.state });
   } catch (err) {
@@ -224,8 +242,17 @@ function createHandler(engine: TaskEngine): http.RequestListener {
  */
 export function startServer(paths: HomePaths): Promise<DaemonServer> {
   const db = openDatabase(paths);
+  // Crash sweep (spec §3): tasks recorded live by a previous daemon lost their
+  // children with its process group — mark them stalled before taking requests.
+  sweepInterruptedTasks(db);
   const engine = new TaskEngine(db, paths, createAdapterRegistry());
   const server = http.createServer(createHandler(engine));
+  // Children must never outlive the daemon (no orphans): whatever path the
+  // process exits through — graceful close below, crash, signal handler —
+  // hard-stop any still-running vendor children on the way out.
+  process.on("exit", () => {
+    engine.killChildren();
+  });
 
   return new Promise<DaemonServer>((resolve, reject) => {
     const failed = (err: Error): void => {
@@ -244,11 +271,18 @@ export function startServer(paths: HomePaths): Promise<DaemonServer> {
       engine.setHubPort(port);
       const close = () =>
         new Promise<void>((resolveClose, rejectClose) => {
+          // Stop children first: a live child holds an open MCP connection
+          // (a blocked ask_orchestrator) that would keep the server from
+          // closing; killing it releases the socket.
+          engine.killChildren();
           server.close((err) => {
             db.close();
             if (err) rejectClose(err);
             else resolveClose();
           });
+          // Sever lingering CLI long-polls too — shutdown must not wait out
+          // a 25s poll window.
+          server.closeAllConnections();
         });
       resolve({ port, close });
     });

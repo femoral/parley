@@ -49,6 +49,15 @@ export async function waitForOutcome(
       return EXIT_CODES.awaiting_answer ?? 3;
     }
     printJson(ctx, task);
+    if (task.state === "stalled") {
+      // The envelope on stdout carries the recorded question; the resume hint
+      // goes to stderr so stdout stays machine-parseable (spec §2/§5).
+      ctx.stderr(
+        `task ${task.task_id} stalled` +
+          (task.question !== null ? ` on question: ${task.question}` : "") +
+          `\nresume with: parley answer ${task.task_id} "<answer>" [--wait]\n`,
+      );
+    }
     return EXIT_CODES[task.state] ?? 1;
   }
 }

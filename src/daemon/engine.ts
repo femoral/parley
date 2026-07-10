@@ -1,9 +1,9 @@
-import { spawn } from "node:child_process";
+import { spawn, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import readline from "node:readline";
 import type { HomePaths } from "../home.js";
-import type { HubInfo, TaskSpec, VendorAdapter, VendorEvent } from "./adapters/types.js";
+import type { HubInfo, SpawnPlan, TaskSpec, VendorAdapter, VendorEvent } from "./adapters/types.js";
 import {
   getTask,
   insertTask,
@@ -11,8 +11,10 @@ import {
   nextQuestionId,
   resolveTask,
   updateTask,
+  SETTLED_STATES,
   TERMINAL_STATES,
   type DatabaseHandle,
+  type TaskPatch,
   type TaskRow,
 } from "./db.js";
 import { taskLogDir } from "./discovery.js";
@@ -29,10 +31,23 @@ function isEventState(state: string): boolean {
   return TERMINAL_STATES.has(state) || state === "awaiting_answer" || state === "stalled";
 }
 
-/** A blocking `ask_orchestrator` call parked in daemon memory until answered. */
+/** Default `--answer-timeout`: 30 minutes (spec §2). */
+export const DEFAULT_ANSWER_TIMEOUT_MS = 30 * 60 * 1000;
+
+/** How long a stopped child gets to exit on SIGTERM before SIGKILL. */
+const CHILD_STOP_GRACE_MS = 2_000;
+
+/** What an `ask_orchestrator` call settles with: an answer, or a tool error. */
+type AskOutcome = { answer: string } | { error: string };
+
+/**
+ * A blocking `ask_orchestrator` call parked in daemon memory until answered —
+ * or until `timer` fires the answer-timeout and stalls the task (#18).
+ */
 interface PendingQuestion {
   questionId: string;
-  resolve: (answer: string) => void;
+  resolve: (outcome: AskOutcome) => void;
+  timer: NodeJS.Timeout;
 }
 
 /** A caller mistake surfaced to the CLI plane as HTTP 400 → exit code 2. */
@@ -46,6 +61,8 @@ export interface DelegateRequest {
   model: string | null;
   name: string | null;
   cwd: string;
+  /** `--answer-timeout` in ms; null means the daemon default (30m). */
+  answerTimeoutMs: number | null;
 }
 
 /**
@@ -53,18 +70,29 @@ export interface DelegateRequest {
  * adapters, captures raw vendor streams as per-task JSONL, applies lifecycle
  * transitions, and wakes long-poll waiters on terminal states.
  *
- * The full crash story (spec §3: orphan sweep marking running tasks stalled on
- * daemon start) lands with the failure-path ticket (#17).
+ * Crash story (spec §3): children spawn into the daemon's process group and
+ * die with it; the startup sweep (`sweepInterruptedTasks`, run by the server
+ * before the engine takes requests) marks tasks recorded live as `stalled`.
  */
 export class TaskEngine {
   private readonly waiters = new Map<string, Set<() => void>>();
   /**
    * Live `ask_orchestrator` calls, keyed by task id. The value's `resolve`
-   * unblocks the child's MCP request with the answer text. One per task by
-   * construction (the child blocks while asking). These live only in memory —
-   * a daemon restart abandons them (the resume story lands with #17/#18).
+   * unblocks the child's MCP request with the answer text (or a tool error on
+   * stall). One per task by construction (the child blocks while asking).
+   * These live only in memory — a daemon restart abandons them; the startup
+   * sweep marks their tasks `stalled` and `parley answer` resumes them.
    */
   private readonly pending = new Map<string, PendingQuestion>();
+  /** Live vendor children, keyed by task id — stopped on stall and daemon exit. */
+  private readonly children = new Map<string, ChildProcess>();
+  /**
+   * Set once the daemon is going down: child exits stop being lifecycle events
+   * (their tasks stay recorded `running`/`awaiting_answer`, and the *next*
+   * daemon's startup sweep marks them `stalled` — the crash story, spec §3)
+   * and must not touch the database, which is closing.
+   */
+  private shuttingDown = false;
   /** MCP endpoint port — published by the server once it has bound. */
   private hubPort: number | null = null;
 
@@ -124,6 +152,7 @@ export class TaskEngine {
       repo: cwd,
       cwd,
       prompt: request.prompt,
+      answer_timeout_ms: request.answerTimeoutMs,
     });
 
     void this.run(row, adapter).catch((err: unknown) => {
@@ -140,19 +169,40 @@ export class TaskEngine {
   submitReport(taskId: string, payload: unknown): string[] | null {
     const task = getTask(this.db, taskId);
     if (!task) return [`unknown task: ${taskId}`];
-    if (TERMINAL_STATES.has(task.state)) {
+    // A settled task's child is gone (a stalled one was stopped) — a
+    // straggling report must not move the task out from under stall/resume.
+    if (SETTLED_STATES.has(task.state)) {
       return [`task ${taskId} is already ${task.state}`];
     }
     const errors = validateReport(payload);
     if (errors.length > 0) return errors;
 
+    // A misbehaving child may report over its own outstanding question —
+    // settle the parked call so its timer cannot stall a completed task.
+    this.settlePending(taskId, { error: `task ${taskId} completed` });
     updateTask(this.db, taskId, {
       state: "completed",
       report: JSON.stringify(payload as Report),
       completed_at: new Date().toISOString(),
+      question_id: null,
+      question: null,
     });
     this.notify(taskId);
     return null;
+  }
+
+  /**
+   * Settle and forget a task's parked `ask_orchestrator` call, if any: disarm
+   * its answer-timeout and resolve the child's blocked MCP request with
+   * `outcome`. Returns true when a call was parked.
+   */
+  private settlePending(taskId: string, outcome: AskOutcome): boolean {
+    const pending = this.pending.get(taskId);
+    if (!pending) return false;
+    this.pending.delete(taskId);
+    clearTimeout(pending.timer);
+    pending.resolve(outcome);
+    return true;
   }
 
   /**
@@ -161,13 +211,14 @@ export class TaskEngine {
    * answer` delivers the text (ADR-0003). Returns the answer as the tool
    * result, or an error string (bounced to the child as a tool error).
    *
-   * Answer-timeout / stall (#18) is out of scope here: an unanswered question
-   * simply blocks. The parked promise lives only in memory.
+   * Unanswered at the task's `--answer-timeout` (default 30m), the question
+   * stays durably recorded on the row, the child is stopped, and the task
+   * moves to `stalled` (spec §2) — the parked call settles with a tool error.
    */
-  async askOrchestrator(taskId: string, question: string): Promise<{ answer: string } | { error: string }> {
+  async askOrchestrator(taskId: string, question: string): Promise<AskOutcome> {
     const task = getTask(this.db, taskId);
     if (!task) return { error: `unknown task: ${taskId}` };
-    if (TERMINAL_STATES.has(task.state)) {
+    if (SETTLED_STATES.has(task.state)) {
       return { error: `task ${taskId} is already ${task.state}` };
     }
     // One outstanding question per task holds by construction (the child blocks
@@ -182,32 +233,127 @@ export class TaskEngine {
       question_id: questionId,
       question,
     });
-    const answer = await new Promise<string>((resolve) => {
-      this.pending.set(taskId, { questionId, resolve });
+    return new Promise<AskOutcome>((resolve) => {
+      const timeoutMs = task.answer_timeout_ms ?? DEFAULT_ANSWER_TIMEOUT_MS;
+      const timer = setTimeout(() => {
+        this.stallOnAnswerTimeout(taskId);
+      }, timeoutMs);
+      timer.unref();
+      this.pending.set(taskId, { questionId, resolve, timer });
       // Wake the waiting `delegate --wait` / `answer --wait` long-poll.
       this.notify(taskId);
     });
-    return { answer };
   }
 
   /**
-   * Deliver an answer to a task's outstanding question: unblock the child's
-   * `ask_orchestrator` call with the text and move the task back to `running`.
+   * The answer-timeout fired with the question still unanswered: stall the
+   * task (spec §2). The question stays recorded on the row (visible via
+   * `parley status`), the parked MCP call settles with a tool error, the child
+   * is stopped, and long-poll waiters wake with `task.stalled` (exit 4).
+   */
+  private stallOnAnswerTimeout(taskId: string): void {
+    const pending = this.pending.get(taskId);
+    if (!pending) return; // answered in the meantime
+    this.pending.delete(taskId);
+    const task = getTask(this.db, taskId);
+    if (!task || SETTLED_STATES.has(task.state)) {
+      // Settled by other means: just release the parked call, no transition.
+      pending.resolve({ error: `task ${taskId} is already ${task?.state ?? "gone"}` });
+      return;
+    }
+    // Stall before stopping the child so its exit is read as part of the
+    // stall, not as a report-less failure.
+    updateTask(this.db, taskId, {
+      state: "stalled",
+      error: `answer timeout: question ${pending.questionId} was not answered in time`,
+    });
+    pending.resolve({
+      error: "answer timeout — the task is stalled; the orchestrator can resume it with `parley answer`",
+    });
+    this.stopChild(taskId);
+    this.notify(taskId);
+  }
+
+  /** SIGTERM a task's child, escalating to SIGKILL after a short grace. */
+  private stopChild(taskId: string): void {
+    const child = this.children.get(taskId);
+    if (!child) return;
+    child.kill("SIGTERM");
+    const hardKill = setTimeout(() => {
+      child.kill("SIGKILL");
+    }, CHILD_STOP_GRACE_MS);
+    hardKill.unref();
+    child.once("close", () => clearTimeout(hardKill));
+  }
+
+  /**
+   * Hard-stop every live vendor child. Called on daemon shutdown — children
+   * must never outlive the daemon (spec §3: no orphans). Safe to call from a
+   * process `exit` handler (synchronous) and idempotent. Their tasks stay
+   * recorded as they were; the next daemon's startup sweep stalls them.
+   */
+  killChildren(): void {
+    this.shuttingDown = true;
+    for (const child of this.children.values()) {
+      try {
+        child.kill("SIGKILL");
+      } catch {
+        /* already gone */
+      }
+    }
+  }
+
+  /**
+   * Deliver an answer to a task. Two cases:
+   *
+   * - A live pending question: unblock the child's `ask_orchestrator` call
+   *   with the text and move the task back to `running`.
+   * - A `stalled` task (answer timeout or daemon crash): respawn the child via
+   *   the adapter's `resume()` with the persisted vendor session id (ADR-0004);
+   *   the answer text is the resume prompt, so it reaches the child as the
+   *   continuation of the conversation (spec §2/§7).
+   *
    * Throws `DelegateError` (→ exit 2) when the ref is unknown or the task has
-   * no pending question. Answers correlate to the single outstanding question
-   * by construction.
+   * neither a pending question nor a stall to resume from. Answers correlate
+   * to the single outstanding question by construction.
    */
   answer(ref: string, text: string): TaskRow {
     const task = resolveTask(this.db, ref);
     if (!task) throw new DelegateError(`no such task: ${ref}`);
+
     const pending = this.pending.get(task.id);
-    if (!pending) {
-      throw new DelegateError(`task ${task.id} has no pending question to answer`);
+    if (pending) {
+      this.pending.delete(task.id);
+      clearTimeout(pending.timer);
+      updateTask(this.db, task.id, { state: "running", question_id: null, question: null });
+      pending.resolve({ answer: text });
+      return getTask(this.db, task.id)!;
     }
-    this.pending.delete(task.id);
-    updateTask(this.db, task.id, { state: "running", question_id: null, question: null });
-    pending.resolve(text);
-    return getTask(this.db, task.id)!;
+
+    if (task.state === "stalled") {
+      const adapter = this.adapters.get(task.vendor ?? "");
+      if (!adapter) {
+        throw new DelegateError(`task ${task.id} has an unknown vendor: ${task.vendor ?? "?"}`);
+      }
+      // The answered question is no longer outstanding; the stall reason is spent.
+      updateTask(this.db, task.id, {
+        state: "running",
+        question_id: null,
+        question: null,
+        error: null,
+      });
+      // A vendor session can only be resumed if one was ever captured. A task
+      // swept stalled before its child spoke (e.g. daemon died right after
+      // delegate) has none — rerun it fresh with its original prompt instead.
+      const revive =
+        task.session_id !== null ? this.resume(task, adapter, text) : this.run(task, adapter);
+      void revive.catch((err: unknown) => {
+        this.fail(task.id, `task resume crashed: ${String(err)}`);
+      });
+      return getTask(this.db, task.id)!;
+    }
+
+    throw new DelegateError(`task ${task.id} has no pending question to answer`);
   }
 
   /**
@@ -260,25 +406,56 @@ export class TaskEngine {
     this.notify(taskId);
   }
 
-  /** Spawn the vendor child and pump its stream until exit. */
-  private async run(task: TaskRow, adapter: VendorAdapter): Promise<void> {
+  private hubFor(taskId: string): HubInfo {
     if (this.hubPort === null) {
       throw new Error("task engine has no hub port yet");
     }
-    const hub: HubInfo = {
+    return {
       url: `http://127.0.0.1:${this.hubPort}/mcp`,
-      headers: { [TASK_HEADER]: task.id },
+      headers: { [TASK_HEADER]: taskId },
     };
-    const spec: TaskSpec = {
+  }
+
+  private buildSpec(task: TaskRow): TaskSpec {
+    return {
       id: task.id,
       name: task.name,
       prompt: task.prompt ?? "",
       vendor: task.vendor ?? "",
       model: task.model,
       cwd: task.cwd ?? process.cwd(),
+      ...(task.session_id !== null ? { sessionId: task.session_id } : {}),
     };
-    const plan = await adapter.prepare(spec, hub);
+  }
 
+  /** Fresh run: spawn the vendor child via `prepare` and pump it until exit. */
+  private async run(task: TaskRow, adapter: VendorAdapter): Promise<void> {
+    const plan = await adapter.prepare(this.buildSpec(task), this.hubFor(task.id));
+    await this.runChild(task, adapter, plan, {
+      state: "running",
+      started_at: new Date().toISOString(),
+    });
+  }
+
+  /**
+   * Resume a stalled task (spec §2): respawn via the adapter's `resume()` with
+   * the persisted vendor session id; the orchestrator's answer is the resume
+   * prompt, delivered to the child as the conversation's continuation.
+   * `started_at` is kept from the original run.
+   */
+  private async resume(task: TaskRow, adapter: VendorAdapter, answer: string): Promise<void> {
+    const spec: TaskSpec = { ...this.buildSpec(task), prompt: answer };
+    const plan = await adapter.resume(spec, this.hubFor(task.id));
+    await this.runChild(task, adapter, plan, { state: "running" });
+  }
+
+  /** Spawn a planned vendor child and pump its stream until exit. */
+  private async runChild(
+    task: TaskRow,
+    adapter: VendorAdapter,
+    plan: SpawnPlan,
+    onSpawn: TaskPatch,
+  ): Promise<void> {
     for (const file of plan.files) {
       const target = path.join(plan.cwd, file.path);
       fs.mkdirSync(path.dirname(target), { recursive: true });
@@ -292,13 +469,17 @@ export class TaskEngine {
 
     const [command, ...args] = plan.argv;
     if (!command) throw new Error(`adapter ${adapter.id} produced an empty argv`);
+    // Deliberately NOT detached: the child joins the daemon's process group
+    // (the daemon is a session leader) so a group kill takes children with it,
+    // and `killChildren` covers daemon shutdown — no orphans (spec §3).
     const child = spawn(command, args, {
       cwd: plan.cwd,
       env: { ...process.env, ...plan.env },
       stdio: ["ignore", "pipe", "pipe"],
     });
+    this.children.set(task.id, child);
 
-    updateTask(this.db, task.id, { state: "running", started_at: new Date().toISOString() });
+    updateTask(this.db, task.id, onSpawn);
 
     child.stderr.pipe(stderrLog);
 
@@ -313,7 +494,7 @@ export class TaskEngine {
       if (lineEvents.length === 0) return;
       events.push(...lineEvents);
 
-      const patch: Parameters<typeof updateTask>[2] = {};
+      const patch: TaskPatch = {};
       let usageChanged = false;
       for (const event of lineEvents) {
         if (event.kind === "session_meta" && event.usage !== undefined) {
@@ -334,18 +515,41 @@ export class TaskEngine {
     });
 
     await new Promise<void>((resolve) => {
+      // A resume replaces this task's entry in `children` — once that has
+      // happened this child is stale (a stall's SIGTERM straggler) and its
+      // exit is no longer a lifecycle event for the task.
+      const isCurrentChild = (): boolean => this.children.get(task.id) === child;
       child.on("error", (err) => {
-        this.fail(task.id, `failed to spawn vendor child: ${String(err)}`);
+        const current = isCurrentChild();
+        if (current) this.children.delete(task.id);
+        if (!this.shuttingDown && current) {
+          this.fail(task.id, `failed to spawn vendor child: ${String(err)}`);
+        }
         resolve();
       });
       child.on("close", (code) => {
+        const current = isCurrentChild();
+        if (current) this.children.delete(task.id);
         lines.close();
         rawLog.end();
         stderrLog.end();
-        const current = getTask(this.db, task.id);
-        if (current && !TERMINAL_STATES.has(current.state)) {
+        if (this.shuttingDown || !current) {
+          // Daemon-initiated kill (db is closing) or a superseded child:
+          // either way, not a task outcome.
+          resolve();
+          return;
+        }
+        // A child that died while blocked on ask_orchestrator leaves its parked
+        // call behind — settle it so nothing leaks (the stall path has already
+        // settled its own).
+        this.settlePending(task.id, {
+          error: "vendor child exited while its question was pending",
+        });
+        const row = getTask(this.db, task.id);
+        if (row && !SETTLED_STATES.has(row.state)) {
           // `completed` strictly requires submit_report (spec §2): exit
-          // without one is a failure, whatever the exit code says.
+          // without one is a failure, whatever the exit code says. A `stalled`
+          // exit is the stall stopping the child, not a failure.
           this.fail(task.id, `vendor child exited (code ${code ?? "?"}) without submitting a report`);
         }
         resolve();

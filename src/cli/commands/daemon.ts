@@ -77,10 +77,18 @@ async function daemonStop(ctx: CliContext, json: boolean): Promise<number> {
   let exited = await waitForExit(running.pid, STOP_TIMEOUT_MS);
   if (!exited) {
     // Daemon ignored SIGTERM (hung / stuck closing sockets): escalate.
+    // SIGKILL is untrappable, so the daemon's own child cleanup won't run —
+    // kill its whole process group (it is a session leader; vendor children
+    // share the group) so no child is orphaned (spec §3). Fall back to the
+    // bare pid if the group is already gone.
     try {
-      process.kill(running.pid, "SIGKILL");
-    } catch (err) {
-      if ((err as NodeJS.ErrnoException).code !== "ESRCH") throw err;
+      process.kill(-running.pid, "SIGKILL");
+    } catch {
+      try {
+        process.kill(running.pid, "SIGKILL");
+      } catch (err) {
+        if ((err as NodeJS.ErrnoException).code !== "ESRCH") throw err;
+      }
     }
     exited = await waitForExit(running.pid, 2_000);
   }

@@ -89,8 +89,24 @@ async function callTool(name, args) {
 }
 
 async function main() {
-  emit({ type: "hello", model: process.env.FAKE_MODEL ?? null, cwd: process.cwd() });
-  const scriptPath = path.join(process.cwd(), ".fake-vendor.json");
+  emit({
+    type: "hello",
+    model: process.env.FAKE_MODEL ?? null,
+    cwd: process.cwd(),
+    pid: process.pid,
+  });
+  // Resume semantics (#18): when respawned via the fake adapter's `resume()`,
+  // FAKE_RESUME_SESSION carries the persisted vendor session id and argv[2]
+  // carries the resume prompt (the orchestrator's answer). A resumed run
+  // executes `.fake-vendor.resume.json` — its post-resume script — instead of
+  // starting the original script over.
+  const resumeSession = process.env.FAKE_RESUME_SESSION;
+  let scriptName = ".fake-vendor.json";
+  if (resumeSession !== undefined) {
+    emit({ type: "resumed", session_id: resumeSession, answer: process.argv[2] ?? null });
+    scriptName = ".fake-vendor.resume.json";
+  }
+  const scriptPath = path.join(process.cwd(), scriptName);
   const actions = JSON.parse(fs.readFileSync(scriptPath, "utf8"));
 
   for (const action of actions) {
