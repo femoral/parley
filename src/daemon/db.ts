@@ -51,6 +51,8 @@ export interface TaskRow {
   branch: string | null;
   /** The commit the worktree branched from — the baseline for auto-remove. */
   base_sha: string | null;
+  /** JSON: the caller-supplied report schema; null means parley's default. */
+  report_schema: string | null;
 }
 
 /** Fields the daemon writes when creating a task. */
@@ -66,6 +68,8 @@ export interface NewTask {
   worktree: string | null;
   branch: string | null;
   base_sha: string | null;
+  /** JSON of the caller-supplied report schema; null uses parley's default. */
+  report_schema: string | null;
 }
 
 /**
@@ -109,6 +113,10 @@ const MIGRATIONS: string[] = [
   `ALTER TABLE tasks ADD COLUMN worktree TEXT;
    ALTER TABLE tasks ADD COLUMN branch TEXT;
    ALTER TABLE tasks ADD COLUMN base_sha TEXT;`,
+  // #17: caller report schemas — the JSON Schema `submit_report` validates
+  // against (null = parley's default). Recorded so the envelope can report the
+  // schema actually applied.
+  `ALTER TABLE tasks ADD COLUMN report_schema TEXT;`,
 ];
 
 function migrate(db: DatabaseHandle): void {
@@ -138,7 +146,7 @@ export function openDatabase(paths: HomePaths): DatabaseHandle {
 
 const TASK_COLUMNS = `id, name, vendor, model, repo, state, created_at, updated_at,
    cwd, prompt, session_id, usage, report, error, started_at, completed_at,
-   question_id, question, worktree, branch, base_sha`;
+   question_id, question, worktree, branch, base_sha, report_schema`;
 
 /** List all tasks, newest first. */
 export function listTasks(db: DatabaseHandle): TaskRow[] {
@@ -201,8 +209,8 @@ export function insertTask(db: DatabaseHandle, task: NewTask): TaskRow {
   db.prepare(
     `INSERT INTO tasks
        (id, name, vendor, model, repo, state, created_at, updated_at,
-        cwd, prompt, worktree, branch, base_sha)
-     VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?)`,
+        cwd, prompt, worktree, branch, base_sha, report_schema)
+     VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     task.id,
     task.name,
@@ -216,6 +224,7 @@ export function insertTask(db: DatabaseHandle, task: NewTask): TaskRow {
     task.worktree,
     task.branch,
     task.base_sha,
+    task.report_schema,
   );
   return getTask(db, task.id)!;
 }

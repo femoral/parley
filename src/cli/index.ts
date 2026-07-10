@@ -2,6 +2,7 @@ import { homePathsFromEnv } from "../home.js";
 import { type CliContext } from "./context.js";
 import { HelpRequested, UsageError } from "./errors.js";
 import { runAnswer } from "./commands/answer.js";
+import { runCancel } from "./commands/cancel.js";
 import { runClean } from "./commands/clean.js";
 import { runDaemon } from "./commands/daemon.js";
 import { runDelegate } from "./commands/delegate.js";
@@ -17,9 +18,11 @@ Usage:
     -n --name <label>  Human label; usable wherever a task id is
     --cwd <path>       Run in this dir directly (skips worktree creation)
     --base-ref <ref>   Branch the worktree from <ref> (default: HEAD)
+    --report-schema <file>  Validate the child's report against this JSON Schema
     --wait             Block until terminal state; print report envelope
   parley answer <task> "<text>" Answer a child's question ('-' reads stdin)
     --wait             Re-block after delivering; return on next question/terminal
+  parley cancel <task>          Terminate a task's child; end it cancelled
   parley [list]                 Show the task table (alias for bare status)
   parley status [task] [--json] Show all tasks, or one (id or name)
   parley logs <task> [--follow] Print the raw captured vendor stream
@@ -56,6 +59,8 @@ export async function run(argv: string[], ctx: CliContext): Promise<number> {
       return runDelegate(ctx, rest);
     case "answer":
       return runAnswer(ctx, rest);
+    case "cancel":
+      return runCancel(ctx, rest);
     case "list":
     case "status":
       return runStatus(ctx, rest);
