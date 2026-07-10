@@ -87,6 +87,48 @@ export function validateReport(
   return (validate.errors ?? []).map(formatError);
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/** Describe one schema property for the preamble (`type`, `enum`, or array item type). */
+function describeField(raw: unknown): string {
+  if (!isRecord(raw)) return "any";
+  if (Array.isArray(raw.enum) && raw.enum.length > 0) {
+    return `one of ${raw.enum.map((v) => JSON.stringify(v)).join(", ")}`;
+  }
+  const type = raw.type;
+  if (type === "array") {
+    const items = isRecord(raw.items) ? raw.items.type : undefined;
+    return typeof items === "string" ? `array of ${items}` : "array";
+  }
+  return typeof type === "string" ? type : "any";
+}
+
+/**
+ * A compact, human summary of the report schema a child must satisfy — the
+ * "report-schema summary" the protocol preamble teaches (spec §7). Handles the
+ * default schema and caller-supplied object schemas; degrades gracefully for
+ * boolean or property-less schemas.
+ */
+export function summarizeReportSchema(schema: JsonSchema): string {
+  if (typeof schema === "boolean") {
+    return schema
+      ? "Any JSON object is accepted as the report."
+      : "No report will be accepted (the schema rejects everything).";
+  }
+  const props = isRecord(schema.properties) ? schema.properties : undefined;
+  if (!props) {
+    return "Submit a report satisfying the caller-supplied JSON Schema.";
+  }
+  const required = Array.isArray(schema.required) ? schema.required.map(String) : [];
+  const lines = Object.entries(props).map(([key, raw]) => {
+    const suffix = required.includes(key) ? " (required)" : "";
+    return `- \`${key}\`: ${describeField(raw)}${suffix}`;
+  });
+  return `Call \`submit_report\` with an object:\n${lines.join("\n")}`;
+}
+
 /** The report envelope the daemon wraps around a task's outcome (spec §4). */
 export interface Envelope {
   task_id: string;

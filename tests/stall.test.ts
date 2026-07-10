@@ -165,7 +165,9 @@ describe("parley answer resumes a stalled task", () => {
     const resumed = vendorEvents(home, "t1").find((e) => e.type === "resumed");
     expect(resumed).toBeDefined();
     expect(resumed!.session_id).toBe("sess-9");
-    expect(resumed!.answer).toBe("option-b");
+    // The resume prompt re-prepends the protocol preamble (spec §7); the answer
+    // rides along as the conversation's continuation.
+    expect(resumed!.answer).toContain("option-b");
 
     // The question is no longer outstanding.
     const row = await waitForState(home, "t1", "completed");
@@ -253,7 +255,7 @@ describe("daemon crash recovery (spec §3)", () => {
     expect(JSON.parse(answer.stdout).state).toBe("completed");
     const resumed = vendorEvents(home, "t1").find((e) => e.type === "resumed");
     expect(resumed!.session_id).toBe("sess-A");
-    expect(resumed!.answer).toBe("keep going");
+    expect(resumed!.answer).toContain("keep going");
   });
 });
 

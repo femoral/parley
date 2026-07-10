@@ -1,6 +1,7 @@
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import { PARLEY_DIR } from "./context.js";
 
 /**
  * Worktree manager (spec §6, ADR-0005). Parley owns an isolated git worktree
@@ -136,6 +137,10 @@ export function createWorktree(opts: CreateWorktreeOptions): WorktreeInfo {
   try {
     const baseSha = git(["-C", wtPath, "rev-parse", "HEAD"]);
     const generated = translateConfig(opts.repoRoot, wtPath);
+    // Parley always materializes task context under `.parley/` here (spec §7);
+    // exclude it unconditionally so the child can never commit or see it as a
+    // change, whether or not `--context` files were passed.
+    generated.push(`/${PARLEY_DIR}/`);
     appendExclude(wtPath, generated);
     return { path: wtPath, branch, baseSha };
   } catch (err) {

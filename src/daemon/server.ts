@@ -3,6 +3,7 @@ import type { HomePaths } from "../home.js";
 import { createAdapterRegistry } from "./adapters/index.js";
 import { openDatabase, sweepInterruptedTasks } from "./db.js";
 import { DEFAULT_NETWORK, DEFAULT_SANDBOX, isSandboxMode } from "./adapters/types.js";
+import type { ContextFile } from "./context.js";
 import { DelegateError, TaskEngine } from "./engine.js";
 import { handleMcpRequest } from "./mcp.js";
 import { buildEnvelope } from "./report.js";
@@ -104,6 +105,24 @@ function handleDelegate(engine: TaskEngine, res: http.ServerResponse, body: unkn
     }
     answerTimeoutMs = Math.round(timeoutRaw);
   }
+  // `--context` files arrive by value (name + contents); the CLI already
+  // rejected an unreadable file. Guard the wire shape — a malformed entry is a
+  // client mistake (→ 400 → exit 2), not a 500.
+  const contexts: ContextFile[] = [];
+  const contextsRaw = body.contexts;
+  if (contextsRaw !== undefined && contextsRaw !== null) {
+    if (!Array.isArray(contextsRaw)) {
+      sendJson(res, 400, { error: "contexts must be an array" });
+      return;
+    }
+    for (const entry of contextsRaw) {
+      if (!isRecord(entry) || typeof entry.name !== "string" || typeof entry.contents !== "string") {
+        sendJson(res, 400, { error: "each context must be { name, contents }" });
+        return;
+      }
+      contexts.push({ name: entry.name, contents: entry.contents });
+    }
+  }
   try {
     const task = engine.delegate({
       prompt,
@@ -121,6 +140,7 @@ function handleDelegate(engine: TaskEngine, res: http.ServerResponse, body: unkn
       // else (object, boolean, or a malformed non-schema) is validated by the
       // engine, which rejects non-schemas before the task is created.
       reportSchema: body.report_schema ?? null,
+      contexts,
     });
     sendJson(res, 201, { task_id: task.id, name: task.name, state: task.state });
   } catch (err) {

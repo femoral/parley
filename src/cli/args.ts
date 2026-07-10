@@ -6,11 +6,14 @@ export interface FlagDef {
   aliases?: string[];
   /** True when the flag consumes the next argument as its value. */
   value?: boolean;
+  /** Repeatable: collect every occurrence's value into a string array. */
+  multi?: boolean;
 }
 
 export interface ParsedArgs {
   positionals: string[];
-  flags: Record<string, string | boolean>;
+  /** Boolean for presence flags, string for valued, string[] for repeatable. */
+  flags: Record<string, string | boolean | string[]>;
 }
 
 /**
@@ -25,7 +28,7 @@ export function parseArgs(args: string[], defs: Record<string, FlagDef>): Parsed
   }
 
   const positionals: string[] = [];
-  const flags: Record<string, string | boolean> = {};
+  const flags: Record<string, string | boolean | string[]> = {};
   for (let i = 0; i < args.length; i++) {
     const arg = args[i]!;
     if (!arg.startsWith("-") || arg === "-") {
@@ -38,7 +41,12 @@ export function parseArgs(args: string[], defs: Record<string, FlagDef>): Parsed
     if (defs[name]!.value) {
       const value = args[++i];
       if (value === undefined) throw new UsageError(`flag ${arg} requires a value`);
-      flags[name] = value;
+      if (defs[name]!.multi) {
+        const existing = flags[name];
+        flags[name] = Array.isArray(existing) ? [...existing, value] : [value];
+      } else {
+        flags[name] = value;
+      }
     } else {
       flags[name] = true;
     }

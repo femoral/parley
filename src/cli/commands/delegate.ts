@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import path from "node:path";
 import { parseArgs } from "../args.js";
 import { DaemonRequestError, daemonPost, ensureDaemon } from "../client.js";
 import { type CliContext, printJson } from "../context.js";
@@ -28,6 +29,7 @@ export async function runDelegate(ctx: CliContext, args: string[]): Promise<numb
     "--base-ref": { value: true },
     "--sandbox": { value: true },
     "--no-network": {},
+    "--context": { value: true, multi: true },
     "--report-schema": { value: true },
     "--wait": {},
     "--json": {},
@@ -100,6 +102,39 @@ export async function runDelegate(ctx: CliContext, args: string[]): Promise<numb
     }
   }
 
+  // `--context <file>` (repeatable): the caller's supporting files. Read here so
+  // a missing/unreadable file is a caller mistake (exit 2) before any task is
+  // created; the daemon materializes them under `.parley/context/` by basename.
+  const contextFlag = flags["--context"];
+  const contextPaths = Array.isArray(contextFlag)
+    ? contextFlag
+    : typeof contextFlag === "string"
+      ? [contextFlag]
+      : [];
+  const contexts = contextPaths.map((file) => {
+    let contents: string;
+    try {
+      contents = fs.readFileSync(file, "utf8");
+    } catch (err) {
+      throw new UsageError(
+        `delegate: cannot read context file ${file}: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+    }
+    return { name: path.basename(file), contents };
+  });
+  // Files are materialized under `.parley/context/<basename>`, so two inputs
+  // that share a basename would silently clobber. Reject that up front (exit 2)
+  // rather than lose one under the child's feet.
+  const seen = new Set<string>();
+  for (const { name } of contexts) {
+    if (seen.has(name)) {
+      throw new UsageError(`delegate: duplicate --context basename: ${name}`);
+    }
+    seen.add(name);
+  }
+
   const discovery = await ensureDaemon(ctx.paths, ctx.env);
   let ack: DelegateAck;
   try {
@@ -115,6 +150,7 @@ export async function runDelegate(ctx: CliContext, args: string[]): Promise<numb
       network,
       answer_timeout_ms: answerTimeoutMs,
       report_schema: reportSchema,
+      contexts,
     });
   } catch (err) {
     // Daemon-side request rejections (unknown vendor, bad cwd) are usage errors.

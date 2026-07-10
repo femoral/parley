@@ -23,3 +23,18 @@ export function parseDuration(text: string): number | null {
   if (factor === undefined) return null;
   return Math.round(value * factor);
 }
+
+function plural(count: number, unit: string): string {
+  return `${count} ${unit}${count === 1 ? "" : "s"}`;
+}
+
+/**
+ * Render a millisecond duration as a human phrase for prose (e.g. the protocol
+ * preamble): whole hours/minutes/seconds where they divide evenly, else ms.
+ */
+export function formatDuration(ms: number): string {
+  if (ms >= 3_600_000 && ms % 3_600_000 === 0) return plural(ms / 3_600_000, "hour");
+  if (ms >= 60_000 && ms % 60_000 === 0) return plural(ms / 60_000, "minute");
+  if (ms >= 1_000 && ms % 1_000 === 0) return plural(ms / 1_000, "second");
+  return `${ms} ms`;
+}

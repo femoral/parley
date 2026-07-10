@@ -25,15 +25,18 @@ import {
   type TaskPatch,
   type TaskRow,
 } from "./db.js";
+import { contextPointers, materializeContext, type ContextFile } from "./context.js";
 import { taskLogDir } from "./discovery.js";
 import {
   assertValidSchema,
   DEFAULT_REPORT_SCHEMA,
   parseJsonColumn,
+  summarizeReportSchema,
   validateReport,
   type JsonSchema,
   type Report,
 } from "./report.js";
+import { formatDuration } from "../util/time.js";
 import {
   createWorktree,
   isWorktreeModified,
@@ -107,6 +110,12 @@ export interface DelegateRequest {
    * is created, so a non-schema is rejected here (→ exit 2).
    */
   reportSchema: unknown;
+  /**
+   * `--context` files, read by the CLI and shipped by value (name + contents).
+   * Materialized under `.parley/context/` in the workspace (spec §7); the CLI
+   * has already rejected an unreadable file (→ exit 2) before this point.
+   */
+  contexts: ContextFile[];
 }
 
 /**
@@ -240,6 +249,22 @@ export class TaskEngine {
       worktreePath = info.path;
       branch = info.branch;
       baseSha = info.baseSha;
+    }
+
+    // Task context rides the workspace, not the prompt (spec §7): the brief and
+    // any `--context` files land under `.parley/`, which the worktree already
+    // git-excludes. Roll a worktree back if this fails so nothing leaks untracked.
+    try {
+      materializeContext(workingDir, request.prompt, request.contexts);
+    } catch (err) {
+      if (worktreePath !== null) {
+        try {
+          removeWorktree(repo, worktreePath);
+        } catch {
+          /* best-effort rollback; the materialization error is the one that matters */
+        }
+      }
+      throw new DelegateError(`failed to materialize task context: ${errorMessage(err)}`);
     }
 
     const row = insertTask(this.db, {
@@ -650,9 +675,77 @@ export class TaskEngine {
     };
   }
 
+  /**
+   * The protocol preamble prepended to every vendor prompt (spec §7). Mechanics
+   * only — no repo digest or history: the tools the child has, the report schema
+   * it must satisfy, where its brief and context live on disk, the workspace and
+   * branch facts, and the answer timeout. Re-prepended on resume too, so a
+   * respawned child is re-taught the rules. Context pointers are read from disk
+   * at build time, so they reflect what was actually materialized.
+   */
+  private buildPreamble(task: TaskRow): string {
+    const cwd = task.cwd ?? process.cwd();
+    const schema = parseJsonColumn<JsonSchema>(task.report_schema) ?? DEFAULT_REPORT_SCHEMA;
+    const timeout = formatDuration(task.answer_timeout_ms ?? DEFAULT_ANSWER_TIMEOUT_MS);
+    const location =
+      task.branch !== null
+        ? `You are working in a git worktree at \`${cwd}\` on branch \`${task.branch}\`. Commit your work there; parley never merges — the orchestrator reviews the branch.`
+        : `You are working directly in \`${cwd}\` (no dedicated branch).`;
+    const pointers = contextPointers(cwd);
+    const contextList =
+      pointers.length > 0
+        ? pointers.map((p) => `- \`${p}\``).join("\n")
+        : "- (none)";
+
+    return [
+      "# Parley protocol",
+      "",
+      "You are an agent working on a task delegated through parley. Read these rules before you begin.",
+      "",
+      "## Where things are",
+      location,
+      "- Your task brief is on disk at `.parley/TASK.md` — read it first.",
+      "- Supporting context files are under `.parley/context/`:",
+      contextList,
+      "",
+      "## Tools available to you",
+      `- \`ask_orchestrator({ question })\` — ask the orchestrator a blocking question when you are genuinely stuck or need a decision only they can make. It blocks until an answer arrives; a question left unanswered for ${timeout} stalls the task (it can be resumed later). Do not use it for anything you can resolve yourself.`,
+      "- `submit_report({ ... })` — you MUST finish by calling this exactly once. The task only completes when you submit a report that satisfies the schema below; exiting without one is a failure.",
+      "",
+      "## Report schema",
+      summarizeReportSchema(schema),
+      "",
+      "The task itself follows below (and in `.parley/TASK.md`); everything above is protocol, not the task.",
+    ].join("\n");
+  }
+
+  /** Fresh-run prompt: the preamble, then the caller's brief (spec §7). */
+  private initialPrompt(task: TaskRow): string {
+    return `${this.buildPreamble(task)}\n\n---\n\n${task.prompt ?? ""}`;
+  }
+
+  /**
+   * Resume prompt: the preamble re-prepended (spec §2/§7), then the
+   * orchestrator's answer as the conversation's continuation.
+   */
+  private resumePrompt(task: TaskRow, answer: string): string {
+    return [
+      this.buildPreamble(task),
+      "",
+      "---",
+      "",
+      "The orchestrator answered your outstanding question:",
+      "",
+      answer,
+      "",
+      "Continue the task from here and finish by calling `submit_report`.",
+    ].join("\n");
+  }
+
   /** Fresh run: spawn the vendor child via `prepare` and pump it until exit. */
   private async run(task: TaskRow, adapter: VendorAdapter): Promise<void> {
-    const plan = await adapter.prepare(this.buildSpec(task), this.hubFor(task.id));
+    const spec: TaskSpec = { ...this.buildSpec(task), prompt: this.initialPrompt(task) };
+    const plan = await adapter.prepare(spec, this.hubFor(task.id));
     await this.runChild(task, adapter, plan, {
       state: "running",
       started_at: new Date().toISOString(),
@@ -666,7 +759,7 @@ export class TaskEngine {
    * `started_at` is kept from the original run.
    */
   private async resume(task: TaskRow, adapter: VendorAdapter, answer: string): Promise<void> {
-    const spec: TaskSpec = { ...this.buildSpec(task), prompt: answer };
+    const spec: TaskSpec = { ...this.buildSpec(task), prompt: this.resumePrompt(task, answer) };
     const plan = await adapter.resume(spec, this.hubFor(task.id));
     await this.runChild(task, adapter, plan, {
       state: "running",

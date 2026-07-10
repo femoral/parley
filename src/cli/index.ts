@@ -18,6 +18,7 @@ Usage:
     -n --name <label>  Human label; usable wherever a task id is
     --cwd <path>       Run in this dir directly (skips worktree creation)
     --base-ref <ref>   Branch the worktree from <ref> (default: HEAD)
+    --context <file>   Copy a file into .parley/context/ (repeatable)
     --report-schema <file>  Validate the child's report against this JSON Schema
     --wait             Block until terminal state; print report envelope
     --answer-timeout <dur>  Stall the task when a question goes unanswered

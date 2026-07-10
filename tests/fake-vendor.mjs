@@ -95,6 +95,9 @@ async function main() {
   emit({
     type: "hello",
     model: process.env.FAKE_MODEL ?? null,
+    // The full vendor prompt the adapter handed us (argv[2]) — tests assert the
+    // protocol preamble + caller brief + on-disk pointers were composed here.
+    prompt: process.argv[2] ?? null,
     cwd: process.cwd(),
     // Echo the sandbox posture the adapter handed us — tests assert delivery.
     sandbox: process.env.FAKE_SANDBOX ?? null,
