@@ -671,6 +671,8 @@ export class TaskEngine {
       // so a resumed task keeps the sandbox it was delegated with (spec §8).
       sandbox: task.sandbox,
       network: task.network === 1,
+      // Adapters raise the vendor's MCP tool timeout above this (spec §4).
+      answerTimeoutMs: task.answer_timeout_ms ?? DEFAULT_ANSWER_TIMEOUT_MS,
       ...(task.session_id !== null ? { sessionId: task.session_id } : {}),
     };
   }
@@ -810,6 +812,12 @@ export class TaskEngine {
     const events: VendorEvent[] = [];
     let sessionId: string | undefined;
     let usage: Record<string, number> | undefined;
+    // The most recent *fatal* error the vendor reported (codex `turn.failed`/
+    // top-level `error`). Exit codes are often opaque (codex is 0/1 only), so a
+    // child that dies without a report surfaces this as the failure detail.
+    // Recoverable mid-run error items are deliberately not captured — the agent
+    // may work past them, and a stale one would misattribute the failure.
+    let lastError: string | undefined;
     const lines = readline.createInterface({ input: child.stdout });
     lines.on("line", (line) => {
       // Raw stream is the durable record — stored untouched, unknown lines included.
@@ -824,6 +832,9 @@ export class TaskEngine {
         if (event.kind === "session_meta" && event.usage !== undefined) {
           usage = { ...usage, ...event.usage };
           usageChanged = true;
+        }
+        if (event.kind === "error" && event.fatal === true && event.text) {
+          lastError = event.text;
         }
       }
       // Only re-extract when this line could have changed the answer.
@@ -884,8 +895,11 @@ export class TaskEngine {
         if (row && !SETTLED_STATES.has(row.state)) {
           // `completed` strictly requires submit_report (spec §2): exit
           // without one is a failure, whatever the exit code says. A `stalled`
-          // exit is the stall stopping the child, not a failure.
-          this.fail(task.id, `vendor child exited (code ${code ?? "?"}) without submitting a report`);
+          // exit is the stall stopping the child, not a failure. Codex exit
+          // codes are 0/1 only, so any `turn.failed`/`error` detail from the
+          // stream is the real diagnosis — append it when present.
+          const base = `vendor child exited (code ${code ?? "?"}) without submitting a report`;
+          this.fail(task.id, lastError !== undefined ? `${base}: ${lastError}` : base);
         }
         // The child has exited, so a cleanly completed task's untouched worktree
         // is reclaimed; a failed/cancelled task retains its worktree and logs

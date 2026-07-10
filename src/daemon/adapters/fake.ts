@@ -79,7 +79,15 @@ export function createFakeAdapter(env: NodeJS.ProcessEnv = process.env): VendorA
           return [{ kind: "file_change", text: typeof event.path === "string" ? event.path : "" }];
         case "error":
         case "fatal":
-          return [{ kind: "error", text: typeof event.message === "string" ? event.message : "" }];
+          return [
+            {
+              kind: "error",
+              text: typeof event.message === "string" ? event.message : "",
+              // `fatal` is the fake vendor's run-terminal error; `error` is a
+              // recoverable one — mirroring the codex turn.failed/item split.
+              ...(event.type === "fatal" ? { fatal: true } : {}),
+            },
+          ];
         case "session":
           return [
             {

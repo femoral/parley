@@ -65,6 +65,41 @@ describe("child exit without a report", () => {
     expect(fs.existsSync(vendorLog)).toBe(true);
     expect(fs.readFileSync(vendorLog, "utf8")).toContain("half-done, then quit");
   });
+
+  it("surfaces a fatal vendor error event as the failure detail (opaque exit codes)", async () => {
+    // Vendors like codex exit 0/1 only — the fatal event in the stream is the
+    // real diagnosis, so it is appended to the report-less-exit error.
+    const cwd = taskDir([{ emit: { type: "fatal", message: "model overloaded" } }, { exit: 1 }]);
+    const result = await runCli(
+      ["delegate", "-v", "fake", "-n", "fatalrun", "--cwd", cwd, "--wait", "do it"],
+      home,
+    );
+
+    expect(result.code).toBe(1);
+    const env = JSON.parse(result.stdout);
+    expect(env.state).toBe("failed");
+    expect(env.error).toMatch(/without submitting a report/);
+    expect(env.error).toMatch(/model overloaded/);
+  });
+
+  it("does not surface a recoverable (non-fatal) error event as failure detail", async () => {
+    // A mid-run recoverable error must not be misattributed as the cause when
+    // the child later exits without a report for unrelated reasons.
+    const cwd = taskDir([
+      { emit: { type: "error", message: "npm: transient hiccup" } },
+      { emit: { type: "message", text: "recovered and kept going" } },
+    ]);
+    const result = await runCli(
+      ["delegate", "-v", "fake", "-n", "hiccup", "--cwd", cwd, "--wait", "do it"],
+      home,
+    );
+
+    expect(result.code).toBe(1);
+    const env = JSON.parse(result.stdout);
+    expect(env.state).toBe("failed");
+    expect(env.error).toMatch(/without submitting a report/);
+    expect(env.error).not.toMatch(/transient hiccup/);
+  });
 });
 
 describe("adapter spawn failure", () => {
