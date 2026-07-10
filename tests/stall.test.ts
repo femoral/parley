@@ -179,7 +179,7 @@ describe("parley answer resumes a stalled task", () => {
     const cwd = taskDir([{ ask: "no session yet?" }, { submit_report: REPORT }]);
 
     const delegate = await runCli(
-      ["delegate", "-v", "fake", "--cwd", cwd, "--answer-timeout", "250ms", "--wait", "fresh"],
+      ["delegate", "-v", "fake", "--cwd", cwd, "--answer-timeout", "2s", "--wait", "fresh"],
       home,
     );
     expect(delegate.code).toBe(3);

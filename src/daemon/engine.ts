@@ -26,7 +26,14 @@ import {
   type TaskRow,
 } from "./db.js";
 import { taskLogDir } from "./discovery.js";
-import { validateReport, type Report } from "./report.js";
+import {
+  assertValidSchema,
+  DEFAULT_REPORT_SCHEMA,
+  parseJsonColumn,
+  validateReport,
+  type JsonSchema,
+  type Report,
+} from "./report.js";
 import {
   createWorktree,
   isWorktreeModified,
@@ -94,6 +101,12 @@ export interface DelegateRequest {
   network: boolean;
   /** `--answer-timeout` in ms; null means the daemon default (30m). */
   answerTimeoutMs: number | null;
+  /**
+   * Caller-supplied report schema (`--report-schema`); null uses parley's
+   * default. Arbitrary parsed JSON — validated as a JSON Schema before the task
+   * is created, so a non-schema is rejected here (→ exit 2).
+   */
+  reportSchema: unknown;
 }
 
 /**
@@ -115,7 +128,10 @@ export class TaskEngine {
    * sweep marks their tasks `stalled` and `parley answer` resumes them.
    */
   private readonly pending = new Map<string, PendingQuestion>();
-  /** Live vendor children, keyed by task id — stopped on stall and daemon exit. */
+  /**
+   * Live vendor children, keyed by task id — the handle `cancel` uses to
+   * terminate a running child; also stopped on stall and daemon exit.
+   */
   private readonly children = new Map<string, ChildProcess>();
   /**
    * Set once the daemon is going down: child exits stop being lifecycle events
@@ -149,6 +165,11 @@ export class TaskEngine {
     return resolveTask(this.db, ref);
   }
 
+  /** The directory holding a task's captured vendor output (the diagnostics reference). */
+  logDir(taskId: string): string {
+    return taskLogDir(this.paths, taskId);
+  }
+
   /**
    * Create a task (pending) and kick off its background run. Returns the row
    * immediately — `--wait` callers long-poll `/tasks/:id/events` afterwards.
@@ -163,6 +184,15 @@ export class TaskEngine {
     // shadow (or be shadowed by) a real task id in `resolveTask`.
     if (request.name !== null && /^t\d+$/.test(request.name)) {
       throw new DelegateError(`name must not look like a task id: ${request.name}`);
+    }
+    // A bad `--report-schema` is rejected before the task exists (spec §5): the
+    // caller supplied it, so a non-schema is their mistake (→ exit 2).
+    if (request.reportSchema !== null) {
+      try {
+        assertValidSchema(request.reportSchema);
+      } catch (err) {
+        throw new DelegateError(`invalid report schema: ${errorMessage(err)}`);
+      }
     }
     const cwd = path.resolve(request.cwd);
     let isDir = false;
@@ -226,6 +256,8 @@ export class TaskEngine {
       sandbox: request.sandbox,
       network: request.network,
       answer_timeout_ms: request.answerTimeoutMs,
+      report_schema:
+        request.reportSchema !== null ? JSON.stringify(request.reportSchema) : null,
     });
 
     void this.run(row, adapter).catch((err: unknown) => {
@@ -307,7 +339,9 @@ export class TaskEngine {
     if (SETTLED_STATES.has(task.state)) {
       return [`task ${taskId} is already ${task.state}`];
     }
-    const errors = validateReport(payload);
+    const schema =
+      parseJsonColumn<JsonSchema>(task.report_schema) ?? DEFAULT_REPORT_SCHEMA;
+    const errors = validateReport(payload, schema);
     if (errors.length > 0) return errors;
 
     // A misbehaving child may report over its own outstanding question —
@@ -490,6 +524,38 @@ export class TaskEngine {
   }
 
   /**
+   * Cancel a task: terminate its vendor child (if running) and move the task to
+   * `cancelled`, waking long-poll waiters (the blocking CLI exits 5). Throws
+   * `DelegateError` (→ exit 2) for an unknown ref or an already-terminal task.
+   * The worktree and captured logs are retained for inspection (never merged).
+   */
+  cancel(ref: string): TaskRow {
+    const task = resolveTask(this.db, ref);
+    if (!task) throw new DelegateError(`no such task: ${ref}`);
+    if (TERMINAL_STATES.has(task.state)) {
+      throw new DelegateError(`task ${task.id} is already ${task.state}`);
+    }
+    // Free any parked `ask_orchestrator` promise; the child is about to die, so
+    // nothing is left to receive its tool result.
+    this.pending.delete(task.id);
+    // Terminate the child. Its own `close` handler fires afterwards, but the
+    // `cancelled` state is terminal so it will not be overwritten with `failed`.
+    const child = this.children.get(task.id);
+    if (child) child.kill("SIGTERM");
+    updateTask(this.db, task.id, {
+      state: "cancelled",
+      error: "cancelled by parley cancel",
+      completed_at: new Date().toISOString(),
+      // Clear any outstanding question so the terminal envelope honours the
+      // "question_id/question are null unless awaiting_answer" contract.
+      question_id: null,
+      question: null,
+    });
+    this.notify(task.id);
+    return getTask(this.db, task.id)!;
+  }
+
+  /**
    * Resolve when the task reaches an event state — terminal, `awaiting_answer`
    * (a question), or `stalled` — or after `timeoutMs` (the long-poll window,
    * the CLI re-polls). Returns the current row either way.
@@ -535,7 +601,9 @@ export class TaskEngine {
    */
   private maybeAutoRemoveWorktree(taskId: string): void {
     const task = getTask(this.db, taskId);
-    if (!task || !TERMINAL_STATES.has(task.state)) return;
+    // Only a clean completion reclaims its worktree. A `failed` or `cancelled`
+    // task retains its worktree and logs so the orchestrator can diagnose it.
+    if (!task || task.state !== "completed") return;
     if (task.worktree === null || task.base_sha === null) return;
     if (isWorktreeModified(task.worktree, task.base_sha)) return;
     try {
@@ -614,6 +682,11 @@ export class TaskEngine {
     plan: SpawnPlan,
     onSpawn: TaskPatch,
   ): Promise<void> {
+    // `cancel` may have landed while the adapter was preparing; don't spawn a
+    // child for an already-terminal task.
+    const beforeSpawn = getTask(this.db, task.id);
+    if (!beforeSpawn || TERMINAL_STATES.has(beforeSpawn.state)) return;
+
     for (const file of plan.files) {
       const target = path.join(plan.cwd, file.path);
       fs.mkdirSync(path.dirname(target), { recursive: true });
@@ -677,20 +750,31 @@ export class TaskEngine {
       // happened this child is stale (a stall's SIGTERM straggler) and its
       // exit is no longer a lifecycle event for the task.
       const isCurrentChild = (): boolean => this.children.get(task.id) === child;
+      let settled = false;
+      const closeStreams = (): void => {
+        lines.close();
+        rawLog.end();
+        stderrLog.end();
+      };
       child.on("error", (err) => {
+        // A spawn failure (bad binary → ENOENT) fails the task with a clear
+        // error rather than hanging. `close` may or may not follow; guard once.
+        if (settled) return;
+        settled = true;
         const current = isCurrentChild();
         if (current) this.children.delete(task.id);
+        closeStreams();
         if (!this.shuttingDown && current) {
-          this.fail(task.id, `failed to spawn vendor child: ${String(err)}`);
+          this.fail(task.id, `failed to spawn vendor child: ${errorMessage(err)}`);
         }
         resolve();
       });
       child.on("close", (code) => {
+        if (settled) return;
+        settled = true;
         const current = isCurrentChild();
         if (current) this.children.delete(task.id);
-        lines.close();
-        rawLog.end();
-        stderrLog.end();
+        closeStreams();
         if (this.shuttingDown || !current) {
           // Daemon-initiated kill (db is closing) or a superseded child:
           // either way, not a task outcome.
@@ -710,9 +794,9 @@ export class TaskEngine {
           // exit is the stall stopping the child, not a failure.
           this.fail(task.id, `vendor child exited (code ${code ?? "?"}) without submitting a report`);
         }
-        // The child has exited, so its worktree is free to reclaim: an untouched
-        // one is auto-removed; any new commits or dirty files retain it for the
-        // orchestrator to review (spec §6).
+        // The child has exited, so a cleanly completed task's untouched worktree
+        // is reclaimed; a failed/cancelled task retains its worktree and logs
+        // for the orchestrator to diagnose (spec §6).
         this.maybeAutoRemoveWorktree(task.id);
         resolve();
       });

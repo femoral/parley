@@ -21,8 +21,11 @@ export function createFakeAdapter(env: NodeJS.ProcessEnv = process.env): VendorA
     if (!bin) {
       throw new Error("fake vendor: PARLEY_FAKE_VENDOR_BIN is not set");
     }
+    // Test seam (spec §10 — this adapter is a test double): point the spawn at a
+    // deliberately bad binary to exercise the daemon's spawn-failure path.
+    const command = env.PARLEY_FAKE_COMMAND ?? process.execPath;
     return {
-      argv: [process.execPath, bin, task.prompt],
+      argv: [command, bin, task.prompt],
       env: {
         FAKE_MCP_URL: hub.url,
         FAKE_MCP_HEADERS: JSON.stringify(hub.headers),

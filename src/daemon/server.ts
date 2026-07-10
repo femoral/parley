@@ -117,6 +117,10 @@ function handleDelegate(engine: TaskEngine, res: http.ServerResponse, body: unkn
       sandbox,
       network,
       answerTimeoutMs,
+      // Forwarded as-is: a `null`/absent value uses the default schema; anything
+      // else (object, boolean, or a malformed non-schema) is validated by the
+      // engine, which rejects non-schemas before the task is created.
+      reportSchema: body.report_schema ?? null,
     });
     sendJson(res, 201, { task_id: task.id, name: task.name, state: task.state });
   } catch (err) {
@@ -179,7 +183,10 @@ async function handleEvents(
     sendJson(res, 404, { error: `no such task: ${ref}` });
     return;
   }
-  sendJson(res, 200, { event: eventFor(row.state), task: buildEnvelope(row) });
+  sendJson(res, 200, {
+    event: eventFor(row.state),
+    task: buildEnvelope(row, engine.logDir(row.id)),
+  });
 }
 
 /**
@@ -208,6 +215,20 @@ function handleAnswer(
   }
   try {
     const row = engine.answer(ref, body.text);
+    sendJson(res, 200, { task_id: row.id, name: row.name, state: row.state });
+  } catch (err) {
+    if (err instanceof DelegateError) {
+      sendJson(res, 400, { error: err.message });
+      return;
+    }
+    throw err;
+  }
+}
+
+/** `POST /tasks/:ref/cancel` — terminate the child and end the task `cancelled`. */
+function handleCancel(engine: TaskEngine, res: http.ServerResponse, ref: string): void {
+  try {
+    const row = engine.cancel(ref);
     sendJson(res, 200, { task_id: row.id, name: row.name, state: row.state });
   } catch (err) {
     if (err instanceof DelegateError) {
@@ -258,7 +279,7 @@ function createHandler(engine: TaskEngine): http.RequestListener {
         if (method === "GET" && segments.length === 2) {
           const task = engine.resolve(ref);
           if (!task) sendJson(res, 404, { error: `no such task: ${ref}` });
-          else sendJson(res, 200, { task: buildEnvelope(task), row: task });
+          else sendJson(res, 200, { task: buildEnvelope(task, engine.logDir(task.id)), row: task });
           return;
         }
         if (method === "GET" && segments.length === 3 && segments[2] === "events") {
@@ -267,6 +288,10 @@ function createHandler(engine: TaskEngine): http.RequestListener {
         }
         if (method === "POST" && segments.length === 3 && segments[2] === "answer") {
           handleAnswer(engine, res, ref, await readBody(req));
+          return;
+        }
+        if (method === "POST" && segments.length === 3 && segments[2] === "cancel") {
+          handleCancel(engine, res, ref);
           return;
         }
       }

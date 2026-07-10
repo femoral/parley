@@ -28,6 +28,7 @@ export async function runDelegate(ctx: CliContext, args: string[]): Promise<numb
     "--base-ref": { value: true },
     "--sandbox": { value: true },
     "--no-network": {},
+    "--report-schema": { value: true },
     "--wait": {},
     "--json": {},
     "--answer-timeout": { value: true },
@@ -75,6 +76,30 @@ export async function runDelegate(ctx: CliContext, args: string[]): Promise<numb
   }
   const network = flags["--no-network"] !== true;
 
+  // `--report-schema <file>` replaces the default report schema. Read and parse
+  // it here so an unreadable / non-JSON file is a caller mistake (exit 2) before
+  // the task is created; the daemon rejects a syntactically-valid-JSON file that
+  // is not a valid JSON Schema.
+  let reportSchema: unknown = null;
+  const schemaFile = flags["--report-schema"];
+  if (typeof schemaFile === "string") {
+    let raw: string;
+    try {
+      raw = fs.readFileSync(schemaFile, "utf8");
+    } catch (err) {
+      throw new UsageError(
+        `delegate: cannot read report schema ${schemaFile}: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+    }
+    try {
+      reportSchema = JSON.parse(raw);
+    } catch {
+      throw new UsageError(`delegate: report schema ${schemaFile} is not valid JSON`);
+    }
+  }
+
   const discovery = await ensureDaemon(ctx.paths, ctx.env);
   let ack: DelegateAck;
   try {
@@ -89,6 +114,7 @@ export async function runDelegate(ctx: CliContext, args: string[]): Promise<numb
       sandbox,
       network,
       answer_timeout_ms: answerTimeoutMs,
+      report_schema: reportSchema,
     });
   } catch (err) {
     // Daemon-side request rejections (unknown vendor, bad cwd) are usage errors.
