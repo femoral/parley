@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import readline from "node:readline";
 import type { HomePaths } from "../home.js";
-import type { HubInfo, TaskSpec, VendorAdapter, VendorEvent } from "./adapters/types.js";
+import type { HubInfo, SandboxMode, TaskSpec, VendorAdapter, VendorEvent } from "./adapters/types.js";
 import {
   getTask,
   insertTask,
@@ -66,6 +66,10 @@ export interface DelegateRequest {
   useWorktree: boolean;
   /** Ref to branch the worktree from; null means the repo's current HEAD. */
   baseRef: string | null;
+  /** Normalized sandbox posture (spec §8); defaults to `workspace`. */
+  sandbox: SandboxMode;
+  /** Whether the child may reach the network (ADR-0006 default: true). */
+  network: boolean;
 }
 
 /**
@@ -184,6 +188,8 @@ export class TaskEngine {
       worktree: worktreePath,
       branch,
       base_sha: baseSha,
+      sandbox: request.sandbox,
+      network: request.network,
     });
 
     void this.run(row, adapter).catch((err: unknown) => {
@@ -413,6 +419,10 @@ export class TaskEngine {
       vendor: task.vendor ?? "",
       model: task.model,
       cwd: task.cwd ?? process.cwd(),
+      // Posture flows to the adapter the same way for a fresh run and a resume,
+      // so a resumed task keeps the sandbox it was delegated with (spec §8).
+      sandbox: task.sandbox,
+      network: task.network === 1,
     };
     const plan = await adapter.prepare(spec, hub);
 

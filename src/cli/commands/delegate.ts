@@ -4,6 +4,7 @@ import { DaemonRequestError, daemonPost, ensureDaemon } from "../client.js";
 import { type CliContext, printJson } from "../context.js";
 import { UsageError } from "../errors.js";
 import { waitForOutcome } from "../wait.js";
+import { DEFAULT_SANDBOX, SANDBOX_MODES, isSandboxMode } from "../../daemon/adapters/types.js";
 
 interface DelegateAck {
   task_id: string;
@@ -24,6 +25,8 @@ export async function runDelegate(ctx: CliContext, args: string[]): Promise<numb
     "--name": { aliases: ["-n"], value: true },
     "--cwd": { value: true },
     "--base-ref": { value: true },
+    "--sandbox": { value: true },
+    "--no-network": {},
     "--wait": {},
     "--json": {},
   });
@@ -47,6 +50,16 @@ export async function runDelegate(ctx: CliContext, args: string[]): Promise<numb
   const explicitCwd = typeof flags["--cwd"] === "string";
   const cwd = explicitCwd ? (flags["--cwd"] as string) : process.cwd();
 
+  // Sandbox posture (spec §8, ADR-0006): default workspace + network on. An
+  // unknown mode is a usage error (exit 2), caught before the daemon is asked.
+  const sandbox = typeof flags["--sandbox"] === "string" ? flags["--sandbox"] : DEFAULT_SANDBOX;
+  if (!isSandboxMode(sandbox)) {
+    throw new UsageError(
+      `delegate: unknown sandbox mode: ${sandbox} (expected ${SANDBOX_MODES.join("|")})`,
+    );
+  }
+  const network = flags["--no-network"] !== true;
+
   const discovery = await ensureDaemon(ctx.paths, ctx.env);
   let ack: DelegateAck;
   try {
@@ -58,6 +71,8 @@ export async function runDelegate(ctx: CliContext, args: string[]): Promise<numb
       cwd,
       use_worktree: !explicitCwd,
       base_ref: flags["--base-ref"] ?? null,
+      sandbox,
+      network,
     });
   } catch (err) {
     // Daemon-side request rejections (unknown vendor, bad cwd) are usage errors.

@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import Database from "better-sqlite3";
 import type { HomePaths } from "../home.js";
+import type { SandboxMode } from "./adapters/types.js";
 
 export type DatabaseHandle = Database.Database;
 
@@ -51,6 +52,10 @@ export interface TaskRow {
   branch: string | null;
   /** The commit the worktree branched from — the baseline for auto-remove. */
   base_sha: string | null;
+  /** Normalized sandbox posture (spec §8); defaults to `workspace`. */
+  sandbox: SandboxMode;
+  /** Network access, stored as SQLite 0/1; 1 (on) is the ADR-0006 default. */
+  network: number;
 }
 
 /** Fields the daemon writes when creating a task. */
@@ -66,6 +71,10 @@ export interface NewTask {
   worktree: string | null;
   branch: string | null;
   base_sha: string | null;
+  /** Normalized sandbox posture (spec §8). */
+  sandbox: SandboxMode;
+  /** Whether the child may reach the network (ADR-0006 default: true). */
+  network: boolean;
 }
 
 /**
@@ -109,6 +118,11 @@ const MIGRATIONS: string[] = [
   `ALTER TABLE tasks ADD COLUMN worktree TEXT;
    ALTER TABLE tasks ADD COLUMN branch TEXT;
    ALTER TABLE tasks ADD COLUMN base_sha TEXT;`,
+  // #20: sandbox posture — the caller's normalized answer to what the child may
+  // touch (spec §8, ADR-0006). Defaults match the ADR: workspace write access,
+  // network on. Adapters map these to vendor mechanisms in their own tickets.
+  `ALTER TABLE tasks ADD COLUMN sandbox TEXT NOT NULL DEFAULT 'workspace';
+   ALTER TABLE tasks ADD COLUMN network INTEGER NOT NULL DEFAULT 1;`,
 ];
 
 function migrate(db: DatabaseHandle): void {
@@ -138,7 +152,7 @@ export function openDatabase(paths: HomePaths): DatabaseHandle {
 
 const TASK_COLUMNS = `id, name, vendor, model, repo, state, created_at, updated_at,
    cwd, prompt, session_id, usage, report, error, started_at, completed_at,
-   question_id, question, worktree, branch, base_sha`;
+   question_id, question, worktree, branch, base_sha, sandbox, network`;
 
 /** List all tasks, newest first. */
 export function listTasks(db: DatabaseHandle): TaskRow[] {
@@ -201,8 +215,8 @@ export function insertTask(db: DatabaseHandle, task: NewTask): TaskRow {
   db.prepare(
     `INSERT INTO tasks
        (id, name, vendor, model, repo, state, created_at, updated_at,
-        cwd, prompt, worktree, branch, base_sha)
-     VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?)`,
+        cwd, prompt, worktree, branch, base_sha, sandbox, network)
+     VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     task.id,
     task.name,
@@ -216,6 +230,8 @@ export function insertTask(db: DatabaseHandle, task: NewTask): TaskRow {
     task.worktree,
     task.branch,
     task.base_sha,
+    task.sandbox,
+    task.network ? 1 : 0,
   );
   return getTask(db, task.id)!;
 }

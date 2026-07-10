@@ -1,4 +1,5 @@
 import type { TaskRow } from "./db.js";
+import type { Posture } from "./adapters/types.js";
 
 /**
  * Parley's default report schema (spec §4): the shape `submit_report` payloads
@@ -53,6 +54,8 @@ export interface Envelope {
   branch: string | null;
   vendor: string | null;
   model: string | null;
+  /** The child's sandbox posture (spec §8): `{ sandbox, network }`. */
+  posture: Posture;
   session_id: string | null;
   usage: Record<string, number> | null;
   duration_ms: number | null;
@@ -89,6 +92,7 @@ export function buildEnvelope(task: TaskRow): Envelope {
     branch: task.branch,
     vendor: task.vendor,
     model: task.model,
+    posture: { sandbox: task.sandbox, network: task.network === 1 },
     session_id: task.session_id,
     usage: parseJsonColumn<Record<string, number>>(task.usage),
     duration_ms: duration,

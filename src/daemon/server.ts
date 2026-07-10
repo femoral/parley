@@ -2,6 +2,7 @@ import http from "node:http";
 import type { HomePaths } from "../home.js";
 import { createAdapterRegistry } from "./adapters/index.js";
 import { openDatabase } from "./db.js";
+import { DEFAULT_NETWORK, DEFAULT_SANDBOX, isSandboxMode } from "./adapters/types.js";
 import { DelegateError, TaskEngine } from "./engine.js";
 import { handleMcpRequest } from "./mcp.js";
 import { buildEnvelope } from "./report.js";
@@ -77,6 +78,15 @@ function handleDelegate(engine: TaskEngine, res: http.ServerResponse, body: unkn
     sendJson(res, 400, { error: "cwd is required" });
     return;
   }
+  // Posture: the CLI validates too, but guard the wire — an unknown mode is a
+  // client mistake (→ 400 → exit 2), not a 500. Absent fields take ADR-0006
+  // defaults so a bare `POST /tasks` still gets a well-formed posture.
+  const sandbox = body.sandbox === undefined ? DEFAULT_SANDBOX : body.sandbox;
+  if (typeof sandbox !== "string" || !isSandboxMode(sandbox)) {
+    sendJson(res, 400, { error: `unknown sandbox mode: ${String(body.sandbox)}` });
+    return;
+  }
+  const network = body.network === undefined ? DEFAULT_NETWORK : body.network === true;
   try {
     const task = engine.delegate({
       prompt,
@@ -87,6 +97,8 @@ function handleDelegate(engine: TaskEngine, res: http.ServerResponse, body: unkn
       // Absent/non-boolean defaults to bypass (old `--cwd`-only behaviour).
       useWorktree: body.use_worktree === true,
       baseRef: optionalString(body.base_ref),
+      sandbox,
+      network,
     });
     sendJson(res, 201, { task_id: task.id, name: task.name, state: task.state });
   } catch (err) {

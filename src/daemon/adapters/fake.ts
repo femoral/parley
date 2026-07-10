@@ -26,6 +26,11 @@ export function createFakeAdapter(env: NodeJS.ProcessEnv = process.env): VendorA
       env: {
         FAKE_MCP_URL: hub.url,
         FAKE_MCP_HEADERS: JSON.stringify(hub.headers),
+        // Sandbox posture (spec §8). A real adapter maps this to vendor flags
+        // (ADR-0006 matrix); the fake vendor just echoes it back to prove the
+        // core delivered the posture — for prepare() and resume() alike.
+        FAKE_SANDBOX: task.sandbox,
+        FAKE_NETWORK: task.network ? "1" : "0",
         // Model passes through opaquely — the adapter never interprets it.
         ...(task.model !== null ? { FAKE_MODEL: task.model } : {}),
         ...(task.sessionId !== undefined ? { FAKE_RESUME_SESSION: task.sessionId } : {}),

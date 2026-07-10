@@ -92,7 +92,14 @@ async function callTool(name, args) {
 }
 
 async function main() {
-  emit({ type: "hello", model: process.env.FAKE_MODEL ?? null, cwd: process.cwd() });
+  emit({
+    type: "hello",
+    model: process.env.FAKE_MODEL ?? null,
+    cwd: process.cwd(),
+    // Echo the sandbox posture the adapter handed us — tests assert delivery.
+    sandbox: process.env.FAKE_SANDBOX ?? null,
+    network: process.env.FAKE_NETWORK === "1",
+  });
   const scriptPath = path.join(process.cwd(), ".fake-vendor.json");
   const actions = JSON.parse(fs.readFileSync(scriptPath, "utf8"));
 

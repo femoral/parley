@@ -4,6 +4,35 @@
  * vendors. Event normalization is deliberately thin — raw JSONL is the record.
  */
 
+/**
+ * Filesystem sandbox posture (spec §8, ADR-0006). Normalized across vendors;
+ * each adapter maps it to the vendor's own mechanism (codex flags, grok env).
+ */
+export type SandboxMode = "read-only" | "workspace" | "full";
+
+/** The valid `--sandbox` values, in the order the CLI advertises them. */
+export const SANDBOX_MODES: readonly SandboxMode[] = ["read-only", "workspace", "full"];
+
+/** ADR-0006 defaults: write access to the worktree, network on. */
+export const DEFAULT_SANDBOX: SandboxMode = "workspace";
+export const DEFAULT_NETWORK = true;
+
+/** True when `value` is one of the three normalized sandbox modes. */
+export function isSandboxMode(value: string): value is SandboxMode {
+  return (SANDBOX_MODES as readonly string[]).includes(value);
+}
+
+/**
+ * The child's sandbox posture — the caller's normalized answer to "what may
+ * this child touch" (spec §8). Delivered to adapters via `TaskSpec`; vendor
+ * mapping (ADR-0006 matrix) belongs to each adapter.
+ */
+export interface Posture {
+  sandbox: SandboxMode;
+  /** Whether the child may reach the network (ADR-0006 default: on). */
+  network: boolean;
+}
+
 /** What the daemon knows about a task when asking an adapter to spawn it. */
 export interface TaskSpec {
   id: string;
@@ -14,6 +43,10 @@ export interface TaskSpec {
   model: string | null;
   /** Working directory the child runs in (worktrees arrive in a later ticket). */
   cwd: string;
+  /** Normalized sandbox posture (spec §8); adapters map it to vendor mechanisms. */
+  sandbox: SandboxMode;
+  /** Whether the child may reach the network (ADR-0006 default: on). */
+  network: boolean;
   /** Persisted vendor session id — set when resuming a stalled task. */
   sessionId?: string;
 }

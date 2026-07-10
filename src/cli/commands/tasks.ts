@@ -32,7 +32,13 @@ function renderTable(ctx: CliContext, tasks: TaskRow[]): void {
 
 /** Present a task row for `--json` output: JSON columns become objects. */
 function presentRow(row: TaskRow): Record<string, unknown> {
-  return { ...row, usage: parseJsonColumn(row.usage), report: parseJsonColumn(row.report) };
+  return {
+    ...row,
+    usage: parseJsonColumn(row.usage),
+    report: parseJsonColumn(row.report),
+    // `network` is stored as SQLite 0/1; surface it as a boolean.
+    network: row.network === 1,
+  };
 }
 
 /**
