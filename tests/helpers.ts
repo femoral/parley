@@ -1,0 +1,95 @@
+import { spawn } from "node:child_process";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const CLI_ENTRY = fileURLToPath(new URL("../src/cli/index.ts", import.meta.url));
+// `--import tsx` resolves from the child's cwd (the repo root under vitest),
+// where tsx is installed. Avoids import.meta.resolve, unavailable in SSR transform.
+const TSX_LOADER = "tsx";
+
+export interface CliResult {
+  code: number;
+  stdout: string;
+  stderr: string;
+}
+
+/**
+ * Run the parley CLI as a real subprocess against an isolated home dir. This is
+ * the only seam the suite tests: stdout, exit codes, and filesystem effects.
+ */
+export function runCli(
+  args: string[],
+  home: string,
+  extraEnv: NodeJS.ProcessEnv = {},
+): Promise<CliResult> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(
+      process.execPath,
+      ["--import", TSX_LOADER, CLI_ENTRY, ...args],
+      {
+        env: { ...process.env, PARLEY_HOME: home, ...extraEnv },
+        stdio: ["ignore", "pipe", "pipe"],
+      },
+    );
+    let stdout = "";
+    let stderr = "";
+    child.stdout.on("data", (d: Buffer) => (stdout += d.toString()));
+    child.stderr.on("data", (d: Buffer) => (stderr += d.toString()));
+    child.on("error", reject);
+    child.on("close", (code) => resolve({ code: code ?? -1, stdout, stderr }));
+  });
+}
+
+/** Create a fresh isolated parley home directory. */
+export function makeHome(): string {
+  return fs.mkdtempSync(path.join(os.tmpdir(), "parley-test-"));
+}
+
+interface Discovery {
+  port: number;
+  pid: number;
+  started_at: string;
+}
+
+export function readDiscovery(home: string): Discovery | null {
+  try {
+    return JSON.parse(fs.readFileSync(path.join(home, "daemon.json"), "utf8")) as Discovery;
+  } catch {
+    return null;
+  }
+}
+
+export function isAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (err) {
+    return (err as NodeJS.ErrnoException).code === "EPERM";
+  }
+}
+
+/** Kill any daemon this home spawned and remove the directory. */
+export function cleanupHome(home: string): void {
+  const discovery = readDiscovery(home);
+  if (discovery && isAlive(discovery.pid)) {
+    try {
+      process.kill(discovery.pid, "SIGKILL");
+    } catch {
+      /* already gone */
+    }
+  }
+  fs.rmSync(home, { recursive: true, force: true });
+}
+
+export function writeStaleDiscovery(home: string, port = 59999): number {
+  // Pick a pid that is (almost certainly) not a live process.
+  const deadPid = 2_147_483_646;
+  fs.mkdirSync(home, { recursive: true });
+  fs.writeFileSync(
+    path.join(home, "daemon.json"),
+    JSON.stringify({ port, pid: deadPid, started_at: new Date().toISOString() }),
+  );
+  return deadPid;
+}
