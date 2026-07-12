@@ -317,6 +317,43 @@ function handleAnswer(
   }
 }
 
+/**
+ * `POST /tasks/:ref/eval` — record an orchestrator's quality score/feedback
+ * against a task. The CLI validates `--score`/`--feedback` too, but guard the
+ * wire — a malformed score is a client mistake (400 → exit 2), not a 500.
+ */
+function handleEval(
+  engine: TaskEngine,
+  res: http.ServerResponse,
+  ref: string,
+  body: unknown,
+): void {
+  if (!isRecord(body)) {
+    sendJson(res, 400, { error: "request body must be a JSON object" });
+    return;
+  }
+  const score = body.score;
+  const feedback = body.feedback;
+  if (typeof score !== "number" || !Number.isInteger(score) || score < 1 || score > 10) {
+    sendJson(res, 400, { error: "score must be an integer between 1 and 10" });
+    return;
+  }
+  if (typeof feedback !== "string" || feedback === "") {
+    sendJson(res, 400, { error: "feedback is required" });
+    return;
+  }
+  try {
+    const row = engine.evalTask(ref, score, feedback);
+    sendJson(res, 200, { task_id: row.id, name: row.name, state: row.state, seq: row.seq });
+  } catch (err) {
+    if (err instanceof DelegateError) {
+      sendJson(res, 400, { error: err.message });
+      return;
+    }
+    throw err;
+  }
+}
+
 /** `POST /tasks/:ref/cancel` — terminate the child and end the task `cancelled`. */
 function handleCancel(engine: TaskEngine, res: http.ServerResponse, ref: string): void {
   try {
@@ -388,6 +425,10 @@ function createHandler(engine: TaskEngine): http.RequestListener {
         }
         if (method === "POST" && segments.length === 3 && segments[2] === "answer") {
           handleAnswer(engine, res, ref, await readBody(req));
+          return;
+        }
+        if (method === "POST" && segments.length === 3 && segments[2] === "eval") {
+          handleEval(engine, res, ref, await readBody(req));
           return;
         }
         if (method === "POST" && segments.length === 3 && segments[2] === "cancel") {

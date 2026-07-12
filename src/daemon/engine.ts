@@ -584,6 +584,18 @@ export class TaskEngine {
   }
 
   /**
+   * Record an orchestrator's quality score/feedback against a task. 1:1 with
+   * the task — a later call overwrites the previous score/feedback. Throws
+   * `DelegateError` (→ exit 2) for an unknown ref.
+   */
+  evalTask(ref: string, score: number, feedback: string): TaskRow {
+    const task = resolveTask(this.db, ref);
+    if (!task) throw new DelegateError(`no such task: ${ref}`);
+    updateTask(this.db, task.id, { eval_score: score, eval_feedback: feedback });
+    return getTask(this.db, task.id)!;
+  }
+
+  /**
    * Cancel a task: terminate its vendor child (if running) and move the task to
    * `cancelled`, waking long-poll waiters (the blocking CLI exits 5). Throws
    * `DelegateError` (→ exit 2) for an unknown ref or an already-terminal task.

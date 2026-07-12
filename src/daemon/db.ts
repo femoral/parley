@@ -75,6 +75,10 @@ export interface TaskRow {
    * envelope surfaces it so `parley watch --since` can close the startup race.
    */
   seq: number;
+  /** Orchestrator-recorded quality score (1-10) via `parley eval`; null until set. */
+  eval_score: number | null;
+  /** Orchestrator-recorded feedback text via `parley eval`; null until set. */
+  eval_feedback: string | null;
 }
 
 /** Fields the daemon writes when creating a task. */
@@ -161,6 +165,10 @@ const MIGRATIONS: string[] = [
   // task first transitions; every envelope carries it so `parley watch --since`
   // can replay a transition that raced the watcher's connect.
   `ALTER TABLE tasks ADD COLUMN seq INTEGER NOT NULL DEFAULT 0;`,
+  // #44: orchestrator eval — a quality score (1-10) and feedback text recorded
+  // against a completed task via `parley eval`, 1:1 with the task.
+  `ALTER TABLE tasks ADD COLUMN eval_score INTEGER;
+   ALTER TABLE tasks ADD COLUMN eval_feedback TEXT;`,
 ];
 
 function migrate(db: DatabaseHandle): void {
@@ -191,7 +199,7 @@ export function openDatabase(paths: HomePaths): DatabaseHandle {
 const TASK_COLUMNS = `id, name, vendor, model, effort, repo, state, created_at, updated_at,
    cwd, prompt, session_id, usage, report, error, started_at, completed_at,
    question_id, question, worktree, branch, base_sha, sandbox, network,
-   answer_timeout_ms, report_schema, seq`;
+   answer_timeout_ms, report_schema, seq, eval_score, eval_feedback`;
 
 /** List all tasks, newest first. */
 export function listTasks(db: DatabaseHandle): TaskRow[] {
@@ -353,6 +361,8 @@ export type TaskPatch = Partial<
     | "question_id"
     | "question"
     | "worktree"
+    | "eval_score"
+    | "eval_feedback"
   >
 >;
 
