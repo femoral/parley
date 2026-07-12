@@ -6,6 +6,7 @@ import { runCancel } from "./commands/cancel.js";
 import { runClean } from "./commands/clean.js";
 import { runDaemon } from "./commands/daemon.js";
 import { runDelegate } from "./commands/delegate.js";
+import { runEval } from "./commands/eval.js";
 import { runLogs } from "./commands/logs.js";
 import { runModels } from "./commands/models.js";
 import { runSkills } from "./commands/skills.js";
@@ -30,6 +31,9 @@ Usage:
   parley answer <task> "<text>" Answer a child's question ('-' reads stdin);
                                 on a stalled task, resume it with the text
     --wait             Re-block after delivering; return on next question/terminal
+  parley eval <task> --score <1-10> --feedback "<text>"
+                            Record an orchestrator's quality score/feedback
+                            against a task; a later call overwrites the last
   parley cancel <task>          Terminate a task's child; end it cancelled
   parley watch [task…] [--since <seq>] [--until any-change|attention|terminal]
               [--follow] [--json]
@@ -89,6 +93,8 @@ export async function run(argv: string[], ctx: CliContext): Promise<number> {
       return runDelegate(ctx, rest);
     case "answer":
       return runAnswer(ctx, rest);
+    case "eval":
+      return runEval(ctx, rest);
     case "cancel":
       return runCancel(ctx, rest);
     case "watch":
