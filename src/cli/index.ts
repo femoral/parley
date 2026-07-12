@@ -8,6 +8,7 @@ import { runDaemon } from "./commands/daemon.js";
 import { runDelegate } from "./commands/delegate.js";
 import { runLogs } from "./commands/logs.js";
 import { runModels } from "./commands/models.js";
+import { runSkills } from "./commands/skills.js";
 import { runStatus } from "./commands/tasks.js";
 
 const HELP = `parley — delegate tasks to agent CLIs
@@ -16,6 +17,7 @@ Usage:
   parley delegate [flags] "<prompt>"  Delegate a task ('-' reads stdin)
     -v --vendor <id>   Vendor adapter (required)
     -m --model <id>    Model, passed through to the vendor
+    --effort <level>   Reasoning effort, passed through to the vendor
     -n --name <label>  Human label; usable wherever a task id is
     --cwd <path>       Run in this dir directly (skips worktree creation)
     --base-ref <ref>   Branch the worktree from <ref> (default: HEAD)
@@ -44,6 +46,11 @@ Usage:
   parley daemon stop            Stop the background daemon
   parley daemon status          Report daemon port/pid
   parley daemon <cmd> [--json]
+  parley skills install         Install the orchestrator skill into a skill dir
+    --scope global|project    Where to install (skips the prompt)
+    --layout claude|agents|<path>
+                              Vendor convention, or a custom directory path
+  parley skills list            List the skills parley bundles
 
 Global flags:
   --json    Emit machine-readable JSON
@@ -84,6 +91,8 @@ export async function run(argv: string[], ctx: CliContext): Promise<number> {
       return runModels(ctx, rest);
     case "daemon":
       return runDaemon(ctx, rest);
+    case "skills":
+      return runSkills(ctx, rest);
     default:
       throw new UsageError(`unknown command: ${command}`);
   }
