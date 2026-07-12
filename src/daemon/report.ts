@@ -1,6 +1,7 @@
 import Ajv, { type ValidateFunction } from "ajv";
 import type { TaskRow } from "./db.js";
 import type { Posture } from "./adapters/types.js";
+import { readEvalExpected } from "./context.js";
 
 /** A JSON Schema — an object of keywords (or a boolean schema). */
 export type JsonSchema = Record<string, unknown> | boolean;
@@ -167,6 +168,8 @@ export interface Envelope {
    * close the startup race. 0 before the task's first transition.
    */
   seq: number;
+  /** Whether the task's repo declares delegations into it are eval'd (#45). */
+  eval_expected: boolean;
 }
 
 /** Parse a nullable JSON text column; malformed content reads as null. */
@@ -209,5 +212,6 @@ export function buildEnvelope(task: TaskRow, logsDir: string | null = null): Env
     question_id: task.question_id,
     question: task.question,
     seq: task.seq,
+    eval_expected: readEvalExpected(task.repo),
   };
 }

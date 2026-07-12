@@ -147,6 +147,54 @@ describe("delegate --wait (the spine)", () => {
   });
 });
 
+describe("eval_expected envelope field (#45)", () => {
+  it("is true when .parley/config.json declares eval.expected: true", async () => {
+    const cwd = taskDir(happyActions());
+    fs.mkdirSync(path.join(cwd, ".parley"), { recursive: true });
+    fs.writeFileSync(
+      path.join(cwd, ".parley", "config.json"),
+      JSON.stringify({ eval: { expected: true } }),
+    );
+    const result = await runCli(["delegate", "-v", "fake", "--cwd", cwd, "--wait", "do it"], home);
+
+    expect(result.code).toBe(0);
+    expect(JSON.parse(result.stdout).eval_expected).toBe(true);
+  });
+
+  it("is false when the repo has no .parley/config.json", async () => {
+    const cwd = taskDir(happyActions());
+    const result = await runCli(["delegate", "-v", "fake", "--cwd", cwd, "--wait", "do it"], home);
+
+    expect(result.code).toBe(0);
+    expect(JSON.parse(result.stdout).eval_expected).toBe(false);
+  });
+
+  it("is false when .parley/config.json omits eval, or sets expected: false", async () => {
+    const cwdOmitted = taskDir(happyActions());
+    fs.mkdirSync(path.join(cwdOmitted, ".parley"), { recursive: true });
+    fs.writeFileSync(path.join(cwdOmitted, ".parley", "config.json"), JSON.stringify({}));
+    const omitted = await runCli(
+      ["delegate", "-v", "fake", "--cwd", cwdOmitted, "--wait", "do it"],
+      home,
+    );
+    expect(omitted.code).toBe(0);
+    expect(JSON.parse(omitted.stdout).eval_expected).toBe(false);
+
+    const cwdFalse = taskDir(happyActions());
+    fs.mkdirSync(path.join(cwdFalse, ".parley"), { recursive: true });
+    fs.writeFileSync(
+      path.join(cwdFalse, ".parley", "config.json"),
+      JSON.stringify({ eval: { expected: false } }),
+    );
+    const falseExpected = await runCli(
+      ["delegate", "-v", "fake", "--cwd", cwdFalse, "--wait", "do it"],
+      home,
+    );
+    expect(falseExpected.code).toBe(0);
+    expect(JSON.parse(falseExpected.stdout).eval_expected).toBe(false);
+  });
+});
+
 describe("delegate without --wait", () => {
   it("returns {task_id, name, state} immediately; task completes in background", async () => {
     const cwd = taskDir([{ sleep: 300 }, ...happyActions()]);
