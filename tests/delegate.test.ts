@@ -7,6 +7,7 @@ import {
   makeTaskDir,
   runCli,
   startCli,
+  waitFor,
   waitForState,
   type FakeVendorAction,
 } from "./helpers.js";
@@ -231,6 +232,119 @@ describe("logs", () => {
     expect(result.code).toBe(0);
     expect(result.stdout).toContain("early line");
     expect(result.stdout).toContain("late line");
+  });
+
+  it("coalesces consecutive token-streamed chunks of the same type (#27)", async () => {
+    const cwd = taskDir([
+      { emit: { type: "thought", data: "The" } },
+      { emit: { type: "thought", data: " user" } },
+      { emit: { type: "thought", data: " wants" } },
+      { emit: { type: "text", data: "Hello" } },
+      { emit: { type: "text", data: " world" } },
+      { emit: { type: "end", stopReason: "EndTurn", sessionId: "sess-1" } },
+      { submit_report: REPORT },
+    ]);
+    await runCli(["delegate", "-v", "fake", "-n", "chunky", "--cwd", cwd, "--wait", "x"], home);
+
+    const logs = await runCli(["logs", "t1"], home);
+    expect(logs.code).toBe(0);
+    const lines = logs.stdout.trim().split("\n").map((l) => JSON.parse(l));
+    expect(lines).toContainEqual({ type: "thought", data: "The user wants" });
+    expect(lines).toContainEqual({ type: "text", data: "Hello world" });
+    // Not chunk-shaped (extra fields) — passes through unchanged, one line.
+    expect(lines).toContainEqual({ type: "end", stopReason: "EndTurn", sessionId: "sess-1" });
+  });
+
+  it("--json prints the raw untouched per-event JSONL, uncoalesced", async () => {
+    const cwd = taskDir([
+      { emit: { type: "thought", data: "The" } },
+      { emit: { type: "thought", data: " user" } },
+      { submit_report: REPORT },
+    ]);
+    await runCli(["delegate", "-v", "fake", "--cwd", cwd, "--wait", "x"], home);
+
+    const raw = await runCli(["logs", "t1", "--json"], home);
+    expect(raw.code).toBe(0);
+    expect(raw.stdout).toContain('{"type":"thought","data":"The"}');
+    expect(raw.stdout).toContain('{"type":"thought","data":" user"}');
+    // Each raw chunk is its own line — never merged.
+    expect(raw.stdout.split("\n").filter((l) => l.includes('"thought"')).length).toBe(2);
+  });
+
+  it("--follow merges chunks that arrive within one poll window", async () => {
+    const cwd = taskDir([
+      { emit: { type: "thought", data: "one" } },
+      { emit: { type: "thought", data: " two" } },
+      { sleep: 300 },
+      { emit: { type: "text", data: "done" } },
+      { submit_report: REPORT },
+    ]);
+    const ack = JSON.parse(
+      (await runCli(["delegate", "-v", "fake", "--cwd", cwd, "chunky follow"], home)).stdout,
+    );
+
+    const follow = startCli(["logs", ack.task_id, "--follow"], home);
+    const result = await follow.result;
+    expect(result.code).toBe(0);
+    const lines = result.stdout.trim().split("\n").map((l) => JSON.parse(l));
+    expect(lines).toContainEqual({ type: "thought", data: "one two" });
+    expect(lines).toContainEqual({ type: "text", data: "done" });
+  });
+
+  it("--follow flushes a buffered group on every poll — live output never goes silent for a slow same-type run (#27 fix)", async () => {
+    const cwd = taskDir([
+      { emit: { type: "thought", data: "one" } },
+      { sleep: 300 },
+      { emit: { type: "thought", data: " two" } },
+      { sleep: 300 },
+      { submit_report: REPORT },
+    ]);
+    const ack = JSON.parse(
+      (await runCli(["delegate", "-v", "fake", "--cwd", cwd, "slow follow"], home)).stdout,
+    );
+
+    const follow = startCli(["logs", ack.task_id, "--follow"], home);
+    // Chunks are 300ms apart, well past one 100ms poll — the first must render
+    // well before the task finishes, not just at the end.
+    await waitFor(
+      () => follow.stdoutSoFar().includes('{"type":"thought","data":"one"}'),
+      "first thought chunk to render live, before the task completes",
+      2_000,
+    );
+    const result = await follow.result;
+    expect(result.code).toBe(0);
+    const lines = result.stdout.trim().split("\n").map((l) => JSON.parse(l));
+    // Flushed as two separate groups, not merged into "one two" — the
+    // liveness/parity tradeoff a post-hoc read of the same file wouldn't make.
+    expect(lines).toContainEqual({ type: "thought", data: "one" });
+    expect(lines).toContainEqual({ type: "thought", data: " two" });
+  });
+
+  it("does not merge distinct error/fatal events even though they share the chunk shape (#27 fix)", async () => {
+    const cwd = taskDir([
+      { emit: { type: "error", data: "first failure" } },
+      { emit: { type: "error", data: "second failure" } },
+      { submit_report: REPORT },
+    ]);
+    await runCli(["delegate", "-v", "fake", "--cwd", cwd, "--wait", "x"], home);
+
+    const logs = await runCli(["logs", "t1"], home);
+    const lines = logs.stdout.trim().split("\n").map((l) => JSON.parse(l));
+    expect(lines).toContainEqual({ type: "error", data: "first failure" });
+    expect(lines).toContainEqual({ type: "error", data: "second failure" });
+  });
+
+  it("a vendor log with no sub-message chunking renders unchanged (codex-shaped events)", async () => {
+    const cwd = taskDir([
+      { emit: { type: "item.completed", item: { id: "i0", type: "agent_message", text: "hi" } } },
+      { emit: { type: "item.completed", item: { id: "i1", type: "agent_message", text: "bye" } } },
+      { submit_report: REPORT },
+    ]);
+    await runCli(["delegate", "-v", "fake", "--cwd", cwd, "--wait", "x"], home);
+
+    const coalesced = await runCli(["logs", "t1"], home);
+    const raw = await runCli(["logs", "t1", "--json"], home);
+    expect(coalesced.stdout).toBe(raw.stdout);
   });
 });
 

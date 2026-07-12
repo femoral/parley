@@ -29,7 +29,10 @@ Usage:
   parley cancel <task>          Terminate a task's child; end it cancelled
   parley [list]                 Show the task table (alias for bare status)
   parley status [task] [--json] Show all tasks, or one (id or name)
-  parley logs <task> [--follow] Print the raw captured vendor stream
+  parley logs <task> [--follow] [--json]
+                            Print the captured vendor stream, coalescing
+                            token-streamed chunks into readable lines
+                            (--json: raw per-event JSONL, untouched)
   parley clean <task>           Remove a finished task's worktree (keeps branch)
   parley clean --all-terminal   Sweep worktrees of all terminal-state tasks
   parley daemon start           Start the background daemon

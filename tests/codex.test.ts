@@ -1,6 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { execFileSync } from "node:child_process";
 import { createCodexAdapter } from "../src/daemon/adapters/codex.js";
 import type { HubInfo, TaskSpec } from "../src/daemon/adapters/types.js";
+import { createWorktree, gitDir } from "../src/daemon/worktree.js";
 
 /**
  * Golden unit tests for the codex adapter — the allowed pure-function exception
@@ -115,6 +120,73 @@ describe("codex prepare — sandbox posture matrix (golden argv)", () => {
       ...mcpOverrides(),
       "do the thing",
     ]);
+  });
+});
+
+describe("codex prepare — worktree gitdir writable root (#25)", () => {
+  it("workspace + gitDir: grants the gitdir as an extra writable root", async () => {
+    const plan = await createCodexAdapter({}).prepare(
+      spec({ gitDir: "/repo/.git/worktrees/t1" }),
+      HUB,
+    );
+    expect(plan.argv).toEqual([
+      "codex",
+      "exec",
+      "--json",
+      "--skip-git-repo-check",
+      "-c",
+      'sandbox_mode="workspace-write"',
+      "-c",
+      'approval_policy="never"',
+      "-c",
+      "sandbox_workspace_write.network_access=true",
+      "-c",
+      'sandbox_workspace_write.writable_roots=["/repo/.git/worktrees/t1"]',
+      ...mcpOverrides(),
+      "do the thing",
+    ]);
+  });
+
+  it("workspace, no gitDir (--cwd-bypassed task): no writable_roots override", async () => {
+    const plan = await createCodexAdapter({}).prepare(spec(), HUB);
+    expect(plan.argv.some((a) => a.startsWith("sandbox_workspace_write.writable_roots"))).toBe(
+      false,
+    );
+  });
+
+  it("read-only + gitDir: no writable_roots override (read-only grants no writes)", async () => {
+    const plan = await createCodexAdapter({}).prepare(
+      spec({ sandbox: "read-only", gitDir: "/repo/.git/worktrees/t1" }),
+      HUB,
+    );
+    expect(plan.argv.some((a) => a.startsWith("sandbox_workspace_write"))).toBe(false);
+  });
+
+  it("full + gitDir: no writable_roots override (full is already unrestricted)", async () => {
+    const plan = await createCodexAdapter({}).prepare(
+      spec({ sandbox: "full", gitDir: "/repo/.git/worktrees/t1" }),
+      HUB,
+    );
+    expect(plan.argv.some((a) => a.startsWith("sandbox_workspace_write"))).toBe(false);
+  });
+
+  it("resume maps gitDir identically to prepare", async () => {
+    const adapter = createCodexAdapter({});
+    const s = spec({ gitDir: "/repo/.git/worktrees/t1", sessionId: "s1" });
+    const resumed = await adapter.resume(s, HUB);
+    expect(resumed.argv).toContain(
+      'sandbox_workspace_write.writable_roots=["/repo/.git/worktrees/t1"]',
+    );
+  });
+
+  it("escapes a gitDir path containing a quote or backslash (TOML-safe)", async () => {
+    const plan = await createCodexAdapter({}).prepare(
+      spec({ gitDir: String.raw`/repo/my "worktree"\t1/.git/worktrees/t1` }),
+      HUB,
+    );
+    expect(plan.argv).toContain(
+      String.raw`sandbox_workspace_write.writable_roots=["/repo/my \"worktree\"\\t1/.git/worktrees/t1"]`,
+    );
   });
 });
 
@@ -298,5 +370,54 @@ describe("codex sessionId — extraction from parsed events", () => {
   it("returns undefined when no session id was seen", () => {
     const events = adapter.parseEvent('{"type":"turn.started"}');
     expect(adapter.sessionId(events)).toBeUndefined();
+  });
+});
+
+describe("codex prepare — real git worktree gitdir (#25, not a mocked path)", () => {
+  const scratch: string[] = [];
+
+  afterEach(() => {
+    for (const dir of scratch.splice(0)) fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("grants the worktree's real private gitdir, resolved via git itself", async () => {
+    const src = fs.mkdtempSync(path.join(os.tmpdir(), "parley-codex-repo-"));
+    scratch.push(src);
+    execFileSync("git", ["init", "-b", "main"], { cwd: src, stdio: "ignore" });
+    execFileSync("git", ["config", "user.email", "test@parley.test"], { cwd: src });
+    execFileSync("git", ["config", "user.name", "parley test"], { cwd: src });
+    fs.writeFileSync(path.join(src, "README.md"), "hi\n");
+    execFileSync("git", ["add", "-A"], { cwd: src });
+    execFileSync("git", ["commit", "-m", "initial"], { cwd: src, stdio: "ignore" });
+
+    const worktreesDir = fs.mkdtempSync(path.join(os.tmpdir(), "parley-codex-worktrees-"));
+    scratch.push(worktreesDir);
+    const info = createWorktree({
+      repoRoot: src,
+      worktreesDir,
+      taskId: "t1",
+      name: null,
+      baseRef: null,
+    });
+
+    // Resolved independently of the adapter, straight from git — the gitdir
+    // genuinely lives outside `info.path` (git's own worktree layout).
+    const realGitDir = gitDir(info.path);
+    expect(realGitDir.startsWith(info.path)).toBe(false);
+    expect(realGitDir).toContain(path.join(".git", "worktrees", "t1"));
+
+    const plan = await createCodexAdapter({}).prepare(
+      spec({ cwd: info.path, gitDir: realGitDir }),
+      HUB,
+    );
+    expect(plan.argv).toContain(`sandbox_workspace_write.writable_roots=["${realGitDir}"]`);
+
+    // Edit + commit inside the worktree, exactly like an agent under this
+    // sandbox would — proves the granted path is the one git actually needs.
+    fs.writeFileSync(path.join(info.path, "new-file.txt"), "hello\n");
+    execFileSync("git", ["add", "-A"], { cwd: info.path });
+    execFileSync("git", ["commit", "-m", "agent commit"], { cwd: info.path, stdio: "ignore" });
+    const log = execFileSync("git", ["log", "--oneline"], { cwd: info.path, encoding: "utf8" });
+    expect(log).toContain("agent commit");
   });
 });

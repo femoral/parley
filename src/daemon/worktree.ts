@@ -89,6 +89,15 @@ function translateConfig(root: string, wt: string): string[] {
 }
 
 /**
+ * The worktree's private git directory (`HEAD`, `index.lock`, per-worktree
+ * config, …). Always lives under the *source repo's* common git dir, not under
+ * `wt` itself — git's own layout, unrelated to where parley places worktrees.
+ */
+export function gitDir(wt: string): string {
+  return git(["-C", wt, "rev-parse", "--absolute-git-dir"]);
+}
+
+/**
  * Register parley-generated paths in an exclude file scoped to this worktree
  * only, so `git status` inside stays clean of plumbing and the child can never
  * stage it. `info/exclude` won't do: git resolves it through the COMMON git
@@ -100,8 +109,7 @@ function translateConfig(root: string, wt: string): string[] {
  */
 function appendExclude(wt: string, entries: string[]): void {
   if (entries.length === 0) return;
-  const gitDir = git(["-C", wt, "rev-parse", "--absolute-git-dir"]);
-  const excludePath = path.join(gitDir, "parley-exclude");
+  const excludePath = path.join(gitDir(wt), "parley-exclude");
   const existing = fs.existsSync(excludePath) ? fs.readFileSync(excludePath, "utf8") : "";
   const gap = existing.length > 0 && !existing.endsWith("\n") ? "\n" : "";
   fs.appendFileSync(excludePath, `${gap}${entries.join("\n")}\n`);
@@ -132,8 +140,7 @@ export function excludeMaterializedFiles(wtPath: string, relPaths: string[]): vo
         .map((rel) => `/${rel}`),
     ),
   ];
-  const gitDir = git(["-C", wtPath, "rev-parse", "--absolute-git-dir"]);
-  const excludePath = path.join(gitDir, "parley-exclude");
+  const excludePath = path.join(gitDir(wtPath), "parley-exclude");
   let existing: Set<string> = new Set();
   try {
     existing = new Set(fs.readFileSync(excludePath, "utf8").split("\n"));

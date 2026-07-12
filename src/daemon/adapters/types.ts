@@ -56,6 +56,15 @@ export interface TaskSpec {
   answerTimeoutMs: number;
   /** Persisted vendor session id — set when resuming a stalled task. */
   sessionId?: string;
+  /**
+   * The parley worktree's private git directory (`git rev-parse
+   * --absolute-git-dir`), when `cwd` is a parley-managed worktree. Always lives
+   * outside `cwd` (under the source repo's common git dir) — adapters whose
+   * sandbox mechanism scopes writes to `cwd` need this as an extra writable
+   * root, or a plain `git commit` inside the worktree fails. Absent for
+   * `--cwd`-bypassed tasks (no parley worktree to grant).
+   */
+  gitDir?: string;
 }
 
 /** How a child reaches back to the daemon: the MCP endpoint + correlation headers. */

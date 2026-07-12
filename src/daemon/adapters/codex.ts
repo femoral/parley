@@ -6,6 +6,7 @@ import type {
   VendorAdapter,
   VendorEvent,
 } from "./types.js";
+import { tomlString } from "./toml.js";
 
 /**
  * The `codex` vendor adapter (spec §9, ADR-0004). Real delegation to OpenAI's
@@ -74,6 +75,15 @@ function configArgs(task: TaskSpec, hub: HubInfo): string[] {
   // false) for `--no-network`. read-only/full ignore it entirely (spec §8).
   if (task.sandbox === "workspace" && task.network) {
     set(`sandbox_workspace_write.network_access=true`);
+  }
+  // Grant the worktree's private gitdir as an extra writable root under
+  // workspace-write: it always lives outside `cwd` (git's own layout — the
+  // common gitdir of the source repo), so codex's default cwd-scoped write
+  // access would otherwise fail every `git add`/`git commit` in the worktree.
+  // read-only grants no writes at all (unaffected); full is already
+  // unrestricted. Absent for `--cwd`-bypassed tasks (no parley worktree).
+  if (task.sandbox === "workspace" && task.gitDir !== undefined) {
+    set(`sandbox_workspace_write.writable_roots=[${tomlString(task.gitDir)}]`);
   }
 
   // MCP injection: point codex's MCP client at the daemon's streamable-HTTP hub

@@ -40,6 +40,7 @@ import { formatDuration } from "../util/time.js";
 import {
   createWorktree,
   excludeMaterializedFiles,
+  gitDir,
   isWorktreeModified,
   removeWorktree,
   repoRoot,
@@ -675,7 +676,23 @@ export class TaskEngine {
       // Adapters raise the vendor's MCP tool timeout above this (spec §4).
       answerTimeoutMs: task.answer_timeout_ms ?? DEFAULT_ANSWER_TIMEOUT_MS,
       ...(task.session_id !== null ? { sessionId: task.session_id } : {}),
+      // Only codex needs the worktree's private gitdir (#25) and only
+      // parley-managed worktrees have one to grant — skip the git shell-out
+      // otherwise so every other vendor's prepare/resume stays git-free.
+      // `gitDir()` can throw (worktree gone from disk out-of-band); degrade to
+      // "no extra writable root" rather than fail the whole task over it.
+      ...(task.worktree !== null && task.vendor === "codex"
+        ? { gitDir: this.tryGitDir(task.worktree) }
+        : {}),
     };
+  }
+
+  private tryGitDir(wt: string): string | undefined {
+    try {
+      return gitDir(wt);
+    } catch {
+      return undefined;
+    }
   }
 
   /**

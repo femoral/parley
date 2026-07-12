@@ -6,6 +6,7 @@ import type {
   VendorAdapter,
   VendorEvent,
 } from "./types.js";
+import { tomlString } from "./toml.js";
 
 /**
  * The `grok` vendor adapter — real delegation to Grok Build (`grok` binary,
@@ -95,21 +96,6 @@ function sandboxEnv(task: TaskSpec): {
         base: "workspace",
       };
   }
-}
-
-/**
- * TOML basic-string literal. Escapes backslash, quote, and control characters —
- * a raw newline/tab in a hub URL or header value would otherwise emit invalid
- * TOML (or, worse, inject an extra config line).
- */
-function tomlString(value: string): string {
-  const escaped = value
-    .replace(/\\/g, "\\\\")
-    .replace(/"/g, '\\"')
-    // TOML basic strings forbid literal control characters (U+0000–U+001F, U+007F).
-    // eslint-disable-next-line no-control-regex
-    .replace(/[\u0000-\u001f\u007f]/g, (ch) => `\\u${ch.charCodeAt(0).toString(16).padStart(4, "0")}`);
-  return `"${escaped}"`;
 }
 
 /**
