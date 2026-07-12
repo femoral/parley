@@ -315,6 +315,21 @@ describe("codex parseEvent — golden JSONL fixtures (rust-v0.144.0)", () => {
     expect(adapter.parseEvent(line)).toEqual([{ kind: "error", text: "tool blew up" }]);
   });
 
+  it("failed mcp_tool_call item.completed → tagged, non-fatal diagnostic error", () => {
+    // Codex's guardian approval gate auto-cancels MCP tool calls headless (no
+    // TTY to answer) — tag it so the engine can carry it through as a
+    // greppable diagnostic even though the turn itself isn't over.
+    const line =
+      '{"type":"item.completed","item":{"id":"i4","type":"mcp_tool_call","server":"parley",' +
+      '"tool":"submit_report","error":{"message":"user cancelled MCP tool call"}}}';
+    expect(adapter.parseEvent(line)).toEqual([
+      {
+        kind: "error",
+        text: "PARLEY-DIAG mcp_tool_call server=parley tool=submit_report failed: user cancelled MCP tool call",
+      },
+    ]);
+  });
+
   it("turn.completed → session_meta usage (all numeric fields)", () => {
     const line =
       '{"type":"turn.completed","usage":{"input_tokens":10,"cached_input_tokens":2,"output_tokens":5,"reasoning_output_tokens":1}}';

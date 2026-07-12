@@ -29,6 +29,12 @@ function buildMcpServer(engine: TaskEngine, taskId: string): McpServer {
       // engine (against the task's report schema) so violations come back as
       // tool errors the child can retry on, not protocol errors.
       inputSchema: z.looseObject({}),
+      // Unannotated MCP tools are treated as potentially destructive by
+      // vendor approval gates (e.g. codex's guardian_approval), which
+      // auto-cancel the call in headless mode since there's no TTY to
+      // approve. This tool only records a report — declare it side-effect-free
+      // so headless children can actually call it.
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
     },
     (args: Record<string, unknown>) => {
       // Validation errors bounce back as tool errors so the child retries.
@@ -55,6 +61,9 @@ function buildMcpServer(engine: TaskEngine, taskId: string): McpServer {
       // Loose at the MCP layer (see submit_report): argument validation happens
       // in the handler so violations bounce back as retryable tool errors.
       inputSchema: z.looseObject({}),
+      // See submit_report: undeclared annotations make vendor approval gates
+      // treat the call as potentially destructive and auto-cancel it headless.
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
     },
     async (args: Record<string, unknown>) => {
       const question = args.question;

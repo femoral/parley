@@ -6,6 +6,7 @@ import type {
   VendorAdapter,
   VendorEvent,
 } from "./types.js";
+import { VENDOR_DIAG_PREFIX } from "./types.js";
 import { tomlString } from "./toml.js";
 
 /**
@@ -151,8 +152,26 @@ function parseItem(item: unknown): VendorEvent[] {
       // A mid-run error item — the agent may recover and work past it, so it is
       // display-only (not fatal); only turn.failed/error end the run.
       return [{ kind: "error", text: asString(it.message) }];
+    case "mcp_tool_call": {
+      // A failed call to *any* MCP tool — most actionably, a call to our own
+      // `submit_report`/`ask_orchestrator` server auto-cancelled by codex's
+      // guardian approval gate, which has no TTY to answer in headless `exec`
+      // (see docs/adr/0006-sandbox-workspace-network.md). Not fatal — the
+      // agent may retry — but tagged so the engine can carry it through as a
+      // greppable diagnostic instead of it getting lost in the raw stream.
+      const err = asRecord(it.error);
+      if (!err) return [];
+      return [
+        {
+          kind: "error",
+          text:
+            `${VENDOR_DIAG_PREFIX} mcp_tool_call server=${asString(it.server)} ` +
+            `tool=${asString(it.tool)} failed: ${asString(err.message)}`,
+        },
+      ];
+    }
     default:
-      // reasoning, mcp_tool_call, web_search, todo_list, … pass through opaque.
+      // reasoning, web_search, todo_list, … pass through opaque.
       return [];
   }
 }

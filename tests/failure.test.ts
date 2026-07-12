@@ -82,6 +82,32 @@ describe("child exit without a report", () => {
     expect(env.error).toMatch(/model overloaded/);
   });
 
+  it("surfaces a PARLEY-DIAG event in the failure detail and a separate diag.log", async () => {
+    // e.g. codex's guardian approval gate cancelling submit_report headless
+    // (no fatal error, no report) — the tag must reach both the failure
+    // string an orchestrator reads and a distilled log a human can grep
+    // without wading through the full raw vendor stream.
+    const cwd = taskDir([
+      { emit: { type: "diag", message: "mcp_tool_call server=parley tool=submit_report failed: user cancelled MCP tool call" } },
+    ]);
+    const result = await runCli(
+      ["delegate", "-v", "fake", "-n", "guardian-cancel", "--cwd", cwd, "--wait", "do it"],
+      home,
+    );
+
+    expect(result.code).toBe(1);
+    const env = JSON.parse(result.stdout);
+    expect(env.state).toBe("failed");
+    expect(env.error).toMatch(/without submitting a report/);
+    expect(env.error).toMatch(/PARLEY-DIAG mcp_tool_call server=parley tool=submit_report/);
+
+    const diagLog = path.join(env.logs_dir, "diag.log");
+    expect(fs.existsSync(diagLog)).toBe(true);
+    expect(fs.readFileSync(diagLog, "utf8")).toMatch(
+      /PARLEY-DIAG mcp_tool_call server=parley tool=submit_report failed: user cancelled MCP tool call/,
+    );
+  });
+
   it("does not surface a recoverable (non-fatal) error event as failure detail", async () => {
     // A mid-run recoverable error must not be misattributed as the cause when
     // the child later exits without a report for unrelated reasons.

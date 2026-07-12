@@ -110,6 +110,20 @@ export interface VendorEvent {
   usage?: Record<string, number>;
 }
 
+/**
+ * Prefix adapters put on an `error` event's `text` to flag it as an
+ * actionable, vendor-integration-level problem — e.g. a vendor's own
+ * approval/guardian gate silently cancelling a `submit_report`/
+ * `ask_orchestrator` call (headless children have no TTY to answer such
+ * prompts). Non-fatal by nature (the agent may still recover the turn), so it
+ * doesn't set `fatal`, but the engine tracks the most recent one per task and
+ * surfaces it — tagged, so a human or the orchestrator can `grep` a task's
+ * `diag.log` (or the failure `error` string) instead of re-reading the full
+ * raw vendor stream to find why a task with no vendor-level fatal error still
+ * never produced a report.
+ */
+export const VENDOR_DIAG_PREFIX = "PARLEY-DIAG";
+
 /** A vendor integration: how to spawn it and how to read its event stream. */
 export interface VendorAdapter {
   id: string;

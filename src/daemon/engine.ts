@@ -11,6 +11,7 @@ import type {
   VendorAdapter,
   VendorEvent,
 } from "./adapters/types.js";
+import { VENDOR_DIAG_PREFIX } from "./adapters/types.js";
 import {
   getTask,
   insertTask,
@@ -827,6 +828,12 @@ export class TaskEngine {
     fs.mkdirSync(logDir, { recursive: true });
     const rawLog = fs.createWriteStream(path.join(logDir, "vendor.jsonl"), { flags: "a" });
     const stderrLog = fs.createWriteStream(path.join(logDir, "stderr.log"), { flags: "a" });
+    // Distilled, greppable trail of adapter-tagged diagnostics (see
+    // VENDOR_DIAG_PREFIX) — separate from the untouched raw stream so a human
+    // or the orchestrator troubleshooting parley itself doesn't have to read
+    // the full vendor.jsonl to find e.g. a vendor approval gate silently
+    // cancelling submit_report/ask_orchestrator.
+    const diagLog = fs.createWriteStream(path.join(logDir, "diag.log"), { flags: "a" });
 
     const [command, ...args] = plan.argv;
     if (!command) throw new Error(`adapter ${adapter.id} produced an empty argv`);
@@ -853,6 +860,11 @@ export class TaskEngine {
     // Recoverable mid-run error items are deliberately not captured — the agent
     // may work past them, and a stale one would misattribute the failure.
     let lastError: string | undefined;
+    // The most recent adapter-tagged diagnostic (VENDOR_DIAG_PREFIX) — kept
+    // separately from `lastError` since it's non-fatal by construction, but
+    // still worth carrying into the failure detail when the task ends without
+    // a report and no fatal error explains why.
+    let lastDiag: string | undefined;
     const lines = readline.createInterface({ input: child.stdout });
     lines.on("line", (line) => {
       // Raw stream is the durable record — stored untouched, unknown lines included.
@@ -870,6 +882,10 @@ export class TaskEngine {
         }
         if (event.kind === "error" && event.fatal === true && event.text) {
           lastError = event.text;
+        }
+        if (event.kind === "error" && event.text?.startsWith(VENDOR_DIAG_PREFIX)) {
+          lastDiag = event.text;
+          diagLog.write(`${new Date().toISOString()} ${event.text}\n`);
         }
       }
       // Only re-extract when this line could have changed the answer.
@@ -894,6 +910,7 @@ export class TaskEngine {
         lines.close();
         rawLog.end();
         stderrLog.end();
+        diagLog.end();
       };
       child.on("error", (err) => {
         // A spawn failure (bad binary → ENOENT) fails the task with a clear
@@ -933,8 +950,13 @@ export class TaskEngine {
           // exit is the stall stopping the child, not a failure. Codex exit
           // codes are 0/1 only, so any `turn.failed`/`error` detail from the
           // stream is the real diagnosis — append it when present.
-          const base = `vendor child exited (code ${code ?? "?"}) without submitting a report`;
-          this.fail(task.id, lastError !== undefined ? `${base}: ${lastError}` : base);
+          let detail = `vendor child exited (code ${code ?? "?"}) without submitting a report`;
+          if (lastError !== undefined) detail += `: ${lastError}`;
+          // Surfaced even when a fatal error already explains the exit — a
+          // vendor approval gate cancelling submit_report is often the reason
+          // the report never landed even when the turn itself "succeeded".
+          if (lastDiag !== undefined) detail += ` [${lastDiag}]`;
+          this.fail(task.id, detail);
         }
         // The child has exited, so a cleanly completed task's untouched worktree
         // is reclaimed; a failed/cancelled task retains its worktree and logs

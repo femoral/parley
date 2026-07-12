@@ -5,6 +5,7 @@ import type {
   VendorAdapter,
   VendorEvent,
 } from "./types.js";
+import { VENDOR_DIAG_PREFIX } from "./types.js";
 
 /**
  * The `fake` vendor adapter — the contract-test vendor (spec §10). It spawns a
@@ -86,6 +87,16 @@ export function createFakeAdapter(env: NodeJS.ProcessEnv = process.env): VendorA
               // `fatal` is the fake vendor's run-terminal error; `error` is a
               // recoverable one — mirroring the codex turn.failed/item split.
               ...(event.type === "fatal" ? { fatal: true } : {}),
+            },
+          ];
+        case "diag":
+          // Contract-test double for VENDOR_DIAG_PREFIX-tagged diagnostics
+          // (see codex.ts's mcp_tool_call handling) — lets the engine's
+          // diag-capture plumbing be exercised without spawning real codex.
+          return [
+            {
+              kind: "error",
+              text: `${VENDOR_DIAG_PREFIX} ${typeof event.message === "string" ? event.message : ""}`,
             },
           ];
         case "session":
