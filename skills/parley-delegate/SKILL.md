@@ -1,5 +1,5 @@
 ---
-name: delegating-to-parley
+name: parley-delegate
 description: Delegate coding tasks to other agent CLIs (codex, grok) with the parley CLI — one task or a parallel fan-out, each in its own git worktree. Use when the user asks to delegate or offload work to codex/grok, run several agent tasks in parallel, or mentions parley.
 ---
 

@@ -30,7 +30,7 @@ function makeRepo(): string {
   return dir;
 }
 
-const SKILL = "delegating-to-parley";
+const SKILL = "parley-delegate";
 
 beforeEach(() => {
   home = makeHome();

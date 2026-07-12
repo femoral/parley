@@ -13,7 +13,7 @@ const REPO_URL = "https://github.com/femoral/parley";
 const REPO_BRANCH = "main";
 
 /** The single orchestrator-facing skill parley ships (bundled under skills/). */
-const SKILL_NAME = "delegating-to-parley";
+const SKILL_NAME = "parley-delegate";
 
 /** A known orchestrator skill-directory convention. */
 interface Layout {
