@@ -273,6 +273,61 @@ describe("status", () => {
     expect(byId[0].id).toBe("t1");
     expect(byId[0].state).toBe("completed");
   });
+
+  it("shows compact token counts in USAGE for a task that reports usage", async () => {
+    const cwd = taskDir([
+      { emit: { type: "session", session_id: "sess-usage" } },
+      {
+        emit: {
+          type: "usage",
+          input_tokens: 12345,
+          cached_input_tokens: 999,
+          output_tokens: 6789,
+        },
+      },
+      { submit_report: REPORT },
+    ]);
+    await runCli(["delegate", "-v", "fake", "-n", "usage-task", "--cwd", cwd, "--wait", "x"], home);
+
+    const table = await runCli(["status"], home);
+    expect(table.code).toBe(0);
+    expect(table.stdout).toContain("USAGE");
+    expect(table.stdout).toContain("12.3k in/6.8k out");
+    // cached_input_tokens stays --json-only, never shown in the table.
+    expect(table.stdout).not.toContain("999");
+  });
+
+  it("shows n/r in USAGE for a task with no usage data, never a bare 0 or blank", async () => {
+    const cwd = taskDir([
+      { emit: { type: "session", session_id: "sess-no-usage" } },
+      { submit_report: REPORT },
+    ]);
+    await runCli(["delegate", "-v", "fake", "-n", "no-usage-task", "--cwd", cwd, "--wait", "x"], home);
+
+    const table = await runCli(["status"], home);
+    expect(table.code).toBe(0);
+    expect(table.stdout).toContain("n/r");
+  });
+
+  it("shows a plain MmSSs DURATION for a completed task", async () => {
+    const cwd = taskDir(happyActions());
+    await runCli(["delegate", "-v", "fake", "-n", "done-task", "--cwd", cwd, "--wait", "x"], home);
+
+    const table = await runCli(["status"], home);
+    expect(table.code).toBe(0);
+    expect(table.stdout).toContain("DURATION");
+    expect(table.stdout).toMatch(/\d+m\d{2}s(?!\.)/);
+  });
+
+  it("shows a live, ...-suffixed DURATION for a still-running task", async () => {
+    const cwd = taskDir([{ sleep: 2000 }, ...happyActions()]);
+    await runCli(["delegate", "-v", "fake", "-n", "slow-task", "--cwd", cwd, "background"], home);
+    await waitForState(home, "t1", "running");
+
+    const table = await runCli(["status"], home);
+    expect(table.code).toBe(0);
+    expect(table.stdout).toMatch(/\d+m\d{2}s\.\.\./);
+  });
 });
 
 describe("logs", () => {

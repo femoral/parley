@@ -1020,6 +1020,9 @@ export class TaskEngine {
       let usageChanged = false;
       for (const event of lineEvents) {
         if (event.kind === "session_meta" && event.usage !== undefined) {
+          // Codex's `usage` is treated as a cumulative running total, so each
+          // new object supersedes the prior one via shallow merge rather than
+          // summing (docs/research/vendor-token-usage-coverage.md).
           usage = { ...usage, ...event.usage };
           usageChanged = true;
         }
