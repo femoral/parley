@@ -8,14 +8,21 @@ interface TasksResponse {
   tasks: TaskRow[];
 }
 
+/** Compact session id for the table — a git-style prefix, like the short ID. */
+function shortSession(id: string | null): string {
+  if (!id) return "-";
+  return id.length > 8 ? id.slice(0, 8) : id;
+}
+
 function renderTable(ctx: CliContext, tasks: TaskRow[]): void {
   if (tasks.length === 0) {
     ctx.stdout("No tasks.\n");
     return;
   }
-  const header = ["ID", "NAME", "VENDOR", "MODEL", "STATE"];
+  const header = ["ID", "SESSION", "NAME", "VENDOR", "MODEL", "STATE"];
   const rows = tasks.map((t) => [
     t.id,
+    shortSession(t.orchestrator_session_id),
     t.name ?? "-",
     t.vendor ?? "-",
     t.model ?? "-",
@@ -42,19 +49,61 @@ function presentRow(row: TaskRow): Record<string, unknown> {
 }
 
 /**
- * `parley status [task] [--json]` (and its `parley list` alias). Auto-spawns the
- * daemon, fetches the task table over the CLI plane, and renders it. A task
- * reference may be a short id or a `--name` label. Exits 0 with an empty
- * listing when no tasks exist.
+ * Resolve the orchestrator session a bare listing narrows to. `--session <id>`
+ * pins that id; `--session latest` (and the env/no-flag default) resolve to the
+ * most-recently-used session — the newest task's non-null session id (tasks
+ * arrive newest-first). `undefined` means "no session filter" (show all).
+ */
+function resolveSessionFilter(
+  sessionFlag: string | undefined,
+  env: NodeJS.ProcessEnv,
+  tasks: TaskRow[],
+): string | undefined {
+  const latest = (): string | undefined =>
+    tasks.find((t) => t.orchestrator_session_id !== null)?.orchestrator_session_id ?? undefined;
+  if (sessionFlag !== undefined) {
+    return sessionFlag === "latest" ? latest() : sessionFlag;
+  }
+  const envSession = env.PARLEY_SESSION_ID;
+  return envSession ? envSession : latest();
+}
+
+/**
+ * `parley status [task] [--json] [--session <id>] [--all]` (and its `parley
+ * list` alias). Auto-spawns the daemon, fetches the task table over the CLI
+ * plane, and renders it. A task reference may be a short id or a `--name`
+ * label — a targeted lookup that bypasses session filtering. With no ref, the
+ * listing narrows to one orchestrator session: `--session <id>` (or `latest`),
+ * else `PARLEY_SESSION_ID` from the environment, else the most-recently-used
+ * session. `--all` shows every task. Exits 0 with an empty listing when no
+ * tasks match.
  */
 export async function runStatus(ctx: CliContext, args: string[]): Promise<number> {
-  const { positionals, flags } = parseArgs(args, { "--json": {} });
+  const { positionals, flags } = parseArgs(args, {
+    "--json": {},
+    "--session": { value: true },
+    "--all": {},
+  });
   const ref = positionals[0];
   const json = flags["--json"] === true;
+  const all = flags["--all"] === true;
+  const sessionFlag = typeof flags["--session"] === "string" ? flags["--session"] : undefined;
 
   const discovery = await ensureDaemon(ctx.paths, ctx.env);
   const { tasks } = await daemonGet<TasksResponse>(discovery, "/tasks");
-  const filtered = ref ? tasks.filter((t) => t.id === ref || t.name === ref) : tasks;
+
+  let filtered: TaskRow[];
+  if (ref) {
+    filtered = tasks.filter((t) => t.id === ref || t.name === ref);
+  } else if (all) {
+    filtered = tasks;
+  } else {
+    const session = resolveSessionFilter(sessionFlag, ctx.env, tasks);
+    filtered =
+      session === undefined
+        ? tasks
+        : tasks.filter((t) => t.orchestrator_session_id === session);
+  }
 
   if (json) {
     printJson(ctx, filtered.map(presentRow));
