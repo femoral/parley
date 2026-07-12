@@ -17,6 +17,8 @@ export interface HomePaths {
   lock: string;
   /** SQLite task-state database. */
   db: string;
+  /** User-patchable model/effort catalog file (`parley models`). */
+  models: string;
   /** Per-task raw vendor event logs live here (future tickets). */
   tasks: string;
   /** Parley-created git worktrees live here (future tickets). */
@@ -39,6 +41,7 @@ export function homePaths(home: string): HomePaths {
     discovery: path.join(home, "daemon.json"),
     lock: path.join(home, "daemon.lock"),
     db: path.join(home, "parley.db"),
+    models: path.join(home, "models.json"),
     tasks: path.join(home, "tasks"),
     worktrees: path.join(home, "worktrees"),
   };

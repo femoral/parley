@@ -7,6 +7,7 @@ import { runClean } from "./commands/clean.js";
 import { runDaemon } from "./commands/daemon.js";
 import { runDelegate } from "./commands/delegate.js";
 import { runLogs } from "./commands/logs.js";
+import { runModels } from "./commands/models.js";
 import { runStatus } from "./commands/tasks.js";
 
 const HELP = `parley — delegate tasks to agent CLIs
@@ -35,6 +36,10 @@ Usage:
                             (--json: raw per-event JSONL, untouched)
   parley clean <task>           Remove a finished task's worktree (keeps branch)
   parley clean --all-terminal   Sweep worktrees of all terminal-state tasks
+  parley models [--vendor <id>] [--json] [--refresh]
+                            Show the model/effort catalog (~/.parley/models.json,
+                            hand-editable). --refresh re-probes vendor CLIs;
+                            advisory only — delegate never gates on it.
   parley daemon start           Start the background daemon
   parley daemon stop            Stop the background daemon
   parley daemon status          Report daemon port/pid
@@ -75,6 +80,8 @@ export async function run(argv: string[], ctx: CliContext): Promise<number> {
       return runLogs(ctx, rest);
     case "clean":
       return runClean(ctx, rest);
+    case "models":
+      return runModels(ctx, rest);
     case "daemon":
       return runDaemon(ctx, rest);
     default:

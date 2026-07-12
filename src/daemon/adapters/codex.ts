@@ -1,5 +1,7 @@
 import type {
   HubInfo,
+  ModelEntry,
+  ProbedModels,
   SandboxMode,
   SpawnPlan,
   TaskSpec,
@@ -7,6 +9,7 @@ import type {
   VendorEvent,
 } from "./types.js";
 import { VENDOR_DIAG_PREFIX } from "./types.js";
+import { runProbe } from "./probe.js";
 import { tomlString } from "./toml.js";
 
 /**
@@ -130,6 +133,43 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
 
 function asString(value: unknown): string {
   return typeof value === "string" ? value : "";
+}
+
+/** The probe command recorded as the catalog entry's `source`. */
+const MODELS_SOURCE = "codex debug models";
+
+/**
+ * Parse the JSON catalog `codex debug models` emits into normalized model
+ * entries (#29, research §2). Drops `visibility:"hide"` models (internal, e.g.
+ * `codex-auto-review`) and the huge per-model `base_instructions` blob — we keep
+ * only `slug`, `supported_reasoning_levels[].effort`, and
+ * `default_reasoning_level`. Throws on non-JSON or a missing `models` array so
+ * the refresh path can keep the existing entry rather than clobber it.
+ */
+export function parseCodexModels(json: string): ModelEntry[] {
+  const root = asRecord(JSON.parse(json));
+  const models = root?.models;
+  if (!Array.isArray(models)) {
+    throw new Error("codex debug models: missing 'models' array");
+  }
+  const entries: ModelEntry[] = [];
+  for (const raw of models) {
+    const m = asRecord(raw);
+    if (!m) continue;
+    if (m.visibility === "hide") continue; // internal model, not user-selectable
+    const id = asString(m.slug);
+    if (id === "") continue;
+    const levels = Array.isArray(m.supported_reasoning_levels)
+      ? m.supported_reasoning_levels
+      : [];
+    const efforts = levels
+      .map((level) => asString(asRecord(level)?.effort))
+      .filter((effort) => effort !== "");
+    const defaultEffort =
+      typeof m.default_reasoning_level === "string" ? m.default_reasoning_level : null;
+    entries.push({ id, efforts, default_effort: defaultEffort });
+  }
+  return entries;
 }
 
 /** Normalize a single `item.completed` item to a thin VendorEvent (or `[]` opaque). */
@@ -263,6 +303,14 @@ export function createCodexAdapter(env: NodeJS.ProcessEnv = process.env): Vendor
         }
       }
       return undefined;
+    },
+
+    async listModels(): Promise<ProbedModels> {
+      // `codex debug models` renders the raw catalog as JSON (research §2). A
+      // debug subcommand with no stability promise, so parse defensively; the
+      // catalog file remains hand-editable when this drifts.
+      const stdout = await runProbe(CODEX_BIN, ["debug", "models"]);
+      return { source: MODELS_SOURCE, models: parseCodexModels(stdout) };
     },
   };
 }
