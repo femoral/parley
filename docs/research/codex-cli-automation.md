@@ -29,7 +29,8 @@ Sources: [non-interactive docs](https://developers.openai.com/codex/noninteracti
 
 ## 2. Model selection
 
-- Flag `-m/--model`; config `model = "gpt-5.6"`, `model_reasoning_effort = "high"` (values up to `"xhigh"`). Per-invocation via `-c model="..."`.
+- Flag `-m/--model`; config `model = "gpt-5.6"`, `model_reasoning_effort = "high"`. Per-invocation via `-c model="..."` / `-c model_reasoning_effort="..."`.
+- **Model enumeration**: `codex debug models` renders the raw model catalog as JSON — per model: `slug`, `default_reasoning_level`, `supported_reasoning_levels` (per-effort descriptions; up to `"ultra"` on gpt-5.6-sol/terra as of codex 0.144.0, 2026-07-12), `visibility`. Caveats: a `debug` subcommand (no stability promise), and output is huge (~235 KB — embeds each model's base instructions), so parse, never dump.
 - Custom providers: `model_provider` + `[model_providers.<id>]` (`base_url`, `env_key`, `http_headers`). Built-in ids `openai`, `ollama`, `lmstudio` are reserved.
 - Model ids move fast — Parley should pass the model string through opaquely, not validate against a list.
 

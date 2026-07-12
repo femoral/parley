@@ -30,7 +30,9 @@ Source: [headless-scripting](https://docs.x.ai/build/cli/headless-scripting)
 ## 3. Model selection
 
 - `-m/--model <MODEL>` per invocation. Default model now `grok-4.5` (2026-07-08; reasoning effort low/medium/high, default high). Env `GROK_DEFAULT_MODEL`.
-- Config `[models]`: `default`, `default_reasoning_effort`, per-purpose models (`session_summary`, `web_search`…), `allowed_models`/`disabled_models` globs. **No headless flag for reasoning effort** — config/env only.
+- `--reasoning-effort <EFFORT>` (alias `--effort`) per invocation — verified in grok 0.2.93 (2026-07-12); earlier finding "config/env only" is stale. Allowed values undocumented in `--help`; config `[models] default_reasoning_effort` remains the fallback.
+- Config `[models]`: `default`, `default_reasoning_effort`, per-purpose models (`session_summary`, `web_search`…), `allowed_models`/`disabled_models` globs.
+- **Model enumeration**: `grok models` lists the default + available model ids as plain text (no `--json`, no per-model efforts). Format unpinned — parse defensively, snapshot per pinned version.
 - BYOK first-class: `[model.<id>]` with `base_url`, `api_backend = "chat_completions" | "responses" | "messages"`, `env_key`, `context_window`. Envs: `GROK_XAI_API_BASE_URL` etc.
 
 Source: [settings reference](https://docs.x.ai/build/settings/reference).
