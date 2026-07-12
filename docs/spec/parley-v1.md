@@ -73,11 +73,16 @@ Decided in [daemon lifecycle and state management](https://github.com/femoral/pa
 |---|---|
 | `POST /tasks` | delegate |
 | `GET /tasks/:id/events?wait=true` | long-poll: blocks until question / terminal state |
+| `GET /tasks/events?ids=…&since=<seq>&wait=true` | multi-task long-poll: blocks until any watched task transitions ([#34](https://github.com/femoral/parley/issues/34)) |
 | `POST /tasks/:id/answer` | answer a question (or resume a stalled task) |
 | `POST /tasks/:id/cancel` | cancel |
 | `GET /tasks[/:id]` | status/list |
 
 Messages are transport-agnostic JSON behind a transport adapter — long-poll HTTP first, websocket can slot in later. Event vocabulary (daemon → CLI): `task.started`, `task.question`, `task.completed`, `task.failed`, `task.cancelled`, `task.stalled`. Vendor-stream items are logs, never CLI events.
+
+### Transition sequencing (`seq`)
+
+Decided in [`parley watch`](https://github.com/femoral/parley/issues/34). The daemon assigns every task-state transition a global monotonically increasing `seq`. Every task envelope (from `delegate`, `status`, `answer`, and watch responses) carries the `seq` current at response time. `GET /tasks/events?...&since=<seq>` replays any transitions after `<seq>` immediately instead of blocking — this is what lets a late-attaching watcher close the race where a task finishes between `delegate` and the first watch (capture `seq` from `delegate`'s envelope, pass it to `--since`). Omitting `since` starts from "now": nothing before connect is replayed.
 
 ## 4. Child channel (MCP)
 
@@ -118,10 +123,18 @@ parley status [task] [--json]        parley list
 parley logs <task> [--follow]
 parley cancel <task>
 parley clean <task> | --all-terminal
+parley watch [task…] [--since <seq>] [--until any-change|attention|terminal] [--follow] [--json]
 parley daemon start|stop|status
 ```
 
 **Blocking contract** (`delegate --wait` / `answer --wait`): JSON on stdout + typed exit code — `0` completed · `1` failed · `2` usage · `3` question (`{task_id, name, question_id, question}`) · `4` stalled · `5` cancelled. The orchestrator branches on `$?` without parsing.
+
+**`parley watch`** ([#34](https://github.com/femoral/parley/issues/34)): blocks until the watched task set changes, instead of an orchestrator hand-rolling a poll loop over `status --json`.
+- Task args default to every currently non-terminal task (a snapshot taken at watch start, not a live-updating set).
+- `--since <seq>` replays any transition after `<seq>` immediately (see "Transition sequencing" in §3) — closes the startup race when chained after `delegate`'s `seq`.
+- `--until` (default `any-change`): `any-change` returns on the first transition of any watched task; `attention` returns only on `awaiting_answer`/`stalled`; `terminal` returns once every watched task is terminal.
+- Exit codes: `0` returned normally (event(s) printed) · `3` attention needed, `awaiting_answer` · `4` attention needed, `stalled`.
+- `--follow`: doesn't return after one condition — streams every transition as JSONL (one line per event) until all watched tasks are terminal or the process is killed. Separate opt-in from the default single-shot mode; suited to hook/daemon-style drivers.
 
 **Task identity**: daemon-assigned short ids (`t7`) + optional `--name`; commands accept either; branch/worktree `parley/t7-fix-auth`.
 
