@@ -126,6 +126,38 @@ export interface VendorEvent {
  */
 export const VENDOR_DIAG_PREFIX = "PARLEY-DIAG";
 
+/**
+ * One model in the local catalog (`parley models`, #29). Advisory only: the
+ * catalog never gates `delegate`, which keeps passing `--model`/`--effort`
+ * through opaquely. `efforts` is the vendor's advertised reasoning-effort set
+ * (may be empty when the vendor exposes none, e.g. grok's text listing).
+ */
+export interface ModelEntry {
+  id: string;
+  efforts: string[];
+  /** The vendor's default effort for this model, or null when unknown. */
+  default_effort: string | null;
+}
+
+/** One vendor's slice of the catalog file (`~/.parley/models.json`). */
+export interface VendorModels {
+  /** ISO timestamp of the last successful `--refresh`; null when never probed. */
+  fetched_at: string | null;
+  /** Where the entry came from: a probe command (`codex debug models`) or `manual`. */
+  source: string;
+  models: ModelEntry[];
+}
+
+/** The whole catalog: vendor id → its models. The file is the source of truth. */
+export type ModelCatalog = Record<string, VendorModels>;
+
+/** What an adapter's `--refresh` probe yields; the catalog stamps `fetched_at`. */
+export interface ProbedModels {
+  /** The probe command, recorded as the entry's `source` (e.g. `codex debug models`). */
+  source: string;
+  models: ModelEntry[];
+}
+
 /** A vendor integration: how to spawn it and how to read its event stream. */
 export interface VendorAdapter {
   id: string;
@@ -137,4 +169,12 @@ export interface VendorAdapter {
   parseEvent(line: string): VendorEvent[];
   /** Extract the vendor session id from the events seen so far, if any. */
   sessionId(events: VendorEvent[]): string | undefined;
+  /**
+   * Optional `parley models --refresh` probe: re-enumerate the vendor's models
+   * by shelling out to its CLI. Receives the vendor's current catalog entry so a
+   * text-only vendor (grok) can carry hand-patched efforts forward. Rejects (or
+   * returns no models) when the probe is missing/unparseable — the catalog then
+   * keeps the existing entry rather than clobbering manual patches with nothing.
+   */
+  listModels?(existing: VendorModels | undefined): Promise<ProbedModels>;
 }

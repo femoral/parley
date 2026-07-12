@@ -1,11 +1,15 @@
 import type {
   HubInfo,
   MaterializedFile,
+  ModelEntry,
+  ProbedModels,
   SpawnPlan,
   TaskSpec,
   VendorAdapter,
   VendorEvent,
+  VendorModels,
 } from "./types.js";
+import { runProbe } from "./probe.js";
 import { tomlString } from "./toml.js";
 
 /**
@@ -137,6 +141,47 @@ function sandboxToml(base: string): string {
     "restrict_network = true",
     "",
   ].join("\n");
+}
+
+/** The probe command recorded as the catalog entry's `source` on refresh. */
+const MODELS_SOURCE = "grok models";
+
+/**
+ * Parse `grok models` plain-text output into normalized model entries (#29,
+ * research §3). The listing is default + bullet ids, no `--json` and no
+ * per-model efforts, so efforts are carried forward from the existing catalog
+ * entry (a hand-patch survives a refresh) and default empty for new ids. Format
+ * is unpinned, so match defensively; throws when no ids parse, so the refresh
+ * path keeps the existing entry rather than replacing it with nothing.
+ *
+ * Observed 0.2.93 shape:
+ *   Available models:
+ *     * grok-4.5 (default)
+ *     - grok-composer-2.5-fast
+ */
+export function parseGrokModels(text: string, existing: VendorModels | undefined): ModelEntry[] {
+  const priorEfforts = new Map(
+    (existing?.models ?? []).map((m) => [m.id, m] as const),
+  );
+  const entries: ModelEntry[] = [];
+  const seen = new Set<string>();
+  for (const line of text.split("\n")) {
+    const match = /^\s*[-*]\s+(\S+)/.exec(line);
+    if (!match) continue; // headers ("Default model:", "Available models:") skipped
+    const id = match[1]!;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    const prior = priorEfforts.get(id);
+    entries.push({
+      id,
+      efforts: prior?.efforts ?? [],
+      default_effort: prior?.default_effort ?? null,
+    });
+  }
+  if (entries.length === 0) {
+    throw new Error("grok models: no model ids parsed from output");
+  }
+  return entries;
 }
 
 export function createGrokAdapter(env: NodeJS.ProcessEnv = process.env): VendorAdapter {
@@ -284,6 +329,13 @@ export function createGrokAdapter(env: NodeJS.ProcessEnv = process.env): VendorA
         }
       }
       return undefined;
+    },
+
+    async listModels(existing): Promise<ProbedModels> {
+      // `grok models` prints the default + available ids as plain text (research
+      // §3); efforts ride the existing catalog entry (grok exposes none here).
+      const stdout = await runProbe(bin, ["models"]);
+      return { source: MODELS_SOURCE, models: parseGrokModels(stdout, existing) };
     },
   };
 }
