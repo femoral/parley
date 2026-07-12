@@ -49,6 +49,9 @@ export function startCli(
       ...process.env,
       PARLEY_HOME: home,
       PARLEY_FAKE_VENDOR_BIN: FAKE_VENDOR_BIN,
+      // Default orchestrator identity so delegate tests need not set it; a test
+      // exercising the required-session rule overrides it via extraEnv.
+      PARLEY_SESSION_ID: "test-orch-session",
       ...options.extraEnv,
     },
     stdio: ["ignore", "pipe", "pipe"],
@@ -90,6 +93,9 @@ export function runCliPiped(
       ...process.env,
       PARLEY_HOME: home,
       PARLEY_FAKE_VENDOR_BIN: FAKE_VENDOR_BIN,
+      // Default orchestrator identity so delegate tests need not set it; a test
+      // exercising the required-session rule overrides it via extraEnv.
+      PARLEY_SESSION_ID: "test-orch-session",
       ...options.extraEnv,
     },
     stdio: ["ignore", "ignore", "pipe"],

@@ -26,6 +26,7 @@ export async function runDelegate(ctx: CliContext, args: string[]): Promise<numb
     "--model": { aliases: ["-m"], value: true },
     "--effort": { value: true },
     "--name": { aliases: ["-n"], value: true },
+    "--session": { value: true },
     "--cwd": { value: true },
     "--base-ref": { value: true },
     "--sandbox": { value: true },
@@ -48,6 +49,18 @@ export async function runDelegate(ctx: CliContext, args: string[]): Promise<numb
   const vendor = flags["--vendor"];
   if (typeof vendor !== "string") {
     throw new UsageError("delegate: a vendor is required (-v/--vendor)");
+  }
+  // Orchestrator-run identity, so every task this run spawns can be grouped
+  // later. `--session` overrides `PARLEY_SESSION_ID`; neither set is a usage
+  // error (exit 2) — no silent ungrouped task. Harness-agnostic on purpose: a
+  // harness maps its own session concept onto `PARLEY_SESSION_ID` (see skill).
+  const sessionFlag = flags["--session"];
+  const orchestratorSessionId =
+    typeof sessionFlag === "string" ? sessionFlag : ctx.env.PARLEY_SESSION_ID;
+  if (typeof orchestratorSessionId !== "string" || orchestratorSessionId === "") {
+    throw new UsageError(
+      "delegate: an orchestrator session is required (--session or PARLEY_SESSION_ID)",
+    );
   }
   // An unanswered question at this timeout stalls the task (spec §2). Omitted
   // means the daemon default (30m).
@@ -142,6 +155,7 @@ export async function runDelegate(ctx: CliContext, args: string[]): Promise<numb
     ack = await daemonPost<DelegateAck>(discovery, "/tasks", {
       prompt,
       vendor,
+      orchestrator_session_id: orchestratorSessionId,
       model: flags["--model"] ?? null,
       effort: flags["--effort"] ?? null,
       name: flags["--name"] ?? null,

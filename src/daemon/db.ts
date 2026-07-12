@@ -44,6 +44,8 @@ export interface TaskRow {
   cwd: string | null;
   prompt: string | null;
   session_id: string | null;
+  /** The orchestrator-run identity that spawned this task (`--session` / `PARLEY_SESSION_ID`). */
+  orchestrator_session_id: string | null;
   /** JSON: token usage extracted from the vendor stream. */
   usage: string | null;
   /** JSON: the validated report body submitted via `submit_report`. */
@@ -89,6 +91,8 @@ export interface NewTask {
   repo: string | null;
   cwd: string;
   prompt: string;
+  /** The orchestrator-run identity that spawned this task (`--session` / `PARLEY_SESSION_ID`). */
+  orchestrator_session_id: string;
   worktree: string | null;
   branch: string | null;
   base_sha: string | null;
@@ -161,6 +165,10 @@ const MIGRATIONS: string[] = [
   // task first transitions; every envelope carries it so `parley watch --since`
   // can replay a transition that raced the watcher's connect.
   `ALTER TABLE tasks ADD COLUMN seq INTEGER NOT NULL DEFAULT 0;`,
+  // #42: orchestrator session identity — the orchestrator-run id (`--session` /
+  // `PARLEY_SESSION_ID`) that spawned this task, distinct from the vendor's own
+  // resume `session_id`. Populated at creation so tasks can be grouped by run.
+  `ALTER TABLE tasks ADD COLUMN orchestrator_session_id TEXT;`,
 ];
 
 function migrate(db: DatabaseHandle): void {
@@ -191,7 +199,7 @@ export function openDatabase(paths: HomePaths): DatabaseHandle {
 const TASK_COLUMNS = `id, name, vendor, model, effort, repo, state, created_at, updated_at,
    cwd, prompt, session_id, usage, report, error, started_at, completed_at,
    question_id, question, worktree, branch, base_sha, sandbox, network,
-   answer_timeout_ms, report_schema, seq`;
+   answer_timeout_ms, report_schema, seq, orchestrator_session_id`;
 
 /** List all tasks, newest first. */
 export function listTasks(db: DatabaseHandle): TaskRow[] {
@@ -282,9 +290,9 @@ export function insertTask(db: DatabaseHandle, task: NewTask): TaskRow {
   db.prepare(
     `INSERT INTO tasks
        (id, name, vendor, model, effort, repo, state, created_at, updated_at,
-        cwd, prompt, worktree, branch, base_sha, sandbox, network, answer_timeout_ms,
-        report_schema)
-     VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        cwd, prompt, orchestrator_session_id, worktree, branch, base_sha, sandbox,
+        network, answer_timeout_ms, report_schema)
+     VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     task.id,
     task.name,
@@ -296,6 +304,7 @@ export function insertTask(db: DatabaseHandle, task: NewTask): TaskRow {
     now,
     task.cwd,
     task.prompt,
+    task.orchestrator_session_id,
     task.worktree,
     task.branch,
     task.base_sha,
