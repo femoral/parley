@@ -85,14 +85,18 @@ function configArgs(task: TaskSpec, hub: HubInfo): string[] {
   if (task.sandbox === "workspace" && task.network) {
     set(`sandbox_workspace_write.network_access=true`);
   }
-  // Grant the worktree's private gitdir as an extra writable root under
-  // workspace-write: it always lives outside `cwd` (git's own layout — the
-  // common gitdir of the source repo), so codex's default cwd-scoped write
-  // access would otherwise fail every `git add`/`git commit` in the worktree.
-  // read-only grants no writes at all (unaffected); full is already
-  // unrestricted. Absent for `--cwd`-bypassed tasks (no parley worktree).
+  // Grant the worktree's private gitdir *and* the repo's common gitdir as
+  // extra writable roots under workspace-write: both live outside `cwd`
+  // (git's own worktree layout), and both are written during `git commit` —
+  // the private gitdir for `HEAD`/`index.lock`, the common gitdir for
+  // `objects/`/`refs/`. Granting only the former (as originally shipped)
+  // still failed every `git add`/`git commit` in the worktree, since the
+  // object database write happens against the common dir. read-only grants no
+  // writes at all (unaffected); full is already unrestricted. Absent for
+  // `--cwd`-bypassed tasks (no parley worktree).
   if (task.sandbox === "workspace" && task.gitDir !== undefined) {
-    set(`sandbox_workspace_write.writable_roots=[${tomlString(task.gitDir)}]`);
+    const roots = [...new Set([task.gitDir, task.gitCommonDir].filter((r) => r !== undefined))];
+    set(`sandbox_workspace_write.writable_roots=[${roots.map(tomlString).join(", ")}]`);
   }
 
   // MCP injection: point codex's MCP client at the daemon's streamable-HTTP hub

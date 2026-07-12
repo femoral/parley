@@ -67,6 +67,15 @@ export interface TaskSpec {
    * `--cwd`-bypassed tasks (no parley worktree to grant).
    */
   gitDir?: string;
+  /**
+   * The repo's *common* git directory (`git rev-parse --git-common-dir`,
+   * resolved absolute), when `cwd` is a parley-managed worktree. This is where
+   * `objects/` and `refs/` actually live — distinct from `gitDir` (the
+   * worktree's private gitdir) and also required as a writable root, or
+   * `git add`/`git commit` fails to write the object database even once
+   * `gitDir` alone is granted. Absent for `--cwd`-bypassed tasks.
+   */
+  gitCommonDir?: string;
 }
 
 /** How a child reaches back to the daemon: the MCP endpoint + correlation headers. */

@@ -98,6 +98,19 @@ export function gitDir(wt: string): string {
 }
 
 /**
+ * The repo's *common* git directory — where `objects/` and `refs/` actually
+ * live, shared by the source repo and every worktree. For a worktree this
+ * differs from `gitDir()` (which returns the worktree's private gitdir);
+ * `git add`/`git commit` inside a worktree need to write here too, not just
+ * to the private gitdir. `--path-format=absolute` makes the result absolute
+ * regardless of cwd (git's default is relative for `--git-common-dir`, unlike
+ * `--absolute-git-dir` which has no common-dir equivalent flag).
+ */
+export function commonGitDir(wt: string): string {
+  return git(["-C", wt, "rev-parse", "--path-format=absolute", "--git-common-dir"]);
+}
+
+/**
  * Register parley-generated paths in an exclude file scoped to this worktree
  * only, so `git status` inside stays clean of plumbing and the child can never
  * stage it. `info/exclude` won't do: git resolves it through the COMMON git

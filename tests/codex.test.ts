@@ -5,7 +5,7 @@ import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { createCodexAdapter } from "../src/daemon/adapters/codex.js";
 import type { HubInfo, TaskSpec } from "../src/daemon/adapters/types.js";
-import { createWorktree, gitDir } from "../src/daemon/worktree.js";
+import { commonGitDir, createWorktree, gitDir } from "../src/daemon/worktree.js";
 
 /**
  * Golden unit tests for the codex adapter — the allowed pure-function exception
@@ -470,5 +470,57 @@ describe("codex prepare — real git worktree gitdir (#25, not a mocked path)", 
     execFileSync("git", ["commit", "-m", "agent commit"], { cwd: info.path, stdio: "ignore" });
     const log = execFileSync("git", ["log", "--oneline"], { cwd: info.path, encoding: "utf8" });
     expect(log).toContain("agent commit");
+  });
+
+  it("grants both the private gitdir and the common gitdir as writable roots (#31)", async () => {
+    const src = fs.mkdtempSync(path.join(os.tmpdir(), "parley-codex-repo-"));
+    scratch.push(src);
+    execFileSync("git", ["init", "-b", "main"], { cwd: src, stdio: "ignore" });
+    execFileSync("git", ["config", "user.email", "test@parley.test"], { cwd: src });
+    execFileSync("git", ["config", "user.name", "parley test"], { cwd: src });
+    fs.writeFileSync(path.join(src, "README.md"), "hi\n");
+    execFileSync("git", ["add", "-A"], { cwd: src });
+    execFileSync("git", ["commit", "-m", "initial"], { cwd: src, stdio: "ignore" });
+
+    const worktreesDir = fs.mkdtempSync(path.join(os.tmpdir(), "parley-codex-worktrees-"));
+    scratch.push(worktreesDir);
+    const info = createWorktree({
+      repoRoot: src,
+      worktreesDir,
+      taskId: "t2",
+      name: null,
+      baseRef: null,
+    });
+
+    // Resolved independently of the adapter, straight from git. The common
+    // gitdir is the *source repo's* `.git` — genuinely distinct from the
+    // worktree's private gitdir, and outside `info.path` too.
+    const realGitDir = gitDir(info.path);
+    const realCommonGitDir = commonGitDir(info.path);
+    expect(realCommonGitDir).not.toBe(realGitDir);
+    expect(realCommonGitDir).toBe(path.join(src, ".git"));
+
+    const plan = await createCodexAdapter({}).prepare(
+      spec({ cwd: info.path, gitDir: realGitDir, gitCommonDir: realCommonGitDir }),
+      HUB,
+    );
+    const override = plan.argv.find((a) => a.startsWith("sandbox_workspace_write.writable_roots"));
+    expect(override).toBe(
+      `sandbox_workspace_write.writable_roots=["${realGitDir}", "${realCommonGitDir}"]`,
+    );
+
+    // Edit + commit inside the worktree, exactly like an agent under this
+    // sandbox would — proves both granted roots are what git actually needs:
+    // the private gitdir for HEAD/index, the common gitdir for objects/refs.
+    fs.writeFileSync(path.join(info.path, "new-file.txt"), "hello\n");
+    execFileSync("git", ["add", "-A"], { cwd: info.path });
+    execFileSync("git", ["commit", "-m", "agent commit"], { cwd: info.path, stdio: "ignore" });
+    const log = execFileSync("git", ["log", "--oneline"], { cwd: info.path, encoding: "utf8" });
+    expect(log).toContain("agent commit");
+
+    // The commit landed real objects in the *common* dir, not just refs local
+    // to the worktree's private gitdir — proving the common-dir root mattered.
+    const objectsCount = fs.readdirSync(path.join(realCommonGitDir, "objects")).length;
+    expect(objectsCount).toBeGreaterThan(0);
   });
 });

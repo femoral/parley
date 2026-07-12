@@ -39,6 +39,7 @@ import {
 } from "./report.js";
 import { formatDuration } from "../util/time.js";
 import {
+  commonGitDir,
   createWorktree,
   excludeMaterializedFiles,
   gitDir,
@@ -681,13 +682,20 @@ export class TaskEngine {
       // Adapters raise the vendor's MCP tool timeout above this (spec §4).
       answerTimeoutMs: task.answer_timeout_ms ?? DEFAULT_ANSWER_TIMEOUT_MS,
       ...(task.session_id !== null ? { sessionId: task.session_id } : {}),
-      // Only codex needs the worktree's private gitdir (#25) and only
-      // parley-managed worktrees have one to grant — skip the git shell-out
-      // otherwise so every other vendor's prepare/resume stays git-free.
-      // `gitDir()` can throw (worktree gone from disk out-of-band); degrade to
-      // "no extra writable root" rather than fail the whole task over it.
+      // Only codex needs the worktree's gitdirs (#25, #31) and only
+      // parley-managed worktrees have any to grant — skip the git shell-out
+      // otherwise so every other vendor's prepare/resume stays git-free. Both
+      // the private gitdir (HEAD, index.lock) and the common gitdir
+      // (objects/, refs/) are required for `git commit` to succeed inside the
+      // sandbox (#31) — granting only the former still left the object
+      // database read-only. Each resolution can throw independently (worktree
+      // gone from disk out-of-band); degrade that one to "no extra writable
+      // root" rather than fail the whole task over it.
       ...(task.worktree !== null && task.vendor === "codex"
-        ? { gitDir: this.tryGitDir(task.worktree) }
+        ? {
+            gitDir: this.tryGitDir(task.worktree),
+            gitCommonDir: this.tryCommonGitDir(task.worktree),
+          }
         : {}),
     };
   }
@@ -695,6 +703,14 @@ export class TaskEngine {
   private tryGitDir(wt: string): string | undefined {
     try {
       return gitDir(wt);
+    } catch {
+      return undefined;
+    }
+  }
+
+  private tryCommonGitDir(wt: string): string | undefined {
+    try {
+      return commonGitDir(wt);
     } catch {
       return undefined;
     }
