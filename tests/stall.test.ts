@@ -175,6 +175,33 @@ describe("parley answer resumes a stalled task", () => {
     expect(row.question_id).toBeNull();
   });
 
+  it("resume preserves --effort (#28): the respawned child gets the same FAKE_EFFORT", async () => {
+    const cwd = taskDir(
+      [{ emit: { type: "session", session_id: "sess-effort" } }, { ask: "pick one?" }],
+      [{ submit_report: REPORT }],
+    );
+
+    const delegate = await runCli(
+      [
+        "delegate", "-v", "fake", "--effort", "high", "--cwd", cwd,
+        "--answer-timeout", "250ms", "--wait", "pick",
+      ],
+      home,
+    );
+    expect(delegate.code).toBe(3);
+    await waitForState(home, "t1", "stalled");
+
+    const answer = await runCli(["answer", "t1", "option-b", "--wait"], home);
+    expect(answer.code).toBe(0);
+    // The task row (and its report envelope) keep the effort the task was
+    // delegated with — same persistence seam as sandbox posture.
+    expect(JSON.parse(answer.stdout).effort).toBe("high");
+
+    // The resumed child received it too (fake adapter echoes FAKE_EFFORT in `hello`).
+    const hello = vendorEvents(home, "t1").find((e) => e.type === "hello");
+    expect(hello!.effort).toBe("high");
+  });
+
   it("revives a stalled task with no captured session by rerunning it fresh", async () => {
     // The child stalls before ever emitting a session id — there is nothing
     // for the vendor to resume, so `answer` reruns the original prompt.

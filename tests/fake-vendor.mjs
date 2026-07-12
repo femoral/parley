@@ -95,6 +95,7 @@ async function main() {
   emit({
     type: "hello",
     model: process.env.FAKE_MODEL ?? null,
+    effort: process.env.FAKE_EFFORT ?? null,
     // The full vendor prompt the adapter handed us (argv[2]) — tests assert the
     // protocol preamble + caller brief + on-disk pointers were composed here.
     prompt: process.argv[2] ?? null,

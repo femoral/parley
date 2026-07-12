@@ -22,6 +22,7 @@ function spec(overrides: Partial<TaskSpec> = {}): TaskSpec {
     prompt: "do the thing",
     vendor: "grok",
     model: null,
+    effort: null,
     cwd: "/work/tree",
     sandbox: "workspace",
     network: true,
@@ -67,6 +68,36 @@ describe("grok adapter — prepare argv (golden)", () => {
     expect((await adapter.prepare(spec({ model: "grok-4.5" }), HUB)).argv).toContain("-m");
     expect((await adapter.prepare(spec({ model: "grok-4.5" }), HUB)).argv).toContain("grok-4.5");
     expect((await adapter.prepare(spec({ model: null }), HUB)).argv).not.toContain("-m");
+  });
+
+  it("passes reasoning effort through with --reasoning-effort when set, omits it otherwise", async () => {
+    const adapter = createGrokAdapter({});
+    const withEffort = await adapter.prepare(spec({ effort: "high" }), HUB);
+    expect(withEffort.argv).toEqual([
+      "grok",
+      "-p",
+      "do the thing",
+      "--output-format",
+      "streaming-json",
+      "--no-auto-update",
+      "--always-approve",
+      "--cwd",
+      "/work/tree",
+      "--reasoning-effort",
+      "high",
+    ]);
+    const withoutEffort = await adapter.prepare(spec({ effort: null }), HUB);
+    expect(withoutEffort.argv).not.toContain("--reasoning-effort");
+  });
+
+  it("carries reasoning effort through resume identically to prepare", async () => {
+    const adapter = createGrokAdapter({});
+    const plan = await adapter.resume(
+      spec({ prompt: "the answer", sessionId: "sess-1", effort: "low" }),
+      HUB,
+    );
+    expect(plan.argv).toContain("--reasoning-effort");
+    expect(plan.argv).toContain("low");
   });
 
   it("honours PARLEY_GROK_BIN override", async () => {

@@ -91,6 +91,8 @@ export interface DelegateRequest {
   prompt: string;
   vendor: string;
   model: string | null;
+  /** Opaque reasoning-effort string (spec §9); passed through to the vendor unchanged. */
+  effort: string | null;
   name: string | null;
   /** The invocation directory: an explicit `--cwd`, else the caller's cwd. */
   cwd: string;
@@ -275,6 +277,7 @@ export class TaskEngine {
       name: request.name,
       vendor: request.vendor,
       model: request.model,
+      effort: request.effort,
       repo,
       cwd: workingDir,
       prompt: request.prompt,
@@ -669,6 +672,7 @@ export class TaskEngine {
       prompt: task.prompt ?? "",
       vendor: task.vendor ?? "",
       model: task.model,
+      effort: task.effort,
       cwd: task.cwd ?? process.cwd(),
       // Posture flows to the adapter the same way for a fresh run and a resume,
       // so a resumed task keeps the sandbox it was delegated with (spec §8).

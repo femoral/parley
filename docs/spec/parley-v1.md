@@ -108,6 +108,7 @@ Decided in [CLI surface prototype](https://github.com/femoral/parley/issues/6) â
 ```
 parley delegate [flags] "<prompt>"   # '-' = stdin
   -v --vendor codex|grok   -m --model <id>   -n --name <label>
+  --effort <level>         (opaque; codex: model_reasoning_effort, grok: --reasoning-effort)
   -w --worktree <name>     --cwd <path>      --base-ref <ref>
   --context <file>â€¦        --report-schema <file>
   --wait                   --answer-timeout <dur=30m>

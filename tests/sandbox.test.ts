@@ -95,6 +95,7 @@ describe("posture survives resume", () => {
       prompt: "p",
       vendor: "fake",
       model: null,
+      effort: null,
       cwd: "/tmp",
       sandbox: "read-only",
       network: false,

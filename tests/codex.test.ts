@@ -31,6 +31,7 @@ function spec(overrides: Partial<TaskSpec> = {}): TaskSpec {
     prompt: "do the thing",
     vendor: "codex",
     model: null,
+    effort: null,
     cwd: "/work/wt",
     sandbox: "workspace",
     network: true,
@@ -214,6 +215,32 @@ describe("codex prepare — model, timeout, auth", () => {
     expect(360).toBeGreaterThan(300); // strictly above the answer timeout in seconds
   });
 
+  it("passes reasoning effort via -c model_reasoning_effort when set, omits it otherwise", async () => {
+    const withEffort = await createCodexAdapter({}).prepare(spec({ effort: "high" }), HUB);
+    expect(withEffort.argv).toContain("-c");
+    expect(withEffort.argv).toContain('model_reasoning_effort="high"');
+    // Placed right after approval_policy, before the network override.
+    expect(withEffort.argv).toEqual([
+      "codex",
+      "exec",
+      "--json",
+      "--skip-git-repo-check",
+      "-c",
+      'sandbox_mode="workspace-write"',
+      "-c",
+      'approval_policy="never"',
+      "-c",
+      'model_reasoning_effort="high"',
+      "-c",
+      "sandbox_workspace_write.network_access=true",
+      ...mcpOverrides(),
+      "do the thing",
+    ]);
+
+    const withoutEffort = await createCodexAdapter({}).prepare(spec(), HUB);
+    expect(withoutEffort.argv.some((a) => a.startsWith("model_reasoning_effort"))).toBe(false);
+  });
+
   it("passes CODEX_API_KEY through when present, and nothing when absent", async () => {
     const withKey = await createCodexAdapter({ CODEX_API_KEY: "sk-test" }).prepare(spec(), HUB);
     expect(withKey.env).toEqual({ CODEX_API_KEY: "sk-test" });
@@ -245,6 +272,15 @@ describe("codex resume — golden argv", () => {
       "use postgres",
     ]);
     expect(plan.cwd).toBe("/work/wt");
+  });
+
+  it("carries reasoning effort through resume identically to prepare", async () => {
+    const adapter = createCodexAdapter({});
+    const plan = await adapter.resume(
+      spec({ prompt: "use postgres", sessionId: "sess-abc", effort: "medium" }),
+      HUB,
+    );
+    expect(plan.argv).toContain('model_reasoning_effort="medium"');
   });
 
   it("maps posture identically to prepare (the resume seam)", async () => {

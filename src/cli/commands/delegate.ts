@@ -24,6 +24,7 @@ export async function runDelegate(ctx: CliContext, args: string[]): Promise<numb
   const { positionals, flags } = parseArgs(args, {
     "--vendor": { aliases: ["-v"], value: true },
     "--model": { aliases: ["-m"], value: true },
+    "--effort": { value: true },
     "--name": { aliases: ["-n"], value: true },
     "--cwd": { value: true },
     "--base-ref": { value: true },
@@ -142,6 +143,7 @@ export async function runDelegate(ctx: CliContext, args: string[]): Promise<numb
       prompt,
       vendor,
       model: flags["--model"] ?? null,
+      effort: flags["--effort"] ?? null,
       name: flags["--name"] ?? null,
       cwd,
       use_worktree: !explicitCwd,

@@ -71,6 +71,11 @@ function configArgs(task: TaskSpec, hub: HubInfo): string[] {
   // Approvals disabled — the sandbox is the guardrail (ADR-0006). `codex exec`
   // has no `-a` flag; the config key is the headless equivalent.
   set(`approval_policy="never"`);
+  // Reasoning effort (#28, spec §9) — opaque string passed through unchanged.
+  // Omitted flag means the vendor's own default; no config emitted.
+  if (task.effort !== null) {
+    set(`model_reasoning_effort="${task.effort}"`);
+  }
   // Network access only exists under workspace-write and is off by default
   // there. Enable it explicitly for the default posture; omit it (codex default
   // false) for `--no-network`. read-only/full ignore it entirely (spec §8).
