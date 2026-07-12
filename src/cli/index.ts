@@ -98,7 +98,29 @@ export async function run(argv: string[], ctx: CliContext): Promise<number> {
   }
 }
 
+/**
+ * A downstream reader that closes early (`parley status | head`) makes writes
+ * to that stream fail with EPIPE. Node's stdout/stderr are Writable streams,
+ * so a failed write emits an async 'error' event — outside any try/catch
+ * around `run()`. Left unhandled, Node's default behavior is to throw and
+ * print a full internal stack trace. Standard CLI behavior is to exit
+ * quietly (code 0) instead; swallow only EPIPE here so genuine stream errors
+ * still surface.
+ */
+function ignoreEpipe(stream: NodeJS.WriteStream): void {
+  stream.on("error", (err: NodeJS.ErrnoException) => {
+    if (err.code === "EPIPE") {
+      process.exitCode = 0;
+      return;
+    }
+    throw err;
+  });
+}
+
 async function main(): Promise<void> {
+  ignoreEpipe(process.stdout);
+  ignoreEpipe(process.stderr);
+
   const ctx: CliContext = {
     paths: homePathsFromEnv(),
     env: process.env,

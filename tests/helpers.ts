@@ -64,6 +64,44 @@ export function startCli(
   return { child, result, stdoutSoFar: () => stdout };
 }
 
+/** Single-quote a string for safe interpolation into a `bash -c` command. */
+function shellQuote(value: string): string {
+  return `'${value.replace(/'/g, `'\\''`)}'`;
+}
+
+/**
+ * Run the CLI with its stdout piped into `downstream` (e.g. `head -1`) via a
+ * real shell pipeline — the only way to reproduce a downstream reader closing
+ * the pipe early (EPIPE). Exit code is the *left* side's (parley's), via
+ * bash's `PIPESTATUS`, not `downstream`'s.
+ */
+export function runCliPiped(
+  args: string[],
+  home: string,
+  downstream: string,
+  options: CliOptions = {},
+): Promise<{ code: number | null; stderr: string }> {
+  const cliCmd = [process.execPath, "--import", TSX_LOADER, CLI_ENTRY, ...args]
+    .map(shellQuote)
+    .join(" ");
+  const child = spawn("bash", ["-c", `${cliCmd} | ${downstream}; exit "\${PIPESTATUS[0]}"`], {
+    cwd: options.cwd,
+    env: {
+      ...process.env,
+      PARLEY_HOME: home,
+      PARLEY_FAKE_VENDOR_BIN: FAKE_VENDOR_BIN,
+      ...options.extraEnv,
+    },
+    stdio: ["ignore", "ignore", "pipe"],
+  });
+  let stderr = "";
+  child.stderr!.on("data", (d: Buffer) => (stderr += d.toString()));
+  return new Promise((resolve, reject) => {
+    child.on("error", reject);
+    child.on("close", (code) => resolve({ code, stderr }));
+  });
+}
+
 /**
  * Fake-vendor action script (see fake-vendor.mjs for the action vocabulary).
  */
