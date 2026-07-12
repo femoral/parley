@@ -46,7 +46,11 @@ Usage:
                             terminal. --follow streams every transition as JSONL.
                             Exit: 0 returned · 3 awaiting_answer · 4 stalled.
   parley [list]                 Show the task table (alias for bare status)
-  parley status [task] [--json] Show all tasks, or one (id or name)
+  parley status [task] [--json] [--session <id>|latest] [--all]
+                            Show tasks, or one (id or name). Bare status
+                            narrows to your orchestrator session (--session,
+                            else PARLEY_SESSION_ID, else the newest session);
+                            --all shows every task.
   parley logs <task> [--follow] [--json]
                             Print the captured vendor stream, coalescing
                             token-streamed chunks into readable lines

@@ -49,7 +49,7 @@ describe("EPIPE from an early-closing downstream reader", () => {
   it("parley status | head -1 exits 0 with no stack trace or error output", async () => {
     seedManyTasks(3000);
 
-    const { code, stderr } = await runCliPiped(["status"], home, "head -1");
+    const { code, stderr } = await runCliPiped(["status", "--all"], home, "head -1");
 
     expect(code).toBe(0);
     expect(stderr).toBe("");
@@ -63,7 +63,7 @@ describe("EPIPE from an early-closing downstream reader", () => {
 
   it("a full, unclosed read still gets the whole output and the original exit code", async () => {
     seedManyTasks(5);
-    const result = await runCli(["status"], home);
+    const result = await runCli(["status", "--all"], home);
     expect(result.code).toBe(0);
     const lines = result.stdout.trim().split("\n");
     // header + 5 rows

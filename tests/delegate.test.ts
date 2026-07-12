@@ -553,6 +553,77 @@ describe("orchestrator session identity (#42)", () => {
   });
 });
 
+describe("session grouping & filtering (#46)", () => {
+  /** Delegate a completed task stamped with a given orchestrator session. */
+  async function delegateUnder(session: string): Promise<void> {
+    const cwd = taskDir(happyActions());
+    await runCli(["delegate", "-v", "fake", "--cwd", cwd, "--wait", "x"], home, {
+      extraEnv: { PARLEY_SESSION_ID: session },
+    });
+  }
+
+  const sessionsOf = (stdout: string): string[] =>
+    (JSON.parse(stdout) as { orchestrator_session_id: string }[]).map(
+      (r) => r.orchestrator_session_id,
+    );
+
+  it("--session <id> shows only that session's tasks", async () => {
+    await delegateUnder("sess-A");
+    await delegateUnder("sess-B");
+
+    const rows = await runCli(["status", "--session", "sess-A", "--json"], home);
+    expect(sessionsOf(rows.stdout)).toEqual(["sess-A"]);
+  });
+
+  it("--session latest resolves to the most-recently-used session", async () => {
+    await delegateUnder("sess-A");
+    await delegateUnder("sess-B");
+
+    const rows = await runCli(["status", "--session", "latest", "--json"], home);
+    expect(sessionsOf(rows.stdout)).toEqual(["sess-B"]);
+  });
+
+  it("bare status filters by PARLEY_SESSION_ID from its own environment", async () => {
+    await delegateUnder("sess-A");
+    await delegateUnder("sess-B");
+
+    const rows = await runCli(["status", "--json"], home, {
+      extraEnv: { PARLEY_SESSION_ID: "sess-A" },
+    });
+    expect(sessionsOf(rows.stdout)).toEqual(["sess-A"]);
+  });
+
+  it("bare status with no PARLEY_SESSION_ID falls back to the newest session", async () => {
+    await delegateUnder("sess-A");
+    await delegateUnder("sess-B");
+
+    const rows = await runCli(["status", "--json"], home, {
+      extraEnv: { PARLEY_SESSION_ID: undefined },
+    });
+    expect(sessionsOf(rows.stdout)).toEqual(["sess-B"]);
+  });
+
+  it("--all bypasses session filtering and shows every task", async () => {
+    await delegateUnder("sess-A");
+    await delegateUnder("sess-B");
+
+    const rows = await runCli(["status", "--all", "--json"], home, {
+      extraEnv: { PARLEY_SESSION_ID: "sess-A" },
+    });
+    expect(sessionsOf(rows.stdout).sort()).toEqual(["sess-A", "sess-B"]);
+  });
+
+  it("the table carries a SESSION column", async () => {
+    await delegateUnder("sess-A");
+
+    const table = await runCli(["status"], home, {
+      extraEnv: { PARLEY_SESSION_ID: "sess-A" },
+    });
+    expect(table.stdout).toMatch(/SESSION/);
+    expect(table.stdout).toMatch(/sess-A/);
+  });
+});
+
 describe("global flags", () => {
   it("bare `parley --json` is the JSON task listing", async () => {
     const result = await runCli(["--json"], home);
