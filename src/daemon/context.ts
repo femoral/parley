@@ -59,3 +59,20 @@ export function contextPointers(dir: string): string[] {
     return [];
   }
 }
+
+/**
+ * Whether a project declares (via `.parley/config.json`, sibling to
+ * `.parley/context/`) that delegations into it are expected to be eval'd
+ * (#45). Absent file, absent `eval` key, or malformed JSON all default to
+ * `false` — eval is opt-in per project.
+ */
+export function readEvalExpected(repo: string | null): boolean {
+  if (repo === null) return false;
+  try {
+    const raw = fs.readFileSync(path.join(repo, PARLEY_DIR, "config.json"), "utf8");
+    const config = JSON.parse(raw) as { eval?: { expected?: unknown } };
+    return config.eval?.expected === true;
+  } catch {
+    return false;
+  }
+}
