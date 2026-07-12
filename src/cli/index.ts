@@ -10,6 +10,7 @@ import { runLogs } from "./commands/logs.js";
 import { runModels } from "./commands/models.js";
 import { runSkills } from "./commands/skills.js";
 import { runStatus } from "./commands/tasks.js";
+import { runWatch } from "./commands/watch.js";
 
 const HELP = `parley — delegate tasks to agent CLIs
 
@@ -30,6 +31,16 @@ Usage:
                                 on a stalled task, resume it with the text
     --wait             Re-block after delivering; return on next question/terminal
   parley cancel <task>          Terminate a task's child; end it cancelled
+  parley watch [task…] [--since <seq>] [--until any-change|attention|terminal]
+              [--follow] [--json]
+                            Block until the watched task set changes state.
+                            No task args watches every non-terminal task at
+                            start. --since replays a transition that already
+                            happened after <seq>. --until any-change (default)
+                            returns on the first transition; attention on
+                            awaiting_answer/stalled; terminal once all are
+                            terminal. --follow streams every transition as JSONL.
+                            Exit: 0 returned · 3 awaiting_answer · 4 stalled.
   parley [list]                 Show the task table (alias for bare status)
   parley status [task] [--json] Show all tasks, or one (id or name)
   parley logs <task> [--follow] [--json]
@@ -80,6 +91,8 @@ export async function run(argv: string[], ctx: CliContext): Promise<number> {
       return runAnswer(ctx, rest);
     case "cancel":
       return runCancel(ctx, rest);
+    case "watch":
+      return runWatch(ctx, rest);
     case "list":
     case "status":
       return runStatus(ctx, rest);

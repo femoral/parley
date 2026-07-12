@@ -69,6 +69,12 @@ export interface TaskRow {
   answer_timeout_ms: number | null;
   /** JSON: the caller-supplied report schema; null means parley's default. */
   report_schema: string | null;
+  /**
+   * Global transition sequence number of this task's most recent state change
+   * (#34). 0 until the task first transitions out of `pending`. Every task
+   * envelope surfaces it so `parley watch --since` can close the startup race.
+   */
+  seq: number;
 }
 
 /** Fields the daemon writes when creating a task. */
@@ -150,6 +156,11 @@ const MIGRATIONS: string[] = [
   // #28: per-vendor reasoning effort — opaque string passed through to the
   // vendor unchanged (same seam as `model`); persisted so `resume` keeps it.
   `ALTER TABLE tasks ADD COLUMN effort TEXT;`,
+  // #34: transition sequencing — the global monotonic `seq` (allocated from the
+  // `transition_seq` counter) of the task's most recent state change. 0 until a
+  // task first transitions; every envelope carries it so `parley watch --since`
+  // can replay a transition that raced the watcher's connect.
+  `ALTER TABLE tasks ADD COLUMN seq INTEGER NOT NULL DEFAULT 0;`,
 ];
 
 function migrate(db: DatabaseHandle): void {
@@ -180,7 +191,7 @@ export function openDatabase(paths: HomePaths): DatabaseHandle {
 const TASK_COLUMNS = `id, name, vendor, model, effort, repo, state, created_at, updated_at,
    cwd, prompt, session_id, usage, report, error, started_at, completed_at,
    question_id, question, worktree, branch, base_sha, sandbox, network,
-   answer_timeout_ms, report_schema`;
+   answer_timeout_ms, report_schema, seq`;
 
 /** List all tasks, newest first. */
 export function listTasks(db: DatabaseHandle): TaskRow[] {
@@ -234,6 +245,34 @@ export function nextQuestionId(db: DatabaseHandle): string {
 }
 
 /**
+ * Stamp a task with the next global transition `seq` (#34) and return it. Called
+ * on every state transition so the row always carries the seq of its latest
+ * change; the counter is persistent, keeping `seq` monotonic across restarts.
+ * Also bumps `updated_at`, since a transition is a mutation.
+ */
+export function bumpTaskSeq(db: DatabaseHandle, id: string): number {
+  const seq = nextCounter(db, "transition_seq");
+  db.prepare(`UPDATE tasks SET seq = ?, updated_at = ? WHERE id = ?`).run(
+    seq,
+    new Date().toISOString(),
+    id,
+  );
+  return seq;
+}
+
+/**
+ * The current global transition `seq` — the highest seq handed out so far (0
+ * before any transition). Read without incrementing; `parley watch` uses it as
+ * the "start from now" baseline (spec §3).
+ */
+export function currentSeq(db: DatabaseHandle): number {
+  const row = db.prepare(`SELECT value FROM counters WHERE name = 'transition_seq'`).get() as
+    | { value: number }
+    | undefined;
+  return row?.value ?? 0;
+}
+
+/**
  * Insert a new task in `pending` state and return its row. The id is allocated
  * by the caller (via `nextTaskId`) because worktree creation — which names its
  * branch `parley/<id>-…` — must happen before the row exists.
@@ -279,6 +318,9 @@ export function sweepInterruptedTasks(db: DatabaseHandle): number {
   // "Live" is defined as the complement of the settled states, so a future
   // state is swept by default rather than surviving restarts as a zombie.
   const placeholders = [...SETTLED_STATES].map(() => "?").join(", ");
+  const live = db
+    .prepare(`SELECT id FROM tasks WHERE state NOT IN (${placeholders})`)
+    .all(...SETTLED_STATES) as { id: string }[];
   const result = db
     .prepare(
       `UPDATE tasks SET state = 'stalled', error = ?, updated_at = ?
@@ -289,6 +331,11 @@ export function sweepInterruptedTasks(db: DatabaseHandle): number {
       new Date().toISOString(),
       ...SETTLED_STATES,
     );
+  // The sweep is a transition too — stamp each swept task with a fresh seq so
+  // its envelope reflects the stall (#34). No in-memory event log exists yet
+  // (the engine is not constructed until after the sweep), so watchers that
+  // attach later simply see the post-sweep state, never the stall as an event.
+  for (const { id } of live) bumpTaskSeq(db, id);
   return result.changes;
 }
 

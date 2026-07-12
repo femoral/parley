@@ -13,6 +13,8 @@ import type {
 } from "./adapters/types.js";
 import { VENDOR_DIAG_PREFIX } from "./adapters/types.js";
 import {
+  bumpTaskSeq,
+  currentSeq,
   getTask,
   insertTask,
   listTasks,
@@ -78,6 +80,18 @@ interface PendingQuestion {
   timer: NodeJS.Timeout;
 }
 
+/**
+ * One recorded task-state transition (#34): the global `seq` it was assigned,
+ * the task that changed, and the state it moved to. Appended to the engine's
+ * in-memory event log so `parley watch`'s multi-task long-poll can replay a
+ * transition that happened after a caller's `since`.
+ */
+export interface Transition {
+  seq: number;
+  task_id: string;
+  state: string;
+}
+
 /** A caller mistake surfaced to the CLI plane as HTTP 400 → exit code 2. */
 export class DelegateError extends Error {
   override readonly name = "DelegateError";
@@ -135,6 +149,16 @@ export interface DelegateRequest {
  */
 export class TaskEngine {
   private readonly waiters = new Map<string, Set<() => void>>();
+  /**
+   * Append-only in-memory log of every task-state transition this daemon has
+   * recorded (#34), in seq order. `parley watch`'s multi-task long-poll scans it
+   * to replay a transition after a caller's `since`, or blocks on `eventWaiters`
+   * until the next one. Lost on restart — a reconnecting watcher just resumes
+   * from the current seq; nothing before connect is replayed (spec §3).
+   */
+  private readonly transitions: Transition[] = [];
+  /** Long-poll watchers (`parley watch`) parked until the next transition. */
+  private readonly eventWaiters = new Set<() => void>();
   /**
    * Live `ask_orchestrator` calls, keyed by task id. The value's `resolve`
    * unblocks the child's MCP request with the answer text (or a tool error on
@@ -386,7 +410,7 @@ export class TaskEngine {
       question_id: null,
       question: null,
     });
-    this.notify(taskId);
+    this.transitioned(taskId);
     return null;
   }
 
@@ -439,8 +463,9 @@ export class TaskEngine {
       }, timeoutMs);
       timer.unref();
       this.pending.set(taskId, { questionId, resolve, timer });
-      // Wake the waiting `delegate --wait` / `answer --wait` long-poll.
-      this.notify(taskId);
+      // Wake the waiting `delegate --wait` / `answer --wait` long-poll and any
+      // `parley watch` (the `awaiting_answer` transition).
+      this.transitioned(taskId);
     });
   }
 
@@ -470,7 +495,7 @@ export class TaskEngine {
       error: "answer timeout — the task is stalled; the orchestrator can resume it with `parley answer`",
     });
     this.stopChild(taskId);
-    this.notify(taskId);
+    this.transitioned(taskId);
   }
 
   /** SIGTERM a task's child, escalating to SIGKILL after a short grace. */
@@ -525,6 +550,9 @@ export class TaskEngine {
       this.pending.delete(task.id);
       clearTimeout(pending.timer);
       updateTask(this.db, task.id, { state: "running", question_id: null, question: null });
+      // `awaiting_answer → running` — a transition `parley watch` surfaces. The
+      // stalled-resume path below transitions via `runChild`'s onSpawn instead.
+      this.transitioned(task.id);
       pending.resolve({ answer: text });
       return getTask(this.db, task.id)!;
     }
@@ -583,7 +611,7 @@ export class TaskEngine {
       question_id: null,
       question: null,
     });
-    this.notify(task.id);
+    this.transitioned(task.id);
     return getTask(this.db, task.id)!;
   }
 
@@ -627,6 +655,80 @@ export class TaskEngine {
   }
 
   /**
+   * Record a task-state transition (#34): stamp the row with the next global
+   * `seq`, append it to the in-memory event log, and wake both the single-task
+   * long-poll waiters (`delegate --wait` / `answer --wait`) and the multi-task
+   * watchers (`parley watch`). Call this after every state change — including
+   * `pending → running` and `awaiting_answer → running`, which are transitions
+   * `watch` surfaces even though the single-task waiter re-polls past them.
+   */
+  private transitioned(taskId: string): void {
+    const row = getTask(this.db, taskId);
+    if (!row) return;
+    const seq = bumpTaskSeq(this.db, taskId);
+    this.transitions.push({ seq, task_id: taskId, state: row.state });
+    this.notify(taskId);
+    this.wakeEventWaiters();
+  }
+
+  private wakeEventWaiters(): void {
+    // Snapshot then clear before waking: a woken watcher re-registers itself
+    // (in its async continuation) when it re-blocks, so clearing here can't drop
+    // that fresh registration.
+    const waiters = [...this.eventWaiters];
+    this.eventWaiters.clear();
+    for (const wake of waiters) wake();
+  }
+
+  /** The current global transition seq — `parley watch`'s "start from now" baseline. */
+  currentSeq(): number {
+    return currentSeq(this.db);
+  }
+
+  /**
+   * The earliest recorded transition of a watched task with `seq > since`, or
+   * null if none has happened yet. The non-blocking core of the multi-task
+   * long-poll; `waitForEvents` blocks on top of it.
+   */
+  peekEvent(ids: readonly string[], since: number): Transition | null {
+    const watched = new Set(ids);
+    // The log is append-only in seq order, so the first match is the earliest.
+    return this.transitions.find((t) => t.seq > since && watched.has(t.task_id)) ?? null;
+  }
+
+  /**
+   * Multi-task long-poll (#34, spec §3): resolve with the earliest transition of
+   * any watched task after `since` — replaying immediately if one already
+   * happened, else blocking until the next transition — or null when the poll
+   * window elapses (the CLI re-polls). Distinct from the per-task `waitForEvent`
+   * it generalizes; `watch` threads the returned `seq` back as `since` to stream
+   * the next.
+   */
+  async waitForEvents(
+    ids: readonly string[],
+    since: number,
+    timeoutMs: number,
+  ): Promise<Transition | null> {
+    for (;;) {
+      const found = this.peekEvent(ids, since);
+      if (found) return found;
+      const woke = await new Promise<boolean>((resolve) => {
+        const wake = (): void => {
+          clearTimeout(timer);
+          this.eventWaiters.delete(wake);
+          resolve(true);
+        };
+        const timer = setTimeout(() => {
+          this.eventWaiters.delete(wake);
+          resolve(false);
+        }, timeoutMs);
+        this.eventWaiters.add(wake);
+      });
+      if (!woke) return null; // poll window elapsed, no matching transition yet
+    }
+  }
+
+  /**
    * Auto-remove the task's worktree once its child has exited, but only when it
    * is untouched (no new commits, clean tree). Modified worktrees are kept so
    * the orchestrator can review and merge; `--cwd` tasks have no worktree.
@@ -653,7 +755,7 @@ export class TaskEngine {
       error,
       completed_at: new Date().toISOString(),
     });
-    this.notify(taskId);
+    this.transitioned(taskId);
   }
 
   private hubFor(taskId: string): HubInfo {
@@ -868,6 +970,9 @@ export class TaskEngine {
     this.children.set(task.id, child);
 
     updateTask(this.db, task.id, onSpawn);
+    // The child is live: `pending → running` (fresh run) or `stalled → running`
+    // (resume). Record the transition so `parley watch` sees the task start.
+    this.transitioned(task.id);
 
     child.stderr.pipe(stderrLog);
 

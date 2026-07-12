@@ -143,7 +143,7 @@ function handleDelegate(engine: TaskEngine, res: http.ServerResponse, body: unkn
       reportSchema: body.report_schema ?? null,
       contexts,
     });
-    sendJson(res, 201, { task_id: task.id, name: task.name, state: task.state });
+    sendJson(res, 201, { task_id: task.id, name: task.name, state: task.state, seq: task.seq });
   } catch (err) {
     if (err instanceof DelegateError) {
       sendJson(res, 400, { error: err.message });
@@ -223,6 +223,77 @@ function eventFor(state: string): string | null {
   return null;
 }
 
+/**
+ * Map a transition's state to the `parley watch` event name (spec §3). Unlike
+ * `eventFor` (single-task long-poll, which only wakes on event states), watch
+ * surfaces every transition — including `running` as `task.started`.
+ */
+function watchEventFor(state: string): string {
+  if (state === "running") return "task.started";
+  if (state === "awaiting_answer") return "task.question";
+  return `task.${state}`;
+}
+
+/**
+ * `GET /tasks/events?ids=…&since=<seq>&wait=true` — the multi-task long-poll
+ * (#34, spec §3). Returns the earliest transition of any watched task after
+ * `since` (replaying immediately if one already happened, else blocking until
+ * the next), or `{ event: null }` when the poll window elapses. Omitting `since`
+ * means "start from now" — the current global seq, so nothing before connect is
+ * replayed. An unknown task id is a client mistake (404 → the CLI exits 2).
+ */
+async function handleWatchEvents(
+  engine: TaskEngine,
+  res: http.ServerResponse,
+  params: URLSearchParams,
+): Promise<void> {
+  const ids = (params.get("ids") ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter((s) => s !== "");
+  if (ids.length === 0) {
+    sendJson(res, 400, { error: "ids is required" });
+    return;
+  }
+  // Resolve every ref to its canonical id up front — a bad id must fail fast
+  // (404 → exit 2), never silently hang the watcher.
+  const resolved: string[] = [];
+  for (const ref of ids) {
+    const task = engine.resolve(ref);
+    if (!task) {
+      sendJson(res, 404, { error: `no such task: ${ref}` });
+      return;
+    }
+    resolved.push(task.id);
+  }
+  const sinceRaw = params.get("since");
+  const since = sinceRaw !== null ? Number(sinceRaw) : engine.currentSeq();
+  if (!Number.isFinite(since) || since < 0) {
+    sendJson(res, 400, { error: "since must be a non-negative number" });
+    return;
+  }
+  const wait = params.get("wait") === "true";
+  const transition = wait
+    ? await engine.waitForEvents(resolved, since, LONG_POLL_WINDOW_MS)
+    : engine.peekEvent(resolved, since);
+  if (!transition) {
+    sendJson(res, 200, { event: null, seq: since, task: null });
+    return;
+  }
+  const row = engine.get(transition.task_id);
+  if (!row) {
+    sendJson(res, 200, { event: null, seq: transition.seq, task: null });
+    return;
+  }
+  // The envelope carries the current row for detail, but its `state`/`seq` are
+  // pinned to the transition so the event name and the CLI's exit code agree
+  // even if the row has since moved on (a superseded non-terminal transition).
+  const task = buildEnvelope(row, engine.logDir(row.id));
+  task.state = transition.state;
+  task.seq = transition.seq;
+  sendJson(res, 200, { event: watchEventFor(transition.state), seq: transition.seq, task });
+}
+
 /** `POST /tasks/:ref/answer` — deliver an answer to a task's pending question. */
 function handleAnswer(
   engine: TaskEngine,
@@ -236,7 +307,7 @@ function handleAnswer(
   }
   try {
     const row = engine.answer(ref, body.text);
-    sendJson(res, 200, { task_id: row.id, name: row.name, state: row.state });
+    sendJson(res, 200, { task_id: row.id, name: row.name, state: row.state, seq: row.seq });
   } catch (err) {
     if (err instanceof DelegateError) {
       sendJson(res, 400, { error: err.message });
@@ -250,7 +321,7 @@ function handleAnswer(
 function handleCancel(engine: TaskEngine, res: http.ServerResponse, ref: string): void {
   try {
     const row = engine.cancel(ref);
-    sendJson(res, 200, { task_id: row.id, name: row.name, state: row.state });
+    sendJson(res, 200, { task_id: row.id, name: row.name, state: row.state, seq: row.seq });
   } catch (err) {
     if (err instanceof DelegateError) {
       sendJson(res, 400, { error: err.message });
@@ -289,11 +360,19 @@ function createHandler(engine: TaskEngine): http.RequestListener {
 
       if (segments[0] === "tasks") {
         if (method === "GET" && segments.length === 1) {
-          sendJson(res, 200, { tasks: engine.list() });
+          // The current global seq rides along so `parley watch` can capture a
+          // "start from now" baseline atomically with the task snapshot (#34).
+          sendJson(res, 200, { tasks: engine.list(), seq: engine.currentSeq() });
           return;
         }
         if (method === "POST" && segments.length === 1) {
           handleDelegate(engine, res, await readBody(req));
+          return;
+        }
+        // `GET /tasks/events` (multi-task watch, #34) sits at the same depth as
+        // `GET /tasks/:ref`, so it must be matched before the ref is resolved.
+        if (method === "GET" && segments.length === 2 && segments[1] === "events") {
+          await handleWatchEvents(engine, res, url.searchParams);
           return;
         }
         const ref = decodeURIComponent(segments[1] ?? "");

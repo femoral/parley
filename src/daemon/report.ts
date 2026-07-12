@@ -161,6 +161,12 @@ export interface Envelope {
   question_id: string | null;
   /** The outstanding question text while `awaiting_answer` (else null). */
   question: string | null;
+  /**
+   * Global transition sequence number as of this response (#34): the seq of the
+   * task's most recent state change. Threads into `parley watch --since` to
+   * close the startup race. 0 before the task's first transition.
+   */
+  seq: number;
 }
 
 /** Parse a nullable JSON text column; malformed content reads as null. */
@@ -202,5 +208,6 @@ export function buildEnvelope(task: TaskRow, logsDir: string | null = null): Env
     logs_dir: logsDir,
     question_id: task.question_id,
     question: task.question,
+    seq: task.seq,
   };
 }
