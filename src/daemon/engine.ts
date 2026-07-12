@@ -109,6 +109,11 @@ export interface DelegateRequest {
   /** Opaque reasoning-effort string (spec §9); passed through to the vendor unchanged. */
   effort: string | null;
   name: string | null;
+  /**
+   * The orchestrator-run identity (`--session` / `PARLEY_SESSION_ID`) that
+   * spawned this task, so it can later be grouped with its sibling tasks.
+   */
+  orchestratorSessionId: string;
   /** The invocation directory: an explicit `--cwd`, else the caller's cwd. */
   cwd: string;
   /**
@@ -306,6 +311,7 @@ export class TaskEngine {
       repo,
       cwd: workingDir,
       prompt: request.prompt,
+      orchestrator_session_id: request.orchestratorSessionId,
       worktree: worktreePath,
       branch,
       base_sha: baseSha,

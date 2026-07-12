@@ -414,6 +414,42 @@ describe("delegate usage errors (exit 2)", () => {
   });
 });
 
+describe("orchestrator session identity (#42)", () => {
+  it("stamps the task with PARLEY_SESSION_ID, visible via status --json", async () => {
+    const cwd = taskDir(happyActions());
+    await runCli(["delegate", "-v", "fake", "--cwd", cwd, "--wait", "x"], home, {
+      extraEnv: { PARLEY_SESSION_ID: "orch-from-env" },
+    });
+
+    const row = JSON.parse((await runCli(["status", "t1", "--json"], home)).stdout)[0];
+    expect(row.orchestrator_session_id).toBe("orch-from-env");
+  });
+
+  it("--session overrides PARLEY_SESSION_ID when both are set", async () => {
+    const cwd = taskDir(happyActions());
+    await runCli(
+      ["delegate", "-v", "fake", "--session", "orch-from-flag", "--cwd", cwd, "--wait", "x"],
+      home,
+      { extraEnv: { PARLEY_SESSION_ID: "orch-from-env" } },
+    );
+
+    const row = JSON.parse((await runCli(["status", "t1", "--json"], home)).stdout)[0];
+    expect(row.orchestrator_session_id).toBe("orch-from-flag");
+  });
+
+  it("rejects a missing session (no flag, no env), exit 2, no task created", async () => {
+    const cwd = taskDir(happyActions());
+    const result = await runCli(["delegate", "-v", "fake", "--cwd", cwd, "x"], home, {
+      extraEnv: { PARLEY_SESSION_ID: undefined },
+    });
+    expect(result.code).toBe(2);
+    expect(result.stderr).toMatch(/session/);
+
+    const rows = JSON.parse((await runCli(["status", "--json"], home)).stdout);
+    expect(rows).toEqual([]);
+  });
+});
+
 describe("global flags", () => {
   it("bare `parley --json` is the JSON task listing", async () => {
     const result = await runCli(["--json"], home);

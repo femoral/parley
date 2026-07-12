@@ -21,6 +21,8 @@ Parley runs a child agent (codex or grok) in an isolated git worktree and hands 
 
    (`-` as the prompt reads stdin — use a heredoc for long briefs.)
 
+   Every `delegate` needs an **orchestrator session id** so the tasks one run spawns can be grouped later: pass `--session <id>`, or set `PARLEY_SESSION_ID` in the environment (`--session` wins when both are set). Neither is a usage error (exit 2), same as a missing `-v/--vendor` — no silent ungrouped task. The id is recorded as `orchestrator_session_id` (visible in `status --json`), distinct from the vendor's own resume `session_id`.
+
 3. **Branch on the exit code** — stdout carries the matching JSON:
 
    | `$?` | state | your move |
@@ -74,6 +76,14 @@ parley watch --follow                 # streams every transition as JSONL; good 
 - **Report schema**: `--report-schema <file>` (JSON Schema) when you need structured results back — e.g. a findings list from a review task. Validation failures bounce back to the child to retry, so the envelope you receive always conforms.
 - **Worktree base**: branches from HEAD; `--base-ref <ref>` overrides. `--cwd <path>` skips worktree creation and runs in that directory — escape hatch only, forfeits isolation.
 - **Sandbox**: default is workspace-write + network, approvals off. `--sandbox read-only` for review/analysis tasks, `--no-network` to cut egress, `--sandbox full` only when the task genuinely needs to escape the workspace.
+
+## Mapping your harness session onto `PARLEY_SESSION_ID`
+
+`PARLEY_SESSION_ID` is deliberately generic — parley core stays harness-agnostic and never reads a harness-specific variable. Each orchestrating harness maps its own session concept onto it:
+
+- **Claude Code**: the harness identifies each run with a session id — the `session_id` field it hands every hook (the same id that appears in the `claude.ai/code/session_…` links). Wire it once per run so every `parley delegate` you make inherits it: a `SessionStart` hook that exports `PARLEY_SESSION_ID` from that `session_id` (or, when you shell out delegate calls yourself, pass `--session "$CLAUDE_SESSION_ID"`). Then all the tasks a single Claude Code run spawns share one `orchestrator_session_id`.
+
+Any harness without a native session concept can synthesize one (a uuid per run) and export it as `PARLEY_SESSION_ID` before its first delegate.
 
 ## When a task fails
 

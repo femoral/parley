@@ -75,12 +75,17 @@ function handleDelegate(engine: TaskEngine, res: http.ServerResponse, body: unkn
   const prompt = body.prompt;
   const vendor = body.vendor;
   const cwd = body.cwd;
+  const orchestratorSessionId = body.orchestrator_session_id;
   if (typeof prompt !== "string" || prompt.trim() === "") {
     sendJson(res, 400, { error: "prompt is required" });
     return;
   }
   if (typeof vendor !== "string" || vendor === "") {
     sendJson(res, 400, { error: "vendor is required" });
+    return;
+  }
+  if (typeof orchestratorSessionId !== "string" || orchestratorSessionId === "") {
+    sendJson(res, 400, { error: "orchestrator_session_id is required" });
     return;
   }
   if (typeof cwd !== "string" || cwd === "") {
@@ -128,6 +133,7 @@ function handleDelegate(engine: TaskEngine, res: http.ServerResponse, body: unkn
       prompt,
       vendor,
       cwd,
+      orchestratorSessionId,
       model: optionalString(body.model),
       effort: optionalString(body.effort),
       name: optionalString(body.name),

@@ -32,6 +32,7 @@ function seedManyTasks(count: number): void {
       repo: "/some/repo",
       cwd: "/some/repo/worktree",
       prompt: "do the thing",
+      orchestrator_session_id: "orch-session",
       worktree: "/some/repo/.parley/worktrees/t" + i,
       branch: `parley/t${i}-task`,
       base_sha: "0".repeat(40),
