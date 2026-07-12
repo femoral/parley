@@ -8,6 +8,8 @@ Prototype asset for the wayfinder ticket [Prototype: parley CLI surface](https:/
 parley delegate [flags] "<prompt>"     # prompt arg, or '-' for stdin
   -v, --vendor codex|grok      (required)
   -m, --model <id>             (passed through to vendor opaquely)
+      --effort <level>         (reasoning effort, passed through opaquely; codex: -c
+                                model_reasoning_effort, grok: --reasoning-effort)
   -n, --name <label>           (human label; default derived from prompt)
   -w, --worktree <name>        (parley creates worktree+branch; default: auto-name)
       --cwd <path>             (escape hatch: pre-made dir, skips worktree creation)

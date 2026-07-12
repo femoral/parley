@@ -129,6 +129,7 @@ function handleDelegate(engine: TaskEngine, res: http.ServerResponse, body: unkn
       vendor,
       cwd,
       model: optionalString(body.model),
+      effort: optionalString(body.effort),
       name: optionalString(body.name),
       // Absent/non-boolean defaults to bypass (old `--cwd`-only behaviour).
       useWorktree: body.use_worktree === true,

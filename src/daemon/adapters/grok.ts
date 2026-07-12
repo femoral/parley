@@ -187,6 +187,10 @@ export function createGrokAdapter(env: NodeJS.ProcessEnv = process.env): VendorA
       task.cwd,
     ];
     if (task.model !== null) argv.push("-m", task.model);
+    // Reasoning effort (#28, spec §9) — opaque string passed through unchanged;
+    // `--reasoning-effort` (alias `--effort`), verified in grok 0.2.93.
+    // Omitted flag means the vendor's own default; no flag emitted.
+    if (task.effort !== null) argv.push("--reasoning-effort", task.effort);
     return argv;
   }
 

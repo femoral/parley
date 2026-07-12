@@ -119,6 +119,32 @@ describe("delegate --wait (the spine)", () => {
     const hello = JSON.parse(log.split("\n").find((l) => l.includes('"hello"'))!);
     expect(hello.model).toBe(weirdModel);
   });
+
+  it("passes --effort through to the adapter opaquely; omitted when not given", async () => {
+    const cwd = taskDir(happyActions());
+    const result = await runCli(
+      ["delegate", "-v", "fake", "--effort", "high", "--cwd", cwd, "--wait", "reason hard"],
+      home,
+    );
+
+    expect(result.code).toBe(0);
+    expect(JSON.parse(result.stdout).effort).toBe("high");
+    // The fake adapter hands the effort to the child verbatim; the child echoes it.
+    const log = fs.readFileSync(path.join(home, "tasks", "t1", "vendor.jsonl"), "utf8");
+    const hello = JSON.parse(log.split("\n").find((l) => l.includes('"hello"'))!);
+    expect(hello.effort).toBe("high");
+  });
+
+  it("omits effort from the envelope and child env when --effort is not given", async () => {
+    const cwd = taskDir(happyActions());
+    const result = await runCli(["delegate", "-v", "fake", "--cwd", cwd, "--wait", "no effort"], home);
+
+    expect(result.code).toBe(0);
+    expect(JSON.parse(result.stdout).effort).toBeNull();
+    const log = fs.readFileSync(path.join(home, "tasks", "t1", "vendor.jsonl"), "utf8");
+    const hello = JSON.parse(log.split("\n").find((l) => l.includes('"hello"'))!);
+    expect(hello.effort).toBeNull();
+  });
 });
 
 describe("delegate without --wait", () => {

@@ -41,6 +41,8 @@ export interface TaskSpec {
   vendor: string;
   /** Opaque model string, passed through to the vendor unchanged. */
   model: string | null;
+  /** Opaque reasoning-effort string, passed through to the vendor unchanged. */
+  effort: string | null;
   /** Working directory the child runs in (worktrees arrive in a later ticket). */
   cwd: string;
   /** Normalized sandbox posture (spec §8); adapters map it to vendor mechanisms. */

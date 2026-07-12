@@ -35,6 +35,8 @@ export interface TaskRow {
   name: string | null;
   vendor: string | null;
   model: string | null;
+  /** Opaque reasoning-effort string, passed through to the vendor unchanged. */
+  effort: string | null;
   repo: string | null;
   state: string;
   created_at: string;
@@ -76,6 +78,8 @@ export interface NewTask {
   name: string | null;
   vendor: string;
   model: string | null;
+  /** Opaque reasoning-effort string, passed through to the vendor unchanged. */
+  effort: string | null;
   repo: string | null;
   cwd: string;
   prompt: string;
@@ -143,6 +147,9 @@ const MIGRATIONS: string[] = [
   // against (null = parley's default). Recorded so the envelope can report the
   // schema actually applied.
   `ALTER TABLE tasks ADD COLUMN report_schema TEXT;`,
+  // #28: per-vendor reasoning effort — opaque string passed through to the
+  // vendor unchanged (same seam as `model`); persisted so `resume` keeps it.
+  `ALTER TABLE tasks ADD COLUMN effort TEXT;`,
 ];
 
 function migrate(db: DatabaseHandle): void {
@@ -170,7 +177,7 @@ export function openDatabase(paths: HomePaths): DatabaseHandle {
   return db;
 }
 
-const TASK_COLUMNS = `id, name, vendor, model, repo, state, created_at, updated_at,
+const TASK_COLUMNS = `id, name, vendor, model, effort, repo, state, created_at, updated_at,
    cwd, prompt, session_id, usage, report, error, started_at, completed_at,
    question_id, question, worktree, branch, base_sha, sandbox, network,
    answer_timeout_ms, report_schema`;
@@ -235,15 +242,16 @@ export function insertTask(db: DatabaseHandle, task: NewTask): TaskRow {
   const now = new Date().toISOString();
   db.prepare(
     `INSERT INTO tasks
-       (id, name, vendor, model, repo, state, created_at, updated_at,
+       (id, name, vendor, model, effort, repo, state, created_at, updated_at,
         cwd, prompt, worktree, branch, base_sha, sandbox, network, answer_timeout_ms,
         report_schema)
-     VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     task.id,
     task.name,
     task.vendor,
     task.model,
+    task.effort,
     task.repo,
     now,
     now,

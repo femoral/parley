@@ -140,6 +140,8 @@ export interface Envelope {
   branch: string | null;
   vendor: string | null;
   model: string | null;
+  /** Opaque reasoning-effort string (spec §9); passed through to the vendor unchanged. */
+  effort: string | null;
   /** The child's sandbox posture (spec §8): `{ sandbox, network }`. */
   posture: Posture;
   session_id: string | null;
@@ -188,6 +190,7 @@ export function buildEnvelope(task: TaskRow, logsDir: string | null = null): Env
     branch: task.branch,
     vendor: task.vendor,
     model: task.model,
+    effort: task.effort,
     posture: { sandbox: task.sandbox, network: task.network === 1 },
     session_id: task.session_id,
     usage: parseJsonColumn<Record<string, number>>(task.usage),

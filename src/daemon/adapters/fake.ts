@@ -37,6 +37,8 @@ export function createFakeAdapter(env: NodeJS.ProcessEnv = process.env): VendorA
         FAKE_NETWORK: task.network ? "1" : "0",
         // Model passes through opaquely — the adapter never interprets it.
         ...(task.model !== null ? { FAKE_MODEL: task.model } : {}),
+        // Reasoning effort (#28) — same opaque passthrough seam as model.
+        ...(task.effort !== null ? { FAKE_EFFORT: task.effort } : {}),
       },
       files: [],
       cwd: task.cwd,
