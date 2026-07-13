@@ -1,9 +1,30 @@
 /** @vitest-environment happy-dom */
 import { act, renderHook } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { useSettings } from "../src/app/hooks/useSettings.js";
 
 const STORAGE_KEY = "parley-cove:settings:v1";
+
+// Node >= 25 exposes its own experimental `localStorage` global that shadows
+// happy-dom's Storage on `window` and lacks the full Storage API. Pin a plain
+// in-memory implementation so the round-trip is deterministic on every runtime.
+function memoryStorage(): Storage {
+  const store = new Map<string, string>();
+  return {
+    get length() {
+      return store.size;
+    },
+    clear: () => store.clear(),
+    getItem: (key: string) => store.get(key) ?? null,
+    key: (index: number) => [...store.keys()][index] ?? null,
+    removeItem: (key: string) => void store.delete(key),
+    setItem: (key: string, value: string) => void store.set(key, value),
+  };
+}
+
+beforeEach(() => {
+  Object.defineProperty(window, "localStorage", { value: memoryStorage(), configurable: true });
+});
 
 afterEach(() => {
   window.localStorage.clear();
