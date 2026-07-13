@@ -1,4 +1,4 @@
-import { homePathsFromEnv } from "../home.js";
+import { homePathsFromEnv } from "@useparley/core";
 import { type CliContext } from "./context.js";
 import { HelpRequested, UsageError } from "./errors.js";
 import { runAnswer } from "./commands/answer.js";

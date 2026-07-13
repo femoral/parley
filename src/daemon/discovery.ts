@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import type { HomePaths } from "../home.js";
+import type { HomePaths } from "@useparley/core";
 
 /** Contents of the daemon discovery file (`~/.parley/daemon.json`). */
 export interface Discovery {

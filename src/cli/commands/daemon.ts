@@ -7,7 +7,7 @@ import {
   liveDiscovery,
   readDiscovery,
 } from "../../daemon/discovery.js";
-import { sleep } from "../../util/time.js";
+import { sleep } from "@useparley/core";
 import { ensureDaemon } from "../client.js";
 
 const STOP_TIMEOUT_MS = 10_000;

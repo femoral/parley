@@ -9,7 +9,7 @@ import type {
   VendorAdapter,
   VendorModels,
 } from "../src/daemon/adapters/types.js";
-import { DEFAULT_CATALOG, loadCatalog, refreshCatalog } from "../src/models.js";
+import { DEFAULT_CATALOG, loadCatalog, refreshCatalog } from "@useparley/core";
 import { cleanupHome, makeHome, runCli } from "./helpers.js";
 
 const CODEX_FIXTURE = fileURLToPath(new URL("./fixtures/codex/debug-models.json", import.meta.url));

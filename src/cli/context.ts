@@ -1,4 +1,4 @@
-import type { HomePaths } from "../home.js";
+import type { HomePaths } from "@useparley/core";
 
 /** Everything a command needs to run and produce observable effects. */
 export interface CliContext {

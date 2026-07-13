@@ -1,0 +1,22 @@
+{
+  "name": "@useparley/core",
+  "version": "0.0.0",
+  "description": "Shared heart of parley: domain types, model catalog, home-dir resolution, and shared utilities.",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    },
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  }
+}

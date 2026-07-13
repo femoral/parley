@@ -1,5 +1,5 @@
 import http from "node:http";
-import type { HomePaths } from "../home.js";
+import type { HomePaths } from "@useparley/core";
 import { createAdapterRegistry } from "./adapters/index.js";
 import { openDatabase, sweepInterruptedTasks } from "./db.js";
 import { DEFAULT_NETWORK, DEFAULT_SANDBOX, isSandboxMode } from "./adapters/types.js";

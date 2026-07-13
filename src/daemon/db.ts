@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import Database from "better-sqlite3";
-import type { HomePaths } from "../home.js";
+import type { HomePaths } from "@useparley/core";
 import type { SandboxMode } from "./adapters/types.js";
 
 export type DatabaseHandle = Database.Database;

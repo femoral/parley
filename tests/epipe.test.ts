@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { homePaths } from "../src/home.js";
+import { homePaths } from "@useparley/core";
 import { insertTask, openDatabase } from "../src/daemon/db.js";
 import { cleanupHome, makeHome, runCli, runCliPiped } from "./helpers.js";
 

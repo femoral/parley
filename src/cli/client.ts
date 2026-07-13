@@ -1,4 +1,4 @@
-import type { HomePaths } from "../home.js";
+import { sleep, type HomePaths } from "@useparley/core";
 import {
   clearDiscovery,
   isProcessAlive,
@@ -7,7 +7,6 @@ import {
   type Discovery,
 } from "../daemon/discovery.js";
 import { withLock } from "../daemon/lock.js";
-import { sleep } from "../util/time.js";
 import { spawnDaemon } from "./spawn.js";
 
 const SPAWN_TIMEOUT_MS = 15_000;

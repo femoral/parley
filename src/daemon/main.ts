@@ -1,4 +1,4 @@
-import { homePathsFromEnv } from "../home.js";
+import { homePathsFromEnv } from "@useparley/core";
 import { clearDiscovery, writeDiscovery } from "./discovery.js";
 import { startServer, type DaemonServer } from "./server.js";
 

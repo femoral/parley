@@ -4,7 +4,7 @@ import { parseArgs } from "../args.js";
 import { DaemonRequestError, daemonPost, ensureDaemon } from "../client.js";
 import { type CliContext, printJson } from "../context.js";
 import { UsageError } from "../errors.js";
-import { parseDuration } from "../../util/time.js";
+import { parseDuration } from "@useparley/core";
 import { waitForOutcome } from "../wait.js";
 import { DEFAULT_SANDBOX, SANDBOX_MODES, isSandboxMode } from "../../daemon/adapters/types.js";
 

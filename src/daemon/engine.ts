@@ -2,7 +2,7 @@ import { spawn, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import readline from "node:readline";
-import type { HomePaths } from "../home.js";
+import { formatDuration, type HomePaths } from "@useparley/core";
 import type {
   HubInfo,
   SandboxMode,
@@ -39,7 +39,6 @@ import {
   type JsonSchema,
   type Report,
 } from "./report.js";
-import { formatDuration } from "../util/time.js";
 import {
   commonGitDir,
   createWorktree,

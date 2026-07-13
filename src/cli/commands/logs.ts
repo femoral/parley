@@ -4,7 +4,7 @@ import { parseArgs } from "../args.js";
 import { DaemonRequestError, daemonGet, ensureDaemon } from "../client.js";
 import type { CliContext } from "../context.js";
 import { UsageError } from "../errors.js";
-import { sleep } from "../../util/time.js";
+import { sleep } from "@useparley/core";
 import { TERMINAL_STATES, type TaskRow } from "../../daemon/db.js";
 import type { Envelope } from "../../daemon/report.js";
 

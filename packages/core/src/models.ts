@@ -1,6 +1,46 @@
 import fs from "node:fs";
 import path from "node:path";
-import type { ModelCatalog, VendorAdapter } from "./daemon/adapters/types.js";
+
+/**
+ * One model an adapter advertises. The catalog is advisory only: `delegate`
+ * never consults it and keeps passing `--model`/`--effort` through opaquely.
+ * `efforts` is the vendor's advertised reasoning-effort set (may be empty when
+ * the vendor exposes none, e.g. grok's text listing).
+ */
+export interface ModelEntry {
+  id: string;
+  efforts: string[];
+  /** The vendor's default effort for this model, or null when unknown. */
+  default_effort: string | null;
+}
+
+/** One vendor's slice of the catalog file (`~/.parley/models.json`). */
+export interface VendorModels {
+  /** ISO timestamp of the last successful `--refresh`; null when never probed. */
+  fetched_at: string | null;
+  /** Where the entry came from: a probe command (`codex debug models`) or `manual`. */
+  source: string;
+  models: ModelEntry[];
+}
+
+/** The whole catalog: vendor id → its models. The file is the source of truth. */
+export type ModelCatalog = Record<string, VendorModels>;
+
+/** What an adapter's `--refresh` probe yields; the catalog stamps `fetched_at`. */
+export interface ProbedModels {
+  /** The probe command, recorded as the entry's `source` (e.g. `codex debug models`). */
+  source: string;
+  models: ModelEntry[];
+}
+
+/**
+ * The catalog-refresh capability `refreshCatalog` needs from a vendor adapter —
+ * the structural slice of the daemon's `VendorAdapter`. Kept minimal so this
+ * shared package stays a leaf (no dependency back into the daemon).
+ */
+export interface ModelProber {
+  listModels?(existing: VendorModels | undefined): Promise<ProbedModels>;
+}
 
 /**
  * Local, user-patchable model/effort catalog (`parley models`, #29).
@@ -86,10 +126,10 @@ export interface RefreshResult {
  * catalog — returns a new object; the caller persists it. `now` is injected for
  * deterministic tests.
  */
-export async function refreshCatalog(
+export async function refreshCatalog<A extends ModelProber>(
   catalog: ModelCatalog,
   vendorIds: string[],
-  adapters: Map<string, VendorAdapter>,
+  adapters: Map<string, A>,
   now: () => string = () => new Date().toISOString(),
 ): Promise<RefreshResult> {
   const next = structuredClone(catalog);

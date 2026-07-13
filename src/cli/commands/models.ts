@@ -3,7 +3,7 @@ import { parseArgs } from "../args.js";
 import { type CliContext, printJson } from "../context.js";
 import { createAdapterRegistry } from "../../daemon/adapters/index.js";
 import type { ModelCatalog, VendorModels } from "../../daemon/adapters/types.js";
-import { loadCatalog, refreshCatalog, writeCatalog } from "../../models.js";
+import { loadCatalog, refreshCatalog, writeCatalog } from "@useparley/core";
 
 /** Restrict a catalog to a single vendor, or return it whole when unfiltered. */
 function filterCatalog(catalog: ModelCatalog, vendor: string | undefined): ModelCatalog {

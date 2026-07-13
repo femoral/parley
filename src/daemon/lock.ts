@@ -1,6 +1,5 @@
 import fs from "node:fs";
-import type { HomePaths } from "../home.js";
-import { sleep } from "../util/time.js";
+import { sleep, type HomePaths } from "@useparley/core";
 import { isProcessAlive } from "./discovery.js";
 
 interface LockRecord {
