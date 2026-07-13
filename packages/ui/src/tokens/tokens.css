@@ -101,10 +101,41 @@
   --report-border: #3f8f68;
   --report-inner: #2f6b4e;
   --report-green: #9fe0bf;
+  --report-text: #cde6d5;
+  --report-label: #7a9c86;
+  /* §2.8 — report-well: summary prose / Q&A answer bubbles */
+  --report-well-bg: #10241a;
+  --report-well-border: #2f7d5a55;
+  /* §4.17 — Q&A answer bubble's anchor avatar */
+  --qa-avatar-bg: #1c3a2a;
+  /* §4.17 — Logs tab's dark terminal well */
+  --terminal-bg: #08120f;
+  --terminal-border: #1c2c24;
   --scroll-thumb: #6b4a2c;
   --scroll-thumb-hover: #8a613a;
   --scroll-track: rgba(0, 0, 0, 0.25);
   --badge-bg: rgba(0, 0, 0, 0.3);
+
+  /* §2.8 — raw log-line colours by kind (inspector Logs tab) */
+  --log-timestamp: #3f5a4d;
+  --log-reasoning: #7f9c8e;
+  --log-tool: #7fb0ff;
+  --log-shell: #ffcf4d;
+  --log-stdout: #8fe0a8;
+  --log-error: #ff8a7a;
+  --log-question: #ffcf4d;
+  /* fallback kind reuses --ink-tan, the manifest's #c9a87a */
+
+  /* Report outcome badge colours (§2.6 — reuse the state palette) */
+  --outcome-success: var(--state-running);
+  --outcome-partial: var(--state-awaiting_answer);
+  --outcome-blocked: var(--state-failed);
+
+  /* §4.18 — the success button (report tab's review CTA) */
+  --btn-success-border: #5fd08a;
+  --btn-success-bg: #123a2a;
+  --btn-success-bg-hover: #16452f;
+  --btn-success-text: #aef0c8;
 
   /* §2.9 — typography */
   --font-display: "Cinzel", "Times New Roman", serif;

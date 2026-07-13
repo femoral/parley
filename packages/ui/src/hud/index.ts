@@ -13,6 +13,25 @@ export { InboxCard } from "./InboxCard.js";
 export type { InboxCardProps } from "./InboxCard.js";
 export { InboxPanel } from "./InboxPanel.js";
 export type { InboxPanelProps } from "./InboxPanel.js";
+export { Inspector } from "./Inspector/index.js";
+export type { InspectorProps } from "./Inspector/index.js";
+export { LogStream } from "./LogStream.js";
+export type { LogStreamProps } from "./LogStream.js";
+export { ReportPanel } from "./ReportPanel.js";
+export type { ReportPanelProps } from "./ReportPanel.js";
 export { RosterPanel } from "./RosterPanel.js";
 export type { RosterPanelProps } from "./RosterPanel.js";
-export type { HealthView, InboxTask, RosterGroup, RosterSessionOption, RosterTask } from "./types.js";
+export type {
+  BriefView,
+  HealthView,
+  InboxTask,
+  InspectorTask,
+  LogLine,
+  LogsView,
+  QaTurn,
+  ReportFile,
+  ReportView,
+  RosterGroup,
+  RosterSessionOption,
+  RosterTask,
+} from "./types.js";

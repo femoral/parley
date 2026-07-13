@@ -51,6 +51,74 @@ export interface InboxTask {
   question: string;
 }
 
+/** One raw log line as the Logs tab renders it (design-manifest §4.17/§2.8). */
+export interface LogLine {
+  /** Stable key for the list (source order — a line never changes once tailed). */
+  key: number;
+  /** Classified kind driving the line's colour (falls back to the muted tan). */
+  kind: "reasoning" | "tool" | "shell" | "stdout" | "error" | "question" | "fallback";
+  /** Friendly rendered text (the raw line, unwrapped from its JSON envelope where possible). */
+  text: string;
+}
+
+/** The Logs tab's plain props (design-manifest §4.17 "Logs"). */
+export interface LogsView {
+  lines: LogLine[];
+  /** Whether the tail is still following (task not yet at `eof`). */
+  live: boolean;
+}
+
+/** The Brief tab's plain props (design-manifest §4.17 "Brief"). */
+export interface BriefView {
+  goal: string | null;
+  branch: string | null;
+  worktree: string | null;
+  model: string | null;
+  effort: string | null;
+  sandbox: string | null;
+  network: boolean | null;
+  /** Pre-formatted duration, e.g. "3m 41s", or null before the task has one. */
+  duration: string | null;
+  /** Pre-formatted token usage, e.g. "1.2k ▸ 340", or null when unknown. */
+  usage: string | null;
+}
+
+/** One file the report says it touched (design-manifest §4.17 "Report" — "+ path"). */
+export interface ReportFile {
+  path: string;
+}
+
+/** The Report tab's plain props; `null` renders the manifest's empty state. */
+export interface ReportView {
+  outcome: "success" | "partial" | "blocked";
+  summary: string;
+  files: ReportFile[];
+}
+
+/** One turn of the Q&A transcript (design-manifest §4.17 "Q&A"). `answer` is
+ * `null` while the question is still outstanding. */
+export interface QaTurn {
+  question: string;
+  answer: string | null;
+}
+
+/** The full inspector payload for the selected task (design-manifest §4.17). */
+export interface InspectorTask {
+  id: string;
+  name: string;
+  coat: string;
+  emblem: string;
+  /** Task state string (matches a `StateKey`) — drives the header's state badge. */
+  state: string;
+  /** Eval score out of 10, when the task has been eval'd (else null). */
+  evalScore: number | null;
+  evalFeedback: string | null;
+  brief: BriefView;
+  logs: LogsView;
+  report: ReportView | null;
+  qa: QaTurn[];
+}
+
 /** The daemon health readout, fully projected to display values by the hooks layer. */
 export interface HealthView {
   /** Whether the daemon answered the last probe. */

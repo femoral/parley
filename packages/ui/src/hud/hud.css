@@ -441,3 +441,379 @@
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+/* ── Inspector (design-manifest §4.17, #68) ───────────────────────────────
+ * Fills the remainder of the right stack; its body is the one part of the
+ * panel that scrolls per tab, so a long log or transcript never grows the
+ * whole cockpit column.
+ */
+.pc-inspector {
+  flex: 1 1 380px;
+  min-height: 380px;
+  display: flex;
+  flex-direction: column;
+}
+.pc-inspector--empty {
+  flex: 1 1 160px;
+  min-height: 160px;
+  display: grid;
+  place-items: center;
+}
+.pc-inspector__placeholder {
+  margin: 0;
+  text-align: center;
+  font-family: var(--font-flavor);
+  font-style: italic;
+  font-size: 13px;
+  color: var(--ink-ghost);
+}
+.pc-inspector__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 15px 8px;
+}
+.pc-inspector__head-titles {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  flex: 1;
+}
+.pc-inspector__kicker {
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-size: 9px;
+  letter-spacing: 1.5px;
+  color: var(--ink-tan);
+}
+.pc-inspector__name {
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--ink-parchment);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pc-inspector__id {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--ink-faint);
+}
+.pc-inspector__head-aside {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+.pc-inspector__tabs {
+  display: flex;
+  gap: 2px;
+  padding: 0 10px;
+  border-bottom: 1px solid var(--plate-well-border);
+}
+.pc-inspector__tab {
+  padding: 8px 10px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: none;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 10.5px;
+  letter-spacing: 1px;
+  color: var(--ink-label);
+  cursor: pointer;
+  transition: var(--ease);
+}
+.pc-inspector__tab:hover {
+  color: var(--ink-warm);
+}
+.pc-inspector__tab--active {
+  color: var(--brass);
+  border-bottom-color: var(--brass);
+}
+.pc-inspector__body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 12px 14px;
+}
+.pc-inspector__body::-webkit-scrollbar {
+  width: 8px;
+}
+.pc-inspector__body::-webkit-scrollbar-thumb {
+  background: var(--scroll-thumb);
+  border-radius: 4px;
+}
+
+/* ── Brief tab ─────────────────────────────────────────────────────────── */
+.pc-brief {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.pc-brief__grid {
+  display: grid;
+  grid-template-columns: 64px 1fr;
+  gap: 6px 10px;
+}
+.pc-brief__label {
+  font-family: var(--font-body);
+  font-size: 9px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--ink-label);
+  align-self: center;
+}
+.pc-brief__value {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--ink-soft);
+  overflow-wrap: anywhere;
+}
+.pc-brief__value--mono-green {
+  color: var(--report-green);
+}
+.pc-brief__well {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: var(--radius-well);
+  background: var(--plate-well);
+  border: 1px solid var(--plate-well-border);
+}
+.pc-brief__well-label {
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 9.5px;
+  letter-spacing: 1px;
+  color: var(--ink-label);
+}
+.pc-brief__goal {
+  margin: 0;
+  font-family: var(--font-flavor);
+  font-style: italic;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--ink-warm);
+}
+.pc-brief__constraints {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.pc-brief__constraints li {
+  position: relative;
+  padding-left: 14px;
+  font-family: var(--font-body);
+  font-size: 11.5px;
+  color: var(--ink-soft);
+}
+.pc-brief__constraints li::before {
+  content: "◆";
+  position: absolute;
+  left: 0;
+  font-size: 8px;
+  color: var(--brass-mid);
+}
+.pc-brief__footnote {
+  margin: 0;
+  font-family: var(--font-flavor);
+  font-style: italic;
+  font-size: 10.5px;
+  color: var(--ink-ghost);
+}
+
+/* ── Logs tab (LogStream) ──────────────────────────────────────────────── */
+.pc-logstream {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  height: 100%;
+}
+.pc-logstream__head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.pc-logstream__status {
+  font-family: var(--font-body);
+  font-size: 9.5px;
+  letter-spacing: 0.6px;
+  color: var(--ink-label);
+}
+.pc-logstream__body {
+  flex: 1;
+  min-height: 160px;
+  border-radius: var(--radius-well);
+  background: var(--terminal-bg);
+  border: 1px solid var(--terminal-border);
+  padding: 8px 10px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.pc-logstream__line {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--ink-tan);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.pc-logstream__line--reasoning {
+  color: var(--log-reasoning);
+}
+.pc-logstream__line--tool {
+  color: var(--log-tool);
+}
+.pc-logstream__line--shell {
+  color: var(--log-shell);
+}
+.pc-logstream__line--stdout {
+  color: var(--log-stdout);
+}
+.pc-logstream__line--error {
+  color: var(--log-error);
+}
+.pc-logstream__line--question {
+  color: var(--log-question);
+}
+.pc-logstream__empty {
+  margin: auto;
+  text-align: center;
+  font-family: var(--font-flavor);
+  font-style: italic;
+  font-size: 12.5px;
+  color: var(--ink-ghost);
+}
+
+/* ── Report tab (ReportPanel, design-manifest §4.13/§4.17) ────────────── */
+.pc-report {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: flex-start;
+}
+.pc-report__summary {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: var(--radius-well);
+  background: var(--report-well-bg);
+  border: 1px solid var(--report-well-border);
+  font-family: var(--font-body);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--report-text);
+  align-self: stretch;
+}
+.pc-report__files {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-self: stretch;
+}
+.pc-report__files-label {
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 9.5px;
+  letter-spacing: 1px;
+  color: var(--report-label);
+}
+.pc-report__files ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.pc-report__files li {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--report-green);
+  overflow-wrap: anywhere;
+}
+.pc-report__cta {
+  align-self: stretch;
+  justify-content: center;
+}
+.pc-report__empty {
+  margin: auto;
+  text-align: center;
+  font-family: var(--font-flavor);
+  font-style: italic;
+  font-size: 13px;
+  color: var(--ink-ghost);
+}
+
+/* ── Q&A tab ───────────────────────────────────────────────────────────── */
+.pc-qa {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.pc-qa__turn {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.pc-qa__bubble {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  max-width: 88%;
+}
+.pc-qa__bubble p {
+  margin: 0;
+  padding: 8px 11px;
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+.pc-qa__bubble--question {
+  align-self: flex-start;
+}
+.pc-qa__bubble--question p {
+  border-radius: 8px 8px 8px 2px;
+  background: var(--plate-well);
+  border: 1px solid var(--plate-well-border);
+  font-family: var(--font-flavor);
+  font-style: italic;
+  color: var(--question-parchment);
+}
+.pc-qa__bubble--answer {
+  align-self: flex-end;
+  flex-direction: row-reverse;
+}
+.pc-qa__bubble--answer p {
+  border-radius: 8px 8px 2px 8px;
+  background: var(--report-well-bg);
+  border: 1px solid var(--report-well-border);
+  font-family: var(--font-body);
+  color: var(--report-text);
+}
+.pc-qa__avatar {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: var(--radius-emblem);
+  background: var(--qa-avatar-bg);
+  color: var(--report-green);
+  font-size: 11px;
+  flex: 0 0 auto;
+}
+.pc-qa__empty {
+  margin: auto;
+  text-align: center;
+  font-family: var(--font-flavor);
+  font-style: italic;
+  font-size: 13px;
+  color: var(--ink-ghost);
+}

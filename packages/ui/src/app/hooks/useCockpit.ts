@@ -1,9 +1,12 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ParleyClient } from "@useparley/core";
-import type { HealthView } from "../../hud/types.js";
+import type { HealthView, InspectorTask, QaTurn } from "../../hud/types.js";
 import { formatClock, formatUptime } from "./format.js";
 import { useHealth } from "./useHealth.js";
+import { projectInspector } from "./inspector.js";
+import { useLogTail } from "./useLogTail.js";
 import { useSnapshot, type SnapshotView } from "./useSnapshot.js";
+import { useTaskDetail } from "./useTaskDetail.js";
 
 /** The roster's selection state — which orchestrator session and task are
  * active (#66). Lives in the app layer: hud rows/selectors take the current
@@ -16,6 +19,10 @@ export interface RosterSelection {
   selectSession: (id: string | null) => void;
   selectTask: (id: string) => void;
 }
+
+/** Identity-stable empty history, so a task with no answered turns doesn't
+ * feed the inspector memo a fresh `[]` every render. */
+const EMPTY_QA: QaTurn[] = [];
 
 export interface CockpitView {
   health: HealthView;
@@ -32,6 +39,8 @@ export interface CockpitView {
    * task out of the inbox, no reload.
    */
   answerTask: (id: string, text: string) => Promise<void>;
+  /** The selected task's inspector payload (#68), or `null` with no selection. */
+  inspector: InspectorTask | null;
 }
 
 /**
@@ -78,10 +87,57 @@ export function useCockpit(): CockpitView {
 
   const roster: RosterSelection = { selectedSessionId, selectedTaskId, selectSession, selectTask };
 
+  // The daemon persists no Q&A transcript — only the task's *current*
+  // outstanding question (`useTaskDetail`'s row/envelope). Each answered turn
+  // is remembered here, client-side, for as long as the cockpit stays open,
+  // keyed by task id; `projectInspector` appends the live outstanding
+  // question (if any) on top of this history (#68's Q&A tab).
+  const [qaHistory, setQaHistory] = useState<Map<string, QaTurn[]>>(new Map());
+
+  // Read the inbox through a ref so `answerTask` keeps a stable identity
+  // across snapshot updates — `InboxPanel` is memoized against exactly that
+  // (its doc comment: "tasks/onAnswer are identity-stable between snapshot
+  // updates"), and a `snapshot.inbox` dependency here would hand it a fresh
+  // callback on every SSE transition anywhere in the roster.
+  const inboxRef = useRef(snapshot.inbox);
+  inboxRef.current = snapshot.inbox;
+
   const answerTask = useCallback(
-    (id: string, text: string) => client.answer(id, text).then(() => undefined),
+    (id: string, text: string) => {
+      const question = inboxRef.current.find((task) => task.id === id)?.question ?? null;
+      return client.answer(id, text).then(() => {
+        if (question === null) return;
+        setQaHistory((prev) => {
+          const next = new Map(prev);
+          next.set(id, [...(next.get(id) ?? []), { question, answer: text }]);
+          return next;
+        });
+      });
+    },
     [client],
   );
 
-  return { health: healthView, snapshot, roster, clock: formatClock(new Date(now)), day, answerTask };
+  const detail = useTaskDetail(client, selectedTaskId);
+  const logs = useLogTail(client, selectedTaskId);
+  // Memoized so the one-second clock tick doesn't mint a fresh InspectorTask
+  // (the memoized Inspector would re-render its whole tab body every second).
+  // The id guard drops one frame of stale detail when the selection changes
+  // (useTaskDetail resets in an effect, i.e. after this render already ran).
+  const inspector: InspectorTask | null = useMemo(
+    () =>
+      detail && detail.task.task_id === selectedTaskId
+        ? projectInspector(detail, logs, qaHistory.get(selectedTaskId) ?? EMPTY_QA)
+        : null,
+    [detail, logs, qaHistory, selectedTaskId],
+  );
+
+  return {
+    health: healthView,
+    snapshot,
+    roster,
+    clock: formatClock(new Date(now)),
+    day,
+    answerTask,
+    inspector,
+  };
 }

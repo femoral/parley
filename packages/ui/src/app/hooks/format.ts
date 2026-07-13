@@ -30,3 +30,43 @@ export function formatUptime(ms: number): string {
 export function formatClock(date: Date): string {
   return `${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
+
+/** Render a token count the design-manifest's compact way (`1.2k`, `340`). */
+export function formatTokenCount(n: number): string {
+  if (!Number.isFinite(n)) return "—";
+  if (n >= 1000) return `${(n / 1000).toFixed(1)}k`;
+  return String(Math.round(n));
+}
+
+/**
+ * Render a task's usage map as the inspector Brief's "in ▸ out tok" reading
+ * (design-manifest §4.17). Vendor usage keys are free-form (spec §"@useparley/
+ * core exports" — the envelope's `usage` is `Record<string, number> | null`
+ * with no fixed schema across vendors), so this sums any key whose name
+ * suggests input/prompt tokens vs. output/completion tokens, falling back to a
+ * single combined total when the shape doesn't split that way.
+ */
+export function formatUsage(usage: Record<string, number> | null | undefined): string | null {
+  if (!usage) return null;
+  let input = 0;
+  let output = 0;
+  let other = 0;
+  let sawInput = false;
+  let sawOutput = false;
+  for (const [key, value] of Object.entries(usage)) {
+    if (typeof value !== "number" || !Number.isFinite(value)) continue;
+    const k = key.toLowerCase();
+    if (k.includes("input") || k.includes("prompt")) {
+      input += value;
+      sawInput = true;
+    } else if (k.includes("output") || k.includes("completion")) {
+      output += value;
+      sawOutput = true;
+    } else {
+      other += value;
+    }
+  }
+  if (sawInput || sawOutput) return `${formatTokenCount(input)} ▸ ${formatTokenCount(output)} tok`;
+  if (other > 0) return `${formatTokenCount(other)} tok`;
+  return null;
+}

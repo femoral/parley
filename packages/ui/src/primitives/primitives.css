@@ -211,6 +211,14 @@
   border-color: var(--brass-frame);
   color: var(--brass-soft);
 }
+.pc-btn--success {
+  border: 1px solid var(--btn-success-border);
+  background: var(--btn-success-bg);
+  color: var(--btn-success-text);
+}
+.pc-btn--success:hover {
+  background: var(--btn-success-bg-hover);
+}
 
 /* ── Stat readout ──────────────────────────────────────────────────────── */
 .pc-stat {
