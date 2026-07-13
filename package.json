@@ -9,6 +9,7 @@
   },
   "scripts": {
     "parley": "node packages/cli/bin/parley.mjs",
+    "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -19,6 +20,7 @@
     "@types/node": "^22.10.5",
     "eslint": "^9.17.0",
     "globals": "^15.14.0",
+    "tsdown": "^0.22.6",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2",
     "typescript-eslint": "^8.19.0",
