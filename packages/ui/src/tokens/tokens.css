@@ -1,0 +1,194 @@
+/*
+ * Layer 0 — tokens. Every value in docs/design/design-manifest.md §2, expressed
+ * as a CSS custom property. Nothing above this layer may hard-code a hex literal
+ * (component-system spec, contract 1); a faction tint is the only run-time colour
+ * and it rides on the `--coat` / `--coat-dark` pair set by a wrapper.
+ */
+:root {
+  /* §2.1 — surfaces & sea */
+  --sea-abyss: #06171f;
+  --sea-deep: #0c2c3b;
+  --sea-mid: #123f52;
+  --sea-shallow: #1b5064;
+  --sea-vignette: rgba(3, 12, 18, 0.72);
+  --sea-gradient: radial-gradient(
+    130% 100% at 50% -6%,
+    #1b5064 0%,
+    #123f52 30%,
+    #0c2c3b 60%,
+    #06171f 100%
+  );
+
+  /* §2.2 — wood / parchment panel chrome */
+  --plate-top: #1d140c;
+  --plate-bottom: #150e07;
+  --plate-card-bottom: #140d07;
+  --plate-footer: #100a06;
+  --plate-well: #1a1209;
+  --plate-well-border: #3a2716;
+  --line-faint: #2a1c10;
+  --progress-track: #0c0904;
+  --input-bg: #0e0a06;
+
+  /* §2.3 — brass / gold */
+  --brass-bright: #ffcf4d;
+  --brass: #f0c25a;
+  --brass-link: #e6b34a;
+  --brass-soft: #e8c88a;
+  --brass-mid: #d9a441;
+  --brass-dim: #c99b45;
+  --brass-border: #b98f3f;
+  --brass-frame: #8a6a34;
+  --brass-inner: #6f5326;
+  --brass-deep: #a8681f;
+  --brass-shadow: #5b3a24;
+  --card-border-idle: #5a441f;
+  --card-ring-idle: #4a381caa;
+
+  /* §2.4 — ink / text */
+  --ink-parchment: #f2e3c4;
+  --ink-warm: #e8d3a6;
+  --ink-warm-alt: #e2d0a8;
+  --ink-cream: #e0cfa4;
+  --ink-soft: #d8c39a;
+  --ink-muted: #c9b184;
+  --ink-tan: #c9a87a;
+  --ink-gold-dim: #b39a6a;
+  --ink-label: #8a6f4d;
+  --ink-faint: #9c8154;
+  --ink-dim: #7a6242;
+  --ink-ghost: #6f5a3c;
+  --ink-dot: #5b4426;
+  --ink-timestamp-faded: #5f4a2c;
+  --ink-dark-on-gold: #2a1a08;
+
+  /* §2.5 — parchment tag (the one light chip) */
+  --parchment-bg: #efe0bd;
+  --parchment-border: #b8935a;
+  --parchment-text: #5b3a24;
+
+  /* §2.6 — task states (canonical stateMeta colours) */
+  --state-pending: #c9a87a;
+  --state-running: #5fd08a;
+  --state-awaiting_answer: #ffcf4d;
+  --state-stalled: #7fa8bf;
+  --state-completed: #7fd0ff;
+  --state-failed: #ff7a6b;
+  --state-cancelled: #9a8a72;
+
+  /* §2.8 — alerts & auxiliary */
+  --alert-red-top: #e23b2e;
+  --alert-red-bottom: #9c1c14;
+  --alert-cream: #ffe6a8;
+  --question-parchment: #ffe6c2;
+  --healthy-dot: #5fd08a;
+  --healthy-text: #8fe0a8;
+  --sessions-blue: #7fd0ff;
+
+  /* §2.8 — ember (inbox) plate */
+  --ember-fill: linear-gradient(180deg, #241206, #180d05);
+  --ember-border: #d97e3a;
+  --ember-inner: #8a4a22;
+  /* §2.8 — sea-green (structured report) plate */
+  --report-fill: linear-gradient(180deg, #122019, #0e1a13);
+  --report-border: #3f8f68;
+  --report-inner: #2f6b4e;
+  --report-green: #9fe0bf;
+  --scroll-thumb: #6b4a2c;
+  --scroll-thumb-hover: #8a613a;
+  --scroll-track: rgba(0, 0, 0, 0.25);
+  --badge-bg: rgba(0, 0, 0, 0.3);
+
+  /* §2.9 — typography */
+  --font-display: "Cinzel", "Times New Roman", serif;
+  --font-flavor: "IM Fell English", Georgia, serif;
+  --font-body: "Outfit", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+
+  --track-title: 7px;
+  --track-caps: 2px;
+  --track-subtitle: 6px;
+  --track-micro: 1px;
+
+  /* §2.10 — spacing, radii, borders */
+  --gutter: 12px;
+  --board-inset: 14px;
+  --region-roster: 300px;
+  --region-right: 344px;
+
+  --radius-panel: 11px;
+  --radius-cartouche: 13px;
+  --radius-card: 10px;
+  --radius-inbox: 9px;
+  --radius-well: 8px;
+  --radius-control: 7px;
+  --radius-emblem: 7px;
+  --radius-pill: 999px;
+
+  /* §2.10 — the signature plate chrome recipe (double inset ring) */
+  --plate-fill: linear-gradient(180deg, var(--plate-top), var(--plate-bottom));
+  --plate-shadow: inset 0 0 0 3px #13100a, inset 0 0 0 4px var(--brass-inner),
+    0 8px 22px rgba(0, 0, 0, 0.5);
+  --plate-shadow-premium: inset 0 0 0 3px #120d07, inset 0 0 0 5px var(--brass-frame),
+    0 8px 22px rgba(0, 0, 0, 0.5);
+  --cartouche-shadow: inset 0 0 0 3px #120d07, inset 0 0 0 5px var(--brass-frame),
+    inset 0 0 30px rgba(0, 0, 0, 0.6), 0 10px 30px rgba(0, 0, 0, 0.6);
+
+  /* §2.10 — gold 3D button drop edge */
+  --btn-gold-fill: linear-gradient(180deg, var(--brass-link), var(--brass-deep));
+  --btn-3d: 0 3px 0 var(--brass-shadow), inset 0 1px 1px rgba(255, 255, 255, 0.4);
+
+  /* §2.10 — divider rule */
+  --divider-h: linear-gradient(
+    90deg,
+    transparent,
+    var(--brass-frame) 22%,
+    #e6c05a 50%,
+    var(--brass-frame) 78%,
+    transparent
+  );
+
+  /* interaction — the manifest recommends ~120ms ease on hover/selection */
+  --ease: 120ms ease;
+}
+
+/* §6 — motion. Ambient loops are slow enough to read as atmosphere. */
+@keyframes pc-beacon {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+
+@keyframes pc-sea-move {
+  from {
+    background-position: 0 0, 0 0;
+  }
+  to {
+    background-position: 220px 0, -180px 90px;
+  }
+}
+
+@keyframes pc-spin-rose {
+  from {
+    transform: translate(-50%, -50%) rotate(0deg);
+  }
+  to {
+    transform: translate(-50%, -50%) rotate(360deg);
+  }
+}
+
+/* §"Accessibility" — reduced motion stills every ambient loop; states stay
+   legible as still imagery. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}

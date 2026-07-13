@@ -123,6 +123,8 @@ const CONTENT_TYPES: Record<string, string> = {
   ".jpg": "image/jpeg",
   ".jpeg": "image/jpeg",
   ".ico": "image/x-icon",
+  ".woff": "font/woff",
+  ".woff2": "font/woff2",
   ".webmanifest": "application/manifest+json",
   ".txt": "text/plain; charset=utf-8",
   ".map": "application/json; charset=utf-8",

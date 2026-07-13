@@ -113,6 +113,13 @@ export interface HealthResponse {
   pid: number;
   /** The daemon package version, so a UI can detect a contract mismatch. */
   version: string;
+  /**
+   * ISO-8601 timestamp of when the daemon process started, so a UI can render a
+   * live-ticking uptime without a filesystem read of the discovery record. An
+   * additive field — older clients that only read `status`/`pid`/`version`
+   * ignore it.
+   */
+  started_at: string;
 }
 
 /** `GET /tasks` — every task plus the atomic "start from now" seq baseline. */

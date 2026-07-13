@@ -530,8 +530,15 @@ function createHandler(engine: TaskEngine, uiBundleDir: string | null): http.Req
 
       if (method === "GET" && url.pathname === "/health") {
         // `version` (daemon package version) lets a UI detect a contract
-        // mismatch against the @useparley/core SDK it was built for.
-        sendJson(res, 200, { status: "ok", pid: process.pid, version: DAEMON_VERSION });
+        // mismatch against the @useparley/core SDK it was built for;
+        // `started_at` feeds the cockpit's live uptime readout (#65).
+        const startedAt = new Date(Date.now() - Math.round(process.uptime() * 1000)).toISOString();
+        sendJson(res, 200, {
+          status: "ok",
+          pid: process.pid,
+          version: DAEMON_VERSION,
+          started_at: startedAt,
+        });
         return;
       }
 

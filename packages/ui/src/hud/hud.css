@@ -1,0 +1,228 @@
+/*
+ * Layer 2 — hud composites. They know what a task / daemon is, but take plain
+ * data props: no fetching, no SSE (contract 2). Colours are layer-0 tokens.
+ */
+
+/* ── Title cartouche ───────────────────────────────────────────────────── */
+.pc-cartouche {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 16px 22px;
+  text-align: center;
+}
+.pc-cartouche__title-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.pc-cartouche__flank {
+  color: var(--brass-frame);
+  font-size: 16px;
+  letter-spacing: 4px;
+}
+.pc-cartouche__title {
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: clamp(26px, 3.4vw, 40px);
+  letter-spacing: var(--track-title);
+  color: var(--brass);
+  text-shadow: 0 2px 0 var(--brass-shadow), 0 0 26px rgba(255, 207, 77, 0.25);
+  line-height: 1;
+  margin: 0;
+}
+.pc-cartouche__subtitle {
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-size: 12px;
+  letter-spacing: var(--track-subtitle);
+  color: var(--ink-tan);
+}
+
+/* ── Day / weather chip ────────────────────────────────────────────────── */
+.pc-daychip {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 10px 14px;
+  min-width: 200px;
+}
+.pc-daychip__row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.pc-daychip__day {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 19px;
+  color: var(--brass);
+}
+.pc-daychip__clock {
+  font-family: var(--font-mono);
+  font-size: 19px;
+  color: var(--brass-soft);
+}
+.pc-daychip__weather {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-flavor);
+  font-style: italic;
+  font-size: 11px;
+  color: var(--ink-soft);
+}
+.pc-daychip__wind {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: #8fb0a0;
+}
+
+/* ── Health panel ──────────────────────────────────────────────────────── */
+.pc-health__grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 14px;
+  padding: 2px 0 12px;
+}
+.pc-health__cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.pc-health__label {
+  font-family: var(--font-body);
+  font-size: 9px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--ink-label);
+}
+.pc-health__value {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--brass-soft);
+  overflow-wrap: anywhere;
+}
+.pc-health__wells {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+.pc-health-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--health-chip-color, var(--healthy-dot));
+  background: var(--badge-bg);
+  color: var(--health-chip-color, var(--healthy-text));
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 9.5px;
+  letter-spacing: 0.8px;
+}
+.pc-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--dot-color, var(--healthy-dot));
+  box-shadow: 0 0 8px var(--dot-color, var(--healthy-dot));
+}
+.pc-dot--beacon {
+  animation: pc-beacon 1.8s ease-in-out infinite;
+}
+
+/* ── Roster ────────────────────────────────────────────────────────────── */
+.pc-roster {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.pc-roster__scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 4px 12px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.pc-roster__group-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 2px 2px;
+}
+.pc-state-dot {
+  display: grid;
+  place-items: center;
+  width: 19px;
+  height: 19px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 50% 40%, #1a1209, #0c0904);
+  border: 1px solid var(--dot-color, var(--ink-label));
+  color: var(--dot-color, var(--ink-label));
+  font-size: 10px;
+  flex: 0 0 auto;
+}
+.pc-roster__group-label {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 11px;
+  letter-spacing: var(--track-micro);
+  color: var(--group-color, var(--ink-label));
+}
+.pc-roster__count {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--ink-label);
+}
+.pc-roster__row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 6px 8px;
+  border-radius: var(--radius-well);
+  border: 1px solid transparent;
+}
+.pc-roster__row-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.pc-roster__name {
+  font-family: var(--font-body);
+  font-weight: 500;
+  font-size: 12.5px;
+  color: var(--ink-parchment);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pc-roster__meta {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--ink-faint);
+}
+.pc-roster__empty {
+  padding: 20px 14px;
+  text-align: center;
+  font-family: var(--font-flavor);
+  font-style: italic;
+  font-size: 13px;
+  color: var(--ink-ghost);
+}
+.pc-roster__footer {
+  display: flex;
+  gap: 12px;
+  padding: 10px 14px;
+  border-top: 1px solid var(--line-faint);
+  background: var(--plate-footer);
+}
+.pc-roster__footer > * {
+  flex: 1;
+}

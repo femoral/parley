@@ -1,0 +1,242 @@
+/*
+ * Layer 1 — primitives. Dumb, styled, zero domain knowledge. Every colour comes
+ * from a layer-0 token (contract 1). Selectors stay flat (one class each) so
+ * variant/element rules never cancel each other on specificity.
+ */
+
+/* ── Plate ─────────────────────────────────────────────────────────────── */
+.pc-plate {
+  position: relative;
+  border-radius: var(--radius-panel);
+  border: 1px solid var(--brass-border);
+  background: var(--plate-fill);
+  box-shadow: var(--plate-shadow);
+  overflow: hidden;
+  color: var(--ink-parchment);
+}
+.pc-plate--premium {
+  border-color: var(--brass-mid);
+  border-radius: var(--radius-cartouche);
+  box-shadow: var(--plate-shadow-premium);
+}
+.pc-plate--cartouche {
+  border-color: var(--brass-mid);
+  border-radius: var(--radius-cartouche);
+  box-shadow: var(--cartouche-shadow);
+}
+.pc-plate--ember {
+  border-color: var(--ember-border);
+  background: var(--ember-fill);
+  box-shadow: inset 0 0 0 3px #13100a, inset 0 0 0 4px var(--ember-inner),
+    0 8px 22px rgba(0, 0, 0, 0.5);
+}
+.pc-plate--report {
+  border-color: var(--report-border);
+  background: var(--report-fill);
+  box-shadow: inset 0 0 0 3px #0a1611, inset 0 0 0 4px var(--report-inner),
+    0 8px 22px rgba(0, 0, 0, 0.5);
+}
+.pc-plate__body {
+  padding: 12px 14px;
+}
+
+/* ── Corner flourishes (premium/cartouche ornament) ────────────────────── */
+.pc-flourish {
+  position: absolute;
+  width: 30px;
+  height: 30px;
+  pointer-events: none;
+  color: var(--brass-mid);
+}
+.pc-flourish--tl {
+  top: 6px;
+  left: 6px;
+}
+.pc-flourish--tr {
+  top: 6px;
+  right: 6px;
+  transform: scaleX(-1);
+}
+.pc-flourish--bl {
+  bottom: 6px;
+  left: 6px;
+  transform: scaleY(-1);
+}
+.pc-flourish--br {
+  bottom: 6px;
+  right: 6px;
+  transform: scale(-1, -1);
+}
+
+/* ── Plate header ──────────────────────────────────────────────────────── */
+.pc-plate-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 15px 8px;
+}
+.pc-plate-header__icon {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--radius-emblem);
+  background: radial-gradient(120% 120% at 30% 20%, var(--brass-soft), var(--brass-deep));
+  color: var(--ink-dark-on-gold);
+  font-size: 14px;
+  flex: 0 0 auto;
+  box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.3);
+}
+.pc-plate-header__icon--dark {
+  background: radial-gradient(120% 120% at 30% 20%, #3a2c18, #1a1209);
+  color: var(--brass-soft);
+}
+.pc-plate-header__titles {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.pc-plate-header__title {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: var(--track-caps);
+  color: var(--brass);
+  line-height: 1.15;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pc-plate-header__subtitle {
+  font-family: var(--font-flavor);
+  font-style: italic;
+  font-size: 11px;
+  color: var(--ink-ghost);
+  line-height: 1.2;
+}
+.pc-plate-header__aside {
+  margin-left: auto;
+  flex: 0 0 auto;
+}
+
+/* ── Divider ───────────────────────────────────────────────────────────── */
+.pc-divider {
+  height: 2px;
+  border: 0;
+  margin: 0;
+  background: var(--divider-h);
+}
+
+/* ── Badge ─────────────────────────────────────────────────────────────── */
+.pc-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--badge-color, var(--ink-label));
+  background: var(--badge-bg);
+  color: var(--badge-color, var(--ink-label));
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 9.5px;
+  letter-spacing: 0.6px;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+.pc-badge__glyph {
+  font-size: 10px;
+}
+
+/* ── Emblem (faction chip) ─────────────────────────────────────────────── */
+.pc-emblem {
+  display: grid;
+  place-items: center;
+  width: var(--emblem-size, 23px);
+  height: var(--emblem-size, 23px);
+  border-radius: var(--radius-emblem);
+  background: var(--coat, var(--brass-frame));
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.3);
+  color: #fff;
+  font-size: calc(var(--emblem-size, 23px) * 0.55);
+  flex: 0 0 auto;
+  line-height: 1;
+}
+
+/* ── Buttons ───────────────────────────────────────────────────────────── */
+.pc-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border-radius: var(--radius-control);
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 11px;
+  letter-spacing: var(--track-micro);
+  cursor: pointer;
+  transition: background var(--ease), border-color var(--ease), color var(--ease);
+}
+.pc-btn:focus-visible {
+  outline: 2px solid var(--brass-bright);
+  outline-offset: 2px;
+}
+.pc-btn--primary {
+  border: 1px solid var(--brass);
+  background: var(--btn-gold-fill);
+  color: var(--ink-dark-on-gold);
+  box-shadow: var(--btn-3d);
+}
+.pc-btn--primary:hover {
+  background: linear-gradient(180deg, var(--brass-bright), var(--brass-deep));
+}
+.pc-btn--secondary {
+  border: 1px solid #7a5c2e;
+  background: #241812;
+  color: var(--brass-soft);
+}
+.pc-btn--secondary:hover {
+  border-color: var(--brass);
+  background: #33240f;
+}
+.pc-btn--tertiary {
+  border: 1px solid #3a2c18;
+  background: transparent;
+  color: var(--ink-faint);
+}
+.pc-btn--tertiary:hover {
+  border-color: var(--brass-frame);
+  color: var(--brass-soft);
+}
+
+/* ── Stat readout ──────────────────────────────────────────────────────── */
+.pc-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.pc-stat__value {
+  font-family: var(--font-mono);
+  font-weight: 500;
+  font-size: 19px;
+  line-height: 1;
+  color: var(--stat-color, var(--brass-soft));
+}
+.pc-stat__label {
+  font-family: var(--font-body);
+  font-size: 9px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--ink-label);
+}
+
+/* ── Well (inset content box) ──────────────────────────────────────────── */
+.pc-well {
+  background: var(--plate-footer);
+  border: 1px solid var(--line-faint);
+  border-radius: var(--radius-well);
+  padding: 8px 10px;
+}

@@ -1,0 +1,55 @@
+import { useEffect, useMemo, useState } from "react";
+import { ParleyClient } from "@useparley/core";
+import type { HealthView } from "../../hud/types.js";
+import { formatClock, formatUptime } from "./format.js";
+import { useHealth } from "./useHealth.js";
+import { useSnapshot, type SnapshotView } from "./useSnapshot.js";
+
+export interface CockpitView {
+  health: HealthView;
+  snapshot: SnapshotView;
+  /** Wall-clock `HH:MM` for the day chip. */
+  clock: string;
+  /** Days the cove has been open (flavour: real elapsed days, min 1). */
+  day: number;
+}
+
+/**
+ * Layer 4 (app) — the single hook the cockpit shell reads. Owns the same-origin
+ * `ParleyClient` and the one-second tick, composes `useHealth` + `useSnapshot`,
+ * and projects everything (including browser-origin host/port and derived
+ * uptime) into the plain view objects hud renders. Keeping all `@useparley/core`
+ * use behind hooks means Cockpit and every layer below take plain props
+ * (component-system spec contract 4).
+ */
+export function useCockpit(): CockpitView {
+  const client = useMemo(() => new ParleyClient({ baseUrl: "" }), []);
+  const health = useHealth(client);
+  const snapshot = useSnapshot(client);
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  const origin = typeof window !== "undefined" ? window.location : undefined;
+  const healthView: HealthView = {
+    online: health.online,
+    version: health.version,
+    pid: health.pid,
+    host: origin?.hostname || "127.0.0.1",
+    port: origin?.port || "—",
+    uptime: health.startedAt !== null ? formatUptime(now - health.startedAt) : "",
+    activeAgents: snapshot.activeTasks,
+    totalTasks: snapshot.totalTasks,
+    durableSessions: snapshot.durableSessions,
+  };
+
+  const day =
+    health.startedAt !== null
+      ? Math.max(1, Math.floor((now - health.startedAt) / 86_400_000) + 1)
+      : 1;
+
+  return { health: healthView, snapshot, clock: formatClock(new Date(now)), day };
+}

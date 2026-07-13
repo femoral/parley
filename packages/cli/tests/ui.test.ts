@@ -19,9 +19,10 @@ afterEach(() => {
   }
 });
 
-/** The real `@useparley/ui` package directory — its placeholder `www/` bundle
+/** The real `@useparley/ui` package directory — its Vite-built `www/` bundle
  * proves the discovery + serving path end-to-end against the actual package,
- * not a synthetic fixture (#64 acceptance criterion). */
+ * not a synthetic fixture (#64/#65 acceptance criterion). The bundle is built on
+ * demand by the vitest global setup when missing. */
 const REAL_UI_PACKAGE_DIR = fileURLToPath(new URL("../../ui", import.meta.url));
 
 function scratchDir(): string {
@@ -100,19 +101,24 @@ describe("UI bundle serving and discovery (#64)", () => {
     expect(root.status).toBe(200);
     expect(root.headers.get("content-type")).toMatch(/text\/html/);
     const rootBody = await root.text();
-    expect(rootBody).toContain("parley UI placeholder");
+    // The real Parley Cove cockpit shell (#65), not a placeholder.
+    expect(rootBody).toContain("Parley Cove");
 
     // SPA fallback: an unknown client-side route still resolves to index.html.
     const spaRoute = await fetch(`${base}/some/deep/route/abc123`);
     expect(spaRoute.status).toBe(200);
     expect(await spaRoute.text()).toBe(rootBody);
 
-    // A real bundle asset is served (not just the fallback), with a sane
-    // content type.
-    const asset = await fetch(`${base}/assets/app.js`);
+    // A real (hashed) bundle asset referenced by index.html is served — not just
+    // the SPA fallback — with a sane content type. Discover its URL from the
+    // built HTML so the assertion doesn't hard-code a content hash.
+    const scriptSrc = /<script[^>]+src="([^"]+\.js)"/.exec(rootBody)?.[1];
+    expect(scriptSrc).toBeTruthy();
+    const asset = await fetch(`${base}${scriptSrc}`);
     expect(asset.status).toBe(200);
     expect(asset.headers.get("content-type")).toMatch(/javascript/);
-    expect(await asset.text()).toContain("Placeholder asset");
+    // The served asset is the JS bundle, not the HTML fallback.
+    expect(await asset.text()).not.toContain("<!doctype html>");
 
     // API routes are never shadowed by the SPA fallback.
     const health = await fetch(`${base}/health`);
