@@ -142,6 +142,27 @@ export interface CleanResponse {
 }
 
 /**
+ * `GET /tasks/:ref/logs?since=<offset>` — a tail chunk of the task's raw vendor
+ * log (spec §"New: per-task logs"). `next` is the offset cursor for the
+ * follow-up call — passing it back as `since` never duplicates or drops bytes.
+ * `eof` is true once the task has reached a genuinely final state
+ * (`completed`, `failed`, `cancelled`) and its vendor process has actually
+ * exited, so this response's `chunk` is the log's final tail. `stalled` is
+ * deliberately excluded — it's resumable (`parley answer` can revive it and
+ * append more to the same log) — and so is a `completed` row whose child
+ * hasn't fully exited yet (a report can settle the task over MCP slightly
+ * before the child's stdout closes). While not there yet, `eof` is false even
+ * when `chunk` is empty (caught up for now, but more may still land) — a UI
+ * tailing a task keeps polling (or re-fetches on SSE transitions) until `eof`
+ * flips.
+ */
+export interface TaskLogResponse {
+  chunk: string;
+  next: number;
+  eof: boolean;
+}
+
+/**
  * One decoded SSE message from `GET /events/stream`: the transition seq (the
  * SSE `id`), the watch event name, and the envelope pinned to that transition.
  */

@@ -1,4 +1,3 @@
-import fs from "node:fs";
 import path from "node:path";
 import { parseArgs } from "../args.js";
 import { DaemonRequestError, daemonGet, ensureDaemon } from "../client.js";
@@ -6,6 +5,7 @@ import type { CliContext } from "../context.js";
 import { UsageError } from "../errors.js";
 import { sleep } from "@useparley/core";
 import { TERMINAL_STATES, type TaskRow } from "@useparley/daemon/db.js";
+import { readLogTail } from "@useparley/daemon/logtail.js";
 import type { Envelope } from "@useparley/daemon/report.js";
 
 const FOLLOW_POLL_MS = 100;
@@ -122,24 +122,18 @@ class Coalescer {
   }
 }
 
-/** Read any bytes appended to `file` since `offset`, handing them to `onBytes`. */
+/**
+ * Read any bytes appended to `file` since `offset`, handing them to `onBytes`.
+ * Thin wrapper over the shared `readLogTail` (also used by the daemon's
+ * `GET /tasks/:ref/logs` route) — the CLI reads the file straight off disk
+ * (same machine, no need to round-trip through HTTP) but shares the same
+ * offset-read implementation so the two never drift on edge cases (missing
+ * file, a cursor past the current length).
+ */
 function drain(file: string, offset: number, onBytes: (bytes: string) => void): number {
-  let stat: fs.Stats;
-  try {
-    stat = fs.statSync(file);
-  } catch {
-    return offset; // log not created yet
-  }
-  if (stat.size <= offset) return offset;
-  const fd = fs.openSync(file, "r");
-  try {
-    const buffer = Buffer.alloc(stat.size - offset);
-    const read = fs.readSync(fd, buffer, 0, buffer.length, offset);
-    onBytes(buffer.toString("utf8", 0, read));
-    return offset + read;
-  } finally {
-    fs.closeSync(fd);
-  }
+  const { bytes, next } = readLogTail(file, offset);
+  if (bytes.length > 0) onBytes(bytes);
+  return next;
 }
 
 /**

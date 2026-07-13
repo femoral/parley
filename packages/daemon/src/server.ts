@@ -1,10 +1,12 @@
 import http from "node:http";
+import path from "node:path";
 import type { HomePaths } from "@useparley/core";
 import { createAdapterRegistry } from "./adapters/index.js";
-import { openDatabase, sweepInterruptedTasks } from "./db.js";
+import { openDatabase, SETTLED_STATES, sweepInterruptedTasks, TERMINAL_STATES } from "./db.js";
 import { DEFAULT_NETWORK, DEFAULT_SANDBOX, isSandboxMode } from "./adapters/types.js";
 import type { ContextFile } from "./context.js";
 import { DelegateError, TaskEngine } from "./engine.js";
+import { readLogTail } from "./logtail.js";
 import { handleMcpRequest } from "./mcp.js";
 import { buildEnvelope } from "./report.js";
 import { DAEMON_VERSION } from "./version.js";
@@ -218,13 +220,49 @@ async function handleEvents(
 }
 
 /**
+ * `GET /tasks/:ref/logs?since=<offset>` — a tail chunk of the task's raw vendor
+ * log (spec §"New: per-task logs"). Offset-cursor contract: `{ chunk, next,
+ * eof }`, where `next` is the byte offset the follow-up call passes back as
+ * `since`. `eof` is true only once the task is in one of `db.js`'s
+ * `TERMINAL_STATES` (`completed`/`failed`/`cancelled`) *and* its child has
+ * actually exited — `stalled` is deliberately excluded (a `parley answer`
+ * resume can append more to the same file later), and a `completed` row with
+ * a still-open child (the MCP `submit_report` call settles before the child's
+ * stdout closes) must not report final either. While not there yet, `eof` is
+ * false even with an empty `chunk`, so a UI keeps polling. An unknown task ref
+ * is a client error (404), matching the other `/tasks/:ref/*` routes.
+ */
+function handleLogs(
+  engine: TaskEngine,
+  res: http.ServerResponse,
+  ref: string,
+  params: URLSearchParams,
+): void {
+  const task = engine.resolve(ref);
+  if (!task) {
+    sendJson(res, 404, { error: `no such task: ${ref}` });
+    return;
+  }
+  const sinceRaw = params.get("since");
+  const since = sinceRaw !== null ? Number(sinceRaw) : 0;
+  if (!Number.isInteger(since) || since < 0) {
+    sendJson(res, 400, { error: "since must be a non-negative integer" });
+    return;
+  }
+  const eof = TERMINAL_STATES.has(task.state) && !engine.hasLiveChild(task.id);
+  const logPath = path.join(engine.logDir(task.id), "vendor.jsonl");
+  const { bytes: chunk, next } = readLogTail(logPath, since);
+  sendJson(res, 200, { chunk, next, eof });
+}
+
+/**
  * Map a task state to its CLI event name (spec §3), or null when the state is
  * not itself an event (the poll window elapsed while the task is still live —
  * the caller re-polls).
  */
 function eventFor(state: string): string | null {
   if (state === "awaiting_answer") return "task.question";
-  if (["completed", "failed", "cancelled", "stalled"].includes(state)) {
+  if (SETTLED_STATES.has(state)) {
     return `task.${state}`;
   }
   return null;
@@ -529,6 +567,10 @@ function createHandler(engine: TaskEngine): http.RequestListener {
         }
         if (method === "GET" && segments.length === 3 && segments[2] === "events") {
           await handleEvents(engine, res, ref, url.searchParams.get("wait") === "true");
+          return;
+        }
+        if (method === "GET" && segments.length === 3 && segments[2] === "logs") {
+          handleLogs(engine, res, ref, url.searchParams);
           return;
         }
         if (method === "POST" && segments.length === 3 && segments[2] === "answer") {

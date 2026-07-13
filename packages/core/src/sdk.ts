@@ -13,6 +13,7 @@ import type {
   TaskAck,
   TaskDetailResponse,
   TaskEnvelope,
+  TaskLogResponse,
   TasksResponse,
 } from "./contract.js";
 import { TASK_EVENT_NAMES } from "./states.js";
@@ -109,6 +110,17 @@ export class ParleyClient {
   /** `POST /clean` — remove one terminal task's worktree, or all terminal ones. */
   clean(body: { task: string } | { all_terminal: true }): Promise<CleanResponse> {
     return this.post<CleanResponse>("/clean", body);
+  }
+
+  /**
+   * `GET /tasks/:ref/logs?since=<offset>` — a tail chunk of a task's raw vendor
+   * log. Pass the prior response's `next` back as `since` to resume without
+   * duplicating or dropping bytes; omit `since` to start from the beginning.
+   */
+  logs(ref: string, since = 0): Promise<TaskLogResponse> {
+    return this.request<TaskLogResponse>(
+      `/tasks/${encodeURIComponent(ref)}/logs?since=${encodeURIComponent(String(since))}`,
+    );
   }
 }
 

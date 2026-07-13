@@ -214,6 +214,17 @@ export class TaskEngine {
   }
 
   /**
+   * Whether a vendor child is still live for this task. A task's row can flip
+   * to `completed` (via `submitReport`) while its child keeps running and
+   * still writing to `vendor.jsonl` — the MCP call settles before the child's
+   * stdout closes — so this is the authoritative "no more log bytes can land"
+   * signal, not the row state alone (see `handleLogs`'s `eof` computation).
+   */
+  hasLiveChild(taskId: string): boolean {
+    return this.children.has(taskId);
+  }
+
+  /**
    * Create a task (pending) and kick off its background run. Returns the row
    * immediately — `--wait` callers long-poll `/tasks/:id/events` afterwards.
    */
