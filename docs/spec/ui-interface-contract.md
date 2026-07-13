@@ -1,0 +1,96 @@
+# UI interface contract
+
+Decided on wayfinder map #47 (ticket #51). Defines what a UI — `@useparley/ui`
+or any custom one — builds against, and how the daemon hosts it. Companion to
+`docs/spec/monorepo-layout.md`.
+
+## Shape of the contract
+
+Two layers, no JS plugin interface — third-party code never executes inside the
+daemon process:
+
+1. **Data contract** — the daemon's documented HTTP + SSE API, plus the typed
+   client and state types exported from `@useparley/core`. A UI is any web app
+   that consumes this API.
+2. **Serving convention** — a UI package ships a static bundle the daemon
+   serves. Implementing the convention is all it takes to be installable.
+
+## Data contract
+
+### Existing surface (unchanged, now public contract)
+
+- `GET /health` — `{ status, pid }`.
+- `GET /tasks` — `{ tasks, seq }`; `seq` is the atomic "start from now" baseline.
+- `GET /tasks/:ref` — task envelope + row.
+- `GET /tasks/events?ids=…&since=<seq>&wait=true` — seq-based long-poll
+  (stays; the CLI keeps using it).
+- `POST /tasks`, `POST /tasks/:ref/answer`, `POST /tasks/:ref/eval`,
+  `POST /tasks/:ref/cancel`, `POST /clean` — writes a UI may issue.
+
+### New: SSE event stream
+
+- `GET /events/stream` — Server-Sent Events over the same transition feed the
+  long-poll reads. Browser-native `EventSource`, auto-reconnect.
+- Each SSE message: `id:` = transition `seq`, `event:` = the existing watch
+  event names (`task.started`, `task.question`, `task.completed`, `task.failed`,
+  `task.cancelled`, `task.stalled`, `task.pending`), `data:` = the task envelope
+  pinned to the transition (same pinning rule as the long-poll).
+- Reconnect: `Last-Event-ID` header maps to `since` — missed transitions replay
+  in order. Bootstrap: `GET /tasks` for the snapshot, then connect the stream
+  from the returned `seq`.
+- No `ids` filter in v1 — the stream carries all tasks; UIs filter client-side
+  (single-user localhost, volume is small).
+
+### New: per-task logs
+
+- `GET /tasks/:ref/logs?since=<offset>` — reads the task's log dir; returns
+  `{ chunk, next, eof }` where `next` is the offset for the follow-up call.
+  Tail-friendly: UIs poll on a short interval while a task is `running`, or
+  re-fetch on SSE transitions. Exact chunking/framing is an execution detail;
+  the offset-cursor shape is the contract.
+- Report and question/answer history already ride the task envelope — no new
+  endpoints.
+
+### `@useparley/core` exports (the SDK)
+
+- Task/state/envelope types and the state machine constants (attention
+  hierarchy order included — UIs shouldn't re-derive it).
+- The HTTP client (typed wrappers for the routes above).
+- SSE helper (wraps `EventSource` wiring + snapshot/seq bootstrap).
+- Discovery-file reader — how a same-machine process finds the daemon's
+  ephemeral port. Browser UIs don't need it (they're served by the daemon —
+  same origin); it exists for custom native/TUI frontends.
+
+### Stability
+
+The routes and envelope fields above are the versioned surface: breaking
+changes bump `@useparley/core` major. `GET /health` gains a `version` field
+(daemon package version) so UIs can detect mismatch.
+
+## Serving convention
+
+- **Package marker**: the UI package's `package.json` declares
+  `"parley": { "ui": "<dir>" }` — the directory (relative to the package root)
+  holding the built static bundle, `index.html` at its root.
+- **Discovery order** (first hit wins):
+  1. Explicit path in parley home config (`ui.path`) — serve that dir directly.
+  2. Package name in config (`ui.package`) — resolved via `createRequire` from
+     the parley home dir, then from the daemon package itself.
+  3. Default: `@useparley/ui`, same resolution.
+  Nothing found → no UI routes; daemon behavior unchanged.
+- **Routes**: API paths (`/tasks`, `/events`, `/health`, `/clean`, `/mcp`) are
+  reserved; everything else serves the bundle with SPA fallback to
+  `index.html`. UI lives at `/` on the daemon's port — same origin as the API,
+  no CORS needed.
+- **Security posture**: unchanged — daemon binds `127.0.0.1`, single-user, no
+  auth chrome (ADR-0006 posture; the brief's "no multi-tenant" guardrail).
+- A custom UI is therefore: any package with a static bundle + the
+  `parley.ui` marker, set as `ui.package` in config. It talks to the same API
+  from the same origin.
+
+## Out of scope here
+
+- Panel/feature composition of the first-party UI — ticket #52.
+- Component system — ticket #53.
+- How the bundle is built (Vite specifics) — first-party UI concern, not
+  contract.
