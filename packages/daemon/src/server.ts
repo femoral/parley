@@ -7,6 +7,7 @@ import type { ContextFile } from "./context.js";
 import { DelegateError, TaskEngine } from "./engine.js";
 import { handleMcpRequest } from "./mcp.js";
 import { buildEnvelope } from "./report.js";
+import { DAEMON_VERSION } from "./version.js";
 
 export interface DaemonServer {
   /** The port the server is listening on. */
@@ -300,6 +301,100 @@ async function handleWatchEvents(
   sendJson(res, 200, { event: watchEventFor(transition.state), seq: transition.seq, task });
 }
 
+/**
+ * Serialize one transition as an SSE message (spec §"New: SSE event stream"):
+ * `id:` is the transition seq (the `Last-Event-ID` a reconnect resumes from),
+ * `event:` is the watch event name, `data:` is the task envelope pinned to the
+ * transition — same pinning rule as the long-poll, so a superseded non-terminal
+ * transition still reports the state/seq it fired at. Returns null when the
+ * transition's row has vanished (never expected in practice).
+ */
+function sseMessageFor(engine: TaskEngine, transition: { seq: number; task_id: string; state: string }): string | null {
+  const row = engine.get(transition.task_id);
+  if (!row) return null;
+  const task = buildEnvelope(row, engine.logDir(row.id));
+  task.state = transition.state;
+  task.seq = transition.seq;
+  const data = JSON.stringify(task);
+  return `id: ${transition.seq}\nevent: ${watchEventFor(transition.state)}\ndata: ${data}\n\n`;
+}
+
+/**
+ * `GET /events/stream` — Server-Sent Events over the same transition feed the
+ * long-poll reads (spec §"New: SSE event stream"). Streams every task's
+ * transitions live; a browser's native `EventSource` consumes it and
+ * auto-reconnects. Resume point: the `Last-Event-ID` header (sent automatically
+ * on reconnect) or a `since` query param (the bootstrap seq from `GET /tasks`),
+ * header winning; absent, the stream starts from the current seq (future
+ * transitions only). Everything after that seq replays in order, nothing before.
+ */
+async function handleEventStream(
+  engine: TaskEngine,
+  req: http.IncomingMessage,
+  res: http.ServerResponse,
+  params: URLSearchParams,
+): Promise<void> {
+  // Reconnect resumes from Last-Event-ID; a fresh bootstrap passes `?since=`.
+  const lastEventId = typeof req.headers["last-event-id"] === "string" ? req.headers["last-event-id"] : null;
+  // An empty header/param is "no resume point" (a proxy may forward an empty
+  // Last-Event-ID) — not seq 0, which would replay the whole log. Fall through
+  // to the current seq (future transitions only), the "start from now" default.
+  const resumeRaw = (lastEventId ?? params.get("since") ?? "").trim();
+  let since = resumeRaw !== "" ? Number(resumeRaw) : engine.currentSeq();
+  if (!Number.isFinite(since) || since < 0) {
+    sendJson(res, 400, { error: "Last-Event-ID / since must be a non-negative number" });
+    return;
+  }
+
+  res.writeHead(200, {
+    "content-type": "text/event-stream",
+    "cache-control": "no-cache, no-transform",
+    connection: "keep-alive",
+    // No proxy sits in front of a localhost daemon, but be explicit for any that does.
+    "x-accel-buffering": "no",
+  });
+  // An opening comment flushes headers so the client's `open` fires promptly.
+  res.write(": connected\n\n");
+
+  let open = true;
+  const stop = (): void => {
+    open = false;
+  };
+  res.on("close", stop);
+
+  // Drain everything already recorded after `since`, then block for the next —
+  // repeating until the client disconnects. Each delivered seq advances `since`
+  // so a reconnect (or the next block) never replays it.
+  while (open) {
+    const transition = engine.peekAnyEvent(since);
+    if (transition) {
+      since = transition.seq;
+      const message = sseMessageFor(engine, transition);
+      if (message !== null && !res.write(message)) {
+        // Backpressure: wait for the socket to drain before queuing more — but
+        // resolve on `close` too, or a client that disconnects mid-write leaves
+        // this await pending forever ('drain' never fires on a dead socket).
+        await new Promise<void>((resolve) => {
+          const done = (): void => {
+            res.off("drain", done);
+            res.off("close", done);
+            resolve();
+          };
+          res.once("drain", done);
+          res.once("close", done);
+        });
+      }
+      continue;
+    }
+    const next = await engine.waitForAnyEvent(since, LONG_POLL_WINDOW_MS);
+    if (!open) break;
+    // On timeout (`next === null`) the loop re-blocks, keeping the stream open;
+    // otherwise the next peek picks the transition up and delivers it in order.
+    if (next === null) res.write(": keep-alive\n\n");
+  }
+  res.end();
+}
+
 /** `POST /tasks/:ref/answer` — deliver an answer to a task's pending question. */
 function handleAnswer(
   engine: TaskEngine,
@@ -392,7 +487,14 @@ function createHandler(engine: TaskEngine): http.RequestListener {
       }
 
       if (method === "GET" && url.pathname === "/health") {
-        sendJson(res, 200, { status: "ok", pid: process.pid });
+        // `version` (daemon package version) lets a UI detect a contract
+        // mismatch against the @useparley/core SDK it was built for.
+        sendJson(res, 200, { status: "ok", pid: process.pid, version: DAEMON_VERSION });
+        return;
+      }
+
+      if (method === "GET" && url.pathname === "/events/stream") {
+        await handleEventStream(engine, req, res, url.searchParams);
         return;
       }
 

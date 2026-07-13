@@ -1,4 +1,5 @@
 import Ajv, { type ValidateFunction } from "ajv";
+import type { TaskEnvelope, TaskRow as WireTaskRow } from "@useparley/core";
 import type { TaskRow } from "./db.js";
 import type { Posture } from "./adapters/types.js";
 import { readEvalExpected } from "./context.js";
@@ -171,6 +172,18 @@ export interface Envelope {
   /** Whether the task's repo declares delegations into it are eval'd (#45). */
   eval_expected: boolean;
 }
+
+/**
+ * Compile-time guard that the daemon keeps producing values assignable to the
+ * public wire contract in `@useparley/core` (the SDK UIs consume). If a field
+ * is renamed, dropped, or retyped incompatibly on either side, one of these
+ * assignments stops compiling — the drift is caught here, not in a UI.
+ */
+type Assignable<From, To> = From extends To ? true : never;
+const _envelopeMatchesContract: Assignable<Envelope, TaskEnvelope> = true;
+const _rowMatchesContract: Assignable<TaskRow, WireTaskRow> = true;
+void _envelopeMatchesContract;
+void _rowMatchesContract;
 
 /** Parse a nullable JSON text column; malformed content reads as null. */
 export function parseJsonColumn<T>(value: string | null): T | null {

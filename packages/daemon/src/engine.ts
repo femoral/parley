@@ -714,20 +714,28 @@ export class TaskEngine {
   }
 
   /**
-   * Multi-task long-poll (#34, spec §3): resolve with the earliest transition of
-   * any watched task after `since` — replaying immediately if one already
-   * happened, else blocking until the next transition — or null when the poll
-   * window elapses (the CLI re-polls). Distinct from the per-task `waitForEvent`
-   * it generalizes; `watch` threads the returned `seq` back as `since` to stream
-   * the next.
+   * The earliest recorded transition of *any* task with `seq > since`, or null
+   * if none has happened yet. The unfiltered counterpart of `peekEvent` — the
+   * non-blocking core of the SSE transition stream (`GET /events/stream`), which
+   * carries all tasks (no `ids` filter in v1, spec §"New: SSE event stream").
    */
-  async waitForEvents(
-    ids: readonly string[],
-    since: number,
+  peekAnyEvent(since: number): Transition | null {
+    return this.transitions.find((t) => t.seq > since) ?? null;
+  }
+
+  /**
+   * Block until `peek` finds a transition after the caller's `since`, replaying
+   * immediately if one already happened, else parking on `eventWaiters` until
+   * the next transition — or resolving null when `timeoutMs` elapses (the caller
+   * re-polls / the SSE loop re-blocks). Shared by the multi-task long-poll and
+   * the SSE stream; both re-peek after every wake to advance their `since`.
+   */
+  private async waitForTransition(
+    peek: () => Transition | null,
     timeoutMs: number,
   ): Promise<Transition | null> {
     for (;;) {
-      const found = this.peekEvent(ids, since);
+      const found = peek();
       if (found) return found;
       const woke = await new Promise<boolean>((resolve) => {
         const wake = (): void => {
@@ -743,6 +751,31 @@ export class TaskEngine {
       });
       if (!woke) return null; // poll window elapsed, no matching transition yet
     }
+  }
+
+  /**
+   * Multi-task long-poll (#34, spec §3): resolve with the earliest transition of
+   * any watched task after `since` — replaying immediately if one already
+   * happened, else blocking until the next transition — or null when the poll
+   * window elapses (the CLI re-polls). Distinct from the per-task `waitForEvent`
+   * it generalizes; `watch` threads the returned `seq` back as `since` to stream
+   * the next.
+   */
+  async waitForEvents(
+    ids: readonly string[],
+    since: number,
+    timeoutMs: number,
+  ): Promise<Transition | null> {
+    return this.waitForTransition(() => this.peekEvent(ids, since), timeoutMs);
+  }
+
+  /**
+   * The unfiltered counterpart of `waitForEvents` for the SSE stream: block for
+   * the next transition of any task after `since`, or null when the window
+   * elapses (the SSE loop re-blocks to keep the connection open).
+   */
+  async waitForAnyEvent(since: number, timeoutMs: number): Promise<Transition | null> {
+    return this.waitForTransition(() => this.peekAnyEvent(since), timeoutMs);
   }
 
   /**
