@@ -64,6 +64,18 @@ describe("Inspector header (#68)", () => {
   });
 });
 
+describe("Inspector's corner flourishes follow the settings bar's Ornaments toggle (#70)", () => {
+  it("omits flourishes by default", () => {
+    const { container } = render(<Inspector task={task()} />);
+    expect(container.querySelector(".pc-flourish")).toBeNull();
+  });
+
+  it("draws all four corner flourishes when ornaments is on", () => {
+    const { container } = render(<Inspector task={task()} ornaments />);
+    expect(container.querySelectorAll(".pc-flourish")).toHaveLength(4);
+  });
+});
+
 describe("Inspector's four tabs render per the manifest's inspector treatment (#68)", () => {
   it("opens on the Brief tab by default, showing goal/branch/model/usage", () => {
     render(<Inspector task={task()} />);

@@ -6,7 +6,9 @@ name: Release
 # package in lockstep, runs the full gate (build/test/typecheck/lint),
 # publishes public packages to npm via trusted publishing (OIDC) with
 # provenance, commits the bump, tags, and creates the GitHub release.
-# @useparley/ui stays private and is skipped by `pnpm -r publish`.
+# @useparley/ui publishes alongside core/daemon/cli as of ticket #70 — it has
+# no `private: true` left to skip it, so `pnpm -r publish` includes it like
+# every other workspace package.
 on:
   workflow_dispatch:
     inputs:

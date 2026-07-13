@@ -75,3 +75,27 @@ export function stateMetaFor(state: string): StateMeta {
   }
   return { label: state.toUpperCase(), glyph: "•", hint: "", colorVar: "var(--ink-tan)" };
 }
+
+/**
+ * The attention hierarchy's display order, mirroring `@useparley/core`'s
+ * `ATTENTION_ORDER` (design-manifest §5). A literal, not an import: this
+ * tokens-layer file must stay free of the core dependency (component-system
+ * spec contract 4 — only the hooks layer imports `@useparley/core`), and the
+ * roster/inbox/scene already get their *functional* grouping order from core
+ * via the hooks layer (contract 6) — this constant only feeds the kit band's
+ * static legend (#70), which lists every state, always, and has nothing to
+ * fetch. `tests/reduced-motion.test.ts`'s sibling,
+ * `tests/state-legend-order.test.ts`, asserts this literal stays equal to
+ * core's real `ATTENTION_ORDER` — a test may import core freely, so drift
+ * (a reordered/renamed/added state) fails loudly there instead of silently
+ * stale-ing this legend.
+ */
+export const ATTENTION_DISPLAY_ORDER: readonly StateKey[] = [
+  "awaiting_answer",
+  "stalled",
+  "running",
+  "pending",
+  "completed",
+  "failed",
+  "cancelled",
+];

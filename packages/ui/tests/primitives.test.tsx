@@ -1,7 +1,7 @@
 /** @vitest-environment happy-dom */
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
-import { Badge, Button, Emblem, Plate, Stat } from "../src/primitives/index.js";
+import { Badge, Button, Divider, Emblem, Plate, Stat } from "../src/primitives/index.js";
 
 afterEach(cleanup);
 
@@ -54,5 +54,20 @@ describe("primitives render per manifest with plain props", () => {
     render(<Stat value="7" label="Total tasks" color="var(--brass)" />);
     expect(screen.getByText("7")).toBeTruthy();
     expect(screen.getByText("Total tasks")).toBeTruthy();
+  });
+
+  it("Divider renders the horizontal rule by default", () => {
+    const { container } = render(<Divider />);
+    const hr = container.querySelector("hr.pc-divider");
+    expect(hr).toBeTruthy();
+    expect(hr!.className).not.toContain("pc-divider--v");
+  });
+
+  it("Divider's vertical variant (kit band column separators, #70) is a decorative div, not an hr", () => {
+    const { container } = render(<Divider vertical />);
+    expect(container.querySelector("hr")).toBeNull();
+    const div = container.querySelector("div.pc-divider.pc-divider--v");
+    expect(div).toBeTruthy();
+    expect(div!.getAttribute("aria-hidden")).toBe("true");
   });
 });

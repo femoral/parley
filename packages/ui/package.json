@@ -1,8 +1,7 @@
 {
   "name": "@useparley/ui",
   "version": "0.0.0",
-  "description": "Parley Cove — the parley web cockpit (React + Vite), served by the daemon when installed. Private until the publish flip (ticket #70).",
-  "private": true,
+  "description": "Parley Cove — the parley web cockpit (React + Vite). An optional install: the daemon discovers and serves it (parley.ui marker) when it's present alongside @useparley/cli/@useparley/daemon.",
   "type": "module",
   "parley": {
     "ui": "www"
@@ -15,6 +14,12 @@
   ],
   "exports": {
     "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "access": "public",
+    "exports": {
+      "./package.json": "./package.json"
+    }
   },
   "scripts": {
     "build": "vite build",

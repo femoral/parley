@@ -8,6 +8,8 @@ export type { CockpitView, RosterSelection } from "./useCockpit.js";
 export { useHealth } from "./useHealth.js";
 export type { HealthState } from "./useHealth.js";
 export { useLogTail } from "./useLogTail.js";
+export { useSettings } from "./useSettings.js";
+export type { Settings, SettingsView } from "./useSettings.js";
 export { useSnapshot } from "./useSnapshot.js";
 export type { SnapshotView } from "./useSnapshot.js";
 export { projectScene } from "./scene.js";

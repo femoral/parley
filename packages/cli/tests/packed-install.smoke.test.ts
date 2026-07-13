@@ -17,13 +17,33 @@ import { FAKE_VENDOR_BIN } from "./helpers.js";
  * the daemon spawning from built `dist/main.js` with no `tsx`, and `workspace:*`
  * deps resolving as ordinary semver between the packed tarballs.
  *
+ * `ui` rides along as of #70's publish flip: installed into the *same* hoisted
+ * prefix as `cli`/`daemon` (never a dependency of either — the whole point of
+ * an optional install), it proves the "install cli + ui, zero config" story
+ * end to end. The daemon's discovery walks node_modules ancestry from two
+ * bases (docs/spec/ui-interface-contract.md): the parley home dir (unused
+ * here — this test's `PARLEY_HOME` is a bare tmpdir with no node_modules of
+ * its own) and the daemon package's own installed location, whose ancestry
+ * *does* reach this hoisted prefix's `node_modules/@useparley/ui` — so this
+ * specifically exercises that second resolution tier against a real packed
+ * tarball, which `packages/cli/tests/ui.test.ts`'s symlink-based fixtures
+ * don't (they always install under the home dir, tier one).
+ *
  * It is heavy (compiles native `better-sqlite3`, hits the registry) so it lives
- * behind generous timeouts and cleans the workspace `dist/` it produces.
+ * behind generous timeouts and cleans the workspace `dist`/`www` it produces.
  */
 
 const REPO_ROOT = fileURLToPath(new URL("../../..", import.meta.url));
-/** Packages that ship to the registry (ui is private, not in the CLI's graph). */
-const PUBLISHABLE = ["core", "daemon", "cli"] as const;
+/** Packages that ship to the registry. */
+const PUBLISHABLE = ["core", "daemon", "cli", "ui"] as const;
+/** `ui`'s build output directory is `www` (Vite), not `dist` (tsdown) — see
+ * packages/ui/vite.config.ts. */
+const BUNDLE_DIR: Record<(typeof PUBLISHABLE)[number], string> = {
+  core: "dist",
+  daemon: "dist",
+  cli: "dist",
+  ui: "www",
+};
 /** Dev-only tooling that must never appear in a consumer's install tree. */
 const DEV_ONLY = ["tsx", "tsdown", "vitest", "typescript"];
 
@@ -114,18 +134,23 @@ afterAll(() => {
   for (const home of homes.splice(0)) cleanupHome(home);
   if (scratch) fs.rmSync(scratch, { recursive: true, force: true });
   // Leave the workspace as we found it: `dist/` present would make the dev bin
-  // run built output against source-mode exports and break `pnpm parley`.
+  // run built output against source-mode exports and break `pnpm parley`. `ui`
+  // is deliberately excluded — its `www/` isn't a dev-mode switch (unlike
+  // `dist/` for the tsdown packages) and the suite's global setup builds it
+  // once and expects it to persist for `packages/cli/tests/ui.test.ts`.
   for (const p of PUBLISHABLE) {
+    if (p === "ui") continue;
     fs.rmSync(path.join(REPO_ROOT, "packages", p, "dist"), { recursive: true, force: true });
   }
 });
 
-describe("packed-install smoke (#60)", () => {
-  it("the installed bin runs built dist end-to-end and ships no source or dev deps", () => {
-    // The published tarball is dist + bin + skills — never TypeScript source.
+describe("packed-install smoke (#60, ui install #70)", () => {
+  it("the installed bin runs built dist end-to-end and ships no source or dev deps", async () => {
+    // The published tarball is its bundle dir + bin + skills — never TypeScript
+    // source (ui's bundle dir is Vite's `www`, everything else is tsdown's `dist`).
     for (const p of PUBLISHABLE) {
       const root = path.join(installed.prefix, "node_modules", "@useparley", p);
-      expect(fs.existsSync(path.join(root, "dist"))).toBe(true);
+      expect(fs.existsSync(path.join(root, BUNDLE_DIR[p]))).toBe(true);
       expect(fs.existsSync(path.join(root, "src"))).toBe(false);
     }
     expect(fs.existsSync(path.join(installed.prefix, "node_modules", "@useparley", "cli", "dist", "index.js"))).toBe(
@@ -179,5 +204,19 @@ describe("packed-install smoke (#60)", () => {
       outcome: "success",
       files_changed: ["src/a.ts"],
     });
+
+    // The delegate call above spawned the daemon detached against `home`
+    // (it's still running — `cleanupHome` kills it in `afterAll`); `daemon.json`
+    // is the discovery file it published (see @useparley/core's `Discovery`).
+    // `home` is a bare tmpdir with no node_modules of its own, so if the
+    // cockpit is served here it can only be via the daemon's *own* installed
+    // location resolving `@useparley/ui` as a hoisted sibling in this prefix
+    // — the "install cli + ui, zero config" acceptance criterion (#70),
+    // exercised against a real packed tarball rather than a symlinked fixture.
+    const discovery = JSON.parse(fs.readFileSync(path.join(home, "daemon.json"), "utf8")) as { port: number };
+    const root = await fetch(`http://127.0.0.1:${discovery.port}/`);
+    expect(root.status).toBe(200);
+    expect(root.headers.get("content-type")).toMatch(/text\/html/);
+    expect(await root.text()).toContain("Parley Cove");
   });
 });

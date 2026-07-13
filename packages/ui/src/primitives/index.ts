@@ -9,6 +9,7 @@ export type { PlateProps, PlateVariant } from "./Plate.js";
 export { PlateHeader } from "./PlateHeader.js";
 export type { PlateHeaderProps } from "./PlateHeader.js";
 export { Divider } from "./Divider.js";
+export type { DividerProps } from "./Divider.js";
 export { Badge } from "./Badge.js";
 export type { BadgeProps } from "./Badge.js";
 export { Emblem } from "./Emblem.js";

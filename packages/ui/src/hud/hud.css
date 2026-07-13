@@ -817,3 +817,134 @@
   font-size: 13px;
   color: var(--ink-ghost);
 }
+
+/* ── Settings bar (design-manifest §7's toggles, #70) ─────────────────────
+ * A slim, always-visible strip — the kit band it partly controls is the dev
+ * toggle; this bar itself is not. Chips reuse the roster session selector's
+ * visual language (design-manifest doesn't specify a settings component, so
+ * this borrows the nearest existing pattern rather than inventing new chrome).
+ */
+.pc-settings {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+.pc-settings__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 11px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--brass-frame);
+  background: rgba(0, 0, 0, 0.25);
+  color: var(--ink-faint);
+  font-family: var(--font-body);
+  font-size: 10.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: var(--ease);
+}
+.pc-settings__toggle:hover {
+  border-color: var(--brass-mid);
+  color: var(--ink-warm);
+}
+.pc-settings__toggle--on {
+  border-color: var(--brass);
+  background: var(--brass-tint-12);
+  color: var(--brass);
+}
+.pc-settings__hint {
+  color: var(--ink-label);
+  font-size: 9px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+/* ── Kit band (design-manifest §3/§4.21-23) ────────────────────────────────
+ * The bottom style-guide strip: factions (fixed), state legend (fluid),
+ * chrome kit (fixed) — separated by the vertical gold divider.
+ */
+.pc-kit {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: stretch;
+  gap: 14px;
+  padding: 12px 16px;
+}
+.pc-kit__col {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+.pc-kit__col--factions {
+  flex: 0 0 300px;
+}
+.pc-kit__col--legend {
+  flex: 1 1 auto;
+}
+.pc-kit__col--chrome {
+  flex: 0 0 300px;
+}
+.pc-kit__list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.pc-kit__faction {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.pc-kit__faction-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.pc-kit__faction-label {
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 11.5px;
+  color: var(--ink-warm);
+}
+.pc-kit__faction-tagline {
+  font-family: var(--font-flavor);
+  font-style: italic;
+  font-size: 10.5px;
+  color: var(--ink-label);
+}
+.pc-kit__legend-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.pc-kit__legend-dot {
+  width: 20px;
+  height: 20px;
+  box-shadow: 0 0 8px var(--dot-color, var(--ink-label));
+}
+.pc-kit__legend-copy {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+.pc-kit__legend-label {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 10.5px;
+  letter-spacing: var(--track-micro);
+}
+.pc-kit__legend-hint {
+  font-family: var(--font-flavor);
+  font-style: italic;
+  font-size: 10.5px;
+  color: var(--ink-label);
+}
+.pc-kit__buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}

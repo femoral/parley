@@ -5,6 +5,7 @@ import { formatClock, formatUptime } from "./format.js";
 import { useHealth } from "./useHealth.js";
 import { projectInspector } from "./inspector.js";
 import { useLogTail } from "./useLogTail.js";
+import { useSettings, type SettingsView } from "./useSettings.js";
 import { useSnapshot, type SnapshotView } from "./useSnapshot.js";
 import { useTaskDetail } from "./useTaskDetail.js";
 
@@ -41,6 +42,8 @@ export interface CockpitView {
   answerTask: (id: string, text: string) => Promise<void>;
   /** The selected task's inspector payload (#68), or `null` with no selection. */
   inspector: InspectorTask | null;
+  /** Persisted cockpit preferences (#70): ornaments, kit band, log follow. */
+  settings: SettingsView;
 }
 
 /**
@@ -55,6 +58,7 @@ export function useCockpit(): CockpitView {
   const client = useMemo(() => new ParleyClient({ baseUrl: "" }), []);
   const health = useHealth(client);
   const snapshot = useSnapshot(client);
+  const settings = useSettings();
   const [now, setNow] = useState(() => Date.now());
   // useState setters are identity-stable, so hud components (memoized against
   // the cockpit's one-second clock re-render) can take them as props directly.
@@ -118,7 +122,7 @@ export function useCockpit(): CockpitView {
   );
 
   const detail = useTaskDetail(client, selectedTaskId);
-  const logs = useLogTail(client, selectedTaskId);
+  const logs = useLogTail(client, selectedTaskId, settings.followLogs);
   // Memoized so the one-second clock tick doesn't mint a fresh InspectorTask
   // (the memoized Inspector would re-render its whole tab body every second).
   // The id guard drops one frame of stale detail when the selection changes
@@ -139,5 +143,6 @@ export function useCockpit(): CockpitView {
     day,
     answerTask,
     inspector,
+    settings,
   };
 }

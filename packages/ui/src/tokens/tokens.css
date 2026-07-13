@@ -185,6 +185,16 @@
     var(--brass-frame) 78%,
     transparent
   );
+  /* Vertical version (manifest §2.10: "rotates to 180deg with --brass-inner
+     stops") — the kit band's column separators (#70). */
+  --divider-v: linear-gradient(
+    180deg,
+    transparent,
+    var(--brass-inner) 22%,
+    #e6c05a 50%,
+    var(--brass-inner) 78%,
+    transparent
+  );
 
   /* §4.6 — roster row selection/hover tints (alpha variants of --brass) and
      the beacon flag's glow (alpha of --brass-bright) */
@@ -227,13 +237,25 @@
 }
 
 /* §"Accessibility" — reduced motion stills every ambient loop; states stay
-   legible as still imagery. */
+   legible as still imagery. A single wildcard rule catches every animation in
+   the app (sea drift, compass spin, beacon pulse, galleon/sloop bob, island
+   rise/sink, shore foam, orbit, wake, flare, fog drift, flag wave, sail-off,
+   camera travel, PARLEY! bounce) without each of them needing its own
+   reduced-motion override — audited against every `@keyframes`/`animation`/
+   `transition` declaration in the package (#70). `animation-delay` is zeroed
+   too (the wake trail staggers its three dashes with `0.2s`/`0.4s` delays;
+   left alone, those would still visibly stagger in for a moment). Every
+   animated element's non-animated base style is its legible resting state
+   (each rule's own comment says so), so collapsing to ~0 duration/1 iteration
+   lands on that still frame rather than losing the state's information. */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
   *::after {
     animation-duration: 0.001ms !important;
+    animation-delay: 0s !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.001ms !important;
+    transition-delay: 0s !important;
   }
 }

@@ -1,5 +1,5 @@
 /** @vitest-environment happy-dom */
-import { renderHook, waitFor } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { ParleyClient } from "@useparley/core";
 import { useLogTail } from "../src/app/hooks/useLogTail.js";
@@ -54,7 +54,7 @@ describe("useLogTail follows a running fake-vendor task and stops cleanly at eof
     // A poll interval comfortably wider than `waitFor`'s sampling cadence
     // below, so the intermediate "still live, idling" window is reliably
     // observed rather than raced past between samples.
-    const { result } = renderHook(() => useLogTail(client, "t1", 80));
+    const { result } = renderHook(() => useLogTail(client, "t1", true, 80));
     const opts = { interval: 10, timeout: 3000 };
 
     // Live and accumulating while the task runs.
@@ -81,7 +81,7 @@ describe("useLogTail follows a running fake-vendor task and stops cleanly at eof
       }),
     });
 
-    const { result } = renderHook(() => useLogTail(client, "t1", 80));
+    const { result } = renderHook(() => useLogTail(client, "t1", true, 80));
 
     // Wait for the classified line itself, not `live === false` alone — the
     // hook's initial (pre-fetch) view is already `{ lines: [], live: false }`,
@@ -100,7 +100,7 @@ describe("useLogTail follows a running fake-vendor task and stops cleanly at eof
       }),
     });
 
-    const { result, rerender } = renderHook(({ id }) => useLogTail(client, id, 5), {
+    const { result, rerender } = renderHook(({ id }) => useLogTail(client, id, true, 5), {
       initialProps: { id: "t1" as string | null },
     });
     await waitFor(() => expect(result.current.lines.map((l) => l.text)).toEqual(["from-t1"]));
@@ -113,5 +113,114 @@ describe("useLogTail follows a running fake-vendor task and stops cleanly at eof
     const client = new ParleyClient({ baseUrl: "", fetch: scriptedLogFetch({}) });
     const { result } = renderHook(() => useLogTail(client, null));
     expect(result.current).toEqual({ lines: [], live: false });
+  });
+});
+
+describe("useLogTail's `follow` toggle (the settings bar's 'Follow logs' control, #70)", () => {
+  it("stops polling and reports live=false the instant follow flips off, without losing the tail so far", async () => {
+    let calls = 0;
+    const client = new ParleyClient({
+      baseUrl: "",
+      fetch: (async () => {
+        calls += 1;
+        // An always-live, ever-growing tail — eof never comes on its own, so
+        // the only thing that can stop this task's tail is `follow`.
+        return new Response(JSON.stringify({ chunk: `l${calls}\n`, next: calls, eof: false }), { status: 200 });
+      }) as typeof fetch,
+    });
+
+    const { result, rerender } = renderHook(({ follow }) => useLogTail(client, "t1", follow, 20), {
+      initialProps: { follow: true },
+    });
+
+    await waitFor(() => expect(result.current.live).toBe(true));
+    await waitFor(() => expect(result.current.lines.length).toBeGreaterThan(0));
+    const seenBeforePause = result.current.lines.length;
+
+    rerender({ follow: false });
+    // No `waitFor` needed for `live` — pausing is synchronous, not a fetch away.
+    expect(result.current.live).toBe(false);
+
+    // Give the (stopped) poll loop a couple of its old intervals' worth of
+    // time; the line count must not keep growing while paused.
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    expect(result.current.lines.length).toBe(seenBeforePause);
+
+    // Resuming picks the tail back up — more lines arrive — without the
+    // window resetting to empty first.
+    rerender({ follow: true });
+    await waitFor(() => expect(result.current.live).toBe(true));
+    await waitFor(() => expect(result.current.lines.length).toBeGreaterThan(seenBeforePause));
+    expect(result.current.lines.slice(0, seenBeforePause).map((l) => l.text)).toEqual(
+      Array.from({ length: seenBeforePause }, (_, i) => `l${i + 1}`),
+    );
+  });
+
+  it("starting paused (follow=false) never fetches until switched on", async () => {
+    let calls = 0;
+    const client = new ParleyClient({
+      baseUrl: "",
+      fetch: (async () => {
+        calls += 1;
+        return new Response(JSON.stringify({ chunk: "l1\n", next: 1, eof: false }), { status: 200 });
+      }) as typeof fetch,
+    });
+
+    const { result, rerender } = renderHook(({ follow }) => useLogTail(client, "t1", follow, 15), {
+      initialProps: { follow: false },
+    });
+
+    expect(result.current).toEqual({ lines: [], live: false });
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    expect(calls).toBe(0);
+
+    await act(async () => {
+      rerender({ follow: true });
+    });
+    await waitFor(() => expect(result.current.lines.map((l) => l.text)).toContain("l1"));
+  });
+});
+
+describe("useLogTail never reports live optimistically (#70 regression: it must reflect a confirmed response, not a guess)", () => {
+  it("starts live=false synchronously, even before the very first fetch has resolved", () => {
+    // A fetch that never resolves within this test — proves the initial
+    // render itself (before any `await`/`waitFor`) is the conservative
+    // {lines: [], live: false}, not an optimistic live:true guess derived
+    // from `follow`/`taskId` alone.
+    const client = new ParleyClient({ baseUrl: "", fetch: (() => new Promise(() => {})) as typeof fetch });
+    const { result } = renderHook(() => useLogTail(client, "t1"));
+    expect(result.current).toEqual({ lines: [], live: false });
+  });
+
+  it("stays live=false forever when every fetch attempt throws (daemon unreachable), never guessing live", async () => {
+    let calls = 0;
+    const client = new ParleyClient({
+      baseUrl: "",
+      fetch: (async () => {
+        calls += 1;
+        throw new Error("network down");
+      }) as typeof fetch,
+    });
+
+    const { result } = renderHook(() => useLogTail(client, "t1", true, 15));
+
+    // Give it several retry cycles' worth of time.
+    await waitFor(() => expect(calls).toBeGreaterThan(2));
+    expect(result.current).toEqual({ lines: [], live: false });
+  });
+});
+
+describe("useLogTail's returned view is identity-stable across idle re-renders (#70 — memoization)", () => {
+  it("returns the exact same object reference across renders where neither lines nor live changed", () => {
+    const client = new ParleyClient({ baseUrl: "", fetch: (() => new Promise(() => {})) as typeof fetch });
+    const { result, rerender } = renderHook(({ _n }) => useLogTail(client, "t1", true, 1000), {
+      initialProps: { _n: 0 },
+    });
+    const first = result.current;
+    // Re-render for an unrelated reason (the hook's own inputs are unchanged
+    // apart from this throwaway prop) — mirrors useCockpit's once-a-second
+    // clock tick re-rendering everything below it.
+    rerender({ _n: 1 });
+    expect(result.current).toBe(first);
   });
 });

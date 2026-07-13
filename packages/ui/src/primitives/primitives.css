@@ -127,6 +127,12 @@
   margin: 0;
   background: var(--divider-h);
 }
+.pc-divider--v {
+  width: 2px;
+  height: auto;
+  align-self: stretch;
+  background: var(--divider-v);
+}
 
 /* ── Badge ─────────────────────────────────────────────────────────────── */
 .pc-badge {

@@ -1,4 +1,13 @@
-import { Cartouche, DayChip, HealthPanel, InboxPanel, Inspector, RosterPanel } from "../hud/index.js";
+import {
+  Cartouche,
+  DayChip,
+  HealthPanel,
+  InboxPanel,
+  Inspector,
+  KitBand,
+  RosterPanel,
+  SettingsBar,
+} from "../hud/index.js";
 import { Plate } from "../primitives/index.js";
 import { Scene } from "../scene/index.js";
 import { useCockpit } from "./hooks/index.js";
@@ -12,7 +21,7 @@ import "./cockpit.css";
  * — with the living scene reserved for its own ticket.
  */
 export function Cockpit() {
-  const { health, snapshot, roster, clock, day, answerTask, inspector } = useCockpit();
+  const { health, snapshot, roster, clock, day, answerTask, inspector, settings } = useCockpit();
 
   return (
     <div className="pc-cockpit">
@@ -37,10 +46,10 @@ export function Cockpit() {
 
           <section className="pc-region--center" aria-label="The cove">
             <div className="pc-center__head">
-              <Cartouche />
+              <Cartouche ornaments={settings.ornaments} />
               <DayChip day={day} clock={clock} />
             </div>
-            <Plate variant="premium" ornaments className="pc-scene" padded={false}>
+            <Plate variant="premium" ornaments={settings.ornaments} className="pc-scene" padded={false}>
               <Scene sessions={snapshot.scene.sessions} activeSessionId={roster.selectedSessionId} />
             </Plate>
           </section>
@@ -48,9 +57,19 @@ export function Cockpit() {
           <aside className="pc-region--right" aria-label="Status stack">
             <HealthPanel health={health} />
             <InboxPanel tasks={snapshot.inbox} onAnswer={answerTask} />
-            <Inspector task={inspector} />
+            <Inspector task={inspector} ornaments={settings.ornaments} />
           </aside>
         </div>
+
+        <SettingsBar
+          ornaments={settings.ornaments}
+          showKit={settings.showKit}
+          followLogs={settings.followLogs}
+          onToggleOrnaments={settings.toggleOrnaments}
+          onToggleShowKit={settings.toggleShowKit}
+          onToggleFollowLogs={settings.toggleFollowLogs}
+        />
+        {settings.showKit && <KitBand />}
       </div>
     </div>
   );
