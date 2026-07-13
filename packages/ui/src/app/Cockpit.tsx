@@ -11,7 +11,7 @@ import "./cockpit.css";
  * — with the living scene reserved for its own ticket.
  */
 export function Cockpit() {
-  const { health, snapshot, clock, day } = useCockpit();
+  const { health, snapshot, roster, clock, day } = useCockpit();
 
   return (
     <div className="pc-cockpit">
@@ -24,6 +24,11 @@ export function Cockpit() {
           <section className="pc-region--roster" aria-label="Fleet roster">
             <RosterPanel
               groups={snapshot.groups}
+              sessions={snapshot.sessions}
+              selectedSessionId={roster.selectedSessionId}
+              onSelectSession={roster.selectSession}
+              selectedTaskId={roster.selectedTaskId}
+              onSelectTask={roster.selectTask}
               totalTasks={snapshot.totalTasks}
               activeTasks={snapshot.activeTasks}
             />

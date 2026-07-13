@@ -4,7 +4,7 @@
  * project.
  */
 export { useCockpit } from "./useCockpit.js";
-export type { CockpitView } from "./useCockpit.js";
+export type { CockpitView, RosterSelection } from "./useCockpit.js";
 export { useHealth } from "./useHealth.js";
 export type { HealthState } from "./useHealth.js";
 export { useSnapshot } from "./useSnapshot.js";

@@ -11,4 +11,4 @@ export type { DayChipProps } from "./DayChip.js";
 export { HealthPanel } from "./HealthPanel.js";
 export { RosterPanel } from "./RosterPanel.js";
 export type { RosterPanelProps } from "./RosterPanel.js";
-export type { HealthView, RosterGroup, RosterTask } from "./types.js";
+export type { HealthView, RosterGroup, RosterSessionOption, RosterTask } from "./types.js";

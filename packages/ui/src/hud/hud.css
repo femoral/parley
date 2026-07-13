@@ -149,6 +149,41 @@
   flex-direction: column;
   gap: 10px;
 }
+.pc-roster__sessions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px 12px 2px;
+}
+.pc-roster__session {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--brass-frame);
+  background: transparent;
+  color: var(--ink-faint);
+  font-family: var(--font-body);
+  font-size: 10.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: var(--ease);
+}
+.pc-roster__session:hover {
+  border-color: var(--brass-mid);
+  color: var(--ink-warm);
+}
+.pc-roster__session--active {
+  border-color: var(--brass);
+  background: var(--brass-tint-12);
+  color: var(--brass);
+}
+.pc-roster__session-count {
+  font-family: var(--font-mono);
+  color: inherit;
+  opacity: 0.75;
+}
 .pc-roster__group-head {
   display: flex;
   align-items: center;
@@ -180,13 +215,39 @@
   font-size: 10px;
   color: var(--ink-label);
 }
+/* Rows are native buttons (free keyboard/AT semantics) restyled flat. */
 .pc-roster__row {
   display: flex;
   align-items: center;
   gap: 9px;
+  width: 100%;
   padding: 6px 8px;
   border-radius: var(--radius-well);
   border: 1px solid transparent;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: var(--ease);
+}
+.pc-roster__row:hover {
+  background: var(--brass-tint-06);
+}
+.pc-roster__row:focus-visible {
+  outline: 2px solid var(--brass-bright);
+  outline-offset: 1px;
+}
+/* Selected row (design-manifest §4.6): gold tint + gold-alpha border. */
+.pc-roster__row--selected {
+  background: var(--brass-tint-12);
+  border-color: var(--brass-border-selected);
+}
+.pc-roster__beacon {
+  margin-left: auto;
+  flex: 0 0 auto;
+  font-size: 12px;
+  filter: drop-shadow(0 0 4px var(--beacon-glow));
 }
 .pc-roster__row-body {
   display: flex;

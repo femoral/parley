@@ -5,9 +5,22 @@ import { formatClock, formatUptime } from "./format.js";
 import { useHealth } from "./useHealth.js";
 import { useSnapshot, type SnapshotView } from "./useSnapshot.js";
 
+/** The roster's selection state — which orchestrator session and task are
+ * active (#66). Lives in the app layer: hud rows/selectors take the current
+ * selection and an `onSelect*` callback as plain props and never own it.
+ * Plain setter semantics — re-selecting the active session is a no-op; the
+ * "All hands" chip (passing `null`) is the one deselect affordance. */
+export interface RosterSelection {
+  selectedSessionId: string | null;
+  selectedTaskId: string | null;
+  selectSession: (id: string | null) => void;
+  selectTask: (id: string) => void;
+}
+
 export interface CockpitView {
   health: HealthView;
   snapshot: SnapshotView;
+  roster: RosterSelection;
   /** Wall-clock `HH:MM` for the day chip. */
   clock: string;
   /** Days the cove has been open (flavour: real elapsed days, min 1). */
@@ -27,6 +40,11 @@ export function useCockpit(): CockpitView {
   const health = useHealth(client);
   const snapshot = useSnapshot(client);
   const [now, setNow] = useState(() => Date.now());
+  // useState setters are identity-stable, so hud components (memoized against
+  // the cockpit's one-second clock re-render) can take them as props directly.
+  const [selectedSessionId, selectSession] = useState<string | null>(null);
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const selectTask: (id: string) => void = setSelectedTaskId;
 
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 1000);
@@ -51,5 +69,7 @@ export function useCockpit(): CockpitView {
       ? Math.max(1, Math.floor((now - health.startedAt) / 86_400_000) + 1)
       : 1;
 
-  return { health: healthView, snapshot, clock: formatClock(new Date(now)), day };
+  const roster: RosterSelection = { selectedSessionId, selectedTaskId, selectSession, selectTask };
+
+  return { health: healthView, snapshot, roster, clock: formatClock(new Date(now)), day };
 }

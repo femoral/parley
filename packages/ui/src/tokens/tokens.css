@@ -148,6 +148,13 @@
     transparent
   );
 
+  /* §4.6 — roster row selection/hover tints (alpha variants of --brass) and
+     the beacon flag's glow (alpha of --brass-bright) */
+  --brass-tint-06: rgba(240, 194, 90, 0.06);
+  --brass-tint-12: rgba(240, 194, 90, 0.12);
+  --brass-border-selected: #f0c25a88;
+  --beacon-glow: rgba(255, 207, 77, 0.6);
+
   /* interaction — the manifest recommends ~120ms ease on hover/selection */
   --ease: 120ms ease;
 }

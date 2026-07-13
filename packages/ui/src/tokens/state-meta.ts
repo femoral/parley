@@ -26,6 +26,12 @@ export interface StateMeta {
   hint: string;
   /** The `var(--state-*)` custom property holding this state's colour. */
   colorVar: string;
+  /** Whether the state carries the beacon flag treatment (manifest §5 —
+   * "loudest thing on screen"; the roster row's pulsing 🚩). */
+  beacon?: boolean;
+  /** Row opacity for quiet states (manifest §5 — terminals render dimmed so
+   * history never competes with live work). Absent = full opacity. */
+  dim?: number;
 }
 
 export const STATE_META: Record<StateKey, StateMeta> = {
@@ -36,11 +42,30 @@ export const STATE_META: Record<StateKey, StateMeta> = {
     glyph: "🚩",
     hint: "needs your input",
     colorVar: "var(--state-awaiting_answer)",
+    beacon: true,
   },
   stalled: { label: "STALLED", glyph: "🧭", hint: "blocked / waiting", colorVar: "var(--state-stalled)" },
-  completed: { label: "COMPLETED", glyph: "🏁", hint: "report ready", colorVar: "var(--state-completed)" },
-  failed: { label: "FAILED", glyph: "✖", hint: "terminal state", colorVar: "var(--state-failed)" },
-  cancelled: { label: "CANCELLED", glyph: "⊘", hint: "called back", colorVar: "var(--state-cancelled)" },
+  completed: {
+    label: "COMPLETED",
+    glyph: "🏁",
+    hint: "report ready",
+    colorVar: "var(--state-completed)",
+    dim: 0.9,
+  },
+  failed: {
+    label: "FAILED",
+    glyph: "✖",
+    hint: "terminal state",
+    colorVar: "var(--state-failed)",
+    dim: 0.62,
+  },
+  cancelled: {
+    label: "CANCELLED",
+    glyph: "⊘",
+    hint: "called back",
+    colorVar: "var(--state-cancelled)",
+    dim: 0.62,
+  },
 };
 
 /** State colour lookup, falling back to a muted tan for unknown states. */

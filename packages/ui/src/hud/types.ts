@@ -24,6 +24,15 @@ export interface RosterGroup {
   tasks: RosterTask[];
 }
 
+/** One entry in the roster's session selector — an orchestrator session and
+ * how many tasks it currently has in the roster (live and historical). */
+export interface RosterSessionOption {
+  id: string;
+  /** Short display label (truncated id). */
+  label: string;
+  count: number;
+}
+
 /** The daemon health readout, fully projected to display values by the hooks layer. */
 export interface HealthView {
   /** Whether the daemon answered the last probe. */
