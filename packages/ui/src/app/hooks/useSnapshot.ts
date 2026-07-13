@@ -2,14 +2,19 @@ import { useEffect, useState } from "react";
 import { bootstrapTaskStream, type ParleyClient, type StreamEvent, type TaskRow } from "@useparley/core";
 import { projectInbox } from "./inbox.js";
 import { projectRoster, type RosterTaskInput } from "./roster.js";
+import { projectScene, type SceneView } from "./scene.js";
 import type { InboxTask, RosterGroup, RosterSessionOption } from "../../hud/types.js";
 
-/** The projected roster + inbox + counts hud consumes. */
+/** The projected roster + inbox + scene + counts hud/scene consume. */
 export interface SnapshotView {
   groups: RosterGroup[];
   sessions: RosterSessionOption[];
   /** Tasks blocked on an answer, sorted awaiting-first (#67). */
   inbox: InboxTask[];
+  /** The living scene's regions — one per session, each with its task-islands
+   * (#69). Projected from the same task list as `groups`/`inbox`, so every
+   * island's state agrees with its roster badge and inbox card. */
+  scene: SceneView;
   totalTasks: number;
   activeTasks: number;
   durableSessions: number;
@@ -19,6 +24,7 @@ const EMPTY: SnapshotView = {
   groups: [],
   sessions: [],
   inbox: [],
+  scene: { sessions: [] },
   totalTasks: 0,
   activeTasks: 0,
   durableSessions: 0,
@@ -89,7 +95,7 @@ export function useSnapshot(client: ParleyClient): SnapshotView {
     // both projections (each a full pass) see every task.
     const emit = (): void => {
       const list = [...tasks.values()];
-      setView({ ...projectRoster(list), inbox: projectInbox(list) });
+      setView({ ...projectRoster(list), inbox: projectInbox(list), scene: projectScene(list) });
     };
 
     /** Adopt `session` for `id` when the task is still session-less. */

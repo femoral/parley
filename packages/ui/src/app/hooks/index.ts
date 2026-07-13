@@ -10,6 +10,8 @@ export type { HealthState } from "./useHealth.js";
 export { useLogTail } from "./useLogTail.js";
 export { useSnapshot } from "./useSnapshot.js";
 export type { SnapshotView } from "./useSnapshot.js";
+export { projectScene } from "./scene.js";
+export type { SceneView, SceneSession, SceneTask } from "./scene.js";
 export { useTaskDetail } from "./useTaskDetail.js";
 export { formatUptime, formatClock, formatTokenCount, formatUsage } from "./format.js";
 export { classifyLogLine, buildLogLines, LogAccumulator, LOG_LINE_CAP } from "./logClassify.js";

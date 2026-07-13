@@ -101,38 +101,13 @@
 .pc-center__head > :first-child {
   flex: 1;
 }
+/* The scene mounts here (#69): a positioned, clipped viewport the living view
+   fills absolutely. The premium plate frame stays as the cove's brass surround. */
 .pc-scene {
   flex: 1;
   min-height: 0;
-  display: grid;
-  place-items: center;
-  text-align: center;
-}
-.pc-scene__inner {
-  max-width: 460px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  align-items: center;
-  padding: 28px;
-}
-.pc-scene__glyph {
-  font-size: 40px;
-  opacity: 0.8;
-}
-.pc-scene__title {
-  font-family: var(--font-display);
-  font-weight: 700;
-  font-size: 15px;
-  letter-spacing: 2px;
-  color: var(--brass-soft);
-}
-.pc-scene__body {
-  font-family: var(--font-flavor);
-  font-style: italic;
-  font-size: 13px;
-  line-height: 1.5;
-  color: var(--ink-ghost);
+  position: relative;
+  overflow: hidden;
 }
 
 /* Scrollbars (§2.10) */

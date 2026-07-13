@@ -1,5 +1,6 @@
 import { Cartouche, DayChip, HealthPanel, InboxPanel, Inspector, RosterPanel } from "../hud/index.js";
 import { Plate } from "../primitives/index.js";
+import { Scene } from "../scene/index.js";
 import { useCockpit } from "./hooks/index.js";
 import { CompassRose } from "./CompassRose.js";
 import "./cockpit.css";
@@ -40,16 +41,7 @@ export function Cockpit() {
               <DayChip day={day} clock={clock} />
             </div>
             <Plate variant="premium" ornaments className="pc-scene" padded={false}>
-              <div className="pc-scene__inner">
-                <span className="pc-scene__glyph" aria-hidden="true">
-                  ⚓
-                </span>
-                <span className="pc-scene__title">THE COVE AWAITS ITS FLEET</span>
-                <p className="pc-scene__body">
-                  Islands will rise for every voyage and ships circle them as the agents work.
-                  For now the tide is calm — the living chart sails in on a later crossing.
-                </p>
-              </div>
+              <Scene sessions={snapshot.scene.sessions} activeSessionId={roster.selectedSessionId} />
             </Plate>
           </section>
 

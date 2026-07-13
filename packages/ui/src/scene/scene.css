@@ -1,0 +1,605 @@
+/*
+ * Layer 3 — the living scene (#69). One rendering system with the HUD: inline
+ * SVG + CSS gradients in the manifest's tokens, faction tint on --coat/--coat-dark.
+ *
+ * Motion discipline (research doc's recommendation, enforced here):
+ *  - Ambient loops (foam, orbit, bob, flare pulse, fog drift) are compositor
+ *    keyframes on transform/opacity only — zero JS per frame.
+ *  - Finite transitions are CSS too: island rise/sink on mount / data-state,
+ *    camera travel on a transform transition. JS sets props; CSS animates.
+ *  - Every animated element's BASE style is its legible resting state, so the
+ *    global reduced-motion rule (tokens.css) leaves every state readable as a
+ *    still image.
+ */
+
+/* ── Viewport & camera ─────────────────────────────────────────────────── */
+.pc-scene-view {
+  position: absolute;
+  /* Sit inside the premium plate's inset brass double-frame (rings at 3px/5px)
+     rather than painting over it — the frame is the cove's signature surround. */
+  inset: 6px;
+  overflow: hidden;
+  border-radius: 7px;
+}
+.pc-world {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 0;
+  height: 0;
+  /* Camera travel — the transform is set inline per active region; this is the
+     only transition in the scene, and the reduced-motion rule zeroes it. */
+  transition: transform 1100ms cubic-bezier(0.4, 0, 0.2, 1);
+  will-change: transform;
+}
+
+/* ── Scene water (behind the camera — parallax, doesn't pan) ────────────── */
+.pc-scene-sea {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(120% 90% at 50% 8%, transparent 40%, var(--sea-vignette) 100%);
+}
+.pc-scene-sea__glint {
+  position: absolute;
+  inset: 0;
+  opacity: 0.4;
+  background: repeating-linear-gradient(
+    100deg,
+    transparent 0 70px,
+    rgba(255, 255, 255, 0.04) 70px 72px
+  );
+  animation: pc-scene-glint 22s linear infinite;
+}
+@keyframes pc-scene-glint {
+  from {
+    background-position: 0 0;
+  }
+  to {
+    background-position: 300px 40px;
+  }
+}
+
+/* ── Empty state ───────────────────────────────────────────────────────── */
+.pc-scene-empty {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 12px;
+  padding: 32px;
+  text-align: center;
+}
+.pc-scene-empty__glyph {
+  font-size: 42px;
+  opacity: 0.7;
+}
+.pc-scene-empty__body {
+  max-width: 380px;
+  font-family: var(--font-flavor);
+  font-style: italic;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink-ghost);
+}
+
+/* ── Session region ────────────────────────────────────────────────────── */
+.pc-region {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 1px;
+  height: 1px;
+}
+.pc-region__banner {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform: translate(-50%, -50%) translateY(-186px);
+  white-space: nowrap;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 11px;
+  letter-spacing: var(--track-caps);
+  color: var(--brass-soft);
+  padding: 4px 12px;
+  border-radius: var(--radius-pill);
+  background: var(--badge-bg);
+  border: 1px solid var(--brass-frame);
+}
+.pc-region__flagship {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform: translate(-50%, -50%) translateY(-70px);
+}
+
+/* ── Orchestrator galleon ──────────────────────────────────────────────── */
+.pc-galleon__svg {
+  display: block;
+  width: 172px;
+  height: auto;
+  filter: drop-shadow(0 6px 10px rgba(0, 0, 0, 0.45));
+  animation: pc-galleon-bob 6.5s ease-in-out infinite;
+  transform-origin: 50% 90%;
+}
+@keyframes pc-galleon-bob {
+  0%,
+  100% {
+    transform: translateY(0) rotate(-0.6deg);
+  }
+  50% {
+    transform: translateY(-4px) rotate(0.6deg);
+  }
+}
+
+/* ── Island ────────────────────────────────────────────────────────────── */
+.pc-island-slot {
+  position: absolute;
+  left: 0;
+  top: 0;
+}
+.pc-island {
+  position: relative;
+  width: 150px;
+  height: 128px;
+}
+/* Rise on mount, sink on cancel — finite CSS transitions. `both` holds the end
+   frame, so reduced-motion (which collapses the duration) lands on the risen
+   island rather than mid-flight. */
+.pc-island__rise {
+  position: absolute;
+  inset: 0;
+  animation: pc-island-rise 1050ms cubic-bezier(0.2, 0.85, 0.3, 1.15) both;
+  transform-origin: 50% 100%;
+}
+.pc-island[data-state="cancelled"] .pc-island__rise {
+  animation: pc-island-sink 2200ms ease-in forwards;
+}
+@keyframes pc-island-rise {
+  0% {
+    transform: translateY(96px) scale(0.7);
+    opacity: 0;
+  }
+  70% {
+    transform: translateY(-6px) scale(1.03);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+}
+@keyframes pc-island-sink {
+  0% {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(110px) scale(0.6);
+    opacity: 0;
+  }
+}
+/* Rising ripple ring on the water. */
+.pc-island__rise::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: 12px;
+  width: 120px;
+  height: 26px;
+  transform: translateX(-50%);
+  border: 1.5px solid rgba(255, 255, 255, 0.28);
+  border-radius: 50%;
+  animation: pc-ripple 1400ms ease-out both;
+  pointer-events: none;
+}
+@keyframes pc-ripple {
+  0% {
+    transform: translateX(-50%) scale(0.4);
+    opacity: 0.7;
+  }
+  100% {
+    transform: translateX(-50%) scale(1.5);
+    opacity: 0;
+  }
+}
+.pc-island__svg {
+  position: absolute;
+  left: 50%;
+  bottom: 8px;
+  width: 150px;
+  height: auto;
+  transform: translateX(-50%);
+  filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.4));
+}
+/* Shore foam — a soft breathing ring at the waterline (ambient). */
+.pc-island__foam {
+  position: absolute;
+  left: 50%;
+  bottom: 4px;
+  width: 132px;
+  height: 30px;
+  transform: translateX(-50%);
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(255, 255, 255, 0.22), transparent 72%);
+  animation: pc-foam 4.5s ease-in-out infinite;
+}
+@keyframes pc-foam {
+  0%,
+  100% {
+    opacity: 0.5;
+    transform: translateX(-50%) scaleX(1);
+  }
+  50% {
+    opacity: 0.85;
+    transform: translateX(-50%) scaleX(1.08);
+  }
+}
+
+/* Hung name plank (design-manifest: a wooden plank labels the task). */
+.pc-plank {
+  position: absolute;
+  left: 50%;
+  bottom: -6px;
+  transform: translateX(-50%);
+  max-width: 148px;
+  padding: 3px 10px;
+  border-radius: var(--radius-well);
+  background: linear-gradient(180deg, var(--brass-shadow), var(--plate-well));
+  border: 1px solid var(--brass-frame);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
+}
+.pc-plank__label {
+  display: block;
+  max-width: 128px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 11px;
+  color: var(--ink-warm);
+}
+
+/* ── Sloop (faction agent ship) ────────────────────────────────────────── */
+.pc-orbit {
+  position: absolute;
+  left: 50%;
+  top: 52%;
+  width: 0;
+  height: 0;
+  animation: pc-orbit 17s linear infinite;
+}
+.pc-orbit[data-state="awaiting_answer"],
+.pc-orbit[data-state="stalled"] {
+  animation-play-state: paused;
+}
+.pc-orbit__arm {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform: translateX(104px);
+}
+/* Anchored pose — draw the ship in over the beach. */
+.pc-orbit[data-state="awaiting_answer"] .pc-orbit__arm,
+.pc-orbit[data-state="stalled"] .pc-orbit__arm {
+  transform: translate(70px, 8px);
+}
+.pc-sloop {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 60px;
+  height: 56px;
+  margin-left: -30px;
+  margin-top: -28px;
+  animation: pc-orbit-rev 17s linear infinite;
+}
+.pc-orbit[data-state="awaiting_answer"] .pc-sloop,
+.pc-orbit[data-state="stalled"] .pc-sloop {
+  animation-play-state: paused;
+}
+.pc-sloop__svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  filter: drop-shadow(0 3px 4px rgba(0, 0, 0, 0.4));
+  animation: pc-sloop-bob 3.6s ease-in-out infinite;
+  transform-origin: 50% 80%;
+}
+.pc-orbit[data-state="stalled"] .pc-sloop__svg {
+  animation: pc-adrift 7s ease-in-out infinite;
+}
+@keyframes pc-orbit {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes pc-orbit-rev {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(-360deg);
+  }
+}
+@keyframes pc-sloop-bob {
+  0%,
+  100% {
+    transform: translateY(0) rotate(-2deg);
+  }
+  50% {
+    transform: translateY(-2px) rotate(2deg);
+  }
+}
+@keyframes pc-adrift {
+  0%,
+  100% {
+    transform: translate(0, 0) rotate(-5deg);
+  }
+  50% {
+    transform: translate(4px, 1px) rotate(4deg);
+  }
+}
+
+/* Sloop silhouette fills — faction tint rides entirely on --coat/--coat-dark. */
+.pc-sloop__main {
+  fill: color-mix(in srgb, var(--coat) 24%, var(--parchment-bg));
+  stroke: var(--coat-dark);
+  stroke-width: 0.6;
+}
+.pc-sloop__jib {
+  fill: color-mix(in srgb, var(--coat) 12%, var(--parchment-bg));
+  stroke: var(--coat-dark);
+  stroke-width: 0.5;
+}
+.pc-sloop__emblem {
+  fill: var(--coat-dark);
+  font-family: var(--font-body);
+  font-size: 11px;
+  opacity: 0.85;
+}
+.pc-sloop__hull {
+  fill: var(--brass-shadow);
+  stroke: var(--brass-frame);
+  stroke-width: 0.8;
+}
+.pc-sloop__waterline {
+  fill: var(--coat-dark);
+}
+.pc-sloop__pennant {
+  fill: var(--coat);
+}
+
+/* Sail-off (cancelled) — ship leaves the frame as the island sinks. */
+.pc-sloop--sailoff {
+  position: absolute;
+  left: 50%;
+  top: 18%;
+  width: 60px;
+  height: 56px;
+  margin-left: -30px;
+  animation: pc-sail-off 2400ms ease-in forwards;
+}
+.pc-sloop--sailoff .pc-sloop__svg {
+  animation: pc-sloop-bob 3.6s ease-in-out infinite;
+}
+@keyframes pc-sail-off {
+  0% {
+    transform: translate(0, 0) rotate(-3deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(210px, -30px) rotate(6deg);
+    opacity: 0;
+  }
+}
+
+/* Anchor rode (awaiting only). */
+.pc-anchor {
+  display: none;
+  position: absolute;
+  left: 20px;
+  bottom: -10px;
+  width: 2px;
+  height: 22px;
+  background: linear-gradient(var(--brass-frame), transparent);
+}
+.pc-anchor::after {
+  content: "⚓";
+  position: absolute;
+  left: 50%;
+  bottom: -8px;
+  transform: translateX(-50%);
+  font-size: 11px;
+  color: var(--brass-frame);
+}
+.pc-orbit[data-state="awaiting_answer"] .pc-anchor {
+  display: block;
+}
+
+/* Wake — only while making way (running). */
+.pc-wake {
+  display: none;
+  position: absolute;
+  right: 44px;
+  top: 40px;
+  align-items: center;
+  gap: 5px;
+}
+.pc-orbit[data-state="running"] .pc-wake {
+  display: flex;
+}
+.pc-wake__dash {
+  display: block;
+  width: 10px;
+  height: 3px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.5);
+  animation: pc-wake-fade 1.6s ease-out infinite;
+}
+.pc-wake__dash:nth-child(2) {
+  animation-delay: 0.2s;
+}
+.pc-wake__dash:nth-child(3) {
+  animation-delay: 0.4s;
+}
+@keyframes pc-wake-fade {
+  0% {
+    opacity: 0.7;
+    transform: translateX(0) scaleX(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(12px) scaleX(0.4);
+  }
+}
+
+/* ── Effect: awaiting flare + PARLEY ribbon (loudest on screen) ─────────── */
+.pc-flare {
+  position: absolute;
+  left: 50%;
+  top: -46px;
+  transform: translateX(-50%);
+  width: 48px;
+  height: 48px;
+  pointer-events: none;
+}
+.pc-flare__glow {
+  position: absolute;
+  inset: -18px;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, var(--attn-awaiting-glow), transparent 72%);
+  animation: pc-flare-glow 1.6s ease-in-out infinite;
+}
+.pc-flare__spark {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  filter: drop-shadow(0 0 8px var(--beacon-glow));
+  animation: pc-flare-spark 1.6s ease-in-out infinite;
+}
+@keyframes pc-flare-glow {
+  0%,
+  100% {
+    opacity: 0.55;
+    transform: scale(0.85);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.15);
+  }
+}
+@keyframes pc-flare-spark {
+  0%,
+  100% {
+    transform: scale(0.9) rotate(0deg);
+  }
+  50% {
+    transform: scale(1.1) rotate(45deg);
+  }
+}
+.pc-parley {
+  position: absolute;
+  top: -18px;
+  right: -26px;
+  transform: rotate(3deg);
+  padding: 3px 12px;
+  border-radius: 3px;
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: 10px;
+  letter-spacing: var(--track-caps);
+  color: var(--alert-cream);
+  background: linear-gradient(180deg, var(--alert-red-top), var(--alert-red-bottom));
+  border-top: 1px solid var(--brass);
+  border-bottom: 1px solid var(--brass);
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.5);
+  animation: pc-parley-bounce 1.4s ease-in-out infinite;
+}
+@keyframes pc-parley-bounce {
+  0%,
+  100% {
+    transform: rotate(3deg) translateY(0);
+  }
+  50% {
+    transform: rotate(3deg) translateY(-3px);
+  }
+}
+
+/* ── Effect: stalled fog bank ──────────────────────────────────────────── */
+.pc-fog {
+  position: absolute;
+  left: 50%;
+  top: 20px;
+  transform: translateX(-50%);
+  width: 190px;
+  height: 74px;
+  pointer-events: none;
+  overflow: hidden;
+}
+.pc-fog__bank {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: radial-gradient(
+    closest-side,
+    color-mix(in srgb, var(--state-stalled) 62%, white) 0%,
+    transparent 70%
+  );
+  opacity: 0.7;
+  animation: pc-fog-drift 9s ease-in-out infinite;
+}
+.pc-fog__bank--far {
+  opacity: 0.45;
+  transform: scale(1.3);
+  animation-duration: 13s;
+  animation-direction: reverse;
+}
+@keyframes pc-fog-drift {
+  0%,
+  100% {
+    transform: translateX(-10px);
+  }
+  50% {
+    transform: translateX(10px);
+  }
+}
+
+/* ── Effect: completed flag ────────────────────────────────────────────── */
+.pc-flag {
+  position: absolute;
+  left: 56%;
+  top: -2px;
+  width: 26px;
+  height: auto;
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.4));
+  transform-origin: 6px 40px;
+  animation: pc-flag-wave 3.4s ease-in-out infinite;
+}
+@keyframes pc-flag-wave {
+  0%,
+  100% {
+    transform: rotate(-1.5deg);
+  }
+  50% {
+    transform: rotate(1.5deg);
+  }
+}
+
+/* ── Effect: failed wreck ──────────────────────────────────────────────── */
+.pc-wreck {
+  position: absolute;
+  left: 50%;
+  bottom: 10px;
+  transform: translateX(-50%) rotate(-4deg);
+  width: 72px;
+  height: auto;
+  filter: drop-shadow(0 3px 4px rgba(0, 0, 0, 0.45));
+}
