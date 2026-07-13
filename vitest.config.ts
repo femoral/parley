@@ -2,7 +2,7 @@ import { defineConfig } from "vitest/config";
 
 export default defineConfig({
   test: {
-    include: ["packages/*/tests/**/*.test.ts"],
+    include: ["packages/*/tests/**/*.test.ts", "scripts/tests/**/*.test.ts"],
     // Each CLI-boundary test spawns real detached daemon processes; give them room
     // and keep them off one shared parley home by isolating per-test temp dirs.
     testTimeout: 30_000,

@@ -1,0 +1,149 @@
+name: Release
+
+# Manually dispatched, lockstep publish workflow. See docs/spec/release-process.md.
+#
+# A maintainer picks the bump, the workflow versions every @useparley/*
+# package in lockstep, runs the full gate (build/test/typecheck/lint),
+# publishes public packages to npm via trusted publishing (OIDC) with
+# provenance, commits the bump, tags, and creates the GitHub release.
+# @useparley/ui stays private and is skipped by `pnpm -r publish`.
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: "Version bump"
+        type: choice
+        options:
+          - patch
+          - minor
+          - explicit
+        default: patch
+        required: true
+      version:
+        description: 'Explicit version (only used when bump = "explicit"), e.g. "0.5.0"'
+        type: string
+        required: false
+      dry_run:
+        description: "Dry run: version + gate + pnpm publish --dry-run, no npm publish, no push, no GitHub release"
+        type: boolean
+        default: true
+        required: true
+
+# Trusted publishing needs an OIDC id-token; pushing the version-bump commit,
+# the tag, and the GitHub release needs contents write.
+permissions:
+  contents: write
+  id-token: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+defaults:
+  run:
+    # Explicit bash enables pipefail (the runner default `bash -e` does not),
+    # so failures inside pipelines like `node ... | tee ...` fail the step.
+    shell: bash
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      # workflow_dispatch inputs are untrusted; expose them to scripts via env
+      # instead of interpolating ${{ }} into run: bodies (shell injection).
+      INPUT_BUMP: ${{ inputs.bump }}
+      INPUT_VERSION: ${{ inputs.version }}
+    steps:
+      - name: Validate inputs
+        run: |
+          if [ "$INPUT_BUMP" = "explicit" ] && [ -z "$INPUT_VERSION" ]; then
+            echo "::error::bump=explicit requires the 'version' input (e.g. 0.5.0)" >&2
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # npm trusted publishing (OIDC) needs a recent npm CLI; the one bundled
+      # with actions/setup-node's Node 22 predates OIDC support. Only needed
+      # for the real publish.
+      - name: Update npm for trusted publishing support
+        if: ${{ !inputs.dry_run }}
+        run: npm install -g npm@latest
+
+      - name: Bump package versions (lockstep)
+        id: version
+        run: |
+          if [ "$INPUT_BUMP" = "explicit" ]; then
+            bump_arg="$INPUT_VERSION"
+          else
+            bump_arg="$INPUT_BUMP"
+          fi
+          node scripts/release/bump-version.mjs "$bump_arg" | tee /tmp/bump-version.log
+          version="$(grep '^RELEASE_VERSION=' /tmp/bump-version.log | cut -d= -f2)"
+          if [ -z "$version" ]; then
+            echo "::error::bump script did not produce a RELEASE_VERSION" >&2
+            exit 1
+          fi
+          echo "RELEASE_VERSION=$version" >>"$GITHUB_OUTPUT"
+
+      - name: Build
+        run: pnpm build
+
+      - name: Test
+        run: pnpm test
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Publish (dry run)
+        if: ${{ inputs.dry_run }}
+        run: pnpm -r publish --access public --provenance --no-git-checks --dry-run
+
+      - name: Publish
+        if: ${{ !inputs.dry_run }}
+        # No NPM_TOKEN anywhere: publishing authenticates via OIDC trusted
+        # publishing (id-token: write above) and attaches provenance.
+        run: pnpm -r publish --access public --provenance --no-git-checks
+
+      - name: Commit version bump and tag
+        if: ${{ !inputs.dry_run }}
+        env:
+          RELEASE_VERSION: ${{ steps.version.outputs.RELEASE_VERSION }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add 'packages/*/package.json'
+          git commit -m "chore(release): v${RELEASE_VERSION}"
+          git tag "v${RELEASE_VERSION}"
+          git push origin "HEAD:${GITHUB_REF_NAME}" "v${RELEASE_VERSION}"
+
+      - name: Create GitHub release
+        if: ${{ !inputs.dry_run }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ steps.version.outputs.RELEASE_VERSION }}
+        run: |
+          gh release create "v${RELEASE_VERSION}" \
+            --title "v${RELEASE_VERSION}" \
+            --generate-notes
+
+      - name: Dry run summary
+        if: ${{ inputs.dry_run }}
+        env:
+          RELEASE_VERSION: ${{ steps.version.outputs.RELEASE_VERSION }}
+        run: |
+          echo "Dry run complete: would have published v${RELEASE_VERSION}, committed the bump, tagged, and created the GitHub release." >>"$GITHUB_STEP_SUMMARY"
