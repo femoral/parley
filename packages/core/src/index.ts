@@ -5,6 +5,7 @@
  * SDK custom UIs build against (see docs/spec/monorepo-layout.md).
  */
 export * from "./client.js";
+export * from "./config.js";
 export * from "./contract.js";
 export * from "./home.js";
 export * from "./models.js";

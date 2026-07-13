@@ -4,11 +4,15 @@
   "description": "The parley web UI (React + Vite), served by the daemon when installed. Placeholder until the UI work lands (ticket #51).",
   "private": true,
   "type": "module",
+  "parley": {
+    "ui": "www"
+  },
   "engines": {
     "node": ">=22"
   },
   "files": [
-    "dist"
+    "dist",
+    "www"
   ],
   "exports": {
     ".": {

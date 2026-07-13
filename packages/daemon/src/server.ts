@@ -9,6 +9,7 @@ import { DelegateError, TaskEngine } from "./engine.js";
 import { readLogTail } from "./logtail.js";
 import { handleMcpRequest } from "./mcp.js";
 import { buildEnvelope } from "./report.js";
+import { discoverUiBundle, isReservedPath, serveUiRequest } from "./ui.js";
 import { DAEMON_VERSION } from "./version.js";
 
 export interface DaemonServer {
@@ -508,10 +509,13 @@ function handleCancel(engine: TaskEngine, res: http.ServerResponse, ref: string)
 }
 
 /**
- * Build the daemon's HTTP request handler: the CLI plane (REST, spec §3) plus
- * the MCP child channel on `/mcp` (spec §4).
+ * Build the daemon's HTTP request handler: the CLI plane (REST, spec §3), the
+ * MCP child channel on `/mcp` (spec §4), and — when `uiBundleDir` is non-null
+ * (UI discovery, spec §"Serving convention") — the UI's static bundle at `/`
+ * with SPA fallback. `uiBundleDir` is resolved once at server start; API
+ * routes are matched first and always win, so the UI can never shadow them.
  */
-function createHandler(engine: TaskEngine): http.RequestListener {
+function createHandler(engine: TaskEngine, uiBundleDir: string | null): http.RequestListener {
   return (req, res) => {
     void (async () => {
       const method = req.method ?? "GET";
@@ -587,6 +591,14 @@ function createHandler(engine: TaskEngine): http.RequestListener {
         }
       }
 
+      // UI fallback (spec §"Routes"): only for GET requests outside the
+      // reserved API prefixes, and only when a bundle was discovered at
+      // startup — otherwise the daemon behaves exactly as it does today.
+      if (method === "GET" && uiBundleDir !== null && !isReservedPath(segments[0])) {
+        serveUiRequest(uiBundleDir, res, url.pathname);
+        return;
+      }
+
       sendJson(res, 404, { error: "not_found", route: `${method} ${url.pathname}` });
     })().catch((err: unknown) => {
       if (!res.headersSent) {
@@ -612,7 +624,17 @@ export function startServer(paths: HomePaths): Promise<DaemonServer> {
   // children with its process group — mark them stalled before taking requests.
   sweepInterruptedTasks(db);
   const engine = new TaskEngine(db, paths, createAdapterRegistry());
-  const server = http.createServer(createHandler(engine));
+  // UI discovery must never take the daemon down: it's spawned detached with
+  // stdio ignored, so an exception here (e.g. a corrupt parley.json) would
+  // brick every CLI command with no visible cause. Degrade to "no UI" and
+  // best-effort report the reason instead.
+  let uiBundleDir: string | null = null;
+  try {
+    uiBundleDir = discoverUiBundle(paths);
+  } catch (err) {
+    process.stderr.write(`parley daemon: UI discovery failed, serving no UI: ${String(err)}\n`);
+  }
+  const server = http.createServer(createHandler(engine, uiBundleDir));
   // Children must never outlive the daemon (no orphans): whatever path the
   // process exits through — graceful close below, crash, signal handler —
   // hard-stop any still-running vendor children on the way out.

@@ -19,6 +19,8 @@ export interface HomePaths {
   db: string;
   /** User-patchable model/effort catalog file (`parley models`). */
   models: string;
+  /** User-patchable settings file (currently: UI bundle discovery, `ui.*`). */
+  config: string;
   /** Per-task raw vendor event logs live here (future tickets). */
   tasks: string;
   /** Parley-created git worktrees live here (future tickets). */
@@ -42,6 +44,7 @@ export function homePaths(home: string): HomePaths {
     lock: path.join(home, "daemon.lock"),
     db: path.join(home, "parley.db"),
     models: path.join(home, "models.json"),
+    config: path.join(home, "parley.json"),
     tasks: path.join(home, "tasks"),
     worktrees: path.join(home, "worktrees"),
   };
