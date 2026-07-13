@@ -421,11 +421,14 @@ describe("logs", () => {
   });
 
   it("--follow flushes a buffered group on every poll — live output never goes silent for a slow same-type run (#27 fix)", async () => {
+    // Generous gaps: the follow CLI is a fresh tsx process whose boot can take
+    // seconds on a loaded machine, and the liveness assertion below is only
+    // meaningful while the vendor is still mid-run.
     const cwd = taskDir([
       { emit: { type: "thought", data: "one" } },
-      { sleep: 300 },
+      { sleep: 2500 },
       { emit: { type: "thought", data: " two" } },
-      { sleep: 300 },
+      { sleep: 2500 },
       { submit_report: REPORT },
     ]);
     const ack = JSON.parse(
@@ -433,12 +436,12 @@ describe("logs", () => {
     );
 
     const follow = startCli(["logs", ack.task_id, "--follow"], home);
-    // Chunks are 300ms apart, well past one 100ms poll — the first must render
+    // Chunks are 2500ms apart, well past one 100ms poll — the first must render
     // well before the task finishes, not just at the end.
     await waitFor(
       () => follow.stdoutSoFar().includes('{"type":"thought","data":"one"}'),
       "first thought chunk to render live, before the task completes",
-      2_000,
+      10_000,
     );
     const result = await follow.result;
     expect(result.code).toBe(0);

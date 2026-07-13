@@ -118,10 +118,19 @@ describe("per-task log tail (#63)", () => {
     // lines), remember its cursor, then let the task finish.
     let first = await client.logs("t1", 0);
     await waitForState(home, "t1", "completed");
-    const onDisk = fs.readFileSync(`${home}/tasks/t1/vendor.jsonl`, "utf8");
 
     // Resume from the saved cursor: the rest of the file, with no overlap.
-    const rest = await client.logs("t1", first.next);
+    // eof flips only once the child process has fully exited, which can lag
+    // the completed transition — the contract's rule is "keep polling until
+    // eof flips" (cursor reads are idempotent, as asserted below).
+    let rest = await client.logs("t1", first.next);
+    const eofDeadline = Date.now() + 10_000;
+    while (!rest.eof) {
+      if (Date.now() > eofDeadline) throw new Error("eof never flipped after completion");
+      await new Promise((r) => setTimeout(r, 50));
+      rest = await client.logs("t1", first.next);
+    }
+    const onDisk = fs.readFileSync(`${home}/tasks/t1/vendor.jsonl`, "utf8");
     expect(rest.eof).toBe(true);
     expect(first.chunk + rest.chunk).toBe(onDisk);
 
