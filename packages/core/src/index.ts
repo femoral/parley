@@ -4,6 +4,7 @@
  * else in the workspace; the daemon and CLI build on top of it. Doubles as the
  * SDK custom UIs build against (see docs/spec/monorepo-layout.md).
  */
+export * from "./client.js";
 export * from "./home.js";
 export * from "./models.js";
 export * from "./util/time.js";

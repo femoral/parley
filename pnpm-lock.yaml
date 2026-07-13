@@ -7,29 +7,10 @@ settings:
 importers:
 
   .:
-    dependencies:
-      '@modelcontextprotocol/sdk':
-        specifier: ^1.29.0
-        version: 1.29.0(zod@4.4.3)
-      '@useparley/core':
-        specifier: workspace:*
-        version: link:packages/core
-      ajv:
-        specifier: ^8.20.0
-        version: 8.20.0
-      better-sqlite3:
-        specifier: ^11.8.1
-        version: 11.10.0
-      zod:
-        specifier: ^4.4.3
-        version: 4.4.3
     devDependencies:
       '@eslint/js':
         specifier: ^9.17.0
         version: 9.39.5
-      '@types/better-sqlite3':
-        specifier: ^7.6.12
-        version: 7.6.13
       '@types/node':
         specifier: ^22.10.5
         version: 22.20.1
@@ -52,7 +33,47 @@ importers:
         specifier: ^2.1.8
         version: 2.1.9(@types/node@22.20.1)
 
+  packages/cli:
+    dependencies:
+      '@useparley/core':
+        specifier: workspace:*
+        version: link:../core
+      '@useparley/daemon':
+        specifier: workspace:*
+        version: link:../daemon
+      tsx:
+        specifier: ^4.19.2
+        version: 4.23.0
+
   packages/core: {}
+
+  packages/daemon:
+    dependencies:
+      '@modelcontextprotocol/sdk':
+        specifier: ^1.29.0
+        version: 1.29.0(zod@4.4.3)
+      '@useparley/core':
+        specifier: workspace:*
+        version: link:../core
+      ajv:
+        specifier: ^8.20.0
+        version: 8.20.0
+      better-sqlite3:
+        specifier: ^11.8.1
+        version: 11.10.0
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
+    devDependencies:
+      '@types/better-sqlite3':
+        specifier: ^7.6.12
+        version: 7.6.13
+
+  packages/ui:
+    dependencies:
+      '@useparley/core':
+        specifier: workspace:*
+        version: link:../core
 
 packages:
 

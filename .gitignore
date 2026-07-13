@@ -6,3 +6,6 @@ coverage/
 *.db-shm
 *.db-wal
 .DS_Store
+
+# TypeScript incremental build metadata
+*.tsbuildinfo
