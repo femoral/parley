@@ -33,6 +33,24 @@ export interface RosterSessionOption {
   count: number;
 }
 
+/** One task awaiting an answer, as the inbox renders it (design-manifest §4.15). */
+export interface InboxTask {
+  id: string;
+  name: string;
+  /** Task state string (matches a `StateKey`) — drives the card's badge via
+   * `stateMetaFor`, the same lookup `RosterPanel` reads, so the label/glyph/
+   * colour never drifts from the layer-0 state language. */
+  state: string;
+  /** Faction coat colour (hex) for the emblem chip. */
+  coat: string;
+  /** Faction emblem glyph. */
+  emblem: string;
+  /** `branch · id` style meta line, same shape as the roster row's. */
+  meta: string;
+  /** The outstanding question text. */
+  question: string;
+}
+
 /** The daemon health readout, fully projected to display values by the hooks layer. */
 export interface HealthView {
   /** Whether the daemon answered the last probe. */

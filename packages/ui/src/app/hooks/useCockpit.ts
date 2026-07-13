@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { ParleyClient } from "@useparley/core";
 import type { HealthView } from "../../hud/types.js";
 import { formatClock, formatUptime } from "./format.js";
@@ -25,6 +25,13 @@ export interface CockpitView {
   clock: string;
   /** Days the cove has been open (flavour: real elapsed days, min 1). */
   day: number;
+  /**
+   * The single v1 write (#67): `POST /tasks/:ref/answer`. Rejects with the
+   * daemon's error on failure — the inbox card catches it and stays put; on
+   * success the state flip arrives over SSE and `useSnapshot` re-projects the
+   * task out of the inbox, no reload.
+   */
+  answerTask: (id: string, text: string) => Promise<void>;
 }
 
 /**
@@ -71,5 +78,10 @@ export function useCockpit(): CockpitView {
 
   const roster: RosterSelection = { selectedSessionId, selectedTaskId, selectSession, selectTask };
 
-  return { health: healthView, snapshot, roster, clock: formatClock(new Date(now)), day };
+  const answerTask = useCallback(
+    (id: string, text: string) => client.answer(id, text).then(() => undefined),
+    [client],
+  );
+
+  return { health: healthView, snapshot, roster, clock: formatClock(new Date(now)), day, answerTask };
 }

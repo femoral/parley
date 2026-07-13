@@ -1,18 +1,28 @@
 import { useEffect, useState } from "react";
 import { bootstrapTaskStream, type ParleyClient, type StreamEvent, type TaskRow } from "@useparley/core";
+import { projectInbox } from "./inbox.js";
 import { projectRoster, type RosterTaskInput } from "./roster.js";
-import type { RosterGroup, RosterSessionOption } from "../../hud/types.js";
+import type { InboxTask, RosterGroup, RosterSessionOption } from "../../hud/types.js";
 
-/** The projected roster + counts hud consumes. */
+/** The projected roster + inbox + counts hud consumes. */
 export interface SnapshotView {
   groups: RosterGroup[];
   sessions: RosterSessionOption[];
+  /** Tasks blocked on an answer, sorted awaiting-first (#67). */
+  inbox: InboxTask[];
   totalTasks: number;
   activeTasks: number;
   durableSessions: number;
 }
 
-const EMPTY: SnapshotView = { groups: [], sessions: [], totalTasks: 0, activeTasks: 0, durableSessions: 0 };
+const EMPTY: SnapshotView = {
+  groups: [],
+  sessions: [],
+  inbox: [],
+  totalTasks: 0,
+  activeTasks: 0,
+  durableSessions: 0,
+};
 
 function fromRow(row: TaskRow): RosterTaskInput {
   return {
@@ -22,6 +32,7 @@ function fromRow(row: TaskRow): RosterTaskInput {
     state: row.state,
     branch: row.branch,
     orchestratorSession: row.orchestrator_session_id,
+    question: row.question,
   };
 }
 
@@ -43,6 +54,7 @@ function mergeEnvelope(prev: RosterTaskInput | undefined, event: StreamEvent): R
     state: t.state,
     branch: t.branch,
     orchestratorSession: prev?.orchestratorSession ?? null,
+    question: t.question,
   };
 }
 
@@ -73,7 +85,12 @@ export function useSnapshot(client: ParleyClient): SnapshotView {
     // no orchestrator session — e.g. CLI-delegated — so "asked" not "found"
     // is what stops the refetching; a failed fetch retries on the next event).
     const sessionFetched = new Set<string>();
-    const emit = (): void => setView(projectRoster(tasks.values()));
+    // A `Map`'s `.values()` iterator is single-use — materialize it once so
+    // both projections (each a full pass) see every task.
+    const emit = (): void => {
+      const list = [...tasks.values()];
+      setView({ ...projectRoster(list), inbox: projectInbox(list) });
+    };
 
     /** Adopt `session` for `id` when the task is still session-less. */
     const adoptSession = (id: string, session: string | null): void => {

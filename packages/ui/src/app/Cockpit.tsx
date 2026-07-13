@@ -1,4 +1,4 @@
-import { Cartouche, DayChip, HealthPanel, RosterPanel } from "../hud/index.js";
+import { Cartouche, DayChip, HealthPanel, InboxPanel, RosterPanel } from "../hud/index.js";
 import { Plate } from "../primitives/index.js";
 import { useCockpit } from "./hooks/index.js";
 import { CompassRose } from "./CompassRose.js";
@@ -11,7 +11,7 @@ import "./cockpit.css";
  * — with the living scene reserved for its own ticket.
  */
 export function Cockpit() {
-  const { health, snapshot, roster, clock, day } = useCockpit();
+  const { health, snapshot, roster, clock, day, answerTask } = useCockpit();
 
   return (
     <div className="pc-cockpit">
@@ -55,6 +55,7 @@ export function Cockpit() {
 
           <aside className="pc-region--right" aria-label="Status stack">
             <HealthPanel health={health} />
+            <InboxPanel tasks={snapshot.inbox} onAnswer={answerTask} />
           </aside>
         </div>
       </div>

@@ -287,3 +287,157 @@
 .pc-roster__footer > * {
   flex: 1;
 }
+
+/* ── Inbox (design-manifest §4.15/§4.16) ──────────────────────────────────
+ * The panel is the ember plate (Plate variant="ember" — §2.8's inbox-panel
+ * recipe); each card inside gets its own, brighter attention background
+ * (--attn-awaiting-fill) so a flag reads even against the ember frame.
+ */
+.pc-inbox {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.pc-inbox__pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: var(--radius-pill);
+  background: linear-gradient(180deg, var(--alert-red-top), var(--alert-red-bottom));
+  color: var(--alert-cream);
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 10px;
+  letter-spacing: 0.6px;
+  white-space: nowrap;
+}
+.pc-inbox__list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 4px 12px 12px;
+  max-height: 290px;
+  overflow-y: auto;
+}
+.pc-inbox__list::-webkit-scrollbar {
+  width: 8px;
+}
+.pc-inbox__list::-webkit-scrollbar-thumb {
+  background: var(--scroll-thumb);
+  border-radius: 4px;
+}
+.pc-inbox__empty {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 16px 6px;
+  font-family: var(--font-flavor);
+  font-style: italic;
+  font-size: 13px;
+  color: var(--ink-ghost);
+}
+.pc-inbox-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 11px;
+  border-radius: var(--radius-inbox);
+  background: var(--attn-awaiting-fill);
+  border: 1px solid var(--attn-awaiting-border);
+  box-shadow: 0 0 14px var(--attn-awaiting-glow);
+}
+.pc-inbox-card__head {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.pc-inbox-card__body {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  flex: 1;
+}
+.pc-inbox-card__name {
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--ink-parchment);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pc-inbox-card__meta {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--ink-faint);
+}
+.pc-inbox-card__question {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin: 0;
+  font-family: var(--font-flavor);
+  font-style: italic;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--question-parchment);
+}
+.pc-inbox-card__marker {
+  flex: 0 0 auto;
+  color: var(--question-marker);
+  font-style: normal;
+}
+.pc-inbox-card__input {
+  width: 100%;
+  resize: vertical;
+  padding: 8px 10px;
+  border-radius: var(--radius-control);
+  border: 1px solid var(--plate-well-border);
+  background: var(--input-bg);
+  color: var(--ink-parchment);
+  font-family: var(--font-body);
+  font-size: 12px;
+  line-height: 1.4;
+}
+.pc-inbox-card__input:focus-visible {
+  outline: 2px solid var(--brass-bright);
+  outline-offset: 1px;
+}
+.pc-inbox-card__input:disabled {
+  opacity: 0.6;
+}
+.pc-inbox-card__error {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  margin: 0;
+  padding: 6px 9px;
+  border-radius: var(--radius-well);
+  border: 1px solid var(--state-failed);
+  background: var(--badge-bg);
+  color: var(--state-failed);
+  font-family: var(--font-body);
+  font-size: 11px;
+}
+.pc-inbox-card__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.pc-inbox-card__hint {
+  font-family: var(--font-body);
+  font-size: 10px;
+  letter-spacing: 0.4px;
+  color: var(--ink-label);
+}
+.pc-inbox-card__send.pc-btn--primary {
+  padding: 5px 12px;
+  font-size: 10.5px;
+  box-shadow: 0 2px 0 var(--brass-shadow), inset 0 1px 1px rgba(255, 255, 255, 0.4);
+}
+.pc-inbox-card__send:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

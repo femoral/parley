@@ -81,6 +81,7 @@
   --alert-red-bottom: #9c1c14;
   --alert-cream: #ffe6a8;
   --question-parchment: #ffe6c2;
+  --question-marker: #d99a5a;
   --healthy-dot: #5fd08a;
   --healthy-text: #8fe0a8;
   --sessions-blue: #7fd0ff;
@@ -89,6 +90,12 @@
   --ember-fill: linear-gradient(180deg, #241206, #180d05);
   --ember-border: #d97e3a;
   --ember-inner: #8a4a22;
+  /* §2.8 — per-card attention backgrounds (inside the ember inbox plate) */
+  --attn-awaiting-fill: linear-gradient(180deg, #3a1a0c, #25130a);
+  --attn-awaiting-border: #f0c25a;
+  --attn-awaiting-glow: rgba(255, 207, 77, 0.35);
+  --attn-stalled-fill: linear-gradient(180deg, #12222c, #0e1a22);
+  --attn-stalled-border: #4a6b7a;
   /* §2.8 — sea-green (structured report) plate */
   --report-fill: linear-gradient(180deg, #122019, #0e1a13);
   --report-border: #3f8f68;

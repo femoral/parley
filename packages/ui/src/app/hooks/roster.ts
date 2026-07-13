@@ -22,6 +22,10 @@ export interface RosterTaskInput {
    * null when unknown (e.g. a task first observed via an SSE envelope, which
    * does not carry this field — see `useSnapshot`'s merge comment). */
   orchestratorSession: string | null;
+  /** The outstanding question text while `awaiting_answer` (else null) — the
+   * `useSnapshot`-maintained map this feeds both the roster and inbox
+   * projections (#67), so it lives on the shared input shape. */
+  question: string | null;
 }
 
 /** The full roster projection a `RosterPanel` renders. */
@@ -34,7 +38,10 @@ export interface RosterProjection {
   durableSessions: number;
 }
 
-function shortId(id: string): string {
+/** Truncate a task id to its short display form (`branch · id` rows, session
+ * chips). Exported so `inbox.ts`'s projection uses the same truncation rather
+ * than re-declaring it. */
+export function shortId(id: string): string {
   return id.length > 8 ? id.slice(0, 8) : id;
 }
 

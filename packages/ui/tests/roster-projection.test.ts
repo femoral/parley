@@ -7,6 +7,7 @@ function task(overrides: Partial<RosterTaskInput> & Pick<RosterTaskInput, "id" |
     vendor: "codex",
     branch: "feat/x",
     orchestratorSession: null,
+    question: null,
     ...overrides,
   };
 }
