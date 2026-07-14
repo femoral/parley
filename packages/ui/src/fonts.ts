@@ -8,7 +8,7 @@
 import "@fontsource/cinzel/500.css";
 import "@fontsource/cinzel/700.css";
 import "@fontsource/cinzel/900.css";
-// IM Fell English — flavour lines & questions: regular + italic.
+// IM Fell English — decorative flavour only (taglines, footnotes, atmosphere).
 import "@fontsource/im-fell-english/400.css";
 import "@fontsource/im-fell-english/400-italic.css";
 // Outfit — default HUD text: 300–700.

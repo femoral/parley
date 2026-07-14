@@ -272,7 +272,7 @@
 .pc-roster__empty {
   padding: 20px 14px;
   text-align: center;
-  font-family: var(--font-flavor);
+  font-family: var(--font-body);
   font-style: italic;
   font-size: 13px;
   color: var(--ink-ghost);
@@ -331,7 +331,7 @@
   align-items: center;
   gap: 8px;
   padding: 16px 6px;
-  font-family: var(--font-flavor);
+  font-family: var(--font-body);
   font-style: italic;
   font-size: 13px;
   color: var(--ink-ghost);
@@ -377,7 +377,7 @@
   align-items: baseline;
   gap: 6px;
   margin: 0;
-  font-family: var(--font-flavor);
+  font-family: var(--font-body);
   font-style: italic;
   font-size: 13px;
   line-height: 1.4;
@@ -462,7 +462,7 @@
 .pc-inspector__placeholder {
   margin: 0;
   text-align: center;
-  font-family: var(--font-flavor);
+  font-family: var(--font-body);
   font-style: italic;
   font-size: 13px;
   color: var(--ink-ghost);
@@ -593,7 +593,7 @@
 }
 .pc-brief__goal {
   margin: 0;
-  font-family: var(--font-flavor);
+  font-family: var(--font-body);
   font-style: italic;
   font-size: 13px;
   line-height: 1.45;
@@ -688,7 +688,7 @@
 .pc-logstream__empty {
   margin: auto;
   text-align: center;
-  font-family: var(--font-flavor);
+  font-family: var(--font-body);
   font-style: italic;
   font-size: 12.5px;
   color: var(--ink-ghost);
@@ -743,7 +743,7 @@
 .pc-report__empty {
   margin: auto;
   text-align: center;
-  font-family: var(--font-flavor);
+  font-family: var(--font-body);
   font-style: italic;
   font-size: 13px;
   color: var(--ink-ghost);
@@ -779,7 +779,7 @@
   border-radius: 8px 8px 8px 2px;
   background: var(--plate-well);
   border: 1px solid var(--plate-well-border);
-  font-family: var(--font-flavor);
+  font-family: var(--font-body);
   font-style: italic;
   color: var(--question-parchment);
 }
@@ -808,7 +808,7 @@
 .pc-qa__empty {
   margin: auto;
   text-align: center;
-  font-family: var(--font-flavor);
+  font-family: var(--font-body);
   font-style: italic;
   font-size: 13px;
   color: var(--ink-ghost);

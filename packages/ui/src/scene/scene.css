@@ -76,7 +76,7 @@
 }
 .pc-scene-empty__body {
   max-width: 380px;
-  font-family: var(--font-flavor);
+  font-family: var(--font-body);
   font-style: italic;
   font-size: 13px;
   line-height: 1.5;

@@ -34,7 +34,7 @@ export interface Faction {
   coatDark: string;
   /** Emblem mark worn on the chip (glyph or original SVG path data). */
   emblem: EmblemMark;
-  /** IM Fell italic flavour line. */
+  /** Decorative flavour tagline (kit band; IM Fell italic). */
   tagline: string;
 }
 

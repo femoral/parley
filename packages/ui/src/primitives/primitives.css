@@ -109,7 +109,7 @@
   text-overflow: ellipsis;
 }
 .pc-plate-header__subtitle {
-  font-family: var(--font-flavor);
+  font-family: var(--font-body);
   font-style: italic;
   font-size: 11px;
   color: var(--ink-ghost);

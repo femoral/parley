@@ -24,9 +24,10 @@ teal sea; the vendor's faction color is the only loud hue per element.
    (`completed` / `failed` / `cancelled`); `pending` is transient. A blocked-on-question
    agent must be the loudest thing on screen (gold glow, red "PARLEY!" banner, beacon
    pulse, top of every list).
-2. **Delight over density.** Flavor copy (IM Fell English italics), corner flourishes,
-   a slowly spinning compass rose, and drifting sea texture keep it a place you *want*
-   to leave open. Data stays readable in Outfit/JetBrains Mono, but never a wall.
+2. **Delight over density.** Decorative flavor copy (IM Fell English italics — only where
+   the user need not read to act), corner flourishes, a slowly spinning compass rose,
+   and drifting sea texture keep it a place you *want* to leave open. Functional copy
+   and data stay readable in Outfit/JetBrains Mono, but never a wall.
 3. **Vendor-agnostic factions.** A vendor = a faction = `{ label, coat color, emblem
    mark, tagline }`. Emblem marks are data (unicode glyph or original SVG path) — never
    per-vendor component code. The system is extensible: adding a vendor means adding one
@@ -186,9 +187,23 @@ Google Fonts load: `Cinzel:wght@500;700;900`, `IM Fell English:ital@0;1`,
 | Family | Role | Weights/sizes actually used |
 |---|---|---|
 | **Cinzel** (serif) | Engraved caps plates: titles, panel headers, tabs, buttons | 900 @ 40px ls 7px (title), 900 @ 10px ls 2px (PARLEY! banner), 700 @ 19/14/13/12.5/12/11/10.5px ls 1–2px (headers, tabs, buttons), 500 @ 12px ls 6px (subtitle), 500 @ 10px ls 2px (kit section labels) |
-| **IM Fell English** (serif, italic) | Flavor lines, agent questions, empty states | italic 13px (questions, empty states), 12px (workboard tagline), 11px (panel subtitles), 10.5px (taglines, footnotes) |
-| **Outfit** (sans) | Default HUD text, values, labels | 600 @ 13px (names), 500 @ 12.5px (rows), 11.5–12px (body, buttons), 9–10px ls 0.5–1px (ALL-CAPS micro-labels) |
+| **IM Fell English** (serif, italic) | Decorative flavor only (see rule below) | italic 11px (day-chip weather), 10.5px (footnotes, faction taglines, state-legend hints) |
+| **Outfit** (sans) | Default HUD text, values, labels, and all functional prose | 600 @ 13px (names), 500 @ 12.5px (rows), 11.5–13px (body, buttons, questions, empty states, goals, panel subtitles), 9–10px ls 0.5–1px (ALL-CAPS micro-labels) |
 | **JetBrains Mono** | Logs, ids, branches, numerics | 21px / 19px / 17px (stat numerals, clock), 11px (log lines), 10–10.5px (ids, ctx %, meta) |
+
+**Flavor-font rule (functional vs decorative).** Token: `--font-flavor` (`IM Fell English`).
+Apply it only when the answer to *"Must the user read this text to use the feature?"* is
+**no**. Borderline informational copy defaults to **functional** (Outfit / `--font-body`).
+
+| Class | Treatment | Examples |
+|---|---|---|
+| **Decorative** — keep `--font-flavor` | Taglines, footnotes, purely atmospheric lines the user can ignore | Day-chip weather, brief standing footnote, kit-band faction taglines, kit-band state-legend hints |
+| **Functional** — use `--font-body` (Outfit); italic optional | Agent questions, empty-state guidance, goals, error/status, panel subtitles that can carry state/data | Inbox/Q&A question text, roster/inbox/log/report/QA/scene empty copy, brief goal well, plate-header subtitles (e.g. health version), inspector placeholder |
+
+Copy classes that still get the flavor font after this rule: day-chip weather
+(`.pc-daychip__weather`), brief footnote (`.pc-brief__footnote`), faction taglines
+(`.pc-kit__faction-tagline`), state-legend hints (`.pc-kit__legend-hint`). Keep the
+token; do not reintroduce it on operational prose.
 
 Scale summary: micro-labels 9–10px, body 11–13px, headers 12–14px (Cinzel, tracked),
 display 19–21px numerals, 40px title. Line-heights: logs 1.6, prose 1.35–1.5, tight
@@ -273,8 +288,9 @@ Fixed 1600×1000 canvas → 14px inset flex column, 12px gaps.
    *ember* (inbox: orange border `#d97e3a`), *sea-green* (structured report). All
    `border-radius:11px`, `overflow:hidden`.
 2. **Panel header** — 24–28px icon chip (radial-gradient gold or dark-bronze, or faction
-   coat) + Cinzel 700 tracked title + optional IM Fell italic subtitle + right-aligned
-   status chip; followed (sometimes) by the gold divider rule.
+   coat) + Cinzel 700 tracked title + optional Outfit italic subtitle (functional —
+   may carry version/status) + right-aligned status chip; followed (sometimes) by the
+   gold divider rule.
 3. **Title cartouche** — PARLEY COVE, Cinzel 900 40px, letter-spacing 7px, `#f0c25a`
    with `text-shadow: 0 2px 0 #5b3a24, 0 0 26px rgba(255,207,77,0.25)`; flanked by
    `✦ ⚓ ✦` in `#8a6a34`; subtitle "AI SUB-AGENT COCKPIT" Cinzel 500 12px ls 6px `#c9a87a`;
@@ -321,8 +337,8 @@ Fixed 1600×1000 canvas → 14px inset flex column, 12px gaps.
     `#8a6f4d`, values mono `#e8c88a`); two stat wells (`#100a06`, border `#2a1c10`):
     ACTIVE AGENTS `x / y` green, DURABLE SESSIONS blue.
 15. **Inbox (attention) card** — ember or slate variant (§2.8). Header row: emblem,
-    name, mono id, state chip. Question block: `⌐` marker `#d99a5a` + IM Fell italic
-    13px `#ffe6c2`. *Awaiting* variant adds suggestion chips (dark buttons, border
+    name, mono id, state chip. Question block: `⌐` marker `#d99a5a` + Outfit italic
+    13px `#ffe6c2` (functional — must be readable to answer). *Awaiting* variant adds suggestion chips (dark buttons, border
     `#6b4a2c`, hover `#33240f`/gold border), an answer input (bg `#0e0a06`, placeholder
     "Your answer…") + gold `➤` send button, and "Markdown supported" hint. *Stalled*
     variant shows "Adrift <duration> — nudge to resume." + blue `⛵ RESUME` button.
@@ -344,7 +360,7 @@ Fixed 1600×1000 canvas → 14px inset flex column, 12px gaps.
       `#5fd08a`, bg `#123a2a`, text `#aef0c8`). Empty: *"No report yet — this soul is
       still at sea."*
     - **Q&A**: chat transcript — agent question bubble left (faction avatar, parchment
-      well `#1a1209`, IM Fell italic, radius `8 8 8 2`) vs. your answer right-aligned
+      well `#1a1209`, Outfit italic body, radius `8 8 8 2`) vs. your answer right-aligned
       (⚓ avatar `#1c3a2a`, green well `#10241a`, radius `8 8 2 8`), centered timestamp
       `#5f4a2c`. Empty: *"No parley yet — this soul hasn't raised a flag."*
 18. **Buttons (chrome kit)** — *Primary*: gold gradient `#e6b34a→#a8681f`, border
@@ -355,10 +371,10 @@ Fixed 1600×1000 canvas → 14px inset flex column, 12px gaps.
     caps label `#8a6f4d`.
 20. **Gold divider rule** — see §2.10; used under panel headers and vertically in the
     kit band.
-21. **State legend entry** — 24px glowing state-dot circle + label `#e0cfa4` + hint
-    `#7a6242` (kit band).
+21. **State legend entry** — 24px glowing state-dot circle + label `#e0cfa4` + IM Fell
+    italic hint `#7a6242` (kit band; decorative atmosphere, not operational copy).
 22. **Faction legend entry** — emblem chip + label `#e8d3a6` + IM Fell italic tagline
-    `#8a6f4d` (kit band).
+    `#8a6f4d` (kit band; decorative — pure atmosphere).
 23. **Corner flourish SVG** — §2.11; decorative, toggleable.
 
 ---
@@ -400,10 +416,11 @@ clock 1s; ambient loops (sea, rose) are slow enough to be subliminal.
 
 ## 7. Implementation notes
 
-- **Fonts**: load Cinzel (500/700/900), IM Fell English (regular + italic), Outfit
-  (300–700), JetBrains Mono (400/500) — Google Fonts in the design; consider
-  self-hosting for the localhost cockpit (offline-friendly). Fallbacks:
-  `serif` for Cinzel/IM Fell, `system-ui, sans-serif` for Outfit, `monospace` for JBM.
+- **Fonts**: load Cinzel (500/700/900), IM Fell English (regular + italic; decorative
+  flavor only — see §2.9), Outfit (300–700; all functional prose), JetBrains Mono
+  (400/500) — Google Fonts in the design; consider self-hosting for the localhost
+  cockpit (offline-friendly). Fallbacks: `serif` for Cinzel/IM Fell,
+  `system-ui, sans-serif` for Outfit, `monospace` for JBM.
 - **Assets**: none external. All decoration is inline SVG (compass rose, corner
   flourishes) and CSS gradients; glyphs are Unicode/emoji (⚓ ⚔ ☾ ⛵ 🚩 🧭 🏁 ⏳ ✖ ⊘ ⑂
   ◆ ▸ ⌐ ✦ 🌤️ 📜 ➤). Emoji rendering varies by platform — consider an SVG icon set for

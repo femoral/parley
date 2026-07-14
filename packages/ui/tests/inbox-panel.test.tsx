@@ -32,7 +32,7 @@ function typeAnswer(taskName: string, text: string): void {
 }
 
 describe("InboxPanel renders question cards (#67)", () => {
-  it("renders one card per awaiting task with its question in flavor type", () => {
+  it("renders one card per awaiting task with its question text", () => {
     render(<InboxPanel tasks={[AWAITING_1, AWAITING_2]} onAnswer={vi.fn()} />);
     expect(screen.getByText("chart-the-bay")).toBeTruthy();
     expect(screen.getByText(AWAITING_1.question)).toBeTruthy();

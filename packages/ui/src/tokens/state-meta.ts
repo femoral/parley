@@ -22,7 +22,7 @@ export interface StateMeta {
   label: string;
   /** Single-glyph state marker. */
   glyph: string;
-  /** IM Fell flavour hint, e.g. "needs your input". */
+  /** Decorative flavour hint (kit legend), e.g. "needs your input". */
   hint: string;
   /** The `var(--state-*)` custom property holding this state's colour. */
   colorVar: string;
