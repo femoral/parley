@@ -164,9 +164,10 @@ export interface Envelope {
   /** The outstanding question text while `awaiting_answer` (else null). */
   question: string | null;
   /**
-   * Global transition sequence number as of this response (#34): the seq of the
-   * task's most recent state change. Threads into `parley watch --since` to
-   * close the startup race. 0 before the task's first transition.
+   * Global transition sequence number as of this response (#34 / ADR-0007): the
+   * seq of the task's most recent state change. For the attention inbox this
+   * is the event id passed to `watch --ack`. 0 before the task's first
+   * transition.
    */
   seq: number;
   /** Whether the task's repo declares delegations into it are eval'd (#45). */

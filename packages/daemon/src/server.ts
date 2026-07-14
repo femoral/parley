@@ -281,36 +281,115 @@ function watchEventFor(state: string): string {
 }
 
 /**
- * `GET /tasks/events?ids=…&since=<seq>&wait=true` — the multi-task long-poll
- * (#34, spec §3). Returns the earliest transition of any watched task after
- * `since` (replaying immediately if one already happened, else blocking until
- * the next), or `{ event: null }` when the poll window elapses. Omitting `since`
- * means "start from now" — the current global seq, so nothing before connect is
- * replayed. An unknown task id is a client mistake (404 → the CLI exits 2).
+ * Resolve `ids` query param to canonical task ids. Empty is allowed (vacuous
+ * all-done / empty firehose). A bad ref is 404 → CLI exit 2.
+ */
+function resolveWatchIds(
+  engine: TaskEngine,
+  params: URLSearchParams,
+): string[] | { error: string; status: number } {
+  const ids = (params.get("ids") ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter((s) => s !== "");
+  const resolved: string[] = [];
+  for (const ref of ids) {
+    const task = engine.resolve(ref);
+    if (!task) {
+      return { error: `no such task: ${ref}`, status: 404 };
+    }
+    resolved.push(task.id);
+  }
+  return [...new Set(resolved)];
+}
+
+/**
+ * `GET /tasks/inbox?ids=…&ack=<seq>&wait=true` — the acked attention inbox
+ * (ADR-0007 / #91). Optionally acks a prior event id, then returns the next
+ * pending event (level-triggered: immediate if already pending), `{ all_done:
+ * true }` when every watched task is terminal and every event is acked, or
+ * `{ event: null, all_done: false }` when the poll window elapses with live
+ * work still outstanding.
+ */
+async function handleInbox(
+  engine: TaskEngine,
+  res: http.ServerResponse,
+  params: URLSearchParams,
+): Promise<void> {
+  const resolved = resolveWatchIds(engine, params);
+  if (!Array.isArray(resolved)) {
+    sendJson(res, resolved.status, { error: resolved.error });
+    return;
+  }
+
+  const ackRaw = params.get("ack");
+  if (ackRaw !== null && ackRaw !== "") {
+    const ackSeq = Number(ackRaw);
+    if (!Number.isInteger(ackSeq) || ackSeq < 0) {
+      sendJson(res, 400, { error: "ack must be a non-negative integer" });
+      return;
+    }
+    engine.ackEvent(ackSeq);
+  }
+
+  const wait = params.get("wait") === "true";
+  const result = wait
+    ? await engine.waitForInbox(resolved, LONG_POLL_WINDOW_MS)
+    : (() => {
+        const pending = engine.peekInbox(resolved);
+        if (pending) return { task: pending } as const;
+        if (engine.isInboxAllDone(resolved)) return { allDone: true } as const;
+        return null;
+      })();
+
+  if (result === null) {
+    sendJson(res, 200, {
+      event: null,
+      seq: engine.currentSeq(),
+      task: null,
+      all_done: false,
+    });
+    return;
+  }
+  if ("allDone" in result) {
+    sendJson(res, 200, {
+      event: null,
+      seq: engine.currentSeq(),
+      task: null,
+      all_done: true,
+    });
+    return;
+  }
+  const row = result.task;
+  const task = buildEnvelope(row, engine.logDir(row.id));
+  sendJson(res, 200, {
+    event: watchEventFor(row.state),
+    seq: row.seq,
+    task,
+    all_done: false,
+  });
+}
+
+/**
+ * `GET /tasks/events?ids=…&since=<seq>&wait=true` — the multi-task transition
+ * firehose (#34). Used by `watch --follow` (no ack). Returns the earliest
+ * transition of any watched task after `since` (replaying immediately if one
+ * already happened, else blocking until the next), or `{ event: null }` when
+ * the poll window elapses. Omitting `since` means "start from now".
  */
 async function handleWatchEvents(
   engine: TaskEngine,
   res: http.ServerResponse,
   params: URLSearchParams,
 ): Promise<void> {
-  const ids = (params.get("ids") ?? "")
-    .split(",")
-    .map((s) => s.trim())
-    .filter((s) => s !== "");
-  if (ids.length === 0) {
-    sendJson(res, 400, { error: "ids is required" });
+  const resolved = resolveWatchIds(engine, params);
+  if (!Array.isArray(resolved)) {
+    sendJson(res, resolved.status, { error: resolved.error });
     return;
   }
-  // Resolve every ref to its canonical id up front — a bad id must fail fast
-  // (404 → exit 2), never silently hang the watcher.
-  const resolved: string[] = [];
-  for (const ref of ids) {
-    const task = engine.resolve(ref);
-    if (!task) {
-      sendJson(res, 404, { error: `no such task: ${ref}` });
-      return;
-    }
-    resolved.push(task.id);
+  if (resolved.length === 0) {
+    sendJson(res, 400, { error: "ids is required" });
+    return;
   }
   const sinceRaw = params.get("since");
   const since = sinceRaw !== null ? Number(sinceRaw) : engine.currentSeq();
@@ -572,8 +651,12 @@ function createHandler(engine: TaskEngine, uiBundleDir: string | null): http.Req
           handleDelegate(engine, res, await readBody(req));
           return;
         }
-        // `GET /tasks/events` (multi-task watch, #34) sits at the same depth as
-        // `GET /tasks/:ref`, so it must be matched before the ref is resolved.
+        // Fixed subpaths under /tasks sit at the same depth as `GET /tasks/:ref`,
+        // so they must be matched before the ref is resolved.
+        if (method === "GET" && segments.length === 2 && segments[1] === "inbox") {
+          await handleInbox(engine, res, url.searchParams);
+          return;
+        }
         if (method === "GET" && segments.length === 2 && segments[1] === "events") {
           await handleWatchEvents(engine, res, url.searchParams);
           return;

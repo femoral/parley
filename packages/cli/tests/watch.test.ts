@@ -90,118 +90,202 @@ describe("transition seq (#34)", () => {
   });
 });
 
-describe("parley watch (#34)", () => {
-  it("single-task watch blocks and returns on the first state change", async () => {
-    await delegate(taskDir(slow(400)));
-    const res = await runCli(["watch", "t1", "--since", "0", "--json"], home);
-    expect(res.code).toBe(0);
+describe("parley watch attention inbox (ADR-0007 / #91)", () => {
+  it("level-trigger: event already pending at watch start returns immediately", async () => {
+    // Complete before watch starts — level-triggered inbox surfaces `completed`
+    // without needing a transition after connect (the #89 edge-trigger miss).
+    await delegate(taskDir(quick()), "done");
+    await waitForState(home, "t1", "completed");
+
+    const res = await runCli(["watch", "t1", "--json"], home);
+    expect(res.code).toBe(6);
     const ev = JSON.parse(res.stdout) as { event: string; seq: number; task: Record<string, unknown> };
-    expect(ev.event).toBe("task.started");
+    expect(ev.event).toBe("task.completed");
     expect(ev.task.task_id).toBe("t1");
-    expect(ev.task.state).toBe("running");
+    expect(ev.task.state).toBe("completed");
     expect(ev.seq).toBeGreaterThan(0);
   });
 
-  it("watches multiple tasks and returns on the one that changes, leaving the other alone", async () => {
-    // A long-runner that stays `running` for the duration of the test.
-    await delegate(taskDir(slow(30_000)), "long");
-    const running = await waitForState(home, "t1", "running");
-    const since = running.seq as number;
+  it("all-terminal + all-acked exits 0 (the #89 hang case)", async () => {
+    await delegate(taskDir(quick()), "a");
+    await delegate(taskDir(quick()), "b");
+    await waitForState(home, "t1", "completed");
+    await waitForState(home, "t2", "completed");
 
-    // A second, quick task delegated after capturing `since`.
-    await delegate(taskDir(quick()), "quick");
+    // Drain both completed events via the ack loop.
+    const first = await runCli(["watch", "--json"], home);
+    expect(first.code).toBe(6);
+    const ev1 = JSON.parse(first.stdout) as { seq: number };
 
-    const res = await runCli(
-      ["watch", "t1", "t2", "--since", String(since), "--until", "any-change", "--json"],
-      home,
-    );
-    expect(res.code).toBe(0);
-    const ev = JSON.parse(res.stdout) as { task: Record<string, unknown> };
-    // Only t2 transitioned after `since`; t1 is still running.
-    expect(ev.task.task_id).toBe("t2");
-    const t1 = JSON.parse((await runCli(["status", "t1", "--json"], home)).stdout) as Record<
-      string,
-      unknown
-    >[];
-    expect(t1[0]!.state).toBe("running");
+    const second = await runCli(["watch", "--json", "--ack", String(ev1.seq)], home);
+    expect(second.code).toBe(6);
+    const ev2 = JSON.parse(second.stdout) as { seq: number };
 
-    await runCli(["cancel", "t1"], home);
+    // Both acked and terminal → all-done, exit 0 (cannot hang).
+    const done = await runCli(["watch", "--json", "--ack", String(ev2.seq)], home);
+    expect(done.code).toBe(0);
+    expect(done.stdout.trim()).toBe("");
   });
 
-  it("--since immediately replays a transition that already happened, rather than blocking", async () => {
-    // Capture a seq while the task is running, before it completes.
-    await delegate(taskDir(slow(500)));
-    const running = await waitForState(home, "t1", "running");
-    const sinceBeforeCompletion = running.seq as number;
+  it("priority: awaiting_answer is delivered before completed", async () => {
+    // A completed task and a later question — question must win regardless of seq.
+    await delegate(taskDir(quick()), "done-first");
     await waitForState(home, "t1", "completed");
 
-    // The task completed before `watch` is invoked; --since replays it at once.
-    const res = await runCli(
-      ["watch", "t1", "--since", String(sinceBeforeCompletion), "--json"],
-      home,
-    );
-    expect(res.code).toBe(0);
+    const cwd = taskDir([
+      { emit: { type: "session", session_id: "s" } },
+      { ask: "which db?" },
+      { submit_report: REPORT },
+    ]);
+    await runCli(["delegate", "-v", "fake", "--cwd", cwd, "-n", "asks", "qa"], home);
+    await waitForState(home, "t2", "awaiting_answer");
+
+    const res = await runCli(["watch", "--json"], home);
+    expect(res.code).toBe(3);
     const ev = JSON.parse(res.stdout) as { event: string; task: Record<string, unknown> };
-    expect(ev.event).toBe("task.completed");
-    expect(ev.task.state).toBe("completed");
+    expect(ev.event).toBe("task.question");
+    expect(ev.task.task_id).toBe("t2");
+    expect(ev.task.state).toBe("awaiting_answer");
   });
 
-  it("--until attention ignores non-attention transitions and returns on awaiting_answer (exit 3)", async () => {
+  it("priority within a tier is FIFO by seq", async () => {
+    await delegate(taskDir(quick()), "first");
+    await waitForState(home, "t1", "completed");
+    await delegate(taskDir(quick()), "second");
+    await waitForState(home, "t2", "completed");
+
+    const res = await runCli(["watch", "--json"], home);
+    expect(res.code).toBe(6);
+    const ev = JSON.parse(res.stdout) as { task: Record<string, unknown>; seq: number };
+    // Older completed seq first.
+    expect(ev.task.task_id).toBe("t1");
+
+    const next = await runCli(["watch", "--json", "--ack", String(ev.seq)], home);
+    expect(next.code).toBe(6);
+    const ev2 = JSON.parse(next.stdout) as { task: Record<string, unknown> };
+    expect(ev2.task.task_id).toBe("t2");
+  });
+
+  it("un-acked events are redelivered (at-least-once)", async () => {
+    await delegate(taskDir(quick()), "redo");
+    await waitForState(home, "t1", "completed");
+
+    const a = await runCli(["watch", "t1", "--json"], home);
+    expect(a.code).toBe(6);
+    const evA = JSON.parse(a.stdout) as { seq: number; task: Record<string, unknown> };
+
+    // No --ack: same event comes back.
+    const b = await runCli(["watch", "t1", "--json"], home);
+    expect(b.code).toBe(6);
+    const evB = JSON.parse(b.stdout) as { seq: number; task: Record<string, unknown> };
+    expect(evB.seq).toBe(evA.seq);
+    expect(evB.task.task_id).toBe("t1");
+
+    // Ack then all-done.
+    const done = await runCli(["watch", "t1", "--json", "--ack", String(evA.seq)], home);
+    expect(done.code).toBe(0);
+  });
+
+  it("ack of a superseded event is a no-op", async () => {
     const cwd = taskDir([
       { emit: { type: "session", session_id: "s" } },
       { ask: "which db?" },
       { submit_report: REPORT },
     ]);
     await runCli(["delegate", "-v", "fake", "--cwd", cwd, "qa"], home);
+    await waitForState(home, "t1", "awaiting_answer");
 
-    // --since 0 puts task.started in the replay window; attention must skip it
-    // and return on task.question.
-    const res = await runCli(
-      ["watch", "t1", "--since", "0", "--until", "attention", "--json"],
-      home,
-    );
+    const q = await runCli(["watch", "t1", "--json"], home);
+    expect(q.code).toBe(3);
+    const questionSeq = (JSON.parse(q.stdout) as { seq: number }).seq;
+
+    // Answering leaves awaiting_answer — the question event is superseded.
+    await runCli(["answer", "t1", "postgres"], home);
+    await waitForState(home, "t1", "completed");
+
+    // Acking the old question seq must not swallow the completed event.
+    const res = await runCli(["watch", "t1", "--json", "--ack", String(questionSeq)], home);
+    expect(res.code).toBe(6);
+    const ev = JSON.parse(res.stdout) as { event: string; task: Record<string, unknown> };
+    expect(ev.event).toBe("task.completed");
+    expect(ev.task.state).toBe("completed");
+  });
+
+  it("answer implicitly consumes the question event (supersession)", async () => {
+    const cwd = taskDir([
+      { emit: { type: "session", session_id: "s" } },
+      { ask: "which db?" },
+      { submit_report: REPORT },
+    ]);
+    await runCli(["delegate", "-v", "fake", "--cwd", cwd, "qa"], home);
+    await waitForState(home, "t1", "awaiting_answer");
+
+    // Answer without ever acking the question via watch.
+    await runCli(["answer", "t1", "postgres"], home);
+    await waitForState(home, "t1", "completed");
+
+    // Next watch yields completed, not a redelivered question.
+    const res = await runCli(["watch", "t1", "--json"], home);
+    expect(res.code).toBe(6);
+    const ev = JSON.parse(res.stdout) as { event: string; task: Record<string, unknown> };
+    expect(ev.event).toBe("task.completed");
+    expect(ev.task.state).toBe("completed");
+  });
+
+  it("returns exit 3 on awaiting_answer", async () => {
+    const cwd = taskDir([
+      { emit: { type: "session", session_id: "s" } },
+      { ask: "which db?" },
+      { submit_report: REPORT },
+    ]);
+    await runCli(["delegate", "-v", "fake", "--cwd", cwd, "qa"], home);
+    await waitForState(home, "t1", "awaiting_answer");
+
+    const res = await runCli(["watch", "t1", "--json"], home);
     expect(res.code).toBe(3);
     const ev = JSON.parse(res.stdout) as { event: string; task: Record<string, unknown> };
     expect(ev.event).toBe("task.question");
     expect(ev.task.state).toBe("awaiting_answer");
   });
 
-  it("--until terminal blocks until every watched task is terminal, not just one", async () => {
-    await delegate(taskDir(quick()), "fast");
-    await delegate(taskDir(slow(700)), "slower");
+  it("blocks until an actionable state appears (live running tasks)", async () => {
+    await delegate(taskDir(slow(400)), "slow");
+    await waitForState(home, "t1", "running");
 
-    const res = await runCli(
-      ["watch", "t1", "t2", "--since", "0", "--until", "terminal", "--json"],
-      home,
-    );
-    expect(res.code).toBe(0);
-    // By the time watch returns, both watched tasks are terminal.
-    for (const id of ["t1", "t2"]) {
-      const row = JSON.parse((await runCli(["status", id, "--json"], home)).stdout) as Record<
-        string,
-        unknown
-      >[];
-      expect(row[0]!.state).toBe("completed");
-    }
+    // Watch while still running; should return completed once it finishes.
+    const res = await runCli(["watch", "t1", "--json"], home);
+    expect(res.code).toBe(6);
+    const ev = JSON.parse(res.stdout) as { event: string; task: Record<string, unknown> };
+    expect(ev.event).toBe("task.completed");
+    expect(ev.task.state).toBe("completed");
   });
 
   it("--follow streams one JSONL line per transition until all watched tasks are terminal", async () => {
-    await delegate(taskDir(slow(300)), "a");
-    await delegate(taskDir(slow(300)), "b");
+    // Start follow before tasks finish so the firehose (start-from-now) still
+    // sees completions. Delegate slow tasks, wait for running, then follow.
+    await delegate(taskDir(slow(800)), "a");
+    await delegate(taskDir(slow(800)), "b");
+    await waitForState(home, "t1", "running");
+    await waitForState(home, "t2", "running");
 
-    const follow = startCli(["watch", "t1", "t2", "--follow", "--since", "0"], home);
+    const follow = startCli(["watch", "t1", "t2", "--follow"], home);
     const res = await follow.result;
     expect(res.code).toBe(0);
 
-    const lines = res.stdout.trim().split("\n").map((l) => JSON.parse(l) as {
-      event: string;
-      seq: number;
-      task: { task_id: string; state: string };
-    });
-    // Two transitions per task: task.started then task.completed.
+    const lines = res.stdout
+      .trim()
+      .split("\n")
+      .filter((l) => l.length > 0)
+      .map((l) => JSON.parse(l) as {
+        event: string;
+        seq: number;
+        task: { task_id: string; state: string };
+      });
+    // At least task.completed for each; task.started may have been missed if it
+    // landed before follow attached (start-from-now baseline).
     const byTask = (id: string) => lines.filter((l) => l.task.task_id === id).map((l) => l.event);
-    expect(byTask("t1")).toEqual(["task.started", "task.completed"]);
-    expect(byTask("t2")).toEqual(["task.started", "task.completed"]);
+    expect(byTask("t1")).toContain("task.completed");
+    expect(byTask("t2")).toContain("task.completed");
     // Monotonic seqs, one line per transition.
     const seqs = lines.map((l) => l.seq);
     expect([...seqs].sort((x, y) => x - y)).toEqual(seqs);
@@ -211,5 +295,21 @@ describe("parley watch (#34)", () => {
     const res = await runCli(["watch", "nope"], home);
     expect(res.code).toBe(2);
     expect(res.stderr).toMatch(/no such task/);
+  });
+
+  it("unknown --until / --since flags are usage errors (clean break)", async () => {
+    const until = await runCli(["watch", "--until", "attention"], home);
+    expect(until.code).toBe(2);
+    expect(until.stderr).toMatch(/unknown flag/);
+
+    const since = await runCli(["watch", "--since", "0"], home);
+    expect(since.code).toBe(2);
+    expect(since.stderr).toMatch(/unknown flag/);
+  });
+
+  it("invalid --ack is a usage error (exit 2)", async () => {
+    const res = await runCli(["watch", "--ack", "nope"], home);
+    expect(res.code).toBe(2);
+    expect(res.stderr).toMatch(/invalid --ack/);
   });
 });

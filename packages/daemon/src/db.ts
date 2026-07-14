@@ -100,8 +100,9 @@ export interface TaskRow {
   report_schema: string | null;
   /**
    * Global transition sequence number of this task's most recent state change
-   * (#34). 0 until the task first transitions out of `pending`. Every task
-   * envelope surfaces it so `parley watch --since` can close the startup race.
+   * (#34 / ADR-0007). 0 until the task first transitions out of `pending`.
+   * Every task envelope surfaces it; for the inbox it is the event id of the
+   * current state (acked via `watch --ack <seq>`).
    */
   seq: number;
   /** Orchestrator-recorded quality score (1-10) via `parley eval`; null until set. */
@@ -193,8 +194,8 @@ const MIGRATIONS: string[] = [
   `ALTER TABLE tasks ADD COLUMN effort TEXT;`,
   // #34: transition sequencing — the global monotonic `seq` (allocated from the
   // `transition_seq` counter) of the task's most recent state change. 0 until a
-  // task first transitions; every envelope carries it so `parley watch --since`
-  // can replay a transition that raced the watcher's connect.
+  // task first transitions; every envelope carries it. ADR-0007 uses seq as the
+  // inbox event id (`watch --ack <seq>`).
   `ALTER TABLE tasks ADD COLUMN seq INTEGER NOT NULL DEFAULT 0;`,
   // #42: orchestrator session identity — the orchestrator-run id (`--session` /
   // `PARLEY_SESSION_ID`) that spawned this task, distinct from the vendor's own
@@ -219,6 +220,17 @@ const MIGRATIONS: string[] = [
      FOREIGN KEY (task_id) REFERENCES tasks(id)
    );
    CREATE INDEX qa_turns_task_ord ON qa_turns(task_id, ask_ord);`,
+  // #91 / ADR-0007: per-task/state ack of inbox events. A task in an actionable
+  // state contributes a pending event until its current seq is recorded here
+  // for that state. Leaving the state auto-resolves (derived view); acking a
+  // superseded seq is a no-op (lookup by current tasks.seq finds nothing).
+  `CREATE TABLE event_acks (
+     task_id    TEXT NOT NULL,
+     state      TEXT NOT NULL,
+     acked_seq  INTEGER NOT NULL,
+     PRIMARY KEY (task_id, state),
+     FOREIGN KEY (task_id) REFERENCES tasks(id)
+   );`,
 ];
 
 /** How many schema migrations have been applied — equals `PRAGMA user_version` after open. */
@@ -424,12 +436,64 @@ export function bumpTaskSeq(db: DatabaseHandle, id: string): number {
 
 /**
  * The current global transition `seq` — the highest seq handed out so far (0
- * before any transition). Read without incrementing; `parley watch` uses it as
- * the "start from now" baseline (spec §3).
+ * before any transition). Read without incrementing; the firehose (`watch
+ * --follow`) and SSE stream use it as the "start from now" baseline.
  */
 export function currentSeq(db: DatabaseHandle): number {
   const row = db.prepare(`SELECT value FROM counters WHERE name = 'transition_seq'`).get();
   return row === undefined ? 0 : asRow<{ value: number }>(row).value;
+}
+
+/**
+ * Look up the task whose *current* transition seq is `eventId` (ADR-0007 event
+ * id). Returns undefined when no task currently holds that seq — the event was
+ * superseded (task moved on) or never existed.
+ */
+export function getTaskBySeq(db: DatabaseHandle, eventId: number): TaskRow | undefined {
+  const row = db.prepare(`SELECT ${TASK_COLUMNS} FROM tasks WHERE seq = ?`).get(eventId);
+  return row === undefined ? undefined : asRow<TaskRow>(row);
+}
+
+/**
+ * Record that the orchestrator handled a task's current actionable state
+ * (ADR-0007). Upserts per `(task_id, state)` so a later re-entry into the same
+ * state with a new seq is un-acked again. Caller validates that the event is
+ * still current and the state is actionable; this is pure persistence.
+ */
+export function upsertEventAck(
+  db: DatabaseHandle,
+  taskId: string,
+  state: string,
+  ackedSeq: number,
+): void {
+  db.prepare(
+    `INSERT INTO event_acks (task_id, state, acked_seq) VALUES (?, ?, ?)
+     ON CONFLICT(task_id, state) DO UPDATE SET acked_seq = excluded.acked_seq`,
+  ).run(taskId, state, ackedSeq);
+}
+
+/**
+ * The seq last acked for `(task_id, state)`, or null when never acked. Used to
+ * decide whether a task's current actionable state is still pending.
+ */
+export function getEventAck(
+  db: DatabaseHandle,
+  taskId: string,
+  state: string,
+): number | null {
+  const row = db
+    .prepare(`SELECT acked_seq FROM event_acks WHERE task_id = ? AND state = ?`)
+    .get(taskId, state);
+  return row === undefined ? null : asRow<{ acked_seq: number }>(row).acked_seq;
+}
+
+/**
+ * True when the task's current state has been acked at its current seq — i.e.
+ * this actionable state no longer contributes a pending inbox event.
+ */
+export function isEventAcked(db: DatabaseHandle, task: TaskRow): boolean {
+  const acked = getEventAck(db, task.id, task.state);
+  return acked !== null && acked === task.seq;
 }
 
 /**

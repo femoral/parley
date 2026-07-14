@@ -55,16 +55,23 @@ parley status                                       # task table
 parley status task-a --json                         # one task; attach via `parley answer <task> --wait` when it asks
 ```
 
-A detached task that asks a question waits up to `--answer-timeout` (default 30m), then stalls — recoverable, but watch for it rather than sampling on an interval:
+A detached task that asks a question waits up to `--answer-timeout` (default 30m), then stalls — recoverable. Drive the whole set with the attention-inbox ack loop rather than sampling `status` on an interval:
 
 ```
-parley watch                          # blocks until any non-terminal task changes; prints the transition
-parley watch --until attention        # returns only on awaiting_answer/stalled
-parley watch --until terminal         # returns once every watched task is terminal
-parley watch --follow                 # streams every transition as JSONL; good for a hook driver
+# Canonical fan-out loop (ADR-0007): level-triggered, priority-ordered, cannot hang.
+ev=$(parley watch --json); code=$?
+while [ "$code" -ne 0 ]; do
+  # act on $ev (exit 3 = question, 4 = stalled, 5 = failed, 6 = completed)
+  id=$(printf '%s' "$ev" | jq -r .seq)
+  # …handle, then ack and fetch the next pending event…
+  ev=$(parley watch --json --ack "$id"); code=$?
+done
+# exit 0 = all-done: every watched task terminal and every event acked
+
+parley watch --follow                 # no-ack JSONL firehose of every transition (UIs/debug)
 ```
 
-`watch` takes explicit task ids/names too; with none, it snapshots whatever's non-terminal at the moment it starts. Chain `--since <seq>` off a `delegate` response's `seq` field to close the race where a task finishes between `delegate` returning and the first `watch` call — otherwise that transition would be invisible to a fresh watcher. Exit codes match the blocking contract above (0 completed/any-change, 3 awaiting_answer, 4 stalled). The fan-out is done when every delegated task reached a terminal state and each branch was reviewed per step 4.
+`watch` is an **acked attention inbox** for the orchestrator session (`--session`, else `PARLEY_SESSION_ID`, else the latest session). Each task contributes at most its *current* actionable state (`awaiting_answer` > `stalled` > `failed` > `completed`) until you ack that event id (the transition `seq`). Level-triggered: if a task is already waiting when you attach, `watch` returns immediately — no `--since` threading. `parley answer` implicitly consumes a question event (leaving `awaiting_answer` auto-resolves it). Positional task refs filter the session inbox. Exit codes: `0` all-done · `3` awaiting_answer · `4` stalled · `5` failed · `6` completed · `2` usage. The fan-out is done when the loop exits 0 *and* each completed branch was reviewed per step 4 — acking `completed` is how you drain the "merge the fan-out" work, not a poll.
 
 **Merging multiple branches from the same fork point.** When several fan-out branches share a parent commit, only the first merge fast-forwards — the rest need real integration, not just `git merge`. The discipline that held up on a real 12-task fan-out: review each branch on its own, then cherry-pick its commit(s) onto the target branch **in dependency order** (prerequisites before dependents), resolving any conflicts at cherry-pick time and amending integration fixes straight into the picked commit rather than leaving a separate fixup commit. This keeps history linear and keeps each merged commit typecheck-clean on its own (see the typecheck note in step 4).
 

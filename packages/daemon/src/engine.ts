@@ -2,7 +2,12 @@ import { spawn, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import readline from "node:readline";
-import { formatDuration, type HomePaths } from "@useparley/core";
+import {
+  formatDuration,
+  inboxRank,
+  isActionableState,
+  type HomePaths,
+} from "@useparley/core";
 import type {
   HubInfo,
   SandboxMode,
@@ -17,8 +22,10 @@ import {
   bumpTaskSeq,
   currentSeq,
   getTask,
+  getTaskBySeq,
   insertQaTurn,
   insertTask,
+  isEventAcked,
   listQaTurns,
   listSessions,
   listTasks,
@@ -26,6 +33,7 @@ import {
   nextTaskId,
   resolveTask,
   updateTask,
+  upsertEventAck,
   SETTLED_STATES,
   TERMINAL_STATES,
   type DatabaseHandle,
@@ -187,7 +195,7 @@ export class TaskEngine {
    * from the current seq; nothing before connect is replayed (spec §3).
    */
   private readonly transitions: Transition[] = [];
-  /** Long-poll watchers (`parley watch`) parked until the next transition. */
+  /** Long-poll waiters (inbox / firehose / SSE) parked until the next transition. */
   private readonly eventWaiters = new Set<() => void>();
   /**
    * Live `ask_orchestrator` calls, keyed by task id. The value's `resolve`
@@ -893,9 +901,8 @@ export class TaskEngine {
    * Multi-task long-poll (#34, spec §3): resolve with the earliest transition of
    * any watched task after `since` — replaying immediately if one already
    * happened, else blocking until the next transition — or null when the poll
-   * window elapses (the CLI re-polls). Distinct from the per-task `waitForEvent`
-   * it generalizes; `watch` threads the returned `seq` back as `since` to stream
-   * the next.
+   * window elapses (the CLI re-polls). Used by `watch --follow` (the firehose)
+   * and kept for the SSE stream's filtered counterpart.
    */
   async waitForEvents(
     ids: readonly string[],
@@ -912,6 +919,97 @@ export class TaskEngine {
    */
   async waitForAnyEvent(since: number, timeoutMs: number): Promise<Transition | null> {
     return this.waitForTransition(() => this.peekAnyEvent(since), timeoutMs);
+  }
+
+  /**
+   * Ack an inbox event by its id (the transition seq that produced the state).
+   * No-op when the event is superseded (no task currently holds that seq, or
+   * the task left the actionable state). ADR-0007: at-least-once delivery;
+   * un-acked events redeliver on the next `watch`.
+   */
+  ackEvent(eventId: number): void {
+    if (!Number.isInteger(eventId) || eventId < 1) return;
+    const task = getTaskBySeq(this.db, eventId);
+    if (!task) return; // superseded or unknown
+    if (!isActionableState(task.state)) return; // left actionable state
+    if (task.seq !== eventId) return;
+    upsertEventAck(this.db, task.id, task.state, eventId);
+  }
+
+  /**
+   * The highest-priority pending inbox event among `ids`, or null when none
+   * (ADR-0007). Level-triggered: derived from each task's *current* actionable
+   * state + acks, not from transition edges. Priority: awaiting_answer >
+   * stalled > failed > completed; FIFO by seq within a tier.
+   */
+  peekInbox(ids: readonly string[]): TaskRow | null {
+    const watched = new Set(ids);
+    const pending: TaskRow[] = [];
+    for (const id of watched) {
+      const task = getTask(this.db, id);
+      if (!task) continue;
+      if (!isActionableState(task.state)) continue;
+      if (isEventAcked(this.db, task)) continue;
+      pending.push(task);
+    }
+    if (pending.length === 0) return null;
+    pending.sort((a, b) => {
+      const rank = inboxRank(a.state) - inboxRank(b.state);
+      if (rank !== 0) return rank;
+      return a.seq - b.seq;
+    });
+    return pending[0] ?? null;
+  }
+
+  /**
+   * True when every watched task is terminal *and* no pending inbox events
+   * remain (ADR-0007 all-done). Empty set is vacuously all-done.
+   */
+  isInboxAllDone(ids: readonly string[]): boolean {
+    if (this.peekInbox(ids) !== null) return false;
+    for (const id of ids) {
+      const task = getTask(this.db, id);
+      if (!task) continue;
+      if (!TERMINAL_STATES.has(task.state)) return false;
+    }
+    return true;
+  }
+
+  /**
+   * Inbox long-poll (ADR-0007): resolve with the next pending event (immediate
+   * when already pending — level-triggered), `{ allDone: true }` when every
+   * watched task is terminal and all events are acked, or null when the poll
+   * window elapses with live work still outstanding (caller re-polls).
+   */
+  async waitForInbox(
+    ids: readonly string[],
+    timeoutMs: number,
+  ): Promise<{ task: TaskRow } | { allDone: true } | null> {
+    for (;;) {
+      const pending = this.peekInbox(ids);
+      if (pending) return { task: pending };
+      if (this.isInboxAllDone(ids)) return { allDone: true };
+      const woke = await new Promise<boolean>((resolve) => {
+        const wake = (): void => {
+          clearTimeout(timer);
+          this.eventWaiters.delete(wake);
+          resolve(true);
+        };
+        const timer = setTimeout(() => {
+          this.eventWaiters.delete(wake);
+          resolve(false);
+        }, timeoutMs);
+        this.eventWaiters.add(wake);
+      });
+      if (!woke) {
+        // Window elapsed — re-check once more in case a transition landed in the
+        // gap between the last peek and the timer firing.
+        const late = this.peekInbox(ids);
+        if (late) return { task: late };
+        if (this.isInboxAllDone(ids)) return { allDone: true };
+        return null;
+      }
+    }
   }
 
   /**

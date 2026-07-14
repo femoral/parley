@@ -37,16 +37,18 @@ Usage:
                             Record an orchestrator's quality score/feedback
                             against a task; a later call overwrites the last
   parley cancel <task>          Terminate a task's child; end it cancelled
-  parley watch [task…] [--since <seq>] [--until any-change|attention|terminal]
+  parley watch [task…] [--ack <event-id>] [--session <id>|latest]
               [--follow] [--json]
-                            Block until the watched task set changes state.
-                            No task args watches every non-terminal task at
-                            start. --since replays a transition that already
-                            happened after <seq>. --until any-change (default)
-                            returns on the first transition; attention on
-                            awaiting_answer/stalled; terminal once all are
-                            terminal. --follow streams every transition as JSONL.
-                            Exit: 0 returned · 3 awaiting_answer · 4 stalled.
+                            Deliver the next pending attention-inbox event
+                            (awaiting_answer / stalled / failed / completed)
+                            for the orchestrator session (--session, else
+                            PARLEY_SESSION_ID, else latest). Level-triggered:
+                            an already-pending event returns immediately.
+                            --ack records handling of a prior event id (seq),
+                            then returns the next. Positional task refs filter
+                            the session inbox. --follow streams every transition
+                            as JSONL (no ack). Exit: 0 all-done · 3
+                            awaiting_answer · 4 stalled · 5 failed · 6 completed.
   parley [list]                 Show the task table (alias for bare status)
   parley status [task] [--json] [--session <id>|latest] [--all]
                             Show tasks, or one (id or name). Bare status
