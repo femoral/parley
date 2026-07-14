@@ -49,7 +49,7 @@ export function HealthPanel({ health }: { health: HealthView }) {
           </div>
           <div className="pc-well">
             <Stat
-              value={`${health.activeAgents} / ${health.totalTasks}`}
+              value={String(health.activeAgents)}
               label="Active agents"
               color="var(--state-running)"
             />

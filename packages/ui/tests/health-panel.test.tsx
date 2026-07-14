@@ -26,9 +26,10 @@ describe("HealthPanel renders daemon status from plain props (#65)", () => {
     expect(screen.getByText("4242")).toBeTruthy();
     expect(screen.getByText("3m 41s")).toBeTruthy();
     expect(screen.getByText("57123")).toBeTruthy();
-    // Total tasks (5) and active/total (2 / 5) both surface.
+    // Total tasks and active agents surface as independent counts.
     expect(screen.getByText("5")).toBeTruthy();
-    expect(screen.getByText("2 / 5")).toBeTruthy();
+    expect(screen.getByText("2")).toBeTruthy();
+    expect(screen.queryByText("2 / 5")).toBeNull();
   });
 
   it("reads OFFLINE when the daemon is unreachable", () => {
