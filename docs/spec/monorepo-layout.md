@@ -30,7 +30,7 @@ per the packaging research — no bundling of workspace packages).
 | `src/models.ts`, `src/home.ts`, `src/util/` | `packages/core/src/` |
 | `src/cli/client.ts` | `packages/core/src/client.ts` |
 | `src/daemon/**` | `packages/daemon/src/` |
-| `src/cli/**` (rest: `index.ts`, `args.ts`, `commands/`, `context.ts`, `errors.ts`, `spawn.ts`, `wait.ts`) | `packages/cli/src/` |
+| `src/cli/**` (rest: `index.ts`, `args.ts`, `commands/`, `context.ts`, `errors.ts`, `spawn.ts`) | `packages/cli/src/` |
 | `bin/parley.mjs` | `packages/cli/bin/parley.mjs` |
 | `skills/`, `skills-lock.json` | `packages/cli/skills/` |
 | `tests/**` | Split per package: each test moves next to the package whose code it exercises (`packages/*/tests/`). |

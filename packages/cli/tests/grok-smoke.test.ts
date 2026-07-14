@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import fs from "node:fs";
-import { cleanupHome, makeGitRepo, makeHome, runCli } from "./helpers.js";
+import { cleanupHome, makeGitRepo, makeHome, runCli, waitForState, watchJson } from "./helpers.js";
 
 /**
  * Opt-in smoke test: delegates a trivial task to the REAL `grok` binary end to
@@ -38,24 +38,26 @@ describe.skipIf(!ENABLED)("grok smoke (real binary, opt-in)", () => {
     scratch.push(src);
 
     const result = await runCli(
-      ["delegate", "-v", "grok", "-n", "smoke", "--wait", PROMPT],
+      ["delegate", "-v", "grok", "-n", "smoke", PROMPT],
       home,
       { cwd: src },
     );
 
     expect(result.code).toBe(0);
-    const envelope = JSON.parse(result.stdout);
+    const ack = JSON.parse(result.stdout);
+    await waitForState(home, ack.task_id, "completed", 180_000);
+    const envelope = (await watchJson(home, [ack.task_id])).task!;
     expect(envelope.state).toBe("completed");
-    expect(envelope.report.outcome).toBe("success");
+    expect((envelope.report as { outcome: string }).outcome).toBe("success");
 
     // The grok session id is only emitted in the terminal `end` event, which
     // grok prints as it exits — a beat after `submit_report` (over MCP) has
-    // already moved the task to `completed` and released `--wait`. Poll briefly
-    // for it to land, proving the stream-side capture works too.
+    // already moved the task to `completed`. Poll briefly for it to land,
+    // proving the stream-side capture works too.
     let sessionId: unknown = null;
     const deadline = Date.now() + 15_000;
     while (Date.now() < deadline) {
-      const row = JSON.parse((await runCli(["status", envelope.task_id, "--json"], home)).stdout);
+      const row = JSON.parse((await runCli(["status", envelope.task_id as string, "--json"], home)).stdout);
       sessionId = row.session_id;
       if (sessionId) break;
       await new Promise((r) => setTimeout(r, 250));

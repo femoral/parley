@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import fs from "node:fs";
-import { cleanupHome, makeGitRepo, makeHome, runCli } from "./helpers.js";
+import { cleanupHome, makeGitRepo, makeHome, runCli, waitForState, watchJson } from "./helpers.js";
 
 /**
  * Opt-in smoke test: real end-to-end delegation to the installed `codex` CLI
@@ -36,7 +36,6 @@ describe.skipIf(!ENABLED)("codex adapter — real end-to-end smoke", () => {
         "codex",
         "--cwd",
         repo,
-        "--wait",
         "Do not edit any files. Immediately call the submit_report tool with " +
           'summary "smoke ok", outcome "success", and files_changed []. Then stop.',
       ],
@@ -46,8 +45,10 @@ describe.skipIf(!ENABLED)("codex adapter — real end-to-end smoke", () => {
     );
 
     expect(result.code).toBe(0);
-    const env = JSON.parse(result.stdout);
+    const ack = JSON.parse(result.stdout);
+    await waitForState(home, ack.task_id, "completed", 300_000);
+    const env = (await watchJson(home, [ack.task_id])).task!;
     expect(env.state).toBe("completed");
-    expect(env.report.outcome).toBe("success");
+    expect((env.report as { outcome: string }).outcome).toBe("success");
   }, 300_000);
 });

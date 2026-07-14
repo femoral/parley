@@ -10,6 +10,7 @@ import {
   runCli,
   waitFor,
   waitForState,
+  watchJson,
   writeFiles,
   type FakeVendorAction,
 } from "./helpers.js";
@@ -52,20 +53,21 @@ function worktreePath(id: string, repoDir: string): string {
 describe("delegate creates an isolated worktree (default, no --cwd)", () => {
   it("cuts a worktree + branch from HEAD; child runs in it; envelope carries both", async () => {
     // Touch a file so auto-remove does not reclaim the worktree before
-    // --wait returns (#72: completed + auto-remove both land at stream close).
+    // completed + auto-remove both land at stream close (#72).
     const src = repo([
       { write_file: { path: "keep.txt", contents: "x" } },
       { submit_report: REPORT },
     ]);
     const result = await runCli(
-      ["delegate", "-v", "fake", "-n", "fix-auth", "--wait", "do it"],
+      ["delegate", "-v", "fake", "-n", "fix-auth", "do it"],
       home,
       { cwd: src },
     );
 
     expect(result.stderr).toBe("");
     expect(result.code).toBe(0);
-    const env = JSON.parse(result.stdout);
+    await waitForState(home, "t1", "completed");
+    const env = (await watchJson(home, ["t1"])).task!;
     expect(env.state).toBe("completed");
     expect(env.repo).toBe(git(src, ["rev-parse", "--show-toplevel"]));
     expect(env.branch).toBe("parley/t1-fix-auth");
@@ -87,9 +89,10 @@ describe("delegate creates an isolated worktree (default, no --cwd)", () => {
     const head = git(src, ["rev-parse", "HEAD"]);
     expect(head).not.toBe(base);
 
-    await runCli(["delegate", "-v", "fake", "-n", "b", "--base-ref", base, "--wait", "x"], home, {
+    await runCli(["delegate", "-v", "fake", "-n", "b", "--base-ref", base, "x"], home, {
       cwd: src,
     });
+    await waitForState(home, "t1", "completed");
 
     expect(git(src, ["rev-parse", "parley/t1-b"])).toBe(base);
   });
@@ -97,7 +100,7 @@ describe("delegate creates an isolated worktree (default, no --cwd)", () => {
   it("errors (exit 2) when delegating outside a git repo without --cwd", async () => {
     const notRepo = fs.mkdtempSync(path.join(os.tmpdir(), "parley-plain-"));
     scratch.push(notRepo);
-    const result = await runCli(["delegate", "-v", "fake", "--wait", "x"], home, { cwd: notRepo });
+    const result = await runCli(["delegate", "-v", "fake", "x"], home, { cwd: notRepo });
 
     expect(result.code).toBe(2);
     expect(result.stderr).toMatch(/git repositor/i);
@@ -112,9 +115,10 @@ describe("config translation and git hygiene", () => {
       "CLAUDE.md": "# project rules\n",
       ".claude/skills/demo/SKILL.md": "skill body\n",
     });
-    await runCli(["delegate", "-v", "fake", "-n", "t", "--wait", "x"], home, { cwd: src });
+    await runCli(["delegate", "-v", "fake", "-n", "t", "x"], home, { cwd: src });
+    await waitForState(home, "t1", "completed");
     const wt = worktreePath("t1", src);
-    await waitFor(() => fs.existsSync(wt), "worktree present");
+    expect(fs.existsSync(wt)).toBe(true);
 
     expect(fs.lstatSync(path.join(wt, "AGENTS.md")).isSymbolicLink()).toBe(true);
     expect(fs.readlinkSync(path.join(wt, "AGENTS.md"))).toBe("CLAUDE.md");
@@ -145,10 +149,11 @@ describe("config translation and git hygiene", () => {
       ".claude/skills/demo/SKILL.md": "s\n",
       ".agents/keep.md": "repo owns .agents\n",
     });
-    await runCli(["delegate", "-v", "fake", "-n", "t", "--wait", "x"], home, { cwd: src });
+    await runCli(["delegate", "-v", "fake", "-n", "t", "x"], home, { cwd: src });
+    await waitForState(home, "t1", "completed");
 
     const wt = worktreePath("t1", src);
-    await waitFor(() => fs.existsSync(wt), "worktree present");
+    expect(fs.existsSync(wt)).toBe(true);
     // AGENTS.md is the repo's committed regular file, not a parley symlink.
     expect(fs.lstatSync(path.join(wt, "AGENTS.md")).isSymbolicLink()).toBe(false);
     expect(fs.readFileSync(path.join(wt, "AGENTS.md"), "utf8")).toBe("# the repo's own agents file\n");
@@ -163,7 +168,7 @@ describe("config translation and git hygiene", () => {
 describe("worktree lifecycle on completion", () => {
   it("auto-removes an untouched worktree; branch is kept", async () => {
     const src = repo(happyActions());
-    await runCli(["delegate", "-v", "fake", "-n", "clean", "--wait", "x"], home, { cwd: src });
+    await runCli(["delegate", "-v", "fake", "-n", "clean", "x"], home, { cwd: src });
 
     const wt = worktreePath("t1", src);
     await waitFor(() => !fs.existsSync(wt), "untouched worktree auto-removed");
@@ -181,7 +186,7 @@ describe("worktree lifecycle on completion", () => {
       { git_commit: { message: "child work" } },
       { submit_report: REPORT },
     ]);
-    await runCli(["delegate", "-v", "fake", "-n", "work", "--wait", "x"], home, { cwd: src });
+    await runCli(["delegate", "-v", "fake", "-n", "work", "x"], home, { cwd: src });
 
     // Give the completion path time to run its (no-op) retention check.
     await waitForState(home, "t1", "completed");
@@ -204,7 +209,7 @@ describe("parley clean", () => {
       { write_file: { path: "dirty.txt", contents: "x" } },
       { submit_report: REPORT },
     ]);
-    await runCli(["delegate", "-v", "fake", "-n", "keep", "--wait", "x"], home, { cwd: src });
+    await runCli(["delegate", "-v", "fake", "-n", "keep", "x"], home, { cwd: src });
     const wt = worktreePath("t1", src);
     await waitForState(home, "t1", "completed");
     expect(fs.existsSync(wt)).toBe(true); // dirty → retained
@@ -236,7 +241,7 @@ describe("parley clean", () => {
       { write_file: { path: "d.txt", contents: "x" } },
       { submit_report: REPORT },
     ]);
-    await runCli(["delegate", "-v", "fake", "-n", "done", "--wait", "x"], home, { cwd: doneRepo });
+    await runCli(["delegate", "-v", "fake", "-n", "done", "x"], home, { cwd: doneRepo });
     await waitForState(home, "t1", "completed");
     const doneWt = worktreePath("t1", doneRepo);
     expect(fs.existsSync(doneWt)).toBe(true);
@@ -261,9 +266,10 @@ describe("--cwd still bypasses worktree creation", () => {
     scratch.push(dir);
     fs.writeFileSync(path.join(dir, ".fake-vendor.json"), JSON.stringify(happyActions()));
 
-    const result = await runCli(["delegate", "-v", "fake", "--cwd", dir, "--wait", "x"], home);
+    const result = await runCli(["delegate", "-v", "fake", "--cwd", dir, "x"], home);
     expect(result.code).toBe(0);
-    const env = JSON.parse(result.stdout);
+    await waitForState(home, "t1", "completed");
+    const env = (await watchJson(home, ["t1"])).task!;
     expect(env.repo).toBe(dir);
     expect(env.worktree).toBeNull();
     expect(env.branch).toBeNull();

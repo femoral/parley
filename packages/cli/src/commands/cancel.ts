@@ -11,10 +11,10 @@ interface CancelAck {
 
 /**
  * `parley cancel <task>` — terminate a task's vendor child and end the task
- * `cancelled`. Any `delegate --wait` / `answer --wait` blocked on the task
- * unblocks with exit 5. The worktree and captured logs are retained (parley
- * never merges). An unknown ref or an already-terminal task is a usage error
- * (exit 2).
+ * `cancelled`. Cancelled is terminal but not an inbox event (orchestrator-
+ * caused); a subsequent `parley watch` treats it as settled for all-done.
+ * The worktree and captured logs are retained (parley never merges). An
+ * unknown ref or an already-terminal task is a usage error (exit 2).
  */
 export async function runCancel(ctx: CliContext, args: string[]): Promise<number> {
   const { positionals, flags } = parseArgs(args, { "--json": {} });

@@ -3,7 +3,6 @@ import { parseArgs } from "../args.js";
 import { DaemonRequestError, daemonPost, ensureDaemon } from "../client.js";
 import { type CliContext, printJson } from "../context.js";
 import { UsageError } from "../errors.js";
-import { waitForOutcome } from "../wait.js";
 
 interface AnswerAck {
   task_id: string;
@@ -12,18 +11,26 @@ interface AnswerAck {
 }
 
 /**
- * `parley answer <task> "<text>" [--wait]` — deliver an answer to a task's
- * outstanding `ask_orchestrator` question. The child unblocks with the text as
- * its tool result and the task returns to `running`. With `--wait`, re-enter the
- * blocking contract: return on the next question (exit 3) or terminal state.
+ * `parley answer <task> "<text>"` — deliver an answer to a task's outstanding
+ * `ask_orchestrator` question. The child unblocks with the text as its tool
+ * result and the task returns to `running`. Returns immediately with the ack
+ * (ADR-0008); the next `parley watch` delivers whatever the resumed child does.
+ * Passing the removed `--wait` flag is a usage error.
  *
  * A task with no pending question (or an unknown ref) is a usage error (exit 2).
  */
 export async function runAnswer(ctx: CliContext, args: string[]): Promise<number> {
   const { positionals, flags } = parseArgs(args, {
+    // Removed (ADR-0008); recognized only so the error points at `parley watch`.
     "--wait": {},
     "--json": {},
   });
+
+  if (flags["--wait"] === true) {
+    throw new UsageError(
+      "answer: --wait is removed; use `parley watch` to wait on tasks (ADR-0008)",
+    );
+  }
 
   const ref = positionals[0];
   if (ref === undefined) {
@@ -52,10 +59,6 @@ export async function runAnswer(ctx: CliContext, args: string[]): Promise<number
     throw err;
   }
 
-  if (flags["--wait"] !== true) {
-    printJson(ctx, ack);
-    return 0;
-  }
-
-  return waitForOutcome(ctx, discovery, ack.task_id);
+  printJson(ctx, ack);
+  return 0;
 }

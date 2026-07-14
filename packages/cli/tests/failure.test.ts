@@ -7,8 +7,8 @@ import {
   makeHome,
   makeTaskDir,
   runCli,
-  startCli,
   waitForState,
+  watchJson,
   type FakeVendorAction,
 } from "./helpers.js";
 
@@ -45,23 +45,31 @@ function schemaFile(dir: string, schema: unknown): string {
   return file;
 }
 
+
+/** Delegate then wait for failed; return watch-delivered envelope (exit 5). */
+async function failedEnvelope(args: string[], options: Parameters<typeof runCli>[2] = {}) {
+  const result = await runCli(args, home, options);
+  expect(result.code).toBe(0);
+  const ack = JSON.parse(result.stdout) as { task_id: string };
+  await waitForState(home, ack.task_id, "failed");
+  const watched = await watchJson(home, [ack.task_id]);
+  expect(watched.code).toBe(5);
+  return { ack, envelope: watched.task!, stderr: watched.stderr };
+}
+
 describe("child exit without a report", () => {
   it("fails the task (exit 1) with an error and a diagnostics reference; logs retained", async () => {
     // The child chatters, then exits without ever calling submit_report.
     const cwd = taskDir([{ emit: { type: "message", text: "half-done, then quit" } }]);
-    const result = await runCli(
-      ["delegate", "-v", "fake", "-n", "quitter", "--cwd", cwd, "--wait", "do it"],
-      home,
+    const { envelope: env } = await failedEnvelope(
+      ["delegate", "-v", "fake", "-n", "quitter", "--cwd", cwd, "do it"],
     );
-
-    expect(result.code).toBe(1);
-    const env = JSON.parse(result.stdout);
     expect(env.state).toBe("failed");
     expect(env.error).toMatch(/without submitting a report/);
 
     // The diagnostics reference points at a retained log dir with the raw stream.
     expect(typeof env.logs_dir).toBe("string");
-    const vendorLog = path.join(env.logs_dir, "vendor.jsonl");
+    const vendorLog = path.join(env.logs_dir as string, "vendor.jsonl");
     expect(fs.existsSync(vendorLog)).toBe(true);
     expect(fs.readFileSync(vendorLog, "utf8")).toContain("half-done, then quit");
   });
@@ -70,13 +78,9 @@ describe("child exit without a report", () => {
     // Vendors like codex exit 0/1 only — the fatal event in the stream is the
     // real diagnosis, so it is appended to the report-less-exit error.
     const cwd = taskDir([{ emit: { type: "fatal", message: "model overloaded" } }, { exit: 1 }]);
-    const result = await runCli(
-      ["delegate", "-v", "fake", "-n", "fatalrun", "--cwd", cwd, "--wait", "do it"],
-      home,
+    const { envelope: env } = await failedEnvelope(
+      ["delegate", "-v", "fake", "-n", "fatalrun", "--cwd", cwd, "do it"],
     );
-
-    expect(result.code).toBe(1);
-    const env = JSON.parse(result.stdout);
     expect(env.state).toBe("failed");
     expect(env.error).toMatch(/without submitting a report/);
     expect(env.error).toMatch(/model overloaded/);
@@ -90,18 +94,14 @@ describe("child exit without a report", () => {
     const cwd = taskDir([
       { emit: { type: "diag", message: "mcp_tool_call server=parley tool=submit_report failed: user cancelled MCP tool call" } },
     ]);
-    const result = await runCli(
-      ["delegate", "-v", "fake", "-n", "guardian-cancel", "--cwd", cwd, "--wait", "do it"],
-      home,
+    const { envelope: env } = await failedEnvelope(
+      ["delegate", "-v", "fake", "-n", "guardian-cancel", "--cwd", cwd, "do it"],
     );
-
-    expect(result.code).toBe(1);
-    const env = JSON.parse(result.stdout);
     expect(env.state).toBe("failed");
     expect(env.error).toMatch(/without submitting a report/);
     expect(env.error).toMatch(/PARLEY-DIAG mcp_tool_call server=parley tool=submit_report/);
 
-    const diagLog = path.join(env.logs_dir, "diag.log");
+    const diagLog = path.join(env.logs_dir as string, "diag.log");
     expect(fs.existsSync(diagLog)).toBe(true);
     expect(fs.readFileSync(diagLog, "utf8")).toMatch(
       /PARLEY-DIAG mcp_tool_call server=parley tool=submit_report failed: user cancelled MCP tool call/,
@@ -115,13 +115,9 @@ describe("child exit without a report", () => {
       { emit: { type: "error", message: "npm: transient hiccup" } },
       { emit: { type: "message", text: "recovered and kept going" } },
     ]);
-    const result = await runCli(
-      ["delegate", "-v", "fake", "-n", "hiccup", "--cwd", cwd, "--wait", "do it"],
-      home,
+    const { envelope: env } = await failedEnvelope(
+      ["delegate", "-v", "fake", "-n", "hiccup", "--cwd", cwd, "do it"],
     );
-
-    expect(result.code).toBe(1);
-    const env = JSON.parse(result.stdout);
     expect(env.state).toBe("failed");
     expect(env.error).toMatch(/without submitting a report/);
     expect(env.error).not.toMatch(/transient hiccup/);
@@ -132,46 +128,40 @@ describe("adapter spawn failure", () => {
   it("fails the task with a clear error instead of hanging", async () => {
     const cwd = taskDir([{ submit_report: REPORT }]); // never reached
     const badBin = path.join(os.tmpdir(), "parley-does-not-exist-bin");
-    const result = await runCli(
-      ["delegate", "-v", "fake", "-n", "badbin", "--cwd", cwd, "--wait", "do it"],
-      home,
+    const { envelope: env } = await failedEnvelope(
+      ["delegate", "-v", "fake", "-n", "badbin", "--cwd", cwd, "do it"],
       { extraEnv: { PARLEY_FAKE_COMMAND: badBin } },
     );
-
-    expect(result.code).toBe(1);
-    const env = JSON.parse(result.stdout);
     expect(env.state).toBe("failed");
     expect(env.error).toMatch(/spawn/i);
   });
 });
 
 describe("parley cancel", () => {
-  it("terminates the child and the waiting delegate exits 5 (cancelled)", async () => {
+  it("terminates the child and ends the task cancelled", async () => {
     // A child that never finishes on its own — only cancel ends it.
     const cwd = taskDir([{ sleep: 60_000 }, { submit_report: REPORT }]);
-    const waiting = startCli(
-      ["delegate", "-v", "fake", "-n", "longrun", "--cwd", cwd, "--wait", "do it"],
+    const delegate = await runCli(
+      ["delegate", "-v", "fake", "-n", "longrun", "--cwd", cwd, "do it"],
       home,
     );
+    expect(delegate.code).toBe(0);
 
     await waitForState(home, "longrun", "running");
     const cancel = await runCli(["cancel", "longrun"], home);
     expect(cancel.code).toBe(0);
     expect(cancel.stdout).toMatch(/Cancelled/);
 
-    const result = await waiting.result;
-    expect(result.code).toBe(5);
-    expect(JSON.parse(result.stdout).state).toBe("cancelled");
+    const row = await waitForState(home, "longrun", "cancelled");
+    expect(row.state).toBe("cancelled");
   });
 
   it("cancels a task blocked on a question and clears the outstanding question", async () => {
     const cwd = taskDir([{ ask: "which db?" }, { submit_report: REPORT }]);
-    const waiting = startCli(
-      ["delegate", "-v", "fake", "-n", "asking", "--cwd", cwd, "--wait", "do it"],
+    await runCli(
+      ["delegate", "-v", "fake", "-n", "asking", "--cwd", cwd, "do it"],
       home,
     );
-    // The delegate --wait returns exit 3 on the question; the task sits awaiting.
-    expect((await waiting.result).code).toBe(3);
     await waitForState(home, "asking", "awaiting_answer");
 
     const cancel = await runCli(["cancel", "asking"], home);
@@ -192,7 +182,8 @@ describe("parley cancel", () => {
 
   it("rejects cancelling an already-finished task (exit 2)", async () => {
     const cwd = taskDir([{ submit_report: REPORT }]);
-    await runCli(["delegate", "-v", "fake", "-n", "done", "--cwd", cwd, "--wait", "x"], home);
+    await runCli(["delegate", "-v", "fake", "-n", "done", "--cwd", cwd, "x"], home);
+    await waitForState(home, "done", "completed");
 
     const result = await runCli(["cancel", "done"], home);
     expect(result.code).toBe(2);
@@ -211,7 +202,7 @@ describe("delegate --report-schema", () => {
     const cwd = taskDir([{ submit_report: REPORT }]);
     const missing = path.join(cwd, "nope.json");
     const result = await runCli(
-      ["delegate", "-v", "fake", "--cwd", cwd, "--report-schema", missing, "--wait", "x"],
+      ["delegate", "-v", "fake", "--cwd", cwd, "--report-schema", missing, "x"],
       home,
     );
     expect(result.code).toBe(2);
@@ -224,7 +215,7 @@ describe("delegate --report-schema", () => {
     const cwd = taskDir([{ submit_report: REPORT }]);
     const file = schemaFile(cwd, "{ this is not json");
     const result = await runCli(
-      ["delegate", "-v", "fake", "--cwd", cwd, "--report-schema", file, "--wait", "x"],
+      ["delegate", "-v", "fake", "--cwd", cwd, "--report-schema", file, "x"],
       home,
     );
     expect(result.code).toBe(2);
@@ -235,7 +226,7 @@ describe("delegate --report-schema", () => {
     const cwd = taskDir([{ submit_report: REPORT }]);
     const file = schemaFile(cwd, { type: "banana" });
     const result = await runCli(
-      ["delegate", "-v", "fake", "--cwd", cwd, "--report-schema", file, "--wait", "x"],
+      ["delegate", "-v", "fake", "--cwd", cwd, "--report-schema", file, "x"],
       home,
     );
     expect(result.code).toBe(2);
@@ -247,7 +238,7 @@ describe("delegate --report-schema", () => {
     const cwd = taskDir([{ submit_report: REPORT }]);
     const file = schemaFile(cwd, 42);
     const result = await runCli(
-      ["delegate", "-v", "fake", "--cwd", cwd, "--report-schema", file, "--wait", "x"],
+      ["delegate", "-v", "fake", "--cwd", cwd, "--report-schema", file, "x"],
       home,
     );
     expect(result.code).toBe(2);
@@ -261,11 +252,12 @@ describe("delegate --report-schema", () => {
     const cwd = taskDir([{ submit_report: { anything: "goes", n: 1 } }]);
     const file = schemaFile(cwd, true);
     const result = await runCli(
-      ["delegate", "-v", "fake", "--cwd", cwd, "--report-schema", file, "--wait", "x"],
+      ["delegate", "-v", "fake", "--cwd", cwd, "--report-schema", file, "x"],
       home,
     );
     expect(result.code).toBe(0);
-    const env = JSON.parse(result.stdout);
+    await waitForState(home, "t1", "completed");
+    const env = (await watchJson(home, ["t1"])).task!;
     expect(env.state).toBe("completed");
     expect(env.report_schema).toBe(true);
   });
@@ -278,12 +270,13 @@ describe("delegate --report-schema", () => {
     ]);
     const file = schemaFile(cwd, CUSTOM);
     const result = await runCli(
-      ["delegate", "-v", "fake", "-n", "sch", "--cwd", cwd, "--report-schema", file, "--wait", "x"],
+      ["delegate", "-v", "fake", "-n", "sch", "--cwd", cwd, "--report-schema", file, "x"],
       home,
     );
 
     expect(result.code).toBe(0);
-    const env = JSON.parse(result.stdout);
+    await waitForState(home, "sch", "completed");
+    const env = (await watchJson(home, ["sch"])).task!;
     expect(env.state).toBe("completed");
     expect(env.report).toEqual({ summary: "now with ticket", ticket: "T-42" });
     // The envelope records the schema actually applied.
@@ -299,18 +292,15 @@ describe("delegate --report-schema", () => {
     expect(results[0]!.text).toMatch(/ticket/);
   });
 
-  it("fails the task when the child never conforms and exits (exit 1)", async () => {
+  it("fails the task when the child never conforms and exits (watch exit 5)", async () => {
     const cwd = taskDir([
       { submit_report: REPORT }, // missing `ticket` → bounces
       { exit: 0 }, // gives up without a conforming report
     ]);
     const file = schemaFile(cwd, CUSTOM);
-    const result = await runCli(
-      ["delegate", "-v", "fake", "-n", "nope", "--cwd", cwd, "--report-schema", file, "--wait", "x"],
-      home,
+    const { envelope } = await failedEnvelope(
+      ["delegate", "-v", "fake", "-n", "nope", "--cwd", cwd, "--report-schema", file, "x"],
     );
-
-    expect(result.code).toBe(1);
-    expect(JSON.parse(result.stdout).state).toBe("failed");
+    expect(envelope.state).toBe("failed");
   });
 });

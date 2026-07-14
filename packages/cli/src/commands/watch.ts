@@ -33,15 +33,15 @@ interface FollowEvent {
 
 /**
  * How long each long-poll request may take; must exceed the daemon's window so
- * the CLI, not the request, controls re-polling. Mirrors `wait.ts`.
+ * the CLI, not the request, controls re-polling.
  */
 const LONG_POLL_TIMEOUT_MS = 60_000;
 
 /**
- * Inbox exit codes (ADR-0007): one code per actionable state so the
- * orchestrator branches on `$?` without parsing. Distinct from
- * `delegate --wait` (where completed is 0 and failed is 1): here exit 0 is
- * reserved for all-done.
+ * Inbox exit codes (ADR-0007 / ADR-0008): one code per actionable state so the
+ * orchestrator branches on `$?` without parsing. Exit 0 is reserved for
+ * all-done; `completed` is 6 and `failed` is 5. This is the only state-typed
+ * exit vocabulary — `delegate` and `answer` exit only 0 or 2.
  */
 function exitFor(state: string): number {
   if (state === "awaiting_answer") return 3;
@@ -229,7 +229,7 @@ function report(ctx: CliContext, ev: InboxEvent, json: boolean): void {
   }
   if (t.state === "stalled") {
     ctx.stderr(
-      `task ${t.task_id} stalled; resume with: parley answer ${t.task_id} "<answer>" [--wait]\n`,
+      `task ${t.task_id} stalled; resume with: parley answer ${t.task_id} "<answer>"\n`,
     );
   }
   if (isActionableState(t.state) && t.state === "failed" && t.error !== null) {

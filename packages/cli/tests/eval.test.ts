@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import fs from "node:fs";
-import { cleanupHome, makeHome, makeTaskDir, runCli, type FakeVendorAction } from "./helpers.js";
+import { cleanupHome, makeHome, makeTaskDir, runCli, waitForState, type FakeVendorAction } from "./helpers.js";
 
 let home: string;
 const taskDirs: string[] = [];
@@ -31,7 +31,7 @@ const REPORT = {
 describe("parley eval", () => {
   it("records a score/feedback, readable back via status --json", async () => {
     const cwd = taskDir([{ submit_report: REPORT }]);
-    const delegate = await runCli(["delegate", "-v", "fake", "--cwd", cwd, "--wait", "do it"], home);
+    const delegate = await runCli(["delegate", "-v", "fake", "--cwd", cwd, "do it"], home);
     expect(delegate.code).toBe(0);
     const taskId = JSON.parse(delegate.stdout).task_id as string;
 
@@ -50,7 +50,7 @@ describe("parley eval", () => {
 
   it("a later call overwrites the previous score/feedback", async () => {
     const cwd = taskDir([{ submit_report: REPORT }]);
-    const delegate = await runCli(["delegate", "-v", "fake", "--cwd", cwd, "--wait", "do it"], home);
+    const delegate = await runCli(["delegate", "-v", "fake", "--cwd", cwd, "do it"], home);
     const taskId = JSON.parse(delegate.stdout).task_id as string;
 
     await runCli(["eval", taskId, "--score", "3", "--feedback", "meh"], home);
@@ -108,7 +108,7 @@ describe("eval usage errors (exit 2)", () => {
 
   it("writes nothing on a rejected score", async () => {
     const cwd = taskDir([{ submit_report: REPORT }]);
-    const delegate = await runCli(["delegate", "-v", "fake", "--cwd", cwd, "--wait", "do it"], home);
+    const delegate = await runCli(["delegate", "-v", "fake", "--cwd", cwd, "do it"], home);
     const taskId = JSON.parse(delegate.stdout).task_id as string;
 
     await runCli(["eval", taskId, "--score", "0", "--feedback", "x"], home);

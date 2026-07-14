@@ -18,7 +18,8 @@ import { VERSION_LINE } from "./version.js";
 const HELP = `parley — delegate tasks to agent CLIs
 
 Usage:
-  parley delegate [flags] "<prompt>"  Delegate a task ('-' reads stdin)
+  parley delegate [flags] "<prompt>"  Delegate a task ('-' reads stdin);
+                                returns immediately with pending-task JSON
     -v --vendor <id>   Vendor adapter (required)
     -m --model <id>    Model, passed through to the vendor
     --effort <level>   Reasoning effort, passed through to the vendor
@@ -27,19 +28,19 @@ Usage:
     --base-ref <ref>   Branch the worktree from <ref> (default: HEAD)
     --context <file>   Copy a file into .parley/context/ (repeatable)
     --report-schema <file>  Validate the child's report against this JSON Schema
-    --wait             Block until terminal state; print report envelope
     --answer-timeout <dur>  Stall the task when a question goes unanswered
                             this long (default 30m; e.g. 90s, 250ms)
   parley answer <task> "<text>" Answer a child's question ('-' reads stdin);
-                                on a stalled task, resume it with the text
-    --wait             Re-block after delivering; return on next question/terminal
+                                on a stalled task, resume it with the text.
+                                Returns immediately; wait with parley watch.
   parley eval <task> --score <1-10> --feedback "<text>"
                             Record an orchestrator's quality score/feedback
                             against a task; a later call overwrites the last
   parley cancel <task>          Terminate a task's child; end it cancelled
   parley watch [task…] [--ack <event-id>] [--session <id>|latest]
               [--follow] [--json]
-                            Deliver the next pending attention-inbox event
+                            The only wait primitive (ADR-0008). Deliver the
+                            next pending attention-inbox event
                             (awaiting_answer / stalled / failed / completed)
                             for the orchestrator session (--session, else
                             PARLEY_SESSION_ID, else latest). Level-triggered:
@@ -81,8 +82,8 @@ Global flags:
   -h,--help Show this help
   -V,--version Show the version
 
-Exit codes (delegate --wait): 0 completed · 1 failed · 2 usage · 3 question ·
-4 stalled · 5 cancelled.
+Exit codes: delegate/answer 0 accepted · 2 usage. watch: 0 all-done · 2 usage ·
+3 awaiting_answer · 4 stalled · 5 failed · 6 completed.
 `;
 
 /**

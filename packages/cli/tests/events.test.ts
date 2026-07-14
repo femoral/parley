@@ -44,7 +44,7 @@ function quick(): FakeVendorAction[] {
   return [{ emit: { type: "session", session_id: "s" } }, { submit_report: REPORT }];
 }
 
-/** Delegate without --wait; returns the parsed ack `{task_id, name, state, seq}`. */
+/** Delegate (always async); returns the parsed ack `{task_id, name, state, seq}`. */
 async function delegate(cwd: string, name?: string): Promise<Record<string, unknown>> {
   const args = ["delegate", "-v", "fake", "--cwd", cwd, ...(name ? ["-n", name] : []), "run"];
   const res = await runCli(args, home);
@@ -219,7 +219,7 @@ describe("SSE transition stream (#62)", () => {
     ]);
     await delegate(dir, "pin");
     await waitForState(home, "t1", "awaiting_answer");
-    const answer = await runCli(["answer", "t1", "postgres", "--wait"], home);
+    const answer = await runCli(["answer", "t1", "postgres"], home);
     expect(answer.code).toBe(0);
     await waitForState(home, "t1", "completed");
 

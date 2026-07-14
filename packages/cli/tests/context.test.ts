@@ -75,16 +75,16 @@ describe("context materialization (spec §7)", () => {
     const result = await runCli(
       [
         "delegate", "-v", "fake", "-n", "ctx",
-        "--context", ctxA, "--context", ctxB,
-        "--wait", "implement the feature",
+        "--context", ctxA, "--context", ctxB, "implement the feature",
       ],
       home,
       { cwd: src },
     );
     expect(result.code).toBe(0);
+    await waitForState(home, "t1", "completed");
 
     const wt = worktreePath("t1", src);
-    await waitFor(() => fs.existsSync(wt), "worktree present");
+    expect(fs.existsSync(wt)).toBe(true);
 
     // TASK.md holds the caller prompt verbatim.
     expect(fs.readFileSync(path.join(wt, ".parley", "TASK.md"), "utf8")).toContain(
@@ -109,11 +109,12 @@ describe("context materialization (spec §7)", () => {
     const ctx = contextFile("design.md", "design doc body\n");
 
     await runCli(
-      ["delegate", "-v", "fake", "-n", "p", "--context", ctx, "--wait", "port the parser"],
+      ["delegate", "-v", "fake", "-n", "p", "--context", ctx, "port the parser"],
       home,
       { cwd: src },
     );
 
+    await waitForState(home, "t1", "completed");
     const prompt = hellos(home, "t1")[0]!.prompt as string;
     // Preamble mechanics: tools, report-schema summary, worktree facts, timeout.
     expect(prompt).toContain("Parley protocol");
@@ -143,11 +144,12 @@ describe("context materialization (spec §7)", () => {
     );
 
     await runCli(
-      ["delegate", "-v", "fake", "-n", "s", "--report-schema", schema, "--wait", "grade it"],
+      ["delegate", "-v", "fake", "-n", "s", "--report-schema", schema, "grade it"],
       home,
       { cwd: src },
     );
 
+    await waitForState(home, "t1", "completed");
     const prompt = hellos(home, "t1")[0]!.prompt as string;
     expect(prompt).toContain("verdict");
     // Not the default schema's fields.
@@ -167,11 +169,11 @@ describe("context materialization (spec §7)", () => {
     const delegate = await runCli(
       [
         "delegate", "-v", "fake", "--cwd", cwd,
-        "--context", ctx, "--answer-timeout", "250ms", "--wait", "the original task",
+        "--context", ctx, "--answer-timeout", "250ms", "the original task",
       ],
       home,
     );
-    expect(delegate.code).toBe(3);
+    expect(delegate.code).toBe(0);
     await waitForState(home, "t1", "stalled");
 
     // Context materialized in the --cwd directory and still present at resume.
@@ -180,9 +182,10 @@ describe("context materialization (spec §7)", () => {
     );
     expect(fs.existsSync(path.join(cwd, ".parley", "context", "brief.md"))).toBe(true);
 
-    const answer = await runCli(["answer", "t1", "the-target", "--wait"], home);
+    const answer = await runCli(["answer", "t1", "the-target"], home);
     expect(answer.code).toBe(0);
-    expect(JSON.parse(answer.stdout).state).toBe("completed");
+    expect(JSON.parse(answer.stdout).state).toBe("running");
+    await waitForState(home, "t1", "completed");
 
     // The resume run's prompt re-prepends the preamble and carries the answer.
     const resumeHello = hellos(home, "t1").at(-1)!.prompt as string;
@@ -197,7 +200,7 @@ describe("context materialization (spec §7)", () => {
   it("exits 2 for a missing --context file before creating any task", async () => {
     const src = repo([{ submit_report: REPORT }]);
     const result = await runCli(
-      ["delegate", "-v", "fake", "--context", "/nonexistent/ctx.md", "--wait", "x"],
+      ["delegate", "-v", "fake", "--context", "/nonexistent/ctx.md", "x"],
       home,
       { cwd: src },
     );
@@ -214,7 +217,7 @@ describe("context materialization (spec §7)", () => {
     // A different directory, same basename — would clobber under .parley/context/.
     const b = contextFile("dup.md", "second\n");
     const result = await runCli(
-      ["delegate", "-v", "fake", "--context", a, "--context", b, "--wait", "x"],
+      ["delegate", "-v", "fake", "--context", a, "--context", b, "x"],
       home,
       { cwd: src },
     );
@@ -228,8 +231,9 @@ describe("context materialization (spec §7)", () => {
       "README.md": "SECRET_REPO_DIGEST_MARKER should never enter the prompt\n",
     });
 
-    await runCli(["delegate", "-v", "fake", "-n", "d", "--wait", "go"], home, { cwd: src });
+    await runCli(["delegate", "-v", "fake", "-n", "d", "go"], home, { cwd: src });
 
+    await waitForState(home, "t1", "completed");
     const prompt = hellos(home, "t1")[0]!.prompt as string;
     expect(prompt).not.toContain("SECRET_REPO_DIGEST_MARKER");
   });

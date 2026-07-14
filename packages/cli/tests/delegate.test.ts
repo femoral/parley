@@ -9,6 +9,7 @@ import {
   startCli,
   waitFor,
   waitForState,
+  watchJson,
   type FakeVendorAction,
 } from "./helpers.js";
 
@@ -49,17 +50,40 @@ function happyActions(overrides: Partial<typeof REPORT> = {}): FakeVendorAction[
   ];
 }
 
-describe("delegate --wait (the spine)", () => {
-  it("runs end-to-end and prints the report envelope, exit 0", async () => {
+
+/** Delegate then wait for completed; return the watch-delivered report envelope. */
+async function completeEnvelope(
+  args: string[],
+  options: Parameters<typeof runCli>[2] = {},
+): Promise<Record<string, unknown>> {
+  const result = await runCli(args, home, options);
+  expect(result.code).toBe(0);
+  const ack = JSON.parse(result.stdout) as { task_id: string };
+  await waitForState(home, ack.task_id, "completed");
+  const watched = await watchJson(home, [ack.task_id]);
+  expect(watched.code).toBe(6);
+  expect(watched.task).not.toBeNull();
+  return watched.task!;
+}
+
+describe("delegate + watch (the spine, ADR-0008)", () => {
+  it("runs end-to-end: pending ack then watch delivers completed envelope", async () => {
     const cwd = taskDir(happyActions());
     const result = await runCli(
-      ["delegate", "-v", "fake", "-m", "fake-model-1", "-n", "spine", "--cwd", cwd, "--wait", "do the thing"],
+      ["delegate", "-v", "fake", "-m", "fake-model-1", "-n", "spine", "--cwd", cwd, "do the thing"],
       home,
     );
-
     expect(result.stderr).toBe("");
     expect(result.code).toBe(0);
-    const envelope = JSON.parse(result.stdout);
+    const ack = JSON.parse(result.stdout);
+    expect(ack.task_id).toBe("t1");
+    expect(ack.name).toBe("spine");
+    expect(["pending", "running"]).toContain(ack.state);
+
+    await waitForState(home, "t1", "completed");
+    const watched = await watchJson(home, ["t1"]);
+    expect(watched.code).toBe(6);
+    const envelope = watched.task!;
     expect(envelope.task_id).toBe("t1");
     expect(envelope.name).toBe("spine");
     expect(envelope.repo).toBe(cwd);
@@ -72,9 +96,21 @@ describe("delegate --wait (the spine)", () => {
     expect(envelope.report).toEqual(REPORT);
   });
 
+  it("rejects --wait with exit 2 and points at parley watch", async () => {
+    const cwd = taskDir(happyActions());
+    const result = await runCli(
+      ["delegate", "-v", "fake", "--cwd", cwd, "--wait", "nope"],
+      home,
+    );
+    expect(result.code).toBe(2);
+    expect(result.stderr).toMatch(/--wait/);
+    expect(result.stderr).toMatch(/parley watch/);
+  });
+
   it("captures the raw vendor stream untouched as per-task JSONL", async () => {
     const cwd = taskDir(happyActions());
-    await runCli(["delegate", "-v", "fake", "--cwd", cwd, "--wait", "do it"], home);
+    await runCli(["delegate", "-v", "fake", "--cwd", cwd, "do it"], home);
+    await waitForState(home, "t1", "completed");
 
     const log = fs.readFileSync(path.join(home, "tasks", "t1", "vendor.jsonl"), "utf8");
     const lines = log.split("\n");
@@ -89,10 +125,8 @@ describe("delegate --wait (the spine)", () => {
       { submit_report: { summary: "bad", files_changed: "nope" } },
       { submit_report: REPORT },
     ]);
-    const result = await runCli(["delegate", "-v", "fake", "--cwd", cwd, "--wait", "retry"], home);
-
-    expect(result.code).toBe(0);
-    expect(JSON.parse(result.stdout).report).toEqual(REPORT);
+    const envelope = await completeEnvelope(["delegate", "-v", "fake", "--cwd", cwd, "retry"]);
+    expect(envelope.report).toEqual(REPORT);
 
     // The fake vendor echoes tool results into its stream: first errored, then ok.
     const log = fs.readFileSync(path.join(home, "tasks", "t1", "vendor.jsonl"), "utf8");
@@ -107,13 +141,10 @@ describe("delegate --wait (the spine)", () => {
   it("passes model and vendor strings through to the adapter opaquely", async () => {
     const cwd = taskDir(happyActions());
     const weirdModel = "my/weird:model@2026-preview";
-    const result = await runCli(
-      ["delegate", "-v", "fake", "-m", weirdModel, "--cwd", cwd, "--wait", "opaque"],
-      home,
+    const envelope = await completeEnvelope(
+      ["delegate", "-v", "fake", "-m", weirdModel, "--cwd", cwd, "opaque"],
     );
-
-    expect(result.code).toBe(0);
-    expect(JSON.parse(result.stdout).model).toBe(weirdModel);
+    expect(envelope.model).toBe(weirdModel);
     // The fake adapter hands the model to the child verbatim; the child echoes it.
     const log = fs.readFileSync(path.join(home, "tasks", "t1", "vendor.jsonl"), "utf8");
     const hello = JSON.parse(log.split("\n").find((l) => l.includes('"hello"'))!);
@@ -122,13 +153,10 @@ describe("delegate --wait (the spine)", () => {
 
   it("passes --effort through to the adapter opaquely; omitted when not given", async () => {
     const cwd = taskDir(happyActions());
-    const result = await runCli(
-      ["delegate", "-v", "fake", "--effort", "high", "--cwd", cwd, "--wait", "reason hard"],
-      home,
+    const envelope = await completeEnvelope(
+      ["delegate", "-v", "fake", "--effort", "high", "--cwd", cwd, "reason hard"],
     );
-
-    expect(result.code).toBe(0);
-    expect(JSON.parse(result.stdout).effort).toBe("high");
+    expect(envelope.effort).toBe("high");
     // The fake adapter hands the effort to the child verbatim; the child echoes it.
     const log = fs.readFileSync(path.join(home, "tasks", "t1", "vendor.jsonl"), "utf8");
     const hello = JSON.parse(log.split("\n").find((l) => l.includes('"hello"'))!);
@@ -137,10 +165,8 @@ describe("delegate --wait (the spine)", () => {
 
   it("omits effort from the envelope and child env when --effort is not given", async () => {
     const cwd = taskDir(happyActions());
-    const result = await runCli(["delegate", "-v", "fake", "--cwd", cwd, "--wait", "no effort"], home);
-
-    expect(result.code).toBe(0);
-    expect(JSON.parse(result.stdout).effort).toBeNull();
+    const envelope = await completeEnvelope(["delegate", "-v", "fake", "--cwd", cwd, "no effort"]);
+    expect(envelope.effort).toBeNull();
     const log = fs.readFileSync(path.join(home, "tasks", "t1", "vendor.jsonl"), "utf8");
     const hello = JSON.parse(log.split("\n").find((l) => l.includes('"hello"'))!);
     expect(hello.effort).toBeNull();
@@ -155,30 +181,24 @@ describe("eval_expected envelope field (#45)", () => {
       path.join(cwd, ".parley", "config.json"),
       JSON.stringify({ eval: { expected: true } }),
     );
-    const result = await runCli(["delegate", "-v", "fake", "--cwd", cwd, "--wait", "do it"], home);
-
-    expect(result.code).toBe(0);
-    expect(JSON.parse(result.stdout).eval_expected).toBe(true);
+    const envelope = await completeEnvelope(["delegate", "-v", "fake", "--cwd", cwd, "do it"]);
+    expect(envelope.eval_expected).toBe(true);
   });
 
   it("is false when the repo has no .parley/config.json", async () => {
     const cwd = taskDir(happyActions());
-    const result = await runCli(["delegate", "-v", "fake", "--cwd", cwd, "--wait", "do it"], home);
-
-    expect(result.code).toBe(0);
-    expect(JSON.parse(result.stdout).eval_expected).toBe(false);
+    const envelope = await completeEnvelope(["delegate", "-v", "fake", "--cwd", cwd, "do it"]);
+    expect(envelope.eval_expected).toBe(false);
   });
 
   it("is false when .parley/config.json omits eval, or sets expected: false", async () => {
     const cwdOmitted = taskDir(happyActions());
     fs.mkdirSync(path.join(cwdOmitted, ".parley"), { recursive: true });
     fs.writeFileSync(path.join(cwdOmitted, ".parley", "config.json"), JSON.stringify({}));
-    const omitted = await runCli(
-      ["delegate", "-v", "fake", "--cwd", cwdOmitted, "--wait", "do it"],
-      home,
+    const omitted = await completeEnvelope(
+      ["delegate", "-v", "fake", "--cwd", cwdOmitted, "do it"],
     );
-    expect(omitted.code).toBe(0);
-    expect(JSON.parse(omitted.stdout).eval_expected).toBe(false);
+    expect(omitted.eval_expected).toBe(false);
 
     const cwdFalse = taskDir(happyActions());
     fs.mkdirSync(path.join(cwdFalse, ".parley"), { recursive: true });
@@ -186,12 +206,10 @@ describe("eval_expected envelope field (#45)", () => {
       path.join(cwdFalse, ".parley", "config.json"),
       JSON.stringify({ eval: { expected: false } }),
     );
-    const falseExpected = await runCli(
-      ["delegate", "-v", "fake", "--cwd", cwdFalse, "--wait", "do it"],
-      home,
+    const falseExpected = await completeEnvelope(
+      ["delegate", "-v", "fake", "--cwd", cwdFalse, "do it"],
     );
-    expect(falseExpected.code).toBe(0);
-    expect(JSON.parse(falseExpected.stdout).eval_expected).toBe(false);
+    expect(falseExpected.eval_expected).toBe(false);
   });
 });
 
@@ -201,9 +219,9 @@ describe("eval_expected envelope field (#45)", () => {
  * usage commit atomically. Fallback completes a hung child after a short window.
  */
 describe("deferred completed + usage atomicity (#72)", () => {
-  it("--wait carries final usage emitted AFTER submit_report returns, never null", async () => {
+  it("watch carries final usage emitted AFTER submit_report returns, never null", async () => {
     // Reproduces the race: under the old code, submit_report flipped completed
-    // immediately and --wait could observe usage: null before the trailing
+    // immediately and a waiter could observe usage: null before the trailing
     // usage event landed. Usage after the MCP call must still appear on the
     // completed envelope.
     const cwd = taskDir([
@@ -213,13 +231,10 @@ describe("deferred completed + usage atomicity (#72)", () => {
       { sleep: 150 },
       { emit: { type: "usage", input_tokens: 777, output_tokens: 42 } },
     ]);
-    const result = await runCli(
-      ["delegate", "-v", "fake", "--cwd", cwd, "--wait", "late usage"],
-      home,
+    const envelope = await completeEnvelope(
+      ["delegate", "-v", "fake", "--cwd", cwd, "late usage"],
     );
 
-    expect(result.code).toBe(0);
-    const envelope = JSON.parse(result.stdout);
     expect(envelope.state).toBe("completed");
     expect(envelope.report).toEqual(REPORT);
     expect(envelope.usage).toEqual({ input_tokens: 777, output_tokens: 42 });
@@ -237,14 +252,11 @@ describe("deferred completed + usage atomicity (#72)", () => {
       // Stay alive past the fallback window so only the timer can complete.
       { sleep: 60_000 },
     ]);
-    const result = await runCli(
-      ["delegate", "-v", "fake", "--cwd", cwd, "--wait", "hung after report"],
-      home,
+    const envelope = await completeEnvelope(
+      ["delegate", "-v", "fake", "--cwd", cwd, "hung after report"],
       { extraEnv: { PARLEY_REPORT_ACCEPTED_FALLBACK_MS: "200" } },
     );
 
-    expect(result.code).toBe(0);
-    const envelope = JSON.parse(result.stdout);
     expect(envelope.state).toBe("completed");
     expect(envelope.report).toEqual(REPORT);
     expect(envelope.usage).toEqual({ input_tokens: 11, output_tokens: 3 });
@@ -261,13 +273,10 @@ describe("deferred completed + usage atomicity (#72)", () => {
       { submit_report: second },
       { emit: { type: "usage", input_tokens: 1, output_tokens: 1 } },
     ]);
-    const result = await runCli(
-      ["delegate", "-v", "fake", "--cwd", cwd, "--wait", "double report"],
-      home,
+    const envelope = await completeEnvelope(
+      ["delegate", "-v", "fake", "--cwd", cwd, "double report"],
     );
 
-    expect(result.code).toBe(0);
-    const envelope = JSON.parse(result.stdout);
     expect(envelope.state).toBe("completed");
     // First report wins.
     expect(envelope.report).toEqual(REPORT);
@@ -289,13 +298,10 @@ describe("deferred completed + usage atomicity (#72)", () => {
       { emit: { type: "usage", input_tokens: 5, output_tokens: 2 } },
       { exit: 1 },
     ]);
-    const result = await runCli(
-      ["delegate", "-v", "fake", "--cwd", cwd, "--wait", "report then crash"],
-      home,
+    const envelope = await completeEnvelope(
+      ["delegate", "-v", "fake", "--cwd", cwd, "report then crash"],
     );
 
-    expect(result.code).toBe(0);
-    const envelope = JSON.parse(result.stdout);
     expect(envelope.state).toBe("completed");
     expect(envelope.report).toEqual(REPORT);
     expect(envelope.error).toBeNull();
@@ -332,7 +338,7 @@ describe("deferred completed + usage atomicity (#72)", () => {
   });
 });
 
-describe("delegate without --wait", () => {
+describe("async delegate (always returns immediately)", () => {
   it("returns {task_id, name, state} immediately; task completes in background", async () => {
     const cwd = taskDir([{ sleep: 300 }, ...happyActions()]);
     const result = await runCli(
@@ -376,19 +382,24 @@ describe("header-based task correlation", () => {
     ]);
 
     const [a, b] = await Promise.all([
-      runCli(["delegate", "-v", "fake", "-n", "task-a", "--cwd", cwdA, "--wait", "A"], home),
-      runCli(["delegate", "-v", "fake", "-n", "task-b", "--cwd", cwdB, "--wait", "B"], home),
+      runCli(["delegate", "-v", "fake", "-n", "task-a", "--cwd", cwdA, "A"], home),
+      runCli(["delegate", "-v", "fake", "-n", "task-b", "--cwd", cwdB, "B"], home),
     ]);
 
     expect(a.code).toBe(0);
     expect(b.code).toBe(0);
-    const envA = JSON.parse(a.stdout);
-    const envB = JSON.parse(b.stdout);
-    expect(envA.name).toBe("task-a");
-    expect(envA.report.summary).toBe("report A");
+    const ackA = JSON.parse(a.stdout);
+    const ackB = JSON.parse(b.stdout);
+    expect(ackA.name).toBe("task-a");
+    expect(ackB.name).toBe("task-b");
+
+    await waitForState(home, "task-a", "completed");
+    await waitForState(home, "task-b", "completed");
+    const envA = (await watchJson(home, ["task-a"])).task!;
+    const envB = (await watchJson(home, ["task-b"])).task!;
+    expect(envA.report).toMatchObject({ summary: "report A" });
     expect(envA.session_id).toBe("sess-A");
-    expect(envB.name).toBe("task-b");
-    expect(envB.report.summary).toBe("report B");
+    expect(envB.report).toMatchObject({ summary: "report B" });
     expect(envB.session_id).toBe("sess-B");
   });
 });
@@ -396,7 +407,8 @@ describe("header-based task correlation", () => {
 describe("status", () => {
   it("shows short id and name; both are accepted by task-taking commands", async () => {
     const cwd = taskDir(happyActions());
-    await runCli(["delegate", "-v", "fake", "-n", "fix-auth", "--cwd", cwd, "--wait", "x"], home);
+    await runCli(["delegate", "-v", "fake", "-n", "fix-auth", "--cwd", cwd, "x"], home);
+    await waitForState(home, "fix-auth", "completed");
 
     const table = await runCli(["status"], home);
     expect(table.code).toBe(0);
@@ -427,7 +439,8 @@ describe("status", () => {
       },
       { submit_report: REPORT },
     ]);
-    await runCli(["delegate", "-v", "fake", "-n", "usage-task", "--cwd", cwd, "--wait", "x"], home);
+    await runCli(["delegate", "-v", "fake", "-n", "usage-task", "--cwd", cwd, "x"], home);
+    await waitForState(home, "usage-task", "completed");
 
     const table = await runCli(["status"], home);
     expect(table.code).toBe(0);
@@ -442,7 +455,8 @@ describe("status", () => {
       { emit: { type: "session", session_id: "sess-no-usage" } },
       { submit_report: REPORT },
     ]);
-    await runCli(["delegate", "-v", "fake", "-n", "no-usage-task", "--cwd", cwd, "--wait", "x"], home);
+    await runCli(["delegate", "-v", "fake", "-n", "no-usage-task", "--cwd", cwd, "x"], home);
+    await waitForState(home, "no-usage-task", "completed");
 
     const table = await runCli(["status"], home);
     expect(table.code).toBe(0);
@@ -451,7 +465,8 @@ describe("status", () => {
 
   it("shows a plain MmSSs DURATION for a completed task", async () => {
     const cwd = taskDir(happyActions());
-    await runCli(["delegate", "-v", "fake", "-n", "done-task", "--cwd", cwd, "--wait", "x"], home);
+    await runCli(["delegate", "-v", "fake", "-n", "done-task", "--cwd", cwd, "x"], home);
+    await waitForState(home, "done-task", "completed");
 
     const table = await runCli(["status"], home);
     expect(table.code).toBe(0);
@@ -473,7 +488,8 @@ describe("status", () => {
 describe("logs", () => {
   it("prints the raw captured vendor stream", async () => {
     const cwd = taskDir(happyActions());
-    await runCli(["delegate", "-v", "fake", "-n", "loggy", "--cwd", cwd, "--wait", "x"], home);
+    await runCli(["delegate", "-v", "fake", "-n", "loggy", "--cwd", cwd, "x"], home);
+    await waitForState(home, "loggy", "completed");
 
     const logs = await runCli(["logs", "t1"], home);
     expect(logs.code).toBe(0);
@@ -513,7 +529,8 @@ describe("logs", () => {
       { emit: { type: "end", stopReason: "EndTurn", sessionId: "sess-1" } },
       { submit_report: REPORT },
     ]);
-    await runCli(["delegate", "-v", "fake", "-n", "chunky", "--cwd", cwd, "--wait", "x"], home);
+    await runCli(["delegate", "-v", "fake", "-n", "chunky", "--cwd", cwd, "x"], home);
+    await waitForState(home, "chunky", "completed");
 
     const logs = await runCli(["logs", "t1"], home);
     expect(logs.code).toBe(0);
@@ -530,7 +547,8 @@ describe("logs", () => {
       { emit: { type: "thought", data: " user" } },
       { submit_report: REPORT },
     ]);
-    await runCli(["delegate", "-v", "fake", "--cwd", cwd, "--wait", "x"], home);
+    await runCli(["delegate", "-v", "fake", "--cwd", cwd, "x"], home);
+    await waitForState(home, "t1", "completed");
 
     const raw = await runCli(["logs", "t1", "--json"], home);
     expect(raw.code).toBe(0);
@@ -598,7 +616,8 @@ describe("logs", () => {
       { emit: { type: "error", data: "second failure" } },
       { submit_report: REPORT },
     ]);
-    await runCli(["delegate", "-v", "fake", "--cwd", cwd, "--wait", "x"], home);
+    await runCli(["delegate", "-v", "fake", "--cwd", cwd, "x"], home);
+    await waitForState(home, "t1", "completed");
 
     const logs = await runCli(["logs", "t1"], home);
     const lines = logs.stdout.trim().split("\n").map((l) => JSON.parse(l));
@@ -612,7 +631,8 @@ describe("logs", () => {
       { emit: { type: "item.completed", item: { id: "i1", type: "agent_message", text: "bye" } } },
       { submit_report: REPORT },
     ]);
-    await runCli(["delegate", "-v", "fake", "--cwd", cwd, "--wait", "x"], home);
+    await runCli(["delegate", "-v", "fake", "--cwd", cwd, "x"], home);
+    await waitForState(home, "t1", "completed");
 
     const coalesced = await runCli(["logs", "t1"], home);
     const raw = await runCli(["logs", "t1", "--json"], home);
@@ -629,7 +649,7 @@ describe("delegate usage errors (exit 2)", () => {
 
   it("rejects an unknown vendor", async () => {
     const cwd = taskDir([]);
-    const result = await runCli(["delegate", "-v", "nope", "--cwd", cwd, "--wait", "x"], home);
+    const result = await runCli(["delegate", "-v", "nope", "--cwd", cwd, "x"], home);
     expect(result.code).toBe(2);
     expect(result.stderr).toMatch(/vendor/);
   });
@@ -663,9 +683,10 @@ describe("delegate usage errors (exit 2)", () => {
 describe("orchestrator session identity (#42)", () => {
   it("stamps the task with PARLEY_SESSION_ID, visible via status --json", async () => {
     const cwd = taskDir(happyActions());
-    await runCli(["delegate", "-v", "fake", "--cwd", cwd, "--wait", "x"], home, {
+    await runCli(["delegate", "-v", "fake", "--cwd", cwd, "x"], home, {
       extraEnv: { PARLEY_SESSION_ID: "orch-from-env" },
     });
+    await waitForState(home, "t1", "completed");
 
     const row = JSON.parse((await runCli(["status", "t1", "--json"], home)).stdout);
     expect(row.orchestrator_session_id).toBe("orch-from-env");
@@ -674,10 +695,11 @@ describe("orchestrator session identity (#42)", () => {
   it("--session overrides PARLEY_SESSION_ID when both are set", async () => {
     const cwd = taskDir(happyActions());
     await runCli(
-      ["delegate", "-v", "fake", "--session", "orch-from-flag", "--cwd", cwd, "--wait", "x"],
+      ["delegate", "-v", "fake", "--session", "orch-from-flag", "--cwd", cwd, "x"],
       home,
       { extraEnv: { PARLEY_SESSION_ID: "orch-from-env" } },
     );
+    await waitForState(home, "t1", "completed");
 
     const row = JSON.parse((await runCli(["status", "t1", "--json"], home)).stdout);
     expect(row.orchestrator_session_id).toBe("orch-from-flag");
@@ -700,9 +722,13 @@ describe("session grouping & filtering (#46)", () => {
   /** Delegate a completed task stamped with a given orchestrator session. */
   async function delegateUnder(session: string): Promise<void> {
     const cwd = taskDir(happyActions());
-    await runCli(["delegate", "-v", "fake", "--cwd", cwd, "--wait", "x"], home, {
+    await runCli(["delegate", "-v", "fake", "--cwd", cwd, "x"], home, {
       extraEnv: { PARLEY_SESSION_ID: session },
     });
+    // Tasks are sequential t1, t2, … under one home; wait for newest completed via status list.
+    const rows = JSON.parse((await runCli(["status", "--json", "--all"], home)).stdout) as { id: string; state: string }[];
+    const pending = rows.filter((r) => r.state !== "completed");
+    for (const r of pending) await waitForState(home, r.id, "completed");
   }
 
   const sessionsOf = (stdout: string): string[] =>

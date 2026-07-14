@@ -11,6 +11,7 @@ import {
   waitForChildPid,
   waitForState,
   waitUntilDead,
+  watchJson,
   type FakeVendorAction,
 } from "./helpers.js";
 
@@ -64,12 +65,14 @@ describe("answer timeout → stalled (spec §2, #18)", () => {
     ]);
 
     const delegate = await runCli(
-      ["delegate", "-v", "fake", "--cwd", cwd, "--answer-timeout", "250ms", "--wait", "do it"],
+      ["delegate", "-v", "fake", "--cwd", cwd, "--answer-timeout", "250ms", "do it"],
       home,
     );
-    // The question event wins the race (it precedes the timeout): exit 3.
-    expect(delegate.code).toBe(3);
-    expect(JSON.parse(delegate.stdout).question).toBe("which database?");
+    expect(delegate.code).toBe(0);
+    // watch surfaces the question (exit 3) before the stall timeout fires.
+    const q = await watchJson(home, ["t1"]);
+    expect(q.code).toBe(3);
+    expect(q.task!.question).toBe("which database?");
 
     const childPid = await waitForChildPid(home, "t1");
 
@@ -85,11 +88,11 @@ describe("answer timeout → stalled (spec §2, #18)", () => {
     await waitUntilDead(childPid);
   });
 
-  it("a waiting CLI that misses the question window exits 4 with the recorded question and a resume hint", async () => {
-    // A CLI blocked on the event stream wakes on the question itself (exit 3)
+  it("a waiting watch that misses the question window exits 4 with the recorded question and a resume hint", async () => {
+    // A CLI blocked on the inbox wakes on the question itself (exit 3)
     // — so exit 4 is the contract for a waiter that observes the task *after*
     // the stall (a slow orchestrator re-polling). Deterministic reproduction:
-    // freeze the waiting CLI (SIGSTOP) across the ask → stall window; a short
+    // freeze the waiting watch (SIGSTOP) across the ask → stall window; a short
     // daemon poll window guarantees its buffered response is a null event,
     // not the question, so on thaw it re-polls and sees `stalled`.
     const cwd = taskDir([
@@ -103,16 +106,19 @@ describe("answer timeout → stalled (spec §2, #18)", () => {
     const delegate = await runCli(
       [
         "delegate", "-v", "fake", "--cwd", cwd,
-        "--answer-timeout", "2s", "--wait", "two asks",
+        "--answer-timeout", "2s", "two asks",
       ],
       home,
       { extraEnv: { PARLEY_LONG_POLL_MS: "150" } }, // inherited by the auto-spawned daemon
     );
-    expect(delegate.code).toBe(3);
-    expect(JSON.parse(delegate.stdout).question).toBe("first?");
+    expect(delegate.code).toBe(0);
+    const first = await watchJson(home, ["t1"]);
+    expect(first.code).toBe(3);
+    expect(first.task!.question).toBe("first?");
 
-    // answer --wait re-blocks... and immediately goes to sleep at the wheel.
-    const waiting = startCli(["answer", "t1", "one", "--wait"], home);
+    // answer returns immediately; then watch re-blocks... and is frozen.
+    expect((await runCli(["answer", "t1", "one"], home)).code).toBe(0);
+    const waiting = startCli(["watch", "t1", "--json"], home);
     await waitForState(home, "t1", "running"); // the answer was delivered
     waiting.child.kill("SIGSTOP");
 
@@ -122,10 +128,12 @@ describe("answer timeout → stalled (spec §2, #18)", () => {
 
     const result = await waiting.result;
     expect(result.code).toBe(4);
-    const envelope = JSON.parse(result.stdout);
-    expect(envelope.state).toBe("stalled");
-    expect(envelope.question).toBe("second?");
-    expect(result.stderr).toMatch(/parley answer t1/);
+    const body = JSON.parse(result.stdout);
+    expect(body.task.state).toBe("stalled");
+    expect(body.task.question).toBe("second?");
+    // Human-mode watch prints a resume hint on stderr; --json keeps stdout
+    // machine-only (hint is only for non-json). Envelope carries the question.
+    expect(body.task.question_id).toBeTruthy();
   }, 30_000);
 
   it("rejects an invalid --answer-timeout (exit 2)", async () => {
@@ -147,16 +155,18 @@ describe("parley answer resumes a stalled task", () => {
     );
 
     const delegate = await runCli(
-      ["delegate", "-v", "fake", "--cwd", cwd, "--answer-timeout", "250ms", "--wait", "pick"],
+      ["delegate", "-v", "fake", "--cwd", cwd, "--answer-timeout", "250ms", "pick"],
       home,
     );
-    expect(delegate.code).toBe(3);
+    expect(delegate.code).toBe(0);
     await waitForState(home, "t1", "stalled");
 
     // Late answer on the stalled task: respawn through resume(), run to completion.
-    const answer = await runCli(["answer", "t1", "option-b", "--wait"], home);
+    const answer = await runCli(["answer", "t1", "option-b"], home);
     expect(answer.code).toBe(0);
-    const envelope = JSON.parse(answer.stdout);
+    expect(JSON.parse(answer.stdout).state).toBe("running");
+    const row = await waitForState(home, "t1", "completed");
+    const envelope = (await watchJson(home, ["t1"])).task!;
     expect(envelope.state).toBe("completed");
     expect(envelope.report).toEqual(REPORT);
     expect(envelope.session_id).toBe("sess-9");
@@ -170,7 +180,6 @@ describe("parley answer resumes a stalled task", () => {
     expect(resumed!.answer).toContain("option-b");
 
     // The question is no longer outstanding.
-    const row = await waitForState(home, "t1", "completed");
     expect(row.question).toBeNull();
     expect(row.question_id).toBeNull();
   });
@@ -184,18 +193,20 @@ describe("parley answer resumes a stalled task", () => {
     const delegate = await runCli(
       [
         "delegate", "-v", "fake", "--effort", "high", "--cwd", cwd,
-        "--answer-timeout", "250ms", "--wait", "pick",
+        "--answer-timeout", "250ms", "pick",
       ],
       home,
     );
-    expect(delegate.code).toBe(3);
+    expect(delegate.code).toBe(0);
     await waitForState(home, "t1", "stalled");
 
-    const answer = await runCli(["answer", "t1", "option-b", "--wait"], home);
+    const answer = await runCli(["answer", "t1", "option-b"], home);
     expect(answer.code).toBe(0);
+    await waitForState(home, "t1", "completed");
     // The task row (and its report envelope) keep the effort the task was
     // delegated with — same persistence seam as sandbox posture.
-    expect(JSON.parse(answer.stdout).effort).toBe("high");
+    const envelope = (await watchJson(home, ["t1"])).task!;
+    expect(envelope.effort).toBe("high");
 
     // The resumed child received it too (fake adapter echoes FAKE_EFFORT in `hello`).
     const hello = vendorEvents(home, "t1").find((e) => e.type === "hello");
@@ -208,10 +219,10 @@ describe("parley answer resumes a stalled task", () => {
     const cwd = taskDir([{ ask: "no session yet?" }, { submit_report: REPORT }]);
 
     const delegate = await runCli(
-      ["delegate", "-v", "fake", "--cwd", cwd, "--answer-timeout", "2s", "--wait", "fresh"],
+      ["delegate", "-v", "fake", "--cwd", cwd, "--answer-timeout", "2s", "fresh"],
       home,
     );
-    expect(delegate.code).toBe(3);
+    expect(delegate.code).toBe(0);
     const stalledRow = await waitForState(home, "t1", "stalled");
     expect(stalledRow.session_id).toBeNull();
 
@@ -225,9 +236,10 @@ describe("parley answer resumes a stalled task", () => {
     expect(vendorEvents(home, "t1").some((e) => e.type === "resumed")).toBe(false);
 
     // And the revived run is fully live: answering it completes the task.
-    const finish = await runCli(["answer", "t1", "proceed", "--wait"], home);
+    const finish = await runCli(["answer", "t1", "proceed"], home);
     expect(finish.code).toBe(0);
-    expect(JSON.parse(finish.stdout).state).toBe("completed");
+    expect(JSON.parse(finish.stdout).state).toBe("running");
+    await waitForState(home, "t1", "completed");
   });
 });
 
@@ -248,8 +260,9 @@ describe("daemon crash recovery (spec §3)", () => {
     // t1 runs long; t2 completes.
     await runCli(["delegate", "-v", "fake", "-n", "crashy", "--cwd", cwdA, "long task"], home);
     await waitForState(home, "t1", "running");
-    const done = await runCli(["delegate", "-v", "fake", "--cwd", cwdB, "--wait", "quick"], home);
+    const done = await runCli(["delegate", "-v", "fake", "--cwd", cwdB, "quick"], home);
     expect(done.code).toBe(0);
+    await waitForState(home, "t2", "completed");
 
     const discovery = readDiscovery(home);
     expect(discovery).not.toBeNull();
@@ -277,9 +290,9 @@ describe("daemon crash recovery (spec §3)", () => {
     });
 
     // The crash-stalled task resumes the same way: answer → resume() → done.
-    const answer = await runCli(["answer", "t1", "keep going", "--wait"], home);
+    const answer = await runCli(["answer", "t1", "keep going"], home);
     expect(answer.code).toBe(0);
-    expect(JSON.parse(answer.stdout).state).toBe("completed");
+    await waitForState(home, "t1", "completed");
     const resumed = vendorEvents(home, "t1").find((e) => e.type === "resumed");
     expect(resumed!.session_id).toBe("sess-A");
     expect(resumed!.answer).toContain("keep going");

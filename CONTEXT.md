@@ -38,8 +38,8 @@ driving parley is the **orchestrator**.
 - **Firehose** — `watch --follow`: every transition streamed as JSONL, no
   ack, no priority; for UIs and debugging, not orchestration.
 - **Attention** — shorthand for the states that interrupt an orchestrator:
-  `awaiting_answer` and `stalled`. Exit codes 3 and 4 everywhere
-  (`watch`, `delegate --wait`, `answer --wait`).
+  `awaiting_answer` and `stalled`. Exit codes 3 and 4 on `watch`
+  (the only wait primitive; ADR-0008).
 - **Report envelope** — the schema-validated result object a completed task
   hands back (worktree path, branch, report body).
 

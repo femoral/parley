@@ -42,7 +42,7 @@ function slow(ms: number): FakeVendorAction[] {
   return [{ emit: { type: "session", session_id: "s" } }, { sleep: ms }, { submit_report: REPORT }];
 }
 
-/** Delegate without --wait and return the parsed ack `{task_id, name, state, seq}`. */
+/** Delegate (always async) and return the parsed ack `{task_id, name, state, seq}`. */
 async function delegate(cwd: string, name?: string): Promise<Record<string, unknown>> {
   const args = ["delegate", "-v", "fake", "--cwd", cwd, ...(name ? ["-n", name] : []), "run"];
   const res = await runCli(args, home);
@@ -65,12 +65,12 @@ describe("transition seq (#34)", () => {
     expect(typeof row.seq).toBe("number");
     expect(row.seq as number).toBeGreaterThan(0);
 
-    // delegate --wait envelope carries a seq too.
-    const waited = JSON.parse(
-      (await runCli(["delegate", "-v", "fake", "--cwd", taskDir(quick()), "--wait", "x"], home))
-        .stdout,
-    ) as Record<string, unknown>;
-    expect(typeof waited.seq).toBe("number");
+    // watch completed envelope carries a seq too.
+    const watched = JSON.parse(
+      (await runCli(["watch", "t1", "--json"], home)).stdout,
+    ) as { seq: number; task: Record<string, unknown> };
+    expect(typeof watched.seq).toBe("number");
+    expect(watched.task.state).toBe("completed");
   });
 
   it("answer ack carries a seq", async () => {

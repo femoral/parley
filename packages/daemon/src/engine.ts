@@ -66,14 +66,6 @@ import {
 /** Correlation header children send on every MCP request (ADR-0003). */
 export const TASK_HEADER = "x-parley-task";
 
-/**
- * States a long-poll waiter wakes on — a task has produced a CLI event (spec
- * §3). Terminal outcomes plus `awaiting_answer` (a question) and `stalled`.
- */
-function isEventState(state: string): boolean {
-  return TERMINAL_STATES.has(state) || state === "awaiting_answer" || state === "stalled";
-}
-
 /** Default `--answer-timeout`: 30 minutes (spec §2). */
 export const DEFAULT_ANSWER_TIMEOUT_MS = 30 * 60 * 1000;
 
@@ -82,7 +74,7 @@ export const DEFAULT_ANSWER_TIMEOUT_MS = 30 * 60 * 1000;
  * stream closes, so the final usage event can land in the same DB update as
  * `completed` (#72). If the child never exits, complete with best-effort usage
  * after this window — generous enough for trailing events (e.g. codex's
- * `turn.completed`), short enough that a hung child does not park `--wait`
+ * `turn.completed`), short enough that a hung child does not park `watch`
  * for minutes. Override via `PARLEY_REPORT_ACCEPTED_FALLBACK_MS` for tests.
  */
 export const REPORT_ACCEPTED_FALLBACK_MS = 30_000;
@@ -186,7 +178,6 @@ export interface DelegateRequest {
  * before the engine takes requests) marks tasks recorded live as `stalled`.
  */
 export class TaskEngine {
-  private readonly waiters = new Map<string, Set<() => void>>();
   /**
    * Append-only in-memory log of every task-state transition this daemon has
    * recorded (#34), in seq order. `parley watch`'s multi-task long-poll scans it
@@ -278,7 +269,7 @@ export class TaskEngine {
 
   /**
    * Create a task (pending) and kick off its background run. Returns the row
-   * immediately — `--wait` callers long-poll `/tasks/:id/events` afterwards.
+   * immediately (ADR-0008); callers wait via the attention inbox (`parley watch`).
    */
   delegate(request: DelegateRequest): TaskRow {
     const adapter = this.adapters.get(request.vendor);
@@ -599,8 +590,7 @@ export class TaskEngine {
       }, timeoutMs);
       timer.unref();
       this.pending.set(taskId, { questionId, resolve, timer });
-      // Wake the waiting `delegate --wait` / `answer --wait` long-poll and any
-      // `parley watch` (the `awaiting_answer` transition).
+      // Wake `parley watch` (the `awaiting_answer` transition).
       this.transitioned(taskId);
     });
   }
@@ -744,7 +734,7 @@ export class TaskEngine {
 
   /**
    * Cancel a task: terminate its vendor child (if running) and move the task to
-   * `cancelled`, waking long-poll waiters (the blocking CLI exits 5). Throws
+   * `cancelled`, waking inbox/firehose long-poll waiters. Throws
    * `DelegateError` (→ exit 2) for an unknown ref or an already-terminal task.
    * The worktree and captured logs are retained for inspection (never merged).
    */
@@ -777,58 +767,16 @@ export class TaskEngine {
   }
 
   /**
-   * Resolve when the task reaches an event state — terminal, `awaiting_answer`
-   * (a question), or `stalled` — or after `timeoutMs` (the long-poll window,
-   * the CLI re-polls). Returns the current row either way.
-   */
-  async waitForEvent(taskId: string, timeoutMs: number): Promise<TaskRow | undefined> {
-    const task = getTask(this.db, taskId);
-    if (!task || isEventState(task.state)) return task;
-
-    await new Promise<void>((resolve) => {
-      const timer = setTimeout(() => {
-        wake();
-      }, timeoutMs);
-      const wake = (): void => {
-        clearTimeout(timer);
-        this.waiters.get(taskId)?.delete(wake);
-        resolve();
-      };
-      let set = this.waiters.get(taskId);
-      if (!set) {
-        set = new Set();
-        this.waiters.set(taskId, set);
-      }
-      set.add(wake);
-      // Re-check after registering: the task may have reached an event state
-      // (completed, question, …) in between.
-      const now = getTask(this.db, taskId);
-      if (!now || isEventState(now.state)) wake();
-    });
-    return getTask(this.db, taskId);
-  }
-
-  private notify(taskId: string): void {
-    const set = this.waiters.get(taskId);
-    if (!set) return;
-    this.waiters.delete(taskId);
-    for (const wake of set) wake();
-  }
-
-  /**
    * Record a task-state transition (#34): stamp the row with the next global
-   * `seq`, append it to the in-memory event log, and wake both the single-task
-   * long-poll waiters (`delegate --wait` / `answer --wait`) and the multi-task
-   * watchers (`parley watch`). Call this after every state change — including
-   * `pending → running` and `awaiting_answer → running`, which are transitions
-   * `watch` surfaces even though the single-task waiter re-polls past them.
+   * `seq`, append it to the in-memory event log, and wake multi-task watchers
+   * (`parley watch` inbox / firehose / SSE). Call this after every state
+   * change — including `pending → running` and `awaiting_answer → running`.
    */
   private transitioned(taskId: string): void {
     const row = getTask(this.db, taskId);
     if (!row) return;
     const seq = bumpTaskSeq(this.db, taskId);
     this.transitions.push({ seq, task_id: taskId, state: row.state });
-    this.notify(taskId);
     this.wakeEventWaiters();
   }
 

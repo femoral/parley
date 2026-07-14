@@ -179,28 +179,41 @@ describe("packed-install smoke (#60, ui install #70)", () => {
       ]),
     );
 
+    const env = {
+      ...process.env,
+      PARLEY_HOME: home,
+      PARLEY_FAKE_VENDOR_BIN: FAKE_VENDOR_BIN,
+      PARLEY_SESSION_ID: "packed-orch",
+    };
     const stdout = execFileSync(
       installed.binPath,
-      ["delegate", "-v", "fake", "-m", "fake-model-1", "-n", "packed", "--cwd", task, "--wait", "do the thing"],
-      {
-        encoding: "utf8",
-        timeout: 60_000,
-        env: {
-          ...process.env,
-          PARLEY_HOME: home,
-          PARLEY_FAKE_VENDOR_BIN: FAKE_VENDOR_BIN,
-          PARLEY_SESSION_ID: "packed-orch",
-        },
-      },
+      ["delegate", "-v", "fake", "-m", "fake-model-1", "-n", "packed", "--cwd", task, "do the thing"],
+      { encoding: "utf8", timeout: 60_000, env },
     );
 
-    const envelope = JSON.parse(stdout);
-    expect(envelope.state).toBe("completed");
-    expect(envelope.vendor).toBe("fake");
-    expect(envelope.model).toBe("fake-model-1");
-    expect(envelope.session_id).toBe("packed-sess");
-    expect(envelope.usage).toEqual({ input_tokens: 100, output_tokens: 25 });
-    expect(envelope.report).toEqual({
+    const ack = JSON.parse(stdout);
+    expect(ack.task_id).toBeTruthy();
+    // Poll status until completed (packed bin has no waitForState helper).
+    const deadline = Date.now() + 30_000;
+    let row: Record<string, unknown> | null = null;
+    while (Date.now() < deadline) {
+      const st = execFileSync(installed.binPath, ["status", "packed", "--json"], {
+        encoding: "utf8",
+        timeout: 10_000,
+        env,
+      });
+      row = JSON.parse(st) as Record<string, unknown>;
+      if (row.state === "completed") break;
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 100);
+    }
+    expect(row?.state).toBe("completed");
+    // status --json carries the completed fields (watch exits 6, which would
+    // make execFileSync throw).
+    expect(row!.vendor).toBe("fake");
+    expect(row!.model).toBe("fake-model-1");
+    expect(row!.session_id).toBe("packed-sess");
+    expect(row!.usage).toEqual({ input_tokens: 100, output_tokens: 25 });
+    expect(row!.report).toEqual({
       summary: "packed run ok",
       outcome: "success",
       files_changed: ["src/a.ts"],

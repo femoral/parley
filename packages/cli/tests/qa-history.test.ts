@@ -82,10 +82,11 @@ describe("durable Q&A history on task detail (#79)", () => {
   it("ask + answer then a fresh detail fetch shows the full exchange", async () => {
     const cwd = taskDir([{ ask: "which database?" }, { submit_report: REPORT }]);
     const delegate = await runCli(
-      ["delegate", "-v", "fake", "--cwd", cwd, "--wait", "do it"],
+      ["delegate", "-v", "fake", "--cwd", cwd, "do it"],
       home,
     );
-    expect(delegate.code).toBe(3);
+    expect(delegate.code).toBe(0);
+    await waitForState(home, "t1", "awaiting_answer");
 
     // Outstanding turn is visible with answer null before anyone answers.
     const outstanding = await fetchDetail("t1");
@@ -94,7 +95,7 @@ describe("durable Q&A history on task detail (#79)", () => {
     ]);
     expect(outstanding.task.question).toBe("which database?");
 
-    await runCli(["answer", "t1", "postgres", "--wait"], home);
+    await runCli(["answer", "t1", "postgres"], home);
     await waitForState(home, "t1", "completed");
 
     // Fresh HTTP client (no live SSE observation) rehydrates the exchange.
@@ -117,10 +118,13 @@ describe("durable Q&A history on task detail (#79)", () => {
       { submit_report: REPORT },
     ]);
     expect(
-      (await runCli(["delegate", "-v", "fake", "--cwd", cwd, "--wait", "multi"], home)).code,
-    ).toBe(3);
-    expect((await runCli(["answer", "t1", "one", "--wait"], home)).code).toBe(3);
-    expect((await runCli(["answer", "t1", "two", "--wait"], home)).code).toBe(0);
+      (await runCli(["delegate", "-v", "fake", "--cwd", cwd, "multi"], home)).code,
+    ).toBe(0);
+    await waitForState(home, "t1", "awaiting_answer");
+    expect((await runCli(["answer", "t1", "one"], home)).code).toBe(0);
+    await waitForState(home, "t1", "awaiting_answer");
+    expect((await runCli(["answer", "t1", "two"], home)).code).toBe(0);
+    await waitForState(home, "t1", "completed");
 
     const detail = await fetchDetail("t1");
     expect(detail.qa.map((t) => ({ q: t.question, a: t.answer }))).toEqual([
@@ -132,15 +136,16 @@ describe("durable Q&A history on task detail (#79)", () => {
   it("updates an outstanding turn in place when answered (no duplicate)", async () => {
     const cwd = taskDir([{ ask: "one turn?" }, { submit_report: REPORT }]);
     expect(
-      (await runCli(["delegate", "-v", "fake", "--cwd", cwd, "--wait", "x"], home)).code,
-    ).toBe(3);
+      (await runCli(["delegate", "-v", "fake", "--cwd", cwd, "x"], home)).code,
+    ).toBe(0);
+    await waitForState(home, "t1", "awaiting_answer");
 
     const before = await fetchDetail("t1");
     expect(before.qa).toHaveLength(1);
     const qid = before.qa[0]!.question_id;
     expect(before.qa[0]!.answer).toBeNull();
 
-    await runCli(["answer", "t1", "yes", "--wait"], home);
+    await runCli(["answer", "t1", "yes"], home);
     const after = await fetchDetail("t1");
     expect(after.qa).toHaveLength(1);
     expect(after.qa[0]).toMatchObject({
@@ -154,7 +159,7 @@ describe("durable Q&A history on task detail (#79)", () => {
     // Misbehaving child: fire-and-forget ask, then submit_report without ever
     // receiving an answer. Engine settles the parked call and completes with
     // the report; history keeps the turn with answer null (#79 + #72).
-    // No --wait: the question transition would exit 3 before completion.
+    // Fire-and-forget ask: child does not block on the answer.
     const cwd = taskDir([
       { ask: "should I keep going?", background: true },
       { sleep: 200 },
@@ -181,10 +186,12 @@ describe("durable Q&A history on task detail (#79)", () => {
   it("history survives a daemon restart (CLI answer, no HUD open)", async () => {
     const cwd = taskDir([{ ask: "persist me?" }, { submit_report: REPORT }]);
     expect(
-      (await runCli(["delegate", "-v", "fake", "--cwd", cwd, "--wait", "x"], home)).code,
-    ).toBe(3);
+      (await runCli(["delegate", "-v", "fake", "--cwd", cwd, "x"], home)).code,
+    ).toBe(0);
+    await waitForState(home, "t1", "awaiting_answer");
     // Answer via CLI while no HUD is observing.
-    expect((await runCli(["answer", "t1", "sure", "--wait"], home)).code).toBe(0);
+    expect((await runCli(["answer", "t1", "sure"], home)).code).toBe(0);
+    await waitForState(home, "t1", "completed");
 
     killDaemon();
 

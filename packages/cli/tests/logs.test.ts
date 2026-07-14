@@ -33,7 +33,7 @@ function taskDir(actions: FakeVendorAction[], resumeActions?: FakeVendorAction[]
 
 const REPORT = { summary: "did it", outcome: "success", files_changed: ["a.ts"] };
 
-/** Delegate without --wait; returns the parsed ack `{task_id, name, state, seq}`. */
+/** Delegate (always async); returns the parsed ack `{task_id, name, state, seq}`. */
 async function delegate(cwd: string, name?: string): Promise<Record<string, unknown>> {
   const args = ["delegate", "-v", "fake", "--cwd", cwd, ...(name ? ["-n", name] : []), "run"];
   const res = await runCli(args, home);
@@ -166,7 +166,7 @@ describe("per-task log tail (#63)", () => {
     // still append more to this same log.
     expect(whileStalled.eof).toBe(false);
 
-    const answer = await runCli(["answer", "t1", "postgres", "--wait"], home);
+    const answer = await runCli(["answer", "t1", "postgres"], home);
     expect(answer.code).toBe(0);
     await waitForState(home, "t1", "completed");
 

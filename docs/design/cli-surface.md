@@ -2,10 +2,12 @@
 
 Prototype asset for the wayfinder ticket [Prototype: parley CLI surface](https://github.com/femoral/parley/issues/6). Reviewed and accepted 2026-07-09. Binds the wire protocol ([ticket](https://github.com/femoral/parley/issues/5)) to concrete commands, flags, and exit codes.
 
+Updated by [ADR-0008](../adr/0008-single-flow-watch-only.md) / [#93](https://github.com/femoral/parley/issues/93): `delegate`/`answer` are always async; `watch` is the only wait.
+
 ## Commands
 
 ```
-parley delegate [flags] "<prompt>"     # prompt arg, or '-' for stdin
+parley delegate [flags] "<prompt>"     # prompt arg, or '-' for stdin; returns immediately
   -v, --vendor codex|grok      (required)
   -m, --model <id>             (passed through to vendor opaquely)
       --effort <level>         (reasoning effort, passed through opaquely; codex: -c
@@ -15,12 +17,13 @@ parley delegate [flags] "<prompt>"     # prompt arg, or '-' for stdin
       --cwd <path>             (escape hatch: pre-made dir, skips worktree creation)
       --context <file>         (repeatable; semantics owned by the context-passing ticket)
       --report-schema <file>   (JSON Schema validating the child's submit_report)
-      --wait                   (block until first question or terminal state)
       --answer-timeout <dur>   (default 30m; on expiry task → stalled, question recorded)
       --sandbox <mode>         (defaults owned by the sandbox-posture ticket)
       --allow-network          (idem)
 
-parley answer <task> "<text>"      # <task> = id or name; '-' reads stdin; --wait re-blocks
+parley answer <task> "<text>"      # <task> = id or name; '-' reads stdin; returns immediately
+parley watch [task…] [--ack <event-id>] [--session <id>] [--follow] [--json]
+                                   # the only blocking primitive (ADR-0007 / ADR-0008)
 parley status [task] [--json]      # all tasks, or one
 parley logs <task> [--follow]      # captured vendor event stream (diagnostics)
 parley cancel <task>
@@ -28,38 +31,45 @@ parley list                        # alias for bare `parley status`
 parley daemon start|stop|status    # explicit control; `delegate` auto-spawns if absent
 ```
 
-## The blocking contract (`--wait`)
+## One flow: always-async delegate, watch is the only wait
 
-`parley delegate --wait` and `parley answer --wait` share one contract: block until the task asks a question or reaches a terminal state, print a JSON document on stdout, exit with a semantic code.
+`parley delegate` prints `{task_id, name, state:"pending", seq}` and returns immediately (exit 0). `parley answer` posts the answer and returns immediately (exit 0). State-typed exit codes live only on `parley watch` (ADR-0007):
 
-| exit | state | stdout |
-|------|-------|--------|
-| 0 | completed | report envelope JSON (validated report body + daemon envelope: task id, worktree, branch, vendor, model, session id, usage, duration) |
-| 1 | failed | error + diagnostics reference (vendor output captured as logs) |
-| 2 | usage/config error | error message (no task created / task unchanged) |
-| 3 | question | `{task_id, name, question_id, question}` — answer via `parley answer <task> --wait "..."`, which re-enters this same contract |
-| 4 | stalled | recorded question + resume hint (`parley answer` later resumes via vendor session resume) |
-| 5 | cancelled | cancellation record |
+| exit | meaning | stdout |
+|------|---------|--------|
+| 0 | all-done | empty — every watched task terminal **and** every event acked |
+| 2 | usage/config error | error message |
+| 3 | awaiting_answer | inbox event JSON (`task.question` + envelope) |
+| 4 | stalled | inbox event JSON + resume hint on stderr |
+| 5 | failed | inbox event JSON |
+| 6 | completed | inbox event JSON (report envelope under `.task`) |
 
-Without `--wait`, `delegate` prints `{task_id, name, state:"pending"}` and returns immediately; the orchestrator polls `parley status` / re-attaches with `parley answer --wait` or `parley status <task> --json`.
+Passing the removed `--wait` flag on `delegate` or `answer` is exit 2, with a message pointing at `parley watch`.
 
 ## Task identity
 
 - Daemon assigns short ids (`t7`); `--name` adds a human label. All task-taking commands accept either.
 - Worktree/branch derive from both: `parley/t7-fix-auth`.
 
-## Orchestration loop (Claude Code side)
+## Orchestration loop
 
 ```
-$ parley delegate -v codex -m gpt-5.6 --name fix-auth --wait "…" ; echo $?
-{"task_id":"t7","name":"fix-auth","question_id":"q1","question":"JWT or session cookies?"}
+$ parley delegate -v codex -m gpt-5.6 --name fix-auth --session orch "…"
+{"task_id":"t7","name":"fix-auth","state":"pending","seq":0}
+$ parley watch --json ; echo $?
+{"event":"task.question","seq":2,"task":{…,"question":"JWT or session cookies?"}}
 3
-$ parley answer fix-auth --wait "JWT" ; echo $?
-{"task_id":"t7", …report envelope…}
+$ parley answer fix-auth "JWT"
+{"task_id":"t7","name":"fix-auth","state":"running",…}
+$ parley watch --json ; echo $?
+{"event":"task.completed","seq":4,"task":{…report envelope…}}
+6
+$ # review branch, then ack
+$ parley watch --json --ack 4 ; echo $?
 0
 ```
 
-Exit code branches the orchestrator's Bash logic without JSON parsing; stdout carries the detail when it wants it.
+Exit code branches the orchestrator's Bash logic without JSON parsing; stdout carries the detail when it wants it. One loop for n=1 and n=N.
 
 ## Deferred to other tickets
 

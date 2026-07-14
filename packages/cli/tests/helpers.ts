@@ -254,6 +254,62 @@ export async function waitForState(
   }
 }
 
+/**
+ * Run `parley watch … --json` once and parse the inbox event. Used by tests
+ * that previously relied on `delegate --wait` / `answer --wait` (ADR-0008).
+ */
+export async function watchJson(
+  home: string,
+  args: string[] = [],
+): Promise<{
+  code: number;
+  stderr: string;
+  event: string | null;
+  seq: number | null;
+  task: Record<string, unknown> | null;
+  raw: string;
+}> {
+  const res = await runCli(["watch", ...args, "--json"], home);
+  if (res.code === 0 || res.stdout.trim() === "") {
+    return { code: res.code, stderr: res.stderr, event: null, seq: null, task: null, raw: res.stdout };
+  }
+  const body = JSON.parse(res.stdout) as {
+    event: string;
+    seq: number;
+    task: Record<string, unknown>;
+  };
+  return {
+    code: res.code,
+    stderr: res.stderr,
+    event: body.event,
+    seq: body.seq,
+    task: body.task,
+    raw: res.stdout,
+  };
+}
+
+/**
+ * Delegate (always async) then poll until `state`. Returns the pending ack and
+ * the status row at the target state — the post-ADR-0008 stand-in for most
+ * former `delegate --wait` call sites that only needed a mid-flight or
+ * terminal state.
+ */
+export async function delegateUntil(
+  home: string,
+  args: string[],
+  state: string,
+  options: CliOptions & { timeoutMs?: number } = {},
+): Promise<{ ack: Record<string, unknown>; row: Record<string, unknown> }> {
+  const { timeoutMs, ...cliOpts } = options;
+  const res = await runCli(args, home, cliOpts);
+  if (res.code !== 0) {
+    throw new Error(`delegate exited ${res.code}: ${res.stderr}\n${res.stdout}`);
+  }
+  const ack = JSON.parse(res.stdout) as Record<string, unknown>;
+  const row = await waitForState(home, String(ack.task_id), state, timeoutMs);
+  return { ack, row };
+}
+
 /** Create a fresh isolated parley home directory. */
 export function makeHome(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), "parley-test-"));

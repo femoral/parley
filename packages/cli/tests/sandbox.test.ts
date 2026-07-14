@@ -8,6 +8,8 @@ import {
   makeHome,
   makeTaskDir,
   runCli,
+  waitForState,
+  watchJson,
   type FakeVendorAction,
 } from "./helpers.js";
 
@@ -53,17 +55,19 @@ describe("sandbox posture (spec §8)", () => {
     it(`delivers ${sandbox} + network:${network} to the adapter, envelope, and status`, async () => {
       const cwd = taskDir([{ submit_report: REPORT }]);
       const result = await runCli(
-        ["delegate", "-v", "fake", "--cwd", cwd, ...args, "--wait", "go"],
+        ["delegate", "-v", "fake", "--cwd", cwd, ...args, "go"],
         home,
       );
 
       expect(result.code).toBe(0);
-      const envelope = JSON.parse(result.stdout);
+      const ack = JSON.parse(result.stdout);
+      await waitForState(home, ack.task_id, "completed");
+      const envelope = (await watchJson(home, [ack.task_id])).task!;
       // Posture appears in the report envelope.
       expect(envelope.posture).toEqual({ sandbox, network });
 
       // The fake vendor received exactly this posture (proves delivery).
-      expect(helloFrom(home, envelope.task_id)).toMatchObject({ sandbox, network });
+      expect(helloFrom(home, envelope.task_id as string)).toMatchObject({ sandbox, network });
 
       // Posture is persisted and visible in `status --json`.
       const row = JSON.parse((await runCli(["status", "t1", "--json"], home)).stdout);
@@ -75,7 +79,7 @@ describe("sandbox posture (spec §8)", () => {
   it("rejects an unknown sandbox mode with exit 2", async () => {
     const cwd = taskDir([{ submit_report: REPORT }]);
     const result = await runCli(
-      ["delegate", "-v", "fake", "--cwd", cwd, "--sandbox", "bogus", "--wait", "x"],
+      ["delegate", "-v", "fake", "--cwd", cwd, "--sandbox", "bogus", "x"],
       home,
     );
     expect(result.code).toBe(2);

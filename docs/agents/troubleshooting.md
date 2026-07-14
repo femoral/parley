@@ -5,8 +5,8 @@ in this order — cheapest and least context-hungry first.
 
 ## 1. The task's `error` field
 
-`parley delegate --wait` and `parley status --json` (or `GET /tasks/:id`) already
-carry the failure detail as a single string:
+`parley status --json` (or `GET /tasks/:id`, or a `watch` exit-5 envelope) already
+carries the failure detail as a single string:
 
 ```
 vendor child exited (code 0) without submitting a report [PARLEY-DIAG mcp_tool_call server=parley tool=submit_report failed: user cancelled MCP tool call]

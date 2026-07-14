@@ -5,7 +5,6 @@ import { DaemonRequestError, daemonPost, ensureDaemon } from "../client.js";
 import { type CliContext, printJson } from "../context.js";
 import { UsageError } from "../errors.js";
 import { parseDuration } from "@useparley/core";
-import { waitForOutcome } from "../wait.js";
 import { DEFAULT_SANDBOX, SANDBOX_MODES, isSandboxMode } from "@useparley/daemon/adapters/types.js";
 
 interface DelegateAck {
@@ -15,10 +14,9 @@ interface DelegateAck {
 }
 
 /**
- * `parley delegate [flags] "<prompt>"` — create a task; with `--wait`, block on
- * the task's event stream and return the first outcome: a question (exit 3 with
- * `{task_id, name, question_id, question}`) or a terminal state (report envelope
- * + its typed code). See `waitForOutcome` for the shared blocking contract.
+ * `parley delegate [flags] "<prompt>"` — create a task and return immediately
+ * with `{task_id, name, state: "pending", seq}` (ADR-0008). Block on outcomes
+ * with `parley watch`. Passing the removed `--wait` flag is a usage error.
  */
 export async function runDelegate(ctx: CliContext, args: string[]): Promise<number> {
   const { positionals, flags } = parseArgs(args, {
@@ -33,10 +31,17 @@ export async function runDelegate(ctx: CliContext, args: string[]): Promise<numb
     "--no-network": {},
     "--context": { value: true, multi: true },
     "--report-schema": { value: true },
+    // Removed (ADR-0008); recognized only so the error points at `parley watch`.
     "--wait": {},
     "--json": {},
     "--answer-timeout": { value: true },
   });
+
+  if (flags["--wait"] === true) {
+    throw new UsageError(
+      "delegate: --wait is removed; use `parley watch` to wait on tasks (ADR-0008)",
+    );
+  }
 
   let prompt = positionals[0];
   if (prompt === "-") prompt = fs.readFileSync(0, "utf8");
@@ -176,10 +181,6 @@ export async function runDelegate(ctx: CliContext, args: string[]): Promise<numb
     throw err;
   }
 
-  if (flags["--wait"] !== true) {
-    printJson(ctx, ack);
-    return 0;
-  }
-
-  return waitForOutcome(ctx, discovery, ack.task_id);
+  printJson(ctx, ack);
+  return 0;
 }

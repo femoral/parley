@@ -2,7 +2,7 @@ import http from "node:http";
 import path from "node:path";
 import type { HomePaths } from "@useparley/core";
 import { createAdapterRegistry } from "./adapters/index.js";
-import { openDatabase, SETTLED_STATES, sweepInterruptedTasks, TERMINAL_STATES } from "./db.js";
+import { openDatabase, sweepInterruptedTasks, TERMINAL_STATES } from "./db.js";
 import { DEFAULT_NETWORK, DEFAULT_SANDBOX, isSandboxMode } from "./adapters/types.js";
 import type { ContextFile } from "./context.js";
 import { DelegateError, TaskEngine } from "./engine.js";
@@ -194,33 +194,6 @@ function handleClean(engine: TaskEngine, res: http.ServerResponse, body: unknown
 }
 
 /**
- * `GET /tasks/:ref/events?wait=true` — long-poll until the task reaches a
- * terminal state (or the poll window elapses; the CLI re-polls). Responds with
- * the event name and the task's report envelope.
- */
-async function handleEvents(
-  engine: TaskEngine,
-  res: http.ServerResponse,
-  ref: string,
-  wait: boolean,
-): Promise<void> {
-  const task = engine.resolve(ref);
-  if (!task) {
-    sendJson(res, 404, { error: `no such task: ${ref}` });
-    return;
-  }
-  const row = wait ? await engine.waitForEvent(task.id, LONG_POLL_WINDOW_MS) : task;
-  if (!row) {
-    sendJson(res, 404, { error: `no such task: ${ref}` });
-    return;
-  }
-  sendJson(res, 200, {
-    event: eventFor(row.state),
-    task: buildEnvelope(row, engine.logDir(row.id)),
-  });
-}
-
-/**
  * `GET /tasks/:ref/logs?since=<offset>` — a tail chunk of the task's raw vendor
  * log (spec §"New: per-task logs"). Offset-cursor contract: `{ chunk, next,
  * eof }`, where `next` is the byte offset the follow-up call passes back as
@@ -257,21 +230,7 @@ function handleLogs(
 }
 
 /**
- * Map a task state to its CLI event name (spec §3), or null when the state is
- * not itself an event (the poll window elapsed while the task is still live —
- * the caller re-polls).
- */
-function eventFor(state: string): string | null {
-  if (state === "awaiting_answer") return "task.question";
-  if (SETTLED_STATES.has(state)) {
-    return `task.${state}`;
-  }
-  return null;
-}
-
-/**
- * Map a transition's state to the `parley watch` event name (spec §3). Unlike
- * `eventFor` (single-task long-poll, which only wakes on event states), watch
+ * Map a transition's state to the `parley watch` event name (spec §3). Watch
  * surfaces every transition — including `running` as `task.started`.
  */
 function watchEventFor(state: string): string {
@@ -673,10 +632,6 @@ function createHandler(engine: TaskEngine, uiBundleDir: string | null): http.Req
               qa: engine.listQa(task.id),
             });
           }
-          return;
-        }
-        if (method === "GET" && segments.length === 3 && segments[2] === "events") {
-          await handleEvents(engine, res, ref, url.searchParams.get("wait") === "true");
           return;
         }
         if (method === "GET" && segments.length === 3 && segments[2] === "logs") {

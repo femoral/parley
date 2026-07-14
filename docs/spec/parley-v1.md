@@ -71,11 +71,10 @@ Decided in [daemon lifecycle and state management](https://github.com/femoral/pa
 
 | endpoint | purpose |
 |---|---|
-| `POST /tasks` | delegate |
-| `GET /tasks/:id/events?wait=true` | long-poll: blocks until question / terminal state |
-| `GET /tasks/inbox?ids=…&ack=<seq>&wait=true` | acked attention inbox: next pending actionable event, or all-done ([#91](https://github.com/femoral/parley/issues/91), ADR-0007) |
+| `POST /tasks` | delegate (always async; returns pending-task ack) |
+| `GET /tasks/inbox?ids=…&ack=<seq>&wait=true` | acked attention inbox — the only wait path: next pending actionable event, or all-done ([#91](https://github.com/femoral/parley/issues/91), ADR-0007; single-task flow unified in ADR-0008 / [#93](https://github.com/femoral/parley/issues/93)) |
 | `GET /tasks/events?ids=…&since=<seq>&wait=true` | multi-task transition firehose (`watch --follow`) ([#34](https://github.com/femoral/parley/issues/34)) |
-| `POST /tasks/:id/answer` | answer a question (or resume a stalled task) |
+| `POST /tasks/:id/answer` | answer a question (or resume a stalled task); returns immediately |
 | `POST /tasks/:id/cancel` | cancel |
 | `GET /tasks[/:id]` | status/list |
 
@@ -112,14 +111,14 @@ Daemon wraps the validated body in its envelope: task id, name, repo, worktree p
 Decided in [CLI surface prototype](https://github.com/femoral/parley/issues/6) — full reference: [docs/design/cli-surface.md](../design/cli-surface.md). Additions since: `parley clean` ([#7](https://github.com/femoral/parley/issues/7)), sandbox flags finalized ([#12](https://github.com/femoral/parley/issues/12)).
 
 ```
-parley delegate [flags] "<prompt>"   # '-' = stdin
+parley delegate [flags] "<prompt>"   # '-' = stdin; always returns immediately
   -v --vendor codex|grok   -m --model <id>   -n --name <label>
   --effort <level>         (opaque; codex: model_reasoning_effort, grok: --reasoning-effort)
   -w --worktree <name>     --cwd <path>      --base-ref <ref>
   --context <file>…        --report-schema <file>
-  --wait                   --answer-timeout <dur=30m>
+  --answer-timeout <dur=30m>
   --sandbox read-only|workspace|full   --no-network
-parley answer <task> "<text>" [--wait]
+parley answer <task> "<text>"        # posts answer; returns immediately
 parley status [task] [--json]        parley list
 parley logs <task> [--follow]
 parley cancel <task>
@@ -128,13 +127,13 @@ parley watch [task…] [--ack <event-id>] [--session <id>] [--follow] [--json]
 parley daemon start|stop|status
 ```
 
-**Blocking contract** (`delegate --wait` / `answer --wait`): JSON on stdout + typed exit code — `0` completed · `1` failed · `2` usage · `3` question (`{task_id, name, question_id, question}`) · `4` stalled · `5` cancelled. The orchestrator branches on `$?` without parsing.
+**One flow** ([ADR-0008](../adr/0008-single-flow-watch-only.md) / [#93](https://github.com/femoral/parley/issues/93)): `delegate` and `answer` always return immediately (exit `0` accepted · `2` usage). `watch` is the only blocking primitive — the single-task case is the fan-out case with one task. Passing the removed `--wait` flag is exit 2.
 
 **`parley watch`** ([#91](https://github.com/femoral/parley/issues/91), [ADR-0007](../adr/0007-watch-attention-inbox.md)): delivers pending events from a per-orchestrator-session **attention inbox**, instead of edge-triggered transition watching.
 - Each task contributes at most its *current* actionable state (`awaiting_answer` > `stalled` > `failed` > `completed`) if un-acked — level-triggered by construction.
 - `--ack <event-id>` records handling of a prior event (id = transition `seq`), then returns the next pending one (blocking if none). Un-acked events redeliver (at-least-once). Ack of a superseded event is a no-op; `parley answer` implicitly consumes a question event.
 - Scope like `status`: `--session`, else `PARLEY_SESSION_ID`, else latest session. Positional task refs filter the inbox.
-- Exit codes: `0` all-done (all watched tasks terminal **and** all events acked) · `3` awaiting_answer · `4` stalled · `5` failed · `6` completed · `2` usage.
+- Exit codes (the only state-typed vocabulary): `0` all-done (all watched tasks terminal **and** all events acked) · `3` awaiting_answer · `4` stalled · `5` failed · `6` completed · `2` usage.
 - `--follow`: no-ack JSONL firehose of every transition until all watched tasks are terminal; for UIs/debugging, not orchestration.
 
 **Task identity**: daemon-assigned short ids (`t7`) + optional `--name`; commands accept either; branch/worktree `parley/t7-fix-auth`.
