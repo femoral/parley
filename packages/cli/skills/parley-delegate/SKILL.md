@@ -23,17 +23,17 @@ There is **one** flow for one task or many: `delegate` always returns immediatel
 
    (`-` as the prompt reads stdin — use a heredoc for long briefs.) `-v` and a session id (`--session <id>`, or `PARLEY_SESSION_ID` in the environment) are both required — missing either is a usage error (exit 2). `delegate` and `answer` exit only `0` (accepted) or `2` (usage).
 
-3. **Run the watch ack-loop** until exit 0 — even for a single task:
+3. **Run the watch ack-loop** until exit 0 — even for a single task. This is a workflow you step through, not a script: each `watch` call returns one event, you do the real work it demands (answer, review, merge), then call `watch` again.
 
-```
-ev=$(parley watch --json); code=$?
-while [ "$code" -ne 0 ]; do
-  seq=$(printf '%s' "$ev" | jq -r .seq)        # the event id you will ack
-  # …handle per the table below…
-  ev=$(parley watch --json --ack "$seq"); code=$?
-done
-# exit 0 = all-done: every watched task terminal AND every event acked.
-```
+   ```
+   run `parley watch --json`
+   repeat:
+     if exit 0            → all-done: every task terminal, every event acked. Stop.
+     otherwise            → one event arrived; note its `.seq` (the event id)
+       handle it per the table below (answer / triage / review-and-merge)
+       questions (3/4)    → run `parley watch --json`            (answering acked it)
+       failed/completed (5/6) → run `parley watch --json --ack <seq>`  (you ack it, now that it's handled)
+   ```
 
 What each exit code means and what you must do before acking:
 
