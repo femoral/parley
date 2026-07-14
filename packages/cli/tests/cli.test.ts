@@ -72,6 +72,17 @@ describe("parley daemon lifecycle", () => {
   });
 });
 
+describe("version", () => {
+  it.each(["--version", "-V"])("%s prints one line without spawning the daemon", async (flag) => {
+    const result = await runCli([flag], home);
+
+    expect(result.code).toBe(0);
+    expect(result.stderr).toBe("");
+    expect(result.stdout).toMatch(/^parley \S+\r?\n$/);
+    expect(readDiscovery(home)).toBeNull();
+  });
+});
+
 describe("auto-spawn", () => {
   it("a CLI command against a dead daemon auto-spawns it", async () => {
     expect(readDiscovery(home)).toBeNull();

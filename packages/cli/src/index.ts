@@ -13,6 +13,7 @@ import { runSkills } from "./commands/skills.js";
 import { runStatus } from "./commands/tasks.js";
 import { runUi } from "./commands/ui.js";
 import { runWatch } from "./commands/watch.js";
+import { VERSION_LINE } from "./version.js";
 
 const HELP = `parley — delegate tasks to agent CLIs
 
@@ -76,6 +77,7 @@ Usage:
 Global flags:
   --json    Emit machine-readable JSON
   -h,--help Show this help
+  -V,--version Show the version
 
 Exit codes (delegate --wait): 0 completed · 1 failed · 2 usage · 3 question ·
 4 stalled · 5 cancelled.
@@ -87,6 +89,11 @@ Exit codes (delegate --wait): 0 completed · 1 failed · 2 usage · 3 question �
  */
 export async function run(argv: string[], ctx: CliContext): Promise<number> {
   const first = argv[0];
+  if (first === "--version" || first === "-V") {
+    ctx.stdout(`${VERSION_LINE}\n`);
+    return 0;
+  }
+
   // A leading flag means the implicit `list` command (`parley --json`); each
   // command's own parser handles -h/--help (raising HelpRequested) so flag
   // *values* that merely look like --help are never hijacked.
