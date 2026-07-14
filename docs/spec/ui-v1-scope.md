@@ -48,8 +48,10 @@ Four cockpit panels, per the design's layout regions:
 1. **Roster** — all tasks grouped by state (attention order), session
    grouping, faction color/emblem, name, state badge. Doubles as the session
    selector driving the camera.
-2. **Inbox** — `awaiting_answer` tasks with question text and **inline answer**
-   (`POST /tasks/:ref/answer`) — the one write in v1.
+2. **Inbox** — `awaiting_answer` tasks with question text, **display only**.
+   The orchestrator delegated the task, so the orchestrator answers it; the
+   human can't answer a question they didn't delegate. No inline answer, no
+   write. (Amended — see "v1 writes" below.)
 3. **Inspector** (selected task) — prompt/brief, branch + worktree, model /
    effort / sandbox / network posture, token usage + duration, raw log tail
    (`GET /tasks/:ref/logs`), structured report, question/answer history, eval
@@ -59,9 +61,16 @@ Four cockpit panels, per the design's layout regions:
 
 ## v1 writes
 
-- **Answer only.** Cancel, eval, clean, and a delegate form are all deferred —
-  delegation is the orchestrator's job; the human's v1 job is unblocking and
-  reviewing.
+- **None.** v1 is read-only. Cancel, eval, clean, delegate, and inline answer
+  are all deferred — delegation (and answering the questions it raises) is the
+  orchestrator's job. The human's v1 job is watching and reviewing, not
+  unblocking.
+- **Amendment:** the original decision gave the human an inline answer write
+  in the Inbox. Reversed — the human isn't necessarily the one who delegated
+  the task (the orchestrator is), so they often lack context to answer. A
+  human-answer surface only makes sense if the human is the one who launched
+  the orchestrator session from the UI in the first place; that's a future
+  possibility, not v1 scope. See #78.
 
 ## Data sources
 
