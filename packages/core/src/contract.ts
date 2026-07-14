@@ -128,10 +128,31 @@ export interface TasksResponse {
   seq: number;
 }
 
-/** `GET /tasks/:ref` — the task envelope alongside its raw row. */
+/**
+ * One `ask_orchestrator` turn in a task's durable Q&A history (#79).
+ * Detail-only — list envelopes do not carry history. `answer` is null while
+ * the question is still outstanding (or was never answered).
+ */
+export interface QaTurn {
+  question: string;
+  answer: string | null;
+  /** Correlates with the outstanding `question_id` on the envelope/row. */
+  question_id: string;
+  /** ISO-8601 timestamp when the question was recorded. */
+  asked_at: string;
+  /** ISO-8601 timestamp when answered; null while outstanding. */
+  answered_at: string | null;
+}
+
+/**
+ * `GET /tasks/:ref` — the task envelope alongside its raw row and the durable
+ * Q&A history for the inspector (ask order). List endpoints omit `qa`.
+ */
 export interface TaskDetailResponse {
   task: TaskEnvelope;
   row: TaskRow;
+  /** Per-task `ask_orchestrator` turns in ask order; empty when none. */
+  qa: QaTurn[];
 }
 
 /** The ack returned by writes that report a task's post-transition state. */

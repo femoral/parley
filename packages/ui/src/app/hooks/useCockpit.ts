@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { ParleyClient } from "@useparley/core";
-import type { HealthView, InspectorTask, QaTurn } from "../../hud/types.js";
+import type { HealthView, InspectorTask } from "../../hud/types.js";
 import { formatClock, formatUptime } from "./format.js";
 import { useHealth } from "./useHealth.js";
 import { projectInspector } from "./inspector.js";
@@ -21,10 +21,6 @@ export interface RosterSelection {
   selectSession: (id: string | null) => void;
   selectTask: (id: string) => void;
 }
-
-/** Identity-stable empty history, so a task with no answered turns doesn't
- * feed the inspector memo a fresh `[]` every render. */
-const EMPTY_QA: QaTurn[] = [];
 
 export interface CockpitView {
   health: HealthView;
@@ -133,32 +129,12 @@ export function useCockpit(): CockpitView {
 
   const roster: RosterSelection = { selectedSessionId, selectedTaskId, selectSession, selectTask };
 
-  // The daemon persists no Q&A transcript — only the task's *current*
-  // outstanding question (`useTaskDetail`'s row/envelope). Each answered turn
-  // is remembered here, client-side, for as long as the cockpit stays open,
-  // keyed by task id; `projectInspector` appends the live outstanding
-  // question (if any) on top of this history (#68's Q&A tab).
-  const [qaHistory, setQaHistory] = useState<Map<string, QaTurn[]>>(new Map());
-
-  // Read the inbox through a ref so `answerTask` keeps a stable identity
-  // across snapshot updates — `InboxPanel` is memoized against exactly that
-  // (its doc comment: "tasks/onAnswer are identity-stable between snapshot
-  // updates"), and a `snapshot.inbox` dependency here would hand it a fresh
-  // callback on every SSE transition anywhere in the roster.
-  const inboxRef = useRef(snapshot.inbox);
-  inboxRef.current = snapshot.inbox;
-
+  // Q&A history is durable on the server (#79) and rides `useTaskDetail`'s
+  // response — no client-side accumulation. The single write stays a plain
+  // POST; the next detail poll (or reselect) rehydrates the answered turn.
   const answerTask = useCallback(
-    (id: string, text: string) => {
-      const question = inboxRef.current.find((task) => task.id === id)?.question ?? null;
-      return client.answer(id, text).then(() => {
-        if (question === null) return;
-        setQaHistory((prev) => {
-          const next = new Map(prev);
-          next.set(id, [...(next.get(id) ?? []), { question, answer: text }]);
-          return next;
-        });
-      });
+    async (id: string, text: string): Promise<void> => {
+      await client.answer(id, text);
     },
     [client],
   );
@@ -172,9 +148,9 @@ export function useCockpit(): CockpitView {
   const inspector: InspectorTask | null = useMemo(
     () =>
       detail && detail.task.task_id === selectedTaskId
-        ? projectInspector(detail, logs, qaHistory.get(selectedTaskId) ?? EMPTY_QA)
+        ? projectInspector(detail, logs)
         : null,
-    [detail, logs, qaHistory, selectedTaskId],
+    [detail, logs, selectedTaskId],
   );
 
   return {

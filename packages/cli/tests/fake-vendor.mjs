@@ -17,6 +17,9 @@
  *   { "ask": "question text" }              MCP ask_orchestrator; blocks until
  *                                           `parley answer` delivers the answer,
  *                                           echoed as a tool_result, then continues
+ *   { "ask": "...", "background": true }    fire-and-forget ask (misbehaving
+ *                                           child that submit_reports over its
+ *                                           own outstanding question — #79)
  *   { "call_tool": { "name": "...", "args": {...} } }
  *   { "exit": 0 }                           exit early with code
  * The result of each tool call is echoed to stdout as a JSONL event
@@ -134,7 +137,13 @@ async function main() {
       });
     }
     else if (action.submit_report !== undefined) await callTool("submit_report", action.submit_report);
-    else if (action.ask !== undefined) await callTool("ask_orchestrator", { question: action.ask });
+    else if (action.ask !== undefined) {
+      const askPromise = callTool("ask_orchestrator", { question: action.ask });
+      // Background ask: do not await — the next action can run while the
+      // question is still outstanding (report-over-question path, #79).
+      if (action.background === true) void askPromise;
+      else await askPromise;
+    }
     else if (action.call_tool !== undefined) await callTool(action.call_tool.name, action.call_tool.args ?? {});
     else if (action.exit !== undefined) process.exit(action.exit);
     else throw new Error(`unknown action: ${JSON.stringify(action)}`);

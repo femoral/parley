@@ -573,7 +573,14 @@ function createHandler(engine: TaskEngine, uiBundleDir: string | null): http.Req
         if (method === "GET" && segments.length === 2) {
           const task = engine.resolve(ref);
           if (!task) sendJson(res, 404, { error: `no such task: ${ref}` });
-          else sendJson(res, 200, { task: buildEnvelope(task, engine.logDir(task.id)), row: task });
+          else {
+            // Detail-only Q&A history (#79) — list envelopes omit it deliberately.
+            sendJson(res, 200, {
+              task: buildEnvelope(task, engine.logDir(task.id)),
+              row: task,
+              qa: engine.listQa(task.id),
+            });
+          }
           return;
         }
         if (method === "GET" && segments.length === 3 && segments[2] === "events") {

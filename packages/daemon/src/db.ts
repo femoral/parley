@@ -204,7 +204,25 @@ const MIGRATIONS: string[] = [
   // against a completed task via `parley eval`, 1:1 with the task.
   `ALTER TABLE tasks ADD COLUMN eval_score INTEGER;
    ALTER TABLE tasks ADD COLUMN eval_feedback TEXT;`,
+  // #79: durable per-task Q&A history — every `ask_orchestrator` turn, written
+  // at ask time (answer null) and updated in place at answer time. Detail-only
+  // on the wire; list envelopes stay small. `ask_ord` is the per-task order.
+  `CREATE TABLE qa_turns (
+     task_id      TEXT NOT NULL,
+     question_id  TEXT NOT NULL,
+     question     TEXT NOT NULL,
+     answer       TEXT,
+     ask_ord      INTEGER NOT NULL,
+     asked_at     TEXT NOT NULL,
+     answered_at  TEXT,
+     PRIMARY KEY (task_id, question_id),
+     FOREIGN KEY (task_id) REFERENCES tasks(id)
+   );
+   CREATE INDEX qa_turns_task_ord ON qa_turns(task_id, ask_ord);`,
 ];
+
+/** How many schema migrations have been applied — equals `PRAGMA user_version` after open. */
+export const SCHEMA_VERSION = MIGRATIONS.length;
 
 /**
  * Run `fn` inside an explicit SQLite transaction. Commits on success; rolls
@@ -248,6 +266,30 @@ export function openDatabase(paths: HomePaths): DatabaseHandle {
   db.exec("PRAGMA journal_mode = WAL;");
   db.exec("PRAGMA foreign_keys = ON;");
   migrate(db);
+  return db;
+}
+
+/**
+ * Open a database applying only the first `upTo` migrations (target
+ * `PRAGMA user_version`). Used by migration tests that need a pre-migration
+ * snapshot; production always uses {@link openDatabase}.
+ */
+export function openDatabaseUpTo(paths: HomePaths, upTo: number): DatabaseHandle {
+  fs.mkdirSync(paths.home, { recursive: true });
+  const db = new DatabaseSync(paths.db);
+  db.exec("PRAGMA journal_mode = WAL;");
+  db.exec("PRAGMA foreign_keys = ON;");
+  const current = asRow<{ user_version: number }>(db.prepare("PRAGMA user_version").get())
+    .user_version;
+  const target = Math.max(0, Math.min(upTo, MIGRATIONS.length));
+  for (let version = current; version < target; version++) {
+    const statement = MIGRATIONS[version];
+    if (statement === undefined) continue;
+    withTransaction(db, () => {
+      db.exec(statement);
+      db.exec(`PRAGMA user_version = ${version + 1}`);
+    });
+  }
   return db;
 }
 
@@ -441,4 +483,67 @@ export function updateTask(db: DatabaseHandle, id: string, patch: TaskPatch): vo
     new Date().toISOString(),
     id,
   );
+}
+
+/**
+ * One durable Q&A turn (#79) as stored and returned on task detail. Matches the
+ * wire {@link import("@useparley/core").QaTurn} floor shape plus ordering keys.
+ */
+export interface QaTurnRow {
+  question_id: string;
+  question: string;
+  answer: string | null;
+  asked_at: string;
+  answered_at: string | null;
+}
+
+/**
+ * Record a new outstanding `ask_orchestrator` turn (answer null) at the end of
+ * this task's history. Called when the task enters `awaiting_answer`.
+ */
+export function insertQaTurn(
+  db: DatabaseHandle,
+  taskId: string,
+  questionId: string,
+  question: string,
+): void {
+  const askedAt = new Date().toISOString();
+  const ord = asRow<{ n: number }>(
+    db
+      .prepare(
+        `SELECT COALESCE(MAX(ask_ord), 0) + 1 AS n FROM qa_turns WHERE task_id = ?`,
+      )
+      .get(taskId),
+  ).n;
+  db.prepare(
+    `INSERT INTO qa_turns (task_id, question_id, question, answer, ask_ord, asked_at, answered_at)
+     VALUES (?, ?, ?, NULL, ?, ?, NULL)`,
+  ).run(taskId, questionId, question, ord, askedAt);
+}
+
+/**
+ * Fill in the answer for an existing turn in place. No-op when the turn is
+ * missing (e.g. a pre-migration task that never had history recorded).
+ */
+export function answerQaTurn(
+  db: DatabaseHandle,
+  taskId: string,
+  questionId: string,
+  answer: string,
+): void {
+  db.prepare(
+    `UPDATE qa_turns SET answer = ?, answered_at = ?
+     WHERE task_id = ? AND question_id = ? AND answer IS NULL`,
+  ).run(answer, new Date().toISOString(), taskId, questionId);
+}
+
+/** List a task's Q&A history in ask order. Empty for tasks with no turns. */
+export function listQaTurns(db: DatabaseHandle, taskId: string): QaTurnRow[] {
+  return db
+    .prepare(
+      `SELECT question_id, question, answer, asked_at, answered_at
+       FROM qa_turns WHERE task_id = ? ORDER BY ask_ord ASC`,
+    )
+    .all(taskId)
+    .map((row) => asRow<QaTurnRow>(row));
 }

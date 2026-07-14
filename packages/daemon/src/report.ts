@@ -1,6 +1,6 @@
 import Ajv, { type ValidateFunction } from "ajv";
-import type { TaskEnvelope, TaskRow as WireTaskRow } from "@useparley/core";
-import type { TaskRow } from "./db.js";
+import type { QaTurn as WireQaTurn, TaskEnvelope, TaskRow as WireTaskRow } from "@useparley/core";
+import type { QaTurnRow, TaskRow } from "./db.js";
 import type { Posture } from "./adapters/types.js";
 import { readEvalExpected } from "./context.js";
 
@@ -182,8 +182,10 @@ export interface Envelope {
 type Assignable<From, To> = From extends To ? true : never;
 const _envelopeMatchesContract: Assignable<Envelope, TaskEnvelope> = true;
 const _rowMatchesContract: Assignable<TaskRow, WireTaskRow> = true;
+const _qaTurnMatchesContract: Assignable<QaTurnRow, WireQaTurn> = true;
 void _envelopeMatchesContract;
 void _rowMatchesContract;
+void _qaTurnMatchesContract;
 
 /** Parse a nullable JSON text column; malformed content reads as null. */
 export function parseJsonColumn<T>(value: string | null): T | null {

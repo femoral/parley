@@ -13,10 +13,13 @@ import type {
 } from "./adapters/types.js";
 import { VENDOR_DIAG_PREFIX } from "./adapters/types.js";
 import {
+  answerQaTurn,
   bumpTaskSeq,
   currentSeq,
   getTask,
+  insertQaTurn,
   insertTask,
+  listQaTurns,
   listTasks,
   nextQuestionId,
   nextTaskId,
@@ -25,6 +28,7 @@ import {
   SETTLED_STATES,
   TERMINAL_STATES,
   type DatabaseHandle,
+  type QaTurnRow,
   type TaskPatch,
   type TaskRow,
 } from "./db.js";
@@ -231,6 +235,11 @@ export class TaskEngine {
 
   resolve(ref: string): TaskRow | undefined {
     return resolveTask(this.db, ref);
+  }
+
+  /** Durable Q&A history for a task (#79), ask order — empty when none. */
+  listQa(taskId: string): QaTurnRow[] {
+    return listQaTurns(this.db, taskId);
   }
 
   /** The directory holding a task's captured vendor output (the diagnostics reference). */
@@ -557,6 +566,9 @@ export class TaskEngine {
     }
 
     const questionId = nextQuestionId(this.db);
+    // Durable history first (#79): the turn is visible on detail even if the
+    // process dies before the awaiting_answer transition is observed live.
+    insertQaTurn(this.db, taskId, questionId, question);
     updateTask(this.db, taskId, {
       state: "awaiting_answer",
       question_id: questionId,
@@ -660,6 +672,8 @@ export class TaskEngine {
     if (pending) {
       this.pending.delete(task.id);
       clearTimeout(pending.timer);
+      // Update the history turn in place (#79) before clearing the outstanding fields.
+      answerQaTurn(this.db, task.id, pending.questionId, text);
       updateTask(this.db, task.id, { state: "running", question_id: null, question: null });
       // `awaiting_answer → running` — a transition `parley watch` surfaces. The
       // stalled-resume path below transitions via `runChild`'s onSpawn instead.
@@ -672,6 +686,10 @@ export class TaskEngine {
       const adapter = this.adapters.get(task.vendor ?? "");
       if (!adapter) {
         throw new DelegateError(`task ${task.id} has an unknown vendor: ${task.vendor ?? "?"}`);
+      }
+      // Resume answers the recorded outstanding question when one is still on the row.
+      if (task.question_id !== null) {
+        answerQaTurn(this.db, task.id, task.question_id, text);
       }
       // The answered question is no longer outstanding; the stall reason is spent.
       updateTask(this.db, task.id, {

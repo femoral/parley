@@ -28,7 +28,11 @@ describe("useTaskDetail fetches and polls a task's full detail (#68)", () => {
       baseUrl: "",
       fetch: scriptedDetailFetch({
         t1: [
-          { task: envelope({ task_id: "t1", state: "running" }), row: row({ id: "t1", state: "running", orchestrator_session_id: null }) },
+          {
+            task: envelope({ task_id: "t1", state: "running" }),
+            row: row({ id: "t1", state: "running", orchestrator_session_id: null }),
+            qa: [],
+          },
           {
             task: envelope({
               task_id: "t1",
@@ -36,6 +40,7 @@ describe("useTaskDetail fetches and polls a task's full detail (#68)", () => {
               report: { outcome: "success", summary: "Done.", files_changed: [] },
             }),
             row: row({ id: "t1", state: "completed", orchestrator_session_id: null }),
+            qa: [],
           },
         ],
       }),

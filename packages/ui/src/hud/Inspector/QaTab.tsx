@@ -11,13 +11,10 @@ export interface QaTabProps {
 
 /**
  * Layer 2 — the Q&A tab: a chat transcript (design-manifest §4.17 "Q&A"),
- * the agent's question bubble left, the operator's answer right-aligned. The
- * daemon carries no persisted Q&A history (only the task's current
- * outstanding question) — `useCockpit`/`projectInspector` build this list
- * from what's actually known, so a turn's `answer` is `null` while still
- * outstanding. No timestamps are rendered: the manifest's per-turn
- * timestamp isn't data parley exposes (docs/spec/ui-v1-scope.md — "fills
- * panels only from data parley exposes today"), so one isn't fabricated.
+ * the agent's question bubble left, the operator's answer right-aligned.
+ * History is rehydrated from `GET /tasks/:ref`'s durable `qa` field (#79);
+ * a turn's `answer` is `null` while still outstanding. Timestamps ride the
+ * wire but aren't rendered here (manifest layout is question/answer only).
  */
 export function QaTab({ qa, coat, emblem }: QaTabProps) {
   if (qa.length === 0) {

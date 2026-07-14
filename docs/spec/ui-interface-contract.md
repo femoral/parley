@@ -21,7 +21,7 @@ daemon process:
 
 - `GET /health` — `{ status, pid }`.
 - `GET /tasks` — `{ tasks, seq }`; `seq` is the atomic "start from now" baseline.
-- `GET /tasks/:ref` — task envelope + row.
+- `GET /tasks/:ref` — task envelope + row + durable Q&A history (`qa`).
 - `GET /tasks/events?ids=…&since=<seq>&wait=true` — seq-based long-poll
   (stays; the CLI keeps using it).
 - `POST /tasks`, `POST /tasks/:ref/answer`, `POST /tasks/:ref/eval`,
@@ -48,8 +48,11 @@ daemon process:
   Tail-friendly: UIs poll on a short interval while a task is `running`, or
   re-fetch on SSE transitions. Exact chunking/framing is an execution detail;
   the offset-cursor shape is the contract.
-- Report and question/answer history already ride the task envelope — no new
-  endpoints.
+- Report rides the task envelope. Question/answer history is a `qa` array on
+  `GET /tasks/:ref` only (not on list envelopes): turns of
+  `{ question, answer, question_id, asked_at, answered_at }` in ask order,
+  written at ask time (`answer` null) and updated in place when answered. The
+  outstanding-question fields on the envelope/row stay for lifecycle only.
 
 ### `@useparley/core` exports (the SDK)
 
