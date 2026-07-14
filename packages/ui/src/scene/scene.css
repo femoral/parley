@@ -15,11 +15,10 @@
 /* ── Viewport & camera ─────────────────────────────────────────────────── */
 .pc-scene-view {
   position: absolute;
-  /* Sit inside the premium plate's inset brass double-frame (rings at 3px/5px)
-     rather than painting over it — the frame is the cove's signature surround. */
-  inset: 6px;
+  /* Edge-to-edge in the center region (#75): the sea is the room's backdrop,
+     not content inset inside a plate frame. */
+  inset: 0;
   overflow: hidden;
-  border-radius: 7px;
 }
 .pc-world {
   position: absolute;

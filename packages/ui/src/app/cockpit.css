@@ -101,8 +101,8 @@
 .pc-center__head > :first-child {
   flex: 1;
 }
-/* The scene mounts here (#69): a positioned, clipped viewport the living view
-   fills absolutely. The premium plate frame stays as the cove's brass surround. */
+/* The scene mounts here (#69/#75): a positioned, clipped viewport the living
+   view fills absolutely. No plate chrome — the sea is the room's backdrop. */
 .pc-scene {
   flex: 1;
   min-height: 0;

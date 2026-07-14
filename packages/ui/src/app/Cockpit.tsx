@@ -8,7 +8,6 @@ import {
   RosterPanel,
   SettingsBar,
 } from "../hud/index.js";
-import { Plate } from "../primitives/index.js";
 import { Scene } from "../scene/index.js";
 import { useCockpit } from "./hooks/index.js";
 import { CompassRose } from "./CompassRose.js";
@@ -49,9 +48,10 @@ export function Cockpit() {
               <Cartouche ornaments={settings.ornaments} />
               <DayChip day={day} clock={clock} />
             </div>
-            <Plate variant="premium" ornaments={settings.ornaments} className="pc-scene" padded={false}>
+            {/* Sea is the room's backdrop (#75) — no Plate card chrome. */}
+            <div className="pc-scene">
               <Scene sessions={snapshot.scene.sessions} activeSessionId={roster.selectedSessionId} />
-            </Plate>
+            </div>
           </section>
 
           <aside className="pc-region--right" aria-label="Status stack">
