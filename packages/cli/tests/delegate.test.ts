@@ -321,7 +321,7 @@ describe("deferred completed + usage atomicity (#72)", () => {
       "report accepted tool_result",
     );
     // Confirm still running with a stored report before cancelling.
-    const mid = JSON.parse((await runCli(["status", "t1", "--json"], home)).stdout)[0];
+    const mid = JSON.parse((await runCli(["status", "t1", "--json"], home)).stdout);
     expect(mid.state).toBe("running");
     expect(mid.report).toBeTruthy();
 
@@ -407,8 +407,11 @@ describe("status", () => {
     const byId = JSON.parse((await runCli(["status", "t1", "--json"], home)).stdout);
     const byName = JSON.parse((await runCli(["status", "fix-auth", "--json"], home)).stdout);
     expect(byId).toEqual(byName);
-    expect(byId[0].id).toBe("t1");
-    expect(byId[0].state).toBe("completed");
+    expect(byId.id).toBe("t1");
+    expect(byId.state).toBe("completed");
+
+    const listing = JSON.parse((await runCli(["status", "--json"], home)).stdout);
+    expect(listing).toEqual([byId]);
   });
 
   it("shows compact token counts in USAGE for a task that reports usage", async () => {
@@ -664,7 +667,7 @@ describe("orchestrator session identity (#42)", () => {
       extraEnv: { PARLEY_SESSION_ID: "orch-from-env" },
     });
 
-    const row = JSON.parse((await runCli(["status", "t1", "--json"], home)).stdout)[0];
+    const row = JSON.parse((await runCli(["status", "t1", "--json"], home)).stdout);
     expect(row.orchestrator_session_id).toBe("orch-from-env");
   });
 
@@ -676,7 +679,7 @@ describe("orchestrator session identity (#42)", () => {
       { extraEnv: { PARLEY_SESSION_ID: "orch-from-env" } },
     );
 
-    const row = JSON.parse((await runCli(["status", "t1", "--json"], home)).stdout)[0];
+    const row = JSON.parse((await runCli(["status", "t1", "--json"], home)).stdout);
     expect(row.orchestrator_session_id).toBe("orch-from-flag");
   });
 

@@ -68,7 +68,7 @@ describe("Q&A channel — ask_orchestrator / parley answer", () => {
 
     // The task is visibly awaiting_answer while blocked.
     const status = await runCli(["status", "t1", "--json"], home);
-    expect(JSON.parse(status.stdout)[0].state).toBe("awaiting_answer");
+    expect(JSON.parse(status.stdout).state).toBe("awaiting_answer");
 
     // answer --wait delivers the text and re-blocks; the child reports → exit 0.
     const answer = await runCli(["answer", "t1", "postgres", "--wait"], home);

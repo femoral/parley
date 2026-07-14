@@ -43,7 +43,7 @@ describe("parley eval", () => {
     expect(JSON.parse(evalRes.stdout).task_id).toBe(taskId);
 
     const status = await runCli(["status", taskId, "--json"], home);
-    const row = JSON.parse(status.stdout)[0];
+    const row = JSON.parse(status.stdout);
     expect(row.eval_score).toBe(8);
     expect(row.eval_feedback).toBe("solid work");
   });
@@ -57,7 +57,7 @@ describe("parley eval", () => {
     await runCli(["eval", taskId, "--score", "9", "--feedback", "great"], home);
 
     const status = await runCli(["status", taskId, "--json"], home);
-    const row = JSON.parse(status.stdout)[0];
+    const row = JSON.parse(status.stdout);
     expect(row.eval_score).toBe(9);
     expect(row.eval_feedback).toBe("great");
   });
@@ -114,7 +114,7 @@ describe("eval usage errors (exit 2)", () => {
     await runCli(["eval", taskId, "--score", "0", "--feedback", "x"], home);
 
     const status = await runCli(["status", taskId, "--json"], home);
-    const row = JSON.parse(status.stdout)[0];
+    const row = JSON.parse(status.stdout);
     expect(row.eval_score).toBeNull();
     expect(row.eval_feedback).toBeNull();
   });

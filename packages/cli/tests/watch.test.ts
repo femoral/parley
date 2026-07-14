@@ -58,12 +58,12 @@ describe("transition seq (#34)", () => {
     await waitForState(home, "t1", "completed");
 
     // status --json row carries the seq of the latest transition (> 0).
-    const rows = JSON.parse((await runCli(["status", "t1", "--json"], home)).stdout) as Record<
+    const row = JSON.parse((await runCli(["status", "t1", "--json"], home)).stdout) as Record<
       string,
       unknown
-    >[];
-    expect(typeof rows[0]!.seq).toBe("number");
-    expect(rows[0]!.seq as number).toBeGreaterThan(0);
+    >;
+    expect(typeof row.seq).toBe("number");
+    expect(row.seq as number).toBeGreaterThan(0);
 
     // delegate --wait envelope carries a seq too.
     const waited = JSON.parse(

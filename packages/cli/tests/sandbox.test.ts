@@ -66,9 +66,9 @@ describe("sandbox posture (spec §8)", () => {
       expect(helloFrom(home, envelope.task_id)).toMatchObject({ sandbox, network });
 
       // Posture is persisted and visible in `status --json`.
-      const rows = JSON.parse((await runCli(["status", "t1", "--json"], home)).stdout);
-      expect(rows[0].sandbox).toBe(sandbox);
-      expect(rows[0].network).toBe(network);
+      const row = JSON.parse((await runCli(["status", "t1", "--json"], home)).stdout);
+      expect(row.sandbox).toBe(sandbox);
+      expect(row.network).toBe(network);
     });
   }
 

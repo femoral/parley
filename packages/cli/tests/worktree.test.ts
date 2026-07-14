@@ -171,7 +171,7 @@ describe("worktree lifecycle on completion", () => {
     expect(git(src, ["branch", "--list", "parley/t1-clean"])).toContain("parley/t1-clean");
 
     // Status reflects the removal: worktree null.
-    const row = JSON.parse((await runCli(["status", "t1", "--json"], home)).stdout)[0];
+    const row = JSON.parse((await runCli(["status", "t1", "--json"], home)).stdout);
     expect(row.worktree).toBeNull();
   });
 
@@ -189,7 +189,7 @@ describe("worktree lifecycle on completion", () => {
     // Retained: still present, still non-null in status.
     await new Promise((r) => setTimeout(r, 300));
     expect(fs.existsSync(wt)).toBe(true);
-    const row = JSON.parse((await runCli(["status", "t1", "--json"], home)).stdout)[0];
+    const row = JSON.parse((await runCli(["status", "t1", "--json"], home)).stdout);
     expect(row.worktree).toBe(wt);
 
     // The child's commit lives on the branch, past the base commit.

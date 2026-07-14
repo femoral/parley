@@ -254,8 +254,8 @@ describe("SSE transition stream (#62)", () => {
     // The existing multi-task long-poll still answers with a transition envelope.
     const res = await runCli(["status", "t1", "--json"], home);
     expect(res.code).toBe(0);
-    const rows = JSON.parse(res.stdout) as Record<string, unknown>[];
-    expect(rows[0]!.state).toBe("completed");
+    const row = JSON.parse(res.stdout) as Record<string, unknown>;
+    expect(row.state).toBe("completed");
   });
 });
 

@@ -55,8 +55,8 @@ describe.skipIf(!ENABLED)("grok smoke (real binary, opt-in)", () => {
     let sessionId: unknown = null;
     const deadline = Date.now() + 15_000;
     while (Date.now() < deadline) {
-      const rows = JSON.parse((await runCli(["status", envelope.task_id, "--json"], home)).stdout);
-      sessionId = rows[0].session_id;
+      const row = JSON.parse((await runCli(["status", envelope.task_id, "--json"], home)).stdout);
+      sessionId = row.session_id;
       if (sessionId) break;
       await new Promise((r) => setTimeout(r, 250));
     }

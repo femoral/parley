@@ -191,7 +191,7 @@ describe("durable Q&A history on task detail (#79)", () => {
     // Next CLI call respawns the daemon; detail must rehydrate from SQLite.
     const status = await runCli(["status", "t1", "--json"], home);
     expect(status.code).toBe(0);
-    expect(JSON.parse(status.stdout)[0].state).toBe("completed");
+    expect(JSON.parse(status.stdout).state).toBe("completed");
 
     const detail = await fetchDetail("t1");
     expect(detail.qa).toEqual([

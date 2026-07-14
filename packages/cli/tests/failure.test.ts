@@ -177,7 +177,7 @@ describe("parley cancel", () => {
     const cancel = await runCli(["cancel", "asking"], home);
     expect(cancel.code).toBe(0);
 
-    const row = JSON.parse((await runCli(["status", "asking", "--json"], home)).stdout)[0];
+    const row = JSON.parse((await runCli(["status", "asking", "--json"], home)).stdout);
     expect(row.state).toBe("cancelled");
     // The terminal envelope must not still advertise an outstanding question.
     expect(row.question_id).toBeNull();

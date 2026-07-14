@@ -243,8 +243,7 @@ export async function waitForState(
   const deadline = Date.now() + timeoutMs;
   for (;;) {
     const res = await runCli(["status", task, "--json"], home);
-    const rows = JSON.parse(res.stdout) as Record<string, unknown>[];
-    const row = rows[0];
+    const row = JSON.parse(res.stdout) as Record<string, unknown> | null;
     if (row && row.state === state) return row;
     if (Date.now() >= deadline) {
       throw new Error(

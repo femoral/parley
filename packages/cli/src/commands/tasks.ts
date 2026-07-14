@@ -144,7 +144,8 @@ export async function runStatus(ctx: CliContext, args: string[]): Promise<number
   }
 
   if (json) {
-    printJson(ctx, filtered.map(presentRow));
+    const presented = filtered.map(presentRow);
+    printJson(ctx, ref ? (presented[0] ?? null) : presented);
   } else {
     renderTable(ctx, filtered);
   }

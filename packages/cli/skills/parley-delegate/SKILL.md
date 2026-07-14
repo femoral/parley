@@ -52,7 +52,7 @@ Each task gets its own worktree, so parallel tasks never collide. Delegate all w
 parley delegate -v codex -n task-a "<brief A>"     # → {task_id, name, state:"pending"}
 parley delegate -v grok  -n task-b "<brief B>"
 parley status                                       # task table
-parley status task-a --json                         # one task; attach via `parley answer <task> --wait` when it asks
+parley status task-a --json | jq '.report'          # one task is an object; inspect its completed report
 ```
 
 A detached task that asks a question waits up to `--answer-timeout` (default 30m), then stalls — recoverable. Drive the whole set with the attention-inbox ack loop rather than sampling `status` on an interval:
@@ -96,7 +96,7 @@ Any harness without a native session concept can synthesize one (a uuid per run)
 
 ## When a task fails
 
-Check the task's `error` field first (`parley status <task> --json`), then `diag.log` in its `logs_dir`, before touching the raw vendor stream — full order and what each layer means: [docs/agents/troubleshooting.md](../../docs/agents/troubleshooting.md). `parley logs <task>` is the last resort; it burns a lot of context on long tasks.
+Check the task's `error` field first (`parley status <task> --json | jq '.error'`), then `diag.log` in its `logs_dir`, before touching the raw vendor stream — full order and what each layer means: [docs/agents/troubleshooting.md](../../docs/agents/troubleshooting.md). `parley logs <task>` is the last resort; it burns a lot of context on long tasks.
 
 ## Reporting parley bugs
 
