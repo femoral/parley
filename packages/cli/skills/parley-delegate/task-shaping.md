@@ -6,13 +6,13 @@ Read this when a task needs more than `-v <vendor> -m <model> -n <name> --sessio
 
 `--report-schema <file>` (JSON Schema) makes the child's report conform to your shape — e.g. a findings list from a review task. Validation failures bounce back to the child to retry, so the envelope you receive always conforms. Without it you get the default schema: `summary`, `outcome: success|partial|blocked`, `files_changed`.
 
-## Context files
-
-`--context <file>` is repeatable; each file lands in the worktree under `.parley/context/`, materialized by **basename**. Two files with the same name from different source directories collide — `delegate` rejects a duplicate `--context` basename as a usage error (exit 2) before the task is created. Give same-named context files distinct names before passing them.
-
 ## Worktree base
 
 Tasks branch from HEAD by default; `--base-ref <ref>` overrides — use it in dependency waves so a follow-up task forks from its actual prerequisite instead of a stale shared HEAD. `--cwd <path>` skips worktree creation entirely and runs in that directory — escape hatch only, forfeits isolation.
+
+```
+parley delegate -v codex -m <model> -n task-b --session <id> --base-ref task-a-merged "<brief>"
+```
 
 ## Sandbox
 

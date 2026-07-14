@@ -1,11 +1,11 @@
 ---
 name: parley-delegate
-description: Delegate coding tasks to other agent CLIs (codex, grok) with the parley CLI — one task or a parallel fan-out, each in its own git worktree. Use when the user asks to delegate or offload work to codex/grok, run several agent tasks in parallel, or mentions parley.
+description: Delegate tasks to other agent CLIs (e.g codex, grok, opencode, pi, etc) with the parley CLI. Use when the user asks to delegate to other agents, or mentions parley.
 ---
 
 # Delegating to parley
 
-Parley runs a child agent (codex or grok) in an isolated git worktree and hands you back a schema-validated **report envelope**. You are the orchestrator: you write the brief, answer the child's questions, and review/merge the branch. Parley never merges.
+Parley runs a child agent CLI in an isolated git worktree and hands you back a schema-validated **report envelope**. You are the orchestrator: you write the brief, answer the child's questions, and review/merge the branch. Parley never merges.
 
 **Orchestrate directly — don't wrap parley in subagents.** Unless the user explicitly asks for subagents, the session reading this skill is the orchestrator: it calls `delegate`, blocks on `watch`, answers questions, and reviews branches itself. Per-task babysitter subagents add a token layer, lose the question-answering context you already have, and tend to idle-stop waiting for notifications that never come.
 
@@ -52,17 +52,15 @@ Rules that leave no room for interpretation:
 - **Un-acked events redeliver.** If you crash or forget between delivery and ack, the next `watch` hands you the same event again. That is the safety net — lean on it; never ack defensively "to clear the queue".
 - **Exit 6 is not "done".** A completed task is *work for you* (review, merge, verify, clean). The loop is finished only at exit 0.
 - **Level-triggered, race-free.** An event already pending when `watch` starts returns immediately. There is no startup race and no sequence bookkeeping on your side; the only seq you ever touch is the one you pass back to `--ack`.
-- **There is no `--wait`, `--until`, or `--since`** — passing any of them is exit 2. A doc, memory, or habit that mentions them is outdated; the loop above is the only wait path.
-- **`--follow` is not the loop.** It streams every transition as JSONL with no acks and no priority — a firehose for UIs and debugging. Orchestrators use the default acked mode.
 - Positional task refs (`parley watch t1 t2`) narrow the inbox to those tasks; the default is every task in the session.
 
 4. **Review and integrate.** On exit 6 the envelope carries the worktree path, branch (`parley/<id>-<name>`), and the report body. Review the diff on the branch, merge if it holds up, then `parley clean <task>` (removes the worktree, keeps the branch). Ack only after that review. Done when the branch is merged-or-rejected and the worktree cleaned.
 
-   **A green report isn't proof the project typechecks.** `outcome: success` only means the child's own verification passed. Re-run the project's typecheck (plus targeted tests) yourself after every merge — per merge, not once at the end of a fan-out, since a later branch can reintroduce what an earlier one had cleared.
+   **A green report isn't proof correctness.** `outcome: success` only means the child's own verification passed. Verify yourself after every merge, not once at the end of a fan-out unless instructed. A later branch can reintroduce what an earlier one had cleared.
 
 ## Fan-out: several tasks in parallel
 
-Each task gets its own worktree, so parallel tasks never collide. Delegate all of them (each returns immediately), then drive the **entire** set with the same watch loop above:
+Each task gets its own worktree, so parallel tasks never collide. Batch them however it makes sense, then drive the **entire** set with the same watch loop above:
 
 ```
 parley delegate -v codex -n task-a --session <id> "<brief A>"   # → {task_id, name, state:"pending"}
@@ -71,15 +69,30 @@ parley delegate -v grok  -n task-b --session <id> "<brief B>"
 
 Do not poll `status` on an interval and do not sleep-and-check. One mechanism for n=1 and n=N.
 
+## Session ID
+
+The session ID identifies the current orchestration session. It can be passed explicitly with `--session <id>` or via the `PARLEY_SESSION_ID` environment variable. Use your current harness's session concept (if it has one) otherwise synthesize a uuid.
+
+## Context files
+
+`--context <file>` is repeatable; each file lands in the worktree under `.parley/context/`, materialized by **basename**.
+
+```
+parley delegate -v codex -n task-a --session <id> \
+  --context /path/to/config.json \
+  --context /path/to/other.json \
+  "<brief A>"
+```
+
 ### Integrating fan-out branches
 
-When several branches share a fork point, only the first merge fast-forwards. Review each branch on its own, then cherry-pick its commits onto the target **in dependency order**, resolving conflicts at pick time and amending integration fixes into the picked commit — linear history, each commit typecheck-clean on its own. When tasks share files or one builds on another, prefer **dependency waves** over blind parallelism: merge task A first, then delegate task B with `--base-ref` on the freshly-merged target so it forks from its actual prerequisite.
+When several branches share a fork point. Review each branch on its own, resolving conflicts at pick time. When tasks share files or one builds on another, prefer **dependency waves** over blind parallelism: merge task A first, then delegate task B with `--base-ref` on the freshly-merged target so it forks from its actual prerequisite.
 
 ## Beyond the golden path
 
 One-liner pointers — read the linked file only when its condition fires:
 
-- **Non-default task shapes** — structured `--report-schema` results, `--base-ref`/`--cwd`, sandbox postures, `--context` naming rules, the literal task-state vocabulary: read [task-shaping.md](task-shaping.md).
+- **Non-default task shapes** — structured `--report-schema` results, no git worktree `--cwd`, sandbox postures: read [task-shaping.md](task-shaping.md).
 - **Setting up a new orchestrating environment** (wiring `PARLEY_SESSION_ID` from your harness, e.g. a Claude Code hook): read [sessions.md](sessions.md).
 
 ## When a task fails
