@@ -4,7 +4,7 @@
   "description": "Shared heart of parley: domain types, model catalog, home-dir resolution, and shared utilities.",
   "type": "module",
   "engines": {
-    "node": ">=22"
+    "node": ">=24"
   },
   "files": [
     "dist"

@@ -29,8 +29,8 @@ import { FAKE_VENDOR_BIN } from "./helpers.js";
  * tarball, which `packages/cli/tests/ui.test.ts`'s symlink-based fixtures
  * don't (they always install under the home dir, tier one).
  *
- * It is heavy (compiles native `better-sqlite3`, hits the registry) so it lives
- * behind generous timeouts and cleans the workspace `dist`/`www` it produces.
+ * It is heavy (hits the registry for transitive deps) so it lives behind
+ * generous timeouts and cleans the workspace `dist`/`www` it produces.
  */
 
 const REPO_ROOT = fileURLToPath(new URL("../../..", import.meta.url));
@@ -111,10 +111,11 @@ beforeAll(() => {
     tgz.push(path.join(tarballs, file));
   }
 
-  // Install the tarballs into a clean prefix — a real consumer install: npm runs
-  // better-sqlite3's build script, and inter-package deps resolve as semver. The
-  // stub manifest roots the install here (so npm does not walk up into the
-  // workspace); hoisted layout puts the bin at node_modules/.bin/parley.
+  // Install the tarballs into a clean prefix — a real consumer install with no
+  // native deps (daemon uses built-in node:sqlite) and inter-package deps
+  // resolving as semver. The stub manifest roots the install here (so npm does
+  // not walk up into the workspace); hoisted layout puts the bin at
+  // node_modules/.bin/parley.
   const prefix = path.join(scratch, "prefix");
   fs.mkdirSync(prefix);
   fs.writeFileSync(

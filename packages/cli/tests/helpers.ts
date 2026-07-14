@@ -30,6 +30,27 @@ export interface CliOptions {
   cwd?: string;
 }
 
+/**
+ * Env for a CLI subprocess. Drops the NO_COLOR/FORCE_COLOR pair when both are
+ * set — Node emits a process warning on stderr for that conflict, which fails
+ * tests that assert quiet stderr.
+ */
+function cliEnv(home: string, extraEnv?: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = {
+    ...process.env,
+    PARLEY_HOME: home,
+    PARLEY_FAKE_VENDOR_BIN: FAKE_VENDOR_BIN,
+    // Default orchestrator identity so delegate tests need not set it; a test
+    // exercising the required-session rule overrides it via extraEnv.
+    PARLEY_SESSION_ID: "test-orch-session",
+    ...extraEnv,
+  };
+  if (env.NO_COLOR !== undefined && env.FORCE_COLOR !== undefined) {
+    delete env.NO_COLOR;
+  }
+  return env;
+}
+
 export function runCli(args: string[], home: string, options: CliOptions = {}): Promise<CliResult> {
   return startCli(args, home, options).result;
 }
@@ -45,15 +66,7 @@ export function startCli(
 ): { child: ReturnType<typeof spawn>; result: Promise<CliResult>; stdoutSoFar: () => string } {
   const child = spawn(process.execPath, ["--import", TSX_LOADER, CLI_ENTRY, ...args], {
     cwd: options.cwd,
-    env: {
-      ...process.env,
-      PARLEY_HOME: home,
-      PARLEY_FAKE_VENDOR_BIN: FAKE_VENDOR_BIN,
-      // Default orchestrator identity so delegate tests need not set it; a test
-      // exercising the required-session rule overrides it via extraEnv.
-      PARLEY_SESSION_ID: "test-orch-session",
-      ...options.extraEnv,
-    },
+    env: cliEnv(home, options.extraEnv),
     stdio: ["ignore", "pipe", "pipe"],
   });
   let stdout = "";
@@ -89,15 +102,7 @@ export function runCliPiped(
     .join(" ");
   const child = spawn("bash", ["-c", `${cliCmd} | ${downstream}; exit "\${PIPESTATUS[0]}"`], {
     cwd: options.cwd,
-    env: {
-      ...process.env,
-      PARLEY_HOME: home,
-      PARLEY_FAKE_VENDOR_BIN: FAKE_VENDOR_BIN,
-      // Default orchestrator identity so delegate tests need not set it; a test
-      // exercising the required-session rule overrides it via extraEnv.
-      PARLEY_SESSION_ID: "test-orch-session",
-      ...options.extraEnv,
-    },
+    env: cliEnv(home, options.extraEnv),
     stdio: ["ignore", "ignore", "pipe"],
   });
   let stderr = "";

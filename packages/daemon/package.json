@@ -4,7 +4,7 @@
   "description": "The parley daemon: engine, vendor adapters, sqlite storage, HTTP server, and MCP channel.",
   "type": "module",
   "engines": {
-    "node": ">=22"
+    "node": ">=24"
   },
   "files": [
     "dist"
@@ -50,10 +50,6 @@
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@useparley/core": "workspace:*",
     "ajv": "^8.20.0",
-    "better-sqlite3": "^11.8.1",
     "zod": "^4.4.3"
-  },
-  "devDependencies": {
-    "@types/better-sqlite3": "^7.6.12"
   }
 }

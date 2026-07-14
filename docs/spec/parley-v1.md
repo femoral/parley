@@ -54,7 +54,7 @@ Decided in [daemon lifecycle and state management](https://github.com/femoral/pa
 
 - **One global daemon per user**; tasks tagged with repo.
 - **Discovery**: binds `127.0.0.1:0`; writes `{port, pid, started_at}` to `~/.parley/daemon.json` under a lockfile (also guards auto-spawn races). Staleness = pid liveness check.
-- **Persistence**: SQLite (`better-sqlite3`) at `~/.parley/parley.db` — tasks, questions, report envelopes, vendor session ids. Vendor event streams as per-task JSONL logs (raw, untouched).
+- **Persistence**: SQLite (`node:sqlite` / `DatabaseSync`) at `~/.parley/parley.db` — tasks, questions, report envelopes, vendor session ids. Vendor event streams as per-task JSONL logs (raw, untouched).
 - **Crash story**: children run in the daemon's process group and die with it. On start, tasks recorded `running`/`awaiting_answer` → `stalled`.
 
 ### `~/.parley/` layout

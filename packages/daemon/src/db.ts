@@ -1,9 +1,36 @@
 import fs from "node:fs";
-import Database from "better-sqlite3";
+import { createRequire } from "node:module";
+import type { DatabaseSync as DatabaseSyncInstance } from "node:sqlite";
 import type { HomePaths } from "@useparley/core";
 import type { SandboxMode } from "./adapters/types.js";
 
-export type DatabaseHandle = Database.Database;
+/**
+ * Load `node:sqlite`'s DatabaseSync without a static import so we can silence
+ * the ExperimentalWarning before the module evaluates (CLI tests and user-facing
+ * stderr assert a quiet process). createRequire also keeps vitest/vite from
+ * trying to resolve the builtin as a bare `sqlite` package.
+ */
+function loadDatabaseSync(): new (
+  path: string,
+) => DatabaseSyncInstance {
+  const original = process.emitWarning;
+  process.emitWarning = ((warning: string | Error, ...args: unknown[]) => {
+    const message = typeof warning === "string" ? warning : warning.message;
+    if (message.includes("SQLite is an experimental feature")) return;
+    return Reflect.apply(original, process, [warning, ...args]);
+  }) as typeof process.emitWarning;
+  try {
+    return createRequire(import.meta.url)("node:sqlite").DatabaseSync as new (
+      path: string,
+    ) => DatabaseSyncInstance;
+  } finally {
+    process.emitWarning = original;
+  }
+}
+
+const DatabaseSync = loadDatabaseSync();
+
+export type DatabaseHandle = DatabaseSyncInstance;
 
 /** Task lifecycle states (spec §2). */
 export type TaskState =
@@ -179,15 +206,35 @@ const MIGRATIONS: string[] = [
    ALTER TABLE tasks ADD COLUMN eval_feedback TEXT;`,
 ];
 
+/**
+ * Run `fn` inside an explicit SQLite transaction. Commits on success; rolls
+ * back and rethrows on failure so each migration step stays atomic.
+ */
+function withTransaction(db: DatabaseHandle, fn: () => void): void {
+  db.exec("BEGIN");
+  try {
+    fn();
+    db.exec("COMMIT");
+  } catch (err) {
+    try {
+      db.exec("ROLLBACK");
+    } catch {
+      /* already rolled back or no active transaction */
+    }
+    throw err;
+  }
+}
+
 function migrate(db: DatabaseHandle): void {
-  const current = db.pragma("user_version", { simple: true }) as number;
+  const current = asRow<{ user_version: number }>(db.prepare("PRAGMA user_version").get())
+    .user_version;
   for (let version = current; version < MIGRATIONS.length; version++) {
     const statement = MIGRATIONS[version];
     if (statement === undefined) continue;
-    db.transaction(() => {
+    withTransaction(db, () => {
       db.exec(statement);
-      db.pragma(`user_version = ${version + 1}`);
-    })();
+      db.exec(`PRAGMA user_version = ${version + 1}`);
+    });
   }
 }
 
@@ -197,9 +244,9 @@ function migrate(db: DatabaseHandle): void {
  */
 export function openDatabase(paths: HomePaths): DatabaseHandle {
   fs.mkdirSync(paths.home, { recursive: true });
-  const db = new Database(paths.db);
-  db.pragma("journal_mode = WAL");
-  db.pragma("foreign_keys = ON");
+  const db = new DatabaseSync(paths.db);
+  db.exec("PRAGMA journal_mode = WAL;");
+  db.exec("PRAGMA foreign_keys = ON;");
   migrate(db);
   return db;
 }
@@ -209,18 +256,23 @@ const TASK_COLUMNS = `id, name, vendor, model, effort, repo, state, created_at, 
    question_id, question, worktree, branch, base_sha, sandbox, network,
    answer_timeout_ms, report_schema, seq, orchestrator_session_id, eval_score, eval_feedback`;
 
+/** Cast a node:sqlite row result to a domain shape (driver types are untyped maps). */
+function asRow<T>(row: unknown): T {
+  return row as T;
+}
+
 /** List all tasks, newest first. */
 export function listTasks(db: DatabaseHandle): TaskRow[] {
   return db
     .prepare(`SELECT ${TASK_COLUMNS} FROM tasks ORDER BY created_at DESC, id DESC`)
-    .all() as TaskRow[];
+    .all()
+    .map((row) => asRow<TaskRow>(row));
 }
 
 /** Fetch one task by exact id. */
 export function getTask(db: DatabaseHandle, id: string): TaskRow | undefined {
-  return db.prepare(`SELECT ${TASK_COLUMNS} FROM tasks WHERE id = ?`).get(id) as
-    | TaskRow
-    | undefined;
+  const row = db.prepare(`SELECT ${TASK_COLUMNS} FROM tasks WHERE id = ?`).get(id);
+  return row === undefined ? undefined : asRow<TaskRow>(row);
 }
 
 /**
@@ -230,23 +282,26 @@ export function getTask(db: DatabaseHandle, id: string): TaskRow | undefined {
 export function resolveTask(db: DatabaseHandle, ref: string): TaskRow | undefined {
   const byId = getTask(db, ref);
   if (byId) return byId;
-  return db
+  const row = db
     .prepare(
       `SELECT ${TASK_COLUMNS} FROM tasks WHERE name = ?
        ORDER BY created_at DESC, id DESC LIMIT 1`,
     )
-    .get(ref) as TaskRow | undefined;
+    .get(ref);
+  return row === undefined ? undefined : asRow<TaskRow>(row);
 }
 
 /** Atomically bump (creating on first use) a named monotonic counter. */
 function nextCounter(db: DatabaseHandle, name: string): number {
-  const row = db
-    .prepare(
-      `INSERT INTO counters (name, value) VALUES (?, 1)
-       ON CONFLICT(name) DO UPDATE SET value = value + 1
-       RETURNING value`,
-    )
-    .get(name) as { value: number };
+  const row = asRow<{ value: number }>(
+    db
+      .prepare(
+        `INSERT INTO counters (name, value) VALUES (?, 1)
+         ON CONFLICT(name) DO UPDATE SET value = value + 1
+         RETURNING value`,
+      )
+      .get(name),
+  );
   return row.value;
 }
 
@@ -282,10 +337,8 @@ export function bumpTaskSeq(db: DatabaseHandle, id: string): number {
  * the "start from now" baseline (spec §3).
  */
 export function currentSeq(db: DatabaseHandle): number {
-  const row = db.prepare(`SELECT value FROM counters WHERE name = 'transition_seq'`).get() as
-    | { value: number }
-    | undefined;
-  return row?.value ?? 0;
+  const row = db.prepare(`SELECT value FROM counters WHERE name = 'transition_seq'`).get();
+  return row === undefined ? 0 : asRow<{ value: number }>(row).value;
 }
 
 /**
@@ -337,7 +390,8 @@ export function sweepInterruptedTasks(db: DatabaseHandle): number {
   const placeholders = [...SETTLED_STATES].map(() => "?").join(", ");
   const live = db
     .prepare(`SELECT id FROM tasks WHERE state NOT IN (${placeholders})`)
-    .all(...SETTLED_STATES) as { id: string }[];
+    .all(...SETTLED_STATES)
+    .map((row) => asRow<{ id: string }>(row));
   const result = db
     .prepare(
       `UPDATE tasks SET state = 'stalled', error = ?, updated_at = ?
@@ -353,7 +407,8 @@ export function sweepInterruptedTasks(db: DatabaseHandle): number {
   // (the engine is not constructed until after the sweep), so watchers that
   // attach later simply see the post-sweep state, never the stall as an event.
   for (const { id } of live) bumpTaskSeq(db, id);
-  return result.changes;
+  // node:sqlite types `changes` as number | bigint; for our UPDATE counts it is a number.
+  return Number(result.changes);
 }
 
 /** The mutable task fields `updateTask` accepts. */

@@ -12,4 +12,4 @@ TypeScript/Node.
 - Best-supported MCP SDK; trivial HTTP/streaming servers; JSON-native protocol handling.
 - npm distribution path when the tool goes OSS.
 - Single-binary distribution sacrificed; acceptable for a personal tool.
-- SQLite via better-sqlite3 (ADR-implied by daemon persistence decision).
+- SQLite via `node:sqlite` (`DatabaseSync`; ADR-implied by daemon persistence decision).

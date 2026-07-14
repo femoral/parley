@@ -77,8 +77,8 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       # npm trusted publishing (OIDC) needs a recent npm CLI; the one bundled
-      # with actions/setup-node's Node 22 predates OIDC support. Only needed
-      # for the real publish.
+      # with some actions/setup-node Node images predates OIDC support. Only
+      # needed for the real publish.
       - name: Update npm for trusted publishing support
         if: ${{ !inputs.dry_run }}
         run: npm install -g npm@latest

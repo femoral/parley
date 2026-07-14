@@ -28,6 +28,9 @@ export default defineWorkspace([
     },
   },
   {
+    // node:sqlite is a Node builtin; keep it external so vite does not try to
+    // rewrite `node:sqlite` into a bare package id (see #54).
+    ssr: { external: ["node:sqlite"] },
     test: {
       name: "integration",
       include: [
