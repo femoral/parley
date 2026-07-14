@@ -70,6 +70,14 @@ export const Inspector = memo(function Inspector({ task, ornaments = false }: In
           <Badge label={meta.label} glyph={meta.glyph} color={meta.colorVar} />
         </div>
       </div>
+      {task.evalFeedback !== null && (
+        <div className="pc-inspector__eval-feedback">
+          <span className="pc-inspector__eval-feedback-label">EVALUATION</span>
+          <p className="pc-inspector__eval-feedback-text" title={task.evalFeedback}>
+            {task.evalFeedback}
+          </p>
+        </div>
+      )}
       <Divider />
       <div className="pc-inspector__tabs" role="tablist" aria-label="Task inspector">
         {TABS.map((tab) => (

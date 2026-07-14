@@ -62,6 +62,17 @@ describe("Inspector header (#68)", () => {
     render(<Inspector task={task({ evalScore: null })} />);
     expect(screen.queryByText(/★/)).toBeNull();
   });
+
+  it("shows eval feedback when present", () => {
+    render(<Inspector task={task({ evalScore: 8, evalFeedback: "Strong result; tighten the final summary." })} />);
+    expect(screen.getByText("EVALUATION")).toBeTruthy();
+    expect(screen.getByText("Strong result; tighten the final summary.")).toBeTruthy();
+  });
+
+  it("omits eval feedback when absent", () => {
+    render(<Inspector task={task({ evalFeedback: null })} />);
+    expect(screen.queryByText("EVALUATION")).toBeNull();
+  });
 });
 
 describe("Inspector's corner flourishes follow the settings bar's Ornaments toggle (#70)", () => {
