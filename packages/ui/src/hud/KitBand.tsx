@@ -20,7 +20,7 @@ export const KitBand = memo(function KitBand() {
         <div className="pc-kit__list">
           {Object.values(FACTIONS).map((faction) => (
             <div className="pc-kit__faction" key={faction.label}>
-              <Emblem coat={faction.coat} glyph={faction.emblem} size={22} label={faction.label} />
+              <Emblem coat={faction.coat} mark={faction.emblem} size={22} label={faction.label} />
               <div className="pc-kit__faction-copy">
                 <span className="pc-kit__faction-label">{faction.label}</span>
                 <span className="pc-kit__faction-tagline">{faction.tagline}</span>

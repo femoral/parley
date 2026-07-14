@@ -9,15 +9,39 @@ afterEach(cleanup);
 const GROUPS: RosterGroup[] = [
   {
     state: "awaiting_answer",
-    tasks: [{ id: "t1", name: "chart-the-bay", coat: "#2f5fb0", emblem: "⚓", meta: "feat/bay · t1" }],
+    tasks: [
+      {
+        id: "t1",
+        name: "chart-the-bay",
+        coat: "#10a37f",
+        emblem: { kind: "svg", viewBox: "0 0 24 24", path: "M12 2 L20 7 V17 L12 22 L4 17 V7 Z" },
+        meta: "feat/bay · t1",
+      },
+    ],
   },
   {
     state: "running",
-    tasks: [{ id: "t2", name: "sound-the-depths", coat: "#c0392b", emblem: "⚔", meta: "feat/depth · t2" }],
+    tasks: [
+      {
+        id: "t2",
+        name: "sound-the-depths",
+        coat: "#2b2b2e",
+        emblem: { kind: "svg", viewBox: "0 0 24 24", path: "M5 4 L19 20 M19 4 L5 20" },
+        meta: "feat/depth · t2",
+      },
+    ],
   },
   {
     state: "failed",
-    tasks: [{ id: "t3", name: "lost-at-sea", coat: "#8a6a34", emblem: "⚐", meta: "feat/lost · t3" }],
+    tasks: [
+      {
+        id: "t3",
+        name: "lost-at-sea",
+        coat: "#8a6a34",
+        emblem: { kind: "glyph", char: "⚐" },
+        meta: "feat/lost · t3",
+      },
+    ],
   },
 ];
 

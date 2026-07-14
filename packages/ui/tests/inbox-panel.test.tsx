@@ -10,8 +10,8 @@ const AWAITING_1: InboxTask = {
   id: "t1",
   name: "chart-the-bay",
   state: "awaiting_answer",
-  coat: "#2f5fb0",
-  emblem: "⚓",
+  coat: "#10a37f",
+  emblem: { kind: "svg", viewBox: "0 0 24 24", path: "M12 2 L20 7 V17 L12 22 L4 17 V7 Z" },
   meta: "feat/bay · t1",
   question: "Should the survey favor the northern shoal?",
 };
@@ -20,8 +20,8 @@ const AWAITING_2: InboxTask = {
   id: "t2",
   name: "sound-the-depths",
   state: "awaiting_answer",
-  coat: "#c0392b",
-  emblem: "⚔",
+  coat: "#2b2b2e",
+  emblem: { kind: "svg", viewBox: "0 0 24 24", path: "M5 4 L19 20 M19 4 L5 20" },
   meta: "feat/depth · t2",
   question: "Deep or shallow anchorage?",
 };

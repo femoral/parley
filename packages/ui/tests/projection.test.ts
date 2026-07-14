@@ -25,8 +25,10 @@ describe("formatClock", () => {
 
 describe("factionFor", () => {
   it("resolves seeded vendors and falls back to Unaligned", () => {
-    expect(factionFor("codex").label).toBe("Cartographers' Guild");
-    expect(factionFor("pi").emblem).toBe("☾");
+    expect(factionFor("codex").label).toBe("Codex");
+    expect(factionFor("codex").coat).toBe("#10a37f");
+    expect(factionFor("pi").emblem).toEqual({ kind: "glyph", char: "π" });
+    expect(factionFor("grok").emblem.kind).toBe("svg");
     expect(factionFor("brand-new")).toBe(UNALIGNED);
     expect(factionFor(null)).toBe(UNALIGNED);
   });

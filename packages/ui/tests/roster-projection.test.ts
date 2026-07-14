@@ -56,8 +56,8 @@ describe("projectRoster groups by state in attention order (#66)", () => {
   it("projects faction coat/emblem and a branch·id meta line per task", () => {
     const { groups } = projectRoster([task({ id: "abcdefghij", state: "running", vendor: "grok" })]);
     const rosterTask = groups[0]!.tasks[0]!;
-    expect(rosterTask.coat).toBe("#c0392b");
-    expect(rosterTask.emblem).toBe("⚔");
+    expect(rosterTask.coat).toBe("#2b2b2e");
+    expect(rosterTask.emblem.kind).toBe("svg");
     expect(rosterTask.meta).toBe("feat/x · abcdefgh");
   });
 });

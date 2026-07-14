@@ -36,11 +36,27 @@ describe("primitives render per manifest with plain props", () => {
     expect(badge.style.getPropertyValue("--badge-color")).toBe("var(--state-awaiting_answer)");
   });
 
-  it("Emblem tints its chip with the faction coat and shows the glyph", () => {
-    const { container } = render(<Emblem coat="#2f5fb0" glyph="⚓" label="Cartographers' Guild" />);
+  it("Emblem tints its chip with the faction coat and shows a glyph mark", () => {
+    const { container } = render(
+      <Emblem coat="#10a37f" mark={{ kind: "glyph", char: "π" }} label="Pi" />,
+    );
     const chip = container.querySelector(".pc-emblem") as HTMLElement;
-    expect(chip.style.getPropertyValue("--coat")).toBe("#2f5fb0");
-    expect(screen.getByLabelText("Cartographers' Guild").textContent).toBe("⚓");
+    expect(chip.style.getPropertyValue("--coat")).toBe("#10a37f");
+    expect(screen.getByLabelText("Pi").textContent).toBe("π");
+  });
+
+  it("Emblem renders an SVG path mark inside the chip", () => {
+    const { container } = render(
+      <Emblem
+        coat="#2b2b2e"
+        mark={{ kind: "svg", viewBox: "0 0 24 24", path: "M5 5 L19 19 M19 5 L5 19" }}
+        label="Grok"
+      />,
+    );
+    const chip = container.querySelector(".pc-emblem") as HTMLElement;
+    expect(chip.style.getPropertyValue("--coat")).toBe("#2b2b2e");
+    expect(chip.querySelector("svg.pc-emblem__mark")).toBeTruthy();
+    expect(chip.querySelector("path")).toBeTruthy();
   });
 
   it("Button applies the variant class and defaults to type=button", () => {

@@ -49,8 +49,8 @@ describe("projectInspector projects a task's Brief tab (#68)", () => {
 
   it("carries the faction coat/emblem from the vendor", () => {
     const view = projectInspector(detail({ vendor: "grok" }), NO_LOGS, []);
-    expect(view.coat).toBe("#c0392b");
-    expect(view.emblem).toBe("⚔");
+    expect(view.coat).toBe("#2b2b2e");
+    expect(view.emblem.kind).toBe("svg");
   });
 
   it("carries the eval score/feedback from the row when present", () => {

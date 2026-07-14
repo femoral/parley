@@ -56,9 +56,9 @@ describe("projectScene groups tasks into session regions (#69)", () => {
       task({ id: "a", state: "running", vendor: "grok", orchestratorSession: "s" }),
     ]);
     const island = sessions[0]!.tasks[0]!;
-    expect(island.coat).toBe("#c0392b");
-    expect(island.coatDark).toBe("#8a241a");
-    expect(island.emblem).toBe("⚔");
+    expect(island.coat).toBe("#2b2b2e");
+    expect(island.coatDark).toBe("#141416");
+    expect(island.emblem.kind).toBe("svg");
   });
 
   it("falls back to the unaligned tint for an unknown vendor (zero new art)", () => {

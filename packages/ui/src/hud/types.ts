@@ -5,14 +5,16 @@
  * with hand-written fixtures.
  */
 
+import type { EmblemMark } from "../tokens/factions.js";
+
 /** One task as the roster renders it. */
 export interface RosterTask {
   id: string;
   name: string;
   /** Faction coat colour (hex) for the emblem chip. */
   coat: string;
-  /** Faction emblem glyph. */
-  emblem: string;
+  /** Faction emblem mark (glyph or original SVG path data). */
+  emblem: EmblemMark;
   /** `branch · id` style meta line. */
   meta: string;
 }
@@ -43,8 +45,8 @@ export interface InboxTask {
   state: string;
   /** Faction coat colour (hex) for the emblem chip. */
   coat: string;
-  /** Faction emblem glyph. */
-  emblem: string;
+  /** Faction emblem mark (glyph or original SVG path data). */
+  emblem: EmblemMark;
   /** `branch · id` style meta line, same shape as the roster row's. */
   meta: string;
   /** The outstanding question text. */
@@ -107,7 +109,7 @@ export interface InspectorTask {
   id: string;
   name: string;
   coat: string;
-  emblem: string;
+  emblem: EmblemMark;
   /** Task state string (matches a `StateKey`) — drives the header's state badge. */
   state: string;
   /** Eval score out of 10, when the task has been eval'd (else null). */

@@ -58,7 +58,7 @@ function Group({
             aria-pressed={selected}
             onClick={() => onSelectTask(task.id)}
           >
-            <Emblem coat={task.coat} glyph={task.emblem} size={23} />
+            <Emblem coat={task.coat} mark={task.emblem} size={23} />
             <span className="pc-roster__row-body">
               <span className="pc-roster__name">{task.name}</span>
               <span className="pc-roster__meta">{task.meta}</span>

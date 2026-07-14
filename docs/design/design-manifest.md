@@ -28,8 +28,9 @@ teal sea; the vendor's faction color is the only loud hue per element.
    a slowly spinning compass rose, and drifting sea texture keep it a place you *want*
    to leave open. Data stays readable in Outfit/JetBrains Mono, but never a wall.
 3. **Vendor-agnostic factions.** A vendor = a faction = `{ label, coat color, emblem
-   glyph, tagline }`. The system is extensible: adding a vendor means adding one faction
-   record, never new layout.
+   mark, tagline }`. Emblem marks are data (unicode glyph or original SVG path) — never
+   per-vendor component code. The system is extensible: adding a vendor means adding one
+   faction record, never new layout.
 4. **Read-only calm, act-only where it matters.** The only interactive inputs are the
    inbox answer box / suggestion chips / resume button and the inspector tabs; everything
    else is observation.
@@ -131,13 +132,14 @@ Report outcomes reuse: `success #5fd08a`, `partial #ffcf4d`, `failed #ff7a6b`.
 
 | Vendor | Faction | Coat | Coat-dark | Emblem | Tagline |
 |---|---|---|---|---|---|
-| codex | Cartographers' Guild | `#2f5fb0` | `#20437e` | ⚓ | Chart the unknown. |
-| grok | Crimson Company | `#c0392b` | `#8a241a` | ⚔ | Solve it with steel. |
-| pi | Tidewatch | `#1f9e7d` | `#137a5f` | ☾ | Guardians of the current. |
+| codex | Codex | `#10a37f` | `#0b7359` | hexagonal knot (SVG) | Green helm. Open charts. |
+| grok | Grok | `#2b2b2e` | `#141416` | X letterform (SVG) | Truth under black canvas. |
+| pi | Pi | `#6c5ce7` | `#4a3db8` | π | A personal current. |
 
-Emblem chips: coat background, `1px solid rgba(255,255,255,0.22)` border, white glyph,
-`inset 0 1px 2px rgba(255,255,255,0.3)` sheen. The coat color also tints the task's name
-in the global log stream.
+Emblem chips: coat background, light rim border, white/light mark,
+`inset` sheen. Near-black coats keep a slightly stronger rim so they read on dark sea.
+Marks are original in-repo path data or glyphs (not trademark logos). The coat color also
+tints the task's name in the global log stream.
 
 ### 2.8 Color — alerts & auxiliary
 

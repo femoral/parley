@@ -34,7 +34,8 @@ app/          # layer 4 — layout + data wiring
 
 1. **Tokens only via CSS vars.** No hex literals below layer 0. Faction tint
    is always the `--coat` / `--coat-dark` pair set on a wrapper; emblems are
-   glyphs, so a new vendor is one `factions.ts` record and zero new art.
+   data marks (glyph or original SVG path), so a new vendor is one
+   `factions.ts` record and zero new art.
 2. **HUD composites take plain data props** (a slice of the task envelope).
    They never fetch and never know about SSE.
 3. **Scene entities are state-driven.** One `data-state` attribute per entity;

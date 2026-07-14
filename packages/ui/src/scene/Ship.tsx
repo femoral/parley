@@ -1,4 +1,5 @@
-import type { CSSProperties } from "react";
+import type { CSSProperties, ReactNode } from "react";
+import type { EmblemMark } from "../tokens/factions.js";
 import { Wake } from "./effects/Wake.js";
 
 export interface ShipProps {
@@ -6,17 +7,37 @@ export interface ShipProps {
   coat: string;
   /** Darker coat (hex) — hull waterline and pennant staff. */
   coatDark: string;
-  /** Faction emblem glyph, worn on the mainsail. */
-  emblem: string;
+  /** Faction emblem mark, worn on the mainsail. */
+  emblem: EmblemMark;
   /** Task state — decides the sloop's pose: circling (running), anchored
    * (awaiting/stalled), or sailing off (cancelled). */
   state: string;
 }
 
+/** Faction mark on the mainsail — glyph as text, or nested SVG path art. */
+function SailMark({ emblem }: { emblem: EmblemMark }): ReactNode {
+  if (emblem.kind === "glyph") {
+    return (
+      <text className="pc-sloop__emblem" x="38" y="30" textAnchor="middle">
+        {emblem.char}
+      </text>
+    );
+  }
+  const paths = typeof emblem.path === "string" ? [emblem.path] : emblem.path;
+  // Nested svg sits over the mainsail belly (viewBox 0 0 60 56 of the sloop).
+  return (
+    <svg className="pc-sloop__emblem-mark" x="32" y="22" width="12" height="12" viewBox={emblem.viewBox} aria-hidden="true">
+      {paths.map((d) => (
+        <path key={d} d={d} fillRule={emblem.fillRule} />
+      ))}
+    </svg>
+  );
+}
+
 /** The sloop silhouette — a planked hull with a faction-dark waterline, a
  * parchment mainsail + jib tinted by the coat, and an emblem on the main. Shared
  * by every pose. */
-function Sloop({ emblem }: { emblem: string }) {
+function Sloop({ emblem }: { emblem: EmblemMark }) {
   return (
     <svg className="pc-sloop__svg" viewBox="0 0 60 56" aria-hidden="true">
       {/* mast + forestay */}
@@ -26,9 +47,7 @@ function Sloop({ emblem }: { emblem: string }) {
       {/* jib */}
       <path className="pc-sloop__jib" d="M28 12 Q17 26 15 34 L28 35 Z" />
       {/* emblem on the mainsail */}
-      <text className="pc-sloop__emblem" x="38" y="30" textAnchor="middle">
-        {emblem}
-      </text>
+      <SailMark emblem={emblem} />
       {/* hull — wood body over a faction-dark waterline */}
       <path
         className="pc-sloop__hull"

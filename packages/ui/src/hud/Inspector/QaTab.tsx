@@ -1,11 +1,12 @@
 import { Emblem } from "../../primitives/index.js";
+import type { EmblemMark } from "../../tokens/factions.js";
 import type { QaTurn } from "../types.js";
 
 export interface QaTabProps {
   qa: QaTurn[];
   /** The task's faction coat/emblem — the question bubble's avatar. */
   coat: string;
-  emblem: string;
+  emblem: EmblemMark;
 }
 
 /**
@@ -27,7 +28,7 @@ export function QaTab({ qa, coat, emblem }: QaTabProps) {
       {qa.map((turn, i) => (
         <div className="pc-qa__turn" key={`${i}-${turn.question}`}>
           <div className="pc-qa__bubble pc-qa__bubble--question">
-            <Emblem coat={coat} glyph={emblem} size={20} />
+            <Emblem coat={coat} mark={emblem} size={20} />
             <p>{turn.question}</p>
           </div>
           {turn.answer !== null && (

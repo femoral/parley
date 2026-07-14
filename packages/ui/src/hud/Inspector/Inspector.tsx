@@ -57,7 +57,7 @@ export const Inspector = memo(function Inspector({ task, ornaments = false }: In
   return (
     <Plate variant="premium" padded={false} ornaments={ornaments} className="pc-inspector">
       <div className="pc-inspector__head">
-        <Emblem coat={task.coat} glyph={task.emblem} size={28} />
+        <Emblem coat={task.coat} mark={task.emblem} size={28} />
         <div className="pc-inspector__head-titles">
           <span className="pc-inspector__kicker">ACTIVE INSPECTOR</span>
           <span className="pc-inspector__name">{task.name}</span>

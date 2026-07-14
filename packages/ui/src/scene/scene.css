@@ -363,6 +363,13 @@
   font-size: 11px;
   opacity: 0.85;
 }
+.pc-sloop__emblem-mark {
+  fill: var(--coat-dark);
+  opacity: 0.9;
+}
+.pc-sloop__emblem-mark path {
+  fill: inherit;
+}
 .pc-sloop__hull {
   fill: var(--brass-shadow);
   stroke: var(--brass-frame);

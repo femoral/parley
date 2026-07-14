@@ -10,8 +10,8 @@ function task(overrides: Partial<InspectorTask> = {}): InspectorTask {
   return {
     id: "t1abcdef",
     name: "chart-the-bay",
-    coat: "#2f5fb0",
-    emblem: "⚓",
+    coat: "#10a37f",
+    emblem: { kind: "svg", viewBox: "0 0 24 24", path: "M12 2 L20 7 V17 L12 22 L4 17 V7 Z" },
     state: "running",
     evalScore: null,
     evalFeedback: null,

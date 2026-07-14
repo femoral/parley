@@ -69,7 +69,7 @@ export function InboxCard({ task, onAnswer }: InboxCardProps) {
   return (
     <form className="pc-inbox-card" onSubmit={onSubmit} aria-label={`Answer ${task.name}`}>
       <div className="pc-inbox-card__head">
-        <Emblem coat={task.coat} glyph={task.emblem} size={23} />
+        <Emblem coat={task.coat} mark={task.emblem} size={23} />
         <span className="pc-inbox-card__body">
           <span className="pc-inbox-card__name">{task.name}</span>
           <span className="pc-inbox-card__meta">{task.meta}</span>

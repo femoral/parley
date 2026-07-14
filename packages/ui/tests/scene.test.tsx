@@ -11,9 +11,9 @@ function island(state: string, overrides: Partial<IslandTask> = {}): IslandTask 
     id: "t1",
     name: "chart-the-bay",
     state,
-    coat: "#2f5fb0",
-    coatDark: "#20437e",
-    emblem: "⚓",
+    coat: "#10a37f",
+    coatDark: "#0b7359",
+    emblem: { kind: "svg", viewBox: "0 0 24 24", path: "M12 2 L20 7 V17 L12 22 L4 17 V7 Z" },
     ...overrides,
   };
 }
@@ -104,20 +104,30 @@ describe("Island renders its state through a single data-state (#69)", () => {
 describe("Ship carries faction tint on the --coat/--coat-dark pair (#69)", () => {
   it("sets both custom properties from the faction record (new faction, zero new art)", () => {
     const { container } = render(
-      <Ship coat="#c0392b" coatDark="#8a241a" emblem="⚔" state="running" />,
+      <Ship
+        coat="#2b2b2e"
+        coatDark="#141416"
+        emblem={{ kind: "svg", viewBox: "0 0 24 24", path: "M5 4 L19 20 M19 4 L5 20" }}
+        state="running"
+      />,
     );
     const orbit = container.querySelector(".pc-orbit") as HTMLElement;
-    expect(orbit.style.getPropertyValue("--coat")).toBe("#c0392b");
-    expect(orbit.style.getPropertyValue("--coat-dark")).toBe("#8a241a");
+    expect(orbit.style.getPropertyValue("--coat")).toBe("#2b2b2e");
+    expect(orbit.style.getPropertyValue("--coat-dark")).toBe("#141416");
   });
 
   it("keeps the tint on the sailing-off pose too", () => {
     const { container } = render(
-      <Ship coat="#1f9e7d" coatDark="#137a5f" emblem="☾" state="cancelled" />,
+      <Ship
+        coat="#6c5ce7"
+        coatDark="#4a3db8"
+        emblem={{ kind: "glyph", char: "π" }}
+        state="cancelled"
+      />,
     );
     const sloop = container.querySelector(".pc-sloop--sailoff") as HTMLElement;
-    expect(sloop.style.getPropertyValue("--coat")).toBe("#1f9e7d");
-    expect(sloop.style.getPropertyValue("--coat-dark")).toBe("#137a5f");
+    expect(sloop.style.getPropertyValue("--coat")).toBe("#6c5ce7");
+    expect(sloop.style.getPropertyValue("--coat-dark")).toBe("#4a3db8");
   });
 });
 

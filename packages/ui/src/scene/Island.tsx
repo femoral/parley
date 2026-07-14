@@ -1,3 +1,4 @@
+import type { EmblemMark } from "../tokens/factions.js";
 import { stateMetaFor } from "../tokens/state-meta.js";
 import { Ship } from "./Ship.js";
 import { Flare } from "./effects/Flare.js";
@@ -16,7 +17,7 @@ export interface IslandTask {
   state: string;
   coat: string;
   coatDark: string;
-  emblem: string;
+  emblem: EmblemMark;
 }
 
 /** States where a sloop is present at the island. `completed`/`failed`/`pending`
