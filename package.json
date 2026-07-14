@@ -4,6 +4,7 @@
   "private": true,
   "description": "Delegate tasks to agent CLIs (Codex, Grok Build) from an orchestrating agent.",
   "type": "module",
+  "packageManager": "pnpm@11.9.0",
   "engines": {
     "node": ">=22"
   },
