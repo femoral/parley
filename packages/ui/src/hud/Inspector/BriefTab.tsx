@@ -41,7 +41,7 @@ export function BriefTab({ brief }: BriefTabProps) {
           {brief.network !== null && <li>Network: {brief.network ? "enabled" : "disabled"}</li>}
         </ul>
       )}
-      <p className="pc-brief__footnote">parley never merges — the branch waits for yer review.</p>
+      <p className="pc-brief__footnote">parley never merges on its own — the branch waits fer yer orchestrator to say the word.</p>
     </div>
   );
 }
