@@ -11,6 +11,12 @@ import { attentionRank, isTerminalState } from "@useparley/core";
 import { factionFor } from "../../tokens/factions.js";
 import type { RosterGroup, RosterSessionOption, RosterTask } from "../../hud/types.js";
 
+/**
+ * How many most-recently-active session chips the roster shows before the
+ * search affordance covers the rest (#88). Named so the cap is one place.
+ */
+export const RECENT_SESSION_CHIP_CAP = 5;
+
 /** The plain per-task slice {@link projectRoster} groups and sorts. */
 export interface RosterTaskInput {
   id: string;
@@ -26,6 +32,12 @@ export interface RosterTaskInput {
    * `useSnapshot`-maintained map this feeds both the roster and inbox
    * projections (#67), so it lives on the shared input shape. */
   question: string | null;
+  /**
+   * ISO-8601 last-activity timestamp when known (from the task row's
+   * `updated_at`, or the wall clock of an SSE transition). Used only to order
+   * session chips by recency (#88); absent values sort last.
+   */
+  updatedAt?: string | null;
 }
 
 /** The full roster projection a `RosterPanel` renders. */
@@ -65,7 +77,11 @@ function toRosterTask(task: RosterTaskInput): RosterTask {
  * When `selectedSessionId` is set, groups/totals include only that session's
  * tasks (tasks with no session id appear only under "All hands" / null).
  * Session chips always reflect the full unfiltered fleet so the selector and
- * the future scene camera cue stay in sync with every known session (#76).
+ * the future scene camera cue stay in sync with every known session (#76) —
+ * but only the {@link RECENT_SESSION_CHIP_CAP} most-recently-active ones are
+ * returned; older sessions are reached via search (#88). A selected session
+ * that falls outside the cap is pinned onto the chip list so the active state
+ * stays visible.
  */
 export function projectRoster(
   tasks: Iterable<RosterTaskInput>,
@@ -73,6 +89,7 @@ export function projectRoster(
 ): RosterProjection {
   const all = [...tasks];
   const sessionCounts = new Map<string, number>();
+  const sessionLastActivity = new Map<string, string>();
   const durableSessions = new Set<string>();
 
   // Session chips + durable count always come from the full fleet so selecting
@@ -80,6 +97,9 @@ export function projectRoster(
   for (const task of all) {
     if (task.orchestratorSession) {
       sessionCounts.set(task.orchestratorSession, (sessionCounts.get(task.orchestratorSession) ?? 0) + 1);
+      const at = task.updatedAt ?? "";
+      const prev = sessionLastActivity.get(task.orchestratorSession) ?? "";
+      if (at > prev) sessionLastActivity.set(task.orchestratorSession, at);
       if (!isTerminalState(task.state)) durableSessions.add(task.orchestratorSession);
     }
   }
@@ -104,9 +124,25 @@ export function projectRoster(
     .map(([state, rosterTasks]) => ({ state, tasks: rosterTasks }))
     .sort((a, b) => attentionRank(a.state) - attentionRank(b.state));
 
-  const sessions: RosterSessionOption[] = [...sessionCounts.entries()]
+  // Most-recently-active first; id tie-break for stable ordering.
+  const allSessions: RosterSessionOption[] = [...sessionCounts.entries()]
     .map(([id, count]) => ({ id, label: shortId(id), count }))
-    .sort((a, b) => a.id.localeCompare(b.id));
+    .sort((a, b) => {
+      const aAt = sessionLastActivity.get(a.id) ?? "";
+      const bAt = sessionLastActivity.get(b.id) ?? "";
+      if (aAt !== bAt) return bAt.localeCompare(aAt);
+      return a.id.localeCompare(b.id);
+    });
+
+  let sessions = allSessions.slice(0, RECENT_SESSION_CHIP_CAP);
+  // Pin a selected session that fell outside the recent cap (search pick, or
+  // an older chip the user still has active) so the active state stays visible.
+  // Only pin when the session still has tasks in the fleet — a gone selection
+  // is cleared by useCockpit, not kept as a ghost chip.
+  if (selectedSessionId !== null && !sessions.some((s) => s.id === selectedSessionId)) {
+    const fromFleet = allSessions.find((s) => s.id === selectedSessionId);
+    if (fromFleet) sessions = [...sessions, fromFleet];
+  }
 
   return { groups, sessions, totalTasks, activeTasks, durableSessions: durableSessions.size };
 }

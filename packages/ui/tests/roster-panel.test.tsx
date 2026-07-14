@@ -53,6 +53,7 @@ function baseProps() {
     sessions: SESSIONS,
     selectedSessionId: null,
     onSelectSession: vi.fn(),
+    searchSessions: vi.fn(async () => []),
     selectedTaskId: null,
     onSelectTask: vi.fn(),
     totalTasks: 3,
@@ -137,6 +138,28 @@ describe("RosterPanel session selector (#66)", () => {
   it("labels the session strip as a group of buttons", () => {
     render(<RosterPanel {...baseProps()} />);
     expect(screen.getByRole("group", { name: "Orchestrator sessions" })).toBeTruthy();
+  });
+
+  it("opens session search and selects a hit like a chip click (#88)", async () => {
+    const onSelectSession = vi.fn();
+    const searchSessions = vi.fn(async () => [
+      { id: "sess-old-history", label: "sess-old", taskCount: 3, lastActivityAt: "2020-01-01T00:00:00.000Z" },
+    ]);
+    render(
+      <RosterPanel
+        {...baseProps()}
+        onSelectSession={onSelectSession}
+        searchSessions={searchSessions}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Search sessions" }));
+    const input = screen.getByLabelText("Session id");
+    fireEvent.change(input, { target: { value: "old" } });
+    // Debounced lookup — wait for the hit to appear.
+    expect(await screen.findByText("sess-old")).toBeTruthy();
+    expect(searchSessions).toHaveBeenCalledWith("old");
+    fireEvent.click(screen.getByText("sess-old"));
+    expect(onSelectSession).toHaveBeenCalledWith("sess-old-history");
   });
 });
 

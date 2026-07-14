@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { projectRoster, type RosterTaskInput } from "../src/app/hooks/roster.js";
+import {
+  projectRoster,
+  RECENT_SESSION_CHIP_CAP,
+  type RosterTaskInput,
+} from "../src/app/hooks/roster.js";
 
 function task(overrides: Partial<RosterTaskInput> & Pick<RosterTaskInput, "id" | "state">): RosterTaskInput {
   return {
@@ -8,6 +12,7 @@ function task(overrides: Partial<RosterTaskInput> & Pick<RosterTaskInput, "id" |
     branch: "feat/x",
     orchestratorSession: null,
     question: null,
+    updatedAt: null,
     ...overrides,
   };
 }
@@ -65,14 +70,15 @@ describe("projectRoster groups by state in attention order (#66)", () => {
 describe("projectRoster session grouping (#66)", () => {
   it("derives one session option per distinct orchestrator session, with counts", () => {
     const { sessions } = projectRoster([
-      task({ id: "a", state: "running", orchestratorSession: "sess-1" }),
-      task({ id: "b", state: "pending", orchestratorSession: "sess-1" }),
-      task({ id: "c", state: "running", orchestratorSession: "sess-2" }),
+      task({ id: "a", state: "running", orchestratorSession: "sess-1", updatedAt: "2024-01-01T00:00:00.000Z" }),
+      task({ id: "b", state: "pending", orchestratorSession: "sess-1", updatedAt: "2024-01-02T00:00:00.000Z" }),
+      task({ id: "c", state: "running", orchestratorSession: "sess-2", updatedAt: "2024-01-03T00:00:00.000Z" }),
       task({ id: "d", state: "completed", orchestratorSession: null }),
     ]);
+    // Most-recently-active first (sess-2 newer than sess-1).
     expect(sessions).toEqual([
-      { id: "sess-1", label: "sess-1", count: 2 },
       { id: "sess-2", label: "sess-2", count: 1 },
+      { id: "sess-1", label: "sess-1", count: 2 },
     ]);
   });
 
@@ -83,6 +89,38 @@ describe("projectRoster session grouping (#66)", () => {
       task({ id: "c", state: "completed", orchestratorSession: "sess-2" }),
     ]);
     expect(durableSessions).toBe(1);
+  });
+});
+
+describe("projectRoster recent session chip cap (#88)", () => {
+  it("caps chips to RECENT_SESSION_CHIP_CAP most-recently-active sessions", () => {
+    const tasks = Array.from({ length: RECENT_SESSION_CHIP_CAP + 3 }, (_, i) =>
+      task({
+        id: `t${i}`,
+        state: "running",
+        orchestratorSession: `sess-${String(i).padStart(2, "0")}`,
+        updatedAt: `2024-01-${String(i + 1).padStart(2, "0")}T00:00:00.000Z`,
+      }),
+    );
+    const { sessions } = projectRoster(tasks);
+    expect(sessions).toHaveLength(RECENT_SESSION_CHIP_CAP);
+    // Highest timestamps first — last-seeded is most recent.
+    expect(sessions[0]!.id).toBe(`sess-${String(RECENT_SESSION_CHIP_CAP + 2).padStart(2, "0")}`);
+    expect(sessions.map((s) => s.id)).not.toContain("sess-00");
+  });
+
+  it("pins a selected session that falls outside the recent cap", () => {
+    const tasks = Array.from({ length: RECENT_SESSION_CHIP_CAP + 2 }, (_, i) =>
+      task({
+        id: `t${i}`,
+        state: "running",
+        orchestratorSession: `sess-${String(i).padStart(2, "0")}`,
+        updatedAt: `2024-01-${String(i + 1).padStart(2, "0")}T00:00:00.000Z`,
+      }),
+    );
+    const { sessions } = projectRoster(tasks, "sess-00");
+    expect(sessions.some((s) => s.id === "sess-00")).toBe(true);
+    expect(sessions.length).toBe(RECENT_SESSION_CHIP_CAP + 1);
   });
 });
 
@@ -117,11 +155,8 @@ describe("projectRoster session filter (#76)", () => {
     for (const group of groups) {
       expect(group.tasks.length).toBeGreaterThan(0);
     }
-    // Session chips still list the full fleet.
-    expect(sessions).toEqual([
-      { id: "sess-1", label: "sess-1", count: 2 },
-      { id: "sess-2", label: "sess-2", count: 2 },
-    ]);
+    // Session chips still list the full fleet (under the recent cap).
+    expect(sessions.map((s) => s.id).sort()).toEqual(["sess-1", "sess-2"]);
   });
 
   it("selecting a session keeps only that session's tasks in every group", () => {
@@ -136,7 +171,7 @@ describe("projectRoster session filter (#76)", () => {
       expect(group.tasks.length).toBe(1);
     }
     // Selector chips remain fleet-wide so the user can switch sessions.
-    expect(sessions.map((s) => s.id)).toEqual(["sess-1", "sess-2"]);
+    expect(sessions.map((s) => s.id).sort()).toEqual(["sess-1", "sess-2"]);
   });
 
   it("tasks without a session id appear only under All hands", () => {

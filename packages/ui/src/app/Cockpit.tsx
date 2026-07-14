@@ -40,6 +40,7 @@ export function Cockpit() {
               sessions={snapshot.sessions}
               selectedSessionId={roster.selectedSessionId}
               onSelectSession={roster.selectSession}
+              searchSessions={roster.searchSessions}
               selectedTaskId={roster.selectedTaskId}
               onSelectTask={roster.selectTask}
               totalTasks={snapshot.totalTasks}

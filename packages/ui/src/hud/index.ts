@@ -35,5 +35,6 @@ export type {
   ReportView,
   RosterGroup,
   RosterSessionOption,
+  RosterSessionSearchHit,
   RosterTask,
 } from "./types.js";

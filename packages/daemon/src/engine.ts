@@ -20,6 +20,7 @@ import {
   insertQaTurn,
   insertTask,
   listQaTurns,
+  listSessions,
   listTasks,
   nextQuestionId,
   nextTaskId,
@@ -29,6 +30,7 @@ import {
   TERMINAL_STATES,
   type DatabaseHandle,
   type QaTurnRow,
+  type SessionSummary,
   type TaskPatch,
   type TaskRow,
 } from "./db.js";
@@ -227,6 +229,14 @@ export class TaskEngine {
 
   list(): TaskRow[] {
     return listTasks(this.db);
+  }
+
+  /**
+   * Distinct orchestrator sessions known via tasks, most-recent first (#88).
+   * Optional `query` filters by id substring.
+   */
+  listSessions(query?: string): SessionSummary[] {
+    return listSessions(this.db, query);
   }
 
   get(id: string): TaskRow | undefined {

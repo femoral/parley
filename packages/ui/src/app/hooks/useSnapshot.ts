@@ -47,6 +47,7 @@ function fromRow(row: TaskRow): RosterTaskInput {
     branch: row.branch,
     orchestratorSession: row.orchestrator_session_id,
     question: row.question,
+    updatedAt: row.updated_at,
   };
 }
 
@@ -69,6 +70,9 @@ function mergeEnvelope(prev: RosterTaskInput | undefined, event: StreamEvent): R
     branch: t.branch,
     orchestratorSession: prev?.orchestratorSession ?? null,
     question: t.question,
+    // A transition is activity — stamp now so session chips re-rank by recency
+    // (#88). The wire envelope has no `updated_at`.
+    updatedAt: new Date().toISOString(),
   };
 }
 

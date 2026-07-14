@@ -543,6 +543,14 @@ function createHandler(engine: TaskEngine, uiBundleDir: string | null): http.Req
         return;
       }
 
+      // `GET /sessions` — historical orchestrator sessions for the roster
+      // selector (#88). Optional `?q=` filters by id substring.
+      if (method === "GET" && url.pathname === "/sessions") {
+        const q = url.searchParams.get("q");
+        sendJson(res, 200, { sessions: engine.listSessions(q ?? undefined) });
+        return;
+      }
+
       if (method === "GET" && url.pathname === "/events/stream") {
         await handleEventStream(engine, req, res, url.searchParams);
         return;

@@ -129,6 +129,30 @@ export interface TasksResponse {
 }
 
 /**
+ * One orchestrator session known to the daemon via its tasks' 
+ * `orchestrator_session_id` (#88). Used by the roster's historical session
+ * search — the live task snapshot only surfaces sessions that still have
+ * tasks in it; this listing covers every session the daemon has ever seen.
+ */
+export interface OrchestratorSession {
+  /** The orchestrator session id (`PARLEY_SESSION_ID` / `--session`). */
+  id: string;
+  /** ISO-8601 of the most recent task activity in this session. */
+  last_activity_at: string;
+  /** Number of tasks currently associated with this session. */
+  task_count: number;
+}
+
+/**
+ * `GET /sessions` — historical orchestrator sessions for the roster selector
+ * (#88). Ordered most-recently-active first. Optional `?q=` filters by id
+ * substring (case-insensitive).
+ */
+export interface SessionsResponse {
+  sessions: OrchestratorSession[];
+}
+
+/**
  * One `ask_orchestrator` turn in a task's durable Q&A history (#79).
  * Detail-only — list envelopes do not carry history. `answer` is null while
  * the question is still outstanding (or was never answered).

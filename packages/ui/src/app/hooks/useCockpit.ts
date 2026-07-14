@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ParleyClient } from "@useparley/core";
-import type { HealthView, InspectorTask } from "../../hud/types.js";
+import type { HealthView, InspectorTask, RosterSessionSearchHit } from "../../hud/types.js";
 import { formatClock, formatUptime } from "./format.js";
 import { useHealth } from "./useHealth.js";
 import { projectInspector } from "./inspector.js";
-import { projectRoster } from "./roster.js";
+import { projectRoster, shortId } from "./roster.js";
 import { useLogTail } from "./useLogTail.js";
 import { useSettings, type SettingsView } from "./useSettings.js";
 import { useSnapshot, type SnapshotView } from "./useSnapshot.js";
@@ -20,6 +20,11 @@ export interface RosterSelection {
   selectedTaskId: string | null;
   selectSession: (id: string | null) => void;
   selectTask: (id: string) => void;
+  /**
+   * Look up historical orchestrator sessions by id substring (#88). Read-only
+   * — selection of a hit goes through {@link selectSession}.
+   */
+  searchSessions: (query: string) => Promise<RosterSessionSearchHit[]>;
 }
 
 export interface CockpitView {
@@ -27,7 +32,8 @@ export interface CockpitView {
   /**
    * Live snapshot with roster groups already filtered by the selected session
    * (#76). Health/scene/inbox counts stay fleet-wide; only `groups` and the
-   * roster footer totals reflect the session chip.
+   * roster footer totals reflect the session chip. Session chips are the
+   * recent-N subset (#88); older sessions come from {@link RosterSelection.searchSessions}.
    */
   snapshot: SnapshotView;
   roster: RosterSelection;
@@ -71,35 +77,51 @@ export function useCockpit(): CockpitView {
     return () => clearInterval(id);
   }, []);
 
-  // If the selected session disappears from the snapshot (tasks pruned), fall
-  // back to "All hands" rather than showing a permanently empty filtered list.
+  // If the selected session has no tasks left in the live fleet at all, fall
+  // back to "All hands". A session outside the recent chip cap (search pick)
+  // stays selected while it still has tasks — chips alone are not the source
+  // of truth for validity (#88).
   useEffect(() => {
     if (selectedSessionId === null) return;
-    if (!live.sessions.some((session) => session.id === selectedSessionId)) {
-      setSelectedSessionId(null);
-    }
-  }, [selectedSessionId, live.sessions]);
+    const stillPresent = live.tasks.some(
+      (task) => task.orchestratorSession === selectedSessionId,
+    );
+    if (!stillPresent) setSelectedSessionId(null);
+  }, [selectedSessionId, live.tasks]);
 
-  // Filter groups at derivation time so header counts match filtered contents.
+  // Filter groups + cap/pin session chips at derivation time so header counts
+  // match filtered contents and a search-selected session stays visible (#76/#88).
   // Health totals stay fleet-wide (unfiltered `live`); the roster list/footer
   // use the session-scoped projection.
   const filteredRoster = useMemo(
-    () =>
-      selectedSessionId === null
-        ? null
-        : projectRoster(live.tasks, selectedSessionId),
+    () => projectRoster(live.tasks, selectedSessionId),
     [live.tasks, selectedSessionId],
   );
 
-  const snapshot: SnapshotView = useMemo(() => {
-    if (filteredRoster === null) return live;
-    return {
+  const snapshot: SnapshotView = useMemo(
+    () => ({
       ...live,
       groups: filteredRoster.groups,
+      sessions: filteredRoster.sessions,
       totalTasks: filteredRoster.totalTasks,
       activeTasks: filteredRoster.activeTasks,
-    };
-  }, [live, filteredRoster]);
+    }),
+    [live, filteredRoster],
+  );
+
+  // Historical session lookup for the roster search affordance (#88). Read-only.
+  const searchSessions = useCallback(
+    async (query: string): Promise<RosterSessionSearchHit[]> => {
+      const { sessions } = await client.listSessions(query);
+      return sessions.map((s) => ({
+        id: s.id,
+        label: shortId(s.id),
+        taskCount: s.task_count,
+        lastActivityAt: s.last_activity_at,
+      }));
+    },
+    [client],
+  );
 
   const origin = typeof window !== "undefined" ? window.location : undefined;
   const healthView: HealthView = {
@@ -120,7 +142,13 @@ export function useCockpit(): CockpitView {
       ? Math.max(1, Math.floor((now - health.startedAt) / 86_400_000) + 1)
       : 1;
 
-  const roster: RosterSelection = { selectedSessionId, selectedTaskId, selectSession, selectTask };
+  const roster: RosterSelection = {
+    selectedSessionId,
+    selectedTaskId,
+    selectSession,
+    selectTask,
+    searchSessions,
+  };
 
   const detail = useTaskDetail(client, selectedTaskId);
   const logs = useLogTail(client, selectedTaskId, settings.followLogs);

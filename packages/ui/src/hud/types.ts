@@ -35,6 +35,19 @@ export interface RosterSessionOption {
   count: number;
 }
 
+/**
+ * One hit from the roster's historical session search (#88). Plain hud shape —
+ * the hooks layer maps the wire `OrchestratorSession` into this.
+ */
+export interface RosterSessionSearchHit {
+  id: string;
+  /** Short display label (truncated id). */
+  label: string;
+  taskCount: number;
+  /** ISO-8601 last activity; used for ordering results, not displayed. */
+  lastActivityAt: string;
+}
+
 /** One task awaiting an answer, as the inbox renders it (design-manifest §4.15). */
 export interface InboxTask {
   id: string;

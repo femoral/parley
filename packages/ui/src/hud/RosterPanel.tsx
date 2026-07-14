@@ -1,18 +1,23 @@
-import { memo, type CSSProperties } from "react";
+import { memo, useCallback, useEffect, useId, useRef, useState, type CSSProperties } from "react";
 import { Plate, PlateHeader, Emblem, Stat } from "../primitives/index.js";
 import { stateMetaFor } from "../tokens/state-meta.js";
-import type { RosterGroup, RosterSessionOption } from "./types.js";
+import type { RosterGroup, RosterSessionOption, RosterSessionSearchHit } from "./types.js";
 
 export interface RosterPanelProps {
   /** State groups, already ordered by attention rank (hooks layer). */
   groups: RosterGroup[];
-  /** Distinct orchestrator sessions among the roster's tasks. */
+  /** Recent orchestrator sessions among the roster's tasks (capped; #88). */
   sessions: RosterSessionOption[];
   /** The active session (`null` = "All hands" / every session). Filters the
    * roster groups the hooks layer projects (#76) and is the future scene's
    * camera-focus target. Single-select only. */
   selectedSessionId: string | null;
   onSelectSession: (id: string | null) => void;
+  /**
+   * Look up historical sessions by id substring (#88). Results drive the
+   * search popover; selecting a hit calls {@link onSelectSession}.
+   */
+  searchSessions: (query: string) => Promise<RosterSessionSearchHit[]>;
   /** The selected task (feeds the inspector/scene, built in later tickets). */
   selectedTaskId: string | null;
   onSelectTask: (id: string) => void;
@@ -75,14 +80,163 @@ function Group({
   );
 }
 
+const SEARCH_DEBOUNCE_MS = 180;
+
+function SessionSearch({
+  searchSessions,
+  onSelectSession,
+}: {
+  searchSessions: (query: string) => Promise<RosterSessionSearchHit[]>;
+  onSelectSession: (id: string | null) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const [hits, setHits] = useState<RosterSessionSearchHit[]>([]);
+  const [status, setStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
+  const inputRef = useRef<HTMLInputElement>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const listId = useId();
+
+  // Focus the field when the search well opens.
+  useEffect(() => {
+    if (open) inputRef.current?.focus();
+  }, [open]);
+
+  // Close on outside click / Escape.
+  useEffect(() => {
+    if (!open) return;
+    const onPointer = (event: MouseEvent): void => {
+      if (rootRef.current && !rootRef.current.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    };
+    const onKey = (event: KeyboardEvent): void => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", onPointer);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onPointer);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  // Debounced lookup — read-only, never mutates the fleet.
+  useEffect(() => {
+    if (!open) return;
+    const q = query.trim();
+    if (q === "") {
+      setHits([]);
+      setStatus("idle");
+      return;
+    }
+    setStatus("loading");
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      void searchSessions(q)
+        .then((results) => {
+          if (cancelled) return;
+          setHits(results);
+          setStatus("ready");
+        })
+        .catch(() => {
+          if (cancelled) return;
+          setHits([]);
+          setStatus("error");
+        });
+    }, SEARCH_DEBOUNCE_MS);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [query, open, searchSessions]);
+
+  const pick = useCallback(
+    (id: string) => {
+      onSelectSession(id);
+      setOpen(false);
+      setQuery("");
+      setHits([]);
+      setStatus("idle");
+    },
+    [onSelectSession],
+  );
+
+  return (
+    <div className="pc-roster__search" ref={rootRef}>
+      <button
+        type="button"
+        className={`pc-roster__session pc-roster__session--search${open ? " pc-roster__session--active" : ""}`}
+        aria-expanded={open}
+        aria-controls={listId}
+        aria-label="Search sessions"
+        onClick={() => setOpen((v) => !v)}
+      >
+        <span aria-hidden="true">⌕</span> Find
+      </button>
+      {open && (
+        <div className="pc-roster__search-pop" role="search">
+          <label className="pc-roster__search-label" htmlFor={listId + "-input"}>
+            Session id
+          </label>
+          <input
+            id={listId + "-input"}
+            ref={inputRef}
+            type="search"
+            className="pc-roster__search-input"
+            placeholder="substring of session id…"
+            value={query}
+            autoComplete="off"
+            spellCheck={false}
+            aria-autocomplete="list"
+            aria-controls={listId}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+          <div id={listId} className="pc-roster__search-results" role="listbox" aria-label="Matching sessions">
+            {status === "loading" && (
+              <p className="pc-roster__search-status">Sounding the deep…</p>
+            )}
+            {status === "error" && (
+              <p className="pc-roster__search-status">Could not reach the daemon.</p>
+            )}
+            {status === "idle" && query.trim() === "" && (
+              <p className="pc-roster__search-status">Type part of a session id.</p>
+            )}
+            {status === "ready" && hits.length === 0 && (
+              <p className="pc-roster__search-status">No sessions match.</p>
+            )}
+            {hits.map((hit) => (
+              <button
+                key={hit.id}
+                type="button"
+                role="option"
+                className="pc-roster__search-hit"
+                aria-selected={false}
+                onClick={() => pick(hit.id)}
+              >
+                <span className="pc-roster__search-hit-id" title={hit.id}>
+                  {hit.label}
+                </span>
+                <span className="pc-roster__search-hit-meta">{hit.taskCount}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function SessionSelector({
   sessions,
   selectedSessionId,
   onSelectSession,
+  searchSessions,
 }: {
   sessions: RosterSessionOption[];
   selectedSessionId: string | null;
   onSelectSession: (id: string | null) => void;
+  searchSessions: (query: string) => Promise<RosterSessionSearchHit[]>;
 }) {
   if (sessions.length === 0) return null;
   return (
@@ -109,6 +263,7 @@ function SessionSelector({
           <span className="pc-roster__session-count">{session.count}</span>
         </button>
       ))}
+      <SessionSearch searchSessions={searchSessions} onSelectSession={onSelectSession} />
     </div>
   );
 }
@@ -117,10 +272,11 @@ function SessionSelector({
  * Layer 2 — the fleet roster (design-manifest §4.5/§4.6). Tasks grouped by state
  * in attention order, with a session selector that both filters the groups
  * below (#76) and marks the future scene's camera-focus target, plus row
- * selection (feeds the inspector/scene). Plain props throughout: the hooks
- * layer does the grouping/ordering/filtering via `@useparley/core`'s attention
- * constants and owns the selection state. Memoized — the cockpit shell
- * re-renders every second for its clock, and all roster props are
+ * selection (feeds the inspector/scene). Recent chips are capped; older
+ * sessions are reached via the Find search (#88). Plain props throughout: the
+ * hooks layer does the grouping/ordering/filtering via `@useparley/core`'s
+ * attention constants and owns the selection state. Memoized — the cockpit
+ * shell re-renders every second for its clock, and all roster props are
  * identity-stable between snapshot updates.
  */
 export const RosterPanel = memo(function RosterPanel({
@@ -128,6 +284,7 @@ export const RosterPanel = memo(function RosterPanel({
   sessions,
   selectedSessionId,
   onSelectSession,
+  searchSessions,
   selectedTaskId,
   onSelectTask,
   totalTasks,
@@ -146,6 +303,7 @@ export const RosterPanel = memo(function RosterPanel({
         sessions={sessions}
         selectedSessionId={selectedSessionId}
         onSelectSession={onSelectSession}
+        searchSessions={searchSessions}
       />
       <div className="pc-roster__scroll">
         {groups.length === 0 ? (

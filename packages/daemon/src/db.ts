@@ -311,6 +311,55 @@ export function listTasks(db: DatabaseHandle): TaskRow[] {
     .map((row) => asRow<TaskRow>(row));
 }
 
+/**
+ * One orchestrator session aggregated from tasks (#88) — the shape behind
+ * `GET /sessions`.
+ */
+export interface SessionSummary {
+  id: string;
+  last_activity_at: string;
+  task_count: number;
+}
+
+/**
+ * Distinct orchestrator sessions known via tasks, most-recently-active first
+ * (#88). Optional `query` filters by id substring (case-insensitive). Null /
+ * empty session ids are excluded.
+ */
+export function listSessions(db: DatabaseHandle, query?: string): SessionSummary[] {
+  const q = query?.trim() ?? "";
+  if (q === "") {
+    return db
+      .prepare(
+        `SELECT orchestrator_session_id AS id,
+                MAX(updated_at) AS last_activity_at,
+                COUNT(*) AS task_count
+         FROM tasks
+         WHERE orchestrator_session_id IS NOT NULL AND orchestrator_session_id != ''
+         GROUP BY orchestrator_session_id
+         ORDER BY last_activity_at DESC, id ASC`,
+      )
+      .all()
+      .map((row) => asRow<SessionSummary>(row));
+  }
+  // SQLite LIKE is case-insensitive for ASCII under the default NOCASE-ish
+  // behaviour only with COLLATE NOCASE; bind a lowercased pattern and lower()
+  // the column so substring match is case-insensitive regardless of collation.
+  return db
+    .prepare(
+      `SELECT orchestrator_session_id AS id,
+              MAX(updated_at) AS last_activity_at,
+              COUNT(*) AS task_count
+       FROM tasks
+       WHERE orchestrator_session_id IS NOT NULL AND orchestrator_session_id != ''
+         AND lower(orchestrator_session_id) LIKE ?
+       GROUP BY orchestrator_session_id
+       ORDER BY last_activity_at DESC, id ASC`,
+    )
+    .all(`%${q.toLowerCase()}%`)
+    .map((row) => asRow<SessionSummary>(row));
+}
+
 /** Fetch one task by exact id. */
 export function getTask(db: DatabaseHandle, id: string): TaskRow | undefined {
   const row = db.prepare(`SELECT ${TASK_COLUMNS} FROM tasks WHERE id = ?`).get(id);

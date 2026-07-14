@@ -154,6 +154,7 @@
   flex-wrap: wrap;
   gap: 6px;
   padding: 8px 12px 2px;
+  align-items: center;
 }
 .pc-roster__session {
   display: inline-flex;
@@ -183,6 +184,113 @@
   font-family: var(--font-mono);
   color: inherit;
   opacity: 0.75;
+}
+/* Session search well (#88) — sits in the chip row; popover is a small parchment
+   chart of older session ids, same brass frame language as the chips. */
+.pc-roster__search {
+  position: relative;
+  display: inline-flex;
+}
+.pc-roster__session--search {
+  font-variant: small-caps;
+  letter-spacing: 0.04em;
+}
+.pc-roster__search-pop {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 20;
+  width: min(240px, 70vw);
+  padding: 8px;
+  border-radius: var(--radius-sm, 6px);
+  border: 1px solid var(--brass-frame);
+  background: linear-gradient(180deg, var(--plate-top) 0%, var(--plate-bottom) 100%);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(240, 194, 90, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.pc-roster__search-label {
+  font-family: var(--font-display);
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-label);
+}
+.pc-roster__search-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 5px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--plate-well-border);
+  background: var(--input-bg);
+  color: var(--ink-cream);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  outline: none;
+}
+.pc-roster__search-input::placeholder {
+  color: var(--ink-ghost);
+}
+.pc-roster__search-input:focus {
+  border-color: var(--brass-mid);
+  box-shadow: 0 0 0 1px var(--brass-tint-12, rgba(240, 194, 90, 0.18));
+}
+.pc-roster__search-results {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 160px;
+  overflow-y: auto;
+}
+.pc-roster__search-status {
+  margin: 0;
+  padding: 4px 2px;
+  font-family: var(--font-body);
+  font-size: 10.5px;
+  color: var(--ink-faint);
+  font-style: italic;
+}
+.pc-roster__search-hit {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 4px 6px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--ink-warm);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  cursor: pointer;
+  text-align: left;
+  transition: var(--ease);
+}
+.pc-roster__search-hit:hover,
+.pc-roster__search-hit:focus-visible {
+  border-color: var(--brass-frame);
+  background: var(--brass-tint-12, rgba(240, 194, 90, 0.12));
+  color: var(--brass);
+  outline: none;
+}
+.pc-roster__search-hit-id {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pc-roster__search-hit-meta {
+  flex: 0 0 auto;
+  font-size: 10px;
+  color: var(--ink-label);
+  opacity: 0.85;
+}
+@media (prefers-reduced-motion: reduce) {
+  .pc-roster__session,
+  .pc-roster__search-hit {
+    transition: none;
+  }
 }
 .pc-roster__group-head {
   display: flex;

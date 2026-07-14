@@ -9,6 +9,7 @@ import { DaemonRequestError } from "./client.js";
 import type {
   CleanResponse,
   HealthResponse,
+  SessionsResponse,
   StreamEvent,
   TaskAck,
   TaskDetailResponse,
@@ -85,6 +86,16 @@ export class ParleyClient {
   /** `GET /tasks` — every task plus the atomic "start from now" seq baseline. */
   listTasks(): Promise<TasksResponse> {
     return this.request<TasksResponse>("/tasks");
+  }
+
+  /**
+   * `GET /sessions` — every orchestrator session known via tasks, most-recent
+   * first (#88). Pass `q` to filter by id substring (case-insensitive).
+   */
+  listSessions(query?: string): Promise<SessionsResponse> {
+    const q = query?.trim() ?? "";
+    const path = q === "" ? "/sessions" : `/sessions?q=${encodeURIComponent(q)}`;
+    return this.request<SessionsResponse>(path);
   }
 
   /** `GET /tasks/:ref` — a task's envelope alongside its raw row. */
