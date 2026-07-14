@@ -7,6 +7,9 @@ import { ParleyRibbon } from "./effects/ParleyRibbon.js";
 import { PlantedFlag } from "./effects/PlantedFlag.js";
 import { Wreck } from "./effects/Wreck.js";
 
+/** Shared SVG-space anchor for artwork planted at the rocky mound's peak. */
+const MOUND_APEX = { x: 70, y: 32 } as const;
+
 /** One task as the scene renders it — the island's data. Defined in the scene
  * layer (plain props, no core import); the app's projection is structurally
  * compatible and passes straight through. */
@@ -28,7 +31,7 @@ function hasShip(state: string): boolean {
 
 /** The rock-and-sand island silhouette with a palm and shore foam — the same
  * for every state; the state layers ride on top. */
-function IslandBody({ name }: { name: string }) {
+function IslandBody({ name, completed }: { name: string; completed: boolean }) {
   return (
     <>
       <span className="pc-island__foam" aria-hidden="true" />
@@ -36,8 +39,12 @@ function IslandBody({ name }: { name: string }) {
         {/* sand beach */}
         <ellipse cx="70" cy="80" rx="60" ry="14" fill="var(--parchment-bg)" />
         {/* rocky mound, two-tone */}
-        <path d="M26 80 Q40 34 70 32 Q100 34 114 80 Z" fill="var(--brass-shadow)" />
+        <path
+          d={`M26 80 Q40 34 ${MOUND_APEX.x} ${MOUND_APEX.y} Q100 34 114 80 Z`}
+          fill="var(--brass-shadow)"
+        />
         <path d="M44 80 Q56 44 70 42 Q86 46 96 80 Z" fill="var(--brass-frame)" opacity="0.9" />
+        {completed && <PlantedFlag anchorX={MOUND_APEX.x} anchorY={MOUND_APEX.y} />}
         {/* palm — trunk + fronds */}
         <path d="M74 46 Q70 30 66 18" stroke="var(--brass-shadow)" strokeWidth="3" fill="none" strokeLinecap="round" />
         <g fill="var(--state-running)">
@@ -64,17 +71,33 @@ function IslandBody({ name }: { name: string }) {
  * transitions; everything ambient (foam, orbit, flare pulse, fog drift) is a
  * compositor keyframe.
  */
-export function Island({ task }: { task: IslandTask }) {
+export interface IslandProps {
+  task: IslandTask;
+  onSelectTask: (taskId: string) => void;
+}
+
+export function Island({ task, onSelectTask }: IslandProps) {
   const { state } = task;
   const meta = stateMetaFor(state);
 
   return (
-    <div className="pc-island" data-state={state} role="img" aria-label={`${task.name} — ${meta.label}`}>
+    <div
+      className="pc-island"
+      data-state={state}
+      role="button"
+      tabIndex={0}
+      aria-label={`${task.name} — ${meta.label}`}
+      onClick={() => onSelectTask(task.id)}
+      onKeyDown={(event) => {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        event.preventDefault();
+        onSelectTask(task.id);
+      }}
+    >
       <div className="pc-island__rise">
         {state === "awaiting_answer" && <Flare />}
-        <IslandBody name={task.name} />
+        <IslandBody name={task.name} completed={state === "completed"} />
         {state === "stalled" && <Fog />}
-        {state === "completed" && <PlantedFlag />}
         {state === "failed" && <Wreck />}
       </div>
       {hasShip(state) && (

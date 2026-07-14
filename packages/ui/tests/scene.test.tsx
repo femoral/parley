@@ -1,10 +1,12 @@
 /** @vitest-environment happy-dom */
-import { afterEach, describe, expect, it } from "vitest";
-import { cleanup, render } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { Island, Scene, Ship, type IslandTask } from "../src/scene/index.js";
 import type { SessionRegionData } from "../src/scene/SessionRegion.js";
 
 afterEach(cleanup);
+
+const noop = () => undefined;
 
 function island(state: string, overrides: Partial<IslandTask> = {}): IslandTask {
   return {
@@ -31,14 +33,14 @@ const ALL_STATES = [
 describe("Island renders its state through a single data-state (#69)", () => {
   it("tags every island with its canonical state on data-state", () => {
     for (const state of ALL_STATES) {
-      const { container } = render(<Island task={island(state)} />);
+      const { container } = render(<Island task={island(state)} onSelectTask={noop} />);
       expect(container.querySelector(".pc-island")?.getAttribute("data-state")).toBe(state);
       cleanup();
     }
   });
 
   it("pending — rising island, no ship, no terminal or attention effect", () => {
-    const { container } = render(<Island task={island("pending")} />);
+    const { container } = render(<Island task={island("pending")} onSelectTask={noop} />);
     expect(container.querySelector(".pc-island__rise")).toBeTruthy();
     expect(container.querySelector(".pc-sloop")).toBeNull();
     expect(container.querySelector(".pc-orbit")).toBeNull();
@@ -48,7 +50,7 @@ describe("Island renders its state through a single data-state (#69)", () => {
   });
 
   it("running — a sloop under way with a wake, no attention/terminal effects", () => {
-    const { container } = render(<Island task={island("running")} />);
+    const { container } = render(<Island task={island("running")} onSelectTask={noop} />);
     expect(container.querySelector(".pc-orbit[data-state='running']")).toBeTruthy();
     expect(container.querySelector(".pc-sloop")).toBeTruthy();
     expect(container.querySelector(".pc-wake")).toBeTruthy();
@@ -57,7 +59,7 @@ describe("Island renders its state through a single data-state (#69)", () => {
   });
 
   it("awaiting_answer — anchored sloop, flare, and PARLEY! ribbon", () => {
-    const { container } = render(<Island task={island("awaiting_answer")} />);
+    const { container } = render(<Island task={island("awaiting_answer")} onSelectTask={noop} />);
     expect(container.querySelector(".pc-orbit[data-state='awaiting_answer']")).toBeTruthy();
     expect(container.querySelector(".pc-anchor")).toBeTruthy();
     expect(container.querySelector(".pc-flare")).toBeTruthy();
@@ -66,35 +68,38 @@ describe("Island renders its state through a single data-state (#69)", () => {
   });
 
   it("stalled — a fog bank rolls over the adrift ship", () => {
-    const { container } = render(<Island task={island("stalled")} />);
+    const { container } = render(<Island task={island("stalled")} onSelectTask={noop} />);
     expect(container.querySelector(".pc-fog")).toBeTruthy();
     expect(container.querySelector(".pc-orbit[data-state='stalled']")).toBeTruthy();
     expect(container.querySelector(".pc-flare")).toBeNull();
   });
 
   it("completed — a planted flag, ship gone", () => {
-    const { container } = render(<Island task={island("completed")} />);
-    expect(container.querySelector(".pc-flag")).toBeTruthy();
+    const { container } = render(<Island task={island("completed")} onSelectTask={noop} />);
+    const flag = container.querySelector(".pc-flag");
+    expect(flag).toBeTruthy();
+    expect(flag?.querySelector("line")?.getAttribute("x2")).toBe("70");
+    expect(flag?.querySelector("line")?.getAttribute("y2")).toBe("32");
     expect(container.querySelector(".pc-sloop")).toBeNull();
     expect(container.querySelector(".pc-wreck")).toBeNull();
   });
 
   it("failed — a shipwreck, ship gone", () => {
-    const { container } = render(<Island task={island("failed")} />);
+    const { container } = render(<Island task={island("failed")} onSelectTask={noop} />);
     expect(container.querySelector(".pc-wreck")).toBeTruthy();
     expect(container.querySelector(".pc-sloop")).toBeNull();
     expect(container.querySelector(".pc-flag")).toBeNull();
   });
 
   it("cancelled — the sloop sails off as the island sinks", () => {
-    const { container } = render(<Island task={island("cancelled")} />);
+    const { container } = render(<Island task={island("cancelled")} onSelectTask={noop} />);
     expect(container.querySelector(".pc-sloop--sailoff")).toBeTruthy();
     expect(container.querySelector(".pc-orbit")).toBeNull();
     expect(container.querySelector(".pc-flag")).toBeNull();
   });
 
   it("labels the island with its name and manifest state label for AT", () => {
-    const { container } = render(<Island task={island("awaiting_answer", { name: "sound-depths" })} />);
+    const { container } = render(<Island task={island("awaiting_answer", { name: "sound-depths" })} onSelectTask={noop} />);
     expect(container.querySelector(".pc-island")?.getAttribute("aria-label")).toBe(
       "sound-depths — AWAITING",
     );
@@ -139,22 +144,22 @@ const REGION: SessionRegionData = {
 
 describe("Scene lays out the active session's cove (#69)", () => {
   it("renders exactly one island per task of the session", () => {
-    const { container } = render(<Scene sessions={[REGION]} activeSessionId="sess-1" />);
+    const { container } = render(<Scene sessions={[REGION]} activeSessionId="sess-1" onSelectTask={noop} />);
     expect(container.querySelectorAll(".pc-island")).toHaveLength(3);
   });
 
   it("anchors a galleon in each session region", () => {
-    const { container } = render(<Scene sessions={[REGION]} activeSessionId="sess-1" />);
+    const { container } = render(<Scene sessions={[REGION]} activeSessionId="sess-1" onSelectTask={noop} />);
     expect(container.querySelector(".pc-galleon")).toBeTruthy();
   });
 
   it("travels the camera to the selected region (a transform offset that changes)", () => {
     const second: SessionRegionData = { id: "sess-2", label: "sess-2", tasks: [island("running", { id: "z" })] };
-    const first = render(<Scene sessions={[REGION, second]} activeSessionId="sess-1" />);
+    const first = render(<Scene sessions={[REGION, second]} activeSessionId="sess-1" onSelectTask={noop} />);
     const camAt = (c: HTMLElement) => (c.querySelector(".pc-world") as HTMLElement).style.transform;
     const atFirst = camAt(first.container);
     cleanup();
-    const secondRender = render(<Scene sessions={[REGION, second]} activeSessionId="sess-2" />);
+    const secondRender = render(<Scene sessions={[REGION, second]} activeSessionId="sess-2" onSelectTask={noop} />);
     const atSecond = camAt(secondRender.container);
     // Selecting the far session shifts the world plane — the camera has sailed.
     expect(atFirst).not.toBe(atSecond);
@@ -163,14 +168,24 @@ describe("Scene lays out the active session's cove (#69)", () => {
   });
 
   it("frames the first region for 'All hands' (null) rather than filtering", () => {
-    const { container } = render(<Scene sessions={[REGION]} activeSessionId={null} />);
+    const { container } = render(<Scene sessions={[REGION]} activeSessionId={null} onSelectTask={noop} />);
     expect(container.querySelectorAll(".pc-island")).toHaveLength(3);
     expect((container.querySelector(".pc-world") as HTMLElement).style.transform).toContain("translate(0px,");
   });
 
   it("shows the calm-tide empty state with no sessions", () => {
-    const { container } = render(<Scene sessions={[]} activeSessionId={null} />);
+    const { container } = render(<Scene sessions={[]} activeSessionId={null} onSelectTask={noop} />);
     expect(container.querySelector(".pc-scene-empty")).toBeTruthy();
     expect(container.querySelector(".pc-region")).toBeNull();
+  });
+
+  it("selects the task represented by a clicked island (#83)", () => {
+    const onSelectTask = vi.fn();
+    render(<Scene sessions={[REGION]} activeSessionId="sess-1" onSelectTask={onSelectTask} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "chart-the-bay — RUNNING" }));
+
+    expect(onSelectTask).toHaveBeenCalledOnce();
+    expect(onSelectTask).toHaveBeenCalledWith("a");
   });
 });

@@ -54,7 +54,11 @@ export function Cockpit() {
             </div>
             {/* Sea is the room's backdrop (#75) — no Plate card chrome. */}
             <div className="pc-scene">
-              <Scene sessions={snapshot.scene.sessions} activeSessionId={roster.selectedSessionId} />
+              <Scene
+                sessions={snapshot.scene.sessions}
+                activeSessionId={roster.selectedSessionId}
+                onSelectTask={roster.selectTask}
+              />
             </div>
           </section>
 

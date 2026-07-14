@@ -143,6 +143,11 @@
   position: relative;
   width: 150px;
   height: 128px;
+  cursor: pointer;
+  outline: none;
+}
+.pc-island:focus-visible {
+  filter: drop-shadow(0 0 5px var(--brass));
 }
 /* Rise on mount, sink on cancel — finite CSS transitions. `both` holds the end
    frame, so reduced-motion (which collapses the duration) lands on the risen
@@ -580,13 +585,8 @@
 
 /* ── Effect: completed flag ────────────────────────────────────────────── */
 .pc-flag {
-  position: absolute;
-  left: 56%;
-  top: -2px;
-  width: 26px;
-  height: auto;
   filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.4));
-  transform-origin: 6px 40px;
+  transform-box: view-box;
   animation: pc-flag-wave 3.4s ease-in-out infinite;
 }
 @keyframes pc-flag-wave {

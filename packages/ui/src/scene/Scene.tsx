@@ -10,6 +10,8 @@ export interface SceneProps {
   /** The roster's selected session (the camera target). `null` ("All hands")
    * frames the first region rather than filtering the sea. */
   activeSessionId: string | null;
+  /** Selects the task represented by a clicked island. */
+  onSelectTask: (taskId: string) => void;
 }
 
 /** Deterministic world layout: regions march along a row with a gentle vertical
@@ -28,7 +30,7 @@ const REGION_STAGGER_Y = 74;
  * only change on an SSE transition or a session switch — so the cove reconciles
  * only when the sea actually changes, keeping idle work at the compositor.
  */
-export const Scene = memo(function Scene({ sessions, activeSessionId }: SceneProps) {
+export const Scene = memo(function Scene({ sessions, activeSessionId, onSelectTask }: SceneProps) {
   if (sessions.length === 0) {
     return (
       <div className="pc-scene-view pc-scene-view--empty">
@@ -64,7 +66,13 @@ export const Scene = memo(function Scene({ sessions, activeSessionId }: ScenePro
       <Sea />
       <Camera offsetX={active.dx} offsetY={active.dy}>
         {placed.map(({ session, dx, dy }) => (
-          <SessionRegion key={session.id ?? "open-water"} session={session} dx={dx} dy={dy} />
+          <SessionRegion
+            key={session.id ?? "open-water"}
+            session={session}
+            dx={dx}
+            dy={dy}
+            onSelectTask={onSelectTask}
+          />
         ))}
       </Camera>
     </div>

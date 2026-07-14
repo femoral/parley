@@ -11,6 +11,7 @@ export interface SessionRegionData {
 
 export interface SessionRegionProps {
   session: SessionRegionData;
+  onSelectTask: (taskId: string) => void;
   /** World offset (px) of this region's centre — the camera translates to it. */
   dx: number;
   dy: number;
@@ -35,7 +36,7 @@ function slot(index: number, count: number): string {
  * its world coordinates by the {@link Camera}; islands are keyed by task id so
  * React mounts one on create (it rises) and unmounts it on clean (it's gone).
  */
-export function SessionRegion({ session, dx, dy }: SessionRegionProps) {
+export function SessionRegion({ session, onSelectTask, dx, dy }: SessionRegionProps) {
   const style = { transform: `translate(-50%, -50%) translate(${dx}px, ${dy}px)` };
   return (
     <div className="pc-region" style={style} aria-label={`Session ${session.label}`}>
@@ -45,7 +46,7 @@ export function SessionRegion({ session, dx, dy }: SessionRegionProps) {
       </div>
       {session.tasks.map((task, i) => (
         <div key={task.id} className="pc-island-slot" style={{ transform: slot(i, session.tasks.length) }}>
-          <Island task={task} />
+          <Island task={task} onSelectTask={onSelectTask} />
         </div>
       ))}
     </div>
