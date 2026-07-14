@@ -15,7 +15,6 @@ export { InboxPanel } from "./InboxPanel.js";
 export type { InboxPanelProps } from "./InboxPanel.js";
 export { Inspector } from "./Inspector/index.js";
 export type { InspectorProps } from "./Inspector/index.js";
-export { KitBand } from "./KitBand.js";
 export { LogStream } from "./LogStream.js";
 export type { LogStreamProps } from "./LogStream.js";
 export { ReportPanel } from "./ReportPanel.js";

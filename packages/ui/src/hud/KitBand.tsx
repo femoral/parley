@@ -2,6 +2,7 @@ import { memo, type CSSProperties } from "react";
 import { Button, Divider, Emblem, Plate, PlateHeader } from "../primitives/index.js";
 import { FACTIONS } from "../tokens/factions.js";
 import { ATTENTION_DISPLAY_ORDER, STATE_META } from "../tokens/state-meta.js";
+import "./KitBand.css";
 
 /**
  * Layer 2 — the HUD kit band (design-manifest §3's bottom strip / §4.21-23,

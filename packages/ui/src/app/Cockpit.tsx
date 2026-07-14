@@ -1,10 +1,10 @@
+import { lazy, Suspense } from "react";
 import {
   Cartouche,
   DayChip,
   HealthPanel,
   InboxPanel,
   Inspector,
-  KitBand,
   RosterPanel,
   SettingsBar,
 } from "../hud/index.js";
@@ -12,6 +12,10 @@ import { Scene } from "../scene/index.js";
 import { useCockpit } from "./hooks/index.js";
 import { CompassRose } from "./CompassRose.js";
 import "./cockpit.css";
+
+const DevKitBand = import.meta.env.DEV
+  ? lazy(() => import("../hud/KitBand.js").then(({ KitBand }) => ({ default: KitBand })))
+  : null;
 
 /**
  * Layer 4 — the cockpit shell. Pure presentation: it reads one hook
@@ -69,7 +73,11 @@ export function Cockpit() {
           onToggleShowKit={settings.toggleShowKit}
           onToggleFollowLogs={settings.toggleFollowLogs}
         />
-        {settings.showKit && <KitBand />}
+        {DevKitBand && settings.showKit && (
+          <Suspense fallback={null}>
+            <DevKitBand />
+          </Suspense>
+        )}
       </div>
     </div>
   );

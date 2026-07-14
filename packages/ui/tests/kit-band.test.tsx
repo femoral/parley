@@ -1,7 +1,7 @@
 /** @vitest-environment happy-dom */
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
-import { KitBand } from "../src/hud/index.js";
+import { KitBand } from "../src/hud/KitBand.js";
 import { FACTIONS } from "../src/tokens/factions.js";
 import { STATE_META } from "../src/tokens/state-meta.js";
 

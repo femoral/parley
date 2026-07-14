@@ -39,14 +39,16 @@ export const SettingsBar = memo(function SettingsBar({
       >
         <span aria-hidden="true">✦</span> Ornaments
       </button>
-      <button
-        type="button"
-        className={`pc-settings__toggle${showKit ? " pc-settings__toggle--on" : ""}`}
-        aria-pressed={showKit}
-        onClick={onToggleShowKit}
-      >
-        <span aria-hidden="true">⚒</span> Kit band <span className="pc-settings__hint">dev</span>
-      </button>
+      {import.meta.env.DEV && (
+        <button
+          type="button"
+          className={`pc-settings__toggle${showKit ? " pc-settings__toggle--on" : ""}`}
+          aria-pressed={showKit}
+          onClick={onToggleShowKit}
+        >
+          <span aria-hidden="true">⚒</span> Kit band <span className="pc-settings__hint">dev</span>
+        </button>
+      )}
       <button
         type="button"
         className={`pc-settings__toggle${followLogs ? " pc-settings__toggle--on" : ""}`}
