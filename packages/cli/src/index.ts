@@ -11,6 +11,7 @@ import { runLogs } from "./commands/logs.js";
 import { runModels } from "./commands/models.js";
 import { runSkills } from "./commands/skills.js";
 import { runStatus } from "./commands/tasks.js";
+import { runUi } from "./commands/ui.js";
 import { runWatch } from "./commands/watch.js";
 
 const HELP = `parley — delegate tasks to agent CLIs
@@ -65,6 +66,7 @@ Usage:
   parley daemon stop            Stop the background daemon
   parley daemon status          Report daemon port/pid
   parley daemon <cmd> [--json]
+  parley ui [--no-open]        Print the cockpit URL and open it in a browser
   parley skills install         Install the orchestrator skill into a skill dir
     --scope global|project    Where to install (skips the prompt)
     --layout claude|agents|<path>
@@ -114,6 +116,8 @@ export async function run(argv: string[], ctx: CliContext): Promise<number> {
       return runModels(ctx, rest);
     case "daemon":
       return runDaemon(ctx, rest);
+    case "ui":
+      return runUi(ctx, rest);
     case "skills":
       return runSkills(ctx, rest);
     default:

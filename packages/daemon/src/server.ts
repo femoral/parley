@@ -538,6 +538,7 @@ function createHandler(engine: TaskEngine, uiBundleDir: string | null): http.Req
           pid: process.pid,
           version: DAEMON_VERSION,
           started_at: startedAt,
+          ui_available: uiBundleDir !== null,
         });
         return;
       }

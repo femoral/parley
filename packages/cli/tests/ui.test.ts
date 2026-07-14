@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { cleanupHome, makeHome, readDiscovery, runCli } from "./helpers.js";
+import { cleanupHome, makeHome, readDiscovery, runCli, waitFor } from "./helpers.js";
 
 let home: string;
 const scratchDirs: string[] = [];
@@ -187,5 +187,58 @@ describe("UI bundle serving and discovery (#64)", () => {
     // Served the SPA fallback, not the symlink target.
     expect(leak.status).toBe(200);
     expect(await leak.text()).toBe("<html>bundle</html>");
+  });
+});
+
+describe("parley ui (#87)", () => {
+  it("starts the daemon and prints the installed cockpit URL without opening it", async () => {
+    installPackage("@useparley/ui", REAL_UI_PACKAGE_DIR);
+
+    const res = await runCli(["ui", "--no-open"], home, { extraEnv: { NODE_PATH: "" } });
+
+    expect(res.code).toBe(0);
+    expect(res.stderr).toBe("");
+    const discovery = readDiscovery(home);
+    expect(discovery).not.toBeNull();
+    expect(res.stdout).toBe(`http://127.0.0.1:${discovery!.port}/\n`);
+  });
+
+  it("prints the cockpit URL and opens it with the platform browser launcher", async () => {
+    installPackage("@useparley/ui", REAL_UI_PACKAGE_DIR);
+    const bin = scratchDir();
+    const opened = path.join(bin, "opened.txt");
+    const opener = path.join(bin, process.platform === "darwin" ? "open" : "xdg-open");
+    fs.writeFileSync(opener, `#!/bin/sh\nprintf '%s' "$1" > "${opened}"\n`);
+    fs.chmodSync(opener, 0o755);
+
+    const res = await runCli(["ui"], home, {
+      extraEnv: { NODE_PATH: "", PATH: `${bin}:${process.env.PATH ?? ""}` },
+    });
+
+    expect(res.code).toBe(0);
+    expect(res.stderr).toBe("");
+    const url = res.stdout.trim();
+    await waitFor(() => fs.existsSync(opened), "browser opener invocation");
+    expect(fs.readFileSync(opened, "utf8")).toBe(url);
+  });
+
+  it("still succeeds and prints the URL when the browser cannot be launched", async () => {
+    installPackage("@useparley/ui", REAL_UI_PACKAGE_DIR);
+
+    const res = await runCli(["ui"], home, {
+      extraEnv: { NODE_PATH: "", PATH: scratchDir() },
+    });
+
+    expect(res.code).toBe(0);
+    expect(res.stdout).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/\n$/);
+  });
+
+  it("reports how to install a cockpit when the daemon has no UI", async () => {
+    const res = await runCli(["ui", "--no-open"], home, { extraEnv: { NODE_PATH: "" } });
+
+    expect(res.code).toBe(1);
+    expect(res.stdout).toBe("");
+    expect(res.stderr).toContain("No Parley UI is installed");
+    expect(res.stderr).toContain("@useparley/ui");
   });
 });
