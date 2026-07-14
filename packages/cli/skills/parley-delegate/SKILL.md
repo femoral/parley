@@ -46,32 +46,52 @@ Parley runs a child agent (codex or grok) in an isolated git worktree and hands 
 
 ## Fan-out: several tasks in parallel
 
-Each task gets its own worktree, so parallel tasks never collide. Delegate all without `--wait`, then attach to each in turn:
+Each task gets its own worktree, so parallel tasks never collide. Delegate all without `--wait`:
 
 ```
 parley delegate -v codex -n task-a "<brief A>"     # → {task_id, name, state:"pending"}
 parley delegate -v grok  -n task-b "<brief B>"
-parley status                                       # task table
+parley status                                       # one-off table; NOT a wait mechanism
 parley status task-a --json | jq '.report'          # one task is an object; inspect its completed report
 ```
 
-A detached task that asks a question waits up to `--answer-timeout` (default 30m), then stalls — recoverable. Drive the whole set with the attention-inbox ack loop rather than sampling `status` on an interval:
+Then drive the **entire** fan-out with one mechanism: the `watch` loop below. Do not poll `status` on an interval, do not sleep-and-check, do not attach `--wait` to tasks one at a time.
+
+### The watch loop — the one intended way to wait
+
+`watch` is an **acked attention inbox** for the orchestrator session (`--session`, else `PARLEY_SESSION_ID`, else the latest session). Each call blocks until something needs you, then returns exactly **one** event — the highest-priority pending one (`awaiting_answer` > `stalled` > `failed` > `completed`) — and exits with a code that tells you what it is. You handle that one event, then call `watch` again, acking the event you just handled. Repeat until exit 0.
 
 ```
-# Canonical fan-out loop (ADR-0007): level-triggered, priority-ordered, cannot hang.
 ev=$(parley watch --json); code=$?
 while [ "$code" -ne 0 ]; do
-  # act on $ev (exit 3 = question, 4 = stalled, 5 = failed, 6 = completed)
-  id=$(printf '%s' "$ev" | jq -r .seq)
-  # …handle, then ack and fetch the next pending event…
-  ev=$(parley watch --json --ack "$id"); code=$?
+  seq=$(printf '%s' "$ev" | jq -r .seq)        # the event id you will ack
+  # …handle per the table below…
+  ev=$(parley watch --json --ack "$seq"); code=$?
 done
-# exit 0 = all-done: every watched task terminal and every event acked
-
-parley watch --follow                 # no-ack JSONL firehose of every transition (UIs/debug)
+# exit 0 = all-done: every watched task terminal AND every event acked. The fan-out is drained.
 ```
 
-`watch` is an **acked attention inbox** for the orchestrator session (`--session`, else `PARLEY_SESSION_ID`, else the latest session). Each task contributes at most its *current* actionable state (`awaiting_answer` > `stalled` > `failed` > `completed`) until you ack that event id (the transition `seq`). Level-triggered: if a task is already waiting when you attach, `watch` returns immediately — no `--since` threading. `parley answer` implicitly consumes a question event (leaving `awaiting_answer` auto-resolves it). Positional task refs filter the session inbox. Exit codes: `0` all-done · `3` awaiting_answer · `4` stalled · `5` failed · `6` completed · `2` usage. The fan-out is done when the loop exits 0 *and* each completed branch was reviewed per step 4 — acking `completed` is how you drain the "merge the fan-out" work, not a poll.
+What each exit code means and what you must do before acking:
+
+| `$?` | event | your move | how it gets acked |
+|---|---|---|---|
+| 3 | `task.question` | `parley answer <task> --wait "<answer>"` | **automatic** — answering moves the task out of `awaiting_answer`, which resolves the event. Do not pass `--ack` for it. |
+| 4 | `task.stalled` | `parley answer <task> --wait "…"` resumes it | **automatic** on resume, same as 3 |
+| 5 | `task.failed` | triage (see "When a task fails") | **explicit**: next `watch --ack <seq>` — only after you've triaged |
+| 6 | `task.completed` | review the branch, merge-or-reject, typecheck, `parley clean` (delegate-loop step 4) | **explicit**: next `watch --ack <seq>` — only after the review is done |
+| 0 | — (all-done) | stop looping; nothing is pending and nothing is running | — |
+| 2 | usage error | fix your invocation | — |
+
+Rules that leave no room for interpretation:
+
+- **Ack means "I handled this", never "I saw this".** Ack a `completed` event only after its branch is reviewed and merged-or-rejected; ack a `failed` event only after triage. Acking early deletes your only reminder — the task drops out of the inbox and nothing will resurface it.
+- **Un-acked events redeliver.** If you crash or forget between delivery and ack, the next `watch` hands you the same event again. That is the safety net — lean on it; never ack defensively "to clear the queue".
+- **Exit 6 is not "done".** A completed task is *work for you* (review, merge, verify, clean). The fan-out is finished only at exit 0.
+- **Level-triggered, race-free.** An event already pending when `watch` starts returns immediately. There is no startup race and no sequence bookkeeping on your side; the only seq you ever touch is the one you pass back to `--ack`.
+- **`--until` and `--since` no longer exist** (removed in [#91](https://github.com/femoral/parley/issues/91); passing them is exit 2). Any doc, memory, or habit that mentions them predates ADR-0007 — the loop above replaces every use they had.
+- **Watch exit codes are not `delegate --wait` exit codes.** In `watch`, 0 is reserved for all-done, so `completed` is 6 and `failed` is 5. In `delegate --wait`/`answer --wait`, `completed` is 0 and `failed` is 1. Codes 3/4 mean the same thing everywhere.
+- **`--follow` is not the loop.** It streams every transition as JSONL with no acks and no priority — a firehose for UIs and debugging. Orchestrators use the default acked mode.
+- Positional task refs (`parley watch t1 t2`) narrow the inbox to those tasks; the default is every task in the session.
 
 **Merging multiple branches from the same fork point.** When several fan-out branches share a parent commit, only the first merge fast-forwards — the rest need real integration, not just `git merge`. The discipline that held up on a real 12-task fan-out: review each branch on its own, then cherry-pick its commit(s) onto the target branch **in dependency order** (prerequisites before dependents), resolving any conflicts at cherry-pick time and amending integration fixes straight into the picked commit rather than leaving a separate fixup commit. This keeps history linear and keeps each merged commit typecheck-clean on its own (see the typecheck note in step 4).
 
