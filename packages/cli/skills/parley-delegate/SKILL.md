@@ -11,7 +11,7 @@ Parley runs a child agent (codex or grok) in an isolated git worktree and hands 
 
 ## The delegate loop
 
-There is **one** flow for one task or many: `delegate` always returns immediately; `watch` is the only wait (ADR-0008). The single-task case is the fan-out loop with n=1.
+There is **one** flow for one task or many: `delegate` always returns immediately; `watch` is the only wait. The single-task case is the fan-out loop with n=1.
 
 1. **Write a self-contained brief.** The child sees only its worktree, your prompt, and `--context` files — none of your conversation. State the goal, constraints, and definition of done (including the project's real typecheck/test commands) in the prompt; pass supporting files with `--context <file>` (repeatable). Done when a stranger could execute the brief without asking you what it means.
 
@@ -52,7 +52,7 @@ Rules that leave no room for interpretation:
 - **Un-acked events redeliver.** If you crash or forget between delivery and ack, the next `watch` hands you the same event again. That is the safety net — lean on it; never ack defensively "to clear the queue".
 - **Exit 6 is not "done".** A completed task is *work for you* (review, merge, verify, clean). The loop is finished only at exit 0.
 - **Level-triggered, race-free.** An event already pending when `watch` starts returns immediately. There is no startup race and no sequence bookkeeping on your side; the only seq you ever touch is the one you pass back to `--ack`.
-- **`--wait` is removed** (ADR-0008 / [#93](https://github.com/femoral/parley/issues/93)); passing it is exit 2. **`--until` and `--since` no longer exist** either (removed in [#91](https://github.com/femoral/parley/issues/91)). Any doc, memory, or habit that mentions them predates the single-flow design — the loop above is the only wait path.
+- **There is no `--wait`, `--until`, or `--since`** — passing any of them is exit 2. A doc, memory, or habit that mentions them is outdated; the loop above is the only wait path.
 - **`--follow` is not the loop.** It streams every transition as JSONL with no acks and no priority — a firehose for UIs and debugging. Orchestrators use the default acked mode.
 - Positional task refs (`parley watch t1 t2`) narrow the inbox to those tasks; the default is every task in the session.
 
@@ -81,7 +81,6 @@ One-liner pointers — read the linked file only when its condition fires:
 
 - **Non-default task shapes** — structured `--report-schema` results, `--base-ref`/`--cwd`, sandbox postures, `--context` naming rules, the literal task-state vocabulary: read [task-shaping.md](task-shaping.md).
 - **Setting up a new orchestrating environment** (wiring `PARLEY_SESSION_ID` from your harness, e.g. a Claude Code hook): read [sessions.md](sessions.md).
-- **Vendor-specific child failures** (e.g. codex `git commit` failing in its worktree on older builds): read [vendor-notes.md](vendor-notes.md).
 
 ## When a task fails
 
