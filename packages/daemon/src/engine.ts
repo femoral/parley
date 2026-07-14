@@ -63,8 +63,28 @@ function isEventState(state: string): boolean {
 /** Default `--answer-timeout`: 30 minutes (spec §2). */
 export const DEFAULT_ANSWER_TIMEOUT_MS = 30 * 60 * 1000;
 
+/**
+ * After `submit_report` is accepted the task stays `running` until the vendor
+ * stream closes, so the final usage event can land in the same DB update as
+ * `completed` (#72). If the child never exits, complete with best-effort usage
+ * after this window — generous enough for trailing events (e.g. codex's
+ * `turn.completed`), short enough that a hung child does not park `--wait`
+ * for minutes. Override via `PARLEY_REPORT_ACCEPTED_FALLBACK_MS` for tests.
+ */
+export const REPORT_ACCEPTED_FALLBACK_MS = 30_000;
+
 /** How long a stopped child gets to exit on SIGTERM before SIGKILL. */
 const CHILD_STOP_GRACE_MS = 2_000;
+
+/** Resolve the post-report fallback window (env override for fast tests). */
+function reportAcceptedFallbackMs(): number {
+  const raw = process.env.PARLEY_REPORT_ACCEPTED_FALLBACK_MS;
+  if (raw !== undefined) {
+    const n = Number(raw);
+    if (Number.isFinite(n) && n >= 0) return n;
+  }
+  return REPORT_ACCEPTED_FALLBACK_MS;
+}
 
 /** What an `ask_orchestrator` call settles with: an answer, or a tool error. */
 type AskOutcome = { answer: string } | { error: string };
@@ -177,6 +197,11 @@ export class TaskEngine {
    */
   private readonly children = new Map<string, ChildProcess>();
   /**
+   * Fallback timers armed when a report is accepted while the vendor child is
+   * still live (#72). Fire `completeAcceptedReport` if the stream never closes.
+   */
+  private readonly reportFallbackTimers = new Map<string, NodeJS.Timeout>();
+  /**
    * Set once the daemon is going down: child exits stop being lifecycle events
    * (their tasks stay recorded `running`/`awaiting_answer`, and the *next*
    * daemon's startup sweep marks them `stalled` — the crash story, spec §3)
@@ -214,11 +239,11 @@ export class TaskEngine {
   }
 
   /**
-   * Whether a vendor child is still live for this task. A task's row can flip
-   * to `completed` (via `submitReport`) while its child keeps running and
-   * still writing to `vendor.jsonl` — the MCP call settles before the child's
-   * stdout closes — so this is the authoritative "no more log bytes can land"
-   * signal, not the row state alone (see `handleLogs`'s `eof` computation).
+   * Whether a vendor child is still live for this task. Normally `completed`
+   * is committed only at stream close (#72), but the post-report fallback can
+   * flip the row while the child is still running — so this is the
+   * authoritative "no more log bytes can land" signal, not the row state alone
+   * (see `handleLogs`'s `eof` computation).
    */
   hasLiveChild(taskId: string): boolean {
     return this.children.has(taskId);
@@ -400,16 +425,24 @@ export class TaskEngine {
 
   /**
    * Handle a `submit_report` MCP call for a task. Returns validation errors
-   * (bounced to the child as a tool error) or null on acceptance, which
-   * completes the task.
+   * (bounced to the child as a tool error) or null on acceptance.
+   *
+   * Acceptance stores the report and settles any parked question but does
+   * *not* transition to `completed` (#72): that happens atomically with the
+   * final usage when the vendor stream closes (or the post-report fallback
+   * fires). The task stays `running` until then so no observer can see
+   * `state: completed` with usage still in flight.
    */
   submitReport(taskId: string, payload: unknown): string[] | null {
     const task = getTask(this.db, taskId);
     if (!task) return [`unknown task: ${taskId}`];
-    // A settled task's child is gone (a stalled one was stopped) — a
-    // straggling report must not move the task out from under stall/resume.
+    // Settled tasks, or a prior accepted report while still `running` — a
+    // second/straggling report must not re-accept or move the task.
     if (SETTLED_STATES.has(task.state)) {
       return [`task ${taskId} is already ${task.state}`];
+    }
+    if (task.report !== null) {
+      return [`task ${taskId} already has an accepted report`];
     }
     const schema =
       parseJsonColumn<JsonSchema>(task.report_schema) ?? DEFAULT_REPORT_SCHEMA;
@@ -417,17 +450,69 @@ export class TaskEngine {
     if (errors.length > 0) return errors;
 
     // A misbehaving child may report over its own outstanding question —
-    // settle the parked call so its timer cannot stall a completed task.
+    // settle the parked call so its timer cannot stall the eventual completion.
     this.settlePending(taskId, { error: `task ${taskId} completed` });
+    // Store the report only. Stay `running` (or return from `awaiting_answer`
+    // to `running`) — completion waits for stream close / fallback.
+    const wasAwaiting = task.state === "awaiting_answer";
     updateTask(this.db, taskId, {
-      state: "completed",
       report: JSON.stringify(payload as Report),
+      question_id: null,
+      question: null,
+      ...(wasAwaiting ? { state: "running" as const } : {}),
+    });
+    if (wasAwaiting) this.transitioned(taskId);
+    this.scheduleReportFallback(taskId);
+    return null;
+  }
+
+  /**
+   * Commit `completed` + `completed_at` + final usage in one update and notify
+   * waiters (#72). No-op when the task is already terminal, has no accepted
+   * report, or the daemon is shutting down.
+   */
+  private completeAcceptedReport(
+    taskId: string,
+    usage?: Record<string, number>,
+  ): void {
+    if (this.shuttingDown) return;
+    this.clearReportFallback(taskId);
+    const task = getTask(this.db, taskId);
+    if (!task || TERMINAL_STATES.has(task.state)) return;
+    if (task.report === null) return;
+
+    const patch: TaskPatch = {
+      state: "completed",
       completed_at: new Date().toISOString(),
       question_id: null,
       question: null,
-    });
+    };
+    // Prefer the caller's in-memory accumulation (stream-close path); fall
+    // back to whatever is already on the row (fallback timer path).
+    if (usage !== undefined) {
+      patch.usage = JSON.stringify(usage);
+    }
+    updateTask(this.db, taskId, patch);
     this.transitioned(taskId);
-    return null;
+  }
+
+  /** Arm the post-report fallback so a hung child cannot leave the task running forever. */
+  private scheduleReportFallback(taskId: string): void {
+    this.clearReportFallback(taskId);
+    const timer = setTimeout(() => {
+      this.reportFallbackTimers.delete(taskId);
+      // Best-effort usage already on the row (possibly null).
+      this.completeAcceptedReport(taskId);
+    }, reportAcceptedFallbackMs());
+    timer.unref();
+    this.reportFallbackTimers.set(taskId, timer);
+  }
+
+  private clearReportFallback(taskId: string): void {
+    const timer = this.reportFallbackTimers.get(taskId);
+    if (!timer) return;
+    clearTimeout(timer);
+    this.reportFallbackTimers.delete(taskId);
   }
 
   /**
@@ -459,6 +544,11 @@ export class TaskEngine {
     if (!task) return { error: `unknown task: ${taskId}` };
     if (SETTLED_STATES.has(task.state)) {
       return { error: `task ${taskId} is already ${task.state}` };
+    }
+    // Report already accepted (task still `running` until stream close) — same
+    // settled guard as submit_report (#72).
+    if (task.report !== null) {
+      return { error: `task ${taskId} already has an accepted report` };
     }
     // One outstanding question per task holds by construction (the child blocks
     // while asking); guard anyway against a misbehaving child.
@@ -534,6 +624,11 @@ export class TaskEngine {
    */
   killChildren(): void {
     this.shuttingDown = true;
+    // Disarm post-report fallbacks so they cannot flip rows while the DB is
+    // closing; live tasks stay as-recorded for the next daemon's sweep.
+    for (const taskId of this.reportFallbackTimers.keys()) {
+      this.clearReportFallback(taskId);
+    }
     for (const child of this.children.values()) {
       try {
         child.kill("SIGKILL");
@@ -626,6 +721,8 @@ export class TaskEngine {
     // Free any parked `ask_orchestrator` promise; the child is about to die, so
     // nothing is left to receive its tool result.
     this.pending.delete(task.id);
+    // Drop a post-report fallback so it cannot complete after we cancel (#72).
+    this.clearReportFallback(task.id);
     // Terminate the child. Its own `close` handler fires afterwards, but the
     // `cancelled` state is terminal so it will not be overwritten with `failed`.
     const child = this.children.get(task.id);
@@ -811,6 +908,12 @@ export class TaskEngine {
   private fail(taskId: string, error: string): void {
     const task = getTask(this.db, taskId);
     if (!task || TERMINAL_STATES.has(task.state)) return;
+    // An accepted report wins over any subsequent failure path (#72).
+    if (task.report !== null) {
+      this.completeAcceptedReport(taskId);
+      return;
+    }
+    this.clearReportFallback(taskId);
     updateTask(this.db, taskId, {
       state: "failed",
       error,
@@ -1110,6 +1213,7 @@ export class TaskEngine {
         if (current) this.children.delete(task.id);
         closeStreams();
         if (!this.shuttingDown && current) {
+          // fail() promotes an already-accepted report to completed (#72).
           this.fail(task.id, `failed to spawn vendor child: ${errorMessage(err)}`);
         }
         resolve();
@@ -1134,18 +1238,24 @@ export class TaskEngine {
         });
         const row = getTask(this.db, task.id);
         if (row && !SETTLED_STATES.has(row.state)) {
-          // `completed` strictly requires submit_report (spec §2): exit
-          // without one is a failure, whatever the exit code says. A `stalled`
-          // exit is the stall stopping the child, not a failure. Codex exit
-          // codes are 0/1 only, so any `turn.failed`/`error` detail from the
-          // stream is the real diagnosis — append it when present.
-          let detail = `vendor child exited (code ${code ?? "?"}) without submitting a report`;
-          if (lastError !== undefined) detail += `: ${lastError}`;
-          // Surfaced even when a fatal error already explains the exit — a
-          // vendor approval gate cancelling submit_report is often the reason
-          // the report never landed even when the turn itself "succeeded".
-          if (lastDiag !== undefined) detail += ` [${lastDiag}]`;
-          this.fail(task.id, detail);
+          if (row.report !== null) {
+            // Accepted report wins over exit status (#72): commit completed +
+            // final accumulated usage atomically, then notify waiters.
+            this.completeAcceptedReport(task.id, usage);
+          } else {
+            // `completed` strictly requires submit_report (spec §2): exit
+            // without one is a failure, whatever the exit code says. A `stalled`
+            // exit is the stall stopping the child, not a failure. Codex exit
+            // codes are 0/1 only, so any `turn.failed`/`error` detail from the
+            // stream is the real diagnosis — append it when present.
+            let detail = `vendor child exited (code ${code ?? "?"}) without submitting a report`;
+            if (lastError !== undefined) detail += `: ${lastError}`;
+            // Surfaced even when a fatal error already explains the exit — a
+            // vendor approval gate cancelling submit_report is often the reason
+            // the report never landed even when the turn itself "succeeded".
+            if (lastDiag !== undefined) detail += ` [${lastDiag}]`;
+            this.fail(task.id, detail);
+          }
         }
         // The child has exited, so a cleanly completed task's untouched worktree
         // is reclaimed; a failed/cancelled task retains its worktree and logs

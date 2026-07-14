@@ -46,7 +46,9 @@ function buildMcpServer(engine: TaskEngine, taskId: string): McpServer {
         };
       }
       return {
-        content: [{ type: "text" as const, text: "report accepted; task completed" }],
+        // Task stays running until the vendor stream closes (#72); the report
+        // is stored and will complete the task with final usage then.
+        content: [{ type: "text" as const, text: "report accepted" }],
       };
     },
   );

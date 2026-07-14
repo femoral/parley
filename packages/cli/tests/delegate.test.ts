@@ -195,6 +195,143 @@ describe("eval_expected envelope field (#45)", () => {
   });
 });
 
+/**
+ * Deferred completion (#72): `submit_report` stores the report but leaves the
+ * task `running` until the vendor stream closes, so `completed` and final
+ * usage commit atomically. Fallback completes a hung child after a short window.
+ */
+describe("deferred completed + usage atomicity (#72)", () => {
+  it("--wait carries final usage emitted AFTER submit_report returns, never null", async () => {
+    // Reproduces the race: under the old code, submit_report flipped completed
+    // immediately and --wait could observe usage: null before the trailing
+    // usage event landed. Usage after the MCP call must still appear on the
+    // completed envelope.
+    const cwd = taskDir([
+      { emit: { type: "session", session_id: "sess-late-usage" } },
+      { submit_report: REPORT },
+      // Beat after the report is accepted — usage would race under early complete.
+      { sleep: 150 },
+      { emit: { type: "usage", input_tokens: 777, output_tokens: 42 } },
+    ]);
+    const result = await runCli(
+      ["delegate", "-v", "fake", "--cwd", cwd, "--wait", "late usage"],
+      home,
+    );
+
+    expect(result.code).toBe(0);
+    const envelope = JSON.parse(result.stdout);
+    expect(envelope.state).toBe("completed");
+    expect(envelope.report).toEqual(REPORT);
+    expect(envelope.usage).toEqual({ input_tokens: 777, output_tokens: 42 });
+    expect(typeof envelope.duration_ms).toBe("number");
+    // completed_at is the stream-close commit, so duration includes the sleep.
+    expect(envelope.duration_ms).toBeGreaterThanOrEqual(100);
+  });
+
+  it("fallback: hung child after accepted report completes with best-effort usage", async () => {
+    // Child accepts a report then never exits. Short injectable fallback window
+    // so the test is fast; usage emitted before the hang is kept.
+    const cwd = taskDir([
+      { emit: { type: "usage", input_tokens: 11, output_tokens: 3 } },
+      { submit_report: REPORT },
+      // Stay alive past the fallback window so only the timer can complete.
+      { sleep: 60_000 },
+    ]);
+    const result = await runCli(
+      ["delegate", "-v", "fake", "--cwd", cwd, "--wait", "hung after report"],
+      home,
+      { extraEnv: { PARLEY_REPORT_ACCEPTED_FALLBACK_MS: "200" } },
+    );
+
+    expect(result.code).toBe(0);
+    const envelope = JSON.parse(result.stdout);
+    expect(envelope.state).toBe("completed");
+    expect(envelope.report).toEqual(REPORT);
+    expect(envelope.usage).toEqual({ input_tokens: 11, output_tokens: 3 });
+  });
+
+  it("second submit_report after acceptance is rejected", async () => {
+    const second = {
+      summary: "should bounce",
+      outcome: "partial" as const,
+      files_changed: ["nope.ts"],
+    };
+    const cwd = taskDir([
+      { submit_report: REPORT },
+      { submit_report: second },
+      { emit: { type: "usage", input_tokens: 1, output_tokens: 1 } },
+    ]);
+    const result = await runCli(
+      ["delegate", "-v", "fake", "--cwd", cwd, "--wait", "double report"],
+      home,
+    );
+
+    expect(result.code).toBe(0);
+    const envelope = JSON.parse(result.stdout);
+    expect(envelope.state).toBe("completed");
+    // First report wins.
+    expect(envelope.report).toEqual(REPORT);
+
+    const log = fs.readFileSync(path.join(home, "tasks", "t1", "vendor.jsonl"), "utf8");
+    const toolResults = log
+      .split("\n")
+      .filter((l) => l.includes('"tool_result"'))
+      .map((l) => JSON.parse(l) as { is_error: boolean; text: string });
+    expect(toolResults).toHaveLength(2);
+    expect(toolResults[0]!.is_error).toBe(false);
+    expect(toolResults[1]!.is_error).toBe(true);
+    expect(toolResults[1]!.text).toMatch(/already has an accepted report/);
+  });
+
+  it("nonzero exit after an accepted report still yields completed with the report", async () => {
+    const cwd = taskDir([
+      { submit_report: REPORT },
+      { emit: { type: "usage", input_tokens: 5, output_tokens: 2 } },
+      { exit: 1 },
+    ]);
+    const result = await runCli(
+      ["delegate", "-v", "fake", "--cwd", cwd, "--wait", "report then crash"],
+      home,
+    );
+
+    expect(result.code).toBe(0);
+    const envelope = JSON.parse(result.stdout);
+    expect(envelope.state).toBe("completed");
+    expect(envelope.report).toEqual(REPORT);
+    expect(envelope.error).toBeNull();
+    expect(envelope.usage).toEqual({ input_tokens: 5, output_tokens: 2 });
+  });
+
+  it("cancel inside the accepted-report window cancels like any running task", async () => {
+    const cwd = taskDir([
+      { submit_report: REPORT },
+      { sleep: 60_000 },
+    ]);
+    await runCli(["delegate", "-v", "fake", "-n", "cancel-after-report", "--cwd", cwd, "x"], home);
+    // Report is accepted while still running — cancel must win over completion.
+    await waitFor(
+      () => {
+        const logPath = path.join(home, "tasks", "t1", "vendor.jsonl");
+        try {
+          return fs.readFileSync(logPath, "utf8").includes('"tool_result"');
+        } catch {
+          return false;
+        }
+      },
+      "report accepted tool_result",
+    );
+    // Confirm still running with a stored report before cancelling.
+    const mid = JSON.parse((await runCli(["status", "t1", "--json"], home)).stdout)[0];
+    expect(mid.state).toBe("running");
+    expect(mid.report).toBeTruthy();
+
+    const cancel = await runCli(["cancel", "t1"], home);
+    expect(cancel.code).toBe(0);
+    const row = await waitForState(home, "t1", "cancelled");
+    expect(row.state).toBe("cancelled");
+  });
+});
+
 describe("delegate without --wait", () => {
   it("returns {task_id, name, state} immediately; task completes in background", async () => {
     const cwd = taskDir([{ sleep: 300 }, ...happyActions()]);

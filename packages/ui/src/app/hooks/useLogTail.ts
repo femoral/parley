@@ -28,7 +28,8 @@ function freshTailState(): TailState {
  * the daemon reports `eof`. Deliberately doesn't guess "done" from the task's
  * own state — `TaskLogResponse.eof` is the one source of truth (spec:
  * `stalled` is resumable and a `completed` row's child may not have fully
- * exited yet, so the daemon, not this hook, decides when the tail is final).
+ * exited yet (post-report fallback, #72), so the daemon, not this hook,
+ * decides when the tail is final).
  * Each chunk is classified incrementally ({@link LogAccumulator} — never
  * re-parsing the already-seen log) and an idle tick (empty chunk, no eof
  * flip) publishes nothing, so a long-running tail costs no re-render and no

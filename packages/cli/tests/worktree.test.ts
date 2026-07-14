@@ -51,7 +51,12 @@ function worktreePath(id: string, repoDir: string): string {
 
 describe("delegate creates an isolated worktree (default, no --cwd)", () => {
   it("cuts a worktree + branch from HEAD; child runs in it; envelope carries both", async () => {
-    const src = repo(happyActions());
+    // Touch a file so auto-remove does not reclaim the worktree before
+    // --wait returns (#72: completed + auto-remove both land at stream close).
+    const src = repo([
+      { write_file: { path: "keep.txt", contents: "x" } },
+      { submit_report: REPORT },
+    ]);
     const result = await runCli(
       ["delegate", "-v", "fake", "-n", "fix-auth", "--wait", "do it"],
       home,

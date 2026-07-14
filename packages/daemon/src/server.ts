@@ -228,8 +228,8 @@ async function handleEvents(
  * `TERMINAL_STATES` (`completed`/`failed`/`cancelled`) *and* its child has
  * actually exited — `stalled` is deliberately excluded (a `parley answer`
  * resume can append more to the same file later), and a `completed` row with
- * a still-open child (the MCP `submit_report` call settles before the child's
- * stdout closes) must not report final either. While not there yet, `eof` is
+ * a still-open child (the post-report fallback can complete before the child
+ * exits, #72) must not report final either. While not there yet, `eof` is
  * false even with an empty `chunk`, so a UI keeps polling. An unknown task ref
  * is a client error (404), matching the other `/tasks/:ref/*` routes.
  */

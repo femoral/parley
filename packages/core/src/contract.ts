@@ -157,11 +157,10 @@ export interface CleanResponse {
  * exited, so this response's `chunk` is the log's final tail. `stalled` is
  * deliberately excluded — it's resumable (`parley answer` can revive it and
  * append more to the same log) — and so is a `completed` row whose child
- * hasn't fully exited yet (a report can settle the task over MCP slightly
- * before the child's stdout closes). While not there yet, `eof` is false even
- * when `chunk` is empty (caught up for now, but more may still land) — a UI
- * tailing a task keeps polling (or re-fetches on SSE transitions) until `eof`
- * flips.
+ * hasn't fully exited yet (the post-report fallback can complete before the
+ * child exits). While not there yet, `eof` is false even when `chunk` is
+ * empty (caught up for now, but more may still land) — a UI tailing a task
+ * keeps polling (or re-fetches on SSE transitions) until `eof` flips.
  */
 export interface TaskLogResponse {
   chunk: string;
