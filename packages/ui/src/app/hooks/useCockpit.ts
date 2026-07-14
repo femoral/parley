@@ -35,13 +35,6 @@ export interface CockpitView {
   clock: string;
   /** Days the cove has been open (flavour: real elapsed days, min 1). */
   day: number;
-  /**
-   * The single v1 write (#67): `POST /tasks/:ref/answer`. Rejects with the
-   * daemon's error on failure — the inbox card catches it and stays put; on
-   * success the state flip arrives over SSE and `useSnapshot` re-projects the
-   * task out of the inbox, no reload.
-   */
-  answerTask: (id: string, text: string) => Promise<void>;
   /** The selected task's inspector payload (#68), or `null` with no selection. */
   inspector: InspectorTask | null;
   /** Persisted cockpit preferences (#70): ornaments, kit band, log follow. */
@@ -129,16 +122,6 @@ export function useCockpit(): CockpitView {
 
   const roster: RosterSelection = { selectedSessionId, selectedTaskId, selectSession, selectTask };
 
-  // Q&A history is durable on the server (#79) and rides `useTaskDetail`'s
-  // response — no client-side accumulation. The single write stays a plain
-  // POST; the next detail poll (or reselect) rehydrates the answered turn.
-  const answerTask = useCallback(
-    async (id: string, text: string): Promise<void> => {
-      await client.answer(id, text);
-    },
-    [client],
-  );
-
   const detail = useTaskDetail(client, selectedTaskId);
   const logs = useLogTail(client, selectedTaskId, settings.followLogs);
   // Memoized so the one-second clock tick doesn't mint a fresh InspectorTask
@@ -159,7 +142,6 @@ export function useCockpit(): CockpitView {
     roster,
     clock: formatClock(new Date(now)),
     day,
-    answerTask,
     inspector,
     settings,
   };

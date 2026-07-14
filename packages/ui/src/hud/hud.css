@@ -388,60 +388,6 @@
   color: var(--question-marker);
   font-style: normal;
 }
-.pc-inbox-card__input {
-  width: 100%;
-  resize: vertical;
-  padding: 8px 10px;
-  border-radius: var(--radius-control);
-  border: 1px solid var(--plate-well-border);
-  background: var(--input-bg);
-  color: var(--ink-parchment);
-  font-family: var(--font-body);
-  font-size: 12px;
-  line-height: 1.4;
-}
-.pc-inbox-card__input:focus-visible {
-  outline: 2px solid var(--brass-bright);
-  outline-offset: 1px;
-}
-.pc-inbox-card__input:disabled {
-  opacity: 0.6;
-}
-.pc-inbox-card__error {
-  display: flex;
-  align-items: baseline;
-  gap: 5px;
-  margin: 0;
-  padding: 6px 9px;
-  border-radius: var(--radius-well);
-  border: 1px solid var(--state-failed);
-  background: var(--badge-bg);
-  color: var(--state-failed);
-  font-family: var(--font-body);
-  font-size: 11px;
-}
-.pc-inbox-card__footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
-.pc-inbox-card__hint {
-  font-family: var(--font-body);
-  font-size: 10px;
-  letter-spacing: 0.4px;
-  color: var(--ink-label);
-}
-.pc-inbox-card__send.pc-btn--primary {
-  padding: 5px 12px;
-  font-size: 10.5px;
-  box-shadow: 0 2px 0 var(--brass-shadow), inset 0 1px 1px rgba(255, 255, 255, 0.4);
-}
-.pc-inbox-card__send:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
 /* ── Inspector (design-manifest §4.17, #68) ───────────────────────────────
  * Fills the remainder of the right stack; its body is the one part of the
  * panel that scrolls per tab, so a long log or transcript never grows the

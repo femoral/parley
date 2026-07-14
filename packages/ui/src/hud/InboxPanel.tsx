@@ -6,21 +6,18 @@ import type { InboxTask } from "./types.js";
 export interface InboxPanelProps {
   /** Tasks awaiting an answer, already sorted awaiting-first (hooks layer). */
   tasks: InboxTask[];
-  /** Deliver an answer for a task; see {@link InboxCard}'s `onAnswer`. */
-  onAnswer: (id: string, text: string) => Promise<void>;
 }
 
 /**
  * Layer 2 — the inbox (design-manifest §4.15/§4.16, docs/spec/ui-v1-scope.md's
- * "the one write in v1"). Ember-tinted plate holding one card per task blocked
+ * read-only cockpit). Ember-tinted plate holding one card per task blocked
  * on an answer, a red "N NEEDS YOU" count pill in the header, and the
  * manifest's quiet-cove empty state when nothing needs a flag raised. Plain
- * props throughout — the hooks layer sorts/filters and owns the `onAnswer`
- * wiring to the daemon (contract 2). Memoized like `RosterPanel` — the
- * cockpit shell re-renders every second for its clock, and `tasks`/`onAnswer`
- * are identity-stable between snapshot updates.
+ * props throughout — the hooks layer sorts/filters the tasks. Memoized like
+ * `RosterPanel` because the cockpit shell re-renders every second for its
+ * clock, while `tasks` is identity-stable between snapshot updates.
  */
-export const InboxPanel = memo(function InboxPanel({ tasks, onAnswer }: InboxPanelProps) {
+export const InboxPanel = memo(function InboxPanel({ tasks }: InboxPanelProps) {
   const count = tasks.length;
   return (
     <Plate variant="ember" padded={false} className="pc-inbox">
@@ -41,7 +38,7 @@ export const InboxPanel = memo(function InboxPanel({ tasks, onAnswer }: InboxPan
             <span aria-hidden="true">🧭</span> All hands accounted for. No flags flying.
           </p>
         ) : (
-          tasks.map((task) => <InboxCard key={task.id} task={task} onAnswer={onAnswer} />)
+          tasks.map((task) => <InboxCard key={task.id} task={task} />)
         )}
       </div>
     </Plate>

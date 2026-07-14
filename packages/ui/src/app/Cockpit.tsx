@@ -24,7 +24,7 @@ const DevKitBand = import.meta.env.DEV
  * — with the living scene reserved for its own ticket.
  */
 export function Cockpit() {
-  const { health, snapshot, roster, clock, day, answerTask, inspector, settings } = useCockpit();
+  const { health, snapshot, roster, clock, day, inspector, settings } = useCockpit();
 
   return (
     <div className="pc-cockpit">
@@ -64,7 +64,7 @@ export function Cockpit() {
 
           <aside className="pc-region--right" aria-label="Status stack">
             <HealthPanel health={health} />
-            <InboxPanel tasks={snapshot.inbox} onAnswer={answerTask} />
+            <InboxPanel tasks={snapshot.inbox} />
             <Inspector task={inspector} ornaments={settings.ornaments} />
           </aside>
         </div>
