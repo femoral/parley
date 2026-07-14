@@ -1,4 +1,4 @@
-import { Badge, Button } from "../primitives/index.js";
+import { Badge } from "../primitives/index.js";
 import type { ReportView } from "./types.js";
 
 export interface ReportPanelProps {
@@ -44,9 +44,6 @@ export function ReportPanel({
           </ul>
         </div>
       )}
-      <Button variant="success" className="pc-report__cta">
-        🏁 Review &amp; plant the branch
-      </Button>
     </div>
   );
 }

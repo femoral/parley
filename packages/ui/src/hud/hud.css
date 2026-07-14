@@ -740,10 +740,6 @@
   color: var(--report-green);
   overflow-wrap: anywhere;
 }
-.pc-report__cta {
-  align-self: stretch;
-  justify-content: center;
-}
 .pc-report__empty {
   margin: auto;
   text-align: center;

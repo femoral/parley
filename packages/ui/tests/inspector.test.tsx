@@ -132,7 +132,7 @@ describe("Inspector's four tabs render per the manifest's inspector treatment (#
     expect(screen.getByText("SUCCESS")).toBeTruthy();
     expect(screen.getByText("Charted the bay end to end.")).toBeTruthy();
     expect(screen.getByText("+ src/chart.ts")).toBeTruthy();
-    expect(screen.getByText(/Review & plant the branch/)).toBeTruthy();
+    expect(screen.queryByText(/Review & plant the branch/)).toBeNull();
   });
 
   it("shows the manifest's empty-state copy on the Report tab when there's no report yet", () => {
