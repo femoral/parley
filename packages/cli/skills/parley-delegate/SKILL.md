@@ -7,6 +7,8 @@ description: Delegate coding tasks to other agent CLIs (codex, grok) with the pa
 
 Parley runs a child agent (codex or grok) in an isolated git worktree and hands you back a schema-validated **report envelope**. You are the orchestrator: you write the brief, answer the child's questions, and review/merge the branch. Parley never merges.
 
+**Orchestrate directly — don't wrap parley in subagents.** Unless the user explicitly asks for subagents, the session reading this skill is the orchestrator: it calls `delegate`, blocks on `watch`, answers questions, and reviews branches itself. Spawning a per-task subagent whose only job is to babysit one `delegate --wait` call is wasteful — the delegate loop is a thin CLI contract, and intermediary agents tend to idle-stop waiting for notifications that never come, adding a token layer and losing the question-answering context you already have. For a fan-out, delegate all tasks without `--wait` and drive the whole set with one `watch` loop (below).
+
 ## The delegate loop
 
 1. **Write a self-contained brief.** The child sees only its worktree, your prompt, and `--context` files — none of your conversation. State the goal, constraints, and definition of done in the prompt; pass supporting files with `--context <file>` (repeatable, lands in `.parley/context/`). Done when a stranger could execute the brief without asking you what it means.
