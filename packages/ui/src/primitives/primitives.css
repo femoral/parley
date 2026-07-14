@@ -51,24 +51,26 @@
 /* Inset past the inner pinstripe ring (5px) and its corner curve
  * (13px radius) so the curl nests inside the frame instead of
  * colliding with it. */
+/* The glyph's arc curls toward center-bottom, i.e. a bottom-corner
+ * shape as drawn — top corners take the vertical flip. */
 .pc-flourish--tl {
   top: 10px;
   left: 10px;
+  transform: scaleY(-1);
 }
 .pc-flourish--tr {
   top: 10px;
   right: 10px;
-  transform: scaleX(-1);
+  transform: scale(-1, -1);
 }
 .pc-flourish--bl {
   bottom: 10px;
   left: 10px;
-  transform: scaleY(-1);
 }
 .pc-flourish--br {
   bottom: 10px;
   right: 10px;
-  transform: scale(-1, -1);
+  transform: scaleX(-1);
 }
 
 /* ── Plate header ──────────────────────────────────────────────────────── */
