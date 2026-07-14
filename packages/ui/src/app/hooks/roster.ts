@@ -61,25 +61,43 @@ function toRosterTask(task: RosterTaskInput): RosterTask {
  * dropped) and the distinct orchestrator sessions among them. The only
  * ordering authority is `@useparley/core`'s `attentionRank` — nothing here
  * re-derives the hierarchy.
+ *
+ * When `selectedSessionId` is set, groups/totals include only that session's
+ * tasks (tasks with no session id appear only under "All hands" / null).
+ * Session chips always reflect the full unfiltered fleet so the selector and
+ * the future scene camera cue stay in sync with every known session (#76).
  */
-export function projectRoster(tasks: Iterable<RosterTaskInput>): RosterProjection {
-  const byState = new Map<string, RosterTask[]>();
+export function projectRoster(
+  tasks: Iterable<RosterTaskInput>,
+  selectedSessionId: string | null = null,
+): RosterProjection {
+  const all = [...tasks];
   const sessionCounts = new Map<string, number>();
   const durableSessions = new Set<string>();
+
+  // Session chips + durable count always come from the full fleet so selecting
+  // a chip never collapses the selector to a single option.
+  for (const task of all) {
+    if (task.orchestratorSession) {
+      sessionCounts.set(task.orchestratorSession, (sessionCounts.get(task.orchestratorSession) ?? 0) + 1);
+      if (!isTerminalState(task.state)) durableSessions.add(task.orchestratorSession);
+    }
+  }
+
+  const visible =
+    selectedSessionId === null
+      ? all
+      : all.filter((task) => task.orchestratorSession === selectedSessionId);
+
+  const byState = new Map<string, RosterTask[]>();
   let totalTasks = 0;
   let activeTasks = 0;
 
-  for (const task of tasks) {
+  for (const task of visible) {
     totalTasks += 1;
     if (!byState.has(task.state)) byState.set(task.state, []);
     byState.get(task.state)!.push(toRosterTask(task));
-    if (task.orchestratorSession) {
-      sessionCounts.set(task.orchestratorSession, (sessionCounts.get(task.orchestratorSession) ?? 0) + 1);
-    }
-    if (!isTerminalState(task.state)) {
-      activeTasks += 1;
-      if (task.orchestratorSession) durableSessions.add(task.orchestratorSession);
-    }
+    if (!isTerminalState(task.state)) activeTasks += 1;
   }
 
   const groups: RosterGroup[] = [...byState.entries()]

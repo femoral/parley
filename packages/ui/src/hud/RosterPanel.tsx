@@ -8,9 +8,9 @@ export interface RosterPanelProps {
   groups: RosterGroup[];
   /** Distinct orchestrator sessions among the roster's tasks. */
   sessions: RosterSessionOption[];
-  /** The active session (`null` = every session). Selecting a session doesn't
-   * filter the roster (it's the future scene's camera cue); it only marks
-   * which session chip reads active. */
+  /** The active session (`null` = "All hands" / every session). Filters the
+   * roster groups the hooks layer projects (#76) and is the future scene's
+   * camera-focus target. Single-select only. */
   selectedSessionId: string | null;
   onSelectSession: (id: string | null) => void;
   /** The selected task (feeds the inspector/scene, built in later tickets). */
@@ -115,12 +115,13 @@ function SessionSelector({
 
 /**
  * Layer 2 — the fleet roster (design-manifest §4.5/§4.6). Tasks grouped by state
- * in attention order, with a session selector (the future scene's camera cue)
- * and row selection (feeds the inspector/scene, built in later tickets). Plain
- * props throughout: the hooks layer does the grouping/ordering via
- * `@useparley/core`'s attention constants and owns the selection state.
- * Memoized — the cockpit shell re-renders every second for its clock, and all
- * roster props are identity-stable between snapshot updates.
+ * in attention order, with a session selector that both filters the groups
+ * below (#76) and marks the future scene's camera-focus target, plus row
+ * selection (feeds the inspector/scene). Plain props throughout: the hooks
+ * layer does the grouping/ordering/filtering via `@useparley/core`'s attention
+ * constants and owns the selection state. Memoized — the cockpit shell
+ * re-renders every second for its clock, and all roster props are
+ * identity-stable between snapshot updates.
  */
 export const RosterPanel = memo(function RosterPanel({
   groups,

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { bootstrapTaskStream, type ParleyClient, type StreamEvent, type TaskRow } from "@useparley/core";
 import { projectInbox } from "./inbox.js";
 import { projectRoster, type RosterTaskInput } from "./roster.js";
@@ -7,6 +7,11 @@ import type { InboxTask, RosterGroup, RosterSessionOption } from "../../hud/type
 
 /** The projected roster + inbox + scene + counts hud/scene consume. */
 export interface SnapshotView {
+  /**
+   * Live task inputs for re-projection (e.g. session-filtered roster groups
+   * in {@link useCockpit}). Identity-stable between snapshot updates.
+   */
+  tasks: RosterTaskInput[];
   groups: RosterGroup[];
   sessions: RosterSessionOption[];
   /** Tasks blocked on an answer, sorted awaiting-first (#67). */
@@ -20,7 +25,10 @@ export interface SnapshotView {
   durableSessions: number;
 }
 
+const EMPTY_TASKS: RosterTaskInput[] = [];
+
 const EMPTY: SnapshotView = {
+  tasks: EMPTY_TASKS,
   groups: [],
   sessions: [],
   inbox: [],
@@ -80,13 +88,16 @@ const RETRY_MS = 3000;
  * selector until a reload.
  */
 export function useSnapshot(client: ParleyClient): SnapshotView {
-  const [view, setView] = useState<SnapshotView>(EMPTY);
+  // Live task list — projected into groups/inbox/scene below. Exposed so
+  // `useCockpit` can re-project groups under the selected session filter (#76)
+  // without forking the SSE merge logic.
+  const [tasks, setTasks] = useState<RosterTaskInput[]>(EMPTY_TASKS);
 
   useEffect(() => {
     let cancelled = false;
     let stream: { close(): void } | null = null;
     let retry: ReturnType<typeof setTimeout> | undefined;
-    const tasks = new Map<string, RosterTaskInput>();
+    const taskMap = new Map<string, RosterTaskInput>();
     // Task ids whose row we've already asked for (a row may legitimately have
     // no orchestrator session — e.g. CLI-delegated — so "asked" not "found"
     // is what stops the refetching; a failed fetch retries on the next event).
@@ -94,16 +105,15 @@ export function useSnapshot(client: ParleyClient): SnapshotView {
     // A `Map`'s `.values()` iterator is single-use — materialize it once so
     // both projections (each a full pass) see every task.
     const emit = (): void => {
-      const list = [...tasks.values()];
-      setView({ ...projectRoster(list), inbox: projectInbox(list), scene: projectScene(list) });
+      if (!cancelled) setTasks([...taskMap.values()]);
     };
 
     /** Adopt `session` for `id` when the task is still session-less. */
     const adoptSession = (id: string, session: string | null): void => {
-      const current = tasks.get(id);
+      const current = taskMap.get(id);
       if (!session || !current || current.orchestratorSession !== null) return;
-      tasks.set(id, { ...current, orchestratorSession: session });
-      if (!cancelled) emit();
+      taskMap.set(id, { ...current, orchestratorSession: session });
+      emit();
     };
 
     /** Fetch the row of a task first seen over SSE, once, for its session. */
@@ -121,10 +131,10 @@ export function useSnapshot(client: ParleyClient): SnapshotView {
         const { snapshot, stream: live } = await bootstrapTaskStream({
           client,
           onEvent: (event) => {
-            const merged = mergeEnvelope(tasks.get(event.task.task_id), event);
-            tasks.set(event.task.task_id, merged);
+            const merged = mergeEnvelope(taskMap.get(event.task.task_id), event);
+            taskMap.set(event.task.task_id, merged);
             if (merged.orchestratorSession === null) fetchSession(merged.id);
-            if (!cancelled) emit();
+            emit();
           },
         });
         if (cancelled) {
@@ -134,11 +144,11 @@ export function useSnapshot(client: ParleyClient): SnapshotView {
         // Seed from the snapshot without clobbering any transition that already
         // arrived while we awaited: the stream opens at `snapshot.seq`, so every
         // event is newer than the snapshot. Only fill in tasks an event hasn't
-        // already set (`tasks.clear()` here would regress those to stale state)
+        // already set (`taskMap.clear()` here would regress those to stale state)
         // — but do backfill the session, which only rows carry.
         for (const row of snapshot.tasks) {
           sessionFetched.add(row.id);
-          if (!tasks.has(row.id)) tasks.set(row.id, fromRow(row));
+          if (!taskMap.has(row.id)) taskMap.set(row.id, fromRow(row));
           else adoptSession(row.id, row.orchestrator_session_id);
         }
         stream = live;
@@ -156,5 +166,16 @@ export function useSnapshot(client: ParleyClient): SnapshotView {
     };
   }, [client]);
 
-  return view;
+  // Unfiltered projection — health/scene/inbox and the base roster. Session
+  // filtering for the roster list is applied in `useCockpit` via a second
+  // `projectRoster(tasks, selectedSessionId)` so selection stays cockpit-owned.
+  return useMemo(() => {
+    if (tasks.length === 0) return EMPTY;
+    return {
+      tasks,
+      ...projectRoster(tasks),
+      inbox: projectInbox(tasks),
+      scene: projectScene(tasks),
+    };
+  }, [tasks]);
 }

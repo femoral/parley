@@ -4,6 +4,7 @@ import type { HealthView, InspectorTask, QaTurn } from "../../hud/types.js";
 import { formatClock, formatUptime } from "./format.js";
 import { useHealth } from "./useHealth.js";
 import { projectInspector } from "./inspector.js";
+import { projectRoster } from "./roster.js";
 import { useLogTail } from "./useLogTail.js";
 import { useSettings, type SettingsView } from "./useSettings.js";
 import { useSnapshot, type SnapshotView } from "./useSnapshot.js";
@@ -27,6 +28,11 @@ const EMPTY_QA: QaTurn[] = [];
 
 export interface CockpitView {
   health: HealthView;
+  /**
+   * Live snapshot with roster groups already filtered by the selected session
+   * (#76). Health/scene/inbox counts stay fleet-wide; only `groups` and the
+   * roster footer totals reflect the session chip.
+   */
   snapshot: SnapshotView;
   roster: RosterSelection;
   /** Wall-clock `HH:MM` for the day chip. */
@@ -57,19 +63,54 @@ export interface CockpitView {
 export function useCockpit(): CockpitView {
   const client = useMemo(() => new ParleyClient({ baseUrl: "" }), []);
   const health = useHealth(client);
-  const snapshot = useSnapshot(client);
+  const live = useSnapshot(client);
   const settings = useSettings();
   const [now, setNow] = useState(() => Date.now());
   // useState setters are identity-stable, so hud components (memoized against
   // the cockpit's one-second clock re-render) can take them as props directly.
-  const [selectedSessionId, selectSession] = useState<string | null>(null);
+  // Single source of truth for session filter + future scene camera cue (#76).
+  const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const selectTask: (id: string) => void = setSelectedTaskId;
+  // Re-selecting the active session is a no-op; only "All hands" (null) deselects.
+  const selectSession = useCallback((id: string | null) => {
+    setSelectedSessionId((prev) => (prev === id ? prev : id));
+  }, []);
 
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(id);
   }, []);
+
+  // If the selected session disappears from the snapshot (tasks pruned), fall
+  // back to "All hands" rather than showing a permanently empty filtered list.
+  useEffect(() => {
+    if (selectedSessionId === null) return;
+    if (!live.sessions.some((session) => session.id === selectedSessionId)) {
+      setSelectedSessionId(null);
+    }
+  }, [selectedSessionId, live.sessions]);
+
+  // Filter groups at derivation time so header counts match filtered contents.
+  // Health totals stay fleet-wide (unfiltered `live`); the roster list/footer
+  // use the session-scoped projection.
+  const filteredRoster = useMemo(
+    () =>
+      selectedSessionId === null
+        ? null
+        : projectRoster(live.tasks, selectedSessionId),
+    [live.tasks, selectedSessionId],
+  );
+
+  const snapshot: SnapshotView = useMemo(() => {
+    if (filteredRoster === null) return live;
+    return {
+      ...live,
+      groups: filteredRoster.groups,
+      totalTasks: filteredRoster.totalTasks,
+      activeTasks: filteredRoster.activeTasks,
+    };
+  }, [live, filteredRoster]);
 
   const origin = typeof window !== "undefined" ? window.location : undefined;
   const healthView: HealthView = {
@@ -79,9 +120,10 @@ export function useCockpit(): CockpitView {
     host: origin?.hostname || "127.0.0.1",
     port: origin?.port || "—",
     uptime: health.startedAt !== null ? formatUptime(now - health.startedAt) : "",
-    activeAgents: snapshot.activeTasks,
-    totalTasks: snapshot.totalTasks,
-    durableSessions: snapshot.durableSessions,
+    // Fleet-wide counts — never scoped to the selected session chip.
+    activeAgents: live.activeTasks,
+    totalTasks: live.totalTasks,
+    durableSessions: live.durableSessions,
   };
 
   const day =

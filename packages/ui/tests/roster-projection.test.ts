@@ -97,3 +97,80 @@ describe("projectRoster totals (#66)", () => {
     expect(activeTasks).toBe(2);
   });
 });
+
+describe("projectRoster session filter (#76)", () => {
+  const fleet = [
+    task({ id: "a1", state: "running", orchestratorSession: "sess-1" }),
+    task({ id: "a2", state: "completed", orchestratorSession: "sess-1" }),
+    task({ id: "b1", state: "running", orchestratorSession: "sess-2" }),
+    task({ id: "b2", state: "awaiting_answer", orchestratorSession: "sess-2" }),
+    task({ id: "orphan", state: "completed", orchestratorSession: null }),
+  ];
+
+  it("null selection (All hands) shows every task and group counts match contents", () => {
+    const { groups, totalTasks, activeTasks, sessions } = projectRoster(fleet, null);
+    expect(totalTasks).toBe(5);
+    expect(activeTasks).toBe(3);
+    expect(groups.flatMap((g) => g.tasks.map((t) => t.id)).sort()).toEqual(
+      ["a1", "a2", "b1", "b2", "orphan"].sort(),
+    );
+    for (const group of groups) {
+      expect(group.tasks.length).toBeGreaterThan(0);
+    }
+    // Session chips still list the full fleet.
+    expect(sessions).toEqual([
+      { id: "sess-1", label: "sess-1", count: 2 },
+      { id: "sess-2", label: "sess-2", count: 2 },
+    ]);
+  });
+
+  it("selecting a session keeps only that session's tasks in every group", () => {
+    const { groups, totalTasks, activeTasks, sessions } = projectRoster(fleet, "sess-1");
+    expect(totalTasks).toBe(2);
+    expect(activeTasks).toBe(1);
+    expect(groups.map((g) => g.state)).toEqual(["running", "completed"]);
+    expect(groups.find((g) => g.state === "running")!.tasks.map((t) => t.id)).toEqual(["a1"]);
+    expect(groups.find((g) => g.state === "completed")!.tasks.map((t) => t.id)).toEqual(["a2"]);
+    // Group header counts == filtered contents (no empty groups left behind).
+    for (const group of groups) {
+      expect(group.tasks.length).toBe(1);
+    }
+    // Selector chips remain fleet-wide so the user can switch sessions.
+    expect(sessions.map((s) => s.id)).toEqual(["sess-1", "sess-2"]);
+  });
+
+  it("tasks without a session id appear only under All hands", () => {
+    const allHands = projectRoster(fleet, null);
+    expect(allHands.groups.flatMap((g) => g.tasks.map((t) => t.id))).toContain("orphan");
+
+    const sess1 = projectRoster(fleet, "sess-1");
+    expect(sess1.groups.flatMap((g) => g.tasks.map((t) => t.id))).not.toContain("orphan");
+
+    const sess2 = projectRoster(fleet, "sess-2");
+    expect(sess2.groups.flatMap((g) => g.tasks.map((t) => t.id))).not.toContain("orphan");
+  });
+
+  it("drops groups that become empty after filtering", () => {
+    const { groups } = projectRoster(fleet, "sess-1");
+    expect(groups.map((g) => g.state)).not.toContain("awaiting_answer");
+  });
+
+  it("omitting the filter argument matches null (All hands)", () => {
+    const withDefault = projectRoster(fleet);
+    const withNull = projectRoster(fleet, null);
+    expect(withDefault.totalTasks).toBe(withNull.totalTasks);
+    expect(withDefault.groups.map((g) => g.state)).toEqual(withNull.groups.map((g) => g.state));
+  });
+
+  it("selecting a session that has left the fleet yields empty groups (caller resets to All hands)", () => {
+    // When the selected session is gone from the snapshot, projectRoster has
+    // nothing to show; useCockpit resets selection to null so the next frame
+    // re-projects unfiltered rather than leaving the user on an empty list.
+    const remaining = fleet.filter((t) => t.orchestratorSession !== "sess-1");
+    const { groups, sessions, totalTasks } = projectRoster(remaining, "sess-1");
+    expect(sessions.map((s) => s.id)).toEqual(["sess-2"]);
+    expect(sessions.some((s) => s.id === "sess-1")).toBe(false);
+    expect(groups).toEqual([]);
+    expect(totalTasks).toBe(0);
+  });
+});
