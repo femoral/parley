@@ -36,6 +36,7 @@ export function projectInbox(tasks: Iterable<RosterTaskInput>): InboxTask[] {
       state: task.state,
       coat: faction.coat,
       emblem: faction.emblem,
+      faction: faction.label,
       meta: `${task.branch ?? "no branch"} · ${shortId(task.id)}`,
       question: task.question,
       sessionId: task.orchestratorSession,

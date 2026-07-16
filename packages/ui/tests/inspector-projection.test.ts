@@ -47,10 +47,25 @@ describe("projectInspector projects a task's Brief tab (#68)", () => {
     expect(view.brief.usage).toBe("1.2k ▸ 340 tok");
   });
 
-  it("carries the faction coat/emblem from the vendor", () => {
+  it("carries the faction coat/emblem/label from the vendor", () => {
     const view = projectInspector(detail({ vendor: "grok" }), NO_LOGS);
     expect(view.coat).toBe("#2b2b2e");
     expect(view.emblem.kind).toBe("svg");
+    expect(view.faction).toBe("Grok");
+  });
+
+  it("projects the task error field (failure cause) through to the inspector view", () => {
+    const view = projectInspector(
+      detail({ state: "failed", error: "vendor exited 1: sandbox denied network" }),
+      NO_LOGS,
+    );
+    expect(view.error).toBe("vendor exited 1: sandbox denied network");
+    expect(view.state).toBe("failed");
+  });
+
+  it("carries a null error when the task has no failure cause", () => {
+    const view = projectInspector(detail({ error: null }), NO_LOGS);
+    expect(view.error).toBeNull();
   });
 
   it("carries the eval score/feedback from the row when present", () => {

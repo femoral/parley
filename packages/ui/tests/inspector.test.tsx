@@ -12,7 +12,9 @@ function task(overrides: Partial<InspectorTask> = {}): InspectorTask {
     name: "chart-the-bay",
     coat: "#10a37f",
     emblem: { kind: "svg", viewBox: "0 0 24 24", path: "M12 2 L20 7 V17 L12 22 L4 17 V7 Z" },
+    faction: "Codex",
     state: "running",
+    error: null,
     evalScore: null,
     evalFeedback: null,
     brief: {
@@ -99,6 +101,35 @@ describe("Inspector's four tabs render per the manifest's inspector treatment (#
     expect(screen.getByText(/Sandbox: workspace/)).toBeTruthy();
     expect(screen.getByText(/Network: disabled/)).toBeTruthy();
     expect(screen.getByText(/parley never merges/)).toBeTruthy();
+  });
+
+  it("renders the failure cause at the top of Brief when the task is failed with an error", () => {
+    render(
+      <Inspector
+        task={task({
+          state: "failed",
+          error: "vendor exited 1: workspace sandbox denied network",
+        })}
+      />,
+    );
+    expect(screen.getByText("WHY IT FAILED")).toBeTruthy();
+    expect(screen.getByText("vendor exited 1: workspace sandbox denied network")).toBeTruthy();
+  });
+
+  it("omits the failure well when the task is not failed, even if error is set", () => {
+    render(<Inspector task={task({ state: "running", error: "stale noise" })} />);
+    expect(screen.queryByText("WHY IT FAILED")).toBeNull();
+    expect(screen.queryByText("stale noise")).toBeNull();
+  });
+
+  it("omits the failure well when failed but error is null", () => {
+    render(<Inspector task={task({ state: "failed", error: null })} />);
+    expect(screen.queryByText("WHY IT FAILED")).toBeNull();
+  });
+
+  it("labels the header emblem with the faction/vendor name", () => {
+    render(<Inspector task={task({ faction: "Grok", coat: "#2b2b2e" })} />);
+    expect(screen.getByLabelText("Grok")).toBeTruthy();
   });
 
   it("switches to the Logs tab and renders classified lines, live", () => {

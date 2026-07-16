@@ -25,6 +25,7 @@ describe("projectInbox selects tasks blocked on an answer (#67)", () => {
         state: "awaiting_answer",
         coat: "#10a37f",
         emblem: expect.objectContaining({ kind: "svg" }),
+        faction: "Codex",
         meta: "feat/x · a",
         question: "Which port?",
         sessionId: "sess-1",
@@ -62,7 +63,7 @@ describe("projectInbox selects tasks blocked on an answer (#67)", () => {
     expect(cards.map((c) => c.id)).toEqual(["first", "second"]);
   });
 
-  it("projects faction coat/emblem and a branch·id meta line, same shape as the roster", () => {
+  it("projects faction coat/emblem/label and a branch·id meta line, same shape as the roster", () => {
     const cards = projectInbox([
       task({ id: "abcdefghij", state: "awaiting_answer", vendor: "grok", question: "Deploy now?" }),
     ]);
@@ -72,6 +73,7 @@ describe("projectInbox selects tasks blocked on an answer (#67)", () => {
       state: "awaiting_answer",
       coat: "#2b2b2e",
       emblem: expect.objectContaining({ kind: "svg" }),
+      faction: "Grok",
       meta: "feat/x · abcdefgh",
       question: "Deploy now?",
       sessionId: null,

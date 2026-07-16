@@ -86,7 +86,7 @@ export function InboxCard({ task, onSelectTask }: InboxCardProps) {
         onClick={() => onSelectTask(task.id)}
       >
         <div className="pc-inbox-card__head">
-          <Emblem coat={task.coat} mark={task.emblem} size={23} />
+          <Emblem coat={task.coat} mark={task.emblem} size={23} label={task.faction} />
           <span className="pc-inbox-card__body">
             <span className="pc-inbox-card__name">{task.name}</span>
             <span className="pc-inbox-card__meta">{task.meta}</span>

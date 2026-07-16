@@ -64,6 +64,7 @@ function toRosterTask(task: RosterTaskInput): RosterTask {
     name: task.name,
     coat: faction.coat,
     emblem: faction.emblem,
+    faction: faction.label,
     meta: `${task.branch ?? "no branch"} · ${shortId(task.id)}`,
   };
 }

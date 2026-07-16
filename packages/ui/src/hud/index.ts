@@ -6,6 +6,7 @@
 import "./hud.css";
 
 export { Cartouche } from "./Cartouche.js";
+export { ChartKey } from "./ChartKey.js";
 export { DayChip } from "./DayChip.js";
 export type { DayChipProps } from "./DayChip.js";
 export { HealthPanel } from "./HealthPanel.js";

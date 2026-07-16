@@ -15,6 +15,8 @@ export interface RosterTask {
   coat: string;
   /** Faction emblem mark (glyph or original SVG path data). */
   emblem: EmblemMark;
+  /** Faction/vendor display name for the emblem's accessible label + tooltip. */
+  faction: string;
   /** `branch · id` style meta line. */
   meta: string;
 }
@@ -60,6 +62,8 @@ export interface InboxTask {
   coat: string;
   /** Faction emblem mark (glyph or original SVG path data). */
   emblem: EmblemMark;
+  /** Faction/vendor display name for the emblem's accessible label + tooltip. */
+  faction: string;
   /** `branch · id` style meta line, same shape as the roster row's. */
   meta: string;
   /** The outstanding question text. */
@@ -127,8 +131,12 @@ export interface InspectorTask {
   name: string;
   coat: string;
   emblem: EmblemMark;
+  /** Faction/vendor display name for the emblem's accessible label + tooltip. */
+  faction: string;
   /** Task state string (matches a `StateKey`) — drives the header's state badge. */
   state: string;
+  /** Terminal failure cause from the task detail payload, or null when none. */
+  error: string | null;
   /** Eval score out of 10, when the task has been eval'd (else null). */
   evalScore: number | null;
   evalFeedback: string | null;

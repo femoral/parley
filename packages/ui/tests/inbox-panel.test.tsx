@@ -12,6 +12,7 @@ const AWAITING_1: InboxTask = {
   state: "awaiting_answer",
   coat: "#10a37f",
   emblem: { kind: "svg", viewBox: "0 0 24 24", path: "M12 2 L20 7 V17 L12 22 L4 17 V7 Z" },
+  faction: "Codex",
   meta: "feat/bay · t1",
   question: "Should the survey favor the northern shoal?",
   sessionId: "sess-abcdef12",
@@ -23,6 +24,7 @@ const AWAITING_2: InboxTask = {
   state: "awaiting_answer",
   coat: "#2b2b2e",
   emblem: { kind: "svg", viewBox: "0 0 24 24", path: "M5 4 L19 20 M19 4 L5 20" },
+  faction: "Grok",
   meta: "feat/depth · t2",
   question: "Deep or shallow anchorage?",
   sessionId: null,
@@ -43,6 +45,12 @@ describe("InboxPanel display-only question cards (#78)", () => {
   it("badges each card from the task's state via the shared state-meta lookup", () => {
     render(<InboxPanel tasks={[AWAITING_1]} onSelectTask={() => {}} />);
     expect(screen.getAllByText("AWAITING")).toHaveLength(1);
+  });
+
+  it("labels each card emblem with its faction/vendor name", () => {
+    render(<InboxPanel tasks={[AWAITING_1, AWAITING_2]} onSelectTask={() => {}} />);
+    expect(screen.getByLabelText("Codex")).toBeTruthy();
+    expect(screen.getByLabelText("Grok")).toBeTruthy();
   });
 
   it("sorts awaiting-first (hooks layer order is preserved, not re-sorted)", () => {

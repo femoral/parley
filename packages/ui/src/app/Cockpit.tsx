@@ -1,6 +1,7 @@
 import { lazy, Suspense } from "react";
 import {
   Cartouche,
+  ChartKey,
   DayChip,
   HealthPanel,
   InboxPanel,
@@ -71,14 +72,17 @@ export function Cockpit() {
           </aside>
         </div>
 
-        <SettingsBar
-          ornaments={settings.ornaments}
-          showKit={settings.showKit}
-          followLogs={settings.followLogs}
-          onToggleOrnaments={settings.toggleOrnaments}
-          onToggleShowKit={settings.toggleShowKit}
-          onToggleFollowLogs={settings.toggleFollowLogs}
-        />
+        <div className="pc-settings-row">
+          <ChartKey />
+          <SettingsBar
+            ornaments={settings.ornaments}
+            showKit={settings.showKit}
+            followLogs={settings.followLogs}
+            onToggleOrnaments={settings.toggleOrnaments}
+            onToggleShowKit={settings.toggleShowKit}
+            onToggleFollowLogs={settings.toggleFollowLogs}
+          />
+        </div>
         {DevKitBand && settings.showKit && (
           <Suspense fallback={null}>
             <DevKitBand />

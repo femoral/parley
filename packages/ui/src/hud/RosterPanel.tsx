@@ -44,7 +44,10 @@ function Group({
   return (
     <div>
       <div className="pc-roster__group-head">
-        <span className="pc-state-dot" style={dotStyle} aria-hidden="true">
+        {/* Decorative: the group label next to the dot carries the state for
+            AT; title still gives mouse users a hover hint without duplicating
+            the label in the accessibility tree. */}
+        <span className="pc-state-dot" style={dotStyle} aria-hidden="true" title={meta.label}>
           {meta.glyph}
         </span>
         <span className="pc-roster__group-label" style={labelStyle}>
@@ -63,7 +66,7 @@ function Group({
             aria-pressed={selected}
             onClick={() => onSelectTask(task.id)}
           >
-            <Emblem coat={task.coat} mark={task.emblem} size={23} />
+            <Emblem coat={task.coat} mark={task.emblem} size={23} label={task.faction} />
             <span className="pc-roster__row-body">
               <span className="pc-roster__name">{task.name}</span>
               <span className="pc-roster__meta">{task.meta}</span>

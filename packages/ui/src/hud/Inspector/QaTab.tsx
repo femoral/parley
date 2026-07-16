@@ -7,6 +7,8 @@ export interface QaTabProps {
   /** The task's faction coat/emblem — the question bubble's avatar. */
   coat: string;
   emblem: EmblemMark;
+  /** Faction/vendor display name for the emblem's accessible label + tooltip. */
+  faction?: string;
 }
 
 /**
@@ -16,7 +18,7 @@ export interface QaTabProps {
  * a turn's `answer` is `null` while still outstanding. Timestamps ride the
  * wire but aren't rendered here (manifest layout is question/answer only).
  */
-export function QaTab({ qa, coat, emblem }: QaTabProps) {
+export function QaTab({ qa, coat, emblem, faction }: QaTabProps) {
   if (qa.length === 0) {
     return <p className="pc-qa__empty">No parley yet — this soul hasn't raised a flag.</p>;
   }
@@ -26,7 +28,7 @@ export function QaTab({ qa, coat, emblem }: QaTabProps) {
         // id is wire question_id — stable across rehydrate; never key on question text (duplicates collide).
         <div className="pc-qa__turn" key={turn.id}>
           <div className="pc-qa__bubble pc-qa__bubble--question">
-            <Emblem coat={coat} mark={emblem} size={20} />
+            <Emblem coat={coat} mark={emblem} size={20} label={faction} />
             <p>{turn.question}</p>
           </div>
           {turn.answer !== null && (

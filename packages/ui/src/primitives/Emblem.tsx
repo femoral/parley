@@ -28,11 +28,20 @@ function EmblemMarkView({ mark }: { mark: EmblemMark }): ReactNode {
 }
 
 /** Layer 1 — the faction emblem chip (design-manifest §2.7 / §4). The coat is
- * the one loud hue; the mark is white/light on it. */
+ * the one loud hue; the mark is white/light on it. `label` is both the
+ * accessible name and the hover tooltip so production users can recognise a
+ * faction without opening the chart key. */
 export function Emblem({ coat, mark, size = 23, label }: EmblemProps) {
   const style = { "--coat": coat, "--emblem-size": `${size}px` } as CSSProperties;
+  const accessible = label ?? "faction emblem";
   return (
-    <span className="pc-emblem" style={style} role="img" aria-label={label ?? "faction emblem"}>
+    <span
+      className="pc-emblem"
+      style={style}
+      role="img"
+      aria-label={accessible}
+      title={label}
+    >
       <EmblemMarkView mark={mark} />
     </span>
   );

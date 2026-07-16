@@ -78,6 +78,17 @@
   gap: var(--gutter);
   min-height: 0;
 }
+/* Settings strip + production chart key sit on one row; overflow visible so
+   the chart-key popover can open upward without being clipped here. */
+.pc-settings-row {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+  position: relative;
+  z-index: var(--z-popover);
+}
 .pc-cockpit__main {
   flex: 1;
   min-height: 0;

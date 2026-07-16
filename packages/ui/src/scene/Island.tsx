@@ -56,7 +56,9 @@ function IslandBody({ name, completed }: { name: string; completed: boolean }) {
         <line x1="96" y1="82" x2="112" y2="78" stroke="var(--brass-shadow)" strokeWidth="2.4" strokeLinecap="round" />
       </svg>
       <span className="pc-plank" aria-hidden="true">
-        <span className="pc-plank__label">{name}</span>
+        <span className="pc-plank__label" title={name}>
+          {name}
+        </span>
       </span>
     </>
   );

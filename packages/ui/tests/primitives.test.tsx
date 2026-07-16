@@ -43,6 +43,7 @@ describe("primitives render per manifest with plain props", () => {
     const chip = container.querySelector(".pc-emblem") as HTMLElement;
     expect(chip.style.getPropertyValue("--coat")).toBe("#10a37f");
     expect(screen.getByLabelText("Pi").textContent).toBe("π");
+    expect(chip.getAttribute("title")).toBe("Pi");
   });
 
   it("Emblem renders an SVG path mark inside the chip", () => {

@@ -91,7 +91,7 @@ export const Inspector = memo(function Inspector({ task, ornaments = false }: In
   return (
     <Plate variant="premium" padded={false} ornaments={ornaments} className="pc-inspector">
       <div className="pc-inspector__head">
-        <Emblem coat={task.coat} mark={task.emblem} size={28} />
+        <Emblem coat={task.coat} mark={task.emblem} size={28} label={task.faction} />
         <div className="pc-inspector__head-titles">
           <span className="pc-inspector__kicker">SHIP'S LOG</span>
           <span className="pc-inspector__name">{task.name}</span>
@@ -140,10 +140,17 @@ export const Inspector = memo(function Inspector({ task, ornaments = false }: In
         role="tabpanel"
         aria-labelledby={tabId(active)}
       >
-        {active === "brief" && <BriefTab brief={task.brief} />}
+        {active === "brief" && (
+          <BriefTab
+            brief={task.brief}
+            error={task.state === "failed" ? task.error : null}
+          />
+        )}
         {active === "logs" && <LogsTab logs={task.logs} />}
         {active === "report" && <ReportTab report={task.report} />}
-        {active === "qa" && <QaTab qa={task.qa} coat={task.coat} emblem={task.emblem} />}
+        {active === "qa" && (
+          <QaTab qa={task.qa} coat={task.coat} emblem={task.emblem} faction={task.faction} />
+        )}
       </div>
     </Plate>
   );

@@ -15,6 +15,7 @@ const GROUPS: RosterGroup[] = [
         name: "chart-the-bay",
         coat: "#10a37f",
         emblem: { kind: "svg", viewBox: "0 0 24 24", path: "M12 2 L20 7 V17 L12 22 L4 17 V7 Z" },
+        faction: "Codex",
         meta: "feat/bay · t1",
       },
     ],
@@ -27,6 +28,7 @@ const GROUPS: RosterGroup[] = [
         name: "sound-the-depths",
         coat: "#2b2b2e",
         emblem: { kind: "svg", viewBox: "0 0 24 24", path: "M5 4 L19 20 M19 4 L5 20" },
+        faction: "Grok",
         meta: "feat/depth · t2",
       },
     ],
@@ -39,6 +41,7 @@ const GROUPS: RosterGroup[] = [
         name: "lost-at-sea",
         coat: "#8a6a34",
         emblem: { kind: "glyph", char: "⚐" },
+        faction: "Unaligned",
         meta: "feat/lost · t3",
       },
     ],
@@ -70,6 +73,13 @@ describe("RosterPanel renders groups it is given, in attention order (#66)", () 
     expect(screen.getByText("chart-the-bay")).toBeTruthy();
     expect(screen.getByText("sound-the-depths")).toBeTruthy();
     expect(screen.getByText("lost-at-sea")).toBeTruthy();
+  });
+
+  it("labels each row emblem with its faction/vendor name", () => {
+    render(<RosterPanel {...baseProps()} />);
+    expect(screen.getByLabelText("Codex")).toBeTruthy();
+    expect(screen.getByLabelText("Grok")).toBeTruthy();
+    expect(screen.getByLabelText("Unaligned")).toBeTruthy();
   });
 
   it("omits empty groups entirely", () => {

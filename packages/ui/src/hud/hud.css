@@ -1037,3 +1037,130 @@
   letter-spacing: 0.5px;
   text-transform: uppercase;
 }
+
+/* ── Chart key (production legend — recognition over recall) ──────────────
+ * Collapsed-by-default toggle chip (same language as .pc-settings__toggle)
+ * that opens a brass-framed popover above the settings strip. Anchor is
+ * position:relative; the popover uses --z-popover and opens upward so it
+ * is not clipped by the board inset (ancestors do not set overflow on the
+ * settings strip). Content reuses the layer-0 state/faction language —
+ * see ChartKey.tsx.
+ */
+.pc-chart-key {
+  position: relative;
+  display: inline-flex;
+}
+.pc-chart-key__pop {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  right: 0;
+  z-index: var(--z-popover);
+  width: min(320px, 82vw);
+  max-height: min(420px, 55vh);
+  overflow-y: auto;
+  padding: 12px 14px;
+  border-radius: var(--radius-control);
+  border: 1px solid var(--brass-frame);
+  background: linear-gradient(180deg, var(--plate-top) 0%, var(--plate-bottom) 100%);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(240, 194, 90, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.pc-chart-key__section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.pc-chart-key__heading {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-label);
+}
+.pc-chart-key__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.pc-chart-key__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.pc-chart-key__dot {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+  box-shadow: 0 0 8px var(--dot-color, var(--ink-label));
+}
+.pc-chart-key__copy {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+.pc-chart-key__label {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 10.5px;
+  letter-spacing: var(--track-micro);
+}
+.pc-chart-key__label--faction {
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 11.5px;
+  color: var(--ink-warm);
+  letter-spacing: normal;
+}
+.pc-chart-key__hint {
+  font-family: var(--font-flavor);
+  font-style: italic;
+  font-size: 10.5px;
+  color: var(--ink-label);
+}
+.pc-chart-key__pop::-webkit-scrollbar {
+  width: 8px;
+}
+.pc-chart-key__pop::-webkit-scrollbar-thumb {
+  background: var(--scroll-thumb);
+  border-radius: 4px;
+}
+.pc-chart-key__pop {
+  scrollbar-color: var(--scroll-thumb) var(--scroll-track);
+  scrollbar-width: thin;
+}
+
+/* ── Brief "why it failed" well (coral-bordered, functional voice) ────────
+ * Reuses .pc-brief__well; border tinted with --state-failed. Body text uses
+ * --ink-parchment on --plate-well (14.6:1, well above WCAG AA 4.5:1); the
+ * "WHY IT FAILED" label uses --state-failed on the same well (7.3:1).
+ * Long errors wrap and scroll after ~8 lines so a stack dump never blows the
+ * inspector open.
+ */
+.pc-brief__well--failed {
+  border-color: color-mix(in srgb, var(--state-failed) 55%, var(--plate-well-border));
+}
+.pc-brief__well-label--failed {
+  color: var(--state-failed);
+}
+.pc-brief__error {
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: 12.5px;
+  font-weight: 500;
+  line-height: 1.45;
+  color: var(--ink-parchment);
+  overflow-wrap: anywhere;
+  max-height: calc(1.45em * 8);
+  overflow-y: auto;
+}

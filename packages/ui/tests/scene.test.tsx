@@ -104,6 +104,14 @@ describe("Island renders its state through a single data-state (#69)", () => {
       "sound-depths — AWAITING",
     );
   });
+
+  it("puts the full task name on the plank label title (truncation tooltip)", () => {
+    const { container } = render(
+      <Island task={island("running", { name: "a-very-long-task-name-that-truncates" })} onSelectTask={noop} />,
+    );
+    const plankLabel = container.querySelector(".pc-plank__label");
+    expect(plankLabel?.getAttribute("title")).toBe("a-very-long-task-name-that-truncates");
+  });
 });
 
 describe("Ship carries faction tint on the --coat/--coat-dark pair (#69)", () => {
