@@ -1,0 +1,7 @@
+{"type":"init","timestamp":"2026-07-16T08:11:55.484Z","session_id":"b661e375-93d9-59b5-96fd-1fcf756e93f1","model":"auto"}
+{"type":"message","timestamp":"2026-07-16T08:11:55.485Z","role":"user","content":"say hi only"}
+{"type":"message","timestamp":"2026-07-16T08:11:55.900Z","role":"assistant","content":"Hi","delta":true}
+{"type":"message","timestamp":"2026-07-16T08:11:55.950Z","role":"assistant","content":" there.","delta":true}
+{"type":"tool_use","timestamp":"2026-07-16T08:11:56.100Z","tool_name":"run_shell_command","tool_id":"call_1","parameters":{"command":"ls"}}
+{"type":"tool_result","timestamp":"2026-07-16T08:11:56.200Z","tool_id":"call_1","status":"success","output":"README.md"}
+{"type":"result","timestamp":"2026-07-16T08:11:56.681Z","status":"success","stats":{"total_tokens":120,"input_tokens":80,"output_tokens":40,"cached":10,"input":0,"duration_ms":1200,"tool_calls":1,"models":{"gemini-3.1-flash-lite":{"total_tokens":120,"input_tokens":80,"output_tokens":40,"cached":10,"input":0}}}}
