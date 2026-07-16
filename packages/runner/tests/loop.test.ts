@@ -1,0 +1,175 @@
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { execFileSync } from "node:child_process";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { homePaths } from "@useparley/core";
+import { startServer, type DaemonServer } from "@useparley/daemon/server.js";
+import { RunnerLoop } from "../src/loop.js";
+
+const FAKE_VENDOR_BIN = fileURLToPath(
+  new URL("../../cli/tests/fake-vendor.mjs", import.meta.url),
+);
+
+const temps: string[] = [];
+let server: DaemonServer | null = null;
+
+function tmp(prefix: string): string {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+  temps.push(dir);
+  return dir;
+}
+
+function makeGitRepo(actions: unknown[]): string {
+  const dir = tmp("parley-runner-repo-");
+  const run = (args: string[]): void => {
+    execFileSync("git", args, { cwd: dir, stdio: "ignore" });
+  };
+  run(["init", "-b", "main"]);
+  run(["config", "user.email", "test@parley.test"]);
+  run(["config", "user.name", "parley test"]);
+  // Bare origin so the runner can push the task branch.
+  const origin = tmp("parley-runner-origin-");
+  execFileSync("git", ["init", "--bare", "-b", "main"], { cwd: origin, stdio: "ignore" });
+  fs.writeFileSync(path.join(dir, ".fake-vendor.json"), JSON.stringify(actions, null, 2));
+  run(["add", "-A"]);
+  run(["commit", "-m", "initial"]);
+  run(["remote", "add", "origin", origin]);
+  // Seed origin/main so push -u has a baseline.
+  run(["push", "-u", "origin", "main"]);
+  return dir;
+}
+
+async function json(
+  base: string,
+  method: string,
+  route: string,
+  body?: unknown,
+  headers: Record<string, string> = {},
+): Promise<{ status: number; body: unknown }> {
+  const res = await fetch(`${base}${route}`, {
+    method,
+    headers: { "content-type": "application/json", ...headers },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  const text = await res.text();
+  let parsed: unknown = text;
+  try {
+    parsed = text === "" ? null : JSON.parse(text);
+  } catch {
+    /* keep text */
+  }
+  return { status: res.status, body: parsed };
+}
+
+beforeEach(() => {
+  // Plain decimal strings only — Number("2_000") is NaN.
+  process.env.PARLEY_RUNNER_HEARTBEAT_MS = "30000";
+  process.env.PARLEY_LONG_POLL_MS = "500";
+  process.env.PARLEY_REPORT_ACCEPTED_FALLBACK_MS = "500";
+  process.env.PARLEY_FAKE_VENDOR_BIN = FAKE_VENDOR_BIN;
+});
+
+afterEach(async () => {
+  if (server) {
+    await server.close();
+    server = null;
+  }
+  for (const dir of temps.splice(0)) {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+  delete process.env.PARLEY_RUNNER_HEARTBEAT_MS;
+  delete process.env.PARLEY_LONG_POLL_MS;
+  delete process.env.PARLEY_REPORT_ACCEPTED_FALLBACK_MS;
+});
+
+describe("runner loop integration", () => {
+  it("leases a task, runs the fake vendor, and completes via report", async () => {
+    const home = tmp("parley-runner-home-");
+    fs.writeFileSync(
+      path.join(home, "parley.json"),
+      JSON.stringify({ runners: { gpu: { token: "secret-gpu" } } }),
+    );
+
+    const repo = makeGitRepo([
+      { emit: { type: "session", session_id: "remote-sess" } },
+      { emit: { type: "usage", input_tokens: 5, output_tokens: 3 } },
+      {
+        submit_report: {
+          summary: "remote done",
+          outcome: "success",
+          files_changed: ["README.md"],
+        },
+      },
+    ]);
+
+    // Runner uses a separate clone path mapping to the same repo.
+    const runnerClone = tmp("parley-runner-clone-");
+    execFileSync("git", ["clone", repo, runnerClone], { stdio: "ignore" });
+    execFileSync("git", ["-C", runnerClone, "config", "user.email", "test@parley.test"], {
+      stdio: "ignore",
+    });
+    execFileSync("git", ["-C", runnerClone, "config", "user.name", "parley test"], {
+      stdio: "ignore",
+    });
+
+    server = await startServer(homePaths(home));
+    const base = `http://127.0.0.1:${server.port}`;
+
+    const created = await json(base, "POST", "/tasks", {
+      prompt: "run remotely",
+      vendor: "fake",
+      orchestrator_session_id: "orch-remote",
+      cwd: repo,
+      use_worktree: true,
+      runner: "gpu",
+      contexts: [{ name: "hint.md", contents: "be thorough\n" }],
+    });
+    expect(created.status).toBe(201);
+    const taskId = (created.body as { task_id: string }).task_id;
+
+    const worktreesDir = tmp("parley-runner-wts-");
+    const loop = new RunnerLoop({
+      config: {
+        daemonUrl: base,
+        name: "gpu",
+        token: "secret-gpu",
+        repos: { [repo]: runnerClone },
+        worktreesDir,
+      },
+      env: { ...process.env, PARLEY_FAKE_VENDOR_BIN: FAKE_VENDOR_BIN },
+      log: () => {
+        /* quiet in tests */
+      },
+    });
+
+    const runPromise = loop.run();
+    // Wait until the task completes (or fails).
+    const deadline = Date.now() + 20_000;
+    let row: { state: string; report: string | null; branch: string | null; usage: string | null } | null =
+      null;
+    while (Date.now() < deadline) {
+      const status = await json(base, "GET", `/tasks/${taskId}`);
+      row = (status.body as { row: typeof row }).row;
+      if (row && (row.state === "completed" || row.state === "failed")) break;
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    loop.stop();
+    await runPromise;
+
+    expect(row).not.toBeNull();
+    expect(row!.state).toBe("completed");
+    expect(JSON.parse(row!.report!)).toMatchObject({
+      summary: "remote done",
+      outcome: "success",
+    });
+    expect(row!.branch).toMatch(/^parley\//);
+    expect(JSON.parse(row!.usage!)).toEqual({ input_tokens: 5, output_tokens: 3 });
+
+    // Events landed in the daemon log.
+    const logPath = path.join(home, "tasks", taskId, "vendor.jsonl");
+    expect(fs.existsSync(logPath)).toBe(true);
+    expect(fs.readFileSync(logPath, "utf8")).toContain("remote-sess");
+  }, 30_000);
+});

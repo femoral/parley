@@ -69,6 +69,15 @@ importers:
         specifier: ^4.4.3
         version: 4.4.3
 
+  packages/runner:
+    dependencies:
+      '@useparley/core':
+        specifier: workspace:*
+        version: link:../core
+      '@useparley/daemon':
+        specifier: workspace:*
+        version: link:../daemon
+
   packages/ui:
     dependencies:
       '@useparley/core':
