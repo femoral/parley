@@ -1371,8 +1371,6 @@ export class TaskEngine {
     // (resume). Record the transition so `parley watch` sees the task start.
     this.transitioned(task.id);
 
-    child.stderr.pipe(stderrLog);
-
     const events: VendorEvent[] = [];
     let sessionId: string | undefined;
     let usage: Record<string, number> | undefined;
@@ -1387,10 +1385,16 @@ export class TaskEngine {
     // still worth carrying into the failure detail when the task ends without
     // a report and no fatal error explains why.
     let lastDiag: string | undefined;
-    const lines = readline.createInterface({ input: child.stdout });
-    lines.on("line", (line) => {
+    // Both output streams feed the adapter's parseEvent: several vendors put
+    // load-bearing signal on stderr (hermes emits `session_id:` there, goose
+    // warns about MCP-extension init failures, openclaw prints auth errors),
+    // and a stdout-only feed silently loses it (adapter-validation-a/b docs,
+    // #107). The raw records stay separate — stdout → vendor.jsonl, stderr →
+    // stderr.log — so the durable logs are unchanged; only event extraction
+    // sees both.
+    const handleLine = (line: string, raw: fs.WriteStream): void => {
       // Raw stream is the durable record — stored untouched, unknown lines included.
-      rawLog.write(`${line}\n`);
+      raw.write(`${line}\n`);
       const lineEvents = adapter.parseEvent(line);
       if (lineEvents.length === 0) return;
       events.push(...lineEvents);
@@ -1423,7 +1427,11 @@ export class TaskEngine {
       }
       if (usageChanged) patch.usage = JSON.stringify(usage);
       if (Object.keys(patch).length > 0) updateTask(this.db, task.id, patch);
-    });
+    };
+    const lines = readline.createInterface({ input: child.stdout });
+    lines.on("line", (line) => handleLine(line, rawLog));
+    const errLines = readline.createInterface({ input: child.stderr });
+    errLines.on("line", (line) => handleLine(line, stderrLog));
 
     await new Promise<void>((resolve) => {
       // A resume replaces this task's entry in `children` — once that has
@@ -1433,6 +1441,7 @@ export class TaskEngine {
       let settled = false;
       const closeStreams = (): void => {
         lines.close();
+        errLines.close();
         rawLog.end();
         stderrLog.end();
         diagLog.end();
