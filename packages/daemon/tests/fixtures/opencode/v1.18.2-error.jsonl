@@ -1,0 +1,1 @@
+{"type":"error","timestamp":1784189651888,"sessionID":"ses_0960279aeffeh2QyCo5pXi11rd","error":{"name":"APIError","data":{"message":"Invalid API key.","statusCode":401,"isRetryable":false,"responseBody":"{\"type\":\"error\",\"error\":{\"type\":\"AuthError\",\"message\":\"Invalid API key.\"}}","metadata":{"url":"https://opencode.ai/zen/v1/chat/completions"}}}}
