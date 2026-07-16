@@ -1,10 +1,13 @@
-import { memo } from "react";
+import { memo, type CSSProperties } from "react";
 import { Mark } from "../primitives/index.js";
 import { MARK_ANCHOR } from "../tokens/chrome-glyphs.js";
 import { Camera } from "./Camera.js";
 import { EdgeAlerts, type EdgeAlertItem, type EdgeAlertSide } from "./EdgeAlerts.js";
+import { Horizon } from "./Horizon.js";
+import { Mist } from "./Mist.js";
 import { Sea } from "./Sea.js";
 import { SessionRegion, type SessionRegionData } from "./SessionRegion.js";
+import { Sky } from "./Sky.js";
 
 export interface SceneProps {
   /** The session regions to lay out — one per orchestrator session, projected
@@ -70,6 +73,19 @@ function edgeAlertsFor(
   return items;
 }
 
+/** Viewport-space ambience (Lantern Watch): far sky, sea, horizon strip, mist.
+ * Shared by the living cove and empty states so the room always feels depth. */
+function Ambience() {
+  return (
+    <>
+      <Sky />
+      <Sea />
+      <Horizon />
+      <Mist />
+    </>
+  );
+}
+
 /**
  * Layer 3 — the living cove (issue #69). One continuous sea holding every
  * session's region; the {@link Camera} sails to the active one. Prop-driven and
@@ -95,7 +111,7 @@ export const Scene = memo(function Scene({
   if (sessions.length === 0) {
     return (
       <div className="pc-scene-view pc-scene-view--empty">
-        <Sea />
+        <Ambience />
         <div className="pc-scene-empty" role={connecting ? "status" : undefined}>
           <span className="pc-scene-empty__glyph" aria-hidden="true">
             <Mark mark={MARK_ANCHOR} size={42} />
@@ -132,9 +148,21 @@ export const Scene = memo(function Scene({
   const label = active.session.id === null ? "open water" : active.session.label;
   const edgeItems = edgeAlertsFor(placed, activeIndex);
 
+  // Camera offsets published once per sail for far-horizon parallax (compositor
+  // transition on ambience; never written per-frame).
+  const camStyle = {
+    "--cam-x": `${active.dx}px`,
+    "--cam-y": `${active.dy}px`,
+  } as CSSProperties;
+
   return (
-    <div className="pc-scene-view" role="group" aria-label={`The cove — sailing with ${label}`}>
-      <Sea />
+    <div
+      className="pc-scene-view"
+      role="group"
+      aria-label={`The cove — sailing with ${label}`}
+      style={camStyle}
+    >
+      <Ambience />
       <Camera offsetX={active.dx} offsetY={active.dy}>
         {placed.map(({ session, dx, dy }, index) => (
           <SessionRegion

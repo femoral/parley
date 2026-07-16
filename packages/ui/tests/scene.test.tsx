@@ -177,6 +177,45 @@ describe("Scene lays out the active session's cove (#69)", () => {
     expect(container.querySelector(".pc-galleon")).toBeTruthy();
   });
 
+  it("Lantern Watch — viewport ambience layers sit behind the world (sky, dual glints, horizon, mist)", () => {
+    const { container } = render(
+      <Scene sessions={[REGION]} activeSessionId="sess-1" onSelectTask={noop} onSelectSession={noop} />,
+    );
+    expect(container.querySelector(".pc-scene-sky")).toBeTruthy();
+    expect(container.querySelector(".pc-scene-sky__moon")).toBeTruthy();
+    expect(container.querySelector(".pc-scene-sky__moonpath")).toBeTruthy();
+    expect(container.querySelectorAll(".pc-scene-sky__star").length).toBeGreaterThanOrEqual(5);
+    expect(container.querySelector(".pc-scene-sea")).toBeTruthy();
+    expect(container.querySelectorAll(".pc-scene-sea__glint")).toHaveLength(2);
+    expect(container.querySelector(".pc-scene-sea__glint--deep")).toBeTruthy();
+    expect(container.querySelector(".pc-scene-horizon")).toBeTruthy();
+    expect(container.querySelector(".pc-scene-horizon__sil")).toBeTruthy();
+    expect(container.querySelector(".pc-scene-mist")).toBeTruthy();
+    expect(container.querySelectorAll(".pc-scene-mist__band")).toHaveLength(2);
+  });
+
+  it("Lantern Watch — publishes camera offsets as CSS vars once per sail (parallax source)", () => {
+    const second = region("sess-2", "sess-2", [island("running", { id: "z" })]);
+    const { container } = render(
+      <Scene sessions={[REGION, second]} activeSessionId="sess-2" onSelectTask={noop} onSelectSession={noop} />,
+    );
+    const view = container.querySelector(".pc-scene-view") as HTMLElement;
+    // Second region is at stride 780 / stagger +74 — set once on the view for horizon parallax.
+    expect(view.style.getPropertyValue("--cam-x")).toBe("780px");
+    expect(view.style.getPropertyValue("--cam-y")).toBe("74px");
+  });
+
+  it("Lantern Watch — flagship carries a stern lantern; sloops carry a stern-lantern dot", () => {
+    const { container } = render(
+      <Scene sessions={[REGION]} activeSessionId="sess-1" onSelectTask={noop} onSelectSession={noop} />,
+    );
+    expect(container.querySelector(".pc-galleon__lantern")).toBeTruthy();
+    expect(container.querySelector(".pc-galleon__lantern-glow")).toBeTruthy();
+    expect(container.querySelector(".pc-galleon__lantern-shimmer")).toBeTruthy();
+    // REGION has running + awaiting ships (not completed/failed).
+    expect(container.querySelectorAll(".pc-sloop__lantern").length).toBeGreaterThanOrEqual(2);
+  });
+
   it("travels the camera to the selected region (a transform offset that changes)", () => {
     const second = region("sess-2", "sess-2", [island("running", { id: "z" })]);
     const first = render(

@@ -28,18 +28,99 @@
   top: 50%;
   width: 0;
   height: 0;
+  /* Above viewport ambience (sky/sea/horizon/mist); edge chips sit higher. */
+  z-index: 1;
   /* Camera travel — the transform is set inline per active region; this is the
      only transition in the scene, and the reduced-motion rule zeroes it. */
   transition: transform 1100ms cubic-bezier(0.4, 0, 0.2, 1);
   will-change: transform;
 }
 
-/* ── Scene water (behind the camera — parallax, doesn't pan) ────────────── */
+/* ── Lantern Watch ambience (viewport space, behind the panning world) ────
+ * Depth order (far → near): sky → sea → horizon → mist → world → edge chips.
+ * All ambient motion is transform/opacity only; reduced-motion stills every
+ * loop via the global tokens.css rule. Nothing here imitates state visuals
+ * (flare = awaiting, fog bank = stalled) — cool misty hues only, low opacity.
+ */
+
+/* Night sky — crescent + sparse stars near the top of the viewport. */
+.pc-scene-sky {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 0;
+}
+.pc-scene-sky__moon {
+  position: absolute;
+  top: 4.5%;
+  left: 72%;
+  width: 28px;
+  height: 28px;
+  fill: color-mix(in srgb, var(--ink-on-sea) 55%, var(--sea-shallow));
+  opacity: 0.55;
+  filter: drop-shadow(0 0 6px rgba(200, 220, 240, 0.25));
+}
+/* Soft cool moonlight column on the water under the moon — opacity breathing. */
+.pc-scene-sky__moonpath {
+  position: absolute;
+  top: 10%;
+  left: 72%;
+  width: 48px;
+  height: 52%;
+  transform: translateX(-50%);
+  pointer-events: none;
+  background: linear-gradient(
+    180deg,
+    rgba(180, 210, 230, 0.1) 0%,
+    rgba(160, 200, 220, 0.045) 35%,
+    transparent 78%
+  );
+  border-radius: 50% / 20%;
+  opacity: 0.7;
+  animation: pc-moonpath-breathe 7.5s ease-in-out infinite;
+}
+@keyframes pc-moonpath-breathe {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 0.8;
+  }
+}
+.pc-scene-sky__star {
+  position: absolute;
+  width: 2px;
+  height: 2px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--ink-on-sea) 70%, white);
+  opacity: 0.35;
+  box-shadow: 0 0 2px rgba(220, 230, 240, 0.35);
+}
+.pc-scene-sky__star--twinkle {
+  animation: pc-star-twinkle 5.2s ease-in-out infinite;
+}
+.pc-scene-sky__star--twinkle-slow {
+  animation: pc-star-twinkle 8.4s ease-in-out 1.6s infinite;
+}
+@keyframes pc-star-twinkle {
+  0%,
+  100% {
+    opacity: 0.22;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+
+/* Scene water (behind the camera — parallax, doesn't pan). */
 .pc-scene-sea {
   position: absolute;
   inset: 0;
   overflow: hidden;
   pointer-events: none;
+  z-index: 0;
   background: radial-gradient(120% 90% at 50% 8%, transparent 40%, var(--sea-vignette) 100%);
 }
 /* Moonlight glint — oversized pattern layer, transform-only drift (compositor).
@@ -57,6 +138,16 @@
   );
   animation: pc-scene-glint 22s linear infinite;
 }
+/* Second, slower counter-drift sparkle for depth — very low opacity. */
+.pc-scene-sea__glint--deep {
+  opacity: 0.18;
+  background: repeating-linear-gradient(
+    78deg,
+    transparent 0 96px,
+    rgba(200, 230, 245, 0.035) 96px 98px
+  );
+  animation: pc-scene-glint-deep 38s linear infinite;
+}
 @keyframes pc-scene-glint {
   from {
     transform: translate(0, 0);
@@ -67,11 +158,127 @@
     transform: translate(285.7px, 38.1px);
   }
 }
+@keyframes pc-scene-glint-deep {
+  from {
+    transform: translate(0, 0);
+  }
+  to {
+    /* Counter-drift, ~3 periods of the 98px axis — seamless loop. */
+    transform: translate(-262px, 28px);
+  }
+}
+
+/* Far-horizon silhouettes — misty deep-sea tint via mask + fill.
+   Nested shells: outer = camera parallax (transition), inner = slow drift. */
+.pc-scene-horizon {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 34%;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 0;
+}
+.pc-scene-horizon__parallax {
+  position: absolute;
+  /* Wide enough that a few-px drift + small camera shift never reveals an edge. */
+  left: -8%;
+  width: 116%;
+  top: 4%;
+  height: 92%;
+  /* Fraction of the camera offset — far layer moves less than the world.
+     JS sets --cam-x/--cam-y once per sail on .pc-scene-view; CSS transitions. */
+  transform: translate(
+    calc(var(--cam-x, 0px) * -0.05),
+    calc(var(--cam-y, 0px) * -0.02)
+  );
+  transition: transform 1100ms cubic-bezier(0.4, 0, 0.2, 1);
+  will-change: transform;
+}
+.pc-scene-horizon__drift {
+  position: absolute;
+  inset: 0;
+  animation: pc-horizon-drift 96s linear infinite;
+}
+.pc-scene-horizon__sil {
+  position: absolute;
+  inset: 0;
+  opacity: 0.32;
+  background: color-mix(in srgb, var(--sea-shallow) 55%, var(--sea-deep));
+  /* Lantern asset: single-colour potrace silhouettes (island/mountain strip). */
+  -webkit-mask-image: url("./assets/lantern/horizon.svg");
+  mask-image: url("./assets/lantern/horizon.svg");
+  -webkit-mask-size: 140% 100%;
+  mask-size: 140% 100%;
+  -webkit-mask-position: center bottom;
+  mask-position: center bottom;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+}
+@keyframes pc-horizon-drift {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-18px);
+  }
+}
+
+/* Horizon mist bands — near the skyline only, opacity ≤ 0.12.
+   Must not read as stalled fog (cool white wash, not state-stalled slate,
+   not over islands). Transform-only drift. */
+.pc-scene-mist {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 8%;
+  height: 22%;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 0;
+}
+.pc-scene-mist__band {
+  position: absolute;
+  left: -15%;
+  width: 130%;
+  top: 28%;
+  height: 42%;
+  opacity: 0.1;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(200, 220, 235, 0.55) 25%,
+    rgba(190, 215, 230, 0.7) 50%,
+    rgba(200, 220, 235, 0.55) 75%,
+    transparent 100%
+  );
+  filter: blur(10px);
+  animation: pc-mist-drift 48s ease-in-out infinite;
+}
+.pc-scene-mist__band--far {
+  top: 8%;
+  height: 30%;
+  opacity: 0.07;
+  animation-duration: 64s;
+  animation-direction: reverse;
+  filter: blur(14px);
+}
+@keyframes pc-mist-drift {
+  0%,
+  100% {
+    transform: translateX(-12px);
+  }
+  50% {
+    transform: translateX(14px);
+  }
+}
 
 /* ── Empty state ───────────────────────────────────────────────────────── */
 .pc-scene-empty {
   position: absolute;
   inset: 0;
+  z-index: 2;
   display: grid;
   place-items: center;
   align-content: center;
@@ -136,13 +343,17 @@
 }
 
 /* ── Orchestrator galleon ──────────────────────────────────────────────── */
+.pc-galleon {
+  position: relative;
+  /* Bob on the whole galleon so the stern lantern rides the swell with the hull. */
+  animation: pc-galleon-bob 6.5s ease-in-out infinite;
+  transform-origin: 50% 90%;
+}
 .pc-galleon__svg {
   display: block;
   width: 172px;
   height: auto;
   filter: drop-shadow(0 6px 10px rgba(0, 0, 0, 0.45));
-  animation: pc-galleon-bob 6.5s ease-in-out infinite;
-  transform-origin: 50% 90%;
 }
 @keyframes pc-galleon-bob {
   0%,
@@ -151,6 +362,71 @@
   }
   50% {
     transform: translateY(-4px) rotate(0.6deg);
+  }
+}
+/* Stern lantern — warm environmental halo + water shimmer. Quiet vs. flare. */
+.pc-galleon__lantern {
+  position: absolute;
+  left: 14%;
+  top: 58%;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+  z-index: 1;
+}
+.pc-galleon__lantern-glow {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 36px;
+  height: 36px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: radial-gradient(
+    closest-side,
+    rgba(255, 186, 96, 0.42) 0%,
+    rgba(240, 160, 60, 0.14) 45%,
+    transparent 72%
+  );
+  animation: pc-lantern-breathe 3.8s ease-in-out infinite;
+}
+.pc-galleon__lantern-core {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 5px;
+  height: 5px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--brass-bright) 70%, #fff6e0);
+  box-shadow: 0 0 5px rgba(255, 200, 100, 0.55);
+  opacity: 0.75;
+  animation: pc-lantern-breathe 3.8s ease-in-out infinite;
+}
+.pc-galleon__lantern-shimmer {
+  position: absolute;
+  left: 50%;
+  top: 8px;
+  width: 10px;
+  height: 28px;
+  transform: translateX(-50%);
+  background: linear-gradient(
+    180deg,
+    rgba(255, 190, 100, 0.22) 0%,
+    rgba(255, 170, 80, 0.08) 40%,
+    transparent 85%
+  );
+  border-radius: 50% / 20%;
+  opacity: 0.55;
+  animation: pc-lantern-breathe 3.8s ease-in-out 0.4s infinite;
+}
+@keyframes pc-lantern-breathe {
+  0%,
+  100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 0.85;
   }
 }
 
@@ -373,6 +649,30 @@
   height: 56px;
   margin-left: -30px;
   margin-top: -28px;
+}
+/* Tiny stern-lantern dot — environmental, not state; quieter than the flare. */
+.pc-sloop__lantern {
+  position: absolute;
+  left: 10px;
+  top: 40px;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--brass-bright) 65%, #fff4d8);
+  box-shadow: 0 0 4px rgba(255, 190, 90, 0.45);
+  opacity: 0.65;
+  pointer-events: none;
+  z-index: 1;
+  animation: pc-sloop-lantern 4.2s ease-in-out infinite;
+}
+@keyframes pc-sloop-lantern {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 0.8;
+  }
 }
 .pc-sloop__svg {
   display: block;

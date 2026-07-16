@@ -13,6 +13,9 @@ export interface CameraProps {
  * centre; changing the offset animates via a CSS `transform` transition — a
  * finite "sail-over", zero JS per frame. The global reduced-motion rule zeroes
  * that transition, so the camera cuts instantly instead of gliding.
+ *
+ * Far-horizon parallax reads `--cam-x` / `--cam-y` from the scene view (set by
+ * {@link Scene} once per sail from the same offsets — never per-frame).
  */
 export function Camera({ offsetX, offsetY, children }: CameraProps) {
   return (

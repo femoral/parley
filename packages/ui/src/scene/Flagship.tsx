@@ -53,6 +53,12 @@ export function Flagship({ label, dressed = false }: { label: string; dressed?: 
       role="img"
       aria-label={dressed ? `Orchestrator ${label} — all voyages home` : `Orchestrator ${label}`}
     >
+      {/* Stern lantern — warm environmental glow (quieter than the awaiting flare). */}
+      <span className="pc-galleon__lantern" aria-hidden="true">
+        <span className="pc-galleon__lantern-glow" />
+        <span className="pc-galleon__lantern-core" />
+        <span className="pc-galleon__lantern-shimmer" />
+      </span>
       <svg className="pc-galleon__svg" viewBox="0 0 150 110">
         {/* masts */}
         <line x1="55" y1="70" x2="55" y2="10" stroke="var(--brass-shadow)" strokeWidth="2.4" />

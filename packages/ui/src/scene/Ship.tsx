@@ -112,6 +112,7 @@ export function Ship({
   if (state === "cancelled") {
     return (
       <span className="pc-sloop pc-sloop--sailoff" data-state={state} style={style} aria-hidden="true">
+        <span className="pc-sloop__lantern" />
         <Sloop emblem={emblem} />
       </span>
     );
@@ -129,6 +130,8 @@ export function Ship({
           <Wake />
           <span className="pc-sloop">
             <span className="pc-anchor" />
+            {/* Tiny stern lantern — environmental warmth, quieter than the flare. */}
+            <span className="pc-sloop__lantern" />
             <Sloop emblem={emblem} />
           </span>
         </span>
