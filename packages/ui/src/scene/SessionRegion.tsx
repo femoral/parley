@@ -7,6 +7,9 @@ export interface SessionRegionData {
   /** Short banner label. */
   label: string;
   tasks: IslandTask[];
+  /** Loudest edge-attention rollup from `projectScene`; null = calm region.
+   * Structurally the hooks-layer `SceneSessionAttention | null`. */
+  attention: { state: string; count: number; rank: number } | null;
 }
 
 export interface SessionRegionProps {

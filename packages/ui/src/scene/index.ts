@@ -13,6 +13,8 @@ export { Camera } from "./Camera.js";
 export { Sea } from "./Sea.js";
 export { SessionRegion } from "./SessionRegion.js";
 export type { SessionRegionData, SessionRegionProps } from "./SessionRegion.js";
+export { EdgeAlerts, EDGE_ALERT_STACK_CAP } from "./EdgeAlerts.js";
+export type { EdgeAlertItem, EdgeAlertSide, EdgeAlertsProps } from "./EdgeAlerts.js";
 export { Flagship } from "./Flagship.js";
 export { Island } from "./Island.js";
 export type { IslandTask } from "./Island.js";

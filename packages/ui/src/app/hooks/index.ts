@@ -12,8 +12,13 @@ export { useSettings } from "./useSettings.js";
 export type { Settings, SettingsView } from "./useSettings.js";
 export { useSnapshot } from "./useSnapshot.js";
 export type { SnapshotView } from "./useSnapshot.js";
-export { projectScene } from "./scene.js";
-export type { SceneView, SceneSession, SceneTask } from "./scene.js";
+export { projectScene, rollupSessionAttention, isSceneAttentionState } from "./scene.js";
+export type {
+  SceneView,
+  SceneSession,
+  SceneSessionAttention,
+  SceneTask,
+} from "./scene.js";
 export { useTaskDetail } from "./useTaskDetail.js";
 export { formatUptime, formatClock, formatTokenCount, formatUsage } from "./format.js";
 export { classifyLogLine, buildLogLines, LogAccumulator, LOG_LINE_CAP } from "./logClassify.js";

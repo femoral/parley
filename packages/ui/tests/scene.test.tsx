@@ -136,30 +136,47 @@ describe("Ship carries faction tint on the --coat/--coat-dark pair (#69)", () =>
   });
 });
 
-const REGION: SessionRegionData = {
-  id: "sess-1",
-  label: "sess-1",
-  tasks: [island("running", { id: "a" }), island("awaiting_answer", { id: "b" }), island("completed", { id: "c" })],
-};
+function region(
+  id: string | null,
+  label: string,
+  tasks: IslandTask[],
+  attention: SessionRegionData["attention"] = null,
+): SessionRegionData {
+  return { id, label, tasks, attention };
+}
+
+const REGION: SessionRegionData = region("sess-1", "sess-1", [
+  island("running", { id: "a" }),
+  island("awaiting_answer", { id: "b" }),
+  island("completed", { id: "c" }),
+], { state: "awaiting_answer", count: 1, rank: 0 });
 
 describe("Scene lays out the active session's cove (#69)", () => {
   it("renders exactly one island per task of the session", () => {
-    const { container } = render(<Scene sessions={[REGION]} activeSessionId="sess-1" onSelectTask={noop} />);
+    const { container } = render(
+      <Scene sessions={[REGION]} activeSessionId="sess-1" onSelectTask={noop} onSelectSession={noop} />,
+    );
     expect(container.querySelectorAll(".pc-island")).toHaveLength(3);
   });
 
   it("anchors a galleon in each session region", () => {
-    const { container } = render(<Scene sessions={[REGION]} activeSessionId="sess-1" onSelectTask={noop} />);
+    const { container } = render(
+      <Scene sessions={[REGION]} activeSessionId="sess-1" onSelectTask={noop} onSelectSession={noop} />,
+    );
     expect(container.querySelector(".pc-galleon")).toBeTruthy();
   });
 
   it("travels the camera to the selected region (a transform offset that changes)", () => {
-    const second: SessionRegionData = { id: "sess-2", label: "sess-2", tasks: [island("running", { id: "z" })] };
-    const first = render(<Scene sessions={[REGION, second]} activeSessionId="sess-1" onSelectTask={noop} />);
+    const second = region("sess-2", "sess-2", [island("running", { id: "z" })]);
+    const first = render(
+      <Scene sessions={[REGION, second]} activeSessionId="sess-1" onSelectTask={noop} onSelectSession={noop} />,
+    );
     const camAt = (c: HTMLElement) => (c.querySelector(".pc-world") as HTMLElement).style.transform;
     const atFirst = camAt(first.container);
     cleanup();
-    const secondRender = render(<Scene sessions={[REGION, second]} activeSessionId="sess-2" onSelectTask={noop} />);
+    const secondRender = render(
+      <Scene sessions={[REGION, second]} activeSessionId="sess-2" onSelectTask={noop} onSelectSession={noop} />,
+    );
     const atSecond = camAt(secondRender.container);
     // Selecting the far session shifts the world plane — the camera has sailed.
     expect(atFirst).not.toBe(atSecond);
@@ -168,24 +185,188 @@ describe("Scene lays out the active session's cove (#69)", () => {
   });
 
   it("frames the first region for 'All hands' (null) rather than filtering", () => {
-    const { container } = render(<Scene sessions={[REGION]} activeSessionId={null} onSelectTask={noop} />);
+    const { container } = render(
+      <Scene sessions={[REGION]} activeSessionId={null} onSelectTask={noop} onSelectSession={noop} />,
+    );
     expect(container.querySelectorAll(".pc-island")).toHaveLength(3);
     expect((container.querySelector(".pc-world") as HTMLElement).style.transform).toContain("translate(0px,");
   });
 
   it("shows the calm-tide empty state with no sessions", () => {
-    const { container } = render(<Scene sessions={[]} activeSessionId={null} onSelectTask={noop} />);
+    const { container } = render(
+      <Scene sessions={[]} activeSessionId={null} onSelectTask={noop} onSelectSession={noop} />,
+    );
     expect(container.querySelector(".pc-scene-empty")).toBeTruthy();
     expect(container.querySelector(".pc-region")).toBeNull();
   });
 
   it("selects the task represented by a clicked island (#83)", () => {
     const onSelectTask = vi.fn();
-    render(<Scene sessions={[REGION]} activeSessionId="sess-1" onSelectTask={onSelectTask} />);
+    render(
+      <Scene sessions={[REGION]} activeSessionId="sess-1" onSelectTask={onSelectTask} onSelectSession={noop} />,
+    );
 
     fireEvent.click(screen.getByRole("button", { name: "chart-the-bay — RUNNING" }));
 
     expect(onSelectTask).toHaveBeenCalledOnce();
     expect(onSelectTask).toHaveBeenCalledWith("a");
+  });
+});
+
+describe("Scene edge-of-frame attention indicators", () => {
+  const calmLeft = region("sess-a", "sess-a", [island("running", { id: "a1" })]);
+  const awaitingRight = region(
+    "sess-b",
+    "sess-b",
+    [island("awaiting_answer", { id: "b1" })],
+    { state: "awaiting_answer", count: 1, rank: 0 },
+  );
+  const failedFar = region(
+    "sess-c",
+    "sess-c",
+    [island("failed", { id: "c1" })],
+    { state: "failed", count: 1, rank: 5 },
+  );
+  const stalledMid = region(
+    "sess-d",
+    "sess-d",
+    [island("stalled", { id: "d1" })],
+    { state: "stalled", count: 1, rank: 1 },
+  );
+
+  it("shows no indicator for the framed session, even when it has attention", () => {
+    const { container } = render(
+      <Scene
+        sessions={[REGION]}
+        activeSessionId="sess-1"
+        onSelectTask={noop}
+        onSelectSession={noop}
+      />,
+    );
+    expect(container.querySelector(".pc-edge-alert")).toBeNull();
+  });
+
+  it("shows no indicator for an off-camera calm session", () => {
+    const calm = region("sess-2", "sess-2", [island("running", { id: "z" })]);
+    const { container } = render(
+      <Scene
+        sessions={[REGION, calm]}
+        activeSessionId="sess-1"
+        onSelectTask={noop}
+        onSelectSession={noop}
+      />,
+    );
+    // REGION is framed (has attention but on-camera); calm is off-camera with null attention.
+    expect(container.querySelector(".pc-edge-alert")).toBeNull();
+  });
+
+  it("renders a right-edge indicator for an off-camera awaiting session", () => {
+    const { container } = render(
+      <Scene
+        sessions={[calmLeft, awaitingRight]}
+        activeSessionId="sess-a"
+        onSelectTask={noop}
+        onSelectSession={noop}
+      />,
+    );
+    const btn = screen.getByRole("button", {
+      name: "Session sess-b — 1 awaiting answer, to the right",
+    });
+    expect(btn).toBeTruthy();
+    expect(btn.classList.contains("pc-edge-alert--beacon")).toBe(true);
+    expect(btn.textContent).toContain("▶");
+    expect(container.querySelector(".pc-edge-alerts--right")).toBeTruthy();
+    expect(container.querySelector(".pc-edge-alerts--left")).toBeNull();
+  });
+
+  it("points left when the attention session sits west of the frame", () => {
+    render(
+      <Scene
+        sessions={[awaitingRight, calmLeft]}
+        activeSessionId="sess-a"
+        onSelectTask={noop}
+        onSelectSession={noop}
+      />,
+    );
+    // calmLeft is second (east); awaitingRight is first (west of frame).
+    // Wait — sessions order is [awaitingRight, calmLeft], active is sess-a which is calmLeft at index 1.
+    const btn = screen.getByRole("button", {
+      name: "Session sess-b — 1 awaiting answer, to the left",
+    });
+    expect(btn.textContent).toContain("◀");
+  });
+
+  it("selects the session when an edge indicator is clicked", () => {
+    const onSelectSession = vi.fn();
+    render(
+      <Scene
+        sessions={[calmLeft, awaitingRight]}
+        activeSessionId="sess-a"
+        onSelectTask={noop}
+        onSelectSession={onSelectSession}
+      />,
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Session sess-b — 1 awaiting answer, to the right" }),
+    );
+    expect(onSelectSession).toHaveBeenCalledOnce();
+    expect(onSelectSession).toHaveBeenCalledWith("sess-b");
+  });
+
+  it("stacks up to 3 indicators loudest-first and collapses the rest into +N", () => {
+    // Four sessions to the right of the framed calm one, mixed attention ranks.
+    const s1 = region("s1", "s1", [island("failed", { id: "f1" })], { state: "failed", count: 1, rank: 5 });
+    const s2 = region("s2", "s2", [island("stalled", { id: "st1" })], { state: "stalled", count: 1, rank: 1 });
+    const s3 = region("s3", "s3", [island("awaiting_answer", { id: "aw1" })], {
+      state: "awaiting_answer",
+      count: 2,
+      rank: 0,
+    });
+    const s4 = region("s4", "s4", [island("failed", { id: "f2" })], { state: "failed", count: 1, rank: 5 });
+    const { container } = render(
+      <Scene
+        sessions={[calmLeft, s1, s2, s3, s4]}
+        activeSessionId="sess-a"
+        onSelectTask={noop}
+        onSelectSession={noop}
+      />,
+    );
+    const buttons = container.querySelectorAll("button.pc-edge-alert");
+    expect(buttons).toHaveLength(3);
+    // Loudest first: awaiting, stalled, then failed (s1 before s4 by id).
+    expect(buttons[0]!.getAttribute("aria-label")).toContain("s3");
+    expect(buttons[1]!.getAttribute("aria-label")).toContain("s2");
+    expect(buttons[2]!.getAttribute("aria-label")).toContain("s1");
+    const more = container.querySelector(".pc-edge-alert--more");
+    expect(more?.textContent).toBe("+1");
+  });
+
+  it("under All hands, treats the first region as framed (indicators for the rest)", () => {
+    render(
+      <Scene
+        sessions={[calmLeft, awaitingRight, failedFar]}
+        activeSessionId={null}
+        onSelectTask={noop}
+        onSelectSession={noop}
+      />,
+    );
+    expect(
+      screen.getByRole("button", { name: "Session sess-b — 1 awaiting answer, to the right" }),
+    ).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Session sess-c — 1 failed, to the right" })).toBeTruthy();
+    // No indicator for the framed calm first region.
+    expect(screen.queryByRole("button", { name: /Session sess-a/ })).toBeNull();
+  });
+
+  it("does not invent indicators for stalledMid when framed on that session", () => {
+    const { container } = render(
+      <Scene
+        sessions={[stalledMid, calmLeft]}
+        activeSessionId="sess-d"
+        onSelectTask={noop}
+        onSelectSession={noop}
+      />,
+    );
+    expect(container.querySelector(".pc-edge-alert")).toBeNull();
   });
 });

@@ -59,6 +59,7 @@ export function Cockpit() {
                 sessions={snapshot.scene.sessions}
                 activeSessionId={roster.selectedSessionId}
                 onSelectTask={roster.selectTask}
+                onSelectSession={roster.selectSession}
               />
             </div>
           </section>

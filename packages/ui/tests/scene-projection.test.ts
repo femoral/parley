@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { projectScene } from "../src/app/hooks/scene.js";
+import { attentionRank } from "@useparley/core";
+import {
+  projectScene,
+  rollupSessionAttention,
+  isSceneAttentionState,
+} from "../src/app/hooks/scene.js";
 import { projectRoster, type RosterTaskInput } from "../src/app/hooks/roster.js";
 import { projectInbox } from "../src/app/hooks/inbox.js";
 
@@ -66,6 +71,81 @@ describe("projectScene groups tasks into session regions (#69)", () => {
     const island = sessions[0]!.tasks[0]!;
     expect(island.coat).toBe("#8a6a34");
     expect(island.coatDark).toBe("#5b3a24");
+  });
+});
+
+describe("projectScene attention rollup (edge-of-frame alerts)", () => {
+  it("is null when every island is calm (running / pending / completed / cancelled)", () => {
+    const { sessions } = projectScene([
+      task({ id: "a", state: "running", orchestratorSession: "s" }),
+      task({ id: "b", state: "completed", orchestratorSession: "s" }),
+      task({ id: "c", state: "pending", orchestratorSession: "s" }),
+      task({ id: "d", state: "cancelled", orchestratorSession: "s" }),
+    ]);
+    expect(sessions[0]!.attention).toBeNull();
+  });
+
+  it("picks awaiting_answer as louder than stalled or failed", () => {
+    const { sessions } = projectScene([
+      task({ id: "a", state: "failed", orchestratorSession: "s" }),
+      task({ id: "b", state: "awaiting_answer", orchestratorSession: "s" }),
+      task({ id: "c", state: "stalled", orchestratorSession: "s" }),
+    ]);
+    expect(sessions[0]!.attention).toEqual({
+      state: "awaiting_answer",
+      count: 1,
+      rank: attentionRank("awaiting_answer"),
+    });
+  });
+
+  it("picks stalled over failed when no awaiting", () => {
+    const { sessions } = projectScene([
+      task({ id: "a", state: "failed", orchestratorSession: "s" }),
+      task({ id: "b", state: "stalled", orchestratorSession: "s" }),
+      task({ id: "c", state: "failed", orchestratorSession: "s" }),
+    ]);
+    expect(sessions[0]!.attention).toEqual({
+      state: "stalled",
+      count: 1,
+      rank: attentionRank("stalled"),
+    });
+  });
+
+  it("counts tasks in the loudest state only", () => {
+    const { sessions } = projectScene([
+      task({ id: "a", state: "awaiting_answer", orchestratorSession: "s" }),
+      task({ id: "b", state: "awaiting_answer", orchestratorSession: "s" }),
+      task({ id: "c", state: "failed", orchestratorSession: "s" }),
+    ]);
+    expect(sessions[0]!.attention).toEqual({
+      state: "awaiting_answer",
+      count: 2,
+      rank: attentionRank("awaiting_answer"),
+    });
+  });
+
+  it("rolls up per session independently", () => {
+    const { sessions } = projectScene([
+      task({ id: "a", state: "running", orchestratorSession: "calm" }),
+      task({ id: "b", state: "failed", orchestratorSession: "trouble" }),
+    ]);
+    const calm = sessions.find((s) => s.id === "calm")!;
+    const trouble = sessions.find((s) => s.id === "trouble")!;
+    expect(calm.attention).toBeNull();
+    expect(trouble.attention?.state).toBe("failed");
+  });
+
+  it("rollupSessionAttention ranks via core attentionRank (never re-derived)", () => {
+    const rollup = rollupSessionAttention([
+      { state: "failed" },
+      { state: "stalled" },
+      { state: "running" },
+    ]);
+    expect(rollup?.rank).toBe(attentionRank("stalled"));
+    expect(isSceneAttentionState("awaiting_answer")).toBe(true);
+    expect(isSceneAttentionState("failed")).toBe(true);
+    expect(isSceneAttentionState("running")).toBe(false);
+    expect(isSceneAttentionState("completed")).toBe(false);
   });
 });
 
