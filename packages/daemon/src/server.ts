@@ -1,9 +1,9 @@
 import http from "node:http";
 import path from "node:path";
-import type { HomePaths } from "@useparley/core";
+import { readConfig, type HomePaths } from "@useparley/core";
 import { createAdapterRegistry } from "./adapters/index.js";
 import { openDatabase, sweepInterruptedTasks, TERMINAL_STATES } from "./db.js";
-import { DEFAULT_NETWORK, DEFAULT_SANDBOX, isSandboxMode } from "./adapters/types.js";
+import { isSandboxMode, type SandboxMode } from "./adapters/types.js";
 import type { ContextFile } from "./context.js";
 import { DelegateError, TaskEngine } from "./engine.js";
 import { readLogTail } from "./logtail.js";
@@ -77,15 +77,17 @@ function handleDelegate(engine: TaskEngine, res: http.ServerResponse, body: unkn
     return;
   }
   const prompt = body.prompt;
-  const vendor = body.vendor;
   const cwd = body.cwd;
   const orchestratorSessionId = body.orchestrator_session_id;
   if (typeof prompt !== "string" || prompt.trim() === "") {
     sendJson(res, 400, { error: "prompt is required" });
     return;
   }
-  if (typeof vendor !== "string" || vendor === "") {
-    sendJson(res, 400, { error: "vendor is required" });
+  // Vendor optional when profile is set; engine resolves precedence (#113).
+  const vendor = optionalString(body.vendor);
+  const profile = optionalString(body.profile);
+  if (vendor === null && profile === null) {
+    sendJson(res, 400, { error: "vendor or profile is required" });
     return;
   }
   if (typeof orchestratorSessionId !== "string" || orchestratorSessionId === "") {
@@ -96,15 +98,24 @@ function handleDelegate(engine: TaskEngine, res: http.ServerResponse, body: unkn
     sendJson(res, 400, { error: "cwd is required" });
     return;
   }
-  // Posture: the CLI validates too, but guard the wire — an unknown mode is a
-  // client mistake (→ 400 → exit 2), not a 500. Absent fields take ADR-0006
-  // defaults so a bare `POST /tasks` still gets a well-formed posture.
-  const sandbox = body.sandbox === undefined ? DEFAULT_SANDBOX : body.sandbox;
-  if (typeof sandbox !== "string" || !isSandboxMode(sandbox)) {
-    sendJson(res, 400, { error: `unknown sandbox mode: ${String(body.sandbox)}` });
-    return;
+  // Posture: null means "not specified" so the engine can apply profile then
+  // ADR-0006 defaults. An unknown mode is a client mistake (→ 400 → exit 2).
+  let sandbox: SandboxMode | null = null;
+  if (body.sandbox !== undefined && body.sandbox !== null) {
+    if (typeof body.sandbox !== "string" || !isSandboxMode(body.sandbox)) {
+      sendJson(res, 400, { error: `unknown sandbox mode: ${String(body.sandbox)}` });
+      return;
+    }
+    sandbox = body.sandbox;
   }
-  const network = body.network === undefined ? DEFAULT_NETWORK : body.network === true;
+  let network: boolean | null = null;
+  if (body.network !== undefined && body.network !== null) {
+    if (typeof body.network !== "boolean") {
+      sendJson(res, 400, { error: "network must be a boolean" });
+      return;
+    }
+    network = body.network;
+  }
   const timeoutRaw = body.answer_timeout_ms;
   let answerTimeoutMs: number | null = null;
   if (timeoutRaw !== undefined && timeoutRaw !== null) {
@@ -136,6 +147,7 @@ function handleDelegate(engine: TaskEngine, res: http.ServerResponse, body: unkn
     const task = engine.delegate({
       prompt,
       vendor,
+      profile,
       cwd,
       orchestratorSessionId,
       model: optionalString(body.model),
@@ -678,13 +690,31 @@ function createHandler(engine: TaskEngine, uiBundleDir: string | null): http.Req
  * the task-state database, and wire up the task engine. Does not touch the
  * discovery file — the daemon entry point publishes discovery once the port is
  * known.
+ *
+ * Plugin adapters (`vendors.<id>.plugin`) load here at startup only — adding a
+ * plugin requires a daemon restart. Vendor args/env/profiles re-read per task.
  */
-export function startServer(paths: HomePaths): Promise<DaemonServer> {
+export async function startServer(paths: HomePaths): Promise<DaemonServer> {
   const db = openDatabase(paths);
   // Crash sweep (spec §3): tasks recorded live by a previous daemon lost their
   // children with its process group — mark them stalled before taking requests.
   sweepInterruptedTasks(db);
-  const engine = new TaskEngine(db, paths, createAdapterRegistry());
+  // Config for plugins only: a corrupt file must not brick the daemon at
+  // startup (UI discovery already degrades). Plugin load failures are logged
+  // inside createAdapterRegistry; missing config is fine (built-ins only).
+  let startupConfig = {};
+  try {
+    startupConfig = readConfig(paths.config);
+  } catch (err) {
+    process.stderr.write(
+      `parley daemon: config unreadable at startup, loading built-in adapters only: ${String(err)}\n`,
+    );
+  }
+  const adapters = await createAdapterRegistry(process.env, {
+    config: startupConfig,
+    parleyHome: paths.home,
+  });
+  const engine = new TaskEngine(db, paths, adapters);
   // UI discovery must never take the daemon down: it's spawned detached with
   // stdio ignored, so an exception here (e.g. a corrupt parley.json) would
   // brick every CLI command with no visible cause. Degrade to "no UI" and

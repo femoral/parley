@@ -3,7 +3,7 @@ import { parseArgs } from "../args.js";
 import { type CliContext, printJson } from "../context.js";
 import { createAdapterRegistry } from "@useparley/daemon/adapters/index.js";
 import type { ModelCatalog, VendorModels } from "@useparley/daemon/adapters/types.js";
-import { loadCatalog, refreshCatalog, writeCatalog } from "@useparley/core";
+import { loadCatalog, readConfig, refreshCatalog, writeCatalog } from "@useparley/core";
 
 /** Restrict a catalog to a single vendor, or return it whole when unfiltered. */
 function filterCatalog(catalog: ModelCatalog, vendor: string | undefined): ModelCatalog {
@@ -65,7 +65,19 @@ export async function runModels(ctx: CliContext, args: string[]): Promise<number
   if (!fs.existsSync(file)) writeCatalog(file, catalog);
 
   if (refresh) {
-    const adapters = createAdapterRegistry(ctx.env);
+    // Include plugin adapters when config loads; a corrupt config falls back to
+    // built-ins so models --refresh still works offline from a bad parley.json.
+    let config = {};
+    try {
+      config = readConfig(ctx.paths.config);
+    } catch (err) {
+      ctx.stderr(`warning: ${err instanceof Error ? err.message : String(err)}\n`);
+    }
+    const adapters = await createAdapterRegistry(ctx.env, {
+      config,
+      parleyHome: ctx.paths.home,
+      log: (line) => ctx.stderr(`${line}\n`),
+    });
     const targets = vendor !== undefined ? [vendor] : Object.keys(catalog);
     const result = await refreshCatalog(catalog, targets, adapters);
     catalog = result.catalog;

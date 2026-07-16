@@ -26,7 +26,9 @@ export function createFakeAdapter(env: NodeJS.ProcessEnv = process.env): VendorA
     // deliberately bad binary to exercise the daemon's spawn-failure path.
     const command = env.PARLEY_FAKE_COMMAND ?? process.execPath;
     return {
-      argv: [command, bin, task.prompt],
+      // extraArgs accepted for contract completeness; the fake vendor may ignore
+      // them (test double has no flag region that needs splicing).
+      argv: [command, bin, task.prompt, ...task.extraArgs],
       env: {
         FAKE_MCP_URL: hub.url,
         FAKE_MCP_HEADERS: JSON.stringify(hub.headers),

@@ -236,6 +236,9 @@ export function createGrokAdapter(env: NodeJS.ProcessEnv = process.env): VendorA
     // `--reasoning-effort` (alias `--effort`), verified in grok 0.2.93.
     // Omitted flag means the vendor's own default; no flag emitted.
     if (task.effort !== null) argv.push("--reasoning-effort", task.effort);
+    // extraArgs land in the flags region (before/with other flags; the prompt
+    // is a separate -p value) so they are never ambiguous (TaskSpec contract).
+    argv.push(...task.extraArgs);
     return argv;
   }
 

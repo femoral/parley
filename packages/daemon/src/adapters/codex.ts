@@ -121,11 +121,14 @@ function configArgs(task: TaskSpec, hub: HubInfo): string[] {
  * passthrough, and the shared config overrides.
  */
 function commonArgs(task: TaskSpec, hub: HubInfo): string[] {
+  // extraArgs land in the flags region (before the positional prompt) so flag
+  // parsers never swallow them as prompt text (TaskSpec contract / ADR-0009).
   return [
     "--json",
     "--skip-git-repo-check",
     ...(task.model !== null ? ["-m", task.model] : []),
     ...configArgs(task, hub),
+    ...task.extraArgs,
   ];
 }
 
