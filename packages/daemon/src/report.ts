@@ -146,6 +146,11 @@ export interface Envelope {
   effort: string | null;
   /** Profile name used at create time, if any (#113). */
   profile: string | null;
+  /**
+   * Remote runner affinity (`--runner <name>`), if any (#111 / ADR-0012).
+   * Null means the task executes in-daemon (default).
+   */
+  runner: string | null;
   /** The child's sandbox posture (spec §8): `{ sandbox, network }`. */
   posture: Posture;
   session_id: string | null;
@@ -219,6 +224,7 @@ export function buildEnvelope(task: TaskRow, logsDir: string | null = null): Env
     model: task.model,
     effort: task.effort,
     profile: task.profile,
+    runner: task.runner,
     posture: { sandbox: task.sandbox, network: task.network === 1 },
     session_id: task.session_id,
     usage: parseJsonColumn<Record<string, number>>(task.usage),

@@ -20,6 +20,7 @@ const RESERVED_PREFIXES = new Set([
   "mcp",
   "sessions",
   "child",
+  "runner",
 ]);
 
 export function isReservedPath(firstSegment: string | undefined): boolean {

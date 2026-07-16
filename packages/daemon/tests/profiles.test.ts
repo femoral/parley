@@ -60,6 +60,7 @@ function baseRequest(
     answerTimeoutMs: null,
     reportSchema: null,
     contexts: [],
+    runner: null,
     ...overrides,
   };
 }
@@ -154,12 +155,15 @@ describe("profile column migration (#113)", () => {
     db.close();
     fs.rmSync(home, { recursive: true, force: true });
     home = fs.mkdtempSync(path.join(os.tmpdir(), "parley-profile-mig-"));
-    const prev = openDatabaseUpTo(homePaths(home), SCHEMA_VERSION - 1);
+    // Profile is the second-to-last migration; runner (#111) is last. Open at
+    // SCHEMA_VERSION - 2 so neither profile nor runner columns exist yet.
+    const prev = openDatabaseUpTo(homePaths(home), SCHEMA_VERSION - 2);
     const colsBefore = prev
       .prepare("PRAGMA table_info(tasks)")
       .all()
       .map((r) => (r as { name: string }).name);
     expect(colsBefore).not.toContain("profile");
+    expect(colsBefore).not.toContain("runner");
     prev.close();
 
     db = openDatabase(homePaths(home));
@@ -168,6 +172,7 @@ describe("profile column migration (#113)", () => {
       .all()
       .map((r) => (r as { name: string }).name);
     expect(colsAfter).toContain("profile");
+    expect(colsAfter).toContain("runner");
     expect(
       (db.prepare("PRAGMA user_version").get() as { user_version: number }).user_version,
     ).toBe(SCHEMA_VERSION);

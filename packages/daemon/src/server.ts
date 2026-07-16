@@ -1,6 +1,6 @@
 import http from "node:http";
 import path from "node:path";
-import { readConfig, type HomePaths } from "@useparley/core";
+import { readConfig, type HomePaths, type ParleyConfig } from "@useparley/core";
 import { createAdapterRegistry } from "./adapters/index.js";
 import { openDatabase, sweepInterruptedTasks, TERMINAL_STATES } from "./db.js";
 import { isSandboxMode, type SandboxMode } from "./adapters/types.js";
@@ -24,12 +24,13 @@ export interface DaemonServer {
  * How long one `/events?wait=true` long-poll blocks before the CLI re-polls.
  * `PARLEY_LONG_POLL_MS` overrides it — tests shrink the window to exercise
  * re-poll behavior (e.g. a waiter observing a stall after missing the
- * question event) without 25s waits.
+ * question event) without 25s waits. Read per call so tests can set the env
+ * after the module loads.
  */
-const LONG_POLL_WINDOW_MS = (() => {
+function longPollWindowMs(): number {
   const parsed = Number(process.env.PARLEY_LONG_POLL_MS ?? "");
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 25_000;
-})();
+}
 
 function sendJson(res: http.ServerResponse, status: number, body: unknown): void {
   const payload = JSON.stringify(body);
@@ -165,6 +166,7 @@ function handleDelegate(engine: TaskEngine, res: http.ServerResponse, body: unkn
       // engine, which rejects non-schemas before the task is created.
       reportSchema: body.report_schema ?? null,
       contexts,
+      runner: optionalString(body.runner),
     });
     sendJson(res, 201, { task_id: task.id, name: task.name, state: task.state, seq: task.seq });
   } catch (err) {
@@ -173,6 +175,41 @@ function handleDelegate(engine: TaskEngine, res: http.ServerResponse, body: unkn
       return;
     }
     throw err;
+  }
+}
+
+/**
+ * Extract `Authorization: Bearer <token>` and match it to a configured runner
+ * name. Returns the runner name, or null when auth fails (caller sends 401).
+ * When `expectedName` is set, the token must belong to that exact runner.
+ */
+function authenticateRunner(
+  req: http.IncomingMessage,
+  config: ParleyConfig,
+  expectedName?: string,
+): string | null {
+  const header = req.headers.authorization;
+  if (typeof header !== "string" || !header.startsWith("Bearer ")) return null;
+  const token = header.slice("Bearer ".length).trim();
+  if (token === "") return null;
+  const runners = config.runners ?? {};
+  if (expectedName !== undefined) {
+    const entry = runners[expectedName];
+    if (entry === undefined || entry.token !== token) return null;
+    return expectedName;
+  }
+  for (const [name, entry] of Object.entries(runners)) {
+    if (entry.token === token) return name;
+  }
+  return null;
+}
+
+/** Re-read config for runner auth (hot, same posture as profiles). */
+function readRunnerConfig(paths: HomePaths): ParleyConfig {
+  try {
+    return readConfig(paths.config);
+  } catch {
+    return {};
   }
 }
 
@@ -306,7 +343,7 @@ async function handleInbox(
 
   const wait = params.get("wait") === "true";
   const result = wait
-    ? await engine.waitForInbox(resolved, LONG_POLL_WINDOW_MS)
+    ? await engine.waitForInbox(resolved, longPollWindowMs())
     : (() => {
         const pending = engine.peekInbox(resolved);
         if (pending) return { task: pending } as const;
@@ -371,7 +408,7 @@ async function handleWatchEvents(
   }
   const wait = params.get("wait") === "true";
   const transition = wait
-    ? await engine.waitForEvents(resolved, since, LONG_POLL_WINDOW_MS)
+    ? await engine.waitForEvents(resolved, since, longPollWindowMs())
     : engine.peekEvent(resolved, since);
   if (!transition) {
     sendJson(res, 200, { event: null, seq: since, task: null });
@@ -476,7 +513,7 @@ async function handleEventStream(
       }
       continue;
     }
-    const next = await engine.waitForAnyEvent(since, LONG_POLL_WINDOW_MS);
+    const next = await engine.waitForAnyEvent(since, longPollWindowMs());
     if (!open) break;
     // On timeout (`next === null`) the loop re-blocks, keeping the stream open;
     // otherwise the next peek picks the transition up and delivers it in order.
@@ -566,7 +603,11 @@ function handleCancel(engine: TaskEngine, res: http.ServerResponse, ref: string)
  * with SPA fallback. `uiBundleDir` is resolved once at server start; API
  * routes are matched first and always win, so the UI can never shadow them.
  */
-function createHandler(engine: TaskEngine, uiBundleDir: string | null): http.RequestListener {
+function createHandler(
+  engine: TaskEngine,
+  uiBundleDir: string | null,
+  paths: HomePaths,
+): http.RequestListener {
   return (req, res) => {
     void (async () => {
       const method = req.method ?? "GET";
@@ -592,6 +633,164 @@ function createHandler(engine: TaskEngine, uiBundleDir: string | null): http.Req
         }
         if (method === "GET" && segments.length === 2 && segments[1] === "task") {
           handleChildTask(engine, req, res);
+          return;
+        }
+      }
+
+      // Remote runner surface (#111 / ADR-0012): bearer-token auth; not localhost trust.
+      if (segments[0] === "runner") {
+        const config = readRunnerConfig(paths);
+        if (method === "POST" && segments.length === 2 && segments[1] === "lease") {
+          const body = await readBody(req);
+          if (!isRecord(body) || typeof body.runner !== "string" || body.runner === "") {
+            sendJson(res, 400, { error: "runner is required" });
+            return;
+          }
+          const runnerName = authenticateRunner(req, config, body.runner);
+          if (runnerName === null) {
+            sendJson(res, 401, { error: "unauthorized" });
+            return;
+          }
+          // Disable socket idle timeouts for the long-poll window.
+          req.setTimeout(0);
+          res.setTimeout(0);
+          const leased = await engine.leaseRunnerTask(runnerName, longPollWindowMs());
+          if (leased === null) {
+            res.writeHead(204);
+            res.end();
+            return;
+          }
+          sendJson(res, 200, leased);
+          return;
+        }
+        if (
+          method === "POST" &&
+          segments.length === 4 &&
+          segments[1] === "tasks" &&
+          segments[3] === "heartbeat"
+        ) {
+          const taskId = decodeURIComponent(segments[2] ?? "");
+          const runnerName = authenticateRunner(req, config);
+          if (runnerName === null) {
+            sendJson(res, 401, { error: "unauthorized" });
+            return;
+          }
+          try {
+            engine.runnerHeartbeat(taskId, runnerName);
+            sendJson(res, 200, { ok: true });
+          } catch (err) {
+            if (err instanceof DelegateError) {
+              sendJson(res, 400, { error: err.message });
+              return;
+            }
+            throw err;
+          }
+          return;
+        }
+        if (
+          method === "POST" &&
+          segments.length === 4 &&
+          segments[1] === "tasks" &&
+          segments[3] === "events"
+        ) {
+          const taskId = decodeURIComponent(segments[2] ?? "");
+          const runnerName = authenticateRunner(req, config);
+          if (runnerName === null) {
+            sendJson(res, 401, { error: "unauthorized" });
+            return;
+          }
+          const body = await readBody(req);
+          if (!isRecord(body) || !Array.isArray(body.lines)) {
+            sendJson(res, 400, { error: "lines must be an array of strings" });
+            return;
+          }
+          const lines: string[] = [];
+          for (const line of body.lines) {
+            if (typeof line !== "string") {
+              sendJson(res, 400, { error: "lines must be an array of strings" });
+              return;
+            }
+            lines.push(line);
+          }
+          try {
+            engine.processRunnerEvents(taskId, runnerName, lines);
+            sendJson(res, 200, { ok: true });
+          } catch (err) {
+            if (err instanceof DelegateError) {
+              sendJson(res, 400, { error: err.message });
+              return;
+            }
+            throw err;
+          }
+          return;
+        }
+        if (
+          method === "POST" &&
+          segments.length === 4 &&
+          segments[1] === "tasks" &&
+          segments[3] === "branch"
+        ) {
+          const taskId = decodeURIComponent(segments[2] ?? "");
+          const runnerName = authenticateRunner(req, config);
+          if (runnerName === null) {
+            sendJson(res, 401, { error: "unauthorized" });
+            return;
+          }
+          const body = await readBody(req);
+          if (!isRecord(body) || typeof body.branch !== "string") {
+            sendJson(res, 400, { error: "branch is required" });
+            return;
+          }
+          try {
+            const row = engine.recordRunnerBranch(taskId, runnerName, body.branch);
+            sendJson(res, 200, {
+              task_id: row.id,
+              name: row.name,
+              state: row.state,
+              branch: row.branch,
+              seq: row.seq,
+            });
+          } catch (err) {
+            if (err instanceof DelegateError) {
+              sendJson(res, 400, { error: err.message });
+              return;
+            }
+            throw err;
+          }
+          return;
+        }
+        if (
+          method === "POST" &&
+          segments.length === 4 &&
+          segments[1] === "tasks" &&
+          segments[3] === "fail"
+        ) {
+          const taskId = decodeURIComponent(segments[2] ?? "");
+          const runnerName = authenticateRunner(req, config);
+          if (runnerName === null) {
+            sendJson(res, 401, { error: "unauthorized" });
+            return;
+          }
+          const body = await readBody(req);
+          if (!isRecord(body) || typeof body.error !== "string" || body.error === "") {
+            sendJson(res, 400, { error: "error is required" });
+            return;
+          }
+          try {
+            const row = engine.failRunnerTask(taskId, runnerName, body.error);
+            sendJson(res, 200, {
+              task_id: row.id,
+              name: row.name,
+              state: row.state,
+              seq: row.seq,
+            });
+          } catch (err) {
+            if (err instanceof DelegateError) {
+              sendJson(res, 400, { error: err.message });
+              return;
+            }
+            throw err;
+          }
           return;
         }
       }
@@ -743,7 +942,7 @@ export async function startServer(paths: HomePaths): Promise<DaemonServer> {
   } catch (err) {
     process.stderr.write(`parley daemon: UI discovery failed, serving no UI: ${String(err)}\n`);
   }
-  const server = http.createServer(createHandler(engine, uiBundleDir));
+  const server = http.createServer(createHandler(engine, uiBundleDir, paths));
   // Children must never outlive the daemon (no orphans): whatever path the
   // process exits through — graceful close below, crash, signal handler —
   // hard-stop any still-running vendor children on the way out.

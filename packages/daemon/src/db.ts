@@ -66,6 +66,11 @@ export interface TaskRow {
   effort: string | null;
   /** Profile name used at create time, if any (#113). */
   profile: string | null;
+  /**
+   * Remote runner affinity (`--runner <name>`), if any (#111 / ADR-0012).
+   * Null means the task executes in-daemon (default).
+   */
+  runner: string | null;
   repo: string | null;
   state: string;
   created_at: string;
@@ -124,6 +129,11 @@ export interface NewTask {
   effort: string | null;
   /** Profile name used at create time, if any (#113). */
   profile: string | null;
+  /**
+   * Remote runner affinity (`--runner <name>`), if any (#111 / ADR-0012).
+   * Null/omitted means the task executes in-daemon (default).
+   */
+  runner?: string | null;
   repo: string | null;
   cwd: string;
   prompt: string;
@@ -238,6 +248,10 @@ const MIGRATIONS: string[] = [
   // #113: agent profiles — the profile name used at create time (null when the
   // caller named a vendor directly). Re-read from config on spawn for args/env.
   `ALTER TABLE tasks ADD COLUMN profile TEXT;`,
+  // #111 / ADR-0012: remote runner affinity — tasks tagged for a named runner
+  // stay pending until that runner leases them; never picked up by the local
+  // engine spawn path. Null means in-daemon execution (default).
+  `ALTER TABLE tasks ADD COLUMN runner TEXT;`,
 ];
 
 /** How many schema migrations have been applied — equals `PRAGMA user_version` after open. */
@@ -312,7 +326,7 @@ export function openDatabaseUpTo(paths: HomePaths, upTo: number): DatabaseHandle
   return db;
 }
 
-const TASK_COLUMNS = `id, name, vendor, model, effort, profile, repo, state, created_at, updated_at,
+const TASK_COLUMNS = `id, name, vendor, model, effort, profile, runner, repo, state, created_at, updated_at,
    cwd, prompt, session_id, usage, report, error, started_at, completed_at,
    question_id, question, worktree, branch, base_sha, sandbox, network,
    answer_timeout_ms, report_schema, seq, orchestrator_session_id, eval_score, eval_feedback`;
@@ -512,10 +526,10 @@ export function insertTask(db: DatabaseHandle, task: NewTask): TaskRow {
   const now = new Date().toISOString();
   db.prepare(
     `INSERT INTO tasks
-       (id, name, vendor, model, effort, profile, repo, state, created_at, updated_at,
+       (id, name, vendor, model, effort, profile, runner, repo, state, created_at, updated_at,
         cwd, prompt, orchestrator_session_id, worktree, branch, base_sha, sandbox,
         network, answer_timeout_ms, report_schema)
-     VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     task.id,
     task.name,
@@ -523,6 +537,7 @@ export function insertTask(db: DatabaseHandle, task: NewTask): TaskRow {
     task.model,
     task.effort,
     task.profile,
+    task.runner ?? null,
     task.repo,
     now,
     now,
@@ -541,24 +556,53 @@ export function insertTask(db: DatabaseHandle, task: NewTask): TaskRow {
 }
 
 /**
+ * Oldest pending task with the given runner affinity, or undefined when none
+ * is waiting. Used by `POST /runner/lease` (#111).
+ */
+export function claimOldestPendingRunnerTask(
+  db: DatabaseHandle,
+  runner: string,
+): TaskRow | undefined {
+  const row = db
+    .prepare(
+      `SELECT ${TASK_COLUMNS} FROM tasks
+       WHERE state = 'pending' AND runner = ?
+       ORDER BY created_at ASC, id ASC
+       LIMIT 1`,
+    )
+    .get(runner);
+  return row === undefined ? undefined : asRow<TaskRow>(row);
+}
+
+/**
  * Startup crash sweep (spec §3): tasks recorded live (`pending`, `running`,
  * `awaiting_answer`) when the previous daemon died are marked `stalled` — their
  * children ran in the daemon's process group and died with it. Terminal and
  * already-stalled tasks are untouched. Questions stay recorded; a stalled task
  * resumes via `parley answer` like any other. Returns the number swept.
+ *
+ * Runner-affine tasks (#111 / ADR-0012) are excluded: their children live on
+ * the remote runner host, not in the daemon's process group. Those tasks keep
+ * their state; the engine re-arms heartbeat timers after restart.
  */
 export function sweepInterruptedTasks(db: DatabaseHandle): number {
   // "Live" is defined as the complement of the settled states, so a future
   // state is swept by default rather than surviving restarts as a zombie.
+  // Runner-affine tasks keep their children on the remote host.
   const placeholders = [...SETTLED_STATES].map(() => "?").join(", ");
   const live = db
-    .prepare(`SELECT id FROM tasks WHERE state NOT IN (${placeholders})`)
+    .prepare(
+      `SELECT id FROM tasks
+       WHERE state NOT IN (${placeholders})
+         AND (runner IS NULL OR runner = '')`,
+    )
     .all(...SETTLED_STATES)
     .map((row) => asRow<{ id: string }>(row));
   const result = db
     .prepare(
       `UPDATE tasks SET state = 'stalled', error = ?, updated_at = ?
-       WHERE state NOT IN (${placeholders})`,
+       WHERE state NOT IN (${placeholders})
+         AND (runner IS NULL OR runner = '')`,
     )
     .run(
       "daemon restarted while the task was live; the child died with the daemon's process group",
@@ -588,6 +632,7 @@ export type TaskPatch = Partial<
     | "question_id"
     | "question"
     | "worktree"
+    | "branch"
     | "eval_score"
     | "eval_feedback"
   >

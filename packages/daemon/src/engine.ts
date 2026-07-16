@@ -1,4 +1,4 @@
-import { spawn, type ChildProcess } from "node:child_process";
+import { execFileSync, spawn, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import readline from "node:readline";
@@ -25,6 +25,7 @@ import { VENDOR_DIAG_PREFIX } from "./adapters/types.js";
 import {
   answerQaTurn,
   bumpTaskSeq,
+  claimOldestPendingRunnerTask,
   currentSeq,
   getTask,
   getTaskBySeq,
@@ -78,6 +79,23 @@ export const TASK_HEADER = "x-parley-task";
 
 /** Default `--answer-timeout`: 30 minutes (spec §2). */
 export const DEFAULT_ANSWER_TIMEOUT_MS = 30 * 60 * 1000;
+
+/** Default runner heartbeat window: 90 seconds (#111 / ADR-0012). */
+export const DEFAULT_RUNNER_HEARTBEAT_TIMEOUT_MS = 90_000;
+
+/**
+ * How long a leased remote task may go without a runner heartbeat before the
+ * daemon fails it with a runner-lost error. Override via
+ * `PARLEY_RUNNER_HEARTBEAT_MS` for fast tests (read each call so tests can set
+ * the env after the module loads).
+ */
+export function runnerHeartbeatTimeoutMs(): number {
+  const parsed = Number(process.env.PARLEY_RUNNER_HEARTBEAT_MS ?? "");
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_RUNNER_HEARTBEAT_TIMEOUT_MS;
+}
+
+/** Filename under the task log dir for contexts + base_ref of runner-affine tasks. */
+const RUNNER_META_FILE = "runner-meta.json";
 
 /**
  * After `submit_report` is accepted the task stays `running` until the vendor
@@ -196,6 +214,50 @@ export interface DelegateRequest {
    * has already rejected an unreadable file (→ exit 2) before this point.
    */
   contexts: ContextFile[];
+  /**
+   * Remote runner affinity (`--runner <name>`), if any (#111 / ADR-0012). Null
+   * means the task executes in-daemon (default). When set, the task stays
+   * pending until that runner leases it — never locally spawned.
+   */
+  runner: string | null;
+}
+
+/**
+ * Full task spec returned by `POST /runner/lease` (#111 / ADR-0012). Resolved
+ * daemon-side (profile/vendor args+env) so the runner mirrors local spawn.
+ */
+export interface RunnerLeaseSpec {
+  task_id: string;
+  name: string | null;
+  prompt: string;
+  vendor: string;
+  model: string | null;
+  effort: string | null;
+  profile: string | null;
+  sandbox: SandboxMode;
+  network: boolean;
+  answer_timeout_ms: number;
+  report_schema: JsonSchema;
+  /** Caller's base ref, when set; null means HEAD at create time. */
+  base_ref: string | null;
+  /** Resolved base commit at create time; null when the daemon could not resolve it. */
+  base_sha: string | null;
+  /**
+   * Repo path as recorded at create time — the runner maps this identifier to
+   * a local clone via its `repos` config.
+   */
+  repo: string;
+  contexts: ContextFile[];
+  /** `vendors.<id>.args` then `profiles.<name>.args`. */
+  extra_args: string[];
+  /** `vendors.<id>.env` then `profiles.<name>.env` (profile wins on key clash). */
+  env: Record<string, string>;
+}
+
+/** Sidecar written for runner-affine tasks (contexts survive until lease). */
+interface RunnerMeta {
+  contexts: ContextFile[];
+  base_ref: string | null;
 }
 
 /** Resolved create-time fields after profile + defaults (#113). */
@@ -247,6 +309,16 @@ export class TaskEngine {
    */
   private readonly reportFallbackTimers = new Map<string, NodeJS.Timeout>();
   /**
+   * Per-task runner heartbeat timers (#111): re-armed on each lease/heartbeat;
+   * fire `fail` with a runner-lost error when the window elapses.
+   */
+  private readonly runnerHeartbeatTimers = new Map<string, NodeJS.Timeout>();
+  /**
+   * Long-poll waiters parked on `POST /runner/lease` until a matching pending
+   * task appears or the poll window elapses.
+   */
+  private readonly runnerLeaseWaiters = new Set<() => void>();
+  /**
    * Set once the daemon is going down: child exits stop being lifecycle events
    * (their tasks stay recorded `running`/`awaiting_answer`, and the *next*
    * daemon's startup sweep marks them `stalled` — the crash story, spec §3)
@@ -260,7 +332,15 @@ export class TaskEngine {
     private readonly db: DatabaseHandle,
     private readonly paths: HomePaths,
     private readonly adapters: Map<string, VendorAdapter>,
-  ) {}
+  ) {
+    // Re-arm heartbeats for runner tasks that survived a daemon restart
+    // (excluded from the process-group crash sweep).
+    for (const task of listTasks(this.db)) {
+      if (task.runner !== null && task.runner !== "" && !TERMINAL_STATES.has(task.state) && task.state !== "pending") {
+        this.armRunnerHeartbeat(task.id);
+      }
+    }
+  }
 
   setHubPort(port: number): void {
     this.hubPort = port;
@@ -352,6 +432,9 @@ export class TaskEngine {
   /**
    * Create a task (pending) and kick off its background run. Returns the row
    * immediately (ADR-0008); callers wait via the attention inbox (`parley watch`).
+   *
+   * When `runner` is set (#111 / ADR-0012), the task stays pending and is never
+   * locally spawned — a remote runner leases it later.
    */
   delegate(request: DelegateRequest): TaskRow {
     const resolved = this.resolveDelegate(request);
@@ -364,6 +447,15 @@ export class TaskEngine {
     // shadow (or be shadowed by) a real task id in `resolveTask`.
     if (request.name !== null && /^t\d+$/.test(request.name)) {
       throw new DelegateError(`name must not look like a task id: ${request.name}`);
+    }
+    // Validate runner affinity against settings before the task exists.
+    if (request.runner !== null) {
+      const config = this.readParleyConfig();
+      if (config.runners?.[request.runner] === undefined) {
+        const known = Object.keys(config.runners ?? {});
+        const list = known.length > 0 ? known.join(", ") : "(none)";
+        throw new DelegateError(`unknown runner: ${request.runner} (known: ${list})`);
+      }
     }
     // A bad `--report-schema` is rejected before the task exists (spec §5): the
     // caller supplied it, so a non-schema is their mistake (→ exit 2).
@@ -387,6 +479,8 @@ export class TaskEngine {
 
     // `--cwd` runs the child directly in that directory (no worktree); the
     // default path creates a parley-owned worktree from the repo's HEAD.
+    // Runner-affine tasks never cut a local worktree — the remote runner does.
+    const isRemote = request.runner !== null;
     let repo = cwd;
     let workingDir = cwd;
     let worktreePath: string | null = null;
@@ -403,39 +497,62 @@ export class TaskEngine {
           `not a git repository: ${cwd} — pass --cwd to delegate outside a worktree`,
         );
       }
-      let info;
-      try {
-        info = createWorktree({
-          repoRoot: root,
-          worktreesDir: this.paths.worktrees,
-          taskId: id,
-          name: request.name,
-          baseRef: request.baseRef,
-        });
-      } catch (err) {
-        throw new DelegateError(`failed to create worktree: ${errorMessage(err)}`);
-      }
       repo = root;
-      workingDir = info.path;
-      worktreePath = info.path;
-      branch = info.branch;
-      baseSha = info.baseSha;
+      if (isRemote) {
+        // Resolve base SHA now so the lease can hand the runner a fixed commit;
+        // worktree + branch are created on the runner host.
+        workingDir = root;
+        try {
+          baseSha = execFileSync(
+            "git",
+            ["-C", root, "rev-parse", request.baseRef ?? "HEAD"],
+            { encoding: "utf8" },
+          ).trim();
+        } catch (err) {
+          throw new DelegateError(`failed to resolve base ref: ${errorMessage(err)}`);
+        }
+      } else {
+        let info;
+        try {
+          info = createWorktree({
+            repoRoot: root,
+            worktreesDir: this.paths.worktrees,
+            taskId: id,
+            name: request.name,
+            baseRef: request.baseRef,
+          });
+        } catch (err) {
+          throw new DelegateError(`failed to create worktree: ${errorMessage(err)}`);
+        }
+        workingDir = info.path;
+        worktreePath = info.path;
+        branch = info.branch;
+        baseSha = info.baseSha;
+      }
     }
 
-    // Task context rides the workspace, not the prompt (spec §7): the brief and
-    // any `--context` files land under `.parley/`, which the worktree already
-    // git-excludes. Roll a worktree back if this fails so nothing leaks untracked.
-    try {
-      materializeContext(workingDir, request.prompt, request.contexts);
-    } catch (err) {
-      if (worktreePath !== null) {
-        try {
-          removeWorktree(repo, worktreePath);
-        } catch {
-          /* best-effort rollback; the materialization error is the one that matters */
+    if (!isRemote) {
+      // Task context rides the workspace, not the prompt (spec §7): the brief and
+      // any `--context` files land under `.parley/`, which the worktree already
+      // git-excludes. Roll a worktree back if this fails so nothing leaks untracked.
+      try {
+        materializeContext(workingDir, request.prompt, request.contexts);
+      } catch (err) {
+        if (worktreePath !== null) {
+          try {
+            removeWorktree(repo, worktreePath);
+          } catch {
+            /* best-effort rollback; the materialization error is the one that matters */
+          }
         }
+        throw new DelegateError(`failed to materialize task context: ${errorMessage(err)}`);
       }
-      throw new DelegateError(`failed to materialize task context: ${errorMessage(err)}`);
+    } else {
+      // Persist contexts for the lease response (no local workspace yet).
+      this.writeRunnerMeta(id, {
+        contexts: request.contexts,
+        base_ref: request.baseRef,
+      });
     }
 
     const row = insertTask(this.db, {
@@ -445,6 +562,7 @@ export class TaskEngine {
       model: resolved.model,
       effort: resolved.effort,
       profile: resolved.profile,
+      runner: request.runner,
       repo,
       cwd: workingDir,
       prompt: request.prompt,
@@ -458,6 +576,12 @@ export class TaskEngine {
       report_schema:
         request.reportSchema !== null ? JSON.stringify(request.reportSchema) : null,
     });
+
+    if (isRemote) {
+      // Wake any lease long-polls waiting for this runner.
+      this.wakeRunnerLeaseWaiters();
+      return row;
+    }
 
     void this.run(row, adapter).catch((err: unknown) => {
       this.fail(row.id, `task runner crashed: ${String(err)}`);
@@ -579,6 +703,7 @@ export class TaskEngine {
   ): void {
     if (this.shuttingDown) return;
     this.clearReportFallback(taskId);
+    this.clearRunnerHeartbeat(taskId);
     const task = getTask(this.db, taskId);
     if (!task || TERMINAL_STATES.has(task.state)) return;
     if (task.report === null) return;
@@ -733,6 +858,11 @@ export class TaskEngine {
     for (const taskId of this.reportFallbackTimers.keys()) {
       this.clearReportFallback(taskId);
     }
+    for (const taskId of this.runnerHeartbeatTimers.keys()) {
+      this.clearRunnerHeartbeat(taskId);
+    }
+    // Unblock lease long-polls so shutdown is not held open.
+    this.wakeRunnerLeaseWaiters();
     for (const child of this.children.values()) {
       try {
         child.kill("SIGKILL");
@@ -833,6 +963,7 @@ export class TaskEngine {
     this.pending.delete(task.id);
     // Drop a post-report fallback so it cannot complete after we cancel (#72).
     this.clearReportFallback(task.id);
+    this.clearRunnerHeartbeat(task.id);
     // Terminate the child. Its own `close` handler fires afterwards, but the
     // `cancelled` state is terminal so it will not be overwritten with `failed`.
     const child = this.children.get(task.id);
@@ -1072,12 +1203,289 @@ export class TaskEngine {
       return;
     }
     this.clearReportFallback(taskId);
+    this.clearRunnerHeartbeat(taskId);
     updateTask(this.db, taskId, {
       state: "failed",
       error,
       completed_at: new Date().toISOString(),
     });
     this.transitioned(taskId);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Remote runners (#111 / ADR-0012)
+  // ---------------------------------------------------------------------------
+
+  private runnerMetaPath(taskId: string): string {
+    return path.join(taskLogDir(this.paths, taskId), RUNNER_META_FILE);
+  }
+
+  private writeRunnerMeta(taskId: string, meta: RunnerMeta): void {
+    const dir = taskLogDir(this.paths, taskId);
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(this.runnerMetaPath(taskId), `${JSON.stringify(meta)}\n`);
+  }
+
+  private readRunnerMeta(taskId: string): RunnerMeta {
+    try {
+      const raw = fs.readFileSync(this.runnerMetaPath(taskId), "utf8");
+      const parsed = JSON.parse(raw) as RunnerMeta;
+      return {
+        contexts: Array.isArray(parsed.contexts) ? parsed.contexts : [],
+        base_ref: typeof parsed.base_ref === "string" ? parsed.base_ref : null,
+      };
+    } catch {
+      return { contexts: [], base_ref: null };
+    }
+  }
+
+  private armRunnerHeartbeat(taskId: string): void {
+    this.clearRunnerHeartbeat(taskId);
+    const windowMs = runnerHeartbeatTimeoutMs();
+    const timer = setTimeout(() => {
+      this.runnerHeartbeatTimers.delete(taskId);
+      this.fail(taskId, `runner lost: no heartbeat within ${windowMs}ms`);
+    }, windowMs);
+    timer.unref();
+    this.runnerHeartbeatTimers.set(taskId, timer);
+  }
+
+  private clearRunnerHeartbeat(taskId: string): void {
+    const timer = this.runnerHeartbeatTimers.get(taskId);
+    if (!timer) return;
+    clearTimeout(timer);
+    this.runnerHeartbeatTimers.delete(taskId);
+  }
+
+  private wakeRunnerLeaseWaiters(): void {
+    const waiters = [...this.runnerLeaseWaiters];
+    this.runnerLeaseWaiters.clear();
+    for (const wake of waiters) wake();
+  }
+
+  /** Config-level env for a task: vendor.env then profile.env (profile wins). */
+  private configEnvFor(task: TaskRow): Record<string, string> {
+    let config: ParleyConfig;
+    try {
+      config = readConfig(this.paths.config);
+    } catch (err) {
+      throw new Error(`config: ${errorMessage(err)}`);
+    }
+    const vendorId = task.vendor ?? "";
+    const vendorEnv = config.vendors?.[vendorId]?.env ?? {};
+    const profileEnv =
+      task.profile !== null ? (config.profiles?.[task.profile]?.env ?? {}) : {};
+    return { ...vendorEnv, ...profileEnv };
+  }
+
+  /**
+   * Build the lease payload for a task row. Shared by the immediate-claim and
+   * long-poll paths of `leaseRunnerTask`.
+   */
+  private buildLeaseSpec(task: TaskRow): RunnerLeaseSpec {
+    if (task.repo === null || task.repo === "") {
+      throw new DelegateError(`task ${task.id} has no repo recorded`);
+    }
+    const meta = this.readRunnerMeta(task.id);
+    return {
+      task_id: task.id,
+      name: task.name,
+      prompt: task.prompt ?? "",
+      vendor: task.vendor ?? "",
+      model: task.model,
+      effort: task.effort,
+      profile: task.profile,
+      sandbox: task.sandbox,
+      network: task.network === 1,
+      answer_timeout_ms: task.answer_timeout_ms ?? DEFAULT_ANSWER_TIMEOUT_MS,
+      report_schema:
+        parseJsonColumn<JsonSchema>(task.report_schema) ?? DEFAULT_REPORT_SCHEMA,
+      base_ref: meta.base_ref,
+      base_sha: task.base_sha,
+      repo: task.repo,
+      contexts: meta.contexts,
+      extra_args: this.extraArgsFor(task),
+      env: this.configEnvFor(task),
+    };
+  }
+
+  /**
+   * Atomically claim the oldest pending task for `runnerName` (transition to
+   * `running`) and return its lease spec, or null when none is waiting.
+   */
+  private tryClaimRunnerTask(runnerName: string): RunnerLeaseSpec | null {
+    const pending = claimOldestPendingRunnerTask(this.db, runnerName);
+    if (!pending) return null;
+    updateTask(this.db, pending.id, {
+      state: "running",
+      started_at: new Date().toISOString(),
+    });
+    this.transitioned(pending.id);
+    this.armRunnerHeartbeat(pending.id);
+    const claimed = getTask(this.db, pending.id);
+    if (!claimed) return null;
+    return this.buildLeaseSpec(claimed);
+  }
+
+  /**
+   * `POST /runner/lease` — long-poll for the oldest pending task with the given
+   * runner affinity. Returns the full lease spec when one is claimed, or null
+   * when the poll window elapses with nothing to claim (HTTP 204).
+   */
+  async leaseRunnerTask(
+    runnerName: string,
+    timeoutMs: number,
+  ): Promise<RunnerLeaseSpec | null> {
+    const deadline = Date.now() + timeoutMs;
+    for (;;) {
+      const claimed = this.tryClaimRunnerTask(runnerName);
+      if (claimed) return claimed;
+      const remaining = deadline - Date.now();
+      if (remaining <= 0) return null;
+      const woke = await new Promise<boolean>((resolve) => {
+        const wake = (): void => {
+          clearTimeout(timer);
+          this.runnerLeaseWaiters.delete(wake);
+          resolve(true);
+        };
+        const timer = setTimeout(() => {
+          this.runnerLeaseWaiters.delete(wake);
+          resolve(false);
+        }, remaining);
+        this.runnerLeaseWaiters.add(wake);
+      });
+      if (!woke) {
+        // Window elapsed — one last try in case a task landed in the gap.
+        return this.tryClaimRunnerTask(runnerName);
+      }
+    }
+  }
+
+  /**
+   * `POST /runner/tasks/:id/heartbeat` — refresh the lease timer. Throws
+   * `DelegateError` when the task is unknown, not runner-affine, or terminal.
+   */
+  runnerHeartbeat(taskId: string, runnerName: string): void {
+    const task = getTask(this.db, taskId);
+    if (!task) throw new DelegateError(`no such task: ${taskId}`);
+    if (task.runner !== runnerName) {
+      throw new DelegateError(`task ${taskId} is not leased to runner ${runnerName}`);
+    }
+    if (TERMINAL_STATES.has(task.state)) {
+      throw new DelegateError(`task ${taskId} is already ${task.state}`);
+    }
+    this.armRunnerHeartbeat(taskId);
+  }
+
+  /**
+   * `POST /runner/tasks/:id/events` — append raw vendor JSONL and run the same
+   * parseEvent-based usage/session extraction as the local stream path.
+   */
+  processRunnerEvents(taskId: string, runnerName: string, lines: string[]): void {
+    const task = getTask(this.db, taskId);
+    if (!task) throw new DelegateError(`no such task: ${taskId}`);
+    if (task.runner !== runnerName) {
+      throw new DelegateError(`task ${taskId} is not leased to runner ${runnerName}`);
+    }
+    if (TERMINAL_STATES.has(task.state) && task.state !== "completed") {
+      // Allow trailing events after completed (usage) but not after fail/cancel.
+      if (task.state === "failed" || task.state === "cancelled") {
+        throw new DelegateError(`task ${taskId} is already ${task.state}`);
+      }
+    }
+    const adapter = this.adapters.get(task.vendor ?? "");
+    if (!adapter) {
+      throw new DelegateError(`task ${taskId} has an unknown vendor: ${task.vendor ?? "?"}`);
+    }
+
+    const logDir = taskLogDir(this.paths, taskId);
+    fs.mkdirSync(logDir, { recursive: true });
+    const rawLogPath = path.join(logDir, "vendor.jsonl");
+    const diagLogPath = path.join(logDir, "diag.log");
+
+    let usage = parseJsonColumn<Record<string, number>>(task.usage) ?? undefined;
+    let sessionId = task.session_id ?? undefined;
+    const events: VendorEvent[] = [];
+    // Re-seed session extraction with a synthetic prior if we already have one
+    // so sessionId() can still see it across chunk boundaries when needed.
+    if (sessionId !== undefined) {
+      events.push({ kind: "session_meta", session_id: sessionId });
+    }
+
+    const appendRaw: string[] = [];
+    const appendDiag: string[] = [];
+    let usageChanged = false;
+    let sessionChanged = false;
+
+    for (const line of lines) {
+      appendRaw.push(line);
+      const lineEvents = adapter.parseEvent(line);
+      if (lineEvents.length === 0) continue;
+      events.push(...lineEvents);
+      for (const event of lineEvents) {
+        if (event.kind === "session_meta" && event.usage !== undefined) {
+          usage = { ...usage, ...event.usage };
+          usageChanged = true;
+        }
+        if (event.kind === "error" && event.text?.startsWith(VENDOR_DIAG_PREFIX)) {
+          appendDiag.push(`${new Date().toISOString()} ${event.text}`);
+        }
+      }
+      if (lineEvents.some((e) => e.kind === "session_meta" && e.session_id !== undefined)) {
+        const found = adapter.sessionId(events);
+        if (found !== undefined && found !== sessionId) {
+          sessionId = found;
+          sessionChanged = true;
+        }
+      }
+    }
+
+    if (appendRaw.length > 0) {
+      fs.appendFileSync(rawLogPath, `${appendRaw.join("\n")}\n`);
+    }
+    if (appendDiag.length > 0) {
+      fs.appendFileSync(diagLogPath, `${appendDiag.join("\n")}\n`);
+    }
+
+    const patch: TaskPatch = {};
+    if (usageChanged && usage !== undefined) patch.usage = JSON.stringify(usage);
+    if (sessionChanged && sessionId !== undefined) patch.session_id = sessionId;
+    if (Object.keys(patch).length > 0) updateTask(this.db, taskId, patch);
+  }
+
+  /**
+   * `POST /runner/tasks/:id/branch` — record the branch the runner pushed.
+   * Worktree stays null for remote tasks. When a report is already accepted,
+   * completes the task (remote stand-in for local stream-close).
+   */
+  recordRunnerBranch(taskId: string, runnerName: string, branch: string): TaskRow {
+    const task = getTask(this.db, taskId);
+    if (!task) throw new DelegateError(`no such task: ${taskId}`);
+    if (task.runner !== runnerName) {
+      throw new DelegateError(`task ${taskId} is not leased to runner ${runnerName}`);
+    }
+    if (branch.trim() === "") {
+      throw new DelegateError("branch must be a non-empty string");
+    }
+    updateTask(this.db, taskId, { branch });
+    if (task.report !== null && !TERMINAL_STATES.has(task.state)) {
+      this.completeAcceptedReport(taskId);
+    }
+    return getTask(this.db, taskId)!;
+  }
+
+  /**
+   * `POST /runner/tasks/:id/fail` — runner cannot execute (or child exited
+   * without a report). An accepted report still wins (#72).
+   */
+  failRunnerTask(taskId: string, runnerName: string, error: string): TaskRow {
+    const task = getTask(this.db, taskId);
+    if (!task) throw new DelegateError(`no such task: ${taskId}`);
+    if (task.runner !== runnerName) {
+      throw new DelegateError(`task ${taskId} is not leased to runner ${runnerName}`);
+    }
+    this.fail(taskId, error);
+    return getTask(this.db, taskId)!;
   }
 
   /** Daemon base URL (no path) — the HTTP/CLI child channels and MCP hub ride on it. */
