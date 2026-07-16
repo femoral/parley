@@ -1,0 +1,373 @@
+import path from "node:path";
+import type {
+  HubInfo,
+  MaterializedFile,
+  SpawnPlan,
+  TaskSpec,
+  VendorAdapter,
+  VendorEvent,
+} from "./types.js";
+import { VENDOR_DIAG_PREFIX } from "./types.js";
+
+/**
+ * The `hermes` vendor adapter — real delegation to Nous Research Hermes Agent
+ * (`hermes` binary, v0.17.0 surface; docs/research/hermes-cli-automation.md).
+ *
+ * Hermes has **no streaming JSONL event surface** (research LOUD CAVEAT / §2).
+ * Quiet mode emits final assistant text on stdout and a `session_id: …` line on
+ * stderr. This adapter is files-heavy like grok: materialize a private
+ * `HERMES_HOME` under the worktree (config.yaml with MCP hub + posture +
+ * effort), spawn `hermes chat --quiet`, and synthesize thin `VendorEvent`s from
+ * plain text lines. Live tool/file progress is opaque.
+ *
+ * Sandbox fidelity is partial (research §5): Hermes has no Codex-style
+ * `--sandbox` matrix. We map posture via `HERMES_WRITE_SAFE_ROOT` +
+ * `terminal.backend: local` and always force `--yolo` / `approvals.mode: off`.
+ * Local backend has **no OS-level network filter**; `network:false` is a
+ * documented residual gap (docker air-gap would require a different lifecycle).
+ *
+ * `listModels` is omitted — `hermes model` is interactive only (research §7).
+ */
+
+/** Default binary; override via `PARLEY_HERMES_BIN` (smoke tests, custom installs). */
+const DEFAULT_HERMES_BIN = "hermes";
+
+/**
+ * Private Hermes home relative to the task cwd. Isolated from the operator's
+ * `~/.hermes` so children never write sessions/skills/memory into the user
+ * install (research §3 / risk #8). Must be stable across prepare→resume so
+ * `--resume` finds the same SQLite `state.db`.
+ */
+const HERMES_HOME_REL = path.join(".parley", "hermes-home");
+
+/**
+ * Headroom added to the answer timeout when raising Hermes' per-tool MCP
+ * timeout (`mcp_servers.*.timeout`, default 300s — research §3). Same
+ * load-bearing concern as codex's `tool_timeout_sec`.
+ */
+const TOOL_TIMEOUT_HEADROOM_SEC = 60;
+
+/**
+ * Provider auth env vars named in research §6. Forward only when set in the
+ * parent — no universal `HERMES_API_KEY`.
+ */
+const AUTH_ENV_KEYS = [
+  "OPENROUTER_API_KEY",
+  "OPENAI_API_KEY",
+  "OPENAI_BASE_URL",
+  "ANTHROPIC_API_KEY",
+  "GOOGLE_API_KEY",
+  "GEMINI_API_KEY",
+  "XAI_API_KEY",
+] as const;
+
+// Control chars for YAML string escaping (same approach as toml.ts).
+const CONTROL_CHARS = new RegExp(
+  `[${String.fromCharCode(0)}-${String.fromCharCode(0x1f)}${String.fromCharCode(0x7f)}]`,
+  "g",
+);
+
+/**
+ * Double-quoted YAML scalar. Escapes backslash, quote, and control characters
+ * so a hub URL or header value cannot inject an extra config line.
+ */
+function yamlString(value: string): string {
+  const escaped = value
+    .replace(/\\/g, "\\\\")
+    .replace(/"/g, '\\"')
+    .replace(CONTROL_CHARS, (ch) => `\\u${ch.charCodeAt(0).toString(16).padStart(4, "0")}`);
+  return `"${escaped}"`;
+}
+
+function toolTimeoutSec(answerTimeoutMs: number): number {
+  return Math.ceil(answerTimeoutMs / 1000) + TOOL_TIMEOUT_HEADROOM_SEC;
+}
+
+function hermesHomeAbs(cwd: string): string {
+  return path.join(cwd, HERMES_HOME_REL);
+}
+
+/**
+ * Map Parley posture → Hermes write-root + config terminal block (research §5).
+ *
+ * Fidelity notes (documented gaps, not full Codex parity):
+ * - **read-only**: `HERMES_WRITE_SAFE_ROOT` limited to the private home so
+ *   `write_file`/`patch` cannot touch the worktree. Terminal can still write
+ *   on the local backend (research: "Poor without docker").
+ * - **workspace**: safe root = worktree + private/common gitdirs + HERMES_HOME
+ *   so `git commit` works (same grant pattern as codex writable_roots).
+ * - **full**: unset `HERMES_WRITE_SAFE_ROOT` (unrestricted host user access).
+ * - **network:false**: local backend has no egress filter. We do not flip to
+ *   docker here (different mount/cwd semantics; research residual gap).
+ */
+function postureEnv(task: TaskSpec, homeAbs: string): Record<string, string> {
+  const env: Record<string, string> = {};
+  switch (task.sandbox) {
+    case "read-only":
+      // Only Hermes state is writable via write_file/patch tools.
+      env.HERMES_WRITE_SAFE_ROOT = homeAbs;
+      break;
+    case "workspace": {
+      const roots = [
+        task.cwd,
+        homeAbs,
+        ...(task.gitDir !== undefined ? [task.gitDir] : []),
+        ...(task.gitCommonDir !== undefined ? [task.gitCommonDir] : []),
+      ];
+      env.HERMES_WRITE_SAFE_ROOT = [...new Set(roots)].join(":");
+      break;
+    }
+    case "full":
+      // Unset — do not put HERMES_WRITE_SAFE_ROOT in env.
+      break;
+  }
+  return env;
+}
+
+/**
+ * Materialized `$HERMES_HOME/config.yaml` (research §3, §5, §6, §9 checklist).
+ * Carries MCP hub injection (no CLI MCP flags), approvals off, optional
+ * reasoning effort, and local terminal backend.
+ */
+function configYaml(task: TaskSpec, hub: HubInfo): string {
+  const lines: string[] = [
+    "# Generated by parley — do not edit; regenerated on every (re)spawn.",
+    "approvals:",
+    "  mode: off",
+    "agent:",
+    "  max_turns: 90",
+  ];
+  // Effort has no CLI flag on v0.17.0 (research §6) — config only.
+  if (task.effort !== null) {
+    lines.push(`  reasoning_effort: ${yamlString(task.effort)}`);
+  }
+  lines.push(
+    "terminal:",
+    "  backend: local",
+    // UNKNOWN(research): docker_network only applies to docker backend; local
+    // has no OS-level network sandbox (research §5). Residual host egress when
+    // task.network is false.
+    "mcp_servers:",
+    "  parley:",
+    `    url: ${yamlString(hub.url)}`,
+    "    headers:",
+  );
+  for (const [key, value] of Object.entries(hub.headers)) {
+    // Quote both key and value so arbitrary header names stay valid YAML.
+    lines.push(`      ${yamlString(key)}: ${yamlString(value)}`);
+  }
+  lines.push(
+    `    timeout: ${toolTimeoutSec(task.answerTimeoutMs)}`,
+    "    connect_timeout: 15",
+    "    enabled: true",
+    "",
+  );
+  return lines.join("\n");
+}
+
+/** Provider keys from research §6 — only when present on the parent env. */
+function authEnv(env: NodeJS.ProcessEnv): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const key of AUTH_ENV_KEYS) {
+    const value = env[key];
+    if (value !== undefined) out[key] = value;
+  }
+  return out;
+}
+
+/**
+ * Auth / provider failure markers seen on quiet stdout (research §2 VERIFIED
+ * auth-failure sample) and other run-terminal error shapes from §9 table.
+ */
+function isFatalErrorText(text: string): boolean {
+  return (
+    /No inference provider configured/i.test(text) ||
+    /^Error:\s/i.test(text) ||
+    /hermes -z:\s*agent failed:/i.test(text) ||
+    /agent failed:/i.test(text)
+  );
+}
+
+/**
+ * Optional post-hoc usage JSON (research §8 schema shape). Quiet mode never
+ * emits this; parseEvent still normalizes it if a line looks like a session
+ * usage row (or a test fixture / future sessions-export pipe).
+ */
+function tryParseUsageLine(line: string): VendorEvent[] | null {
+  const trimmed = line.trim();
+  if (!trimmed.startsWith("{")) return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(trimmed);
+  } catch {
+    return null;
+  }
+  if (typeof parsed !== "object" || parsed === null) return null;
+  const obj = parsed as Record<string, unknown>;
+  // Require at least one harness usage field so random JSON is not treated as usage.
+  const harnessKeys = [
+    "input_tokens",
+    "output_tokens",
+    "cache_read_tokens",
+    "cache_write_tokens",
+    "reasoning_tokens",
+    "estimated_cost_usd",
+  ] as const;
+  if (!harnessKeys.some((k) => typeof obj[k] === "number")) return null;
+
+  const usage: Record<string, number> = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (typeof value === "number" && key !== "id") usage[key] = value;
+  }
+  // Canonical keys when derivable from Hermes field names (research §8 / task).
+  if (typeof obj.input_tokens === "number") usage.input_tokens = obj.input_tokens;
+  if (typeof obj.output_tokens === "number") usage.output_tokens = obj.output_tokens;
+  // cache_read_tokens is Hermes' cached-input analogue → cached_tokens.
+  if (typeof obj.cache_read_tokens === "number") {
+    usage.cache_read_tokens = obj.cache_read_tokens;
+    usage.cached_tokens = obj.cache_read_tokens;
+  }
+  const session_id = typeof obj.id === "string" ? obj.id : undefined;
+  return [{ kind: "session_meta", session_id, usage }];
+}
+
+export function createHermesAdapter(env: NodeJS.ProcessEnv = process.env): VendorAdapter {
+  const bin = env.PARLEY_HERMES_BIN ?? DEFAULT_HERMES_BIN;
+
+  /** Env shared by prepare and resume: isolation, yolo, write root, auth. */
+  function baseEnv(task: TaskSpec): Record<string, string> {
+    const homeAbs = hermesHomeAbs(task.cwd);
+    return {
+      HERMES_HOME: homeAbs,
+      // Belt-and-braces with --yolo / --accept-hooks (research §5).
+      HERMES_YOLO_MODE: "1",
+      HERMES_ACCEPT_HOOKS: "1",
+      ...postureEnv(task, homeAbs),
+      ...authEnv(env),
+    };
+  }
+
+  function files(task: TaskSpec, hub: HubInfo): MaterializedFile[] {
+    return [
+      {
+        path: path.join(HERMES_HOME_REL, "config.yaml"),
+        contents: configYaml(task, hub),
+      },
+    ];
+  }
+
+  /**
+   * Flags after `hermes chat` and before `-q <prompt>`: quiet headless posture,
+   * optional model, optional resume session, then extraArgs (TaskSpec contract —
+   * never after the prompt value).
+   */
+  function flagArgs(task: TaskSpec, resumeSessionId: string | undefined): string[] {
+    const argv: string[] = [
+      "chat",
+      "--quiet",
+      "--yolo",
+      "--accept-hooks",
+      "--source",
+      "tool",
+    ];
+    if (resumeSessionId !== undefined) {
+      argv.push("--resume", resumeSessionId);
+    }
+    if (task.model !== null) {
+      argv.push("-m", task.model);
+    }
+    // extraArgs in the flags region before -q (research §9 / TaskSpec contract).
+    argv.push(...task.extraArgs);
+    return argv;
+  }
+
+  function spawnPlan(
+    task: TaskSpec,
+    hub: HubInfo,
+    resumeSessionId: string | undefined,
+  ): SpawnPlan {
+    return {
+      argv: [bin, ...flagArgs(task, resumeSessionId), "-q", task.prompt],
+      env: baseEnv(task),
+      files: files(task, hub),
+      cwd: task.cwd,
+    };
+  }
+
+  return {
+    id: "hermes",
+
+    prepare(task, hub): Promise<SpawnPlan> {
+      // Fresh headless one-shot (research §2 / §9):
+      //   hermes chat --quiet --yolo --accept-hooks --source tool -q <prompt>
+      // Do NOT use `hermes -z` (no session id). Do NOT pass `--worktree` /
+      // `--safe-mode` / `--ignore-user-config` (research §9 risks).
+      return Promise.resolve(spawnPlan(task, hub, undefined));
+    },
+
+    resume(task, hub): Promise<SpawnPlan> {
+      // Spawn-per-turn resume (research §4): same HERMES_HOME + --resume <id>.
+      // Without a session id, hermes would start fresh or --continue the wrong
+      // concurrent session — reject like grok.
+      if (task.sessionId === undefined) {
+        return Promise.reject(new Error(`hermes resume for task ${task.id} has no session id`));
+      }
+      return Promise.resolve(spawnPlan(task, hub, task.sessionId));
+    },
+
+    parseEvent(line: string): VendorEvent[] {
+      // Quiet mode is plain text, not JSONL (research LOUD CAVEAT / §9 table A).
+      // Unknown / empty → [] always; the raw log remains the durable record.
+      if (line === "") return [];
+
+      // stderr session line (research §2 / §4). Engine currently feeds stdout
+      // only, but fixtures and any future stream merge still need this.
+      const sessionMatch = /^session_id:\s*(\S+)\s*$/.exec(line);
+      if (sessionMatch) {
+        return [{ kind: "session_meta", session_id: sessionMatch[1] }];
+      }
+
+      // Optional usage JSON (research §8) — not emitted by quiet mode live.
+      const usageEvents = tryParseUsageLine(line);
+      if (usageEvents !== null) return usageEvents;
+
+      // Leading/trailing whitespace-only: opaque.
+      const text = line; // keep full line for message fidelity
+      if (text.trim() === "") return [];
+
+      // Run-terminal auth / agent failures (research §2 VERIFIED + §9).
+      if (isFatalErrorText(text)) {
+        return [{ kind: "error", text, fatal: true }];
+      }
+
+      // Actionable integration diagnostics if Hermes ever surfaces approval
+      // cancellation of our MCP tools on a text line (yolo should prevent this;
+      // keep the greppable prefix if the text looks like a cancelled hub call).
+      if (/mcp_parley_|submit_report|ask_orchestrator/i.test(text) && /cancel|denied|approval/i.test(text)) {
+        return [
+          {
+            kind: "error",
+            text: `${VENDOR_DIAG_PREFIX} hermes MCP/approval issue: ${text}`,
+          },
+        ];
+      }
+
+      // Non-empty stdout chunk → assistant message (research §9).
+      return [{ kind: "message", text }];
+    },
+
+    sessionId(events: VendorEvent[]): string | undefined {
+      // Last session_meta with a session_id (research §4: trust last line after
+      // mid-run context compression may rotate ids).
+      for (let i = events.length - 1; i >= 0; i--) {
+        const event = events[i];
+        if (event?.kind === "session_meta" && event.session_id !== undefined) {
+          return event.session_id;
+        }
+      }
+      return undefined;
+    },
+
+    // listModels omitted: hermes model is interactive TUI only (research §7).
+  };
+}
