@@ -59,6 +59,16 @@ export interface ProfileConfig {
 }
 
 /**
+ * Named remote runner under `runners.<name>` (#111 / ADR-0012). The daemon
+ * authenticates lease/heartbeat/event requests with the bearer token; the
+ * runner process is started with the same name + token out-of-band.
+ */
+export interface RunnerConfig {
+  /** Shared secret the runner presents as `Authorization: Bearer <token>`. */
+  token: string;
+}
+
+/**
  * The parley home config file (`~/.parley/parley.json`). Unknown top-level keys
  * (and unknown keys inside sections) are preserved by callers that round-trip
  * the file but ignored by readers.
@@ -68,6 +78,8 @@ export interface ParleyConfig {
   daemon?: DaemonConfig;
   vendors?: Record<string, VendorConfig>;
   profiles?: Record<string, ProfileConfig>;
+  /** Remote runner credentials (`runners.<name>.token`); see ADR-0012. */
+  runners?: Record<string, RunnerConfig>;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -189,6 +201,29 @@ function validateProfiles(file: string, raw: unknown): void {
   }
 }
 
+function validateRunnerEntry(file: string, name: string, raw: unknown): void {
+  if (!isRecord(raw)) {
+    throw new Error(`invalid config at ${file}: runners.${name} must be an object`);
+  }
+  if (raw.token === undefined) {
+    throw new Error(`invalid config at ${file}: runners.${name}.token is required`);
+  }
+  assertNonEmptyString(file, `runners.${name}.token`, raw.token);
+}
+
+function validateRunners(file: string, raw: unknown): void {
+  if (raw === undefined) return;
+  if (!isRecord(raw)) {
+    throw new Error(`invalid config at ${file}: runners must be an object`);
+  }
+  for (const [name, entry] of Object.entries(raw)) {
+    if (name === "") {
+      throw new Error(`invalid config at ${file}: runners keys must be non-empty strings`);
+    }
+    validateRunnerEntry(file, name, entry);
+  }
+}
+
 /**
  * Read the parley home config file, returning `{}` when it does not exist —
  * the file is optional; every consumer of `readConfig` must behave as if
@@ -225,6 +260,7 @@ export function readConfig(file: string): ParleyConfig {
   validateDaemon(file, config.daemon);
   validateVendors(file, config.vendors);
   validateProfiles(file, config.profiles);
+  validateRunners(file, config.runners);
   // Validate the fields consumers hand to path/module APIs — a non-string must
   // surface as a named config error here, not a TypeError deep in a consumer.
   // (ui.path / ui.package checked in validateUi above.)

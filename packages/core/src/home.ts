@@ -21,7 +21,7 @@ export interface HomePaths {
   models: string;
   /**
    * User-patchable settings file (`ui.*`, `daemon.url`, `vendors.*`,
-   * `profiles.*` — see `config.ts` / ADR-0010).
+   * `profiles.*`, `runners.*` — see `config.ts` / ADR-0010 / ADR-0012).
    */
   config: string;
   /** Per-task raw vendor event logs live here (future tickets). */

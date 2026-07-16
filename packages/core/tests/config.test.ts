@@ -190,6 +190,35 @@ describe("readConfig — profiles.*", () => {
   });
 });
 
+describe("readConfig — runners.*", () => {
+  it("accepts runners.<name>.token", () => {
+    const file = writeConfig(
+      JSON.stringify({ runners: { gpu: { token: "secret-token" } } }),
+    );
+    expect(readConfig(file).runners?.gpu).toEqual({ token: "secret-token" });
+  });
+
+  it("requires runners.<name>.token", () => {
+    const file = writeConfig(JSON.stringify({ runners: { gpu: {} } }));
+    expect(() => readConfig(file)).toThrow(/runners\.gpu\.token is required/);
+  });
+
+  it("rejects empty runners.<name>.token", () => {
+    const file = writeConfig(JSON.stringify({ runners: { gpu: { token: "" } } }));
+    expect(() => readConfig(file)).toThrow(/runners\.gpu\.token must be a non-empty string/);
+  });
+
+  it("rejects non-object runners", () => {
+    const file = writeConfig(JSON.stringify({ runners: "x" }));
+    expect(() => readConfig(file)).toThrow(/runners must be an object/);
+  });
+
+  it("rejects empty runner names", () => {
+    const file = writeConfig(JSON.stringify({ runners: { "": { token: "x" } } }));
+    expect(() => readConfig(file)).toThrow(/runners keys must be non-empty strings/);
+  });
+});
+
 describe("readConfig — unknown keys preserved", () => {
   it("keeps unknown top-level and nested keys", () => {
     const file = writeConfig(

@@ -42,6 +42,12 @@ export interface TaskEnvelope {
   effort: string | null;
   /** Profile name used at create time, if any (#113). */
   profile: string | null;
+  /**
+   * Remote runner affinity (`--runner <name>`), if any (#111 / ADR-0012).
+   * Null/absent means the task executes in-daemon (default). Optional on the
+   * wire so older clients/fixtures remain assignable.
+   */
+  runner?: string | null;
   posture: Posture;
   session_id: string | null;
   usage: Record<string, number> | null;
@@ -76,6 +82,12 @@ export interface TaskRow {
   effort: string | null;
   /** Profile name used at create time, if any (#113). */
   profile: string | null;
+  /**
+   * Remote runner affinity (`--runner <name>`), if any (#111 / ADR-0012).
+   * Null/absent means the task executes in-daemon (default). Optional on the
+   * wire so older clients/fixtures remain assignable.
+   */
+  runner?: string | null;
   repo: string | null;
   state: string;
   created_at: string;
