@@ -29,6 +29,7 @@ function seedManyTasks(count: number): void {
       vendor: "codex",
       model: "gpt-5",
       effort: "medium",
+      profile: null,
       repo: "/some/repo",
       cwd: "/some/repo/worktree",
       prompt: "do the thing",

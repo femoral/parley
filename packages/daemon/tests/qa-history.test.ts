@@ -28,6 +28,7 @@ function seedTask(id = "t1"): void {
     vendor: "fake",
     model: null,
     effort: null,
+    profile: null,
     repo: null,
     cwd: "/tmp",
     prompt: "do it",
@@ -132,40 +133,57 @@ describe("qa_turns table (#79)", () => {
     fs.rmSync(home, { recursive: true, force: true });
     home = fs.mkdtempSync(path.join(os.tmpdir(), "parley-qa-mig-"));
 
-    // Build a DB at the schema version just before #79's qa_turns migration.
+    // Build a DB at the schema version just before the latest migration so the
+    // next open applies it. Seed with a raw INSERT that omits columns added by
+    // later migrations (insertTask always writes the current column set).
     const prev = openDatabaseUpTo(homePaths(home), SCHEMA_VERSION - 1);
-    insertTask(prev, {
-      id: "t1",
-      name: "pre-migration",
-      vendor: "fake",
-      model: null,
-      effort: null,
-      repo: null,
-      cwd: "/tmp",
-      prompt: "legacy task",
-      orchestrator_session_id: "orch",
-      worktree: null,
-      branch: null,
-      base_sha: null,
-      sandbox: "workspace",
-      network: true,
-      answer_timeout_ms: null,
-      report_schema: null,
-    });
+    const now = new Date().toISOString();
+    prev
+      .prepare(
+        `INSERT INTO tasks
+           (id, name, vendor, model, effort, repo, state, created_at, updated_at,
+            cwd, prompt, orchestrator_session_id, worktree, branch, base_sha, sandbox,
+            network, answer_timeout_ms, report_schema)
+         VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        "t1",
+        "pre-migration",
+        "fake",
+        null,
+        null,
+        null,
+        now,
+        now,
+        "/tmp",
+        "legacy task",
+        "orch",
+        null,
+        null,
+        null,
+        "workspace",
+        1,
+        null,
+        null,
+      );
     const versionBefore = (
       prev.prepare("PRAGMA user_version").get() as { user_version: number }
     ).user_version;
     expect(versionBefore).toBe(SCHEMA_VERSION - 1);
     prev.close();
 
-    // Full open applies the remaining migration.
+    // Full open applies the remaining migration(s).
     db = openDatabase(homePaths(home));
     const versionAfter = (
       db.prepare("PRAGMA user_version").get() as { user_version: number }
     ).user_version;
     expect(versionAfter).toBe(SCHEMA_VERSION);
-    // Pre-existing task has no history rows.
+    // Pre-existing task has no history rows; profile column is null.
     expect(listQaTurns(db, "t1")).toEqual([]);
+    const row = db.prepare("SELECT profile FROM tasks WHERE id = ?").get("t1") as {
+      profile: string | null;
+    };
+    expect(row.profile).toBeNull();
     // New turns can be written after migration.
     insertQaTurn(db, "t1", "q1", "post-migration?");
     expect(listQaTurns(db, "t1")).toHaveLength(1);

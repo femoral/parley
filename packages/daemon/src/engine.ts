@@ -3,10 +3,15 @@ import fs from "node:fs";
 import path from "node:path";
 import readline from "node:readline";
 import {
+  DEFAULT_NETWORK,
+  DEFAULT_SANDBOX,
   formatDuration,
   inboxRank,
   isActionableState,
+  readConfig,
   type HomePaths,
+  type ParleyConfig,
+  type ProfileConfig,
 } from "@useparley/core";
 import type {
   HubInfo,
@@ -129,9 +134,23 @@ function errorMessage(err: unknown): string {
 
 export interface DelegateRequest {
   prompt: string;
-  vendor: string;
+  /**
+   * Vendor id. Optional when `profile` is set — the profile supplies the vendor
+   * (explicit request vendor still wins). Null means "not specified".
+   */
+  vendor: string | null;
+  /**
+   * Named profile from `~/.parley/parley.json` `profiles.<name>` (#113). Null
+   * when the caller named a vendor directly. Explicit request fields beat
+   * profile values; profile values beat ADR defaults.
+   */
+  profile: string | null;
+  /**
+   * Opaque model string. Null means "not specified" (use profile, else none) —
+   * not "clear the profile's model".
+   */
   model: string | null;
-  /** Opaque reasoning-effort string (spec §9); passed through to the vendor unchanged. */
+  /** Opaque reasoning-effort string (spec §9); null means not specified. */
   effort: string | null;
   name: string | null;
   /**
@@ -148,10 +167,16 @@ export interface DelegateRequest {
   useWorktree: boolean;
   /** Ref to branch the worktree from; null means the repo's current HEAD. */
   baseRef: string | null;
-  /** Normalized sandbox posture (spec §8); defaults to `workspace`. */
-  sandbox: SandboxMode;
-  /** Whether the child may reach the network (ADR-0006 default: true). */
-  network: boolean;
+  /**
+   * Normalized sandbox posture when the caller set it explicitly; null means
+   * use the profile (if any) then ADR-0006 default (`workspace`).
+   */
+  sandbox: SandboxMode | null;
+  /**
+   * Network access when the caller set it explicitly; null means use the
+   * profile (if any) then ADR-0006 default (on).
+   */
+  network: boolean | null;
   /** `--answer-timeout` in ms; null means the daemon default (30m). */
   answerTimeoutMs: number | null;
   /**
@@ -166,6 +191,16 @@ export interface DelegateRequest {
    * has already rejected an unreadable file (→ exit 2) before this point.
    */
   contexts: ContextFile[];
+}
+
+/** Resolved create-time fields after profile + defaults (#113). */
+interface ResolvedDelegate {
+  vendor: string;
+  profile: string | null;
+  model: string | null;
+  effort: string | null;
+  sandbox: SandboxMode;
+  network: boolean;
 }
 
 /**
@@ -268,14 +303,57 @@ export class TaskEngine {
   }
 
   /**
+   * Re-read `~/.parley/parley.json` (hot for vendor args/env/profiles). A
+   * corrupt file throws `DelegateError` so the delegate request fails loudly
+   * without taking down the daemon.
+   */
+  private readParleyConfig(): ParleyConfig {
+    try {
+      return readConfig(this.paths.config);
+    } catch (err) {
+      throw new DelegateError(errorMessage(err));
+    }
+  }
+
+  /**
+   * Resolve profile + explicit request fields. Precedence: explicit request >
+   * profile > ADR defaults. Throws `DelegateError` on unknown profile/vendor.
+   */
+  private resolveDelegate(request: DelegateRequest): ResolvedDelegate {
+    const config = this.readParleyConfig();
+    let profileCfg: ProfileConfig | undefined;
+    if (request.profile !== null) {
+      profileCfg = config.profiles?.[request.profile];
+      if (profileCfg === undefined) {
+        const known = Object.keys(config.profiles ?? {});
+        const list = known.length > 0 ? known.join(", ") : "(none)";
+        throw new DelegateError(`unknown profile: ${request.profile} (known: ${list})`);
+      }
+    }
+    const vendor = request.vendor ?? profileCfg?.vendor ?? null;
+    if (vendor === null || vendor === "") {
+      throw new DelegateError("vendor is required (or set via profile)");
+    }
+    return {
+      vendor,
+      profile: request.profile,
+      model: request.model ?? profileCfg?.model ?? null,
+      effort: request.effort ?? profileCfg?.effort ?? null,
+      sandbox: request.sandbox ?? profileCfg?.sandbox ?? DEFAULT_SANDBOX,
+      network: request.network ?? profileCfg?.network ?? DEFAULT_NETWORK,
+    };
+  }
+
+  /**
    * Create a task (pending) and kick off its background run. Returns the row
    * immediately (ADR-0008); callers wait via the attention inbox (`parley watch`).
    */
   delegate(request: DelegateRequest): TaskRow {
-    const adapter = this.adapters.get(request.vendor);
+    const resolved = this.resolveDelegate(request);
+    const adapter = this.adapters.get(resolved.vendor);
     if (!adapter) {
       const known = [...this.adapters.keys()].join(", ");
-      throw new DelegateError(`unknown vendor: ${request.vendor} (known: ${known})`);
+      throw new DelegateError(`unknown vendor: ${resolved.vendor} (known: ${known})`);
     }
     // Ids and names are interchangeable task refs, so an id-shaped name would
     // shadow (or be shadowed by) a real task id in `resolveTask`.
@@ -358,9 +436,10 @@ export class TaskEngine {
     const row = insertTask(this.db, {
       id,
       name: request.name,
-      vendor: request.vendor,
-      model: request.model,
-      effort: request.effort,
+      vendor: resolved.vendor,
+      model: resolved.model,
+      effort: resolved.effort,
+      profile: resolved.profile,
       repo,
       cwd: workingDir,
       prompt: request.prompt,
@@ -368,8 +447,8 @@ export class TaskEngine {
       worktree: worktreePath,
       branch,
       base_sha: baseSha,
-      sandbox: request.sandbox,
-      network: request.network,
+      sandbox: resolved.sandbox,
+      network: resolved.network,
       answer_timeout_ms: request.answerTimeoutMs,
       report_schema:
         request.reportSchema !== null ? JSON.stringify(request.reportSchema) : null,
@@ -1006,6 +1085,56 @@ export class TaskEngine {
     };
   }
 
+  /**
+   * Build extraArgs from config: `vendors.<id>.args` then `profiles.<name>.args`.
+   * Re-reads config so edits apply without a daemon restart. Corrupt config at
+   * spawn fails the task (same loud posture as delegate).
+   */
+  private extraArgsFor(task: TaskRow): string[] {
+    let config: ParleyConfig;
+    try {
+      config = readConfig(this.paths.config);
+    } catch (err) {
+      throw new Error(`config: ${errorMessage(err)}`);
+    }
+    const vendorId = task.vendor ?? "";
+    const vendorArgs = config.vendors?.[vendorId]?.args ?? [];
+    const profileArgs =
+      task.profile !== null ? (config.profiles?.[task.profile]?.args ?? []) : [];
+    return [...vendorArgs, ...profileArgs];
+  }
+
+  /**
+   * Apply vendor-level spawn customization after the adapter builds a plan:
+   * `vendors.<id>.bin` replaces argv[0]; env merge order is plan.env <
+   * vendors.<id>.env < profile.env. Re-reads config (hot).
+   */
+  private applyVendorConfig(task: TaskRow, plan: SpawnPlan): SpawnPlan {
+    let config: ParleyConfig;
+    try {
+      config = readConfig(this.paths.config);
+    } catch (err) {
+      throw new Error(`config: ${errorMessage(err)}`);
+    }
+    const vendorId = task.vendor ?? "";
+    const vendorCfg = config.vendors?.[vendorId];
+    const profileCfg =
+      task.profile !== null ? config.profiles?.[task.profile] : undefined;
+    const argv = [...plan.argv];
+    if (vendorCfg?.bin !== undefined && argv.length > 0) {
+      argv[0] = vendorCfg.bin;
+    }
+    return {
+      ...plan,
+      argv,
+      env: {
+        ...plan.env,
+        ...(vendorCfg?.env ?? {}),
+        ...(profileCfg?.env ?? {}),
+      },
+    };
+  }
+
   private buildSpec(task: TaskRow): TaskSpec {
     return {
       id: task.id,
@@ -1021,6 +1150,8 @@ export class TaskEngine {
       network: task.network === 1,
       // Adapters raise the vendor's MCP tool timeout above this (spec §4).
       answerTimeoutMs: task.answer_timeout_ms ?? DEFAULT_ANSWER_TIMEOUT_MS,
+      // vendors.<id>.args then profiles.<name>.args — adapters splice into flags.
+      extraArgs: this.extraArgsFor(task),
       ...(task.session_id !== null ? { sessionId: task.session_id } : {}),
       // Only codex needs the worktree's gitdirs (#25, #31) and only
       // parley-managed worktrees have any to grant — skip the git shell-out
@@ -1126,7 +1257,7 @@ export class TaskEngine {
   /** Fresh run: spawn the vendor child via `prepare` and pump it until exit. */
   private async run(task: TaskRow, adapter: VendorAdapter): Promise<void> {
     const spec: TaskSpec = { ...this.buildSpec(task), prompt: this.initialPrompt(task) };
-    const plan = await adapter.prepare(spec, this.hubFor(task.id));
+    const plan = this.applyVendorConfig(task, await adapter.prepare(spec, this.hubFor(task.id)));
     await this.runChild(task, adapter, plan, {
       state: "running",
       started_at: new Date().toISOString(),
@@ -1141,7 +1272,7 @@ export class TaskEngine {
    */
   private async resume(task: TaskRow, adapter: VendorAdapter, answer: string): Promise<void> {
     const spec: TaskSpec = { ...this.buildSpec(task), prompt: this.resumePrompt(task, answer) };
-    const plan = await adapter.resume(spec, this.hubFor(task.id));
+    const plan = this.applyVendorConfig(task, await adapter.resume(spec, this.hubFor(task.id)));
     await this.runChild(task, adapter, plan, {
       state: "running",
       // Kept from the original run; stamped here only if that never happened.

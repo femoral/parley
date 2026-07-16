@@ -27,6 +27,7 @@ function spec(overrides: Partial<TaskSpec> = {}): TaskSpec {
     sandbox: "workspace",
     network: true,
     answerTimeoutMs: 30 * 60 * 1000,
+    extraArgs: [],
     ...overrides,
   };
 }

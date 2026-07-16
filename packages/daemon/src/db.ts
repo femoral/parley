@@ -64,6 +64,8 @@ export interface TaskRow {
   model: string | null;
   /** Opaque reasoning-effort string, passed through to the vendor unchanged. */
   effort: string | null;
+  /** Profile name used at create time, if any (#113). */
+  profile: string | null;
   repo: string | null;
   state: string;
   created_at: string;
@@ -120,6 +122,8 @@ export interface NewTask {
   model: string | null;
   /** Opaque reasoning-effort string, passed through to the vendor unchanged. */
   effort: string | null;
+  /** Profile name used at create time, if any (#113). */
+  profile: string | null;
   repo: string | null;
   cwd: string;
   prompt: string;
@@ -231,6 +235,9 @@ const MIGRATIONS: string[] = [
      PRIMARY KEY (task_id, state),
      FOREIGN KEY (task_id) REFERENCES tasks(id)
    );`,
+  // #113: agent profiles — the profile name used at create time (null when the
+  // caller named a vendor directly). Re-read from config on spawn for args/env.
+  `ALTER TABLE tasks ADD COLUMN profile TEXT;`,
 ];
 
 /** How many schema migrations have been applied — equals `PRAGMA user_version` after open. */
@@ -305,7 +312,7 @@ export function openDatabaseUpTo(paths: HomePaths, upTo: number): DatabaseHandle
   return db;
 }
 
-const TASK_COLUMNS = `id, name, vendor, model, effort, repo, state, created_at, updated_at,
+const TASK_COLUMNS = `id, name, vendor, model, effort, profile, repo, state, created_at, updated_at,
    cwd, prompt, session_id, usage, report, error, started_at, completed_at,
    question_id, question, worktree, branch, base_sha, sandbox, network,
    answer_timeout_ms, report_schema, seq, orchestrator_session_id, eval_score, eval_feedback`;
@@ -505,16 +512,17 @@ export function insertTask(db: DatabaseHandle, task: NewTask): TaskRow {
   const now = new Date().toISOString();
   db.prepare(
     `INSERT INTO tasks
-       (id, name, vendor, model, effort, repo, state, created_at, updated_at,
+       (id, name, vendor, model, effort, profile, repo, state, created_at, updated_at,
         cwd, prompt, orchestrator_session_id, worktree, branch, base_sha, sandbox,
         network, answer_timeout_ms, report_schema)
-     VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     task.id,
     task.name,
     task.vendor,
     task.model,
     task.effort,
+    task.profile,
     task.repo,
     now,
     now,

@@ -23,6 +23,7 @@ function seedTask(
     vendor: "fake",
     model: null,
     effort: null,
+    profile: null,
     repo: null,
     cwd: "/tmp",
     prompt: "do it",

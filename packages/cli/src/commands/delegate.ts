@@ -5,7 +5,7 @@ import { DaemonRequestError, daemonPost, ensureDaemon } from "../client.js";
 import { type CliContext, printJson } from "../context.js";
 import { UsageError } from "../errors.js";
 import { parseDuration } from "@useparley/core";
-import { DEFAULT_SANDBOX, SANDBOX_MODES, isSandboxMode } from "@useparley/daemon/adapters/types.js";
+import { SANDBOX_MODES, isSandboxMode } from "@useparley/daemon/adapters/types.js";
 
 interface DelegateAck {
   task_id: string;
@@ -21,6 +21,7 @@ interface DelegateAck {
 export async function runDelegate(ctx: CliContext, args: string[]): Promise<number> {
   const { positionals, flags } = parseArgs(args, {
     "--vendor": { aliases: ["-v"], value: true },
+    "--profile": { value: true },
     "--model": { aliases: ["-m"], value: true },
     "--effort": { value: true },
     "--name": { aliases: ["-n"], value: true },
@@ -51,9 +52,12 @@ export async function runDelegate(ctx: CliContext, args: string[]): Promise<numb
   if (positionals.length > 1) {
     throw new UsageError(`delegate: unexpected argument: ${positionals[1]}`);
   }
-  const vendor = flags["--vendor"];
-  if (typeof vendor !== "string") {
-    throw new UsageError("delegate: a vendor is required (-v/--vendor)");
+  // Vendor optional when --profile is given; the daemon resolves vendor from
+  // the profile (and applies profile defaults). Explicit flags beat the profile.
+  const vendor = typeof flags["--vendor"] === "string" ? flags["--vendor"] : null;
+  const profile = typeof flags["--profile"] === "string" ? flags["--profile"] : null;
+  if (vendor === null && profile === null) {
+    throw new UsageError("delegate: a vendor or --profile is required");
   }
   // Orchestrator-run identity, so every task this run spawns can be grouped
   // later. `--session` overrides `PARLEY_SESSION_ID`; neither set is a usage
@@ -87,15 +91,21 @@ export async function runDelegate(ctx: CliContext, args: string[]): Promise<numb
   const explicitCwd = typeof flags["--cwd"] === "string";
   const cwd = explicitCwd ? (flags["--cwd"] as string) : process.cwd();
 
-  // Sandbox posture (spec §8, ADR-0006): default workspace + network on. An
-  // unknown mode is a usage error (exit 2), caught before the daemon is asked.
-  const sandbox = typeof flags["--sandbox"] === "string" ? flags["--sandbox"] : DEFAULT_SANDBOX;
-  if (!isSandboxMode(sandbox)) {
-    throw new UsageError(
-      `delegate: unknown sandbox mode: ${sandbox} (expected ${SANDBOX_MODES.join("|")})`,
-    );
+  // Sandbox posture (spec §8, ADR-0006). Only send when the caller set the flag
+  // so a profile's sandbox/network can apply; otherwise the daemon uses profile
+  // then ADR defaults. An unknown mode is a usage error (exit 2).
+  let sandbox: string | undefined;
+  if (typeof flags["--sandbox"] === "string") {
+    sandbox = flags["--sandbox"];
+    if (!isSandboxMode(sandbox)) {
+      throw new UsageError(
+        `delegate: unknown sandbox mode: ${sandbox} (expected ${SANDBOX_MODES.join("|")})`,
+      );
+    }
   }
-  const network = flags["--no-network"] !== true;
+  // Only send network when the caller opted out — omitting it lets a profile
+  // set network:false. There is no --network flag to force-on over a profile.
+  const networkExplicit = flags["--no-network"] === true ? false : undefined;
 
   // `--report-schema <file>` replaces the default report schema. Read and parse
   // it here so an unreadable / non-JSON file is a caller mistake (exit 2) before
@@ -157,22 +167,24 @@ export async function runDelegate(ctx: CliContext, args: string[]): Promise<numb
   const discovery = await ensureDaemon(ctx.paths, ctx.env);
   let ack: DelegateAck;
   try {
-    ack = await daemonPost<DelegateAck>(discovery, "/tasks", {
+    const body: Record<string, unknown> = {
       prompt,
-      vendor,
       orchestrator_session_id: orchestratorSessionId,
-      model: flags["--model"] ?? null,
-      effort: flags["--effort"] ?? null,
-      name: flags["--name"] ?? null,
+      model: typeof flags["--model"] === "string" ? flags["--model"] : null,
+      effort: typeof flags["--effort"] === "string" ? flags["--effort"] : null,
+      name: typeof flags["--name"] === "string" ? flags["--name"] : null,
       cwd,
       use_worktree: !explicitCwd,
-      base_ref: flags["--base-ref"] ?? null,
-      sandbox,
-      network,
+      base_ref: typeof flags["--base-ref"] === "string" ? flags["--base-ref"] : null,
       answer_timeout_ms: answerTimeoutMs,
       report_schema: reportSchema,
       contexts,
-    });
+    };
+    if (vendor !== null) body.vendor = vendor;
+    if (profile !== null) body.profile = profile;
+    if (sandbox !== undefined) body.sandbox = sandbox;
+    if (networkExplicit !== undefined) body.network = networkExplicit;
+    ack = await daemonPost<DelegateAck>(discovery, "/tasks", body);
   } catch (err) {
     // Daemon-side request rejections (unknown vendor, bad cwd) are usage errors.
     if (err instanceof DaemonRequestError && err.status === 400) {
