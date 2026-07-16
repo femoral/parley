@@ -70,12 +70,19 @@ function IslandBody({ name, completed }: { name: string; completed: boolean }) {
  * source every effect and the ambient CSS read, so an island can only ever show
  * one coherent state — and that state is the exact string the roster badges and
  * the inbox card by. Rising on mount and sinking on `cancelled` are finite CSS
- * transitions; everything ambient (foam, orbit, flare pulse, fog drift) is a
- * compositor keyframe.
+ * transitions; everything ambient (foam, station float, flare pulse, fog drift)
+ * is a compositor keyframe.
  */
 export interface IslandProps {
   task: IslandTask;
   onSelectTask: (taskId: string) => void;
+  /**
+   * Scatter centre of this island relative to the session region origin.
+   * Used by the sloop to voyage from the flagship (region origin −70y) to
+   * station. Defaults to a south-of-flagship placeholder for isolated tests.
+   */
+  islandX?: number;
+  islandY?: number;
   /**
    * When false, the island is removed from the tab order (off-camera regions).
    * The roster remains the canonical keyboard path to every task. Defaults true
@@ -84,7 +91,13 @@ export interface IslandProps {
   focusable?: boolean;
 }
 
-export function Island({ task, onSelectTask, focusable = true }: IslandProps) {
+export function Island({
+  task,
+  onSelectTask,
+  islandX = 0,
+  islandY = 150,
+  focusable = true,
+}: IslandProps) {
   const { state } = task;
   const meta = stateMetaFor(state);
 
@@ -110,7 +123,14 @@ export function Island({ task, onSelectTask, focusable = true }: IslandProps) {
         {state === "failed" && <Wreck />}
       </div>
       {hasShip(state) && (
-        <Ship coat={task.coat} coatDark={task.coatDark} emblem={task.emblem} state={state} />
+        <Ship
+          coat={task.coat}
+          coatDark={task.coatDark}
+          emblem={task.emblem}
+          state={state}
+          islandX={islandX}
+          islandY={islandY}
+        />
       )}
       {state === "awaiting_answer" && <ParleyRibbon />}
     </div>

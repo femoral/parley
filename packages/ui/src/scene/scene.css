@@ -3,13 +3,15 @@
  * SVG + CSS gradients in the manifest's tokens, faction tint on --coat/--coat-dark.
  *
  * Motion discipline (research doc's recommendation, enforced here):
- *  - Ambient loops (foam, orbit, bob, flare pulse, fog drift) are compositor
- *    keyframes on transform/opacity only — zero JS per frame.
+ *  - Ambient loops (foam, station float, bob, flare pulse, fog drift) are
+ *    compositor keyframes on transform/opacity only — zero JS per frame.
  *  - Finite transitions are CSS too: island rise/sink on mount / data-state,
- *    camera travel on a transform transition. JS sets props; CSS animates.
+ *    ship voyage from flagship to island, camera travel on a transform
+ *    transition. JS sets props/custom properties once; CSS animates.
  *  - Every animated element's BASE style is its legible resting state, so the
  *    global reduced-motion rule (tokens.css) leaves every state readable as a
- *    still image.
+ *    still image. One-shot voyage/rise use `both`/`forwards` fill so
+ *    reduced-motion lands on the end frame (ship on station, island risen).
  */
 
 /* ── Viewport & camera ─────────────────────────────────────────────────── */
@@ -309,29 +311,59 @@
   color: var(--ink-warm);
 }
 
-/* ── Sloop (faction agent ship) ────────────────────────────────────────── */
-.pc-orbit {
+/* ── Sloop (faction agent ship) ──────────────────────────────────────────
+ * Voyage: one-shot sail from the flagship to the island on mount. JS sets
+ * --voyage-from-* / --station-* once; CSS animates transform only.
+ * Base/end frame is ON STATION so reduced-motion stills the ship at the island.
+ * Station: gentle bob + heading sway + slow drift (boat on swell, not static).
+ */
+.pc-voyage {
   position: absolute;
   left: 50%;
   top: 52%;
   width: 0;
   height: 0;
-  animation: pc-orbit 17s linear infinite;
+  /* Resting frame = on station at the island. */
+  transform: translate(var(--station-x, 88px), var(--station-y, 8px));
+  /* Slow start, cruise, gentle arrival — sailing ease (~3.2s). `both` holds
+     the end frame under reduced-motion (duration collapsed to ~0). */
+  animation: pc-voyage 3.2s cubic-bezier(0.33, 0.1, 0.25, 1) both;
 }
-.pc-orbit[data-state="awaiting_answer"],
-.pc-orbit[data-state="stalled"] {
-  animation-play-state: paused;
+@keyframes pc-voyage {
+  0% {
+    transform: translate(var(--voyage-from-x, 0px), var(--voyage-from-y, -220px));
+  }
+  100% {
+    transform: translate(var(--station-x, 88px), var(--station-y, 8px));
+  }
 }
-.pc-orbit__arm {
+/* Station float — small drift loop like a boat riding swell at anchor. */
+.pc-station {
   position: absolute;
   left: 0;
   top: 0;
-  transform: translateX(104px);
+  animation: pc-station-float 5.8s ease-in-out infinite;
 }
-/* Anchored pose — draw the ship in over the beach. */
-.pc-orbit[data-state="awaiting_answer"] .pc-orbit__arm,
-.pc-orbit[data-state="stalled"] .pc-orbit__arm {
-  transform: translate(70px, 8px);
+@keyframes pc-station-float {
+  0%,
+  100% {
+    transform: translate(0, 0) rotate(-1.2deg);
+  }
+  30% {
+    transform: translate(3px, -2px) rotate(1.4deg);
+  }
+  65% {
+    transform: translate(-2px, 1px) rotate(-0.6deg);
+  }
+}
+/* Port heading: flip the sloop when the island lies west of the flagship. */
+.pc-heading {
+  position: absolute;
+  left: 0;
+  top: 0;
+}
+.pc-voyage--port .pc-heading {
+  transform: scaleX(-1);
 }
 .pc-sloop {
   position: absolute;
@@ -341,11 +373,6 @@
   height: 56px;
   margin-left: -30px;
   margin-top: -28px;
-  animation: pc-orbit-rev 17s linear infinite;
-}
-.pc-orbit[data-state="awaiting_answer"] .pc-sloop,
-.pc-orbit[data-state="stalled"] .pc-sloop {
-  animation-play-state: paused;
 }
 .pc-sloop__svg {
   display: block;
@@ -355,24 +382,8 @@
   animation: pc-sloop-bob 3.6s ease-in-out infinite;
   transform-origin: 50% 80%;
 }
-.pc-orbit[data-state="stalled"] .pc-sloop__svg {
+.pc-voyage[data-state="stalled"] .pc-sloop__svg {
   animation: pc-adrift 7s ease-in-out infinite;
-}
-@keyframes pc-orbit {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
-}
-@keyframes pc-orbit-rev {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(-360deg);
-  }
 }
 @keyframes pc-sloop-bob {
   0%,
@@ -478,11 +489,11 @@
   mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill-rule='evenodd' d='M12 2a2.7 2.7 0 0 1 1.15 5.14V8.5h3.35v2.2h-3.35v7.4c2.62-.5 4.7-2.35 5.55-4.75l-1.95.6 3.1-4.65 1.65 5.35-1.75-.55C18.6 18.7 15.6 21.3 12 21.3s-6.6-2.6-7.75-7.2l-1.75.55 1.65-5.35 3.1 4.65-1.95-.6c.85 2.4 2.93 4.25 5.55 4.75v-7.4H7.5V8.5h3.35V7.14A2.7 2.7 0 0 1 12 2zm0 1.7a1.05 1.05 0 1 0 0 2.1 1.05 1.05 0 0 0 0-2.1z'/%3E%3C/svg%3E")
     center / contain no-repeat;
 }
-.pc-orbit[data-state="awaiting_answer"] .pc-anchor {
+.pc-voyage[data-state="awaiting_answer"] .pc-anchor {
   display: block;
 }
 
-/* Wake — only while making way (running). */
+/* Wake — underway during the voyage; subtle on-station pulse for running. */
 .pc-wake {
   display: none;
   position: absolute;
@@ -491,8 +502,34 @@
   align-items: center;
   gap: 5px;
 }
-.pc-orbit[data-state="running"] .pc-wake {
+.pc-voyage[data-state="running"] .pc-wake {
   display: flex;
+  /* Full wake while sailing out, then settle to a soft on-station pulse. */
+  animation: pc-wake-underway 3.2s ease-out both;
+}
+.pc-voyage[data-state="awaiting_answer"] .pc-wake,
+.pc-voyage[data-state="stalled"] .pc-wake {
+  display: flex;
+  /* Show a brief wake under way, then vanish once on station. */
+  animation: pc-wake-fade-out 3.2s ease-out both;
+}
+@keyframes pc-wake-underway {
+  0%,
+  55% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0.45;
+  }
+}
+@keyframes pc-wake-fade-out {
+  0%,
+  55% {
+    opacity: 0.75;
+  }
+  100% {
+    opacity: 0;
+  }
 }
 .pc-wake__dash {
   display: block;

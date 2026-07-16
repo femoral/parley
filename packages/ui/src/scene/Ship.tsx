@@ -1,5 +1,6 @@
 import type { CSSProperties, ReactNode } from "react";
 import type { EmblemMark } from "../tokens/factions.js";
+import { stationOffset, voyageFromFlagship } from "./layout.js";
 import { Wake } from "./effects/Wake.js";
 
 export interface ShipProps {
@@ -9,9 +10,16 @@ export interface ShipProps {
   coatDark: string;
   /** Faction emblem mark, worn on the mainsail. */
   emblem: EmblemMark;
-  /** Task state — decides the sloop's pose: circling (running), anchored
-   * (awaiting/stalled), or sailing off (cancelled). */
+  /** Task state — decides the sloop's pose: floating on station (running),
+   * anchored close in (awaiting), adrift (stalled), or sailing off (cancelled). */
   state: string;
+  /**
+   * Island scatter centre relative to the session region origin. Used to
+   * compute the one-shot voyage from the flagship to this island. Defaults
+   * keep isolated unit tests rendering a short southbound hop.
+   */
+  islandX?: number;
+  islandY?: number;
 }
 
 /** Faction mark on the mainsail — glyph as text, or nested SVG path art. */
@@ -65,13 +73,41 @@ function Sloop({ emblem }: { emblem: EmblemMark }) {
  * direction"). Faction is expressed entirely through the `--coat`/`--coat-dark`
  * pair set here, so a new faction record restyles every ship with zero new art.
  *
- * Pose is state-driven and CSS renders it from `data-state`: `running` orbits its
- * island with a wake; `awaiting_answer`/`stalled` drop anchor (orbit paused, wake
- * gone); `cancelled` sails off the edge. Orbit and bob are compositor keyframes —
- * zero JS per frame.
+ * Pose is state-driven and CSS renders it from `data-state`:
+ * - Mount: one-shot voyage from the flagship to the island (transform only).
+ * - `running`: float on station with gentle bob/sway/drift + subtle wake.
+ * - `awaiting_answer`: anchored close in (anchor rode + flare/ribbon on island).
+ * - `stalled`: adrift on station.
+ * - `cancelled`: sails off the frame.
+ *
+ * Ambient loops and the voyage are compositor keyframes — zero JS per frame.
+ * Base/end frames are on-station at the island so reduced-motion stills there.
  */
-export function Ship({ coat, coatDark, emblem, state }: ShipProps) {
-  const style = { "--coat": coat, "--coat-dark": coatDark } as CSSProperties;
+export function Ship({
+  coat,
+  coatDark,
+  emblem,
+  state,
+  islandX = 0,
+  islandY = 150,
+}: ShipProps) {
+  const island = { x: islandX, y: islandY };
+  const from = voyageFromFlagship(island);
+  // Awaiting sits closer in; running/stalled hold a bit further offshore.
+  const closeness = state === "awaiting_answer" ? 58 : state === "stalled" ? 96 : 88;
+  const station = stationOffset(island, closeness);
+  // Bow art faces starboard (right); flip when the island lies to port of the
+  // flagship so the voyage reads as sailing outward rather than reverse.
+  const headingPort = islandX < 0;
+
+  const style = {
+    "--coat": coat,
+    "--coat-dark": coatDark,
+    "--voyage-from-x": `${from.x}px`,
+    "--voyage-from-y": `${from.y}px`,
+    "--station-x": `${station.x}px`,
+    "--station-y": `${station.y}px`,
+  } as CSSProperties;
 
   if (state === "cancelled") {
     return (
@@ -81,15 +117,20 @@ export function Ship({ coat, coatDark, emblem, state }: ShipProps) {
     );
   }
 
-  // running / awaiting_answer / stalled all ride the orbit wrapper; CSS pauses it
-  // and swaps the pose for the anchored/adrift states.
   return (
-    <span className="pc-orbit" data-state={state} style={style} aria-hidden="true">
-      <span className="pc-orbit__arm">
-        <Wake />
-        <span className="pc-sloop">
-          <span className="pc-anchor" />
-          <Sloop emblem={emblem} />
+    <span
+      className={`pc-voyage${headingPort ? " pc-voyage--port" : ""}`}
+      data-state={state}
+      style={style}
+      aria-hidden="true"
+    >
+      <span className="pc-station">
+        <span className="pc-heading">
+          <Wake />
+          <span className="pc-sloop">
+            <span className="pc-anchor" />
+            <Sloop emblem={emblem} />
+          </span>
         </span>
       </span>
     </span>

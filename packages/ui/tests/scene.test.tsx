@@ -43,7 +43,7 @@ describe("Island renders its state through a single data-state (#69)", () => {
     const { container } = render(<Island task={island("pending")} onSelectTask={noop} />);
     expect(container.querySelector(".pc-island__rise")).toBeTruthy();
     expect(container.querySelector(".pc-sloop")).toBeNull();
-    expect(container.querySelector(".pc-orbit")).toBeNull();
+    expect(container.querySelector(".pc-voyage")).toBeNull();
     expect(container.querySelector(".pc-flare")).toBeNull();
     expect(container.querySelector(".pc-flag")).toBeNull();
     expect(container.querySelector(".pc-wreck")).toBeNull();
@@ -51,7 +51,7 @@ describe("Island renders its state through a single data-state (#69)", () => {
 
   it("running — a sloop under way with a wake, no attention/terminal effects", () => {
     const { container } = render(<Island task={island("running")} onSelectTask={noop} />);
-    expect(container.querySelector(".pc-orbit[data-state='running']")).toBeTruthy();
+    expect(container.querySelector(".pc-voyage[data-state='running']")).toBeTruthy();
     expect(container.querySelector(".pc-sloop")).toBeTruthy();
     expect(container.querySelector(".pc-wake")).toBeTruthy();
     expect(container.querySelector(".pc-flare")).toBeNull();
@@ -60,7 +60,7 @@ describe("Island renders its state through a single data-state (#69)", () => {
 
   it("awaiting_answer — anchored sloop, flare, and PARLEY! ribbon", () => {
     const { container } = render(<Island task={island("awaiting_answer")} onSelectTask={noop} />);
-    expect(container.querySelector(".pc-orbit[data-state='awaiting_answer']")).toBeTruthy();
+    expect(container.querySelector(".pc-voyage[data-state='awaiting_answer']")).toBeTruthy();
     expect(container.querySelector(".pc-anchor")).toBeTruthy();
     expect(container.querySelector(".pc-flare")).toBeTruthy();
     expect(container.querySelector(".pc-parley")).toBeTruthy();
@@ -70,7 +70,7 @@ describe("Island renders its state through a single data-state (#69)", () => {
   it("stalled — a fog bank rolls over the adrift ship", () => {
     const { container } = render(<Island task={island("stalled")} onSelectTask={noop} />);
     expect(container.querySelector(".pc-fog")).toBeTruthy();
-    expect(container.querySelector(".pc-orbit[data-state='stalled']")).toBeTruthy();
+    expect(container.querySelector(".pc-voyage[data-state='stalled']")).toBeTruthy();
     expect(container.querySelector(".pc-flare")).toBeNull();
   });
 
@@ -97,7 +97,7 @@ describe("Island renders its state through a single data-state (#69)", () => {
   it("cancelled — the sloop sails off as the island sinks", () => {
     const { container } = render(<Island task={island("cancelled")} onSelectTask={noop} />);
     expect(container.querySelector(".pc-sloop--sailoff")).toBeTruthy();
-    expect(container.querySelector(".pc-orbit")).toBeNull();
+    expect(container.querySelector(".pc-voyage")).toBeNull();
     expect(container.querySelector(".pc-flag")).toBeNull();
   });
 
@@ -127,9 +127,9 @@ describe("Ship carries faction tint on the --coat/--coat-dark pair (#69)", () =>
         state="running"
       />,
     );
-    const orbit = container.querySelector(".pc-orbit") as HTMLElement;
-    expect(orbit.style.getPropertyValue("--coat")).toBe("#2b2b2e");
-    expect(orbit.style.getPropertyValue("--coat-dark")).toBe("#141416");
+    const voyage = container.querySelector(".pc-voyage") as HTMLElement;
+    expect(voyage.style.getPropertyValue("--coat")).toBe("#2b2b2e");
+    expect(voyage.style.getPropertyValue("--coat-dark")).toBe("#141416");
   });
 
   it("keeps the tint on the sailing-off pose too", () => {

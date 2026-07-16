@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
  * Reduced-motion regression guard (#70's accessibility pass).
  *
  * Every ambient/attention animation in the package (sea drift, compass spin,
- * beacon pulse, galleon/sloop bob, island rise/sink, shore foam, orbit, wake,
+ * beacon pulse, galleon/sloop bob, island rise/sink, shore foam, voyage, wake,
  * flare, fog drift, flag wave, sail-off, camera travel, PARLEY! bounce) is
  * driven by plain CSS `animation`/`transition` declarations — there is no
  * JS-side motion logic in the package (grepped: no `requestAnimationFrame`,
