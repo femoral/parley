@@ -9,6 +9,7 @@ import { createGooseAdapter } from "./goose.js";
 import { createOpenclawAdapter } from "./openclaw.js";
 import { createClineAdapter } from "./cline.js";
 import { createOpenhandsAdapter } from "./openhands.js";
+import { createOpencodeAdapter } from "./opencode.js";
 import { loadPluginAdapter } from "./plugins.js";
 
 /**
@@ -29,6 +30,7 @@ export function createBuiltinAdapters(
     createOpenclawAdapter(env),
     createClineAdapter(env),
     createOpenhandsAdapter(env),
+    createOpencodeAdapter(env),
   ];
   return new Map(adapters.map((adapter) => [adapter.id, adapter]));
 }
