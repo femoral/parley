@@ -1,0 +1,3 @@
+{"type":"message","message":{"id":null,"role":"assistant","created":1784189502,"content":[{"type":"toolRequest","id":"call_1","toolCall":{"name":"developer__shell","arguments":{"command":"ls -la"}}}],"metadata":{"userVisible":true,"agentVisible":true}}}
+{"type":"message","message":{"id":null,"role":"assistant","created":1784189503,"content":[{"type":"text","text":"listed files"}],"metadata":{"userVisible":true,"agentVisible":true}}}
+{"type":"complete","total_tokens":50,"input_tokens":40,"output_tokens":10}

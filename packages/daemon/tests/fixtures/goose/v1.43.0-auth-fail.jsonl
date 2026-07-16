@@ -1,0 +1,2 @@
+{"type":"message","message":{"id":null,"role":"assistant","created":1784189502,"content":[{"type":"text","text":"Ran into this error: Authentication error: Authentication failed for https://api.openai.com/v1/chat/completions. Status: 401 Unauthorized. Response: You didn't provide an API key. …"}],"metadata":{"userVisible":true,"agentVisible":true}}}
+{"type":"complete","total_tokens":null}

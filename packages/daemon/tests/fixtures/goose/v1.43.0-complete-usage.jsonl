@@ -1,0 +1,2 @@
+{"type":"message","message":{"id":null,"role":"assistant","created":1784189502,"content":[{"type":"text","text":"Done."}],"metadata":{"userVisible":true,"agentVisible":true}}}
+{"type":"complete","total_tokens":1234,"input_tokens":1000,"output_tokens":234}
