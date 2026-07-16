@@ -47,7 +47,7 @@ function IslandBody({ name, completed }: { name: string; completed: boolean }) {
         {completed && <PlantedFlag anchorX={MOUND_APEX.x} anchorY={MOUND_APEX.y} />}
         {/* palm — trunk + fronds */}
         <path d="M74 46 Q70 30 66 18" stroke="var(--brass-shadow)" strokeWidth="3" fill="none" strokeLinecap="round" />
-        <g fill="var(--state-running)">
+        <g fill="var(--palm-green)">
           <path d="M66 18 Q50 12 42 20 Q54 16 66 22 Z" />
           <path d="M66 18 Q82 10 92 18 Q78 16 66 22 Z" />
           <path d="M66 18 Q58 6 66 -2 Q70 8 68 20 Z" />

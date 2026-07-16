@@ -69,6 +69,11 @@
   --parchment-border: #b8935a;
   --parchment-text: #5b3a24;
 
+  /* Scene foliage only — earthy olive kept OUTSIDE the state family so
+     running green stays rare (State-Color Reservation). Lower chroma/luma
+     than --state-running #5fd08a; still legible on the teal sea. */
+  --palm-green: #5e7a4a;
+
   /* §2.6 — task states (canonical stateMeta colours) */
   --state-pending: #c9a87a;
   --state-running: #5fd08a;
