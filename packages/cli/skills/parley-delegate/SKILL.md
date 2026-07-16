@@ -21,7 +21,12 @@ There is **one** flow for one task or many: `delegate` always returns immediatel
    parley delegate -v codex -m <model> -n <short-name> --session <id> "<brief>"
    ```
 
-   (`-` as the prompt reads stdin — use a heredoc for long briefs.) `-v` and a session id (`--session <id>`, or `PARLEY_SESSION_ID` in the environment) are both required — missing either is a usage error (exit 2). `delegate` and `answer` exit only `0` (accepted) or `2` (usage).
+   (`-` as the prompt reads stdin — use a heredoc for long briefs.) A vendor (`-v`, or a `--profile` that names one) and a session id (`--session <id>`, or `PARLEY_SESSION_ID` in the environment) are both required — missing either is a usage error (exit 2). `delegate` and `answer` exit only `0` (accepted) or `2` (usage).
+
+   - **Vendors**: `codex`, `grok`, `claude`, `gemini`, `opencode`, `goose`, `pi`, `cline`, `kilo`, `openhands`, `hermes`, `openclaw` — plus any plugin vendors from the user's settings. Unknown vendor errors list what's registered.
+   - **Profiles**: `--profile <name>` pulls vendor/model/effort (and extra args) from the user's `~/.parley/parley.json`; explicit flags win. Prefer a profile when the user has them — profiles are tracked per task and make `parley metrics` comparisons meaningful.
+   - **Classification**: when the project has a rubric (`.parley/rubric.md`, set up by the parley-rubric skill), classify every brief at delegate time: `--size <XS|S|M|L|XL> --difficulty <trivial|easy|medium|hard|extreme>`. Metrics slice eval outcomes by these.
+   - **Remote execution**: `--runner <name>` targets a configured remote runner; the task's commits come back as a pushed branch (no local worktree to review — fetch it).
 
 3. **Run the watch ack-loop** until exit 0 — even for a single task. This is a workflow you step through, not a script: each `watch` call returns one event, you do the real work it demands (answer, review, merge), then call `watch` again.
 
@@ -57,6 +62,8 @@ Rules that leave no room for interpretation:
 4. **Review and integrate.** On exit 6 the envelope carries the worktree path, branch (`parley/<id>-<name>`), and the report body. Review the diff on the branch, merge if it holds up, then `parley clean <task>` (removes the worktree, keeps the branch). Ack only after that review. Done when the branch is merged-or-rejected and the worktree cleaned.
 
    **A green report isn't proof correctness.** `outcome: success` only means the child's own verification passed. Verify yourself after every merge, not once at the end of a fan-out unless instructed. A later branch can reintroduce what an earlier one had cleared.
+
+   **Record an eval on every reviewed task**: `parley eval <task> --score <1-10> --feedback "<what held up, what didn't>"`. With a project rubric, walk its binary gates and derive the score from them (see the parley-rubric skill). Evals power `parley metrics` — score honestly, including the failures.
 
 ## Fan-out: several tasks in parallel
 
