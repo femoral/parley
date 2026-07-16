@@ -187,8 +187,25 @@ export function parseGrokModels(text: string, existing: VendorModels | undefined
 export function createGrokAdapter(env: NodeJS.ProcessEnv = process.env): VendorAdapter {
   const bin = env.PARLEY_GROK_BIN ?? DEFAULT_GROK_BIN;
 
-  /** The env shared by fresh runs and resumes: auth, sandbox, scanner posture. */
-  function baseEnv(task: TaskSpec): Record<string, string> {
+  /**
+   * The env shared by fresh runs and resumes: auth, sandbox, scanner posture,
+   * and the daemon-local xAI usage proxy base URL (#95).
+   *
+   * `GROK_XAI_API_BASE_URL` precedence (highest last at the child process):
+   * 1. Parent process env — when set, we omit the key from `plan.env` so the
+   *    engine's `{...process.env, ...plan.env}` spawn keeps the parent value
+   *    (explicit user override / debugging; never clobber).
+   * 2. This adapter's proxy URL (`http://127.0.0.1:<hubPort>/xai/<taskId>/v1`)
+   *    when the parent did not set the var — same port as the MCP hub.
+   * 3. `vendors.grok.env` / `profiles.<name>.env` via `applyVendorConfig`
+   *    (`plan.env < vendors.env < profile.env`) still override (2) after prepare.
+   *
+   * Caveat (`restrict_network`): when `task.network` is false the custom bwrap
+   * profile may block loopback to the proxy. Capture is fail-open — the child
+   * either reaches the real API without attribution or fails to talk to the
+   * model; sandbox exemption (research proposal #2) is NOT implemented.
+   */
+  function baseEnv(task: TaskSpec, hub: HubInfo): Record<string, string> {
     const { env: sandbox } = sandboxEnv(task);
     const result: Record<string, string> = {
       ...sandbox,
@@ -204,6 +221,16 @@ export function createGrokAdapter(env: NodeJS.ProcessEnv = process.env): VendorA
     for (const key of CLAUDE_SCANNER_VARS) result[key] = "0";
     // Auth passes through opaquely (per-token billing); only when the parent set it.
     if (env.XAI_API_KEY !== undefined) result.XAI_API_KEY = env.XAI_API_KEY;
+    // Route built-in-model API-key traffic through the daemon proxy for usage
+    // capture (#95). Hub URL already carries the shared ephemeral port.
+    if (env.GROK_XAI_API_BASE_URL === undefined) {
+      try {
+        const origin = new URL(hub.url).origin;
+        result.GROK_XAI_API_BASE_URL = `${origin}/xai/${task.id}/v1`;
+      } catch {
+        // Malformed hub URL — skip proxy injection rather than fail prepare.
+      }
+    }
     return result;
   }
 
@@ -250,7 +277,7 @@ export function createGrokAdapter(env: NodeJS.ProcessEnv = process.env): VendorA
       // from the terminal `end` event and persisted for resume.
       return Promise.resolve({
         argv: [bin, "-p", task.prompt, ...commonArgv(task)],
-        env: baseEnv(task),
+        env: baseEnv(task, hub),
         files: files(task, hub),
         cwd: task.cwd,
       });
@@ -274,7 +301,7 @@ export function createGrokAdapter(env: NodeJS.ProcessEnv = process.env): VendorA
       }
       return Promise.resolve({
         argv: [bin, "-p", task.prompt, "-r", task.sessionId, ...commonArgv(task)],
-        env: baseEnv(task),
+        env: baseEnv(task, hub),
         files: files(task, hub),
         cwd: task.cwd,
       });

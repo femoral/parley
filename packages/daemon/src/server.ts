@@ -23,6 +23,7 @@ import { handleMcpRequest } from "./mcp.js";
 import { buildEnvelope } from "./report.js";
 import { discoverUiBundle, isReservedPath, serveUiRequest } from "./ui.js";
 import { DAEMON_VERSION } from "./version.js";
+import { handleXaiProxyRequest } from "./xai-proxy.js";
 
 export interface DaemonServer {
   /** The port the server is listening on. */
@@ -657,7 +658,8 @@ function handleCancel(engine: TaskEngine, res: http.ServerResponse, ref: string)
 
 /**
  * Build the daemon's HTTP request handler: the CLI plane (REST, spec §3), the
- * MCP child channel on `/mcp` (spec §4), and — when `uiBundleDir` is non-null
+ * MCP child channel on `/mcp` (spec §4), the grok xAI usage proxy on
+ * `/xai/<taskId>/v1/...` (#95), and — when `uiBundleDir` is non-null
  * (UI discovery, spec §"Serving convention") — the UI's static bundle at `/`
  * with SPA fallback. `uiBundleDir` is resolved once at server start; API
  * routes are matched first and always win, so the UI can never shadow them.
@@ -676,6 +678,14 @@ function createHandler(
       if (url.pathname === "/mcp") {
         const body = method === "POST" ? await readBody(req) : undefined;
         await handleMcpRequest(engine, req, res, body);
+        return;
+      }
+
+      // Grok xAI reverse proxy (#95): path-correlated usage capture. Reads the
+      // raw body itself (must not go through JSON readBody) and streams the
+      // upstream response back verbatim.
+      if (segments[0] === "xai") {
+        await handleXaiProxyRequest(engine, req, res);
         return;
       }
 

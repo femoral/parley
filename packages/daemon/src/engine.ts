@@ -371,6 +371,29 @@ export class TaskEngine {
     return getTask(this.db, id);
   }
 
+  /**
+   * Merge usage attributed outside the vendor stream (the xAI reverse proxy
+   * for grok, #95). Same shallow-merge semantics as `session_meta` usage on the
+   * stream path (`usage = { ...existing, ...delta }`), written to the durable
+   * task row so concurrent proxy calls share one bag with any stream-sourced
+   * fields. Proxy-captured xAI usage is per-response; multi-call tasks may
+   * undercount if only the last response's counters remain — residual risk
+   * documented on #95.
+   */
+  mergeUsage(taskId: string, delta: Record<string, number>): void {
+    if (this.shuttingDown) return;
+    const task = getTask(this.db, taskId);
+    if (!task) return;
+    const existing = parseJsonColumn<Record<string, number>>(task.usage) ?? {};
+    const merged: Record<string, number> = { ...existing };
+    for (const [key, value] of Object.entries(delta)) {
+      if (typeof value === "number" && Number.isFinite(value)) {
+        merged[key] = value;
+      }
+    }
+    updateTask(this.db, taskId, { usage: JSON.stringify(merged) });
+  }
+
   resolve(ref: string): TaskRow | undefined {
     return resolveTask(this.db, ref);
   }

@@ -216,6 +216,32 @@ describe("grok adapter — env passthrough & leak control", () => {
     const adapter = createGrokAdapter({ MCP_TIMEOUT: "600000" });
     expect((await adapter.prepare(spec(), HUB)).env.MCP_TIMEOUT).toBe("30000");
   });
+
+  it("sets GROK_XAI_API_BASE_URL to the daemon proxy path when parent did not override (#95)", async () => {
+    const plan = await createGrokAdapter({}).prepare(spec({ id: "t7" }), HUB);
+    expect(plan.env.GROK_XAI_API_BASE_URL).toBe("http://127.0.0.1:54321/xai/t7/v1");
+  });
+
+  it("omits GROK_XAI_API_BASE_URL from plan.env when the parent already set it", async () => {
+    // Parent override must not be clobbered: engine spawn is
+    // `{...process.env, ...plan.env}`, so omitting the key keeps the parent value.
+    const plan = await createGrokAdapter({
+      GROK_XAI_API_BASE_URL: "https://custom.example/v1",
+    }).prepare(spec(), HUB);
+    expect("GROK_XAI_API_BASE_URL" in plan.env).toBe(false);
+  });
+
+  it("derives the proxy URL from the hub origin + task id on resume too", async () => {
+    const hub: HubInfo = {
+      url: "http://127.0.0.1:9999/mcp",
+      headers: { "x-parley-task": "task-r" },
+    };
+    const plan = await createGrokAdapter({}).resume(
+      spec({ id: "task-r", sessionId: "sess-1" }),
+      hub,
+    );
+    expect(plan.env.GROK_XAI_API_BASE_URL).toBe("http://127.0.0.1:9999/xai/task-r/v1");
+  });
 });
 
 describe("grok adapter — materialized .grok/config.toml", () => {
