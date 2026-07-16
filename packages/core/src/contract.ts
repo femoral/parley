@@ -5,6 +5,8 @@
  * assignable to these types (a compile-time guard in the daemon enforces it);
  * UIs consume them through the typed client and SSE helper.
  */
+import type { Posture } from "./adapter.js";
+
 /** A JSON Schema — an object of keywords, or a boolean schema. */
 export type JsonSchema = Record<string, unknown> | boolean;
 
@@ -18,13 +20,8 @@ export interface Report {
   files_changed: string[];
 }
 
-/** The child's sandbox posture (spec §8): what it may touch and whether it has network. */
-export interface Posture {
-  /** Normalized sandbox mode (`read-only` | `workspace` | `full`). */
-  sandbox: string;
-  /** Whether the child may reach the network. */
-  network: boolean;
-}
+// Posture is defined once in adapter.ts (SandboxMode-typed) and reused on the
+// wire — SandboxMode is a string union, so JSON consumers still see a string.
 
 /**
  * The report envelope the daemon wraps around a task (spec §4) — the primary
@@ -43,6 +40,8 @@ export interface TaskEnvelope {
   model: string | null;
   /** Opaque reasoning-effort string (spec §9). */
   effort: string | null;
+  /** Profile name used at create time, if any (#113). */
+  profile: string | null;
   posture: Posture;
   session_id: string | null;
   usage: Record<string, number> | null;
@@ -75,6 +74,8 @@ export interface TaskRow {
   vendor: string | null;
   model: string | null;
   effort: string | null;
+  /** Profile name used at create time, if any (#113). */
+  profile: string | null;
   repo: string | null;
   state: string;
   created_at: string;
