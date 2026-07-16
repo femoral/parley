@@ -14,18 +14,18 @@ const DRESS_HALYARD =
   ` Q${(fore.x + main.x) / 2} ${Math.min(fore.y, main.y) - 6} ${main.x} ${main.y}` +
   ` Q${(main.x + stern.x) / 2} ${(main.y + stern.y) / 2 + 10} ${stern.x} ${stern.y}`;
 
-/** Flag seats along the halyard — denser between the masts, sparse on the drops. */
+/** Flag seats sampled along the halyard quadratics (bowsprit → fore → main
+ * → mizzen), so every flag hangs from the string instead of floating. */
 const DRESS_FLAGS: ReadonlyArray<{ x: number; y: number }> = [
-  { x: 120, y: 250 },
-  { x: 160, y: 190 },
-  { x: 200, y: 130 },
-  { x: 230, y: 80 },
+  { x: 93, y: 183 },
+  { x: 149, y: 135 },
+  { x: 206, y: 82 },
   { x: fore.x, y: fore.y + 4 },
-  { x: 305, y: 48 },
+  { x: 301, y: 38 },
+  { x: 350, y: 44 },
   { x: main.x, y: main.y + 4 },
-  { x: 410, y: 100 },
-  { x: 455, y: 170 },
-  { x: 485, y: 235 },
+  { x: 444, y: 97 },
+  { x: 487, y: 130 },
 ];
 
 /** The hoisted string of signal flags. Rendered only while every task island in

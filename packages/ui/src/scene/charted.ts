@@ -53,10 +53,12 @@ export const GALLEON_SRC = galleonUrl;
 export const GALLEON_VIEW = { w: 560, h: 466 } as const;
 /** Fore and main mastheads (native px) — dress flags string between them. */
 export const GALLEON_MASTS = {
-  fore: { x: 248, y: 52 },
-  main: { x: 362, y: 48 },
-  stem: { x: 78, y: 305 },
-  stern: { x: 505, y: 295 },
+  // Measured on the 560×466 sprite (grid overlay): bowsprit tip, the two
+  // masthead hoists just under their pennants, and the mizzen top aft.
+  fore: { x: 252, y: 34 },
+  main: { x: 400, y: 58 },
+  stem: { x: 24, y: 232 },
+  stern: { x: 525, y: 152 },
 } as const;
 
 /** Deterministic island art variant for a task id (stable for the task's life). */
