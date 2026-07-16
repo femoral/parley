@@ -166,6 +166,20 @@
   /* Suppress the UA focus ring; :focus-visible carries the design-system recipe. */
   outline: none;
   border-radius: 4px;
+  /* Hover lift affordance — the island answers the pointer. Base transform is
+     identity (the legible resting state); reduced-motion collapses the
+     transition to an instant, still-legible nudge. */
+  transition: transform 160ms cubic-bezier(0.25, 1, 0.5, 1);
+}
+/* A sinking (cancelled) island doesn't answer the pointer — it's leaving. */
+.pc-island:not([data-state="cancelled"]):hover {
+  transform: translateY(-3px);
+}
+.pc-island:not([data-state="cancelled"]):active {
+  transform: translateY(-1px);
+}
+.pc-island:hover .pc-plank {
+  border-color: var(--brass-mid);
 }
 /* Match the global focus recipe (2px Bright Brass, 2px offset). Outline works
    on the island's box over the teal sea; the prior drop-shadow was too subtle. */
@@ -281,6 +295,7 @@
   background: linear-gradient(180deg, var(--brass-shadow), var(--plate-well));
   border: 1px solid var(--brass-frame);
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
+  transition: border-color var(--ease);
 }
 .pc-plank__label {
   display: block;
@@ -630,6 +645,65 @@
   }
   50% {
     transform: rotate(1.5deg);
+  }
+}
+/* One-shot completion ceremony — the pennant runs up the pole, then a brass
+   glint blooms at the masthead as it seats. `both` holds each end frame, and
+   both end frames are the legible resting state (pennant hoisted, glint gone),
+   so the global reduced-motion collapse lands exactly there. */
+.pc-flag__pennant {
+  animation: pc-flag-hoist 800ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+@keyframes pc-flag-hoist {
+  0% {
+    transform: translateY(17px);
+    opacity: 0;
+  }
+  30% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+.pc-flag__glint {
+  transform-box: fill-box;
+  transform-origin: center;
+  opacity: 0;
+  animation: pc-flag-glint 900ms ease-out 650ms both;
+  pointer-events: none;
+}
+@keyframes pc-flag-glint {
+  0% {
+    opacity: 0.85;
+    transform: scale(0.25);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1);
+  }
+}
+
+/* ── Effect: dressed ship (all voyages home) ─────────────────────────────
+   Signal flags strung between the flagship's masts — hoisted once when the
+   session's last voyage comes home, then riding the ambient galleon bob.
+   Base/end frame is the hoisted string, so reduced-motion shows it static. */
+.pc-dress {
+  transform-box: view-box;
+  animation: pc-dress-hoist 1400ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+@keyframes pc-dress-hoist {
+  0% {
+    transform: translateY(26px);
+    opacity: 0;
+  }
+  45% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(0);
+    opacity: 1;
   }
 }
 

@@ -53,6 +53,9 @@ export function SessionRegion({
   active = true,
 }: SessionRegionProps) {
   const style = { transform: `translate(-50%, -50%) translate(${dx}px, ${dy}px)` };
+  // All voyages home — every task island completed. The flagship dresses ship
+  // (signal flags between the masts); pure state, so it can never lie.
+  const dressed = session.tasks.length > 0 && session.tasks.every((t) => t.state === "completed");
   return (
     <div
       className="pc-region"
@@ -64,7 +67,7 @@ export function SessionRegion({
     >
       <span className="pc-region__banner">{session.label}</span>
       <div className="pc-region__flagship">
-        <Flagship label={session.label} />
+        <Flagship label={session.label} dressed={dressed} />
       </div>
       {session.tasks.map((task, i) => (
         <div key={task.id} className="pc-island-slot" style={{ transform: slot(i, session.tasks.length) }}>

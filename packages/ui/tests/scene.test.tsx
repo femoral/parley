@@ -80,6 +80,9 @@ describe("Island renders its state through a single data-state (#69)", () => {
     expect(flag).toBeTruthy();
     expect(flag?.querySelector("line")?.getAttribute("x2")).toBe("70");
     expect(flag?.querySelector("line")?.getAttribute("y2")).toBe("32");
+    // Completion ceremony parts: the hoisting pennant and the masthead glint.
+    expect(flag?.querySelector(".pc-flag__pennant")).toBeTruthy();
+    expect(flag?.querySelector(".pc-flag__glint")).toBeTruthy();
     expect(container.querySelector(".pc-sloop")).toBeNull();
     expect(container.querySelector(".pc-wreck")).toBeNull();
   });
@@ -261,6 +264,40 @@ describe("Scene lays out the active session's cove (#69)", () => {
     // Region itself is inert so nothing nested can take focus either.
     expect(offCamera.closest(".pc-region")?.hasAttribute("inert")).toBe(true);
     expect(onCamera.closest(".pc-region")?.hasAttribute("inert")).toBe(false);
+  });
+});
+
+describe("Flagship dresses ship when all voyages are home", () => {
+  it("hoists the signal-flag string when every task is completed", () => {
+    const allHome = region("sess-h", "sess-h", [
+      island("completed", { id: "h1" }),
+      island("completed", { id: "h2" }),
+    ]);
+    const { container } = render(
+      <Scene sessions={[allHome]} activeSessionId="sess-h" onSelectTask={noop} onSelectSession={noop} />,
+    );
+    expect(container.querySelector(".pc-dress")).toBeTruthy();
+    expect(
+      container.querySelector(".pc-galleon")?.getAttribute("aria-label"),
+    ).toBe("Orchestrator sess-h — all voyages home");
+  });
+
+  it("stays undressed while any voyage is still out", () => {
+    const { container } = render(
+      <Scene sessions={[REGION]} activeSessionId="sess-1" onSelectTask={noop} onSelectSession={noop} />,
+    );
+    expect(container.querySelector(".pc-dress")).toBeNull();
+    expect(
+      container.querySelector(".pc-galleon")?.getAttribute("aria-label"),
+    ).toBe("Orchestrator sess-1");
+  });
+
+  it("never dresses an empty region (no tasks is not a milestone)", () => {
+    const empty = region("sess-e", "sess-e", []);
+    const { container } = render(
+      <Scene sessions={[empty]} activeSessionId="sess-e" onSelectTask={noop} onSelectSession={noop} />,
+    );
+    expect(container.querySelector(".pc-dress")).toBeNull();
   });
 });
 
