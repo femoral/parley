@@ -1,0 +1,5 @@
+provider      model                         context  max-out  thinking  images
+openai-codex  gpt-5.3-codex-spark           128K     128K     yes       no
+openai-codex  gpt-5.4                       272K     128K     yes       yes
+openai-codex  gpt-5.5                       272K     128K     yes       yes
+xai-oauth     grok-4.5                      500K     500K     yes       yes
