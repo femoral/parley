@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-import { Plate } from "../primitives/index.js";
+import { Mark, Plate } from "../primitives/index.js";
 import { weatherBucketAt, weatherForBucket } from "./day-chip-weather.js";
 
 const WEATHER_CHECK_INTERVAL_MS = 30 * 1000;
@@ -50,7 +50,9 @@ export function DayChip({ day, clock }: DayChipProps) {
           <span className="pc-daychip__clock">{clock}</span>
         </div>
         <div className="pc-daychip__weather">
-          <span aria-hidden="true">{weather.icon}</span>
+          <span className="pc-daychip__weather-icon" aria-hidden="true">
+            <Mark mark={weather.mark} size={12} />
+          </span>
           <span>{weather.condition}</span>
           <span className="pc-daychip__wind">· {weather.wind}</span>
         </div>

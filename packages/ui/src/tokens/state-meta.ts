@@ -7,7 +7,12 @@
  *
  * Keys mirror `@useparley/core`'s `TaskState` strings but are declared locally so
  * the tokens layer stays free of the core import (contract 4).
+ *
+ * `glyph` is the accessible/text emoji string (stable for labels/tests);
+ * `mark` is the authored SVG silhouette rendered in operational chrome.
  */
+import { MARK_UNKNOWN, STATE_GLYPH_MARKS, type StateGlyphMark } from "./state-glyphs.js";
+
 export type StateKey =
   | "pending"
   | "running"
@@ -20,14 +25,19 @@ export type StateKey =
 export interface StateMeta {
   /** Short caps label, e.g. "AWAITING". */
   label: string;
-  /** Single-glyph state marker. */
+  /**
+   * Single-glyph state marker (emoji/unicode). Kept for accessible text and
+   * any string-based consumers — the *rendered* chrome uses {@link mark}.
+   */
   glyph: string;
+  /** Authored micro-SVG mark for operational chrome (currentColor fill). */
+  mark: StateGlyphMark;
   /** Decorative flavour hint (kit legend), e.g. "needs your input". */
   hint: string;
   /** The `var(--state-*)` custom property holding this state's colour. */
   colorVar: string;
   /** Whether the state carries the beacon flag treatment (manifest §5 —
-   * "loudest thing on screen"; the roster row's pulsing 🚩). */
+   * "loudest thing on screen"; the roster row's pulsing beacon). */
   beacon?: boolean;
   /** Row opacity for quiet states (manifest §5 — terminals render dimmed so
    * history never competes with live work). Absent = full opacity. */
@@ -35,19 +45,39 @@ export interface StateMeta {
 }
 
 export const STATE_META: Record<StateKey, StateMeta> = {
-  pending: { label: "PENDING", glyph: "⏳", hint: "queued & calm", colorVar: "var(--state-pending)" },
-  running: { label: "RUNNING", glyph: "⛵", hint: "hard at work", colorVar: "var(--state-running)" },
+  pending: {
+    label: "PENDING",
+    glyph: "⏳",
+    mark: STATE_GLYPH_MARKS.pending,
+    hint: "queued & calm",
+    colorVar: "var(--state-pending)",
+  },
+  running: {
+    label: "RUNNING",
+    glyph: "⛵",
+    mark: STATE_GLYPH_MARKS.running,
+    hint: "hard at work",
+    colorVar: "var(--state-running)",
+  },
   awaiting_answer: {
     label: "AWAITING",
     glyph: "🚩",
+    mark: STATE_GLYPH_MARKS.awaiting_answer,
     hint: "needs your input",
     colorVar: "var(--state-awaiting_answer)",
     beacon: true,
   },
-  stalled: { label: "STALLED", glyph: "🧭", hint: "blocked / waiting", colorVar: "var(--state-stalled)" },
+  stalled: {
+    label: "STALLED",
+    glyph: "🧭",
+    mark: STATE_GLYPH_MARKS.stalled,
+    hint: "blocked / waiting",
+    colorVar: "var(--state-stalled)",
+  },
   completed: {
     label: "COMPLETED",
     glyph: "🏁",
+    mark: STATE_GLYPH_MARKS.completed,
     hint: "report ready",
     colorVar: "var(--state-completed)",
     dim: 0.9,
@@ -55,6 +85,7 @@ export const STATE_META: Record<StateKey, StateMeta> = {
   failed: {
     label: "FAILED",
     glyph: "✖",
+    mark: STATE_GLYPH_MARKS.failed,
     hint: "terminal state",
     colorVar: "var(--state-failed)",
     dim: 0.62,
@@ -62,6 +93,7 @@ export const STATE_META: Record<StateKey, StateMeta> = {
   cancelled: {
     label: "CANCELLED",
     glyph: "⊘",
+    mark: STATE_GLYPH_MARKS.cancelled,
     hint: "called back",
     colorVar: "var(--state-cancelled)",
     dim: 0.62,
@@ -73,7 +105,13 @@ export function stateMetaFor(state: string): StateMeta {
   if (Object.prototype.hasOwnProperty.call(STATE_META, state)) {
     return STATE_META[state as StateKey];
   }
-  return { label: state.toUpperCase(), glyph: "•", hint: "", colorVar: "var(--ink-tan)" };
+  return {
+    label: state.toUpperCase(),
+    glyph: "•",
+    mark: MARK_UNKNOWN,
+    hint: "",
+    colorVar: "var(--ink-tan)",
+  };
 }
 
 /**

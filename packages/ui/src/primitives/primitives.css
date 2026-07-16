@@ -152,7 +152,16 @@
   white-space: nowrap;
 }
 .pc-badge__glyph {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   font-size: 10px;
+  line-height: 1;
+}
+.pc-badge__glyph svg {
+  display: block;
+  width: 10px;
+  height: 10px;
 }
 
 /* ── Emblem (faction chip) ─────────────────────────────────────────────── */

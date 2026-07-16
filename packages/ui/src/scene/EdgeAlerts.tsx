@@ -1,4 +1,5 @@
 import type { CSSProperties } from "react";
+import { Mark } from "../primitives/index.js";
 import { stateMetaFor } from "../tokens/state-meta.js";
 
 /** How many per-side session chips render before the overflow "+N" chip. */
@@ -75,7 +76,7 @@ function EdgeAlertButton({
         </span>
       )}
       <span className="pc-edge-alert__glyph" aria-hidden="true">
-        {meta.glyph}
+        <Mark mark={meta.mark} size={13} />
       </span>
       {item.side === "right" && (
         <span className="pc-edge-alert__chevron" aria-hidden="true">

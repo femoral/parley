@@ -33,7 +33,27 @@ describe("primitives render per manifest with plain props", () => {
     );
     const badge = container.querySelector(".pc-badge") as HTMLElement;
     expect(badge.textContent).toContain("AWAITING");
+    expect(badge.textContent).toContain("🚩");
     expect(badge.style.getPropertyValue("--badge-color")).toBe("var(--state-awaiting_answer)");
+  });
+
+  it("Badge accepts a ReactNode glyph (authored Mark SVG)", () => {
+    const { container } = render(
+      <Badge
+        label="RUNNING"
+        glyph={
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M12 2 L20 12 L12 22 Z" fill="currentColor" />
+          </svg>
+        }
+        color="var(--state-running)"
+      />,
+    );
+    const badge = container.querySelector(".pc-badge") as HTMLElement;
+    expect(badge.textContent).toContain("RUNNING");
+    expect(badge.querySelector(".pc-badge__glyph svg")).toBeTruthy();
+    // String emoji is not rendered when an SVG mark is passed.
+    expect(badge.textContent).not.toContain("⛵");
   });
 
   it("Emblem tints its chip with the faction coat and shows a glyph mark", () => {

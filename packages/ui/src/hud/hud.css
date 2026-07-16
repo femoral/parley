@@ -73,6 +73,17 @@
   font-size: 11px;
   color: var(--ink-soft);
 }
+.pc-daychip__weather-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: inherit;
+  line-height: 1;
+  flex: 0 0 auto;
+}
+.pc-daychip__weather-icon svg {
+  display: block;
+}
 .pc-daychip__wind {
   font-family: var(--font-mono);
   font-size: 10.5px;
@@ -311,6 +322,12 @@
   color: var(--dot-color, var(--ink-label));
   font-size: 10px;
   flex: 0 0 auto;
+  line-height: 1;
+}
+.pc-state-dot svg {
+  display: block;
+  width: 10px;
+  height: 10px;
 }
 .pc-roster__group-label {
   font-family: var(--font-display);
@@ -354,10 +371,20 @@
   border-color: var(--brass-border-selected);
 }
 .pc-roster__beacon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   margin-left: auto;
   flex: 0 0 auto;
   font-size: 12px;
+  line-height: 1;
+  color: var(--state-awaiting_answer);
   filter: drop-shadow(0 0 4px var(--beacon-glow));
+}
+.pc-roster__beacon svg {
+  display: block;
+  width: 12px;
+  height: 12px;
 }
 .pc-roster__row-body {
   display: flex;

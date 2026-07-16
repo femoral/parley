@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useId, useRef, useState, type CSSProperties } from "react";
-import { Plate, PlateHeader, Emblem, Stat } from "../primitives/index.js";
+import { Plate, PlateHeader, Emblem, Mark, Stat } from "../primitives/index.js";
 import { stateMetaFor } from "../tokens/state-meta.js";
 import type { RosterGroup, RosterSessionOption, RosterSessionSearchHit } from "./types.js";
 
@@ -48,7 +48,7 @@ function Group({
             AT; title still gives mouse users a hover hint without duplicating
             the label in the accessibility tree. */}
         <span className="pc-state-dot" style={dotStyle} aria-hidden="true" title={meta.label}>
-          {meta.glyph}
+          <Mark mark={meta.mark} size={10} />
         </span>
         <span className="pc-roster__group-label" style={labelStyle}>
           {meta.label}
@@ -73,7 +73,7 @@ function Group({
             </span>
             {meta.beacon && (
               <span className="pc-roster__beacon pc-dot--beacon" aria-hidden="true">
-                {meta.glyph}
+                <Mark mark={meta.mark} size={12} />
               </span>
             )}
           </button>

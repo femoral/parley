@@ -1,5 +1,5 @@
 import { memo, type CSSProperties } from "react";
-import { Button, Divider, Emblem, Plate, PlateHeader } from "../primitives/index.js";
+import { Button, Divider, Emblem, Mark, Plate, PlateHeader } from "../primitives/index.js";
 import { FACTIONS } from "../tokens/factions.js";
 import { ATTENTION_DISPLAY_ORDER, STATE_META } from "../tokens/state-meta.js";
 import "./KitBand.css";
@@ -42,7 +42,7 @@ export const KitBand = memo(function KitBand() {
             return (
               <div className="pc-kit__legend-row" key={key}>
                 <span className="pc-state-dot pc-kit__legend-dot" style={dotStyle} aria-hidden="true">
-                  {meta.glyph}
+                  <Mark mark={meta.mark} size={10} />
                 </span>
                 <span className="pc-kit__legend-copy">
                   <span className="pc-kit__legend-label" style={{ color: meta.colorVar }}>

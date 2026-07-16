@@ -14,6 +14,8 @@ export { Badge } from "./Badge.js";
 export type { BadgeProps } from "./Badge.js";
 export { Emblem } from "./Emblem.js";
 export type { EmblemProps } from "./Emblem.js";
+export { Mark } from "./Mark.js";
+export type { MarkProps } from "./Mark.js";
 export { Button } from "./Button.js";
 export type { ButtonProps, ButtonVariant } from "./Button.js";
 export { Stat } from "./Stat.js";

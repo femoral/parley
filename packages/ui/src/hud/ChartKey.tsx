@@ -1,5 +1,5 @@
 import { memo, useEffect, useId, useRef, useState, type CSSProperties } from "react";
-import { Emblem } from "../primitives/index.js";
+import { Emblem, Mark } from "../primitives/index.js";
 import { FACTIONS } from "../tokens/factions.js";
 import { ATTENTION_DISPLAY_ORDER, STATE_META } from "../tokens/state-meta.js";
 
@@ -65,7 +65,7 @@ export const ChartKey = memo(function ChartKey() {
                 return (
                   <li className="pc-chart-key__row" key={key}>
                     <span className="pc-state-dot pc-chart-key__dot" style={dotStyle} aria-hidden="true">
-                      {meta.glyph}
+                      <Mark mark={meta.mark} size={10} />
                     </span>
                     <span className="pc-chart-key__copy">
                       <span className="pc-chart-key__label" style={{ color: meta.colorVar }}>

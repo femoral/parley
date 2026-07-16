@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Badge, Emblem } from "../primitives/index.js";
+import { Badge, Emblem, Mark } from "../primitives/index.js";
 import { stateMetaFor } from "../tokens/state-meta.js";
 import type { InboxTask } from "./types.js";
 
@@ -91,7 +91,11 @@ export function InboxCard({ task, onSelectTask }: InboxCardProps) {
             <span className="pc-inbox-card__name">{task.name}</span>
             <span className="pc-inbox-card__meta">{task.meta}</span>
           </span>
-          <Badge label={meta.label} glyph={meta.glyph} color={meta.colorVar} />
+          <Badge
+            label={meta.label}
+            glyph={<Mark mark={meta.mark} size={10} />}
+            color={meta.colorVar}
+          />
         </div>
         <p className="pc-inbox-card__question">
           <span className="pc-inbox-card__marker" aria-hidden="true">

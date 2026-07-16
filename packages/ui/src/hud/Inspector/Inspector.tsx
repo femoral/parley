@@ -1,5 +1,5 @@
 import { memo, useId, useRef, useState, type KeyboardEvent } from "react";
-import { Badge, Divider, Emblem, Plate } from "../../primitives/index.js";
+import { Badge, Divider, Emblem, Mark, Plate } from "../../primitives/index.js";
 import { stateMetaFor } from "../../tokens/state-meta.js";
 import { BriefTab } from "./BriefTab.js";
 import { LogsTab } from "./LogsTab.js";
@@ -101,7 +101,11 @@ export const Inspector = memo(function Inspector({ task, ornaments = false }: In
           {task.evalScore !== null && (
             <Badge label={`★ ${task.evalScore}/10`} color="var(--brass)" />
           )}
-          <Badge label={meta.label} glyph={meta.glyph} color={meta.colorVar} />
+          <Badge
+            label={meta.label}
+            glyph={<Mark mark={meta.mark} size={10} />}
+            color={meta.colorVar}
+          />
         </div>
       </div>
       {task.evalFeedback !== null && (

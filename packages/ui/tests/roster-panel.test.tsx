@@ -197,12 +197,12 @@ describe("RosterPanel session selector (#66)", () => {
 });
 
 describe("RosterPanel state treatment (#66)", () => {
-  it("carries the beacon flag on awaiting rows only", () => {
+  it("carries the beacon mark on awaiting rows only", () => {
     render(<RosterPanel {...baseProps()} />);
     const awaitingRow = screen.getByText("chart-the-bay").closest("button")!;
-    expect(awaitingRow.textContent).toContain("🚩");
+    expect(awaitingRow.querySelector(".pc-roster__beacon svg")).toBeTruthy();
     const runningRow = screen.getByText("sound-the-depths").closest("button")!;
-    expect(runningRow.textContent).not.toContain("🚩");
+    expect(runningRow.querySelector(".pc-roster__beacon")).toBeNull();
   });
 
   it("dims terminal rows per the manifest's quiet-history treatment", () => {

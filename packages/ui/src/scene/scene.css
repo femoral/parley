@@ -678,11 +678,19 @@ button.pc-edge-alert:focus-visible {
 }
 .pc-edge-alert__glyph {
   /* State colour is the only loud hue on the chip (One Loud Hue). */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   color: var(--edge-state, var(--brass));
   font-size: 13px;
   line-height: 1;
   /* Resting frame is full opacity so reduced-motion still reads the glyph. */
   opacity: 1;
+}
+.pc-edge-alert__glyph svg {
+  display: block;
+  width: 13px;
+  height: 13px;
 }
 .pc-edge-alert--beacon .pc-edge-alert__glyph {
   animation: pc-beacon 1.8s ease-in-out infinite;
