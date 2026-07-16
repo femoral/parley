@@ -119,8 +119,8 @@
   --badge-bg: rgba(0, 0, 0, 0.3);
 
   /* §2.8 — raw log-line colours by kind (inspector Logs tab).
-     Timestamp stays quieter than body kinds; ≥3:1 on terminal well. */
-  --log-timestamp: #4a6a5c;
+     Timestamp stays quieter than body kinds; ≥4.5:1 on terminal well. */
+  --log-timestamp: #5d8374;
   --log-reasoning: #7f9c8e;
   --log-tool: #7fb0ff;
   --log-shell: #ffcf4d;
@@ -176,6 +176,10 @@
   --radius-control: 7px;
   --radius-emblem: 7px;
   --radius-pill: 999px;
+
+  /* §2.10 — z scale. The cockpit is flat (atmosphere 0 / regions 1 inline);
+     the only floating layer is the roster's search popover. */
+  --z-popover: 20;
 
   /* §2.10 — the signature plate chrome recipe (double inset ring) */
   --plate-fill: linear-gradient(180deg, var(--plate-top), var(--plate-bottom));
@@ -244,15 +248,17 @@
 
 /* Sea texture current — two stacked pattern layers (cockpit.css .pc-atmos--sea
    ::before / ::after), each translating one of the design drift vectors on the
-   compositor. Distances match the former dual background-position endpoints
-   (220px 0 / −180px 90px). Base transform is identity so reduced-motion stills
+   compositor. Travel distances are the design endpoints (220px 0 / −180px 90px)
+   snapped to the nearest whole number of gradient periods along each layer's
+   gradient axis (115deg/46px → 4 periods; 65deg/60px → 3), so the loop wraps
+   without a visible seam. Base transform is identity so reduced-motion stills
    on the legible resting frame. */
 @keyframes pc-sea-move-a {
   from {
     transform: translate(0, 0);
   }
   to {
-    transform: translate(220px, 0);
+    transform: translate(203px, 0);
   }
 }
 @keyframes pc-sea-move-b {
@@ -260,7 +266,7 @@
     transform: translate(0, 0);
   }
   to {
-    transform: translate(-180px, 90px);
+    transform: translate(-161.1px, 80.5px);
   }
 }
 

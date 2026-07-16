@@ -60,8 +60,9 @@
     transform: translate(0, 0);
   }
   to {
-    /* Same vector as the former background-position endpoint. */
-    transform: translate(300px, 40px);
+    /* The design vector (300px 40px) snapped to 4 whole gradient periods
+       along the 100deg/72px axis, so the 22s loop wraps without a seam. */
+    transform: translate(285.7px, 38.1px);
   }
 }
 

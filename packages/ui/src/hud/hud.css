@@ -201,7 +201,7 @@
   position: absolute;
   top: calc(100% + 6px);
   right: 0;
-  z-index: 20;
+  z-index: var(--z-popover);
   width: min(240px, 70vw);
   padding: 8px;
   border-radius: var(--radius-control);
