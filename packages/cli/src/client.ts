@@ -1,5 +1,6 @@
 import {
   ensureDaemon as ensureDaemonCore,
+  readConfig,
   type DaemonLauncher,
   type Discovery,
   type HomePaths,
@@ -21,8 +22,20 @@ export type { Discovery } from "@useparley/core";
  * spawn from this package) into the injectable launcher core's `ensureDaemon`
  * expects. Inverting the dependency this way keeps the HTTP client in core
  * without it cycling back to daemon/cli. See docs/spec/monorepo-layout.md.
+ *
+ * When `~/.parley/parley.json` sets `daemon.url`, discovery/spawn are skipped
+ * and that URL is probed instead (ADR-0010). A corrupt config is ignored for
+ * lifecycle purposes so `daemon start` / auto-spawn still work (UI discovery
+ * already degrades the same way); task creation re-reads config and fails the
+ * delegate request loudly.
  */
 export function ensureDaemon(paths: HomePaths, env: NodeJS.ProcessEnv): Promise<Discovery> {
+  let remoteUrl: string | undefined;
+  try {
+    remoteUrl = readConfig(paths.config).daemon?.url;
+  } catch {
+    remoteUrl = undefined;
+  }
   const launcher: DaemonLauncher = {
     liveDiscovery: () => liveDiscovery(paths),
     readDiscovery: () => readDiscovery(paths),
@@ -31,5 +44,5 @@ export function ensureDaemon(paths: HomePaths, env: NodeJS.ProcessEnv): Promise<
     spawnDaemon: () => spawnDaemon(env),
     withLock: (fn) => withLock(paths, fn),
   };
-  return ensureDaemonCore(launcher);
+  return ensureDaemonCore(launcher, remoteUrl !== undefined ? { url: remoteUrl } : undefined);
 }

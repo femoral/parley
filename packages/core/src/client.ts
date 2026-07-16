@@ -2,6 +2,7 @@ import { sleep } from "./util/time.js";
 
 const SPAWN_TIMEOUT_MS = 15_000;
 const POLL_INTERVAL_MS = 25;
+const REMOTE_HEALTH_TIMEOUT_MS = 5_000;
 
 /** Contents of the daemon discovery file (`~/.parley/daemon.json`). */
 export interface Discovery {
@@ -11,6 +12,11 @@ export interface Discovery {
   pid: number;
   /** ISO-8601 timestamp of when the daemon started. */
   started_at: string;
+  /**
+   * When set (config `daemon.url`), all requests go to this base URL instead of
+   * `http://127.0.0.1:<port>`. Trailing slashes are stripped at use sites.
+   */
+  url?: string;
 }
 
 /**
@@ -35,9 +41,17 @@ export interface DaemonLauncher {
   withLock<T>(fn: () => Promise<T>): Promise<T>;
 }
 
+/** Base URL for daemon HTTP — remote `url` when set, else local loopback port. */
+export function discoveryBaseUrl(discovery: Discovery): string {
+  if (discovery.url !== undefined && discovery.url !== "") {
+    return discovery.url.replace(/\/$/, "");
+  }
+  return `http://127.0.0.1:${discovery.port}`;
+}
+
 async function healthy(discovery: Discovery): Promise<boolean> {
   try {
-    const res = await fetch(`http://127.0.0.1:${discovery.port}/health`, {
+    const res = await fetch(`${discoveryBaseUrl(discovery)}/health`, {
       signal: AbortSignal.timeout(1000),
     });
     return res.ok;
@@ -68,6 +82,45 @@ async function waitForDaemon(launcher: DaemonLauncher, pid: number): Promise<Dis
 }
 
 /**
+ * Probe a non-local daemon at `url` (`GET /health`) and return a Discovery that
+ * routes subsequent requests there. Skips local discovery/spawn entirely.
+ * Throws a clear error naming the URL when unreachable.
+ */
+export async function ensureRemoteDaemon(url: string): Promise<Discovery> {
+  const base = url.replace(/\/$/, "");
+  let res: Response;
+  try {
+    res = await fetch(`${base}/health`, {
+      signal: AbortSignal.timeout(REMOTE_HEALTH_TIMEOUT_MS),
+    });
+  } catch (err) {
+    throw new Error(
+      `parley daemon at ${base} is unreachable: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+  if (!res.ok) {
+    throw new Error(
+      `parley daemon at ${base} is unreachable: GET /health returned ${res.status}`,
+    );
+  }
+  let body: { pid?: unknown; started_at?: unknown } = {};
+  try {
+    body = (await res.json()) as { pid?: unknown; started_at?: unknown };
+  } catch {
+    /* health without a body is still live */
+  }
+  // Synthesize a Discovery: port is unused when `url` is set; pid/started_at
+  // come from health when present so `parley daemon status` stays informative.
+  return {
+    port: 0,
+    pid: typeof body.pid === "number" ? body.pid : 0,
+    started_at:
+      typeof body.started_at === "string" ? body.started_at : new Date().toISOString(),
+    url: base,
+  };
+}
+
+/**
  * Ensure a daemon is running and return its discovery record, spawning one if
  * necessary. Auto-spawn is guarded by the parley lock so concurrent CLI
  * invocations converge on a single daemon:
@@ -75,8 +128,18 @@ async function waitForDaemon(launcher: DaemonLauncher, pid: number): Promise<Dis
  *  1. Fast path — a live daemon is already advertised: return it, no lock.
  *  2. Under the lock, re-check (another invocation may have just started one).
  *  3. Clear any stale discovery (dead pid), spawn a fresh daemon, wait for it.
+ *
+ * When `options.url` is set (config `daemon.url`), skip discovery/spawn and
+ * probe that URL instead (ADR-0010).
  */
-export async function ensureDaemon(launcher: DaemonLauncher): Promise<Discovery> {
+export async function ensureDaemon(
+  launcher: DaemonLauncher,
+  options?: { url?: string },
+): Promise<Discovery> {
+  if (options?.url !== undefined && options.url !== "") {
+    return ensureRemoteDaemon(options.url);
+  }
+
   const existing = launcher.liveDiscovery();
   if (existing) return existing;
 
@@ -106,7 +169,7 @@ async function daemonFetch<T>(
   pathname: string,
   init: RequestInit,
 ): Promise<T> {
-  const res = await fetch(`http://127.0.0.1:${discovery.port}${pathname}`, init);
+  const res = await fetch(`${discoveryBaseUrl(discovery)}${pathname}`, init);
   const raw = await res.text();
   if (!res.ok) {
     let detail = `daemon request ${pathname} failed with status ${res.status}`;
