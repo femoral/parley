@@ -14,3 +14,7 @@ packages/ui/www/
 
 # TypeScript incremental build metadata
 *.tsbuildinfo
+
+# Local tool state (impeccable plugin cache, local claude settings)
+.impeccable/
+.claude/settings.json

@@ -18,3 +18,13 @@ Single-context: one `CONTEXT.md` + `docs/adr/` at repo root. See `docs/agents/do
 
 Check the task's `error` field, then `diag.log`, before reading raw vendor
 logs. See `docs/agents/troubleshooting.md`.
+
+## Design Context
+
+The web cockpit (`packages/ui`, "Parley Cove") has captured design context for
+agents doing UI work:
+
+- `packages/ui/PRODUCT.md` — strategic: register (product), users, positioning
+  ("agent work you want to watch"), personality, anti-references, principles.
+- `packages/ui/DESIGN.md` — visual system (tokens, typography, components).
+- `docs/design/design-manifest.md` — the source design export the UI implements.
