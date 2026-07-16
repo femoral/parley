@@ -494,11 +494,11 @@ Alternative (interactive only): `/model` picker. Gateway deployments may use `CL
 
 **Permission mapping helper:**
 
-| `task.sandbox` | `--permission-mode` |
-| --- | --- |
-| `read-only` | `plan` (or `dontAsk` + allowlist) |
-| `workspace` | `acceptEdits` or `bypassPermissions` |
-| `full` | `bypassPermissions` |
+| `task.sandbox` | `--permission-mode` | `--allowedTools` (adapter-validation-a / #107) |
+| --- | --- | --- |
+| `read-only` | `dontAsk` (not `plan` — plan was unproven for hub MCP tool execution) | `Read,Grep,Glob,mcp__parley__*` |
+| `workspace` | `acceptEdits` (not silent `bypassPermissions`) | `Read,Edit,Write,Bash,mcp__parley__*` |
+| `full` | `bypassPermissions` | (none — full tool privilege) |
 
 ### `resume()` — proposed argv
 

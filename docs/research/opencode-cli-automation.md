@@ -6,10 +6,10 @@ Research asset for the wayfinder ticket [Research: OpenCode CLI automation surfa
 
 OpenCode **can** do headless single-shot automation. It is a viable vendor adapter, closer to Grok (config/env injection) than Codex (flags-only):
 
-- **Spawn**: `opencode run --format json --auto --dir <worktree> -m <provider/model> "<prompt>"`.
+- **Spawn**: `opencode run --format json --dangerously-skip-permissions --dir <worktree> -m <provider/model> "<prompt>"`.
 - **Streaming**: JSONL on stdout (`--format json`). Event types include `step_start`, `text`, `tool_use`, `step_finish` (usage), `error`. Session id is on **every** line as `sessionID`.
 - **MCP injection**: remote HTTP MCP with custom `headers` via config. Best per-child routes: `OPENCODE_CONFIG_CONTENT` (inline JSON) or materialize project `opencode.json`. No CLI `-c` overrides.
-- **Approvals**: `--auto` and/or `permission: "allow"` / `OPENCODE_PERMISSION` — required for non-interactive runs when any rule would `ask`.
+- **Approvals**: `--dangerously-skip-permissions` and/or `permission: "allow"` / `OPENCODE_PERMISSION` — required for non-interactive runs when any rule would `ask`. **Flag drift (adapter-validation-a / #107):** 1.18.2 help/docs also list `--auto` as the current-line name; OpenCode **≤1.16.x** only has `--dangerously-skip-permissions` (using `--auto` dumps help / fails the run). Prefer the long form for host compatibility.
 - **Session resume**: `opencode run -s <sessionID> ...` (or `-c` for last session in directory).
 - **Auth**: credentials in `~/.local/share/opencode/auth.json`, provider env keys (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `XAI_API_KEY`, …), plus binary-present **`OPENCODE_API_KEY`** for OpenCode Zen/Go.
 - **Usage**: `step_finish.part.tokens.{input,output,reasoning,cache.{read,write},total}` and `part.cost`.
@@ -270,11 +270,12 @@ OpenCode does **not** ship an OS sandbox comparable to Codex bubblewrap or Grok 
 
 | Mechanism | Effect | Evidence |
 | --- | --- | --- |
-| `--auto` | Auto-approve anything not explicitly `deny` | DOCS + VERIFIED flag |
+| `--dangerously-skip-permissions` | Auto-approve anything not explicitly `deny` | VERIFIED help on 1.16.2 + 1.18.2 |
+| `--auto` | Same intent; **absent on ≤1.16.x** (yargs rejects) | DOCS (1.18.x) + VERIFIED 1.16.2 lacks flag |
 | `"permission": "allow"` in config / `OPENCODE_CONFIG_CONTENT` | Global allow | DOCS + VERIFIED `debug config` |
-| `OPENCODE_PERMISSION='{"*":"allow"}'` | Same via env | DOCS + VERIFIED |
+| `OPENCODE_PERMISSION='{"*":"allow"}'` | Same via env (clobbers structured maps — prefer config content for posture) | DOCS + VERIFIED |
 
-For Parley, use **both** `--auto` and explicit `"permission": "allow"` (or a structured map) so children never block on TTY approval. Explicit `deny` rules still apply under `--auto`.
+For Parley, use **`--dangerously-skip-permissions`** plus a structured `"permission"` map in `OPENCODE_CONFIG_CONTENT` so children never block on TTY approval while read-only / network denies still apply. Explicit `deny` rules still apply under auto-approve.
 
 ### Map Parley posture → OpenCode
 

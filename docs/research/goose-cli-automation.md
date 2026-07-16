@@ -365,6 +365,8 @@ Optional security extras (not a substitute for sandbox): `SECURITY_PROMPT_ENABLE
 
 CLI flags override env for that run (DOCS running-tasks).
 
+**Hermetic path root (`GOOSE_PATH_ROOT`) drops `~/.config/goose` provider state** (adapter-validation-a / #107). Headless children therefore need `GOOSE_PROVIDER` in the daemon env **or** `extraArgs: ["--provider", …]`; without either, `goose run` exits 1 with `No provider configured`. Adapter prepare should refuse loudly rather than spawn a doomed child.
+
 ### 6.2 Effort / thinking
 
 There is **no** general `--effort` / `--reasoning-effort` flag on `goose run` (VERIFIED: absent from `--help`).
@@ -565,7 +567,7 @@ Reject resume when neither `sessionId` nor recoverable name exists (same fail-lo
 1. **No OS sandbox** — workspace/read-only/network postures cannot be enforced in-process; document host-level isolation or accept reduced guarantees vs Codex/Grok.
 2. **Session id not in JSONL** — resume depends on banner parse, stable `-n` name, or post-hoc `session list` under the same `GOOSE_PATH_ROOT`.
 3. **MCP headers require config isolation** — CLI HTTP flag cannot carry Parley correlation headers; `GOOSE_PATH_ROOT` is load-bearing.
-4. **MCP start failures are soft** — agent runs without hub; must detect "Failed to start extension" on stderr or missing report.
+4. **MCP start failures are soft** — agent runs without hub; must detect "Failed to start extension 'parley'" on **stderr** (engine now feeds stderr to `parseEvent`, #107) and emit a fatal/PARLEY-DIAG event. Resume misses (`No session found…`) also land on stderr only.
 5. **Exit code 0 on auth failure** — do not trust exit status; parse stream text.
 6. **No cloud model catalog CLI** — `listModels` will be weak or provider-specific.
 7. **No unified effort flag** — map only known provider envs.

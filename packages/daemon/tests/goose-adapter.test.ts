@@ -20,6 +20,9 @@ const HUB: HubInfo = {
   headers: { "x-parley-task": "t7" },
 };
 
+/** Default env for prepare/resume: provider required after #107 (#107). */
+const PROVIDER_ENV = { GOOSE_PROVIDER: "openai" };
+
 /** A TaskSpec with the given posture; overrides merge over the defaults. */
 function spec(overrides: Partial<TaskSpec> = {}): TaskSpec {
   return {
@@ -38,6 +41,11 @@ function spec(overrides: Partial<TaskSpec> = {}): TaskSpec {
   };
 }
 
+/** Adapter with provider env so prepare/resume succeed under the #107 gate. */
+function goose(env: NodeJS.ProcessEnv = {}): ReturnType<typeof createGooseAdapter> {
+  return createGooseAdapter({ ...PROVIDER_ENV, ...env });
+}
+
 const AUTH_KEYS = [
   "OPENAI_API_KEY",
   "ANTHROPIC_API_KEY",
@@ -49,7 +57,7 @@ const AUTH_KEYS = [
 
 describe("goose adapter — prepare argv (golden)", () => {
   it("builds the hermetic headless stream-json invocation", async () => {
-    const adapter = createGooseAdapter({});
+    const adapter = goose();
     const plan = await adapter.prepare(spec(), HUB);
     expect(plan.argv).toEqual([
       "goose",
@@ -65,7 +73,7 @@ describe("goose adapter — prepare argv (golden)", () => {
   });
 
   it("passes the model through with --model when set, omits it otherwise", async () => {
-    const adapter = createGooseAdapter({});
+    const adapter = goose();
     const withModel = await adapter.prepare(spec({ model: "gpt-4o" }), HUB);
     expect(withModel.argv).toContain("--model");
     expect(withModel.argv).toContain("gpt-4o");
@@ -79,7 +87,7 @@ describe("goose adapter — prepare argv (golden)", () => {
   });
 
   it("splices extraArgs into the flags region before -t (never after the prompt)", async () => {
-    const plan = await createGooseAdapter({}).prepare(
+    const plan = await goose().prepare(
       spec({ extraArgs: ["--provider", "openai", "--max-turns", "5"] }),
       HUB,
     );
@@ -103,12 +111,12 @@ describe("goose adapter — prepare argv (golden)", () => {
   });
 
   it("honours PARLEY_GOOSE_BIN override", async () => {
-    const adapter = createGooseAdapter({ PARLEY_GOOSE_BIN: "/opt/goose/goose" });
+    const adapter = goose({ PARLEY_GOOSE_BIN: "/opt/goose/goose" });
     expect((await adapter.prepare(spec(), HUB)).argv[0]).toBe("/opt/goose/goose");
   });
 
   it("does not pass --no-session or -q (resume + banner session-id capture)", async () => {
-    const plan = await createGooseAdapter({}).prepare(spec(), HUB);
+    const plan = await goose().prepare(spec(), HUB);
     expect(plan.argv).not.toContain("--no-session");
     expect(plan.argv).not.toContain("-q");
     expect(plan.argv).not.toContain("--quiet");
@@ -117,7 +125,7 @@ describe("goose adapter — prepare argv (golden)", () => {
 
 describe("goose adapter — resume argv (golden)", () => {
   it("resumes by --session-id when captured", async () => {
-    const adapter = createGooseAdapter({});
+    const adapter = goose();
     const plan = await adapter.resume(
       spec({ prompt: "the answer", sessionId: "20260716_9" }),
       HUB,
@@ -137,7 +145,7 @@ describe("goose adapter — resume argv (golden)", () => {
 
   it("falls back to name-based --resume -n when session id is missing", async () => {
     // Goose can resume by stable name (§4.2); we always assigned -n on prepare.
-    const plan = await createGooseAdapter({}).resume(spec({ prompt: "follow up" }), HUB);
+    const plan = await goose().resume(spec({ prompt: "follow up" }), HUB);
     expect(plan.argv).toEqual([
       "goose",
       "run",
@@ -152,7 +160,7 @@ describe("goose adapter — resume argv (golden)", () => {
   });
 
   it("re-materializes the MCP config on resume", async () => {
-    const plan = await createGooseAdapter({}).resume(
+    const plan = await goose().resume(
       spec({ sessionId: "20260716_9" }),
       HUB,
     );
@@ -160,7 +168,7 @@ describe("goose adapter — resume argv (golden)", () => {
   });
 
   it("carries model and extraArgs on resume in the flags region before -t", async () => {
-    const plan = await createGooseAdapter({}).resume(
+    const plan = await goose().resume(
       spec({
         prompt: "answer",
         sessionId: "20260716_1",
@@ -197,7 +205,7 @@ describe("goose adapter — sandbox × network posture (golden env)", () => {
 
   for (const c of cases) {
     it(`${c.sandbox} + network:${c.network} → GOOSE_MODE=${c.expectMode}`, async () => {
-      const plan = await createGooseAdapter({}).prepare(
+      const plan = await goose().prepare(
         spec({ sandbox: c.sandbox, network: c.network }),
         HUB,
       );
@@ -209,7 +217,7 @@ describe("goose adapter — sandbox × network posture (golden env)", () => {
   }
 
   it("resume carries the identical posture env as prepare", async () => {
-    const adapter = createGooseAdapter({});
+    const adapter = goose();
     const s = spec({ sandbox: "read-only", network: false, sessionId: "20260716_1" });
     const prepared = await adapter.prepare(s, HUB);
     const resumed = await adapter.resume(s, HUB);
@@ -220,18 +228,18 @@ describe("goose adapter — sandbox × network posture (golden env)", () => {
 
 describe("goose adapter — env isolation & auth passthrough", () => {
   it("sets GOOSE_PATH_ROOT to the per-task private dir under cwd", async () => {
-    const plan = await createGooseAdapter({}).prepare(spec(), HUB);
+    const plan = await goose().prepare(spec(), HUB);
     expect(plan.env.GOOSE_PATH_ROOT).toBe("/work/tree/.parley-goose");
   });
 
   it("disables keyring and session naming for headless children", async () => {
-    const plan = await createGooseAdapter({}).prepare(spec(), HUB);
+    const plan = await goose().prepare(spec(), HUB);
     expect(plan.env.GOOSE_DISABLE_KEYRING).toBe("1");
     expect(plan.env.GOOSE_DISABLE_SESSION_NAMING).toBe("true");
   });
 
   it("passes provider API keys through only when the parent set them", async () => {
-    const withKeys = await createGooseAdapter({
+    const withKeys = await goose({
       OPENAI_API_KEY: "sk-openai",
       XAI_API_KEY: "xai-secret",
       ANTHROPIC_API_KEY: "sk-ant",
@@ -240,14 +248,14 @@ describe("goose adapter — env isolation & auth passthrough", () => {
     expect(withKeys.env.XAI_API_KEY).toBe("xai-secret");
     expect(withKeys.env.ANTHROPIC_API_KEY).toBe("sk-ant");
 
-    const without = await createGooseAdapter({}).prepare(spec(), HUB);
+    const without = await goose().prepare(spec(), HUB);
     for (const key of AUTH_KEYS) {
       expect(key in without.env).toBe(false);
     }
   });
 
   it("does not invent auth keys that were never set", async () => {
-    const plan = await createGooseAdapter({ OPENAI_API_KEY: "only-this" }).prepare(spec(), HUB);
+    const plan = await goose({ OPENAI_API_KEY: "only-this" }).prepare(spec(), HUB);
     expect(plan.env.OPENAI_API_KEY).toBe("only-this");
     expect("ANTHROPIC_API_KEY" in plan.env).toBe(false);
     expect("XAI_API_KEY" in plan.env).toBe(false);
@@ -256,24 +264,24 @@ describe("goose adapter — env isolation & auth passthrough", () => {
 
 describe("goose adapter — effort passthrough (provider-specific envs)", () => {
   it("maps Claude thinking effort values to CLAUDE_THINKING_TYPE", async () => {
-    const plan = await createGooseAdapter({}).prepare(spec({ effort: "adaptive" }), HUB);
+    const plan = await goose().prepare(spec({ effort: "adaptive" }), HUB);
     expect(plan.env.CLAUDE_THINKING_TYPE).toBe("adaptive");
     expect(plan.argv).not.toContain("--effort");
     expect(plan.argv).not.toContain("--reasoning-effort");
   });
 
   it("maps Gemini low/high effort to GEMINI3_THINKING_LEVEL", async () => {
-    const plan = await createGooseAdapter({}).prepare(spec({ effort: "high" }), HUB);
+    const plan = await goose().prepare(spec({ effort: "high" }), HUB);
     expect(plan.env.GEMINI3_THINKING_LEVEL).toBe("high");
   });
 
   it("passes unknown effort strings opaquely as CLAUDE_THINKING_TYPE", async () => {
-    const plan = await createGooseAdapter({}).prepare(spec({ effort: "medium" }), HUB);
+    const plan = await goose().prepare(spec({ effort: "medium" }), HUB);
     expect(plan.env.CLAUDE_THINKING_TYPE).toBe("medium");
   });
 
   it("omits effort envs when effort is null", async () => {
-    const plan = await createGooseAdapter({}).prepare(spec({ effort: null }), HUB);
+    const plan = await goose().prepare(spec({ effort: null }), HUB);
     expect("CLAUDE_THINKING_TYPE" in plan.env).toBe(false);
     expect("GEMINI3_THINKING_LEVEL" in plan.env).toBe(false);
   });
@@ -281,7 +289,7 @@ describe("goose adapter — effort passthrough (provider-specific envs)", () => 
 
 describe("goose adapter — materialized config.yaml (MCP injection)", () => {
   it("carries streamable_http hub URL, correlation headers, and raised timeout", async () => {
-    const plan = await createGooseAdapter({}).prepare(spec(), HUB);
+    const plan = await goose().prepare(spec(), HUB);
     const file = plan.files.find((f) => f.path === ".parley-goose/config/config.yaml");
     expect(file).toBeDefined();
     const yaml = file!.contents;
@@ -298,7 +306,7 @@ describe("goose adapter — materialized config.yaml (MCP injection)", () => {
 
   it("raises extension timeout strictly above the task's answer timeout", async () => {
     // 5-minute answer timeout → 300s + 60s headroom = 360s.
-    const plan = await createGooseAdapter({}).prepare(
+    const plan = await goose().prepare(
       spec({ answerTimeoutMs: 300_000 }),
       HUB,
     );
@@ -312,7 +320,7 @@ describe("goose adapter — materialized config.yaml (MCP injection)", () => {
       url: 'http://127.0.0.1:1/mcp?q="x"\\y',
       headers: { "x-parley-task": "t1\nInjected: true" },
     };
-    const plan = await createGooseAdapter({}).prepare(spec(), hub);
+    const plan = await goose().prepare(spec(), hub);
     const yaml = plan.files[0]!.contents;
     expect(yaml).toContain('uri: "http://127.0.0.1:1/mcp?q=\\"x\\"\\\\y"');
     // Newline escaped — no injected config line.
@@ -412,6 +420,63 @@ describe("goose adapter — parseEvent (tolerant)", () => {
         text: "PARLEY-DIAG goose toolResponse tool=submit_report failed: cancelled",
       },
     ]);
+  });
+
+  it("stderr MCP extension init failure → fatal PARLEY-DIAG (defect: silent hub-less run)", () => {
+    // Live shape: Warning: Failed to start extension 'parley' … continuing without it
+    const line =
+      "Warning: Failed to start extension 'parley' (connection refused); continuing without it";
+    expect(adapter.parseEvent(line)).toEqual([
+      {
+        kind: "error",
+        text:
+          "PARLEY-DIAG goose MCP extension 'parley' failed to start (hub tools unavailable): " +
+          line,
+        fatal: true,
+      },
+    ]);
+  });
+
+  it("stderr resume/session miss → fatal PARLEY-DIAG (defect: generic exited-without-report)", () => {
+    const line = "Error: No session found with name 'parley-nonexistent'";
+    expect(adapter.parseEvent(line)).toEqual([
+      {
+        kind: "error",
+        text: `PARLEY-DIAG goose resume/session error: ${line}`,
+        fatal: true,
+      },
+    ]);
+  });
+});
+
+describe("goose adapter — provider required (#107)", () => {
+  it("refuses prepare without GOOSE_PROVIDER or --provider (defect: hermetic root drops config)", async () => {
+    await expect(createGooseAdapter({}).prepare(spec(), HUB)).rejects.toThrow(
+      /no provider configured/,
+    );
+  });
+
+  it("accepts GOOSE_PROVIDER from parent env", async () => {
+    const plan = await createGooseAdapter({ GOOSE_PROVIDER: "anthropic" }).prepare(spec(), HUB);
+    expect(plan.env.GOOSE_PROVIDER).toBe("anthropic");
+  });
+
+  it("accepts --provider in extraArgs without GOOSE_PROVIDER env", async () => {
+    const plan = await createGooseAdapter({}).prepare(
+      spec({ extraArgs: ["--provider", "openai"] }),
+      HUB,
+    );
+    expect(plan.argv).toContain("--provider");
+    expect(plan.argv).toContain("openai");
+  });
+
+  it("forwards GOOSE_PROVIDER and GOOSE_MODEL when set", async () => {
+    const plan = await createGooseAdapter({
+      GOOSE_PROVIDER: "openai",
+      GOOSE_MODEL: "gpt-4o",
+    }).prepare(spec(), HUB);
+    expect(plan.env.GOOSE_PROVIDER).toBe("openai");
+    expect(plan.env.GOOSE_MODEL).toBe("gpt-4o");
   });
 });
 

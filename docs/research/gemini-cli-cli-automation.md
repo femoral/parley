@@ -129,7 +129,7 @@ Stdout JSONL (stderr had YOLO banners + stack traces; **parse stdout only**):
 | --- | --- | --- |
 | Missing auth (`json`) | **41** | Matches `error.code` in JSON body |
 | Missing auth (`stream-json`) | **41** | No JSONL events emitted (fails before `init`) |
-| Invalid `GEMINI_API_KEY` (`stream-json`) | **144** | API returned HTTP 400; Node `process.exit(400)` → `400 & 0xff = 144` |
+| Invalid `GEMINI_API_KEY` (`stream-json`) | **0** (also observed **144**) | Adapter-validation-a (0.50.0): terminal `result.status:"error"` on stdout with exit **0**. Older note claimed HTTP 400 truncated to 144 — exit codes remain unreliable; always parse stream `result`. |
 | Invalid `--approval-mode` | **1** | yargs validation |
 | Resume unknown session id | **42** | stderr: `Error resuming session: Invalid session identifier "…".` |
 
@@ -316,13 +316,13 @@ There is **no** Codex-style `--sandbox read-only|workspace-write|danger-full-acc
 
 | Parley `Posture` | Gemini mapping | Notes |
 | --- | --- | --- |
-| `sandbox: "read-only"`, network any | `--approval-mode=plan` (+ optional `-s` / `GEMINI_SANDBOX`) | Plan mode is the documented read-only tool policy. Network still not a clean independent switch. |
-| `sandbox: "workspace"`, `network: true` (**default**) | `--approval-mode=yolo`, **no** `-s` *or* `-s` with permissive profile | Unsandboxed yolo matches “write worktree freely.” With sandbox on, default seatbelt restricts writes outside project but allows network (**DOCS**). |
-| `sandbox: "workspace"`, `network: false` | macOS: `SEATBELT_PROFILE=permissive-proxied` or `restrictive-proxied` with sandbox on; Linux: **UNKNOWN** without custom Docker network off | No first-class “network=false” flag. |
+| `sandbox: "read-only"`, network on | `--approval-mode=plan` | Plan mode is the documented read-only tool policy. |
+| `sandbox: "workspace"`, `network: true` (**default**) | `--approval-mode=yolo`, **no** `-s` | Unsandboxed yolo matches “write worktree freely.” |
+| `sandbox: "workspace"`, `network: false` | **macOS only:** `SEATBELT_PROFILE=permissive-proxied` + `-s`. **Linux: refuse prepare** (adapter-validation-a / #107) | Seatbelt is a no-op off-macOS; `-s` without Docker/gVisor does not implement network-off. Do not silently claim isolation. |
 | `sandbox: "full"`, network on | `--approval-mode=yolo`, sandbox **off** | Full host access. |
-| `sandbox: "full"`, network off | **UNKNOWN** / not a natural mode | Full + no network is contradictory on most OS sandboxes. |
+| `sandbox: "full"`, network off | **Refuse prepare** (#107) | No natural Gemini mode. |
 
-**Git dirs outside worktree:** Gemini sandbox (when on) mounts/restricts relative to project dir (**DOCS**). Whether `gitDir` / `gitCommonDir` outside `cwd` need extra writable roots is **UNKNOWN** — likely only matters when sandbox is enabled; default Parley path (yolo, no sandbox) should allow normal git in worktrees.
+**Git dirs outside worktree:** pass `task.gitDir` / `task.gitCommonDir` via `--include-directories <a>,<b>` (0.50.0 help: comma-separated or repeated flags). Required when sandbox expands the project root; also safe on the default yolo path.
 
 ---
 
@@ -515,14 +515,14 @@ Ensure the same `HOME` / project path so `~/.gemini/tmp/<hash>/chats/` still res
 
 ### Top risks / unknowns
 
-1. **Exit codes lie / truncate** — HTTP 400 → process exit 144. Always parse `result`.
+1. **Exit codes lie** — invalid-key streams may exit 0 with `result.status:"error"` (or historically 144). Always parse `result`.
 2. **Folder trust** — forgetting `--skip-trust` silently disables project MCP (and project settings). Load-bearing.
 3. **No MCP CLI inject** — only settings file; must git-exclude `.gemini/settings.json` if the worktree is committed by the agent.
 4. **MCP timeout units are ms** (default 10 min) — easy to confuse with Codex’s seconds.
 5. **MCP tool FQNs** — model sees `mcp_parley_*`; prompt/protocol should name tools accordingly or rely on discovery descriptions.
 6. **No effort flag** — Parley `effort` has no verified mapping.
 7. **No model list command** — catalog is static/handish.
-8. **Sandbox ≠ Codex matrix** — network-off and extra git writable roots are rough/UNKNOWN on Linux without custom Docker.
+8. **Sandbox ≠ Codex matrix** — Linux `network:false` is a no-op for seatbelt; adapter refuses rather than under-isolates (#107). Pass `gitDir`/`gitCommonDir` via `--include-directories`.
 9. **Sessions in `~/.gemini`** — not worktree-local; HOME isolation and multi-tenant hosts need care.
 10. **Product transition** — Antigravity CLI messaging on official docs; pin package version and re-verify before production.
 11. **Live success path** — tool_use/tool_result lines and non-zero token stats not captured end-to-end without a valid key + hub (**UNKNOWN** only for golden numbers, not for field names).

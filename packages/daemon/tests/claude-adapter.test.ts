@@ -55,9 +55,11 @@ describe("claude adapter — prepare argv (golden)", () => {
       ".parley/claude-mcp.json",
       "--strict-mcp-config",
       "--permission-mode",
-      "bypassPermissions",
+      "acceptEdits",
       "--settings",
       ".parley/claude-settings.json",
+      "--allowedTools",
+      "Read,Edit,Write,Bash,mcp__parley__*",
     ]);
     expect(plan.cwd).toBe("/work/tree");
   });
@@ -149,9 +151,11 @@ describe("claude adapter — resume argv (golden)", () => {
       ".parley/claude-mcp.json",
       "--strict-mcp-config",
       "--permission-mode",
-      "bypassPermissions",
+      "acceptEdits",
       "--settings",
       ".parley/claude-settings.json",
+      "--allowedTools",
+      "Read,Edit,Write,Bash,mcp__parley__*",
     ]);
   });
 
@@ -175,36 +179,42 @@ describe("claude adapter — sandbox-posture matrix (golden)", () => {
     sandbox: SandboxMode;
     network: boolean;
     permission: string;
+    allowedTools: string | null;
     sandboxSettings: boolean;
   }[] = [
     {
       sandbox: "workspace",
       network: true,
-      permission: "bypassPermissions",
+      permission: "acceptEdits",
+      allowedTools: "Read,Edit,Write,Bash,mcp__parley__*",
       sandboxSettings: false,
     },
     {
       sandbox: "workspace",
       network: false,
-      permission: "bypassPermissions",
+      permission: "acceptEdits",
+      allowedTools: "Read,Edit,Write,Bash,mcp__parley__*",
       sandboxSettings: true,
     },
     {
       sandbox: "read-only",
       network: true,
-      permission: "plan",
+      permission: "dontAsk",
+      allowedTools: "Read,Grep,Glob,mcp__parley__*",
       sandboxSettings: false,
     },
     {
       sandbox: "read-only",
       network: false,
-      permission: "plan",
+      permission: "dontAsk",
+      allowedTools: "Read,Grep,Glob,mcp__parley__*",
       sandboxSettings: true,
     },
     {
       sandbox: "full",
       network: true,
       permission: "bypassPermissions",
+      allowedTools: null,
       sandboxSettings: false,
     },
     // full ignores network:false — danger-full-access is inherently network-on.
@@ -212,16 +222,26 @@ describe("claude adapter — sandbox-posture matrix (golden)", () => {
       sandbox: "full",
       network: false,
       permission: "bypassPermissions",
+      allowedTools: null,
       sandboxSettings: false,
     },
   ];
 
   for (const c of cases) {
-    it(`${c.sandbox} + network:${c.network} → permission-mode ${c.permission}`, async () => {
+    it(`${c.sandbox} + network:${c.network} → permission-mode ${c.permission} (not silent full bypass for workspace/read-only)`, async () => {
       const adapter = createClaudeAdapter({});
       const plan = await adapter.prepare(spec({ sandbox: c.sandbox, network: c.network }), HUB);
       const modeIdx = plan.argv.indexOf("--permission-mode");
       expect(plan.argv[modeIdx + 1]).toBe(c.permission);
+      if (c.allowedTools === null) {
+        expect(plan.argv).not.toContain("--allowedTools");
+      } else {
+        const toolsIdx = plan.argv.indexOf("--allowedTools");
+        expect(toolsIdx).toBeGreaterThan(-1);
+        expect(plan.argv[toolsIdx + 1]).toBe(c.allowedTools);
+        // Hub protocol tools must be on the allowlist so submit_report works.
+        expect(c.allowedTools).toContain("mcp__parley__*");
+      }
 
       const settings = plan.files.find((f) => f.path === ".parley/claude-settings.json");
       expect(settings).toBeDefined();
@@ -250,7 +270,8 @@ describe("claude adapter — sandbox-posture matrix (golden)", () => {
       return argv[i + 1]!;
     };
     expect(permOf(resumed.argv)).toBe(permOf(prepared.argv));
-    expect(permOf(prepared.argv)).toBe("plan");
+    // Defect scenario: plan mode could block hub MCP; dontAsk + allowlist instead.
+    expect(permOf(prepared.argv)).toBe("dontAsk");
   });
 });
 

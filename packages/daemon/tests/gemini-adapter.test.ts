@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { createGeminiAdapter } from "../src/adapters/gemini.js";
+import {
+  assertGeminiNetworkPosture,
+  createGeminiAdapter,
+} from "../src/adapters/gemini.js";
 import type { HubInfo, SandboxMode, TaskSpec } from "../src/adapters/types.js";
 
 /**
@@ -165,34 +168,14 @@ describe("gemini adapter — sandbox × network posture matrix (golden)", () => 
       sandboxFlag: false,
     },
     {
-      sandbox: "workspace",
-      network: false,
-      approval: "yolo",
-      sandboxFlag: true,
-      seatbelt: "permissive-proxied",
-    },
-    {
       sandbox: "read-only",
       network: true,
       approval: "plan",
       sandboxFlag: false,
     },
     {
-      sandbox: "read-only",
-      network: false,
-      approval: "plan",
-      sandboxFlag: false,
-    },
-    {
       sandbox: "full",
       network: true,
-      approval: "yolo",
-      sandboxFlag: false,
-    },
-    // full ignores network:false — no natural Gemini mode (research §5).
-    {
-      sandbox: "full",
-      network: false,
       approval: "yolo",
       sandboxFlag: false,
     },
@@ -216,15 +199,75 @@ describe("gemini adapter — sandbox × network posture matrix (golden)", () => 
     });
   }
 
-  it("resume carries the identical posture as prepare", async () => {
+  it("Linux network:false is refused (defect: seatbelt was a silent no-op)", async () => {
+    // On this host (linux) SEATBELT_PROFILE/-s do not implement network-off.
+    // Old code would emit -s + SEATBELT_PROFILE and claim the posture.
     const adapter = createGeminiAdapter({});
-    const s = spec({ sandbox: "workspace", network: false, sessionId: "sess-1" });
+    await expect(
+      adapter.prepare(spec({ sandbox: "workspace", network: false }), HUB),
+    ).rejects.toThrow(/network:false is not enforced/);
+    await expect(
+      adapter.prepare(spec({ sandbox: "full", network: false }), HUB),
+    ).rejects.toThrow(/network:false is not enforced/);
+    await expect(
+      adapter.prepare(spec({ sandbox: "read-only", network: false }), HUB),
+    ).rejects.toThrow(/network:false is not enforced/);
+  });
+
+  it("macOS workspace + network:false is allowed (seatbelt path)", () => {
+    expect(() =>
+      assertGeminiNetworkPosture(spec({ sandbox: "workspace", network: false }), "darwin"),
+    ).not.toThrow();
+    expect(() =>
+      assertGeminiNetworkPosture(spec({ sandbox: "workspace", network: false }), "linux"),
+    ).toThrow(/network:false is not enforced/);
+  });
+
+  it("resume refuses the same network:false postures as prepare", async () => {
+    const adapter = createGeminiAdapter({});
+    await expect(
+      adapter.resume(spec({ sandbox: "workspace", network: false, sessionId: "sess-1" }), HUB),
+    ).rejects.toThrow(/network:false is not enforced/);
+  });
+
+  it("resume carries the identical posture as prepare when network is on", async () => {
+    const adapter = createGeminiAdapter({});
+    const s = spec({ sandbox: "workspace", network: true, sessionId: "sess-1" });
     const prepared = await adapter.prepare(s, HUB);
     const resumed = await adapter.resume(s, HUB);
     expect(resumed.argv.filter((a) => a.startsWith("--approval-mode") || a === "-s")).toEqual(
       prepared.argv.filter((a) => a.startsWith("--approval-mode") || a === "-s"),
     );
     expect(resumed.env.SEATBELT_PROFILE).toBe(prepared.env.SEATBELT_PROFILE);
+  });
+});
+
+describe("gemini adapter — gitDir/gitCommonDir include-directories (#107)", () => {
+  it("passes --include-directories for gitDir and gitCommonDir (defect: flag unused when set)", async () => {
+    const plan = await createGeminiAdapter({}).prepare(
+      spec({
+        gitDir: "/repo/.git/worktrees/t9",
+        gitCommonDir: "/repo/.git",
+      }),
+      HUB,
+    );
+    const i = plan.argv.indexOf("--include-directories");
+    expect(i).toBeGreaterThan(-1);
+    expect(plan.argv[i + 1]).toBe("/repo/.git/worktrees/t9,/repo/.git");
+  });
+
+  it("does not duplicate when gitDir === gitCommonDir", async () => {
+    const plan = await createGeminiAdapter({}).prepare(
+      spec({ gitDir: "/repo/.git", gitCommonDir: "/repo/.git" }),
+      HUB,
+    );
+    expect(plan.argv).toContain("--include-directories");
+    expect(plan.argv[plan.argv.indexOf("--include-directories") + 1]).toBe("/repo/.git");
+  });
+
+  it("omits --include-directories when neither git root is set", async () => {
+    const plan = await createGeminiAdapter({}).prepare(spec(), HUB);
+    expect(plan.argv).not.toContain("--include-directories");
   });
 });
 

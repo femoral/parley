@@ -18,13 +18,21 @@ import { runProbe } from "./probe.js";
  * `@earendil-works/pi-coding-agent`, research docs/research/pi-cli-automation.md,
  * verified 0.80.7). Spec §9, ADR-0004/0006.
  *
- * Pi is a **materialized-files** adapter (like grok): native MCP is not built
- * in (research §3, "No MCP" philosophy). The hub is injected by writing
- * `.mcp.json` for the community `pi-mcp-adapter` package (must be installed
- * via `pi install npm:pi-mcp-adapter` or loaded with `-e` — see
- * `PARLEY_PI_MCP_ADAPTER`). There is **no native filesystem/network sandbox**
- * (research §5); soft read-only maps to `--tools`, workspace/full share the
- * default tool set, and `network:false` cannot be expressed in-process.
+ * Pi has **no native MCP client** (research §3, "No MCP" philosophy). Parley
+ * injects hub tools by materializing a **Parley-owned extension**
+ * (`.parley/pi-hub-extension.ts`) and loading it with `--no-extensions -e`
+ * (adapter-validation-a / #107). The extension registers `ask_orchestrator` /
+ * `submit_report` via the daemon child REST surface (`POST /child/ask`,
+ * `POST /child/report`) so we never depend on community `pi-mcp-adapter` or its
+ * cold `directTools` metadata cache.
+ *
+ * Optional escape hatch: `PARLEY_PI_MCP_ADAPTER` still loads an external
+ * extension path instead of (or in addition to) the built-in hub extension
+ * when set — used for experiments; default path always ships the Parley hub.
+ *
+ * There is **no native filesystem/network sandbox** (research §5); soft
+ * read-only maps to `--tools`, workspace/full share the default tool set, and
+ * `network:false` is refused loudly (cannot be expressed in-process).
  *
  * Headless shape: `pi --mode json -p …` (spawn-per-turn, ADR-0004). Exit codes
  * are uninformative (always 0) — fatal failures live in the stream
@@ -35,12 +43,8 @@ import { runProbe } from "./probe.js";
 /** Default binary; override via `PARLEY_PI_BIN` (smoke tests, custom installs). */
 const DEFAULT_PI_BIN = "pi";
 
-/**
- * Headroom (ms) added to `answerTimeoutMs` when setting pi-mcp-adapter's
- * `requestTimeoutMs` (research §3 / §9). Mirrors codex's tool_timeout headroom
- * so a blocking `ask_orchestrator` is never killed before the orchestrator answers.
- */
-const REQUEST_TIMEOUT_HEADROOM_MS = 60_000;
+/** Relative path of the materialized Parley hub extension (research §3 alt path). */
+const HUB_EXTENSION_PATH = ".parley/pi-hub-extension.ts";
 
 /**
  * Fixed Pi thinking levels used as catalog efforts (research §7: `--list-models`
@@ -87,58 +91,182 @@ const MODELS_SOURCE = "pi --list-models";
  *  - `read-only` → read tools only (no bash/edit/write)
  *  - `workspace` / `full` → default tools (identical in-process; full has no
  *    extra privilege flag)
- *  - `network:false` → **not expressible**; document-only gap (host/container
- *    isolation required for real network off)
+ *  - `network:false` → **not expressible**; prepare refuses (see
+ *    {@link assertPiNetworkPosture})
  */
 function sandboxArgs(sandbox: SandboxMode): string[] {
   switch (sandbox) {
     case "read-only":
       // Soft read-only: no bash / edit / write (research §5 table).
-      return ["--tools", "read,grep,find,ls"];
+      // Always include hub tools so submit_report works under --tools allowlist.
+      return ["--tools", "read,grep,find,ls,ask_orchestrator,submit_report"];
     case "full":
     case "workspace":
     default:
-      // No native write sandbox; default built-in tools.
+      // No native write sandbox; default built-in tools + extension hub tools.
       return [];
   }
 }
 
-function requestTimeoutMs(answerTimeoutMs: number): number {
-  return answerTimeoutMs + REQUEST_TIMEOUT_HEADROOM_MS;
+/**
+ * Loud capability gap: Pi cannot enforce network-off in-process (#107).
+ */
+export function assertPiNetworkPosture(task: TaskSpec): void {
+  if (task.network) return;
+  throw new Error(
+    "pi: network:false is not expressible in-process (no OS/network sandbox " +
+      "flag). Refuse rather than under-isolate (#107). Use network:true or wrap " +
+      "the child in an external netns/container.",
+  );
 }
 
 /**
- * Project `.mcp.json` for pi-mcp-adapter (research §3). `requestTimeoutMs` is
- * raised above the answer timeout; `directTools` registers parley's hub tools
- * natively; `samplingAutoApprove` is required for non-UI sampling sessions.
- *
- * UNKNOWN(research): whether pi-mcp-adapter reads root `.mcp.json` without
- * project trust — we pass `--approve` as belt-and-braces (research §5/§9).
+ * Derive the daemon base URL from the hub MCP URL (`…/mcp` → origin+path root).
  */
-function mcpJson(task: TaskSpec, hub: HubInfo): string {
-  const timeout = requestTimeoutMs(task.answerTimeoutMs);
-  return (
-    JSON.stringify(
-      {
-        mcpServers: {
-          parley: {
-            url: hub.url,
-            headers: hub.headers,
-            auth: false,
-            lifecycle: "eager",
-            requestTimeoutMs: timeout,
-            directTools: ["ask_orchestrator", "submit_report"],
-          },
-        },
-        settings: {
-          requestTimeoutMs: timeout,
-          samplingAutoApprove: true,
-        },
+function hubBaseUrl(hubUrl: string): string {
+  try {
+    const u = new URL(hubUrl);
+    // Strip a trailing /mcp segment when present.
+    u.pathname = u.pathname.replace(/\/mcp\/?$/, "") || "/";
+    // Avoid trailing slash for clean join.
+    const base = u.toString().replace(/\/$/, "");
+    return base === "" ? hubUrl : base;
+  } catch {
+    return hubUrl.replace(/\/mcp\/?$/, "");
+  }
+}
+
+/**
+ * Materialized Pi extension that registers Parley protocol tools against the
+ * child REST surface (ADR-0011). Avoids pi-mcp-adapter + directTools cache
+ * entirely (adapter-validation-a critical findings).
+ *
+ * Hub base URL and correlation headers are embedded at materialize time (per
+ * task) so the extension needs no env plumbing for identity.
+ */
+function hubExtensionSource(hub: HubInfo, answerTimeoutMs: number): string {
+  const base = hubBaseUrl(hub.url);
+  const headersJson = JSON.stringify(hub.headers);
+  // Abort slightly above answer timeout so the engine stall wins first, then
+  // the extension surfaces a clean error if the socket hangs.
+  const fetchTimeoutMs = answerTimeoutMs + 60_000;
+  return `// Generated by parley — do not edit; regenerated on every (re)spawn.
+// Parley hub tools via child REST (POST /child/report, POST /child/ask).
+// Loaded with: pi --no-extensions -e ${HUB_EXTENSION_PATH}
+
+const HUB_BASE = ${JSON.stringify(base)};
+const HUB_HEADERS = ${headersJson} as Record<string, string>;
+const FETCH_TIMEOUT_MS = ${fetchTimeoutMs};
+
+async function postJson(path: string, body: unknown, signal?: AbortSignal): Promise<{ ok: boolean; status: number; json: any }> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT_MS);
+  const onAbort = () => ctrl.abort();
+  signal?.addEventListener("abort", onAbort);
+  try {
+    const res = await fetch(HUB_BASE + path, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        ...HUB_HEADERS,
       },
-      null,
-      2,
-    ) + "\n"
-  );
+      body: JSON.stringify(body ?? {}),
+      signal: ctrl.signal,
+    });
+    let json: any = null;
+    try {
+      json = await res.json();
+    } catch {
+      json = null;
+    }
+    return { ok: res.ok, status: res.status, json };
+  } finally {
+    clearTimeout(timer);
+    signal?.removeEventListener("abort", onAbort);
+  }
+}
+
+export default function (pi: any) {
+  pi.registerTool({
+    name: "submit_report",
+    label: "Submit Report",
+    description:
+      "Submit the final task report. Required before finishing: a task only " +
+      "completes when a schema-valid report is submitted. Default schema: " +
+      '{ summary: string (markdown), outcome: "success" | "partial" | "blocked", ' +
+      "files_changed: string[] }.",
+    parameters: {
+      type: "object",
+      properties: {
+        summary: { type: "string" },
+        outcome: { type: "string" },
+        files_changed: { type: "array", items: { type: "string" } },
+      },
+      additionalProperties: true,
+    },
+    async execute(_toolCallId: string, params: Record<string, unknown>, signal?: AbortSignal) {
+      const { ok, status, json } = await postJson("/child/report", params, signal);
+      if (!ok) {
+        const err =
+          (json && Array.isArray(json.errors) && json.errors.join("; ")) ||
+          (json && typeof json.error === "string" && json.error) ||
+          ("report rejected (HTTP " + status + ")");
+        return {
+          content: [{ type: "text", text: String(err) }],
+          details: { status, json },
+          isError: true,
+        };
+      }
+      return {
+        content: [{ type: "text", text: "report accepted" }],
+        details: { accepted: true },
+      };
+    },
+  });
+
+  pi.registerTool({
+    name: "ask_orchestrator",
+    label: "Ask Orchestrator",
+    description:
+      "Ask the orchestrator a blocking question when stuck. Blocks until the " +
+      "orchestrator answers; the answer is returned as the tool result. Use " +
+      "only when you genuinely cannot proceed. Argument: { question: string }.",
+    parameters: {
+      type: "object",
+      properties: {
+        question: { type: "string", description: "The question for the orchestrator" },
+      },
+      required: ["question"],
+    },
+    async execute(_toolCallId: string, params: Record<string, unknown>, signal?: AbortSignal) {
+      const question = params.question;
+      if (typeof question !== "string" || question.trim() === "") {
+        return {
+          content: [{ type: "text", text: "ask_orchestrator requires a non-empty 'question' string" }],
+          details: {},
+          isError: true,
+        };
+      }
+      const { ok, status, json } = await postJson("/child/ask", { question }, signal);
+      if (!ok) {
+        const err =
+          (json && typeof json.error === "string" && json.error) ||
+          ("ask failed (HTTP " + status + ")");
+        return {
+          content: [{ type: "text", text: String(err) }],
+          details: { status, json },
+          isError: true,
+        };
+      }
+      const answer = json && typeof json.answer === "string" ? json.answer : JSON.stringify(json);
+      return {
+        content: [{ type: "text", text: answer }],
+        details: { answer },
+      };
+    },
+  });
+}
+`;
 }
 
 /**
@@ -269,15 +397,23 @@ export function createPiAdapter(env: NodeJS.ProcessEnv = process.env): VendorAda
   }
 
   function files(task: TaskSpec, hub: HubInfo): MaterializedFile[] {
-    return [{ path: ".mcp.json", contents: mcpJson(task, hub) }];
+    return [
+      {
+        path: HUB_EXTENSION_PATH,
+        contents: hubExtensionSource(hub, task.answerTimeoutMs),
+      },
+    ];
   }
 
   /**
    * Flags after the mode/prompt head. Order: isolation → model/effort → soft
-   * sandbox → project trust → optional MCP extension path → extraArgs.
+   * sandbox → project trust → hub extension → optional external MCP path →
+   * extraArgs.
    *
-   * `--approve` loads project resources (`.mcp.json` / `.pi/*`) headlessly
-   * (research §5). Interactive permission popups do not exist in core Pi.
+   * Always load the Parley hub extension with `--no-extensions -e` so user
+   * global extensions cannot bleed in and hub tools are always present
+   * (adapter-validation-a / #107). `PARLEY_PI_MCP_ADAPTER` may point at an
+   * additional extension (e.g. experimental MCP adapter) loaded after the hub.
    */
   function commonArgv(task: TaskSpec): string[] {
     const argv: string[] = [
@@ -291,12 +427,12 @@ export function createPiAdapter(env: NodeJS.ProcessEnv = process.env): VendorAda
     if (task.effort !== null) argv.push("--thinking", task.effort);
     argv.push(...sandboxArgs(task.sandbox));
     argv.push("--approve"); // research §5 — trust project materialization headlessly
-    // Optional explicit load of pi-mcp-adapter (or a Parley-owned extension).
-    // When set, also disable discovery so the user's global extensions cannot
-    // bleed into the child (research §9 risk #8).
+    // Hermetic extension load: disable discovery, load Parley hub always.
+    argv.push("--no-extensions", "-e", HUB_EXTENSION_PATH);
+    // Optional extra extension (legacy pi-mcp-adapter path or experiments).
     const mcpExt = env.PARLEY_PI_MCP_ADAPTER;
     if (mcpExt !== undefined && mcpExt !== "") {
-      argv.push("--no-extensions", "-e", mcpExt);
+      argv.push("-e", mcpExt);
     }
     // extraArgs land in the flags region (prompt is a -p value, never ambiguous).
     argv.push(...task.extraArgs);
@@ -307,6 +443,11 @@ export function createPiAdapter(env: NodeJS.ProcessEnv = process.env): VendorAda
     id: "pi",
 
     prepare(task, hub): Promise<SpawnPlan> {
+      try {
+        assertPiNetworkPosture(task);
+      } catch (err) {
+        return Promise.reject(err);
+      }
       // Fresh one-shot: `pi --mode json -p <prompt> …` (research §2 / §9).
       return Promise.resolve({
         argv: [bin, "--mode", "json", "-p", task.prompt, ...commonArgv(task)],
@@ -323,6 +464,11 @@ export function createPiAdapter(env: NodeJS.ProcessEnv = process.env): VendorAda
         // Without a session id Pi would start a brand-new session (or -c most
         // recent, which is wrong for multi-task hosts). Fail loudly like grok.
         return Promise.reject(new Error(`pi resume for task ${task.id} has no session id`));
+      }
+      try {
+        assertPiNetworkPosture(task);
+      } catch (err) {
+        return Promise.reject(err);
       }
       return Promise.resolve({
         argv: [

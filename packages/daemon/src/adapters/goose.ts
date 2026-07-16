@@ -63,6 +63,8 @@ const AUTH_ENV_KEYS = [
   "GROQ_API_KEY",
   "DATABRICKS_HOST",
   "DATABRICKS_TOKEN",
+  "GOOSE_PROVIDER",
+  "GOOSE_MODEL",
   "GOOSE_PROVIDER__API_KEY",
   "GOOSE_PROVIDER__HOST",
   "GOOSE_PROVIDER__TYPE",
@@ -77,6 +79,22 @@ const BANNER_SESSION_ID = /\b(\d{8}_\d+)\b/;
 /** Auth / fatal patterns in assistant text — exit code is 0 on 401 (§2.4). */
 const AUTH_FATAL_RE =
   /Authentication error|401 Unauthorized|You didn't provide an API key|No provider configured/i;
+
+/**
+ * MCP extension init failure on stderr (research §3 / adapter-validation-a).
+ * Goose continues without the extension (exit 0) — must surface as fatal so
+ * the task does not silently run without ask_orchestrator / submit_report.
+ * Engine feeds stderr through parseEvent (#107).
+ */
+const MCP_EXTENSION_FAIL_RE =
+  /Failed to start extension ['"]parley['"]|Failed to start extension parley/i;
+
+/**
+ * Resume/session lookup failures land on stderr with empty stdout (research §4,
+ * adapter-validation-a). Without this, diagnosis is only "exited without report".
+ */
+const RESUME_FAIL_RE =
+  /No session found|Cannot resume session|session not found/i;
 
 /**
  * YAML double-quoted scalar. Escapes backslash, quote, and control characters so
@@ -148,6 +166,31 @@ function configYaml(task: TaskSpec, hub: HubInfo): string {
   // research §3: extension timeout is seconds; raise above answerTimeoutMs.
   lines.push(`    timeout: ${timeout}`);
   return lines.join("\n") + "\n";
+}
+
+/**
+ * Provider must be known before spawn: hermetic `GOOSE_PATH_ROOT` drops the
+ * user's interactive `~/.config/goose`, so a keyed host with only interactive
+ * provider config yields `No provider configured` (adapter-validation-a / #107).
+ * Accept parent `GOOSE_PROVIDER` or `extraArgs: ["--provider", …]`.
+ */
+export function assertGooseProvider(
+  task: TaskSpec,
+  env: NodeJS.ProcessEnv,
+): void {
+  if (env.GOOSE_PROVIDER !== undefined && env.GOOSE_PROVIDER !== "") return;
+  const args = task.extraArgs;
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === "--provider" && args[i + 1] !== undefined && args[i + 1] !== "") {
+      return;
+    }
+    if (args[i]?.startsWith("--provider=")) return;
+  }
+  throw new Error(
+    "goose: no provider configured for headless run. Set GOOSE_PROVIDER in the " +
+      "daemon environment, or pass extraArgs: [\"--provider\", \"<name>\"]. " +
+      "Hermetic GOOSE_PATH_ROOT isolates away ~/.config/goose provider state (#107).",
+  );
 }
 
 function sessionName(taskId: string): string {
@@ -267,6 +310,11 @@ export function createGooseAdapter(env: NodeJS.ProcessEnv = process.env): Vendor
       // Fresh headless one-shot: `goose run --output-format stream-json … -t`.
       // Omit `--no-session` so resume remains possible (§2.1 / §4).
       // Omit `-q` so the banner can carry the session id (§4.2).
+      try {
+        assertGooseProvider(task, env);
+      } catch (err) {
+        return Promise.reject(err);
+      }
       return Promise.resolve({
         argv: [
           bin,
@@ -290,6 +338,11 @@ export function createGooseAdapter(env: NodeJS.ProcessEnv = process.env): Vendor
       // recoverable from task.id, so we never reject the way grok must when
       // its resume flag is id-only. Re-materialize config so hub headers stay
       // current.
+      try {
+        assertGooseProvider(task, env);
+      } catch (err) {
+        return Promise.reject(err);
+      }
       const resumeFlags: string[] = ["--resume"];
       if (task.sessionId !== undefined) {
         resumeFlags.push("--session-id", task.sessionId);
@@ -316,11 +369,34 @@ export function createGooseAdapter(env: NodeJS.ProcessEnv = process.env): Vendor
     },
 
     parseEvent(line: string): VendorEvent[] {
-      // Non-JSON (banner, warnings): optionally scrape session id (§4.2 / §9.3).
+      // Non-JSON (banner, stderr warnings): session scrape + fatal diagnostics
+      // that only appear off the JSONL stream (engine feeds stderr too — #107).
       let parsed: unknown;
       try {
         parsed = JSON.parse(line);
       } catch {
+        // Critical: MCP hub never registered — agent cannot finish protocol.
+        if (MCP_EXTENSION_FAIL_RE.test(line)) {
+          return [
+            {
+              kind: "error",
+              text:
+                `${VENDOR_DIAG_PREFIX} goose MCP extension 'parley' failed to ` +
+                `start (hub tools unavailable): ${line.trim()}`,
+              fatal: true,
+            },
+          ];
+        }
+        // Major: resume/session miss — diagnose instead of "exited without report".
+        if (RESUME_FAIL_RE.test(line)) {
+          return [
+            {
+              kind: "error",
+              text: `${VENDOR_DIAG_PREFIX} goose resume/session error: ${line.trim()}`,
+              fatal: true,
+            },
+          ];
+        }
         const match = BANNER_SESSION_ID.exec(line);
         if (match?.[1]) {
           return [{ kind: "session_meta", session_id: match[1] }];

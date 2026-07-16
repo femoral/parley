@@ -92,20 +92,51 @@ function settingsJson(task: TaskSpec, hub: HubInfo): string {
 }
 
 /**
- * Sandbox / approval posture (research §5). Gemini has no
- * `read-only|workspace-write|danger-full-access` triad:
+ * Sandbox / approval posture (research §5, adapter-validation-a / #107).
+ * Gemini has no `read-only|workspace-write|danger-full-access` triad:
  *  - `read-only` → `--approval-mode=plan` (documented read-only tool policy).
  *    Network is not an independent switch.
  *  - `workspace` + network on → yolo, no process sandbox (default path).
  *  - `workspace` + network off → yolo + `-s` + `SEATBELT_PROFILE=permissive-proxied`
- *    (macOS seatbelt; Linux network-off without custom Docker is
- *    UNKNOWN(research) — best-effort closest safe posture).
- *  - `full` → yolo, sandbox off. `network:false` has no natural mode
- *    (UNKNOWN(research)); ignored like grok's full posture.
+ *    on **macOS only**. On Linux, seatbelt env is a no-op and `-s` without
+ *    Docker/gVisor does **not** implement network-off — prepare rejects so we
+ *    never silently claim a weaker isolation than `network:false`.
+ *  - `full` → yolo, sandbox off. `network:false` is refused (no natural mode).
  *
- * gitDir / gitCommonDir extra writable roots: UNKNOWN(research) under Gemini
- * sandbox; default Parley path (yolo, no `-s`) allows normal git in worktrees.
+ * gitDir / gitCommonDir: passed via `--include-directories` when set so sandbox
+ * / workspace root expansion can see worktree git objects outside cwd.
  */
+
+/** Platforms where Gemini's SEATBELT_PROFILE can enforce network-off. */
+function seatbeltSupportsNetworkOff(platform: string = process.platform): boolean {
+  return platform === "darwin";
+}
+
+/**
+ * Loud capability gap: refuse postures that would silently under-isolate.
+ * Call before building argv so the task fails with a clear error (#107).
+ *
+ * Only `workspace` + macOS seatbelt is treated as a real network-off path;
+ * everywhere else `network:false` would be a no-op (Linux seatbelt, full
+ * posture, plan mode) — refuse rather than claim isolation we cannot provide.
+ */
+export function assertGeminiNetworkPosture(
+  task: TaskSpec,
+  platform: string = process.platform,
+): void {
+  if (task.network) return;
+  if (task.sandbox === "workspace" && seatbeltSupportsNetworkOff(platform)) {
+    return; // SEATBELT_PROFILE=permissive-proxied + `-s`
+  }
+  throw new Error(
+    `gemini: network:false is not enforced for sandbox=${task.sandbox} on ` +
+      `${platform} (SEATBELT_PROFILE/-s only isolates on macOS workspace; ` +
+      `Linux/Docker-less and full/read-only paths are no-ops). Refuse rather ` +
+      `than under-isolate (#107). Use network:true, sandbox=workspace on macOS, ` +
+      `or wrap the child in a real netns/container.`,
+  );
+}
+
 function postureArgs(task: TaskSpec): {
   approvalMode: string;
   sandboxFlag: boolean;
@@ -115,17 +146,15 @@ function postureArgs(task: TaskSpec): {
   switch (task.sandbox) {
     case "read-only":
       // Plan mode is the documented read-only tool policy (research §5).
+      // network:false already refused by assertGeminiNetworkPosture off-macOS.
       return { approvalMode: "plan", sandboxFlag: false, env };
     case "full":
-      // Full host access — no sandbox. network:false is not a natural Gemini
-      // mode (research §5 UNKNOWN); ignored.
+      // Full host access — no sandbox. network:false refused above.
       return { approvalMode: "yolo", sandboxFlag: false, env };
     case "workspace":
     default:
       if (!task.network) {
-        // Closest network-off posture: enable sandbox + macOS proxied seatbelt
-        // profile. // UNKNOWN(research): Linux has no first-class network=false
-        // without custom Docker/gVisor; SEATBELT_PROFILE is a no-op there.
+        // macOS only (asserted): enable sandbox + proxied seatbelt profile.
         env.SEATBELT_PROFILE = "permissive-proxied";
         return { approvalMode: "yolo", sandboxFlag: true, env };
       }
@@ -210,6 +239,19 @@ export function createGeminiAdapter(env: NodeJS.ProcessEnv = process.env): Vendo
       "--skip-trust",
     ];
     if (sandboxFlag) argv.push("-s");
+    // Extra project roots for worktree gitdirs when sandbox/workspace expands
+    // beyond cwd (0.50.0 `--include-directories`, comma-separated — #107).
+    const includeDirs: string[] = [];
+    if (task.gitDir !== undefined) includeDirs.push(task.gitDir);
+    if (
+      task.gitCommonDir !== undefined &&
+      task.gitCommonDir !== task.gitDir
+    ) {
+      includeDirs.push(task.gitCommonDir);
+    }
+    if (includeDirs.length > 0) {
+      argv.push("--include-directories", includeDirs.join(","));
+    }
     if (task.model !== null) argv.push("-m", task.model);
     // extraArgs in the flags region (prompt is a separate -p value).
     argv.push(...task.extraArgs);
@@ -222,6 +264,11 @@ export function createGeminiAdapter(env: NodeJS.ProcessEnv = process.env): Vendo
     prepare(task, hub): Promise<SpawnPlan> {
       // Fresh headless one-shot (research §2 / §9):
       //   gemini -p <prompt> --output-format stream-json --approval-mode=… --skip-trust
+      try {
+        assertGeminiNetworkPosture(task);
+      } catch (err) {
+        return Promise.reject(err);
+      }
       return Promise.resolve({
         argv: [bin, "-p", task.prompt, ...commonArgv(task)],
         env: baseEnv(task),
@@ -237,6 +284,11 @@ export function createGeminiAdapter(env: NodeJS.ProcessEnv = process.env): Vendo
         // Without `-r` gemini would start a brand-new session. Fail loudly —
         // the engine reruns session-less stalled tasks via prepare().
         return Promise.reject(new Error(`gemini resume for task ${task.id} has no session id`));
+      }
+      try {
+        assertGeminiNetworkPosture(task);
+      } catch (err) {
+        return Promise.reject(err);
       }
       return Promise.resolve({
         argv: [bin, "-p", task.prompt, "-r", task.sessionId, ...commonArgv(task)],

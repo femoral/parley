@@ -38,7 +38,7 @@ function spec(overrides: Partial<TaskSpec> = {}): TaskSpec {
 }
 
 describe("pi adapter — prepare argv (golden)", () => {
-  it("builds the pinned headless json-mode invocation", async () => {
+  it("builds the pinned headless json-mode invocation with Parley hub extension", async () => {
     const adapter = createPiAdapter({});
     const plan = await adapter.prepare(spec(), HUB);
     expect(plan.argv).toEqual([
@@ -51,6 +51,9 @@ describe("pi adapter — prepare argv (golden)", () => {
       "--session-dir",
       path.join("/work/wt", ".pi", "sessions"),
       "--approve",
+      "--no-extensions",
+      "-e",
+      ".parley/pi-hub-extension.ts",
     ]);
     expect(plan.cwd).toBe("/work/wt");
   });
@@ -66,19 +69,10 @@ describe("pi adapter — prepare argv (golden)", () => {
   it("maps effort to --thinking when set, omits it otherwise", async () => {
     const adapter = createPiAdapter({});
     const withEffort = await adapter.prepare(spec({ effort: "high" }), HUB);
-    expect(withEffort.argv).toEqual([
-      "pi",
-      "--mode",
-      "json",
-      "-p",
-      "do the thing",
-      "--offline",
-      "--session-dir",
-      path.join("/work/wt", ".pi", "sessions"),
-      "--thinking",
-      "high",
-      "--approve",
-    ]);
+    expect(withEffort.argv).toContain("--thinking");
+    expect(withEffort.argv).toContain("high");
+    expect(withEffort.argv).toContain("--no-extensions");
+    expect(withEffort.argv).toContain(".parley/pi-hub-extension.ts");
     expect((await adapter.prepare(spec({ effort: null }), HUB)).argv).not.toContain("--thinking");
   });
 
@@ -104,13 +98,19 @@ describe("pi adapter — prepare argv (golden)", () => {
     expect((await adapter.prepare(spec(), HUB)).argv[0]).toBe("/opt/pi/pi");
   });
 
-  it("loads PARLEY_PI_MCP_ADAPTER with --no-extensions -e for hermetic MCP", async () => {
-    const adapter = createPiAdapter({ PARLEY_PI_MCP_ADAPTER: "/opt/pi-mcp-adapter/ext.js" });
-    const plan = await adapter.prepare(spec(), HUB);
-    expect(plan.argv).toContain("--no-extensions");
-    const eIdx = plan.argv.indexOf("-e");
-    expect(eIdx).toBeGreaterThan(-1);
-    expect(plan.argv[eIdx + 1]).toBe("/opt/pi-mcp-adapter/ext.js");
+  it("always loads Parley hub extension; PARLEY_PI_MCP_ADAPTER adds a second -e", async () => {
+    // Defect: default path had no MCP without pi-mcp-adapter installed (#107).
+    const bare = await createPiAdapter({}).prepare(spec(), HUB);
+    expect(bare.argv).toContain("--no-extensions");
+    expect(bare.argv).toContain(".parley/pi-hub-extension.ts");
+
+    const withExtra = await createPiAdapter({
+      PARLEY_PI_MCP_ADAPTER: "/opt/pi-mcp-adapter/ext.js",
+    }).prepare(spec(), HUB);
+    const eFlags = withExtra.argv
+      .map((a, i) => (a === "-e" ? withExtra.argv[i + 1] : null))
+      .filter((x): x is string => x !== null);
+    expect(eFlags).toEqual([".parley/pi-hub-extension.ts", "/opt/pi-mcp-adapter/ext.js"]);
   });
 });
 
@@ -121,11 +121,8 @@ describe("pi adapter — sandbox × network matrix (soft tools)", () => {
     tools: string | null;
   }[] = [
     { sandbox: "workspace", network: true, tools: null },
-    { sandbox: "workspace", network: false, tools: null }, // network:false not expressible
-    { sandbox: "read-only", network: true, tools: "read,grep,find,ls" },
-    { sandbox: "read-only", network: false, tools: "read,grep,find,ls" },
+    { sandbox: "read-only", network: true, tools: "read,grep,find,ls,ask_orchestrator,submit_report" },
     { sandbox: "full", network: true, tools: null },
-    { sandbox: "full", network: false, tools: null },
   ];
 
   for (const c of cases) {
@@ -144,9 +141,19 @@ describe("pi adapter — sandbox × network matrix (soft tools)", () => {
     });
   }
 
+  it("network:false is refused (defect: silent weaker isolation)", async () => {
+    const adapter = createPiAdapter({});
+    await expect(
+      adapter.prepare(spec({ sandbox: "workspace", network: false }), HUB),
+    ).rejects.toThrow(/network:false is not expressible/);
+    await expect(
+      adapter.resume(spec({ sandbox: "full", network: false, sessionId: "s1" }), HUB),
+    ).rejects.toThrow(/network:false is not expressible/);
+  });
+
   it("resume maps soft sandbox identically to prepare", async () => {
     const adapter = createPiAdapter({});
-    const s = spec({ sandbox: "read-only", network: false, sessionId: "s1" });
+    const s = spec({ sandbox: "read-only", network: true, sessionId: "s1" });
     const prepared = await adapter.prepare(s, HUB);
     const resumed = await adapter.resume(s, HUB);
     const toolsOf = (argv: string[]): string | undefined => {
@@ -176,14 +183,19 @@ describe("pi adapter — resume argv (golden)", () => {
       "--session-dir",
       path.join("/work/wt", ".pi", "sessions"),
       "--approve",
+      "--no-extensions",
+      "-e",
+      ".parley/pi-hub-extension.ts",
     ]);
     expect(plan.cwd).toBe("/work/wt");
   });
 
-  it("re-materializes .mcp.json on resume", async () => {
+  it("re-materializes hub extension on resume (not .mcp.json alone)", async () => {
+    // Defect: materializing .mcp.json only is insufficient without pi-mcp-adapter.
     const adapter = createPiAdapter({});
     const plan = await adapter.resume(spec({ sessionId: "sess-abc" }), HUB);
-    expect(plan.files.map((f) => f.path)).toContain(".mcp.json");
+    expect(plan.files.map((f) => f.path)).toContain(".parley/pi-hub-extension.ts");
+    expect(plan.files.map((f) => f.path)).not.toContain(".mcp.json");
   });
 
   it("rejects a resume without a session id (would silently start a fresh session)", async () => {
@@ -244,46 +256,36 @@ describe("pi adapter — env passthrough & isolation", () => {
   });
 });
 
-describe("pi adapter — materialized .mcp.json (MCP injection)", () => {
-  it("carries hub url, headers, raised requestTimeoutMs, and directTools", async () => {
+describe("pi adapter — Parley hub extension (protocol tools without pi-mcp-adapter)", () => {
+  it("materializes extension that registers submit_report and ask_orchestrator via child REST", async () => {
+    // Defect: .mcp.json alone is inert without pi-mcp-adapter; directTools cold
+    // cache hides tools on first session. Parley-owned extension fixes both.
     const adapter = createPiAdapter({});
     const plan = await adapter.prepare(spec(), HUB);
-    const file = plan.files.find((f) => f.path === ".mcp.json");
+    const file = plan.files.find((f) => f.path === ".parley/pi-hub-extension.ts");
     expect(file).toBeDefined();
-    const json = JSON.parse(file!.contents) as {
-      mcpServers: {
-        parley: {
-          url: string;
-          headers: Record<string, string>;
-          auth: boolean;
-          lifecycle: string;
-          requestTimeoutMs: number;
-          directTools: string[];
-        };
-      };
-      settings: { requestTimeoutMs: number; samplingAutoApprove: boolean };
-    };
-    expect(json.mcpServers.parley.url).toBe("http://127.0.0.1:5555/mcp");
-    expect(json.mcpServers.parley.headers).toEqual({ "x-parley-task": "t1" });
-    expect(json.mcpServers.parley.auth).toBe(false);
-    expect(json.mcpServers.parley.lifecycle).toBe("eager");
-    // 1_800_000 + 60_000 headroom
-    expect(json.mcpServers.parley.requestTimeoutMs).toBe(1_860_000);
-    expect(json.mcpServers.parley.directTools).toEqual([
-      "ask_orchestrator",
-      "submit_report",
-    ]);
-    expect(json.settings.requestTimeoutMs).toBe(1_860_000);
-    expect(json.settings.samplingAutoApprove).toBe(true);
+    const src = file!.contents;
+    expect(src).toContain("submit_report");
+    expect(src).toContain("ask_orchestrator");
+    expect(src).toContain("/child/report");
+    expect(src).toContain("/child/ask");
+    expect(src).toContain("http://127.0.0.1:5555");
+    expect(src).toContain("x-parley-task");
+    expect(src).toContain("t1");
+    // No dependency on pi-mcp-adapter directTools cache.
+    expect(src).not.toContain("directTools");
+    expect(src).not.toContain("mcp-cache");
   });
 
-  it("raises requestTimeoutMs strictly above the task answer timeout", async () => {
+  it("embeds fetch timeout strictly above the task answer timeout", async () => {
     const plan = await createPiAdapter({}).prepare(spec({ answerTimeoutMs: 300_000 }), HUB);
-    const json = JSON.parse(plan.files.find((f) => f.path === ".mcp.json")!.contents) as {
-      mcpServers: { parley: { requestTimeoutMs: number } };
-    };
-    expect(json.mcpServers.parley.requestTimeoutMs).toBe(360_000);
-    expect(360_000).toBeGreaterThan(300_000);
+    const src = plan.files.find((f) => f.path === ".parley/pi-hub-extension.ts")!.contents;
+    expect(src).toContain("FETCH_TIMEOUT_MS = 360000");
+  });
+
+  it("does not ship .mcp.json as the sole hub injection (would be silent without adapter)", async () => {
+    const plan = await createPiAdapter({}).prepare(spec(), HUB);
+    expect(plan.files.map((f) => f.path)).not.toContain(".mcp.json");
   });
 });
 

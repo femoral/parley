@@ -20,7 +20,11 @@ import { runProbe } from "./probe.js";
  * - MCP hub + permission posture ride `OPENCODE_CONFIG_CONTENT` (research §3, highest
  *   non-MDM precedence) so we never mutate the user's global
  *   `~/.config/opencode/opencode.json`.
- * - Approvals disabled with both `--auto` and config `"permission"` (research §5).
+ * - Approvals disabled with `--dangerously-skip-permissions` plus config
+ *   `"permission"` (research §5). Flag drift: 1.18.2 docs/help also list
+ *   `--auto` as the current-line name; ≤1.16.x only expose
+ *   `--dangerously-skip-permissions` (adapter-validation-a / #107). We pin the
+ *   older/stable name so common installer builds (1.16.x) still auto-approve.
  * - No OS sandbox (no bubblewrap/Landlock equivalent). Posture maps to the
  *   **permission** system only; network isolation is partial (`webfetch`/`websearch`
  *   deny; `bash` can still hit the network — documented capability gap).
@@ -37,8 +41,12 @@ const DEFAULT_OPENCODE_BIN = "opencode";
 /**
  * Headroom added to the answer timeout when raising OpenCode's MCP `timeout`
  * (schema default **5000** ms — far too low for a blocking `ask_orchestrator`).
- * Research §3: units are ms; whether the timeout covers tool *execution* vs only
- * tool *discovery* is UNKNOWN(research) — raise aggressively either way.
+ * Research §3: units are ms. Official schema/docs still disagree on whether
+ * `timeout` bounds tool **execution** vs tool **discovery** only
+ * (adapter-validation-a: still UNKNOWN after live config merge). We raise it
+ * well above `answerTimeoutMs` either way so a discovery-only timer cannot
+ * starve hub setup, and rely on the injected `mcp.parley.timeout` surviving
+ * `OPENCODE_CONFIG_CONTENT` merge (verified on 1.18.2).
  */
 const MCP_TIMEOUT_HEADROOM_MS = 60_000;
 
@@ -177,9 +185,22 @@ function baseEnv(task: TaskSpec, hub: HubInfo, env: NodeJS.ProcessEnv): Record<s
  * Flags shared by prepare/resume after the `run` head and before the prompt:
  * JSONL stream, auto-approve, working dir, optional model/effort, extraArgs.
  * Prompt is always last (after `--`) so flag parsers never swallow it (research §9).
+ *
+ * Auto-approve flag: `--dangerously-skip-permissions` (not `--auto`). On
+ * OpenCode ≤1.16.x `--auto` is absent and yargs dumps help / fails the run;
+ * 1.18.2 documents `--auto` as the friendlier alias for the same behaviour.
+ * Prefer the long form so both pin and older host installs work (#107).
+ * Permission posture still rides `OPENCODE_CONFIG_CONTENT` (structured map)
+ * so explicit denies (read-only / network tools) remain load-bearing.
  */
 function commonArgs(task: TaskSpec): string[] {
-  const argv = ["--format", "json", "--auto", "--dir", task.cwd];
+  const argv = [
+    "--format",
+    "json",
+    "--dangerously-skip-permissions",
+    "--dir",
+    task.cwd,
+  ];
   if (task.model !== null) argv.push("-m", task.model);
   // Effort → `--variant` (research §6); opaque string, omitted when null.
   if (task.effort !== null) argv.push("--variant", task.effort);
@@ -325,7 +346,7 @@ export function createOpencodeAdapter(env: NodeJS.ProcessEnv = process.env): Ven
 
     prepare(task, hub): Promise<SpawnPlan> {
       // Fresh headless one-shot (research §2/§9):
-      //   opencode run --format json --auto --dir <cwd> [flags…] -- <prompt>
+      //   opencode run --format json --dangerously-skip-permissions --dir <cwd> …
       return Promise.resolve({
         argv: [bin, "run", ...commonArgs(task), "--", task.prompt],
         env: baseEnv(task, hub, env),

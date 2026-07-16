@@ -19,9 +19,11 @@ import { VENDOR_DIAG_PREFIX } from "./types.js";
  * Headless streaming requires **both** `--output-format stream-json` and
  * `--verbose` (research §2) — without `--verbose` the CLI exits 1 with no events.
  *
- * Posture maps to `--permission-mode` (research §5). Claude has no simple
+ * Posture maps to `--permission-mode` + `--allowedTools` (research §5, #107):
+ * workspace → `acceptEdits` with hub/builtin allowlist; read-only → `dontAsk`
+ * + read-class + hub tools; full → `bypassPermissions`. Claude has no simple
  * sandbox CLI enum like codex; OS-level Bash network lockdown is optional via
- * `--settings` when `network:false`. Approvals are disabled for headless runs.
+ * `--settings` when `network:false`.
  *
  * `parseEvent` is deliberately tolerant: any unknown or changed line yields `[]`
  * and the raw JSONL log (the durable record) keeps it. Exit codes are unreliable
@@ -62,15 +64,18 @@ function toolTimeoutMs(answerTimeoutMs: number): number {
 }
 
 /**
- * Normalized posture → Claude `--permission-mode` (research §5 / §9).
+ * Normalized posture → Claude `--permission-mode` + optional `--allowedTools`
+ * (research §5 / §9, adapter-validation-a / #107).
  *
- * - `read-only` → `plan` (read-only exploration; no source edits).
- * - `workspace` → `bypassPermissions` — headless must not stall on approvals.
- *   `acceptEdits` alone may still prompt on Bash/MCP; without a reliable
- *   auto-allow for our hub tools we skip the permission gate entirely. The
- *   isolation boundary is the parley worktree cwd (Claude has no codex-style
- *   workspace-write FS sandbox by default).
- * - `full` → `bypassPermissions` (docs: isolated containers only).
+ * - `read-only` → `dontAsk` + allowlist Read/Grep/Glob + `mcp__parley__*`.
+ *   Plan mode is exploration-only and was never proven to execute hub MCP
+ *   tools (`submit_report` / `ask_orchestrator`); `dontAsk` denies anything
+ *   not pre-allowed, so the allowlist is load-bearing for the protocol.
+ * - `workspace` → `acceptEdits` + allowlist Read/Edit/Write/Bash +
+ *   `mcp__parley__*`. Middle ground for auto file edits without granting
+ *   full-host `bypassPermissions` (which skips protected-path checks).
+ * - `full` → `bypassPermissions` (docs: isolated containers only). No
+ *   allowlist — full tool privilege.
  *
  * Gap vs codex: Claude's Bash OS sandbox is settings-driven, not a simple CLI
  * enum; we only enable it for `network:false` (see {@link settingsJson}).
@@ -78,12 +83,30 @@ function toolTimeoutMs(answerTimeoutMs: number): number {
 function permissionMode(sandbox: SandboxMode): string {
   switch (sandbox) {
     case "read-only":
-      return "plan";
+      return "dontAsk";
     case "full":
       return "bypassPermissions";
     case "workspace":
     default:
-      return "bypassPermissions";
+      return "acceptEdits";
+  }
+}
+
+/**
+ * Tool allowlist for non-`full` postures. Ensures hub tools always pass the
+ * permission gate under `acceptEdits` / `dontAsk` (#107). Comma form matches
+ * Claude Code 2.1.211 `--allowedTools` help.
+ */
+function allowedToolsArg(sandbox: SandboxMode): string | undefined {
+  switch (sandbox) {
+    case "read-only":
+      // Read-class builtins + hub protocol tools only.
+      return "Read,Grep,Glob,mcp__parley__*";
+    case "full":
+      return undefined;
+    case "workspace":
+    default:
+      return "Read,Edit,Write,Bash,mcp__parley__*";
   }
 }
 
@@ -282,6 +305,8 @@ export function createClaudeAdapter(env: NodeJS.ProcessEnv = process.env): Vendo
       "--settings",
       SETTINGS_PATH,
     ];
+    const allowed = allowedToolsArg(task.sandbox);
+    if (allowed !== undefined) argv.push("--allowedTools", allowed);
     if (task.model !== null) argv.push("--model", task.model);
     // Reasoning effort (research §6) — opaque string passed through unchanged.
     if (task.effort !== null) argv.push("--effort", task.effort);

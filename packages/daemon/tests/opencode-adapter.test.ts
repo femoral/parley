@@ -49,19 +49,21 @@ function permissionOf(plan: { env: Record<string, string> }): Record<string, unk
 }
 
 describe("opencode prepare — golden argv", () => {
-  it("builds the pinned headless run --format json --auto invocation", async () => {
+  it("builds the pinned headless run --format json --dangerously-skip-permissions invocation (not --auto; fails on ≤1.16.x)", async () => {
     const plan = await createOpencodeAdapter({}).prepare(spec(), HUB);
     expect(plan.argv).toEqual([
       "opencode",
       "run",
       "--format",
       "json",
-      "--auto",
+      "--dangerously-skip-permissions",
       "--dir",
       "/work/wt",
       "--",
       "do the thing",
     ]);
+    // Defect scenario: --auto is absent on OpenCode ≤1.16.x (adapter-validation-a).
+    expect(plan.argv).not.toContain("--auto");
     expect(plan.cwd).toBe("/work/wt");
     expect(plan.files).toEqual([]);
   });
@@ -88,7 +90,7 @@ describe("opencode prepare — golden argv", () => {
       "run",
       "--format",
       "json",
-      "--auto",
+      "--dangerously-skip-permissions",
       "--dir",
       "/work/wt",
       "--variant",
@@ -139,7 +141,7 @@ describe("opencode resume — golden argv", () => {
       "ses_096042ed7ffegkkH3BpVm5C5CH",
       "--format",
       "json",
-      "--auto",
+      "--dangerously-skip-permissions",
       "--dir",
       "/work/wt",
       "--",
@@ -249,8 +251,9 @@ describe("opencode prepare — sandbox × network posture matrix (golden config)
         spec({ sandbox: c.sandbox, network: c.network }),
         HUB,
       );
-      // Always headless-safe flags.
-      expect(plan.argv).toContain("--auto");
+      // Always headless-safe flags (≤1.16.x has no --auto; use long form).
+      expect(plan.argv).toContain("--dangerously-skip-permissions");
+      expect(plan.argv).not.toContain("--auto");
       expect(plan.argv).toContain("--format");
       expect(plan.argv).toContain("json");
 
@@ -331,9 +334,10 @@ describe("opencode prepare — MCP injection, timeout, auth, isolation", () => {
     expect(360_000).toBeGreaterThan(300_000);
   });
 
-  it("disables interactive approvals in config permission + --auto", async () => {
+  it("disables interactive approvals in config permission + --dangerously-skip-permissions", async () => {
     const plan = await createOpencodeAdapter({}).prepare(spec(), HUB);
-    expect(plan.argv).toContain("--auto");
+    expect(plan.argv).toContain("--dangerously-skip-permissions");
+    expect(plan.argv).not.toContain("--auto");
     const perm = permissionOf(plan);
     // Workspace posture uses global allow (no ask); explicit deny still applies for external_directory.
     expect(perm["*"]).toBe("allow");

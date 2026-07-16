@@ -29,7 +29,7 @@ What Parley needs vs what Pi gives:
 |-------------|------------|--------|
 | Headless one-shot | `--mode json` (+ optional `-p`) | Streams JSONL to stdout; process exits after turn. **VERIFIED (0.80.7)** |
 | Streaming JSON events | `--mode json` | First line is session header; then agent/turn/message/tool events. **VERIFIED** |
-| MCP-over-HTTP + headers | **Not built-in** | Core philosophy is “No MCP”. Use community `pi-mcp-adapter` (config files with `url` + `headers`) or a Parley-owned extension. **DOCS + package README** |
+| MCP-over-HTTP + headers | **Not built-in** | Core philosophy is “No MCP”. **Preferred (#107):** Parley-owned extension via `-e` that registers `ask_orchestrator` / `submit_report` against the daemon **child REST** surface (`POST /child/ask`, `POST /child/report`). Community `pi-mcp-adapter` is optional but insufficient alone (needs install + cold `directTools` cache). |
 | Session resume | `--session <id\|path>` or `--session-id <id>` | Session id is the first JSONL line’s `id`. **VERIFIED** |
 | Sandbox / network | **No built-in sandbox** | Soft read-only via `--tools`; real isolation is OS/container. **DOCS** |
 | Disable interactive approvals | N/A (no permission popups) | Project trust only: `--approve` / `--no-approve`. **DOCS + VERIFIED flags** |
@@ -39,11 +39,11 @@ What Parley needs vs what Pi gives:
 
 **Loud caveats (adapter-blocking if ignored):**
 
-1. **No native MCP client.** Parley must inject MCP via a third-party extension (`pi-mcp-adapter` is the most complete community option as of 2026-07) or a tiny custom extension that registers tools against the hub HTTP endpoint.
-2. **No native filesystem/network sandbox.** Default Pi is “run as the user.” Soft postures map to `--tools` allowlists; hard isolation is Docker/OpenShell/Gondolin (see §5).
+1. **No native MCP client.** Materializing `.mcp.json` alone is **inert** unless `pi-mcp-adapter` is installed (adapter-validation-a / #107). Even then, `directTools` register from a metadata cache that is empty on the first session after config add (tools fall back to proxy-only until `/mcp reconnect`). Prefer a **Parley-owned extension** loaded with `--no-extensions -e .parley/pi-hub-extension.ts` that `registerTool`s protocol tools against child REST — no third-party package, no cold cache.
+2. **No native filesystem/network sandbox.** Default Pi is “run as the user.” Soft postures map to `--tools` allowlists; `network:false` cannot be expressed in-process — adapter should **refuse** rather than silently under-isolate (#107). Hard isolation is Docker/OpenShell/Gondolin (see §5).
 3. **Exit code is not a success signal.** Auth failures, missing sessions, and API 401s still exit **0**. Parse `stopReason` / `errorMessage` / stderr text. **VERIFIED (0.80.7)**.
 
-Closest viable integration if MCP injection is non-negotiable: **print/JSON spawn-per-turn** + **materialized `.mcp.json`** + **`pi-mcp-adapter` via `-e` or `pi install`**, with `requestTimeoutMs` raised above Parley’s answer timeout. Alternative: long-lived `pi --mode rpc` (richer steering; different process model than codex/grok spawn-per-turn).
+Closest viable integration: **print/JSON spawn-per-turn** + **materialized Parley hub extension (`-e`)** calling **`/child/report` + `/child/ask`**. Optional fallback: `pi-mcp-adapter` via `PARLEY_PI_MCP_ADAPTER` / `pi install`, with the cache/first-run caveats above.
 
 ---
 
