@@ -27,14 +27,12 @@
 .pc-plate--ember {
   border-color: var(--ember-border);
   background: var(--ember-fill);
-  box-shadow: inset 0 0 0 3px #13100a, inset 0 0 0 4px var(--ember-inner),
-    0 8px 22px rgba(0, 0, 0, 0.5);
+  box-shadow: var(--plate-shadow-ember);
 }
 .pc-plate--report {
   border-color: var(--report-border);
   background: var(--report-fill);
-  box-shadow: inset 0 0 0 3px #0a1611, inset 0 0 0 4px var(--report-inner),
-    0 8px 22px rgba(0, 0, 0, 0.5);
+  box-shadow: var(--plate-shadow-report);
 }
 .pc-plate__body {
   padding: 12px 14px;
@@ -90,7 +88,7 @@
   box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.3);
 }
 .pc-plate-header__icon--dark {
-  background: radial-gradient(120% 120% at 30% 20%, #3a2c18, #1a1209);
+  background: var(--plate-header-icon-dark);
   color: var(--brass-soft);
 }
 .pc-plate-header__titles {
@@ -114,7 +112,7 @@
   font-family: var(--font-body);
   font-style: italic;
   font-size: 11px;
-  color: var(--ink-ghost);
+  color: var(--ink-faint);
   line-height: 1.2;
 }
 .pc-plate-header__aside {
@@ -210,16 +208,16 @@
   background: linear-gradient(180deg, var(--brass-bright), var(--brass-deep));
 }
 .pc-btn--secondary {
-  border: 1px solid #7a5c2e;
-  background: #241812;
+  border: 1px solid var(--btn-secondary-border);
+  background: var(--btn-secondary-bg);
   color: var(--brass-soft);
 }
 .pc-btn--secondary:hover {
   border-color: var(--brass);
-  background: #33240f;
+  background: var(--btn-secondary-bg-hover);
 }
 .pc-btn--tertiary {
-  border: 1px solid #3a2c18;
+  border: 1px solid var(--btn-tertiary-border);
   background: transparent;
   color: var(--ink-faint);
 }

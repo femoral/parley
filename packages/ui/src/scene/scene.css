@@ -86,7 +86,7 @@
   font-style: italic;
   font-size: 13px;
   line-height: 1.5;
-  color: var(--ink-ghost);
+  color: var(--ink-faint);
 }
 
 /* ── Session region ────────────────────────────────────────────────────── */

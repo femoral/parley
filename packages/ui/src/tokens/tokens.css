@@ -54,12 +54,14 @@
   --ink-muted: #c9b184;
   --ink-tan: #c9a87a;
   --ink-gold-dim: #b39a6a;
-  --ink-label: #8a6f4d;
+  /* Label is the quietest functional tier (≥4.5:1 on plate wood); ghost is flavor-only. */
+  --ink-label: #967c54;
   --ink-faint: #9c8154;
   --ink-dim: #7a6242;
   --ink-ghost: #6f5a3c;
   --ink-dot: #5b4426;
-  --ink-timestamp-faded: #5f4a2c;
+  /* Quiet warm mono metadata (e.g. day-chip wind) — ≥4.5:1 on plate wood. */
+  --ink-meta: #a08a62;
   --ink-dark-on-gold: #2a1a08;
 
   /* §2.5 — parchment tag (the one light chip) */
@@ -116,8 +118,9 @@
   --scroll-track: rgba(0, 0, 0, 0.25);
   --badge-bg: rgba(0, 0, 0, 0.3);
 
-  /* §2.8 — raw log-line colours by kind (inspector Logs tab) */
-  --log-timestamp: #3f5a4d;
+  /* §2.8 — raw log-line colours by kind (inspector Logs tab).
+     Timestamp stays quieter than body kinds; ≥3:1 on terminal well. */
+  --log-timestamp: #4a6a5c;
   --log-reasoning: #7f9c8e;
   --log-tool: #7fb0ff;
   --log-shell: #ffcf4d;
@@ -136,6 +139,17 @@
   --btn-success-bg: #123a2a;
   --btn-success-bg-hover: #16452f;
   --btn-success-text: #aef0c8;
+  /* §4.18 — secondary / tertiary button chrome */
+  --btn-secondary-border: #7a5c2e;
+  --btn-secondary-bg: #241812;
+  --btn-secondary-bg-hover: #33240f;
+  --btn-tertiary-border: #3a2c18;
+  /* Dark plate-header icon gradient (wood inset, not gold) */
+  --plate-header-icon-dark: radial-gradient(
+    120% 120% at 30% 20%,
+    var(--btn-tertiary-border),
+    var(--plate-well)
+  );
 
   /* §2.9 — typography */
   --font-display: "Cinzel", "Times New Roman", serif;
@@ -169,8 +183,18 @@
     0 8px 22px rgba(0, 0, 0, 0.5);
   --plate-shadow-premium: inset 0 0 0 3px #120d07, inset 0 0 0 5px var(--brass-frame),
     0 8px 22px rgba(0, 0, 0, 0.5);
+  --plate-shadow-ember: inset 0 0 0 3px #13100a, inset 0 0 0 4px var(--ember-inner),
+    0 8px 22px rgba(0, 0, 0, 0.5);
+  --plate-shadow-report: inset 0 0 0 3px #0a1611, inset 0 0 0 4px var(--report-inner),
+    0 8px 22px rgba(0, 0, 0, 0.5);
   --cartouche-shadow: inset 0 0 0 3px #120d07, inset 0 0 0 5px var(--brass-frame),
     inset 0 0 30px rgba(0, 0, 0, 0.6), 0 10px 30px rgba(0, 0, 0, 0.6);
+  /* State-dot inset (wood core under the state rim) */
+  --state-dot-fill: radial-gradient(
+    circle at 50% 40%,
+    var(--plate-well),
+    var(--progress-track)
+  );
 
   /* §2.10 — gold 3D button drop edge */
   --btn-gold-fill: linear-gradient(180deg, var(--brass-link), var(--brass-deep));

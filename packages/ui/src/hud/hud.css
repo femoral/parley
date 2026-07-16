@@ -76,7 +76,7 @@
 .pc-daychip__wind {
   font-family: var(--font-mono);
   font-size: 10.5px;
-  color: #8fb0a0;
+  color: var(--ink-meta);
 }
 
 /* ── Health panel ──────────────────────────────────────────────────────── */
@@ -204,7 +204,7 @@
   z-index: 20;
   width: min(240px, 70vw);
   padding: 8px;
-  border-radius: var(--radius-sm, 6px);
+  border-radius: var(--radius-control);
   border: 1px solid var(--brass-frame);
   background: linear-gradient(180deg, var(--plate-top) 0%, var(--plate-bottom) 100%);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(240, 194, 90, 0.08);
@@ -232,7 +232,7 @@
   outline: none;
 }
 .pc-roster__search-input::placeholder {
-  color: var(--ink-ghost);
+  color: var(--ink-faint);
 }
 .pc-roster__search-input:focus {
   border-color: var(--brass-mid);
@@ -306,7 +306,7 @@
   width: 19px;
   height: 19px;
   border-radius: 50%;
-  background: radial-gradient(circle at 50% 40%, #1a1209, #0c0904);
+  background: var(--state-dot-fill);
   border: 1px solid var(--dot-color, var(--ink-label));
   color: var(--dot-color, var(--ink-label));
   font-size: 10px;
@@ -385,7 +385,7 @@
   font-family: var(--font-body);
   font-style: italic;
   font-size: 13px;
-  color: var(--ink-ghost);
+  color: var(--ink-faint);
 }
 .pc-roster__footer {
   display: flex;
@@ -444,7 +444,7 @@
   font-family: var(--font-body);
   font-style: italic;
   font-size: 13px;
-  color: var(--ink-ghost);
+  color: var(--ink-faint);
 }
 .pc-inbox-card {
   display: flex;
@@ -521,7 +521,7 @@
   font-family: var(--font-body);
   font-style: italic;
   font-size: 13px;
-  color: var(--ink-ghost);
+  color: var(--ink-faint);
 }
 .pc-inspector__head {
   display: flex;
@@ -777,7 +777,7 @@
   font-family: var(--font-body);
   font-style: italic;
   font-size: 12.5px;
-  color: var(--ink-ghost);
+  color: var(--ink-faint);
 }
 
 /* ── Report tab (ReportPanel, design-manifest §4.13/§4.17) ────────────── */
@@ -832,7 +832,7 @@
   font-family: var(--font-body);
   font-style: italic;
   font-size: 13px;
-  color: var(--ink-ghost);
+  color: var(--ink-faint);
 }
 
 /* ── Q&A tab ───────────────────────────────────────────────────────────── */
@@ -897,7 +897,7 @@
   font-family: var(--font-body);
   font-style: italic;
   font-size: 13px;
-  color: var(--ink-ghost);
+  color: var(--ink-faint);
 }
 
 /* ── Settings bar (design-manifest §7's toggles, #70) ─────────────────────
