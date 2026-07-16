@@ -1303,6 +1303,7 @@
   border-radius: var(--radius-control);
   cursor: pointer;
   line-height: 1.2;
+  transition: border-color var(--ease), color var(--ease), background var(--ease);
 }
 .pc-soundings__chip-btn:hover {
   border-color: var(--brass-frame);
