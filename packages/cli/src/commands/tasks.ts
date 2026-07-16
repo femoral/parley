@@ -55,13 +55,25 @@ function renderTable(ctx: CliContext, tasks: TaskRow[]): void {
     ctx.stdout("No tasks.\n");
     return;
   }
-  const header = ["ID", "SESSION", "NAME", "VENDOR", "PROFILE", "MODEL", "STATE", "USAGE", "DURATION"];
+  const header = [
+    "ID",
+    "SESSION",
+    "NAME",
+    "VENDOR",
+    "PROFILE",
+    "RUNNER",
+    "MODEL",
+    "STATE",
+    "USAGE",
+    "DURATION",
+  ];
   const rows = tasks.map((t) => [
     t.id,
     shortSession(t.orchestrator_session_id),
     t.name ?? "-",
     t.vendor ?? "-",
     t.profile ?? "-",
+    t.runner ?? "-",
     t.model ?? "-",
     t.state,
     formatUsage(parseJsonColumn<Record<string, number>>(t.usage)),

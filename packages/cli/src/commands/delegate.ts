@@ -32,6 +32,9 @@ export async function runDelegate(ctx: CliContext, args: string[]): Promise<numb
     "--no-network": {},
     "--context": { value: true, multi: true },
     "--report-schema": { value: true },
+    // Remote runner affinity (#111 / ADR-0012): task stays pending until the
+    // named runner leases it; never locally spawned.
+    "--runner": { value: true },
     // Removed (ADR-0008); recognized only so the error points at `parley watch`.
     "--wait": {},
     "--json": {},
@@ -184,6 +187,7 @@ export async function runDelegate(ctx: CliContext, args: string[]): Promise<numb
     if (profile !== null) body.profile = profile;
     if (sandbox !== undefined) body.sandbox = sandbox;
     if (networkExplicit !== undefined) body.network = networkExplicit;
+    if (typeof flags["--runner"] === "string") body.runner = flags["--runner"];
     ack = await daemonPost<DelegateAck>(discovery, "/tasks", body);
   } catch (err) {
     // Daemon-side request rejections (unknown vendor, bad cwd) are usage errors.
