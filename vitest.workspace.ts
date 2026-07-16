@@ -36,6 +36,7 @@ export default defineWorkspace([
       include: [
         "packages/cli/tests/**/*.test.ts",
         "packages/daemon/tests/**/*.test.ts",
+        "packages/runner/tests/**/*.test.ts",
       ],
       // Build the @useparley/ui bundle when missing so the daemon's
       // UI-serving test has a real built bundle to discover (#65).

@@ -194,7 +194,8 @@ question stall/collapse cannot drift:
 Every spawn gets `PARLEY_HUB_URL` (daemon base URL) and `PARLEY_TASK_ID` in env,
 plus `.parley/child.json` (`{ "url", "task_id" }`) in the task cwd for children
 that lose env. Prefer MCP when the vendor supports it; fall back to HTTP or the
-CLI when it does not.
+CLI when it does not. Remote runners (ADR-0012) serve a local hub proxy that
+forwards these same channels to the daemon — see `docs/agents/remote-runners.md`.
 
 ### HTTP examples
 
@@ -226,4 +227,6 @@ parley child task   # self-inspection envelope
 - ADR-0009 — public plugin interface
 - ADR-0010 — settings, profiles, remote daemon
 - ADR-0011 — child HTTP and CLI channels beside MCP
+- ADR-0012 — remote runners (lease-based executors)
+- `docs/agents/remote-runners.md` — runner setup and branch handoff
 - `packages/core/src/adapter.ts` — TypeScript contract source
