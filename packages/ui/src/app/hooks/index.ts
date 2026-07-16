@@ -5,6 +5,15 @@
  */
 export { useCockpit } from "./useCockpit.js";
 export type { CockpitView, RosterSelection } from "./useCockpit.js";
+export {
+  useCockpitKeys,
+  awaitingTaskIds,
+  nextAwaitingId,
+  isTypingTarget,
+  hasModifier,
+  hasOpenPopover,
+} from "./useCockpitKeys.js";
+export type { CockpitKeysOptions, RosterSearchHandle } from "./useCockpitKeys.js";
 export { useHealth } from "./useHealth.js";
 export type { HealthState } from "./useHealth.js";
 export { useLogTail } from "./useLogTail.js";

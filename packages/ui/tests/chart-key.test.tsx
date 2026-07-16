@@ -66,4 +66,16 @@ describe("ChartKey production legend (recognition over recall)", () => {
     expect(toggle.hasAttribute("aria-expanded")).toBe(true);
     expect(toggle.hasAttribute("aria-controls")).toBe(true);
   });
+
+  it("documents keyboard accelerators in a Keys section (recognition over recall)", () => {
+    render(<ChartKey />);
+    fireEvent.click(screen.getByRole("button", { name: /Chart key/ }));
+    expect(screen.getByText("Keys")).toBeTruthy();
+    expect(screen.getByText("/")).toBeTruthy();
+    expect(screen.getByText("find session")).toBeTruthy();
+    expect(screen.getByText("n")).toBeTruthy();
+    expect(screen.getByText("next flag that needs you")).toBeTruthy();
+    expect(screen.getByText("Esc")).toBeTruthy();
+    expect(screen.getByText("clear task selection")).toBeTruthy();
+  });
 });

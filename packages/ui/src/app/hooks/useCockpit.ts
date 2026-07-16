@@ -14,12 +14,15 @@ import { useTaskDetail } from "./useTaskDetail.js";
  * active (#66). Lives in the app layer: hud rows/selectors take the current
  * selection and an `onSelect*` callback as plain props and never own it.
  * Plain setter semantics — re-selecting the active session is a no-op; the
- * "All hands" chip (passing `null`) is the one deselect affordance. */
+ * "All hands" chip (passing `null`) is the one deselect affordance. Task
+ * rows only select; {@link clearTask} (Escape accelerator) deselects. */
 export interface RosterSelection {
   selectedSessionId: string | null;
   selectedTaskId: string | null;
   selectSession: (id: string | null) => void;
   selectTask: (id: string) => void;
+  /** Clear the selected task (Escape accelerator; inspector shows empty state). */
+  clearTask: () => void;
   /**
    * Look up historical orchestrator sessions by id substring (#88). Read-only
    * — selection of a hit goes through {@link selectSession}.
@@ -66,7 +69,11 @@ export function useCockpit(): CockpitView {
   // Single source of truth for session filter + future scene camera cue (#76).
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  // useState setters are identity-stable — safe as memoized-hud props.
   const selectTask: (id: string) => void = setSelectedTaskId;
+  const clearTask = useCallback(() => {
+    setSelectedTaskId(null);
+  }, []);
   // Re-selecting the active session is a no-op; only "All hands" (null) deselects.
   const selectSession = useCallback((id: string | null) => {
     setSelectedSessionId((prev) => (prev === id ? prev : id));
@@ -147,6 +154,7 @@ export function useCockpit(): CockpitView {
     selectedTaskId,
     selectSession,
     selectTask,
+    clearTask,
     searchSessions,
   };
 

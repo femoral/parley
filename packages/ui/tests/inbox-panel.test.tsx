@@ -96,6 +96,28 @@ describe("InboxPanel display-only question cards (#78)", () => {
   });
 });
 
+describe("InboxPanel announces attention count changes (aria-live)", () => {
+  it("exposes a polite live region whose text tracks the needs-you count", () => {
+    const { rerender } = render(<InboxPanel tasks={[]} onSelectTask={() => {}} />);
+    const live = document.querySelector("[aria-live='polite']");
+    expect(live).toBeTruthy();
+    expect(live?.getAttribute("aria-live")).toBe("polite");
+    expect(live?.textContent).toBe("No tasks need you");
+
+    rerender(<InboxPanel tasks={[AWAITING_1]} onSelectTask={() => {}} />);
+    expect(document.querySelector("[aria-live='polite']")?.textContent).toBe("1 task needs you");
+
+    rerender(<InboxPanel tasks={[AWAITING_1, AWAITING_2]} onSelectTask={() => {}} />);
+    expect(document.querySelector("[aria-live='polite']")?.textContent).toBe("2 tasks need you");
+  });
+
+  it("does not use assertive politeness (calm, not spammy)", () => {
+    render(<InboxPanel tasks={[AWAITING_1]} onSelectTask={() => {}} />);
+    expect(document.querySelector("[aria-live='assertive']")).toBeNull();
+    expect(document.querySelector("[aria-live='polite']")).toBeTruthy();
+  });
+});
+
 describe("InboxCard copy answer scaffold", () => {
   const writeText = vi.fn(async () => undefined);
 

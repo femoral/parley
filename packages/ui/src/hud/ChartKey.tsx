@@ -91,8 +91,26 @@ export const ChartKey = memo(function ChartKey() {
               ))}
             </ul>
           </section>
+          {/* Recognition over recall — power-user accelerators (useCockpitKeys). */}
+          <section className="pc-chart-key__section" aria-label="Keyboard shortcuts">
+            <h3 className="pc-chart-key__heading">Keys</h3>
+            <ul className="pc-chart-key__list">
+              {KEYBOARD_SHORTCUTS.map((row) => (
+                <li className="pc-chart-key__row pc-chart-key__row--key" key={row.key}>
+                  <kbd className="pc-chart-key__kbd">{row.key}</kbd>
+                  <span className="pc-chart-key__hint">{row.hint}</span>
+                </li>
+              ))}
+            </ul>
+          </section>
         </div>
       )}
     </div>
   );
 });
+
+const KEYBOARD_SHORTCUTS: readonly { key: string; hint: string }[] = [
+  { key: "/", hint: "find session" },
+  { key: "n", hint: "next flag that needs you" },
+  { key: "Esc", hint: "clear task selection" },
+];

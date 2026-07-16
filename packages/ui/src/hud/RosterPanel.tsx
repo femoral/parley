@@ -1,7 +1,29 @@
-import { memo, useCallback, useEffect, useId, useRef, useState, type CSSProperties } from "react";
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useId,
+  useImperativeHandle,
+  useRef,
+  useState,
+  type CSSProperties,
+  type Ref,
+} from "react";
 import { Plate, PlateHeader, Emblem, Mark, Stat } from "../primitives/index.js";
 import { stateMetaFor } from "../tokens/state-meta.js";
 import type { RosterGroup, RosterSessionOption, RosterSessionSearchHit } from "./types.js";
+
+/**
+ * Imperative surface the roster exposes for the `/` cockpit accelerator
+ * (wired in `useCockpitKeys`). Lives in the hud layer so app hooks depend on
+ * hud types, never the reverse.
+ */
+export interface RosterSearchHandle {
+  /** Open the session-search well and focus its input. */
+  openSearch: () => void;
+  /** Whether the session-search popover is currently open. */
+  isSearchOpen: () => boolean;
+}
 
 export interface RosterPanelProps {
   /** State groups, already ordered by attention rank (hooks layer). */
@@ -23,6 +45,11 @@ export interface RosterPanelProps {
   onSelectTask: (id: string) => void;
   totalTasks: number;
   activeTasks: number;
+  /**
+   * Imperative handle for the `/` accelerator: open/focus session search.
+   * Optional so existing call sites and tests stay prop-only.
+   */
+  searchRef?: Ref<RosterSearchHandle | null>;
 }
 
 function Group({
@@ -57,12 +84,17 @@ function Group({
       </div>
       {group.tasks.map((task) => {
         const selected = task.id === selectedTaskId;
+        // Group headers are skipped by Tab-through; put the state in each
+        // row's accessible name so a screen-reader user hears which task is
+        // failed / awaiting / … without leaving the row list.
+        const accessibleName = `${task.name} — ${meta.label}`;
         return (
           <button
             type="button"
             className={`pc-roster__row${selected ? " pc-roster__row--selected" : ""}`}
             style={rowStyle}
             key={task.id}
+            aria-label={accessibleName}
             aria-pressed={selected}
             onClick={() => onSelectTask(task.id)}
           >
@@ -85,12 +117,20 @@ function Group({
 
 const SEARCH_DEBOUNCE_MS = 180;
 
+/** Imperative surface SessionSearch exposes to the roster (and thus `/`). */
+interface SessionSearchHandle {
+  open: () => void;
+  isOpen: () => boolean;
+}
+
 function SessionSearch({
   searchSessions,
   onSelectSession,
+  searchHandleRef,
 }: {
   searchSessions: (query: string) => Promise<RosterSessionSearchHit[]>;
   onSelectSession: (id: string | null) => void;
+  searchHandleRef?: Ref<SessionSearchHandle | null>;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -99,6 +139,19 @@ function SessionSearch({
   const inputRef = useRef<HTMLInputElement>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   const listId = useId();
+  // Keep a live open flag for the imperative isOpen() without forcing
+  // useImperativeHandle to rebuild every toggle (ref-stable identity).
+  const openRef = useRef(open);
+  openRef.current = open;
+
+  useImperativeHandle(
+    searchHandleRef,
+    () => ({
+      open: () => setOpen(true),
+      isOpen: () => openRef.current,
+    }),
+    [],
+  );
 
   // Focus the field when the search well opens.
   useEffect(() => {
@@ -233,13 +286,16 @@ function SessionSelector({
   selectedSessionId,
   onSelectSession,
   searchSessions,
+  searchHandleRef,
 }: {
   sessions: RosterSessionOption[];
   selectedSessionId: string | null;
   onSelectSession: (id: string | null) => void;
   searchSessions: (query: string) => Promise<RosterSessionSearchHit[]>;
+  searchHandleRef?: Ref<SessionSearchHandle | null>;
 }) {
-  if (sessions.length === 0) return null;
+  // Always mount SessionSearch so `/` can open Find even when there are no
+  // recent chips (historical sessions are reached via search, #88).
   return (
     <div className="pc-roster__sessions" role="group" aria-label="Orchestrator sessions">
       <button
@@ -264,7 +320,11 @@ function SessionSelector({
           <span className="pc-roster__session-count">{session.count}</span>
         </button>
       ))}
-      <SessionSearch searchSessions={searchSessions} onSelectSession={onSelectSession} />
+      <SessionSearch
+        searchSessions={searchSessions}
+        onSelectSession={onSelectSession}
+        searchHandleRef={searchHandleRef}
+      />
     </div>
   );
 }
@@ -290,7 +350,19 @@ export const RosterPanel = memo(function RosterPanel({
   onSelectTask,
   totalTasks,
   activeTasks,
+  searchRef,
 }: RosterPanelProps) {
+  const sessionSearchRef = useRef<SessionSearchHandle | null>(null);
+
+  useImperativeHandle(
+    searchRef,
+    () => ({
+      openSearch: () => sessionSearchRef.current?.open(),
+      isSearchOpen: () => sessionSearchRef.current?.isOpen() ?? false,
+    }),
+    [],
+  );
+
   return (
     <Plate padded={false} className="pc-roster">
       <PlateHeader
@@ -305,6 +377,7 @@ export const RosterPanel = memo(function RosterPanel({
         selectedSessionId={selectedSessionId}
         onSelectSession={onSelectSession}
         searchSessions={searchSessions}
+        searchHandleRef={sessionSearchRef}
       />
       <div className="pc-roster__scroll">
         {groups.length === 0 ? (

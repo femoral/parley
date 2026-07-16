@@ -140,9 +140,12 @@ describe("RosterPanel session selector (#66)", () => {
     expect(screen.getByText("sess-abc1").closest("button")?.getAttribute("aria-pressed")).toBe("true");
   });
 
-  it("renders no session strip when there are no sessions", () => {
+  it("still renders All hands + Find when there are no recent session chips", () => {
+    // Find must stay available for historical lookup (#88) and the `/` key.
     render(<RosterPanel {...baseProps()} sessions={[]} />);
-    expect(screen.queryByRole("group", { name: "Orchestrator sessions" })).toBeNull();
+    expect(screen.getByRole("group", { name: "Orchestrator sessions" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /All hands/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Search sessions" })).toBeTruthy();
   });
 
   it("labels the session strip as a group of buttons", () => {
@@ -211,5 +214,21 @@ describe("RosterPanel state treatment (#66)", () => {
     expect(failedRow.style.opacity).toBe("0.62");
     const awaitingRow = screen.getByText("chart-the-bay").closest("button")!;
     expect(awaitingRow.style.opacity).toBe("");
+  });
+});
+
+describe("RosterPanel row accessible names include state", () => {
+  it("composes each row's accessible name as name — state label", () => {
+    render(<RosterPanel {...baseProps()} />);
+    // Group headers are siblings Tab-through skips; state must live on the row.
+    expect(screen.getByRole("button", { name: "chart-the-bay — AWAITING" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "sound-the-depths — RUNNING" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "lost-at-sea — FAILED" })).toBeTruthy();
+  });
+
+  it("keeps the visible row name text unchanged", () => {
+    render(<RosterPanel {...baseProps()} />);
+    expect(screen.getByText("chart-the-bay")).toBeTruthy();
+    expect(screen.getByText("lost-at-sea")).toBeTruthy();
   });
 });

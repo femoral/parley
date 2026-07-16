@@ -19,9 +19,20 @@ export interface InboxPanelProps {
  * `RosterPanel` because the cockpit shell re-renders every second for its
  * clock, while `tasks` is identity-stable between snapshot updates.
  * `onSelectTask` must stay identity-stable (useCockpit's roster.selectTask).
+ *
+ * An `aria-live="polite"` region announces count changes ("2 tasks need you")
+ * so a PARLEY! event is not silent to AT. Polite (not assertive); content only
+ * changes when `count` changes, so memoized re-renders with the same tasks
+ * identity do not spam announcements.
  */
 export const InboxPanel = memo(function InboxPanel({ tasks, onSelectTask }: InboxPanelProps) {
   const count = tasks.length;
+  const liveMessage =
+    count === 0
+      ? "No tasks need you"
+      : count === 1
+        ? "1 task needs you"
+        : `${count} tasks need you`;
   return (
     <Plate variant="ember" padded={false} className="pc-inbox">
       <PlateHeader
@@ -35,6 +46,10 @@ export const InboxPanel = memo(function InboxPanel({ tasks, onSelectTask }: Inbo
           ) : undefined
         }
       />
+      {/* Live region outside the pill so empty→non-empty still announces. */}
+      <div className="pc-visually-hidden" aria-live="polite" aria-atomic="true">
+        {liveMessage}
+      </div>
       <div className="pc-inbox__list">
         {count === 0 ? (
           <p className="pc-inbox__empty">

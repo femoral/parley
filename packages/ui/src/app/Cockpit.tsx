@@ -1,4 +1,4 @@
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useRef } from "react";
 import {
   Cartouche,
   ChartKey,
@@ -8,9 +8,10 @@ import {
   Inspector,
   RosterPanel,
   SettingsBar,
+  type RosterSearchHandle,
 } from "../hud/index.js";
 import { Scene } from "../scene/index.js";
-import { useCockpit } from "./hooks/index.js";
+import { useCockpit, useCockpitKeys } from "./hooks/index.js";
 import { CompassRose } from "./CompassRose.js";
 import "./cockpit.css";
 
@@ -26,6 +27,14 @@ const DevKitBand = import.meta.env.DEV
  */
 export function Cockpit() {
   const { health, snapshot, roster, clock, day, inspector, settings } = useCockpit();
+  const rosterSearchRef = useRef<RosterSearchHandle | null>(null);
+  useCockpitKeys({
+    rosterRef: rosterSearchRef,
+    groups: snapshot.groups,
+    selectedTaskId: roster.selectedTaskId,
+    selectTask: roster.selectTask,
+    clearTask: roster.clearTask,
+  });
 
   return (
     <div className="pc-cockpit">
@@ -46,6 +55,7 @@ export function Cockpit() {
               onSelectTask={roster.selectTask}
               totalTasks={snapshot.totalTasks}
               activeTasks={snapshot.activeTasks}
+              searchRef={rosterSearchRef}
             />
           </section>
 
