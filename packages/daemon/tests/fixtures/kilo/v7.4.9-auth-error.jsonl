@@ -1,0 +1,1 @@
+{"type":"error","timestamp":1784189544500,"sessionID":"ses_0960423adffeuBdTh4fmHZMFzY","error":{"name":"APIError","data":{"message":"Unauthorized: {\"error\":{\"code\":\"PAID_MODEL_AUTH_REQUIRED\",\"message\":\"You need to sign in to use this model.\"},\"error_type\":\"paid_model_auth_required\"}","statusCode":401,"isRetryable":false}}}

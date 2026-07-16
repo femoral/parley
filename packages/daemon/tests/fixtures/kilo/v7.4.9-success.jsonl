@@ -1,0 +1,4 @@
+{"type":"step_start","timestamp":1767036059338,"sessionID":"ses_494719016ffe85dkDMj0FPRbHK","part":{"id":"prt_example","sessionID":"ses_494719016ffe85dkDMj0FPRbHK","messageID":"msg_example","type":"step-start","snapshot":"71db24a7"}}
+{"type":"tool_use","timestamp":1767036061199,"sessionID":"ses_494719016ffe85dkDMj0FPRbHK","part":{"type":"tool","tool":"bash","callID":"call_example","state":{"status":"completed","input":{"command":"echo hello"},"output":"hello\n","metadata":{"exit":0},"time":{"start":1767036061000,"end":1767036061100}}}}
+{"type":"text","timestamp":1767036064268,"sessionID":"ses_494719016ffe85dkDMj0FPRbHK","part":{"type":"text","text":"hello","time":{"start":1767036064000,"end":1767036064200}}}
+{"type":"step_finish","timestamp":1767036064273,"sessionID":"ses_494719016ffe85dkDMj0FPRbHK","part":{"type":"step-finish","reason":"stop","cost":0.001,"tokens":{"input":671,"output":8,"reasoning":0,"cache":{"read":21415,"write":0}}}}
