@@ -16,7 +16,7 @@ function task(overrides: Partial<RosterTaskInput> & Pick<RosterTaskInput, "id" |
 describe("projectInbox selects tasks blocked on an answer (#67)", () => {
   it("includes awaiting_answer tasks that carry a question", () => {
     const cards = projectInbox([
-      task({ id: "a", state: "awaiting_answer", question: "Which port?" }),
+      task({ id: "a", state: "awaiting_answer", question: "Which port?", orchestratorSession: "sess-1" }),
     ]);
     expect(cards).toEqual([
       {
@@ -27,6 +27,7 @@ describe("projectInbox selects tasks blocked on an answer (#67)", () => {
         emblem: expect.objectContaining({ kind: "svg" }),
         meta: "feat/x · a",
         question: "Which port?",
+        sessionId: "sess-1",
       },
     ]);
   });
@@ -73,6 +74,19 @@ describe("projectInbox selects tasks blocked on an answer (#67)", () => {
       emblem: expect.objectContaining({ kind: "svg" }),
       meta: "feat/x · abcdefgh",
       question: "Deploy now?",
+      sessionId: null,
     });
+  });
+
+  it("carries the orchestrator session id through for the card footer rope", () => {
+    const cards = projectInbox([
+      task({
+        id: "task-1",
+        state: "awaiting_answer",
+        question: "Ship it?",
+        orchestratorSession: "orch-session-xyz",
+      }),
+    ]);
+    expect(cards[0]?.sessionId).toBe("orch-session-xyz");
   });
 });

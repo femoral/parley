@@ -6,6 +6,8 @@ import type { InboxTask } from "./types.js";
 export interface InboxPanelProps {
   /** Tasks awaiting an answer, already sorted awaiting-first (hooks layer). */
   tasks: InboxTask[];
+  /** Select a task in the roster/inspector — same callback the roster rows use. */
+  onSelectTask: (id: string) => void;
 }
 
 /**
@@ -16,8 +18,9 @@ export interface InboxPanelProps {
  * props throughout — the hooks layer sorts/filters the tasks. Memoized like
  * `RosterPanel` because the cockpit shell re-renders every second for its
  * clock, while `tasks` is identity-stable between snapshot updates.
+ * `onSelectTask` must stay identity-stable (useCockpit's roster.selectTask).
  */
-export const InboxPanel = memo(function InboxPanel({ tasks }: InboxPanelProps) {
+export const InboxPanel = memo(function InboxPanel({ tasks, onSelectTask }: InboxPanelProps) {
   const count = tasks.length;
   return (
     <Plate variant="ember" padded={false} className="pc-inbox">
@@ -38,9 +41,16 @@ export const InboxPanel = memo(function InboxPanel({ tasks }: InboxPanelProps) {
             <span aria-hidden="true">🧭</span> All hands accounted for. No flags flying.
           </p>
         ) : (
-          tasks.map((task) => <InboxCard key={task.id} task={task} />)
+          tasks.map((task) => (
+            <InboxCard key={task.id} task={task} onSelectTask={onSelectTask} />
+          ))
         )}
       </div>
+      {count > 0 ? (
+        <p className="pc-inbox__scope">
+          Answer from your orchestrator session — the cove keeps watch.
+        </p>
+      ) : null}
     </Plate>
   );
 });

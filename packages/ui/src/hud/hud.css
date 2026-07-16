@@ -456,6 +456,28 @@
   border: 1px solid var(--attn-awaiting-border);
   box-shadow: 0 0 14px var(--attn-awaiting-glow);
 }
+/* Selectable head/body — native button, focus ring matches roster rows. */
+.pc-inbox-card__select {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  border-radius: calc(var(--radius-inbox) - 2px);
+}
+.pc-inbox-card__select:hover .pc-inbox-card__name {
+  color: var(--ink-warm);
+}
+.pc-inbox-card__select:focus-visible {
+  outline: 2px solid var(--brass-bright);
+  outline-offset: 1px;
+}
 .pc-inbox-card__head {
   display: flex;
   align-items: center;
@@ -480,7 +502,8 @@
 .pc-inbox-card__meta {
   font-family: var(--font-mono);
   font-size: 10px;
-  color: var(--ink-faint);
+  /* ink-muted (not faint): ≥4.5:1 on both stops of --attn-awaiting-fill. */
+  color: var(--ink-muted);
 }
 .pc-inbox-card__question {
   display: flex;
@@ -497,6 +520,78 @@
   flex: 0 0 auto;
   color: var(--question-marker);
   font-style: normal;
+}
+.pc-inbox-card__footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding-top: 2px;
+  border-top: 1px solid var(--brass-frame);
+}
+.pc-inbox-card__refs {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  flex: 1;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--ink-muted);
+}
+.pc-inbox-card__ref {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pc-inbox-card__ref-sep {
+  flex: 0 0 auto;
+  opacity: 0.7;
+}
+/* Off-screen scaffold used when clipboard.writeText is unavailable. */
+.pc-inbox-card__scaffold {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+.pc-inbox-card__copy {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 3px 8px;
+  border: 1px solid var(--btn-tertiary-border);
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--ink-muted);
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 10px;
+  letter-spacing: 0.3px;
+  cursor: pointer;
+  transition: border-color var(--ease), color var(--ease);
+}
+.pc-inbox-card__copy:hover {
+  border-color: var(--brass-frame);
+  color: var(--ink-warm);
+}
+.pc-inbox-card__copy:focus-visible {
+  outline: 2px solid var(--brass-bright);
+  outline-offset: 1px;
+}
+/* Panel-level scope line: Outfit functional voice, not flavor serif. */
+.pc-inbox__scope {
+  margin: 0;
+  padding: 0 14px 12px;
+  font-family: var(--font-body);
+  font-weight: 500;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--ink-muted);
 }
 /* ── Inspector (design-manifest §4.17, #68) ───────────────────────────────
  * Fills the remainder of the right stack; its body is the one part of the

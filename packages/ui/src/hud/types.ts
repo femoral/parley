@@ -64,6 +64,8 @@ export interface InboxTask {
   meta: string;
   /** The outstanding question text. */
   question: string;
+  /** Orchestrator session this task belongs to, or null when unknown. */
+  sessionId: string | null;
 }
 
 /** One raw log line as the Logs tab renders it (design-manifest §4.17/§2.8). */
