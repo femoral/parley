@@ -112,10 +112,13 @@ describe("parley skills install", () => {
     const target = mkTemp("parley-reinstall-");
     const first = await runCli(["skills", "install", "--layout", target, "--json"], home);
     const firstOut = JSON.parse(first.stdout) as {
-      installs: { changes: { file: string; status: string }[] }[];
+      installs: { skill: string; changes: { file: string; status: string }[] }[];
     };
-    expect(firstOut.installs).toHaveLength(1);
-    expect(firstOut.installs[0]!.changes.every((c) => c.status === "created")).toBe(true);
+    // Count-agnostic: more bundled skills may ship; this test pins the
+    // parley-delegate install's behavior.
+    const firstDelegate = firstOut.installs.find((i) => i.skill === SKILL);
+    expect(firstDelegate).toBeDefined();
+    expect(firstDelegate!.changes.every((c) => c.status === "created")).toBe(true);
 
     // Local edit is clobbered by the upgrade path; unchanged files report so.
     const skillPath = path.join(target, SKILL, "SKILL.md");
@@ -124,10 +127,12 @@ describe("parley skills install", () => {
     const second = await runCli(["skills", "install", "--layout", target, "--json"], home);
     expect(second.code).toBe(0);
     const secondOut = JSON.parse(second.stdout) as {
-      installs: { changes: { file: string; status: string }[] }[];
+      installs: { skill: string; changes: { file: string; status: string }[] }[];
     };
     const byFile = Object.fromEntries(
-      secondOut.installs[0]!.changes.map((c) => [c.file, c.status]),
+      secondOut.installs
+        .find((i) => i.skill === SKILL)!
+        .changes.map((c) => [c.file, c.status]),
     );
     expect(byFile["SKILL.md"]).toBe("updated");
     expect(byFile["bug-report.md"]).toBe("unchanged");
@@ -238,9 +243,10 @@ describe("parley skills list", () => {
     const out = JSON.parse(res.stdout) as {
       skills: { name: string; description: string }[];
     };
-    expect(out.skills).toHaveLength(1);
-    expect(out.skills[0]!.name).toBe(SKILL);
-    expect(out.skills[0]!.description).toMatch(/Delegate tasks/);
+    // Count-agnostic: more bundled skills may ship; pin the delegate entry.
+    const delegate = out.skills.find((s) => s.name === SKILL);
+    expect(delegate).toBeDefined();
+    expect(delegate!.description).toMatch(/Delegate tasks/);
   });
 
   it("human list prints name and one-line description", async () => {
