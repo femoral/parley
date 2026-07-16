@@ -111,7 +111,9 @@ Event types observed / documented (OpenCode lineage; Kilo binary contains the sa
 | `step_finish` | Step end; usage + cost on `part` | same |
 | `error` | Fatal-ish session error | **VERIFIED** real line above |
 
-**Worked success-path examples** (OpenCode stream shape; same CLI lineage — mark **DOCS** until re-verified with a live Kilo auth):
+**Worked success-path examples** (OpenCode stream shape; **binary-verified**
+emission in `@kilocode/cli@7.4.9` via `nA("step_start"|"tool_use"|"text"|"step_finish")`
+with `part.tool` / tokens — #107; still mark live-auth capture as residual):
 
 ```json
 {"type":"step_start","timestamp":1767036059338,"sessionID":"ses_494719016ffe85dkDMj0FPRbHK","part":{"id":"prt_…","sessionID":"ses_…","messageID":"msg_…","type":"step-start","snapshot":"71db24a7…"}}

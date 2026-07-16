@@ -261,14 +261,10 @@ Injection is **file- or install-command-based**.
 
 `CreateMcpToolsOptions.timeoutMs` exists in `@cline/core` types (DOCS/types).
 Whether `timeoutMs` (or similar) is honored inside `cline_mcp_settings.json`
-per server is **UNKNOWN** — not observed in install output shape. Adapter
-authors should:
-
-- Prefer raising any documented request timeout once confirmed, **or**
-- Rely on Cline’s default if it is already long enough for
-  `task.answerTimeoutMs` (codex’s 60s trap may not apply; do not assume).
-
-Mark tool-timeout raise as a **implementation-time verification** item.
+per server is **UNKNOWN** — not observed in install output shape. The Parley
+adapter **does** write per-server `timeoutMs = answerTimeoutMs + 60_000` under
+`mcpServers.parley` as a best-effort raise (#107); re-verify against a live
+MCP tool call that sleeps past Cline’s default before treating it as load-bearing.
 
 ---
 
@@ -335,6 +331,15 @@ errors with `interactive mode requires a TTY`. So **spawn-per-turn resume via
    not fully mapped here.
 3. Degrade: no vendor resume; Parley restarts with a fresh session and embeds
    prior context in the prompt (lossy).
+
+**Adapter decision (#107, 2026-07-16):** Parley **refuses** `resume()` on 3.0.42
+with a clear error (do not ship broken `--id`). Session ids are still scraped
+from `<data-dir>/sessions/*/*.json` via a post-exit wrap script for
+observability / future fixed releases. Provider auto-select: when exactly one
+BYOK key is present (e.g. only `ANTHROPIC_API_KEY`), pass `-P anthropic` so the
+default provider does not stay `cline`. MCP settings include best-effort
+per-server `timeoutMs = answerTimeoutMs + 60s` (type-surface; live honor
+unproven).
 
 `cline history --json` returned `[]` for isolated data-dirs that clearly
 contained sessions (VERIFIED) — do not depend on history listing for capture.

@@ -15,10 +15,18 @@ import { VENDOR_DIAG_PREFIX } from "./types.js";
  *
  * Hermes has **no streaming JSONL event surface** (research LOUD CAVEAT / §2).
  * Quiet mode emits final assistant text on stdout and a `session_id: …` line on
- * stderr. This adapter is files-heavy like grok: materialize a private
- * `HERMES_HOME` under the worktree (config.yaml with MCP hub + posture +
- * effort), spawn `hermes chat --quiet`, and synthesize thin `VendorEvent`s from
- * plain text lines. Live tool/file progress is opaque.
+ * stderr. The engine dual-feeds stdout **and** stderr into `parseEvent` (#107),
+ * so the stderr session line is captured without adapter buffering. This adapter
+ * is files-heavy like grok: materialize a private `HERMES_HOME` under the
+ * worktree (config.yaml with MCP hub + posture + effort), spawn
+ * `hermes chat --quiet`, and synthesize thin `VendorEvent`s from plain text
+ * lines.
+ *
+ * Capability limit (#107 major): quiet mode has **no** live tool/command/usage
+ * stream. Progress is opaque (message lines only); usage only if a JSON usage
+ * row appears (synthetic fixture / future export). Switching to `hermes acp`
+ * or post-exit `state.db` scrape would be a larger redesign — left as documented
+ * residual.
  *
  * Sandbox fidelity is partial (research §5): Hermes has no Codex-style
  * `--sandbox` matrix. We map posture via `HERMES_WRITE_SAFE_ROOT` +
@@ -320,8 +328,9 @@ export function createHermesAdapter(env: NodeJS.ProcessEnv = process.env): Vendo
       // Unknown / empty → [] always; the raw log remains the durable record.
       if (line === "") return [];
 
-      // stderr session line (research §2 / §4). Engine currently feeds stdout
-      // only, but fixtures and any future stream merge still need this.
+      // stderr session line (research §2 / §4). Engine dual-feeds stderr into
+      // parseEvent (#107 critical) — without that feed, sessionId() stayed
+      // undefined and multi-turn resume never started.
       const sessionMatch = /^session_id:\s*(\S+)\s*$/.exec(line);
       if (sessionMatch) {
         return [{ kind: "session_meta", session_id: sessionMatch[1] }];

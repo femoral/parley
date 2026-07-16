@@ -315,10 +315,21 @@ describe("hermes adapter — parseEvent (research §9 line-oriented)", () => {
     ]);
   });
 
-  it("maps session_id: stderr line to session_meta", () => {
+  it("maps session_id: stderr line to session_meta (#107 critical; engine now dual-feeds stderr)", () => {
+    // Old engine fed stdout only → sessionId() stayed undefined and resume never started.
+    // parseEvent already recognized this shape; dual-feed makes it load-bearing.
     expect(adapter.parseEvent("session_id: 20260716_143052_a1b2c3")).toEqual([
       { kind: "session_meta", session_id: "20260716_143052_a1b2c3" },
     ]);
+  });
+
+  it("quiet-mode success has no tool/usage events (#107 major capability limit)", () => {
+    // Quiet mode is plain text — no command/file_change/usage on the success path.
+    const text = fs.readFileSync(path.join(FIXTURES, "v0.17.0-quiet-success.txt"), "utf8");
+    const events = text.split("\n").flatMap((line) => adapter.parseEvent(line));
+    expect(events.every((e) => e.kind === "message" || e.kind === "error")).toBe(true);
+    expect(events.some((e) => e.kind === "command" || e.kind === "file_change")).toBe(false);
+    expect(events.some((e) => e.kind === "session_meta" && e.usage !== undefined)).toBe(false);
   });
 
   it("maps auth-failure stdout to fatal error", () => {

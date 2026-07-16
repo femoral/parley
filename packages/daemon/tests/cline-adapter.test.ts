@@ -1,10 +1,15 @@
 import { describe, expect, it } from "vitest";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
+  CLINE_DATA_DIR_ENV,
   CLINE_MCP_SETTINGS_REL,
+  CLINE_SESSION_WRAP_REL,
   createClineAdapter,
+  providerFlags,
+  scrapeClineSessionId,
 } from "../src/adapters/cline.js";
 import type { HubInfo, SandboxMode, TaskSpec } from "../src/adapters/types.js";
 
@@ -13,6 +18,9 @@ import type { HubInfo, SandboxMode, TaskSpec } from "../src/adapters/types.js";
  * suite's CLI-boundary rule (spec §10). Pins argv/env/files across the
  * sandbox×network matrix and NDJSON normalization against cline 3.0.42
  * (docs/research/cline-cli-automation.md; real lines from research §2 / §8).
+ *
+ * #107 defect regressions: session scrape, resume refuse, -P provider auto,
+ * MCP timeoutMs.
  */
 
 const FIXTURES = fileURLToPath(new URL("./fixtures/cline/", import.meta.url));
@@ -44,11 +52,17 @@ function expectedDataDir(cwd = "/work/tree"): string {
   return path.resolve(cwd, ".cline-parley");
 }
 
+function expectedWrapPath(cwd = "/work/tree"): string {
+  return path.resolve(cwd, CLINE_SESSION_WRAP_REL);
+}
+
 describe("cline adapter — prepare argv (golden)", () => {
-  it("builds the pinned headless --json one-shot invocation", async () => {
+  it("builds the pinned headless --json one-shot via the session-scrape wrapper", async () => {
     const adapter = createClineAdapter({});
     const plan = await adapter.prepare(spec(), HUB);
     expect(plan.argv).toEqual([
+      process.execPath,
+      expectedWrapPath(),
       "cline",
       "--json",
       "--auto-approve",
@@ -60,6 +74,8 @@ describe("cline adapter — prepare argv (golden)", () => {
       "do the thing",
     ]);
     expect(plan.cwd).toBe("/work/tree");
+    expect(plan.files.map((f) => f.path)).toContain(CLINE_SESSION_WRAP_REL);
+    expect(plan.env[CLINE_DATA_DIR_ENV]).toBe(expectedDataDir());
   });
 
   it("passes the model through with -m when set, omits it otherwise", async () => {
@@ -78,19 +94,9 @@ describe("cline adapter — prepare argv (golden)", () => {
   it("passes effort through with --thinking when set, omits it otherwise", async () => {
     const adapter = createClineAdapter({});
     const withEffort = await adapter.prepare(spec({ effort: "high" }), HUB);
-    expect(withEffort.argv).toEqual([
-      "cline",
-      "--json",
-      "--auto-approve",
-      "true",
-      "--data-dir",
-      expectedDataDir(),
-      "-c",
-      "/work/tree",
-      "--thinking",
-      "high",
-      "do the thing",
-    ]);
+    expect(withEffort.argv).toContain("--thinking");
+    expect(withEffort.argv).toContain("high");
+    expect(withEffort.argv[withEffort.argv.length - 1]).toBe("do the thing");
     const without = await adapter.prepare(spec({ effort: null }), HUB);
     expect(without.argv).not.toContain("--thinking");
   });
@@ -105,9 +111,11 @@ describe("cline adapter — prepare argv (golden)", () => {
     expect(plan.argv.slice(promptIdx - 3, promptIdx)).toEqual(["--retries", "2", "--foo"]);
   });
 
-  it("honours PARLEY_CLINE_BIN override", async () => {
+  it("honours PARLEY_CLINE_BIN override inside the wrap argv", async () => {
     const adapter = createClineAdapter({ PARLEY_CLINE_BIN: "/opt/cline/cline" });
-    expect((await adapter.prepare(spec(), HUB)).argv[0]).toBe("/opt/cline/cline");
+    const plan = await adapter.prepare(spec(), HUB);
+    // argv: [node, wrap, bin, ...]
+    expect(plan.argv[2]).toBe("/opt/cline/cline");
   });
 
   it("does not pass --worktree (Parley owns worktrees)", async () => {
@@ -116,53 +124,70 @@ describe("cline adapter — prepare argv (golden)", () => {
   });
 });
 
-describe("cline adapter — resume argv (golden)", () => {
-  it("resumes with --id and the follow-up prompt after flags", async () => {
-    const adapter = createClineAdapter({});
-    const plan = await adapter.resume(
-      spec({ prompt: "the answer", sessionId: "1784189583906_bj2xq", effort: "low" }),
+describe("cline adapter — #107 provider -P auto-select (old code never passed -P)", () => {
+  it("passes -P anthropic when only ANTHROPIC_API_KEY is set (defect: default stayed cline)", async () => {
+    const plan = await createClineAdapter({
+      ANTHROPIC_API_KEY: "sk-ant-fake",
+    }).prepare(spec({ model: "claude-sonnet-4-20250514" }), HUB);
+    expect(plan.argv).toContain("-P");
+    expect(plan.argv[plan.argv.indexOf("-P") + 1]).toBe("anthropic");
+    // Provider lands before model and prompt.
+    expect(plan.argv.indexOf("-P")).toBeLessThan(plan.argv.indexOf("-m"));
+  });
+
+  it("passes -P openai when only OPENAI_API_KEY is set", async () => {
+    const plan = await createClineAdapter({ OPENAI_API_KEY: "sk-oai" }).prepare(spec(), HUB);
+    expect(plan.argv).toContain("-P");
+    expect(plan.argv[plan.argv.indexOf("-P") + 1]).toBe("openai");
+  });
+
+  it("omits -P when zero or multiple BYOK keys are set", async () => {
+    expect((await createClineAdapter({}).prepare(spec(), HUB)).argv).not.toContain("-P");
+    const multi = await createClineAdapter({
+      ANTHROPIC_API_KEY: "a",
+      OPENAI_API_KEY: "b",
+    }).prepare(spec(), HUB);
+    expect(multi.argv).not.toContain("-P");
+  });
+
+  it("omits auto -P when extraArgs already names a provider", async () => {
+    const plan = await createClineAdapter({ ANTHROPIC_API_KEY: "sk" }).prepare(
+      spec({ extraArgs: ["-P", "openrouter"] }),
       HUB,
     );
-    expect(plan.argv).toEqual([
-      "cline",
-      "--json",
-      "--auto-approve",
-      "true",
-      "--data-dir",
-      expectedDataDir(),
-      "-c",
-      "/work/tree",
-      "--thinking",
-      "low",
-      "--id",
-      "1784189583906_bj2xq",
-      "the answer",
-    ]);
+    // Only the explicit extraArgs -P, not a second auto one before it.
+    const pIdxs = plan.argv
+      .map((a, i) => (a === "-P" ? i : -1))
+      .filter((i) => i >= 0);
+    expect(pIdxs).toHaveLength(1);
+    expect(plan.argv[pIdxs[0]! + 1]).toBe("openrouter");
   });
 
-  it("re-materializes MCP settings on resume", async () => {
+  it("providerFlags helper: single anthropic key → -P anthropic", () => {
+    expect(providerFlags(spec(), { ANTHROPIC_API_KEY: "x" })).toEqual(["-P", "anthropic"]);
+    expect(providerFlags(spec(), {})).toEqual([]);
+  });
+});
+
+describe("cline adapter — #107 resume refuses broken --id (old code shipped --id as if it worked)", () => {
+  it("rejects resume even with a scraped session id (3.0.42 headless --id is broken)", async () => {
     const adapter = createClineAdapter({});
-    const plan = await adapter.resume(spec({ sessionId: "sess-1" }), HUB);
-    expect(plan.files.map((f) => f.path)).toContain(CLINE_MCP_SETTINGS_REL);
+    await expect(
+      adapter.resume(spec({ prompt: "the answer", sessionId: "1784189583906_bj2xq" }), HUB),
+    ).rejects.toThrow(/unsupported on 3\.0\.42|JSON output mode|headless --id/i);
   });
 
-  it("rejects a resume without a session id (would silently start a fresh session)", async () => {
+  it("rejects resume without a session id with the same clear error class", async () => {
     const adapter = createClineAdapter({});
-    await expect(adapter.resume(spec(), HUB)).rejects.toThrow(/no session id/);
+    await expect(adapter.resume(spec(), HUB)).rejects.toThrow(/unsupported on 3\.0\.42/);
   });
 
-  it("splices extraArgs before --id and the prompt on resume", async () => {
-    const plan = await createClineAdapter({}).resume(
-      spec({
-        prompt: "answer",
-        sessionId: "sid",
-        extraArgs: ["--retries", "1"],
-      }),
-      HUB,
-    );
-    expect(plan.argv[plan.argv.length - 1]).toBe("answer");
-    expect(plan.argv.indexOf("--retries")).toBeLessThan(plan.argv.indexOf("--id"));
-    expect(plan.argv.indexOf("--id")).toBeLessThan(plan.argv.length - 1);
+  it("does not build a broken --id argv on any resume path", async () => {
+    const adapter = createClineAdapter({});
+    await expect(
+      adapter.resume(spec({ sessionId: "sid" }), HUB),
+    ).rejects.toThrow();
+    // No successful plan with --id (regression: old resume returned that argv).
   });
 });
 
@@ -201,14 +226,6 @@ describe("cline adapter — sandbox×network matrix (closest safe posture)", () 
       expect(plan.env).not.toHaveProperty("CLINE_NETWORK");
     });
   }
-
-  it("resume carries the identical posture env as prepare", async () => {
-    const adapter = createClineAdapter({});
-    const s = spec({ sandbox: "read-only", network: false, sessionId: "sess-1" });
-    const prepared = await adapter.prepare(s, HUB);
-    const resumed = await adapter.resume(s, HUB);
-    expect(resumed.env.CLINE_COMMAND_PERMISSIONS).toBe(prepared.env.CLINE_COMMAND_PERMISSIONS);
-  });
 });
 
 describe("cline adapter — MCP injection (materialized settings)", () => {
@@ -226,6 +243,17 @@ describe("cline adapter — MCP injection (materialized settings)", () => {
         Authorization: "Bearer secret",
       },
     });
+  });
+
+  it("sets per-server timeoutMs above answerTimeoutMs (#107 major; old code omitted timeout)", async () => {
+    // 5-minute answer → 300_000 + 60_000 = 360_000.
+    const plan = await createClineAdapter({}).prepare(spec({ answerTimeoutMs: 300_000 }), HUB);
+    const file = plan.files.find((f) => f.path === CLINE_MCP_SETTINGS_REL)!;
+    const json = JSON.parse(file.contents) as {
+      mcpServers: { parley: { timeoutMs: number } };
+    };
+    expect(json.mcpServers.parley.timeoutMs).toBe(360_000);
+    expect(360_000).toBeGreaterThan(300_000);
   });
 
   it("points --data-dir at the absolute task-private directory", async () => {
@@ -248,17 +276,22 @@ describe("cline adapter — auth env passthrough", () => {
       CODEX_API_KEY: "nope",
       RANDOM_SECRET: "nope",
     }).prepare(spec(), HUB);
-    expect(withKeys.env).toEqual({
+    expect(withKeys.env).toMatchObject({
       ANTHROPIC_API_KEY: "sk-ant",
       CLINE_API_KEY: "cline-k",
       OPENAI_API_KEY: "sk-oai",
       OPENROUTER_API_KEY: "or-k",
       AI_GATEWAY_API_KEY: "gw-k",
       V0_API_KEY: "v0-k",
+      [CLINE_DATA_DIR_ENV]: expectedDataDir(),
     });
+    expect("CODEX_API_KEY" in withKeys.env).toBe(false);
+    expect("RANDOM_SECRET" in withKeys.env).toBe(false);
 
     const without = await createClineAdapter({}).prepare(spec(), HUB);
-    expect(without.env).toEqual({});
+    expect(without.env).toEqual({
+      [CLINE_DATA_DIR_ENV]: expectedDataDir(),
+    });
   });
 });
 
@@ -450,15 +483,50 @@ describe("cline adapter — parseEvent (3.0.42 envelope)", () => {
   });
 });
 
-describe("cline adapter — sessionId extraction", () => {
+describe("cline adapter — #107 session id from data-dir scrape (old code never emitted session_id)", () => {
   const adapter = createClineAdapter({});
 
-  it("returns undefined when the stream never carried a session_id (3.0.42)", () => {
+  it("maps parley_session_scrape synthetic line to session_meta (would fail on old code)", () => {
+    const line = JSON.stringify({
+      type: "parley_session_scrape",
+      session_id: "1784193690918_hiozv",
+    });
+    expect(adapter.parseEvent(line)).toEqual([
+      { kind: "session_meta", session_id: "1784193690918_hiozv" },
+    ]);
+    expect(
+      adapter.sessionId(adapter.parseEvent(line)),
+    ).toBe("1784193690918_hiozv");
+  });
+
+  it("scrapeClineSessionId reads newest sessions/*/*.json session_id (live disk shape)", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "cline-sess-"));
+    try {
+      const sid = "1784193690918_hiozv";
+      const dir = path.join(root, "sessions", sid);
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(
+        path.join(dir, `${sid}.json`),
+        JSON.stringify({
+          version: 1,
+          session_id: sid,
+          status: "failed",
+          provider: "anthropic",
+        }),
+      );
+      expect(scrapeClineSessionId(root)).toBe(sid);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("returns undefined when the stream never carried a session_id (3.0.42 NDJSON alone)", () => {
     const lines = fs
       .readFileSync(path.join(FIXTURES, "v3.0.42-auth-fail.jsonl"), "utf8")
       .split("\n")
       .filter(Boolean);
     const events = lines.flatMap((line) => adapter.parseEvent(line));
+    // Without the wrap-script scrape line, sessionId stays undefined (old defect).
     expect(adapter.sessionId(events)).toBeUndefined();
   });
 
@@ -469,6 +537,20 @@ describe("cline adapter — sessionId extraction", () => {
       { kind: "session_meta" as const, session_id: "last-sid" },
     ];
     expect(adapter.sessionId(events)).toBe("last-sid");
+  });
+
+  it("auth-fail fixture + scrape line: sessionId becomes available (defect regression)", () => {
+    const lines = fs
+      .readFileSync(path.join(FIXTURES, "v3.0.42-auth-fail.jsonl"), "utf8")
+      .split("\n")
+      .filter(Boolean);
+    const events = [
+      ...lines.flatMap((line) => adapter.parseEvent(line)),
+      ...adapter.parseEvent(
+        JSON.stringify({ type: "parley_session_scrape", session_id: "1784193198730_nqinf" }),
+      ),
+    ];
+    expect(adapter.sessionId(events)).toBe("1784193198730_nqinf");
   });
 });
 

@@ -29,9 +29,16 @@ import { runProbe } from "./probe.js";
  *  - With sandbox enabled, `.git` is always read-only — tasks that must commit
  *    leave sandbox disabled (research §5).
  *
- * Event shapes for the success path are OpenCode-lineage (research §2/§8);
- * // UNKNOWN(research): not re-verified against a live authenticated Kilo 7.4.9
- * run. `parseEvent` is deliberately tolerant: unknown/changed lines yield `[]`.
+ * Event shapes for the success path: OpenCode-lineage fixtures match the 7.4.9
+ * binary emission path (`nA("step_start"|"tool_use"|"text"|"step_finish"|…)`
+ * with `part.tool` / `part.tokens` — **binary-verified** 2026-07-16, #107).
+ * Live authenticated success streams were still not captured (no provider keys
+ * in validation). `parseEvent` is deliberately tolerant: unknown/changed lines
+ * yield `[]`.
+ *
+ * BYOK (#107 minor→applied): when parent sets common provider keys
+ * (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, …) they are forwarded so users without
+ * `KILO_API_KEY` can still hit configured providers.
  */
 
 /** Default binary; override via `PARLEY_KILO_BIN` (smoke tests, custom installs). */
@@ -45,6 +52,24 @@ const MCP_SERVER_NAME = "parley";
  * default is 5000 — far below Parley's answer timeout; research §3 / §9).
  */
 const MCP_TIMEOUT_HEADROOM_MS = 60_000;
+
+/**
+ * Provider BYOK keys documented for config `{env:…}` injection (research §6).
+ * Forward when set so isolation does not drop provider credentials that Kilo
+ * would otherwise only see from global config (#107).
+ */
+const BYOK_ENV_KEYS = [
+  "ANTHROPIC_API_KEY",
+  "OPENAI_API_KEY",
+  "OPENROUTER_API_KEY",
+  "GOOGLE_API_KEY",
+  "GEMINI_API_KEY",
+  "XAI_API_KEY",
+  "GROQ_API_KEY",
+  "MISTRAL_API_KEY",
+  "DEEPSEEK_API_KEY",
+  "AZURE_OPENAI_API_KEY",
+] as const;
 
 /** The probe command recorded as the catalog entry's `source` on refresh. */
 const MODELS_SOURCE = "kilo models";
@@ -181,6 +206,12 @@ function baseEnv(
   // Auth / org routing — only when the parent set them (research §6).
   if (env.KILO_API_KEY !== undefined) result.KILO_API_KEY = env.KILO_API_KEY;
   if (env.KILO_ORG_ID !== undefined) result.KILO_ORG_ID = env.KILO_ORG_ID;
+  // BYOK provider keys (#107): forward when set so hermetic KILO_CONFIG_CONTENT
+  // runs are not limited to KILO_API_KEY alone.
+  for (const key of BYOK_ENV_KEYS) {
+    const value = env[key];
+    if (value !== undefined) result[key] = value;
+  }
   return result;
 }
 
@@ -345,14 +376,19 @@ export function createKiloAdapter(env: NodeJS.ProcessEnv = process.env): VendorA
             : [];
         }
 
-        case "tool_use": {
-          // Completed tool call (research §2 / §9). Also tolerate missing part.
-          const part = asRecord(event.part);
-          if (!part) return [];
-          const tool = asString(part.tool);
+        case "tool_use":
+        case "tool_call": {
+          // Completed tool call (research §2 / §9). Binary emits `tool_use` for
+          // parts with `type==="tool"` (#107 binary verify); also accept
+          // `tool_call` string inventory and missing part.
+          const part = asRecord(event.part) ?? event;
+          const tool =
+            asString(part.tool) ||
+            asString(part.name) ||
+            asString(asRecord(part.tool)?.name);
           const toolLower = tool.toLowerCase();
           const state = asRecord(part.state);
-          const input = asRecord(state?.input) ?? {};
+          const input = asRecord(state?.input) ?? asRecord(part.input) ?? {};
           const status = asString(state?.status);
 
           // Failed call to our hub tools (or any tool with an error) — tag
@@ -414,8 +450,9 @@ export function createKiloAdapter(env: NodeJS.ProcessEnv = process.env): VendorA
         }
 
         default:
-          // tool_call / tool_result / step-start nested / unknown → opaque.
-          // // UNKNOWN(research): full success-path type set under live Kilo auth.
+          // tool_result / step-start nested / unknown → opaque.
+          // Success-path type set is binary-confirmed for step_*/text/tool_use/error;
+          // live-auth capture still outstanding (#107 residual).
           return [];
       }
     },

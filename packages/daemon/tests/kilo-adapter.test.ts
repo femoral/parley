@@ -303,6 +303,17 @@ describe("kilo adapter — env passthrough", () => {
     ).toBe("org-1");
     expect("KILO_ORG_ID" in (await createKiloAdapter({}).prepare(spec(), HUB)).env).toBe(false);
   });
+
+  it("forwards BYOK provider keys when set (#107; old code only passed KILO_API_KEY)", async () => {
+    const plan = await createKiloAdapter({
+      ANTHROPIC_API_KEY: "sk-ant",
+      OPENAI_API_KEY: "sk-oai",
+      UNRELATED_SECRET: "nope",
+    }).prepare(spec(), HUB);
+    expect(plan.env.ANTHROPIC_API_KEY).toBe("sk-ant");
+    expect(plan.env.OPENAI_API_KEY).toBe("sk-oai");
+    expect("UNRELATED_SECRET" in plan.env).toBe(false);
+  });
 });
 
 describe("kilo adapter — parseEvent (tolerant)", () => {
@@ -453,7 +464,9 @@ describe("kilo adapter — golden JSONL fixtures (pins research §2/§8 shapes)"
     return { events, sessionId: adapter.sessionId(events) };
   }
 
-  it("reconstructs message, command, usage, and session id from a success-path stream", () => {
+  it("reconstructs message, command, usage, and session id from binary-confirmed success shapes (#107; old UNKNOWN live path)", () => {
+    // Fixture mirrors 7.4.9 binary emission (nA("step_start"|"tool_use"|"text"|"step_finish")).
+    // Live-auth capture still unavailable; binary verify replaces pure OpenCode guesswork.
     const { events, sessionId } = replay("v7.4.9-success.jsonl");
     expect(sessionId).toBe("ses_494719016ffe85dkDMj0FPRbHK");
     expect(events.filter((e) => e.kind === "message").map((e) => e.text)).toEqual(["hello"]);
@@ -469,6 +482,23 @@ describe("kilo adapter — golden JSONL fixtures (pins research §2/§8 shapes)"
       cache_read: 21415,
       cost: 0.001,
     });
+  });
+
+  it("maps tool_call alias the same as tool_use (binary also inventories tool_call)", () => {
+    const adapter = createKiloAdapter({});
+    const line = JSON.stringify({
+      type: "tool_call",
+      timestamp: 1,
+      sessionID: "ses_t",
+      part: {
+        type: "tool",
+        tool: "bash",
+        state: { status: "completed", input: { command: "pwd" } },
+      },
+    });
+    expect(adapter.parseEvent(line)).toEqual([
+      { kind: "command", text: "pwd", session_id: "ses_t" },
+    ]);
   });
 
   it("extracts session id and fatal error from the verified auth-failure line", () => {

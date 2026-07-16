@@ -36,22 +36,31 @@ import { VENDOR_DIAG_PREFIX } from "./types.js";
  * (soft workspace affinity). `read-only` and `network:false` cannot be enforced
  * by OpenHands itself — document the gap, do not claim they are real.
  *
- * MCP tool timeout (research §3): SDK hardcodes `MCP_TOOL_TIMEOUT_SECONDS = 300`
- * with no CLI/config dial. Unlike codex's `tool_timeout_sec`, we cannot raise it
- * above `task.answerTimeoutMs`. // UNKNOWN(research): how to raise without
- * patching the SDK.
+ * MCP tool timeout (research §3 / #107 critical): SDK hardcodes
+ * `MCP_TOOL_TIMEOUT_SECONDS = 300` with no CLI/config dial. Unlike codex's
+ * `tool_timeout_sec`, we cannot raise it. Effective Q&A ceiling is **300s**;
+ * when `task.answerTimeoutMs > 300_000` we emit a greppable PARLEY-DIAG on the
+ * first stream line so operators see the mismatch (orchestrator may still wait
+ * longer than the tool can). Do not claim full multi-turn Q&A beyond 5 minutes.
  *
- * Effort (research §6): no CLI flag and no `LLM_REASONING_EFFORT` under
- * `--override-with-envs` (env override only has api_key/base_url/model). When
- * `task.effort` is set we materialize a minimal `agent_settings.json` with
- * `llm.reasoning_effort`. // UNKNOWN(research): whether a partial Agent JSON
- * merges cleanly with env-created agents, or replaces and breaks headless.
+ * Effort (research §6 / #107 major): no CLI flag and no `LLM_REASONING_EFFORT`
+ * under `--override-with-envs`. We **do not** write a partial
+ * `agent_settings.json` — `AgentStore.load_or_create` expects a full agent
+ * spec; a `{llm:{reasoning_effort}}` stub is unproven and may replace/wipe
+ * env-created LLM settings. `task.effort` is therefore ignored (documented
+ * residual) until a full agent materialization path is verified.
  */
 
 /** Default binary; override via `PARLEY_OPENHANDS_BIN` (smoke tests, custom installs). */
 const DEFAULT_OPENHANDS_BIN = "openhands";
 
 const MCP_SERVER_NAME = "parley";
+
+/**
+ * SDK hardcodes MCP tool calls at 300s (research §3 / #107). No adapter dial
+ * can raise this; keep the constant so tests/docs stay aligned with the binary.
+ */
+const MCP_TOOL_TIMEOUT_MS = 300_000;
 
 /**
  * Task-private plumbing under the worktree (relative to `task.cwd`). Kept out of
@@ -78,24 +87,6 @@ function mcpJson(hub: HubInfo): string {
             headers: hub.headers,
             enabled: true,
           },
-        },
-      },
-      null,
-      2,
-    ) + "\n"
-  );
-}
-
-/**
- * Minimal agent settings for reasoning effort (research §6). Full Agent JSON is
- * the disk format; we only set the effort field when asked.
- */
-function agentSettingsJson(effort: string): string {
-  return (
-    JSON.stringify(
-      {
-        llm: {
-          reasoning_effort: effort,
         },
       },
       null,
@@ -183,6 +174,11 @@ function usageFromStateUpdate(event: Record<string, unknown>): Record<string, nu
 
 export function createOpenhandsAdapter(env: NodeJS.ProcessEnv = process.env): VendorAdapter {
   const bin = env.PARLEY_OPENHANDS_BIN ?? DEFAULT_OPENHANDS_BIN;
+  // Track the highest answerTimeoutMs seen on prepare/resume so parseEvent can
+  // emit a one-shot PARLEY-DIAG when it exceeds the SDK 300s MCP ceiling (#107).
+  // Registry singleton: diagnostic is process-global and best-effort.
+  let maxAnswerTimeoutMsSeen = 0;
+  let mcpTimeoutDiagEmitted = false;
 
   /**
    * Env shared by prepare and resume: isolation dirs, suppress banner, auth, model.
@@ -216,19 +212,33 @@ export function createOpenhandsAdapter(env: NodeJS.ProcessEnv = process.env): Ve
     return result;
   }
 
-  /** Materialize mcp.json (+ optional agent_settings for effort) under private persist. */
-  function files(task: TaskSpec, hub: HubInfo): MaterializedFile[] {
-    const materialized: MaterializedFile[] = [
-      { path: `${PERSIST_REL}/mcp.json`, contents: mcpJson(hub) },
+  /**
+   * Materialize mcp.json only. Intentionally omit partial agent_settings.json
+   * for effort (#107 major) — unproven merge can break headless LLM settings.
+   */
+  function files(_task: TaskSpec, hub: HubInfo): MaterializedFile[] {
+    return [{ path: `${PERSIST_REL}/mcp.json`, contents: mcpJson(hub) }];
+  }
+
+  /**
+   * When any prepared task's answer window exceeds the SDK MCP tool ceiling,
+   * surface a greppable diagnostic once on the first non-empty stream line
+   * (#107 critical).
+   */
+  function mcpTimeoutDiagIfNeeded(): VendorEvent[] {
+    if (maxAnswerTimeoutMsSeen <= MCP_TOOL_TIMEOUT_MS) return [];
+    if (mcpTimeoutDiagEmitted) return [];
+    mcpTimeoutDiagEmitted = true;
+    return [
+      {
+        kind: "error",
+        text:
+          `${VENDOR_DIAG_PREFIX} openhands: SDK MCP_TOOL_TIMEOUT_SECONDS=300; ` +
+          `ask_orchestrator longer than 300s will fail while answerTimeoutMs=` +
+          `${maxAnswerTimeoutMsSeen} still has budget. Cap Q&A waits at ≤300s for this vendor.`,
+        fatal: false,
+      },
     ];
-    // UNKNOWN(research): partial agent_settings.json may not merge with env agent.
-    if (task.effort !== null) {
-      materialized.push({
-        path: `${PERSIST_REL}/agent_settings.json`,
-        contents: agentSettingsJson(task.effort),
-      });
-    }
-    return materialized;
   }
 
   /**
@@ -244,6 +254,7 @@ export function createOpenhandsAdapter(env: NodeJS.ProcessEnv = process.env): Ve
   }
 
   function planFor(task: TaskSpec, hub: HubInfo, resumeSessionId: string | undefined): SpawnPlan {
+    maxAnswerTimeoutMsSeen = Math.max(maxAnswerTimeoutMsSeen, task.answerTimeoutMs);
     const argv = [bin, ...commonArgv(task)];
     if (resumeSessionId !== undefined) {
       // Headless resume still requires -t (research §4).
@@ -281,6 +292,8 @@ export function createOpenhandsAdapter(env: NodeJS.ProcessEnv = process.env): Ve
       const trimmed = line.trim();
       if (trimmed === "") return [];
 
+      const prefix = mcpTimeoutDiagIfNeeded();
+
       let parsed: unknown;
       try {
         parsed = JSON.parse(trimmed);
@@ -288,25 +301,27 @@ export function createOpenhandsAdapter(env: NodeJS.ProcessEnv = process.env): Ve
         const match = CONVERSATION_ID_RE.exec(line);
         if (match?.[1]) {
           return [
+            ...prefix,
             {
               kind: "session_meta",
               session_id: normalizeSessionId(match[1]),
             },
           ];
         }
-        return []; // opaque vendor noise — the raw log keeps it
+        return prefix.length > 0 ? prefix : []; // opaque vendor noise — the raw log keeps it
       }
 
       const event = asRecord(parsed);
-      if (!event) return [];
+      if (!event) return prefix;
 
       // Discriminator is `kind`, not `type` (research §2 — docs schematic is wrong).
+      let body: VendorEvent[] = [];
       switch (event.kind) {
         case "MessageEvent": {
           // User/agent text from llm_message content blocks (research §9).
           const text = messageText(event.llm_message);
-          if (text === "") return [];
-          return [{ kind: "message", text }];
+          if (text !== "") body = [{ kind: "message", text }];
+          break;
         }
         case "ActionEvent": {
           const toolName = asString(event.tool_name);
@@ -314,24 +329,22 @@ export function createOpenhandsAdapter(env: NodeJS.ProcessEnv = process.env): Ve
           if (toolName === "terminal") {
             // TerminalAction: command string (research §2 sample).
             const command = asString(action?.command);
-            return [{ kind: "command", text: command }];
-          }
-          if (toolName === "file_editor") {
+            body = [{ kind: "command", text: command }];
+          } else if (toolName === "file_editor") {
             // FileEditorAction: command + path (research §2).
             const cmd = asString(action?.command);
             const filePath = asString(action?.path);
             const text = [cmd, filePath].filter(Boolean).join(" ");
-            return [{ kind: "file_change", text }];
+            body = [{ kind: "file_change", text }];
+          } else if (toolName !== "") {
+            // Other / MCP tools: surface as message with tool name (research §9).
+            body = [{ kind: "message", text: `tool:${toolName}` }];
           }
-          // Other / MCP tools: surface as message with tool name (research §9).
-          if (toolName !== "") {
-            return [{ kind: "message", text: `tool:${toolName}` }];
-          }
-          return [];
+          break;
         }
         case "ObservationEvent":
           // Optional progress noise — skip (research §9).
-          return [];
+          break;
         case "AgentErrorEvent": {
           // Per-tool error; agent may recover (research §9) — non-fatal.
           const errText = asString(event.error) || asString(event.detail);
@@ -340,7 +353,8 @@ export function createOpenhandsAdapter(env: NodeJS.ProcessEnv = process.env): Ve
             tool !== ""
               ? `${VENDOR_DIAG_PREFIX} agent_error tool=${tool}: ${errText}`
               : errText;
-          return [{ kind: "error", text, fatal: false }];
+          body = [{ kind: "error", text, fatal: false }];
+          break;
         }
         case "ConversationErrorEvent": {
           // Run-terminal failure (auth, crash, …) — fatal even when exit code is 0
@@ -351,24 +365,26 @@ export function createOpenhandsAdapter(env: NodeJS.ProcessEnv = process.env): Ve
             code !== "" && detail !== ""
               ? `${code}: ${detail}`
               : detail || code || "conversation error";
-          return [{ kind: "error", text, fatal: true }];
+          body = [{ kind: "error", text, fatal: true }];
+          break;
         }
         case "ConversationStateUpdateEvent": {
           // UNKNOWN(research): whether local --json emits stats. Parse if present.
           const usage = usageFromStateUpdate(event);
-          if (usage) return [{ kind: "session_meta", usage }];
-          return [];
+          if (usage) body = [{ kind: "session_meta", usage }];
+          break;
         }
         case "SystemPromptEvent":
           // Filtered out of --json callback (research §2); handle if it appears.
-          return [];
+          break;
         case "TokenEvent":
           // Raw token IDs, not billing counters (research §2/§8).
-          return [];
+          break;
         default:
           // Unknown/changed kinds must never fail the task.
-          return [];
+          break;
       }
+      return prefix.length > 0 ? [...prefix, ...body] : body;
     },
 
     sessionId(events: VendorEvent[]): string | undefined {
@@ -386,3 +402,6 @@ export function createOpenhandsAdapter(env: NodeJS.ProcessEnv = process.env): Ve
     // SDK VERIFIED_MODELS allowlist, not a live probe.
   };
 }
+
+/** Exported for tests asserting the SDK MCP tool-timeout ceiling (#107). */
+export const OPENHANDS_MCP_TOOL_TIMEOUT_MS = MCP_TOOL_TIMEOUT_MS;

@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import path from "node:path";
 import type {
   HubInfo,
@@ -28,17 +29,28 @@ import { VENDOR_DIAG_PREFIX } from "./types.js";
  * unenforced with an explicit comment. Prefer Parley worktrees as the
  * boundary.
  *
- * MCP tool timeout (research §3): whether `timeoutMs` (or similar) is honored
- * inside `cline_mcp_settings.json` is UNKNOWN — not raised here. Codex-style
- * `tool_timeout_sec` does not apply; long `ask_orchestrator` calls rely on
- * Cline's default until re-verified.
+ * MCP tool timeout (research §3 / #107): we set per-server `timeoutMs` to
+ * `answerTimeoutMs + 60s` headroom in `cline_mcp_settings.json`. Whether Cline
+ * 3.0.42 honors that field is still only type-surface evidence
+ * (`CreateMcpToolsOptions.timeoutMs`); treat long `ask_orchestrator` as a known
+ * residual risk if the binary ignores the field.
  *
- * Session id (research §4): **not present** on the NDJSON stream in 3.0.42.
- * `sessionId()` follows the codex contract (last `session_meta` with
- * `session_id`) and will return undefined until a stream field appears or a
- * data-dir side channel is added. Headless `--id` resume is VERIFIED broken
- * on 3.0.42; `resume()` still builds the documented argv shape so a fixed
- * release can work, and rejects when no session id is supplied (Grok pattern).
+ * Session id (research §4 / #107): **not present** on the NDJSON stream in
+ * 3.0.42. After the child exits, a small Node wrapper scrapes
+ * `<data-dir>/sessions/<id>/<id>.json` and prints a synthetic
+ * `{type:"parley_session_scrape",session_id}` line so `parseEvent` can emit
+ * `session_meta` without cross-task adapter state.
+ *
+ * Resume (#107 critical): headless `--id` + `--json` is **VERIFIED broken** on
+ * 3.0.42 (`JSON output mode requires a prompt argument…` even with a trailing
+ * prompt). `resume()` always rejects with a clear error — do not ship broken
+ * `--id` as if it works. Session ids are still scraped for observability /
+ * future fixed Cline releases.
+ *
+ * Provider (#107 major): when exactly one BYOK provider key is present in the
+ * parent env (e.g. only `ANTHROPIC_API_KEY`), we pass `-P <provider>` so Cline
+ * does not stay on the default `cline` provider. Explicit `-P` / `--provider`
+ * in `extraArgs` wins.
  *
  * No `listModels` — `cline models` is not a subcommand (research §7).
  */
@@ -56,7 +68,19 @@ const DATA_DIR_REL = ".cline-parley";
 /** Relative path of the materialized MCP settings file under the worktree. */
 const MCP_SETTINGS_REL = `${DATA_DIR_REL}/settings/cline_mcp_settings.json`;
 
+/**
+ * Post-exit wrapper that scrapes session id from the private data-dir and
+ * appends a synthetic NDJSON line. Relative to `task.cwd` (materialized).
+ */
+const SESSION_WRAP_REL = `${DATA_DIR_REL}/parley-session-wrap.mjs`;
+
+/** Env the wrap script uses to find sessions (absolute data-dir). */
+const DATA_DIR_ENV = "PARLEY_CLINE_DATA_DIR";
+
 const MCP_SERVER_NAME = "parley";
+
+/** Headroom above answer timeout for MCP `timeoutMs` (ms). */
+const MCP_TIMEOUT_HEADROOM_MS = 60_000;
 
 /**
  * Auth env keys named in research §6. Forward only when set in the parent env
@@ -71,6 +95,19 @@ const AUTH_ENV_KEYS = [
   "AI_GATEWAY_API_KEY",
   "V0_API_KEY",
 ] as const;
+
+/**
+ * Map a single present BYOK env key → `-P` provider id (research §6 / #107).
+ * `CLINE_API_KEY` alone leaves the default `cline` provider (no flag needed).
+ */
+const ENV_KEY_TO_PROVIDER: Partial<Record<(typeof AUTH_ENV_KEYS)[number], string>> = {
+  ANTHROPIC_API_KEY: "anthropic",
+  OPENAI_API_KEY: "openai",
+  OPENROUTER_API_KEY: "openrouter",
+  AI_GATEWAY_API_KEY: "ai-gateway",
+  V0_API_KEY: "v0",
+  // CLINE_API_KEY → default provider "cline" (omit -P)
+};
 
 /**
  * Shell permission JSON for the closest `read-only` posture Cline allows
@@ -97,16 +134,24 @@ function dataDirAbs(task: TaskSpec): string {
   return path.resolve(task.cwd, DATA_DIR_REL);
 }
 
+function mcpTimeoutMs(answerTimeoutMs: number): number {
+  return answerTimeoutMs + MCP_TIMEOUT_HEADROOM_MS;
+}
+
 /**
  * MCP hub config for streamable HTTP + correlation headers (research §3
  * canonical shape). Written under the isolated data-dir settings path.
+ * `timeoutMs` is best-effort (#107) — schema/types mention it; live honor
+ * on 3.0.42 is not fully proven.
  */
-function mcpSettingsJson(hub: HubInfo): string {
+function mcpSettingsJson(hub: HubInfo, answerTimeoutMs: number): string {
   return (
     JSON.stringify(
       {
         mcpServers: {
           [MCP_SERVER_NAME]: {
+            // Best-effort raise above answer timeout (#107 major).
+            timeoutMs: mcpTimeoutMs(answerTimeoutMs),
             transport: {
               type: "streamableHttp",
               url: hub.url,
@@ -121,6 +166,80 @@ function mcpSettingsJson(hub: HubInfo): string {
   );
 }
 
+/**
+ * Node wrap script: run `cline …`, pass through stdout/stderr, then scrape the
+ * newest session manifest under PARLEY_CLINE_DATA_DIR and emit a synthetic
+ * scrape line. Concurrent-safe (no adapter instance state).
+ */
+function sessionWrapScript(): string {
+  return `// Generated by parley cline adapter — scrape session id after exit (#107).
+import { spawn } from "node:child_process";
+import fs from "node:fs";
+import path from "node:path";
+
+const dataDir = process.env.${DATA_DIR_ENV};
+const [bin, ...args] = process.argv.slice(2);
+if (!bin) {
+  console.error("parley-session-wrap: missing cline binary argv");
+  process.exit(1);
+}
+
+function newestSessionId() {
+  if (!dataDir) return undefined;
+  const sessionsRoot = path.join(dataDir, "sessions");
+  let bestId;
+  let bestMtime = -1;
+  let dirs;
+  try {
+    dirs = fs.readdirSync(sessionsRoot);
+  } catch {
+    return undefined;
+  }
+  for (const dir of dirs) {
+    const jsonPath = path.join(sessionsRoot, dir, \`\${dir}.json\`);
+    try {
+      const st = fs.statSync(jsonPath);
+      if (st.mtimeMs < bestMtime) continue;
+      const raw = JSON.parse(fs.readFileSync(jsonPath, "utf8"));
+      const id =
+        typeof raw.session_id === "string" && raw.session_id !== ""
+          ? raw.session_id
+          : dir;
+      bestMtime = st.mtimeMs;
+      bestId = id;
+    } catch {
+      // skip unreadable / partial session files
+    }
+  }
+  return bestId;
+}
+
+const child = spawn(bin, args, {
+  stdio: ["ignore", "pipe", "pipe"],
+  env: process.env,
+});
+child.stdout.on("data", (chunk) => {
+  process.stdout.write(chunk);
+});
+child.stderr.on("data", (chunk) => {
+  process.stderr.write(chunk);
+});
+child.on("error", (err) => {
+  console.error(String(err));
+  process.exit(1);
+});
+child.on("close", (code) => {
+  const sid = newestSessionId();
+  if (sid) {
+    process.stdout.write(
+      JSON.stringify({ type: "parley_session_scrape", session_id: sid }) + "\\n",
+    );
+  }
+  process.exit(code === null ? 1 : code);
+});
+`;
+}
+
 function authEnv(env: NodeJS.ProcessEnv): Record<string, string> {
   const result: Record<string, string> = {};
   for (const key of AUTH_ENV_KEYS) {
@@ -128,6 +247,32 @@ function authEnv(env: NodeJS.ProcessEnv): Record<string, string> {
     if (value !== undefined) result[key] = value;
   }
   return result;
+}
+
+/**
+ * Auto `-P <provider>` when exactly one BYOK key is present and the caller did
+ * not already pass `-P` / `--provider` in extraArgs (#107 major).
+ */
+export function providerFlags(
+  task: TaskSpec,
+  env: NodeJS.ProcessEnv,
+): string[] {
+  const extra = task.extraArgs;
+  for (let i = 0; i < extra.length; i++) {
+    const a = extra[i];
+    if (a === "-P" || a === "--provider") return [];
+    if (typeof a === "string" && (a.startsWith("-P=") || a.startsWith("--provider="))) {
+      return [];
+    }
+  }
+
+  const presentByok = AUTH_ENV_KEYS.filter(
+    (key) => env[key] !== undefined && ENV_KEY_TO_PROVIDER[key] !== undefined,
+  );
+  if (presentByok.length !== 1) return [];
+  const provider = ENV_KEY_TO_PROVIDER[presentByok[0]!];
+  if (provider === undefined) return [];
+  return ["-P", provider];
 }
 
 /**
@@ -152,15 +297,15 @@ function postureEnv(task: TaskSpec): Record<string, string> {
 }
 
 /**
- * Flags shared by prepare and resume: headless JSON, auto-approve, isolated
- * data-dir, worktree cwd, optional model/effort, then extraArgs. The positional
+ * Flags shared by prepare: headless JSON, auto-approve, isolated data-dir,
+ * worktree cwd, optional provider/model/effort, then extraArgs. The positional
  * prompt is appended by the caller so extraArgs never land after it
  * (TaskSpec / ADR-0009).
  *
  * Do **not** pass `--worktree` — Cline would create its own detached worktree
  * under `~/.cline/worktrees/`; Parley owns worktrees (research §9).
  */
-function commonArgv(task: TaskSpec): string[] {
+function commonArgv(task: TaskSpec, env: NodeJS.ProcessEnv): string[] {
   const argv = [
     "--json",
     "--auto-approve",
@@ -170,6 +315,8 @@ function commonArgv(task: TaskSpec): string[] {
     "-c",
     task.cwd,
   ];
+  // Provider auto-select when a single BYOK key is present (#107).
+  argv.push(...providerFlags(task, env));
   // Model / effort — opaque passthrough (research §6).
   if (task.model !== null) argv.push("-m", task.model);
   if (task.effort !== null) argv.push("--thinking", task.effort);
@@ -178,15 +325,30 @@ function commonArgv(task: TaskSpec): string[] {
   return argv;
 }
 
-function files(hub: HubInfo): MaterializedFile[] {
-  return [{ path: MCP_SETTINGS_REL, contents: mcpSettingsJson(hub) }];
+function files(task: TaskSpec, hub: HubInfo): MaterializedFile[] {
+  return [
+    { path: MCP_SETTINGS_REL, contents: mcpSettingsJson(hub, task.answerTimeoutMs) },
+    { path: SESSION_WRAP_REL, contents: sessionWrapScript() },
+  ];
 }
 
 function baseEnv(task: TaskSpec, env: NodeJS.ProcessEnv): Record<string, string> {
   return {
     ...postureEnv(task),
     ...authEnv(env),
+    // Absolute data-dir for the post-exit session scrape wrapper (#107).
+    [DATA_DIR_ENV]: dataDirAbs(task),
   };
+}
+
+/**
+ * Wrap argv so a Node script runs cline, then emits a session scrape line.
+ * Uses `process.execPath` so we do not depend on `node` being on PATH.
+ */
+function wrappedArgv(task: TaskSpec, env: NodeJS.ProcessEnv, prompt: string): string[] {
+  const wrapAbs = path.resolve(task.cwd, SESSION_WRAP_REL);
+  const bin = env.PARLEY_CLINE_BIN ?? DEFAULT_CLINE_BIN;
+  return [process.execPath, wrapAbs, bin, ...commonArgv(task, env), prompt];
 }
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
@@ -315,37 +477,68 @@ function parseToolContent(event: Record<string, unknown>): VendorEvent[] {
   return [];
 }
 
-export function createClineAdapter(env: NodeJS.ProcessEnv = process.env): VendorAdapter {
-  const bin = env.PARLEY_CLINE_BIN ?? DEFAULT_CLINE_BIN;
+/**
+ * Read the newest session_id under a Cline data-dir (research §4 / #107).
+ * Exported for unit tests that reproduce the disk layout without the wrap script.
+ */
+export function scrapeClineSessionId(dataDir: string): string | undefined {
+  const sessionsRoot = path.join(dataDir, "sessions");
+  let bestId: string | undefined;
+  let bestMtime = -1;
+  let dirs: string[];
+  try {
+    dirs = fs.readdirSync(sessionsRoot);
+  } catch {
+    return undefined;
+  }
+  for (const dir of dirs) {
+    const jsonPath = path.join(sessionsRoot, dir, `${dir}.json`);
+    try {
+      const st = fs.statSync(jsonPath);
+      if (st.mtimeMs < bestMtime) continue;
+      const raw = JSON.parse(fs.readFileSync(jsonPath, "utf8")) as {
+        session_id?: unknown;
+      };
+      const id =
+        typeof raw.session_id === "string" && raw.session_id !== ""
+          ? raw.session_id
+          : dir;
+      bestMtime = st.mtimeMs;
+      bestId = id;
+    } catch {
+      // skip
+    }
+  }
+  return bestId;
+}
 
+export function createClineAdapter(env: NodeJS.ProcessEnv = process.env): VendorAdapter {
   return {
     id: "cline",
 
     prepare(task, hub): Promise<SpawnPlan> {
-      // Fresh headless one-shot (research §2 / §9):
-      //   cline --json --auto-approve true --data-dir … -c <cwd> … "<prompt>"
+      // Fresh headless one-shot (research §2 / §9) via session-scrape wrapper:
+      //   node parley-session-wrap.mjs cline --json … "<prompt>"
       return Promise.resolve({
-        argv: [bin, ...commonArgv(task), task.prompt],
+        argv: wrappedArgv(task, env, task.prompt),
         env: baseEnv(task, env),
-        files: files(hub),
+        files: files(task, hub),
         cwd: task.cwd,
       });
     },
 
-    resume(task, hub): Promise<SpawnPlan> {
-      // Documented resume argv (research §4 / §9). Headless `--id` + `--json`
-      // is VERIFIED broken on 3.0.42 ("JSON output mode requires a prompt…");
-      // still emit the shape so a fixed Cline can resume, and reject without
-      // a session id so we never silently start a fresh conversation.
-      if (task.sessionId === undefined) {
-        return Promise.reject(new Error(`cline resume for task ${task.id} has no session id`));
-      }
-      return Promise.resolve({
-        argv: [bin, ...commonArgv(task), "--id", task.sessionId, task.prompt],
-        env: baseEnv(task, env),
-        files: files(hub),
-        cwd: task.cwd,
-      });
+    resume(task, _hub): Promise<SpawnPlan> {
+      // #107 critical: headless `--id` + `--json` is VERIFIED broken on 3.0.42.
+      // Refuse rather than ship a broken resume argv that exits 1 without context.
+      return Promise.reject(
+        new Error(
+          `cline resume is unsupported on 3.0.42: headless --id + --json fails ` +
+            `("JSON output mode requires a prompt argument or piped stdin") even ` +
+            `with a trailing prompt. Session ids are still scraped from --data-dir ` +
+            `for observability; multi-turn needs a fixed Cline release` +
+            (task.sessionId !== undefined ? ` (scraped id was ${task.sessionId})` : ""),
+        ),
+      );
     },
 
     parseEvent(line: string): VendorEvent[] {
@@ -359,6 +552,11 @@ export function createClineAdapter(env: NodeJS.ProcessEnv = process.env): Vendor
       if (!event) return [];
 
       switch (event.type) {
+        case "parley_session_scrape": {
+          // Synthetic post-exit line from the wrap script (#107 critical).
+          const session_id = asString(event.session_id);
+          return session_id !== "" ? [{ kind: "session_meta", session_id }] : [];
+        }
         case "hook_event": {
           // agent_start carries agentId/taskId which are NOT the resume
           // session id (research §4). Emit empty — optional session_meta
@@ -387,6 +585,7 @@ export function createClineAdapter(env: NodeJS.ProcessEnv = process.env): Vendor
         }
         case "error": {
           // Top-level error on stdout or stderr (research §2 / §9) — run-terminal.
+          // Engine dual-feeds stderr into parseEvent (#107).
           const text = asString(event.message);
           // Tag approval-shaped failures that cancel our MCP tools (headless
           // has no TTY) so diag.log is greppable — same VENDOR_DIAG_PREFIX
@@ -415,8 +614,8 @@ export function createClineAdapter(env: NodeJS.ProcessEnv = process.env): Vendor
 
     sessionId(events: VendorEvent[]): string | undefined {
       // Last session_meta with a session_id (codex pattern). On 3.0.42 the
-      // stream never carries one (research §4); returns undefined until that
-      // changes or a data-dir scrape is wired into the engine.
+      // stream never carries one; the wrap script's parley_session_scrape line
+      // is the side channel (#107).
       for (let i = events.length - 1; i >= 0; i--) {
         const event = events[i];
         if (event?.kind === "session_meta" && event.session_id !== undefined) {
@@ -433,3 +632,5 @@ export function createClineAdapter(env: NodeJS.ProcessEnv = process.env): Vendor
 /** Exported for tests that assert the private data-dir relative path. */
 export const CLINE_DATA_DIR_REL = DATA_DIR_REL;
 export const CLINE_MCP_SETTINGS_REL = MCP_SETTINGS_REL;
+export const CLINE_SESSION_WRAP_REL = SESSION_WRAP_REL;
+export const CLINE_DATA_DIR_ENV = DATA_DIR_ENV;

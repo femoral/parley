@@ -2,7 +2,11 @@ import { describe, expect, it } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { createOpenclawAdapter, parseOpenclawModels } from "../src/adapters/openclaw.js";
+import {
+  createOpenclawAdapter,
+  OPENCLAW_COMPACT_WRAP_REL,
+  parseOpenclawModels,
+} from "../src/adapters/openclaw.js";
 import type { HubInfo, SandboxMode, TaskSpec } from "../src/adapters/types.js";
 
 const FIXTURES = fileURLToPath(new URL("./fixtures/openclaw/", import.meta.url));
@@ -38,10 +42,13 @@ function readFixture(name: string): string {
 const DEFAULT_TIMEOUT_SEC = "1860";
 
 describe("openclaw adapter — prepare argv (golden)", () => {
-  it("builds the pinned headless agent --local --json invocation", async () => {
+  it("builds the pinned headless agent --local --json invocation behind compact-stdout wrap (#107)", async () => {
     const adapter = createOpenclawAdapter({});
     const plan = await adapter.prepare(spec(), HUB);
+    const wrapAbs = path.resolve("/work/tree", OPENCLAW_COMPACT_WRAP_REL);
     expect(plan.argv).toEqual([
+      process.execPath,
+      wrapAbs,
       "openclaw",
       "agent",
       "--local",
@@ -56,6 +63,7 @@ describe("openclaw adapter — prepare argv (golden)", () => {
       "agent:parley:t7",
     ]);
     expect(plan.cwd).toBe("/work/tree");
+    expect(plan.files.map((f) => f.path)).toContain(OPENCLAW_COMPACT_WRAP_REL);
   });
 
   it("passes the model through with --model when set, omits it otherwise", async () => {
@@ -103,9 +111,11 @@ describe("openclaw adapter — prepare argv (golden)", () => {
     expect(360).toBeGreaterThan(300);
   });
 
-  it("honours PARLEY_OPENCLAW_BIN override", async () => {
+  it("honours PARLEY_OPENCLAW_BIN override inside the wrap argv", async () => {
     const adapter = createOpenclawAdapter({ PARLEY_OPENCLAW_BIN: "/opt/openclaw/openclaw" });
-    expect((await adapter.prepare(spec(), HUB)).argv[0]).toBe("/opt/openclaw/openclaw");
+    const plan = await adapter.prepare(spec(), HUB);
+    // argv: [node, wrap, bin, ...]
+    expect(plan.argv[2]).toBe("/opt/openclaw/openclaw");
   });
 });
 
@@ -116,7 +126,10 @@ describe("openclaw adapter — resume argv (golden)", () => {
       spec({ prompt: "the answer", sessionId: "3a944b05-b121-4269-8576-48b24306e10d" }),
       HUB,
     );
+    const wrapAbs = path.resolve("/work/tree", OPENCLAW_COMPACT_WRAP_REL);
     expect(plan.argv).toEqual([
+      process.execPath,
+      wrapAbs,
       "openclaw",
       "agent",
       "--local",
@@ -142,13 +155,14 @@ describe("openclaw adapter — resume argv (golden)", () => {
     expect(plan.argv).not.toContain("--session-id");
   });
 
-  it("re-materializes config + approvals on resume", async () => {
+  it("re-materializes config + approvals + compact wrap on resume", async () => {
     const adapter = createOpenclawAdapter({});
     const plan = await adapter.resume(spec({ sessionId: "sess-abc" }), HUB);
     expect(plan.files.map((f) => f.path)).toEqual(
       expect.arrayContaining([
         ".openclaw-state/openclaw.json",
         ".openclaw-state/exec-approvals.json",
+        OPENCLAW_COMPACT_WRAP_REL,
       ]),
     );
   });
@@ -365,6 +379,25 @@ describe("openclaw adapter — parseEvent (research §2/§8/§9 envelopes)", () 
     ]);
   });
 
+  it("line-by-line pretty-print drops envelope on old code; compact one-liner passes now (#107 critical)", () => {
+    // Simulate engine line-feed of pretty-printed --json (defect scenario).
+    const pretty = readFixture("success-envelope.json");
+    const lineEvents = pretty.split("\n").flatMap((line) => adapter.parseEvent(line));
+    // Intermediate pretty lines are not valid JSON alone → no session_id from fragments.
+    // (With compact wrap, the engine sees one compact line instead.)
+    const compact = JSON.stringify(JSON.parse(pretty));
+    const compactEvents = adapter.parseEvent(compact);
+    expect(adapter.sessionId(compactEvents)).toBe("3a944b05-b121-4269-8576-48b24306e10d");
+    expect(compactEvents.some((e) => e.kind === "message" && e.text === "Report ready")).toBe(
+      true,
+    );
+    // Full multi-line blob still parses when tests pass the whole document.
+    expect(adapter.sessionId(adapter.parseEvent(pretty))).toBe(
+      "3a944b05-b121-4269-8576-48b24306e10d",
+    );
+    void lineEvents;
+  });
+
   it("maps usage with cache fields and canonical token keys (golden fixture)", () => {
     const events = adapter.parseEvent(readFixture("success-usage.json"));
     const meta = events.find((e) => e.kind === "session_meta");
@@ -417,6 +450,17 @@ describe("openclaw adapter — parseEvent (research §2/§8/§9 envelopes)", () 
     expect(events[0]?.text).toMatch(/ProviderAuthError|FailoverError|missing-provider-auth/);
   });
 
+  it("line-fed stderr auth lines produce fatal error (#107 major; old engine skipped stderr)", () => {
+    // Engine now dual-feeds stderr line-by-line into parseEvent.
+    const lines = readFixture("auth-fail-stderr.txt").split("\n");
+    const events = lines.flatMap((line) => adapter.parseEvent(line));
+    const fatals = events.filter((e) => e.kind === "error" && e.fatal === true);
+    expect(fatals.length).toBeGreaterThanOrEqual(1);
+    expect(fatals.some((e) => /ProviderAuthError|FailoverError|missing-provider-auth/i.test(e.text ?? ""))).toBe(
+      true,
+    );
+  });
+
   it("tags approval-gate style MCP cancellations with VENDOR_DIAG_PREFIX", () => {
     const line = "mcp tool parley/submit_report cancelled: approval required";
     expect(adapter.parseEvent(line)).toEqual([
@@ -433,9 +477,16 @@ describe("openclaw adapter — parseEvent (research §2/§8/§9 envelopes)", () 
     expect(adapter.parseEvent("not json at all")).toEqual([]);
     expect(adapter.parseEvent("42")).toEqual([]);
     expect(adapter.parseEvent("")).toEqual([]);
-    // Intermediate pretty-print lines (engine feeds line-by-line) → opaque.
-    expect(adapter.parseEvent("  \"payloads\": [")).toEqual([]);
+    // Incomplete bare brace is non-JSON → diagnostic text path → [].
     expect(adapter.parseEvent("{")).toEqual([]);
+  });
+
+  it("pretty-print fragment lines emit PARLEY-DIAG when wrap is missing (#107 residual signal)", () => {
+    const events = adapter.parseEvent('  "payloads": [');
+    expect(events).toHaveLength(1);
+    expect(events[0]?.kind).toBe("error");
+    expect(events[0]?.text).toMatch(/^PARLEY-DIAG/);
+    expect(events[0]?.fatal).toBe(false);
   });
 });
 

@@ -327,8 +327,10 @@ There is **no** per-server `tool_timeout_sec` field in `RemoteMCPServer` (fields
 
 **Implication for Parley:** `ask_orchestrator` blocking longer than **300s** will
 time out unless the SDK default is raised elsewhere (not exposed via CLI config
-today). Compare Codex’s configurable `tool_timeout_sec`. **Risk — UNKNOWN** how to
-raise without patching the SDK.
+today). Compare Codex’s configurable `tool_timeout_sec`. **No raise path** without
+patching the SDK (#107). **Adapter decision:** do not claim full Q&A beyond
+300s; emit a PARLEY-DIAG when `answerTimeoutMs > 300_000`; cap effective Q&A
+waits at ≤300s for this vendor.
 
 ### OAuth MCP
 
@@ -468,10 +470,11 @@ SDK `LLM.reasoning_effort`:
 | `LLM_REASONING_EFFORT` env via `--override-with-envs` | **No** — env override struct only has `api_key`, `base_url`, `model` **VERIFIED** (agent_store.py) |
 | Persist in `agent_settings.json` on `llm.reasoning_effort` | **Yes** (set when creating/saving agent) **VERIFIED** (field exists on LLM) |
 
-**Adapter path for `task.effort`:** materialize/patch
-`$OPENHANDS_PERSISTENCE_DIR/agent_settings.json` with the desired
-`llm.reasoning_effort`, *or* accept SDK default `high` and pass effort as
-**UNKNOWN**/unsupported until a flag lands.
+**Adapter path for `task.effort` (#107 major):** do **not** write a partial
+`agent_settings.json` stub (`{llm:{reasoning_effort}}`) — merge with
+env-created agents is unproven and may wipe LLM settings. Accept SDK default
+effort (or put effort in the prompt) until a full agent materialization path
+is verified end-to-end.
 
 Web product env table still lists `LLM_REASONING_EFFORT` for the server `config.toml`
 world ([Environment Variables](https://docs.openhands.dev/openhands/usage/environment-variables))

@@ -41,6 +41,11 @@ streamed as structured events to the parent. Parley's durable raw JSONL log
 will therefore contain plain text (plus the stderr session line if captured),
 not a rich event timeline.
 
+**Adapter note (#107):** the engine dual-feeds stderr into `parseEvent`, so the
+`session_id: …` quiet-mode line is load-bearing for multi-turn resume. Quiet
+mode remains intentionally opaque for tool/usage progress (capability limit;
+ACP / post-exit DB scrape would be a redesign).
+
 **Closest viable Parley integration shapes** (in preference order for an
 adapter):
 

@@ -24,11 +24,13 @@ spawn-per-turn path **does exist**:
 **Critical differences from codex/grok adapters:**
 
 1. **No streaming JSONL event stream on stdout.** `--json` emits a **single JSON
-   document at the end** of the turn (pretty-printed). Mid-run tool/message events
-   are **not** available as codex-style `item.completed` / grok `text` JSONL lines.
-   Parley's `parseEvent(line)` model must buffer stdout (or treat the whole blob as
-   one "line"), or use a secondary surface (`sessions tail`, gateway logs) for
-   progress.
+   document at the end** of the turn (pretty-printed via `JSON.stringify(…, null, 2)`
+   in 2026.7.1 — no compact flag). Mid-run tool/message events are **not**
+   available as codex-style `item.completed` / grok `text` JSONL lines.
+   **Adapter decision (#107):** wrap the binary so stdout is re-emitted as one
+   compact JSON line before the engine's line reader (registry singleton cannot
+   safely buffer multi-line JSON across concurrent tasks). Auth failures on
+   stderr are dual-fed into `parseEvent`.
 2. **No per-invocation MCP / sandbox / cwd flags** on `openclaw agent`. MCP, sandbox,
    workspace root, and exec-approvals are **config-file / env isolation** concerns
    (closer to grok's materialized `.grok/config.toml` than codex's `-c` overrides).

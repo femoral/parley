@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { createOpenhandsAdapter } from "../src/adapters/openhands.js";
+import {
+  createOpenhandsAdapter,
+  OPENHANDS_MCP_TOOL_TIMEOUT_MS,
+} from "../src/adapters/openhands.js";
 import type { HubInfo, SandboxMode, TaskSpec } from "../src/adapters/types.js";
 
 /**
@@ -98,11 +101,13 @@ describe("openhands adapter — prepare argv (golden)", () => {
     expect(plan.env.LLM_MODEL).toBe("task-model");
   });
 
-  it("materializes agent_settings.json with reasoning_effort when effort is set", async () => {
+  it("does not materialize partial agent_settings.json for effort (#107 major; old code wrote unproven stub)", async () => {
+    // Partial {llm:{reasoning_effort}} may replace full agent specs — omit until verified.
     const withEffort = await createOpenhandsAdapter({}).prepare(spec({ effort: "low" }), HUB);
-    const settings = withEffort.files.find((f) => f.path.endsWith("agent_settings.json"));
-    expect(settings).toBeDefined();
-    expect(JSON.parse(settings!.contents)).toEqual({ llm: { reasoning_effort: "low" } });
+    expect(withEffort.files.some((f) => f.path.endsWith("agent_settings.json"))).toBe(false);
+    expect(withEffort.files.map((f) => f.path)).toEqual([
+      ".parley-openhands/persist/mcp.json",
+    ]);
 
     const without = await createOpenhandsAdapter({}).prepare(spec({ effort: null }), HUB);
     expect(without.files.some((f) => f.path.endsWith("agent_settings.json"))).toBe(false);
@@ -167,14 +172,13 @@ describe("openhands adapter — resume argv (golden)", () => {
     await expect(adapter.resume(spec({ sessionId: "" }), HUB)).rejects.toThrow(/no session id/);
   });
 
-  it("carries effort materialization through resume identically to prepare", async () => {
+  it("resume also omits partial agent_settings for effort (#107)", async () => {
     const adapter = createOpenhandsAdapter({});
     const s = spec({ effort: "medium", sessionId: "sess-1" });
     const prepared = await adapter.prepare(s, HUB);
     const resumed = await adapter.resume(s, HUB);
-    const prepSettings = prepared.files.find((f) => f.path.endsWith("agent_settings.json"));
-    const resSettings = resumed.files.find((f) => f.path.endsWith("agent_settings.json"));
-    expect(resSettings?.contents).toBe(prepSettings?.contents);
+    expect(prepared.files.some((f) => f.path.endsWith("agent_settings.json"))).toBe(false);
+    expect(resumed.files.some((f) => f.path.endsWith("agent_settings.json"))).toBe(false);
   });
 });
 
@@ -474,6 +478,41 @@ describe("openhands adapter — sessionId extraction", () => {
   it("returns undefined when no session id was seen", () => {
     const events = adapter.parseEvent('{"kind":"MessageEvent","llm_message":{"content":[]}}');
     expect(adapter.sessionId(events)).toBeUndefined();
+  });
+});
+
+describe("openhands adapter — #107 MCP 300s ceiling vs long answerTimeoutMs", () => {
+  it("exports the SDK 300s ceiling constant", () => {
+    expect(OPENHANDS_MCP_TOOL_TIMEOUT_MS).toBe(300_000);
+  });
+
+  it("emits PARLEY-DIAG when prepare saw answerTimeoutMs > 300s (old code silent)", async () => {
+    const adapter = createOpenhandsAdapter({});
+    await adapter.prepare(spec({ answerTimeoutMs: 1_800_000 }), HUB);
+    const events = adapter.parseEvent(
+      '{"kind":"MessageEvent","llm_message":{"content":[{"type":"text","text":"hi"}]}}',
+    );
+    const diag = events.find((e) => e.kind === "error" && e.text?.includes("MCP_TOOL_TIMEOUT"));
+    expect(diag).toBeDefined();
+    expect(diag!.fatal).toBe(false);
+    expect(diag!.text).toMatch(/^PARLEY-DIAG/);
+    expect(diag!.text).toMatch(/300/);
+    // Message still present after the diag.
+    expect(events.some((e) => e.kind === "message" && e.text === "hi")).toBe(true);
+    // One-shot: second line does not re-emit.
+    const again = adapter.parseEvent(
+      '{"kind":"MessageEvent","llm_message":{"content":[{"type":"text","text":"yo"}]}}',
+    );
+    expect(again.every((e) => !e.text?.includes("MCP_TOOL_TIMEOUT"))).toBe(true);
+  });
+
+  it("does not emit MCP timeout diag when answerTimeoutMs ≤ 300s", async () => {
+    const adapter = createOpenhandsAdapter({});
+    await adapter.prepare(spec({ answerTimeoutMs: 300_000 }), HUB);
+    const events = adapter.parseEvent(
+      '{"kind":"MessageEvent","llm_message":{"content":[{"type":"text","text":"hi"}]}}',
+    );
+    expect(events.every((e) => !e.text?.includes("MCP_TOOL_TIMEOUT"))).toBe(true);
   });
 });
 
