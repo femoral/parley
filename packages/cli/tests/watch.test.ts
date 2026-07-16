@@ -263,8 +263,10 @@ describe("parley watch attention inbox (ADR-0007 / #91)", () => {
   it("--follow streams one JSONL line per transition until all watched tasks are terminal", async () => {
     // Start follow before tasks finish so the firehose (start-from-now) still
     // sees completions. Delegate slow tasks, wait for running, then follow.
-    await delegate(taskDir(slow(800)), "a");
-    await delegate(taskDir(slow(800)), "b");
+    // Sleep must cover waitForState×2 + follow attach overhead or a task can
+    // complete before the firehose baseline and vanish from the stream.
+    await delegate(taskDir(slow(2500)), "a");
+    await delegate(taskDir(slow(2500)), "b");
     await waitForState(home, "t1", "running");
     await waitForState(home, "t2", "running");
 
