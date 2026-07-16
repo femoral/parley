@@ -34,8 +34,36 @@ export function formatClock(date: Date): string {
 /** Render a token count the design-manifest's compact way (`1.2k`, `340`). */
 export function formatTokenCount(n: number): string {
   if (!Number.isFinite(n)) return "—";
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
   if (n >= 1000) return `${(n / 1000).toFixed(1)}k`;
   return String(Math.round(n));
+}
+
+/**
+ * Success rate as a one-decimal percent (`87.5%`), or em-dash when null
+ * (no completed+failed decisions yet).
+ */
+export function formatSuccessRate(rate: number | null | undefined): string {
+  if (rate === null || rate === undefined || !Number.isFinite(rate)) return "—";
+  return `${Math.round(rate * 1000) / 10}%`;
+}
+
+/**
+ * Eval average with sample count (`4.2 · n=12`), or em-dash when unscored.
+ */
+export function formatEvalAvg(avg: number | null | undefined, count: number): string {
+  if (count === 0 || avg === null || avg === undefined || !Number.isFinite(avg)) return "—";
+  const rounded = Number.isInteger(avg) ? String(avg) : (Math.round(avg * 10) / 10).toString();
+  return `${rounded} · n=${count}`;
+}
+
+/**
+ * Duration in ms using the cockpit's compact clock phrasing (reuses
+ * {@link formatUptime}). Null → em-dash.
+ */
+export function formatDurationMs(ms: number | null | undefined): string {
+  if (ms === null || ms === undefined || !Number.isFinite(ms)) return "—";
+  return formatUptime(ms);
 }
 
 /**

@@ -8,6 +8,7 @@ import {
   Inspector,
   RosterPanel,
   SettingsBar,
+  SoundingsPanel,
   type RosterSearchHandle,
 } from "../hud/index.js";
 import { Mark } from "../primitives/index.js";
@@ -24,11 +25,24 @@ const DevKitBand = import.meta.env.DEV
 /**
  * Layer 4 — the cockpit shell. Pure presentation: it reads one hook
  * ({@link useCockpit}) and lays the regions out; it never imports the core SDK.
- * This is #65's demoable slice — the chrome, the layout, and a live health panel
- * — with the living scene reserved for its own ticket.
+ * Centre column switches Cove (living scene) ↔ Soundings (metrics, #119).
  */
 export function Cockpit() {
-  const { health, snapshot, roster, clock, day, inspector, settings, chartStale } = useCockpit();
+  const {
+    health,
+    snapshot,
+    roster,
+    clock,
+    day,
+    inspector,
+    settings,
+    chartStale,
+    mode,
+    setMode,
+    toggleSoundings,
+    soundings,
+    setGroupBy,
+  } = useCockpit();
   const rosterSearchRef = useRef<RosterSearchHandle | null>(null);
   useCockpitKeys({
     rosterRef: rosterSearchRef,
@@ -36,6 +50,7 @@ export function Cockpit() {
     selectedTaskId: roster.selectedTaskId,
     selectTask: roster.selectTask,
     clearTask: roster.clearTask,
+    toggleSoundings,
   });
 
   return (
@@ -62,29 +77,53 @@ export function Cockpit() {
             />
           </section>
 
-          <section className="pc-region--center" aria-label="The cove">
+          <section className="pc-region--center" aria-label={mode === "soundings" ? "Soundings" : "The cove"}>
             <div className="pc-center__head">
               <Cartouche ornaments={settings.ornaments} />
+              <nav className="pc-view-nav" aria-label="Cockpit views">
+                <button
+                  type="button"
+                  className={`pc-view-nav__tab${mode === "cove" ? " pc-view-nav__tab--active" : ""}`}
+                  aria-current={mode === "cove" ? "page" : undefined}
+                  onClick={() => setMode("cove")}
+                >
+                  Cove
+                </button>
+                <button
+                  type="button"
+                  className={`pc-view-nav__tab${mode === "soundings" ? " pc-view-nav__tab--active" : ""}`}
+                  aria-current={mode === "soundings" ? "page" : undefined}
+                  onClick={() => setMode("soundings")}
+                >
+                  Soundings
+                </button>
+              </nav>
               <DayChip day={day} clock={clock} />
             </div>
-            {/* Sea is the room's backdrop (#75) — no Plate card chrome. */}
-            <div className="pc-scene">
-              {chartStale && (
-                <div className="pc-stale-band" role="status" aria-live="polite">
-                  <span className="pc-stale-band__glyph" aria-hidden="true">
-                    <Mark mark={STATE_META.stalled.mark} size={14} />
-                  </span>
-                  <span className="pc-stale-band__copy">Chart may be stale — reconnecting…</span>
-                </div>
-              )}
-              <Scene
-                sessions={snapshot.scene.sessions}
-                activeSessionId={roster.selectedSessionId}
-                onSelectTask={roster.selectTask}
-                onSelectSession={roster.selectSession}
-                connecting={!snapshot.ready}
-              />
-            </div>
+            {mode === "soundings" ? (
+              <div className="pc-soundings-stage">
+                <SoundingsPanel soundings={soundings} onGroupBy={setGroupBy} />
+              </div>
+            ) : (
+              /* Sea is the room's backdrop (#75) — no Plate card chrome. */
+              <div className="pc-scene">
+                {chartStale && (
+                  <div className="pc-stale-band" role="status" aria-live="polite">
+                    <span className="pc-stale-band__glyph" aria-hidden="true">
+                      <Mark mark={STATE_META.stalled.mark} size={14} />
+                    </span>
+                    <span className="pc-stale-band__copy">Chart may be stale — reconnecting…</span>
+                  </div>
+                )}
+                <Scene
+                  sessions={snapshot.scene.sessions}
+                  activeSessionId={roster.selectedSessionId}
+                  onSelectTask={roster.selectTask}
+                  onSelectSession={roster.selectSession}
+                  connecting={!snapshot.ready}
+                />
+              </div>
+            )}
           </section>
 
           <aside className="pc-region--right" aria-label="Status stack">

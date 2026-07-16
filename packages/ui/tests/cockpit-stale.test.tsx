@@ -69,6 +69,18 @@ function baseView(overrides: Partial<CockpitView> = {}): CockpitView {
       toggleFollowLogs: () => {},
     },
     chartStale: false,
+    mode: "cove",
+    setMode: () => {},
+    toggleSoundings: () => {},
+    soundings: {
+      status: "loading",
+      error: null,
+      groups: [],
+      groupBy: "vendor",
+      sessionLabel: "All hands",
+      generatedAt: null,
+    },
+    setGroupBy: () => {},
     ...overrides,
   };
 }

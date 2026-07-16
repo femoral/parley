@@ -140,6 +140,17 @@
   position: relative;
   overflow: hidden;
 }
+/* Soundings board fills the centre column under the head (#119). */
+.pc-soundings-stage {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.pc-soundings-stage > * {
+  flex: 1;
+  min-height: 0;
+}
 
 /* ── Stale-chart honesty ─────────────────────────────────────────────────
    When the snapshot stream is lost or health is unreachable (debounced in

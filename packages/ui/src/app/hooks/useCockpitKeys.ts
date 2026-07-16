@@ -3,6 +3,7 @@
  * Power-user shortcuts (recognition over recall via ChartKey's Keys section):
  *   `/`  — open and focus the roster session search
  *   `n`  — cycle to the next `awaiting_answer` task (roster attention order)
+ *   `m`  — toggle Soundings metrics board (#119)
  *   `Esc` — clear the selected task (when no popover/search is open)
  *
  * All keys are ignored while typing in an input/textarea/contenteditable or
@@ -23,8 +24,9 @@ export interface CockpitKeysOptions {
   selectedTaskId: string | null;
   selectTask: (id: string) => void;
   clearTask: () => void;
+  /** Toggle Cove ↔ Soundings (`m` accelerator, #119). */
+  toggleSoundings?: () => void;
 }
-
 /** True when the event target is a text-entry control (or contenteditable). */
 export function isTypingTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
@@ -94,6 +96,7 @@ export function useCockpitKeys(options: CockpitKeysOptions): void {
         selectedTaskId,
         selectTask,
         clearTask,
+        toggleSoundings,
       } = optionsRef.current;
 
       if (event.key === "/") {
@@ -107,6 +110,14 @@ export function useCockpitKeys(options: CockpitKeysOptions): void {
         if (next !== null) {
           event.preventDefault();
           selectTask(next);
+        }
+        return;
+      }
+
+      if (event.key === "m" || event.key === "M") {
+        if (toggleSoundings) {
+          event.preventDefault();
+          toggleSoundings();
         }
         return;
       }

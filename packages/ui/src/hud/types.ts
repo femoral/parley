@@ -174,3 +174,66 @@ export interface HealthView {
   /** Distinct orchestrator sessions with live tasks. */
   durableSessions: number;
 }
+
+/** One size/difficulty eval bucket under a Soundings group (#119). */
+export interface SoundingsEvalBucket {
+  key: string;
+  /** Pre-formatted average with sample count, e.g. `4.2 · n=3`. */
+  avg: string;
+  count: number;
+}
+
+/** One metrics group as the Soundings plate renders it (#119). */
+export interface SoundingsGroupView {
+  /** Wire group key (null when the dimension was unset for that bucket). */
+  key: string | null;
+  /** Display label (`(none)` when key is null). */
+  label: string;
+  tasks: {
+    total: number;
+    done: number;
+    failed: number;
+    running: number;
+  };
+  /** Pre-formatted success rate (`87.5%` or `—`). */
+  successRate: string;
+  /** Raw 0–1 rate for the micro-bar; null when no decided tasks. */
+  successRateValue: number | null;
+  /** Pre-formatted eval average (`4.2 · n=12` or `—`). */
+  evals: string;
+  tokens: {
+    input: string;
+    output: string;
+    cached: string;
+  };
+  duration: {
+    avg: string;
+    p95: string;
+  };
+  /** Size breakdown — empty when no size-tagged evals. */
+  evalsBySize: SoundingsEvalBucket[];
+  /** Difficulty breakdown — empty when no difficulty-tagged evals. */
+  evalsByDifficulty: SoundingsEvalBucket[];
+}
+
+/**
+ * Plain Soundings dashboard props (#119). Status is fully projected so the
+ * plate never interprets wire shapes or loading policy.
+ */
+export interface SoundingsView {
+  /**
+   * `loading` — taking soundings (first fetch or idle before enable).
+   * `ready` — groups present.
+   * `empty` — successful fetch with no groups.
+   * `error` — last fetch failed (may still show prior groups).
+   */
+  status: "loading" | "ready" | "empty" | "error";
+  error: string | null;
+  groups: SoundingsGroupView[];
+  /** Active group-by dimension string (vendor|model|profile|size|difficulty). */
+  groupBy: string;
+  /** Session scope label (`All hands` or short session id). */
+  sessionLabel: string;
+  /** ISO timestamp from the response, or null before first success. */
+  generatedAt: string | null;
+}

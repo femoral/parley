@@ -72,9 +72,11 @@ describe("awaitingTaskIds / nextAwaitingId pure helpers", () => {
 function KeysHarness({
   groups = GROUPS,
   initialTaskId = null as string | null,
+  onToggleSoundings,
 }: {
   groups?: RosterGroup[];
   initialTaskId?: string | null;
+  onToggleSoundings?: () => void;
 }) {
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(initialTaskId);
   const rosterRef = useRef<RosterSearchHandle | null>(null);
@@ -84,6 +86,7 @@ function KeysHarness({
     selectedTaskId,
     selectTask: setSelectedTaskId,
     clearTask: () => setSelectedTaskId(null),
+    toggleSoundings: onToggleSoundings,
   });
   return (
     <div>
@@ -133,6 +136,21 @@ describe("useCockpitKeys window keydown accelerators", () => {
       fireEvent.keyDown(window, { key: "Escape" });
     });
     expect(screen.getByTestId("selected").textContent).toBe("none");
+  });
+
+  it("m toggles Soundings when toggleSoundings is provided", () => {
+    let toggles = 0;
+    render(<KeysHarness onToggleSoundings={() => { toggles += 1; }} />);
+
+    act(() => {
+      fireEvent.keyDown(window, { key: "m" });
+    });
+    expect(toggles).toBe(1);
+
+    act(() => {
+      fireEvent.keyDown(window, { key: "M" });
+    });
+    expect(toggles).toBe(2);
   });
 
   it("/ opens the session search and focuses the Find input", () => {

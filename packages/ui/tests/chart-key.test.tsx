@@ -75,6 +75,8 @@ describe("ChartKey production legend (recognition over recall)", () => {
     expect(screen.getByText("find session")).toBeTruthy();
     expect(screen.getByText("n")).toBeTruthy();
     expect(screen.getByText("next flag that needs you")).toBeTruthy();
+    expect(screen.getByText("m")).toBeTruthy();
+    expect(screen.getByText("toggle Soundings")).toBeTruthy();
     expect(screen.getByText("Esc")).toBeTruthy();
     expect(screen.getByText("clear task selection")).toBeTruthy();
   });

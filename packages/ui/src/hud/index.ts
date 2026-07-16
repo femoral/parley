@@ -24,6 +24,8 @@ export { RosterPanel } from "./RosterPanel.js";
 export type { RosterPanelProps, RosterSearchHandle } from "./RosterPanel.js";
 export { SettingsBar } from "./SettingsBar.js";
 export type { SettingsBarProps } from "./SettingsBar.js";
+export { SoundingsPanel, SOUNDINGS_GROUP_BY } from "./SoundingsPanel.js";
+export type { SoundingsPanelProps } from "./SoundingsPanel.js";
 export type {
   BriefView,
   HealthView,
@@ -38,4 +40,7 @@ export type {
   RosterSessionOption,
   RosterSessionSearchHit,
   RosterTask,
+  SoundingsEvalBucket,
+  SoundingsGroupView,
+  SoundingsView,
 } from "./types.js";

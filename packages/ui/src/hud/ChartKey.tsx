@@ -116,5 +116,6 @@ export const ChartKey = memo(function ChartKey() {
 const KEYBOARD_SHORTCUTS: readonly { key: string; hint: string }[] = [
   { key: "/", hint: "find session" },
   { key: "n", hint: "next flag that needs you" },
+  { key: "m", hint: "toggle Soundings" },
   { key: "Esc", hint: "clear task selection" },
 ];

@@ -1,11 +1,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ParleyClient } from "@useparley/core";
-import type { HealthView, InspectorTask, RosterSessionSearchHit } from "../../hud/types.js";
+import { isMetricsGroupBy, ParleyClient, type MetricsGroupBy } from "@useparley/core";
+import type {
+  HealthView,
+  InspectorTask,
+  RosterSessionSearchHit,
+  SoundingsView,
+} from "../../hud/types.js";
 import { formatClock, formatUptime } from "./format.js";
 import { useHealth } from "./useHealth.js";
 import { projectInspector } from "./inspector.js";
+import { metricsRefreshKey, projectSoundings } from "./metrics.js";
 import { advanceFailedObservations, projectRoster, shortId } from "./roster.js";
 import { useLogTail } from "./useLogTail.js";
+import { useMetrics } from "./useMetrics.js";
 import { useSettings, type SettingsView } from "./useSettings.js";
 import { useSnapshot, type SnapshotView } from "./useSnapshot.js";
 import { useTaskDetail } from "./useTaskDetail.js";
@@ -81,6 +88,9 @@ export interface RosterSelection {
   searchSessions: (query: string) => Promise<RosterSessionSearchHit[]>;
 }
 
+/** Which primary board the centre column shows (#119). */
+export type CockpitMode = "cove" | "soundings";
+
 export interface CockpitView {
   health: HealthView;
   /**
@@ -105,8 +115,16 @@ export interface CockpitView {
    * scene animation pause — not the immediate HealthPanel OFFLINE chip.
    */
   chartStale: boolean;
+  /** Centre-column mode: living cove scene vs Soundings metrics (#119). */
+  mode: CockpitMode;
+  setMode: (mode: CockpitMode) => void;
+  /** Toggle Cove ↔ Soundings (`m` accelerator). */
+  toggleSoundings: () => void;
+  /** Projected Soundings board; only fetched while mode is `soundings`. */
+  soundings: SoundingsView;
+  /** Accepts wire group_by strings; invalid values are ignored. */
+  setGroupBy: (groupBy: string) => void;
 }
-
 /**
  * Layer 4 (app) — the single hook the cockpit shell reads. Owns the same-origin
  * `ParleyClient` and the one-second tick, composes `useHealth` + `useSnapshot`,
@@ -129,6 +147,15 @@ export function useCockpit(): CockpitView {
   // Single source of truth for session filter + future scene camera cue (#76).
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  // Centre mode + metrics group-by (#119). Ephemeral UI state (like inspector tabs).
+  const [mode, setMode] = useState<CockpitMode>("cove");
+  const [groupBy, setGroupByState] = useState<MetricsGroupBy>("vendor");
+  const setGroupBy = useCallback((next: string) => {
+    if (isMetricsGroupBy(next)) setGroupByState(next);
+  }, []);
+  const toggleSoundings = useCallback(() => {
+    setMode((prev) => (prev === "soundings" ? "cove" : "soundings"));
+  }, []);
   // Failed-freshness acknowledgement: selecting a failed task once decays it
   // to the archive treatment (dim, quiet rank). Cleared when the task leaves
   // failed so a re-failure is loud again.
@@ -284,6 +311,33 @@ export function useCockpit(): CockpitView {
     [detail, logs, selectedTaskId],
   );
 
+  // Soundings (#119): session scope follows the roster chip; refreshKey advances
+  // on SSE task transitions so metrics revalidate without polling.
+  const metricsSession = selectedSessionId ?? "all";
+  const refreshKey = useMemo(() => metricsRefreshKey(live.tasks), [live.tasks]);
+  const metrics = useMetrics(client, {
+    session: metricsSession,
+    groupBy,
+    refreshKey,
+    enabled: mode === "soundings",
+  });
+  const sessionLabel =
+    selectedSessionId === null
+      ? "All hands"
+      : (snapshot.sessions.find((s) => s.id === selectedSessionId)?.label ??
+        shortId(selectedSessionId));
+  const soundings: SoundingsView = useMemo(
+    () =>
+      projectSoundings(
+        metrics.data,
+        metrics.status,
+        metrics.error,
+        groupBy,
+        sessionLabel,
+      ),
+    [metrics.data, metrics.status, metrics.error, groupBy, sessionLabel],
+  );
+
   return {
     health: healthView,
     snapshot,
@@ -293,5 +347,10 @@ export function useCockpit(): CockpitView {
     inspector,
     settings,
     chartStale,
+    mode,
+    setMode,
+    toggleSoundings,
+    soundings,
+    setGroupBy,
   };
 }
