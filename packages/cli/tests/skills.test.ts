@@ -3,6 +3,7 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { cleanupHome, makeHome, runCli } from "./helpers.js";
 
 let home: string;
@@ -31,6 +32,7 @@ function makeRepo(): string {
 }
 
 const SKILL = "parley-delegate";
+const FIXTURE_BUNDLE = fileURLToPath(new URL("./fixtures/skills-bundle", import.meta.url));
 
 beforeEach(() => {
   home = makeHome();
@@ -109,8 +111,11 @@ describe("parley skills install", () => {
   it("re-install overwrites cleanly and reports what changed (--json)", async () => {
     const target = mkTemp("parley-reinstall-");
     const first = await runCli(["skills", "install", "--layout", target, "--json"], home);
-    const firstOut = JSON.parse(first.stdout) as { changes: { file: string; status: string }[] };
-    expect(firstOut.changes.every((c) => c.status === "created")).toBe(true);
+    const firstOut = JSON.parse(first.stdout) as {
+      installs: { changes: { file: string; status: string }[] }[];
+    };
+    expect(firstOut.installs).toHaveLength(1);
+    expect(firstOut.installs[0]!.changes.every((c) => c.status === "created")).toBe(true);
 
     // Local edit is clobbered by the upgrade path; unchanged files report so.
     const skillPath = path.join(target, SKILL, "SKILL.md");
@@ -119,9 +124,11 @@ describe("parley skills install", () => {
     const second = await runCli(["skills", "install", "--layout", target, "--json"], home);
     expect(second.code).toBe(0);
     const secondOut = JSON.parse(second.stdout) as {
-      changes: { file: string; status: string }[];
+      installs: { changes: { file: string; status: string }[] }[];
     };
-    const byFile = Object.fromEntries(secondOut.changes.map((c) => [c.file, c.status]));
+    const byFile = Object.fromEntries(
+      secondOut.installs[0]!.changes.map((c) => [c.file, c.status]),
+    );
     expect(byFile["SKILL.md"]).toBe("updated");
     expect(byFile["bug-report.md"]).toBe("unchanged");
     expect(fs.readFileSync(skillPath, "utf8")).not.toBe("stale\n");
@@ -146,12 +153,119 @@ describe("parley skills install", () => {
     expect(res.code).toBe(2);
     expect(res.stderr).toMatch(/git repository/);
   });
+
+  it("--skill selects a single skill; default installs all bundled", async () => {
+    const target = mkTemp("parley-skill-flag-");
+    const only = await runCli(
+      ["skills", "install", "--layout", target, "--skill", SKILL, "--json"],
+      home,
+    );
+    expect(only.code).toBe(0);
+    const onlyOut = JSON.parse(only.stdout) as { installs: { skill: string }[] };
+    expect(onlyOut.installs.map((i) => i.skill)).toEqual([SKILL]);
+
+    const unknown = await runCli(
+      ["skills", "install", "--layout", target, "--skill", "no-such-skill"],
+      home,
+    );
+    expect(unknown.code).toBe(2);
+    expect(unknown.stderr).toMatch(/unknown skill/);
+  });
+
+  it("multi-skill install copies every selected skill into the target", async () => {
+    const target = mkTemp("parley-multi-");
+    const res = await runCli(["skills", "install", "--layout", target, "--json"], home, {
+      extraEnv: { PARLEY_SKILLS_SOURCE: FIXTURE_BUNDLE },
+    });
+    expect(res.code).toBe(0);
+    const out = JSON.parse(res.stdout) as {
+      installs: { skill: string; dest: string; changes: { status: string }[] }[];
+    };
+    expect(out.installs.map((i) => i.skill).sort()).toEqual(["fixture-alpha", "fixture-beta"]);
+    expect(fs.existsSync(path.join(target, "fixture-alpha", "SKILL.md"))).toBe(true);
+    expect(fs.existsSync(path.join(target, "fixture-alpha", "note.md"))).toBe(true);
+    expect(fs.existsSync(path.join(target, "fixture-beta", "SKILL.md"))).toBe(true);
+
+    // --skill can narrow to one of several bundled skills.
+    const target2 = mkTemp("parley-multi-one-");
+    const one = await runCli(
+      ["skills", "install", "--layout", target2, "--skill", "fixture-beta", "--json"],
+      home,
+      { extraEnv: { PARLEY_SKILLS_SOURCE: FIXTURE_BUNDLE } },
+    );
+    expect(one.code).toBe(0);
+    const oneOut = JSON.parse(one.stdout) as { installs: { skill: string }[] };
+    expect(oneOut.installs.map((i) => i.skill)).toEqual(["fixture-beta"]);
+    expect(fs.existsSync(path.join(target2, "fixture-beta", "SKILL.md"))).toBe(true);
+    expect(fs.existsSync(path.join(target2, "fixture-alpha"))).toBe(false);
+
+    // Link rewrite is skill-name-aware for multi-skill bundles.
+    const alphaMd = fs.readFileSync(path.join(target, "fixture-alpha", "SKILL.md"), "utf8");
+    expect(alphaMd).toContain(
+      "https://github.com/femoral/parley/blob/main/docs/out.md",
+    );
+    expect(alphaMd).toContain("(note.md)");
+  });
+
+  it("--yes is accepted as a non-interactive flag alongside layout/scope", async () => {
+    const fakeHome = mkTemp("parley-yes-");
+    const res = await runCli(
+      ["skills", "install", "--scope", "global", "--layout", "claude", "--yes", "--json"],
+      home,
+      { extraEnv: { HOME: fakeHome } },
+    );
+    expect(res.code).toBe(0);
+    expect(fs.existsSync(path.join(fakeHome, ".claude", "skills", SKILL, "SKILL.md"))).toBe(true);
+  });
+
+  it("human output is a compact target → skill tree summary", async () => {
+    const target = mkTemp("parley-tree-");
+    const res = await runCli(["skills", "install", "--layout", target], home, {
+      extraEnv: { PARLEY_SKILLS_SOURCE: FIXTURE_BUNDLE },
+    });
+    expect(res.code).toBe(0);
+    expect(res.stdout).toMatch(/custom path/);
+    expect(res.stdout).toMatch(/fixture-alpha/);
+    expect(res.stdout).toMatch(/fixture-beta/);
+    expect(res.stdout).toMatch(/created/);
+  });
 });
 
 describe("parley skills list", () => {
-  it("lists the bundled skill", async () => {
+  it("lists the bundled skill with description", async () => {
     const res = await runCli(["skills", "list", "--json"], home);
     expect(res.code).toBe(0);
-    expect(JSON.parse(res.stdout)).toEqual({ skills: [SKILL] });
+    const out = JSON.parse(res.stdout) as {
+      skills: { name: string; description: string }[];
+    };
+    expect(out.skills).toHaveLength(1);
+    expect(out.skills[0]!.name).toBe(SKILL);
+    expect(out.skills[0]!.description).toMatch(/Delegate tasks/);
+  });
+
+  it("human list prints name and one-line description", async () => {
+    const res = await runCli(["skills", "list"], home);
+    expect(res.code).toBe(0);
+    expect(res.stdout).toMatch(/parley-delegate/);
+    expect(res.stdout).toMatch(/Delegate tasks/);
+  });
+
+  it("list --json includes descriptions for multi-skill fixtures", async () => {
+    const res = await runCli(["skills", "list", "--json"], home, {
+      extraEnv: { PARLEY_SKILLS_SOURCE: FIXTURE_BUNDLE },
+    });
+    expect(res.code).toBe(0);
+    expect(JSON.parse(res.stdout)).toEqual({
+      skills: [
+        {
+          name: "fixture-alpha",
+          description: "Tiny fixture skill alpha for multi-skill install tests.",
+        },
+        {
+          name: "fixture-beta",
+          description: "Tiny fixture skill beta for multi-skill install tests.",
+        },
+      ],
+    });
   });
 });

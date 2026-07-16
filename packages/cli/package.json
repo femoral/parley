@@ -36,6 +36,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@clack/prompts": "^1.7.0",
     "@useparley/core": "workspace:*",
     "@useparley/daemon": "workspace:*"
   },

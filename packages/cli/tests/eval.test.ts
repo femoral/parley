@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import fs from "node:fs";
-import { cleanupHome, makeHome, makeTaskDir, runCli, waitForState, type FakeVendorAction } from "./helpers.js";
+import { cleanupHome, makeHome, makeTaskDir, runCli, type FakeVendorAction } from "./helpers.js";
 
 let home: string;
 const taskDirs: string[] = [];

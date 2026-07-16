@@ -9,7 +9,6 @@ import {
   makeHome,
   makeTaskDir,
   runCli,
-  waitFor,
   waitForState,
   type FakeVendorAction,
 } from "./helpers.js";

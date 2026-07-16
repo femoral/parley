@@ -9,7 +9,7 @@ import { runDelegate } from "./commands/delegate.js";
 import { runEval } from "./commands/eval.js";
 import { runLogs } from "./commands/logs.js";
 import { runModels } from "./commands/models.js";
-import { runSkills } from "./commands/skills.js";
+import { runSkills } from "./commands/skills/index.js";
 import { runStatus } from "./commands/tasks.js";
 import { runUi } from "./commands/ui.js";
 import { runWatch } from "./commands/watch.js";
@@ -71,11 +71,15 @@ Usage:
   parley daemon status          Report daemon port/pid
   parley daemon <cmd> [--json]
   parley ui [--no-open]        Print the cockpit URL and open it in a browser
-  parley skills install         Install the orchestrator skill into a skill dir
-    --scope global|project    Where to install (skips the prompt)
+  parley skills install         Install bundled orchestrator skill(s)
     --layout claude|agents|<path>
                               Vendor convention, or a custom directory path
-  parley skills list            List the skills parley bundles
+                              (required non-interactive / CI)
+    --scope global|project    Where to install for a known layout
+                              (required non-interactive with --layout)
+    --skill <name>            Skill to install (repeatable; default: all)
+    --yes                     Accept defaults; skip confirm prompts
+  parley skills list            List bundled skills (name + description)
 
 Global flags:
   --json    Emit machine-readable JSON
