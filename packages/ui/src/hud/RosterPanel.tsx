@@ -188,11 +188,10 @@ function SessionSearch({
             value={query}
             autoComplete="off"
             spellCheck={false}
-            aria-autocomplete="list"
             aria-controls={listId}
             onChange={(e) => setQuery(e.target.value)}
           />
-          <div id={listId} className="pc-roster__search-results" role="listbox" aria-label="Matching sessions">
+          <div id={listId} className="pc-roster__search-results" role="list" aria-label="Matching sessions">
             {status === "loading" && (
               <p className="pc-roster__search-status">Sounding the deep…</p>
             )}
@@ -206,19 +205,18 @@ function SessionSearch({
               <p className="pc-roster__search-status">No sessions match.</p>
             )}
             {hits.map((hit) => (
-              <button
-                key={hit.id}
-                type="button"
-                role="option"
-                className="pc-roster__search-hit"
-                aria-selected={false}
-                onClick={() => pick(hit.id)}
-              >
-                <span className="pc-roster__search-hit-id" title={hit.id}>
-                  {hit.label}
-                </span>
-                <span className="pc-roster__search-hit-meta">{hit.taskCount}</span>
-              </button>
+              <div key={hit.id} role="listitem">
+                <button
+                  type="button"
+                  className="pc-roster__search-hit"
+                  onClick={() => pick(hit.id)}
+                >
+                  <span className="pc-roster__search-hit-id" title={hit.id}>
+                    {hit.label}
+                  </span>
+                  <span className="pc-roster__search-hit-meta">{hit.taskCount}</span>
+                </button>
+              </div>
             ))}
           </div>
         </div>

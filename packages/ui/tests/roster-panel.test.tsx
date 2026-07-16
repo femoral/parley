@@ -161,6 +161,29 @@ describe("RosterPanel session selector (#66)", () => {
     fireEvent.click(screen.getByText("sess-old"));
     expect(onSelectSession).toHaveBeenCalledWith("sess-old-history");
   });
+
+  it("exposes search hits as a plain list of buttons, not a listbox", async () => {
+    const searchSessions = vi.fn(async () => [
+      { id: "sess-old-history", label: "sess-old", taskCount: 3, lastActivityAt: "2020-01-01T00:00:00.000Z" },
+    ]);
+    render(<RosterPanel {...baseProps()} searchSessions={searchSessions} />);
+    fireEvent.click(screen.getByRole("button", { name: "Search sessions" }));
+    const input = screen.getByLabelText("Session id");
+    expect(input.getAttribute("aria-autocomplete")).toBeNull();
+    fireEvent.change(input, { target: { value: "old" } });
+    expect(await screen.findByText("sess-old")).toBeTruthy();
+
+    const results = screen.getByRole("list", { name: "Matching sessions" });
+    expect(results).toBeTruthy();
+    expect(screen.queryByRole("listbox")).toBeNull();
+    expect(screen.queryByRole("option")).toBeNull();
+
+    const hit = screen.getByRole("button", { name: /sess-old/ });
+    expect(hit.getAttribute("aria-selected")).toBeNull();
+    expect(hit.closest("[role='listitem']")).toBeTruthy();
+    // Results region remains a meaningful aria-controls target.
+    expect(input.getAttribute("aria-controls")).toBe(results.getAttribute("id"));
+  });
 });
 
 describe("RosterPanel state treatment (#66)", () => {

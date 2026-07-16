@@ -175,3 +175,87 @@ describe("Inspector's four tabs render per the manifest's inspector treatment (#
     expect(screen.getByText("No parley yet — this soul hasn't raised a flag.")).toBeTruthy();
   });
 });
+
+describe("Inspector tabs follow the WAI-ARIA APG Tabs pattern (manual activation)", () => {
+  it("wires tab ids to the panel via aria-controls / aria-labelledby", () => {
+    render(<Inspector task={task()} />);
+    const brief = screen.getByRole("tab", { name: "BRIEF" });
+    const panel = screen.getByRole("tabpanel");
+    const tabId = brief.getAttribute("id");
+    const panelId = panel.getAttribute("id");
+    expect(tabId).toBeTruthy();
+    expect(panelId).toBeTruthy();
+    expect(brief.getAttribute("aria-controls")).toBe(panelId);
+    expect(panel.getAttribute("aria-labelledby")).toBe(tabId);
+
+    openTab("LOGS");
+    const logs = screen.getByRole("tab", { name: "LOGS" });
+    expect(screen.getByRole("tabpanel").getAttribute("aria-labelledby")).toBe(logs.getAttribute("id"));
+    expect(logs.getAttribute("aria-controls")).toBe(panelId);
+  });
+
+  it("uses roving tabindex: only the selected tab is in the tab order", () => {
+    render(<Inspector task={task()} />);
+    expect(screen.getByRole("tab", { name: "BRIEF" }).tabIndex).toBe(0);
+    expect(screen.getByRole("tab", { name: "LOGS" }).tabIndex).toBe(-1);
+    expect(screen.getByRole("tab", { name: "REPORT" }).tabIndex).toBe(-1);
+    expect(screen.getByRole("tab", { name: "Q&A" }).tabIndex).toBe(-1);
+
+    openTab("REPORT");
+    expect(screen.getByRole("tab", { name: "BRIEF" }).tabIndex).toBe(-1);
+    expect(screen.getByRole("tab", { name: "REPORT" }).tabIndex).toBe(0);
+  });
+
+  it("moves focus with ArrowLeft/ArrowRight (wrapping) without activating", () => {
+    render(<Inspector task={task()} />);
+    const brief = screen.getByRole("tab", { name: "BRIEF" });
+    const logs = screen.getByRole("tab", { name: "LOGS" });
+    const qa = screen.getByRole("tab", { name: "Q&A" });
+
+    brief.focus();
+    fireEvent.keyDown(brief, { key: "ArrowRight" });
+    expect(document.activeElement).toBe(logs);
+    expect(brief.getAttribute("aria-selected")).toBe("true");
+    expect(logs.getAttribute("aria-selected")).toBe("false");
+
+    fireEvent.keyDown(logs, { key: "ArrowLeft" });
+    expect(document.activeElement).toBe(brief);
+
+    fireEvent.keyDown(brief, { key: "ArrowLeft" });
+    expect(document.activeElement).toBe(qa);
+    expect(brief.getAttribute("aria-selected")).toBe("true");
+  });
+
+  it("jumps focus to first/last tab with Home/End", () => {
+    render(<Inspector task={task()} />);
+    const brief = screen.getByRole("tab", { name: "BRIEF" });
+    const logs = screen.getByRole("tab", { name: "LOGS" });
+    const qa = screen.getByRole("tab", { name: "Q&A" });
+
+    brief.focus();
+    fireEvent.keyDown(brief, { key: "ArrowRight" });
+    expect(document.activeElement).toBe(logs);
+
+    fireEvent.keyDown(logs, { key: "End" });
+    expect(document.activeElement).toBe(qa);
+
+    fireEvent.keyDown(qa, { key: "Home" });
+    expect(document.activeElement).toBe(brief);
+  });
+
+  it("activates the focused tab on click without leaving selection on the prior tab", () => {
+    render(<Inspector task={task()} />);
+    const brief = screen.getByRole("tab", { name: "BRIEF" });
+    const logs = screen.getByRole("tab", { name: "LOGS" });
+
+    brief.focus();
+    fireEvent.keyDown(brief, { key: "ArrowRight" });
+    expect(document.activeElement).toBe(logs);
+    // Manual activation: arrows only move focus; click (Enter/Space via native
+    // button behavior) selects.
+    fireEvent.click(logs);
+    expect(logs.getAttribute("aria-selected")).toBe("true");
+    expect(brief.getAttribute("aria-selected")).toBe("false");
+    expect(logs.tabIndex).toBe(0);
+  });
+});

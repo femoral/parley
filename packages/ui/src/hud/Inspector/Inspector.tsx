@@ -1,4 +1,4 @@
-import { memo, useState } from "react";
+import { memo, useId, useRef, useState, type KeyboardEvent } from "react";
 import { Badge, Divider, Emblem, Plate } from "../../primitives/index.js";
 import { stateMetaFor } from "../../tokens/state-meta.js";
 import { BriefTab } from "./BriefTab.js";
@@ -41,6 +41,40 @@ export interface InspectorProps {
  */
 export const Inspector = memo(function Inspector({ task, ornaments = false }: InspectorProps) {
   const [active, setActive] = useState<TabKey>("brief");
+  const baseId = useId();
+  const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const panelId = `${baseId}-panel`;
+  const tabId = (key: TabKey): string => `${baseId}-tab-${key}`;
+
+  const focusTabAt = (index: number): void => {
+    tabRefs.current[index]?.focus();
+  };
+
+  // Manual-activation tabs (WAI-ARIA APG): arrows/Home/End only move focus;
+  // Enter/Space activate via the button's native click. Do not call setActive
+  // here or Space would double-fire (keydown handler + click).
+  const onTabKeyDown = (event: KeyboardEvent<HTMLButtonElement>, index: number): void => {
+    const last = TABS.length - 1;
+    let next: number | null = null;
+    switch (event.key) {
+      case "ArrowRight":
+        next = index === last ? 0 : index + 1;
+        break;
+      case "ArrowLeft":
+        next = index === 0 ? last : index - 1;
+        break;
+      case "Home":
+        next = 0;
+        break;
+      case "End":
+        next = last;
+        break;
+      default:
+        return;
+    }
+    event.preventDefault();
+    focusTabAt(next);
+  };
 
   if (!task) {
     return (
@@ -80,20 +114,32 @@ export const Inspector = memo(function Inspector({ task, ornaments = false }: In
       )}
       <Divider />
       <div className="pc-inspector__tabs" role="tablist" aria-label="Task inspector">
-        {TABS.map((tab) => (
+        {TABS.map((tab, index) => (
           <button
             key={tab.key}
+            ref={(el) => {
+              tabRefs.current[index] = el;
+            }}
+            id={tabId(tab.key)}
             type="button"
             role="tab"
             aria-selected={active === tab.key}
+            aria-controls={panelId}
+            tabIndex={active === tab.key ? 0 : -1}
             className={`pc-inspector__tab${active === tab.key ? " pc-inspector__tab--active" : ""}`}
             onClick={() => setActive(tab.key)}
+            onKeyDown={(event) => onTabKeyDown(event, index)}
           >
             {tab.label}
           </button>
         ))}
       </div>
-      <div className="pc-inspector__body" role="tabpanel">
+      <div
+        id={panelId}
+        className="pc-inspector__body"
+        role="tabpanel"
+        aria-labelledby={tabId(active)}
+      >
         {active === "brief" && <BriefTab brief={task.brief} />}
         {active === "logs" && <LogsTab logs={task.logs} />}
         {active === "report" && <ReportTab report={task.report} />}
