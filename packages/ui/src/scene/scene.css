@@ -449,13 +449,19 @@
   background: linear-gradient(var(--brass-frame), transparent);
 }
 .pc-anchor::after {
-  content: "⚓";
+  /* Authored anchor silhouette (chrome-glyphs MARK_ANCHOR) as a mask so the
+     brass token paints it — the unicode anchor glyph takes emoji presentation
+     on some platforms and breaks the monochrome. */
+  content: "";
   position: absolute;
   left: 50%;
   bottom: -8px;
   transform: translateX(-50%);
-  font-size: 11px;
-  color: var(--brass-frame);
+  width: 11px;
+  height: 11px;
+  background: var(--brass-frame);
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill-rule='evenodd' d='M12 2a2.7 2.7 0 0 1 1.15 5.14V8.5h3.35v2.2h-3.35v7.4c2.62-.5 4.7-2.35 5.55-4.75l-1.95.6 3.1-4.65 1.65 5.35-1.75-.55C18.6 18.7 15.6 21.3 12 21.3s-6.6-2.6-7.75-7.2l-1.75.55 1.65-5.35 3.1 4.65-1.95-.6c.85 2.4 2.93 4.25 5.55 4.75v-7.4H7.5V8.5h3.35V7.14A2.7 2.7 0 0 1 12 2zm0 1.7a1.05 1.05 0 1 0 0 2.1 1.05 1.05 0 0 0 0-2.1z'/%3E%3C/svg%3E")
+    center / contain no-repeat;
 }
 .pc-orbit[data-state="awaiting_answer"] .pc-anchor {
   display: block;

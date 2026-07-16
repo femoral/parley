@@ -1,3 +1,5 @@
+import { Mark } from "../../primitives/index.js";
+import { MARK_SCROLL } from "../../tokens/chrome-glyphs.js";
 import type { BriefView } from "../types.js";
 
 export interface BriefTabProps {
@@ -10,7 +12,7 @@ export interface BriefTabProps {
 
 /**
  * Layer 2 — the Brief tab (design-manifest §4.17 "Brief"): branch/worktree +
- * model/effort + elapsed·usage key-value grid, the "📜 GOAL" well (the task's
+ * model/effort + elapsed·usage key-value grid, the scroll-marked GOAL well (the task's
  * prompt), the sandbox/network posture as constraint bullets, and the
  * standing footnote. When a failed task carries an `error`, a coral-bordered
  * "WHY IT FAILED" well leads so the cause is recognition, not recall. Plain
@@ -43,7 +45,7 @@ export function BriefTab({ brief, error = null }: BriefTabProps) {
       </div>
       <div className="pc-brief__well">
         <span className="pc-brief__well-label" aria-hidden="true">
-          📜 GOAL
+          <Mark mark={MARK_SCROLL} size={10} /> GOAL
         </span>
         <p className="pc-brief__goal">
           {brief.goal ?? "No brief filed — the orders never reached this ship."}

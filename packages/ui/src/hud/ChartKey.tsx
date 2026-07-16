@@ -1,5 +1,6 @@
 import { memo, useEffect, useId, useRef, useState, type CSSProperties } from "react";
 import { Emblem, Mark } from "../primitives/index.js";
+import { MARK_RING } from "../tokens/chrome-glyphs.js";
 import { FACTIONS } from "../tokens/factions.js";
 import { ATTENTION_DISPLAY_ORDER, STATE_META } from "../tokens/state-meta.js";
 
@@ -47,7 +48,10 @@ export const ChartKey = memo(function ChartKey() {
         aria-controls={panelId}
         onClick={() => setOpen((v) => !v)}
       >
-        <span aria-hidden="true">◉</span> Chart key
+        <span aria-hidden="true">
+          <Mark mark={MARK_RING} size={11} />
+        </span>{" "}
+        Chart key
       </button>
       {open && (
         <div

@@ -13,6 +13,7 @@ import {
   type Ref,
 } from "react";
 import { Plate, PlateHeader, Emblem, Mark, Stat } from "../primitives/index.js";
+import { MARK_ANCHOR, MARK_LENS, MARK_SLOOP } from "../tokens/chrome-glyphs.js";
 import { stateMetaFor } from "../tokens/state-meta.js";
 import type { RosterGroup, RosterSessionOption, RosterSessionSearchHit } from "./types.js";
 
@@ -269,7 +270,10 @@ function SessionSearch({
         aria-label="Search sessions"
         onClick={() => setOpen((v) => !v)}
       >
-        <span aria-hidden="true">⌕</span> Find
+        <span aria-hidden="true">
+          <Mark mark={MARK_LENS} size={11} />
+        </span>{" "}
+        Find
       </button>
       {open && (
         <div className="pc-roster__search-pop" role="search">
@@ -357,7 +361,10 @@ function SessionSelector({
           aria-pressed={selectedSessionId === session.id}
           onClick={() => onSelectSession(session.id)}
         >
-          <span aria-hidden="true">⚓</span> {session.label}
+          <span aria-hidden="true">
+            <Mark mark={MARK_ANCHOR} size={10} />
+          </span>{" "}
+          {session.label}
           <span className="pc-roster__session-count">{session.count}</span>
         </button>
       ))}
@@ -485,7 +492,7 @@ export const RosterPanel = memo(function RosterPanel({
   return (
     <Plate padded={false} className="pc-roster">
       <PlateHeader
-        icon="⚑"
+        icon={<Mark mark={MARK_SLOOP} size={14} />}
         iconDark
         title="FLEET ROSTER"
         subtitle="every soul at sea"

@@ -1,4 +1,6 @@
 import { memo } from "react";
+import { Mark } from "../primitives/index.js";
+import { MARK_MALLET, MARK_SPARK, MARK_SPYGLASS } from "../tokens/chrome-glyphs.js";
 
 export interface SettingsBarProps {
   ornaments: boolean;
@@ -37,7 +39,10 @@ export const SettingsBar = memo(function SettingsBar({
         aria-pressed={ornaments}
         onClick={onToggleOrnaments}
       >
-        <span aria-hidden="true">✦</span> Ornaments
+        <span aria-hidden="true">
+          <Mark mark={MARK_SPARK} size={11} />
+        </span>{" "}
+        Ornaments
       </button>
       {import.meta.env.DEV && (
         <button
@@ -46,7 +51,10 @@ export const SettingsBar = memo(function SettingsBar({
           aria-pressed={showKit}
           onClick={onToggleShowKit}
         >
-          <span aria-hidden="true">⚒</span> Kit band <span className="pc-settings__hint">dev</span>
+          <span aria-hidden="true">
+            <Mark mark={MARK_MALLET} size={11} />
+          </span>{" "}
+          Kit band <span className="pc-settings__hint">dev</span>
         </button>
       )}
       <button
@@ -55,7 +63,10 @@ export const SettingsBar = memo(function SettingsBar({
         aria-pressed={followLogs}
         onClick={onToggleFollowLogs}
       >
-        <span aria-hidden="true">⛵</span> Follow logs
+        <span aria-hidden="true">
+          <Mark mark={MARK_SPYGLASS} size={11} />
+        </span>{" "}
+        Follow logs
       </button>
     </div>
   );

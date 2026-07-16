@@ -1,4 +1,5 @@
-import { Emblem } from "../../primitives/index.js";
+import { Emblem, Mark } from "../../primitives/index.js";
+import { MARK_ANCHOR } from "../../tokens/chrome-glyphs.js";
 import type { EmblemMark } from "../../tokens/factions.js";
 import type { QaTurn } from "../types.js";
 
@@ -80,7 +81,7 @@ export function QaTab({ qa, coat, emblem, faction }: QaTabProps) {
           {turn.answer !== null && (
             <div className="pc-qa__bubble pc-qa__bubble--answer">
               <span className="pc-qa__avatar" aria-hidden="true">
-                ⚓
+                <Mark mark={MARK_ANCHOR} size={11} />
               </span>
               <div className="pc-qa__body">
                 <p>{turn.answer}</p>

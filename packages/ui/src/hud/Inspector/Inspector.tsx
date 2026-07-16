@@ -1,5 +1,6 @@
 import { memo, useId, useRef, useState, type KeyboardEvent } from "react";
 import { Badge, Divider, Emblem, Mark, Plate } from "../../primitives/index.js";
+import { MARK_ANCHOR } from "../../tokens/chrome-glyphs.js";
 import { stateMetaFor } from "../../tokens/state-meta.js";
 import { BriefTab } from "./BriefTab.js";
 import { LogsTab } from "./LogsTab.js";
@@ -80,7 +81,10 @@ export const Inspector = memo(function Inspector({ task, ornaments = false }: In
     return (
       <Plate variant="premium" className="pc-inspector pc-inspector--empty">
         <p className="pc-inspector__placeholder">
-          <span aria-hidden="true">⚓</span> Select a soul from the roster to open the ship's log.
+          <span aria-hidden="true">
+            <Mark mark={MARK_ANCHOR} size={13} />
+          </span>{" "}
+          Select a soul from the roster to open the ship's log.
         </p>
       </Plate>
     );

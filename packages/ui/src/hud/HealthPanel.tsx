@@ -1,5 +1,6 @@
 import type { CSSProperties } from "react";
-import { Plate, PlateHeader, Stat } from "../primitives/index.js";
+import { Mark, Plate, PlateHeader, Stat } from "../primitives/index.js";
+import { MARK_ANCHOR } from "../tokens/chrome-glyphs.js";
 import type { HealthView } from "./types.js";
 
 function Cell({ label, value }: { label: string; value: string }) {
@@ -26,7 +27,7 @@ export function HealthPanel({ health }: { health: HealthView }) {
   return (
     <Plate padded={false}>
       <PlateHeader
-        icon="⚓"
+        icon={<Mark mark={MARK_ANCHOR} size={14} />}
         title="DAEMON HEALTH"
         subtitle={health.version ? `v${health.version}` : "connecting…"}
         divider

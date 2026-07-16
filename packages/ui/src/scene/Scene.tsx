@@ -1,4 +1,6 @@
 import { memo } from "react";
+import { Mark } from "../primitives/index.js";
+import { MARK_ANCHOR } from "../tokens/chrome-glyphs.js";
 import { Camera } from "./Camera.js";
 import { EdgeAlerts, type EdgeAlertItem, type EdgeAlertSide } from "./EdgeAlerts.js";
 import { Sea } from "./Sea.js";
@@ -96,7 +98,7 @@ export const Scene = memo(function Scene({
         <Sea />
         <div className="pc-scene-empty" role={connecting ? "status" : undefined}>
           <span className="pc-scene-empty__glyph" aria-hidden="true">
-            ⚓
+            <Mark mark={MARK_ANCHOR} size={42} />
           </span>
           {connecting ? (
             <>

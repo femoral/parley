@@ -18,9 +18,10 @@
   gap: 16px;
 }
 .pc-cartouche__flank {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
   color: var(--brass-frame);
-  font-size: 16px;
-  letter-spacing: 4px;
 }
 .pc-cartouche__title {
   font-family: var(--font-display);
@@ -804,6 +805,9 @@
   border: 1px solid var(--plate-well-border);
 }
 .pc-brief__well-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   font-family: var(--font-body);
   font-weight: 600;
   font-size: 9.5px;

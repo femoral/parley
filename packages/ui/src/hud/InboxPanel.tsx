@@ -1,5 +1,6 @@
 import { memo } from "react";
-import { Plate, PlateHeader } from "../primitives/index.js";
+import { Mark, Plate, PlateHeader } from "../primitives/index.js";
+import { MARK_BANNER, MARK_COMPASS } from "../tokens/chrome-glyphs.js";
 import { InboxCard } from "./InboxCard.js";
 import type { InboxTask } from "./types.js";
 
@@ -36,7 +37,7 @@ export const InboxPanel = memo(function InboxPanel({ tasks, onSelectTask }: Inbo
   return (
     <Plate variant="ember" padded={false} className="pc-inbox">
       <PlateHeader
-        icon="🚩"
+        icon={<Mark mark={MARK_BANNER} size={14} />}
         title="INBOX"
         subtitle="the flags that need you"
         divider
@@ -53,7 +54,10 @@ export const InboxPanel = memo(function InboxPanel({ tasks, onSelectTask }: Inbo
       <div className="pc-inbox__list">
         {count === 0 ? (
           <p className="pc-inbox__empty">
-            <span aria-hidden="true">🧭</span> All hands accounted for. No flags flying.
+            <span aria-hidden="true">
+              <Mark mark={MARK_COMPASS} size={14} />
+            </span>{" "}
+            All hands accounted for. No flags flying.
           </p>
         ) : (
           tasks.map((task) => (

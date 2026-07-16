@@ -1,5 +1,6 @@
 import { memo, type CSSProperties } from "react";
 import { Button, Divider, Emblem, Mark, Plate, PlateHeader } from "../primitives/index.js";
+import { MARK_BANNER, MARK_MALLET } from "../tokens/chrome-glyphs.js";
 import { FACTIONS } from "../tokens/factions.js";
 import { ATTENTION_DISPLAY_ORDER, STATE_META } from "../tokens/state-meta.js";
 import "./KitBand.css";
@@ -17,7 +18,7 @@ export const KitBand = memo(function KitBand() {
   return (
     <Plate padded={false} className="pc-kit">
       <div className="pc-kit__col pc-kit__col--factions">
-        <PlateHeader icon="⚑" iconDark title="FACTIONS" />
+        <PlateHeader icon={<Mark mark={MARK_BANNER} size={14} />} iconDark title="FACTIONS" />
         <div className="pc-kit__list">
           {Object.values(FACTIONS).map((faction) => (
             <div className="pc-kit__faction" key={faction.label}>
@@ -59,7 +60,7 @@ export const KitBand = memo(function KitBand() {
       <Divider vertical />
 
       <div className="pc-kit__col pc-kit__col--chrome">
-        <PlateHeader icon="⚒" iconDark title="CHROME KIT" />
+        <PlateHeader icon={<Mark mark={MARK_MALLET} size={14} />} iconDark title="CHROME KIT" />
         <div className="pc-kit__buttons">
           <Button variant="primary">Primary</Button>
           <Button variant="secondary">Secondary</Button>
