@@ -829,12 +829,16 @@
   font-size: 8px;
   color: var(--brass-mid);
 }
+/* Standing operational reassurance (Flavor-Font Rule: must-read → Outfit body,
+ * not IM Fell). ink-label on plate wood ≈ 4.59:1 (≥4.5:1 AA); quiet footnote,
+ * not a warning. */
 .pc-brief__footnote {
   margin: 0;
-  font-family: var(--font-flavor);
-  font-style: italic;
+  font-family: var(--font-body);
+  font-style: normal;
   font-size: 10.5px;
-  color: var(--ink-ghost);
+  line-height: 1.4;
+  color: var(--ink-label);
 }
 
 /* ── Logs tab (LogStream) ──────────────────────────────────────────────── */
@@ -943,10 +947,21 @@
   gap: 2px;
 }
 .pc-report__files li {
+  position: relative;
+  padding-left: 12px;
   font-family: var(--font-mono);
   font-size: 10.5px;
   color: var(--report-green);
   overflow-wrap: anywhere;
+}
+/* Neutral diamond — not +/- (data carries "changed", not add/delete). */
+.pc-report__files li::before {
+  content: "◆";
+  position: absolute;
+  left: 0;
+  font-size: 7px;
+  color: var(--report-label);
+  top: 0.35em;
 }
 .pc-report__empty {
   margin: auto;
@@ -974,6 +989,12 @@
   gap: 8px;
   max-width: 88%;
 }
+.pc-qa__body {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
 .pc-qa__bubble p {
   margin: 0;
   padding: 8px 11px;
@@ -995,12 +1016,27 @@
   align-self: flex-end;
   flex-direction: row-reverse;
 }
+.pc-qa__bubble--answer .pc-qa__body {
+  align-items: flex-end;
+}
 .pc-qa__bubble--answer p {
   border-radius: 8px 8px 2px 8px;
   background: var(--report-well-bg);
   border: 1px solid var(--report-well-border);
   font-family: var(--font-body);
   color: var(--report-text);
+}
+/* Quiet absolute clock (HH:MM) — mono metadata tier, matching day-chip wind /
+ * log-timestamp quietness. ink-meta ≥4.5:1 on plate-well and report-well. */
+.pc-qa__time {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 400;
+  line-height: 1;
+  letter-spacing: 0.3px;
+  color: var(--ink-meta);
+  padding: 0 2px;
 }
 .pc-qa__avatar {
   display: grid;

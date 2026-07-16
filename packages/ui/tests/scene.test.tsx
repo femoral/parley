@@ -283,6 +283,9 @@ describe("Scene edge-of-frame attention indicators", () => {
     expect(btn).toBeTruthy();
     expect(btn.classList.contains("pc-edge-alert--beacon")).toBe(true);
     expect(btn.textContent).toContain("▶");
+    // Visible payload for sighted operators (not only aria-label).
+    expect(btn.querySelector(".pc-edge-alert__label")?.textContent).toBe("sess-b");
+    expect(btn.querySelector(".pc-edge-alert__count")?.textContent).toBe("1");
     expect(container.querySelector(".pc-edge-alerts--right")).toBeTruthy();
     expect(container.querySelector(".pc-edge-alerts--left")).toBeNull();
   });
@@ -345,6 +348,9 @@ describe("Scene edge-of-frame attention indicators", () => {
     expect(buttons[0]!.getAttribute("aria-label")).toContain("s3");
     expect(buttons[1]!.getAttribute("aria-label")).toContain("s2");
     expect(buttons[2]!.getAttribute("aria-label")).toContain("s1");
+    // Visible count matches the attention rollup (s3 has count 2).
+    expect(buttons[0]!.querySelector(".pc-edge-alert__count")?.textContent).toBe("2");
+    expect(buttons[0]!.querySelector(".pc-edge-alert__label")?.textContent).toBe("s3");
     const more = container.querySelector(".pc-edge-alert--more");
     expect(more?.textContent).toBe("+1");
   });

@@ -78,6 +78,14 @@ function EdgeAlertButton({
       <span className="pc-edge-alert__glyph" aria-hidden="true">
         <Mark mark={meta.mark} size={13} />
       </span>
+      {/* Visible payload: session label + count. aria-label keeps the fuller
+          prose; these must not contradict it (label and count are the same). */}
+      <span className="pc-edge-alert__label" aria-hidden="true">
+        {item.label}
+      </span>
+      <span className="pc-edge-alert__count" aria-hidden="true">
+        {item.count}
+      </span>
       {item.side === "right" && (
         <span className="pc-edge-alert__chevron" aria-hidden="true">
           {chevron}

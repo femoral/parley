@@ -100,7 +100,9 @@ describe("Inspector's four tabs render per the manifest's inspector treatment (#
     expect(screen.getByText(/3m 41s/)).toBeTruthy();
     expect(screen.getByText(/Sandbox: workspace/)).toBeTruthy();
     expect(screen.getByText(/Network: disabled/)).toBeTruthy();
-    expect(screen.getByText(/parley never merges/)).toBeTruthy();
+    expect(
+      screen.getByText(/Parley never merges on its own — the branch waits for your orchestrator/),
+    ).toBeTruthy();
   });
 
   it("renders the failure cause at the top of Brief when the task is failed with an error", () => {
@@ -174,7 +176,9 @@ describe("Inspector's four tabs render per the manifest's inspector treatment (#
     openTab("REPORT");
     expect(screen.getByText("SUCCESS")).toBeTruthy();
     expect(screen.getByText("Charted the bay end to end.")).toBeTruthy();
-    expect(screen.getByText("+ src/chart.ts")).toBeTruthy();
+    // Neutral path listing — no "+" add/delete claim the data doesn't carry.
+    expect(screen.getByText("src/chart.ts")).toBeTruthy();
+    expect(screen.queryByText(/^\+\s/)).toBeNull();
     expect(screen.queryByText(/Review & plant the branch/)).toBeNull();
   });
 
@@ -189,8 +193,20 @@ describe("Inspector's four tabs render per the manifest's inspector treatment (#
       <Inspector
         task={task({
           qa: [
-            { id: "q1", question: "Which shoal?", answer: "The northern one." },
-            { id: "q2", question: "Deep or shallow anchorage?", answer: null },
+            {
+              id: "q1",
+              question: "Which shoal?",
+              answer: "The northern one.",
+              askedAt: "2026-01-01T14:02:00.000Z",
+              answeredAt: "2026-01-01T14:05:00.000Z",
+            },
+            {
+              id: "q2",
+              question: "Deep or shallow anchorage?",
+              answer: null,
+              askedAt: "2026-01-01T14:10:00.000Z",
+              answeredAt: null,
+            },
           ],
         })}
       />,
@@ -199,6 +215,46 @@ describe("Inspector's four tabs render per the manifest's inspector treatment (#
     expect(screen.getByText("Which shoal?")).toBeTruthy();
     expect(screen.getByText("The northern one.")).toBeTruthy();
     expect(screen.getByText("Deep or shallow anchorage?")).toBeTruthy();
+  });
+
+  it("renders quiet absolute HH:MM timestamps on each Q&A bubble", () => {
+    // Fixed local-wall times via a known offset so the clock string is stable
+    // across TZ environments: construct from Date local components.
+    const asked = new Date(2026, 0, 1, 14, 2, 0);
+    const answered = new Date(2026, 0, 1, 14, 5, 0);
+    const outstanding = new Date(2026, 0, 1, 14, 10, 0);
+    render(
+      <Inspector
+        task={task({
+          qa: [
+            {
+              id: "q1",
+              question: "Which shoal?",
+              answer: "The northern one.",
+              askedAt: asked.toISOString(),
+              answeredAt: answered.toISOString(),
+            },
+            {
+              id: "q2",
+              question: "Deep or shallow anchorage?",
+              answer: null,
+              askedAt: outstanding.toISOString(),
+              answeredAt: null,
+            },
+          ],
+        })}
+      />,
+    );
+    openTab("Q&A");
+    const times = screen.getAllByText(/^\d{2}:\d{2}$/);
+    // Question + answer on the first turn, question only on the outstanding turn.
+    expect(times).toHaveLength(3);
+    expect(times.map((el) => el.textContent)).toEqual(["14:02", "14:05", "14:10"]);
+    // Full datetime is available on title / dateTime for stall diagnosis.
+    const first = times[0] as HTMLTimeElement;
+    expect(first.tagName).toBe("TIME");
+    expect(first.getAttribute("dateTime")).toBe(asked.toISOString());
+    expect(first.getAttribute("title")).toBeTruthy();
   });
 
   it("shows the manifest's empty-state copy on the Q&A tab when no flag has been raised", () => {

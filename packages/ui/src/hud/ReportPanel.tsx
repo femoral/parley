@@ -21,7 +21,9 @@ const OUTCOME_COLOR: Record<ReportView["outcome"], string> = {
  * Inspector's Report tab. Files changed lists paths only — the contract's
  * `Report` shape carries no per-file add/del counts, so the manifest's
  * `+adds`/`−dels` footer stat is out for v1 (docs/spec/ui-v1-scope.md: "fills
- * panels only from data parley exposes today").
+ * panels only from data parley exposes today"). Paths render with a neutral
+ * diamond mark — never `+`/`−`, which would imply add/delete semantics the
+ * contract does not carry.
  */
 export function ReportPanel({
   report,
@@ -39,7 +41,7 @@ export function ReportPanel({
           <span className="pc-report__files-label">FILES CHANGED</span>
           <ul>
             {report.files.map((file) => (
-              <li key={file.path}>+ {file.path}</li>
+              <li key={file.path}>{file.path}</li>
             ))}
           </ul>
         </div>

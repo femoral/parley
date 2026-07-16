@@ -37,14 +37,17 @@ function projectReport(detail: TaskDetailResponse): ReportView | null {
 
 /**
  * Project the durable server history (#79) into the inspector's plain Q&A
- * turns. Floor shape is `{ id, question, answer }` — `id` is the wire
- * `question_id` (stable React key); other wire extras (timestamps) are dropped.
+ * turns. Floor shape is `{ id, question, answer, askedAt, answeredAt }` — `id`
+ * is the wire `question_id` (stable React key); timestamps ride through so the
+ * Q&A tab can render quiet absolute clocks for stall diagnosis.
  */
 function projectQa(detail: TaskDetailResponse): QaTurn[] {
   return detail.qa.map((turn) => ({
     id: turn.question_id,
     question: turn.question,
     answer: turn.answer,
+    askedAt: turn.asked_at,
+    answeredAt: turn.answered_at,
   }));
 }
 

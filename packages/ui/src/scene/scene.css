@@ -701,6 +701,26 @@ button.pc-edge-alert:focus-visible {
   font-size: 10px;
   line-height: 1;
 }
+/* Short session label (already truncated to ≤8 chars in projection). Caps
+   width so an unexpected long id never blows the peripheral pill. */
+.pc-edge-alert__label {
+  max-width: 8ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-body);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink-parchment);
+}
+.pc-edge-alert__count {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink-soft);
+  min-width: 0.75em;
+  text-align: center;
+}
 .pc-edge-alert--more {
   cursor: default;
   color: var(--ink-muted);

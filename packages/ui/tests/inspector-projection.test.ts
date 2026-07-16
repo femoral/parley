@@ -107,7 +107,7 @@ describe("projectInspector projects the Q&A tab from the server detail response 
     expect(view.qa).toEqual([]);
   });
 
-  it("maps server turns into the hud floor shape (id + question + answer)", () => {
+  it("maps server turns into the hud floor shape (id + question + answer + timestamps)", () => {
     const view = projectInspector(
       detail({}, {}, [
         {
@@ -127,10 +127,22 @@ describe("projectInspector projects the Q&A tab from the server detail response 
       ]),
       NO_LOGS,
     );
-    // question_id → id (stable React key); other wire extras (timestamps) dropped.
+    // question_id → id (stable React key); asked_at / answered_at ride through for the tab clocks.
     expect(view.qa).toEqual([
-      { id: "q1", question: "Which shoal?", answer: "The northern one." },
-      { id: "q2", question: "Deep or shallow anchorage?", answer: null },
+      {
+        id: "q1",
+        question: "Which shoal?",
+        answer: "The northern one.",
+        askedAt: "2026-01-01T00:00:00.000Z",
+        answeredAt: "2026-01-01T00:01:00.000Z",
+      },
+      {
+        id: "q2",
+        question: "Deep or shallow anchorage?",
+        answer: null,
+        askedAt: "2026-01-01T00:02:00.000Z",
+        answeredAt: null,
+      },
     ]);
   });
 

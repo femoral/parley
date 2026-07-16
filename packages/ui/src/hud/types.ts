@@ -104,7 +104,7 @@ export interface BriefView {
   usage: string | null;
 }
 
-/** One file the report says it touched (design-manifest §4.17 "Report" — "+ path"). */
+/** One file the report says it touched (path only — no add/del counts on the wire). */
 export interface ReportFile {
   path: string;
 }
@@ -123,6 +123,10 @@ export interface QaTurn {
   id: string;
   question: string;
   answer: string | null;
+  /** ISO-8601 when the question was recorded (wire `asked_at`). */
+  askedAt: string;
+  /** ISO-8601 when answered; null while outstanding (wire `answered_at`). */
+  answeredAt: string | null;
 }
 
 /** The full inspector payload for the selected task (design-manifest §4.17). */
