@@ -2,6 +2,7 @@ import type { ParleyConfig, VendorAdapter } from "@useparley/core";
 import { createFakeAdapter } from "./fake.js";
 import { createCodexAdapter } from "./codex.js";
 import { createGrokAdapter } from "./grok.js";
+import { createClaudeAdapter } from "./claude.js";
 import { loadPluginAdapter } from "./plugins.js";
 
 /**
@@ -11,7 +12,12 @@ import { loadPluginAdapter } from "./plugins.js";
 export function createBuiltinAdapters(
   env: NodeJS.ProcessEnv = process.env,
 ): Map<string, VendorAdapter> {
-  const adapters = [createFakeAdapter(env), createCodexAdapter(env), createGrokAdapter(env)];
+  const adapters = [
+    createFakeAdapter(env),
+    createCodexAdapter(env),
+    createGrokAdapter(env),
+    createClaudeAdapter(env),
+  ];
   return new Map(adapters.map((adapter) => [adapter.id, adapter]));
 }
 
