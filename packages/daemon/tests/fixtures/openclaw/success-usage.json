@@ -1,0 +1,21 @@
+{
+  "payloads": [{ "text": "Done." }],
+  "meta": {
+    "durationMs": 4521,
+    "agentMeta": {
+      "sessionId": "3a944b05-b121-4269-8576-48b24306e10d",
+      "provider": "anthropic",
+      "model": "claude-sonnet-4-6",
+      "usage": {
+        "input": 15234,
+        "output": 892,
+        "cacheRead": 12000,
+        "cacheWrite": 200,
+        "total": 16326
+      },
+      "lastCallUsage": { "input": 500, "output": 100 },
+      "contextTokens": 200000,
+      "promptTokens": 15234
+    }
+  }
+}

@@ -1,0 +1,4 @@
+[diagnostic] lane task error: lane=main durationMs=1067
+  error="ProviderAuthError: No API key found for provider \"openai\".
+  Auth store: <STATE>/agents/main/agent/openclaw-agent.sqlite ..."
+FailoverError: No API key found for provider "openai". ... | missing-provider-auth

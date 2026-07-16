@@ -1,0 +1,21 @@
+{
+  "payloads": [
+    { "text": "Report ready", "mediaUrl": null }
+  ],
+  "meta": {
+    "durationMs": 1200,
+    "agentMeta": {
+      "sessionId": "3a944b05-b121-4269-8576-48b24306e10d",
+      "provider": "openai",
+      "model": "gpt-5.5",
+      "usage": {
+        "input": 1200,
+        "output": 340,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "total": 1540
+      }
+    },
+    "transport": "embedded"
+  }
+}

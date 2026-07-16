@@ -1,0 +1,507 @@
+import path from "node:path";
+import type {
+  HubInfo,
+  MaterializedFile,
+  ModelEntry,
+  ProbedModels,
+  SandboxMode,
+  SpawnPlan,
+  TaskSpec,
+  VendorAdapter,
+  VendorEvent,
+  VendorModels,
+} from "./types.js";
+import { VENDOR_DIAG_PREFIX } from "./types.js";
+import { runProbe } from "./probe.js";
+
+/**
+ * The `openclaw` vendor adapter — real delegation to OpenClaw (`openclaw`
+ * binary, formerly Clawdbot/Moltbot). Verified against openclaw@2026.7.1
+ * (docs/research/openclaw-cli-automation.md).
+ *
+ * OpenClaw is gateway/daemon-shaped, not a pure one-shot coding CLI. The
+ * Parley path is spawn-per-turn embedded agent:
+ *   `openclaw agent --local --agent parley --message … --json`
+ *
+ * Unlike codex (flags-only), there are **no** per-invocation MCP / sandbox /
+ * cwd flags on `openclaw agent`. Closest sibling is **grok**: materialize a
+ * per-task config + approvals into `SpawnPlan.files`, isolate state via
+ * `OPENCLAW_STATE_DIR` / `OPENCLAW_CONFIG_PATH` so the user's `~/.openclaw`
+ * never bleeds in, and map posture in that config (research §3, §5, §9).
+ *
+ * **No streaming JSONL** — `--json` emits one document at turn end (often
+ * pretty-printed). `parseEvent` accepts a complete JSON document string
+ * (compact or multi-line). The engine feeds stdout line-by-line today, so
+ * intermediate pretty-print lines yield `[]`; pass the whole blob when the
+ * engine (or a test) buffers. Mid-run tool events are not available on
+ * stdout (research §2, §9 risk #1).
+ */
+
+/** Default binary; override via `PARLEY_OPENCLAW_BIN` (smoke tests, custom installs). */
+const DEFAULT_OPENCLAW_BIN = "openclaw";
+
+/** Agent id used for session scoping (`--agent` / `agents.list[].id`). */
+const AGENT_ID = "parley";
+
+/** MCP server name registered in the materialized openclaw.json. */
+const MCP_SERVER_NAME = "parley";
+
+/**
+ * Headroom added when raising OpenClaw's per-server MCP `timeout` (seconds)
+ * above the task's answer timeout so a blocking `ask_orchestrator` is not
+ * killed early (research §3; same role as codex `tool_timeout_sec`).
+ */
+const TOOL_TIMEOUT_HEADROOM_SEC = 60;
+
+/**
+ * Advisory `--thinking` vocabulary (research §6 / §7). `models list` does not
+ * expose per-model efforts; listModels uses this when the existing catalog has
+ * no efforts for an id.
+ */
+const THINKING_LEVELS = [
+  "off",
+  "minimal",
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "adaptive",
+  "max",
+] as const;
+
+/**
+ * Provider auth env keys named in research §6. Forward only when set on the
+ * parent — same pattern as grok's `XAI_API_KEY`.
+ */
+const AUTH_ENV_KEYS = [
+  "ANTHROPIC_API_KEY",
+  "ANTHROPIC_API_KEYS",
+  "ANTHROPIC_API_KEY_1",
+  "OPENAI_API_KEY",
+  "OPENROUTER_API_KEY",
+  "XAI_API_KEY",
+  "GEMINI_API_KEY",
+  "GOOGLE_API_KEY",
+  "GROQ_API_KEY",
+  "MISTRAL_API_KEY",
+  "DEEPSEEK_API_KEY",
+  "OPENCLAW_GATEWAY_TOKEN",
+] as const;
+
+/** Relative paths under `task.cwd` for task-isolated OpenClaw state (research §9). */
+const STATE_DIR_REL = ".openclaw-state";
+const CONFIG_REL = `${STATE_DIR_REL}/openclaw.json`;
+const APPROVALS_REL = `${STATE_DIR_REL}/exec-approvals.json`;
+
+const MODELS_SOURCE = "openclaw models list --all --json";
+
+function toolTimeoutSec(answerTimeoutMs: number): number {
+  return Math.ceil(answerTimeoutMs / 1000) + TOOL_TIMEOUT_HEADROOM_SEC;
+}
+
+/** Stable session key for spawn-per-turn isolation (research §4 / §9). */
+function sessionKey(taskId: string): string {
+  return `agent:${AGENT_ID}:${taskId}`;
+}
+
+/**
+ * Map Parley sandbox × network → OpenClaw `agents.defaults.sandbox` (research §5).
+ *
+ * Gaps (documented, not silent):
+ * - Docker sandbox (`mode: all`) needs image `openclaw-sandbox:bookworm-slim` on
+ *   the host; fails closed if missing when mode ≠ off.
+ * - // UNKNOWN(research): gitDir / gitCommonDir extra writable roots via
+ *   `sandbox.docker.binds` are not mapped yet — worktree private gitdirs may
+ *   fail under Docker sandbox until designed and tested (research §5, §9 #3).
+ * - `sandbox=workspace` + `network=true` prefers `mode: off` (host tools +
+ *   configured workspace) to avoid requiring Docker for the default posture.
+ */
+function sandboxConfig(
+  sandbox: SandboxMode,
+  network: boolean,
+): Record<string, unknown> {
+  switch (sandbox) {
+    case "read-only":
+      // Research §5: mode=all, workspaceAccess=ro; docker network stays default none.
+      // network is ignored for read-only (matches ADR-0006 matrix elsewhere).
+      return {
+        mode: "all",
+        workspaceAccess: "ro",
+        docker: { network: "none" },
+      };
+    case "full":
+      // Full host access — dangerous; exec ask off is set separately.
+      return { mode: "off" };
+    case "workspace":
+    default:
+      if (!network) {
+        // mode=all + rw workspace + docker network none (research §5).
+        return {
+          mode: "all",
+          workspaceAccess: "rw",
+          docker: { network: "none" },
+        };
+      }
+      // Default posture: no process sandbox; file tools rooted at workspace.
+      // Closest safe host-local mapping when Docker is not required.
+      return { mode: "off" };
+  }
+}
+
+/**
+ * Headless YOLO exec-approvals (research §5). Written into the task-isolated
+ * state dir so interactive approval gates never hang a headless child.
+ */
+function execApprovalsJson(): string {
+  return (
+    JSON.stringify(
+      {
+        version: 1,
+        defaults: { security: "full", ask: "off", askFallback: "full" },
+      },
+      null,
+      2,
+    ) + "\n"
+  );
+}
+
+/**
+ * Per-task `openclaw.json`: workspace = task.cwd, MCP hub, sandbox posture,
+ * and headless exec policy (research §3, §5, §9).
+ */
+function openclawConfigJson(task: TaskSpec, hub: HubInfo): string {
+  const mcpTimeoutSec = toolTimeoutSec(task.answerTimeoutMs);
+  const config: Record<string, unknown> = {
+    agents: {
+      defaults: {
+        workspace: task.cwd,
+        sandbox: sandboxConfig(task.sandbox, task.network),
+      },
+      list: [
+        {
+          id: AGENT_ID,
+          workspace: task.cwd,
+        },
+      ],
+    },
+    tools: {
+      // Avoid tools.profile "minimal" which hides MCP (research §3).
+      // coding/messaging expose bundle MCP tools; leave profile unset so the
+      // product default applies, and only force exec headless.
+      exec: { host: "gateway", security: "full", ask: "off" },
+    },
+    mcp: {
+      servers: {
+        [MCP_SERVER_NAME]: {
+          url: hub.url,
+          transport: "streamable-http",
+          // Seconds — raise above answer timeout (research §3).
+          timeout: mcpTimeoutSec,
+          headers: { ...hub.headers },
+        },
+      },
+    },
+  };
+  return JSON.stringify(config, null, 2) + "\n";
+}
+
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  return typeof value === "object" && value !== null
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
+function asString(value: unknown): string {
+  return typeof value === "string" ? value : "";
+}
+
+function asNumber(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+/**
+ * Parse `openclaw models list --all --json` into catalog entries (research §7).
+ * Uses `models[].key` as id; efforts come from the existing catalog entry or
+ * the advisory `--thinking` vocabulary (probe exposes no efforts).
+ */
+export function parseOpenclawModels(
+  json: string,
+  existing: VendorModels | undefined,
+): ModelEntry[] {
+  const root = asRecord(JSON.parse(json));
+  const models = root?.models;
+  if (!Array.isArray(models)) {
+    throw new Error("openclaw models list: missing 'models' array");
+  }
+  const prior = new Map((existing?.models ?? []).map((m) => [m.id, m] as const));
+  const entries: ModelEntry[] = [];
+  const seen = new Set<string>();
+  for (const raw of models) {
+    const m = asRecord(raw);
+    if (!m) continue;
+    const id = asString(m.key);
+    if (id === "" || seen.has(id)) continue;
+    seen.add(id);
+    const prev = prior.get(id);
+    entries.push({
+      id,
+      efforts: prev?.efforts?.length ? prev.efforts : [...THINKING_LEVELS],
+      default_effort: prev?.default_effort ?? null,
+    });
+  }
+  if (entries.length === 0) {
+    throw new Error("openclaw models list: no model ids parsed from output");
+  }
+  return entries;
+}
+
+/**
+ * Normalize OpenClaw `meta.agentMeta.usage` into a usage bag: harness field
+ * names plus canonical `input_tokens` / `output_tokens` / `cached_tokens`
+ * when derivable (research §8 / §9).
+ */
+function usageFromAgentMeta(usageObj: Record<string, unknown>): Record<string, number> {
+  const usage: Record<string, number> = {};
+  for (const [key, value] of Object.entries(usageObj)) {
+    const n = asNumber(value);
+    if (n !== undefined) usage[key] = n;
+  }
+  const input = asNumber(usageObj.input);
+  const output = asNumber(usageObj.output);
+  const cacheRead = asNumber(usageObj.cacheRead);
+  if (input !== undefined) usage.input_tokens = input;
+  if (output !== undefined) usage.output_tokens = output;
+  if (cacheRead !== undefined) usage.cached_tokens = cacheRead;
+  return usage;
+}
+
+/** True when `obj` looks like an OpenClaw agent `--json` result envelope. */
+function isResultEnvelope(obj: Record<string, unknown>): boolean {
+  return "payloads" in obj || "meta" in obj || "deliveryStatus" in obj;
+}
+
+/**
+ * Map a parsed agent `--json` result to VendorEvents (research §9 event table).
+ */
+function eventsFromResult(obj: Record<string, unknown>): VendorEvent[] {
+  const events: VendorEvent[] = [];
+
+  const payloads = Array.isArray(obj.payloads) ? obj.payloads : [];
+  const texts: string[] = [];
+  let sawPayloadError = false;
+  for (const raw of payloads) {
+    const p = asRecord(raw);
+    if (!p) continue;
+    if (p.isError === true) {
+      sawPayloadError = true;
+      const errText = asString(p.text) || asString(p.message) || "payload error";
+      events.push({ kind: "error", text: errText });
+    } else if (typeof p.text === "string" && p.text.length > 0) {
+      texts.push(p.text);
+    }
+  }
+  if (texts.length > 0) {
+    events.push({ kind: "message", text: texts.join("\n") });
+  }
+
+  const meta = asRecord(obj.meta);
+  const agentMeta = asRecord(meta?.agentMeta);
+  if (agentMeta) {
+    const sessionId =
+      typeof agentMeta.sessionId === "string" ? agentMeta.sessionId : undefined;
+    const usageRaw = asRecord(agentMeta.usage);
+    const usage = usageRaw ? usageFromAgentMeta(usageRaw) : undefined;
+    if (sessionId !== undefined || (usage !== undefined && Object.keys(usage).length > 0)) {
+      events.push({
+        kind: "session_meta",
+        ...(sessionId !== undefined ? { session_id: sessionId } : {}),
+        ...(usage !== undefined && Object.keys(usage).length > 0 ? { usage } : {}),
+      });
+    }
+  }
+
+  // Error-like top-level shapes (defensive; success path is payloads + meta).
+  if (typeof obj.error === "string" && obj.error.length > 0) {
+    events.push({ kind: "error", text: obj.error, fatal: true });
+  } else if (asRecord(obj.error)) {
+    const err = asRecord(obj.error)!;
+    events.push({
+      kind: "error",
+      text: asString(err.message) || asString(err.error) || JSON.stringify(obj.error),
+      fatal: true,
+    });
+  }
+
+  // payload.isError alone is mid-run-ish / non-fatal (research §9 fatal TBD).
+  void sawPayloadError;
+
+  return events;
+}
+
+/**
+ * Detect actionable auth/gateway failures if they appear as a parseable line
+ * (usually they land on stderr, which the engine does not feed to parseEvent —
+ * still map them when present so tests and any future whole-stream plumbing work).
+ */
+function eventsFromDiagnosticText(line: string): VendorEvent[] {
+  if (
+    /ProviderAuthError|FailoverError|GatewayCredentialsRequiredError|missing-provider-auth/i.test(
+      line,
+    )
+  ) {
+    return [{ kind: "error", text: line.trim(), fatal: true }];
+  }
+  // Approval / guardian style cancellation of our MCP tools (headless, no TTY).
+  if (/cancelled|denied|approval|ask.*mcp|mcp.*ask/i.test(line) && /mcp|parley|tool/i.test(line)) {
+    return [
+      {
+        kind: "error",
+        text: `${VENDOR_DIAG_PREFIX} openclaw approval/tool gate: ${line.trim()}`,
+      },
+    ];
+  }
+  return [];
+}
+
+export function createOpenclawAdapter(env: NodeJS.ProcessEnv = process.env): VendorAdapter {
+  const bin = env.PARLEY_OPENCLAW_BIN ?? DEFAULT_OPENCLAW_BIN;
+
+  function statePaths(task: TaskSpec): { stateDir: string; configPath: string } {
+    const stateDir = path.join(task.cwd, STATE_DIR_REL);
+    return { stateDir, configPath: path.join(stateDir, "openclaw.json") };
+  }
+
+  /** Auth + isolation env shared by prepare and resume (research §6, §9). */
+  function baseEnv(task: TaskSpec): Record<string, string> {
+    const { stateDir, configPath } = statePaths(task);
+    const result: Record<string, string> = {
+      // Isolate from the user's ~/.openclaw (research §1, §9).
+      OPENCLAW_STATE_DIR: stateDir,
+      OPENCLAW_CONFIG_PATH: configPath,
+    };
+    for (const key of AUTH_ENV_KEYS) {
+      const value = env[key];
+      if (value !== undefined) result[key] = value;
+    }
+    return result;
+  }
+
+  function files(task: TaskSpec, hub: HubInfo): MaterializedFile[] {
+    return [
+      { path: CONFIG_REL, contents: openclawConfigJson(task, hub) },
+      { path: APPROVALS_REL, contents: execApprovalsJson() },
+    ];
+  }
+
+  /**
+   * Flags shared by prepare/resume. Prompt is always `--message` (not a bare
+   * positional), so extraArgs splice safely after other flags (TaskSpec contract).
+   */
+  function commonArgv(task: TaskSpec): string[] {
+    const timeoutSec = toolTimeoutSec(task.answerTimeoutMs);
+    const argv: string[] = [
+      "agent",
+      "--local",
+      "--agent",
+      AGENT_ID,
+      "--message",
+      task.prompt,
+      "--json",
+      "--timeout",
+      String(timeoutSec),
+    ];
+    // Model / thinking pass through opaquely (research §6).
+    if (task.model !== null) argv.push("--model", task.model);
+    if (task.effort !== null) argv.push("--thinking", task.effort);
+    // extraArgs in the flags region — never after a bare positional prompt.
+    argv.push(...task.extraArgs);
+    return argv;
+  }
+
+  return {
+    id: "openclaw",
+
+    prepare(task, hub): Promise<SpawnPlan> {
+      // Fresh headless one-shot (research §2, §9): embedded agent, stable
+      // session key for later resume, task-local config + approvals.
+      return Promise.resolve({
+        argv: [bin, ...commonArgv(task), "--session-key", sessionKey(task.id)],
+        env: baseEnv(task),
+        files: files(task, hub),
+        cwd: task.cwd,
+      });
+    },
+
+    resume(task, hub): Promise<SpawnPlan> {
+      // Spawn-per-turn resume (research §4): prefer UUID --session-id when the
+      // engine persisted one from a prior session_meta; otherwise the stable
+      // --session-key still targets the same agent session store under the
+      // task-local OPENCLAW_STATE_DIR. Re-materialize config so hub headers /
+      // timeouts stay current.
+      //
+      // OpenClaw can resume via session-key alone (unlike grok, which needs -r).
+      // We only reject when even that cannot be formed (no task id — should not
+      // happen in practice).
+      if (!task.id) {
+        return Promise.reject(
+          new Error(`openclaw resume for task has no session id or task id for session-key`),
+        );
+      }
+
+      const argv = [bin, ...commonArgv(task)];
+      if (task.sessionId !== undefined && task.sessionId !== "") {
+        argv.push("--session-id", task.sessionId);
+      } else {
+        argv.push("--session-key", sessionKey(task.id));
+      }
+
+      return Promise.resolve({
+        argv,
+        env: baseEnv(task),
+        files: files(task, hub),
+        cwd: task.cwd,
+      });
+    },
+
+    parseEvent(line: string): VendorEvent[] {
+      // Complete JSON document (compact one-liner or multi-line blob). Unknown
+      // / partial pretty-print lines → [] always (research §9).
+      const trimmed = line.trim();
+      if (trimmed === "") return [];
+
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(trimmed);
+      } catch {
+        // Non-JSON: only map known run-terminal diagnostic phrases.
+        return eventsFromDiagnosticText(line);
+      }
+
+      const obj = asRecord(parsed);
+      if (!obj) return [];
+
+      if (isResultEnvelope(obj)) {
+        return eventsFromResult(obj);
+      }
+
+      // Defensive: sessions --json shaped blobs are not the agent result path.
+      return [];
+    },
+
+    sessionId(events: VendorEvent[]): string | undefined {
+      for (let i = events.length - 1; i >= 0; i--) {
+        const event = events[i];
+        if (event?.kind === "session_meta" && event.session_id !== undefined) {
+          return event.session_id;
+        }
+      }
+      return undefined;
+    },
+
+    async listModels(existing): Promise<ProbedModels> {
+      // research §7: full catalog via --all --json; no per-model efforts.
+      const stdout = await runProbe(bin, ["models", "list", "--all", "--json"]);
+      return { source: MODELS_SOURCE, models: parseOpenclawModels(stdout, existing) };
+    },
+  };
+}
