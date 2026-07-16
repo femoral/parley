@@ -134,18 +134,18 @@ export function preferredPoint(id: string): Point {
   const seed = fnv1a(id);
   const rand = mulberry32(seed);
 
-  // Seeded origin in the lower cove + a short golden-angle hop.
-  const originX =
-    LAYOUT_BOUNDS.minX + rand() * (LAYOUT_BOUNDS.maxX - LAYOUT_BOUNDS.minX);
-  const originY =
-    LAYOUT_BOUNDS.minY +
-    0.25 * (LAYOUT_BOUNDS.maxY - LAYOUT_BOUNDS.minY) +
-    rand() * 0.55 * (LAYOUT_BOUNDS.maxY - LAYOUT_BOUNDS.minY);
-  const hop = 20 + rand() * 120;
-  const angle = rand() * Math.PI * 2 + GOLDEN_ANGLE * (seed % 17);
+  // Seeded point on a fan ringing the flagship: radius bands just outside the
+  // exclusion zone, sweep biased to the lower half-circle with a little spill
+  // past horizontal on both flanks. Mass gathers around the galleon (the
+  // composition's anchor) instead of pooling in the lower cove, so a typical
+  // fleet stays inside one viewport fold; deep rows fill only as the lattice
+  // near the flagship runs out. Golden-angle jitter keeps the fan organic.
+  const radius = FLAGSHIP_EXCLUSION_RADIUS + 40 + rand() * 180;
+  const sweep = -0.15 + rand() * 1.3; // of π: −27°…207°, flank-to-flank
+  const angle = sweep * Math.PI + GOLDEN_ANGLE * (seed % 17) * 0.02;
   return {
-    x: originX + hop * Math.cos(angle),
-    y: originY + hop * Math.sin(angle),
+    x: FLAGSHIP_CENTER.x + radius * Math.cos(angle),
+    y: FLAGSHIP_CENTER.y + radius * Math.sin(angle),
   };
 }
 
