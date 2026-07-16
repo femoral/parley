@@ -10,6 +10,7 @@ import { createOpenclawAdapter } from "./openclaw.js";
 import { createClineAdapter } from "./cline.js";
 import { createOpenhandsAdapter } from "./openhands.js";
 import { createOpencodeAdapter } from "./opencode.js";
+import { createHermesAdapter } from "./hermes.js";
 import { loadPluginAdapter } from "./plugins.js";
 
 /**
@@ -31,6 +32,7 @@ export function createBuiltinAdapters(
     createClineAdapter(env),
     createOpenhandsAdapter(env),
     createOpencodeAdapter(env),
+    createHermesAdapter(env),
   ];
   return new Map(adapters.map((adapter) => [adapter.id, adapter]));
 }
