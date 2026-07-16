@@ -57,6 +57,7 @@ export function Cockpit() {
               onSelectTask={roster.selectTask}
               totalTasks={snapshot.totalTasks}
               activeTasks={snapshot.activeTasks}
+              connecting={!snapshot.ready}
               searchRef={rosterSearchRef}
             />
           </section>
@@ -81,6 +82,7 @@ export function Cockpit() {
                 activeSessionId={roster.selectedSessionId}
                 onSelectTask={roster.selectTask}
                 onSelectSession={roster.selectSession}
+                connecting={!snapshot.ready}
               />
             </div>
           </section>

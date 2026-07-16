@@ -40,7 +40,10 @@
   --brass-border: #b98f3f;
   --brass-frame: #8a6a34;
   --brass-inner: #6f5326;
-  --brass-deep: #a8681f;
+  /* Primary button gradient low stop — kept brass-warm but light enough that
+     --ink-dark-on-gold (#2a1a08) on this stop computes ≈4.60:1 (≥4.5:1 AA at
+     11px button text). Prior #a8681f was 3.73:1. */
+  --brass-deep: #b87825;
   --brass-shadow: #5b3a24;
   --card-border-idle: #5a441f;
   --card-ring-idle: #4a381caa;
@@ -63,6 +66,9 @@
   /* Quiet warm mono metadata (e.g. day-chip wind) — ≥4.5:1 on plate wood. */
   --ink-meta: #a08a62;
   --ink-dark-on-gold: #2a1a08;
+  /* Sea empty-state body (on --sea-shallow #1b5064). Plate --ink-faint fails
+     here at ≈2.4:1; parchment-ward #e0cfa4 computes ≈5.73:1 (≥4.5:1 AA). */
+  --ink-on-sea: #e0cfa4;
 
   /* §2.5 — parchment tag (the one light chip) */
   --parchment-bg: #efe0bd;
@@ -83,8 +89,10 @@
   --state-failed: #ff7a6b;
   --state-cancelled: #9a8a72;
 
-  /* §2.8 — alerts & auxiliary */
-  --alert-red-top: #e23b2e;
+  /* §2.8 — alerts & auxiliary.
+     --alert-cream on --alert-red-top: #ffe6a8 on #c22b1f ≈ 4.68:1 (≥4.5:1 AA)
+     for the "N NEEDS YOU" pill and PARLEY! ribbon. Prior #e23b2e was 3.50:1. */
+  --alert-red-top: #c22b1f;
   --alert-red-bottom: #9c1c14;
   --alert-cream: #ffe6a8;
   --question-parchment: #ffe6c2;
@@ -235,6 +243,8 @@
   --brass-tint-12: rgba(240, 194, 90, 0.12);
   --brass-border-selected: #f0c25a88;
   --beacon-glow: rgba(255, 207, 77, 0.6);
+  /* Coral twin of --beacon-glow for fresh failed rows (--state-failed #ff7a6b). */
+  --beacon-glow-failed: rgba(255, 122, 107, 0.6);
 
   /* interaction — the manifest recommends ~120ms ease on hover/selection */
   --ease: 120ms ease;

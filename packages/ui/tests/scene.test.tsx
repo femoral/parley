@@ -206,6 +206,22 @@ describe("Scene lays out the active session's cove (#69)", () => {
     );
     expect(container.querySelector(".pc-scene-empty")).toBeTruthy();
     expect(container.querySelector(".pc-region")).toBeNull();
+    expect(screen.getByText(/The tide is calm/)).toBeTruthy();
+    expect(screen.queryByText(/Taking soundings/)).toBeNull();
+  });
+
+  it("shows taking-soundings copy before the first snapshot (connecting)", () => {
+    render(
+      <Scene
+        sessions={[]}
+        activeSessionId={null}
+        onSelectTask={noop}
+        onSelectSession={noop}
+        connecting
+      />,
+    );
+    expect(screen.getByText(/Taking soundings/)).toBeTruthy();
+    expect(screen.queryByText(/The tide is calm/)).toBeNull();
   });
 
   it("selects the task represented by a clicked island (#83)", () => {

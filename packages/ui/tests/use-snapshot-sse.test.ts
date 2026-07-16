@@ -120,6 +120,19 @@ describe("useSnapshot regroups live on SSE transitions (#66)", () => {
 });
 
 describe("useSnapshot connection / stream-lost signal", () => {
+  it("latches ready after the first successful bootstrap (even with an empty fleet)", async () => {
+    (globalThis as { EventSource?: unknown }).EventSource = FakeEventSource;
+    const client = new ParleyClient({
+      baseUrl: "",
+      fetch: fakeDaemon({ seq: 1, tasks: [] }, {}),
+    });
+    const { result } = renderHook(() => useSnapshot(client));
+    expect(result.current.ready).toBe(false);
+    await waitFor(() => expect(result.current.ready).toBe(true));
+    expect(result.current.connected).toBe(true);
+    expect(result.current.totalTasks).toBe(0);
+  });
+
   it("starts disconnected with streamLostSince set, then connects on bootstrap", async () => {
     (globalThis as { EventSource?: unknown }).EventSource = FakeEventSource;
 

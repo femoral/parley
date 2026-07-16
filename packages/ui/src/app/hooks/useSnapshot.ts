@@ -30,6 +30,12 @@ export interface SnapshotView {
    */
   connected: boolean;
   /**
+   * True once the first bootstrap snapshot has resolved successfully (even when
+   * the fleet is empty). Latches for the session so roster/scene can distinguish
+   * "taking soundings" from a genuinely quiet cove.
+   */
+  ready: boolean;
+  /**
    * Epoch ms when the stream last became disconnected/erroring, or `null`
    * while {@link connected}. Surfaces "stream lost since <t>" for the shell.
    */
@@ -110,6 +116,9 @@ export function useSnapshot(client: ParleyClient): SnapshotView {
   // Transport liveness — separate from the projected task list so a disconnect
   // can flip honesty signals without inventing empty-fleet snapshots.
   const [connected, setConnected] = useState(false);
+  // Latches true after the first successful bootstrap so empty-fleet and
+  // pre-snapshot UIs never share copy.
+  const [ready, setReady] = useState(false);
   const [streamLostSince, setStreamLostSince] = useState<number | null>(() => Date.now());
 
   useEffect(() => {
@@ -191,6 +200,7 @@ export function useSnapshot(client: ParleyClient): SnapshotView {
         }
         stream = live;
         markConnected();
+        if (!cancelled) setReady(true);
         emit();
       } catch {
         markDisconnected();
@@ -224,7 +234,8 @@ export function useSnapshot(client: ParleyClient): SnapshotView {
     return {
       ...projected,
       connected,
+      ready,
       streamLostSince,
     };
-  }, [tasks, connected, streamLostSince]);
+  }, [tasks, connected, ready, streamLostSince]);
 }

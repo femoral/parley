@@ -46,6 +46,11 @@ export interface RosterPanelProps {
   totalTasks: number;
   activeTasks: number;
   /**
+   * True before the first snapshot has resolved. Distinguishes "taking
+   * soundings" from a genuinely empty fleet (PRODUCT.md honesty).
+   */
+  connecting?: boolean;
+  /**
    * Imperative handle for the `/` accelerator: open/focus session search.
    * Optional so existing call sites and tests stay prop-only.
    */
@@ -64,9 +69,6 @@ function Group({
   const meta = stateMetaFor(group.state);
   const dotStyle = { "--dot-color": meta.colorVar } as CSSProperties;
   const labelStyle = { "--group-color": meta.colorVar } as CSSProperties;
-  // Quiet/dimmed terminals and the beacon flag both come from the layer-0
-  // state language (manifest §5) — this layer never re-derives state sets.
-  const rowStyle = meta.dim !== undefined ? { opacity: meta.dim } : undefined;
 
   return (
     <div>
@@ -84,6 +86,19 @@ function Group({
       </div>
       {group.tasks.map((task) => {
         const selected = task.id === selectedTaskId;
+        // Fresh failures arrive undimmed with a coral beacon; archive failures
+        // (and other quiet terminals) keep STATE_META.dim. Per-row, not group-
+        // wide — a mixed failed group can hold both treatments.
+        const freshFailure = Boolean(task.freshFailure);
+        const dim = freshFailure ? undefined : meta.dim;
+        const rowStyle = dim !== undefined ? { opacity: dim } : undefined;
+        const showBeacon = Boolean(meta.beacon) || freshFailure;
+        const beaconStyle = freshFailure
+          ? ({
+              "--beacon-color": "var(--state-failed)",
+              "--beacon-glow-color": "var(--beacon-glow-failed)",
+            } as CSSProperties)
+          : undefined;
         // Group headers are skipped by Tab-through; put the state in each
         // row's accessible name so a screen-reader user hears which task is
         // failed / awaiting / … without leaving the row list.
@@ -103,8 +118,12 @@ function Group({
               <span className="pc-roster__name">{task.name}</span>
               <span className="pc-roster__meta">{task.meta}</span>
             </span>
-            {meta.beacon && (
-              <span className="pc-roster__beacon pc-dot--beacon" aria-hidden="true">
+            {showBeacon && (
+              <span
+                className="pc-roster__beacon pc-dot--beacon"
+                style={beaconStyle}
+                aria-hidden="true"
+              >
                 <Mark mark={meta.mark} size={12} />
               </span>
             )}
@@ -350,6 +369,7 @@ export const RosterPanel = memo(function RosterPanel({
   onSelectTask,
   totalTasks,
   activeTasks,
+  connecting = false,
   searchRef,
 }: RosterPanelProps) {
   const sessionSearchRef = useRef<SessionSearchHandle | null>(null);
@@ -381,7 +401,14 @@ export const RosterPanel = memo(function RosterPanel({
       />
       <div className="pc-roster__scroll">
         {groups.length === 0 ? (
-          <p className="pc-roster__empty">The cove is quiet — no voyages under way.</p>
+          connecting ? (
+            <div className="pc-roster__empty" role="status">
+              <p className="pc-roster__empty-title">Taking soundings…</p>
+              <p className="pc-roster__empty-sub">listening for the fleet</p>
+            </div>
+          ) : (
+            <p className="pc-roster__empty">The cove is quiet — no voyages under way.</p>
+          )
         ) : (
           groups.map((group) => (
             <Group

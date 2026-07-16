@@ -378,8 +378,11 @@
   flex: 0 0 auto;
   font-size: 12px;
   line-height: 1;
-  color: var(--state-awaiting_answer);
-  filter: drop-shadow(0 0 4px var(--beacon-glow));
+  /* Defaults to awaiting gold; fresh failures set --beacon-color / --beacon-glow-color
+     inline to the coral state pair. Pulse reuses .pc-dot--beacon (pc-beacon keyframe),
+     which collapses under prefers-reduced-motion to a legible resting frame. */
+  color: var(--beacon-color, var(--state-awaiting_answer));
+  filter: drop-shadow(0 0 4px var(--beacon-glow-color, var(--beacon-glow)));
 }
 .pc-roster__beacon svg {
   display: block;
@@ -412,6 +415,20 @@
   font-family: var(--font-body);
   font-style: italic;
   font-size: 13px;
+  color: var(--ink-faint);
+}
+.pc-roster__empty-title {
+  margin: 0;
+  font-family: var(--font-body);
+  font-style: italic;
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+.pc-roster__empty-sub {
+  margin: 4px 0 0;
+  font-family: var(--font-body);
+  font-style: italic;
+  font-size: 11px;
   color: var(--ink-faint);
 }
 .pc-roster__footer {

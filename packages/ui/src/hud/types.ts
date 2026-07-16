@@ -19,6 +19,13 @@ export interface RosterTask {
   faction: string;
   /** `branch · id` style meta line. */
   meta: string;
+  /**
+   * Display-layer freshness for `failed` rows only (hooks-projected). When
+   * true, the row is undimmed with a coral beacon and the failed group sorts
+   * just under stalled. When false/undefined, archive treatment from
+   * STATE_META applies (dim, no beacon, quiet rank).
+   */
+  freshFailure?: boolean;
 }
 
 /** A roster state group — already ordered by attention rank in the hooks layer. */

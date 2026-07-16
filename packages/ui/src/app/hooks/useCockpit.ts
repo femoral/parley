@@ -1,10 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ParleyClient } from "@useparley/core";
 import type { HealthView, InspectorTask, RosterSessionSearchHit } from "../../hud/types.js";
 import { formatClock, formatUptime } from "./format.js";
 import { useHealth } from "./useHealth.js";
 import { projectInspector } from "./inspector.js";
-import { projectRoster, shortId } from "./roster.js";
+import { advanceFailedObservations, projectRoster, shortId } from "./roster.js";
 import { useLogTail } from "./useLogTail.js";
 import { useSettings, type SettingsView } from "./useSettings.js";
 import { useSnapshot, type SnapshotView } from "./useSnapshot.js";
@@ -129,8 +129,31 @@ export function useCockpit(): CockpitView {
   // Single source of truth for session filter + future scene camera cue (#76).
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
-  // useState setters are identity-stable — safe as memoized-hud props.
-  const selectTask: (id: string) => void = setSelectedTaskId;
+  // Failed-freshness acknowledgement: selecting a failed task once decays it
+  // to the archive treatment (dim, quiet rank). Cleared when the task leaves
+  // failed so a re-failure is loud again.
+  const [acknowledgedFailed, setAcknowledgedFailed] = useState<Set<string>>(
+    () => new Set(),
+  );
+  // Observation stamps for the freshness timeout — ref so the map advances
+  // during render without an extra effect tick (first paint after a failure
+  // is already loud). The one-second `now` clock drives timeout decay.
+  const failedObservedAtRef = useRef<Map<string, number>>(new Map());
+  const tasksRef = useRef(live.tasks);
+  tasksRef.current = live.tasks;
+
+  const selectTask = useCallback((id: string) => {
+    setSelectedTaskId(id);
+    const task = tasksRef.current.find((t) => t.id === id);
+    if (task?.state === "failed") {
+      setAcknowledgedFailed((prev) => {
+        if (prev.has(id)) return prev;
+        const next = new Set(prev);
+        next.add(id);
+        return next;
+      });
+    }
+  }, []);
   const clearTask = useCallback(() => {
     setSelectedTaskId(null);
   }, []);
@@ -156,13 +179,44 @@ export function useCockpit(): CockpitView {
     if (!stillPresent) setSelectedSessionId(null);
   }, [selectedSessionId, live.tasks]);
 
+  // Drop acknowledgements for tasks that left failed (so a later re-failure
+  // is loud again). Observation map is advanced below during render.
+  useEffect(() => {
+    const failedIds = new Set(
+      live.tasks.filter((t) => t.state === "failed").map((t) => t.id),
+    );
+    setAcknowledgedFailed((prev) => {
+      let changed = false;
+      const next = new Set<string>();
+      for (const id of prev) {
+        if (failedIds.has(id)) next.add(id);
+        else changed = true;
+      }
+      return changed ? next : prev;
+    });
+  }, [live.tasks]);
+
+  // Advance failed-observation stamps once per render from the previous map.
+  const failedObservedAt = advanceFailedObservations(
+    live.tasks,
+    failedObservedAtRef.current,
+    now,
+  );
+  failedObservedAtRef.current = failedObservedAt;
+
   // Filter groups + cap/pin session chips at derivation time so header counts
   // match filtered contents and a search-selected session stays visible (#76/#88).
   // Health totals stay fleet-wide (unfiltered `live`); the roster list/footer
-  // use the session-scoped projection.
+  // use the session-scoped projection. Freshness rides the one-second clock so
+  // the 5-minute decay does not need wall-clock inside the panel.
   const filteredRoster = useMemo(
-    () => projectRoster(live.tasks, selectedSessionId),
-    [live.tasks, selectedSessionId],
+    () =>
+      projectRoster(live.tasks, selectedSessionId, {
+        observedAt: failedObservedAt,
+        acknowledged: acknowledgedFailed,
+        now,
+      }),
+    [live.tasks, selectedSessionId, failedObservedAt, acknowledgedFailed, now],
   );
 
   const snapshot: SnapshotView = useMemo(

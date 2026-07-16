@@ -35,6 +35,16 @@ export type {
   SceneSessionAttention,
   SceneTask,
 } from "./scene.js";
+export {
+  projectRoster,
+  shortId,
+  RECENT_SESSION_CHIP_CAP,
+  FAILED_FRESHNESS_MS,
+  isFreshFailure,
+  displayAttentionRank,
+  advanceFailedObservations,
+} from "./roster.js";
+export type { RosterTaskInput, RosterProjection, FailedFreshness } from "./roster.js";
 export { useTaskDetail } from "./useTaskDetail.js";
 export { formatUptime, formatClock, formatTokenCount, formatUsage } from "./format.js";
 export { classifyLogLine, buildLogLines, LogAccumulator, LOG_LINE_CAP } from "./logClassify.js";

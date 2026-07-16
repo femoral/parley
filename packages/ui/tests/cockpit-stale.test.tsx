@@ -48,6 +48,7 @@ function baseView(overrides: Partial<CockpitView> = {}): CockpitView {
       activeTasks: 0,
       durableSessions: 0,
       connected: true,
+      ready: true,
       streamLostSince: null,
     },
     roster: {

@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
+  advanceFailedObservations,
+  displayAttentionRank,
+  FAILED_FRESHNESS_MS,
+  isFreshFailure,
   projectRoster,
   RECENT_SESSION_CHIP_CAP,
+  type FailedFreshness,
   type RosterTaskInput,
 } from "../src/app/hooks/roster.js";
 
@@ -14,6 +19,16 @@ function task(overrides: Partial<RosterTaskInput> & Pick<RosterTaskInput, "id" |
     question: null,
     updatedAt: null,
     ...overrides,
+  };
+}
+
+function freshness(
+  overrides: Partial<FailedFreshness> & Pick<FailedFreshness, "now">,
+): FailedFreshness {
+  return {
+    observedAt: overrides.observedAt ?? new Map(),
+    acknowledged: overrides.acknowledged ?? new Set(),
+    now: overrides.now,
   };
 }
 
@@ -208,5 +223,115 @@ describe("projectRoster session filter (#76)", () => {
     expect(sessions.some((s) => s.id === "sess-1")).toBe(false);
     expect(groups).toEqual([]);
     expect(totalTasks).toBe(0);
+  });
+});
+
+describe("projectRoster failed freshness window (display layer)", () => {
+  const now = 1_000_000;
+
+  it("without freshness options, failed stays at core archive rank (below completed)", () => {
+    const { groups } = projectRoster([
+      task({ id: "r", state: "running" }),
+      task({ id: "f", state: "failed" }),
+      task({ id: "k", state: "completed" }),
+    ]);
+    expect(groups.map((g) => g.state)).toEqual(["running", "completed", "failed"]);
+    expect(groups.find((g) => g.state === "failed")!.tasks[0]!.freshFailure).toBe(false);
+  });
+
+  it("a fresh failure sorts under stalled and above running, and is marked freshFailure", () => {
+    const { groups } = projectRoster(
+      [
+        task({ id: "r", state: "running" }),
+        task({ id: "s", state: "stalled" }),
+        task({ id: "f", state: "failed" }),
+        task({ id: "a", state: "awaiting_answer" }),
+      ],
+      null,
+      freshness({
+        now,
+        observedAt: new Map([["f", now - 1_000]]),
+      }),
+    );
+    expect(groups.map((g) => g.state)).toEqual([
+      "awaiting_answer",
+      "stalled",
+      "failed",
+      "running",
+    ]);
+    expect(groups.find((g) => g.state === "failed")!.tasks[0]!.freshFailure).toBe(true);
+  });
+
+  it("decays to archive rank after FAILED_FRESHNESS_MS without acknowledgement", () => {
+    const { groups } = projectRoster(
+      [task({ id: "r", state: "running" }), task({ id: "f", state: "failed" })],
+      null,
+      freshness({
+        now,
+        observedAt: new Map([["f", now - FAILED_FRESHNESS_MS]]),
+      }),
+    );
+    expect(groups.map((g) => g.state)).toEqual(["running", "failed"]);
+    expect(groups.find((g) => g.state === "failed")!.tasks[0]!.freshFailure).toBe(false);
+  });
+
+  it("decays immediately when the task id is acknowledged (selected once)", () => {
+    const { groups } = projectRoster(
+      [task({ id: "r", state: "running" }), task({ id: "f", state: "failed" })],
+      null,
+      freshness({
+        now,
+        observedAt: new Map([["f", now - 500]]),
+        acknowledged: new Set(["f"]),
+      }),
+    );
+    expect(groups.map((g) => g.state)).toEqual(["running", "failed"]);
+    expect(groups.find((g) => g.state === "failed")!.tasks[0]!.freshFailure).toBe(false);
+  });
+
+  it("sorts fresh failed tasks above archived ones within the failed group", () => {
+    const { groups } = projectRoster(
+      [
+        task({ id: "old", state: "failed" }),
+        task({ id: "new", state: "failed" }),
+      ],
+      null,
+      freshness({
+        now,
+        observedAt: new Map([
+          ["old", now - FAILED_FRESHNESS_MS],
+          ["new", now - 100],
+        ]),
+      }),
+    );
+    const failed = groups.find((g) => g.state === "failed")!;
+    expect(failed.tasks.map((t) => t.id)).toEqual(["new", "old"]);
+    expect(failed.tasks[0]!.freshFailure).toBe(true);
+    expect(failed.tasks[1]!.freshFailure).toBe(false);
+  });
+});
+
+describe("failed freshness helpers", () => {
+  it("isFreshFailure is false for non-failed states and without a freshness bag", () => {
+    expect(isFreshFailure("t", "running", freshness({ now: 0 }))).toBe(false);
+    expect(isFreshFailure("t", "failed", null)).toBe(false);
+  });
+
+  it("displayAttentionRank lifts fresh failed just under stalled", () => {
+    expect(displayAttentionRank("failed", true)).toBeGreaterThan(displayAttentionRank("stalled", false));
+    expect(displayAttentionRank("failed", true)).toBeLessThan(displayAttentionRank("running", false));
+    expect(displayAttentionRank("failed", false)).toBeGreaterThan(displayAttentionRank("completed", false));
+  });
+
+  it("advanceFailedObservations stamps new failures and drops recovered ones", () => {
+    const prev = new Map([["a", 100], ["gone", 50]]);
+    const next = advanceFailedObservations(
+      [task({ id: "a", state: "failed" }), task({ id: "b", state: "failed" }), task({ id: "r", state: "running" })],
+      prev,
+      999,
+    );
+    expect(next.get("a")).toBe(100);
+    expect(next.get("b")).toBe(999);
+    expect(next.has("gone")).toBe(false);
   });
 });

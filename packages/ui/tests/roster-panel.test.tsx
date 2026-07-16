@@ -93,6 +93,23 @@ describe("RosterPanel renders groups it is given, in attention order (#66)", () 
   it("shows the quiet-cove empty state with no groups", () => {
     render(<RosterPanel {...baseProps()} groups={[]} sessions={[]} totalTasks={0} activeTasks={0} />);
     expect(screen.getByText(/The cove is quiet/)).toBeTruthy();
+    expect(screen.queryByText(/Taking soundings/)).toBeNull();
+  });
+
+  it("shows taking-soundings copy before the first snapshot (connecting)", () => {
+    render(
+      <RosterPanel
+        {...baseProps()}
+        groups={[]}
+        sessions={[]}
+        totalTasks={0}
+        activeTasks={0}
+        connecting
+      />,
+    );
+    expect(screen.getByText(/Taking soundings/)).toBeTruthy();
+    expect(screen.getByText(/listening for the fleet/)).toBeTruthy();
+    expect(screen.queryByText(/The cove is quiet/)).toBeNull();
   });
 });
 
@@ -214,6 +231,31 @@ describe("RosterPanel state treatment (#66)", () => {
     expect(failedRow.style.opacity).toBe("0.62");
     const awaitingRow = screen.getByText("chart-the-bay").closest("button")!;
     expect(awaitingRow.style.opacity).toBe("");
+  });
+
+  it("renders a fresh failure undimmed with a coral beacon", () => {
+    const groups: RosterGroup[] = [
+      {
+        state: "failed",
+        tasks: [
+          {
+            id: "t-fresh",
+            name: "fresh-wreck",
+            coat: "#8a6a34",
+            emblem: { kind: "glyph", char: "✖" },
+            faction: "Unaligned",
+            meta: "feat/x · t-fresh",
+            freshFailure: true,
+          },
+        ],
+      },
+    ];
+    render(<RosterPanel {...baseProps()} groups={groups} totalTasks={1} activeTasks={0} />);
+    const row = screen.getByText("fresh-wreck").closest("button")!;
+    expect(row.style.opacity).toBe("");
+    const beacon = row.querySelector(".pc-roster__beacon") as HTMLElement;
+    expect(beacon).toBeTruthy();
+    expect(beacon.style.getPropertyValue("--beacon-color")).toBe("var(--state-failed)");
   });
 });
 

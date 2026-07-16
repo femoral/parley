@@ -16,6 +16,11 @@ export interface SceneProps {
   /** Selects a session from an edge-of-frame attention chip (camera sails there).
    * Wired to the roster's `selectSession` — same source of truth as the chips. */
   onSelectSession: (sessionId: string) => void;
+  /**
+   * True before the first snapshot has resolved. Distinguishes "taking
+   * soundings" from a genuinely empty cove (PRODUCT.md honesty).
+   */
+  connecting?: boolean;
 }
 
 /** Deterministic world layout: regions march along a row with a gentle vertical
@@ -83,18 +88,28 @@ export const Scene = memo(function Scene({
   activeSessionId,
   onSelectTask,
   onSelectSession,
+  connecting = false,
 }: SceneProps) {
   if (sessions.length === 0) {
     return (
       <div className="pc-scene-view pc-scene-view--empty">
         <Sea />
-        <div className="pc-scene-empty">
+        <div className="pc-scene-empty" role={connecting ? "status" : undefined}>
           <span className="pc-scene-empty__glyph" aria-hidden="true">
             ⚓
           </span>
-          <p className="pc-scene-empty__body">
-            The tide is calm and the cove is empty. Islands will rise as voyages set out.
-          </p>
+          {connecting ? (
+            <>
+              <p className="pc-scene-empty__title">Taking soundings…</p>
+              <p className="pc-scene-empty__body">
+                Charting the cove — islands will rise as the fleet reports in.
+              </p>
+            </>
+          ) : (
+            <p className="pc-scene-empty__body">
+              The tide is calm and the cove is empty. Islands will rise as voyages set out.
+            </p>
+          )}
         </div>
       </div>
     );
