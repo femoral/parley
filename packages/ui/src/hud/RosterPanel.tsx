@@ -4,9 +4,12 @@ import {
   useEffect,
   useId,
   useImperativeHandle,
+  useMemo,
   useRef,
   useState,
   type CSSProperties,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type MutableRefObject,
   type Ref,
 } from "react";
 import { Plate, PlateHeader, Emblem, Mark, Stat } from "../primitives/index.js";
@@ -60,11 +63,18 @@ export interface RosterPanelProps {
 function Group({
   group,
   selectedTaskId,
+  focusedTaskId,
   onSelectTask,
+  onFocusTask,
+  rowRefs,
 }: {
   group: RosterGroup;
   selectedTaskId: string | null;
+  /** The single tab-stop row in the listbox (roving tabindex). */
+  focusedTaskId: string | null;
   onSelectTask: (id: string) => void;
+  onFocusTask: (id: string) => void;
+  rowRefs: MutableRefObject<Map<string, HTMLDivElement | null>>;
 }) {
   const meta = stateMetaFor(group.state);
   const dotStyle = { "--dot-color": meta.colorVar } as CSSProperties;
@@ -72,6 +82,7 @@ function Group({
 
   return (
     <div>
+      {/* Group headers stay non-focusable; state lives on each option's name. */}
       <div className="pc-roster__group-head">
         {/* Decorative: the group label next to the dot carries the state for
             AT; title still gives mouse users a hover hint without duplicating
@@ -86,6 +97,7 @@ function Group({
       </div>
       {group.tasks.map((task) => {
         const selected = task.id === selectedTaskId;
+        const focused = task.id === focusedTaskId;
         // Fresh failures arrive undimmed with a coral beacon; archive failures
         // (and other quiet terminals) keep STATE_META.dim. Per-row, not group-
         // wide — a mixed failed group can hold both treatments.
@@ -104,14 +116,24 @@ function Group({
         // failed / awaiting / … without leaving the row list.
         const accessibleName = `${task.name} — ${meta.label}`;
         return (
-          <button
-            type="button"
+          <div
+            role="option"
             className={`pc-roster__row${selected ? " pc-roster__row--selected" : ""}`}
             style={rowStyle}
             key={task.id}
+            id={`roster-option-${task.id}`}
             aria-label={accessibleName}
-            aria-pressed={selected}
-            onClick={() => onSelectTask(task.id)}
+            aria-selected={selected}
+            tabIndex={focused ? 0 : -1}
+            ref={(el) => {
+              if (el) rowRefs.current.set(task.id, el);
+              else rowRefs.current.delete(task.id);
+            }}
+            onClick={() => {
+              onFocusTask(task.id);
+              onSelectTask(task.id);
+            }}
+            onFocus={() => onFocusTask(task.id)}
           >
             <Emblem coat={task.coat} mark={task.emblem} size={23} label={task.faction} />
             <span className="pc-roster__row-body">
@@ -127,7 +149,7 @@ function Group({
                 <Mark mark={meta.mark} size={12} />
               </span>
             )}
-          </button>
+          </div>
         );
       })}
     </div>
@@ -373,6 +395,83 @@ export const RosterPanel = memo(function RosterPanel({
   searchRef,
 }: RosterPanelProps) {
   const sessionSearchRef = useRef<SessionSearchHandle | null>(null);
+  const rowRefs = useRef<Map<string, HTMLDivElement | null>>(new Map());
+
+  // Flat task order across groups — the listbox's single navigation axis.
+  const taskIds = useMemo(
+    () => groups.flatMap((g) => g.tasks.map((t) => t.id)),
+    [groups],
+  );
+
+  // Roving tabindex: one tab stop among options (APG listbox / Inspector house style).
+  // Prefer the selected task when present; else the first row.
+  const [focusedTaskId, setFocusedTaskId] = useState<string | null>(null);
+  const resolvedFocusId = useMemo(() => {
+    if (taskIds.length === 0) return null;
+    if (focusedTaskId && taskIds.includes(focusedTaskId)) return focusedTaskId;
+    if (selectedTaskId && taskIds.includes(selectedTaskId)) return selectedTaskId;
+    return taskIds[0] ?? null;
+  }, [taskIds, focusedTaskId, selectedTaskId]);
+
+  // Keep focus index coherent when the fleet reshuffles under us.
+  useEffect(() => {
+    if (resolvedFocusId && resolvedFocusId !== focusedTaskId) {
+      setFocusedTaskId(resolvedFocusId);
+    }
+    if (taskIds.length === 0 && focusedTaskId !== null) {
+      setFocusedTaskId(null);
+    }
+  }, [resolvedFocusId, focusedTaskId, taskIds.length]);
+
+  const focusTaskAt = useCallback(
+    (index: number) => {
+      const id = taskIds[index];
+      if (!id) return;
+      setFocusedTaskId(id);
+      // Defer so the tabIndex update lands before focus.
+      requestAnimationFrame(() => {
+        rowRefs.current.get(id)?.focus();
+      });
+    },
+    [taskIds],
+  );
+
+  // Manual-activation listbox (WAI-ARIA APG): arrows/Home/End only move focus;
+  // Enter/Space select. Matches the Inspector tab bar's house style.
+  const onListKeyDown = useCallback(
+    (event: ReactKeyboardEvent<HTMLDivElement>) => {
+      if (taskIds.length === 0) return;
+      const current = resolvedFocusId ? taskIds.indexOf(resolvedFocusId) : 0;
+      const last = taskIds.length - 1;
+      let next: number | null = null;
+      switch (event.key) {
+        case "ArrowDown":
+          next = current < 0 ? 0 : current === last ? 0 : current + 1;
+          break;
+        case "ArrowUp":
+          next = current < 0 ? last : current === 0 ? last : current - 1;
+          break;
+        case "Home":
+          next = 0;
+          break;
+        case "End":
+          next = last;
+          break;
+        case "Enter":
+        case " ": {
+          event.preventDefault();
+          const id = resolvedFocusId ?? taskIds[0];
+          if (id) onSelectTask(id);
+          return;
+        }
+        default:
+          return;
+      }
+      event.preventDefault();
+      focusTaskAt(next);
+    },
+    [taskIds, resolvedFocusId, onSelectTask, focusTaskAt],
+  );
 
   useImperativeHandle(
     searchRef,
@@ -399,7 +498,12 @@ export const RosterPanel = memo(function RosterPanel({
         searchSessions={searchSessions}
         searchHandleRef={sessionSearchRef}
       />
-      <div className="pc-roster__scroll">
+      <div
+        className="pc-roster__scroll"
+        role={groups.length > 0 ? "listbox" : undefined}
+        aria-label={groups.length > 0 ? "Fleet tasks" : undefined}
+        onKeyDown={groups.length > 0 ? onListKeyDown : undefined}
+      >
         {groups.length === 0 ? (
           connecting ? (
             <div className="pc-roster__empty" role="status">
@@ -415,7 +519,10 @@ export const RosterPanel = memo(function RosterPanel({
               key={group.state}
               group={group}
               selectedTaskId={selectedTaskId}
+              focusedTaskId={resolvedFocusId}
               onSelectTask={onSelectTask}
+              onFocusTask={setFocusedTaskId}
+              rowRefs={rowRefs}
             />
           ))
         )}

@@ -66,6 +66,20 @@ export const KitBand = memo(function KitBand() {
           <Button variant="tertiary">Tertiary</Button>
           <Button variant="success">Success</Button>
         </div>
+        <div className="pc-kit__buttons" aria-label="Button states">
+          <Button variant="primary" disabled>
+            Disabled
+          </Button>
+          <Button variant="primary" loading>
+            Loading
+          </Button>
+          <Button variant="secondary" disabled>
+            Disabled
+          </Button>
+          <Button variant="success" loading>
+            Loading
+          </Button>
+        </div>
       </div>
     </Plate>
   );

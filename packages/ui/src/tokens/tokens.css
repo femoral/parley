@@ -216,6 +216,8 @@
   /* §2.10 — gold 3D button drop edge */
   --btn-gold-fill: linear-gradient(180deg, var(--brass-link), var(--brass-deep));
   --btn-3d: 0 3px 0 var(--brass-shadow), inset 0 1px 1px rgba(255, 255, 255, 0.4);
+  /* Pressed: hard edge compresses with the :active translateY(1px). */
+  --btn-3d-pressed: 0 1px 0 var(--brass-shadow), inset 0 1px 1px rgba(255, 255, 255, 0.35);
 
   /* §2.10 — divider rule */
   --divider-h: linear-gradient(

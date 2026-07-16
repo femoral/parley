@@ -134,12 +134,13 @@ export const Scene = memo(function Scene({
     <div className="pc-scene-view" role="group" aria-label={`The cove — sailing with ${label}`}>
       <Sea />
       <Camera offsetX={active.dx} offsetY={active.dy}>
-        {placed.map(({ session, dx, dy }) => (
+        {placed.map(({ session, dx, dy }, index) => (
           <SessionRegion
             key={session.id ?? "open-water"}
             session={session}
             dx={dx}
             dy={dy}
+            active={index === activeIndex}
             onSelectTask={onSelectTask}
           />
         ))}

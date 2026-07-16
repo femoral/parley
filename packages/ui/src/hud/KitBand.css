@@ -14,7 +14,7 @@
 }
 .pc-kit__col--factions { flex: 0 0 300px; }
 .pc-kit__col--legend { flex: 1 1 auto; }
-.pc-kit__col--chrome { flex: 0 0 300px; }
+.pc-kit__col--chrome { flex: 0 0 300px; gap: 10px; }
 .pc-kit__list {
   display: flex;
   flex-direction: column;

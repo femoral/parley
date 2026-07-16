@@ -235,6 +235,33 @@ describe("Scene lays out the active session's cove (#69)", () => {
     expect(onSelectTask).toHaveBeenCalledOnce();
     expect(onSelectTask).toHaveBeenCalledWith("a");
   });
+
+  it("keeps off-camera islands out of the tab order", () => {
+    const far = region("sess-2", "sess-2", [
+      island("running", { id: "far-1", name: "distant-shoal" }),
+    ]);
+    const { container } = render(
+      <Scene
+        sessions={[REGION, far]}
+        activeSessionId="sess-1"
+        onSelectTask={noop}
+        onSelectSession={noop}
+      />,
+    );
+
+    const onCamera = screen.getByRole("button", { name: "chart-the-bay — RUNNING" });
+    expect(onCamera.getAttribute("tabindex")).toBe("0");
+
+    // Off-camera island is still in the DOM (world plane) but not tabbable.
+    const offCamera = container.querySelector(
+      '.pc-island[aria-label="distant-shoal — RUNNING"]',
+    ) as HTMLElement;
+    expect(offCamera).toBeTruthy();
+    expect(offCamera.getAttribute("tabindex")).toBe("-1");
+    // Region itself is inert so nothing nested can take focus either.
+    expect(offCamera.closest(".pc-region")?.hasAttribute("inert")).toBe(true);
+    expect(onCamera.closest(".pc-region")?.hasAttribute("inert")).toBe(false);
+  });
 });
 
 describe("Scene edge-of-frame attention indicators", () => {

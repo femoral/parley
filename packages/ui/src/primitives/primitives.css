@@ -190,6 +190,7 @@
 
 /* ── Buttons ───────────────────────────────────────────────────────────── */
 .pc-btn {
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -201,11 +202,50 @@
   font-size: 11px;
   letter-spacing: var(--track-micro);
   cursor: pointer;
-  transition: background var(--ease), border-color var(--ease), color var(--ease);
+  transition:
+    background var(--ease),
+    border-color var(--ease),
+    color var(--ease),
+    box-shadow var(--ease),
+    transform var(--ease),
+    opacity var(--ease);
 }
 .pc-btn:focus-visible {
   outline: 2px solid var(--brass-bright);
   outline-offset: 2px;
+}
+.pc-btn__label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+/* Loading: keep the label's box + accessible name for stable width; spinner overlays. */
+.pc-btn--loading .pc-btn__label {
+  opacity: 0;
+}
+.pc-btn__spinner {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 12px;
+  height: 12px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  opacity: 0.85;
+  animation: pc-btn-spin 0.7s linear infinite;
+}
+@keyframes pc-btn-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+/* Disabled / loading — dim the whole control (non-interactive); stay ≥~40%. */
+.pc-btn:disabled,
+.pc-btn[aria-disabled="true"] {
+  opacity: 0.45;
+  cursor: default;
+  pointer-events: none;
 }
 .pc-btn--primary {
   border: 1px solid var(--brass);
@@ -213,16 +253,25 @@
   color: var(--ink-dark-on-gold);
   box-shadow: var(--btn-3d);
 }
-.pc-btn--primary:hover {
+.pc-btn--primary:hover:not(:disabled) {
   background: linear-gradient(180deg, var(--brass-bright), var(--brass-deep));
+}
+/* Tactile press: hard 3px drop edge compresses. */
+.pc-btn--primary:active:not(:disabled) {
+  transform: translateY(1px);
+  box-shadow: var(--btn-3d-pressed);
 }
 .pc-btn--secondary {
   border: 1px solid var(--btn-secondary-border);
   background: var(--btn-secondary-bg);
   color: var(--brass-soft);
 }
-.pc-btn--secondary:hover {
+.pc-btn--secondary:hover:not(:disabled) {
   border-color: var(--brass);
+  background: var(--btn-secondary-bg-hover);
+}
+.pc-btn--secondary:active:not(:disabled) {
+  transform: translateY(1px);
   background: var(--btn-secondary-bg-hover);
 }
 .pc-btn--tertiary {
@@ -230,8 +279,12 @@
   background: transparent;
   color: var(--ink-faint);
 }
-.pc-btn--tertiary:hover {
+.pc-btn--tertiary:hover:not(:disabled) {
   border-color: var(--brass-frame);
+  color: var(--brass-soft);
+}
+.pc-btn--tertiary:active:not(:disabled) {
+  transform: translateY(1px);
   color: var(--brass-soft);
 }
 .pc-btn--success {
@@ -239,7 +292,11 @@
   background: var(--btn-success-bg);
   color: var(--btn-success-text);
 }
-.pc-btn--success:hover {
+.pc-btn--success:hover:not(:disabled) {
+  background: var(--btn-success-bg-hover);
+}
+.pc-btn--success:active:not(:disabled) {
+  transform: translateY(1px);
   background: var(--btn-success-bg-hover);
 }
 

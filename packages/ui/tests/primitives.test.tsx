@@ -87,6 +87,46 @@ describe("primitives render per manifest with plain props", () => {
     expect(btn.type).toBe("button");
   });
 
+  it("Button disabled state sets the native disabled attribute", () => {
+    render(
+      <Button variant="primary" disabled>
+        Send
+      </Button>,
+    );
+    const btn = screen.getByRole("button", { name: "Send" }) as HTMLButtonElement;
+    expect(btn.disabled).toBe(true);
+  });
+
+  it("Button loading applies busy semantics, disables, and shows a spinner", () => {
+    const { container } = render(
+      <Button variant="primary" loading>
+        Save
+      </Button>,
+    );
+    const btn = container.querySelector("button") as HTMLButtonElement;
+    expect(btn.disabled).toBe(true);
+    expect(btn.getAttribute("aria-busy")).toBe("true");
+    expect(btn.classList.contains("pc-btn--loading")).toBe(true);
+    expect(btn.querySelector(".pc-btn__spinner")).toBeTruthy();
+    // Label stays in the tree (layout stability) under .pc-btn__label.
+    expect(btn.querySelector(".pc-btn__label")?.textContent).toBe("Save");
+  });
+
+  it("Button loading works across all four variants", () => {
+    for (const variant of ["primary", "secondary", "tertiary", "success"] as const) {
+      const { container } = render(
+        <Button variant={variant} loading>
+          Go
+        </Button>,
+      );
+      const btn = container.querySelector("button") as HTMLButtonElement;
+      expect(btn.classList.contains(`pc-btn--${variant}`)).toBe(true);
+      expect(btn.classList.contains("pc-btn--loading")).toBe(true);
+      expect(btn.disabled).toBe(true);
+      cleanup();
+    }
+  });
+
   it("Stat shows the numeral over its caps label", () => {
     render(<Stat value="7" label="Total tasks" color="var(--brass)" />);
     expect(screen.getByText("7")).toBeTruthy();

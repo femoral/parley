@@ -163,10 +163,15 @@
   width: 150px;
   height: 128px;
   cursor: pointer;
+  /* Suppress the UA focus ring; :focus-visible carries the design-system recipe. */
   outline: none;
+  border-radius: 4px;
 }
+/* Match the global focus recipe (2px Bright Brass, 2px offset). Outline works
+   on the island's box over the teal sea; the prior drop-shadow was too subtle. */
 .pc-island:focus-visible {
-  filter: drop-shadow(0 0 5px var(--brass));
+  outline: 2px solid var(--brass-bright);
+  outline-offset: 2px;
 }
 /* Rise on mount, sink on cancel — finite CSS transitions. `both` holds the end
    frame, so reduced-motion (which collapses the duration) lands on the risen

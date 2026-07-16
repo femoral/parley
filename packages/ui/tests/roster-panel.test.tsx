@@ -121,19 +121,19 @@ describe("RosterPanel row selection (#66)", () => {
     expect(onSelectTask).toHaveBeenCalledWith("t1");
   });
 
-  it("marks the selected row pressed", () => {
+  it("marks the selected row with aria-selected", () => {
     render(<RosterPanel {...baseProps()} selectedTaskId="t2" />);
-    const row = screen.getByText("sound-the-depths").closest("button");
-    expect(row?.getAttribute("aria-pressed")).toBe("true");
-    const other = screen.getByText("chart-the-bay").closest("button");
-    expect(other?.getAttribute("aria-pressed")).toBe("false");
+    const row = screen.getByRole("option", { name: "sound-the-depths — RUNNING" });
+    expect(row.getAttribute("aria-selected")).toBe("true");
+    const other = screen.getByRole("option", { name: "chart-the-bay — AWAITING" });
+    expect(other.getAttribute("aria-selected")).toBe("false");
   });
 
-  it("renders rows as native buttons (keyboard/AT semantics for free)", () => {
+  it("renders the task list as a listbox of options (roving tabindex)", () => {
     render(<RosterPanel {...baseProps()} />);
-    const row = screen.getByText("chart-the-bay").closest("button")!;
-    expect(row.tagName).toBe("BUTTON");
-    expect(row.getAttribute("type")).toBe("button");
+    expect(screen.getByRole("listbox", { name: "Fleet tasks" })).toBeTruthy();
+    const row = screen.getByRole("option", { name: "chart-the-bay — AWAITING" });
+    expect(row.getAttribute("role")).toBe("option");
   });
 });
 
@@ -205,8 +205,10 @@ describe("RosterPanel session selector (#66)", () => {
 
     const results = screen.getByRole("list", { name: "Matching sessions" });
     expect(results).toBeTruthy();
-    expect(screen.queryByRole("listbox")).toBeNull();
-    expect(screen.queryByRole("option")).toBeNull();
+    // Search hits stay a plain list; the fleet task listbox is a sibling surface.
+    expect(results.getAttribute("role")).toBe("list");
+    expect(results.querySelector("[role='option']")).toBeNull();
+    expect(results.querySelector("[role='listbox']")).toBeNull();
 
     const hit = screen.getByRole("button", { name: /sess-old/ });
     expect(hit.getAttribute("aria-selected")).toBeNull();
@@ -219,17 +221,17 @@ describe("RosterPanel session selector (#66)", () => {
 describe("RosterPanel state treatment (#66)", () => {
   it("carries the beacon mark on awaiting rows only", () => {
     render(<RosterPanel {...baseProps()} />);
-    const awaitingRow = screen.getByText("chart-the-bay").closest("button")!;
+    const awaitingRow = screen.getByRole("option", { name: "chart-the-bay — AWAITING" });
     expect(awaitingRow.querySelector(".pc-roster__beacon svg")).toBeTruthy();
-    const runningRow = screen.getByText("sound-the-depths").closest("button")!;
+    const runningRow = screen.getByRole("option", { name: "sound-the-depths — RUNNING" });
     expect(runningRow.querySelector(".pc-roster__beacon")).toBeNull();
   });
 
   it("dims terminal rows per the manifest's quiet-history treatment", () => {
     render(<RosterPanel {...baseProps()} />);
-    const failedRow = screen.getByText("lost-at-sea").closest("button")!;
+    const failedRow = screen.getByRole("option", { name: "lost-at-sea — FAILED" }) as HTMLElement;
     expect(failedRow.style.opacity).toBe("0.62");
-    const awaitingRow = screen.getByText("chart-the-bay").closest("button")!;
+    const awaitingRow = screen.getByRole("option", { name: "chart-the-bay — AWAITING" }) as HTMLElement;
     expect(awaitingRow.style.opacity).toBe("");
   });
 
@@ -251,7 +253,7 @@ describe("RosterPanel state treatment (#66)", () => {
       },
     ];
     render(<RosterPanel {...baseProps()} groups={groups} totalTasks={1} activeTasks={0} />);
-    const row = screen.getByText("fresh-wreck").closest("button")!;
+    const row = screen.getByRole("option", { name: "fresh-wreck — FAILED" }) as HTMLElement;
     expect(row.style.opacity).toBe("");
     const beacon = row.querySelector(".pc-roster__beacon") as HTMLElement;
     expect(beacon).toBeTruthy();
@@ -262,15 +264,90 @@ describe("RosterPanel state treatment (#66)", () => {
 describe("RosterPanel row accessible names include state", () => {
   it("composes each row's accessible name as name — state label", () => {
     render(<RosterPanel {...baseProps()} />);
-    // Group headers are siblings Tab-through skips; state must live on the row.
-    expect(screen.getByRole("button", { name: "chart-the-bay — AWAITING" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "sound-the-depths — RUNNING" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "lost-at-sea — FAILED" })).toBeTruthy();
+    // Group headers are non-focusable; state must live on the option.
+    expect(screen.getByRole("option", { name: "chart-the-bay — AWAITING" })).toBeTruthy();
+    expect(screen.getByRole("option", { name: "sound-the-depths — RUNNING" })).toBeTruthy();
+    expect(screen.getByRole("option", { name: "lost-at-sea — FAILED" })).toBeTruthy();
   });
 
   it("keeps the visible row name text unchanged", () => {
     render(<RosterPanel {...baseProps()} />);
     expect(screen.getByText("chart-the-bay")).toBeTruthy();
     expect(screen.getByText("lost-at-sea")).toBeTruthy();
+  });
+});
+
+describe("RosterPanel listbox keyboard (roving tabindex)", () => {
+  it("keeps a single tab stop among task rows", () => {
+    render(<RosterPanel {...baseProps()} />);
+    const options = screen.getAllByRole("option");
+    const tabStops = options.filter((el) => el.getAttribute("tabindex") === "0");
+    expect(tabStops).toHaveLength(1);
+    // Default focus lands on the first row when nothing is selected.
+    expect(tabStops[0]!.getAttribute("aria-label")).toBe("chart-the-bay — AWAITING");
+    for (const el of options) {
+      if (el !== tabStops[0]) expect(el.getAttribute("tabindex")).toBe("-1");
+    }
+  });
+
+  it("lands the tab stop on the selected task when provided", () => {
+    render(<RosterPanel {...baseProps()} selectedTaskId="t2" />);
+    const focused = screen.getByRole("option", { name: "sound-the-depths — RUNNING" });
+    expect(focused.getAttribute("tabindex")).toBe("0");
+  });
+
+  it("moves focus with ArrowDown / ArrowUp and wraps", () => {
+    render(<RosterPanel {...baseProps()} />);
+    const listbox = screen.getByRole("listbox", { name: "Fleet tasks" });
+    const first = screen.getByRole("option", { name: "chart-the-bay — AWAITING" });
+    first.focus();
+    fireEvent.keyDown(listbox, { key: "ArrowDown" });
+    expect(
+      screen.getByRole("option", { name: "sound-the-depths — RUNNING" }).getAttribute("tabindex"),
+    ).toBe("0");
+    fireEvent.keyDown(listbox, { key: "ArrowDown" });
+    expect(
+      screen.getByRole("option", { name: "lost-at-sea — FAILED" }).getAttribute("tabindex"),
+    ).toBe("0");
+    fireEvent.keyDown(listbox, { key: "ArrowDown" });
+    expect(first.getAttribute("tabindex")).toBe("0");
+    fireEvent.keyDown(listbox, { key: "ArrowUp" });
+    expect(
+      screen.getByRole("option", { name: "lost-at-sea — FAILED" }).getAttribute("tabindex"),
+    ).toBe("0");
+  });
+
+  it("jumps with Home / End", () => {
+    render(<RosterPanel {...baseProps()} selectedTaskId="t2" />);
+    const listbox = screen.getByRole("listbox", { name: "Fleet tasks" });
+    fireEvent.keyDown(listbox, { key: "End" });
+    expect(
+      screen.getByRole("option", { name: "lost-at-sea — FAILED" }).getAttribute("tabindex"),
+    ).toBe("0");
+    fireEvent.keyDown(listbox, { key: "Home" });
+    expect(
+      screen.getByRole("option", { name: "chart-the-bay — AWAITING" }).getAttribute("tabindex"),
+    ).toBe("0");
+  });
+
+  it("selects the focused row with Enter and Space", () => {
+    const onSelectTask = vi.fn();
+    render(<RosterPanel {...baseProps()} onSelectTask={onSelectTask} />);
+    const listbox = screen.getByRole("listbox", { name: "Fleet tasks" });
+    // Move to second row, then select.
+    fireEvent.keyDown(listbox, { key: "ArrowDown" });
+    fireEvent.keyDown(listbox, { key: "Enter" });
+    expect(onSelectTask).toHaveBeenCalledWith("t2");
+    fireEvent.keyDown(listbox, { key: " " });
+    expect(onSelectTask).toHaveBeenLastCalledWith("t2");
+  });
+
+  it("leaves group headers out of the option set", () => {
+    render(<RosterPanel {...baseProps()} />);
+    const options = screen.getAllByRole("option");
+    expect(options).toHaveLength(3);
+    // Group labels remain visible but are not options.
+    expect(screen.getByText("AWAITING")).toBeTruthy();
+    expect(screen.getByText("AWAITING").closest("[role='option']")).toBeNull();
   });
 });

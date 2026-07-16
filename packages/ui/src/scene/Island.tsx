@@ -76,9 +76,15 @@ function IslandBody({ name, completed }: { name: string; completed: boolean }) {
 export interface IslandProps {
   task: IslandTask;
   onSelectTask: (taskId: string) => void;
+  /**
+   * When false, the island is removed from the tab order (off-camera regions).
+   * The roster remains the canonical keyboard path to every task. Defaults true
+   * so a lone island stays reachable.
+   */
+  focusable?: boolean;
 }
 
-export function Island({ task, onSelectTask }: IslandProps) {
+export function Island({ task, onSelectTask, focusable = true }: IslandProps) {
   const { state } = task;
   const meta = stateMetaFor(state);
 
@@ -87,10 +93,11 @@ export function Island({ task, onSelectTask }: IslandProps) {
       className="pc-island"
       data-state={state}
       role="button"
-      tabIndex={0}
+      tabIndex={focusable ? 0 : -1}
       aria-label={`${task.name} — ${meta.label}`}
       onClick={() => onSelectTask(task.id)}
       onKeyDown={(event) => {
+        if (!focusable) return;
         if (event.key !== "Enter" && event.key !== " ") return;
         event.preventDefault();
         onSelectTask(task.id);

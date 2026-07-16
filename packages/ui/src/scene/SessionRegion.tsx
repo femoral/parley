@@ -18,6 +18,12 @@ export interface SessionRegionProps {
   /** World offset (px) of this region's centre — the camera translates to it. */
   dx: number;
   dy: number;
+  /**
+   * Whether this region is the camera's framed target. Off-camera islands are
+   * taken out of the tab order so keyboard focus never vanishes off-canvas;
+   * the roster is the path to every task.
+   */
+  active?: boolean;
 }
 
 /** Deterministic island slot: a centred grid beneath the galleon, up to four
@@ -39,17 +45,30 @@ function slot(index: number, count: number): string {
  * its world coordinates by the {@link Camera}; islands are keyed by task id so
  * React mounts one on create (it rises) and unmounts it on clean (it's gone).
  */
-export function SessionRegion({ session, onSelectTask, dx, dy }: SessionRegionProps) {
+export function SessionRegion({
+  session,
+  onSelectTask,
+  dx,
+  dy,
+  active = true,
+}: SessionRegionProps) {
   const style = { transform: `translate(-50%, -50%) translate(${dx}px, ${dy}px)` };
   return (
-    <div className="pc-region" style={style} aria-label={`Session ${session.label}`}>
+    <div
+      className="pc-region"
+      style={style}
+      aria-label={`Session ${session.label}`}
+      // `inert` is belt-and-suspenders with per-island tabIndex={-1}: blocks
+      // pointer/keyboard activation of anything still nested off-camera.
+      inert={!active || undefined}
+    >
       <span className="pc-region__banner">{session.label}</span>
       <div className="pc-region__flagship">
         <Flagship label={session.label} />
       </div>
       {session.tasks.map((task, i) => (
         <div key={task.id} className="pc-island-slot" style={{ transform: slot(i, session.tasks.length) }}>
-          <Island task={task} onSelectTask={onSelectTask} />
+          <Island task={task} onSelectTask={onSelectTask} focusable={active} />
         </div>
       ))}
     </div>
