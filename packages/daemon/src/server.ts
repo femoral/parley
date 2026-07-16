@@ -7,6 +7,7 @@ import { isSandboxMode, type SandboxMode } from "./adapters/types.js";
 import type { ContextFile } from "./context.js";
 import { DelegateError, TaskEngine } from "./engine.js";
 import { readLogTail } from "./logtail.js";
+import { handleChildAsk, handleChildReport, handleChildTask } from "./child.js";
 import { handleMcpRequest } from "./mcp.js";
 import { buildEnvelope } from "./report.js";
 import { discoverUiBundle, isReservedPath, serveUiRequest } from "./ui.js";
@@ -576,6 +577,23 @@ function createHandler(engine: TaskEngine, uiBundleDir: string | null): http.Req
         const body = method === "POST" ? await readBody(req) : undefined;
         await handleMcpRequest(engine, req, res, body);
         return;
+      }
+
+      // Child REST surface (ADR-0011): same correlation header as MCP, thin
+      // front-end over engine.submitReport / askOrchestrator / the envelope.
+      if (segments[0] === "child") {
+        if (method === "POST" && segments.length === 2 && segments[1] === "report") {
+          handleChildReport(engine, req, res, await readBody(req));
+          return;
+        }
+        if (method === "POST" && segments.length === 2 && segments[1] === "ask") {
+          await handleChildAsk(engine, req, res, await readBody(req));
+          return;
+        }
+        if (method === "GET" && segments.length === 2 && segments[1] === "task") {
+          handleChildTask(engine, req, res);
+          return;
+        }
       }
 
       if (method === "GET" && url.pathname === "/health") {

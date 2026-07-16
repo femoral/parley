@@ -12,7 +12,15 @@ import { readConfig, type HomePaths } from "@useparley/core";
  */
 
 /** API path prefixes the UI's SPA fallback must never shadow (spec list). */
-const RESERVED_PREFIXES = new Set(["tasks", "events", "health", "clean", "mcp", "sessions"]);
+const RESERVED_PREFIXES = new Set([
+  "tasks",
+  "events",
+  "health",
+  "clean",
+  "mcp",
+  "sessions",
+  "child",
+]);
 
 export function isReservedPath(firstSegment: string | undefined): boolean {
   return firstSegment !== undefined && RESERVED_PREFIXES.has(firstSegment);

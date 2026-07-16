@@ -46,6 +46,18 @@ export function materializeContext(
 }
 
 /**
+ * Materialize `.parley/child.json` so subprocesses that lose env can still find
+ * the hub (ADR-0011). Shape: `{ "url": <daemon base>, "task_id": <id> }`.
+ * Lives under `.parley/`, which worktrees already git-exclude.
+ */
+export function materializeChildHub(dir: string, url: string, taskId: string): void {
+  const root = path.join(dir, PARLEY_DIR);
+  fs.mkdirSync(root, { recursive: true });
+  const body = JSON.stringify({ url, task_id: taskId });
+  fs.writeFileSync(path.join(root, "child.json"), body.endsWith("\n") ? body : `${body}\n`);
+}
+
+/**
  * The relative pointers (for the prompt preamble) to the context files present
  * on disk under `<dir>/.parley/context/`, sorted. Empty when there are none.
  */

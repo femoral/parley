@@ -47,7 +47,12 @@ import {
   type TaskPatch,
   type TaskRow,
 } from "./db.js";
-import { contextPointers, materializeContext, type ContextFile } from "./context.js";
+import {
+  contextPointers,
+  materializeChildHub,
+  materializeContext,
+  type ContextFile,
+} from "./context.js";
 import { taskLogDir } from "./discovery.js";
 import {
   assertValidSchema,
@@ -1075,12 +1080,17 @@ export class TaskEngine {
     this.transitioned(taskId);
   }
 
-  private hubFor(taskId: string): HubInfo {
+  /** Daemon base URL (no path) — the HTTP/CLI child channels and MCP hub ride on it. */
+  private hubBaseUrl(): string {
     if (this.hubPort === null) {
       throw new Error("task engine has no hub port yet");
     }
+    return `http://127.0.0.1:${this.hubPort}`;
+  }
+
+  private hubFor(taskId: string): HubInfo {
     return {
-      url: `http://127.0.0.1:${this.hubPort}/mcp`,
+      url: `${this.hubBaseUrl()}/mcp`,
       headers: { [TASK_HEADER]: taskId },
     };
   }
@@ -1292,6 +1302,24 @@ export class TaskEngine {
     const beforeSpawn = getTask(this.db, task.id);
     if (!beforeSpawn || TERMINAL_STATES.has(beforeSpawn.state)) return;
 
+    // Engine-side hub injection for every adapter (ADR-0011): children reach
+    // the REST/CLI fallback via these, independent of MCP config quality.
+    const hubUrl = this.hubBaseUrl();
+    const planEnv: Record<string, string> = {
+      ...plan.env,
+      PARLEY_HUB_URL: hubUrl,
+      PARLEY_TASK_ID: task.id,
+    };
+    // Materialize alongside other `.parley/` context so a subprocess that loses
+    // env can still find the hub. Worktrees already git-exclude `/.parley/`.
+    try {
+      materializeChildHub(plan.cwd, hubUrl, task.id);
+    } catch (err) {
+      console.error(
+        `task ${task.id}: failed to materialize .parley/child.json: ${errorMessage(err)}`,
+      );
+    }
+
     // Git-exclude vendor plumbing before writing it, so a worktree task's
     // `git status` stays clean, the files never count as "modified" (which would
     // block auto-remove of an otherwise-untouched worktree), and the child can
@@ -1333,7 +1361,7 @@ export class TaskEngine {
     // and `killChildren` covers daemon shutdown — no orphans (spec §3).
     const child = spawn(command, args, {
       cwd: plan.cwd,
-      env: { ...process.env, ...plan.env },
+      env: { ...process.env, ...planEnv },
       stdio: ["ignore", "pipe", "pipe"],
     });
     this.children.set(task.id, child);

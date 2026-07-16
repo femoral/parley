@@ -95,6 +95,14 @@ async function callTool(name, args) {
 }
 
 async function main() {
+  // Engine injects PARLEY_HUB_URL / PARLEY_TASK_ID for every adapter (ADR-0011);
+  // echo them so tests can assert the env (and .parley/child.json) path.
+  let childJson = null;
+  try {
+    childJson = JSON.parse(fs.readFileSync(path.join(process.cwd(), ".parley", "child.json"), "utf8"));
+  } catch {
+    /* absent */
+  }
   emit({
     type: "hello",
     model: process.env.FAKE_MODEL ?? null,
@@ -107,6 +115,9 @@ async function main() {
     sandbox: process.env.FAKE_SANDBOX ?? null,
     network: process.env.FAKE_NETWORK === "1",
     pid: process.pid,
+    parley_hub_url: process.env.PARLEY_HUB_URL ?? null,
+    parley_task_id: process.env.PARLEY_TASK_ID ?? null,
+    child_json: childJson,
   });
   // Resume semantics (#18): when respawned via the fake adapter's `resume()`,
   // FAKE_RESUME_SESSION carries the persisted vendor session id and argv[2]

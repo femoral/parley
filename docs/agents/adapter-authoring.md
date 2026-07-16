@@ -179,9 +179,51 @@ unknown vendor.
 - Implement thin `parseEvent` (unknown lines → `[]`); raw JSONL is the durable
   record (ADR-0004).
 
+## Channels
+
+Children reach the daemon three ways (ADR-0011). All three converge on the same
+engine methods (`submitReport`, `askOrchestrator`), so report validation and
+question stall/collapse cannot drift:
+
+| Channel | When to use |
+| --- | --- |
+| **MCP** (canonical) | The harness has a configurable MCP client that can set custom headers (`x-parley-task`). Adapters inject this via `HubInfo`. |
+| **HTTP** | The harness can `curl` / `fetch` but has no MCP client, or cannot set MCP headers. |
+| **CLI** | Shell scripts / subprocesses: `parley child report` / `ask` / `task`. |
+
+Every spawn gets `PARLEY_HUB_URL` (daemon base URL) and `PARLEY_TASK_ID` in env,
+plus `.parley/child.json` (`{ "url", "task_id" }`) in the task cwd for children
+that lose env. Prefer MCP when the vendor supports it; fall back to HTTP or the
+CLI when it does not.
+
+### HTTP examples
+
+```bash
+# Submit a report (default schema shape)
+curl -sS -X POST "$PARLEY_HUB_URL/child/report" \
+  -H "content-type: application/json" \
+  -H "x-parley-task: $PARLEY_TASK_ID" \
+  -d '{"summary":"done","outcome":"success","files_changed":["src/a.ts"]}'
+
+# Ask the orchestrator (long-polls until answered or answer-timeout → 504)
+curl -sS -X POST "$PARLEY_HUB_URL/child/ask" \
+  -H "content-type: application/json" \
+  -H "x-parley-task: $PARLEY_TASK_ID" \
+  -d '{"question":"which database should I use?"}'
+```
+
+### CLI examples
+
+```bash
+parley child report --summary "done" --outcome success --file src/a.ts
+parley child ask "which database should I use?"
+parley child task   # self-inspection envelope
+```
+
 ## Related
 
 - ADR-0004 — spawn-per-turn adapters
 - ADR-0009 — public plugin interface
 - ADR-0010 — settings, profiles, remote daemon
+- ADR-0011 — child HTTP and CLI channels beside MCP
 - `packages/core/src/adapter.ts` — TypeScript contract source

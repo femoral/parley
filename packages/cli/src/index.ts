@@ -3,6 +3,7 @@ import { type CliContext } from "./context.js";
 import { HelpRequested, UsageError } from "./errors.js";
 import { runAnswer } from "./commands/answer.js";
 import { runCancel } from "./commands/cancel.js";
+import { runChild } from "./commands/child.js";
 import { runClean } from "./commands/clean.js";
 import { runDaemon } from "./commands/daemon.js";
 import { runDelegate } from "./commands/delegate.js";
@@ -80,6 +81,15 @@ Usage:
     --skill <name>            Skill to install (repeatable; default: all)
     --yes                     Accept defaults; skip confirm prompts
   parley skills list            List bundled skills (name + description)
+  parley child report --summary <text> --outcome <success|partial|blocked>
+              [--file <path>…]  Submit the final report (default schema)
+  parley child report --json-file <path>|-
+                            Submit an arbitrary JSON report (custom schemas)
+  parley child ask "<question>" Ask the orchestrator (blocks; '-' = stdin)
+  parley child task             Print this task's envelope as JSON
+                            Child commands resolve hub + task id from
+                            PARLEY_HUB_URL + PARLEY_TASK_ID, else
+                            .parley/child.json walking up from cwd.
 
 Global flags:
   --json    Emit machine-readable JSON
@@ -87,7 +97,8 @@ Global flags:
   -V,--version Show the version
 
 Exit codes: delegate/answer 0 accepted · 2 usage. watch: 0 all-done · 2 usage ·
-3 awaiting_answer · 4 stalled · 5 failed · 6 completed.
+3 awaiting_answer · 4 stalled · 5 failed · 6 completed. child report: 0
+accepted · 5 rejected · 2 usage. child ask: 0 answered · 4 stalled · 2 usage.
 `;
 
 /**
@@ -134,6 +145,8 @@ export async function run(argv: string[], ctx: CliContext): Promise<number> {
       return runUi(ctx, rest);
     case "skills":
       return runSkills(ctx, rest);
+    case "child":
+      return runChild(ctx, rest);
     default:
       throw new UsageError(`unknown command: ${command}`);
   }
