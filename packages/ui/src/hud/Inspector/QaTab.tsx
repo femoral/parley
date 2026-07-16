@@ -22,8 +22,9 @@ export function QaTab({ qa, coat, emblem }: QaTabProps) {
   }
   return (
     <div className="pc-qa">
-      {qa.map((turn, i) => (
-        <div className="pc-qa__turn" key={`${i}-${turn.question}`}>
+      {qa.map((turn) => (
+        // id is wire question_id — stable across rehydrate; never key on question text (duplicates collide).
+        <div className="pc-qa__turn" key={turn.id}>
           <div className="pc-qa__bubble pc-qa__bubble--question">
             <Emblem coat={coat} mark={emblem} size={20} />
             <p>{turn.question}</p>

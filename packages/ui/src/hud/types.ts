@@ -113,6 +113,8 @@ export interface ReportView {
 /** One turn of the Q&A transcript (design-manifest §4.17 "Q&A"). `answer` is
  * `null` while the question is still outstanding. */
 export interface QaTurn {
+  /** Stable turn identity (wire `question_id`); safe React key across rehydrate. */
+  id: string;
   question: string;
   answer: string | null;
 }

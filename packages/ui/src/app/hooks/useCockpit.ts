@@ -39,7 +39,7 @@ export interface CockpitView {
   roster: RosterSelection;
   /** Wall-clock `HH:MM` for the day chip. */
   clock: string;
-  /** Days the cove has been open (flavour: real elapsed days, min 1). */
+  /** Daemon uptime in whole days (min 1) — day chip's "days at sea". */
   day: number;
   /** The selected task's inspector payload (#68), or `null` with no selection. */
   inspector: InspectorTask | null;

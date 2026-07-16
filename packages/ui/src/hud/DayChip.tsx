@@ -6,15 +6,19 @@ import { weatherBucketAt, weatherForBucket } from "./day-chip-weather.js";
 const WEATHER_CHECK_INTERVAL_MS = 30 * 1000;
 
 export interface DayChipProps {
-  /** Flavour "day number" the cove has been open (real elapsed days is fine). */
+  /**
+   * Daemon uptime in whole days (min 1), projected from `/health` `started_at`
+   * in `useCockpit` — flavour "days at sea", not a calendar session day.
+   */
   day: number;
   /** Wall-clock string, e.g. "14:32". */
   clock: string;
 }
 
 /**
- * Layer 2 — the day/weather chip (design-manifest §4.4). Pure flavour beside a
- * real clock; the decorative weather rotates deterministically every five minutes.
+ * Layer 2 — the day/weather chip (design-manifest §4.4). Daemon-uptime "days
+ * at sea" beside a real clock; the decorative weather rotates deterministically
+ * every five minutes.
  */
 export function DayChip({ day, clock }: DayChipProps) {
   const [weatherBucket, setWeatherBucket] = useState(weatherBucketAt);
@@ -31,11 +35,15 @@ export function DayChip({ day, clock }: DayChipProps) {
     return () => window.clearInterval(interval);
   }, []);
 
+  const dayTitle = day === 1 ? "Daemon up 1 day" : `Daemon up ${day} days`;
+
   return (
     <Plate padded={false}>
       <div className="pc-daychip">
         <div className="pc-daychip__row">
-          <span className="pc-daychip__day">Day {day}</span>
+          <span className="pc-daychip__day" title={dayTitle}>
+            Day {day} at sea
+          </span>
           <span aria-hidden="true" style={{ color: "var(--ink-dot)" }}>
             ·
           </span>

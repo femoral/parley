@@ -28,7 +28,7 @@ export interface InspectorProps {
 
 /**
  * Layer 2 — the active task inspector (design-manifest §4.17, #68). Premium
- * plate; header (faction emblem, "ACTIVE INSPECTOR" kicker, name + mono id,
+ * plate; header (faction emblem, "SHIP'S LOG" kicker, name + mono id,
  * state badge, eval score badge when present); a four-tab bar (Brief | Logs |
  * Report | Q&A) with local tab-selection state (ephemeral UI state owned
  * here, same as `InboxCard`'s draft text — not a fetch, contract 2 is about
@@ -93,7 +93,7 @@ export const Inspector = memo(function Inspector({ task, ornaments = false }: In
       <div className="pc-inspector__head">
         <Emblem coat={task.coat} mark={task.emblem} size={28} />
         <div className="pc-inspector__head-titles">
-          <span className="pc-inspector__kicker">ACTIVE INSPECTOR</span>
+          <span className="pc-inspector__kicker">SHIP'S LOG</span>
           <span className="pc-inspector__name">{task.name}</span>
           <span className="pc-inspector__id">{task.id}</span>
         </div>

@@ -46,8 +46,9 @@ describe("Inspector renders a quiet placeholder with no selection (#68)", () => 
 });
 
 describe("Inspector header (#68)", () => {
-  it("shows the task name, id, and state badge", () => {
+  it("shows the ship's log kicker, task name, id, and state badge", () => {
     render(<Inspector task={task()} />);
+    expect(screen.getByText("SHIP'S LOG")).toBeTruthy();
     expect(screen.getByText("chart-the-bay")).toBeTruthy();
     expect(screen.getByText("t1abcdef")).toBeTruthy();
     expect(screen.getByText("RUNNING")).toBeTruthy();
@@ -157,8 +158,8 @@ describe("Inspector's four tabs render per the manifest's inspector treatment (#
       <Inspector
         task={task({
           qa: [
-            { question: "Which shoal?", answer: "The northern one." },
-            { question: "Deep or shallow anchorage?", answer: null },
+            { id: "q1", question: "Which shoal?", answer: "The northern one." },
+            { id: "q2", question: "Deep or shallow anchorage?", answer: null },
           ],
         })}
       />,

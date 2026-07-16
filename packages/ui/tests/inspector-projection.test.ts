@@ -92,7 +92,7 @@ describe("projectInspector projects the Q&A tab from the server detail response 
     expect(view.qa).toEqual([]);
   });
 
-  it("maps server turns into the hud floor shape (question + answer)", () => {
+  it("maps server turns into the hud floor shape (id + question + answer)", () => {
     const view = projectInspector(
       detail({}, {}, [
         {
@@ -112,10 +112,10 @@ describe("projectInspector projects the Q&A tab from the server detail response 
       ]),
       NO_LOGS,
     );
-    // Wire extras (ids/timestamps) are dropped — hud stays free of contract types.
+    // question_id → id (stable React key); other wire extras (timestamps) dropped.
     expect(view.qa).toEqual([
-      { question: "Which shoal?", answer: "The northern one." },
-      { question: "Deep or shallow anchorage?", answer: null },
+      { id: "q1", question: "Which shoal?", answer: "The northern one." },
+      { id: "q2", question: "Deep or shallow anchorage?", answer: null },
     ]);
   });
 

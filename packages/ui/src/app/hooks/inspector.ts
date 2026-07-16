@@ -37,11 +37,15 @@ function projectReport(detail: TaskDetailResponse): ReportView | null {
 
 /**
  * Project the durable server history (#79) into the inspector's plain Q&A
- * turns. Floor shape is `{ question, answer }` — wire extras (ids/timestamps)
- * are dropped so the hud stays free of contract types.
+ * turns. Floor shape is `{ id, question, answer }` — `id` is the wire
+ * `question_id` (stable React key); other wire extras (timestamps) are dropped.
  */
 function projectQa(detail: TaskDetailResponse): QaTurn[] {
-  return detail.qa.map((turn) => ({ question: turn.question, answer: turn.answer }));
+  return detail.qa.map((turn) => ({
+    id: turn.question_id,
+    question: turn.question,
+    answer: turn.answer,
+  }));
 }
 
 /**

@@ -15,7 +15,7 @@ export function Cartouche({ ornaments = true }: { ornaments?: boolean }) {
             ✦ ⚓ ✦
           </span>
         </div>
-        <span className="pc-cartouche__subtitle">AI SUB-AGENT COCKPIT</span>
+        <span className="pc-cartouche__subtitle">DELEGATED FLEET COCKPIT</span>
       </div>
     </Plate>
   );
