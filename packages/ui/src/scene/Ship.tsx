@@ -43,8 +43,9 @@ function SailMark({ emblem }: { emblem: EmblemMark }): ReactNode {
 }
 
 /** The sloop silhouette — a planked hull with a faction-dark waterline, a
- * parchment mainsail + jib tinted by the coat, and an emblem on the main. Shared
- * by every pose. */
+ * parchment mainsail + jib tinted by the coat, an emblem on the main, and a
+ * tiny warm stern lantern so the vector ships belong to the night scene.
+ * Shared by every pose. */
 function Sloop({ emblem }: { emblem: EmblemMark }) {
   return (
     <svg className="pc-sloop__svg" viewBox="0 0 60 56" aria-hidden="true">
@@ -64,6 +65,9 @@ function Sloop({ emblem }: { emblem: EmblemMark }) {
       <path className="pc-sloop__waterline" d="M9 39 L55 40 L52 45 L12 44 Z" />
       {/* pennant at the masthead */}
       <path className="pc-sloop__pennant" d="M30 5 L44 8 L30 11 Z" />
+      {/* Stern lantern — tiny warm night cue; stays under coat/faction as decor. */}
+      <circle className="pc-sloop__lantern-glow" cx="51.5" cy="41.5" r="3.2" />
+      <circle className="pc-sloop__lantern" cx="51.5" cy="41.5" r="1.35" />
     </svg>
   );
 }

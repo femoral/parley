@@ -34,13 +34,18 @@
   will-change: transform;
 }
 
-/* ── Scene water (behind the camera — parallax, doesn't pan) ────────────── */
+/* ── Scene water (behind the camera — parallax, doesn't pan) ──────────────
+ * Soft moonlit night wash: a cool high-centre lift + deeper abyss vignette.
+ * No moon disc, no clouds — uncluttered backdrop only. */
 .pc-scene-sea {
   position: absolute;
   inset: 0;
   overflow: hidden;
   pointer-events: none;
-  background: radial-gradient(120% 90% at 50% 8%, transparent 40%, var(--sea-vignette) 100%);
+  background:
+    radial-gradient(70% 50% at 50% 10%, rgba(170, 200, 220, 0.045) 0%, transparent 55%),
+    radial-gradient(120% 90% at 50% 8%, transparent 38%, var(--sea-vignette) 100%),
+    radial-gradient(140% 80% at 50% 100%, rgba(2, 8, 14, 0.4) 0%, transparent 55%);
 }
 /* Moonlight glint — oversized pattern layer, transform-only drift (compositor).
    Base transform is identity so reduced-motion stills on a legible frame. */
@@ -48,12 +53,12 @@
   position: absolute;
   /* Oversize past the 300×40 travel so the pattern always covers the sea. */
   inset: -320px;
-  opacity: 0.4;
+  opacity: 0.32;
   pointer-events: none;
   background: repeating-linear-gradient(
     100deg,
     transparent 0 70px,
-    rgba(255, 255, 255, 0.04) 70px 72px
+    rgba(200, 220, 240, 0.035) 70px 72px
   );
   animation: pc-scene-glint 22s linear infinite;
 }
@@ -135,14 +140,58 @@
   transform: translate(-50%, -50%) translateY(-70px);
 }
 
-/* ── Orchestrator galleon ──────────────────────────────────────────────── */
-.pc-galleon__svg {
-  display: block;
-  width: 172px;
-  height: auto;
-  filter: drop-shadow(0 6px 10px rgba(0, 0, 0, 0.45));
+/* ── Orchestrator galleon (painterly raster + dress-lines overlay) ─────── */
+.pc-galleon {
+  position: relative;
+  width: 188px;
+}
+.pc-galleon__bob {
+  position: relative;
+  width: 100%;
+  /* Bob the whole assembly (art + halo + dress) so signal flags ride the swell. */
   animation: pc-galleon-bob 6.5s ease-in-out infinite;
   transform-origin: 50% 90%;
+}
+.pc-galleon__art {
+  position: relative;
+  z-index: 1;
+  display: block;
+  width: 100%;
+  height: auto;
+  filter: drop-shadow(0 6px 10px rgba(0, 0, 0, 0.45));
+  pointer-events: none;
+  user-select: none;
+}
+/* Soft cabin/window halo — ambient decor under the baked amber lights.
+   Opacity-only breathe; stays well under awaiting flare / failed wreck. */
+.pc-galleon__halo {
+  position: absolute;
+  left: 52%;
+  top: 62%;
+  width: 92px;
+  height: 48px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: radial-gradient(
+    closest-side,
+    rgba(255, 176, 72, 0.22) 0%,
+    rgba(255, 150, 40, 0.08) 48%,
+    transparent 72%
+  );
+  animation: pc-halo-breathe 5.2s ease-in-out infinite;
+  pointer-events: none;
+  z-index: 0;
+}
+/* Dress-lines SVG overlaid on the three-masted sprite; viewBox tuned to masts. */
+.pc-galleon__dress-layer {
+  position: absolute;
+  left: 6%;
+  top: 4%;
+  width: 88%;
+  height: 72%;
+  pointer-events: none;
+  overflow: visible;
+  z-index: 2;
 }
 @keyframes pc-galleon-bob {
   0%,
@@ -153,8 +202,19 @@
     transform: translateY(-4px) rotate(0.6deg);
   }
 }
+/* Shared ambient light breath — opacity only (compositor). Resting opacity is
+   the mid-frame so reduced-motion still shows a soft warm pool. */
+@keyframes pc-halo-breathe {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 0.9;
+  }
+}
 
-/* ── Island ────────────────────────────────────────────────────────────── */
+/* ── Island (painterly storybook sprites) ──────────────────────────────── */
 .pc-island-slot {
   position: absolute;
   left: 0;
@@ -162,8 +222,9 @@
 }
 .pc-island {
   position: relative;
-  width: 150px;
-  height: 128px;
+  width: 156px;
+  /* Tall enough for the arch variant (aspect ~1.2) at 152px width + plank. */
+  height: 142px;
   cursor: pointer;
   /* Suppress the UA focus ring; :focus-visible carries the design-system recipe. */
   outline: none;
@@ -252,36 +313,103 @@
     opacity: 0;
   }
 }
-.pc-island__svg {
+/* Art stage — aspect matches the chosen sprite so flag/halo % anchors land true. */
+.pc-island__stage {
   position: absolute;
   left: 50%;
-  bottom: 8px;
-  width: 150px;
-  height: auto;
+  bottom: 10px;
+  width: 152px;
+  aspect-ratio: var(--island-aspect, 1.4);
   transform: translateX(-50%);
   filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.4));
 }
-/* Shore foam — a soft breathing ring at the waterline (ambient). */
+.pc-island__art {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: bottom center;
+  pointer-events: none;
+  user-select: none;
+}
+/* Soft warm halo under lanterns/campfire — opacity-breathe only.
+   Peak opacity stays well below the awaiting flare's glow. */
+.pc-island__halo {
+  position: absolute;
+  left: var(--halo-x, 50%);
+  top: var(--halo-y, 50%);
+  width: 64px;
+  height: 48px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: radial-gradient(
+    closest-side,
+    rgba(255, 180, 70, 0.2) 0%,
+    rgba(255, 150, 40, 0.07) 50%,
+    transparent 72%
+  );
+  animation: pc-halo-breathe 4.6s ease-in-out infinite;
+  pointer-events: none;
+  z-index: 0;
+}
+/* Arch peak lantern sits high — a slightly taller, tighter halo. */
+.pc-island[data-variant="3"] .pc-island__halo {
+  width: 42px;
+  height: 38px;
+  background: radial-gradient(
+    closest-side,
+    rgba(255, 190, 80, 0.24) 0%,
+    rgba(255, 150, 40, 0.08) 48%,
+    transparent 70%
+  );
+}
+/* Campfire — a bit wider/lower, warmer core. */
+.pc-island[data-variant="2"] .pc-island__halo {
+  width: 56px;
+  height: 42px;
+  background: radial-gradient(
+    closest-side,
+    rgba(255, 150, 50, 0.22) 0%,
+    rgba(255, 120, 30, 0.08) 48%,
+    transparent 72%
+  );
+}
+/* Completed flag — planted at the per-variant peak via --flag-x/--flag-y.
+   Pole base sits on the anchor; the pennant flies above the rock. */
+.pc-island__flag {
+  position: absolute;
+  left: var(--flag-x, 50%);
+  top: var(--flag-y, 24%);
+  transform: translate(-28%, -92%);
+  width: 36px;
+  height: 40px;
+  pointer-events: none;
+  z-index: 2;
+  line-height: 0;
+}
+/* Shore foam — sprites carry their own water skirt; CSS foam is a quiet whisper. */
 .pc-island__foam {
   position: absolute;
   left: 50%;
-  bottom: 4px;
-  width: 132px;
-  height: 30px;
+  bottom: 6px;
+  width: 128px;
+  height: 22px;
   transform: translateX(-50%);
   border-radius: 50%;
-  background: radial-gradient(closest-side, rgba(255, 255, 255, 0.22), transparent 72%);
-  animation: pc-foam 4.5s ease-in-out infinite;
+  background: radial-gradient(closest-side, rgba(255, 255, 255, 0.1), transparent 72%);
+  /* Quiet breath — peak opacity stays low so it never fights the sprite foam. */
+  animation: pc-foam 5s ease-in-out infinite;
+  pointer-events: none;
 }
 @keyframes pc-foam {
   0%,
   100% {
-    opacity: 0.5;
+    opacity: 0.25;
     transform: translateX(-50%) scaleX(1);
   }
   50% {
-    opacity: 0.85;
-    transform: translateX(-50%) scaleX(1.08);
+    opacity: 0.45;
+    transform: translateX(-50%) scaleX(1.04);
   }
 }
 
@@ -439,6 +567,25 @@
 .pc-sloop__pennant {
   fill: var(--coat);
 }
+/* Stern lantern — tiny warm night cue so vector sloops belong with the
+   painterly islands/galleon. Glow + core; opacity breathe only. */
+.pc-sloop__lantern-glow {
+  fill: rgba(255, 180, 70, 0.35);
+  animation: pc-lantern-pulse 3.4s ease-in-out infinite;
+}
+.pc-sloop__lantern {
+  fill: #ffcf6a;
+  animation: pc-lantern-pulse 3.4s ease-in-out infinite;
+}
+@keyframes pc-lantern-pulse {
+  0%,
+  100% {
+    opacity: 0.7;
+  }
+  50% {
+    opacity: 1;
+  }
+}
 
 /* Sail-off (cancelled) — ship leaves the frame as the island sinks. */
 .pc-sloop--sailoff {
@@ -560,11 +707,16 @@
 .pc-flare {
   position: absolute;
   left: 50%;
-  top: -46px;
+  top: -40px;
   transform: translateX(-50%);
   width: 48px;
   height: 48px;
   pointer-events: none;
+  z-index: 4;
+}
+/* Taller arch island — lift the flare so it clears the peak lantern. */
+.pc-island[data-variant="3"] .pc-flare {
+  top: -52px;
 }
 .pc-flare__glow {
   position: absolute;
@@ -634,12 +786,18 @@
 .pc-fog {
   position: absolute;
   left: 50%;
-  top: 20px;
+  top: 14px;
   transform: translateX(-50%);
   width: 190px;
-  height: 74px;
+  height: 90px;
   pointer-events: none;
   overflow: hidden;
+  z-index: 3;
+}
+/* Arch is taller — drape fog from a bit higher so it still covers the peak. */
+.pc-island[data-variant="3"] .pc-fog {
+  top: 4px;
+  height: 100px;
 }
 .pc-fog__bank {
   position: absolute;
@@ -671,8 +829,13 @@
 
 /* ── Effect: completed flag ────────────────────────────────────────────── */
 .pc-flag {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
   filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.4));
-  transform-box: view-box;
+  /* Wave pivots on the pole base (local viewBox 10, 38 of 36×40). */
+  transform-origin: 28% 95%;
   animation: pc-flag-wave 3.4s ease-in-out infinite;
 }
 @keyframes pc-flag-wave {
@@ -744,15 +907,34 @@
   }
 }
 
-/* ── Effect: failed wreck ──────────────────────────────────────────────── */
+/* ── Effect: failed wreck ────────────────────────────────────────────────
+ * Beach placement is per island variant so the hull sits on sand, not water. */
 .pc-wreck {
   position: absolute;
-  left: 50%;
-  bottom: 10px;
+  left: 54%;
+  bottom: 22px;
   transform: translateX(-50%) rotate(-4deg);
-  width: 72px;
+  width: 64px;
   height: auto;
   filter: drop-shadow(0 3px 4px rgba(0, 0, 0, 0.45));
+  z-index: 2;
+  pointer-events: none;
+}
+/* Variant 1 (lantern beach, sand to the right) */
+.pc-island[data-variant="1"] .pc-wreck {
+  left: 60%;
+  bottom: 24px;
+}
+/* Variant 2 (campfire beach, centre-front sand) */
+.pc-island[data-variant="2"] .pc-wreck {
+  left: 52%;
+  bottom: 26px;
+}
+/* Variant 3 (arch beach, sand through the opening) */
+.pc-island[data-variant="3"] .pc-wreck {
+  left: 50%;
+  bottom: 20px;
+  width: 58px;
 }
 
 /* ── Edge-of-frame attention chips ───────────────────────────────────────

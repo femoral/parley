@@ -1,7 +1,7 @@
 /** @vitest-environment happy-dom */
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { Island, Scene, Ship, type IslandTask } from "../src/scene/index.js";
+import { Island, islandVariantFor, Scene, Ship, type IslandTask } from "../src/scene/index.js";
 import type { SessionRegionData } from "../src/scene/SessionRegion.js";
 
 afterEach(cleanup);
@@ -78,13 +78,26 @@ describe("Island renders its state through a single data-state (#69)", () => {
     const { container } = render(<Island task={island("completed")} onSelectTask={noop} />);
     const flag = container.querySelector(".pc-flag");
     expect(flag).toBeTruthy();
-    expect(flag?.querySelector("line")?.getAttribute("x2")).toBe("70");
-    expect(flag?.querySelector("line")?.getAttribute("y2")).toBe("32");
+    // Self-contained flag SVG: pole base at local (10, 38).
+    expect(flag?.querySelector("line")?.getAttribute("x2")).toBe("10");
+    expect(flag?.querySelector("line")?.getAttribute("y2")).toBe("38");
     // Completion ceremony parts: the hoisting pennant and the masthead glint.
     expect(flag?.querySelector(".pc-flag__pennant")).toBeTruthy();
     expect(flag?.querySelector(".pc-flag__glint")).toBeTruthy();
     expect(container.querySelector(".pc-sloop")).toBeNull();
     expect(container.querySelector(".pc-wreck")).toBeNull();
+  });
+
+  it("picks a stable painterly island variant from the task id", () => {
+    const { container } = render(<Island task={island("running")} onSelectTask={noop} />);
+    const root = container.querySelector(".pc-island");
+    const variant = islandVariantFor("t1");
+    expect(root?.getAttribute("data-variant")).toBe(String(variant));
+    expect(container.querySelector(".pc-island__art")).toBeTruthy();
+    expect(container.querySelector(".pc-island__halo")).toBeTruthy();
+    // Same id always maps to the same variant.
+    expect(islandVariantFor("t1")).toBe(variant);
+    expect(islandVariantFor("other-task")).not.toBeUndefined();
   });
 
   it("failed — a shipwreck, ship gone", () => {
@@ -130,6 +143,8 @@ describe("Ship carries faction tint on the --coat/--coat-dark pair (#69)", () =>
     const voyage = container.querySelector(".pc-voyage") as HTMLElement;
     expect(voyage.style.getPropertyValue("--coat")).toBe("#2b2b2e");
     expect(voyage.style.getPropertyValue("--coat-dark")).toBe("#141416");
+    // Night-scene stern lantern rides the vector sloop (not faction-tinted).
+    expect(container.querySelector(".pc-sloop__lantern")).toBeTruthy();
   });
 
   it("keeps the tint on the sailing-off pose too", () => {
@@ -175,6 +190,9 @@ describe("Scene lays out the active session's cove (#69)", () => {
       <Scene sessions={[REGION]} activeSessionId="sess-1" onSelectTask={noop} onSelectSession={noop} />,
     );
     expect(container.querySelector(".pc-galleon")).toBeTruthy();
+    // Raster flagship art + cabin halo (dress lines only when all home).
+    expect(container.querySelector(".pc-galleon__art")).toBeTruthy();
+    expect(container.querySelector(".pc-galleon__halo")).toBeTruthy();
   });
 
   it("travels the camera to the selected region (a transform offset that changes)", () => {
