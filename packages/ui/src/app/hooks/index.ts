@@ -3,7 +3,14 @@
  * spec contract 4). Everything above takes the plain view objects these hooks
  * project.
  */
-export { useCockpit } from "./useCockpit.js";
+export {
+  useCockpit,
+  useChartStale,
+  useCockpitDocumentTitle,
+  formatCockpitDocumentTitle,
+  COCKPIT_DOCUMENT_TITLE,
+  CHART_STALE_DEBOUNCE_MS,
+} from "./useCockpit.js";
 export type { CockpitView, RosterSelection } from "./useCockpit.js";
 export {
   useCockpitKeys,

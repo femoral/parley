@@ -141,6 +141,56 @@
   overflow: hidden;
 }
 
+/* ── Stale-chart honesty ─────────────────────────────────────────────────
+   When the snapshot stream is lost or health is unreachable (debounced in
+   useCockpit), the shell adds `.pc-cockpit--stale`. Ships must stop claiming
+   live motion; HUD chrome (beacon on OFFLINE, etc.) may keep animating.
+   Pause is scoped to `.pc-scene` only — never touch scene source for this. */
+.pc-cockpit--stale .pc-scene *,
+.pc-cockpit--stale .pc-scene *::before,
+.pc-cockpit--stale .pc-scene *::after {
+  animation-play-state: paused !important;
+}
+
+/* Slim brass-framed band over the scene region. Stalled-slate fill + parchment
+   body copy (Outfit). Text contrast: #f2e3c4 on #0e1a22 ≈ 13.9:1 (≥4.5:1 AA).
+   State is also carried by the compass glyph, not colour alone. No motion —
+   reduced-motion-safe by construction. The band is only as tall as its content
+   so pointer-events do not block the scene beneath (except on the band itself). */
+.pc-stale-band {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  box-sizing: border-box;
+  background: var(--attn-stalled-fill);
+  border: 1px solid var(--brass-frame);
+  border-top: none;
+  border-radius: 0 0 var(--radius-well) var(--radius-well);
+  box-shadow: inset 0 0 0 1px var(--attn-stalled-border), 0 4px 14px rgba(0, 0, 0, 0.35);
+  color: var(--ink-parchment);
+  font-family: var(--font-body);
+  font-size: 12.5px;
+  font-weight: 500;
+  line-height: 1.45;
+  pointer-events: auto;
+}
+.pc-stale-band__glyph {
+  flex: 0 0 auto;
+  font-size: 14px;
+  line-height: 1;
+  /* Glyph is decorative; the role=status copy is the accessible name. */
+  user-select: none;
+}
+.pc-stale-band__copy {
+  min-width: 0;
+}
+
 /* Scrollbars (§2.10) */
 .pc-region--right::-webkit-scrollbar,
 .pc-roster__scroll::-webkit-scrollbar {

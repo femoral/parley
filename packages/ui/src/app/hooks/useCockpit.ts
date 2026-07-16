@@ -10,6 +10,57 @@ import { useSettings, type SettingsView } from "./useSettings.js";
 import { useSnapshot, type SnapshotView } from "./useSnapshot.js";
 import { useTaskDetail } from "./useTaskDetail.js";
 
+/** Base browser tab title — matches `packages/ui/index.html`. Keep in one place. */
+export const COCKPIT_DOCUMENT_TITLE = "Parley Cove — parley cockpit";
+
+/**
+ * How long the snapshot stream and/or health must stay bad before the shell
+ * treats the chart as stale. A single SSE hiccup or health blip must not flash
+ * the band or freeze ships.
+ */
+export const CHART_STALE_DEBOUNCE_MS = 4000;
+
+/** Tab title with an optional inbox badge: `(N) Parley Cove — parley cockpit`. */
+export function formatCockpitDocumentTitle(awaitingCount: number): string {
+  return awaitingCount > 0 ? `(${awaitingCount}) ${COCKPIT_DOCUMENT_TITLE}` : COCKPIT_DOCUMENT_TITLE;
+}
+
+/**
+ * Debounced chart-staleness: true when the snapshot stream is disconnected or
+ * health is unreachable, only after {@link CHART_STALE_DEBOUNCE_MS} of continuous
+ * failure. Clears immediately when both signals recover.
+ */
+export function useChartStale(
+  streamConnected: boolean,
+  healthOnline: boolean,
+  debounceMs: number = CHART_STALE_DEBOUNCE_MS,
+): boolean {
+  const rawStale = !streamConnected || !healthOnline;
+  const [stale, setStale] = useState(false);
+
+  useEffect(() => {
+    if (!rawStale) {
+      setStale(false);
+      return;
+    }
+    const id = setTimeout(() => setStale(true), debounceMs);
+    return () => clearTimeout(id);
+  }, [rawStale, debounceMs]);
+
+  return stale;
+}
+
+/** SSR-safe `document.title` sync for the inbox awaiting count. */
+export function useCockpitDocumentTitle(awaitingCount: number): void {
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    document.title = formatCockpitDocumentTitle(awaitingCount);
+    return () => {
+      document.title = COCKPIT_DOCUMENT_TITLE;
+    };
+  }, [awaitingCount]);
+}
+
 /** The roster's selection state — which orchestrator session and task are
  * active (#66). Lives in the app layer: hud rows/selectors take the current
  * selection and an `onSelect*` callback as plain props and never own it.
@@ -48,6 +99,12 @@ export interface CockpitView {
   inspector: InspectorTask | null;
   /** Persisted cockpit preferences (#70): ornaments, kit band, log follow. */
   settings: SettingsView;
+  /**
+   * Debounced chart honesty signal: snapshot stream lost and/or health
+   * unreachable for {@link CHART_STALE_DEBOUNCE_MS}. Drives the stale band and
+   * scene animation pause — not the immediate HealthPanel OFFLINE chip.
+   */
+  chartStale: boolean;
 }
 
 /**
@@ -63,6 +120,9 @@ export function useCockpit(): CockpitView {
   const health = useHealth(client);
   const live = useSnapshot(client);
   const settings = useSettings();
+  const chartStale = useChartStale(live.connected, health.online);
+  // Inbox count is the awaiting_answer (and any other question-bearing) tally.
+  useCockpitDocumentTitle(live.inbox.length);
   const [now, setNow] = useState(() => Date.now());
   // useState setters are identity-stable, so hud components (memoized against
   // the cockpit's one-second clock re-render) can take them as props directly.
@@ -180,5 +240,6 @@ export function useCockpit(): CockpitView {
     day,
     inspector,
     settings,
+    chartStale,
   };
 }

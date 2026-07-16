@@ -51,6 +51,8 @@ describe("useSnapshot regroups live on SSE transitions (#66)", () => {
 
     // Bootstrap settles: one running task, its own group, its session chip.
     await waitFor(() => expect(result.current.groups.map((g) => g.state)).toEqual(["running"]));
+    expect(result.current.connected).toBe(true);
+    expect(result.current.streamLostSince).toBeNull();
     expect(result.current.groups[0]!.tasks[0]!.name).toBe("chart-the-bay");
     expect(result.current.sessions).toEqual([{ id: "sess-1", label: "sess-1", count: 1 }]);
     expect(result.current.durableSessions).toBe(1);
@@ -114,5 +116,74 @@ describe("useSnapshot regroups live on SSE transitions (#66)", () => {
       expect(result.current.sessions).toEqual([{ id: "sess-2", label: "sess-2", count: 1 }]),
     );
     expect(result.current.durableSessions).toBe(1);
+  });
+});
+
+describe("useSnapshot connection / stream-lost signal", () => {
+  it("starts disconnected with streamLostSince set, then connects on bootstrap", async () => {
+    (globalThis as { EventSource?: unknown }).EventSource = FakeEventSource;
+
+    const client = new ParleyClient({
+      baseUrl: "",
+      fetch: fakeDaemon({ seq: 1, tasks: [] }, {}),
+    });
+    const { result } = renderHook(() => useSnapshot(client));
+
+    expect(result.current.connected).toBe(false);
+    expect(result.current.streamLostSince).toEqual(expect.any(Number));
+
+    await waitFor(() => expect(result.current.connected).toBe(true));
+    expect(result.current.streamLostSince).toBeNull();
+  });
+
+  it("marks disconnected on bootstrap failure and keeps streamLostSince", async () => {
+    (globalThis as { EventSource?: unknown }).EventSource = FakeEventSource;
+
+    const failing: typeof fetch = (async () => {
+      throw new Error("daemon down");
+    }) as typeof fetch;
+    const client = new ParleyClient({ baseUrl: "", fetch: failing });
+    const { result } = renderHook(() => useSnapshot(client));
+
+    await waitFor(() => {
+      expect(result.current.connected).toBe(false);
+      expect(result.current.streamLostSince).toEqual(expect.any(Number));
+    });
+    const lostAt = result.current.streamLostSince;
+
+    // Stay disconnected across the retry window — no successful bootstrap yet.
+    await waitFor(() => expect(result.current.connected).toBe(false));
+    expect(result.current.streamLostSince).toBe(lostAt);
+  });
+
+  it("flips connected false on stream error, recovers on the next event", async () => {
+    (globalThis as { EventSource?: unknown }).EventSource = FakeEventSource;
+
+    const snapshot: TasksResponse = {
+      seq: 1,
+      tasks: [row({ id: "t1", state: "running", orchestrator_session_id: "sess-1" })],
+    };
+    const client = new ParleyClient({ baseUrl: "", fetch: fakeDaemon(snapshot, {}) });
+    const { result } = renderHook(() => useSnapshot(client));
+
+    await waitFor(() => expect(result.current.connected).toBe(true));
+
+    act(() => {
+      FakeEventSource.current!.emitError();
+    });
+    await waitFor(() => expect(result.current.connected).toBe(false));
+    expect(result.current.streamLostSince).toEqual(expect.any(Number));
+    // Prior fleet data is retained — honesty is the signal, not a blank chart.
+    expect(result.current.totalTasks).toBe(1);
+
+    act(() => {
+      FakeEventSource.current!.emit(
+        "task.started",
+        2,
+        envelope({ task_id: "t1", state: "running", name: "still-here" }),
+      );
+    });
+    await waitFor(() => expect(result.current.connected).toBe(true));
+    expect(result.current.streamLostSince).toBeNull();
   });
 });

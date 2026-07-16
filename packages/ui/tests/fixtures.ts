@@ -16,15 +16,19 @@ import type { EventSourceLike, TaskEnvelope, TaskRow } from "@useparley/core";
  */
 export class FakeEventSource implements EventSourceLike {
   static current: FakeEventSource | undefined;
-  private readonly listeners = new Map<string, ((e: { data: string; lastEventId: string }) => void)[]>();
+  // Message listeners get `{ data, lastEventId }`; error listeners get `unknown`.
+  private readonly listeners = new Map<string, ((e: unknown) => void)[]>();
 
   constructor(_url: string) {
     FakeEventSource.current = this;
   }
 
-  addEventListener(type: string, listener: (e: { data: string; lastEventId: string }) => void): void {
+  addEventListener(
+    type: string,
+    listener: ((e: { data: string; lastEventId: string }) => void) | ((event: unknown) => void),
+  ): void {
     const list = this.listeners.get(type) ?? [];
-    list.push(listener);
+    list.push(listener as (e: unknown) => void);
     this.listeners.set(type, list);
   }
 
@@ -35,6 +39,13 @@ export class FakeEventSource implements EventSourceLike {
   emit(eventName: string, seq: number, task: TaskEnvelope): void {
     for (const cb of this.listeners.get(eventName) ?? []) {
       cb({ data: JSON.stringify(task), lastEventId: String(seq) });
+    }
+  }
+
+  /** Fire the stream `error` listener (daemon drop / transport fault). */
+  emitError(event: unknown = {}): void {
+    for (const cb of this.listeners.get("error") ?? []) {
+      cb(event);
     }
   }
 }

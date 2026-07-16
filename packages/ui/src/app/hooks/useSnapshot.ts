@@ -23,16 +23,27 @@ export interface SnapshotView {
   totalTasks: number;
   activeTasks: number;
   durableSessions: number;
+  /**
+   * Whether the bootstrap+SSE stream is currently live. False while connecting,
+   * after a bootstrap failure, or after a stream error until an event arrives
+   * again (EventSource auto-reconnect) or a full re-bootstrap succeeds.
+   */
+  connected: boolean;
+  /**
+   * Epoch ms when the stream last became disconnected/erroring, or `null`
+   * while {@link connected}. Surfaces "stream lost since <t>" for the shell.
+   */
+  streamLostSince: number | null;
 }
 
 const EMPTY_TASKS: RosterTaskInput[] = [];
 
-const EMPTY: SnapshotView = {
+const EMPTY_PROJECTION = {
   tasks: EMPTY_TASKS,
-  groups: [],
-  sessions: [],
-  inbox: [],
-  scene: { sessions: [] },
+  groups: [] as RosterGroup[],
+  sessions: [] as RosterSessionOption[],
+  inbox: [] as InboxTask[],
+  scene: { sessions: [] } as SceneView,
   totalTasks: 0,
   activeTasks: 0,
   durableSessions: 0,
@@ -96,6 +107,10 @@ export function useSnapshot(client: ParleyClient): SnapshotView {
   // `useCockpit` can re-project groups under the selected session filter (#76)
   // without forking the SSE merge logic.
   const [tasks, setTasks] = useState<RosterTaskInput[]>(EMPTY_TASKS);
+  // Transport liveness — separate from the projected task list so a disconnect
+  // can flip honesty signals without inventing empty-fleet snapshots.
+  const [connected, setConnected] = useState(false);
+  const [streamLostSince, setStreamLostSince] = useState<number | null>(() => Date.now());
 
   useEffect(() => {
     let cancelled = false;
@@ -110,6 +125,20 @@ export function useSnapshot(client: ParleyClient): SnapshotView {
     // both projections (each a full pass) see every task.
     const emit = (): void => {
       if (!cancelled) setTasks([...taskMap.values()]);
+    };
+
+    /** Mark the stream live (bootstrap success or post-error event after reconnect). */
+    const markConnected = (): void => {
+      if (cancelled) return;
+      setConnected(true);
+      setStreamLostSince(null);
+    };
+
+    /** Mark the stream lost; keep the first lost-at timestamp across repeated errors. */
+    const markDisconnected = (): void => {
+      if (cancelled) return;
+      setConnected(false);
+      setStreamLostSince((prev) => prev ?? Date.now());
     };
 
     /** Adopt `session` for `id` when the task is still session-less. */
@@ -135,10 +164,15 @@ export function useSnapshot(client: ParleyClient): SnapshotView {
         const { snapshot, stream: live } = await bootstrapTaskStream({
           client,
           onEvent: (event) => {
+            // An event after an error means EventSource auto-reconnected — chart is live again.
+            markConnected();
             const merged = mergeEnvelope(taskMap.get(event.task.task_id), event);
             taskMap.set(event.task.task_id, merged);
             if (merged.orchestratorSession === null) fetchSession(merged.id);
             emit();
+          },
+          onError: () => {
+            markDisconnected();
           },
         });
         if (cancelled) {
@@ -156,8 +190,10 @@ export function useSnapshot(client: ParleyClient): SnapshotView {
           else adoptSession(row.id, row.orchestrator_session_id);
         }
         stream = live;
+        markConnected();
         emit();
       } catch {
+        markDisconnected();
         if (!cancelled) retry = setTimeout(() => void connect(), RETRY_MS);
       }
     };
@@ -173,13 +209,22 @@ export function useSnapshot(client: ParleyClient): SnapshotView {
   // Unfiltered projection — health/scene/inbox and the base roster. Session
   // filtering for the roster list is applied in `useCockpit` via a second
   // `projectRoster(tasks, selectedSessionId)` so selection stays cockpit-owned.
+  // Transport fields ride along so the shell can compose chart-staleness without
+  // a second subscription to the same client.
   return useMemo(() => {
-    if (tasks.length === 0) return EMPTY;
+    const projected =
+      tasks.length === 0
+        ? EMPTY_PROJECTION
+        : {
+            tasks,
+            ...projectRoster(tasks),
+            inbox: projectInbox(tasks),
+            scene: projectScene(tasks),
+          };
     return {
-      tasks,
-      ...projectRoster(tasks),
-      inbox: projectInbox(tasks),
-      scene: projectScene(tasks),
+      ...projected,
+      connected,
+      streamLostSince,
     };
-  }, [tasks]);
+  }, [tasks, connected, streamLostSince]);
 }

@@ -10,6 +10,8 @@ import {
   SettingsBar,
   type RosterSearchHandle,
 } from "../hud/index.js";
+import { Mark } from "../primitives/index.js";
+import { STATE_META } from "../tokens/state-meta.js";
 import { Scene } from "../scene/index.js";
 import { useCockpit, useCockpitKeys } from "./hooks/index.js";
 import { CompassRose } from "./CompassRose.js";
@@ -26,7 +28,7 @@ const DevKitBand = import.meta.env.DEV
  * — with the living scene reserved for its own ticket.
  */
 export function Cockpit() {
-  const { health, snapshot, roster, clock, day, inspector, settings } = useCockpit();
+  const { health, snapshot, roster, clock, day, inspector, settings, chartStale } = useCockpit();
   const rosterSearchRef = useRef<RosterSearchHandle | null>(null);
   useCockpitKeys({
     rosterRef: rosterSearchRef,
@@ -37,7 +39,7 @@ export function Cockpit() {
   });
 
   return (
-    <div className="pc-cockpit">
+    <div className={`pc-cockpit${chartStale ? " pc-cockpit--stale" : ""}`} data-stale={chartStale ? "true" : undefined}>
       <div className="pc-atmos pc-atmos--sea" />
       <CompassRose />
       <div className="pc-atmos pc-atmos--vignette" />
@@ -66,6 +68,14 @@ export function Cockpit() {
             </div>
             {/* Sea is the room's backdrop (#75) — no Plate card chrome. */}
             <div className="pc-scene">
+              {chartStale && (
+                <div className="pc-stale-band" role="status" aria-live="polite">
+                  <span className="pc-stale-band__glyph" aria-hidden="true">
+                    <Mark mark={STATE_META.stalled.mark} size={14} />
+                  </span>
+                  <span className="pc-stale-band__copy">Chart may be stale — reconnecting…</span>
+                </div>
+              )}
               <Scene
                 sessions={snapshot.scene.sessions}
                 activeSessionId={roster.selectedSessionId}
