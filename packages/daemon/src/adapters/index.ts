@@ -7,6 +7,7 @@ import { createGeminiAdapter } from "./gemini.js";
 import { createKiloAdapter } from "./kilo.js";
 import { createGooseAdapter } from "./goose.js";
 import { createOpenclawAdapter } from "./openclaw.js";
+import { createClineAdapter } from "./cline.js";
 import { loadPluginAdapter } from "./plugins.js";
 
 /**
@@ -25,6 +26,7 @@ export function createBuiltinAdapters(
     createKiloAdapter(env),
     createGooseAdapter(env),
     createOpenclawAdapter(env),
+    createClineAdapter(env),
   ];
   return new Map(adapters.map((adapter) => [adapter.id, adapter]));
 }
