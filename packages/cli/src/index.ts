@@ -9,6 +9,7 @@ import { runDaemon } from "./commands/daemon.js";
 import { runDelegate } from "./commands/delegate.js";
 import { runEval } from "./commands/eval.js";
 import { runLogs } from "./commands/logs.js";
+import { runMetrics } from "./commands/metrics.js";
 import { runModels } from "./commands/models.js";
 import { runSkills } from "./commands/skills/index.js";
 import { runStatus } from "./commands/tasks.js";
@@ -31,6 +32,8 @@ Usage:
     --report-schema <file>  Validate the child's report against this JSON Schema
     --answer-timeout <dur>  Stall the task when a question goes unanswered
                             this long (default 30m; e.g. 90s, 250ms)
+    --size <XS|S|M|L|XL>    Task size classification (optional; for metrics)
+    --difficulty <level>    trivial|easy|medium|hard|extreme (optional)
   parley answer <task> "<text>" Answer a child's question ('-' reads stdin);
                                 on a stalled task, resume it with the text.
                                 Returns immediately; wait with parley watch.
@@ -57,6 +60,10 @@ Usage:
                             narrows to your orchestrator session (--session,
                             else PARLEY_SESSION_ID, else the newest session);
                             --all shows every task.
+  parley metrics [--session <id>|latest|all] [--group-by vendor|model|profile|size|difficulty]
+              [--json]      Aggregate task metrics (counts, evals, tokens,
+                            duration) by group. Defaults: session=all,
+                            group-by=vendor.
   parley logs <task> [--follow] [--json]
                             Print the captured vendor stream, coalescing
                             token-streamed chunks into readable lines
@@ -133,6 +140,8 @@ export async function run(argv: string[], ctx: CliContext): Promise<number> {
     case "list":
     case "status":
       return runStatus(ctx, rest);
+    case "metrics":
+      return runMetrics(ctx, rest);
     case "logs":
       return runLogs(ctx, rest);
     case "clean":

@@ -4,7 +4,13 @@ import { parseArgs } from "../args.js";
 import { DaemonRequestError, daemonPost, ensureDaemon } from "../client.js";
 import { type CliContext, printJson } from "../context.js";
 import { UsageError } from "../errors.js";
-import { parseDuration } from "@useparley/core";
+import {
+  isTaskDifficulty,
+  isTaskSize,
+  parseDuration,
+  TASK_DIFFICULTIES,
+  TASK_SIZES,
+} from "@useparley/core";
 import { SANDBOX_MODES, isSandboxMode } from "@useparley/daemon/adapters/types.js";
 
 interface DelegateAck {
@@ -39,6 +45,8 @@ export async function runDelegate(ctx: CliContext, args: string[]): Promise<numb
     "--wait": {},
     "--json": {},
     "--answer-timeout": { value: true },
+    "--size": { value: true },
+    "--difficulty": { value: true },
   });
 
   if (flags["--wait"] === true) {
@@ -167,6 +175,26 @@ export async function runDelegate(ctx: CliContext, args: string[]): Promise<numb
     seen.add(name);
   }
 
+  // Classification (#118): optional; unknown enum values are usage errors (exit 2).
+  let size: string | null = null;
+  if (typeof flags["--size"] === "string") {
+    size = flags["--size"];
+    if (!isTaskSize(size)) {
+      throw new UsageError(
+        `delegate: invalid --size: ${size} (expected ${TASK_SIZES.join("|")})`,
+      );
+    }
+  }
+  let difficulty: string | null = null;
+  if (typeof flags["--difficulty"] === "string") {
+    difficulty = flags["--difficulty"];
+    if (!isTaskDifficulty(difficulty)) {
+      throw new UsageError(
+        `delegate: invalid --difficulty: ${difficulty} (expected ${TASK_DIFFICULTIES.join("|")})`,
+      );
+    }
+  }
+
   const discovery = await ensureDaemon(ctx.paths, ctx.env);
   let ack: DelegateAck;
   try {
@@ -182,6 +210,8 @@ export async function runDelegate(ctx: CliContext, args: string[]): Promise<numb
       answer_timeout_ms: answerTimeoutMs,
       report_schema: reportSchema,
       contexts,
+      size,
+      difficulty,
     };
     if (vendor !== null) body.vendor = vendor;
     if (profile !== null) body.profile = profile;

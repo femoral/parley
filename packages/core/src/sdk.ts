@@ -9,6 +9,7 @@ import { DaemonRequestError } from "./client.js";
 import type {
   CleanResponse,
   HealthResponse,
+  MetricsResponse,
   SessionsResponse,
   StreamEvent,
   TaskAck,
@@ -17,6 +18,7 @@ import type {
   TaskLogResponse,
   TasksResponse,
 } from "./contract.js";
+import type { MetricsGroupBy } from "./classification.js";
 import { TASK_EVENT_NAMES } from "./states.js";
 
 /** How the client reaches the daemon. */
@@ -96,6 +98,21 @@ export class ParleyClient {
     const q = query?.trim() ?? "";
     const path = q === "" ? "/sessions" : `/sessions?q=${encodeURIComponent(q)}`;
     return this.request<SessionsResponse>(path);
+  }
+
+  /**
+   * `GET /metrics` — per-group task/eval/token/duration aggregates (#118).
+   * Defaults: session=`all`, groupBy=`vendor`.
+   */
+  metrics(options?: {
+    session?: string;
+    groupBy?: MetricsGroupBy;
+  }): Promise<MetricsResponse> {
+    const params = new URLSearchParams();
+    if (options?.session !== undefined) params.set("session", options.session);
+    if (options?.groupBy !== undefined) params.set("group_by", options.groupBy);
+    const qs = params.toString();
+    return this.request<MetricsResponse>(qs === "" ? "/metrics" : `/metrics?${qs}`);
   }
 
   /** `GET /tasks/:ref` — a task's envelope alongside its raw row. */

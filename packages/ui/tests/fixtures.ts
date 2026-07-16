@@ -75,6 +75,8 @@ export function envelope(
     question: null,
     seq: 0,
     eval_expected: false,
+    size: null,
+    difficulty: null,
     ...overrides,
   };
 }
@@ -112,6 +114,8 @@ export function row(
     seq: 1,
     eval_score: null,
     eval_feedback: null,
+    size: null,
+    difficulty: null,
     ...overrides,
   };
 }

@@ -29,6 +29,8 @@ function seedTask(id = "t1"): void {
     model: null,
     effort: null,
     profile: null,
+    size: null,
+    difficulty: null,
     repo: null,
     cwd: "/tmp",
     prompt: "do it",

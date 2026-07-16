@@ -67,6 +67,10 @@ export interface TaskEnvelope {
   seq: number;
   /** Whether the task's repo declares delegations into it are eval'd (#45). */
   eval_expected: boolean;
+  /** Task size classification (XS|S|M|L|XL); null when unset at delegate time (#118). */
+  size: string | null;
+  /** Task difficulty (trivial|easy|medium|hard|extreme); null when unset (#118). */
+  difficulty: string | null;
 }
 
 /**
@@ -118,6 +122,10 @@ export interface TaskRow {
   seq: number;
   eval_score: number | null;
   eval_feedback: string | null;
+  /** Task size classification (XS|S|M|L|XL); null when unset at delegate time (#118). */
+  size: string | null;
+  /** Task difficulty (trivial|easy|medium|hard|extreme); null when unset (#118). */
+  difficulty: string | null;
 }
 
 /** `GET /health` — daemon liveness plus its package version (spec stability §). */
@@ -235,4 +243,64 @@ export interface StreamEvent {
   seq: number;
   event: string;
   task: TaskEnvelope;
+}
+
+/** Task-count breakdown inside a metrics group (#118). */
+export interface MetricsTaskCounts {
+  total: number;
+  completed: number;
+  failed: number;
+  cancelled: number;
+  running: number;
+  other: number;
+}
+
+/** Eval aggregate: count of scored tasks and their mean score. */
+export interface MetricsEvalStats {
+  count: number;
+  avg: number | null;
+}
+
+/** Token totals after canonical normalizeUsage mapping. */
+export interface MetricsTokenTotals {
+  input: number;
+  output: number;
+  cached: number;
+  /** Tasks whose usage JSON contributed at least one non-null token field. */
+  tasks_reporting: number;
+}
+
+/** Duration aggregates from started_at/completed_at (ms). */
+export interface MetricsDurationStats {
+  total: number;
+  avg: number | null;
+  p50: number | null;
+  p95: number | null;
+  tasks_reporting: number;
+}
+
+/**
+ * One group in `GET /metrics` (#118) — keyed by vendor/model/profile/size/
+ * difficulty (or null when the column is unset for that bucket).
+ */
+export interface MetricsGroup {
+  key: string | null;
+  tasks: MetricsTaskCounts;
+  /** completed / (completed + failed); null when neither completed nor failed. */
+  success_rate: number | null;
+  evals: MetricsEvalStats;
+  evals_by_size: Record<string, MetricsEvalStats>;
+  evals_by_difficulty: Record<string, MetricsEvalStats>;
+  tokens: MetricsTokenTotals;
+  duration_ms: MetricsDurationStats;
+}
+
+/**
+ * `GET /metrics?session=&group_by=` — per-group task/eval/token/duration
+ * aggregates for the CLI and Cove dashboard (#118 / #119).
+ */
+export interface MetricsResponse {
+  groups: MetricsGroup[];
+  /** ISO-8601 timestamp when the response was generated. */
+  generated_at: string;
 }

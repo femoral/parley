@@ -35,6 +35,8 @@ function seedTask(
     network: true,
     answer_timeout_ms: null,
     report_schema: null,
+    size: null,
+    difficulty: null,
   });
 }
 

@@ -179,6 +179,10 @@ export interface Envelope {
   seq: number;
   /** Whether the task's repo declares delegations into it are eval'd (#45). */
   eval_expected: boolean;
+  /** Task size classification (XS|S|M|L|XL); null when unset (#118). */
+  size: string | null;
+  /** Task difficulty (trivial|easy|medium|hard|extreme); null when unset (#118). */
+  difficulty: string | null;
 }
 
 /**
@@ -238,5 +242,7 @@ export function buildEnvelope(task: TaskRow, logsDir: string | null = null): Env
     question: task.question,
     seq: task.seq,
     eval_expected: readEvalExpected(task.repo),
+    size: task.size,
+    difficulty: task.difficulty,
   };
 }

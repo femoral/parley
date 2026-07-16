@@ -61,6 +61,8 @@ function baseRequest(
     reportSchema: null,
     contexts: [],
     runner: null,
+    size: null,
+    difficulty: null,
     ...overrides,
   };
 }
@@ -155,9 +157,9 @@ describe("profile column migration (#113)", () => {
     db.close();
     fs.rmSync(home, { recursive: true, force: true });
     home = fs.mkdtempSync(path.join(os.tmpdir(), "parley-profile-mig-"));
-    // Profile is the second-to-last migration; runner (#111) is last. Open at
-    // SCHEMA_VERSION - 2 so neither profile nor runner columns exist yet.
-    const prev = openDatabaseUpTo(homePaths(home), SCHEMA_VERSION - 2);
+    // Profile (#113) is followed by runner (#111) and size/difficulty (#118).
+    // Open just before the profile migration so none of those columns exist yet.
+    const prev = openDatabaseUpTo(homePaths(home), SCHEMA_VERSION - 3);
     const colsBefore = prev
       .prepare("PRAGMA table_info(tasks)")
       .all()

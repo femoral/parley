@@ -220,6 +220,15 @@ export interface DelegateRequest {
    * pending until that runner leases it — never locally spawned.
    */
   runner: string | null;
+  /**
+   * Task size classification (XS|S|M|L|XL); null when unset (#118). Validated
+   * at the HTTP boundary; engine stores as-is.
+   */
+  size: string | null;
+  /**
+   * Task difficulty (trivial|easy|medium|hard|extreme); null when unset (#118).
+   */
+  difficulty: string | null;
 }
 
 /**
@@ -575,6 +584,8 @@ export class TaskEngine {
       answer_timeout_ms: request.answerTimeoutMs,
       report_schema:
         request.reportSchema !== null ? JSON.stringify(request.reportSchema) : null,
+      size: request.size,
+      difficulty: request.difficulty,
     });
 
     if (isRemote) {

@@ -1,6 +1,16 @@
 import http from "node:http";
 import path from "node:path";
-import { readConfig, type HomePaths, type ParleyConfig } from "@useparley/core";
+import {
+  isMetricsGroupBy,
+  isTaskDifficulty,
+  isTaskSize,
+  METRICS_GROUP_BY,
+  TASK_DIFFICULTIES,
+  TASK_SIZES,
+  type HomePaths,
+  type ParleyConfig,
+  readConfig,
+} from "@useparley/core";
 import { createAdapterRegistry } from "./adapters/index.js";
 import { openDatabase, sweepInterruptedTasks, TERMINAL_STATES } from "./db.js";
 import { isSandboxMode, type SandboxMode } from "./adapters/types.js";
@@ -8,6 +18,7 @@ import type { ContextFile } from "./context.js";
 import { DelegateError, TaskEngine } from "./engine.js";
 import { readLogTail } from "./logtail.js";
 import { handleChildAsk, handleChildReport, handleChildTask } from "./child.js";
+import { aggregateMetrics } from "./metrics.js";
 import { handleMcpRequest } from "./mcp.js";
 import { buildEnvelope } from "./report.js";
 import { discoverUiBundle, isReservedPath, serveUiRequest } from "./ui.js";
@@ -145,6 +156,27 @@ function handleDelegate(engine: TaskEngine, res: http.ServerResponse, body: unkn
       contexts.push({ name: entry.name, contents: entry.contents });
     }
   }
+  // Classification (#118): optional size/difficulty; reject unknown enum values.
+  let size: string | null = null;
+  if (body.size !== undefined && body.size !== null) {
+    if (typeof body.size !== "string" || !isTaskSize(body.size)) {
+      sendJson(res, 400, {
+        error: `invalid size: ${String(body.size)} (expected ${TASK_SIZES.join("|")})`,
+      });
+      return;
+    }
+    size = body.size;
+  }
+  let difficulty: string | null = null;
+  if (body.difficulty !== undefined && body.difficulty !== null) {
+    if (typeof body.difficulty !== "string" || !isTaskDifficulty(body.difficulty)) {
+      sendJson(res, 400, {
+        error: `invalid difficulty: ${String(body.difficulty)} (expected ${TASK_DIFFICULTIES.join("|")})`,
+      });
+      return;
+    }
+    difficulty = body.difficulty;
+  }
   try {
     const task = engine.delegate({
       prompt,
@@ -167,6 +199,8 @@ function handleDelegate(engine: TaskEngine, res: http.ServerResponse, body: unkn
       reportSchema: body.report_schema ?? null,
       contexts,
       runner: optionalString(body.runner),
+      size,
+      difficulty,
     });
     sendJson(res, 201, { task_id: task.id, name: task.name, state: task.state, seq: task.seq });
   } catch (err) {
@@ -211,6 +245,31 @@ function readRunnerConfig(paths: HomePaths): ParleyConfig {
   } catch {
     return {};
   }
+}
+
+/**
+ * `GET /metrics?session=<id|all>&group_by=<vendor|model|profile|size|difficulty>`
+ * — per-group task/eval/token/duration aggregates (#118). Defaults: session=all,
+ * group_by=vendor.
+ */
+function handleMetrics(
+  engine: TaskEngine,
+  res: http.ServerResponse,
+  params: URLSearchParams,
+): void {
+  const session = params.get("session") ?? "all";
+  if (session === "") {
+    sendJson(res, 400, { error: "session must be a non-empty id or 'all'" });
+    return;
+  }
+  const groupByRaw = params.get("group_by") ?? "vendor";
+  if (!isMetricsGroupBy(groupByRaw)) {
+    sendJson(res, 400, {
+      error: `invalid group_by: ${groupByRaw} (expected ${METRICS_GROUP_BY.join("|")})`,
+    });
+    return;
+  }
+  sendJson(res, 200, aggregateMetrics(engine.list(), { session, groupBy: groupByRaw }));
 }
 
 /**
@@ -815,6 +874,12 @@ function createHandler(
       if (method === "GET" && url.pathname === "/sessions") {
         const q = url.searchParams.get("q");
         sendJson(res, 200, { sessions: engine.listSessions(q ?? undefined) });
+        return;
+      }
+
+      // `GET /metrics` — task/eval/token/duration aggregates (#118).
+      if (method === "GET" && url.pathname === "/metrics") {
+        handleMetrics(engine, res, url.searchParams);
         return;
       }
 

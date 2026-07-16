@@ -116,6 +116,10 @@ export interface TaskRow {
   eval_score: number | null;
   /** Orchestrator-recorded feedback text via `parley eval`; null until set. */
   eval_feedback: string | null;
+  /** Task size classification (XS|S|M|L|XL); null when unset at delegate time (#118). */
+  size: string | null;
+  /** Task difficulty (trivial|easy|medium|hard|extreme); null when unset (#118). */
+  difficulty: string | null;
 }
 
 /** Fields the daemon writes when creating a task. */
@@ -149,6 +153,10 @@ export interface NewTask {
   answer_timeout_ms: number | null;
   /** JSON of the caller-supplied report schema; null uses parley's default. */
   report_schema: string | null;
+  /** Task size classification (XS|S|M|L|XL); null when unset (#118). */
+  size: string | null;
+  /** Task difficulty (trivial|easy|medium|hard|extreme); null when unset (#118). */
+  difficulty: string | null;
 }
 
 /**
@@ -252,6 +260,10 @@ const MIGRATIONS: string[] = [
   // stay pending until that runner leases them; never picked up by the local
   // engine spawn path. Null means in-daemon execution (default).
   `ALTER TABLE tasks ADD COLUMN runner TEXT;`,
+  // #118: task classification for metrics — size (XS|S|M|L|XL) and difficulty
+  // (trivial|easy|medium|hard|extreme), optional at delegate time.
+  `ALTER TABLE tasks ADD COLUMN size TEXT;
+   ALTER TABLE tasks ADD COLUMN difficulty TEXT;`,
 ];
 
 /** How many schema migrations have been applied — equals `PRAGMA user_version` after open. */
@@ -329,7 +341,8 @@ export function openDatabaseUpTo(paths: HomePaths, upTo: number): DatabaseHandle
 const TASK_COLUMNS = `id, name, vendor, model, effort, profile, runner, repo, state, created_at, updated_at,
    cwd, prompt, session_id, usage, report, error, started_at, completed_at,
    question_id, question, worktree, branch, base_sha, sandbox, network,
-   answer_timeout_ms, report_schema, seq, orchestrator_session_id, eval_score, eval_feedback`;
+   answer_timeout_ms, report_schema, seq, orchestrator_session_id, eval_score, eval_feedback,
+   size, difficulty`;
 
 /** Cast a node:sqlite row result to a domain shape (driver types are untyped maps). */
 function asRow<T>(row: unknown): T {
@@ -528,8 +541,8 @@ export function insertTask(db: DatabaseHandle, task: NewTask): TaskRow {
     `INSERT INTO tasks
        (id, name, vendor, model, effort, profile, runner, repo, state, created_at, updated_at,
         cwd, prompt, orchestrator_session_id, worktree, branch, base_sha, sandbox,
-        network, answer_timeout_ms, report_schema)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        network, answer_timeout_ms, report_schema, size, difficulty)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     task.id,
     task.name,
@@ -551,6 +564,8 @@ export function insertTask(db: DatabaseHandle, task: NewTask): TaskRow {
     task.network ? 1 : 0,
     task.answer_timeout_ms,
     task.report_schema,
+    task.size,
+    task.difficulty,
   );
   return getTask(db, task.id)!;
 }
