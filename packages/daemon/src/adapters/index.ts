@@ -5,6 +5,7 @@ import { createGrokAdapter } from "./grok.js";
 import { createClaudeAdapter } from "./claude.js";
 import { createGeminiAdapter } from "./gemini.js";
 import { createKiloAdapter } from "./kilo.js";
+import { createGooseAdapter } from "./goose.js";
 import { loadPluginAdapter } from "./plugins.js";
 
 /**
@@ -21,6 +22,7 @@ export function createBuiltinAdapters(
     createClaudeAdapter(env),
     createGeminiAdapter(env),
     createKiloAdapter(env),
+    createGooseAdapter(env),
   ];
   return new Map(adapters.map((adapter) => [adapter.id, adapter]));
 }
