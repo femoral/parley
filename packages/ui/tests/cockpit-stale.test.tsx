@@ -34,8 +34,6 @@ function baseView(overrides: Partial<CockpitView> = {}): CockpitView {
       host: "127.0.0.1",
       port: "1",
       uptime: "1m",
-      activeAgents: 0,
-      totalTasks: 0,
       durableSessions: 0,
     },
     snapshot: {

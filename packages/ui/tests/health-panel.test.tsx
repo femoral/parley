@@ -13,23 +13,23 @@ const HEALTH: HealthView = {
   host: "127.0.0.1",
   port: "57123",
   uptime: "3m 41s",
-  activeAgents: 2,
-  totalTasks: 5,
   durableSessions: 1,
 };
 
 describe("HealthPanel renders daemon status from plain props (#65)", () => {
-  it("shows status, version, pid, uptime, and task counts", () => {
+  it("shows daemon facts: status, version, pid, uptime, host/port, sessions", () => {
     render(<HealthPanel health={HEALTH} />);
     expect(screen.getByText("HEALTHY")).toBeTruthy();
     expect(screen.getByText("v0.0.0")).toBeTruthy();
     expect(screen.getByText("4242")).toBeTruthy();
     expect(screen.getByText("3m 41s")).toBeTruthy();
     expect(screen.getByText("57123")).toBeTruthy();
-    // Total tasks and active agents surface as independent counts.
-    expect(screen.getByText("5")).toBeTruthy();
-    expect(screen.getByText("2")).toBeTruthy();
-    expect(screen.queryByText("2 / 5")).toBeNull();
+    expect(screen.getByText("127.0.0.1")).toBeTruthy();
+    // Sessions is the one non-grid daemon count; fleet totals live on the roster.
+    expect(screen.getByText("1")).toBeTruthy();
+    expect(screen.getByText("Sessions")).toBeTruthy();
+    expect(screen.queryByText("Total tasks")).toBeNull();
+    expect(screen.queryByText("Active agents")).toBeNull();
   });
 
   it("reads OFFLINE when the daemon is unreachable", () => {

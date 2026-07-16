@@ -117,7 +117,7 @@
 }
 .pc-health__wells {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: 1fr;
   gap: 8px;
 }
 .pc-health-chip {
@@ -223,10 +223,12 @@
   flex-direction: column;
   gap: 6px;
 }
+/* Outfit label tier (Engraved-Chrome: Cinzel is titles/tabs/buttons, not form labels). */
 .pc-roster__search-label {
-  font-family: var(--font-display);
+  font-family: var(--font-body);
+  font-weight: 600;
   font-size: 9px;
-  letter-spacing: 0.12em;
+  letter-spacing: 1px;
   text-transform: uppercase;
   color: var(--ink-label);
 }
@@ -465,20 +467,12 @@
   letter-spacing: 0.6px;
   white-space: nowrap;
 }
+/* No inner max-height — the right column (.pc-region--right) owns scrolling. */
 .pc-inbox__list {
   display: flex;
   flex-direction: column;
   gap: 8px;
   padding: 4px 12px 12px;
-  max-height: 290px;
-  overflow-y: auto;
-}
-.pc-inbox__list::-webkit-scrollbar {
-  width: 8px;
-}
-.pc-inbox__list::-webkit-scrollbar-thumb {
-  background: var(--scroll-thumb);
-  border-radius: 4px;
 }
 .pc-inbox__empty {
   display: flex;
@@ -819,7 +813,7 @@
 .pc-brief__goal {
   margin: 0;
   font-family: var(--font-body);
-  font-style: italic;
+  font-style: normal;
   font-size: 13px;
   line-height: 1.45;
   color: var(--ink-warm);
@@ -1026,7 +1020,7 @@
   background: var(--plate-well);
   border: 1px solid var(--plate-well-border);
   font-family: var(--font-body);
-  font-style: italic;
+  font-style: normal;
   color: var(--question-parchment);
 }
 .pc-qa__bubble--answer {

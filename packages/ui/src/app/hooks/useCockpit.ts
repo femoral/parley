@@ -252,9 +252,7 @@ export function useCockpit(): CockpitView {
     host: origin?.hostname || "127.0.0.1",
     port: origin?.port || "—",
     uptime: health.startedAt !== null ? formatUptime(now - health.startedAt) : "",
-    // Fleet-wide counts — never scoped to the selected session chip.
-    activeAgents: live.activeTasks,
-    totalTasks: live.totalTasks,
+    // Daemon-side session count only — fleet totals/active live on the roster.
     durableSessions: live.durableSessions,
   };
 

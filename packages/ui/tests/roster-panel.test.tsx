@@ -90,6 +90,17 @@ describe("RosterPanel renders groups it is given, in attention order (#66)", () 
     expect(screen.queryByText("CANCELLED")).toBeNull();
   });
 
+  it("owns fleet counts in the footer (Total tasks / Active)", () => {
+    const { container } = render(<RosterPanel {...baseProps()} />);
+    expect(screen.getByText("Total tasks")).toBeTruthy();
+    expect(screen.getByText("Active")).toBeTruthy();
+    // baseProps totalTasks=3, activeTasks=2 — assert values on the footer stats only
+    // (group counts and session chips also render small numerals).
+    const footer = container.querySelector(".pc-roster__footer");
+    expect(footer?.textContent).toMatch(/3\s*Total tasks/);
+    expect(footer?.textContent).toMatch(/2\s*Active/);
+  });
+
   it("shows the quiet-cove empty state with no groups", () => {
     render(<RosterPanel {...baseProps()} groups={[]} sessions={[]} totalTasks={0} activeTasks={0} />);
     expect(screen.getByText(/The cove is quiet/)).toBeTruthy();

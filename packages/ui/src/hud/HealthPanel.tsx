@@ -14,7 +14,8 @@ function Cell({ label, value }: { label: string; value: string }) {
 /**
  * Layer 2 — the daemon health panel (design-manifest §4.14). Plain props only:
  * the hooks layer probes `/health` + `/tasks` and hands this a fully-projected
- * {@link HealthView}. Renders status, version, pid, uptime and task counts.
+ * {@link HealthView}. Daemon facts only (connection, version, host/port/pid,
+ * uptime, durable sessions) — fleet counts (total/active) live on the roster.
  */
 export function HealthPanel({ health }: { health: HealthView }) {
   const chipColor = health.online ? "var(--healthy-dot)" : "var(--state-failed)";
@@ -44,16 +45,6 @@ export function HealthPanel({ health }: { health: HealthView }) {
           <Cell label="Uptime" value={health.uptime || "—"} />
         </div>
         <div className="pc-health__wells">
-          <div className="pc-well">
-            <Stat value={String(health.totalTasks)} label="Total tasks" color="var(--brass)" />
-          </div>
-          <div className="pc-well">
-            <Stat
-              value={String(health.activeAgents)}
-              label="Active agents"
-              color="var(--state-running)"
-            />
-          </div>
           <div className="pc-well">
             <Stat
               value={String(health.durableSessions)}

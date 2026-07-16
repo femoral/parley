@@ -171,10 +171,6 @@ export interface HealthView {
   port: string;
   /** Pre-formatted uptime, e.g. "3m 41s" (empty before the first probe). */
   uptime: string;
-  /** Non-terminal task count (running/awaiting/pending/stalled). */
-  activeAgents: number;
-  /** Total tasks known to the daemon. */
-  totalTasks: number;
   /** Distinct orchestrator sessions with live tasks. */
   durableSessions: number;
 }
