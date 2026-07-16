@@ -160,7 +160,9 @@
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  padding: 3px 9px;
+  /* ≥24px tall for WCAG 2.2 AA 2.5.8 (was ~21px at 3px pad / 10.5px type). */
+  min-height: 24px;
+  padding: 4px 9px;
   border-radius: var(--radius-pill);
   border: 1px solid var(--brass-frame);
   background: transparent;

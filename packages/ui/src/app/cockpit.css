@@ -145,4 +145,11 @@
   .pc-region--roster {
     min-height: 220px;
   }
+  /* Column scroll + flex:1 / min-height:0 on centre+scene collapses the living
+     scene to ~0 when flanks (roster ≥220px, right stack inspector min 380px)
+     exceed the viewport. Floor the scene so the chart stays the point of the
+     cockpit; the main column scrolls. Header (.pc-center__head) is flex:0. */
+  .pc-scene {
+    min-height: clamp(320px, 50vh, 560px);
+  }
 }
