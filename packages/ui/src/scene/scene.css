@@ -64,10 +64,12 @@
 /* Soft cool moonlight column on the water under the moon — opacity breathing. */
 .pc-scene-sky__moonpath {
   position: absolute;
-  top: 10%;
+  /* Moonlight lives on the water: the column starts at the horizon crest
+     (~34% — .pc-scene-horizon height), never up in the sky beside the moon. */
+  top: 26%;
   left: 72%;
   width: 48px;
-  height: 52%;
+  height: 38%;
   transform: translateX(-50%);
   pointer-events: none;
   background: linear-gradient(
@@ -204,8 +206,10 @@
 .pc-scene-horizon__sil {
   position: absolute;
   inset: 0;
-  opacity: 0.32;
-  background: color-mix(in srgb, var(--sea-shallow) 55%, var(--sea-deep));
+  /* Distant land reads darker than the sky behind it — the natural depth cue.
+     A lighter-than-sky tint at 0.32 all but vanished against the gradient. */
+  opacity: 0.55;
+  background: color-mix(in srgb, var(--sea-deep) 70%, var(--sea-abyss));
   /* Lantern asset: single-colour potrace silhouettes (island/mountain strip). */
   -webkit-mask-image: url("./assets/lantern/horizon.svg");
   mask-image: url("./assets/lantern/horizon.svg");
