@@ -218,12 +218,25 @@
   }
 }
 
-@keyframes pc-sea-move {
+/* Sea texture current — two stacked pattern layers (cockpit.css .pc-atmos--sea
+   ::before / ::after), each translating one of the design drift vectors on the
+   compositor. Distances match the former dual background-position endpoints
+   (220px 0 / −180px 90px). Base transform is identity so reduced-motion stills
+   on the legible resting frame. */
+@keyframes pc-sea-move-a {
   from {
-    background-position: 0 0, 0 0;
+    transform: translate(0, 0);
   }
   to {
-    background-position: 220px 0, -180px 90px;
+    transform: translate(220px, 0);
+  }
+}
+@keyframes pc-sea-move-b {
+  from {
+    transform: translate(0, 0);
+  }
+  to {
+    transform: translate(-180px, 90px);
   }
 }
 
@@ -238,16 +251,17 @@
 
 /* §"Accessibility" — reduced motion stills every ambient loop; states stay
    legible as still imagery. A single wildcard rule catches every animation in
-   the app (sea drift, compass spin, beacon pulse, galleon/sloop bob, island
-   rise/sink, shore foam, orbit, wake, flare, fog drift, flag wave, sail-off,
-   camera travel, PARLEY! bounce) without each of them needing its own
-   reduced-motion override — audited against every `@keyframes`/`animation`/
-   `transition` declaration in the package (#70). `animation-delay` is zeroed
-   too (the wake trail staggers its three dashes with `0.2s`/`0.4s` delays;
-   left alone, those would still visibly stagger in for a moment). Every
-   animated element's non-animated base style is its legible resting state
-   (each rule's own comment says so), so collapsing to ~0 duration/1 iteration
-   lands on that still frame rather than losing the state's information. */
+   the app (sea drift a/b, compass spin, beacon pulse, galleon/sloop bob,
+   island rise/sink, shore foam, orbit, wake, flare, fog drift, flag wave,
+   sail-off, camera travel, PARLEY! bounce, scene glint) without each of them
+   needing its own reduced-motion override — audited against every
+   `@keyframes`/`animation`/`transition` declaration in the package (#70).
+   `animation-delay` is zeroed too (the wake trail staggers its three dashes
+   with `0.2s`/`0.4s` delays; left alone, those would still visibly stagger in
+   for a moment). Every animated element's non-animated base style is its
+   legible resting state (each rule's own comment says so), so collapsing to
+   ~0 duration/1 iteration lands on that still frame rather than losing the
+   state's information. */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
