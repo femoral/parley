@@ -2,6 +2,13 @@ import type { CSSProperties, ReactNode } from "react";
 import type { EmblemMark } from "../tokens/factions.js";
 import { stationOffset, voyageFromFlagship } from "./layout.js";
 import { Wake } from "./effects/Wake.js";
+import sloopUrl from "./assets/charted/sloop.png";
+// Tint masks (sloop-{silhouette,sail,hullband,pennant}-mask.svg) are referenced
+// directly from scene.css via relative `mask-image: url(...)` — Vite resolves
+// and fingerprints them like any other CSS asset. Kept out of JS/inline style:
+// an earlier attempt setting `mask-image` via React inline `style` silently
+// dropped the property (camelCase `maskImage`/`WebkitMaskImage` never reached
+// the DOM), so the mask lives in the stylesheet instead.
 
 export interface ShipProps {
   /** Faction coat colour (hex) — the one loud hue on the sails/pennant. */
@@ -22,49 +29,53 @@ export interface ShipProps {
   islandY?: number;
 }
 
-/** Faction mark on the mainsail — glyph as text, or nested SVG path art. */
+/** Faction mark on the mainsail — glyph as text, or authored SVG path art.
+ * Rendered as its own small svg, absolutely positioned over the mainsail
+ * belly by `.pc-sloop__emblem-layer` (see scene.css). */
 function SailMark({ emblem }: { emblem: EmblemMark }): ReactNode {
   if (emblem.kind === "glyph") {
     return (
-      <text className="pc-sloop__emblem" x="38" y="30" textAnchor="middle">
-        {emblem.char}
-      </text>
+      <svg className="pc-sloop__emblem-layer" viewBox="0 0 40 40" aria-hidden="true">
+        <text className="pc-sloop__emblem" x="20" y="27" textAnchor="middle">
+          {emblem.char}
+        </text>
+      </svg>
     );
   }
   const paths = typeof emblem.path === "string" ? [emblem.path] : emblem.path;
-  // Nested svg sits over the mainsail belly (viewBox 0 0 60 56 of the sloop).
   return (
-    <svg className="pc-sloop__emblem-mark" x="32" y="22" width="12" height="12" viewBox={emblem.viewBox} aria-hidden="true">
+    <svg className="pc-sloop__emblem-layer" viewBox={emblem.viewBox} aria-hidden="true">
       {paths.map((d) => (
-        <path key={d} d={d} fillRule={emblem.fillRule} />
+        <path key={d} className="pc-sloop__emblem-mark" d={d} fillRule={emblem.fillRule} />
       ))}
     </svg>
   );
 }
 
-/** The sloop silhouette — a planked hull with a faction-dark waterline, a
- * parchment mainsail + jib tinted by the coat, and an emblem on the main. Shared
- * by every pose. */
+/**
+ * The sloop art — a painted aged-chart raster sprite (same codex-imagegen art
+ * direction and style-locked composition as the galleon/islands), with the
+ * faction coat expressed via CSS `mask-image` + `background-color` recolor
+ * layers instead of hand-authored SVG fills. Three tintable regions were
+ * traced (potrace) from flat-silhouette generations of the same composition:
+ * mainsail+jib and masthead pennant (coat, `mix-blend-mode: color` so the
+ * raster's own paint shading/highlights show through the recolor), and the
+ * hull waterline band (coat-dark, opaque). A fourth trace of the full sprite's
+ * own alpha silhouette clips the tint layers so a slightly generous mask trace
+ * never bleeds paint past the hull/sail edges. The neutral wood-hull/rigging
+ * detail underneath is shared by every faction — zero new art per faction,
+ * same product law as the old inline-SVG sloop, now on painted art. */
 function Sloop({ emblem }: { emblem: EmblemMark }) {
   return (
-    <svg className="pc-sloop__svg" viewBox="0 0 60 56" aria-hidden="true">
-      {/* mast + forestay */}
-      <line x1="30" y1="40" x2="30" y2="5" stroke="var(--brass-shadow)" strokeWidth="1.6" />
-      {/* mainsail — parchment, coat-tinted by CSS */}
-      <path className="pc-sloop__main" d="M31 8 Q47 22 49 35 L31 37 Z" />
-      {/* jib */}
-      <path className="pc-sloop__jib" d="M28 12 Q17 26 15 34 L28 35 Z" />
-      {/* emblem on the mainsail */}
+    <span className="pc-sloop__art">
+      <img className="pc-sloop__base" src={sloopUrl} alt="" draggable={false} />
+      <span className="pc-sloop__tints" aria-hidden="true">
+        <span className="pc-sloop__tint pc-sloop__tint--sail" />
+        <span className="pc-sloop__tint pc-sloop__tint--pennant" />
+        <span className="pc-sloop__tint pc-sloop__tint--hull" />
+      </span>
       <SailMark emblem={emblem} />
-      {/* hull — wood body over a faction-dark waterline */}
-      <path
-        className="pc-sloop__hull"
-        d="M9 39 Q11 50 24 50 L44 50 Q53 50 55 40 Z"
-      />
-      <path className="pc-sloop__waterline" d="M9 39 L55 40 L52 45 L12 44 Z" />
-      {/* pennant at the masthead */}
-      <path className="pc-sloop__pennant" d="M30 5 L44 8 L30 11 Z" />
-    </svg>
+    </span>
   );
 }
 
