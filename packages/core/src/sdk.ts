@@ -55,15 +55,25 @@ export class ParleyClient {
     const raw = await res.text();
     if (!res.ok) {
       let detail = `daemon request ${path} failed with status ${res.status}`;
+      let code: string | undefined;
       try {
         const body: unknown = JSON.parse(raw);
-        if (typeof body === "object" && body !== null && "error" in body) {
-          detail = String((body as { error: unknown }).error);
+        if (typeof body === "object" && body !== null) {
+          if ("error" in body) {
+            detail = String((body as { error: unknown }).error);
+          }
+          if (
+            "code" in body &&
+            typeof (body as { code: unknown }).code === "string" &&
+            (body as { code: string }).code !== ""
+          ) {
+            code = (body as { code: string }).code;
+          }
         }
       } catch {
         /* keep the generic detail */
       }
-      throw new DaemonRequestError(res.status, detail);
+      throw new DaemonRequestError(res.status, detail, code);
     }
     try {
       return JSON.parse(raw) as T;

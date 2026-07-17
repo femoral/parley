@@ -379,3 +379,224 @@ describe("parley fix — attempt chains (#152)", () => {
     expect(res.stderr).toMatch(/fix brief|required/i);
   });
 });
+
+describe("parley fix — retry limits and --fresh (#158)", () => {
+  function writeProjectRetry(
+    cwd: string,
+    retry: { max?: number; window?: string },
+  ): void {
+    fs.mkdirSync(path.join(cwd, ".parley"), { recursive: true });
+    fs.writeFileSync(
+      path.join(cwd, ".parley", "config.json"),
+      JSON.stringify({ retry }),
+    );
+  }
+
+  function writeDaemonVendorRetry(window: string | number): void {
+    fs.writeFileSync(
+      path.join(home, "parley.json"),
+      JSON.stringify({ vendors: { fake: { retryWindow: window } } }, null, 2),
+    );
+  }
+
+  it("rejects a second resume when retry.max is 1 (exit 7, stable code)", async () => {
+    // Default retry.max=1: one resumed fix is allowed, the next resume is not.
+    const cwd = taskDir(firstAttemptActions(), fixResumeActions());
+    const parentId = await completeDelegate([
+      "delegate",
+      "-v",
+      "fake",
+      "--cwd",
+      cwd,
+      "original brief",
+    ]);
+
+    const first = await runCli(["fix", parentId, "first resumed fix"], home);
+    expect(first.code).toBe(0);
+    const firstAck = JSON.parse(first.stdout) as {
+      task_id: string;
+      attempt: number;
+      resumed: boolean;
+    };
+    expect(firstAck.resumed).toBe(true);
+    expect(firstAck.attempt).toBe(2);
+    await waitForState(home, firstAck.task_id, "completed");
+
+    // Second resume against the latest attempt: budget already spent.
+    const second = await runCli(["fix", firstAck.task_id, "second resume"], home);
+    expect(second.code).toBe(7);
+    expect(second.stderr).toMatch(/retry limit exceeded/i);
+    expect(second.stderr).toMatch(/parley fix --fresh/);
+    expect(second.stderr).toMatch(/new delegate/i);
+    // Never coach raising the limit.
+    expect(second.stderr.toLowerCase()).not.toMatch(/raise|increase|set retry/);
+    expect(second.stdout).toBe("");
+
+    // Rejection creates no new task row — chain still has one resumed attempt.
+    const list = JSON.parse(
+      (await runCli(["status", "--all", "--json"], home)).stdout,
+    ) as Array<{ id: string; resumed: boolean; parent_task_id: string | null }>;
+    const chain = list.filter(
+      (t) => t.id === parentId || t.parent_task_id === parentId || t.id === firstAck.task_id,
+    );
+    expect(chain.filter((t) => t.resumed).length).toBe(1);
+  });
+
+  it("window expiry rejects resume (exit 8) without consuming budget", async () => {
+    const cwd = taskDir(firstAttemptActions(), fixResumeActions());
+    // Tiny window so a brief wait after completion expires it.
+    writeProjectRetry(cwd, { max: 1, window: "1ms" });
+    const parentId = await completeDelegate([
+      "delegate",
+      "-v",
+      "fake",
+      "--cwd",
+      cwd,
+      "original brief",
+    ]);
+    // Ensure parent has been terminal longer than 1ms.
+    await new Promise((r) => setTimeout(r, 20));
+
+    const blocked = await runCli(["fix", parentId, "too late to resume"], home);
+    expect(blocked.code).toBe(8);
+    expect(blocked.stderr).toMatch(/reattempt window expired/i);
+    expect(blocked.stderr).toMatch(/parley fix --fresh/);
+    expect(blocked.stderr).toMatch(/new delegate/i);
+    expect(blocked.stderr.toLowerCase()).not.toMatch(/raise|increase/);
+    expect(blocked.stdout).toBe("");
+
+    // No attempt row created → budget still unused. Lengthen the window and
+    // a resume must succeed (window expiry must not consume the retry budget).
+    writeProjectRetry(cwd, { max: 1, window: "30m" });
+    const after = await runCli(["fix", parentId, "still within budget"], home);
+    expect(after.code).toBe(0);
+    const ack = JSON.parse(after.stdout) as { resumed: boolean; attempt: number };
+    expect(ack.resumed).toBe(true);
+    expect(ack.attempt).toBe(2);
+    await waitForState(home, (JSON.parse(after.stdout) as { task_id: string }).task_id, "completed");
+  });
+
+  it("honors vendors.<id>.retryWindow override (hot-read)", async () => {
+    const cwd = taskDir(firstAttemptActions(), fixResumeActions());
+    // Project window is generous; vendor override is already expired.
+    writeProjectRetry(cwd, { max: 2, window: "30m" });
+    writeDaemonVendorRetry("1ms");
+    const parentId = await completeDelegate([
+      "delegate",
+      "-v",
+      "fake",
+      "--cwd",
+      cwd,
+      "original",
+    ]);
+    await new Promise((r) => setTimeout(r, 20));
+
+    const blocked = await runCli(["fix", parentId, "vendor window"], home);
+    expect(blocked.code).toBe(8);
+    expect(blocked.stderr).toMatch(/reattempt window expired/i);
+
+    // Hot-read: widen vendor window without restarting the daemon.
+    writeDaemonVendorRetry("30m");
+    const ok = await runCli(["fix", parentId, "now allowed"], home);
+    expect(ok.code).toBe(0);
+    const ack = JSON.parse(ok.stdout) as { resumed: boolean };
+    expect(ack.resumed).toBe(true);
+    await waitForState(home, (JSON.parse(ok.stdout) as { task_id: string }).task_id, "completed");
+  });
+
+  it("--fresh is uncapped, stays in the chain, and composes three-section context", async () => {
+    const cwd = taskDir(firstAttemptActions(), fixResumeActions());
+    // Spend the resume budget so a normal fix would fail.
+    const parentId = await completeDelegate([
+      "delegate",
+      "-v",
+      "fake",
+      "--cwd",
+      cwd,
+      "do the original thing",
+    ]);
+    const resumed = await runCli(["fix", parentId, "first fix brief"], home);
+    const resumedId = (JSON.parse(resumed.stdout) as { task_id: string }).task_id;
+    await waitForState(home, resumedId, "completed");
+
+    // Normal fix is blocked.
+    const blocked = await runCli(["fix", resumedId, "would resume"], home);
+    expect(blocked.code).toBe(7);
+
+    // Fresh path: swap main script so the blank session uses a known session id.
+    fs.writeFileSync(
+      path.join(cwd, ".fake-vendor.json"),
+      JSON.stringify(freshFixScript(), null, 2),
+    );
+
+    const fresh = await runCli(
+      ["fix", "--fresh", resumedId, "start over with full context"],
+      home,
+    );
+    expect(fresh.code).toBe(0);
+    const ack = JSON.parse(fresh.stdout) as {
+      task_id: string;
+      parent_task_id: string;
+      attempt: number;
+      resumed: boolean;
+    };
+    expect(ack.parent_task_id).toBe(resumedId);
+    expect(ack.attempt).toBe(3);
+    expect(ack.resumed).toBe(false);
+
+    await waitForState(home, ack.task_id, "completed");
+
+    const log = fs.readFileSync(path.join(home, "tasks", ack.task_id, "vendor.jsonl"), "utf8");
+    expect(log).not.toContain('"type":"resumed"');
+    expect(log).toContain("fake-sess-fresh");
+
+    // Hello event carries the full prompt — assert three-section composition
+    // behind the channel-matched preamble.
+    const helloLine = log.split("\n").find((l) => l.includes('"hello"'));
+    expect(helloLine).toBeTruthy();
+    const prompt = (JSON.parse(helloLine!) as { prompt: string }).prompt;
+    expect(prompt).toContain("Parley protocol");
+    expect(prompt).toMatch(/ask_orchestrator|submit_report/);
+    expect(prompt).toContain("## Original brief");
+    expect(prompt).toContain("do the original thing");
+    expect(prompt).toContain("## Attempt history");
+    expect(prompt).toContain("### Attempt 1 (");
+    expect(prompt).toContain("Brief: do the original thing");
+    expect(prompt).toMatch(/Report: did the thing \(outcome: success\)/);
+    expect(prompt).toContain("### Attempt 2 (");
+    expect(prompt).toContain("Brief: first fix brief");
+    expect(prompt).toMatch(/Report: fixed it \(outcome: success\)/);
+    expect(prompt).toContain("## Fix request");
+    expect(prompt).toContain("start over with full context");
+  });
+
+  it("stable error codes appear in the daemon HTTP body", async () => {
+    const cwd = taskDir(firstAttemptActions(), fixResumeActions());
+    writeProjectRetry(cwd, { max: 0, window: "30m" });
+    const parentId = await completeDelegate([
+      "delegate",
+      "-v",
+      "fake",
+      "--cwd",
+      cwd,
+      "x",
+    ]);
+
+    // max=0: any resume is over budget. Hit the daemon HTTP surface directly
+    // so we can assert the JSON `code` field (CLI only surfaces the message).
+    const discovery = JSON.parse(
+      fs.readFileSync(path.join(home, "daemon.json"), "utf8"),
+    ) as { port: number };
+    const res = await fetch(`http://127.0.0.1:${discovery.port}/tasks/${parentId}/fix`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ prompt: "nope" }),
+    });
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: string; code: string };
+    expect(body.code).toBe("retry_limit_exceeded");
+    expect(body.error).toMatch(/retry limit exceeded/i);
+    expect(body.error).toMatch(/parley fix --fresh/);
+  });
+});
+

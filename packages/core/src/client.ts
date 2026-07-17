@@ -169,11 +169,16 @@ export async function ensureDaemon(
   });
 }
 
-/** A non-2xx daemon response; 400s map to usage errors at the command layer. */
+/**
+ * A non-2xx daemon response; 400s map to usage errors at the command layer.
+ * When the daemon returns a stable `code` field (e.g. retry gates, #158), it is
+ * preserved so the CLI can map to distinct exit codes without parsing prose.
+ */
 export class DaemonRequestError extends Error {
   constructor(
     readonly status: number,
     message: string,
+    readonly code?: string,
   ) {
     super(message);
     this.name = "DaemonRequestError";
@@ -189,15 +194,25 @@ async function daemonFetch<T>(
   const raw = await res.text();
   if (!res.ok) {
     let detail = `daemon request ${pathname} failed with status ${res.status}`;
+    let code: string | undefined;
     try {
       const body: unknown = JSON.parse(raw);
-      if (typeof body === "object" && body !== null && "error" in body) {
-        detail = String((body as { error: unknown }).error);
+      if (typeof body === "object" && body !== null) {
+        if ("error" in body) {
+          detail = String((body as { error: unknown }).error);
+        }
+        if (
+          "code" in body &&
+          typeof (body as { code: unknown }).code === "string" &&
+          (body as { code: string }).code !== ""
+        ) {
+          code = (body as { code: string }).code;
+        }
       }
     } catch {
       /* keep the generic detail */
     }
-    throw new DaemonRequestError(res.status, detail);
+    throw new DaemonRequestError(res.status, detail, code);
   }
   try {
     return JSON.parse(raw) as T;

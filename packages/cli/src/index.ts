@@ -40,10 +40,14 @@ Usage:
     --difficulty <level>    trivial|easy|medium|hard|extreme (optional)
     --type <t>              Work-domain type (coding|design|…|other; optional,
                             default other; project-configurable via taskTypes)
-  parley fix <task> "<brief>"  Create a linked reattempt that inherits the
-                                parent's profile/workspace and resumes its
-                                vendor session when resume.enabled (default on).
-                                Returns immediately; wait with parley watch.
+  parley fix [--fresh] <task> "<brief>"
+                            Create a linked reattempt that inherits the
+                            parent's profile/workspace and resumes its
+                            vendor session when resume.enabled (default on).
+                            --fresh: blank session, uncapped by retry limits,
+                            with daemon-composed context (original brief +
+                            attempt history + fix request). Returns immediately;
+                            wait with parley watch.
   parley answer <task> "<text>" Answer a child's question ('-' reads stdin);
                                 on a stalled task, resume it with the text.
                                 Returns immediately; wait with parley watch.
@@ -127,7 +131,8 @@ Global flags:
   -h,--help Show this help
   -V,--version Show the version
 
-Exit codes: delegate/answer 0 accepted · 2 usage. watch: 0 all-done · 2 usage ·
+Exit codes: delegate/answer 0 accepted · 2 usage. fix: 0 accepted · 2 usage ·
+7 retry_limit_exceeded · 8 reattempt_window_expired. watch: 0 all-done · 2 usage ·
 3 awaiting_answer · 4 stalled · 5 failed · 6 completed. child report: 0
 accepted · 5 rejected · 2 usage. child ask: 0 answered · 4 stalled · 2 usage.
 `;

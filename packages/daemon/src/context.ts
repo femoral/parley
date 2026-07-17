@@ -152,3 +152,49 @@ export function readResumeEnabled(repo: string | null): boolean {
     return true;
   }
 }
+
+/**
+ * Project retry budget (`retry.max`, #158). Caps *resumed* fixes per chain.
+ * Default 1 when the file, section, or key is absent. Hot-read at fix time.
+ * Non-integer / negative values degrade to the default (never block fix).
+ */
+export function readRetryMax(repo: string | null, defaultMax = 1): number {
+  if (repo === null) return defaultMax;
+  try {
+    const raw = fs.readFileSync(path.join(repo, PARLEY_DIR, "config.json"), "utf8");
+    const config = JSON.parse(raw) as { retry?: { max?: unknown } };
+    const max = config.retry?.max;
+    if (typeof max === "number" && Number.isInteger(max) && max >= 0) return max;
+    return defaultMax;
+  } catch {
+    return defaultMax;
+  }
+}
+
+/**
+ * Project reattempt window (`retry.window`, #158) as milliseconds. Default
+ * when unset/unparseable is supplied by the caller (shipped 30m). Accepts the
+ * same duration strings as `--answer-timeout` (`30m`, `90s`, `250ms`).
+ */
+export function readRetryWindowMs(
+  repo: string | null,
+  parseDuration: (text: string) => number | null,
+  defaultMs: number,
+): number {
+  if (repo === null) return defaultMs;
+  try {
+    const raw = fs.readFileSync(path.join(repo, PARLEY_DIR, "config.json"), "utf8");
+    const config = JSON.parse(raw) as { retry?: { window?: unknown } };
+    const window = config.retry?.window;
+    if (typeof window === "string") {
+      const ms = parseDuration(window);
+      if (ms !== null && ms >= 0) return ms;
+    } else if (typeof window === "number" && Number.isFinite(window) && window >= 0) {
+      // Bare number: milliseconds (matches parseDuration bare-number semantics).
+      return Math.round(window);
+    }
+    return defaultMs;
+  } catch {
+    return defaultMs;
+  }
+}

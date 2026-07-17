@@ -101,7 +101,7 @@ describe("readConfig — retention.*", () => {
 });
 
 describe("readConfig — vendors.*", () => {
-  it("accepts bin, args, env, plugin, childChannel", () => {
+  it("accepts bin, args, env, plugin, childChannel, retryWindow", () => {
     const file = writeConfig(
       JSON.stringify({
         vendors: {
@@ -111,6 +111,7 @@ describe("readConfig — vendors.*", () => {
             env: { A: "1" },
             plugin: "/plugins/codex.js",
             childChannel: "cli",
+            retryWindow: "10m",
           },
         },
       }),
@@ -121,7 +122,13 @@ describe("readConfig — vendors.*", () => {
       env: { A: "1" },
       plugin: "/plugins/codex.js",
       childChannel: "cli",
+      retryWindow: "10m",
     });
+  });
+
+  it("rejects invalid vendors.<id>.retryWindow", () => {
+    const file = writeConfig(JSON.stringify({ vendors: { codex: { retryWindow: "" } } }));
+    expect(() => readConfig(file)).toThrow(/vendors\.codex\.retryWindow/);
   });
 
   it("rejects invalid vendors.<id>.childChannel", () => {

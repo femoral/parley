@@ -71,6 +71,12 @@ export interface VendorConfig {
    * (`mcp` | `cli` | `http`; #155). Other transports stay functional but untaught.
    */
   childChannel?: ChildChannel;
+  /**
+   * Per-vendor reattempt window override for `parley fix` resumes (#158).
+   * Duration string (`30m`, `90s`, `250ms`) or bare milliseconds. When set,
+   * replaces the project/global `retry.window` for this vendor only. Hot-read.
+   */
+  retryWindow?: string | number;
 }
 
 /**
@@ -203,6 +209,25 @@ function validateVendorEntry(file: string, id: string, raw: unknown): void {
     if (typeof raw.childChannel !== "string" || !isChildChannel(raw.childChannel)) {
       throw new Error(
         `invalid config at ${file}: vendors.${id}.childChannel must be one of mcp|cli|http`,
+      );
+    }
+  }
+  if (raw.retryWindow !== undefined) {
+    if (typeof raw.retryWindow === "string") {
+      if (raw.retryWindow === "") {
+        throw new Error(
+          `invalid config at ${file}: vendors.${id}.retryWindow must be a non-empty duration string or non-negative number`,
+        );
+      }
+    } else if (typeof raw.retryWindow === "number") {
+      if (!Number.isFinite(raw.retryWindow) || raw.retryWindow < 0) {
+        throw new Error(
+          `invalid config at ${file}: vendors.${id}.retryWindow must be a non-empty duration string or non-negative number`,
+        );
+      }
+    } else {
+      throw new Error(
+        `invalid config at ${file}: vendors.${id}.retryWindow must be a non-empty duration string or non-negative number`,
       );
     }
   }
@@ -368,7 +393,7 @@ const KNOWN_TOP_LEVEL = new Set([
 ]);
 const KNOWN_UI = new Set(["path", "package"]);
 const KNOWN_DAEMON = new Set(["url", "idleTimeoutMs"]);
-const KNOWN_VENDOR = new Set(["bin", "args", "env", "plugin"]);
+const KNOWN_VENDOR = new Set(["bin", "args", "env", "plugin", "childChannel", "retryWindow"]);
 const KNOWN_PROFILE = new Set([
   "vendor",
   "model",

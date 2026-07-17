@@ -13,6 +13,7 @@ import {
   isChildChannel,
   isValidTaskType,
   normalizeUsage,
+  parseDuration,
   readConfig,
   retentionDays,
   scoreRubric,
@@ -64,8 +65,22 @@ import {
   materializeContext,
   readProjectTaskTypes,
   readResumeEnabled,
+  readRetryMax,
+  readRetryWindowMs,
   type ContextFile,
 } from "./context.js";
+import {
+  CODE_REATTEMPT_WINDOW_EXPIRED,
+  CODE_RETRY_LIMIT_EXCEEDED,
+  collectAttemptChain,
+  composeFreshFixBody,
+  countResumedAttempts,
+  DEFAULT_RETRY_MAX,
+  DEFAULT_RETRY_WINDOW_MS,
+  parentTerminalAgeMs,
+  reattemptWindowMessage,
+  retryLimitMessage,
+} from "./retry.js";
 import { taskLogDir } from "./discovery.js";
 import { resolveRubricForTask } from "./rubrics.js";
 import {
@@ -171,9 +186,19 @@ export interface Transition {
   state: string;
 }
 
-/** A caller mistake surfaced to the CLI plane as HTTP 400 → exit code 2. */
+/**
+ * A caller mistake surfaced to the CLI plane as HTTP 400 → exit code 2
+ * (or a distinct code when {@link code} is set — e.g. retry gates #158).
+ */
 export class DelegateError extends Error {
   override readonly name = "DelegateError";
+  constructor(
+    message: string,
+    /** Stable machine-readable code when the CLI maps to a non-2 exit. */
+    readonly code?: string,
+  ) {
+    super(message);
+  }
 }
 
 /** Best-effort message from a thrown value (git errors arrive as `Error`). */
@@ -310,13 +335,20 @@ export interface DelegateRequest {
 /**
  * `parley fix <task> "<brief>"` request (#152) — create a linked attempt that
  * inherits the parent's classification/posture/workspace and optionally
- * resumes its vendor session.
+ * resumes its vendor session. `#158`: `--fresh` skips resume gates and
+ * composes opening context.
  */
 export interface FixRequest {
   /** Parent task ref (short id or name). */
   parentRef: string;
   /** The fix brief that becomes this attempt's prompt. */
   prompt: string;
+  /**
+   * When true (`parley fix --fresh`), force a blank session, skip retry budget
+   * and reattempt-window gates, and compose original-brief + history + fix
+   * request behind the channel-matched preamble.
+   */
+  fresh?: boolean;
 }
 
 /**
@@ -781,11 +813,16 @@ export class TaskEngine {
   }
 
   /**
-   * `parley fix <task> "<brief>"` (#152): create a new attempt row linked to
-   * `parent`, inherit classification/posture/workspace/profile/vendor fields,
+   * `parley fix <task> "<brief>"` (#152 / #158): create a new attempt row linked
+   * to `parent`, inherit classification/posture/workspace/profile/vendor fields,
    * and either resume the parent's vendor session (`resume.enabled`, default
    * on) or start a fresh session (still chain-linked). Returns the new row
    * immediately (ADR-0008).
+   *
+   * Resume path is gated by `retry.max` (project, default 1 — count of
+   * `resumed=true` in the chain) and a reattempt window (`retry.window` default
+   * 30m, `vendors.<id>.retryWindow` override). `--fresh` skips both gates,
+   * forces a blank session, and receives daemon-composed context.
    *
    * The work-domain `type` (#151) is inherited alongside size/difficulty.
    */
@@ -812,11 +849,17 @@ export class TaskEngine {
       throw new DelegateError(`unknown vendor: ${vendor} (known: ${known})`);
     }
 
-    // Resume when project config allows *and* the parent captured a session.
-    // Off (or missing session) still creates a linked attempt with a blank
-    // session — lineage is independent of resume.
-    const resumeWanted = readResumeEnabled(parent.repo ?? parent.cwd);
+    const fresh = request.fresh === true;
+    // Resume when project config allows *and* the parent captured a session,
+    // unless the caller forced `--fresh`. Off (or missing session) still creates
+    // a linked attempt with a blank session — lineage is independent of resume.
+    const resumeWanted = !fresh && readResumeEnabled(parent.repo ?? parent.cwd);
     const canResume = resumeWanted && parent.session_id !== null;
+
+    if (canResume) {
+      this.assertResumeAllowed(parent, vendor);
+    }
+
     const id = nextTaskId(this.db);
     // Reuse the parent's workspace; fix never cuts a new worktree.
     const workingDir = parent.cwd ?? process.cwd();
@@ -866,11 +909,67 @@ export class TaskEngine {
         this.fail(row.id, `task resume crashed: ${String(err)}`);
       });
     } else {
-      void this.run(row, adapter).catch((err: unknown) => {
+      // Fresh path: composed opening context (original + history + fix) behind
+      // the channel-matched preamble — used for `--fresh` and resume-off/no-session.
+      void this.runFreshFix(row, adapter, request.prompt).catch((err: unknown) => {
         this.fail(row.id, `task runner crashed: ${String(err)}`);
       });
     }
     return row;
+  }
+
+  /**
+   * Enforce resume budget (`retry.max`) and reattempt window for a would-be
+   * resumed fix (#158). Window expiry does not consume budget (no row is
+   * written when this throws). Hot-reads project + vendor config.
+   */
+  private assertResumeAllowed(parent: TaskRow, vendor: string): void {
+    const projectRoot = parent.repo ?? parent.cwd;
+    const max = readRetryMax(projectRoot, DEFAULT_RETRY_MAX);
+    const resumedCount = countResumedAttempts(listTasks(this.db), parent.id);
+    if (resumedCount >= max) {
+      throw new DelegateError(
+        retryLimitMessage(resumedCount, max),
+        CODE_RETRY_LIMIT_EXCEEDED,
+      );
+    }
+
+    const windowMs = this.resolveRetryWindowMs(projectRoot, vendor);
+    const ageMs = parentTerminalAgeMs(parent);
+    if (ageMs > windowMs) {
+      throw new DelegateError(
+        reattemptWindowMessage(ageMs, windowMs),
+        CODE_REATTEMPT_WINDOW_EXPIRED,
+      );
+    }
+  }
+
+  /**
+   * Effective reattempt window: `vendors.<id>.retryWindow` (daemon home, hot)
+   * overrides project `retry.window` (default 30m).
+   */
+  private resolveRetryWindowMs(projectRoot: string | null, vendor: string): number {
+    const projectMs = readRetryWindowMs(
+      projectRoot,
+      parseDuration,
+      DEFAULT_RETRY_WINDOW_MS,
+    );
+    let config: ParleyConfig;
+    try {
+      config = this.readParleyConfig();
+    } catch {
+      return projectMs;
+    }
+    const override = config.vendors?.[vendor]?.retryWindow;
+    if (override === undefined) return projectMs;
+    if (typeof override === "number" && Number.isFinite(override) && override >= 0) {
+      return Math.round(override);
+    }
+    if (typeof override === "string") {
+      const ms = parseDuration(override);
+      if (ms !== null && ms >= 0) return ms;
+    }
+    return projectMs;
   }
 
   /**
@@ -2184,6 +2283,25 @@ export class TaskEngine {
   }
 
   /**
+   * Fresh fix attempt (#158): blank session via `prepare()`, daemon-composed
+   * opening context (original brief + attempt history + fix request) behind
+   * the channel-matched preamble.
+   */
+  private async runFreshFix(
+    task: TaskRow,
+    adapter: VendorAdapter,
+    fixBrief: string,
+  ): Promise<void> {
+    const prompt = this.freshFixPrompt(task, adapter, fixBrief);
+    const spec: TaskSpec = { ...this.buildSpec(task), prompt };
+    const plan = this.applyVendorConfig(task, await adapter.prepare(spec, this.hubFor(task.id)));
+    await this.runChild(task, adapter, plan, prompt, {
+      state: "running",
+      started_at: new Date().toISOString(),
+    });
+  }
+
+  /**
    * Resume prompt for a fix attempt: re-teach the protocol, then deliver the
    * fix brief as the conversation's continuation.
    */
@@ -2199,6 +2317,21 @@ export class TaskEngine {
       "",
       "Continue from the prior session context and finish by calling `submit_report`.",
     ].join("\n");
+  }
+
+  /**
+   * Fresh-fix prompt (#158): channel-matched preamble, then the three-section
+   * composed body (original brief → attempt history → fix request). The new
+   * row is already inserted, so exclude it from history (its report is empty).
+   */
+  private freshFixPrompt(task: TaskRow, adapter: VendorAdapter, fixBrief: string): string {
+    const parentId = task.parent_task_id;
+    const chain =
+      parentId !== null
+        ? collectAttemptChain(listTasks(this.db), parentId).filter((t) => t.id !== task.id)
+        : [];
+    const body = composeFreshFixBody(chain, fixBrief);
+    return `${this.buildPreamble(task, adapter)}\n\n---\n\n${body}`;
   }
 
   /** Spawn a planned vendor child and pump its stream until exit. */

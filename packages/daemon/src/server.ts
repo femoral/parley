@@ -1004,7 +1004,8 @@ function handleCancel(engine: TaskEngine, res: http.ServerResponse, ref: string)
 
 /**
  * `POST /tasks/:ref/fix` — create a linked attempt that inherits the parent's
- * classification/workspace and optionally resumes its vendor session (#152).
+ * classification/workspace and optionally resumes its vendor session
+ * (#152 / #158). Body: `{ prompt, fresh?: boolean }`.
  */
 function handleFix(
   engine: TaskEngine,
@@ -1021,8 +1022,16 @@ function handleFix(
     sendJson(res, 400, { error: "prompt is required" });
     return;
   }
+  if (body.fresh !== undefined && typeof body.fresh !== "boolean") {
+    sendJson(res, 400, { error: "fresh must be a boolean" });
+    return;
+  }
   try {
-    const task = engine.fix({ parentRef: ref, prompt });
+    const task = engine.fix({
+      parentRef: ref,
+      prompt,
+      fresh: body.fresh === true,
+    });
     sendJson(res, 201, {
       task_id: task.id,
       name: task.name,
@@ -1034,7 +1043,12 @@ function handleFix(
     });
   } catch (err) {
     if (err instanceof DelegateError) {
-      sendJson(res, 400, { error: err.message });
+      // Include stable `code` when present so the CLI can map retry gates
+      // (#158) to distinct exit codes without parsing message prose.
+      sendJson(res, 400, {
+        error: err.message,
+        ...(err.code !== undefined ? { code: err.code } : {}),
+      });
       return;
     }
     throw err;
