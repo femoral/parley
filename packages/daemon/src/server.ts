@@ -6,6 +6,7 @@ import {
   getConfigPath,
   isMetricsGroupBy,
   METRICS_GROUP_BY,
+  parseTaskMetricsFilters,
   setConfigPath,
   unsetConfigPath,
   validateConfig,
@@ -31,9 +32,14 @@ import type { ContextFile } from "./context.js";
 import { DelegateError, TaskEngine } from "./engine.js";
 import { readLogTail } from "./logtail.js";
 import { handleChildAsk, handleChildReport, handleChildTask } from "./child.js";
-import { aggregateMetrics } from "./metrics.js";
+import { aggregateMetrics, taskMatchesFilters } from "./metrics.js";
 import { handleMcpRequest } from "./mcp.js";
 import { buildEnvelope } from "./report.js";
+import {
+  buildAttemptChain,
+  buildEvalDetail,
+  buildSessionProvenance,
+} from "./task-detail.js";
 import { discoverUiBundle, isReservedPath, serveUiRequest } from "./ui.js";
 import { DAEMON_VERSION } from "./version.js";
 import { handleXaiProxyRequest } from "./xai-proxy.js";
@@ -625,9 +631,10 @@ function handlePrompt(
 }
 
 /**
- * `GET /metrics?session=<id|all>&group_by=<vendor|model|profile|size|difficulty|type>`
- * — per-group task/eval/token/duration aggregates (#118). Defaults: session=all,
- * group_by=vendor.
+ * `GET /metrics?session=<id|all>&group_by=<…>&…filters`
+ * — per-group task/eval/token/duration aggregates (#118 / #164). Defaults:
+ * session=all, group_by=vendor. Filters mirror list filters (type, provenance,
+ * rubric, first_attempt, below_baseline, …).
  */
 function handleMetrics(
   engine: TaskEngine,
@@ -646,7 +653,19 @@ function handleMetrics(
     });
     return;
   }
-  sendJson(res, 200, aggregateMetrics(engine.list(), { session, groupBy: groupByRaw }));
+  // Reject invalid rubric_version early (parse silently drops non-integers).
+  const rvRaw = params.get("rubric_version");
+  if (rvRaw !== null && rvRaw !== "") {
+    const n = Number(rvRaw);
+    if (!Number.isInteger(n) || n < 1) {
+      sendJson(res, 400, { error: "rubric_version must be a positive integer" });
+      return;
+    }
+  }
+  const filters = parseTaskMetricsFilters(params);
+  // Default session=all when the query omits it; parse leaves it undefined.
+  if (filters.session === undefined) filters.session = session;
+  sendJson(res, 200, aggregateMetrics(engine.list(), { ...filters, groupBy: groupByRaw }));
 }
 
 /**
@@ -1525,7 +1544,16 @@ function createHandler(
         if (method === "GET" && segments.length === 1) {
           // The current global seq rides along so `parley watch` can capture a
           // "start from now" baseline atomically with the task snapshot (#34).
-          sendJson(res, 200, { tasks: engine.list(), seq: engine.currentSeq() });
+          // Optional filters (#164) narrow the list the same way as /metrics.
+          const filters = parseTaskMetricsFilters(url.searchParams);
+          // List default: no session filter (return everything) — only apply
+          // when the client explicitly passes session=.
+          const all = engine.list();
+          const tasks =
+            Object.keys(filters).length === 0
+              ? all
+              : all.filter((t) => taskMatchesFilters(t, filters));
+          sendJson(res, 200, { tasks, seq: engine.currentSeq() });
           return;
         }
         if (method === "POST" && segments.length === 1) {
@@ -1548,10 +1576,15 @@ function createHandler(
           if (!task) sendJson(res, 404, { error: `no such task: ${ref}` });
           else {
             // Detail-only Q&A history (#79) — list envelopes omit it deliberately.
+            // #164: attempt lineage + session + eval detail for status / Cove.
+            const all = engine.list();
             sendJson(res, 200, {
               task: buildEnvelope(task, engine.logDir(task.id)),
               row: task,
               qa: engine.listQa(task.id),
+              attempts: buildAttemptChain(task, all),
+              session: buildSessionProvenance(task),
+              eval_detail: buildEvalDetail(task),
             });
           }
           return;

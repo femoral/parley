@@ -212,7 +212,12 @@ describe("aggregateMetrics (#118)", () => {
         state?: string;
         session?: string;
         usage?: Record<string, number> | null;
+        /** Structured rubric score; pairs with baseline=5 coding@1 by default. */
         eval?: number | null;
+        /** When true, write score without rubric fields (legacy free score). */
+        legacyEval?: boolean;
+        baseline?: number;
+        answers?: Record<string, boolean>;
         started?: string;
         completed?: string | null;
       },
@@ -229,10 +234,27 @@ describe("aggregateMetrics (#118)", () => {
           orchestrator_session_id: patch.session ?? "sess-a",
         }),
       );
+      const evalPatch =
+        patch.eval === undefined || patch.eval === null
+          ? { eval_score: null as number | null }
+          : patch.legacyEval
+            ? { eval_score: patch.eval }
+            : {
+                eval_score: patch.eval,
+                eval_baseline: patch.baseline ?? 5,
+                eval_rubric: "coding",
+                eval_rubric_version: 1,
+                eval_answers: JSON.stringify(
+                  patch.answers ?? {
+                    "brief-implemented": true,
+                    "broke-existing": false,
+                  },
+                ),
+              };
       updateTask(db, id, {
         state: patch.state ?? "completed",
         usage: patch.usage === undefined || patch.usage === null ? null : JSON.stringify(patch.usage),
-        eval_score: patch.eval === undefined ? null : patch.eval,
+        ...evalPatch,
         started_at: patch.started ?? "2026-01-01T00:00:00.000Z",
         completed_at:
           patch.completed === undefined
@@ -333,16 +355,19 @@ describe("aggregateMetrics (#118)", () => {
       other: 0,
     });
     expect(codex.success_rate).toBe(4 / 5);
-    // evals: t1=8, t2=6, t3=10, t5=2 → count 4, avg 6.5
-    expect(codex.evals).toEqual({ count: 4, avg: 6.5 });
-    expect(codex.evals_by_size).toEqual({
-      S: { count: 2, avg: 5 }, // 8 and 2
-      M: { count: 2, avg: 8 }, // 6 and 10
-    });
-    expect(codex.evals_by_difficulty).toEqual({
-      easy: { count: 2, avg: 5 },
-      hard: { count: 2, avg: 8 },
-    });
+    // rubric evals: t1=8, t2=6, t3=10, t5=2 → count 4, avg 6.5; baseline 5 each
+    expect(codex.evals.count).toBe(4);
+    expect(codex.evals.avg).toBe(6.5);
+    expect(codex.evals.avg_baseline).toBe(5);
+    expect(codex.evals.avg_delta).toBe(1.5); // (3 + 1 + 5 + -3) / 4
+    // below baseline: only t5 (2 < 5) → 1/4
+    expect(codex.evals.below_baseline_rate).toBe(0.25);
+    expect(codex.evals_by_size.S?.count).toBe(2);
+    expect(codex.evals_by_size.S?.avg).toBe(5);
+    expect(codex.evals_by_size.M?.count).toBe(2);
+    expect(codex.evals_by_size.M?.avg).toBe(8);
+    expect(codex.evals_by_difficulty.easy?.avg).toBe(5);
+    expect(codex.evals_by_difficulty.hard?.avg).toBe(8);
     // tokens: t1 100/50/10 + t2 200/80/20 + t4 50/25/0 + t5 10/5/0 = 360/160/30; 4 reporting
     expect(codex.tokens).toEqual({
       input: 360,
@@ -368,7 +393,8 @@ describe("aggregateMetrics (#118)", () => {
     });
     // success_rate = 1/(1+0) = 1
     expect(fake.success_rate).toBe(1);
-    expect(fake.evals).toEqual({ count: 1, avg: 9 });
+    expect(fake.evals.count).toBe(1);
+    expect(fake.evals.avg).toBe(9);
     expect(fake.tokens).toEqual({
       input: 5,
       output: 1,
@@ -449,6 +475,10 @@ describe("GET /metrics (#118)", () => {
       state: "completed",
       usage: JSON.stringify({ input_tokens: 10, output_tokens: 5, cached_input_tokens: 1 }),
       eval_score: 7,
+      eval_baseline: 5,
+      eval_rubric: "coding",
+      eval_rubric_version: 1,
+      eval_answers: JSON.stringify({ "brief-implemented": true, "broke-existing": false }),
       started_at: "2026-01-01T00:00:00.000Z",
       completed_at: "2026-01-01T00:00:02.000Z",
     });
@@ -464,12 +494,13 @@ describe("GET /metrics (#118)", () => {
       key: "codex",
       tasks: { total: 1, completed: 1, failed: 0 },
       success_rate: 1,
-      evals: { count: 1, avg: 7 },
+      evals: { count: 1, avg: 7, avg_baseline: 5 },
       tokens: { input: 10, output: 5, cached: 1, tasks_reporting: 1 },
       duration_ms: { total: 2000, avg: 2000, p50: 2000, p95: 2000, tasks_reporting: 1 },
     });
-    expect(body.groups[0]!.evals_by_size).toEqual({ M: { count: 1, avg: 7 } });
-    expect(body.groups[0]!.evals_by_difficulty).toEqual({ medium: { count: 1, avg: 7 } });
+    expect(body.groups[0]!.evals_by_size.M?.count).toBe(1);
+    expect(body.groups[0]!.evals_by_size.M?.avg).toBe(7);
+    expect(body.groups[0]!.evals_by_difficulty.medium?.avg).toBe(7);
 
     const bad = await fetch(`http://127.0.0.1:${server.port}/metrics?group_by=nope`);
     expect(bad.status).toBe(400);
@@ -528,6 +559,379 @@ describe("GET /metrics (#118)", () => {
     expect(detailBody.row.difficulty).toBe("trivial");
     expect(detailBody.task.size).toBe("XL");
     expect(detailBody.task.difficulty).toBe("trivial");
+
+    db = openDatabase(homePaths(home));
+  });
+});
+
+describe("aggregateMetrics eval aggregations (#164)", () => {
+  function seedEvalTask(
+    id: string,
+    patch: {
+      score: number;
+      baseline?: number;
+      answers?: Record<string, boolean>;
+      attempt?: number;
+      parent?: string | null;
+      type?: string;
+      vendor?: string;
+      orch_harness?: string | null;
+      orch_model?: string | null;
+      orch_effort?: string | null;
+      eval_harness?: string | null;
+      eval_model?: string | null;
+      eval_effort?: string | null;
+      rubric?: string;
+      rubric_version?: number;
+      legacy?: boolean;
+      session?: string;
+    },
+  ): void {
+    insertTask(
+      db,
+      baseNewTask({
+        id,
+        type: patch.type ?? "coding",
+        vendor: patch.vendor ?? "codex",
+        orchestrator_session_id: patch.session ?? "sess-a",
+        parent_task_id: patch.parent ?? null,
+        attempt: patch.attempt ?? 1,
+        orch_harness: patch.orch_harness ?? null,
+        orch_model: patch.orch_model ?? null,
+        orch_effort: patch.orch_effort ?? null,
+      }),
+    );
+    if (patch.legacy) {
+      updateTask(db, id, {
+        state: "completed",
+        eval_score: patch.score,
+        completed_at: "2026-01-01T00:00:01.000Z",
+        started_at: "2026-01-01T00:00:00.000Z",
+      });
+      return;
+    }
+    updateTask(db, id, {
+      state: "completed",
+      eval_score: patch.score,
+      eval_baseline: patch.baseline ?? 5,
+      eval_rubric: patch.rubric ?? "coding",
+      eval_rubric_version: patch.rubric_version ?? 1,
+      eval_answers: JSON.stringify(
+        patch.answers ?? {
+          "brief-implemented": true,
+          "broke-existing": false,
+        },
+      ),
+      eval_harness: patch.eval_harness ?? null,
+      eval_model: patch.eval_model ?? null,
+      eval_effort: patch.eval_effort ?? null,
+      completed_at: "2026-01-01T00:00:01.000Z",
+      started_at: "2026-01-01T00:00:00.000Z",
+    });
+  }
+
+  it("computes avg score/baseline/delta and below-baseline rate", () => {
+    // scores 8, 4, 10 with baseline 5 → deltas +3, -1, +5; below = 1/3
+    seedEvalTask("a", { score: 8, baseline: 5 });
+    seedEvalTask("b", { score: 4, baseline: 5 });
+    seedEvalTask("c", { score: 10, baseline: 5 });
+    const { groups } = aggregateMetrics(listTasks(db), { groupBy: "vendor" });
+    const g = groups[0]!;
+    expect(g.evals.count).toBe(3);
+    expect(g.evals.avg).toBeCloseTo((8 + 4 + 10) / 3);
+    expect(g.evals.avg_baseline).toBe(5);
+    expect(g.evals.avg_delta).toBeCloseTo((3 + -1 + 5) / 3);
+    expect(g.evals.below_baseline_rate).toBeCloseTo(1 / 3);
+  });
+
+  it("excludes legacy free scores from rubric aggregations", () => {
+    seedEvalTask("rubric", { score: 8, baseline: 5 });
+    seedEvalTask("legacy", { score: 2, legacy: true });
+    const { groups } = aggregateMetrics(listTasks(db), { groupBy: "vendor" });
+    const g = groups[0]!;
+    // Only the structured eval counts.
+    expect(g.evals.count).toBe(1);
+    expect(g.evals.avg).toBe(8);
+    expect(g.evals.avg_baseline).toBe(5);
+    // Legacy score is still on the task row (visible via status), not here.
+    const rows = listTasks(db);
+    expect(rows.find((t) => t.id === "legacy")!.eval_score).toBe(2);
+    expect(rows.find((t) => t.id === "legacy")!.eval_rubric).toBeNull();
+  });
+
+  it("tracks per-criterion failure frequency (positives and negatives)", () => {
+    // Task 1: positive fail, negative ok
+    seedEvalTask("t1", {
+      score: 6,
+      answers: { "brief-implemented": false, "broke-existing": false },
+    });
+    // Task 2: positive ok, negative triggered (fail)
+    seedEvalTask("t2", {
+      score: 3,
+      answers: { "brief-implemented": true, "broke-existing": true },
+    });
+    // Task 3: both ok
+    seedEvalTask("t3", {
+      score: 10,
+      answers: { "brief-implemented": true, "broke-existing": false },
+    });
+    const { groups } = aggregateMetrics(listTasks(db), { groupBy: "vendor" });
+    const cf = groups[0]!.evals.criterion_failures;
+    // brief-implemented fails once of three
+    expect(cf["brief-implemented"]).toEqual({ failures: 1, count: 3, rate: 1 / 3 });
+    // broke-existing fails once of three (triggered true)
+    expect(cf["broke-existing"]).toEqual({ failures: 1, count: 3, rate: 1 / 3 });
+  });
+
+  it("splits first-attempt vs fix rubric evals", () => {
+    seedEvalTask("root", { score: 4, attempt: 1 });
+    seedEvalTask("fix1", { score: 8, attempt: 2, parent: "root" });
+    seedEvalTask("solo", { score: 10, attempt: 1 });
+    const { groups } = aggregateMetrics(listTasks(db), { groupBy: "vendor" });
+    const e = groups[0]!.evals;
+    expect(e.first_attempt.count).toBe(2);
+    expect(e.first_attempt.avg).toBe(7); // (4+10)/2
+    expect(e.fix.count).toBe(1);
+    expect(e.fix.avg).toBe(8);
+    expect(e.first_attempt.below_baseline_rate).toBe(0.5); // 4 < 5
+    expect(e.fix.below_baseline_rate).toBe(0);
+  });
+
+  it("groups by type, orch provenance, judge provenance, and rubric", () => {
+    seedEvalTask("a", {
+      score: 8,
+      type: "coding",
+      orch_harness: "claude",
+      orch_model: "sonnet",
+      orch_effort: "high",
+      eval_harness: "claude",
+      eval_model: "opus",
+      eval_effort: "max",
+      rubric: "coding",
+      rubric_version: 1,
+    });
+    seedEvalTask("b", {
+      score: 6,
+      type: "design",
+      orch_harness: "codex",
+      orch_model: "gpt-5",
+      orch_effort: "low",
+      eval_harness: "grok",
+      eval_model: "grok-4",
+      eval_effort: "default",
+      rubric: "design",
+      rubric_version: 2,
+    });
+
+    const byType = aggregateMetrics(listTasks(db), { groupBy: "type" });
+    expect(byType.groups.map((g) => g.key).sort()).toEqual(["coding", "design"]);
+
+    const byOrch = aggregateMetrics(listTasks(db), { groupBy: "orch_harness" });
+    expect(byOrch.groups.map((g) => g.key).sort()).toEqual(["claude", "codex"]);
+
+    const byJudge = aggregateMetrics(listTasks(db), { groupBy: "eval_model" });
+    expect(byJudge.groups.map((g) => g.key).sort()).toEqual(["grok-4", "opus"]);
+
+    const byRubric = aggregateMetrics(listTasks(db), { groupBy: "rubric" });
+    expect(byRubric.groups.map((g) => g.key).sort()).toEqual(["coding@1", "design@2"]);
+  });
+
+  it("filters by type, provenance, rubric, first_attempt, below_baseline", () => {
+    seedEvalTask("a", {
+      score: 8,
+      type: "coding",
+      orch_harness: "claude",
+      eval_harness: "claude",
+      rubric: "coding",
+      rubric_version: 1,
+      attempt: 1,
+    });
+    seedEvalTask("b", {
+      score: 3,
+      type: "design",
+      orch_harness: "codex",
+      eval_harness: "grok",
+      rubric: "design",
+      rubric_version: 1,
+      attempt: 2,
+      parent: "a",
+      baseline: 5,
+    });
+
+    expect(
+      aggregateMetrics(listTasks(db), { type: "coding", groupBy: "vendor" }).groups[0]!.tasks
+        .total,
+    ).toBe(1);
+
+    expect(
+      aggregateMetrics(listTasks(db), { orch_harness: "claude", groupBy: "vendor" }).groups[0]!
+        .tasks.total,
+    ).toBe(1);
+
+    expect(
+      aggregateMetrics(listTasks(db), { eval_harness: "grok", groupBy: "vendor" }).groups[0]!
+        .tasks.total,
+    ).toBe(1);
+
+    expect(
+      aggregateMetrics(listTasks(db), {
+        rubric: "coding",
+        rubric_version: 1,
+        groupBy: "vendor",
+      }).groups[0]!.tasks.total,
+    ).toBe(1);
+
+    expect(
+      aggregateMetrics(listTasks(db), { first_attempt: true, groupBy: "vendor" }).groups[0]!
+        .tasks.total,
+    ).toBe(1);
+
+    // b is below baseline (3 < 5)
+    expect(
+      aggregateMetrics(listTasks(db), { below_baseline: true, groupBy: "vendor" }).groups[0]!
+        .tasks.total,
+    ).toBe(1);
+    expect(
+      aggregateMetrics(listTasks(db), { below_baseline: true, groupBy: "vendor" }).groups[0]!
+        .evals.avg,
+    ).toBe(3);
+  });
+
+  it("handles empty groups and zero-eval edges", () => {
+    insertTask(db, baseNewTask({ id: "bare", vendor: "fake" }));
+    updateTask(db, "bare", { state: "running" });
+    const { groups } = aggregateMetrics(listTasks(db), { groupBy: "vendor" });
+    expect(groups[0]!.evals.count).toBe(0);
+    expect(groups[0]!.evals.avg).toBeNull();
+    expect(groups[0]!.evals.avg_baseline).toBeNull();
+    expect(groups[0]!.evals.avg_delta).toBeNull();
+    expect(groups[0]!.evals.below_baseline_rate).toBeNull();
+    expect(groups[0]!.evals.criterion_failures).toEqual({});
+    expect(groups[0]!.evals.first_attempt.count).toBe(0);
+    expect(groups[0]!.evals.fix.count).toBe(0);
+  });
+});
+
+describe("GET /tasks detail enrichment (#164)", () => {
+  let server: DaemonServer | null = null;
+
+  beforeEach(() => {
+    process.env.PARLEY_GC_INTERVAL_MS = "0";
+  });
+
+  afterEach(async () => {
+    delete process.env.PARLEY_GC_INTERVAL_MS;
+    if (server) {
+      await server.close();
+      server = null;
+    }
+  });
+
+  it("returns attempts, session, and eval_detail on GET /tasks/:ref", async () => {
+    insertTask(
+      db,
+      baseNewTask({
+        id: "root",
+        orch_harness: "claude",
+        orch_model: "sonnet",
+        orch_effort: "high",
+      }),
+    );
+    updateTask(db, "root", {
+      state: "completed",
+      eval_score: 4,
+      eval_baseline: 5,
+      eval_rubric: "coding",
+      eval_rubric_version: 1,
+      eval_answers: JSON.stringify({
+        "brief-implemented": false,
+        "broke-existing": false,
+        "fabricated-claim": false,
+        "scope-creep": false,
+        "change-verified": false,
+        "tests-pass": true,
+        "readable-diff": true,
+        "scope-honored": true,
+      }),
+      eval_harness: "claude",
+      eval_model: "opus",
+      eval_effort: "max",
+      eval_session_id: "judge-sess",
+      completed_at: "2026-01-01T00:00:01.000Z",
+      started_at: "2026-01-01T00:00:00.000Z",
+    });
+    insertTask(
+      db,
+      baseNewTask({
+        id: "fix1",
+        parent_task_id: "root",
+        attempt: 2,
+        resumed: true,
+        orch_harness: "claude",
+        orch_model: "sonnet",
+        orch_effort: "high",
+      }),
+    );
+    updateTask(db, "fix1", {
+      state: "completed",
+      eval_score: 9,
+      eval_baseline: 5,
+      eval_rubric: "coding",
+      eval_rubric_version: 1,
+      eval_answers: JSON.stringify({ "brief-implemented": true, "broke-existing": false }),
+      cached_input_tokens: 100,
+      completed_at: "2026-01-01T00:00:02.000Z",
+      started_at: "2026-01-01T00:00:00.000Z",
+    });
+    db.close();
+
+    server = await startServer(homePaths(home));
+    const res = await fetch(`http://127.0.0.1:${server.port}/tasks/fix1`);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      attempts: { id: string; attempt: number; resumed: boolean; cache_hit: boolean | null }[];
+      session: { harness: string | null; model: string | null };
+      eval_detail: {
+        score: number;
+        baseline: number;
+        delta: number;
+        below_baseline: boolean;
+        legacy: boolean;
+        criteria: { id: string; pass: boolean }[] | null;
+        judge: { harness: string | null } | null;
+      };
+    };
+    expect(body.attempts.map((a) => a.id)).toEqual(["root", "fix1"]);
+    expect(body.attempts[1]!.resumed).toBe(true);
+    expect(body.attempts[1]!.cache_hit).toBe(true);
+    expect(body.session.harness).toBe("claude");
+    expect(body.session.model).toBe("sonnet");
+    expect(body.eval_detail.score).toBe(9);
+    expect(body.eval_detail.baseline).toBe(5);
+    expect(body.eval_detail.delta).toBe(4);
+    expect(body.eval_detail.below_baseline).toBe(false);
+    expect(body.eval_detail.legacy).toBe(false);
+    expect(body.eval_detail.criteria).not.toBeNull();
+
+    db = openDatabase(homePaths(home));
+  });
+
+  it("filters GET /tasks by type and first_attempt", async () => {
+    insertTask(db, baseNewTask({ id: "a", type: "coding" }));
+    insertTask(
+      db,
+      baseNewTask({ id: "b", type: "design", parent_task_id: "a", attempt: 2 }),
+    );
+    db.close();
+    server = await startServer(homePaths(home));
+
+    const byType = await fetch(`http://127.0.0.1:${server.port}/tasks?type=coding`);
+    const typeBody = (await byType.json()) as { tasks: { id: string }[] };
+    expect(typeBody.tasks.map((t) => t.id)).toEqual(["a"]);
+
+    const first = await fetch(`http://127.0.0.1:${server.port}/tasks?first_attempt=true`);
+    const firstBody = (await first.json()) as { tasks: { id: string }[] };
+    expect(firstBody.tasks.map((t) => t.id)).toEqual(["a"]);
 
     db = openDatabase(homePaths(home));
   });

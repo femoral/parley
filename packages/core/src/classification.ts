@@ -63,7 +63,12 @@ export interface ClassificationConfig {
   difficulties: ClassificationEntry[];
 }
 
-/** Metrics aggregation group dimensions. */
+/**
+ * Metrics aggregation group dimensions (#118 / #151 / #164).
+ * Provenance and rubric keys join the original vendor/model/profile/size/
+ * difficulty/type set so comparisons can isolate orchestrator, judge, or
+ * rubric version.
+ */
 export const METRICS_GROUP_BY = [
   "vendor",
   "model",
@@ -71,6 +76,22 @@ export const METRICS_GROUP_BY = [
   "size",
   "difficulty",
   "type",
+  /** Spawn-time orchestrator harness snapshot. */
+  "orch_harness",
+  /** Spawn-time orchestrator model snapshot. */
+  "orch_model",
+  /** Spawn-time orchestrator effort snapshot. */
+  "orch_effort",
+  /** Judge harness snapshot at eval time. */
+  "eval_harness",
+  /** Judge model snapshot at eval time. */
+  "eval_model",
+  /** Judge effort snapshot at eval time. */
+  "eval_effort",
+  /**
+   * Rubric id+version composite (`coding@1`). Null when no structured eval.
+   */
+  "rubric",
 ] as const;
 export type MetricsGroupBy = (typeof METRICS_GROUP_BY)[number];
 

@@ -284,12 +284,28 @@ export interface QaTurn {
 /**
  * `GET /tasks/:ref` — the task envelope alongside its raw row and the durable
  * Q&A history for the inspector (ask order). List endpoints omit `qa`.
+ * #164 adds attempt lineage, eval detail, and spawn-session provenance for Cove.
  */
 export interface TaskDetailResponse {
   task: TaskEnvelope;
   row: TaskRow;
   /** Per-task `ask_orchestrator` turns in ask order; empty when none. */
   qa: QaTurn[];
+  /**
+   * Full attempt chain containing this task (root → latest) (#164).
+   * Always present; a first attempt with no fixes is a one-element array.
+   */
+  attempts: AttemptLineageEntry[];
+  /**
+   * Spawn-time orchestrator provenance snapshot (#162 / #164).
+   * Fields are null when no session was bound at create time.
+   */
+  session: SessionProvenance;
+  /**
+   * Structured (or legacy) eval detail for status/inspector (#164).
+   * Null when the task has never been scored.
+   */
+  eval_detail: EvalDetail | null;
 }
 
 /** The ack returned by writes that report a task's post-transition state. */
@@ -347,10 +363,56 @@ export interface MetricsTaskCounts {
   other: number;
 }
 
-/** Eval aggregate: count of scored tasks and their mean score. */
-export interface MetricsEvalStats {
+/**
+ * Per-criterion failure frequency within a metrics group (#164).
+ * A criterion "fails" when a positive answer is false or a negative is true.
+ */
+export interface MetricsCriterionFailureStats {
+  /** Times this criterion failed among rubric evals that answered it. */
+  failures: number;
+  /** Rubric evals that included an answer for this criterion id. */
+  count: number;
+  /** failures / count; null when count is 0. */
+  rate: number | null;
+}
+
+/**
+ * First-attempt vs fix split of rubric eval scores (#164).
+ * Attempt 1 = first delegation; attempt > 1 = `parley fix` retries.
+ */
+export interface MetricsAttemptEvalSplit {
   count: number;
   avg: number | null;
+  avg_baseline: number | null;
+  avg_delta: number | null;
+  below_baseline_rate: number | null;
+}
+
+/**
+ * Rubric-eval aggregate for a metrics group (#164).
+ *
+ * Only structured rubric evals (eval_rubric set) contribute. Historical free
+ * scores (`eval_score` with null rubric fields) are excluded so legacy data
+ * never pollutes baseline/delta/criterion math — they remain visible on
+ * status as "legacy".
+ */
+export interface MetricsEvalStats {
+  /** Count of rubric-scored tasks in this group. */
+  count: number;
+  /** Mean score among rubric evals. */
+  avg: number | null;
+  /** Mean baseline among rubric evals. */
+  avg_baseline: number | null;
+  /** Mean (score − baseline) among rubric evals. */
+  avg_delta: number | null;
+  /** Fraction of rubric evals with score < baseline. */
+  below_baseline_rate: number | null;
+  /** Per-criterion failure frequency among rubric evals. */
+  criterion_failures: Record<string, MetricsCriterionFailureStats>;
+  /** Rubric evals on first attempts (attempt === 1). */
+  first_attempt: MetricsAttemptEvalSplit;
+  /** Rubric evals on fix attempts (attempt > 1). */
+  fix: MetricsAttemptEvalSplit;
 }
 
 /** Token totals after canonical normalizeUsage mapping. */
@@ -372,8 +434,8 @@ export interface MetricsDurationStats {
 }
 
 /**
- * One group in `GET /metrics` (#118 / #151) — keyed by vendor/model/profile/
- * size/difficulty/type (or null when the column is unset for that bucket).
+ * One group in `GET /metrics` (#118 / #151 / #164) — keyed by the active
+ * group_by dimension (or null when that column is unset for the bucket).
  */
 export interface MetricsGroup {
   key: string | null;
@@ -388,11 +450,118 @@ export interface MetricsGroup {
 }
 
 /**
- * `GET /metrics?session=&group_by=` — per-group task/eval/token/duration
- * aggregates for the CLI and Cove dashboard (#118 / #119).
+ * `GET /metrics?session=&group_by=&…` — per-group task/eval/token/duration
+ * aggregates for the CLI and Cove dashboard (#118 / #119 / #164).
  */
 export interface MetricsResponse {
   groups: MetricsGroup[];
   /** ISO-8601 timestamp when the response was generated. */
   generated_at: string;
+}
+
+/**
+ * One attempt in a fix chain (#152 / #164), root → latest order.
+ * Surfaced on `GET /tasks/:ref` so Cove can render attempt lineage.
+ */
+export interface AttemptLineageEntry {
+  id: string;
+  name: string | null;
+  attempt: number;
+  parent_task_id: string | null;
+  state: string;
+  resumed: boolean;
+  cached_input_tokens: number | null;
+  /** true when cached > 0, false when 0, null when unreported. */
+  cache_hit: boolean | null;
+  eval_score: number | null;
+  eval_baseline: number | null;
+  eval_rubric: string | null;
+  eval_rubric_version: number | null;
+  /** True when eval_score is set but rubric fields are null (pre-#157 free score). */
+  eval_legacy: boolean;
+}
+
+/**
+ * Spawn-time orchestrator session snapshot on a task (#162 / #164).
+ */
+export interface SessionProvenance {
+  session_id: string | null;
+  harness: string | null;
+  model: string | null;
+  effort: string | null;
+}
+
+/**
+ * Judge-time session snapshot from a structured eval (#162 / #164).
+ */
+export interface JudgeProvenance {
+  session_id: string | null;
+  harness: string | null;
+  model: string | null;
+  effort: string | null;
+}
+
+/**
+ * One criterion verdict for status/inspector (#164).
+ * `pass` is the "good outcome": positive answered true, or negative answered false.
+ */
+export interface EvalCriterionDetail {
+  id: string;
+  kind: "positive" | "negative";
+  weight: number;
+  text: string;
+  answer: boolean;
+  pass: boolean;
+}
+
+/**
+ * Structured eval detail for status / task detail (#164).
+ * Null-ish when the task has never been scored; `legacy` free scores set
+ * score without rubric/criteria.
+ */
+export interface EvalDetail {
+  score: number | null;
+  baseline: number | null;
+  /** score − baseline when both present; null otherwise. */
+  delta: number | null;
+  /** score < baseline when both present; null otherwise. */
+  below_baseline: boolean | null;
+  /** True when score exists without rubric fields (pre-#157 free score). */
+  legacy: boolean;
+  rubric: string | null;
+  rubric_version: number | null;
+  feedback: string | null;
+  judge: JudgeProvenance | null;
+  /** Per-criterion pass/fail with weights; null for legacy or missing answers. */
+  criteria: EvalCriterionDetail[] | null;
+}
+
+/**
+ * Shared filter params for `GET /metrics` and `GET /tasks` (#164).
+ * All fields optional; omitted means no constraint. Boolean flags are true
+ * when the query value is `"true"` or `"1"`.
+ */
+export interface TaskMetricsFilters {
+  /** Orchestrator session id; `"all"` / omit for every session (metrics default). */
+  session?: string;
+  type?: string;
+  vendor?: string;
+  model?: string;
+  profile?: string;
+  size?: string;
+  difficulty?: string;
+  orch_harness?: string;
+  orch_model?: string;
+  orch_effort?: string;
+  eval_harness?: string;
+  eval_model?: string;
+  eval_effort?: string;
+  /** Rubric id (e.g. `coding`). */
+  rubric?: string;
+  /** Rubric version integer. */
+  rubric_version?: number;
+  /** When true, only first attempts (attempt === 1 / no parent). */
+  first_attempt?: boolean;
+  /** When true, only rubric evals with score < baseline. */
+  below_baseline?: boolean;
 }

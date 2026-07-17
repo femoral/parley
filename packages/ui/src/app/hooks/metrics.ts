@@ -23,6 +23,13 @@ export const GROUP_BY_OPTIONS: readonly { value: MetricsGroupBy; label: string }
   { value: "size", label: "Size" },
   { value: "difficulty", label: "Difficulty" },
   { value: "type", label: "Type" },
+  { value: "orch_harness", label: "Orch harness" },
+  { value: "orch_model", label: "Orch model" },
+  { value: "orch_effort", label: "Orch effort" },
+  { value: "eval_harness", label: "Judge harness" },
+  { value: "eval_model", label: "Judge model" },
+  { value: "eval_effort", label: "Judge effort" },
+  { value: "rubric", label: "Rubric" },
 ];
 
 function projectEvalBuckets(map: Record<string, { count: number; avg: number | null }>): SoundingsEvalBucket[] {

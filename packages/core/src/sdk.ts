@@ -16,6 +16,7 @@ import type {
   TaskDetailResponse,
   TaskEnvelope,
   TaskLogResponse,
+  TaskMetricsFilters,
   TasksResponse,
 } from "./contract.js";
 import type { MetricsGroupBy } from "./classification.js";
@@ -95,9 +96,14 @@ export class ParleyClient {
     return this.request<HealthResponse>("/health");
   }
 
-  /** `GET /tasks` — every task plus the atomic "start from now" seq baseline. */
-  listTasks(): Promise<TasksResponse> {
-    return this.request<TasksResponse>("/tasks");
+  /**
+   * `GET /tasks` — tasks plus the atomic "start from now" seq baseline.
+   * Optional filters (#164) narrow the list the same way as metrics.
+   */
+  listTasks(filters?: TaskMetricsFilters): Promise<TasksResponse> {
+    const params = filtersToSearchParams(filters);
+    const qs = params.toString();
+    return this.request<TasksResponse>(qs === "" ? "/tasks" : `/tasks?${qs}`);
   }
 
   /**
@@ -111,15 +117,11 @@ export class ParleyClient {
   }
 
   /**
-   * `GET /metrics` — per-group task/eval/token/duration aggregates (#118).
-   * Defaults: session=`all`, groupBy=`vendor`.
+   * `GET /metrics` — per-group task/eval/token/duration aggregates (#118 / #164).
+   * Defaults: session=`all`, groupBy=`vendor`. Extra filters match list filters.
    */
-  metrics(options?: {
-    session?: string;
-    groupBy?: MetricsGroupBy;
-  }): Promise<MetricsResponse> {
-    const params = new URLSearchParams();
-    if (options?.session !== undefined) params.set("session", options.session);
+  metrics(options?: TaskMetricsFilters & { groupBy?: MetricsGroupBy }): Promise<MetricsResponse> {
+    const params = filtersToSearchParams(options);
     if (options?.groupBy !== undefined) params.set("group_by", options.groupBy);
     const qs = params.toString();
     return this.request<MetricsResponse>(qs === "" ? "/metrics" : `/metrics?${qs}`);
@@ -261,4 +263,77 @@ export async function bootstrapTaskStream(
     since: snapshot.seq,
   });
   return { snapshot, stream };
+}
+
+/** Serialize {@link TaskMetricsFilters} into query params for metrics/list. */
+export function filtersToSearchParams(
+  filters?: TaskMetricsFilters | null,
+): URLSearchParams {
+  const params = new URLSearchParams();
+  if (!filters) return params;
+  const set = (key: string, value: string | number | boolean | undefined): void => {
+    if (value === undefined) return;
+    if (typeof value === "boolean") {
+      params.set(key, value ? "true" : "false");
+      return;
+    }
+    params.set(key, String(value));
+  };
+  set("session", filters.session);
+  set("type", filters.type);
+  set("vendor", filters.vendor);
+  set("model", filters.model);
+  set("profile", filters.profile);
+  set("size", filters.size);
+  set("difficulty", filters.difficulty);
+  set("orch_harness", filters.orch_harness);
+  set("orch_model", filters.orch_model);
+  set("orch_effort", filters.orch_effort);
+  set("eval_harness", filters.eval_harness);
+  set("eval_model", filters.eval_model);
+  set("eval_effort", filters.eval_effort);
+  set("rubric", filters.rubric);
+  set("rubric_version", filters.rubric_version);
+  set("first_attempt", filters.first_attempt);
+  set("below_baseline", filters.below_baseline);
+  return params;
+}
+
+/**
+ * Parse metrics/list filter query params from a URLSearchParams (#164).
+ * Unknown / empty values are ignored; boolean flags accept `true`/`1`.
+ */
+export function parseTaskMetricsFilters(params: URLSearchParams): TaskMetricsFilters {
+  const out: TaskMetricsFilters = {};
+  const str = (key: keyof TaskMetricsFilters): void => {
+    const v = params.get(key as string);
+    if (v !== null && v !== "") (out as Record<string, unknown>)[key] = v;
+  };
+  str("session");
+  str("type");
+  str("vendor");
+  str("model");
+  str("profile");
+  str("size");
+  str("difficulty");
+  str("orch_harness");
+  str("orch_model");
+  str("orch_effort");
+  str("eval_harness");
+  str("eval_model");
+  str("eval_effort");
+  str("rubric");
+  const rv = params.get("rubric_version");
+  if (rv !== null && rv !== "") {
+    const n = Number(rv);
+    if (Number.isInteger(n) && n >= 1) out.rubric_version = n;
+  }
+  const bool = (key: "first_attempt" | "below_baseline"): void => {
+    const v = params.get(key);
+    if (v === "true" || v === "1") out[key] = true;
+    else if (v === "false" || v === "0") out[key] = false;
+  };
+  bool("first_attempt");
+  bool("below_baseline");
+  return out;
 }

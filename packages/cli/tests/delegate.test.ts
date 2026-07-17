@@ -440,9 +440,20 @@ describe("status", () => {
     expect(byId).toEqual(byName);
     expect(byId.id).toBe("t1");
     expect(byId.state).toBe("completed");
+    // Single-task status --json includes Session/Eval/Attempts detail (#164).
+    expect(byId.session).toBeDefined();
+    expect(byId.attempts).toEqual([
+      expect.objectContaining({ id: "t1", attempt: 1 }),
+    ]);
 
-    const listing = JSON.parse((await runCli(["status", "--json"], home)).stdout);
-    expect(listing).toEqual([byId]);
+    const listing = JSON.parse((await runCli(["status", "--json"], home)).stdout) as unknown[];
+    expect(listing).toHaveLength(1);
+    // List rows carry the same task fields but omit the detail sections.
+    const { session: _s, eval_detail: _e, attempts: _a, ...rowFields } = byId as Record<
+      string,
+      unknown
+    >;
+    expect(listing[0]).toEqual(rowFields);
   });
 
   it("shows compact token counts in USAGE for a task that reports usage", async () => {

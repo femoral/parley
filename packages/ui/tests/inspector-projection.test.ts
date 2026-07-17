@@ -8,10 +8,36 @@ function detail(
   rowOverrides: Partial<TaskDetailResponse["row"]> = {},
   qa: QaTurn[] = [],
 ): TaskDetailResponse {
+  const r = row({ id: "t1", state: "running", orchestrator_session_id: "sess-1", ...rowOverrides });
   return {
     task: envelope({ task_id: "t1", state: "running", vendor: "grok", ...overrides }),
-    row: row({ id: "t1", state: "running", orchestrator_session_id: "sess-1", ...rowOverrides }),
+    row: r,
     qa,
+    // #164 detail fields — projection tests only read task/row/qa today.
+    attempts: [
+      {
+        id: r.id,
+        name: r.name,
+        attempt: r.attempt ?? 1,
+        parent_task_id: r.parent_task_id ?? null,
+        state: r.state,
+        resumed: false,
+        cached_input_tokens: r.cached_input_tokens ?? null,
+        cache_hit: null,
+        eval_score: r.eval_score,
+        eval_baseline: r.eval_baseline ?? null,
+        eval_rubric: r.eval_rubric ?? null,
+        eval_rubric_version: r.eval_rubric_version ?? null,
+        eval_legacy: r.eval_score !== null && (r.eval_rubric == null || r.eval_rubric === ""),
+      },
+    ],
+    session: {
+      session_id: r.orchestrator_session_id,
+      harness: r.orch_harness ?? null,
+      model: r.orch_model ?? null,
+      effort: r.orch_effort ?? null,
+    },
+    eval_detail: null,
   };
 }
 

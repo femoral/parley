@@ -181,3 +181,155 @@ describe("parley metrics (#118)", () => {
     expect(res.stderr).toMatch(/invalid --group-by/);
   });
 });
+
+describe("parley metrics / status surfacing (#164)", () => {
+  async function completeWithEval(
+    name: string,
+    opts: {
+      type?: string;
+      size?: string;
+      score: number;
+    },
+  ): Promise<string> {
+    const dir = makeTaskDir([{ submit_report: REPORT }]);
+    const args = [
+      "delegate",
+      "--vendor",
+      "fake",
+      "--cwd",
+      dir,
+      "--name",
+      name,
+      "--type",
+      opts.type ?? "coding",
+      "work",
+    ];
+    if (opts.size) args.splice(args.length - 1, 0, "--size", opts.size);
+    const del = await runCli(args, home);
+    expect(del.code).toBe(0);
+    const ack = JSON.parse(del.stdout) as { task_id: string };
+    await runCli(["watch", ack.task_id], home);
+    const evalRes = await runCli(
+      [
+        "eval",
+        ack.task_id,
+        "--answers",
+        JSON.stringify(codingAnswersForScore(opts.score)),
+        "--feedback",
+        "ok",
+      ],
+      home,
+    );
+    expect(evalRes.code).toBe(0);
+    fs.rmSync(dir, { recursive: true, force: true });
+    return ack.task_id;
+  }
+
+  it("groups by type and filters metrics by type", async () => {
+    await completeWithEval("coding-task", { type: "coding", score: 8 });
+    // design type uses design rubric — eval with coding answers would fail validation;
+    // just delegate+complete without eval for the second type, and filter by type alone.
+    const dir = makeTaskDir([{ submit_report: REPORT }]);
+    const del = await runCli(
+      ["delegate", "--vendor", "fake", "--cwd", dir, "--name", "design-task", "--type", "design", "x"],
+      home,
+    );
+    expect(del.code).toBe(0);
+    const designId = JSON.parse(del.stdout).task_id as string;
+    await runCli(["watch", designId], home);
+    fs.rmSync(dir, { recursive: true, force: true });
+
+    const byType = await runCli(["metrics", "--group-by", "type", "--json"], home);
+    expect(byType.code).toBe(0);
+    const body = JSON.parse(byType.stdout) as MetricsResponse;
+    const keys = body.groups.map((g) => g.key).sort();
+    expect(keys).toContain("coding");
+    expect(keys).toContain("design");
+
+    const filtered = await runCli(["metrics", "--type", "coding", "--json"], home);
+    expect(filtered.code).toBe(0);
+    const fBody = JSON.parse(filtered.stdout) as MetricsResponse;
+    const total = fBody.groups.reduce((s, g) => s + g.tasks.total, 0);
+    expect(total).toBe(1);
+    expect(fBody.groups[0]!.evals.count).toBe(1);
+    expect(fBody.groups[0]!.evals.avg_baseline).not.toBeNull();
+  });
+
+  it("exposes avg_baseline/avg_delta/below_baseline_rate and criterion_failures in --json", async () => {
+    await completeWithEval("m1", { score: 10 });
+    const json = await runCli(["metrics", "--json"], home);
+    expect(json.code).toBe(0);
+    const body = JSON.parse(json.stdout) as MetricsResponse;
+    const g = body.groups.find((x) => x.key === "fake")!;
+    expect(g.evals.count).toBe(1);
+    expect(g.evals.avg).toBe(10);
+    expect(g.evals.avg_baseline).toBe(5);
+    expect(g.evals.avg_delta).toBe(5);
+    expect(g.evals.below_baseline_rate).toBe(0);
+    expect(g.evals.first_attempt.count).toBe(1);
+    expect(g.evals.fix.count).toBe(0);
+    expect(typeof g.evals.criterion_failures).toBe("object");
+  });
+
+  it("renders Session / Eval / Attempts on status and mirrors them in --json", async () => {
+    const id = await completeWithEval("status-me", { score: 10 });
+
+    const human = await runCli(["status", id], home);
+    expect(human.code).toBe(0);
+    expect(human.stdout).toMatch(/Session/);
+    expect(human.stdout).toMatch(/Eval/);
+    expect(human.stdout).toMatch(/Attempts/);
+    expect(human.stdout).toMatch(/score: 10/);
+    expect(human.stdout).toMatch(/rubric: coding@v1/);
+    expect(human.stdout).toMatch(/#1/);
+    expect(human.stdout).toMatch(/criteria:/);
+
+    const json = await runCli(["status", id, "--json"], home);
+    expect(json.code).toBe(0);
+    const row = JSON.parse(json.stdout) as {
+      eval_score: number;
+      session: { session_id: string | null };
+      eval_detail: {
+        score: number;
+        baseline: number;
+        delta: number;
+        legacy: boolean;
+        criteria: { id: string; pass: boolean; weight: number }[];
+      };
+      attempts: { id: string; attempt: number }[];
+    };
+    expect(row.eval_score).toBe(10);
+    expect(row.eval_detail.score).toBe(10);
+    expect(row.eval_detail.baseline).toBe(5);
+    expect(row.eval_detail.delta).toBe(5);
+    expect(row.eval_detail.legacy).toBe(false);
+    expect(row.eval_detail.criteria.length).toBeGreaterThan(0);
+    expect(row.attempts).toHaveLength(1);
+    expect(row.attempts[0]!.id).toBe(id);
+    expect(row.session).toBeDefined();
+  });
+
+  it("filters list by type", async () => {
+    await completeWithEval("listed-coding", { type: "coding", score: 7 });
+    const dir = makeTaskDir([{ submit_report: REPORT }]);
+    const del = await runCli(
+      ["delegate", "--vendor", "fake", "--cwd", dir, "--name", "listed-design", "--type", "design", "x"],
+      home,
+    );
+    expect(del.code).toBe(0);
+    await runCli(["watch", JSON.parse(del.stdout).task_id], home);
+    fs.rmSync(dir, { recursive: true, force: true });
+
+    const list = await runCli(["list", "--all", "--type", "coding", "--json"], home);
+    expect(list.code).toBe(0);
+    const rows = JSON.parse(list.stdout) as { type: string; name: string | null }[];
+    expect(rows.length).toBeGreaterThanOrEqual(1);
+    expect(rows.every((r) => r.type === "coding")).toBe(true);
+  });
+
+  it("rejects invalid --rubric-version", async () => {
+    const res = await runCli(["metrics", "--rubric-version", "nope"], home);
+    expect(res.code).toBe(2);
+    expect(res.stderr).toMatch(/rubric-version/);
+  });
+});

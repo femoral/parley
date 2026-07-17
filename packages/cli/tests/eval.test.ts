@@ -96,7 +96,10 @@ describe("parley eval --answers (#157)", () => {
 
     const human = await runCli(["status", taskId], home);
     expect(human.code).toBe(0);
-    expect(human.stdout).toMatch(/eval: score=10 baseline=5 rubric=coding@v1/);
+    // #164 enriched status: Session / Eval / Attempts sections.
+    expect(human.stdout).toMatch(/Eval/);
+    expect(human.stdout).toMatch(/score: 10 baseline=5/);
+    expect(human.stdout).toMatch(/rubric: coding@v1/);
   });
 
   it("other type falls back to generic rubric", async () => {

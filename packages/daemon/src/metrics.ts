@@ -1,8 +1,10 @@
 /**
- * Task metrics aggregation (#118) — pure functions over task rows for
- * `GET /metrics` and unit tests.
+ * Task metrics aggregation (#118 / #164) — pure functions over task rows for
+ * `GET /metrics` and unit tests. Rubric eval stats exclude legacy free scores.
  */
 import type {
+  MetricsAttemptEvalSplit,
+  MetricsCriterionFailureStats,
   MetricsDurationStats,
   MetricsEvalStats,
   MetricsGroup,
@@ -10,18 +12,29 @@ import type {
   MetricsResponse,
   MetricsTaskCounts,
   MetricsTokenTotals,
+  TaskMetricsFilters,
 } from "@useparley/core";
-import { normalizeUsage } from "@useparley/core";
+import { normalizeUsage, UNIVERSAL_NEGATIVES } from "@useparley/core";
 import type { TaskRow } from "./db.js";
 import { parseJsonColumn } from "./report.js";
 
-const GROUP_COLUMNS: Record<MetricsGroupBy, keyof TaskRow> = {
+/**
+ * Group-by columns that map 1:1 onto a TaskRow field. `rubric` is composite
+ * (`id@version`) and handled separately.
+ */
+const GROUP_COLUMNS: Partial<Record<MetricsGroupBy, keyof TaskRow>> = {
   vendor: "vendor",
   model: "model",
   profile: "profile",
   size: "size",
   difficulty: "difficulty",
   type: "type",
+  orch_harness: "orch_harness",
+  orch_model: "orch_model",
+  orch_effort: "orch_effort",
+  eval_harness: "eval_harness",
+  eval_model: "eval_model",
+  eval_effort: "eval_effort",
 };
 
 /** Nearest-rank percentile over a pre-sorted ascending array; null when empty. */
@@ -31,6 +44,95 @@ export function percentile(sorted: readonly number[], p: number): number | null 
   const rank = Math.ceil((p / 100) * sorted.length);
   const idx = Math.min(sorted.length - 1, Math.max(0, rank - 1));
   return sorted[idx] ?? null;
+}
+
+/**
+ * True when the task has a structured rubric eval (#157 / #164). Legacy free
+ * scores have eval_score but null rubric fields and are excluded from rubric
+ * aggregations.
+ */
+export function isRubricEval(task: TaskRow): boolean {
+  return (
+    task.eval_score !== null &&
+    Number.isFinite(task.eval_score) &&
+    task.eval_rubric !== null &&
+    task.eval_rubric !== "" &&
+    task.eval_baseline !== null &&
+    Number.isFinite(task.eval_baseline)
+  );
+}
+
+/** True when eval_score is set without a structured rubric (pre-#157 free score). */
+export function isLegacyEval(task: TaskRow): boolean {
+  return (
+    task.eval_score !== null &&
+    Number.isFinite(task.eval_score) &&
+    !isRubricEval(task)
+  );
+}
+
+/** Rubric composite key `id@version` for group-by=rubric; null when unset. */
+export function rubricGroupKey(task: TaskRow): string | null {
+  if (task.eval_rubric === null || task.eval_rubric === "") return null;
+  if (task.eval_rubric_version === null || task.eval_rubric_version === undefined) {
+    return task.eval_rubric;
+  }
+  return `${task.eval_rubric}@${task.eval_rubric_version}`;
+}
+
+/**
+ * Whether a task matches metrics/list filters (#164). Session `"all"` / omit /
+ * null includes every session; other string values pin `orchestrator_session_id`.
+ */
+export function taskMatchesFilters(
+  task: TaskRow,
+  filters: TaskMetricsFilters = {},
+): boolean {
+  const session = filters.session;
+  if (session !== undefined && session !== null && session !== "" && session !== "all") {
+    if (task.orchestrator_session_id !== session) return false;
+  }
+
+  const eq = (want: string | undefined, got: string | null | undefined): boolean => {
+    if (want === undefined) return true;
+    return (got ?? "") === want;
+  };
+
+  if (!eq(filters.type, task.type)) return false;
+  if (!eq(filters.vendor, task.vendor)) return false;
+  if (!eq(filters.model, task.model)) return false;
+  if (!eq(filters.profile, task.profile)) return false;
+  if (!eq(filters.size, task.size)) return false;
+  if (!eq(filters.difficulty, task.difficulty)) return false;
+  if (!eq(filters.orch_harness, task.orch_harness)) return false;
+  if (!eq(filters.orch_model, task.orch_model)) return false;
+  if (!eq(filters.orch_effort, task.orch_effort)) return false;
+  if (!eq(filters.eval_harness, task.eval_harness)) return false;
+  if (!eq(filters.eval_model, task.eval_model)) return false;
+  if (!eq(filters.eval_effort, task.eval_effort)) return false;
+  if (!eq(filters.rubric, task.eval_rubric)) return false;
+
+  if (filters.rubric_version !== undefined) {
+    if (task.eval_rubric_version !== filters.rubric_version) return false;
+  }
+
+  if (filters.first_attempt === true) {
+    const attempt = task.attempt ?? 1;
+    if (attempt !== 1) return false;
+  } else if (filters.first_attempt === false) {
+    const attempt = task.attempt ?? 1;
+    if (attempt <= 1) return false;
+  }
+
+  if (filters.below_baseline === true) {
+    if (!isRubricEval(task)) return false;
+    if (!(task.eval_score! < task.eval_baseline!)) return false;
+  } else if (filters.below_baseline === false) {
+    if (!isRubricEval(task)) return false;
+    if (task.eval_score! < task.eval_baseline!) return false;
+  }
+
+  return true;
 }
 
 function emptyTaskCounts(): MetricsTaskCounts {
@@ -45,33 +147,146 @@ function emptyDuration(): MetricsDurationStats {
   return { total: 0, avg: null, p50: null, p95: null, tasks_reporting: 0 };
 }
 
+function emptyAttemptSplit(): MetricsAttemptEvalSplit {
+  return {
+    count: 0,
+    avg: null,
+    avg_baseline: null,
+    avg_delta: null,
+    below_baseline_rate: null,
+  };
+}
+
 function emptyEvals(): MetricsEvalStats {
-  return { count: 0, avg: null };
+  return {
+    count: 0,
+    avg: null,
+    avg_baseline: null,
+    avg_delta: null,
+    below_baseline_rate: null,
+    criterion_failures: {},
+    first_attempt: emptyAttemptSplit(),
+    fix: emptyAttemptSplit(),
+  };
 }
 
-function bumpEval(map: Record<string, { sum: number; count: number }>, key: string, score: number): void {
-  const cur = map[key] ?? { sum: 0, count: 0 };
-  cur.sum += score;
-  cur.count += 1;
-  map[key] = cur;
+/** Mutable accumulator for rubric eval stats. */
+interface EvalAcc {
+  scoreSum: number;
+  baselineSum: number;
+  deltaSum: number;
+  count: number;
+  belowBaseline: number;
+  criterion: Record<string, { failures: number; count: number }>;
+  first: { scoreSum: number; baselineSum: number; deltaSum: number; count: number; below: number };
+  fix: { scoreSum: number; baselineSum: number; deltaSum: number; count: number; below: number };
 }
 
-function finalizeEvalMap(
-  map: Record<string, { sum: number; count: number }>,
-): Record<string, MetricsEvalStats> {
-  const out: Record<string, MetricsEvalStats> = {};
-  for (const [key, { sum, count }] of Object.entries(map)) {
-    out[key] = { count, avg: count === 0 ? null : sum / count };
+function emptyEvalAcc(): EvalAcc {
+  return {
+    scoreSum: 0,
+    baselineSum: 0,
+    deltaSum: 0,
+    count: 0,
+    belowBaseline: 0,
+    criterion: {},
+    first: { scoreSum: 0, baselineSum: 0, deltaSum: 0, count: 0, below: 0 },
+    fix: { scoreSum: 0, baselineSum: 0, deltaSum: 0, count: 0, below: 0 },
+  };
+}
+
+/**
+ * Record one structured rubric eval into an accumulator.
+ * Criterion failure: positive answer false, or negative answer true.
+ * Kind is inferred from the answer alone when rubric text is unavailable:
+ * we treat `false` as a failure for the frequency map when the criterion id
+ * is present — but for negatives, failure is `true`. Without kind info we
+ * need the answers plus a kind map.
+ *
+ * Convention: answers are stored as the raw boolean the judge gave. Failures
+ * are computed using optional kind hints from the answers payload when we
+ * know the rubric; otherwise we use a simple rule: for known universal
+ * negatives and shipped criteria we detect by id prefix / known negative ids.
+ *
+ * Simpler contract used here: pass a `failed` map computed by the caller, or
+ * compute from answers with kind=positive means fail on false, kind=negative
+ * fail on true. When kind is unknown, treat answer `false` as failure (positive
+ * default) — negatives always have known ids in shipped set.
+ */
+function accumulateRubricEval(
+  acc: EvalAcc,
+  task: TaskRow,
+  criterionFailed: (id: string, answer: boolean) => boolean,
+): void {
+  const score = task.eval_score!;
+  const baseline = task.eval_baseline!;
+  const delta = score - baseline;
+  const below = score < baseline;
+
+  acc.scoreSum += score;
+  acc.baselineSum += baseline;
+  acc.deltaSum += delta;
+  acc.count += 1;
+  if (below) acc.belowBaseline += 1;
+
+  const attempt = task.attempt ?? 1;
+  const split = attempt <= 1 ? acc.first : acc.fix;
+  split.scoreSum += score;
+  split.baselineSum += baseline;
+  split.deltaSum += delta;
+  split.count += 1;
+  if (below) split.below += 1;
+
+  const answers = parseJsonColumn<Record<string, boolean>>(task.eval_answers ?? null);
+  if (answers !== null && typeof answers === "object" && !Array.isArray(answers)) {
+    for (const [id, answer] of Object.entries(answers)) {
+      if (typeof answer !== "boolean") continue;
+      const cur = acc.criterion[id] ?? { failures: 0, count: 0 };
+      cur.count += 1;
+      if (criterionFailed(id, answer)) cur.failures += 1;
+      acc.criterion[id] = cur;
+    }
   }
-  return out;
+}
+
+function finalizeAttemptSplit(s: EvalAcc["first"]): MetricsAttemptEvalSplit {
+  if (s.count === 0) return emptyAttemptSplit();
+  return {
+    count: s.count,
+    avg: s.scoreSum / s.count,
+    avg_baseline: s.baselineSum / s.count,
+    avg_delta: s.deltaSum / s.count,
+    below_baseline_rate: s.below / s.count,
+  };
+}
+
+function finalizeEvalAcc(acc: EvalAcc): MetricsEvalStats {
+  if (acc.count === 0) return emptyEvals();
+  const criterion_failures: Record<string, MetricsCriterionFailureStats> = {};
+  for (const [id, { failures, count }] of Object.entries(acc.criterion)) {
+    criterion_failures[id] = {
+      failures,
+      count,
+      rate: count === 0 ? null : failures / count,
+    };
+  }
+  return {
+    count: acc.count,
+    avg: acc.scoreSum / acc.count,
+    avg_baseline: acc.baselineSum / acc.count,
+    avg_delta: acc.deltaSum / acc.count,
+    below_baseline_rate: acc.belowBaseline / acc.count,
+    criterion_failures,
+    first_attempt: finalizeAttemptSplit(acc.first),
+    fix: finalizeAttemptSplit(acc.fix),
+  };
 }
 
 interface GroupAcc {
   tasks: MetricsTaskCounts;
-  evalSum: number;
-  evalCount: number;
-  evalsBySize: Record<string, { sum: number; count: number }>;
-  evalsByDifficulty: Record<string, { sum: number; count: number }>;
+  evals: EvalAcc;
+  evalsBySize: Record<string, EvalAcc>;
+  evalsByDifficulty: Record<string, EvalAcc>;
   tokens: MetricsTokenTotals;
   durations: number[];
 }
@@ -79,8 +294,7 @@ interface GroupAcc {
 function emptyAcc(): GroupAcc {
   return {
     tasks: emptyTaskCounts(),
-    evalSum: 0,
-    evalCount: 0,
+    evals: emptyEvalAcc(),
     evalsBySize: {},
     evalsByDifficulty: {},
     tokens: emptyTokens(),
@@ -89,10 +303,29 @@ function emptyAcc(): GroupAcc {
 }
 
 function groupKeyFor(task: TaskRow, groupBy: MetricsGroupBy): string | null {
+  if (groupBy === "rubric") return rubricGroupKey(task);
   const col = GROUP_COLUMNS[groupBy];
+  if (col === undefined) return null;
   const value = task[col];
   if (value === null || value === undefined || value === "") return null;
   return String(value);
+}
+
+/**
+ * Known universal negative criterion ids — answered true ⇒ failure.
+ * Everything else is treated as positive (answered false ⇒ failure). Project
+ * custom negatives with new ids are a rare edge; shipped rubrics share the
+ * universal trio.
+ */
+const KNOWN_NEGATIVE_IDS = new Set(UNIVERSAL_NEGATIVES.map((c) => c.id));
+
+/**
+ * Whether a criterion answer counts as a failure for frequency stats.
+ * Negatives fail when triggered (true); positives fail when unmet (false).
+ */
+export function criterionAnswerFailed(id: string, answer: boolean): boolean {
+  if (KNOWN_NEGATIVE_IDS.has(id)) return answer === true;
+  return answer === false;
 }
 
 function accumulateTask(acc: GroupAcc, task: TaskRow): void {
@@ -115,14 +348,24 @@ function accumulateTask(acc: GroupAcc, task: TaskRow): void {
       break;
   }
 
-  if (task.eval_score !== null && Number.isFinite(task.eval_score)) {
-    acc.evalSum += task.eval_score;
-    acc.evalCount += 1;
+  // Rubric evals only — legacy free scores are excluded from all eval stats.
+  if (isRubricEval(task)) {
+    accumulateRubricEval(acc.evals, task, criterionAnswerFailed);
     if (task.size !== null && task.size !== "") {
-      bumpEval(acc.evalsBySize, task.size, task.eval_score);
+      let sizeAcc = acc.evalsBySize[task.size];
+      if (sizeAcc === undefined) {
+        sizeAcc = emptyEvalAcc();
+        acc.evalsBySize[task.size] = sizeAcc;
+      }
+      accumulateRubricEval(sizeAcc, task, criterionAnswerFailed);
     }
     if (task.difficulty !== null && task.difficulty !== "") {
-      bumpEval(acc.evalsByDifficulty, task.difficulty, task.eval_score);
+      let diffAcc = acc.evalsByDifficulty[task.difficulty];
+      if (diffAcc === undefined) {
+        diffAcc = emptyEvalAcc();
+        acc.evalsByDifficulty[task.difficulty] = diffAcc;
+      }
+      accumulateRubricEval(diffAcc, task, criterionAnswerFailed);
     }
   }
 
@@ -147,6 +390,14 @@ function accumulateTask(acc: GroupAcc, task: TaskRow): void {
   }
 }
 
+function finalizeEvalMap(map: Record<string, EvalAcc>): Record<string, MetricsEvalStats> {
+  const out: Record<string, MetricsEvalStats> = {};
+  for (const [key, acc] of Object.entries(map)) {
+    out[key] = finalizeEvalAcc(acc);
+  }
+  return out;
+}
+
 function finalizeGroup(key: string | null, acc: GroupAcc): MetricsGroup {
   const decided = acc.tasks.completed + acc.tasks.failed;
   const success_rate = decided === 0 ? null : acc.tasks.completed / decided;
@@ -156,10 +407,7 @@ function finalizeGroup(key: string | null, acc: GroupAcc): MetricsGroup {
     key,
     tasks: acc.tasks,
     success_rate,
-    evals: {
-      count: acc.evalCount,
-      avg: acc.evalCount === 0 ? null : acc.evalSum / acc.evalCount,
-    },
+    evals: finalizeEvalAcc(acc.evals),
     evals_by_size: finalizeEvalMap(acc.evalsBySize),
     evals_by_difficulty: finalizeEvalMap(acc.evalsByDifficulty),
     tokens: acc.tokens,
@@ -174,21 +422,18 @@ function finalizeGroup(key: string | null, acc: GroupAcc): MetricsGroup {
 }
 
 /**
- * Aggregate task rows into metrics groups. `session` of `"all"` (or null/
- * undefined) includes every task; any other string filters by
- * `orchestrator_session_id`. Groups are ordered by key (null last), stable.
+ * Aggregate task rows into metrics groups (#118 / #164).
+ * Filters (session, type, provenance, rubric, first_attempt, below_baseline)
+ * are applied before bucketing. Groups are ordered by key (null last), stable.
  */
 export function aggregateMetrics(
   tasks: readonly TaskRow[],
-  options: { session?: string | null; groupBy?: MetricsGroupBy } = {},
+  options: TaskMetricsFilters & { groupBy?: MetricsGroupBy } = {},
 ): MetricsResponse {
-  const session = options.session ?? "all";
   const groupBy: MetricsGroupBy = options.groupBy ?? "vendor";
+  const filters: TaskMetricsFilters = options;
 
-  const filtered =
-    session === "all"
-      ? tasks
-      : tasks.filter((t) => t.orchestrator_session_id === session);
+  const filtered = tasks.filter((t) => taskMatchesFilters(t, filters));
 
   const buckets = new Map<string | null, GroupAcc>();
   for (const task of filtered) {

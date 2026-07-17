@@ -75,9 +75,18 @@ describe("task types (#151)", () => {
     expect(formatValidTaskTypes(trimmed)).toBe("coding|other");
   });
 
-  it("includes type in metrics group-by dimensions", () => {
+  it("includes type and provenance/rubric in metrics group-by dimensions (#164)", () => {
     expect(METRICS_GROUP_BY).toContain("type");
+    expect(METRICS_GROUP_BY).toContain("orch_harness");
+    expect(METRICS_GROUP_BY).toContain("orch_model");
+    expect(METRICS_GROUP_BY).toContain("orch_effort");
+    expect(METRICS_GROUP_BY).toContain("eval_harness");
+    expect(METRICS_GROUP_BY).toContain("eval_model");
+    expect(METRICS_GROUP_BY).toContain("eval_effort");
+    expect(METRICS_GROUP_BY).toContain("rubric");
     expect(isMetricsGroupBy("type")).toBe(true);
+    expect(isMetricsGroupBy("orch_harness")).toBe(true);
+    expect(isMetricsGroupBy("rubric")).toBe(true);
     expect(isMetricsGroupBy("nope")).toBe(false);
   });
 });

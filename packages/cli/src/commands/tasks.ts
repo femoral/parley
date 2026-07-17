@@ -1,8 +1,17 @@
+import type {
+  AttemptLineageEntry,
+  EvalDetail,
+  SessionProvenance,
+  TaskDetailResponse,
+  TaskMetricsFilters,
+} from "@useparley/core";
+import { filtersToSearchParams } from "@useparley/core";
 import { parseArgs } from "../args.js";
 import { type CliContext, printJson } from "../context.js";
 import { daemonGet, ensureDaemon } from "../client.js";
 import type { TaskRow } from "@useparley/daemon/db.js";
 import { parseJsonColumn } from "@useparley/daemon/report.js";
+import { filtersFromFlags, METRICS_FILTER_FLAGS } from "./metrics.js";
 
 interface TasksResponse {
   tasks: TaskRow[];
@@ -111,24 +120,93 @@ function renderTable(ctx: CliContext, tasks: TaskRow[]): void {
   for (const row of rows) ctx.stdout(`${format(row)}\n`);
 }
 
-/**
- * Basic eval summary line for human status (#157): score/baseline/version when
- * a structured rubric eval is present; legacy free-score rows show score only.
- */
-function formatEvalLine(task: TaskRow): string | null {
-  if (task.eval_score === null || task.eval_score === undefined) return null;
-  if (task.eval_rubric != null && task.eval_rubric_version != null) {
-    const baseline =
-      task.eval_baseline !== null && task.eval_baseline !== undefined
-        ? String(task.eval_baseline)
-        : "?";
-    return `eval: score=${task.eval_score} baseline=${baseline} rubric=${task.eval_rubric}@v${task.eval_rubric_version}`;
-  }
-  // Historical free-score row (pre-#157) — score remains displayable.
-  return `eval: score=${task.eval_score} (legacy)`;
+function formatSigned(n: number): string {
+  const rounded = Math.round(n * 10) / 10;
+  if (rounded > 0) return `+${rounded}`;
+  return String(rounded);
 }
 
-/** Present a task row for `--json` output: JSON columns become objects. */
+/** Render Session / Eval / Attempts sections for single-task status (#164). */
+function renderDetailSections(
+  ctx: CliContext,
+  detail: {
+    session: SessionProvenance;
+    eval_detail: EvalDetail | null;
+    attempts: AttemptLineageEntry[];
+  },
+): void {
+  const s = detail.session;
+  ctx.stdout("\nSession\n");
+  ctx.stdout(`  id:      ${s.session_id ?? "-"}\n`);
+  ctx.stdout(`  harness: ${s.harness ?? "-"}\n`);
+  ctx.stdout(`  model:   ${s.model ?? "-"}\n`);
+  ctx.stdout(`  effort:  ${s.effort ?? "-"}\n`);
+
+  const e = detail.eval_detail;
+  ctx.stdout("\nEval\n");
+  if (e === null) {
+    ctx.stdout("  (none)\n");
+  } else if (e.legacy) {
+    ctx.stdout(`  score: ${e.score} (legacy)\n`);
+    if (e.feedback) ctx.stdout(`  feedback: ${e.feedback}\n`);
+  } else {
+    const base = e.baseline === null ? "?" : String(e.baseline);
+    const delta =
+      e.delta === null ? "" : ` delta=${formatSigned(e.delta)}`;
+    const below =
+      e.below_baseline === true ? " BELOW BASELINE" : e.below_baseline === false ? "" : "";
+    ctx.stdout(`  score: ${e.score} baseline=${base}${delta}${below}\n`);
+    if (e.rubric != null) {
+      const ver = e.rubric_version != null ? `@v${e.rubric_version}` : "";
+      ctx.stdout(`  rubric: ${e.rubric}${ver}\n`);
+    }
+    if (e.judge) {
+      const j = e.judge;
+      ctx.stdout(
+        `  judge: harness=${j.harness ?? "-"} model=${j.model ?? "-"} effort=${j.effort ?? "-"}\n`,
+      );
+    }
+    if (e.feedback) ctx.stdout(`  feedback: ${e.feedback}\n`);
+    if (e.criteria && e.criteria.length > 0) {
+      ctx.stdout("  criteria:\n");
+      for (const c of e.criteria) {
+        const mark = c.pass ? "✓" : "✗";
+        const kind = c.kind === "negative" ? " [neg]" : "";
+        ctx.stdout(`    ${mark} ${c.id} (w=${c.weight})${kind}\n`);
+      }
+    }
+  }
+
+  ctx.stdout("\nAttempts\n");
+  if (detail.attempts.length === 0) {
+    ctx.stdout("  (none)\n");
+    return;
+  }
+  for (const a of detail.attempts) {
+    const badges: string[] = [];
+    if (a.resumed) badges.push("resumed");
+    if (a.cache_hit === true) badges.push("cache");
+    else if (a.cache_hit === false) badges.push("no-cache");
+    const badgeStr = badges.length > 0 ? ` [${badges.join(",")}]` : "";
+    let scoreStr = "";
+    if (a.eval_score !== null && a.eval_score !== undefined) {
+      if (a.eval_legacy) {
+        scoreStr = ` score=${a.eval_score} (legacy)`;
+      } else {
+        const base =
+          a.eval_baseline !== null && a.eval_baseline !== undefined
+            ? `/${a.eval_baseline}`
+            : "";
+        scoreStr = ` score=${a.eval_score}${base}`;
+      }
+    }
+    ctx.stdout(
+      `  #${a.attempt}  ${a.id}  ${a.state}${scoreStr}${badgeStr}\n`,
+    );
+  }
+}
+
+/** Present a task row for list `--json` output: JSON columns become objects. */
 function presentRow(row: TaskRow): Record<string, unknown> {
   const cached =
     row.cached_input_tokens === undefined ? null : row.cached_input_tokens;
@@ -148,6 +226,19 @@ function presentRow(row: TaskRow): Record<string, unknown> {
     parent_task_id: row.parent_task_id ?? null,
     cached_input_tokens: cached,
     cache_hit: cacheHit(cached),
+  };
+}
+
+/**
+ * Present single-task status `--json`: row fields plus Session/Eval/Attempts
+ * sections (#164) so scripts see the same data as human output.
+ */
+function presentDetail(detail: TaskDetailResponse): Record<string, unknown> {
+  return {
+    ...presentRow(detail.row as TaskRow),
+    session: detail.session,
+    eval_detail: detail.eval_detail,
+    attempts: detail.attempts,
   };
 }
 
@@ -172,52 +263,95 @@ function resolveSessionFilter(
 }
 
 /**
- * `parley status [task] [--json] [--session <id>] [--all]` (and its `parley
- * list` alias). Auto-spawns the daemon, fetches the task table over the CLI
- * plane, and renders it. A task reference may be a short id or a `--name`
+ * Apply local session scoping after server filters. Server already applied
+ * type/provenance/rubric filters via query params; session for list still
+ * uses CLI defaulting (latest / env / --all).
+ */
+function applySessionScope(
+  tasks: TaskRow[],
+  ref: string | undefined,
+  all: boolean,
+  sessionFlag: string | undefined,
+  env: NodeJS.ProcessEnv,
+): TaskRow[] {
+  if (ref) {
+    return tasks.filter((t) => t.id === ref || t.name === ref);
+  }
+  if (all) return tasks;
+  const session = resolveSessionFilter(sessionFlag, env, tasks);
+  if (session === undefined) return tasks;
+  return tasks.filter((t) => t.orchestrator_session_id === session);
+}
+
+/**
+ * `parley status [task] [--json] [--session <id>] [--all] [filters]` (and its
+ * `parley list` alias). Auto-spawns the daemon, fetches the task table over the
+ * CLI plane, and renders it. A task reference may be a short id or a `--name`
  * label — a targeted lookup that bypasses session filtering. With no ref, the
  * listing narrows to one orchestrator session: `--session <id>` (or `latest`),
  * else `PARLEY_SESSION_ID` from the environment, else the most-recently-used
- * session. `--all` shows every task. Exits 0 with an empty listing when no
- * tasks match.
+ * session. `--all` shows every task. Dimension filters (#164) match metrics.
+ * Single-task status renders Session / Eval / Attempts sections.
  */
 export async function runStatus(ctx: CliContext, args: string[]): Promise<number> {
   const { positionals, flags } = parseArgs(args, {
     "--json": {},
     "--session": { value: true },
     "--all": {},
+    ...METRICS_FILTER_FLAGS,
   });
   const ref = positionals[0];
   const json = flags["--json"] === true;
   const all = flags["--all"] === true;
   const sessionFlag = typeof flags["--session"] === "string" ? flags["--session"] : undefined;
+  const filters: TaskMetricsFilters = filtersFromFlags(flags);
 
   const discovery = await ensureDaemon(ctx.paths, ctx.env);
-  const { tasks } = await daemonGet<TasksResponse>(discovery, "/tasks");
 
-  let filtered: TaskRow[];
+  // Single-task path: fetch detail so Session/Eval/Attempts are complete.
   if (ref) {
-    filtered = tasks.filter((t) => t.id === ref || t.name === ref);
-  } else if (all) {
-    filtered = tasks;
-  } else {
-    const session = resolveSessionFilter(sessionFlag, ctx.env, tasks);
-    filtered =
-      session === undefined
-        ? tasks
-        : tasks.filter((t) => t.orchestrator_session_id === session);
+    // Still need the list for name-based resolution when ref is a --name label.
+    const listParams = filtersToSearchParams(filters);
+    const listQs = listParams.toString();
+    const { tasks } = await daemonGet<TasksResponse>(
+      discovery,
+      listQs === "" ? "/tasks" : `/tasks?${listQs}`,
+    );
+    const match = tasks.find((t) => t.id === ref || t.name === ref);
+    if (!match) {
+      if (json) {
+        printJson(ctx, null);
+      } else {
+        ctx.stdout("No tasks.\n");
+      }
+      return 0;
+    }
+    const detail = await daemonGet<TaskDetailResponse>(
+      discovery,
+      `/tasks/${encodeURIComponent(match.id)}`,
+    );
+    if (json) {
+      printJson(ctx, presentDetail(detail));
+    } else {
+      renderTable(ctx, [detail.row as TaskRow]);
+      renderDetailSections(ctx, detail);
+    }
+    return 0;
   }
 
+  // List path: server-side dimension filters + local session scoping.
+  const listParams = filtersToSearchParams(filters);
+  const listQs = listParams.toString();
+  const { tasks } = await daemonGet<TasksResponse>(
+    discovery,
+    listQs === "" ? "/tasks" : `/tasks?${listQs}`,
+  );
+  const filtered = applySessionScope(tasks, undefined, all, sessionFlag, ctx.env);
+
   if (json) {
-    const presented = filtered.map(presentRow);
-    printJson(ctx, ref ? (presented[0] ?? null) : presented);
+    printJson(ctx, filtered.map(presentRow));
   } else {
     renderTable(ctx, filtered);
-    // Single-task status: surface a basic eval line (score/baseline/version).
-    if (ref && filtered.length === 1) {
-      const line = formatEvalLine(filtered[0]!);
-      if (line !== null) ctx.stdout(`${line}\n`);
-    }
   }
   return 0;
 }
