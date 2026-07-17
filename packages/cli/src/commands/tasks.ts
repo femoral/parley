@@ -119,6 +119,8 @@ function presentRow(row: TaskRow): Record<string, unknown> {
     ...row,
     usage: parseJsonColumn(row.usage),
     report: parseJsonColumn(row.report),
+    // #154: launch_command is stored as a JSON array of spawn records.
+    launch_command: parseJsonColumn(row.launch_command),
     // `network` is stored as SQLite 0/1; surface it as a boolean.
     network: row.network === 1,
     // Attempt chain (#152): boolean + derived tri-state for cache honesty.

@@ -7,6 +7,7 @@ import { sleep } from "@useparley/core";
 import { TERMINAL_STATES, type TaskRow } from "@useparley/daemon/db.js";
 import { readLogTail } from "@useparley/daemon/logtail.js";
 import type { Envelope } from "@useparley/daemon/report.js";
+import { parseLaunchCommands } from "@useparley/daemon/trace.js";
 
 const FOLLOW_POLL_MS = 100;
 /**
@@ -169,6 +170,14 @@ export async function runLogs(ctx: CliContext, args: string[]): Promise<number> 
   }
   const taskId = task.row.id;
   const logFile = path.join(ctx.paths.tasks, taskId, "vendor.jsonl");
+
+  // #154: launch_command header — one line before the vendor stream so operators
+  // can see the resolved argv/cwd/env names without grepping the DB. Prompt is
+  // already elided in the stored record; env values are never present.
+  const launches = parseLaunchCommands(task.row.launch_command);
+  if (launches.length > 0) {
+    ctx.stdout(`# launch_command ${JSON.stringify(launches)}\n`);
+  }
 
   const coalescer =
     flags["--json"] === true ? null : new Coalescer((line) => ctx.stdout(`${line}\n`));

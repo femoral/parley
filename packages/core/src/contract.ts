@@ -168,6 +168,21 @@ export interface TaskRow {
    * Optional for older clients.
    */
   cached_input_tokens?: number | null;
+  /**
+   * JSON string of the per-spawn launch-command records (#154): each entry is
+   * `{ argv, cwd, env_names }` with the prompt elided and env values omitted.
+   * Null until the first spawn. Optional so older fixtures remain assignable.
+   */
+  launch_command?: string | null;
+  /**
+   * Provenance of {@link model}: `resolved` (request/profile/adapter default)
+   * or `vendor` (stream-confirmed). Null when model is unknown (#154).
+   */
+  model_source?: string | null;
+  /**
+   * Provenance of {@link effort}: same vocabulary as {@link model_source} (#154).
+   */
+  effort_source?: string | null;
 }
 
 /** `GET /health` — daemon liveness plus its package version (spec stability §). */

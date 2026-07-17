@@ -109,6 +109,9 @@ export function createFakeAdapter(env: NodeJS.ProcessEnv = process.env): VendorA
             {
               kind: "session_meta",
               session_id: typeof event.session_id === "string" ? event.session_id : undefined,
+              // #154: optional vendor-reported model/effort for source upgrade tests.
+              ...(typeof event.model === "string" ? { model: event.model } : {}),
+              ...(typeof event.effort === "string" ? { effort: event.effort } : {}),
             },
           ];
         case "usage": {

@@ -146,6 +146,22 @@ export interface TaskRow {
    * the vendor never reported a cache count — never guessed as 0.
    */
   cached_input_tokens: number | null;
+  /**
+   * JSON array of per-spawn launch-command records (#154):
+   * `{ argv, cwd, env_names }[]` — prompt elided, env values omitted.
+   * Null until the first spawn.
+   */
+  launch_command: string | null;
+  /**
+   * Provenance of {@link model}: `resolved` or `vendor`, null when model is
+   * unknown (#154).
+   */
+  model_source: string | null;
+  /**
+   * Provenance of {@link effort}: `resolved` or `vendor`, null when effort is
+   * unknown (#154).
+   */
+  effort_source: string | null;
 }
 
 /** Fields the daemon writes when creating a task. */
@@ -157,6 +173,15 @@ export interface NewTask {
   model: string | null;
   /** Opaque reasoning-effort string, passed through to the vendor unchanged. */
   effort: string | null;
+  /**
+   * Provenance of model at create time (`resolved` when a value was resolved
+   * from request/profile/adapter default; null when unknown) (#154).
+   */
+  model_source?: string | null;
+  /**
+   * Provenance of effort at create time (same vocabulary as model_source) (#154).
+   */
+  effort_source?: string | null;
   /** Profile name used at create time, if any (#113). */
   profile: string | null;
   /**
@@ -329,6 +354,12 @@ const MIGRATIONS: string[] = [
    ALTER TABLE tasks ADD COLUMN attempt INTEGER NOT NULL DEFAULT 1;
    ALTER TABLE tasks ADD COLUMN resumed INTEGER NOT NULL DEFAULT 0;
    ALTER TABLE tasks ADD COLUMN cached_input_tokens INTEGER;`,
+  // #154: launch-command capture + model/effort source tracking — one JSON
+  // column of per-spawn records (argv with prompt elided, cwd, env *names*
+  // only) and provenance for the resolved model/effort fields.
+  `ALTER TABLE tasks ADD COLUMN launch_command TEXT;
+   ALTER TABLE tasks ADD COLUMN model_source TEXT;
+   ALTER TABLE tasks ADD COLUMN effort_source TEXT;`,
 ];
 
 /** How many schema migrations have been applied — equals `PRAGMA user_version` after open. */
@@ -407,7 +438,8 @@ const TASK_COLUMNS = `id, name, vendor, model, effort, profile, runner, repo, st
    cwd, prompt, session_id, usage, report, error, started_at, completed_at,
    question_id, question, worktree, branch, base_sha, sandbox, network,
    answer_timeout_ms, report_schema, seq, orchestrator_session_id, eval_score, eval_feedback,
-   size, difficulty, type, parent_task_id, attempt, resumed, cached_input_tokens`;
+   size, difficulty, type, parent_task_id, attempt, resumed, cached_input_tokens,
+   launch_command, model_source, effort_source`;
 
 /** Cast a node:sqlite row result to a domain shape (driver types are untyped maps). */
 function asRow<T>(row: unknown): T {
@@ -623,8 +655,8 @@ export function insertTask(db: DatabaseHandle, task: NewTask): TaskRow {
        (id, name, vendor, model, effort, profile, runner, repo, state, created_at, updated_at,
         cwd, prompt, session_id, orchestrator_session_id, worktree, branch, base_sha, sandbox,
         network, answer_timeout_ms, report_schema, size, difficulty, type,
-        parent_task_id, attempt, resumed)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        parent_task_id, attempt, resumed, model_source, effort_source)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     task.id,
     task.name,
@@ -653,6 +685,8 @@ export function insertTask(db: DatabaseHandle, task: NewTask): TaskRow {
     task.parent_task_id ?? null,
     attempt,
     resumed,
+    task.model_source ?? null,
+    task.effort_source ?? null,
   );
   return getTask(db, task.id)!;
 }
@@ -738,6 +772,11 @@ export type TaskPatch = Partial<
     | "eval_score"
     | "eval_feedback"
     | "cached_input_tokens"
+    | "model"
+    | "effort"
+    | "model_source"
+    | "effort_source"
+    | "launch_command"
   >
 >;
 

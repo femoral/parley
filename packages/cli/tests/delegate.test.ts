@@ -485,6 +485,15 @@ describe("status", () => {
   });
 });
 
+/** Parse log stdout as JSONL, skipping the `# launch_command …` header (#154). */
+function parseLogJsonl(stdout: string): unknown[] {
+  return stdout
+    .trim()
+    .split("\n")
+    .filter((l) => l.length > 0 && !l.startsWith("# "))
+    .map((l) => JSON.parse(l));
+}
+
 describe("logs", () => {
   it("prints the raw captured vendor stream", async () => {
     const cwd = taskDir(happyActions());
@@ -534,7 +543,7 @@ describe("logs", () => {
 
     const logs = await runCli(["logs", "t1"], home);
     expect(logs.code).toBe(0);
-    const lines = logs.stdout.trim().split("\n").map((l) => JSON.parse(l));
+    const lines = parseLogJsonl(logs.stdout);
     expect(lines).toContainEqual({ type: "thought", data: "The user wants" });
     expect(lines).toContainEqual({ type: "text", data: "Hello world" });
     // Not chunk-shaped (extra fields) — passes through unchanged, one line.
@@ -573,7 +582,7 @@ describe("logs", () => {
     const follow = startCli(["logs", ack.task_id, "--follow"], home);
     const result = await follow.result;
     expect(result.code).toBe(0);
-    const lines = result.stdout.trim().split("\n").map((l) => JSON.parse(l));
+    const lines = parseLogJsonl(result.stdout);
     expect(lines).toContainEqual({ type: "thought", data: "one two" });
     expect(lines).toContainEqual({ type: "text", data: "done" });
   });
@@ -603,7 +612,7 @@ describe("logs", () => {
     );
     const result = await follow.result;
     expect(result.code).toBe(0);
-    const lines = result.stdout.trim().split("\n").map((l) => JSON.parse(l));
+    const lines = parseLogJsonl(result.stdout);
     // Flushed as two separate groups, not merged into "one two" — the
     // liveness/parity tradeoff a post-hoc read of the same file wouldn't make.
     expect(lines).toContainEqual({ type: "thought", data: "one" });
@@ -620,7 +629,7 @@ describe("logs", () => {
     await waitForState(home, "t1", "completed");
 
     const logs = await runCli(["logs", "t1"], home);
-    const lines = logs.stdout.trim().split("\n").map((l) => JSON.parse(l));
+    const lines = parseLogJsonl(logs.stdout);
     expect(lines).toContainEqual({ type: "error", data: "first failure" });
     expect(lines).toContainEqual({ type: "error", data: "second failure" });
   });

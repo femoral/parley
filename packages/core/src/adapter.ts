@@ -148,6 +148,17 @@ export interface VendorEvent {
   fatal?: boolean;
   session_id?: string;
   usage?: Record<string, number>;
+  /**
+   * Vendor-reported model id on `session_meta` (#154). When present the engine
+   * upgrades the task's model with `source=vendor`. Never invented by the
+   * daemon — only recorded when the stream actually names one.
+   */
+  model?: string;
+  /**
+   * Vendor-reported reasoning effort on `session_meta` (#154). Same upgrade
+   * rules as {@link model}.
+   */
+  effort?: string;
 }
 
 /**
@@ -173,6 +184,17 @@ export interface VendorAdapter {
    * `vendors.<id>.childChannel` overrides it.
    */
   childChannel: ChildChannel;
+  /**
+   * Adapter-known default model when neither the request nor a profile names
+   * one (#154). Optional — most adapters leave this unset so model stays null
+   * rather than fabricating a guess.
+   */
+  defaultModel?: string | null;
+  /**
+   * Adapter-known default effort when neither the request nor a profile names
+   * one (#154). Optional; same "never fabricate" rule as {@link defaultModel}.
+   */
+  defaultEffort?: string | null;
   /** Build the spawn plan for a fresh run. */
   prepare(task: TaskSpec, hub: HubInfo): Promise<SpawnPlan>;
   /** Build the spawn plan for resuming a stalled task (vendor session resume). */

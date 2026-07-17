@@ -75,6 +75,13 @@ import {
 } from "./report.js";
 import { buildProtocolPreamble, finishInstruction } from "./preamble.js";
 import {
+  appendLaunchCommand,
+  captureLaunchCommand,
+  resolveTraceField,
+  upgradeTraceField,
+  type ResolvedTraceField,
+} from "./trace.js";
+import {
   commonGitDir,
   createWorktree,
   excludeMaterializedFiles,
@@ -341,12 +348,16 @@ interface RunnerMeta {
   base_ref: string | null;
 }
 
-/** Resolved create-time fields after profile + defaults (#113). */
+/** Resolved create-time fields after profile + defaults (#113 / #154). */
 interface ResolvedDelegate {
   vendor: string;
   profile: string | null;
   model: string | null;
   effort: string | null;
+  /** Provenance of model (`resolved` or null when unknown) (#154). */
+  model_source: string | null;
+  /** Provenance of effort (`resolved` or null when unknown) (#154). */
+  effort_source: string | null;
   sandbox: SandboxMode;
   network: boolean;
 }
@@ -522,8 +533,9 @@ export class TaskEngine {
   }
 
   /**
-   * Resolve profile + explicit request fields. Precedence: explicit request >
-   * profile > ADR defaults. Throws `DelegateError` on unknown profile/vendor.
+   * Resolve profile + explicit request fields. Precedence for model/effort:
+   * explicit request > profile > adapter default (#154). Posture falls back to
+   * ADR defaults. Throws `DelegateError` on unknown profile/vendor.
    */
   private resolveDelegate(request: DelegateRequest): ResolvedDelegate {
     const config = this.readParleyConfig();
@@ -540,11 +552,26 @@ export class TaskEngine {
     if (vendor === null || vendor === "") {
       throw new DelegateError("vendor is required (or set via profile)");
     }
+    // Adapter defaults only apply when the registry already knows the vendor;
+    // unknown-vendor is rejected by the caller after this returns.
+    const adapter = this.adapters.get(vendor);
+    const model = resolveTraceField(
+      request.model,
+      profileCfg?.model,
+      adapter?.defaultModel,
+    );
+    const effort = resolveTraceField(
+      request.effort,
+      profileCfg?.effort,
+      adapter?.defaultEffort,
+    );
     return {
       vendor,
       profile: request.profile,
-      model: request.model ?? profileCfg?.model ?? null,
-      effort: request.effort ?? profileCfg?.effort ?? null,
+      model: model.value,
+      effort: effort.value,
+      model_source: model.source,
+      effort_source: effort.source,
       sandbox: request.sandbox ?? profileCfg?.sandbox ?? DEFAULT_SANDBOX,
       network: request.network ?? profileCfg?.network ?? DEFAULT_NETWORK,
     };
@@ -711,6 +738,8 @@ export class TaskEngine {
       vendor: resolved.vendor,
       model: resolved.model,
       effort: resolved.effort,
+      model_source: resolved.model_source,
+      effort_source: resolved.effort_source,
       profile: resolved.profile,
       runner: request.runner,
       repo,
@@ -1991,12 +2020,10 @@ export class TaskEngine {
 
   /** Fresh run: spawn the vendor child via `prepare` and pump it until exit. */
   private async run(task: TaskRow, adapter: VendorAdapter): Promise<void> {
-    const spec: TaskSpec = {
-      ...this.buildSpec(task),
-      prompt: this.initialPrompt(task, adapter),
-    };
+    const prompt = this.initialPrompt(task, adapter);
+    const spec: TaskSpec = { ...this.buildSpec(task), prompt };
     const plan = this.applyVendorConfig(task, await adapter.prepare(spec, this.hubFor(task.id)));
-    await this.runChild(task, adapter, plan, {
+    await this.runChild(task, adapter, plan, prompt, {
       state: "running",
       started_at: new Date().toISOString(),
     });
@@ -2009,12 +2036,10 @@ export class TaskEngine {
    * `started_at` is kept from the original run.
    */
   private async resume(task: TaskRow, adapter: VendorAdapter, answer: string): Promise<void> {
-    const spec: TaskSpec = {
-      ...this.buildSpec(task),
-      prompt: this.resumePrompt(task, adapter, answer),
-    };
+    const prompt = this.resumePrompt(task, adapter, answer);
+    const spec: TaskSpec = { ...this.buildSpec(task), prompt };
     const plan = this.applyVendorConfig(task, await adapter.resume(spec, this.hubFor(task.id)));
-    await this.runChild(task, adapter, plan, {
+    await this.runChild(task, adapter, plan, prompt, {
       state: "running",
       // Kept from the original run; stamped here only if that never happened.
       ...(task.started_at === null ? { started_at: new Date().toISOString() } : {}),
@@ -2027,12 +2052,10 @@ export class TaskEngine {
    * the continuation prompt. Fresh `started_at` — a fix is a new attempt.
    */
   private async resumeFix(task: TaskRow, adapter: VendorAdapter, fixBrief: string): Promise<void> {
-    const spec: TaskSpec = {
-      ...this.buildSpec(task),
-      prompt: this.fixResumePrompt(task, adapter, fixBrief),
-    };
+    const prompt = this.fixResumePrompt(task, adapter, fixBrief);
+    const spec: TaskSpec = { ...this.buildSpec(task), prompt };
     const plan = this.applyVendorConfig(task, await adapter.resume(spec, this.hubFor(task.id)));
-    await this.runChild(task, adapter, plan, {
+    await this.runChild(task, adapter, plan, prompt, {
       state: "running",
       started_at: new Date().toISOString(),
     });
@@ -2061,6 +2084,8 @@ export class TaskEngine {
     task: TaskRow,
     adapter: VendorAdapter,
     plan: SpawnPlan,
+    /** Exact prompt string in argv — elided as `"<prompt>"` in launch_command. */
+    prompt: string,
     onSpawn: TaskPatch,
   ): Promise<void> {
     // `cancel` may have landed while the adapter was preparing; don't spawn a
@@ -2076,6 +2101,10 @@ export class TaskEngine {
       PARLEY_HUB_URL: hubUrl,
       PARLEY_TASK_ID: task.id,
     };
+    // #154: record the final spawn argv (prompt elided) + cwd + env *names*
+    // only. Spawn-per-turn vendors append one entry per spawn.
+    const launchEntry = captureLaunchCommand(plan, prompt, planEnv);
+    const launch_command = appendLaunchCommand(beforeSpawn.launch_command, launchEntry);
     // Materialize alongside other `.parley/` context so a subprocess that loses
     // env can still find the hub. Worktrees already git-exclude `/.parley/`.
     try {
@@ -2132,7 +2161,7 @@ export class TaskEngine {
     });
     this.children.set(task.id, child);
 
-    updateTask(this.db, task.id, onSpawn);
+    updateTask(this.db, task.id, { ...onSpawn, launch_command });
     // The child is live: `pending → running` (fresh run) or `stalled → running`
     // (resume). Record the transition so `parley watch` sees the task start.
     this.transitioned(task.id);
@@ -2174,6 +2203,37 @@ export class TaskEngine {
           // summing (docs/research/vendor-token-usage-coverage.md).
           usage = { ...usage, ...event.usage };
           usageChanged = true;
+        }
+        // #154: vendor-reported model/effort upgrade the resolved-at-spawn
+        // values (source flips to `vendor`). Empty reports are ignored so we
+        // never overwrite a known value with nothing.
+        if (
+          event.kind === "session_meta" &&
+          (event.model !== undefined || event.effort !== undefined)
+        ) {
+          const row = getTask(this.db, task.id);
+          if (event.model !== undefined) {
+            const current: ResolvedTraceField = {
+              value: row?.model ?? null,
+              source: (row?.model_source as ResolvedTraceField["source"]) ?? null,
+            };
+            const upgraded = upgradeTraceField(current, event.model);
+            if (upgraded.value !== current.value || upgraded.source !== current.source) {
+              patch.model = upgraded.value;
+              patch.model_source = upgraded.source;
+            }
+          }
+          if (event.effort !== undefined) {
+            const current: ResolvedTraceField = {
+              value: row?.effort ?? null,
+              source: (row?.effort_source as ResolvedTraceField["source"]) ?? null,
+            };
+            const upgraded = upgradeTraceField(current, event.effort);
+            if (upgraded.value !== current.value || upgraded.source !== current.source) {
+              patch.effort = upgraded.value;
+              patch.effort_source = upgraded.source;
+            }
+          }
         }
         if (event.kind === "error" && event.fatal === true && event.text) {
           lastError = event.text;
