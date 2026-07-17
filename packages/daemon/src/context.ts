@@ -1,5 +1,10 @@
 import fs from "node:fs";
 import path from "node:path";
+import {
+  defaultTaskTypes,
+  resolveTaskTypes,
+  type TaskTypesMap,
+} from "@useparley/core";
 
 /** One `--context` file, read by the CLI and shipped to the daemon by value. */
 export interface ContextFile {
@@ -87,4 +92,31 @@ export function readEvalExpected(repo: string | null): boolean {
   } catch {
     return false;
   }
+}
+
+/**
+ * Hot-read the project's effective `taskTypes` map from `.parley/config.json`
+ * (#151). Missing file or missing `taskTypes` section ⇒ shipped defaults.
+ * Malformed `taskTypes` throws so delegate can surface a named error (never
+ * coerce unknown shapes into defaults).
+ */
+export function readProjectTaskTypes(repo: string | null): TaskTypesMap {
+  if (repo === null) return defaultTaskTypes();
+  let rawText: string;
+  try {
+    rawText = fs.readFileSync(path.join(repo, PARLEY_DIR, "config.json"), "utf8");
+  } catch {
+    return defaultTaskTypes();
+  }
+  let config: { taskTypes?: unknown };
+  try {
+    config = JSON.parse(rawText) as { taskTypes?: unknown };
+  } catch {
+    // Corrupt project config: same posture as eval_expected — degrade to
+    // defaults rather than blocking every delegate on a JSON typo elsewhere.
+    // An *invalid taskTypes shape* (when present) is still a hard error.
+    return defaultTaskTypes();
+  }
+  if (config.taskTypes === undefined) return defaultTaskTypes();
+  return resolveTaskTypes(config.taskTypes);
 }

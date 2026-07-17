@@ -31,6 +31,7 @@ function seedTask(id = "t1"): void {
     profile: null,
     size: null,
     difficulty: null,
+    type: "other",
     repo: null,
     cwd: "/tmp",
     prompt: "do it",

@@ -230,7 +230,7 @@ export interface SoundingsView {
   status: "loading" | "ready" | "empty" | "error";
   error: string | null;
   groups: SoundingsGroupView[];
-  /** Active group-by dimension string (vendor|model|profile|size|difficulty). */
+  /** Active group-by dimension string (vendor|model|profile|size|difficulty|type). */
   groupBy: string;
   /** Session scope label (`All hands` or short session id). */
   sessionLabel: string;

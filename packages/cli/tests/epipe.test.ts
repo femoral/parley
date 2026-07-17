@@ -43,6 +43,7 @@ function seedManyTasks(count: number): void {
       report_schema: null,
       size: null,
       difficulty: null,
+      type: "other",
     });
   }
   db.close();

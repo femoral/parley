@@ -274,6 +274,16 @@ function handleDelegate(engine: TaskEngine, res: http.ServerResponse, body: unkn
     }
     difficulty = body.difficulty;
   }
+  // Work-domain type (#151): optional string; null/absent → engine stores
+  // `other`. Project-set validation is daemon-side (hot-read at repo).
+  let type: string | null = null;
+  if (body.type !== undefined && body.type !== null) {
+    if (typeof body.type !== "string" || body.type === "") {
+      sendJson(res, 400, { error: "type must be a non-empty string" });
+      return;
+    }
+    type = body.type;
+  }
   try {
     const task = engine.delegate({
       prompt,
@@ -298,6 +308,7 @@ function handleDelegate(engine: TaskEngine, res: http.ServerResponse, body: unkn
       runner: optionalString(body.runner),
       size,
       difficulty,
+      type,
     });
     sendJson(res, 201, { task_id: task.id, name: task.name, state: task.state, seq: task.seq });
   } catch (err) {
@@ -503,7 +514,7 @@ function handleConfigUnset(paths: HomePaths, res: http.ServerResponse, body: unk
 }
 
 /**
- * `GET /metrics?session=<id|all>&group_by=<vendor|model|profile|size|difficulty>`
+ * `GET /metrics?session=<id|all>&group_by=<vendor|model|profile|size|difficulty|type>`
  * — per-group task/eval/token/duration aggregates (#118). Defaults: session=all,
  * group_by=vendor.
  */

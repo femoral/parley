@@ -36,6 +36,8 @@ Usage:
                             this long (default 30m; e.g. 90s, 250ms)
     --size <XS|S|M|L|XL>    Task size classification (optional; for metrics)
     --difficulty <level>    trivial|easy|medium|hard|extreme (optional)
+    --type <t>              Work-domain type (coding|design|…|other; optional,
+                            default other; project-configurable via taskTypes)
   parley answer <task> "<text>" Answer a child's question ('-' reads stdin);
                                 on a stalled task, resume it with the text.
                                 Returns immediately; wait with parley watch.
@@ -62,7 +64,7 @@ Usage:
                             narrows to your orchestrator session (--session,
                             else PARLEY_SESSION_ID, else the newest session);
                             --all shows every task.
-  parley metrics [--session <id>|latest|all] [--group-by vendor|model|profile|size|difficulty]
+  parley metrics [--session <id>|latest|all] [--group-by vendor|model|profile|size|difficulty|type]
               [--json]      Aggregate task metrics (counts, evals, tokens,
                             duration) by group. Defaults: session=all,
                             group-by=vendor.

@@ -22,6 +22,7 @@ export const GROUP_BY_OPTIONS: readonly { value: MetricsGroupBy; label: string }
   { value: "profile", label: "Profile" },
   { value: "size", label: "Size" },
   { value: "difficulty", label: "Difficulty" },
+  { value: "type", label: "Type" },
 ];
 
 function projectEvalBuckets(map: Record<string, { count: number; avg: number | null }>): SoundingsEvalBucket[] {

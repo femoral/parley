@@ -6,9 +6,12 @@ import {
   DEFAULT_NETWORK,
   DEFAULT_RETENTION_DAYS,
   DEFAULT_SANDBOX,
+  FALLBACK_TASK_TYPE,
+  formatValidTaskTypes,
   inboxRank,
   isActionableState,
   isChildChannel,
+  isValidTaskType,
   readConfig,
   retentionDays,
   type ChildChannel,
@@ -56,6 +59,7 @@ import {
 import {
   materializeChildHub,
   materializeContext,
+  readProjectTaskTypes,
   type ContextFile,
 } from "./context.js";
 import { taskLogDir } from "./discovery.js";
@@ -278,6 +282,11 @@ export interface DelegateRequest {
    * Task difficulty (trivial|easy|medium|hard|extreme); null when unset (#118).
    */
   difficulty: string | null;
+  /**
+   * Work-domain task type (#151). Null/absent means store `other`. Validated
+   * against the project's hot-read `taskTypes` set after repo resolution.
+   */
+  type: string | null;
 }
 
 /**
@@ -612,6 +621,35 @@ export class TaskEngine {
       }
     }
 
+    // Work-domain type (#151): hot-read project config at the resolved repo;
+    // omitted ⇒ other; unknown ⇒ usage error listing the project's valid set.
+    // Validate before materializing context so a bad type never leaves a task
+    // row — and roll back any worktree already cut for the same reason.
+    let taskType: string;
+    try {
+      const taskTypes = readProjectTaskTypes(repo);
+      taskType =
+        request.type === null || request.type === undefined || request.type === ""
+          ? FALLBACK_TASK_TYPE
+          : request.type;
+      if (!isValidTaskType(taskType, taskTypes)) {
+        throw new DelegateError(
+          `unknown task type: ${taskType} (expected ${formatValidTaskTypes(taskTypes)})`,
+        );
+      }
+    } catch (err) {
+      if (worktreePath !== null) {
+        try {
+          removeWorktree(repo, worktreePath);
+        } catch {
+          /* best-effort */
+        }
+      }
+      if (err instanceof DelegateError) throw err;
+      // Malformed taskTypes section (or other named config error).
+      throw new DelegateError(`invalid project taskTypes: ${errorMessage(err)}`);
+    }
+
     if (!isRemote) {
       // Task context rides the workspace, not the prompt (spec §7): the brief and
       // any `--context` files land under `.parley/`, which the worktree already
@@ -658,6 +696,7 @@ export class TaskEngine {
         request.reportSchema !== null ? JSON.stringify(request.reportSchema) : null,
       size: request.size,
       difficulty: request.difficulty,
+      type: taskType,
     });
 
     if (isRemote) {

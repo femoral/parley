@@ -47,6 +47,7 @@ export async function runDelegate(ctx: CliContext, args: string[]): Promise<numb
     "--answer-timeout": { value: true },
     "--size": { value: true },
     "--difficulty": { value: true },
+    "--type": { value: true },
   });
 
   if (flags["--wait"] === true) {
@@ -194,6 +195,16 @@ export async function runDelegate(ctx: CliContext, args: string[]): Promise<numb
       );
     }
   }
+  // Work-domain type (#151): optional; project-set validation is daemon-side
+  // (hot-read of `.parley/config.json` taskTypes). Empty string is a usage error;
+  // omitted ⇒ daemon stores `other`.
+  let type: string | null = null;
+  if (typeof flags["--type"] === "string") {
+    type = flags["--type"];
+    if (type === "") {
+      throw new UsageError("delegate: --type requires a non-empty value");
+    }
+  }
 
   const discovery = await ensureDaemon(ctx.paths, ctx.env);
   let ack: DelegateAck;
@@ -212,6 +223,7 @@ export async function runDelegate(ctx: CliContext, args: string[]): Promise<numb
       contexts,
       size,
       difficulty,
+      type,
     };
     if (vendor !== null) body.vendor = vendor;
     if (profile !== null) body.profile = profile;

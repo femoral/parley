@@ -71,6 +71,10 @@ export interface TaskEnvelope {
   size: string | null;
   /** Task difficulty (trivial|easy|medium|hard|extreme); null when unset (#118). */
   difficulty: string | null;
+  /**
+   * Work-domain task type (#151). Always set: omitted at delegate ⇒ `other`.
+   */
+  type: string;
 }
 
 /**
@@ -126,6 +130,10 @@ export interface TaskRow {
   size: string | null;
   /** Task difficulty (trivial|easy|medium|hard|extreme); null when unset (#118). */
   difficulty: string | null;
+  /**
+   * Work-domain task type (#151). Always set: omitted at delegate ⇒ `other`.
+   */
+  type: string;
 }
 
 /** `GET /health` — daemon liveness plus its package version (spec stability §). */
@@ -280,8 +288,8 @@ export interface MetricsDurationStats {
 }
 
 /**
- * One group in `GET /metrics` (#118) — keyed by vendor/model/profile/size/
- * difficulty (or null when the column is unset for that bucket).
+ * One group in `GET /metrics` (#118 / #151) — keyed by vendor/model/profile/
+ * size/difficulty/type (or null when the column is unset for that bucket).
  */
 export interface MetricsGroup {
   key: string | null;

@@ -63,6 +63,7 @@ function baseRequest(
     runner: null,
     size: null,
     difficulty: null,
+    type: null,
     ...overrides,
   };
 }

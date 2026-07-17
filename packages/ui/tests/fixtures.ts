@@ -77,6 +77,7 @@ export function envelope(
     eval_expected: false,
     size: null,
     difficulty: null,
+    type: "other",
     ...overrides,
   };
 }
@@ -116,6 +117,7 @@ export function row(
     eval_feedback: null,
     size: null,
     difficulty: null,
+    type: "other",
     ...overrides,
   };
 }

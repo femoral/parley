@@ -120,6 +120,11 @@ export interface TaskRow {
   size: string | null;
   /** Task difficulty (trivial|easy|medium|hard|extreme); null when unset (#118). */
   difficulty: string | null;
+  /**
+   * Work-domain task type (#151). Always set: omitted at delegate ⇒ `other`;
+   * backfilled to `other` for pre-migration rows.
+   */
+  type: string;
 }
 
 /** Fields the daemon writes when creating a task. */
@@ -157,6 +162,10 @@ export interface NewTask {
   size: string | null;
   /** Task difficulty (trivial|easy|medium|hard|extreme); null when unset (#118). */
   difficulty: string | null;
+  /**
+   * Work-domain task type (#151). Always set: omitted at delegate ⇒ `other`.
+   */
+  type: string;
 }
 
 /**
@@ -270,6 +279,9 @@ const MIGRATIONS: string[] = [
      key   TEXT PRIMARY KEY,
      value TEXT NOT NULL
    );`,
+  // #151: work-domain task type — always present; existing rows backfill to
+  // `other` via the column default.
+  `ALTER TABLE tasks ADD COLUMN type TEXT NOT NULL DEFAULT 'other';`,
 ];
 
 /** How many schema migrations have been applied — equals `PRAGMA user_version` after open. */
@@ -348,7 +360,7 @@ const TASK_COLUMNS = `id, name, vendor, model, effort, profile, runner, repo, st
    cwd, prompt, session_id, usage, report, error, started_at, completed_at,
    question_id, question, worktree, branch, base_sha, sandbox, network,
    answer_timeout_ms, report_schema, seq, orchestrator_session_id, eval_score, eval_feedback,
-   size, difficulty`;
+   size, difficulty, type`;
 
 /** Cast a node:sqlite row result to a domain shape (driver types are untyped maps). */
 function asRow<T>(row: unknown): T {
@@ -561,8 +573,8 @@ export function insertTask(db: DatabaseHandle, task: NewTask): TaskRow {
     `INSERT INTO tasks
        (id, name, vendor, model, effort, profile, runner, repo, state, created_at, updated_at,
         cwd, prompt, orchestrator_session_id, worktree, branch, base_sha, sandbox,
-        network, answer_timeout_ms, report_schema, size, difficulty)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        network, answer_timeout_ms, report_schema, size, difficulty, type)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     task.id,
     task.name,
@@ -586,6 +598,7 @@ export function insertTask(db: DatabaseHandle, task: NewTask): TaskRow {
     task.report_schema,
     task.size,
     task.difficulty,
+    task.type,
   );
   return getTask(db, task.id)!;
 }

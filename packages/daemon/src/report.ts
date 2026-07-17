@@ -183,6 +183,8 @@ export interface Envelope {
   size: string | null;
   /** Task difficulty (trivial|easy|medium|hard|extreme); null when unset (#118). */
   difficulty: string | null;
+  /** Work-domain task type (#151). Always set (default `other`). */
+  type: string;
 }
 
 /**
@@ -244,5 +246,6 @@ export function buildEnvelope(task: TaskRow, logsDir: string | null = null): Env
     eval_expected: readEvalExpected(task.repo),
     size: task.size,
     difficulty: task.difficulty,
+    type: task.type,
   };
 }

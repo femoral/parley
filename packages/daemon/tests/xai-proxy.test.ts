@@ -69,6 +69,7 @@ function baseTask(id: string): NewTask {
     report_schema: null,
     size: null,
     difficulty: null,
+    type: "other",
   };
 }
 

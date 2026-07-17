@@ -43,6 +43,7 @@ function baseNewTask(overrides: Partial<NewTask> & Pick<NewTask, "id">): NewTask
     report_schema: null,
     size: null,
     difficulty: null,
+    type: "other",
     ...overrides,
   };
 }
@@ -100,6 +101,76 @@ describe("size/difficulty migration (#118)", () => {
     };
     expect(row.size).toBe("M");
     expect(row.difficulty).toBe("hard");
+  });
+});
+
+describe("type column migration (#151)", () => {
+  it("adds type column and backfills other for existing rows", () => {
+    db.close();
+    fs.rmSync(home, { recursive: true, force: true });
+    home = fs.mkdtempSync(path.join(os.tmpdir(), "parley-type-mig-"));
+    // Version 17 is the schema just before the type migration (#151); pinned
+    // absolute so later appended migrations don't shift this fixture.
+    const prev = openDatabaseUpTo(homePaths(home), 17);
+    const now = new Date().toISOString();
+    prev
+      .prepare(
+        `INSERT INTO tasks
+           (id, name, vendor, model, effort, profile, runner, repo, state, created_at, updated_at,
+            cwd, prompt, orchestrator_session_id, worktree, branch, base_sha, sandbox,
+            network, answer_timeout_ms, report_schema, size, difficulty)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        "legacy",
+        "legacy",
+        "fake",
+        null,
+        null,
+        null,
+        null,
+        null,
+        now,
+        now,
+        "/tmp",
+        "old task",
+        "orch",
+        null,
+        null,
+        null,
+        "workspace",
+        1,
+        null,
+        null,
+        null,
+        null,
+      );
+    const colsBefore = prev
+      .prepare("PRAGMA table_info(tasks)")
+      .all()
+      .map((r) => (r as { name: string }).name);
+    expect(colsBefore).not.toContain("type");
+    prev.close();
+
+    db = openDatabase(homePaths(home));
+    const colsAfter = db
+      .prepare("PRAGMA table_info(tasks)")
+      .all()
+      .map((r) => (r as { name: string }).name);
+    expect(colsAfter).toContain("type");
+    const row = db.prepare("SELECT type FROM tasks WHERE id = ?").get("legacy") as {
+      type: string;
+    };
+    expect(row.type).toBe("other");
+    expect(
+      (db.prepare("PRAGMA user_version").get() as { user_version: number }).user_version,
+    ).toBe(SCHEMA_VERSION);
+  });
+
+  it("persists type on insert", () => {
+    insertTask(db, baseNewTask({ id: "t1", type: "coding" }));
+    const row = db.prepare("SELECT type FROM tasks WHERE id = ?").get("t1") as { type: string };
+    expect(row.type).toBe("coding");
   });
 });
 

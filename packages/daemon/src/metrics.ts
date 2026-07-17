@@ -21,6 +21,7 @@ const GROUP_COLUMNS: Record<MetricsGroupBy, keyof TaskRow> = {
   profile: "profile",
   size: "size",
   difficulty: "difficulty",
+  type: "type",
 };
 
 /** Nearest-rank percentile over a pre-sorted ascending array; null when empty. */
