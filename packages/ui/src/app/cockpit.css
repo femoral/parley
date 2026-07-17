@@ -21,35 +21,11 @@
   pointer-events: none;
   z-index: 0;
 }
-/* Two stacked pattern layers (not one dual-background) so each can drift on
-   its own transform vector — compositor-only, no background-position paint. */
+/* Flat sea atmosphere — no stripe texture, no motion (#124). Deep-sea colour
+   is painted by .pc-cockpit via --sea-gradient; this layer stays as a stacking
+   slot (vignette is separate). */
 .pc-atmos--sea {
-  opacity: 0.5;
-  overflow: hidden;
-}
-.pc-atmos--sea::before,
-.pc-atmos--sea::after {
-  content: "";
-  position: absolute;
-  /* Oversize past the travel distance so the pattern always covers the viewport. */
-  inset: -300px;
-  pointer-events: none;
-}
-.pc-atmos--sea::before {
-  background-image: repeating-linear-gradient(
-    115deg,
-    transparent 0 45px,
-    rgba(255, 255, 255, 0.045) 45px 46px
-  );
-  animation: pc-sea-move-a 16s linear infinite;
-}
-.pc-atmos--sea::after {
-  background-image: repeating-linear-gradient(
-    65deg,
-    transparent 0 59px,
-    rgba(255, 255, 255, 0.03) 59px 60px
-  );
-  animation: pc-sea-move-b 16s linear infinite;
+  background: transparent;
 }
 .pc-atmos--vignette {
   box-shadow: inset 0 0 240px 70px var(--sea-vignette);
