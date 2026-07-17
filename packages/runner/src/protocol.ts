@@ -1,4 +1,5 @@
 import {
+  homePathsFromEnv,
   type ChildChannel,
   type JsonSchema,
 } from "@useparley/core";
@@ -8,6 +9,10 @@ import {
 } from "@useparley/daemon/context.js";
 import { DEFAULT_REPORT_SCHEMA } from "@useparley/daemon/report.js";
 import { buildProtocolPreamble as buildDaemonPreamble } from "@useparley/daemon/preamble.js";
+import {
+  assembleChildPrompt,
+  composeOperatorInstructions,
+} from "@useparley/daemon/prompt-layers.js";
 
 /**
  * Protocol preamble for a remote task (mirrors the daemon engine's preamble so
@@ -39,6 +44,12 @@ export function materializeTaskContext(
   materializeContext(cwd, prompt, contexts);
 }
 
+/**
+ * Full child prompt for a remote-runner spawn (#159). Project PROMPT.md layers
+ * are read from the workspace (`cwd`) at spawn; home layers from the runner
+ * host's parley home (`PARLEY_HOME` / `~/.parley`). Operator section order
+ * matches the daemon engine.
+ */
 export function fullPrompt(
   cwd: string,
   branch: string | null,
@@ -46,6 +57,12 @@ export function fullPrompt(
   reportSchema: JsonSchema,
   brief: string,
   childChannel: ChildChannel = "mcp",
+  options: {
+    vendorId?: string | null;
+    profileName?: string | null;
+    /** Override home dir (tests); default is the runner host's parley home. */
+    homeDir?: string;
+  } = {},
 ): string {
   const preamble = buildProtocolPreamble({
     cwd,
@@ -54,5 +71,12 @@ export function fullPrompt(
     reportSchema,
     childChannel,
   });
-  return `${preamble}\n\n---\n\n${brief}`;
+  const homeDir = options.homeDir ?? homePathsFromEnv().home;
+  const operator = composeOperatorInstructions({
+    homeDir,
+    projectDir: cwd,
+    vendorId: options.vendorId ?? null,
+    profileName: options.profileName ?? null,
+  });
+  return assembleChildPrompt(preamble, operator, brief);
 }

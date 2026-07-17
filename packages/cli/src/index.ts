@@ -18,6 +18,7 @@ import { runSkills } from "./commands/skills/index.js";
 import { runStatus } from "./commands/tasks.js";
 import { runUi } from "./commands/ui.js";
 import { runWatch } from "./commands/watch.js";
+import { runPrompt } from "./commands/prompt.js";
 import { VERSION_LINE } from "./version.js";
 
 const HELP = `parley — delegate tasks to agent CLIs
@@ -96,6 +97,11 @@ Usage:
   parley config push <file>     Validate then replace the daemon config wholesale
   parley config pull [file]     Write the current daemon config to a file (or stdout)
   parley ui [--no-open]        Print the cockpit URL and open it in a browser
+  parley prompt [--vendor <id>] [--profile <name>] [--orchestrator]
+                            Preview the composed prompt a child would get from
+                            this cwd (protocol preamble + PROMPT.md layers).
+                            --orchestrator shows compounded orchestrator
+                            PROMPT.md instead (never injected into children).
   parley skills install         Install bundled orchestrator skill(s)
     --layout claude|agents|<path>
                               Vendor convention, or a custom directory path
@@ -175,6 +181,8 @@ export async function run(argv: string[], ctx: CliContext): Promise<number> {
       return runConfig(ctx, rest);
     case "ui":
       return runUi(ctx, rest);
+    case "prompt":
+      return runPrompt(ctx, rest);
     case "skills":
       return runSkills(ctx, rest);
     case "child":

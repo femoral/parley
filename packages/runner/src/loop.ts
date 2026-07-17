@@ -169,6 +169,10 @@ export class RunnerLoop {
         lease.report_schema as JsonSchema,
         lease.prompt,
         adapter.childChannel,
+        {
+          vendorId: lease.vendor,
+          profileName: lease.profile,
+        },
       );
 
       const hub: HubInfo = {

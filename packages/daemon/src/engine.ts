@@ -75,6 +75,12 @@ import {
 } from "./report.js";
 import { buildProtocolPreamble, finishInstruction } from "./preamble.js";
 import {
+  assembleChildPrompt,
+  assemblePromptPreview,
+  composeOperatorInstructions,
+  composeOrchestratorInstructions,
+} from "./prompt-layers.js";
+import {
   appendLaunchCommand,
   captureLaunchCommand,
   resolveTraceField,
@@ -1994,28 +2000,116 @@ export class TaskEngine {
     });
   }
 
-  /** Fresh-run prompt: the preamble, then the caller's brief (spec §7). */
+  /**
+   * Hot-read operator PROMPT.md layers for a task (#159). Project layers resolve
+   * from the workspace (`task.cwd`) so remote runners pick up the checked-out
+   * repo's `.parley` prompts; home layers come from the daemon home.
+   */
+  private operatorInstructionsFor(task: TaskRow): string | null {
+    return composeOperatorInstructions({
+      homeDir: this.paths.home,
+      projectDir: task.cwd,
+      vendorId: task.vendor,
+      profileName: task.profile,
+    });
+  }
+
+  /** Fresh-run prompt: preamble + optional operator layers + brief (#159). */
   private initialPrompt(task: TaskRow, adapter: VendorAdapter): string {
-    return `${this.buildPreamble(task, adapter)}\n\n---\n\n${task.prompt ?? ""}`;
+    return assembleChildPrompt(
+      this.buildPreamble(task, adapter),
+      this.operatorInstructionsFor(task),
+      task.prompt ?? "",
+    );
   }
 
   /**
-   * Resume prompt: the preamble re-prepended (spec §2/§7), then the
-   * orchestrator's answer as the conversation's continuation.
+   * Resume prompt: preamble re-prepended (spec §2/§7), operator layers re-read
+   * hot (#159), then the orchestrator's answer as the continuation.
    */
   private resumePrompt(task: TaskRow, adapter: VendorAdapter, answer: string): string {
     const channel = this.childChannelFor(task, adapter);
-    return [
-      this.buildPreamble(task, adapter),
-      "",
-      "---",
-      "",
+    const body = [
       "The orchestrator answered your outstanding question:",
       "",
       answer,
       "",
       finishInstruction(channel),
     ].join("\n");
+    return assembleChildPrompt(
+      this.buildPreamble(task, adapter),
+      this.operatorInstructionsFor(task),
+      body,
+    );
+  }
+
+  /**
+   * Compose a prompt preview for `parley prompt` (#159). Child mode mirrors
+   * what a spawn from `projectDir` would receive (preamble + operator layers,
+   * no brief). Orchestrator mode returns compounded orchestrator PROMPT.md only.
+   */
+  previewPrompt(options: {
+    projectDir: string;
+    vendor: string | null;
+    profile: string | null;
+    orchestrator: boolean;
+  }): string {
+    if (options.orchestrator) {
+      return (
+        composeOrchestratorInstructions({
+          homeDir: this.paths.home,
+          projectDir: options.projectDir,
+        }) ?? ""
+      );
+    }
+
+    let config: ParleyConfig;
+    try {
+      config = readConfig(this.paths.config);
+    } catch {
+      config = {};
+    }
+
+    let profileCfg: ProfileConfig | undefined;
+    if (options.profile !== null) {
+      profileCfg = config.profiles?.[options.profile];
+      if (profileCfg === undefined) {
+        const known = Object.keys(config.profiles ?? {});
+        const list = known.length > 0 ? known.join(", ") : "(none)";
+        throw new DelegateError(`unknown profile: ${options.profile} (known: ${list})`);
+      }
+    }
+
+    const vendor = options.vendor ?? profileCfg?.vendor ?? null;
+    if (vendor === null) {
+      throw new DelegateError("vendor is required (or set via profile)");
+    }
+    const adapter = this.adapters.get(vendor);
+    if (!adapter) {
+      const known = [...this.adapters.keys()].join(", ");
+      throw new DelegateError(`unknown vendor: ${vendor} (known: ${known})`);
+    }
+
+    const override = config.vendors?.[vendor]?.childChannel;
+    const childChannel =
+      typeof override === "string" && isChildChannel(override)
+        ? override
+        : adapter.childChannel;
+
+    const preamble = buildProtocolPreamble({
+      cwd: options.projectDir,
+      branch: null,
+      answerTimeoutMs: DEFAULT_ANSWER_TIMEOUT_MS,
+      reportSchema: DEFAULT_REPORT_SCHEMA,
+      childChannel,
+    });
+    const operator = composeOperatorInstructions({
+      homeDir: this.paths.home,
+      projectDir: options.projectDir,
+      vendorId: vendor,
+      profileName: options.profile,
+    });
+    return assemblePromptPreview(preamble, operator);
   }
 
   /** Fresh run: spawn the vendor child via `prepare` and pump it until exit. */

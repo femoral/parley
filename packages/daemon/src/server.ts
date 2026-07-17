@@ -514,6 +514,47 @@ function handleConfigUnset(paths: HomePaths, res: http.ServerResponse, body: unk
 }
 
 /**
+ * `GET /prompt?project=<abs>&vendor=<id>&profile=<name>&orchestrator=1` —
+ * render the composed prompt a child (or orchestrator) would receive from
+ * `project` (#159). Child mode needs vendor or profile; orchestrator mode
+ * compounds home→project orchestrator PROMPT.md only.
+ */
+function handlePrompt(
+  engine: TaskEngine,
+  res: http.ServerResponse,
+  params: URLSearchParams,
+): void {
+  const project = params.get("project");
+  if (project === null || project.trim() === "") {
+    sendJson(res, 400, { error: "project is required (absolute path of the workspace root)" });
+    return;
+  }
+  // Presence of `orchestrator` (any value other than explicit false/0) selects
+  // orchestrator-only composition — no child preamble.
+  const orchRaw = params.get("orchestrator");
+  const orchestrator =
+    params.has("orchestrator") && orchRaw !== "0" && orchRaw !== "false";
+
+  const vendor = params.get("vendor");
+  const profile = params.get("profile");
+  try {
+    const prompt = engine.previewPrompt({
+      projectDir: project,
+      vendor: vendor !== null && vendor !== "" ? vendor : null,
+      profile: profile !== null && profile !== "" ? profile : null,
+      orchestrator,
+    });
+    sendJson(res, 200, { prompt });
+  } catch (err) {
+    if (err instanceof DelegateError) {
+      sendJson(res, 400, { error: err.message });
+      return;
+    }
+    sendJson(res, 500, { error: err instanceof Error ? err.message : String(err) });
+  }
+}
+
+/**
  * `GET /metrics?session=<id|all>&group_by=<vendor|model|profile|size|difficulty|type>`
  * — per-group task/eval/token/duration aggregates (#118). Defaults: session=all,
  * group_by=vendor.
@@ -1222,6 +1263,12 @@ function createHandler(
       // `GET /metrics` — task/eval/token/duration aggregates (#118).
       if (method === "GET" && url.pathname === "/metrics") {
         handleMetrics(engine, res, url.searchParams);
+        return;
+      }
+
+      // `GET /prompt` — composed PROMPT.md preview for current project (#159).
+      if (method === "GET" && url.pathname === "/prompt") {
+        handlePrompt(engine, res, url.searchParams);
         return;
       }
 

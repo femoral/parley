@@ -23,6 +23,8 @@ const RESERVED_PREFIXES = new Set([
   "runner",
   "config",
   "metrics",
+  "prompt",
+  "gc",
 ]);
 
 export function isReservedPath(firstSegment: string | undefined): boolean {
