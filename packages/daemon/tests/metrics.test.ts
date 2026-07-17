@@ -66,7 +66,9 @@ describe("size/difficulty migration (#118)", () => {
     db.close();
     fs.rmSync(home, { recursive: true, force: true });
     home = fs.mkdtempSync(path.join(os.tmpdir(), "parley-metrics-mig-"));
-    const prev = openDatabaseUpTo(homePaths(home), SCHEMA_VERSION - 1);
+    // Version 15 is the schema just before the size/difficulty migration (#118);
+    // pinned absolute so later appended migrations don't shift this fixture.
+    const prev = openDatabaseUpTo(homePaths(home), 15);
     const colsBefore = prev
       .prepare("PRAGMA table_info(tasks)")
       .all()
@@ -348,7 +350,14 @@ describe("aggregateMetrics (#118)", () => {
 describe("GET /metrics (#118)", () => {
   let server: DaemonServer | null = null;
 
+  // The fixture tasks carry old completed_at timestamps; keep the retention
+  // sweep (#153) from purging them at server startup.
+  beforeEach(() => {
+    process.env.PARLEY_GC_INTERVAL_MS = "0";
+  });
+
   afterEach(async () => {
+    delete process.env.PARLEY_GC_INTERVAL_MS;
     if (server) {
       await server.close();
       server = null;

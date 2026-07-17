@@ -157,9 +157,10 @@ describe("profile column migration (#113)", () => {
     db.close();
     fs.rmSync(home, { recursive: true, force: true });
     home = fs.mkdtempSync(path.join(os.tmpdir(), "parley-profile-mig-"));
-    // Profile (#113) is followed by runner (#111) and size/difficulty (#118).
-    // Open just before the profile migration so none of those columns exist yet.
-    const prev = openDatabaseUpTo(homePaths(home), SCHEMA_VERSION - 3);
+    // Version 13 is the schema just before the profile migration (#113), so
+    // neither profile nor the later runner/size/difficulty columns exist yet.
+    // Pinned absolute so later appended migrations don't shift this fixture.
+    const prev = openDatabaseUpTo(homePaths(home), 13);
     const colsBefore = prev
       .prepare("PRAGMA table_info(tasks)")
       .all()
