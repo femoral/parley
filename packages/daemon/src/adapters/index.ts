@@ -12,6 +12,7 @@ import { createOpenhandsAdapter } from "./openhands.js";
 import { createOpencodeAdapter } from "./opencode.js";
 import { createHermesAdapter } from "./hermes.js";
 import { createPiAdapter } from "./pi.js";
+import { createKimiAdapter } from "./kimi.js";
 import { loadPluginAdapter } from "./plugins.js";
 
 /**
@@ -35,6 +36,7 @@ export function createBuiltinAdapters(
     createOpencodeAdapter(env),
     createHermesAdapter(env),
     createPiAdapter(env),
+    createKimiAdapter(env),
   ];
   return new Map(adapters.map((adapter) => [adapter.id, adapter]));
 }
