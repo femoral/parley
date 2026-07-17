@@ -30,18 +30,22 @@
 .pc-atmos--vignette {
   box-shadow: inset 0 0 240px 70px var(--sea-vignette);
 }
+/* Icon-scale rose at the top-left of the centre column stage (under the head).
+   Collapses its flex contribution (height + following gap) so the head→scene
+   rhythm stays a single gutter — no layout shift in header or roster. */
 .pc-compass {
-  position: absolute;
-  top: 52%;
-  left: 50%;
-  width: 760px;
-  height: 760px;
-  max-width: 90vmin;
-  max-height: 90vmin;
-  opacity: 0.05;
+  flex: 0 0 auto;
+  align-self: flex-start;
+  box-sizing: border-box;
+  width: 48px;
+  height: 48px;
+  margin: 8px 0 calc(-56px - var(--gutter)) 8px;
+  position: relative;
+  z-index: 2;
+  pointer-events: none;
+  opacity: 0.4;
   color: var(--brass);
   animation: pc-spin-rose 140s linear infinite;
-  transform: translate(-50%, -50%);
 }
 
 /* ── Regions ───────────────────────────────────────────────────────────── */

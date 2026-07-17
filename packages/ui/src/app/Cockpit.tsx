@@ -56,7 +56,6 @@ export function Cockpit() {
   return (
     <div className={`pc-cockpit${chartStale ? " pc-cockpit--stale" : ""}`} data-stale={chartStale ? "true" : undefined}>
       <div className="pc-atmos pc-atmos--sea" />
-      <CompassRose />
       <div className="pc-atmos pc-atmos--vignette" />
 
       <div className="pc-cockpit__layout">
@@ -100,6 +99,8 @@ export function Cockpit() {
               </nav>
               <DayChip day={day} clock={clock} />
             </div>
+            {/* Icon-scale rose: top-left of the scene/soundings stage, under the head. */}
+            <CompassRose />
             {mode === "soundings" ? (
               <div className="pc-soundings-stage">
                 <SoundingsPanel soundings={soundings} onGroupBy={setGroupBy} />

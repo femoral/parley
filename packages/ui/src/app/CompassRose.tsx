@@ -1,5 +1,6 @@
-/** Layer 4 — the slow compass-rose watermark (design-manifest §2.11): two rings
- * and a four-point star, faint brass, spinning over 140s via CSS. Decorative. */
+/** Layer 4 — icon-scale compass rose (design-manifest §2.11 lineage): two rings
+ * and a four-point star, brass, spinning over 140s via CSS. Decorative; sits
+ * top-left of the centre stage under the cartouche. */
 export function CompassRose() {
   return (
     <svg className="pc-compass" viewBox="0 0 100 100" aria-hidden="true">
