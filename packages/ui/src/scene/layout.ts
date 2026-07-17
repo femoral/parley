@@ -24,8 +24,9 @@
  * - Min centre distance ≥ {@link MIN_ISLAND_DISTANCE} (150×128 footprint + plank).
  * - Flagship exclusion: no centre within {@link FLAGSHIP_EXCLUSION_RADIUS} of
  *   {@link FLAGSHIP_CENTER} (galleon sits at translateY(-70px) on the region).
- * - Bounds {@link LAYOUT_BOUNDS} keep islands inside the region window so
- *   neighbouring sessions (stride 780px) never visually collide.
+ * - Horizontal bounds of {@link LAYOUT_BOUNDS} keep |x| clear of neighbouring
+ *   sessions (stride 780px). Large fleets grow the lattice south past
+ *   `maxY` rather than violating min-distance.
  */
 
 export interface Point {
@@ -46,9 +47,13 @@ export const FLAGSHIP_EXCLUSION_RADIUS = 170;
 export const FLAGSHIP_CENTER: Point = { x: 0, y: -70 };
 
 /**
- * Scatter window for island centres. Tall enough to hex-pack a dozen islands
- * at {@link MIN_ISLAND_DISTANCE} while keeping |x| ≤ 330 so neighbouring
+ * Preferred scatter window for island centres. Tall enough to hex-pack a dozen
+ * islands at {@link MIN_ISLAND_DISTANCE} while keeping |x| ≤ 330 so neighbouring
  * session regions (stride 780px) stay clear of each other.
+ *
+ * When a fleet outgrows this window, {@link placeIslands} extends the hex
+ * lattice south (larger y) rather than packing tighter — |x| still respects
+ * these horizontal bounds so neighbour regions never collide.
  */
 export const LAYOUT_BOUNDS = {
   minX: -330,
@@ -88,13 +93,9 @@ function dist(a: Point, b: Point): number {
   return Math.hypot(a.x - b.x, a.y - b.y);
 }
 
-function inBounds(p: Point): boolean {
-  return (
-    p.x >= LAYOUT_BOUNDS.minX &&
-    p.x <= LAYOUT_BOUNDS.maxX &&
-    p.y >= LAYOUT_BOUNDS.minY &&
-    p.y <= LAYOUT_BOUNDS.maxY
-  );
+/** Horizontal clamp only — y may grow past {@link LAYOUT_BOUNDS.maxY} on overflow. */
+function inXBounds(p: Point): boolean {
+  return p.x >= LAYOUT_BOUNDS.minX && p.x <= LAYOUT_BOUNDS.maxX;
 }
 
 function clearOfFlagship(p: Point): boolean {
@@ -106,24 +107,35 @@ function quantize(p: Point): Point {
 }
 
 /**
- * Hex lattice of legal island centres. Spacing equals {@link MIN_ISLAND_DISTANCE}
- * so any two slots are non-overlapping; flagship-excluded cells are dropped.
- * Built once per `placeIslands` call (tiny).
+ * Append one hex-lattice row (by row index from {@link LAYOUT_BOUNDS.minY}).
+ * Spacing equals {@link LATTICE_PITCH} so any two slots are non-overlapping;
+ * flagship-excluded cells are dropped. X stays inside {@link LAYOUT_BOUNDS}.
  */
-function buildLattice(): Point[] {
+function appendLatticeRow(slots: Point[], row: number): void {
+  const y = LAYOUT_BOUNDS.minY + row * LATTICE_ROW;
+  if (y < LAYOUT_BOUNDS.minY) return;
+  const stagger = (row % 2) * (LATTICE_PITCH / 2);
+  for (let col = 0; ; col++) {
+    const x = LAYOUT_BOUNDS.minX + stagger + col * LATTICE_PITCH;
+    if (x > LAYOUT_BOUNDS.maxX) break;
+    const p = { x, y };
+    if (inXBounds(p) && clearOfFlagship(p)) slots.push(p);
+  }
+}
+
+/**
+ * Hex lattice of legal island centres inside the preferred vertical window.
+ * Built once per `placeIslands` call; overflow grows further rows south.
+ */
+function buildBaseLattice(): { slots: Point[]; nextRow: number } {
   const slots: Point[] = [];
-  for (let row = 0; ; row++) {
+  let row = 0;
+  for (; ; row++) {
     const y = LAYOUT_BOUNDS.minY + row * LATTICE_ROW;
     if (y > LAYOUT_BOUNDS.maxY) break;
-    const stagger = (row % 2) * (LATTICE_PITCH / 2);
-    for (let col = 0; ; col++) {
-      const x = LAYOUT_BOUNDS.minX + stagger + col * LATTICE_PITCH;
-      if (x > LAYOUT_BOUNDS.maxX) break;
-      const p = { x, y };
-      if (inBounds(p) && clearOfFlagship(p)) slots.push(p);
-    }
+    appendLatticeRow(slots, row);
   }
-  return slots;
+  return { slots, nextRow: row };
 }
 
 /**
@@ -152,14 +164,37 @@ export function preferredPoint(id: string): Point {
 /**
  * Place every island for the given task ids (array order = placement order).
  * Returns a Map of task id → centre offset from the region origin.
+ *
+ * When the preferred-window lattice is full, further slots are opened by
+ * extending the same hex lattice south. That preserves the min-distance
+ * guarantee (lattice pitch), flagship exclusion, |x| neighbour clearance,
+ * determinism, and append-only stability — unlike the old seeded-ellipse
+ * fallback, which could stack centres a few pixels apart.
  */
 export function placeIslands(taskIds: readonly string[]): Map<string, Point> {
-  const free = buildLattice();
+  const { slots: free, nextRow: startRow } = buildBaseLattice();
+  let nextRow = startRow;
   const result = new Map<string, Point>();
 
+  /** Grow south until at least one free lattice slot exists. */
+  const ensureFreeSlot = (): void => {
+    // Pathological safety: each row yields several legal cols; this is far
+    // beyond any realistic fleet and only guards a broken geometry constant.
+    const rowLimit = nextRow + taskIds.length + 64;
+    while (free.length === 0) {
+      if (nextRow >= rowLimit) {
+        throw new Error("placeIslands: unable to grow lattice for free slot");
+      }
+      appendLatticeRow(free, nextRow);
+      nextRow += 1;
+    }
+  };
+
   for (const id of taskIds) {
+    ensureFreeSlot();
+
     const preferred = preferredPoint(id);
-    let bestIdx = -1;
+    let bestIdx = 0;
     let bestDist = Infinity;
 
     for (let i = 0; i < free.length; i++) {
@@ -171,22 +206,8 @@ export function placeIslands(taskIds: readonly string[]): Map<string, Point> {
       }
     }
 
-    if (bestIdx >= 0) {
-      const [slot] = free.splice(bestIdx, 1);
-      result.set(id, quantize(slot!));
-      continue;
-    }
-
-    // Lattice exhausted (beyond designed fleet size): fall back to a seeded
-    // ring so the island still has a deterministic home. May pack tighter.
-    const angle = (fnv1a(id) % 360) * (Math.PI / 180);
-    result.set(
-      id,
-      quantize({
-        x: Math.cos(angle) * 240,
-        y: 200 + Math.sin(angle) * 120,
-      }),
-    );
+    const [slot] = free.splice(bestIdx, 1);
+    result.set(id, quantize(slot!));
   }
 
   return result;

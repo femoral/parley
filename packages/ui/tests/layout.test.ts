@@ -104,3 +104,76 @@ describe("placeIslands — append-only stability", () => {
     }
   });
 });
+
+/**
+ * Property tests for fleets larger than the fixed LAYOUT_BOUNDS lattice.
+ * Overflow must still honour min-distance, flagship exclusion, determinism,
+ * and append-stability — never stack islands on the seeded ellipse fallback.
+ */
+describe("placeIslands — overflow fleet properties", () => {
+  /** Well over lattice capacity inside LAYOUT_BOUNDS (~a dozen slots). */
+  const OVERFLOW_N = 30;
+
+  function assertMinDistance(map: Map<string, Point>, list: string[]) {
+    const points = list.map((id) => map.get(id)!);
+    for (let i = 0; i < points.length; i++) {
+      for (let j = i + 1; j < points.length; j++) {
+        expect(dist(points[i]!, points[j]!)).toBeGreaterThanOrEqual(MIN_ISLAND_DISTANCE);
+      }
+    }
+  }
+
+  it(`keeps min centre distance for ${OVERFLOW_N} islands (beyond lattice capacity)`, () => {
+    const list = ids(OVERFLOW_N);
+    const map = placeIslands(list);
+    expect(map.size).toBe(OVERFLOW_N);
+    assertMinDistance(map, list);
+  });
+
+  it(`is deterministic for the same ${OVERFLOW_N}-id list`, () => {
+    const list = ids(OVERFLOW_N);
+    const a = placeIslands(list);
+    const b = placeIslands(list);
+    expect([...a.entries()]).toEqual([...b.entries()]);
+  });
+
+  it("does not move earlier ids when appending past lattice capacity", () => {
+    const base = ids(OVERFLOW_N);
+    const before = placeIslands(base);
+    const after = placeIslands([...base, "task-extra"]);
+    for (const id of base) {
+      expect(after.get(id)).toEqual(before.get(id));
+    }
+    expect(after.get("task-extra")).toBeDefined();
+    assertMinDistance(after, [...base, "task-extra"]);
+  });
+
+  it("keeps a growing overflow fleet's early islands fixed across many appends", () => {
+    let list: string[] = [];
+    let previous = new Map<string, Point>();
+    for (let i = 0; i < OVERFLOW_N; i++) {
+      list = [...list, `overflow-grow-${String(i).padStart(3, "0")}`];
+      const next = placeIslands(list);
+      for (const [id, pos] of previous) {
+        expect(next.get(id)).toEqual(pos);
+      }
+      previous = next;
+    }
+    assertMinDistance(previous, list);
+  });
+
+  it(`never places centres inside the flagship exclusion zone for ${OVERFLOW_N} islands`, () => {
+    const map = placeIslands(ids(OVERFLOW_N));
+    for (const p of map.values()) {
+      expect(dist(p, FLAGSHIP_CENTER)).toBeGreaterThanOrEqual(FLAGSHIP_EXCLUSION_RADIUS);
+    }
+  });
+
+  it("keeps |x| within LAYOUT_BOUNDS so neighbouring session regions stay clear", () => {
+    const map = placeIslands(ids(OVERFLOW_N));
+    for (const p of map.values()) {
+      expect(p.x).toBeGreaterThanOrEqual(LAYOUT_BOUNDS.minX);
+      expect(p.x).toBeLessThanOrEqual(LAYOUT_BOUNDS.maxX);
+    }
+  });
+});
