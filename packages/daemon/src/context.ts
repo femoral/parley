@@ -1,8 +1,11 @@
 import fs from "node:fs";
 import path from "node:path";
 import {
+  defaultClassification,
   defaultTaskTypes,
+  parseClassification,
   resolveTaskTypes,
+  type ClassificationConfig,
   type TaskTypesMap,
 } from "@useparley/core";
 
@@ -133,6 +136,30 @@ export function readProjectTaskTypes(repo: string | null): TaskTypesMap {
   }
   if (config.taskTypes === undefined) return defaultTaskTypes();
   return resolveTaskTypes(config.taskTypes);
+}
+
+/**
+ * Hot-read the project's effective classification from
+ * `.parley/classification.json` (#161). Missing file ⇒ shipped size/difficulty
+ * defaults with guidance. Present but invalid throws so delegate can surface a
+ * named error (never coerce a bad file into defaults).
+ */
+export function readProjectClassification(repo: string | null): ClassificationConfig {
+  if (repo === null) return defaultClassification();
+  let rawText: string;
+  try {
+    rawText = fs.readFileSync(path.join(repo, PARLEY_DIR, "classification.json"), "utf8");
+  } catch {
+    return defaultClassification();
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(rawText) as unknown;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(`invalid classification.json: ${msg}`);
+  }
+  return parseClassification(parsed);
 }
 
 /**

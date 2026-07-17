@@ -19,6 +19,7 @@ import { runStatus } from "./commands/tasks.js";
 import { runUi } from "./commands/ui.js";
 import { runWatch } from "./commands/watch.js";
 import { runPrompt } from "./commands/prompt.js";
+import { runLint } from "./commands/lint.js";
 import { VERSION_LINE } from "./version.js";
 
 const HELP = `parley — delegate tasks to agent CLIs
@@ -36,10 +37,12 @@ Usage:
     --report-schema <file>  Validate the child's report against this JSON Schema
     --answer-timeout <dur>  Stall the task when a question goes unanswered
                             this long (default 30m; e.g. 90s, 250ms)
-    --size <XS|S|M|L|XL>    Task size classification (optional; for metrics)
-    --difficulty <level>    trivial|easy|medium|hard|extreme (optional)
+    --size <id>             Task size classification (optional; for metrics;
+                            project-configurable via classification.json)
+    --difficulty <id>       Task difficulty (optional; project-configurable)
     --type <t>              Work-domain type (coding|design|…|other; optional,
                             default other; project-configurable via taskTypes)
+    --dry-run               Run the task but record nothing (no task row left)
   parley fix [--fresh] <task> "<brief>"
                             Create a linked reattempt that inherits the
                             parent's profile/workspace and resumes its
@@ -107,6 +110,8 @@ Usage:
                             this cwd (protocol preamble + PROMPT.md layers).
                             --orchestrator shows compounded orchestrator
                             PROMPT.md instead (never injected into children).
+  parley lint [dir]             Validate project .parley surfaces (config,
+                            classification, rubrics). Exit 1 on error (CI).
   parley skills install         Install bundled orchestrator skill(s)
     --layout claude|agents|<path>
                               Vendor convention, or a custom directory path
@@ -189,6 +194,8 @@ export async function run(argv: string[], ctx: CliContext): Promise<number> {
       return runUi(ctx, rest);
     case "prompt":
       return runPrompt(ctx, rest);
+    case "lint":
+      return runLint(ctx, rest);
     case "skills":
       return runSkills(ctx, rest);
     case "child":

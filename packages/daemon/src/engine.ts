@@ -7,10 +7,14 @@ import {
   DEFAULT_RETENTION_DAYS,
   DEFAULT_SANDBOX,
   FALLBACK_TASK_TYPE,
+  formatValidDifficulties,
+  formatValidSizes,
   formatValidTaskTypes,
   inboxRank,
   isActionableState,
   isChildChannel,
+  isValidDifficulty,
+  isValidSize,
   isValidTaskType,
   normalizeUsage,
   parseDuration,
@@ -63,6 +67,7 @@ import {
 import {
   materializeChildHub,
   materializeContext,
+  readProjectClassification,
   readProjectTaskTypes,
   readResumeEnabled,
   readRetryMax,
@@ -317,12 +322,13 @@ export interface DelegateRequest {
    */
   runner: string | null;
   /**
-   * Task size classification (XS|S|M|L|XL); null when unset (#118). Validated
-   * at the HTTP boundary; engine stores as-is.
+   * Task size classification; null when unset (#118 / #161). Validated against
+   * the project's hot-read classification set after repo resolution.
    */
   size: string | null;
   /**
-   * Task difficulty (trivial|easy|medium|hard|extreme); null when unset (#118).
+   * Task difficulty; null when unset (#118 / #161). Validated against the
+   * project's hot-read classification set after repo resolution.
    */
   difficulty: string | null;
   /**
@@ -330,6 +336,11 @@ export interface DelegateRequest {
    * against the project's hot-read `taskTypes` set after repo resolution.
    */
   type: string | null;
+  /**
+   * When true (`delegate --dry-run`, #161): run the task normally, then purge
+   * the row (and logs/worktree) on terminal so nothing is recorded.
+   */
+  dryRun?: boolean;
 }
 
 /**
@@ -446,6 +457,12 @@ export class TaskEngine {
    * fire `fail` with a runner-lost error when the window elapses.
    */
   private readonly runnerHeartbeatTimers = new Map<string, NodeJS.Timeout>();
+  /**
+   * Task ids created with `delegate --dry-run` (#161). On terminal transition
+   * the row + logs + worktree are purged so nothing is recorded. In-memory
+   * only — a daemon restart mid dry-run may leave a rare orphan row.
+   */
+  private readonly dryRunTaskIds = new Set<string>();
   /**
    * Long-poll waiters parked on `POST /runner/lease` until a matching pending
    * task appears or the poll window elapses.
@@ -720,11 +737,14 @@ export class TaskEngine {
       }
     }
 
-    // Work-domain type (#151): hot-read project config at the resolved repo;
-    // omitted ⇒ other; unknown ⇒ usage error listing the project's valid set.
-    // Validate before materializing context so a bad type never leaves a task
-    // row — and roll back any worktree already cut for the same reason.
+    // Classification + work-domain type (#151 / #161): hot-read project files
+    // at the resolved repo. Omitted type ⇒ other; unknown size/difficulty/type
+    // ⇒ usage error listing the project's valid set. Validate before
+    // materializing context so a bad value never leaves a task row — and roll
+    // back any worktree already cut for the same reason.
     let taskType: string;
+    let size: string | null = request.size;
+    let difficulty: string | null = request.difficulty;
     try {
       const taskTypes = readProjectTaskTypes(repo);
       taskType =
@@ -736,6 +756,25 @@ export class TaskEngine {
           `unknown task type: ${taskType} (expected ${formatValidTaskTypes(taskTypes)})`,
         );
       }
+      const classification = readProjectClassification(repo);
+      if (size !== null && size !== "") {
+        if (!isValidSize(size, classification)) {
+          throw new DelegateError(
+            `invalid size: ${size} (expected ${formatValidSizes(classification)})`,
+          );
+        }
+      } else {
+        size = null;
+      }
+      if (difficulty !== null && difficulty !== "") {
+        if (!isValidDifficulty(difficulty, classification)) {
+          throw new DelegateError(
+            `invalid difficulty: ${difficulty} (expected ${formatValidDifficulties(classification)})`,
+          );
+        }
+      } else {
+        difficulty = null;
+      }
     } catch (err) {
       if (worktreePath !== null) {
         try {
@@ -745,8 +784,8 @@ export class TaskEngine {
         }
       }
       if (err instanceof DelegateError) throw err;
-      // Malformed taskTypes section (or other named config error).
-      throw new DelegateError(`invalid project taskTypes: ${errorMessage(err)}`);
+      // Malformed taskTypes / classification (or other named config error).
+      throw new DelegateError(`invalid project config: ${errorMessage(err)}`);
     }
 
     if (!isRemote) {
@@ -795,10 +834,14 @@ export class TaskEngine {
       answer_timeout_ms: request.answerTimeoutMs,
       report_schema:
         request.reportSchema !== null ? JSON.stringify(request.reportSchema) : null,
-      size: request.size,
-      difficulty: request.difficulty,
+      size,
+      difficulty,
       type: taskType,
     });
+
+    if (request.dryRun === true) {
+      this.dryRunTaskIds.add(id);
+    }
 
     if (isRemote) {
       // Wake any lease long-polls waiting for this runner.
@@ -1481,6 +1524,42 @@ export class TaskEngine {
     const seq = bumpTaskSeq(this.db, taskId);
     this.transitions.push({ seq, task_id: taskId, state: row.state });
     this.wakeEventWaiters();
+    // Dry-run (#161): after waiters observe the terminal event, purge the row
+    // so list/status leave no record. A short delay lets an already-parked
+    // (or just-started) watch read the terminal state before the row vanishes.
+    if (TERMINAL_STATES.has(row.state) && this.dryRunTaskIds.has(taskId)) {
+      const timer = setTimeout(() => this.purgeDryRunTask(taskId), 250);
+      timer.unref();
+    }
+  }
+
+  /**
+   * Remove a dry-run task's worktree, logs, and DB row after it reaches a
+   * terminal state (#161). Best-effort: failures are swallowed so a stuck
+   * cleanup never leaves the daemon in a bad state.
+   */
+  private purgeDryRunTask(taskId: string): void {
+    this.dryRunTaskIds.delete(taskId);
+    const task = getTask(this.db, taskId);
+    if (!task) return;
+    if (!TERMINAL_STATES.has(task.state)) return;
+    try {
+      if (task.worktree !== null) {
+        try {
+          this.removeTaskWorktree(task);
+        } catch {
+          /* best-effort */
+        }
+      }
+      try {
+        fs.rmSync(taskLogDir(this.paths, taskId), { recursive: true, force: true });
+      } catch {
+        /* best-effort */
+      }
+      deleteTask(this.db, taskId);
+    } catch {
+      /* best-effort */
+    }
   }
 
   private wakeEventWaiters(): void {

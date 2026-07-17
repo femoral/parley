@@ -1,17 +1,26 @@
 /**
- * #118 / #151 — classification helpers (size/difficulty fixed enums + task types).
+ * #118 / #151 / #161 — classification helpers (project-aware size/difficulty + task types).
  */
 import { describe, expect, it } from "vitest";
 import {
+  defaultClassification,
   defaultTaskTypes,
   FALLBACK_TASK_TYPE,
+  formatValidDifficulties,
+  formatValidSizes,
   formatValidTaskTypes,
   isMetricsGroupBy,
+  isValidDifficulty,
+  isValidSize,
   isValidTaskType,
   METRICS_GROUP_BY,
+  parseClassification,
   parseTaskTypesSection,
+  resolveClassification,
   resolveTaskTypes,
   SHIPPED_TASK_TYPES,
+  TASK_DIFFICULTIES,
+  TASK_SIZES,
   validTaskTypeIds,
 } from "../src/classification.js";
 
@@ -70,5 +79,66 @@ describe("task types (#151)", () => {
     expect(METRICS_GROUP_BY).toContain("type");
     expect(isMetricsGroupBy("type")).toBe(true);
     expect(isMetricsGroupBy("nope")).toBe(false);
+  });
+});
+
+describe("classification.json (#161)", () => {
+  it("ships default sizes and difficulties with non-empty guidance", () => {
+    const d = defaultClassification();
+    expect(d.sizes.map((s) => s.id)).toEqual([...TASK_SIZES]);
+    expect(d.difficulties.map((x) => x.id)).toEqual([...TASK_DIFFICULTIES]);
+    for (const s of d.sizes) expect(s.guidance.trim().length).toBeGreaterThan(0);
+    for (const x of d.difficulties) expect(x.guidance.trim().length).toBeGreaterThan(0);
+    expect(isValidSize("M", d)).toBe(true);
+    expect(isValidDifficulty("hard", d)).toBe(true);
+    expect(isValidSize("huge", d)).toBe(false);
+    expect(formatValidSizes(d)).toBe("XS|S|M|L|XL");
+    expect(formatValidDifficulties(d)).toContain("trivial");
+  });
+
+  it("parses custom size/difficulty ids", () => {
+    const c = parseClassification({
+      version: 2,
+      sizes: [
+        { id: "tiny", guidance: "A few lines." },
+        { id: "epic", guidance: "Multi-week effort." },
+      ],
+      difficulties: [{ id: "routine", guidance: "Known path." }],
+    });
+    expect(c.version).toBe(2);
+    expect(isValidSize("tiny", c)).toBe(true);
+    expect(isValidSize("M", c)).toBe(false);
+    expect(isValidDifficulty("routine", c)).toBe(true);
+    expect(formatValidSizes(c)).toBe("tiny|epic");
+  });
+
+  it("missing raw resolves to shipped defaults", () => {
+    expect(resolveClassification(undefined)).toEqual(defaultClassification());
+    expect(resolveClassification(null)).toEqual(defaultClassification());
+  });
+
+  it("rejects empty guidance, duplicate ids, and bad shapes with field names", () => {
+    expect(() => parseClassification([])).toThrow(/classification must be a JSON object/);
+    expect(() =>
+      parseClassification({
+        sizes: [{ id: "XS", guidance: "" }],
+        difficulties: [{ id: "easy", guidance: "ok" }],
+      }),
+    ).toThrow(/classification\.sizes\[0\]\.guidance/);
+    expect(() =>
+      parseClassification({
+        sizes: [
+          { id: "XS", guidance: "a" },
+          { id: "XS", guidance: "b" },
+        ],
+        difficulties: [{ id: "easy", guidance: "ok" }],
+      }),
+    ).toThrow(/duplicate id "XS"/);
+    expect(() =>
+      parseClassification({
+        sizes: [{ id: "XS", guidance: "a" }],
+        difficulties: [],
+      }),
+    ).toThrow(/classification\.difficulties must be a non-empty array/);
   });
 });

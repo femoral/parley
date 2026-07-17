@@ -84,7 +84,10 @@ describe("delegate --size / --difficulty (#118)", () => {
       home,
     );
     expect(res.code).toBe(2);
-    expect(res.stderr).toMatch(/invalid --size/);
+    // Project-set validation (daemon hot-read); lists shipped defaults when no
+    // classification.json is present (#161).
+    expect(res.stderr).toMatch(/invalid size: huge/);
+    expect(res.stderr).toMatch(/XS\|S\|M\|L\|XL/);
   });
 
   it("rejects invalid --difficulty with exit 2", async () => {
@@ -93,7 +96,8 @@ describe("delegate --size / --difficulty (#118)", () => {
       home,
     );
     expect(res.code).toBe(2);
-    expect(res.stderr).toMatch(/invalid --difficulty/);
+    expect(res.stderr).toMatch(/invalid difficulty: insane/);
+    expect(res.stderr).toMatch(/trivial\|easy\|medium\|hard\|extreme/);
   });
 });
 

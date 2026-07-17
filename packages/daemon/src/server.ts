@@ -5,12 +5,8 @@ import {
   collectUnknownConfigKeys,
   getConfigPath,
   isMetricsGroupBy,
-  isTaskDifficulty,
-  isTaskSize,
   METRICS_GROUP_BY,
   setConfigPath,
-  TASK_DIFFICULTIES,
-  TASK_SIZES,
   unsetConfigPath,
   validateConfig,
   writeConfig,
@@ -253,23 +249,20 @@ function handleDelegate(engine: TaskEngine, res: http.ServerResponse, body: unkn
       contexts.push({ name: entry.name, contents: entry.contents });
     }
   }
-  // Classification (#118): optional size/difficulty; reject unknown enum values.
+  // Classification (#118 / #161): optional size/difficulty strings; project-set
+  // validation is engine-side (hot-read of classification.json at the repo).
   let size: string | null = null;
   if (body.size !== undefined && body.size !== null) {
-    if (typeof body.size !== "string" || !isTaskSize(body.size)) {
-      sendJson(res, 400, {
-        error: `invalid size: ${String(body.size)} (expected ${TASK_SIZES.join("|")})`,
-      });
+    if (typeof body.size !== "string" || body.size === "") {
+      sendJson(res, 400, { error: "size must be a non-empty string" });
       return;
     }
     size = body.size;
   }
   let difficulty: string | null = null;
   if (body.difficulty !== undefined && body.difficulty !== null) {
-    if (typeof body.difficulty !== "string" || !isTaskDifficulty(body.difficulty)) {
-      sendJson(res, 400, {
-        error: `invalid difficulty: ${String(body.difficulty)} (expected ${TASK_DIFFICULTIES.join("|")})`,
-      });
+    if (typeof body.difficulty !== "string" || body.difficulty === "") {
+      sendJson(res, 400, { error: "difficulty must be a non-empty string" });
       return;
     }
     difficulty = body.difficulty;
@@ -284,6 +277,7 @@ function handleDelegate(engine: TaskEngine, res: http.ServerResponse, body: unkn
     }
     type = body.type;
   }
+  const dryRun = body.dry_run === true;
   try {
     const task = engine.delegate({
       prompt,
@@ -309,6 +303,7 @@ function handleDelegate(engine: TaskEngine, res: http.ServerResponse, body: unkn
       size,
       difficulty,
       type,
+      dryRun,
     });
     sendJson(res, 201, { task_id: task.id, name: task.name, state: task.state, seq: task.seq });
   } catch (err) {
