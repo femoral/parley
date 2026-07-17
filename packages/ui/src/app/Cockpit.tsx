@@ -11,7 +11,7 @@ import {
   SoundingsPanel,
   type RosterSearchHandle,
 } from "../hud/index.js";
-import { Mark } from "../primitives/index.js";
+import { Mark, Plate } from "../primitives/index.js";
 import { STATE_META } from "../tokens/state-meta.js";
 import { Scene } from "../scene/index.js";
 import { useCockpit, useCockpitKeys } from "./hooks/index.js";
@@ -79,24 +79,26 @@ export function Cockpit() {
           <section className="pc-region--center" aria-label={mode === "soundings" ? "Soundings" : "The cove"}>
             <div className="pc-center__head">
               <Cartouche ornaments={settings.ornaments} />
-              <nav className="pc-view-nav" aria-label="Cockpit views">
-                <button
-                  type="button"
-                  className={`pc-view-nav__tab${mode === "cove" ? " pc-view-nav__tab--active" : ""}`}
-                  aria-current={mode === "cove" ? "page" : undefined}
-                  onClick={() => setMode("cove")}
-                >
-                  Cove
-                </button>
-                <button
-                  type="button"
-                  className={`pc-view-nav__tab${mode === "soundings" ? " pc-view-nav__tab--active" : ""}`}
-                  aria-current={mode === "soundings" ? "page" : undefined}
-                  onClick={() => setMode("soundings")}
-                >
-                  Soundings
-                </button>
-              </nav>
+              <Plate padded={false}>
+                <nav className="pc-view-nav" aria-label="Cockpit views">
+                  <button
+                    type="button"
+                    className={`pc-view-nav__tab${mode === "cove" ? " pc-view-nav__tab--active" : ""}`}
+                    aria-current={mode === "cove" ? "page" : undefined}
+                    onClick={() => setMode("cove")}
+                  >
+                    Cove
+                  </button>
+                  <button
+                    type="button"
+                    className={`pc-view-nav__tab${mode === "soundings" ? " pc-view-nav__tab--active" : ""}`}
+                    aria-current={mode === "soundings" ? "page" : undefined}
+                    onClick={() => setMode("soundings")}
+                  >
+                    Soundings
+                  </button>
+                </nav>
+              </Plate>
               <DayChip day={day} clock={clock} />
             </div>
             {/* Icon-scale rose: top-left of the scene/soundings stage, under the head. */}

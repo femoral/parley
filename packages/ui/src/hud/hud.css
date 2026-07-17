@@ -1513,17 +1513,15 @@
   color: var(--ink-soft);
 }
 
-/* View nav — Cove ↔ Soundings (engraved tab chrome, DESIGN.md §Navigation). */
+/* View nav — Cove ↔ Soundings (engraved tab chrome, DESIGN.md §Navigation).
+   Outer frame comes from Plate (standard, padded=false); no standalone pill. */
 .pc-view-nav {
-  display: inline-flex;
-  align-items: stretch;
+  display: flex;
+  align-items: center;
   gap: 2px;
   padding: 3px;
-  border-radius: var(--radius-control);
-  border: 1px solid var(--brass-frame);
-  background: rgba(0, 0, 0, 0.28);
-  flex: 0 0 auto;
-  align-self: center;
+  height: 100%;
+  box-sizing: border-box;
 }
 .pc-view-nav__tab {
   appearance: none;
