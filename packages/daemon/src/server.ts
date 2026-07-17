@@ -561,6 +561,29 @@ function handleConfigUnset(paths: HomePaths, res: http.ServerResponse, body: unk
 }
 
 /**
+ * `GET /info?project=<abs>` — effective configuration as prose + the structured
+ * config it was rendered from (#163). Project root is required so remote
+ * daemons resolve the caller's workspace (never the daemon's cwd).
+ */
+function handleInfo(
+  engine: TaskEngine,
+  res: http.ServerResponse,
+  params: URLSearchParams,
+): void {
+  const project = params.get("project");
+  if (project === null || project.trim() === "") {
+    sendJson(res, 400, { error: "project is required (absolute path of the workspace root)" });
+    return;
+  }
+  try {
+    sendJson(res, 200, engine.info(project));
+  } catch (err) {
+    // Bad project config (classification/taskTypes/rubrics) is a caller mistake.
+    sendJson(res, 400, { error: err instanceof Error ? err.message : String(err) });
+  }
+}
+
+/**
  * `GET /prompt?project=<abs>&vendor=<id>&profile=<name>&orchestrator=1` —
  * render the composed prompt a child (or orchestrator) would receive from
  * `project` (#159). Child mode needs vendor or profile; orchestrator mode
@@ -1447,6 +1470,12 @@ function createHandler(
       // `GET /metrics` — task/eval/token/duration aggregates (#118).
       if (method === "GET" && url.pathname === "/metrics") {
         handleMetrics(engine, res, url.searchParams);
+        return;
+      }
+
+      // `GET /info` — effective config as prose + structured twin (#163).
+      if (method === "GET" && url.pathname === "/info") {
+        handleInfo(engine, res, url.searchParams);
         return;
       }
 

@@ -19,6 +19,7 @@ import { runStatus } from "./commands/tasks.js";
 import { runUi } from "./commands/ui.js";
 import { runWatch } from "./commands/watch.js";
 import { runPrompt } from "./commands/prompt.js";
+import { runInfo } from "./commands/info.js";
 import { runLint } from "./commands/lint.js";
 import { runSession } from "./commands/session.js";
 import { VERSION_LINE } from "./version.js";
@@ -111,6 +112,11 @@ Usage:
                             this cwd (protocol preamble + PROMPT.md layers).
                             --orchestrator shows compounded orchestrator
                             PROMPT.md instead (never injected into children).
+  parley info [--json]          Effective configuration for this project as
+                            orchestrator prose (instructions, vendors/profiles,
+                            types, classification, eval, fix/retries). --json
+                            prints the structured config the prose was rendered
+                            from (same daemon response; never drifts).
   parley lint [dir]             Validate project .parley surfaces (config,
                             classification, rubrics). Exit 1 on error (CI).
   parley session -v <harness> -m <model> -e <effort> [-s <id>]
@@ -199,6 +205,8 @@ export async function run(argv: string[], ctx: CliContext): Promise<number> {
       return runUi(ctx, rest);
     case "prompt":
       return runPrompt(ctx, rest);
+    case "info":
+      return runInfo(ctx, rest);
     case "lint":
       return runLint(ctx, rest);
     case "session":

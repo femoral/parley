@@ -121,6 +121,7 @@ import {
   composeOperatorInstructions,
   composeOrchestratorInstructions,
 } from "./prompt-layers.js";
+import { buildInfo, type InfoResponse } from "./info.js";
 import {
   appendLaunchCommand,
   captureLaunchCommand,
@@ -2480,6 +2481,19 @@ export class TaskEngine {
       this.operatorInstructionsFor(task),
       body,
     );
+  }
+
+  /**
+   * Effective configuration for `parley info` (#163): structured config plus
+   * prose rendered from the same object (no drift). Project root is always
+   * caller-supplied so remote daemons resolve the right workspace.
+   */
+  info(projectDir: string): InfoResponse {
+    return buildInfo({
+      projectDir,
+      paths: this.paths,
+      adapters: this.adapters,
+    });
   }
 
   /**
