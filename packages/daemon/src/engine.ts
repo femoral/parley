@@ -4,11 +4,13 @@ import path from "node:path";
 import readline from "node:readline";
 import {
   DEFAULT_NETWORK,
+  DEFAULT_RETENTION_DAYS,
   DEFAULT_SANDBOX,
   formatDuration,
   inboxRank,
   isActionableState,
   readConfig,
+  retentionDays,
   type HomePaths,
   type ParleyConfig,
   type ProfileConfig,
@@ -27,11 +29,13 @@ import {
   bumpTaskSeq,
   claimOldestPendingRunnerTask,
   currentSeq,
+  deleteTask,
   getTask,
   getTaskBySeq,
   insertQaTurn,
   insertTask,
   isEventAcked,
+  listExpiredTasks,
   listQaTurns,
   listSessions,
   listTasks,
@@ -153,6 +157,51 @@ export class DelegateError extends Error {
 /** Best-effort message from a thrown value (git errors arrive as `Error`). */
 function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
+}
+
+/** Recursively sum on-disk bytes for a path; missing paths contribute 0. */
+function directoryBytes(root: string): number {
+  let total = 0;
+  let st: fs.Stats;
+  try {
+    st = fs.lstatSync(root);
+  } catch {
+    return 0;
+  }
+  if (st.isFile() || st.isSymbolicLink()) return st.size;
+  if (!st.isDirectory()) return 0;
+  let entries: fs.Dirent[];
+  try {
+    entries = fs.readdirSync(root, { withFileTypes: true });
+  } catch {
+    return 0;
+  }
+  for (const entry of entries) {
+    total += directoryBytes(path.join(root, entry.name));
+  }
+  return total;
+}
+
+/** One task considered (or removed) by a retention sweep (#153). */
+export interface GcTaskEntry {
+  task_id: string;
+  state: string;
+  completed_at: string | null;
+  /** Estimated on-disk bytes reclaimed (logs + worktree). */
+  bytes: number;
+  worktree: string | null;
+}
+
+/** Result of `parley gc` / the scheduled daemon sweep (#153). */
+export interface GcResult {
+  dry_run: boolean;
+  /** Tasks purged (or listed when dry-run). */
+  removed: number;
+  /** Sum of estimated on-disk bytes for removed (or listed) tasks. */
+  freed_bytes: number;
+  tasks: GcTaskEntry[];
+  /** Per-task worktree (or other) failures that did not block the rest. */
+  failed: { task_id: string; error: string }[];
 }
 
 export interface DelegateRequest {
@@ -665,6 +714,86 @@ export class TaskEngine {
       }
     }
     return { cleaned, failed };
+  }
+
+  /**
+   * Retention sweep (#153): purge terminal tasks older than `retention.days`
+   * (daemon config, default 30). Removes the task row (evals/qa/acks), logs,
+   * report envelope, and leftover worktree — never git branches, never
+   * non-terminal tasks. Worktree failures are reported and leave the task so
+   * a later sweep can retry; other tasks continue.
+   *
+   * When `dryRun` is true, lists expired tasks and estimated bytes without
+   * deleting anything.
+   */
+  gc(opts: { dryRun?: boolean } = {}): GcResult {
+    const dryRun = opts.dryRun === true;
+    let days = DEFAULT_RETENTION_DAYS;
+    try {
+      days = retentionDays(readConfig(this.paths.config));
+    } catch {
+      /* corrupt config → shipped default */
+    }
+    const cutoffMs = Date.now() - days * 24 * 60 * 60 * 1000;
+    const cutoffIso = new Date(cutoffMs).toISOString();
+    const expired = listExpiredTasks(this.db, cutoffIso);
+
+    const tasks: GcTaskEntry[] = [];
+    const failed: { task_id: string; error: string }[] = [];
+    let freed = 0;
+
+    for (const task of expired) {
+      const logDir = taskLogDir(this.paths, task.id);
+      const logBytes = directoryBytes(logDir);
+      const wtBytes = task.worktree !== null ? directoryBytes(task.worktree) : 0;
+      const bytes = logBytes + wtBytes;
+      const entry: GcTaskEntry = {
+        task_id: task.id,
+        state: task.state,
+        completed_at: task.completed_at,
+        bytes,
+        worktree: task.worktree,
+      };
+
+      if (dryRun) {
+        tasks.push(entry);
+        freed += bytes;
+        continue;
+      }
+
+      // Worktree first: if removal fails, keep the row so the next sweep retries
+      // and the branch association is not orphaned mid-flight.
+      if (task.worktree !== null) {
+        try {
+          this.removeTaskWorktree(task);
+        } catch (err) {
+          failed.push({ task_id: task.id, error: errorMessage(err) });
+          continue;
+        }
+      }
+
+      try {
+        fs.rmSync(logDir, { recursive: true, force: true });
+      } catch (err) {
+        // Log dir residual is non-fatal; still drop the row so gc converges.
+        failed.push({
+          task_id: task.id,
+          error: `logs: ${errorMessage(err)}`,
+        });
+      }
+
+      deleteTask(this.db, task.id);
+      tasks.push(entry);
+      freed += bytes;
+    }
+
+    return {
+      dry_run: dryRun,
+      removed: tasks.length,
+      freed_bytes: freed,
+      tasks,
+      failed,
+    };
   }
 
   /**

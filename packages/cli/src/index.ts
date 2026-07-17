@@ -8,6 +8,7 @@ import { runClean } from "./commands/clean.js";
 import { runDaemon } from "./commands/daemon.js";
 import { runDelegate } from "./commands/delegate.js";
 import { runEval } from "./commands/eval.js";
+import { runGc } from "./commands/gc.js";
 import { runLogs } from "./commands/logs.js";
 import { runMetrics } from "./commands/metrics.js";
 import { runModels } from "./commands/models.js";
@@ -70,6 +71,8 @@ Usage:
                             (--json: raw per-event JSONL, untouched)
   parley clean <task>           Remove a finished task's worktree (keeps branch)
   parley clean --all-terminal   Sweep worktrees of all terminal-state tasks
+  parley gc [--dry-run]         Purge expired terminal tasks (rows, logs,
+                            worktrees; never branches). --dry-run lists only.
   parley models [--vendor <id>] [--json] [--refresh]
                             Show the model/effort catalog (~/.parley/models.json,
                             hand-editable). --refresh re-probes vendor CLIs;
@@ -146,6 +149,8 @@ export async function run(argv: string[], ctx: CliContext): Promise<number> {
       return runLogs(ctx, rest);
     case "clean":
       return runClean(ctx, rest);
+    case "gc":
+      return runGc(ctx, rest);
     case "models":
       return runModels(ctx, rest);
     case "daemon":

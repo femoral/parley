@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { readConfig } from "../src/config.js";
+import { DEFAULT_RETENTION_DAYS, readConfig, retentionDays } from "../src/config.js";
 
 function writeConfig(contents: string): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "parley-config-"));
@@ -60,6 +60,33 @@ describe("readConfig — daemon.*", () => {
   it("rejects non-object daemon", () => {
     const file = writeConfig(JSON.stringify({ daemon: "x" }));
     expect(() => readConfig(file)).toThrow(/daemon must be an object/);
+  });
+});
+
+describe("readConfig — retention.*", () => {
+  it("accepts retention.days", () => {
+    const file = writeConfig(JSON.stringify({ retention: { days: 7 } }));
+    expect(readConfig(file).retention).toEqual({ days: 7 });
+  });
+
+  it("accepts retention.days = 0 (expire immediately)", () => {
+    const file = writeConfig(JSON.stringify({ retention: { days: 0 } }));
+    expect(readConfig(file).retention).toEqual({ days: 0 });
+  });
+
+  it("rejects non-integer retention.days", () => {
+    const file = writeConfig(JSON.stringify({ retention: { days: 1.5 } }));
+    expect(() => readConfig(file)).toThrow(/retention\.days must be a non-negative integer/);
+  });
+
+  it("rejects negative retention.days", () => {
+    const file = writeConfig(JSON.stringify({ retention: { days: -1 } }));
+    expect(() => readConfig(file)).toThrow(/retention\.days must be a non-negative integer/);
+  });
+
+  it("retentionDays defaults to 30 when unset", () => {
+    expect(retentionDays({})).toBe(DEFAULT_RETENTION_DAYS);
+    expect(DEFAULT_RETENTION_DAYS).toBe(30);
   });
 });
 

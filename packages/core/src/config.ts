@@ -29,6 +29,22 @@ export interface DaemonConfig {
 }
 
 /**
+ * Task-scoped data retention (`retention.days`, #153 / #136). Daemon-home
+ * config only — no per-project override. Missing section ⇒ default 30 days.
+ */
+export interface RetentionConfig {
+  /**
+   * Days after a task reaches a terminal state before gc may purge it.
+   * Non-negative integer; `0` expires every terminal task immediately.
+   * Default when unset: 30.
+   */
+  days?: number;
+}
+
+/** Default retention window when `retention.days` is unset (#153). */
+export const DEFAULT_RETENTION_DAYS = 30;
+
+/**
  * Per-vendor settings under `vendors.<id>` (#112). `bin`/`args`/`env` customize
  * spawn; `plugin` loads a third-party adapter module (ADR-0009).
  */
@@ -86,6 +102,8 @@ export interface ParleyConfig {
   profiles?: Record<string, ProfileConfig>;
   /** Remote runner credentials (`runners.<name>.token`); see ADR-0012. */
   runners?: Record<string, RunnerConfig>;
+  /** Task data retention window for `parley gc` / daemon sweep (#153). */
+  retention?: RetentionConfig;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -140,6 +158,21 @@ function validateDaemon(file: string, raw: unknown): void {
     if (typeof v !== "number" || !Number.isInteger(v) || v < 0) {
       throw new Error(
         `invalid config at ${file}: daemon.idleTimeoutMs must be a non-negative integer`,
+      );
+    }
+  }
+}
+
+function validateRetention(file: string, raw: unknown): void {
+  if (raw === undefined) return;
+  if (!isRecord(raw)) {
+    throw new Error(`invalid config at ${file}: retention must be an object`);
+  }
+  if (raw.days !== undefined) {
+    const v = raw.days;
+    if (typeof v !== "number" || !Number.isInteger(v) || v < 0) {
+      throw new Error(
+        `invalid config at ${file}: retention.days must be a non-negative integer`,
       );
     }
   }
@@ -275,8 +308,17 @@ export function readConfig(file: string): ParleyConfig {
   validateVendors(file, config.vendors);
   validateProfiles(file, config.profiles);
   validateRunners(file, config.runners);
+  validateRetention(file, config.retention);
   // Validate the fields consumers hand to path/module APIs — a non-string must
   // surface as a named config error here, not a TypeError deep in a consumer.
   // (ui.path / ui.package checked in validateUi above.)
   return config;
+}
+
+/**
+ * Resolve the retention window in days from config, applying the shipped
+ * default when the section or key is absent.
+ */
+export function retentionDays(config: ParleyConfig): number {
+  return config.retention?.days ?? DEFAULT_RETENTION_DAYS;
 }

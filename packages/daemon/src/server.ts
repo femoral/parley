@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import http from "node:http";
 import path from "node:path";
 import {
@@ -12,7 +13,16 @@ import {
   readConfig,
 } from "@useparley/core";
 import { createAdapterRegistry } from "./adapters/index.js";
-import { countUnsettledTasks, openDatabase, sweepInterruptedTasks, TERMINAL_STATES } from "./db.js";
+import {
+  countUnsettledTasks,
+  getMeta,
+  META_LAST_GC_AT,
+  openDatabase,
+  setMeta,
+  sweepInterruptedTasks,
+  TERMINAL_STATES,
+  type DatabaseHandle,
+} from "./db.js";
 import type { DaemonIdentity } from "./identity.js";
 import { isSandboxMode, type SandboxMode } from "./adapters/types.js";
 import type { ContextFile } from "./context.js";
@@ -25,6 +35,85 @@ import { buildEnvelope } from "./report.js";
 import { discoverUiBundle, isReservedPath, serveUiRequest } from "./ui.js";
 import { DAEMON_VERSION } from "./version.js";
 import { handleXaiProxyRequest } from "./xai-proxy.js";
+
+/** Default scheduled retention sweep interval (#153): 24 hours. */
+const DEFAULT_GC_INTERVAL_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Scheduled gc interval. `PARLEY_GC_INTERVAL_MS` overrides for tests; `0`
+ * disables auto-sweep entirely. Unset/blank → 24h.
+ */
+function gcIntervalMs(): number {
+  const raw = process.env.PARLEY_GC_INTERVAL_MS;
+  if (raw === undefined || raw.trim() === "") return DEFAULT_GC_INTERVAL_MS;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : DEFAULT_GC_INTERVAL_MS;
+}
+
+/** Append a line to the daemon-home `diag.log` (best-effort). */
+function appendDaemonDiag(paths: HomePaths, line: string): void {
+  const logPath = path.join(paths.home, "diag.log");
+  try {
+    fs.appendFileSync(logPath, `${new Date().toISOString()} ${line}\n`);
+  } catch {
+    /* never let logging take down the daemon */
+  }
+}
+
+/**
+ * Self-schedule retention sweeps every 24h (#153). Persists `last_gc_at` so a
+ * restart never resweeps early: on startup, run only when due (or never run
+ * before); otherwise wait until `last_gc_at + interval`. Returns a stop fn.
+ */
+function scheduleRetentionGc(
+  engine: TaskEngine,
+  db: DatabaseHandle,
+  paths: HomePaths,
+): () => void {
+  const intervalMs = gcIntervalMs();
+  if (intervalMs === 0) return () => {};
+
+  let timer: NodeJS.Timeout | undefined;
+  let stopped = false;
+
+  const runSweep = (): void => {
+    if (stopped) return;
+    try {
+      const result = engine.gc({ dryRun: false });
+      setMeta(db, META_LAST_GC_AT, new Date().toISOString());
+      appendDaemonDiag(
+        paths,
+        `gc: removed ${result.removed} task(s), freed ${result.freed_bytes} byte(s)` +
+          (result.failed.length > 0 ? `, ${result.failed.length} failure(s)` : ""),
+      );
+      for (const f of result.failed) {
+        appendDaemonDiag(paths, `gc: ${f.task_id} failed: ${f.error}`);
+      }
+    } catch (err) {
+      appendDaemonDiag(paths, `gc: sweep error: ${String(err)}`);
+    }
+    if (!stopped) {
+      timer = setTimeout(runSweep, intervalMs);
+      timer.unref();
+    }
+  };
+
+  const last = getMeta(db, META_LAST_GC_AT);
+  let delay = 0;
+  if (last !== null) {
+    const lastMs = Date.parse(last);
+    if (Number.isFinite(lastMs)) {
+      delay = Math.max(0, lastMs + intervalMs - Date.now());
+    }
+  }
+  timer = setTimeout(runSweep, delay);
+  timer.unref();
+
+  return () => {
+    stopped = true;
+    if (timer !== undefined) clearTimeout(timer);
+  };
+}
 
 export interface DaemonServer {
   /** The port the server is listening on. */
@@ -302,6 +391,20 @@ function handleClean(engine: TaskEngine, res: http.ServerResponse, body: unknown
     }
     throw err;
   }
+}
+
+/**
+ * `POST /gc` — retention sweep (#153). Optional `{ dry_run: true }` lists
+ * expired tasks without deleting. Always returns the sweep summary.
+ */
+function handleGc(engine: TaskEngine, res: http.ServerResponse, body: unknown): void {
+  // Empty / missing body is fine — defaults to a real sweep.
+  if (body !== undefined && body !== null && !isRecord(body)) {
+    sendJson(res, 400, { error: "request body must be a JSON object" });
+    return;
+  }
+  const dryRun = isRecord(body) && body.dry_run === true;
+  sendJson(res, 200, engine.gc({ dryRun }));
 }
 
 /**
@@ -918,6 +1021,11 @@ function createHandler(
         return;
       }
 
+      if (method === "POST" && url.pathname === "/gc") {
+        handleGc(engine, res, await readBody(req));
+        return;
+      }
+
       if (segments[0] === "tasks") {
         if (method === "GET" && segments.length === 1) {
           // The current global seq rides along so `parley watch` can capture a
@@ -1087,8 +1195,12 @@ export async function startServer(
     idleTimer.unref();
   }
 
+  // Retention sweep schedule (#153): respects last_gc_at across restarts.
+  const stopGc = scheduleRetentionGc(engine, db, paths);
+
   return new Promise<DaemonServer>((resolve, reject) => {
     const failed = (err: Error): void => {
+      stopGc();
       db.close();
       reject(err);
     };
@@ -1104,6 +1216,7 @@ export async function startServer(
       engine.setHubPort(port);
       const close = () =>
         new Promise<void>((resolveClose, rejectClose) => {
+          stopGc();
           if (idleTimer !== undefined) clearInterval(idleTimer);
           // Stop children first: a live child holds an open MCP connection
           // (a blocked ask_orchestrator) that would keep the server from

@@ -264,6 +264,12 @@ const MIGRATIONS: string[] = [
   // (trivial|easy|medium|hard|extreme), optional at delegate time.
   `ALTER TABLE tasks ADD COLUMN size TEXT;
    ALTER TABLE tasks ADD COLUMN difficulty TEXT;`,
+  // #153: daemon meta key/value store (e.g. last_gc_at for scheduled retention
+  // sweeps). Opaque string values; callers parse.
+  `CREATE TABLE meta (
+     key   TEXT PRIMARY KEY,
+     value TEXT NOT NULL
+   );`,
 ];
 
 /** How many schema migrations have been applied — equals `PRAGMA user_version` after open. */
@@ -741,4 +747,52 @@ export function listQaTurns(db: DatabaseHandle, taskId: string): QaTurnRow[] {
     )
     .all(taskId)
     .map((row) => asRow<QaTurnRow>(row));
+}
+
+/** Meta key for the last completed retention sweep (#153). ISO-8601 timestamp. */
+export const META_LAST_GC_AT = "last_gc_at";
+
+/** Read a meta value, or `null` when unset. */
+export function getMeta(db: DatabaseHandle, key: string): string | null {
+  const row = db.prepare(`SELECT value FROM meta WHERE key = ?`).get(key);
+  return row === undefined ? null : asRow<{ value: string }>(row).value;
+}
+
+/** Upsert a meta key/value pair. */
+export function setMeta(db: DatabaseHandle, key: string, value: string): void {
+  db.prepare(
+    `INSERT INTO meta (key, value) VALUES (?, ?)
+     ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+  ).run(key, value);
+}
+
+/**
+ * Permanently delete a task row and its dependent rows (`qa_turns`,
+ * `event_acks`). Does not touch the filesystem (logs/worktrees) — callers
+ * remove those before or after. Used by retention gc (#153).
+ */
+export function deleteTask(db: DatabaseHandle, taskId: string): void {
+  withTransaction(db, () => {
+    db.prepare(`DELETE FROM qa_turns WHERE task_id = ?`).run(taskId);
+    db.prepare(`DELETE FROM event_acks WHERE task_id = ?`).run(taskId);
+    db.prepare(`DELETE FROM tasks WHERE id = ?`).run(taskId);
+  });
+}
+
+/**
+ * Terminal tasks whose `completed_at` is at or before `cutoffIso` (retention
+ * expiry). Non-terminal tasks are never returned. Tasks missing `completed_at`
+ * fall back to `updated_at` so legacy rows still expire.
+ */
+export function listExpiredTasks(db: DatabaseHandle, cutoffIso: string): TaskRow[] {
+  const placeholders = [...TERMINAL_STATES].map(() => "?").join(", ");
+  return db
+    .prepare(
+      `SELECT ${TASK_COLUMNS} FROM tasks
+       WHERE state IN (${placeholders})
+         AND COALESCE(completed_at, updated_at) <= ?
+       ORDER BY COALESCE(completed_at, updated_at) ASC, id ASC`,
+    )
+    .all(...TERMINAL_STATES, cutoffIso)
+    .map((row) => asRow<TaskRow>(row));
 }
