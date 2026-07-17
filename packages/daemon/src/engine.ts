@@ -15,6 +15,8 @@ import {
   normalizeUsage,
   readConfig,
   retentionDays,
+  scoreRubric,
+  validateAnswers,
   type ChildChannel,
   type HomePaths,
   type ParleyConfig,
@@ -65,6 +67,7 @@ import {
   type ContextFile,
 } from "./context.js";
 import { taskLogDir } from "./discovery.js";
+import { resolveRubricForTask } from "./rubrics.js";
 import {
   assertValidSchema,
   DEFAULT_REPORT_SCHEMA,
@@ -1296,14 +1299,39 @@ export class TaskEngine {
   }
 
   /**
-   * Record an orchestrator's quality score/feedback against a task. 1:1 with
-   * the task — a later call overwrites the previous score/feedback. Throws
-   * `DelegateError` (→ exit 2) for an unknown ref.
+   * Record a structured rubric evaluation against a task (#157). Resolves the
+   * task's type → rubric (project override, then shipped, then generic),
+   * validates answers cover criterion ids exactly, computes score + baseline,
+   * and persists answers + rubric id/version + score + baseline + feedback.
+   * A later call overwrites the previous eval. Throws `DelegateError`
+   * (→ exit 2) for unknown ref, invalid answers, or bad project rubrics.
    */
-  evalTask(ref: string, score: number, feedback: string): TaskRow {
+  evalTask(ref: string, answers: Record<string, boolean>, feedback: string): TaskRow {
     const task = resolveTask(this.db, ref);
     if (!task) throw new DelegateError(`no such task: ${ref}`);
-    updateTask(this.db, task.id, { eval_score: score, eval_feedback: feedback });
+
+    let rubric;
+    try {
+      rubric = resolveRubricForTask(task.repo, task.type);
+    } catch (err) {
+      throw new DelegateError(err instanceof Error ? err.message : String(err));
+    }
+
+    try {
+      validateAnswers(rubric, answers);
+    } catch (err) {
+      throw new DelegateError(err instanceof Error ? err.message : String(err));
+    }
+
+    const result = scoreRubric(rubric, answers);
+    updateTask(this.db, task.id, {
+      eval_score: result.score,
+      eval_baseline: result.baseline,
+      eval_feedback: feedback,
+      eval_answers: JSON.stringify(answers),
+      eval_rubric: rubric.id,
+      eval_rubric_version: rubric.version,
+    });
     return getTask(this.db, task.id)!;
   }
 

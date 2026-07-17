@@ -926,9 +926,9 @@ function handleAnswer(
 }
 
 /**
- * `POST /tasks/:ref/eval` — record an orchestrator's quality score/feedback
- * against a task. The CLI validates `--score`/`--feedback` too, but guard the
- * wire — a malformed score is a client mistake (400 → exit 2), not a 500.
+ * `POST /tasks/:ref/eval` — structured rubric evaluation (#157). Body:
+ * `{ answers: Record<criterionId, boolean>, feedback: string }`. Free `score`
+ * is rejected with a teaching message; the daemon computes score + baseline.
  */
 function handleEval(
   engine: TaskEngine,
@@ -940,19 +940,45 @@ function handleEval(
     sendJson(res, 400, { error: "request body must be a JSON object" });
     return;
   }
-  const score = body.score;
-  const feedback = body.feedback;
-  if (typeof score !== "number" || !Number.isInteger(score) || score < 1 || score > 10) {
-    sendJson(res, 400, { error: "score must be an integer between 1 and 10" });
+  if ("score" in body && body.score !== undefined) {
+    sendJson(res, 400, {
+      error:
+        "score is no longer accepted; use answers (criterion id → boolean) so the daemon can compute the score from the rubric",
+    });
     return;
   }
+  const answers = body.answers;
+  if (typeof answers !== "object" || answers === null || Array.isArray(answers)) {
+    sendJson(res, 400, {
+      error: "answers is required (object mapping criterion ids to booleans)",
+    });
+    return;
+  }
+  for (const [id, value] of Object.entries(answers as Record<string, unknown>)) {
+    if (typeof value !== "boolean") {
+      sendJson(res, 400, {
+        error: `answers.${id} must be a boolean, got: ${typeof value}`,
+      });
+      return;
+    }
+  }
+  const feedback = body.feedback;
   if (typeof feedback !== "string" || feedback === "") {
     sendJson(res, 400, { error: "feedback is required" });
     return;
   }
   try {
-    const row = engine.evalTask(ref, score, feedback);
-    sendJson(res, 200, { task_id: row.id, name: row.name, state: row.state, seq: row.seq });
+    const row = engine.evalTask(ref, answers as Record<string, boolean>, feedback);
+    sendJson(res, 200, {
+      task_id: row.id,
+      name: row.name,
+      state: row.state,
+      seq: row.seq,
+      eval_score: row.eval_score,
+      eval_baseline: row.eval_baseline,
+      eval_rubric: row.eval_rubric,
+      eval_rubric_version: row.eval_rubric_version,
+    });
   } catch (err) {
     if (err instanceof DelegateError) {
       sendJson(res, 400, { error: err.message });

@@ -143,6 +143,21 @@ export interface TaskRow {
   seq: number;
   eval_score: number | null;
   eval_feedback: string | null;
+  /**
+   * Rubric-eval answers JSON (`Record<criterionId, boolean>`), null until a
+   * structured eval is recorded (#157). Legacy free-score rows leave this null.
+   * Optional on the wire so older fixtures remain assignable.
+   */
+  eval_answers?: string | null;
+  /** Rubric id used for the structured eval (#157); null until set / legacy. */
+  eval_rubric?: string | null;
+  /** Rubric version used for the structured eval (#157); null until set / legacy. */
+  eval_rubric_version?: number | null;
+  /**
+   * Daemon-computed baseline (0–10) for the structured eval (#157). Null until
+   * set; legacy free-score rows leave this null.
+   */
+  eval_baseline?: number | null;
   /** Task size classification (XS|S|M|L|XL); null when unset at delegate time (#118). */
   size: string | null;
   /** Task difficulty (trivial|easy|medium|hard|extreme); null when unset (#118). */

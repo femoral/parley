@@ -82,16 +82,30 @@ export function contextPointers(dir: string): string[] {
  * `.parley/context/`) that delegations into it are expected to be eval'd
  * (#45). Absent file, absent `eval` key, or malformed JSON all default to
  * `false` — eval is opt-in per project.
+ *
+ * Also accepts `eval.enabled` as the v3 on/off switch (#157): either
+ * `enabled: true` or `expected: true` turns evaluation on. Default OFF.
  */
 export function readEvalExpected(repo: string | null): boolean {
   if (repo === null) return false;
   try {
     const raw = fs.readFileSync(path.join(repo, PARLEY_DIR, "config.json"), "utf8");
-    const config = JSON.parse(raw) as { eval?: { expected?: unknown } };
-    return config.eval?.expected === true;
+    const config = JSON.parse(raw) as {
+      eval?: { expected?: unknown; enabled?: unknown };
+    };
+    return config.eval?.enabled === true || config.eval?.expected === true;
   } catch {
     return false;
   }
+}
+
+/**
+ * Whether structured evaluation is enabled for the project (#157). Default
+ * OFF — absent file/key/malformed JSON all yield false. Alias of
+ * {@link readEvalExpected} (both keys accepted).
+ */
+export function readEvalEnabled(repo: string | null): boolean {
+  return readEvalExpected(repo);
 }
 
 /**

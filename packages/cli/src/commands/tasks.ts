@@ -111,6 +111,23 @@ function renderTable(ctx: CliContext, tasks: TaskRow[]): void {
   for (const row of rows) ctx.stdout(`${format(row)}\n`);
 }
 
+/**
+ * Basic eval summary line for human status (#157): score/baseline/version when
+ * a structured rubric eval is present; legacy free-score rows show score only.
+ */
+function formatEvalLine(task: TaskRow): string | null {
+  if (task.eval_score === null || task.eval_score === undefined) return null;
+  if (task.eval_rubric != null && task.eval_rubric_version != null) {
+    const baseline =
+      task.eval_baseline !== null && task.eval_baseline !== undefined
+        ? String(task.eval_baseline)
+        : "?";
+    return `eval: score=${task.eval_score} baseline=${baseline} rubric=${task.eval_rubric}@v${task.eval_rubric_version}`;
+  }
+  // Historical free-score row (pre-#157) — score remains displayable.
+  return `eval: score=${task.eval_score} (legacy)`;
+}
+
 /** Present a task row for `--json` output: JSON columns become objects. */
 function presentRow(row: TaskRow): Record<string, unknown> {
   const cached =
@@ -121,6 +138,8 @@ function presentRow(row: TaskRow): Record<string, unknown> {
     report: parseJsonColumn(row.report),
     // #154: launch_command is stored as a JSON array of spawn records.
     launch_command: parseJsonColumn(row.launch_command),
+    // #157: eval_answers is a JSON object of criterion id → boolean.
+    eval_answers: parseJsonColumn(row.eval_answers ?? null),
     // `network` is stored as SQLite 0/1; surface it as a boolean.
     network: row.network === 1,
     // Attempt chain (#152): boolean + derived tri-state for cache honesty.
@@ -194,6 +213,11 @@ export async function runStatus(ctx: CliContext, args: string[]): Promise<number
     printJson(ctx, ref ? (presented[0] ?? null) : presented);
   } else {
     renderTable(ctx, filtered);
+    // Single-task status: surface a basic eval line (score/baseline/version).
+    if (ref && filtered.length === 1) {
+      const line = formatEvalLine(filtered[0]!);
+      if (line !== null) ctx.stdout(`${line}\n`);
+    }
   }
   return 0;
 }

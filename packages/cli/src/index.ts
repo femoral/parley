@@ -47,9 +47,10 @@ Usage:
   parley answer <task> "<text>" Answer a child's question ('-' reads stdin);
                                 on a stalled task, resume it with the text.
                                 Returns immediately; wait with parley watch.
-  parley eval <task> --score <1-10> --feedback "<text>"
-                            Record an orchestrator's quality score/feedback
-                            against a task; a later call overwrites the last
+  parley eval <task> --answers '<json>' --feedback "<text>"
+                            Record a structured rubric evaluation (boolean
+                            answers per criterion); daemon computes score +
+                            baseline. A later call overwrites the last.
   parley cancel <task>          Terminate a task's child; end it cancelled
   parley watch [task…] [--ack <event-id>] [--session <id>|latest]
               [--follow] [--json]

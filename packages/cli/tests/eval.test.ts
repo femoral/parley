@@ -1,5 +1,11 @@
+/**
+ * #157 — structured rubric eval CLI seam: --answers, --score rejection,
+ * persistence via status --json, project override, answer validation.
+ */
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import fs from "node:fs";
+import path from "node:path";
+import { getShippedRubric, type RubricAnswers } from "@useparley/core";
 import { cleanupHome, makeHome, makeTaskDir, runCli, type FakeVendorAction } from "./helpers.js";
 
 let home: string;
@@ -28,38 +34,165 @@ const REPORT = {
   files_changed: ["src/a.ts"],
 };
 
-describe("parley eval", () => {
-  it("records a score/feedback, readable back via status --json", async () => {
-    const cwd = taskDir([{ submit_report: REPORT }]);
-    const delegate = await runCli(["delegate", "-v", "fake", "--cwd", cwd, "do it"], home);
-    expect(delegate.code).toBe(0);
-    const taskId = JSON.parse(delegate.stdout).task_id as string;
+function answersFor(rubricId: string, positives: boolean, negatives: boolean): RubricAnswers {
+  const r = getShippedRubric(rubricId)!;
+  const out: RubricAnswers = {};
+  for (const c of r.criteria) {
+    out[c.id] = c.kind === "positive" ? positives : negatives;
+  }
+  return out;
+}
 
+async function delegate(
+  cwd: string,
+  type?: string,
+): Promise<string> {
+  const args = ["delegate", "-v", "fake", "--cwd", cwd, "do it"];
+  if (type !== undefined) args.splice(5, 0, "--type", type);
+  const res = await runCli(args, home);
+  expect(res.code).toBe(0);
+  return JSON.parse(res.stdout).task_id as string;
+}
+
+describe("parley eval --answers (#157)", () => {
+  it("records answers; daemon computes score/baseline; status --json surfaces them", async () => {
+    const cwd = taskDir([{ submit_report: REPORT }]);
+    const taskId = await delegate(cwd, "coding");
+
+    const a = answersFor("coding", true, false);
     const evalRes = await runCli(
-      ["eval", taskId, "--score", "8", "--feedback", "solid work"],
+      ["eval", taskId, "--answers", JSON.stringify(a), "--feedback", "solid work"],
       home,
     );
     expect(evalRes.code).toBe(0);
-    expect(JSON.parse(evalRes.stdout).task_id).toBe(taskId);
+    const ack = JSON.parse(evalRes.stdout) as {
+      task_id: string;
+      eval_score: number;
+      eval_baseline: number;
+      eval_rubric: string;
+      eval_rubric_version: number;
+    };
+    expect(ack.task_id).toBe(taskId);
+    expect(ack.eval_score).toBe(10);
+    expect(ack.eval_baseline).toBe(5);
+    expect(ack.eval_rubric).toBe("coding");
+    expect(ack.eval_rubric_version).toBe(1);
 
     const status = await runCli(["status", taskId, "--json"], home);
-    const row = JSON.parse(status.stdout);
-    expect(row.eval_score).toBe(8);
+    const row = JSON.parse(status.stdout) as {
+      eval_score: number;
+      eval_baseline: number;
+      eval_feedback: string;
+      eval_rubric: string;
+      eval_rubric_version: number;
+      eval_answers: RubricAnswers;
+    };
+    expect(row.eval_score).toBe(10);
+    expect(row.eval_baseline).toBe(5);
     expect(row.eval_feedback).toBe("solid work");
+    expect(row.eval_rubric).toBe("coding");
+    expect(row.eval_rubric_version).toBe(1);
+    expect(row.eval_answers).toEqual(a);
+
+    const human = await runCli(["status", taskId], home);
+    expect(human.code).toBe(0);
+    expect(human.stdout).toMatch(/eval: score=10 baseline=5 rubric=coding@v1/);
   });
 
-  it("a later call overwrites the previous score/feedback", async () => {
+  it("other type falls back to generic rubric", async () => {
     const cwd = taskDir([{ submit_report: REPORT }]);
-    const delegate = await runCli(["delegate", "-v", "fake", "--cwd", cwd, "do it"], home);
-    const taskId = JSON.parse(delegate.stdout).task_id as string;
+    const taskId = await delegate(cwd); // no --type → other
+    const a = answersFor("generic", true, false);
+    const evalRes = await runCli(
+      ["eval", taskId, "--answers", JSON.stringify(a), "--feedback", "ok"],
+      home,
+    );
+    expect(evalRes.code).toBe(0);
+    const ack = JSON.parse(evalRes.stdout) as { eval_rubric: string; eval_score: number };
+    expect(ack.eval_rubric).toBe("generic");
+    expect(ack.eval_score).toBe(10);
+  });
 
-    await runCli(["eval", taskId, "--score", "3", "--feedback", "meh"], home);
-    await runCli(["eval", taskId, "--score", "9", "--feedback", "great"], home);
+  it("project rubric override is used for scoring", async () => {
+    const cwd = taskDir([{ submit_report: REPORT }]);
+    const rubricsDir = path.join(cwd, ".parley", "rubrics");
+    fs.mkdirSync(rubricsDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(rubricsDir, "coding.json"),
+      JSON.stringify({
+        id: "coding",
+        version: 2,
+        criteria: [
+          { id: "shipped", kind: "positive", weight: 1, text: "Shipped" },
+          { id: "broke", kind: "negative", weight: 1, text: "Broke" },
+        ],
+      }),
+    );
+
+    const taskId = await delegate(cwd, "coding");
+    const evalRes = await runCli(
+      [
+        "eval",
+        taskId,
+        "--answers",
+        JSON.stringify({ shipped: true, broke: false }),
+        "--feedback",
+        "custom rubric",
+      ],
+      home,
+    );
+    expect(evalRes.code).toBe(0);
+    const ack = JSON.parse(evalRes.stdout) as {
+      eval_score: number;
+      eval_baseline: number;
+      eval_rubric_version: number;
+    };
+    // max=2, raw=2, score=10; baseline=round(10*1/2)=5
+    expect(ack.eval_score).toBe(10);
+    expect(ack.eval_baseline).toBe(5);
+    expect(ack.eval_rubric_version).toBe(2);
+  });
+
+  it("a later call overwrites the previous eval", async () => {
+    const cwd = taskDir([{ submit_report: REPORT }]);
+    const taskId = await delegate(cwd, "coding");
+    const good = answersFor("coding", true, false);
+    const bad = answersFor("coding", false, true);
+
+    await runCli(
+      ["eval", taskId, "--answers", JSON.stringify(good), "--feedback", "first"],
+      home,
+    );
+    await runCli(
+      ["eval", taskId, "--answers", JSON.stringify(bad), "--feedback", "second"],
+      home,
+    );
 
     const status = await runCli(["status", taskId, "--json"], home);
-    const row = JSON.parse(status.stdout);
-    expect(row.eval_score).toBe(9);
-    expect(row.eval_feedback).toBe("great");
+    const row = JSON.parse(status.stdout) as {
+      eval_score: number;
+      eval_feedback: string;
+      eval_answers: RubricAnswers;
+    };
+    expect(row.eval_score).toBe(0);
+    expect(row.eval_feedback).toBe("second");
+    expect(row.eval_answers).toEqual(bad);
+  });
+
+  it("below-baseline is derivable as score < baseline", async () => {
+    const cwd = taskDir([{ submit_report: REPORT }]);
+    const taskId = await delegate(cwd, "coding");
+    // Fail all positives, trigger all negatives → score 0, baseline 5
+    const a = answersFor("coding", false, true);
+    await runCli(
+      ["eval", taskId, "--answers", JSON.stringify(a), "--feedback", "bad"],
+      home,
+    );
+    const status = await runCli(["status", taskId, "--json"], home);
+    const row = JSON.parse(status.stdout) as { eval_score: number; eval_baseline: number };
+    expect(row.eval_score).toBe(0);
+    expect(row.eval_baseline).toBe(5);
+    expect(row.eval_score < row.eval_baseline).toBe(true);
   });
 });
 
@@ -70,52 +203,111 @@ describe("eval usage errors (exit 2)", () => {
     expect(result.stderr).toMatch(/task/);
   });
 
-  it("rejects a missing --score", async () => {
+  it("rejects --score with a teaching message", async () => {
+    const result = await runCli(
+      ["eval", "t1", "--score", "8", "--feedback", "x"],
+      home,
+    );
+    expect(result.code).toBe(2);
+    expect(result.stderr).toMatch(/--score is no longer accepted/);
+    expect(result.stderr).toMatch(/--answers/);
+  });
+
+  it("rejects a missing --answers", async () => {
     const result = await runCli(["eval", "t1", "--feedback", "x"], home);
     expect(result.code).toBe(2);
-    expect(result.stderr).toMatch(/score/);
+    expect(result.stderr).toMatch(/answers/);
   });
 
   it("rejects a missing --feedback", async () => {
-    const result = await runCli(["eval", "t1", "--score", "5"], home);
+    const result = await runCli(
+      ["eval", "t1", "--answers", JSON.stringify({ a: true })],
+      home,
+    );
     expect(result.code).toBe(2);
     expect(result.stderr).toMatch(/feedback/);
   });
 
-  it("rejects --score 0", async () => {
-    const result = await runCli(["eval", "t1", "--score", "0", "--feedback", "x"], home);
+  it("rejects invalid JSON for --answers", async () => {
+    const result = await runCli(
+      ["eval", "t1", "--answers", "{not-json", "--feedback", "x"],
+      home,
+    );
     expect(result.code).toBe(2);
-    expect(result.stderr).toMatch(/score/);
+    expect(result.stderr).toMatch(/JSON/);
   });
 
-  it("rejects --score 11", async () => {
-    const result = await runCli(["eval", "t1", "--score", "11", "--feedback", "x"], home);
+  it("rejects missing criterion ids", async () => {
+    const cwd = taskDir([{ submit_report: REPORT }]);
+    const taskId = await delegate(cwd, "coding");
+    const result = await runCli(
+      [
+        "eval",
+        taskId,
+        "--answers",
+        JSON.stringify({ "brief-implemented": true }),
+        "--feedback",
+        "incomplete",
+      ],
+      home,
+    );
     expect(result.code).toBe(2);
-    expect(result.stderr).toMatch(/score/);
+    expect(result.stderr).toMatch(/missing criterion ids/);
   });
 
-  it("rejects a non-integer --score", async () => {
-    const result = await runCli(["eval", "t1", "--score", "abc", "--feedback", "x"], home);
+  it("rejects unknown criterion ids", async () => {
+    const cwd = taskDir([{ submit_report: REPORT }]);
+    const taskId = await delegate(cwd, "coding");
+    const a = answersFor("coding", true, false);
+    const result = await runCli(
+      [
+        "eval",
+        taskId,
+        "--answers",
+        JSON.stringify({ ...a, "not-a-criterion": true }),
+        "--feedback",
+        "extra",
+      ],
+      home,
+    );
     expect(result.code).toBe(2);
-    expect(result.stderr).toMatch(/score/);
+    expect(result.stderr).toMatch(/unknown criterion ids/);
   });
 
   it("rejects an unknown task", async () => {
-    const result = await runCli(["eval", "t999", "--score", "5", "--feedback", "x"], home);
+    const a = answersFor("generic", true, false);
+    const result = await runCli(
+      ["eval", "t999", "--answers", JSON.stringify(a), "--feedback", "x"],
+      home,
+    );
     expect(result.code).toBe(2);
     expect(result.stderr).toMatch(/no such task/);
   });
 
-  it("writes nothing on a rejected score", async () => {
+  it("writes nothing on a rejected answers payload", async () => {
     const cwd = taskDir([{ submit_report: REPORT }]);
-    const delegate = await runCli(["delegate", "-v", "fake", "--cwd", cwd, "do it"], home);
-    const taskId = JSON.parse(delegate.stdout).task_id as string;
+    const taskId = await delegate(cwd, "coding");
 
-    await runCli(["eval", taskId, "--score", "0", "--feedback", "x"], home);
+    await runCli(
+      [
+        "eval",
+        taskId,
+        "--answers",
+        JSON.stringify({ "brief-implemented": true }),
+        "--feedback",
+        "x",
+      ],
+      home,
+    );
 
     const status = await runCli(["status", taskId, "--json"], home);
-    const row = JSON.parse(status.stdout);
+    const row = JSON.parse(status.stdout) as {
+      eval_score: number | null;
+      eval_feedback: string | null;
+      eval_answers: unknown;
+    };
     expect(row.eval_score).toBeNull();
     expect(row.eval_feedback).toBeNull();
+    expect(row.eval_answers).toBeNull();
   });
 });

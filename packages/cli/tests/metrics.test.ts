@@ -3,8 +3,36 @@
  */
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import fs from "node:fs";
-import type { MetricsResponse } from "@useparley/core";
+import { getShippedRubric, type MetricsResponse, type RubricAnswers } from "@useparley/core";
 import { cleanupHome, makeHome, makeTaskDir, runCli } from "./helpers.js";
+
+/** Build coding-rubric answers that score exactly `target` (negatives all false). */
+function codingAnswersForScore(target: number): RubricAnswers {
+  const rubric = getShippedRubric("coding")!;
+  // Prefer heavier positives first so small targets are reachable.
+  const positives = rubric.criteria
+    .filter((c) => c.kind === "positive")
+    .sort((a, b) => b.weight - a.weight);
+  const chosen = new Set<string>();
+  // brute-force subset search for the exact daemon score
+  const n = positives.length;
+  for (let mask = 0; mask < 1 << n; mask++) {
+    chosen.clear();
+    for (let i = 0; i < n; i++) {
+      if (mask & (1 << i)) chosen.add(positives[i]!.id);
+    }
+    const answers: RubricAnswers = {};
+    for (const c of rubric.criteria) {
+      answers[c.id] = c.kind === "positive" ? chosen.has(c.id) : false;
+    }
+    // score = round(10 * (13 + passed) / 27)
+    let passed = 0;
+    for (const c of positives) if (chosen.has(c.id)) passed += c.weight;
+    const score = Math.round((10 * (13 + passed)) / 27);
+    if (score === target) return answers;
+  }
+  throw new Error(`no coding-rubric subset yields score ${target}`);
+}
 
 let home: string;
 let taskDir: string;
@@ -71,10 +99,11 @@ describe("delegate --size / --difficulty (#118)", () => {
 
 describe("parley metrics (#118)", () => {
   it("renders a human table and --json against a test daemon", async () => {
-    // Two completed tasks with evals so per-size lines appear under the group.
+    // Two completed tasks with rubric evals so per-size lines appear under the group.
+    // Scores 7 and 9 (avg 8) via coding-rubric answer subsets (#157).
     for (const [name, size, score] of [
-      ["a", "S", "7"],
-      ["b", "M", "9"],
+      ["a", "S", 7],
+      ["b", "M", 9],
     ] as const) {
       const dir = makeTaskDir([{ submit_report: REPORT }]);
       const del = await runCli(
@@ -90,6 +119,8 @@ describe("parley metrics (#118)", () => {
           size,
           "--difficulty",
           "easy",
+          "--type",
+          "coding",
           "work",
         ],
         home,
@@ -100,7 +131,14 @@ describe("parley metrics (#118)", () => {
       const watch = await runCli(["watch", ack.task_id], home);
       expect(watch.code).toBe(6);
       const evalRes = await runCli(
-        ["eval", ack.task_id, "--score", score, "--feedback", "ok"],
+        [
+          "eval",
+          ack.task_id,
+          "--answers",
+          JSON.stringify(codingAnswersForScore(score)),
+          "--feedback",
+          "ok",
+        ],
         home,
       );
       expect(evalRes.code).toBe(0);

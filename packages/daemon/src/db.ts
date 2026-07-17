@@ -112,10 +112,27 @@ export interface TaskRow {
    * current state (acked via `watch --ack <seq>`).
    */
   seq: number;
-  /** Orchestrator-recorded quality score (1-10) via `parley eval`; null until set. */
+  /**
+   * Daemon-computed quality score (0-10) via `parley eval --answers` (#157);
+   * legacy free-score rows may still hold 1–10 values. Null until set.
+   */
   eval_score: number | null;
   /** Orchestrator-recorded feedback text via `parley eval`; null until set. */
   eval_feedback: string | null;
+  /**
+   * JSON object of per-criterion boolean answers from structured eval (#157).
+   * Null until a rubric eval is recorded (legacy free-score rows stay null).
+   */
+  eval_answers: string | null;
+  /** Rubric id used for the structured eval (#157); null until set / legacy. */
+  eval_rubric: string | null;
+  /** Rubric version used for the structured eval (#157); null until set / legacy. */
+  eval_rubric_version: number | null;
+  /**
+   * Daemon-computed baseline (0–10) for the structured eval (#157). Null until
+   * set; legacy free-score rows leave this null.
+   */
+  eval_baseline: number | null;
   /** Task size classification (XS|S|M|L|XL); null when unset at delegate time (#118). */
   size: string | null;
   /** Task difficulty (trivial|easy|medium|hard|extreme); null when unset (#118). */
@@ -360,6 +377,13 @@ const MIGRATIONS: string[] = [
   `ALTER TABLE tasks ADD COLUMN launch_command TEXT;
    ALTER TABLE tasks ADD COLUMN model_source TEXT;
    ALTER TABLE tasks ADD COLUMN effort_source TEXT;`,
+  // #157: structured rubric evaluation — answers + rubric id/version + baseline
+  // alongside the existing eval_score / eval_feedback. Historical free-score
+  // rows keep eval_score and leave the new columns null.
+  `ALTER TABLE tasks ADD COLUMN eval_answers TEXT;
+   ALTER TABLE tasks ADD COLUMN eval_rubric TEXT;
+   ALTER TABLE tasks ADD COLUMN eval_rubric_version INTEGER;
+   ALTER TABLE tasks ADD COLUMN eval_baseline INTEGER;`,
 ];
 
 /** How many schema migrations have been applied — equals `PRAGMA user_version` after open. */
@@ -438,6 +462,7 @@ const TASK_COLUMNS = `id, name, vendor, model, effort, profile, runner, repo, st
    cwd, prompt, session_id, usage, report, error, started_at, completed_at,
    question_id, question, worktree, branch, base_sha, sandbox, network,
    answer_timeout_ms, report_schema, seq, orchestrator_session_id, eval_score, eval_feedback,
+   eval_answers, eval_rubric, eval_rubric_version, eval_baseline,
    size, difficulty, type, parent_task_id, attempt, resumed, cached_input_tokens,
    launch_command, model_source, effort_source`;
 
@@ -771,6 +796,10 @@ export type TaskPatch = Partial<
     | "branch"
     | "eval_score"
     | "eval_feedback"
+    | "eval_answers"
+    | "eval_rubric"
+    | "eval_rubric_version"
+    | "eval_baseline"
     | "cached_input_tokens"
     | "model"
     | "effort"

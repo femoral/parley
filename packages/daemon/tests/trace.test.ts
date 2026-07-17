@@ -136,7 +136,9 @@ describe("launch_command + model_source migration (#154)", () => {
     db.close();
     fs.rmSync(home, { recursive: true, force: true });
     home = fs.mkdtempSync(path.join(os.tmpdir(), "parley-trace-mig-"));
-    const prev = openDatabaseUpTo(homePaths(home), SCHEMA_VERSION - 1);
+    // Version 19 is the schema just before the #154 launch_command migration;
+    // pinned absolute so later appended migrations don't shift this fixture.
+    const prev = openDatabaseUpTo(homePaths(home), 19);
     const colsBefore = prev
       .prepare("PRAGMA table_info(tasks)")
       .all()

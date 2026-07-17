@@ -7,19 +7,21 @@ interface EvalAck {
   task_id: string;
   name: string | null;
   state: string;
+  eval_score?: number | null;
+  eval_baseline?: number | null;
+  eval_rubric?: string | null;
+  eval_rubric_version?: number | null;
 }
 
 /**
- * `parley eval <task> --score <1-10> --feedback "<text>"` — record an
- * orchestrator's quality score and feedback against a task, symmetric with
- * `parley answer`. A later call overwrites the previous score/feedback.
- *
- * `--score` must be an integer 1-10; out-of-range, non-integer, or a missing
- * `--score`/`--feedback` is a usage error (exit 2), same posture as
- * `delegate`'s flag validation. An unknown task ref is also a usage error.
+ * `parley eval <task> --answers '<json>' --feedback "<text>"` — record a
+ * structured rubric evaluation (#157). The daemon resolves type → rubric,
+ * validates answers, and computes score + baseline. `--score` is hard-removed
+ * and errors with a teaching message; historical scores remain stored.
  */
 export async function runEval(ctx: CliContext, args: string[]): Promise<number> {
   const { positionals, flags } = parseArgs(args, {
+    "--answers": { value: true },
     "--score": { value: true },
     "--feedback": { value: true },
     "--json": {},
@@ -33,13 +35,39 @@ export async function runEval(ctx: CliContext, args: string[]): Promise<number> 
     throw new UsageError(`eval: unexpected argument: ${positionals[1]}`);
   }
 
-  const scoreFlag = flags["--score"];
-  if (typeof scoreFlag !== "string") {
-    throw new UsageError("eval: a score is required (--score <1-10>)");
+  if (flags["--score"] !== undefined) {
+    throw new UsageError(
+      "eval: --score is no longer accepted; use --answers '<json>' with boolean answers for each rubric criterion so the daemon can compute the score",
+    );
   }
-  const score = Number(scoreFlag);
-  if (!Number.isInteger(score) || score < 1 || score > 10) {
-    throw new UsageError(`eval: --score must be an integer between 1 and 10, got: ${scoreFlag}`);
+
+  const answersFlag = flags["--answers"];
+  if (typeof answersFlag !== "string") {
+    throw new UsageError(
+      "eval: answers are required (--answers '<json>' mapping criterion ids to booleans)",
+    );
+  }
+  let answers: Record<string, boolean>;
+  try {
+    const parsed: unknown = JSON.parse(answersFlag);
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+      throw new UsageError(
+        "eval: --answers must be a JSON object mapping criterion ids to booleans",
+      );
+    }
+    for (const [id, value] of Object.entries(parsed as Record<string, unknown>)) {
+      if (typeof value !== "boolean") {
+        throw new UsageError(
+          `eval: --answers.${id} must be a boolean, got: ${typeof value}`,
+        );
+      }
+    }
+    answers = parsed as Record<string, boolean>;
+  } catch (err) {
+    if (err instanceof UsageError) throw err;
+    throw new UsageError(
+      `eval: --answers must be valid JSON: ${err instanceof Error ? err.message : String(err)}`,
+    );
   }
 
   const feedback = flags["--feedback"];
@@ -51,11 +79,11 @@ export async function runEval(ctx: CliContext, args: string[]): Promise<number> 
   let ack: EvalAck;
   try {
     ack = await daemonPost<EvalAck>(discovery, `/tasks/${encodeURIComponent(ref)}/eval`, {
-      score,
+      answers,
       feedback,
     });
   } catch (err) {
-    // No such task is a caller mistake (exit 2).
+    // No such task / bad answers are caller mistakes (exit 2).
     if (err instanceof DaemonRequestError && (err.status === 400 || err.status === 404)) {
       throw new UsageError(`eval: ${err.message}`);
     }

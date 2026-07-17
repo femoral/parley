@@ -11,6 +11,7 @@ export * from "./config.js";
 export * from "./contract.js";
 export * from "./home.js";
 export * from "./models.js";
+export * from "./rubric.js";
 export * from "./sdk.js";
 export * from "./states.js";
 export * from "./usage.js";
