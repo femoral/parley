@@ -1,6 +1,7 @@
 /** @vitest-environment happy-dom */
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { islandVariantFor } from "../src/scene/charted.js";
 import { Island, Scene, Ship, type IslandTask } from "../src/scene/index.js";
 import type { SessionRegionData } from "../src/scene/SessionRegion.js";
 
@@ -43,7 +44,7 @@ describe("Island renders its state through a single data-state (#69)", () => {
     const { container } = render(<Island task={island("pending")} onSelectTask={noop} />);
     expect(container.querySelector(".pc-island__rise")).toBeTruthy();
     expect(container.querySelector(".pc-sloop")).toBeNull();
-    expect(container.querySelector(".pc-orbit")).toBeNull();
+    expect(container.querySelector(".pc-voyage")).toBeNull();
     expect(container.querySelector(".pc-flare")).toBeNull();
     expect(container.querySelector(".pc-flag")).toBeNull();
     expect(container.querySelector(".pc-wreck")).toBeNull();
@@ -51,7 +52,7 @@ describe("Island renders its state through a single data-state (#69)", () => {
 
   it("running — a sloop under way with a wake, no attention/terminal effects", () => {
     const { container } = render(<Island task={island("running")} onSelectTask={noop} />);
-    expect(container.querySelector(".pc-orbit[data-state='running']")).toBeTruthy();
+    expect(container.querySelector(".pc-voyage[data-state='running']")).toBeTruthy();
     expect(container.querySelector(".pc-sloop")).toBeTruthy();
     expect(container.querySelector(".pc-wake")).toBeTruthy();
     expect(container.querySelector(".pc-flare")).toBeNull();
@@ -60,7 +61,7 @@ describe("Island renders its state through a single data-state (#69)", () => {
 
   it("awaiting_answer — anchored sloop, flare, and PARLEY! ribbon", () => {
     const { container } = render(<Island task={island("awaiting_answer")} onSelectTask={noop} />);
-    expect(container.querySelector(".pc-orbit[data-state='awaiting_answer']")).toBeTruthy();
+    expect(container.querySelector(".pc-voyage[data-state='awaiting_answer']")).toBeTruthy();
     expect(container.querySelector(".pc-anchor")).toBeTruthy();
     expect(container.querySelector(".pc-flare")).toBeTruthy();
     expect(container.querySelector(".pc-parley")).toBeTruthy();
@@ -70,21 +71,39 @@ describe("Island renders its state through a single data-state (#69)", () => {
   it("stalled — a fog bank rolls over the adrift ship", () => {
     const { container } = render(<Island task={island("stalled")} onSelectTask={noop} />);
     expect(container.querySelector(".pc-fog")).toBeTruthy();
-    expect(container.querySelector(".pc-orbit[data-state='stalled']")).toBeTruthy();
+    expect(container.querySelector(".pc-voyage[data-state='stalled']")).toBeTruthy();
     expect(container.querySelector(".pc-flare")).toBeNull();
   });
 
-  it("completed — a planted flag, ship gone", () => {
+  it("completed — a planted flag at the charted peak, ship gone", () => {
     const { container } = render(<Island task={island("completed")} onSelectTask={noop} />);
     const flag = container.querySelector(".pc-flag");
     expect(flag).toBeTruthy();
-    expect(flag?.querySelector("line")?.getAttribute("x2")).toBe("70");
-    expect(flag?.querySelector("line")?.getAttribute("y2")).toBe("32");
+    // Peak anchor is the variant's rock apex (stable hash of task id).
+    const peak = islandVariantFor("t1").peak;
+    expect(flag?.querySelector("line")?.getAttribute("x2")).toBe(String(peak.x));
+    expect(flag?.querySelector("line")?.getAttribute("y2")).toBe(String(peak.y));
     // Completion ceremony parts: the hoisting pennant and the masthead glint.
     expect(flag?.querySelector(".pc-flag__pennant")).toBeTruthy();
     expect(flag?.querySelector(".pc-flag__glint")).toBeTruthy();
     expect(container.querySelector(".pc-sloop")).toBeNull();
     expect(container.querySelector(".pc-wreck")).toBeNull();
+  });
+
+  it("picks a stable charted island sprite per task id (data-variant 1..3)", () => {
+    const { container } = render(<Island task={island("running")} onSelectTask={noop} />);
+    const root = container.querySelector(".pc-island");
+    const expected = islandVariantFor("t1");
+    expect(root?.getAttribute("data-variant")).toBe(String(expected.id));
+    const sprite = container.querySelector(".pc-island__sprite") as HTMLImageElement | null;
+    expect(sprite).toBeTruthy();
+    expect(sprite?.getAttribute("src")).toBeTruthy();
+    // Same id → same variant across remounts.
+    cleanup();
+    const again = render(<Island task={island("pending")} onSelectTask={noop} />);
+    expect(again.container.querySelector(".pc-island")?.getAttribute("data-variant")).toBe(
+      String(expected.id),
+    );
   });
 
   it("failed — a shipwreck, ship gone", () => {
@@ -97,7 +116,7 @@ describe("Island renders its state through a single data-state (#69)", () => {
   it("cancelled — the sloop sails off as the island sinks", () => {
     const { container } = render(<Island task={island("cancelled")} onSelectTask={noop} />);
     expect(container.querySelector(".pc-sloop--sailoff")).toBeTruthy();
-    expect(container.querySelector(".pc-orbit")).toBeNull();
+    expect(container.querySelector(".pc-voyage")).toBeNull();
     expect(container.querySelector(".pc-flag")).toBeNull();
   });
 
@@ -127,9 +146,9 @@ describe("Ship carries faction tint on the --coat/--coat-dark pair (#69)", () =>
         state="running"
       />,
     );
-    const orbit = container.querySelector(".pc-orbit") as HTMLElement;
-    expect(orbit.style.getPropertyValue("--coat")).toBe("#2b2b2e");
-    expect(orbit.style.getPropertyValue("--coat-dark")).toBe("#141416");
+    const voyage = container.querySelector(".pc-voyage") as HTMLElement;
+    expect(voyage.style.getPropertyValue("--coat")).toBe("#2b2b2e");
+    expect(voyage.style.getPropertyValue("--coat-dark")).toBe("#141416");
   });
 
   it("keeps the tint on the sailing-off pose too", () => {
@@ -175,6 +194,29 @@ describe("Scene lays out the active session's cove (#69)", () => {
       <Scene sessions={[REGION]} activeSessionId="sess-1" onSelectTask={noop} onSelectSession={noop} />,
     );
     expect(container.querySelector(".pc-galleon")).toBeTruthy();
+    expect(container.querySelector(".pc-galleon__sprite")).toBeTruthy();
+  });
+
+  it("draws dotted voyage routes only for islands with a ship present", () => {
+    const { container } = render(
+      <Scene sessions={[REGION]} activeSessionId="sess-1" onSelectTask={noop} onSelectSession={noop} />,
+    );
+    // REGION: running + awaiting_answer + completed → two routes (not completed).
+    const routes = container.querySelectorAll(".pc-route");
+    expect(routes).toHaveLength(2);
+    expect(container.querySelector(".pc-routes")).toBeTruthy();
+  });
+
+  it("omits voyage routes when no ship is on the water", () => {
+    const docked = region("sess-d", "sess-d", [
+      island("completed", { id: "d1" }),
+      island("failed", { id: "d2" }),
+      island("pending", { id: "d3" }),
+    ]);
+    const { container } = render(
+      <Scene sessions={[docked]} activeSessionId="sess-d" onSelectTask={noop} onSelectSession={noop} />,
+    );
+    expect(container.querySelector(".pc-routes")).toBeNull();
   });
 
   it("travels the camera to the selected region (a transform offset that changes)", () => {

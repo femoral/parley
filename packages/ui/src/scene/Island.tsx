@@ -1,14 +1,12 @@
 import type { EmblemMark } from "../tokens/factions.js";
 import { stateMetaFor } from "../tokens/state-meta.js";
+import { islandVariantFor, type IslandVariant } from "./charted.js";
 import { Ship } from "./Ship.js";
 import { Flare } from "./effects/Flare.js";
 import { Fog } from "./effects/Fog.js";
 import { ParleyRibbon } from "./effects/ParleyRibbon.js";
 import { PlantedFlag } from "./effects/PlantedFlag.js";
 import { Wreck } from "./effects/Wreck.js";
-
-/** Shared SVG-space anchor for artwork planted at the rocky mound's peak. */
-const MOUND_APEX = { x: 70, y: 32 } as const;
 
 /** One task as the scene renders it — the island's data. Defined in the scene
  * layer (plain props, no core import); the app's projection is structurally
@@ -29,32 +27,37 @@ function hasShip(state: string): boolean {
   return state === "running" || state === "awaiting_answer" || state === "stalled" || state === "cancelled";
 }
 
-/** The rock-and-sand island silhouette with a palm and shore foam — the same
- * for every state; the state layers ride on top. */
-function IslandBody({ name, completed }: { name: string; completed: boolean }) {
+/**
+ * Charted-waters island body: a deterministic raster sprite (one of three
+ * aged-chart cutouts) with the name plank, foam ring, and state layers riding
+ * on top. The completed flag is an SVG overlay pinned to the variant's peak.
+ */
+function IslandBody({
+  name,
+  completed,
+  variant,
+}: {
+  name: string;
+  completed: boolean;
+  variant: IslandVariant;
+}) {
+  const { peak } = variant;
   return (
     <>
       <span className="pc-island__foam" aria-hidden="true" />
-      <svg className="pc-island__svg" viewBox="0 0 140 96" aria-hidden="true">
-        {/* sand beach */}
-        <ellipse cx="70" cy="80" rx="60" ry="14" fill="var(--parchment-bg)" />
-        {/* rocky mound, two-tone */}
-        <path
-          d={`M26 80 Q40 34 ${MOUND_APEX.x} ${MOUND_APEX.y} Q100 34 114 80 Z`}
-          fill="var(--brass-shadow)"
-        />
-        <path d="M44 80 Q56 44 70 42 Q86 46 96 80 Z" fill="var(--brass-frame)" opacity="0.9" />
-        {completed && <PlantedFlag anchorX={MOUND_APEX.x} anchorY={MOUND_APEX.y} />}
-        {/* palm — trunk + fronds */}
-        <path d="M74 46 Q70 30 66 18" stroke="var(--brass-shadow)" strokeWidth="3" fill="none" strokeLinecap="round" />
-        <g fill="var(--palm-green)">
-          <path d="M66 18 Q50 12 42 20 Q54 16 66 22 Z" />
-          <path d="M66 18 Q82 10 92 18 Q78 16 66 22 Z" />
-          <path d="M66 18 Q58 6 66 -2 Q70 8 68 20 Z" />
-        </g>
-        {/* driftwood */}
-        <line x1="96" y1="82" x2="112" y2="78" stroke="var(--brass-shadow)" strokeWidth="2.4" strokeLinecap="round" />
-      </svg>
+      <div className="pc-island__art" aria-hidden="true">
+        <img className="pc-island__sprite" src={variant.src} alt="" draggable={false} />
+        {completed && (
+          <svg
+            className="pc-island__flag-layer"
+            viewBox="0 0 100 100"
+            preserveAspectRatio="none"
+            overflow="visible"
+          >
+            <PlantedFlag anchorX={peak.x} anchorY={peak.y} />
+          </svg>
+        )}
+      </div>
       <span className="pc-plank" aria-hidden="true">
         <span className="pc-plank__label" title={name}>
           {name}
@@ -70,12 +73,22 @@ function IslandBody({ name, completed }: { name: string; completed: boolean }) {
  * source every effect and the ambient CSS read, so an island can only ever show
  * one coherent state — and that state is the exact string the roster badges and
  * the inbox card by. Rising on mount and sinking on `cancelled` are finite CSS
- * transitions; everything ambient (foam, orbit, flare pulse, fog drift) is a
- * compositor keyframe.
+ * transitions; everything ambient (foam, station float, flare pulse, fog drift)
+ * is a compositor keyframe.
+ *
+ * `data-variant` (1..3) selects the charted sprite and tunes effect seats
+ * (flag peak, wreck beach, foam scale) so nothing floats detached from the art.
  */
 export interface IslandProps {
   task: IslandTask;
   onSelectTask: (taskId: string) => void;
+  /**
+   * Scatter centre of this island relative to the session region origin.
+   * Used by the sloop to voyage from the flagship (region origin −70y) to
+   * station. Defaults to a south-of-flagship placeholder for isolated tests.
+   */
+  islandX?: number;
+  islandY?: number;
   /**
    * When false, the island is removed from the tab order (off-camera regions).
    * The roster remains the canonical keyboard path to every task. Defaults true
@@ -84,14 +97,22 @@ export interface IslandProps {
   focusable?: boolean;
 }
 
-export function Island({ task, onSelectTask, focusable = true }: IslandProps) {
+export function Island({
+  task,
+  onSelectTask,
+  islandX = 0,
+  islandY = 150,
+  focusable = true,
+}: IslandProps) {
   const { state } = task;
   const meta = stateMetaFor(state);
+  const variant = islandVariantFor(task.id);
 
   return (
     <div
       className="pc-island"
       data-state={state}
+      data-variant={variant.id}
       role="button"
       tabIndex={focusable ? 0 : -1}
       aria-label={`${task.name} — ${meta.label}`}
@@ -105,12 +126,19 @@ export function Island({ task, onSelectTask, focusable = true }: IslandProps) {
     >
       <div className="pc-island__rise">
         {state === "awaiting_answer" && <Flare />}
-        <IslandBody name={task.name} completed={state === "completed"} />
+        <IslandBody name={task.name} completed={state === "completed"} variant={variant} />
         {state === "stalled" && <Fog />}
         {state === "failed" && <Wreck />}
       </div>
       {hasShip(state) && (
-        <Ship coat={task.coat} coatDark={task.coatDark} emblem={task.emblem} state={state} />
+        <Ship
+          coat={task.coat}
+          coatDark={task.coatDark}
+          emblem={task.emblem}
+          state={state}
+          islandX={islandX}
+          islandY={islandY}
+        />
       )}
       {state === "awaiting_answer" && <ParleyRibbon />}
     </div>

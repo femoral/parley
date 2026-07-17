@@ -1,5 +1,6 @@
 import { Flagship } from "./Flagship.js";
 import { Island, type IslandTask } from "./Island.js";
+import { FLAGSHIP_CENTER, islandSlotTransform, placeIslands } from "./layout.js";
 
 export interface SessionRegionData {
   /** Orchestrator session id, or null for the open-water region. */
@@ -26,24 +27,24 @@ export interface SessionRegionProps {
   active?: boolean;
 }
 
-/** Deterministic island slot: a centred grid beneath the galleon, up to four
- * across. Position is a pure function of the island's index, so the cove's
- * geography holds still as tasks transition (islands change in place, never
- * leap). */
-function slot(index: number, count: number): string {
-  const cols = Math.min(count, 4) || 1;
-  const col = index % cols;
-  const row = Math.floor(index / cols);
-  const x = (col - (cols - 1) / 2) * 176;
-  const y = 150 + row * 170;
-  return `translate(-50%, -50%) translate(${x}px, ${y}px)`;
+/** States that draw a charted dotted route from flagship → island (a ship is
+ * out on the water). Terminal / bare islands leave the route undrawn. */
+function hasVoyageRoute(state: string): boolean {
+  return state === "running" || state === "awaiting_answer" || state === "stalled";
 }
 
 /**
  * Layer 3 — one orchestrator session's water region (spec §"Scene grammar"):
- * the anchored galleon with its task-islands clustered around it. Positioned at
+ * the anchored galleon with its task-islands scattered around it. Positioned at
  * its world coordinates by the {@link Camera}; islands are keyed by task id so
  * React mounts one on create (it rises) and unmounts it on clean (it's gone).
+ *
+ * Island geography comes from {@link placeIslands}: deterministic per task id,
+ * append-stable in array order, never keyed on index alone — so a sibling
+ * completing or cleaning cannot make surviving islands leap.
+ *
+ * Dotted voyage routes (aged-chart dashed lines) sit behind entities and only
+ * for islands with a ship present — thin, faint, non-interactive.
  */
 export function SessionRegion({
   session,
@@ -56,6 +57,15 @@ export function SessionRegion({
   // All voyages home — every task island completed. The flagship dresses ship
   // (signal flags between the masts); pure state, so it can never lie.
   const dressed = session.tasks.length > 0 && session.tasks.every((t) => t.state === "completed");
+  const positions = placeIslands(session.tasks.map((t) => t.id));
+
+  const routes = session.tasks.flatMap((task) => {
+    if (!hasVoyageRoute(task.state)) return [];
+    const pos = positions.get(task.id);
+    if (!pos) return [];
+    return [{ id: task.id, x: pos.x, y: pos.y }];
+  });
+
   return (
     <div
       className="pc-region"
@@ -66,14 +76,42 @@ export function SessionRegion({
       inert={!active || undefined}
     >
       <span className="pc-region__banner">{session.label}</span>
+      {/* Charted routes: behind flagship/islands (DOM order + z-index). */}
+      {routes.length > 0 && (
+        <svg className="pc-routes" aria-hidden="true" overflow="visible">
+          {routes.map((r) => (
+            <line
+              key={r.id}
+              className="pc-route"
+              x1={FLAGSHIP_CENTER.x}
+              y1={FLAGSHIP_CENTER.y}
+              x2={r.x}
+              y2={r.y}
+            />
+          ))}
+        </svg>
+      )}
       <div className="pc-region__flagship">
         <Flagship label={session.label} dressed={dressed} />
       </div>
-      {session.tasks.map((task, i) => (
-        <div key={task.id} className="pc-island-slot" style={{ transform: slot(i, session.tasks.length) }}>
-          <Island task={task} onSelectTask={onSelectTask} focusable={active} />
-        </div>
-      ))}
+      {session.tasks.map((task) => {
+        const pos = positions.get(task.id) ?? { x: 0, y: 150 };
+        return (
+          <div
+            key={task.id}
+            className="pc-island-slot"
+            style={{ transform: islandSlotTransform(pos) }}
+          >
+            <Island
+              task={task}
+              islandX={pos.x}
+              islandY={pos.y}
+              onSelectTask={onSelectTask}
+              focusable={active}
+            />
+          </div>
+        );
+      })}
     </div>
   );
 }

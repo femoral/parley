@@ -1,18 +1,31 @@
+import { GALLEON_MASTS, GALLEON_SRC, GALLEON_VIEW } from "./charted.js";
+
+const { stem, fore, main, stern } = GALLEON_MASTS;
+
 /** Dressing-lines for the all-voyages-home ceremony: signal flags strung
  * stem → foremast → mainmast → stern, the traditional "dressed overall".
- * Flag fills alternate parchment and completed-sky — the sky-blue is spent as
- * status here (every task in the session IS completed), not decoration. */
-const DRESS_HALYARD = "M20 60 Q40 42 55 10 Q75 14 95 4 Q110 40 134 60";
+ * Coordinates are native galleon-sprite pixels so the string seats on the
+ * raster masts. Flag fills alternate parchment and completed-sky — the
+ * sky-blue is spent as status here (every task in the session IS completed),
+ * not decoration. */
+const DRESS_HALYARD =
+  `M${stem.x} ${stem.y}` +
+  ` Q${(stem.x + fore.x) / 2} ${(stem.y + fore.y) / 2 + 20} ${fore.x} ${fore.y}` +
+  ` Q${(fore.x + main.x) / 2} ${Math.min(fore.y, main.y) - 6} ${main.x} ${main.y}` +
+  ` Q${(main.x + stern.x) / 2} ${(main.y + stern.y) / 2 + 10} ${stern.x} ${stern.y}`;
+
+/** Flag seats sampled along the halyard quadratics (bowsprit → fore → main
+ * → mizzen), so every flag hangs from the string instead of floating. */
 const DRESS_FLAGS: ReadonlyArray<{ x: number; y: number }> = [
-  { x: 33, y: 45 },
-  { x: 44, y: 30 },
-  { x: 51, y: 18 },
-  { x: 67, y: 10 },
-  { x: 75, y: 11 },
-  { x: 83, y: 9 },
-  { x: 105, y: 24 },
-  { x: 114, y: 38 },
-  { x: 125, y: 51 },
+  { x: 93, y: 183 },
+  { x: 149, y: 135 },
+  { x: 206, y: 82 },
+  { x: fore.x, y: fore.y + 4 },
+  { x: 301, y: 38 },
+  { x: 350, y: 44 },
+  { x: main.x, y: main.y + 4 },
+  { x: 444, y: 97 },
+  { x: 487, y: 130 },
 ];
 
 /** The hoisted string of signal flags. Rendered only while every task island in
@@ -20,14 +33,14 @@ const DRESS_FLAGS: ReadonlyArray<{ x: number; y: number }> = [
 function DressLines() {
   return (
     <g className="pc-dress" aria-hidden="true">
-      <path d={DRESS_HALYARD} fill="none" stroke="var(--brass-frame)" strokeWidth="1" />
+      <path d={DRESS_HALYARD} fill="none" stroke="var(--brass-frame)" strokeWidth="1.6" />
       {DRESS_FLAGS.map(({ x, y }, i) => (
         <path
           key={`${x}-${y}`}
-          d={`M${x - 2.5} ${y} h5 l-0.6 5.5 L${x} ${y + 6.5} l-1.9 -1 Z`}
+          d={`M${x - 4} ${y} h8 l-1 9 L${x} ${y + 11} l-3 -1.6 Z`}
           fill={i % 2 === 0 ? "var(--parchment-bg)" : "var(--state-completed)"}
           stroke="var(--brass-shadow)"
-          strokeWidth="0.5"
+          strokeWidth="0.8"
         />
       ))}
     </g>
@@ -41,6 +54,10 @@ function DressLines() {
  * Not a faction ship — it wears the house brass, not a coat — so it takes no tint
  * props. Gentle bob is a compositor keyframe.
  *
+ * Hull/sails are a charted raster sprite; the dressed-overall signal-flag
+ * ceremony is an SVG overlay pinned to the sprite's masts so the hoist
+ * survives the art swap.
+ *
  * When every voyage in the session is home (`dressed`), the galleon dresses
  * ship: signal flags run up between the masts as a one-shot hoist, then ride
  * the ambient bob. The milestone also lands in the aria-label so it isn't
@@ -53,47 +70,17 @@ export function Flagship({ label, dressed = false }: { label: string; dressed?: 
       role="img"
       aria-label={dressed ? `Orchestrator ${label} — all voyages home` : `Orchestrator ${label}`}
     >
-      <svg className="pc-galleon__svg" viewBox="0 0 150 110">
-        {/* masts */}
-        <line x1="55" y1="70" x2="55" y2="10" stroke="var(--brass-shadow)" strokeWidth="2.4" />
-        <line x1="95" y1="70" x2="95" y2="4" stroke="var(--brass-shadow)" strokeWidth="2.4" />
-        {/* gold standard at the main masthead */}
-        <path d="M95 4 L120 10 L95 17 Z" fill="var(--brass)" />
-        <circle cx="95" cy="3" r="2.4" fill="var(--brass-bright)" />
-        {/* sails — parchment, brass-edged */}
-        <path
-          d="M57 14 Q78 30 80 58 L57 60 Z"
-          fill="var(--parchment-bg)"
-          stroke="var(--brass-frame)"
-          strokeWidth="1"
-        />
-        <path
-          d="M53 14 Q34 30 32 58 L53 60 Z"
-          fill="var(--parchment-bg)"
-          stroke="var(--brass-frame)"
-          strokeWidth="1"
-        />
-        <path
-          d="M97 8 Q116 26 118 56 L97 58 Z"
-          fill="var(--parchment-bg)"
-          stroke="var(--brass-frame)"
-          strokeWidth="1"
-        />
-        {dressed && <DressLines />}
-        {/* hull — tall planked body with a brass sheer line */}
-        <path
-          d="M18 64 Q22 96 52 96 L104 96 Q132 96 138 66 L128 62 Z"
-          fill="var(--plate-top)"
-          stroke="var(--brass-frame)"
-          strokeWidth="1.4"
-        />
-        <path d="M18 64 L138 66 L134 74 L22 72 Z" fill="var(--brass-frame)" opacity="0.85" />
-        {/* gunports */}
-        <circle cx="45" cy="80" r="2.6" fill="var(--brass-deep)" />
-        <circle cx="65" cy="82" r="2.6" fill="var(--brass-deep)" />
-        <circle cx="85" cy="82" r="2.6" fill="var(--brass-deep)" />
-        <circle cx="105" cy="80" r="2.6" fill="var(--brass-deep)" />
-      </svg>
+      <img className="pc-galleon__sprite" src={GALLEON_SRC} alt="" draggable={false} />
+      {dressed && (
+        <svg
+          className="pc-galleon__dress"
+          viewBox={`0 0 ${GALLEON_VIEW.w} ${GALLEON_VIEW.h}`}
+          overflow="visible"
+          aria-hidden="true"
+        >
+          <DressLines />
+        </svg>
+      )}
     </div>
   );
 }

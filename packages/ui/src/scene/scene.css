@@ -1,15 +1,19 @@
 /*
- * Layer 3 — the living scene (#69). One rendering system with the HUD: inline
- * SVG + CSS gradients in the manifest's tokens, faction tint on --coat/--coat-dark.
+ * Layer 3 — the living scene (#69). One rendering system with the HUD: charted
+ * raster sprites (islands + flagship) + inline SVG for faction sloops and
+ * state effects, all in the manifest's tokens. Faction tint rides on
+ * --coat/--coat-dark so a new faction restyles every ship with zero new art.
  *
  * Motion discipline (research doc's recommendation, enforced here):
- *  - Ambient loops (foam, orbit, bob, flare pulse, fog drift) are compositor
- *    keyframes on transform/opacity only — zero JS per frame.
+ *  - Ambient loops (foam, station float, bob, flare pulse, fog drift) are
+ *    compositor keyframes on transform/opacity only — zero JS per frame.
  *  - Finite transitions are CSS too: island rise/sink on mount / data-state,
- *    camera travel on a transform transition. JS sets props; CSS animates.
+ *    ship voyage from flagship to island, camera travel on a transform
+ *    transition. JS sets props/custom properties once; CSS animates.
  *  - Every animated element's BASE style is its legible resting state, so the
  *    global reduced-motion rule (tokens.css) leaves every state readable as a
- *    still image.
+ *    still image. One-shot voyage/rise use `both`/`forwards` fill so
+ *    reduced-motion lands on the end frame (ship on station, island risen).
  */
 
 /* ── Viewport & camera ─────────────────────────────────────────────────── */
@@ -133,14 +137,30 @@
   transform: translate(-50%, -50%) translateY(-70px);
 }
 
-/* ── Orchestrator galleon ──────────────────────────────────────────────── */
-.pc-galleon__svg {
-  display: block;
+/* ── Orchestrator galleon (charted raster + dress-lines overlay) ──────── */
+.pc-galleon {
+  position: relative;
   width: 172px;
-  height: auto;
-  filter: drop-shadow(0 6px 10px rgba(0, 0, 0, 0.45));
+  /* Bob on the wrapper so the dress overlay rides with the hull. */
   animation: pc-galleon-bob 6.5s ease-in-out infinite;
   transform-origin: 50% 90%;
+  filter: drop-shadow(0 6px 10px rgba(0, 0, 0, 0.45));
+}
+.pc-galleon__sprite {
+  display: block;
+  width: 100%;
+  height: auto;
+  /* No pointer hit on the art — the region itself isn't a control. */
+  pointer-events: none;
+  user-select: none;
+}
+.pc-galleon__dress {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  overflow: visible;
 }
 @keyframes pc-galleon-bob {
   0%,
@@ -152,7 +172,28 @@
   }
 }
 
-/* ── Island ────────────────────────────────────────────────────────────── */
+/* ── Charted voyage routes (flagship → island, aged-chart dashed) ───────
+ * Non-interactive, behind entities. One thin faint line per voyaging ship —
+ * no clutter, just the charted track on the water. */
+.pc-routes {
+  /* Sits first in the region DOM so flagship + islands paint above it. */
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 1px;
+  height: 1px;
+  overflow: visible;
+  pointer-events: none;
+}
+.pc-route {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.18);
+  stroke-width: 1.4;
+  stroke-linecap: round;
+  stroke-dasharray: 3.5 7;
+}
+
+/* ── Island (charted raster sprite + state layers) ─────────────────────── */
 .pc-island-slot {
   position: absolute;
   left: 0;
@@ -160,8 +201,10 @@
 }
 .pc-island {
   position: relative;
-  width: 150px;
-  height: 128px;
+  /* Footprint fits the widest charted cutout + name plank air. Tallest
+     sprite (v3) needs a bit more vertical room than the old SVG mound. */
+  width: 156px;
+  height: 142px;
   cursor: pointer;
   /* Suppress the UA focus ring; :focus-visible carries the design-system recipe. */
   outline: none;
@@ -250,36 +293,73 @@
     opacity: 0;
   }
 }
-.pc-island__svg {
+/* Raster island art — sprite seats on the water with a drop-shadow; flag
+   overlay shares the same box so peak anchors (% viewBox) land on stone. */
+.pc-island__art {
   position: absolute;
   left: 50%;
-  bottom: 8px;
-  width: 150px;
-  height: auto;
+  bottom: 10px;
+  width: 148px;
   transform: translateX(-50%);
   filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.4));
+  pointer-events: none;
 }
-/* Shore foam — a soft breathing ring at the waterline (ambient). */
+.pc-island__sprite {
+  display: block;
+  width: 100%;
+  height: auto;
+  user-select: none;
+  /* Feather the sprite's painted water-skirt edge so it fades into the scene's
+     ambient sea instead of showing as a hard-edged disc — the raster ring's
+     saturated turquoise otherwise reads as a sticker over the darker backdrop. */
+  -webkit-mask-image: radial-gradient(120% 92% at 50% 60%, #000 42%, rgba(0, 0, 0, 0.55) 62%, transparent 92%);
+  mask-image: radial-gradient(120% 92% at 50% 60%, #000 42%, rgba(0, 0, 0, 0.55) 62%, transparent 92%);
+}
+.pc-island__flag-layer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+/* Shore foam — a soft breathing ring at the waterline (ambient). Tuned a
+   touch wider than the old SVG beach so it hugs the charted shallow-water
+   skirt; per-variant scales keep the ring under the cutout, not adrift. */
 .pc-island__foam {
   position: absolute;
   left: 50%;
-  bottom: 4px;
-  width: 132px;
-  height: 30px;
+  bottom: 2px;
+  width: 140px;
+  height: 34px;
   transform: translateX(-50%);
   border-radius: 50%;
-  background: radial-gradient(closest-side, rgba(255, 255, 255, 0.22), transparent 72%);
+  background: radial-gradient(closest-side, rgba(255, 255, 255, 0.2), transparent 72%);
   animation: pc-foam 4.5s ease-in-out infinite;
+  pointer-events: none;
+}
+/* v1 — wider shallow skirt; v2 — rounder twin-palm; v3 — taller/narrower. */
+.pc-island[data-variant="1"] .pc-island__foam {
+  width: 144px;
+  height: 32px;
+}
+.pc-island[data-variant="2"] .pc-island__foam {
+  width: 138px;
+  height: 34px;
+}
+.pc-island[data-variant="3"] .pc-island__foam {
+  width: 134px;
+  height: 36px;
 }
 @keyframes pc-foam {
   0%,
   100% {
-    opacity: 0.5;
+    opacity: 0.45;
     transform: translateX(-50%) scaleX(1);
   }
   50% {
-    opacity: 0.85;
-    transform: translateX(-50%) scaleX(1.08);
+    opacity: 0.8;
+    transform: translateX(-50%) scaleX(1.06);
   }
 }
 
@@ -287,7 +367,7 @@
 .pc-plank {
   position: absolute;
   left: 50%;
-  bottom: -6px;
+  bottom: -4px;
   transform: translateX(-50%);
   max-width: 148px;
   padding: 3px 10px;
@@ -296,6 +376,7 @@
   border: 1px solid var(--brass-frame);
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
   transition: border-color var(--ease);
+  z-index: 1;
 }
 .pc-plank__label {
   display: block;
@@ -309,45 +390,73 @@
   color: var(--ink-warm);
 }
 
-/* ── Sloop (faction agent ship) ────────────────────────────────────────── */
-.pc-orbit {
+/* ── Sloop (faction agent ship) ──────────────────────────────────────────
+ * Voyage: one-shot sail from the flagship to the island on mount. JS sets
+ * --voyage-from-* / --station-* once; CSS animates transform only.
+ * Base/end frame is ON STATION so reduced-motion stills the ship at the island.
+ * Station: gentle bob + heading sway + slow drift (boat on swell, not static).
+ */
+.pc-voyage {
   position: absolute;
   left: 50%;
   top: 52%;
   width: 0;
   height: 0;
-  animation: pc-orbit 17s linear infinite;
+  /* Resting frame = on station at the island. */
+  transform: translate(var(--station-x, 88px), var(--station-y, 8px));
+  /* Slow start, cruise, gentle arrival — sailing ease (~3.2s). `both` holds
+     the end frame under reduced-motion (duration collapsed to ~0). */
+  animation: pc-voyage 3.2s cubic-bezier(0.33, 0.1, 0.25, 1) both;
 }
-.pc-orbit[data-state="awaiting_answer"],
-.pc-orbit[data-state="stalled"] {
-  animation-play-state: paused;
+@keyframes pc-voyage {
+  0% {
+    transform: translate(var(--voyage-from-x, 0px), var(--voyage-from-y, -220px));
+  }
+  100% {
+    transform: translate(var(--station-x, 88px), var(--station-y, 8px));
+  }
 }
-.pc-orbit__arm {
+/* Station float — small drift loop like a boat riding swell at anchor. */
+.pc-station {
   position: absolute;
   left: 0;
   top: 0;
-  transform: translateX(104px);
+  animation: pc-station-float 5.8s ease-in-out infinite;
 }
-/* Anchored pose — draw the ship in over the beach. */
-.pc-orbit[data-state="awaiting_answer"] .pc-orbit__arm,
-.pc-orbit[data-state="stalled"] .pc-orbit__arm {
-  transform: translate(70px, 8px);
+@keyframes pc-station-float {
+  0%,
+  100% {
+    transform: translate(0, 0) rotate(-1.2deg);
+  }
+  30% {
+    transform: translate(3px, -2px) rotate(1.4deg);
+  }
+  65% {
+    transform: translate(-2px, 1px) rotate(-0.6deg);
+  }
+}
+/* Port heading: flip the sloop when the island lies west of the flagship. */
+.pc-heading {
+  position: absolute;
+  left: 0;
+  top: 0;
+}
+.pc-voyage--port .pc-heading {
+  transform: scaleX(-1);
 }
 .pc-sloop {
   position: absolute;
   left: 0;
   top: 0;
-  width: 60px;
-  height: 56px;
-  margin-left: -30px;
-  margin-top: -28px;
-  animation: pc-orbit-rev 17s linear infinite;
+  /* Box aspect matches the painted sprite's native canvas (1672×941) so the
+     base raster and every mask layer stretch to 100%/100% with zero distortion. */
+  width: 84px;
+  height: 47px;
+  margin-left: -42px;
+  margin-top: -23px;
 }
-.pc-orbit[data-state="awaiting_answer"] .pc-sloop,
-.pc-orbit[data-state="stalled"] .pc-sloop {
-  animation-play-state: paused;
-}
-.pc-sloop__svg {
+.pc-sloop__art {
+  position: relative;
   display: block;
   width: 100%;
   height: 100%;
@@ -355,24 +464,8 @@
   animation: pc-sloop-bob 3.6s ease-in-out infinite;
   transform-origin: 50% 80%;
 }
-.pc-orbit[data-state="stalled"] .pc-sloop__svg {
+.pc-voyage[data-state="stalled"] .pc-sloop__art {
   animation: pc-adrift 7s ease-in-out infinite;
-}
-@keyframes pc-orbit {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
-}
-@keyframes pc-orbit-rev {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(-360deg);
-  }
 }
 @keyframes pc-sloop-bob {
   0%,
@@ -393,40 +486,79 @@
   }
 }
 
-/* Sloop silhouette fills — faction tint rides entirely on --coat/--coat-dark. */
-.pc-sloop__main {
-  fill: color-mix(in srgb, var(--coat) 24%, var(--parchment-bg));
-  stroke: var(--coat-dark);
-  stroke-width: 0.6;
+/* Sloop art — painted aged-chart raster sprite, shared unmodified by every
+   faction (the wood hull, rigging, mast and sail shading are neutral art).
+   Faction tint rides entirely on --coat/--coat-dark, applied as masked
+   recolor layers over the raster instead of hand-authored SVG fills. */
+.pc-sloop__base {
+  display: block;
+  width: 100%;
+  height: 100%;
+  user-select: none;
+  pointer-events: none;
 }
-.pc-sloop__jib {
-  fill: color-mix(in srgb, var(--coat) 12%, var(--parchment-bg));
-  stroke: var(--coat-dark);
-  stroke-width: 0.5;
+/* Tint group is clipped to the sprite's own alpha silhouette (a fourth trace)
+   so a slightly generous sail/hull-band mask trace never bleeds coat paint
+   past the ship's edge into open water. */
+.pc-sloop__tints {
+  position: absolute;
+  inset: 0;
+  -webkit-mask-image: url("./assets/charted/sloop-silhouette-mask.svg");
+  mask-image: url("./assets/charted/sloop-silhouette-mask.svg");
+  mask-repeat: no-repeat;
+  mask-size: 100% 100%;
+  -webkit-mask-repeat: no-repeat;
+  -webkit-mask-size: 100% 100%;
+}
+.pc-sloop__tint {
+  position: absolute;
+  inset: 0;
+  mask-repeat: no-repeat;
+  mask-size: 100% 100%;
+  -webkit-mask-repeat: no-repeat;
+  -webkit-mask-size: 100% 100%;
+}
+/* Sail + pennant: `color` blend re-hues the raster's own painted parchment
+   (folds, highlights, shadow) to the coat, rather than flattening it to a
+   solid fill — the paint texture survives the recolor. */
+.pc-sloop__tint--sail,
+.pc-sloop__tint--pennant {
+  background: var(--coat);
+  mix-blend-mode: color;
+  opacity: 0.92;
+}
+.pc-sloop__tint--sail {
+  -webkit-mask-image: url("./assets/charted/sloop-sail-mask.svg");
+  mask-image: url("./assets/charted/sloop-sail-mask.svg");
+}
+.pc-sloop__tint--pennant {
+  -webkit-mask-image: url("./assets/charted/sloop-pennant-mask.svg");
+  mask-image: url("./assets/charted/sloop-pennant-mask.svg");
+}
+/* Hull waterline band: opaque coat-dark fill, same as the old vector waterline. */
+.pc-sloop__tint--hull {
+  background: var(--coat-dark);
+  -webkit-mask-image: url("./assets/charted/sloop-hullband-mask.svg");
+  mask-image: url("./assets/charted/sloop-hullband-mask.svg");
+}
+.pc-sloop__emblem-layer {
+  position: absolute;
+  left: 42%;
+  top: 40%;
+  width: 15px;
+  height: 15px;
+  transform: translate(-50%, -50%);
+  overflow: visible;
 }
 .pc-sloop__emblem {
   fill: var(--coat-dark);
   font-family: var(--font-body);
-  font-size: 11px;
-  opacity: 0.85;
+  font-size: 7px;
+  opacity: 0.88;
 }
 .pc-sloop__emblem-mark {
   fill: var(--coat-dark);
-  opacity: 0.9;
-}
-.pc-sloop__emblem-mark path {
-  fill: inherit;
-}
-.pc-sloop__hull {
-  fill: var(--brass-shadow);
-  stroke: var(--brass-frame);
-  stroke-width: 0.8;
-}
-.pc-sloop__waterline {
-  fill: var(--coat-dark);
-}
-.pc-sloop__pennant {
-  fill: var(--coat);
+  opacity: 0.92;
 }
 
 /* Sail-off (cancelled) — ship leaves the frame as the island sinks. */
@@ -434,12 +566,12 @@
   position: absolute;
   left: 50%;
   top: 18%;
-  width: 60px;
-  height: 56px;
-  margin-left: -30px;
+  width: 84px;
+  height: 47px;
+  margin-left: -42px;
   animation: pc-sail-off 2400ms ease-in forwards;
 }
-.pc-sloop--sailoff .pc-sloop__svg {
+.pc-sloop--sailoff .pc-sloop__art {
   animation: pc-sloop-bob 3.6s ease-in-out infinite;
 }
 @keyframes pc-sail-off {
@@ -457,7 +589,7 @@
 .pc-anchor {
   display: none;
   position: absolute;
-  left: 20px;
+  left: 28px;
   bottom: -10px;
   width: 2px;
   height: 22px;
@@ -478,11 +610,11 @@
   mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill-rule='evenodd' d='M12 2a2.7 2.7 0 0 1 1.15 5.14V8.5h3.35v2.2h-3.35v7.4c2.62-.5 4.7-2.35 5.55-4.75l-1.95.6 3.1-4.65 1.65 5.35-1.75-.55C18.6 18.7 15.6 21.3 12 21.3s-6.6-2.6-7.75-7.2l-1.75.55 1.65-5.35 3.1 4.65-1.95-.6c.85 2.4 2.93 4.25 5.55 4.75v-7.4H7.5V8.5h3.35V7.14A2.7 2.7 0 0 1 12 2zm0 1.7a1.05 1.05 0 1 0 0 2.1 1.05 1.05 0 0 0 0-2.1z'/%3E%3C/svg%3E")
     center / contain no-repeat;
 }
-.pc-orbit[data-state="awaiting_answer"] .pc-anchor {
+.pc-voyage[data-state="awaiting_answer"] .pc-anchor {
   display: block;
 }
 
-/* Wake — only while making way (running). */
+/* Wake — underway during the voyage; subtle on-station pulse for running. */
 .pc-wake {
   display: none;
   position: absolute;
@@ -491,8 +623,34 @@
   align-items: center;
   gap: 5px;
 }
-.pc-orbit[data-state="running"] .pc-wake {
+.pc-voyage[data-state="running"] .pc-wake {
   display: flex;
+  /* Full wake while sailing out, then settle to a soft on-station pulse. */
+  animation: pc-wake-underway 3.2s ease-out both;
+}
+.pc-voyage[data-state="awaiting_answer"] .pc-wake,
+.pc-voyage[data-state="stalled"] .pc-wake {
+  display: flex;
+  /* Show a brief wake under way, then vanish once on station. */
+  animation: pc-wake-fade-out 3.2s ease-out both;
+}
+@keyframes pc-wake-underway {
+  0%,
+  55% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0.45;
+  }
+}
+@keyframes pc-wake-fade-out {
+  0%,
+  55% {
+    opacity: 0.75;
+  }
+  100% {
+    opacity: 0;
+  }
 }
 .pc-wake__dash {
   display: block;
@@ -519,15 +677,27 @@
   }
 }
 
-/* ── Effect: awaiting flare + PARLEY ribbon (loudest on screen) ─────────── */
+/* ── Effect: awaiting flare + PARLEY ribbon (loudest on screen) ───────────
+ * Flare floats above the rock peak; per-variant top offsets keep it seated
+ * over the apex rather than detached above a short mound (v2) or clipped
+ * into a tall spire (v3). */
 .pc-flare {
   position: absolute;
   left: 50%;
-  top: -46px;
+  top: -40px;
   transform: translateX(-50%);
   width: 48px;
   height: 48px;
   pointer-events: none;
+}
+.pc-island[data-variant="1"] .pc-flare {
+  top: -36px;
+}
+.pc-island[data-variant="2"] .pc-flare {
+  top: -28px;
+}
+.pc-island[data-variant="3"] .pc-flare {
+  top: -44px;
 }
 .pc-flare__glow {
   position: absolute;
@@ -566,8 +736,8 @@
 }
 .pc-parley {
   position: absolute;
-  top: -18px;
-  right: -26px;
+  top: -14px;
+  right: -22px;
   transform: rotate(3deg);
   padding: 3px 12px;
   border-radius: 3px;
@@ -581,6 +751,15 @@
   border-bottom: 1px solid var(--brass);
   box-shadow: 0 3px 8px rgba(0, 0, 0, 0.5);
   animation: pc-parley-bob 1.4s ease-in-out infinite;
+  z-index: 2;
+}
+.pc-island[data-variant="2"] .pc-parley {
+  top: -8px;
+  right: -18px;
+}
+.pc-island[data-variant="3"] .pc-parley {
+  top: -20px;
+  right: -20px;
 }
 /* A hover bob like the sloop/galleon's — the ribbon floats, it doesn't bounce. */
 @keyframes pc-parley-bob {
@@ -593,16 +772,32 @@
   }
 }
 
-/* ── Effect: stalled fog bank ──────────────────────────────────────────── */
+/* ── Effect: stalled fog bank ────────────────────────────────────────────
+ * Drapes the island body; variant top/height follow the rock silhouette so
+ * the bank reads as weather over the mound, not a free-floating oval. */
 .pc-fog {
   position: absolute;
   left: 50%;
-  top: 20px;
+  top: 18px;
   transform: translateX(-50%);
-  width: 190px;
-  height: 74px;
+  width: 168px;
+  height: 88px;
   pointer-events: none;
   overflow: hidden;
+}
+.pc-island[data-variant="1"] .pc-fog {
+  top: 22px;
+  height: 80px;
+}
+.pc-island[data-variant="2"] .pc-fog {
+  top: 28px;
+  height: 78px;
+  width: 172px;
+}
+.pc-island[data-variant="3"] .pc-fog {
+  top: 8px;
+  height: 100px;
+  width: 160px;
 }
 .pc-fog__bank {
   position: absolute;
@@ -656,7 +851,8 @@
 }
 @keyframes pc-flag-hoist {
   0% {
-    transform: translateY(17px);
+    /* Pennant starts at the base of the (shorter charted) pole. */
+    transform: translateY(12px);
     opacity: 0;
   }
   30% {
@@ -707,15 +903,30 @@
   }
 }
 
-/* ── Effect: failed wreck ──────────────────────────────────────────────── */
+/* ── Effect: failed wreck ────────────────────────────────────────────────
+ * Beached on the sand apron in front of the rock (not floating offshore).
+ * Per-variant bottom/offset seat it on the charted beach, clear of the palm. */
 .pc-wreck {
   position: absolute;
-  left: 50%;
-  bottom: 10px;
-  transform: translateX(-50%) rotate(-4deg);
-  width: 72px;
+  left: 46%;
+  bottom: 22px;
+  transform: translateX(-50%) rotate(-6deg);
+  width: 64px;
   height: auto;
   filter: drop-shadow(0 3px 4px rgba(0, 0, 0, 0.45));
+  pointer-events: none;
+}
+.pc-island[data-variant="1"] .pc-wreck {
+  left: 48%;
+  bottom: 24px;
+}
+.pc-island[data-variant="2"] .pc-wreck {
+  left: 46%;
+  bottom: 28px;
+}
+.pc-island[data-variant="3"] .pc-wreck {
+  left: 50%;
+  bottom: 26px;
 }
 
 /* ── Edge-of-frame attention chips ───────────────────────────────────────
