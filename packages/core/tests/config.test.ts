@@ -2,7 +2,17 @@ import { describe, expect, it } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { DEFAULT_RETENTION_DAYS, readConfig, retentionDays } from "../src/config.js";
+import {
+  collectUnknownConfigKeys,
+  DEFAULT_RETENTION_DAYS,
+  getConfigPath,
+  readConfig,
+  retentionDays,
+  setConfigPath,
+  unsetConfigPath,
+  validateConfig,
+  writeConfig as writeConfigFile,
+} from "../src/config.js";
 
 function writeConfig(contents: string): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "parley-config-"));
@@ -259,5 +269,47 @@ describe("readConfig — unknown keys preserved", () => {
     expect(config.experimental).toBe(true);
     expect((config.ui as { theme: string }).theme).toBe("dark");
     expect((config.vendors as { codex: { extra: number } }).codex.extra).toBe(1);
+  });
+});
+
+describe("validateConfig / writeConfig / dotted paths", () => {
+  it("validateConfig names the source and field", () => {
+    expect(() => validateConfig("push", { daemon: { idleTimeoutMs: -1 } })).toThrow(
+      /invalid config at push: daemon\.idleTimeoutMs/,
+    );
+  });
+
+  it("writeConfig round-trips via readConfig", () => {
+    const file = writeConfig("{}");
+    writeConfigFile(file, { daemon: { idleTimeoutMs: 0 }, experimental: true } as never);
+    const config = readConfig(file) as Record<string, unknown>;
+    expect(config).toEqual({ daemon: { idleTimeoutMs: 0 }, experimental: true });
+  });
+
+  it("get/set/unset dotted paths", () => {
+    const root: Record<string, unknown> = {};
+    const set = setConfigPath(root, "profiles.fast.vendor", "fake");
+    expect(getConfigPath(set, "profiles.fast.vendor")).toEqual({
+      found: true,
+      value: "fake",
+    });
+    const unset = unsetConfigPath(set, "profiles.fast.vendor");
+    expect(getConfigPath(unset, "profiles.fast.vendor")).toEqual({ found: false });
+    // parent object remains after unsetting the leaf
+    expect(getConfigPath(unset, "profiles.fast")).toEqual({ found: true, value: {} });
+  });
+
+  it("collectUnknownConfigKeys lists dotted unknowns", () => {
+    const keys = collectUnknownConfigKeys({
+      experimental: true,
+      ui: { path: "/x", theme: "dark" },
+      vendors: { codex: { bin: "c", extra: 1 } },
+      daemon: { idleTimeoutMs: 0 },
+    });
+    expect(keys).toEqual(
+      expect.arrayContaining(["experimental", "ui.theme", "vendors.codex.extra"]),
+    );
+    expect(keys).not.toContain("daemon.idleTimeoutMs");
+    expect(keys).not.toContain("ui.path");
   });
 });

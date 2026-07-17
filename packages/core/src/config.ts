@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import path from "node:path";
 import { isSandboxMode, type SandboxMode } from "./adapter.js";
 
 /**
@@ -272,6 +273,31 @@ function validateRunners(file: string, raw: unknown): void {
 }
 
 /**
+ * Validate a parsed config value with the same named field errors as load time.
+ * `source` is included in every error message (a filesystem path for file loads,
+ * or a synthetic label for in-memory pushes) so callers can point at the input.
+ * Unknown keys (top-level and nested) are ignored-but-preserved on the returned
+ * object.
+ */
+export function validateConfig(source: string, raw: unknown): ParleyConfig {
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
+    throw new Error(`invalid config at ${source}: must be a JSON object`);
+  }
+  const config = raw as ParleyConfig;
+  // Validate known sections; unknown keys stay ignored-but-preserved.
+  validateUi(source, config.ui);
+  validateDaemon(source, config.daemon);
+  validateVendors(source, config.vendors);
+  validateProfiles(source, config.profiles);
+  validateRunners(source, config.runners);
+  validateRetention(source, config.retention);
+  // Validate the fields consumers hand to path/module APIs — a non-string must
+  // surface as a named config error here, not a TypeError deep in a consumer.
+  // (ui.path / ui.package checked in validateUi above.)
+  return config;
+}
+
+/**
  * Read the parley home config file, returning `{}` when it does not exist —
  * the file is optional; every consumer of `readConfig` must behave as if
  * nothing were configured in that case. A corrupt (unparseable) file is
@@ -298,21 +324,191 @@ export function readConfig(file: string): ParleyConfig {
     // of a hand-edited config nothing to act on.
     throw new Error(`invalid config at ${file}: ${(err as Error).message}`);
   }
-  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-    throw new Error(`invalid config at ${file}: must be a JSON object`);
+  return validateConfig(file, parsed);
+}
+
+/**
+ * Persist a config object to disk (pretty-printed JSON). Write is atomic via
+ * temp file + rename so a crash mid-write cannot leave a half-applied file.
+ * Callers must validate first (`validateConfig`); this only serializes.
+ */
+export function writeConfig(file: string, config: ParleyConfig): void {
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const payload = `${JSON.stringify(config, null, 2)}\n`;
+  const tmp = `${file}.tmp.${process.pid}`;
+  fs.writeFileSync(tmp, payload, "utf8");
+  fs.renameSync(tmp, file);
+}
+
+/** Known top-level and nested keys — anything else is ignored-but-preserved. */
+const KNOWN_TOP_LEVEL = new Set([
+  "ui",
+  "daemon",
+  "vendors",
+  "profiles",
+  "runners",
+  "retention",
+]);
+const KNOWN_UI = new Set(["path", "package"]);
+const KNOWN_DAEMON = new Set(["url", "idleTimeoutMs"]);
+const KNOWN_VENDOR = new Set(["bin", "args", "env", "plugin"]);
+const KNOWN_PROFILE = new Set([
+  "vendor",
+  "model",
+  "effort",
+  "sandbox",
+  "network",
+  "args",
+  "env",
+]);
+const KNOWN_RUNNER = new Set(["token"]);
+const KNOWN_RETENTION = new Set(["days"]);
+
+/**
+ * List dotted paths of unknown keys in a config object (top-level and nested
+ * under known sections). Used to warn on wholesale push (#156) while still
+ * preserving those keys for round-trips.
+ */
+export function collectUnknownConfigKeys(config: Record<string, unknown>): string[] {
+  const unknown: string[] = [];
+  for (const key of Object.keys(config)) {
+    if (!KNOWN_TOP_LEVEL.has(key)) unknown.push(key);
   }
-  const config = parsed as ParleyConfig;
-  // Validate known sections; unknown keys stay ignored-but-preserved.
-  validateUi(file, config.ui);
-  validateDaemon(file, config.daemon);
-  validateVendors(file, config.vendors);
-  validateProfiles(file, config.profiles);
-  validateRunners(file, config.runners);
-  validateRetention(file, config.retention);
-  // Validate the fields consumers hand to path/module APIs — a non-string must
-  // surface as a named config error here, not a TypeError deep in a consumer.
-  // (ui.path / ui.package checked in validateUi above.)
-  return config;
+  const ui = config.ui;
+  if (isRecord(ui)) {
+    for (const key of Object.keys(ui)) {
+      if (!KNOWN_UI.has(key)) unknown.push(`ui.${key}`);
+    }
+  }
+  const daemon = config.daemon;
+  if (isRecord(daemon)) {
+    for (const key of Object.keys(daemon)) {
+      if (!KNOWN_DAEMON.has(key)) unknown.push(`daemon.${key}`);
+    }
+  }
+  const vendors = config.vendors;
+  if (isRecord(vendors)) {
+    for (const [id, entry] of Object.entries(vendors)) {
+      if (!isRecord(entry)) continue;
+      for (const key of Object.keys(entry)) {
+        if (!KNOWN_VENDOR.has(key)) unknown.push(`vendors.${id}.${key}`);
+      }
+    }
+  }
+  const profiles = config.profiles;
+  if (isRecord(profiles)) {
+    for (const [name, entry] of Object.entries(profiles)) {
+      if (!isRecord(entry)) continue;
+      for (const key of Object.keys(entry)) {
+        if (!KNOWN_PROFILE.has(key)) unknown.push(`profiles.${name}.${key}`);
+      }
+    }
+  }
+  const runners = config.runners;
+  if (isRecord(runners)) {
+    for (const [name, entry] of Object.entries(runners)) {
+      if (!isRecord(entry)) continue;
+      for (const key of Object.keys(entry)) {
+        if (!KNOWN_RUNNER.has(key)) unknown.push(`runners.${name}.${key}`);
+      }
+    }
+  }
+  const retention = config.retention;
+  if (isRecord(retention)) {
+    for (const key of Object.keys(retention)) {
+      if (!KNOWN_RETENTION.has(key)) unknown.push(`retention.${key}`);
+    }
+  }
+  return unknown;
+}
+
+/** Split and validate a dotted config key (`daemon.url`, `profiles.fast.vendor`). */
+export function parseConfigKey(key: string): string[] {
+  if (typeof key !== "string" || key.trim() === "") {
+    throw new Error("config key must be a non-empty dotted path");
+  }
+  const parts = key.split(".");
+  if (parts.some((p) => p === "")) {
+    throw new Error(`invalid config key: ${key}`);
+  }
+  return parts;
+}
+
+/**
+ * Read a dotted path from a config object. Returns `{ found: false }` when any
+ * segment is missing; does not throw for absent keys.
+ */
+export function getConfigPath(
+  root: unknown,
+  key: string,
+): { found: true; value: unknown } | { found: false } {
+  const parts = parseConfigKey(key);
+  let cur: unknown = root;
+  for (const part of parts) {
+    if (!isRecord(cur) || !(part in cur)) return { found: false };
+    cur = cur[part];
+  }
+  return { found: true, value: cur };
+}
+
+/**
+ * Return a deep-cloned config with `key` set to `value`, creating intermediate
+ * objects as needed. Throws when an intermediate segment exists but is not an
+ * object (would otherwise silently clobber scalar structure).
+ */
+export function setConfigPath(
+  root: Record<string, unknown>,
+  key: string,
+  value: unknown,
+): Record<string, unknown> {
+  const parts = parseConfigKey(key);
+  const result = structuredClone(root) as Record<string, unknown>;
+  let cur: Record<string, unknown> = result;
+  for (let i = 0; i < parts.length - 1; i++) {
+    const part = parts[i]!;
+    const next = cur[part];
+    if (next === undefined) {
+      const created: Record<string, unknown> = {};
+      cur[part] = created;
+      cur = created;
+      continue;
+    }
+    if (!isRecord(next)) {
+      throw new Error(
+        `invalid config key ${key}: ${parts.slice(0, i + 1).join(".")} is not an object`,
+      );
+    }
+    cur = next;
+  }
+  cur[parts[parts.length - 1]!] = value;
+  return result;
+}
+
+/**
+ * Return a deep-cloned config with `key` removed. Throws when the path is
+ * absent so callers can report a clear "no such key" error.
+ */
+export function unsetConfigPath(
+  root: Record<string, unknown>,
+  key: string,
+): Record<string, unknown> {
+  const parts = parseConfigKey(key);
+  const result = structuredClone(root) as Record<string, unknown>;
+  let cur: Record<string, unknown> = result;
+  for (let i = 0; i < parts.length - 1; i++) {
+    const part = parts[i]!;
+    const next = cur[part];
+    if (!isRecord(next)) {
+      throw new Error(`no such config key: ${key}`);
+    }
+    cur = next;
+  }
+  const last = parts[parts.length - 1]!;
+  if (!(last in cur)) {
+    throw new Error(`no such config key: ${key}`);
+  }
+  delete cur[last];
+  return result;
 }
 
 /**

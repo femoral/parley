@@ -230,3 +230,17 @@ export async function daemonPost<T>(
     signal: AbortSignal.timeout(10_000),
   });
 }
+
+/** Issue a PUT with a JSON body against the running daemon. */
+export async function daemonPut<T>(
+  discovery: Discovery,
+  pathname: string,
+  body: unknown,
+): Promise<T> {
+  return daemonFetch<T>(discovery, pathname, {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(10_000),
+  });
+}

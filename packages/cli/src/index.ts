@@ -5,6 +5,7 @@ import { runAnswer } from "./commands/answer.js";
 import { runCancel } from "./commands/cancel.js";
 import { runChild } from "./commands/child.js";
 import { runClean } from "./commands/clean.js";
+import { runConfig } from "./commands/config.js";
 import { runDaemon } from "./commands/daemon.js";
 import { runDelegate } from "./commands/delegate.js";
 import { runEval } from "./commands/eval.js";
@@ -81,6 +82,12 @@ Usage:
   parley daemon stop            Stop the background daemon
   parley daemon status          Report daemon identity (pid, port, id, home, version, provenance)
   parley daemon <cmd> [--json]
+  parley config show            Show the daemon's effective config (via endpoints)
+  parley config get <key>       Read a dotted key (e.g. daemon.url, profiles.fast.vendor)
+  parley config set <key> <val> Set a dotted key (JSON when parseable; else string)
+  parley config unset <key>     Remove a dotted key
+  parley config push <file>     Validate then replace the daemon config wholesale
+  parley config pull [file]     Write the current daemon config to a file (or stdout)
   parley ui [--no-open]        Print the cockpit URL and open it in a browser
   parley skills install         Install bundled orchestrator skill(s)
     --layout claude|agents|<path>
@@ -155,6 +162,8 @@ export async function run(argv: string[], ctx: CliContext): Promise<number> {
       return runModels(ctx, rest);
     case "daemon":
       return runDaemon(ctx, rest);
+    case "config":
+      return runConfig(ctx, rest);
     case "ui":
       return runUi(ctx, rest);
     case "skills":

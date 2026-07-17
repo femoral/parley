@@ -2,12 +2,18 @@ import fs from "node:fs";
 import http from "node:http";
 import path from "node:path";
 import {
+  collectUnknownConfigKeys,
+  getConfigPath,
   isMetricsGroupBy,
   isTaskDifficulty,
   isTaskSize,
   METRICS_GROUP_BY,
+  setConfigPath,
   TASK_DIFFICULTIES,
   TASK_SIZES,
+  unsetConfigPath,
+  validateConfig,
+  writeConfig,
   type HomePaths,
   type ParleyConfig,
   readConfig,
@@ -336,6 +342,164 @@ function readRunnerConfig(paths: HomePaths): ParleyConfig {
   } catch {
     return {};
   }
+}
+
+/**
+ * Load the daemon's current config for the admin surface (#156). A missing file
+ * is `{}` (same as `readConfig`); a corrupt/invalid file is a 500 so the
+ * operator knows the on-disk state needs repair before further edits.
+ */
+function loadAdminConfig(paths: HomePaths): ParleyConfig {
+  return readConfig(paths.config);
+}
+
+/** Persist a fully-validated config; hot readers re-open the file on next use. */
+function persistAdminConfig(paths: HomePaths, config: ParleyConfig): void {
+  writeConfig(paths.config, config);
+}
+
+/**
+ * `GET /config` — full effective config (show/pull). Optional `?key=` returns a
+ * single dotted path (`{ key, value }`).
+ */
+function handleConfigGet(paths: HomePaths, res: http.ServerResponse, key: string | null): void {
+  let config: ParleyConfig;
+  try {
+    config = loadAdminConfig(paths);
+  } catch (err) {
+    sendJson(res, 500, { error: err instanceof Error ? err.message : String(err) });
+    return;
+  }
+  if (key === null || key === "") {
+    sendJson(res, 200, { config });
+    return;
+  }
+  try {
+    const hit = getConfigPath(config, key);
+    if (!hit.found) {
+      sendJson(res, 404, { error: `no such config key: ${key}` });
+      return;
+    }
+    sendJson(res, 200, { key, value: hit.value });
+  } catch (err) {
+    sendJson(res, 400, { error: err instanceof Error ? err.message : String(err) });
+  }
+}
+
+/**
+ * `PUT /config` — wholesale replace (push). Validates the entire body first;
+ * on failure nothing is written. Unknown keys are preserved and listed in
+ * `warnings` so the CLI can surface them without rejecting the push.
+ */
+function handleConfigPut(paths: HomePaths, res: http.ServerResponse, body: unknown): void {
+  let config: ParleyConfig;
+  try {
+    config = validateConfig(paths.config, body);
+  } catch (err) {
+    sendJson(res, 400, { error: err instanceof Error ? err.message : String(err) });
+    return;
+  }
+  const warnings = collectUnknownConfigKeys(config as Record<string, unknown>).map(
+    (k) => `unknown config key preserved: ${k}`,
+  );
+  try {
+    persistAdminConfig(paths, config);
+  } catch (err) {
+    sendJson(res, 500, { error: err instanceof Error ? err.message : String(err) });
+    return;
+  }
+  sendJson(res, 200, { config, warnings });
+}
+
+/**
+ * `POST /config/set` — set a dotted key. Validates the resulting whole config
+ * before write so an invalid value is rejected wholesale with the field named.
+ */
+function handleConfigSet(paths: HomePaths, res: http.ServerResponse, body: unknown): void {
+  if (!isRecord(body) || typeof body.key !== "string") {
+    sendJson(res, 400, { error: "key is required" });
+    return;
+  }
+  if (!("value" in body)) {
+    sendJson(res, 400, { error: "value is required" });
+    return;
+  }
+  const key = body.key;
+  let current: ParleyConfig;
+  try {
+    current = loadAdminConfig(paths);
+  } catch (err) {
+    sendJson(res, 500, { error: err instanceof Error ? err.message : String(err) });
+    return;
+  }
+  let next: Record<string, unknown>;
+  try {
+    next = setConfigPath(current as Record<string, unknown>, key, body.value);
+  } catch (err) {
+    sendJson(res, 400, { error: err instanceof Error ? err.message : String(err) });
+    return;
+  }
+  let validated: ParleyConfig;
+  try {
+    validated = validateConfig(paths.config, next);
+  } catch (err) {
+    sendJson(res, 400, { error: err instanceof Error ? err.message : String(err) });
+    return;
+  }
+  try {
+    persistAdminConfig(paths, validated);
+  } catch (err) {
+    sendJson(res, 500, { error: err instanceof Error ? err.message : String(err) });
+    return;
+  }
+  sendJson(res, 200, { config: validated, key, value: body.value });
+}
+
+/**
+ * `POST /config/unset` — remove a dotted key. Absent keys are 404; the write
+ * is skipped until the key is confirmed present.
+ */
+function handleConfigUnset(paths: HomePaths, res: http.ServerResponse, body: unknown): void {
+  if (!isRecord(body) || typeof body.key !== "string") {
+    sendJson(res, 400, { error: "key is required" });
+    return;
+  }
+  const key = body.key;
+  let current: ParleyConfig;
+  try {
+    current = loadAdminConfig(paths);
+  } catch (err) {
+    sendJson(res, 500, { error: err instanceof Error ? err.message : String(err) });
+    return;
+  }
+  let next: Record<string, unknown>;
+  try {
+    next = unsetConfigPath(current as Record<string, unknown>, key);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (message.startsWith("no such config key:")) {
+      sendJson(res, 404, { error: message });
+      return;
+    }
+    sendJson(res, 400, { error: message });
+    return;
+  }
+  let validated: ParleyConfig;
+  try {
+    // Unset can leave a required nested field missing (e.g. profiles.x.vendor);
+    // reject wholesale so the on-disk file never goes invalid.
+    validated = validateConfig(paths.config, next);
+  } catch (err) {
+    sendJson(res, 400, { error: err instanceof Error ? err.message : String(err) });
+    return;
+  }
+  try {
+    persistAdminConfig(paths, validated);
+  } catch (err) {
+    sendJson(res, 500, { error: err instanceof Error ? err.message : String(err) });
+    return;
+  }
+  sendJson(res, 200, { config: validated, key });
 }
 
 /**
@@ -1009,6 +1173,27 @@ function createHandler(
       if (method === "GET" && url.pathname === "/metrics") {
         handleMetrics(engine, res, url.searchParams);
         return;
+      }
+
+      // Config admin surface (#156): daemon's own parley.json via endpoints so
+      // local and remote daemons share the same CLI path (never touch the file).
+      if (segments[0] === "config") {
+        if (method === "GET" && segments.length === 1) {
+          handleConfigGet(paths, res, url.searchParams.get("key"));
+          return;
+        }
+        if (method === "PUT" && segments.length === 1) {
+          handleConfigPut(paths, res, await readBody(req));
+          return;
+        }
+        if (method === "POST" && segments.length === 2 && segments[1] === "set") {
+          handleConfigSet(paths, res, await readBody(req));
+          return;
+        }
+        if (method === "POST" && segments.length === 2 && segments[1] === "unset") {
+          handleConfigUnset(paths, res, await readBody(req));
+          return;
+        }
       }
 
       if (method === "GET" && url.pathname === "/events/stream") {

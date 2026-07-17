@@ -302,7 +302,11 @@ describe("parley child CLI (ADR-0011 / #110)", () => {
   });
 
   it("usage error when neither env nor child.json exists", async () => {
+    // Isolated cwd under /tmp so the hub walk cannot climb into a developer
+    // home that happens to hold a leftover .parley/child.json.
+    const emptyCwd = taskDir([{ sleep: 60_000 }]);
     const res = await runCli(["child", "task"], home, {
+      cwd: emptyCwd,
       extraEnv: { PARLEY_HUB_URL: "", PARLEY_TASK_ID: "" },
     });
     expect(res.code).toBe(2);
