@@ -39,7 +39,9 @@ describe("attempt-chain migration (#152)", () => {
     fs.rmSync(home, { recursive: true, force: true });
     home = fs.mkdtempSync(path.join(os.tmpdir(), "parley-attempt-mig-"));
 
-    const prev = openDatabaseUpTo(homePaths(home), SCHEMA_VERSION - 1);
+    // Version 18 is the schema just before the attempt-chain migration (#152);
+    // pinned absolute so later appended migrations don't shift this fixture.
+    const prev = openDatabaseUpTo(homePaths(home), 18);
     const colsBefore = prev
       .prepare("PRAGMA table_info(tasks)")
       .all()
