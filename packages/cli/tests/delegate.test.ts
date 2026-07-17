@@ -181,7 +181,26 @@ describe("eval_expected envelope field (#45)", () => {
       path.join(cwd, ".parley", "config.json"),
       JSON.stringify({ eval: { expected: true } }),
     );
-    const envelope = await completeEnvelope(["delegate", "-v", "fake", "--cwd", cwd, "do it"]);
+    // eval.expected turns the session_required gate on (#162): register first.
+    const anchor = { machine_id: "m", pid: 1, start_time: "t" };
+    const sess = await runCli(
+      ["session", "-v", "h", "-m", "m", "-e", "e", "--json"],
+      home,
+      {
+        cwd,
+        extraEnv: {
+          PARLEY_ANCESTRY_CHAIN: JSON.stringify([anchor]),
+          PARLEY_SESSION_ID: undefined,
+        },
+      },
+    );
+    expect(sess.code).toBe(0);
+    const envelope = await completeEnvelope(["delegate", "-v", "fake", "--cwd", cwd, "do it"], {
+      extraEnv: {
+        PARLEY_ANCESTRY_CHAIN: JSON.stringify([anchor]),
+        PARLEY_SESSION_ID: undefined,
+      },
+    });
     expect(envelope.eval_expected).toBe(true);
   });
 
@@ -714,16 +733,16 @@ describe("orchestrator session identity (#42)", () => {
     expect(row.orchestrator_session_id).toBe("orch-from-flag");
   });
 
-  it("rejects a missing session (no flag, no env), exit 2, no task created", async () => {
+  it("allows a missing session when evals are off (#162; free-form still works)", async () => {
     const cwd = taskDir(happyActions());
     const result = await runCli(["delegate", "-v", "fake", "--cwd", cwd, "x"], home, {
       extraEnv: { PARLEY_SESSION_ID: undefined },
     });
-    expect(result.code).toBe(2);
-    expect(result.stderr).toMatch(/session/);
-
-    const rows = JSON.parse((await runCli(["status", "--json"], home)).stdout);
-    expect(rows).toEqual([]);
+    expect(result.code).toBe(0);
+    const taskId = JSON.parse(result.stdout).task_id as string;
+    await waitForState(home, taskId, "completed");
+    const row = JSON.parse((await runCli(["status", taskId, "--json"], home)).stdout);
+    expect(row.orchestrator_session_id).toBeNull();
   });
 });
 

@@ -1,8 +1,10 @@
 import fs from "node:fs";
 import { parseArgs } from "../args.js";
+import { readLiveAncestryChain, resolveWorkspaceRoot } from "../ancestry.js";
 import { DaemonRequestError, daemonPost, ensureDaemon } from "../client.js";
 import { type CliContext, printJson } from "../context.js";
 import { UsageError } from "../errors.js";
+import { CODE_SESSION_REQUIRED } from "@useparley/daemon/session-binding.js";
 
 interface FixAck {
   task_id: string;
@@ -32,6 +34,7 @@ export async function runFix(ctx: CliContext, args: string[]): Promise<number> {
   const { positionals, flags } = parseArgs(args, {
     "--json": {},
     "--fresh": {},
+    "--session": { value: true },
   });
 
   const ref = positionals[0];
@@ -48,13 +51,34 @@ export async function runFix(ctx: CliContext, args: string[]): Promise<number> {
   }
 
   const fresh = flags["--fresh"] === true;
+  // Fix resolves orchestrator session fresh at its own spawn (#162).
+  const sessionFlag = flags["--session"];
+  const orchestratorSessionId =
+    typeof sessionFlag === "string" && sessionFlag !== ""
+      ? sessionFlag
+      : typeof ctx.env.PARLEY_SESSION_ID === "string" && ctx.env.PARLEY_SESSION_ID !== ""
+        ? ctx.env.PARLEY_SESSION_ID
+        : null;
+  const ancestryChain = readLiveAncestryChain(ctx.env);
+  const workspaceRoot = resolveWorkspaceRoot(process.cwd());
+
   const discovery = await ensureDaemon(ctx.paths, ctx.env);
   let ack: FixAck;
   try {
-    ack = await daemonPost<FixAck>(discovery, `/tasks/${encodeURIComponent(ref)}/fix`, {
+    const body: Record<string, unknown> = {
       prompt,
+      ancestry_chain: ancestryChain,
+      workspace_root: workspaceRoot,
       ...(fresh ? { fresh: true } : {}),
-    });
+    };
+    if (orchestratorSessionId !== null) {
+      body.orchestrator_session_id = orchestratorSessionId;
+    }
+    ack = await daemonPost<FixAck>(
+      discovery,
+      `/tasks/${encodeURIComponent(ref)}/fix`,
+      body,
+    );
   } catch (err) {
     if (err instanceof DaemonRequestError && err.status === 400) {
       // Distinct exit codes for retry gates so agent orchestrators can branch
@@ -66,6 +90,9 @@ export async function runFix(ctx: CliContext, args: string[]): Promise<number> {
       if (err.code === "reattempt_window_expired") {
         ctx.stderr(`error: ${err.message}\n`);
         return EXIT_REATTEMPT_WINDOW_EXPIRED;
+      }
+      if (err.code === CODE_SESSION_REQUIRED) {
+        throw new UsageError(`fix: ${err.message}`);
       }
       throw new UsageError(`fix: ${err.message}`);
     }

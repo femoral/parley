@@ -41,12 +41,17 @@ import {
   bumpTaskSeq,
   claimOldestPendingRunnerTask,
   currentSeq,
+  deleteSession,
   deleteTask,
+  getSession,
   getTask,
   getTaskBySeq,
   insertQaTurn,
+  insertSession,
   insertTask,
   isEventAcked,
+  listAllSessions,
+  listExpiredSessions,
   listExpiredTasks,
   listQaTurns,
   listSessions,
@@ -54,12 +59,15 @@ import {
   nextQuestionId,
   nextTaskId,
   resolveTask,
+  updateSession,
   updateTask,
   upsertEventAck,
   SETTLED_STATES,
   TERMINAL_STATES,
   type DatabaseHandle,
+  type ProcessAnchor,
   type QaTurnRow,
+  type SessionRow,
   type SessionSummary,
   type TaskPatch,
   type TaskRow,
@@ -68,6 +76,7 @@ import {
   materializeChildHub,
   materializeContext,
   readProjectClassification,
+  readEvalEnabled,
   readProjectTaskTypes,
   readResumeEnabled,
   readRetryMax,
@@ -86,6 +95,15 @@ import {
   reattemptWindowMessage,
   retryLimitMessage,
 } from "./retry.js";
+import {
+  CODE_SESSION_REQUIRED,
+  normalizeProvenance,
+  resolveSessionBinding,
+  sessionAmbiguousMessage,
+  sessionRequiredMessage,
+  snapshotFromSession,
+  type ProvenanceSnapshot,
+} from "./session-binding.js";
 import { taskLogDir } from "./discovery.js";
 import { resolveRubricForTask } from "./rubrics.js";
 import {
@@ -278,10 +296,21 @@ export interface DelegateRequest {
   effort: string | null;
   name: string | null;
   /**
-   * The orchestrator-run identity (`--session` / `PARLEY_SESSION_ID`) that
-   * spawned this task, so it can later be grouped with its sibling tasks.
+   * Explicit orchestrator session override (`--session` / `PARLEY_SESSION_ID`).
+   * Null when omitted — the daemon binds via ancestry / single-live fallback
+   * (#162). Free-form ids still stamp when evals are off.
    */
-  orchestratorSessionId: string;
+  orchestratorSessionId: string | null;
+  /**
+   * Caller's process-ancestry chain (self first) for session binding (#162).
+   * Empty/absent when the client cannot walk the table.
+   */
+  ancestryChain?: ProcessAnchor[];
+  /**
+   * Absolute workspace root the caller is operating in (#162). Used for
+   * single-live-session fallback and eval gating.
+   */
+  workspaceRoot?: string | null;
   /** The invocation directory: an explicit `--cwd`, else the caller's cwd. */
   cwd: string;
   /**
@@ -360,6 +389,43 @@ export interface FixRequest {
    * request behind the channel-matched preamble.
    */
   fresh?: boolean;
+  /**
+   * Explicit session override for this fix spawn (#162). Null/omitted ⇒ bind
+   * fresh via ancestry (does not inherit the parent's session id).
+   */
+  orchestratorSessionId?: string | null;
+  /** Caller's process-ancestry chain for fresh binding (#162). */
+  ancestryChain?: ProcessAnchor[];
+  /** Workspace root for single-live fallback / eval gate (#162). */
+  workspaceRoot?: string | null;
+}
+
+/** `parley session` registration request (#162). */
+export interface RegisterSessionRequest {
+  /** Required free-form harness (lowercased for grouping). */
+  harness: string;
+  /** Required free-form model (lowercased). */
+  model: string;
+  /** Required free-form effort (lowercased). */
+  effort: string;
+  /**
+   * Known session id to re-anchor, or null/omitted to allocate a fresh id.
+   * Unknown id is an error.
+   */
+  sessionId?: string | null;
+  /** Absolute workspace root this session is flying. */
+  workspaceRoot: string;
+  /** The registering process's own anchor (not the full chain). */
+  anchor: ProcessAnchor;
+}
+
+/** Inputs shared by delegate/fix/eval for session binding (#162). */
+export interface SessionBindInput {
+  explicitSessionId: string | null;
+  ancestryChain: ProcessAnchor[];
+  workspaceRoot: string | null;
+  /** Repo (or cwd) used to read `eval.enabled`. */
+  evalProjectRoot: string | null;
 }
 
 /**
@@ -506,6 +572,111 @@ export class TaskEngine {
    */
   listSessions(query?: string): SessionSummary[] {
     return listSessions(this.db, query);
+  }
+
+  /**
+   * Register or re-anchor an orchestrator session (#162).
+   * - No `sessionId` ⇒ allocate a fresh id and insert.
+   * - Known `sessionId` ⇒ re-anchor + update harness/model/effort/workspace.
+   * - Unknown `sessionId` ⇒ usage error.
+   * Values are lowercased for grouping. Does not rewrite past task/eval
+   * dual snapshots.
+   */
+  registerSession(request: RegisterSessionRequest): SessionRow {
+    const harness = normalizeProvenance(request.harness);
+    const model = normalizeProvenance(request.model);
+    const effort = normalizeProvenance(request.effort);
+    if (harness === "" || model === "" || effort === "") {
+      throw new DelegateError("session: harness, model, and effort are all required");
+    }
+    if (request.workspaceRoot === "" || request.workspaceRoot === null) {
+      throw new DelegateError("session: workspace_root is required");
+    }
+    const anchor = request.anchor;
+    if (
+      typeof anchor?.machine_id !== "string" ||
+      anchor.machine_id === "" ||
+      typeof anchor.pid !== "number" ||
+      !Number.isFinite(anchor.pid) ||
+      typeof anchor.start_time !== "string" ||
+      anchor.start_time === ""
+    ) {
+      throw new DelegateError(
+        "session: anchor must be { machine_id, pid, start_time }",
+      );
+    }
+
+    const existingId =
+      typeof request.sessionId === "string" && request.sessionId !== ""
+        ? request.sessionId
+        : null;
+
+    if (existingId !== null) {
+      const existing = getSession(this.db, existingId);
+      if (!existing) {
+        throw new DelegateError(`unknown session: ${existingId}`);
+      }
+      return updateSession(this.db, existingId, {
+        harness,
+        model,
+        effort,
+        workspace_root: request.workspaceRoot,
+        anchor,
+      });
+    }
+
+    // Fresh id: short, unique, free-form-friendly (matches historical session ids).
+    const id = `s${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+    return insertSession(this.db, {
+      id,
+      harness,
+      model,
+      effort,
+      workspace_root: request.workspaceRoot,
+      anchor,
+    });
+  }
+
+  /**
+   * Resolve orchestrator binding for a call (#162). Returns a provenance
+   * snapshot when a registered session binds, a free-form id when the caller
+   * overrode with an unregistered id, or null when unbound. Throws
+   * `session_required` when evals are on and nothing resolves; throws on
+   * ambiguity.
+   */
+  private bindOrchestrator(
+    input: SessionBindInput,
+  ): { snapshot: ProvenanceSnapshot | null; freeformId: string | null } {
+    const workspaceRoot = input.workspaceRoot ?? "";
+    const result = resolveSessionBinding({
+      explicitSessionId: input.explicitSessionId,
+      ancestryChain: input.ancestryChain,
+      workspaceRoot,
+      sessions: listAllSessions(this.db),
+    });
+
+    if (result.kind === "ambiguous") {
+      throw new DelegateError(
+        sessionAmbiguousMessage(workspaceRoot || "(unknown)", result.count),
+      );
+    }
+
+    let snapshot: ProvenanceSnapshot | null = null;
+    let freeformId: string | null = null;
+    if (result.kind === "bound") {
+      snapshot = snapshotFromSession(result.session);
+    } else if (result.kind === "freeform") {
+      freeformId = result.sessionId;
+    }
+
+    const evalsOn = readEvalEnabled(input.evalProjectRoot);
+    if (evalsOn && snapshot === null) {
+      // Free-form ids without registration lack harness/model/effort — not
+      // attributable enough when evals are on.
+      throw new DelegateError(sessionRequiredMessage(), CODE_SESSION_REQUIRED);
+    }
+
+    return { snapshot, freeformId };
   }
 
   get(id: string): TaskRow | undefined {
@@ -663,6 +834,19 @@ export class TaskEngine {
         throw new DelegateError(`unknown runner: ${request.runner} (known: ${list})`);
       }
     }
+
+    // Session binding (#162) before any worktree/row so session_required never
+    // leaves orphan state. Workspace root falls back to repo root of cwd.
+    const earlyRepo = repoRoot(request.cwd);
+    const workspaceRoot =
+      request.workspaceRoot ?? earlyRepo ?? path.resolve(request.cwd);
+    const { snapshot: orchSnapshot, freeformId: orchFreeform } = this.bindOrchestrator({
+      explicitSessionId: request.orchestratorSessionId,
+      ancestryChain: request.ancestryChain ?? [],
+      workspaceRoot,
+      evalProjectRoot: earlyRepo ?? request.cwd,
+    });
+    const orchSessionId = orchSnapshot?.session_id ?? orchFreeform;
     // A bad `--report-schema` is rejected before the task exists (spec §5): the
     // caller supplied it, so a non-schema is their mistake (→ exit 2).
     if (request.reportSchema !== null) {
@@ -825,7 +1009,10 @@ export class TaskEngine {
       repo,
       cwd: workingDir,
       prompt: request.prompt,
-      orchestrator_session_id: request.orchestratorSessionId,
+      orchestrator_session_id: orchSessionId,
+      orch_harness: orchSnapshot?.harness ?? null,
+      orch_model: orchSnapshot?.model ?? null,
+      orch_effort: orchSnapshot?.effort ?? null,
       worktree: worktreePath,
       branch,
       base_sha: baseSha,
@@ -912,6 +1099,18 @@ export class TaskEngine {
       throw new DelegateError(`failed to materialize task context: ${errorMessage(err)}`);
     }
 
+    // Fix resolves its orchestrator session fresh at its own spawn (#162) —
+    // not inherited from the parent. Attempt lineage is independent.
+    const workspaceRoot =
+      request.workspaceRoot ?? parent.repo ?? path.resolve(workingDir);
+    const { snapshot, freeformId } = this.bindOrchestrator({
+      explicitSessionId: request.orchestratorSessionId ?? null,
+      ancestryChain: request.ancestryChain ?? [],
+      workspaceRoot,
+      evalProjectRoot: parent.repo ?? workingDir,
+    });
+    const orchSessionId = snapshot?.session_id ?? freeformId;
+
     const row = insertTask(this.db, {
       id,
       name: parent.name,
@@ -923,7 +1122,10 @@ export class TaskEngine {
       repo: parent.repo,
       cwd: workingDir,
       prompt: request.prompt,
-      orchestrator_session_id: parent.orchestrator_session_id ?? "unknown",
+      orchestrator_session_id: orchSessionId,
+      orch_harness: snapshot?.harness ?? null,
+      orch_model: snapshot?.model ?? null,
+      orch_effort: snapshot?.effort ?? null,
       worktree: parent.worktree,
       branch: parent.branch,
       base_sha: parent.base_sha,
@@ -1128,6 +1330,14 @@ export class TaskEngine {
       deleteTask(this.db, task.id);
       tasks.push(entry);
       freed += bytes;
+    }
+
+    // Sessions share the same retention window (#162): drop rows older than
+    // the cutoff. Dry-run still only reports tasks (session rows are tiny).
+    if (!dryRun) {
+      for (const session of listExpiredSessions(this.db, cutoffIso)) {
+        deleteSession(this.db, session.id);
+      }
     }
 
     return {
@@ -1441,14 +1651,23 @@ export class TaskEngine {
   }
 
   /**
-   * Record a structured rubric evaluation against a task (#157). Resolves the
-   * task's type → rubric (project override, then shipped, then generic),
-   * validates answers cover criterion ids exactly, computes score + baseline,
-   * and persists answers + rubric id/version + score + baseline + feedback.
-   * A later call overwrites the previous eval. Throws `DelegateError`
-   * (→ exit 2) for unknown ref, invalid answers, or bad project rubrics.
+   * Record a structured rubric evaluation against a task (#157 / #162).
+   * Resolves the task's type → rubric, validates answers, computes score +
+   * baseline, and persists answers + rubric id/version + score + baseline +
+   * feedback. Separately snapshots the *judging* session's provenance at eval
+   * time (dual snapshot — never rewrites spawn-time orch_* columns). A later
+   * call overwrites the previous eval (including judge snapshot).
    */
-  evalTask(ref: string, answers: Record<string, boolean>, feedback: string): TaskRow {
+  evalTask(
+    ref: string,
+    answers: Record<string, boolean>,
+    feedback: string,
+    bind?: {
+      explicitSessionId?: string | null;
+      ancestryChain?: ProcessAnchor[];
+      workspaceRoot?: string | null;
+    },
+  ): TaskRow {
     const task = resolveTask(this.db, ref);
     if (!task) throw new DelegateError(`no such task: ${ref}`);
 
@@ -1465,6 +1684,16 @@ export class TaskEngine {
       throw new DelegateError(err instanceof Error ? err.message : String(err));
     }
 
+    // Judge binding (#162): independent of the task's spawn-time session.
+    const workspaceRoot =
+      bind?.workspaceRoot ?? task.repo ?? (task.cwd !== null ? path.resolve(task.cwd) : "");
+    const { snapshot, freeformId } = this.bindOrchestrator({
+      explicitSessionId: bind?.explicitSessionId ?? null,
+      ancestryChain: bind?.ancestryChain ?? [],
+      workspaceRoot,
+      evalProjectRoot: task.repo ?? task.cwd,
+    });
+
     const result = scoreRubric(rubric, answers);
     updateTask(this.db, task.id, {
       eval_score: result.score,
@@ -1473,6 +1702,10 @@ export class TaskEngine {
       eval_answers: JSON.stringify(answers),
       eval_rubric: rubric.id,
       eval_rubric_version: rubric.version,
+      eval_session_id: snapshot?.session_id ?? freeformId,
+      eval_harness: snapshot?.harness ?? null,
+      eval_model: snapshot?.model ?? null,
+      eval_effort: snapshot?.effort ?? null,
     });
     return getTask(this.db, task.id)!;
   }

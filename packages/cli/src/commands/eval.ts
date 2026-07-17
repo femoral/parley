@@ -1,7 +1,9 @@
 import { parseArgs } from "../args.js";
+import { readLiveAncestryChain, resolveWorkspaceRoot } from "../ancestry.js";
 import { DaemonRequestError, daemonPost, ensureDaemon } from "../client.js";
 import { type CliContext, printJson } from "../context.js";
 import { UsageError } from "../errors.js";
+import { CODE_SESSION_REQUIRED } from "@useparley/daemon/session-binding.js";
 
 interface EvalAck {
   task_id: string;
@@ -24,6 +26,7 @@ export async function runEval(ctx: CliContext, args: string[]): Promise<number> 
     "--answers": { value: true },
     "--score": { value: true },
     "--feedback": { value: true },
+    "--session": { value: true },
     "--json": {},
   });
 
@@ -75,16 +78,40 @@ export async function runEval(ctx: CliContext, args: string[]): Promise<number> 
     throw new UsageError('eval: feedback is required (--feedback "<text>")');
   }
 
+  // Judge binding (#162): independent of the task's spawn-time session.
+  const sessionFlag = flags["--session"];
+  const orchestratorSessionId =
+    typeof sessionFlag === "string" && sessionFlag !== ""
+      ? sessionFlag
+      : typeof ctx.env.PARLEY_SESSION_ID === "string" && ctx.env.PARLEY_SESSION_ID !== ""
+        ? ctx.env.PARLEY_SESSION_ID
+        : null;
+  const ancestryChain = readLiveAncestryChain(ctx.env);
+  const workspaceRoot = resolveWorkspaceRoot(process.cwd());
+
   const discovery = await ensureDaemon(ctx.paths, ctx.env);
   let ack: EvalAck;
   try {
-    ack = await daemonPost<EvalAck>(discovery, `/tasks/${encodeURIComponent(ref)}/eval`, {
+    const body: Record<string, unknown> = {
       answers,
       feedback,
-    });
+      ancestry_chain: ancestryChain,
+      workspace_root: workspaceRoot,
+    };
+    if (orchestratorSessionId !== null) {
+      body.orchestrator_session_id = orchestratorSessionId;
+    }
+    ack = await daemonPost<EvalAck>(
+      discovery,
+      `/tasks/${encodeURIComponent(ref)}/eval`,
+      body,
+    );
   } catch (err) {
-    // No such task / bad answers are caller mistakes (exit 2).
+    // No such task / bad answers / session_required are caller mistakes (exit 2).
     if (err instanceof DaemonRequestError && (err.status === 400 || err.status === 404)) {
+      if (err.code === CODE_SESSION_REQUIRED) {
+        throw new UsageError(`eval: ${err.message}`);
+      }
       throw new UsageError(`eval: ${err.message}`);
     }
     throw err;

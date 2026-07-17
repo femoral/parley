@@ -1,11 +1,13 @@
 import fs from "node:fs";
 import path from "node:path";
 import { parseArgs } from "../args.js";
+import { readLiveAncestryChain, resolveWorkspaceRoot } from "../ancestry.js";
 import { DaemonRequestError, daemonPost, ensureDaemon } from "../client.js";
 import { type CliContext, printJson } from "../context.js";
 import { UsageError } from "../errors.js";
 import { parseDuration } from "@useparley/core";
 import { SANDBOX_MODES, isSandboxMode } from "@useparley/daemon/adapters/types.js";
+import { CODE_SESSION_REQUIRED } from "@useparley/daemon/session-binding.js";
 
 interface DelegateAck {
   task_id: string;
@@ -67,18 +69,17 @@ export async function runDelegate(ctx: CliContext, args: string[]): Promise<numb
   if (vendor === null && profile === null) {
     throw new UsageError("delegate: a vendor or --profile is required");
   }
-  // Orchestrator-run identity, so every task this run spawns can be grouped
-  // later. `--session` overrides `PARLEY_SESSION_ID`; neither set is a usage
-  // error (exit 2) — no silent ungrouped task. Harness-agnostic on purpose: a
-  // harness maps its own session concept onto `PARLEY_SESSION_ID` (see skill).
+  // Orchestrator-run identity (#162): `--session` overrides `PARLEY_SESSION_ID`.
+  // When neither is set the daemon binds via process ancestry (or single-live
+  // fallback). When evals are on and nothing resolves, the daemon returns
+  // `session_required`. Evals off ⇒ session optional.
   const sessionFlag = flags["--session"];
   const orchestratorSessionId =
-    typeof sessionFlag === "string" ? sessionFlag : ctx.env.PARLEY_SESSION_ID;
-  if (typeof orchestratorSessionId !== "string" || orchestratorSessionId === "") {
-    throw new UsageError(
-      "delegate: an orchestrator session is required (--session or PARLEY_SESSION_ID)",
-    );
-  }
+    typeof sessionFlag === "string" && sessionFlag !== ""
+      ? sessionFlag
+      : typeof ctx.env.PARLEY_SESSION_ID === "string" && ctx.env.PARLEY_SESSION_ID !== ""
+        ? ctx.env.PARLEY_SESSION_ID
+        : null;
   // An unanswered question at this timeout stalls the task (spec §2). Omitted
   // means the daemon default (30m).
   let answerTimeoutMs: number | null = null;
@@ -201,12 +202,16 @@ export async function runDelegate(ctx: CliContext, args: string[]): Promise<numb
   }
   const dryRun = flags["--dry-run"] === true;
 
+  const ancestryChain = readLiveAncestryChain(ctx.env);
+  const workspaceRoot = resolveWorkspaceRoot(cwd);
+
   const discovery = await ensureDaemon(ctx.paths, ctx.env);
   let ack: DelegateAck;
   try {
     const body: Record<string, unknown> = {
       prompt,
-      orchestrator_session_id: orchestratorSessionId,
+      ancestry_chain: ancestryChain,
+      workspace_root: workspaceRoot,
       model: typeof flags["--model"] === "string" ? flags["--model"] : null,
       effort: typeof flags["--effort"] === "string" ? flags["--effort"] : null,
       name: typeof flags["--name"] === "string" ? flags["--name"] : null,
@@ -221,6 +226,9 @@ export async function runDelegate(ctx: CliContext, args: string[]): Promise<numb
       type,
       dry_run: dryRun,
     };
+    if (orchestratorSessionId !== null) {
+      body.orchestrator_session_id = orchestratorSessionId;
+    }
     if (vendor !== null) body.vendor = vendor;
     if (profile !== null) body.profile = profile;
     if (sandbox !== undefined) body.sandbox = sandbox;
@@ -228,8 +236,13 @@ export async function runDelegate(ctx: CliContext, args: string[]): Promise<numb
     if (typeof flags["--runner"] === "string") body.runner = flags["--runner"];
     ack = await daemonPost<DelegateAck>(discovery, "/tasks", body);
   } catch (err) {
-    // Daemon-side request rejections (unknown vendor, bad cwd) are usage errors.
+    // Daemon-side request rejections (unknown vendor, bad cwd, session_required)
+    // are usage errors (exit 2). session_required keeps its stable code in the
+    // message body for agent branching.
     if (err instanceof DaemonRequestError && err.status === 400) {
+      if (err.code === CODE_SESSION_REQUIRED) {
+        throw new UsageError(`delegate: ${err.message}`);
+      }
       throw new UsageError(`delegate: ${err.message}`);
     }
     throw err;

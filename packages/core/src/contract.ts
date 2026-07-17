@@ -198,6 +198,26 @@ export interface TaskRow {
    * Provenance of {@link effort}: same vocabulary as {@link model_source} (#154).
    */
   effort_source?: string | null;
+  /**
+   * Spawn-time orchestrator harness snapshot (#162). Null when unbound.
+   * Optional so older fixtures remain assignable.
+   */
+  orch_harness?: string | null;
+  /** Spawn-time orchestrator model snapshot (#162). */
+  orch_model?: string | null;
+  /** Spawn-time orchestrator effort snapshot (#162). */
+  orch_effort?: string | null;
+  /**
+   * Judging session id at eval time (#162). Null until a structured eval is
+   * recorded with a bound session.
+   */
+  eval_session_id?: string | null;
+  /** Judge harness snapshot at eval time (#162). */
+  eval_harness?: string | null;
+  /** Judge model snapshot at eval time (#162). */
+  eval_model?: string | null;
+  /** Judge effort snapshot at eval time (#162). */
+  eval_effort?: string | null;
 }
 
 /** `GET /health` — daemon liveness plus its package version (spec stability §). */

@@ -62,6 +62,13 @@ function row(partial: Partial<TaskRow> & { id: string }): TaskRow {
     launch_command: null,
     model_source: null,
     effort_source: null,
+    orch_harness: null,
+    orch_model: null,
+    orch_effort: null,
+    eval_session_id: null,
+    eval_harness: null,
+    eval_model: null,
+    eval_effort: null,
     ...partial,
   };
 }

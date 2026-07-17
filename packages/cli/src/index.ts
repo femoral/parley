@@ -20,6 +20,7 @@ import { runUi } from "./commands/ui.js";
 import { runWatch } from "./commands/watch.js";
 import { runPrompt } from "./commands/prompt.js";
 import { runLint } from "./commands/lint.js";
+import { runSession } from "./commands/session.js";
 import { VERSION_LINE } from "./version.js";
 
 const HELP = `parley — delegate tasks to agent CLIs
@@ -112,6 +113,10 @@ Usage:
                             PROMPT.md instead (never injected into children).
   parley lint [dir]             Validate project .parley surfaces (config,
                             classification, rubrics). Exit 1 on error (CI).
+  parley session -v <harness> -m <model> -e <effort> [-s <id>]
+                            Register the orchestrating session (provenance for
+                            tasks/evals). Fresh id printed when -s omitted;
+                            known -s re-anchors after crash/restart.
   parley skills install         Install bundled orchestrator skill(s)
     --layout claude|agents|<path>
                               Vendor convention, or a custom directory path
@@ -196,6 +201,8 @@ export async function run(argv: string[], ctx: CliContext): Promise<number> {
       return runPrompt(ctx, rest);
     case "lint":
       return runLint(ctx, rest);
+    case "session":
+      return runSession(ctx, rest);
     case "skills":
       return runSkills(ctx, rest);
     case "child":

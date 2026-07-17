@@ -176,6 +176,43 @@ function optionalString(value: unknown): string | null {
   return typeof value === "string" && value !== "" ? value : null;
 }
 
+/**
+ * Parse an optional `ancestry_chain` body field (#162). Returns `[]` when
+ * absent/null; `undefined` when present but malformed (caller → 400).
+ */
+function parseAncestryChain(
+  value: unknown,
+): import("./db.js").ProcessAnchor[] | undefined {
+  if (value === undefined || value === null) return [];
+  if (!Array.isArray(value)) return undefined;
+  const out: import("./db.js").ProcessAnchor[] = [];
+  for (const entry of value) {
+    if (!isRecord(entry)) return undefined;
+    if (typeof entry.machine_id !== "string" || entry.machine_id === "") return undefined;
+    if (typeof entry.pid !== "number" || !Number.isFinite(entry.pid)) return undefined;
+    if (typeof entry.start_time !== "string" || entry.start_time === "") return undefined;
+    out.push({
+      machine_id: entry.machine_id,
+      pid: entry.pid,
+      start_time: entry.start_time,
+    });
+  }
+  return out;
+}
+
+/** Parse a single process anchor object (#162). */
+function parseAnchor(value: unknown): import("./db.js").ProcessAnchor | null {
+  if (!isRecord(value)) return null;
+  if (typeof value.machine_id !== "string" || value.machine_id === "") return null;
+  if (typeof value.pid !== "number" || !Number.isFinite(value.pid)) return null;
+  if (typeof value.start_time !== "string" || value.start_time === "") return null;
+  return {
+    machine_id: value.machine_id,
+    pid: value.pid,
+    start_time: value.start_time,
+  };
+}
+
 /** `POST /tasks` — the delegate endpoint. */
 function handleDelegate(engine: TaskEngine, res: http.ServerResponse, body: unknown): void {
   if (!isRecord(body)) {
@@ -196,14 +233,24 @@ function handleDelegate(engine: TaskEngine, res: http.ServerResponse, body: unkn
     sendJson(res, 400, { error: "vendor or profile is required" });
     return;
   }
-  if (typeof orchestratorSessionId !== "string" || orchestratorSessionId === "") {
-    sendJson(res, 400, { error: "orchestrator_session_id is required" });
-    return;
-  }
+  // Session id is optional on the wire (#162): daemon binds via ancestry /
+  // single-live fallback, and gates with session_required only when evals on.
+  const orchSession =
+    typeof orchestratorSessionId === "string" && orchestratorSessionId !== ""
+      ? orchestratorSessionId
+      : null;
   if (typeof cwd !== "string" || cwd === "") {
     sendJson(res, 400, { error: "cwd is required" });
     return;
   }
+  const ancestryChain = parseAncestryChain(body.ancestry_chain);
+  if (ancestryChain === undefined) {
+    sendJson(res, 400, {
+      error: "ancestry_chain must be an array of { machine_id, pid, start_time }",
+    });
+    return;
+  }
+  const workspaceRoot = optionalString(body.workspace_root);
   // Posture: null means "not specified" so the engine can apply profile then
   // ADR-0006 defaults. An unknown mode is a client mistake (→ 400 → exit 2).
   let sandbox: SandboxMode | null = null;
@@ -284,7 +331,9 @@ function handleDelegate(engine: TaskEngine, res: http.ServerResponse, body: unkn
       vendor,
       profile,
       cwd,
-      orchestratorSessionId,
+      orchestratorSessionId: orchSession,
+      ancestryChain,
+      workspaceRoot,
       model: optionalString(body.model),
       effort: optionalString(body.effort),
       name: optionalString(body.name),
@@ -308,7 +357,10 @@ function handleDelegate(engine: TaskEngine, res: http.ServerResponse, body: unkn
     sendJson(res, 201, { task_id: task.id, name: task.name, state: task.state, seq: task.seq });
   } catch (err) {
     if (err instanceof DelegateError) {
-      sendJson(res, 400, { error: err.message });
+      sendJson(res, 400, {
+        error: err.message,
+        ...(err.code !== undefined ? { code: err.code } : {}),
+      });
       return;
     }
     throw err;
@@ -962,8 +1014,19 @@ function handleEval(
     sendJson(res, 400, { error: "feedback is required" });
     return;
   }
+  const ancestryChain = parseAncestryChain(body.ancestry_chain);
+  if (ancestryChain === undefined) {
+    sendJson(res, 400, {
+      error: "ancestry_chain must be an array of { machine_id, pid, start_time }",
+    });
+    return;
+  }
   try {
-    const row = engine.evalTask(ref, answers as Record<string, boolean>, feedback);
+    const row = engine.evalTask(ref, answers as Record<string, boolean>, feedback, {
+      explicitSessionId: optionalString(body.orchestrator_session_id),
+      ancestryChain,
+      workspaceRoot: optionalString(body.workspace_root),
+    });
     sendJson(res, 200, {
       task_id: row.id,
       name: row.name,
@@ -973,10 +1036,17 @@ function handleEval(
       eval_baseline: row.eval_baseline,
       eval_rubric: row.eval_rubric,
       eval_rubric_version: row.eval_rubric_version,
+      eval_session_id: row.eval_session_id,
+      eval_harness: row.eval_harness,
+      eval_model: row.eval_model,
+      eval_effort: row.eval_effort,
     });
   } catch (err) {
     if (err instanceof DelegateError) {
-      sendJson(res, 400, { error: err.message });
+      sendJson(res, 400, {
+        error: err.message,
+        ...(err.code !== undefined ? { code: err.code } : {}),
+      });
       return;
     }
     throw err;
@@ -1021,11 +1091,23 @@ function handleFix(
     sendJson(res, 400, { error: "fresh must be a boolean" });
     return;
   }
+  const ancestryChain = parseAncestryChain(body.ancestry_chain);
+  if (ancestryChain === undefined) {
+    sendJson(res, 400, {
+      error: "ancestry_chain must be an array of { machine_id, pid, start_time }",
+    });
+    return;
+  }
+  const orchSession = optionalString(body.orchestrator_session_id);
+  const workspaceRoot = optionalString(body.workspace_root);
   try {
     const task = engine.fix({
       parentRef: ref,
       prompt,
       fresh: body.fresh === true,
+      orchestratorSessionId: orchSession,
+      ancestryChain,
+      workspaceRoot,
     });
     sendJson(res, 201, {
       task_id: task.id,
@@ -1039,11 +1121,71 @@ function handleFix(
   } catch (err) {
     if (err instanceof DelegateError) {
       // Include stable `code` when present so the CLI can map retry gates
-      // (#158) to distinct exit codes without parsing message prose.
+      // (#158) and session_required (#162) without parsing message prose.
       sendJson(res, 400, {
         error: err.message,
         ...(err.code !== undefined ? { code: err.code } : {}),
       });
+      return;
+    }
+    throw err;
+  }
+}
+
+/**
+ * `POST /sessions` — register or re-anchor an orchestrator session (#162).
+ * Body: `{ harness, model, effort, workspace_root, anchor, session_id? }`.
+ * Fresh id when session_id omitted; known id re-anchors; unknown id → 400.
+ */
+function handleRegisterSession(
+  engine: TaskEngine,
+  res: http.ServerResponse,
+  body: unknown,
+): void {
+  if (!isRecord(body)) {
+    sendJson(res, 400, { error: "request body must be a JSON object" });
+    return;
+  }
+  const harness = optionalString(body.harness);
+  const model = optionalString(body.model);
+  const effort = optionalString(body.effort);
+  const workspaceRoot = optionalString(body.workspace_root);
+  if (harness === null || model === null || effort === null) {
+    sendJson(res, 400, { error: "harness, model, and effort are all required" });
+    return;
+  }
+  if (workspaceRoot === null) {
+    sendJson(res, 400, { error: "workspace_root is required" });
+    return;
+  }
+  const anchor = parseAnchor(body.anchor);
+  if (anchor === null) {
+    sendJson(res, 400, {
+      error: "anchor is required ({ machine_id, pid, start_time })",
+    });
+    return;
+  }
+  try {
+    const session = engine.registerSession({
+      harness,
+      model,
+      effort,
+      workspaceRoot,
+      anchor,
+      sessionId: optionalString(body.session_id),
+    });
+    sendJson(res, 201, {
+      session_id: session.id,
+      harness: session.harness,
+      model: session.model,
+      effort: session.effort,
+      workspace_root: session.workspace_root,
+      created_at: session.created_at,
+      updated_at: session.updated_at,
+    });
+  } catch (err) {
+    if (err instanceof DelegateError) {
+      sendJson(res, 400, { error: err.message });
       return;
     }
     throw err;
@@ -1289,10 +1431,17 @@ function createHandler(
 
       // `GET /sessions` — historical orchestrator sessions for the roster
       // selector (#88). Optional `?q=` filters by id substring.
-      if (method === "GET" && url.pathname === "/sessions") {
-        const q = url.searchParams.get("q");
-        sendJson(res, 200, { sessions: engine.listSessions(q ?? undefined) });
-        return;
+      // `POST /sessions` — register / re-anchor a live orchestrator session (#162).
+      if (url.pathname === "/sessions") {
+        if (method === "GET") {
+          const q = url.searchParams.get("q");
+          sendJson(res, 200, { sessions: engine.listSessions(q ?? undefined) });
+          return;
+        }
+        if (method === "POST") {
+          handleRegisterSession(engine, res, await readBody(req));
+          return;
+        }
       }
 
       // `GET /metrics` — task/eval/token/duration aggregates (#118).

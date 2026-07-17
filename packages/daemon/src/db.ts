@@ -179,6 +179,26 @@ export interface TaskRow {
    * unknown (#154).
    */
   effort_source: string | null;
+  /**
+   * Spawn-time orchestrator harness snapshot (#162). Null when no registered
+   * session was bound; never rewritten by later session updates.
+   */
+  orch_harness: string | null;
+  /** Spawn-time orchestrator model snapshot (#162). */
+  orch_model: string | null;
+  /** Spawn-time orchestrator effort snapshot (#162). */
+  orch_effort: string | null;
+  /**
+   * Judging session id at eval time (#162). Null until a structured eval is
+   * recorded with a bound session; independent of spawn-time session.
+   */
+  eval_session_id: string | null;
+  /** Judge harness snapshot at eval time (#162). */
+  eval_harness: string | null;
+  /** Judge model snapshot at eval time (#162). */
+  eval_model: string | null;
+  /** Judge effort snapshot at eval time (#162). */
+  eval_effort: string | null;
 }
 
 /** Fields the daemon writes when creating a task. */
@@ -209,8 +229,19 @@ export interface NewTask {
   repo: string | null;
   cwd: string;
   prompt: string;
-  /** The orchestrator-run identity that spawned this task (`--session` / `PARLEY_SESSION_ID`). */
-  orchestrator_session_id: string;
+  /**
+   * The orchestrator-run identity that spawned this task (`parley session`,
+   * ancestry binding, `--session` / `PARLEY_SESSION_ID`). Null when evals are
+   * off and no session resolved (#162).
+   */
+  orchestrator_session_id: string | null;
+  /**
+   * Spawn-time orchestrator provenance snapshots from the bound session (#162).
+   * Null when unbound / free-form id with no registration.
+   */
+  orch_harness?: string | null;
+  orch_model?: string | null;
+  orch_effort?: string | null;
   worktree: string | null;
   branch: string | null;
   base_sha: string | null;
@@ -384,6 +415,29 @@ const MIGRATIONS: string[] = [
    ALTER TABLE tasks ADD COLUMN eval_rubric TEXT;
    ALTER TABLE tasks ADD COLUMN eval_rubric_version INTEGER;
    ALTER TABLE tasks ADD COLUMN eval_baseline INTEGER;`,
+  // #162: orchestrator session provenance — registered sessions with process
+  // ancestry anchors; dual snapshots on tasks (spawn-time orchestrator +
+  // eval-time judge) so session updates never rewrite history.
+  `CREATE TABLE sessions (
+     id              TEXT PRIMARY KEY,
+     harness         TEXT NOT NULL,
+     model           TEXT NOT NULL,
+     effort          TEXT NOT NULL,
+     workspace_root  TEXT NOT NULL,
+     anchor_machine  TEXT NOT NULL,
+     anchor_pid      INTEGER NOT NULL,
+     anchor_start    TEXT NOT NULL,
+     created_at      TEXT NOT NULL,
+     updated_at      TEXT NOT NULL
+   );
+   CREATE INDEX sessions_workspace ON sessions(workspace_root);
+   ALTER TABLE tasks ADD COLUMN orch_harness TEXT;
+   ALTER TABLE tasks ADD COLUMN orch_model TEXT;
+   ALTER TABLE tasks ADD COLUMN orch_effort TEXT;
+   ALTER TABLE tasks ADD COLUMN eval_session_id TEXT;
+   ALTER TABLE tasks ADD COLUMN eval_harness TEXT;
+   ALTER TABLE tasks ADD COLUMN eval_model TEXT;
+   ALTER TABLE tasks ADD COLUMN eval_effort TEXT;`,
 ];
 
 /** How many schema migrations have been applied — equals `PRAGMA user_version` after open. */
@@ -464,7 +518,9 @@ const TASK_COLUMNS = `id, name, vendor, model, effort, profile, runner, repo, st
    answer_timeout_ms, report_schema, seq, orchestrator_session_id, eval_score, eval_feedback,
    eval_answers, eval_rubric, eval_rubric_version, eval_baseline,
    size, difficulty, type, parent_task_id, attempt, resumed, cached_input_tokens,
-   launch_command, model_source, effort_source`;
+   launch_command, model_source, effort_source,
+   orch_harness, orch_model, orch_effort,
+   eval_session_id, eval_harness, eval_model, eval_effort`;
 
 /** Cast a node:sqlite row result to a domain shape (driver types are untyped maps). */
 function asRow<T>(row: unknown): T {
@@ -680,8 +736,9 @@ export function insertTask(db: DatabaseHandle, task: NewTask): TaskRow {
        (id, name, vendor, model, effort, profile, runner, repo, state, created_at, updated_at,
         cwd, prompt, session_id, orchestrator_session_id, worktree, branch, base_sha, sandbox,
         network, answer_timeout_ms, report_schema, size, difficulty, type,
-        parent_task_id, attempt, resumed, model_source, effort_source)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        parent_task_id, attempt, resumed, model_source, effort_source,
+        orch_harness, orch_model, orch_effort)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     task.id,
     task.name,
@@ -712,6 +769,9 @@ export function insertTask(db: DatabaseHandle, task: NewTask): TaskRow {
     resumed,
     task.model_source ?? null,
     task.effort_source ?? null,
+    task.orch_harness ?? null,
+    task.orch_model ?? null,
+    task.orch_effort ?? null,
   );
   return getTask(db, task.id)!;
 }
@@ -806,6 +866,13 @@ export type TaskPatch = Partial<
     | "model_source"
     | "effort_source"
     | "launch_command"
+    | "orch_harness"
+    | "orch_model"
+    | "orch_effort"
+    | "eval_session_id"
+    | "eval_harness"
+    | "eval_model"
+    | "eval_effort"
   >
 >;
 
@@ -931,4 +998,154 @@ export function listExpiredTasks(db: DatabaseHandle, cutoffIso: string): TaskRow
     )
     .all(...TERMINAL_STATES, cutoffIso)
     .map((row) => asRow<TaskRow>(row));
+}
+
+// ---------------------------------------------------------------------------
+// Orchestrator sessions (#162)
+// ---------------------------------------------------------------------------
+
+/**
+ * A process-ancestry anchor: machine-id namespaces remote daemons; pid +
+ * start-time defeats pid recycling. Walked client-side; stored + matched
+ * daemon-side.
+ */
+export interface ProcessAnchor {
+  machine_id: string;
+  pid: number;
+  /** Opaque start-time token from the client process table (e.g. /proc starttime). */
+  start_time: string;
+}
+
+/** A registered orchestrator session row (#162). */
+export interface SessionRow {
+  id: string;
+  harness: string;
+  model: string;
+  effort: string;
+  workspace_root: string;
+  anchor_machine: string;
+  anchor_pid: number;
+  anchor_start: string;
+  created_at: string;
+  updated_at: string;
+}
+
+const SESSION_COLUMNS = `id, harness, model, effort, workspace_root,
+   anchor_machine, anchor_pid, anchor_start, created_at, updated_at`;
+
+/** Fetch one registered session by id. */
+export function getSession(db: DatabaseHandle, id: string): SessionRow | undefined {
+  const row = db.prepare(`SELECT ${SESSION_COLUMNS} FROM sessions WHERE id = ?`).get(id);
+  return row === undefined ? undefined : asRow<SessionRow>(row);
+}
+
+/** All registered sessions for a workspace root (live set for fallback). */
+export function listSessionsForWorkspace(
+  db: DatabaseHandle,
+  workspaceRoot: string,
+): SessionRow[] {
+  return db
+    .prepare(
+      `SELECT ${SESSION_COLUMNS} FROM sessions
+       WHERE workspace_root = ?
+       ORDER BY updated_at DESC, id ASC`,
+    )
+    .all(workspaceRoot)
+    .map((row) => asRow<SessionRow>(row));
+}
+
+/** Every registered session (for ancestry matching across workspaces). */
+export function listAllSessions(db: DatabaseHandle): SessionRow[] {
+  return db
+    .prepare(`SELECT ${SESSION_COLUMNS} FROM sessions ORDER BY updated_at DESC, id ASC`)
+    .all()
+    .map((row) => asRow<SessionRow>(row));
+}
+
+/**
+ * Insert a new orchestrator session. Caller allocates `id` (fresh or re-anchor
+ * path). Anchor is the registering process's own triple.
+ */
+export function insertSession(
+  db: DatabaseHandle,
+  session: {
+    id: string;
+    harness: string;
+    model: string;
+    effort: string;
+    workspace_root: string;
+    anchor: ProcessAnchor;
+  },
+): SessionRow {
+  const now = new Date().toISOString();
+  db.prepare(
+    `INSERT INTO sessions
+       (id, harness, model, effort, workspace_root,
+        anchor_machine, anchor_pid, anchor_start, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    session.id,
+    session.harness,
+    session.model,
+    session.effort,
+    session.workspace_root,
+    session.anchor.machine_id,
+    session.anchor.pid,
+    session.anchor.start_time,
+    now,
+    now,
+  );
+  return getSession(db, session.id)!;
+}
+
+/**
+ * Re-anchor an existing session and/or update harness/model/effort (#162).
+ * Never mutates task dual-snapshot columns.
+ */
+export function updateSession(
+  db: DatabaseHandle,
+  id: string,
+  patch: {
+    harness: string;
+    model: string;
+    effort: string;
+    workspace_root: string;
+    anchor: ProcessAnchor;
+  },
+): SessionRow {
+  db.prepare(
+    `UPDATE sessions SET
+       harness = ?, model = ?, effort = ?, workspace_root = ?,
+       anchor_machine = ?, anchor_pid = ?, anchor_start = ?,
+       updated_at = ?
+     WHERE id = ?`,
+  ).run(
+    patch.harness,
+    patch.model,
+    patch.effort,
+    patch.workspace_root,
+    patch.anchor.machine_id,
+    patch.anchor.pid,
+    patch.anchor.start_time,
+    new Date().toISOString(),
+    id,
+  );
+  return getSession(db, id)!;
+}
+
+/** Sessions whose `updated_at` is at or before `cutoffIso` (retention expiry). */
+export function listExpiredSessions(db: DatabaseHandle, cutoffIso: string): SessionRow[] {
+  return db
+    .prepare(
+      `SELECT ${SESSION_COLUMNS} FROM sessions
+       WHERE updated_at <= ?
+       ORDER BY updated_at ASC, id ASC`,
+    )
+    .all(cutoffIso)
+    .map((row) => asRow<SessionRow>(row));
+}
+
+/** Permanently delete a registered session row. */
+export function deleteSession(db: DatabaseHandle, id: string): void {
+  db.prepare(`DELETE FROM sessions WHERE id = ?`).run(id);
 }
