@@ -78,15 +78,15 @@ describe("Inspector header (#68)", () => {
   });
 });
 
-describe("Inspector's corner flourishes follow the settings bar's Ornaments toggle (#70)", () => {
-  it("omits flourishes by default", () => {
+describe("Inspector never draws corner flourishes (#127)", () => {
+  it("omits flourishes in the populated state", () => {
     const { container } = render(<Inspector task={task()} />);
     expect(container.querySelector(".pc-flourish")).toBeNull();
   });
 
-  it("draws all four corner flourishes when ornaments is on", () => {
-    const { container } = render(<Inspector task={task()} ornaments />);
-    expect(container.querySelectorAll(".pc-flourish")).toHaveLength(4);
+  it("omits flourishes in the empty state", () => {
+    const { container } = render(<Inspector task={null} />);
+    expect(container.querySelector(".pc-flourish")).toBeNull();
   });
 });
 

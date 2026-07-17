@@ -129,7 +129,7 @@ export function Cockpit() {
           <aside className="pc-region--right" aria-label="Status stack">
             <HealthPanel health={health} />
             <InboxPanel tasks={snapshot.inbox} onSelectTask={roster.selectTask} />
-            <Inspector task={inspector} ornaments={settings.ornaments} />
+            <Inspector task={inspector} />
           </aside>
         </div>
 

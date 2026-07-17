@@ -21,10 +21,6 @@ export interface InspectorProps {
   /** The selected task's full inspector payload, or `null` when the roster
    * has no selection — renders a quiet placeholder rather than empty tabs. */
   task: InspectorTask | null;
-  /** Corner flourishes (design-manifest §4.1 lists the inspector among the
-   * premium plates that carry them), gated by the settings bar's "Ornaments"
-   * toggle (#70). Defaults off to match this component's pre-#70 look. */
-  ornaments?: boolean;
 }
 
 /**
@@ -40,7 +36,7 @@ export interface InspectorProps {
  * its clock, and `task` is identity-stable between real data changes (the
  * hooks layer memoizes the projection).
  */
-export const Inspector = memo(function Inspector({ task, ornaments = false }: InspectorProps) {
+export const Inspector = memo(function Inspector({ task }: InspectorProps) {
   const [active, setActive] = useState<TabKey>("brief");
   const baseId = useId();
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
@@ -93,7 +89,7 @@ export const Inspector = memo(function Inspector({ task, ornaments = false }: In
   const meta = stateMetaFor(task.state);
 
   return (
-    <Plate variant="premium" padded={false} ornaments={ornaments} className="pc-inspector">
+    <Plate variant="premium" padded={false} className="pc-inspector">
       <div className="pc-inspector__head">
         <Emblem coat={task.coat} mark={task.emblem} size={28} label={task.faction} />
         <div className="pc-inspector__head-titles">
