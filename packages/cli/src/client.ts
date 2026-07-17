@@ -11,6 +11,7 @@ import {
   liveDiscovery,
   readDiscovery,
 } from "@useparley/daemon/discovery";
+import { daemonIdMatches } from "@useparley/daemon/identity";
 import { withLock } from "@useparley/daemon/lock";
 import { spawnDaemon } from "./spawn.js";
 
@@ -30,6 +31,19 @@ export type { Discovery } from "@useparley/core";
  * delegate request loudly.
  */
 export function ensureDaemon(paths: HomePaths, env: NodeJS.ProcessEnv): Promise<Discovery> {
+  // Isolation handshake (#130): never attach across a `PARLEY_DAEMON_ID`
+  // boundary in either direction — and never spawn over the mismatched
+  // daemon's registration either. Fail loudly instead of touching it.
+  const live = liveDiscovery(paths);
+  if (live !== null && !daemonIdMatches(live, env)) {
+    return Promise.reject(
+      new Error(
+        `a parley daemon is running for ${paths.home} but advertises a different ` +
+          `isolation id (daemon_id ${live.daemon_id ?? "unset"} vs PARLEY_DAEMON_ID ` +
+          `${env.PARLEY_DAEMON_ID ?? "unset"}); refusing to attach or replace it`,
+      ),
+    );
+  }
   let remoteUrl: string | undefined;
   try {
     remoteUrl = readConfig(paths.config).daemon?.url;

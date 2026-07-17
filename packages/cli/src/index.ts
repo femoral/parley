@@ -74,9 +74,9 @@ Usage:
                             Show the model/effort catalog (~/.parley/models.json,
                             hand-editable). --refresh re-probes vendor CLIs;
                             advisory only — delegate never gates on it.
-  parley daemon start           Start the background daemon
+  parley daemon start           Start the background daemon (--replace takes over a running one)
   parley daemon stop            Stop the background daemon
-  parley daemon status          Report daemon port/pid
+  parley daemon status          Report daemon identity (pid, port, id, home, version, provenance)
   parley daemon <cmd> [--json]
   parley ui [--no-open]        Print the cockpit URL and open it in a browser
   parley skills install         Install bundled orchestrator skill(s)

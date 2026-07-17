@@ -473,6 +473,20 @@ export function bumpTaskSeq(db: DatabaseHandle, id: string): number {
  * before any transition). Read without incrementing; the firehose (`watch
  * --follow`) and SSE stream use it as the "start from now" baseline.
  */
+/**
+ * Number of tasks still owed work — neither terminal nor stalled. Idle
+ * auto-shutdown (#130) gates on this reaching zero: stalled tasks persist
+ * their vendor session id, so a later `parley answer` resumes them fine
+ * across a daemon restart.
+ */
+export function countUnsettledTasks(db: DatabaseHandle): number {
+  const placeholders = [...SETTLED_STATES].map(() => "?").join(", ");
+  const row = db
+    .prepare(`SELECT COUNT(*) AS n FROM tasks WHERE state NOT IN (${placeholders})`)
+    .get(...[...SETTLED_STATES]);
+  return row === undefined ? 0 : asRow<{ n: number }>(row).n;
+}
+
 export function currentSeq(db: DatabaseHandle): number {
   const row = db.prepare(`SELECT value FROM counters WHERE name = 'transition_seq'`).get();
   return row === undefined ? 0 : asRow<{ value: number }>(row).value;

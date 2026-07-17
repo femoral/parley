@@ -3,10 +3,8 @@
  */
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import fs from "node:fs";
-import os from "node:os";
-import path from "node:path";
 import type { MetricsResponse } from "@useparley/core";
-import { makeTaskDir, runCli } from "./helpers.js";
+import { cleanupHome, makeHome, makeTaskDir, runCli } from "./helpers.js";
 
 let home: string;
 let taskDir: string;
@@ -14,12 +12,12 @@ let taskDir: string;
 const REPORT = { summary: "done", outcome: "success", files_changed: [] as string[] };
 
 beforeEach(() => {
-  home = fs.mkdtempSync(path.join(os.tmpdir(), "parley-cli-metrics-"));
+  home = makeHome();
   taskDir = makeTaskDir([{ submit_report: REPORT }]);
 });
 
 afterEach(() => {
-  fs.rmSync(home, { recursive: true, force: true });
+  cleanupHome(home);
   fs.rmSync(taskDir, { recursive: true, force: true });
 });
 

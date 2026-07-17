@@ -12,7 +12,8 @@ import {
   readConfig,
 } from "@useparley/core";
 import { createAdapterRegistry } from "./adapters/index.js";
-import { openDatabase, sweepInterruptedTasks, TERMINAL_STATES } from "./db.js";
+import { countUnsettledTasks, openDatabase, sweepInterruptedTasks, TERMINAL_STATES } from "./db.js";
+import type { DaemonIdentity } from "./identity.js";
 import { isSandboxMode, type SandboxMode } from "./adapters/types.js";
 import type { ContextFile } from "./context.js";
 import { DelegateError, TaskEngine } from "./engine.js";
@@ -668,6 +669,7 @@ function createHandler(
   engine: TaskEngine,
   uiBundleDir: string | null,
   paths: HomePaths,
+  identity?: DaemonIdentity,
 ): http.RequestListener {
   return (req, res) => {
     void (async () => {
@@ -867,14 +869,27 @@ function createHandler(
       if (method === "GET" && url.pathname === "/health") {
         // `version` (daemon package version) lets a UI detect a contract
         // mismatch against the @useparley/core SDK it was built for;
-        // `started_at` feeds the cockpit's live uptime readout (#65).
-        const startedAt = new Date(Date.now() - Math.round(process.uptime() * 1000)).toISOString();
+        // `started_at` feeds the cockpit's live uptime readout (#65). Identity
+        // fields (#130) make a version-skewed or foreign hub visible at a
+        // glance: instance id, served home, dist-vs-source provenance, entry.
+        const startedAt =
+          identity?.started_at ??
+          new Date(Date.now() - Math.round(process.uptime() * 1000)).toISOString();
         sendJson(res, 200, {
           status: "ok",
           pid: process.pid,
           version: DAEMON_VERSION,
           started_at: startedAt,
           ui_available: uiBundleDir !== null,
+          ...(identity !== undefined
+            ? {
+                instance_id: identity.instance_id,
+                home: identity.home,
+                provenance: identity.provenance,
+                entry: identity.entry,
+                ...(identity.daemon_id !== undefined ? { daemon_id: identity.daemon_id } : {}),
+              }
+            : {}),
         });
         return;
       }
@@ -986,7 +1001,23 @@ function createHandler(
  * Plugin adapters (`vendors.<id>.plugin`) load here at startup only — adding a
  * plugin requires a daemon restart. Vendor args/env/profiles re-read per task.
  */
-export async function startServer(paths: HomePaths): Promise<DaemonServer> {
+/** Optional lifecycle wiring for `startServer` (#130); tests may omit it all. */
+export interface StartServerOptions {
+  /** This process's identity, advertised on `/health`. */
+  identity?: DaemonIdentity;
+  /**
+   * Idle auto-shutdown: after `idleTimeoutMs` with zero open connections, zero
+   * unsettled tasks, and no request activity, `onIdle` fires once. `0` (or an
+   * omitted callback) disables monitoring entirely.
+   */
+  idleTimeoutMs?: number;
+  onIdle?: () => void;
+}
+
+export async function startServer(
+  paths: HomePaths,
+  options: StartServerOptions = {},
+): Promise<DaemonServer> {
   const db = openDatabase(paths);
   // Crash sweep (spec §3): tasks recorded live by a previous daemon lost their
   // children with its process group — mark them stalled before taking requests.
@@ -1017,13 +1048,44 @@ export async function startServer(paths: HomePaths): Promise<DaemonServer> {
   } catch (err) {
     process.stderr.write(`parley daemon: UI discovery failed, serving no UI: ${String(err)}\n`);
   }
-  const server = http.createServer(createHandler(engine, uiBundleDir, paths));
+  const server = http.createServer(createHandler(engine, uiBundleDir, paths, options.identity));
   // Children must never outlive the daemon (no orphans): whatever path the
   // process exits through — graceful close below, crash, signal handler —
   // hard-stop any still-running vendor children on the way out.
   process.on("exit", () => {
     engine.killChildren();
   });
+
+  // Idle auto-shutdown (#130). Open connections count as activity by
+  // construction: an SSE stream, a blocked long-poll, or a child's MCP call is
+  // an in-flight request until its socket closes, so `inFlight === 0` means no
+  // watcher, no poller, no child is attached. Unsettled tasks are checked last
+  // (cheap COUNT) so a quiet daemon with running work never exits.
+  let inFlight = 0;
+  let lastActivity = Date.now();
+  server.on("request", (req, res) => {
+    inFlight += 1;
+    lastActivity = Date.now();
+    res.on("close", () => {
+      inFlight -= 1;
+      lastActivity = Date.now();
+    });
+  });
+  const idleTimeoutMs = options.idleTimeoutMs ?? 0;
+  let idleTimer: NodeJS.Timeout | undefined;
+  if (idleTimeoutMs > 0 && options.onIdle !== undefined) {
+    const onIdle = options.onIdle;
+    const pollMs = Math.max(250, Math.min(15_000, Math.floor(idleTimeoutMs / 4)));
+    idleTimer = setInterval(() => {
+      if (inFlight !== 0) return;
+      if (Date.now() - lastActivity < idleTimeoutMs) return;
+      if (countUnsettledTasks(db) !== 0) return;
+      clearInterval(idleTimer);
+      onIdle();
+    }, pollMs);
+    // unref: the idle watchdog must never be what keeps the process alive.
+    idleTimer.unref();
+  }
 
   return new Promise<DaemonServer>((resolve, reject) => {
     const failed = (err: Error): void => {
@@ -1042,6 +1104,7 @@ export async function startServer(paths: HomePaths): Promise<DaemonServer> {
       engine.setHubPort(port);
       const close = () =>
         new Promise<void>((resolveClose, rejectClose) => {
+          if (idleTimer !== undefined) clearInterval(idleTimer);
           // Stop children first: a live child holds an open MCP connection
           // (a blocked ask_orchestrator) that would keep the server from
           // closing; killing it releases the socket.

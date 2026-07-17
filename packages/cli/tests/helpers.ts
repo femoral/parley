@@ -43,6 +43,10 @@ function cliEnv(home: string, extraEnv?: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
     // Default orchestrator identity so delegate tests need not set it; a test
     // exercising the required-session rule overrides it via extraEnv.
     PARLEY_SESSION_ID: "test-orch-session",
+    // Isolation handshake (#130): every test daemon is id-stamped per home, so
+    // no test CLI can ever attach to (or stop) the developer's real hub, and no
+    // real CLI adopts a leftover test daemon. Overridable via extraEnv.
+    PARLEY_DAEMON_ID: `test-${path.basename(home)}`,
     ...extraEnv,
   };
   if (env.NO_COLOR !== undefined && env.FORCE_COLOR !== undefined) {
@@ -310,15 +314,42 @@ export async function delegateUntil(
   return { ack, row };
 }
 
+/**
+ * Homes this worker created; swept on process exit so a crashed or interrupted
+ * run (vitest bailing, ctrl-C) still leaves zero daemon processes behind (#130).
+ * `cleanupHome` remains the per-test teardown; this is the backstop.
+ */
+const SPAWNED_HOMES = new Set<string>();
+process.on("exit", () => {
+  for (const home of SPAWNED_HOMES) killHomeDaemon(home);
+});
+// Signal-terminated workers (vitest recycling a worker, ctrl-C) skip `exit`
+// hooks unless something handles the signal — sweep, then exit with the
+// conventional code so the `exit` hook also runs (the sweep is idempotent).
+for (const signal of ["SIGTERM", "SIGINT"] as const) {
+  process.once(signal, () => {
+    for (const home of SPAWNED_HOMES) killHomeDaemon(home);
+    process.exit(signal === "SIGTERM" ? 143 : 130);
+  });
+}
+
 /** Create a fresh isolated parley home directory. */
 export function makeHome(): string {
-  return fs.mkdtempSync(path.join(os.tmpdir(), "parley-test-"));
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "parley-test-"));
+  SPAWNED_HOMES.add(home);
+  return home;
 }
 
 interface Discovery {
   port: number;
   pid: number;
   started_at: string;
+  instance_id?: string;
+  home?: string;
+  version?: string;
+  provenance?: string;
+  entry?: string;
+  daemon_id?: string;
 }
 
 export function readDiscovery(home: string): Discovery | null {
@@ -338,8 +369,8 @@ export function isAlive(pid: number): boolean {
   }
 }
 
-/** Kill any daemon this home spawned and remove the directory. */
-export function cleanupHome(home: string): void {
+/** Kill the daemon (and its process group) advertised by `home`, if alive. */
+function killHomeDaemon(home: string): void {
   const discovery = readDiscovery(home);
   if (discovery && isAlive(discovery.pid)) {
     try {
@@ -355,6 +386,12 @@ export function cleanupHome(home: string): void {
       }
     }
   }
+}
+
+/** Kill any daemon this home spawned and remove the directory. */
+export function cleanupHome(home: string): void {
+  killHomeDaemon(home);
+  SPAWNED_HOMES.delete(home);
   fs.rmSync(home, { recursive: true, force: true });
 }
 

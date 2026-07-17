@@ -17,6 +17,22 @@ export interface Discovery {
    * `http://127.0.0.1:<port>`. Trailing slashes are stripped at use sites.
    */
   url?: string;
+  /** Random per-process instance id — the registration token (#130). */
+  instance_id?: string;
+  /** The parley home this daemon serves. */
+  home?: string;
+  /** Daemon package version. */
+  version?: string;
+  /** How the daemon's code is run: a published build or dev source. */
+  provenance?: "dist" | "source";
+  /** Absolute path of the daemon entry module (pinpoints *which* checkout). */
+  entry?: string;
+  /**
+   * Isolation id advertised by a daemon started with `PARLEY_DAEMON_ID` set.
+   * A CLI carrying the env var attaches only on an exact match, and a CLI
+   * without it never attaches to an id-stamped daemon (#130).
+   */
+  daemon_id?: string;
 }
 
 /**

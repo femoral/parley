@@ -20,6 +20,12 @@ export interface UiConfig {
 export interface DaemonConfig {
   /** Base URL of a running daemon, e.g. `http://host:57123` (no trailing slash). */
   url?: string;
+  /**
+   * Idle auto-shutdown window in milliseconds (#130). The daemon exits after
+   * this long with no live tasks, no open connections, and no RPC. `0`
+   * disables. Default: 5 minutes.
+   */
+  idleTimeoutMs?: number;
 }
 
 /**
@@ -128,6 +134,14 @@ function validateDaemon(file: string, raw: unknown): void {
   }
   if (raw.url !== undefined) {
     assertNonEmptyString(file, "daemon.url", raw.url);
+  }
+  if (raw.idleTimeoutMs !== undefined) {
+    const v = raw.idleTimeoutMs;
+    if (typeof v !== "number" || !Number.isInteger(v) || v < 0) {
+      throw new Error(
+        `invalid config at ${file}: daemon.idleTimeoutMs must be a non-negative integer`,
+      );
+    }
   }
 }
 
