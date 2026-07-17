@@ -125,6 +125,27 @@ export interface TaskRow {
    * backfilled to `other` for pre-migration rows.
    */
   type: string;
+  /**
+   * Prior attempt this row reattempts (`parley fix`, #152). Null for first
+   * delegations (`attempt = 1`).
+   */
+  parent_task_id: string | null;
+  /**
+   * 1-based attempt number in a fix chain (#152). First delegations are 1;
+   * each `parley fix` increments from its parent.
+   */
+  attempt: number;
+  /**
+   * Whether this attempt requested a vendor-session resume (#152). First
+   * attempts and `resume.enabled: false` fixes are 0; resumed fixes are 1.
+   * Stored as SQLite 0/1.
+   */
+  resumed: number;
+  /**
+   * Vendor-reported cached input tokens for this attempt (#152). Null when
+   * the vendor never reported a cache count — never guessed as 0.
+   */
+  cached_input_tokens: number | null;
 }
 
 /** Fields the daemon writes when creating a task. */
@@ -166,6 +187,25 @@ export interface NewTask {
    * Work-domain task type (#151). Always set: omitted at delegate ⇒ `other`.
    */
   type: string;
+  /**
+   * Prior attempt this row reattempts (#152). Null/omitted for first
+   * delegations. When set, `attempt` should be parent.attempt + 1.
+   */
+  parent_task_id?: string | null;
+  /**
+   * 1-based attempt number (#152). Defaults to 1 when omitted.
+   */
+  attempt?: number;
+  /**
+   * Whether vendor-session resume was requested for this attempt (#152).
+   * Defaults to false when omitted.
+   */
+  resumed?: boolean;
+  /**
+   * Seed the vendor session id at insert (resumed fix inherits the parent's
+   * session so `buildSpec` can resume immediately). Null/omitted otherwise.
+   */
+  session_id?: string | null;
 }
 
 /**
@@ -282,6 +322,13 @@ const MIGRATIONS: string[] = [
   // #151: work-domain task type — always present; existing rows backfill to
   // `other` via the column default.
   `ALTER TABLE tasks ADD COLUMN type TEXT NOT NULL DEFAULT 'other';`,
+  // #152: attempt chains — each `parley fix` is a first-class task row linked
+  // to its parent. Existing rows backfill as attempt 1 (not resumed, no parent,
+  // cache unreported).
+  `ALTER TABLE tasks ADD COLUMN parent_task_id TEXT;
+   ALTER TABLE tasks ADD COLUMN attempt INTEGER NOT NULL DEFAULT 1;
+   ALTER TABLE tasks ADD COLUMN resumed INTEGER NOT NULL DEFAULT 0;
+   ALTER TABLE tasks ADD COLUMN cached_input_tokens INTEGER;`,
 ];
 
 /** How many schema migrations have been applied — equals `PRAGMA user_version` after open. */
@@ -360,7 +407,7 @@ const TASK_COLUMNS = `id, name, vendor, model, effort, profile, runner, repo, st
    cwd, prompt, session_id, usage, report, error, started_at, completed_at,
    question_id, question, worktree, branch, base_sha, sandbox, network,
    answer_timeout_ms, report_schema, seq, orchestrator_session_id, eval_score, eval_feedback,
-   size, difficulty, type`;
+   size, difficulty, type, parent_task_id, attempt, resumed, cached_input_tokens`;
 
 /** Cast a node:sqlite row result to a domain shape (driver types are untyped maps). */
 function asRow<T>(row: unknown): T {
@@ -569,12 +616,15 @@ export function isEventAcked(db: DatabaseHandle, task: TaskRow): boolean {
  */
 export function insertTask(db: DatabaseHandle, task: NewTask): TaskRow {
   const now = new Date().toISOString();
+  const attempt = task.attempt ?? 1;
+  const resumed = task.resumed === true ? 1 : 0;
   db.prepare(
     `INSERT INTO tasks
        (id, name, vendor, model, effort, profile, runner, repo, state, created_at, updated_at,
-        cwd, prompt, orchestrator_session_id, worktree, branch, base_sha, sandbox,
-        network, answer_timeout_ms, report_schema, size, difficulty, type)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        cwd, prompt, session_id, orchestrator_session_id, worktree, branch, base_sha, sandbox,
+        network, answer_timeout_ms, report_schema, size, difficulty, type,
+        parent_task_id, attempt, resumed)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     task.id,
     task.name,
@@ -588,6 +638,7 @@ export function insertTask(db: DatabaseHandle, task: NewTask): TaskRow {
     now,
     task.cwd,
     task.prompt,
+    task.session_id ?? null,
     task.orchestrator_session_id,
     task.worktree,
     task.branch,
@@ -599,6 +650,9 @@ export function insertTask(db: DatabaseHandle, task: NewTask): TaskRow {
     task.size,
     task.difficulty,
     task.type,
+    task.parent_task_id ?? null,
+    attempt,
+    resumed,
   );
   return getTask(db, task.id)!;
 }
@@ -683,6 +737,7 @@ export type TaskPatch = Partial<
     | "branch"
     | "eval_score"
     | "eval_feedback"
+    | "cached_input_tokens"
   >
 >;
 

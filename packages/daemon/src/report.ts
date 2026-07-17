@@ -185,6 +185,17 @@ export interface Envelope {
   difficulty: string | null;
   /** Work-domain task type (#151). Always set (default `other`). */
   type: string;
+  /** Prior attempt this envelope reattempts (#152); null for first delegations. */
+  parent_task_id: string | null;
+  /** 1-based attempt number in a fix chain (#152). */
+  attempt: number;
+  /** Whether vendor-session resume was requested for this attempt (#152). */
+  resumed: boolean;
+  /**
+   * Vendor-reported cached input tokens (#152). Null when unreported — never
+   * guessed as 0.
+   */
+  cached_input_tokens: number | null;
 }
 
 /**
@@ -247,5 +258,9 @@ export function buildEnvelope(task: TaskRow, logsDir: string | null = null): Env
     size: task.size,
     difficulty: task.difficulty,
     type: task.type,
+    parent_task_id: task.parent_task_id,
+    attempt: task.attempt,
+    resumed: task.resumed === 1,
+    cached_input_tokens: task.cached_input_tokens,
   };
 }

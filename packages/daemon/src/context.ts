@@ -120,3 +120,21 @@ export function readProjectTaskTypes(repo: string | null): TaskTypesMap {
   if (config.taskTypes === undefined) return defaultTaskTypes();
   return resolveTaskTypes(config.taskTypes);
 }
+
+/**
+ * Whether `parley fix` should resume the parent's vendor session (#152).
+ * Read from the project's `.parley/config.json` (`resume.enabled`). Defaults
+ * **on** when the file, key, or project is absent — resume is the common path;
+ * opt out explicitly with `"resume": { "enabled": false }`.
+ */
+export function readResumeEnabled(repo: string | null): boolean {
+  if (repo === null) return true;
+  try {
+    const raw = fs.readFileSync(path.join(repo, PARLEY_DIR, "config.json"), "utf8");
+    const config = JSON.parse(raw) as { resume?: { enabled?: unknown } };
+    if (config.resume?.enabled === false) return false;
+    return true;
+  } catch {
+    return true;
+  }
+}

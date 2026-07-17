@@ -75,6 +75,23 @@ export interface TaskEnvelope {
    * Work-domain task type (#151). Always set: omitted at delegate ⇒ `other`.
    */
   type: string;
+  /**
+   * Prior attempt this envelope reattempts (`parley fix`, #152). Null for first
+   * delegations. Optional on the wire so older clients remain assignable.
+   */
+  parent_task_id?: string | null;
+  /** 1-based attempt number in a fix chain (#152). Optional for older clients. */
+  attempt?: number;
+  /**
+   * Whether vendor-session resume was requested for this attempt (#152).
+   * Optional for older clients.
+   */
+  resumed?: boolean;
+  /**
+   * Vendor-reported cached input tokens (#152). Null when unreported — never
+   * guessed. Optional for older clients.
+   */
+  cached_input_tokens?: number | null;
 }
 
 /**
@@ -134,6 +151,23 @@ export interface TaskRow {
    * Work-domain task type (#151). Always set: omitted at delegate ⇒ `other`.
    */
   type: string;
+  /**
+   * Prior attempt this row reattempts (`parley fix`, #152). Null for first
+   * delegations. Optional on the wire so older clients remain assignable.
+   */
+  parent_task_id?: string | null;
+  /** 1-based attempt number in a fix chain (#152). Optional for older clients. */
+  attempt?: number;
+  /**
+   * Whether vendor-session resume was requested (#152). Stored as SQLite 0/1
+   * on the row. Optional for older clients.
+   */
+  resumed?: number;
+  /**
+   * Vendor-reported cached input tokens (#152). Null when unreported.
+   * Optional for older clients.
+   */
+  cached_input_tokens?: number | null;
 }
 
 /** `GET /health` — daemon liveness plus its package version (spec stability §). */

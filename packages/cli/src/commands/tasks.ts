@@ -50,6 +50,25 @@ function shortSession(id: string | null): string {
   return id.length > 8 ? id.slice(0, 8) : id;
 }
 
+/**
+ * ATTEMPT column (#152): show the 1-based attempt number. First delegations
+ * are `1`; each `parley fix` increments. Always present so the column is
+ * stable even when every row is a first attempt.
+ */
+function formatAttempt(task: TaskRow): string {
+  return String(task.attempt ?? 1);
+}
+
+/**
+ * Derived cache-hit tri-state for `--json` (#152): true when the vendor
+ * reported a positive cache count, false when it reported zero, null when
+ * unreported — never guessed from latency or missing usage.
+ */
+function cacheHit(cached: number | null | undefined): boolean | null {
+  if (cached === null || cached === undefined) return null;
+  return cached > 0;
+}
+
 function renderTable(ctx: CliContext, tasks: TaskRow[]): void {
   if (tasks.length === 0) {
     ctx.stdout("No tasks.\n");
@@ -65,6 +84,7 @@ function renderTable(ctx: CliContext, tasks: TaskRow[]): void {
     "RUNNER",
     "MODEL",
     "STATE",
+    "ATTEMPT",
     "USAGE",
     "DURATION",
   ];
@@ -78,6 +98,7 @@ function renderTable(ctx: CliContext, tasks: TaskRow[]): void {
     t.runner ?? "-",
     t.model ?? "-",
     t.state,
+    formatAttempt(t),
     formatUsage(parseJsonColumn<Record<string, number>>(t.usage)),
     formatDuration(t),
   ]);
@@ -92,12 +113,20 @@ function renderTable(ctx: CliContext, tasks: TaskRow[]): void {
 
 /** Present a task row for `--json` output: JSON columns become objects. */
 function presentRow(row: TaskRow): Record<string, unknown> {
+  const cached =
+    row.cached_input_tokens === undefined ? null : row.cached_input_tokens;
   return {
     ...row,
     usage: parseJsonColumn(row.usage),
     report: parseJsonColumn(row.report),
     // `network` is stored as SQLite 0/1; surface it as a boolean.
     network: row.network === 1,
+    // Attempt chain (#152): boolean + derived tri-state for cache honesty.
+    resumed: row.resumed === 1,
+    attempt: row.attempt ?? 1,
+    parent_task_id: row.parent_task_id ?? null,
+    cached_input_tokens: cached,
+    cache_hit: cacheHit(cached),
   };
 }
 

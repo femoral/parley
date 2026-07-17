@@ -78,6 +78,10 @@ export function envelope(
     size: null,
     difficulty: null,
     type: "other",
+    parent_task_id: null,
+    attempt: 1,
+    resumed: false,
+    cached_input_tokens: null,
     ...overrides,
   };
 }
@@ -118,6 +122,10 @@ export function row(
     size: null,
     difficulty: null,
     type: "other",
+    parent_task_id: null,
+    attempt: 1,
+    resumed: 0,
+    cached_input_tokens: null,
     ...overrides,
   };
 }

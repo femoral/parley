@@ -936,6 +936,45 @@ function handleCancel(engine: TaskEngine, res: http.ServerResponse, ref: string)
 }
 
 /**
+ * `POST /tasks/:ref/fix` — create a linked attempt that inherits the parent's
+ * classification/workspace and optionally resumes its vendor session (#152).
+ */
+function handleFix(
+  engine: TaskEngine,
+  res: http.ServerResponse,
+  ref: string,
+  body: unknown,
+): void {
+  if (!isRecord(body)) {
+    sendJson(res, 400, { error: "request body must be a JSON object" });
+    return;
+  }
+  const prompt = body.prompt;
+  if (typeof prompt !== "string" || prompt.trim() === "") {
+    sendJson(res, 400, { error: "prompt is required" });
+    return;
+  }
+  try {
+    const task = engine.fix({ parentRef: ref, prompt });
+    sendJson(res, 201, {
+      task_id: task.id,
+      name: task.name,
+      state: task.state,
+      seq: task.seq,
+      parent_task_id: task.parent_task_id,
+      attempt: task.attempt,
+      resumed: task.resumed === 1,
+    });
+  } catch (err) {
+    if (err instanceof DelegateError) {
+      sendJson(res, 400, { error: err.message });
+      return;
+    }
+    throw err;
+  }
+}
+
+/**
  * Build the daemon's HTTP request handler: the CLI plane (REST, spec §3), the
  * MCP child channel on `/mcp` (spec §4), the grok xAI usage proxy on
  * `/xai/<taskId>/v1/...` (#95), and — when `uiBundleDir` is non-null
@@ -1271,6 +1310,10 @@ function createHandler(
         }
         if (method === "POST" && segments.length === 3 && segments[2] === "cancel") {
           handleCancel(engine, res, ref);
+          return;
+        }
+        if (method === "POST" && segments.length === 3 && segments[2] === "fix") {
+          handleFix(engine, res, ref, await readBody(req));
           return;
         }
       }

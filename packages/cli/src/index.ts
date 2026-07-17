@@ -10,6 +10,7 @@ import { runDaemon } from "./commands/daemon.js";
 import { runDelegate } from "./commands/delegate.js";
 import { runEval } from "./commands/eval.js";
 import { runGc } from "./commands/gc.js";
+import { runFix } from "./commands/fix.js";
 import { runLogs } from "./commands/logs.js";
 import { runMetrics } from "./commands/metrics.js";
 import { runModels } from "./commands/models.js";
@@ -38,6 +39,10 @@ Usage:
     --difficulty <level>    trivial|easy|medium|hard|extreme (optional)
     --type <t>              Work-domain type (coding|design|…|other; optional,
                             default other; project-configurable via taskTypes)
+  parley fix <task> "<brief>"  Create a linked reattempt that inherits the
+                                parent's profile/workspace and resumes its
+                                vendor session when resume.enabled (default on).
+                                Returns immediately; wait with parley watch.
   parley answer <task> "<text>" Answer a child's question ('-' reads stdin);
                                 on a stalled task, resume it with the text.
                                 Returns immediately; wait with parley watch.
@@ -141,6 +146,8 @@ export async function run(argv: string[], ctx: CliContext): Promise<number> {
   switch (command) {
     case "delegate":
       return runDelegate(ctx, rest);
+    case "fix":
+      return runFix(ctx, rest);
     case "answer":
       return runAnswer(ctx, rest);
     case "eval":

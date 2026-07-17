@@ -12,6 +12,7 @@ import {
   isActionableState,
   isChildChannel,
   isValidTaskType,
+  normalizeUsage,
   readConfig,
   retentionDays,
   type ChildChannel,
@@ -60,6 +61,7 @@ import {
   materializeChildHub,
   materializeContext,
   readProjectTaskTypes,
+  readResumeEnabled,
   type ContextFile,
 } from "./context.js";
 import { taskLogDir } from "./discovery.js";
@@ -290,6 +292,18 @@ export interface DelegateRequest {
 }
 
 /**
+ * `parley fix <task> "<brief>"` request (#152) — create a linked attempt that
+ * inherits the parent's classification/posture/workspace and optionally
+ * resumes its vendor session.
+ */
+export interface FixRequest {
+  /** Parent task ref (short id or name). */
+  parentRef: string;
+  /** The fix brief that becomes this attempt's prompt. */
+  prompt: string;
+}
+
+/**
  * Full task spec returned by `POST /runner/lease` (#111 / ADR-0012). Resolved
  * daemon-side (profile/vendor args+env) so the runner mirrors local spawn.
  */
@@ -449,7 +463,24 @@ export class TaskEngine {
         merged[key] = value;
       }
     }
-    updateTask(this.db, taskId, { usage: JSON.stringify(merged) });
+    const patch: TaskPatch = { usage: JSON.stringify(merged) };
+    // Best-effort cache column (#152): only write when the vendor reported a
+    // cache count — never invent 0 for silent vendors (tri-state honesty).
+    const cached = normalizeUsage(merged).cached;
+    if (cached !== null) patch.cached_input_tokens = cached;
+    updateTask(this.db, taskId, patch);
+  }
+
+  /**
+   * Persist usage JSON and, when the vendor reported a cache count, the
+   * durable `cached_input_tokens` column (#152). Leaves the column null when
+   * cache is unreported so metrics/status never guess a hit or miss.
+   */
+  private usagePatch(usage: Record<string, number>): TaskPatch {
+    const patch: TaskPatch = { usage: JSON.stringify(usage) };
+    const cached = normalizeUsage(usage).cached;
+    if (cached !== null) patch.cached_input_tokens = cached;
+    return patch;
   }
 
   resolve(ref: string): TaskRow | undefined {
@@ -712,6 +743,99 @@ export class TaskEngine {
   }
 
   /**
+   * `parley fix <task> "<brief>"` (#152): create a new attempt row linked to
+   * `parent`, inherit classification/posture/workspace/profile/vendor fields,
+   * and either resume the parent's vendor session (`resume.enabled`, default
+   * on) or start a fresh session (still chain-linked). Returns the new row
+   * immediately (ADR-0008).
+   *
+   * The work-domain `type` (#151) is inherited alongside size/difficulty.
+   */
+  fix(request: FixRequest): TaskRow {
+    const parent = resolveTask(this.db, request.parentRef);
+    if (!parent) {
+      throw new DelegateError(`no such task: ${request.parentRef}`);
+    }
+    if (!TERMINAL_STATES.has(parent.state)) {
+      throw new DelegateError(
+        `task ${parent.id} is ${parent.state}; fix requires a terminal attempt (completed|failed|cancelled)`,
+      );
+    }
+    if (typeof request.prompt !== "string" || request.prompt.trim() === "") {
+      throw new DelegateError("prompt is required");
+    }
+    const vendor = parent.vendor;
+    if (vendor === null || vendor === "") {
+      throw new DelegateError(`task ${parent.id} has no vendor; cannot fix`);
+    }
+    const adapter = this.adapters.get(vendor);
+    if (!adapter) {
+      const known = [...this.adapters.keys()].join(", ");
+      throw new DelegateError(`unknown vendor: ${vendor} (known: ${known})`);
+    }
+
+    // Resume when project config allows *and* the parent captured a session.
+    // Off (or missing session) still creates a linked attempt with a blank
+    // session — lineage is independent of resume.
+    const resumeWanted = readResumeEnabled(parent.repo ?? parent.cwd);
+    const canResume = resumeWanted && parent.session_id !== null;
+    const id = nextTaskId(this.db);
+    // Reuse the parent's workspace; fix never cuts a new worktree.
+    const workingDir = parent.cwd ?? process.cwd();
+    try {
+      materializeContext(workingDir, request.prompt, []);
+    } catch (err) {
+      throw new DelegateError(`failed to materialize task context: ${errorMessage(err)}`);
+    }
+
+    const row = insertTask(this.db, {
+      id,
+      name: parent.name,
+      vendor,
+      model: parent.model,
+      effort: parent.effort,
+      profile: parent.profile,
+      runner: parent.runner,
+      repo: parent.repo,
+      cwd: workingDir,
+      prompt: request.prompt,
+      orchestrator_session_id: parent.orchestrator_session_id ?? "unknown",
+      worktree: parent.worktree,
+      branch: parent.branch,
+      base_sha: parent.base_sha,
+      sandbox: parent.sandbox,
+      network: parent.network === 1,
+      answer_timeout_ms: parent.answer_timeout_ms,
+      report_schema: parent.report_schema,
+      size: parent.size,
+      difficulty: parent.difficulty,
+      type: parent.type,
+      parent_task_id: parent.id,
+      attempt: parent.attempt + 1,
+      resumed: canResume,
+      // Seed so buildSpec/resume see the parent's vendor session immediately.
+      session_id: canResume ? parent.session_id : null,
+    });
+
+    // Remote-affine parents stay remote: the runner leases the new attempt.
+    if (parent.runner !== null && parent.runner !== "") {
+      this.wakeRunnerLeaseWaiters();
+      return row;
+    }
+
+    if (canResume) {
+      void this.resumeFix(row, adapter, request.prompt).catch((err: unknown) => {
+        this.fail(row.id, `task resume crashed: ${String(err)}`);
+      });
+    } else {
+      void this.run(row, adapter).catch((err: unknown) => {
+        this.fail(row.id, `task runner crashed: ${String(err)}`);
+      });
+    }
+    return row;
+  }
+
+  /**
    * Remove a task's worktree (keeping its branch — parley never merges). Refuses
    * tasks that are not in a terminal state. A `--cwd` task (no worktree) is a
    * no-op. Throws `DelegateError` (→ exit 2) on refusal or an unknown ref.
@@ -919,7 +1043,7 @@ export class TaskEngine {
     // Prefer the caller's in-memory accumulation (stream-close path); fall
     // back to whatever is already on the row (fallback timer path).
     if (usage !== undefined) {
-      patch.usage = JSON.stringify(usage);
+      Object.assign(patch, this.usagePatch(usage));
     }
     updateTask(this.db, taskId, patch);
     this.transitioned(taskId);
@@ -1650,7 +1774,7 @@ export class TaskEngine {
     }
 
     const patch: TaskPatch = {};
-    if (usageChanged && usage !== undefined) patch.usage = JSON.stringify(usage);
+    if (usageChanged && usage !== undefined) Object.assign(patch, this.usagePatch(usage));
     if (sessionChanged && sessionId !== undefined) patch.session_id = sessionId;
     if (Object.keys(patch).length > 0) updateTask(this.db, taskId, patch);
   }
@@ -1897,6 +2021,41 @@ export class TaskEngine {
     });
   }
 
+  /**
+   * Resume a fix attempt (#152): respawn via the adapter's `resume()` with the
+   * parent's vendor session (already seeded on the row) and the fix brief as
+   * the continuation prompt. Fresh `started_at` — a fix is a new attempt.
+   */
+  private async resumeFix(task: TaskRow, adapter: VendorAdapter, fixBrief: string): Promise<void> {
+    const spec: TaskSpec = {
+      ...this.buildSpec(task),
+      prompt: this.fixResumePrompt(task, adapter, fixBrief),
+    };
+    const plan = this.applyVendorConfig(task, await adapter.resume(spec, this.hubFor(task.id)));
+    await this.runChild(task, adapter, plan, {
+      state: "running",
+      started_at: new Date().toISOString(),
+    });
+  }
+
+  /**
+   * Resume prompt for a fix attempt: re-teach the protocol, then deliver the
+   * fix brief as the conversation's continuation.
+   */
+  private fixResumePrompt(task: TaskRow, adapter: VendorAdapter, fixBrief: string): string {
+    return [
+      this.buildPreamble(task, adapter),
+      "",
+      "---",
+      "",
+      "The orchestrator is requesting a fix on the previous attempt:",
+      "",
+      fixBrief,
+      "",
+      "Continue from the prior session context and finish by calling `submit_report`.",
+    ].join("\n");
+  }
+
   /** Spawn a planned vendor child and pump its stream until exit. */
   private async runChild(
     task: TaskRow,
@@ -2032,7 +2191,7 @@ export class TaskEngine {
           patch.session_id = found;
         }
       }
-      if (usageChanged) patch.usage = JSON.stringify(usage);
+      if (usageChanged && usage !== undefined) Object.assign(patch, this.usagePatch(usage));
       if (Object.keys(patch).length > 0) updateTask(this.db, task.id, patch);
     };
     const lines = readline.createInterface({ input: child.stdout });
