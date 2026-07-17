@@ -33,6 +33,8 @@ function makeRepo(): string {
 
 const SKILL = "parley-delegate";
 const FIXTURE_BUNDLE = fileURLToPath(new URL("./fixtures/skills-bundle", import.meta.url));
+/** Bundled skills source next to this package's tests (installs from here). */
+const BUNDLED_SKILLS = fileURLToPath(new URL("../skills", import.meta.url));
 
 beforeEach(() => {
   home = makeHome();
@@ -249,11 +251,26 @@ describe("parley skills list", () => {
     expect(delegate!.description).toMatch(/Delegate tasks/);
   });
 
+  it("ships parley-wizard and not the retired parley-rubric skill", async () => {
+    const res = await runCli(["skills", "list", "--json"], home);
+    expect(res.code).toBe(0);
+    const out = JSON.parse(res.stdout) as {
+      skills: { name: string; description: string }[];
+    };
+    const names = out.skills.map((s) => s.name);
+    expect(names).toContain("parley-wizard");
+    expect(names).not.toContain("parley-rubric");
+    const wizard = out.skills.find((s) => s.name === "parley-wizard");
+    expect(wizard!.description).toMatch(/interview|Configure a parley project/i);
+  });
+
   it("human list prints name and one-line description", async () => {
     const res = await runCli(["skills", "list"], home);
     expect(res.code).toBe(0);
     expect(res.stdout).toMatch(/parley-delegate/);
     expect(res.stdout).toMatch(/Delegate tasks/);
+    expect(res.stdout).toMatch(/parley-wizard/);
+    expect(res.stdout).not.toMatch(/parley-rubric/);
   });
 
   it("list --json includes descriptions for multi-skill fixtures", async () => {
@@ -273,5 +290,43 @@ describe("parley skills list", () => {
         },
       ],
     });
+  });
+});
+
+describe("bundled skill contents", () => {
+  it("parley-wizard covers the full interview, skippable rubrics, lint, and dry-run cost warning", () => {
+    const skillMd = fs.readFileSync(path.join(BUNDLED_SKILLS, "parley-wizard", "SKILL.md"), "utf8");
+    // Interview areas from #167.
+    for (const needle of [
+      "eval",
+      "taskTypes",
+      "rubric",
+      "classification",
+      "retention",
+      "resume",
+      "retry",
+      "daemon.url",
+      "parley models",
+      "parley lint",
+      "--dry-run",
+    ]) {
+      expect(skillMd.toLowerCase()).toContain(needle.toLowerCase());
+    }
+    // Skippable rubrics, re-run/no-op, version bump, token cost.
+    expect(skillMd).toMatch(/skippable/i);
+    expect(skillMd).toMatch(/no-op/i);
+    expect(skillMd).toMatch(/[Bb]ump.*version|version.*[Bb]ump/);
+    expect(skillMd).toMatch(/token/i);
+    expect(skillMd).toMatch(/factory-reset|never factory/i);
+    // No retired skill or issue/ADR sediment in the consumer entry point.
+    expect(skillMd).not.toMatch(/parley-rubric/);
+    expect(skillMd).not.toMatch(/ADR-\d+/);
+    expect(skillMd).not.toMatch(/#\d{2,}/);
+  });
+
+  it("does not ship parley-rubric", () => {
+    expect(fs.existsSync(path.join(BUNDLED_SKILLS, "parley-rubric"))).toBe(false);
+    expect(fs.existsSync(path.join(BUNDLED_SKILLS, "parley-wizard", "SKILL.md"))).toBe(true);
+    expect(fs.existsSync(path.join(BUNDLED_SKILLS, "parley-delegate", "SKILL.md"))).toBe(true);
   });
 });

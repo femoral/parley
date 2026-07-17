@@ -25,7 +25,7 @@ There is **one** flow for one task or many: `delegate` always returns immediatel
 
    - **Vendors**: `codex`, `grok`, `claude`, `gemini`, `opencode`, `goose`, `pi`, `cline`, `kilo`, `openhands`, `hermes`, `openclaw` — plus any plugin vendors from the user's settings. Unknown vendor errors list what's registered.
    - **Profiles**: `--profile <name>` pulls vendor/model/effort (and extra args) from the user's `~/.parley/parley.json`; explicit flags win. Prefer a profile when the user has them — profiles are tracked per task and make `parley metrics` comparisons meaningful.
-   - **Classification**: when the project has a rubric (`.parley/rubric.md`, set up by the parley-rubric skill), classify every brief at delegate time: `--size <XS|S|M|L|XL> --difficulty <trivial|easy|medium|hard|extreme>`. Metrics slice eval outcomes by these.
+   - **Classification**: when the project uses evaluation (set up by `parley-wizard`), classify every brief at delegate time: `--size`, `--difficulty`, and optional `--type` using the project's configured ids (see `.parley/classification.json` and `taskTypes`). Metrics slice eval outcomes by these.
    - **Remote execution**: `--runner <name>` targets a configured remote runner; the task's commits come back as a pushed branch (no local worktree to review — fetch it).
 
 3. **Run the watch ack-loop** until exit 0 — even for a single task. This is a workflow you step through, not a script: each `watch` call returns one event, you do the real work it demands (answer, review, merge), then call `watch` again.
@@ -63,7 +63,7 @@ Rules that leave no room for interpretation:
 
    **A green report isn't proof correctness.** `outcome: success` only means the child's own verification passed. Verify yourself after every merge, not once at the end of a fan-out unless instructed. A later branch can reintroduce what an earlier one had cleared.
 
-   **Record an eval on every reviewed task**: `parley eval <task> --score <1-10> --feedback "<what held up, what didn't>"`. With a project rubric, walk its binary gates and derive the score from them (see the parley-rubric skill). Evals power `parley metrics` — score honestly, including the failures.
+   **Record an eval on every reviewed task when eval is enabled**: walk the type's rubric criteria, then `parley eval <task> --answers '<json>' --feedback "<one line per criterion>"` (daemon computes score + baseline). Evals power `parley metrics` — answer honestly, including the failures.
 
 ## Fan-out: several tasks in parallel
 

@@ -64,8 +64,8 @@ parley clean t1        # removes the worktree, keeps the branch
 ```
 
 Orchestrating from an agent harness? `parley skills install` ships the
-orchestrator skills (`parley-delegate`, `parley-wizard`, `parley-rubric`)
-into your harness's skills directory.
+orchestrator skills (`parley-delegate`, `parley-wizard`) into your harness's
+skills directory.
 
 ## Vendors
 
@@ -148,10 +148,10 @@ parley eval t42 --score 8 --feedback "…" # your judgment, recorded
 parley delegate --size M --difficulty hard …   # classify at delegate time
 ```
 
-The `parley-rubric` skill interviews you into a committed project rubric:
-concrete T-shirt size and difficulty definitions plus binary, MECE success
-gates — so classification and scoring stay consistent across orchestrators.
-The web cockpit (`parley ui`) renders the same aggregates.
+`/parley-wizard` interviews you into project eval settings, task types,
+versioned rubrics, and classification guidance under `.parley/` — so scoring
+and metrics stay consistent across orchestrators. The web cockpit (`parley ui`)
+renders the same aggregates.
 
 ## The cockpit
 
@@ -164,8 +164,7 @@ daemon serves it when present.
 | Skill | Purpose |
 | ----- | ------- |
 | `parley-delegate` | the orchestrator loop: brief → delegate → watch → answer → review |
-| `parley-wizard` | guided setup: detect CLIs, write settings, smoke-test |
-| `parley-rubric` | define evaluation metrics and success rubrics |
+| `parley-wizard` | conversational setup: eval, types, rubrics, classification, daemon config |
 
 `parley skills install` — interactive picker, or `--layout`/`--scope`/`--skill`
 for CI.
