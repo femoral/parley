@@ -14,6 +14,7 @@ import type { VendorAdapter, TaskSpec, HubInfo, SpawnPlan, VendorEvent } from "@
 export function createAdapter(env: NodeJS.ProcessEnv): VendorAdapter {
   return {
     id: "acme", // MUST equal the config key vendors.acme
+    childChannel: "mcp", // mcp | cli | http — what the preamble teaches (#155)
     prepare(task: TaskSpec, hub: HubInfo): Promise<SpawnPlan> { /* ... */ },
     resume(task: TaskSpec, hub: HubInfo): Promise<SpawnPlan> { /* ... */ },
     parseEvent(line: string): VendorEvent[] { /* ... */ },
@@ -30,6 +31,7 @@ The daemon validates:
 | Check | Failure |
 | --- | --- |
 | `id` equals config key | loud per-plugin error; plugin skipped |
+| `childChannel` is `mcp` \| `cli` \| `http` | same |
 | `prepare` / `resume` / `parseEvent` / `sessionId` are functions | same |
 
 A failed plugin does **not** crash the daemon. Delegating to that vendor then
@@ -62,6 +64,7 @@ export function createAdapter(_env) {
   /** @type {VendorAdapter} */
   const adapter = {
     id: "acme",
+    childChannel: "mcp",
     async prepare(task, hub) {
       return {
         argv: [
@@ -183,19 +186,22 @@ unknown vendor.
 
 Children reach the daemon three ways (ADR-0011). All three converge on the same
 engine methods (`submitReport`, `askOrchestrator`), so report validation and
-question stall/collapse cannot drift:
+question stall/collapse cannot drift. Declare **exactly one** on the adapter as
+`childChannel`; the engine teaches only that channel in the protocol preamble
+(#155). Config may override with `vendors.<id>.childChannel`.
 
 | Channel | When to use |
 | --- | --- |
-| **MCP** (canonical) | The harness has a configurable MCP client that can set custom headers (`x-parley-task`). Adapters inject this via `HubInfo`. |
-| **HTTP** | The harness can `curl` / `fetch` but has no MCP client, or cannot set MCP headers. |
-| **CLI** | Shell scripts / subprocesses: `parley child report` / `ask` / `task`. |
+| **MCP** (canonical) | The harness has a configurable MCP client that can set custom headers (`x-parley-task`). Adapters inject this via `HubInfo`. Preamble teaches `ask_orchestrator` / `submit_report` tool calls. |
+| **HTTP** | The harness can `curl` / `fetch` but has no MCP client, or cannot set MCP headers. Preamble teaches curl examples against `/child/*`. |
+| **CLI** | Shell scripts / subprocesses: `parley child report` / `ask` / `task`. Preamble teaches those commands. |
 
 Every spawn gets `PARLEY_HUB_URL` (daemon base URL) and `PARLEY_TASK_ID` in env,
 plus `.parley/child.json` (`{ "url", "task_id" }`) in the task cwd for children
-that lose env. Prefer MCP when the vendor supports it; fall back to HTTP or the
-CLI when it does not. Remote runners (ADR-0012) serve a local hub proxy that
-forwards these same channels to the daemon — see `docs/agents/remote-runners.md`.
+that lose env — other transports stay functional even when untaught. Prefer MCP
+when the vendor supports it; fall back to HTTP or the CLI when it does not.
+Remote runners (ADR-0012) serve a local hub proxy that forwards these same
+channels to the daemon — see `docs/agents/remote-runners.md`.
 
 ### HTTP examples
 

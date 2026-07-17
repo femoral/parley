@@ -168,6 +168,7 @@ export class RunnerLoop {
         lease.answer_timeout_ms,
         lease.report_schema as JsonSchema,
         lease.prompt,
+        adapter.childChannel,
       );
 
       const hub: HubInfo = {

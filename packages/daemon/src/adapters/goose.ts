@@ -305,6 +305,7 @@ export function createGooseAdapter(env: NodeJS.ProcessEnv = process.env): Vendor
 
   return {
     id: "goose",
+    childChannel: "mcp",
 
     prepare(task, hub): Promise<SpawnPlan> {
       // Fresh headless one-shot: `goose run --output-format stream-json … -t`.

@@ -271,6 +271,7 @@ export function createOpenhandsAdapter(env: NodeJS.ProcessEnv = process.env): Ve
 
   return {
     id: "openhands",
+    childChannel: "mcp",
 
     prepare(task, hub): Promise<SpawnPlan> {
       return Promise.resolve(planFor(task, hub, undefined));

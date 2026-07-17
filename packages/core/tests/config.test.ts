@@ -101,7 +101,7 @@ describe("readConfig — retention.*", () => {
 });
 
 describe("readConfig — vendors.*", () => {
-  it("accepts bin, args, env, plugin", () => {
+  it("accepts bin, args, env, plugin, childChannel", () => {
     const file = writeConfig(
       JSON.stringify({
         vendors: {
@@ -110,6 +110,7 @@ describe("readConfig — vendors.*", () => {
             args: ["--foo"],
             env: { A: "1" },
             plugin: "/plugins/codex.js",
+            childChannel: "cli",
           },
         },
       }),
@@ -119,7 +120,15 @@ describe("readConfig — vendors.*", () => {
       args: ["--foo"],
       env: { A: "1" },
       plugin: "/plugins/codex.js",
+      childChannel: "cli",
     });
+  });
+
+  it("rejects invalid vendors.<id>.childChannel", () => {
+    const file = writeConfig(JSON.stringify({ vendors: { codex: { childChannel: "stdio" } } }));
+    expect(() => readConfig(file)).toThrow(
+      /vendors\.codex\.childChannel must be one of mcp\|cli\|http/,
+    );
   });
 
   it("rejects non-object vendors", () => {

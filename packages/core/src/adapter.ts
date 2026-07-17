@@ -28,6 +28,22 @@ export function isSandboxMode(value: string): value is SandboxMode {
 }
 
 /**
+ * How a child is taught to reach the daemon (ADR-0011 / #155). Adapters declare
+ * one; `vendors.<id>.childChannel` may override. The protocol preamble renders
+ * exactly that channel's report/ask instructions — other transports stay
+ * functional but untaught.
+ */
+export type ChildChannel = "mcp" | "cli" | "http";
+
+/** The valid child channels, in the order docs advertise them. */
+export const CHILD_CHANNELS: readonly ChildChannel[] = ["mcp", "cli", "http"];
+
+/** True when `value` is one of the three child channels. */
+export function isChildChannel(value: string): value is ChildChannel {
+  return (CHILD_CHANNELS as readonly string[]).includes(value);
+}
+
+/**
  * The child's sandbox posture — the caller's normalized answer to "what may
  * this child touch" (spec §8). Delivered to adapters via `TaskSpec`; vendor
  * mapping (ADR-0006 matrix) belongs to each adapter.
@@ -151,6 +167,12 @@ export const VENDOR_DIAG_PREFIX = "PARLEY-DIAG";
 /** A vendor integration: how to spawn it and how to read its event stream. */
 export interface VendorAdapter {
   id: string;
+  /**
+   * Declared child→daemon channel this adapter sets up (ADR-0011 / #155).
+   * The engine teaches exactly this channel in the protocol preamble unless
+   * `vendors.<id>.childChannel` overrides it.
+   */
+  childChannel: ChildChannel;
   /** Build the spawn plan for a fresh run. */
   prepare(task: TaskSpec, hub: HubInfo): Promise<SpawnPlan>;
   /** Build the spawn plan for resuming a stalled task (vendor session resume). */

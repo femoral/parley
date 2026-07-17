@@ -323,6 +323,7 @@ export function createClaudeAdapter(env: NodeJS.ProcessEnv = process.env): Vendo
 
   return {
     id: "claude",
+    childChannel: "mcp",
 
     prepare(task, hub): Promise<SpawnPlan> {
       // Fresh single-turn run (research §2 / §9): `claude -p <prompt> …`.

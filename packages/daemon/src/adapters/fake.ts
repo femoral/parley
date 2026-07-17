@@ -49,6 +49,7 @@ export function createFakeAdapter(env: NodeJS.ProcessEnv = process.env): VendorA
 
   return {
     id: "fake",
+    childChannel: "mcp",
 
     prepare(task, hub) {
       return Promise.resolve(plan(task, hub));

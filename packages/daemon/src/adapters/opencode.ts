@@ -343,6 +343,7 @@ export function createOpencodeAdapter(env: NodeJS.ProcessEnv = process.env): Ven
 
   return {
     id: "opencode",
+    childChannel: "mcp",
 
     prepare(task, hub): Promise<SpawnPlan> {
       // Fresh headless one-shot (research §2/§9):

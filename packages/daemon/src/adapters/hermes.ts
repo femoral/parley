@@ -304,6 +304,7 @@ export function createHermesAdapter(env: NodeJS.ProcessEnv = process.env): Vendo
 
   return {
     id: "hermes",
+    childChannel: "mcp",
 
     prepare(task, hub): Promise<SpawnPlan> {
       // Fresh headless one-shot (research §2 / §9):

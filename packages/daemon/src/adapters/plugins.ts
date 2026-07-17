@@ -1,7 +1,7 @@
 import { createRequire } from "node:module";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import type { VendorAdapter, VendorConfig } from "@useparley/core";
+import { isChildChannel, type VendorAdapter, type VendorConfig } from "@useparley/core";
 
 /**
  * Plugin adapter loader (ADR-0009 / #108).
@@ -12,8 +12,9 @@ import type { VendorAdapter, VendorConfig } from "@useparley/core";
  *
  * Named export preferred; default export accepted (either the factory function
  * itself, or an object with a `createAdapter` property). The returned adapter's
- * `id` must equal the config key (`vendors.<id>`); `prepare`, `resume`,
- * `parseEvent`, and `sessionId` must be functions.
+ * `id` must equal the config key (`vendors.<id>`); `childChannel` must be one
+ * of `mcp`|`cli`|`http`; `prepare`, `resume`, `parseEvent`, and `sessionId`
+ * must be functions.
  *
  * Specifiers:
  * - absolute filesystem path
@@ -35,6 +36,11 @@ export function assertVendorAdapter(id: string, value: unknown): asserts value i
   if (adapter.id !== id) {
     throw new Error(
       `plugin adapter "${id}": returned id ${JSON.stringify(adapter.id)} does not match config key`,
+    );
+  }
+  if (typeof adapter.childChannel !== "string" || !isChildChannel(adapter.childChannel)) {
+    throw new Error(
+      `plugin adapter "${id}": childChannel must be one of mcp|cli|http`,
     );
   }
   for (const method of ["prepare", "resume", "parseEvent", "sessionId"] as const) {

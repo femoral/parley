@@ -515,6 +515,7 @@ export function scrapeClineSessionId(dataDir: string): string | undefined {
 export function createClineAdapter(env: NodeJS.ProcessEnv = process.env): VendorAdapter {
   return {
     id: "cline",
+    childChannel: "mcp",
 
     prepare(task, hub): Promise<SpawnPlan> {
       // Fresh headless one-shot (research §2 / §9) via session-scrape wrapper:

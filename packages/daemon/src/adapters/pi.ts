@@ -441,6 +441,7 @@ export function createPiAdapter(env: NodeJS.ProcessEnv = process.env): VendorAda
 
   return {
     id: "pi",
+    childChannel: "mcp",
 
     prepare(task, hub): Promise<SpawnPlan> {
       try {

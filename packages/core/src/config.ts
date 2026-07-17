@@ -1,6 +1,11 @@
 import fs from "node:fs";
 import path from "node:path";
-import { isSandboxMode, type SandboxMode } from "./adapter.js";
+import {
+  isChildChannel,
+  isSandboxMode,
+  type ChildChannel,
+  type SandboxMode,
+} from "./adapter.js";
 
 /**
  * UI bundle discovery settings (`docs/spec/ui-interface-contract.md` §"Serving
@@ -61,6 +66,11 @@ export interface VendorConfig {
    * package name resolved from the parley home dir. Loaded at daemon startup.
    */
   plugin?: string;
+  /**
+   * Override the adapter's declared child channel for preamble teaching
+   * (`mcp` | `cli` | `http`; #155). Other transports stay functional but untaught.
+   */
+  childChannel?: ChildChannel;
 }
 
 /**
@@ -188,6 +198,13 @@ function validateVendorEntry(file: string, id: string, raw: unknown): void {
   if (raw.env !== undefined) assertStringRecord(file, `vendors.${id}.env`, raw.env);
   if (raw.plugin !== undefined) {
     assertNonEmptyString(file, `vendors.${id}.plugin`, raw.plugin);
+  }
+  if (raw.childChannel !== undefined) {
+    if (typeof raw.childChannel !== "string" || !isChildChannel(raw.childChannel)) {
+      throw new Error(
+        `invalid config at ${file}: vendors.${id}.childChannel must be one of mcp|cli|http`,
+      );
+    }
   }
 }
 

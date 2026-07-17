@@ -9,11 +9,14 @@
  * `export *` here does not dual-export them.
  */
 export {
+  CHILD_CHANNELS,
   DEFAULT_NETWORK,
   DEFAULT_SANDBOX,
   SANDBOX_MODES,
   VENDOR_DIAG_PREFIX,
+  isChildChannel,
   isSandboxMode,
+  type ChildChannel,
   type HubInfo,
   type MaterializedFile,
   type ModelCatalog,

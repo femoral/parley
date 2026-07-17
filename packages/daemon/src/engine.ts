@@ -6,11 +6,12 @@ import {
   DEFAULT_NETWORK,
   DEFAULT_RETENTION_DAYS,
   DEFAULT_SANDBOX,
-  formatDuration,
   inboxRank,
   isActionableState,
+  isChildChannel,
   readConfig,
   retentionDays,
+  type ChildChannel,
   type HomePaths,
   type ParleyConfig,
   type ProfileConfig,
@@ -53,7 +54,6 @@ import {
   type TaskRow,
 } from "./db.js";
 import {
-  contextPointers,
   materializeChildHub,
   materializeContext,
   type ContextFile,
@@ -63,11 +63,11 @@ import {
   assertValidSchema,
   DEFAULT_REPORT_SCHEMA,
   parseJsonColumn,
-  summarizeReportSchema,
   validateReport,
   type JsonSchema,
   type Report,
 } from "./report.js";
+import { buildProtocolPreamble, finishInstruction } from "./preamble.js";
 import {
   commonGitDir,
   createWorktree,
@@ -1769,61 +1769,52 @@ export class TaskEngine {
   }
 
   /**
-   * The protocol preamble prepended to every vendor prompt (spec §7). Mechanics
-   * only — no repo digest or history: the tools the child has, the report schema
-   * it must satisfy, where its brief and context live on disk, the workspace and
-   * branch facts, and the answer timeout. Re-prepended on resume too, so a
-   * respawned child is re-taught the rules. Context pointers are read from disk
-   * at build time, so they reflect what was actually materialized.
+   * Resolve the child channel taught in the preamble (#155): config override
+   * `vendors.<id>.childChannel` wins over the adapter's declared channel.
+   * Re-reads config hot (same posture as args/env).
    */
-  private buildPreamble(task: TaskRow): string {
+  private childChannelFor(task: TaskRow, adapter: VendorAdapter): ChildChannel {
+    let config: ParleyConfig;
+    try {
+      config = readConfig(this.paths.config);
+    } catch {
+      return adapter.childChannel;
+    }
+    const override = config.vendors?.[task.vendor ?? ""]?.childChannel;
+    if (typeof override === "string" && isChildChannel(override)) return override;
+    return adapter.childChannel;
+  }
+
+  /**
+   * The protocol preamble prepended to every vendor prompt (spec §7 / #155).
+   * Channel-matched tools section; everything else is channel-independent.
+   * Re-prepended on resume too. Exported builder: {@link buildProtocolPreamble}.
+   */
+  private buildPreamble(task: TaskRow, adapter: VendorAdapter): string {
     const cwd = task.cwd ?? process.cwd();
     const schema = parseJsonColumn<JsonSchema>(task.report_schema) ?? DEFAULT_REPORT_SCHEMA;
-    const timeout = formatDuration(task.answer_timeout_ms ?? DEFAULT_ANSWER_TIMEOUT_MS);
-    const location =
-      task.branch !== null
-        ? `You are working in a git worktree at \`${cwd}\` on branch \`${task.branch}\`. Commit your work there; parley never merges — the orchestrator reviews the branch.`
-        : `You are working directly in \`${cwd}\` (no dedicated branch).`;
-    const pointers = contextPointers(cwd);
-    const contextList =
-      pointers.length > 0
-        ? pointers.map((p) => `- \`${p}\``).join("\n")
-        : "- (none)";
-
-    return [
-      "# Parley protocol",
-      "",
-      "You are an agent working on a task delegated through parley. Read these rules before you begin.",
-      "",
-      "## Where things are",
-      location,
-      "- Your task brief is on disk at `.parley/TASK.md` — read it first.",
-      "- Supporting context files are under `.parley/context/`:",
-      contextList,
-      "",
-      "## Tools available to you",
-      `- \`ask_orchestrator({ question })\` — ask the orchestrator a blocking question when you are genuinely stuck or need a decision only they can make. It blocks until an answer arrives; a question left unanswered for ${timeout} stalls the task (it can be resumed later). Do not use it for anything you can resolve yourself.`,
-      "- `submit_report({ ... })` — you MUST finish by calling this exactly once. The task only completes when you submit a report that satisfies the schema below; exiting without one is a failure.",
-      "",
-      "## Report schema",
-      summarizeReportSchema(schema),
-      "",
-      "The task itself follows below (and in `.parley/TASK.md`); everything above is protocol, not the task.",
-    ].join("\n");
+    return buildProtocolPreamble({
+      cwd,
+      branch: task.branch,
+      answerTimeoutMs: task.answer_timeout_ms ?? DEFAULT_ANSWER_TIMEOUT_MS,
+      reportSchema: schema,
+      childChannel: this.childChannelFor(task, adapter),
+    });
   }
 
   /** Fresh-run prompt: the preamble, then the caller's brief (spec §7). */
-  private initialPrompt(task: TaskRow): string {
-    return `${this.buildPreamble(task)}\n\n---\n\n${task.prompt ?? ""}`;
+  private initialPrompt(task: TaskRow, adapter: VendorAdapter): string {
+    return `${this.buildPreamble(task, adapter)}\n\n---\n\n${task.prompt ?? ""}`;
   }
 
   /**
    * Resume prompt: the preamble re-prepended (spec §2/§7), then the
    * orchestrator's answer as the conversation's continuation.
    */
-  private resumePrompt(task: TaskRow, answer: string): string {
+  private resumePrompt(task: TaskRow, adapter: VendorAdapter, answer: string): string {
+    const channel = this.childChannelFor(task, adapter);
     return [
-      this.buildPreamble(task),
+      this.buildPreamble(task, adapter),
       "",
       "---",
       "",
@@ -1831,13 +1822,16 @@ export class TaskEngine {
       "",
       answer,
       "",
-      "Continue the task from here and finish by calling `submit_report`.",
+      finishInstruction(channel),
     ].join("\n");
   }
 
   /** Fresh run: spawn the vendor child via `prepare` and pump it until exit. */
   private async run(task: TaskRow, adapter: VendorAdapter): Promise<void> {
-    const spec: TaskSpec = { ...this.buildSpec(task), prompt: this.initialPrompt(task) };
+    const spec: TaskSpec = {
+      ...this.buildSpec(task),
+      prompt: this.initialPrompt(task, adapter),
+    };
     const plan = this.applyVendorConfig(task, await adapter.prepare(spec, this.hubFor(task.id)));
     await this.runChild(task, adapter, plan, {
       state: "running",
@@ -1852,7 +1846,10 @@ export class TaskEngine {
    * `started_at` is kept from the original run.
    */
   private async resume(task: TaskRow, adapter: VendorAdapter, answer: string): Promise<void> {
-    const spec: TaskSpec = { ...this.buildSpec(task), prompt: this.resumePrompt(task, answer) };
+    const spec: TaskSpec = {
+      ...this.buildSpec(task),
+      prompt: this.resumePrompt(task, adapter, answer),
+    };
     const plan = this.applyVendorConfig(task, await adapter.resume(spec, this.hubFor(task.id)));
     await this.runChild(task, adapter, plan, {
       state: "running",

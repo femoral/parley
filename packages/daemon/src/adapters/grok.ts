@@ -271,6 +271,7 @@ export function createGrokAdapter(env: NodeJS.ProcessEnv = process.env): VendorA
 
   return {
     id: "grok",
+    childChannel: "mcp",
 
     prepare(task, hub): Promise<SpawnPlan> {
       // Fresh single-turn run: `grok -p <prompt> …`. The session id is captured

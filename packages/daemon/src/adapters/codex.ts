@@ -231,6 +231,7 @@ function parseItem(item: unknown): VendorEvent[] {
 export function createCodexAdapter(env: NodeJS.ProcessEnv = process.env): VendorAdapter {
   return {
     id: "codex",
+    childChannel: "mcp",
 
     prepare(task, hub) {
       const plan: SpawnPlan = {

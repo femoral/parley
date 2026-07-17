@@ -323,6 +323,7 @@ export function createKiloAdapter(env: NodeJS.ProcessEnv = process.env): VendorA
 
   return {
     id: "kilo",
+    childChannel: "mcp",
 
     prepare(task, hub): Promise<SpawnPlan> {
       // Fresh headless one-shot: `kilo run --format json --auto --dir <cwd> …`

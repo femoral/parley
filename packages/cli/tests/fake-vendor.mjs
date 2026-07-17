@@ -4,7 +4,8 @@
  *
  * Speaks a vendor-like JSONL event stream on stdout and acts as a real MCP
  * client against the daemon's streamable-HTTP endpoint (URL + correlation
- * headers injected by the fake adapter's SpawnPlan via env).
+ * headers injected by the fake adapter's SpawnPlan via env). Also exercises
+ * the ADR-0011 HTTP and CLI child channels when scripted to (#155).
  *
  * Behavior is scripted per task: it reads `.fake-vendor.json` from its cwd —
  * an array of actions:
@@ -14,9 +15,13 @@
  *   { "write_file": { "path": "...", "contents": "..." } }  write a file in cwd
  *   { "git_commit": { "message": "..." } }  stage all + commit in cwd
  *   { "submit_report": {...} }              MCP tools/call submit_report
+ *   { "submit_report_http": {...} }         POST /child/report (HTTP channel)
+ *   { "submit_report_cli": {...} }          `parley child report --json-file -`
  *   { "ask": "question text" }              MCP ask_orchestrator; blocks until
  *                                           `parley answer` delivers the answer,
  *                                           echoed as a tool_result, then continues
+ *   { "ask_http": "question text" }         POST /child/ask (HTTP channel)
+ *   { "ask_cli": "question text" }          `parley child ask "..."`
  *   { "ask": "...", "background": true }    fire-and-forget ask (misbehaving
  *                                           child that submit_reports over its
  *                                           own outstanding question — #79)
@@ -25,12 +30,17 @@
  * The result of each tool call is echoed to stdout as a JSONL event
  * ({"type":"tool_result", ...}) so tests can observe validation bounces.
  */
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { createRequire } from "node:module";
 
 const mcpUrl = process.env.FAKE_MCP_URL;
 const headers = JSON.parse(process.env.FAKE_MCP_HEADERS ?? "{}");
+const hubBase = (process.env.PARLEY_HUB_URL ?? "").replace(/\/$/, "");
+const taskId = process.env.PARLEY_TASK_ID ?? "";
+const TASK_HEADER = "x-parley-task";
 
 function emit(event) {
   process.stdout.write(`${JSON.stringify(event)}\n`);
@@ -94,6 +104,85 @@ async function callTool(name, args) {
   return result;
 }
 
+/** POST /child/* using the engine-injected hub env (ADR-0011 HTTP channel). */
+async function childHttp(pathname, body) {
+  if (!hubBase || !taskId) {
+    throw new Error("child http: PARLEY_HUB_URL / PARLEY_TASK_ID not set");
+  }
+  const res = await fetch(`${hubBase}${pathname}`, {
+    method: body === undefined ? "GET" : "POST",
+    headers: {
+      "content-type": "application/json",
+      [TASK_HEADER]: taskId,
+    },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  const text = await res.text();
+  let parsed;
+  try {
+    parsed = text === "" ? undefined : JSON.parse(text);
+  } catch {
+    parsed = text;
+  }
+  emit({
+    type: "tool_result",
+    tool: `http:${pathname}`,
+    is_error: res.status >= 400,
+    status: res.status,
+    text: typeof parsed === "string" ? parsed : JSON.stringify(parsed ?? {}),
+  });
+  if (res.status >= 400 && res.status !== 504) {
+    throw new Error(`child http ${pathname} failed: ${res.status} ${text}`);
+  }
+  return { status: res.status, body: parsed };
+}
+
+/**
+ * Resolve the parley CLI entry the same way integration tests do, so
+ * `submit_report_cli` / `ask_cli` exercise the real `parley child` surface.
+ */
+function resolveParleyCli() {
+  // Prefer an explicit path (tests can set PARLEY_CLI_ENTRY); else locate the
+  // packages/cli entry relative to this fake-vendor file.
+  if (process.env.PARLEY_CLI_ENTRY) return process.env.PARLEY_CLI_ENTRY;
+  return path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../src/index.ts");
+}
+
+function resolveTsxLoader() {
+  if (process.env.PARLEY_TSX_LOADER) return process.env.PARLEY_TSX_LOADER;
+  const require = createRequire(import.meta.url);
+  return pathToFileURL(require.resolve("tsx")).href;
+}
+
+/** Shell out to `parley child …` (ADR-0011 CLI channel). */
+function childCli(args, stdin) {
+  const cliEntry = resolveParleyCli();
+  const tsx = resolveTsxLoader();
+  const result = spawnSync(
+    process.execPath,
+    ["--import", tsx, cliEntry, "child", ...args],
+    {
+      cwd: process.cwd(),
+      env: process.env,
+      encoding: "utf8",
+      input: stdin,
+    },
+  );
+  emit({
+    type: "tool_result",
+    tool: `cli:child ${args[0]}`,
+    is_error: result.status !== 0,
+    status: result.status ?? 1,
+    text: (result.stdout ?? "") + (result.stderr ?? ""),
+  });
+  if (result.status !== 0 && result.status !== 4) {
+    throw new Error(
+      `child cli ${args.join(" ")} failed (exit ${result.status}): ${result.stderr || result.stdout}`,
+    );
+  }
+  return result;
+}
+
 async function main() {
   // Engine injects PARLEY_HUB_URL / PARLEY_TASK_ID for every adapter (ADR-0011);
   // echo them so tests can assert the env (and .parley/child.json) path.
@@ -148,15 +237,23 @@ async function main() {
       });
     }
     else if (action.submit_report !== undefined) await callTool("submit_report", action.submit_report);
-    else if (action.ask !== undefined) {
+    else if (action.submit_report_http !== undefined) {
+      await childHttp("/child/report", action.submit_report_http);
+    } else if (action.submit_report_cli !== undefined) {
+      childCli(["report", "--json-file", "-"], JSON.stringify(action.submit_report_cli));
+    } else if (action.ask !== undefined) {
       const askPromise = callTool("ask_orchestrator", { question: action.ask });
       // Background ask: do not await — the next action can run while the
       // question is still outstanding (report-over-question path, #79).
       if (action.background === true) void askPromise;
       else await askPromise;
-    }
-    else if (action.call_tool !== undefined) await callTool(action.call_tool.name, action.call_tool.args ?? {});
-    else if (action.exit !== undefined) process.exit(action.exit);
+    } else if (action.ask_http !== undefined) {
+      await childHttp("/child/ask", { question: action.ask_http });
+    } else if (action.ask_cli !== undefined) {
+      childCli(["ask", action.ask_cli]);
+    } else if (action.call_tool !== undefined) {
+      await callTool(action.call_tool.name, action.call_tool.args ?? {});
+    } else if (action.exit !== undefined) process.exit(action.exit);
     else throw new Error(`unknown action: ${JSON.stringify(action)}`);
   }
 }

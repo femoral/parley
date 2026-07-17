@@ -30,6 +30,7 @@ const GOOD_ADAPTER = `
 export function createAdapter(env) {
   return {
     id: "acme",
+    childChannel: "mcp",
     prepare: async () => ({ argv: ["acme"], env: {}, files: [], cwd: "/tmp" }),
     resume: async () => ({ argv: ["acme"], env: {}, files: [], cwd: "/tmp" }),
     parseEvent: () => [],
@@ -38,34 +39,43 @@ export function createAdapter(env) {
 }
 `;
 
+function validAdapter(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "acme",
+    childChannel: "mcp",
+    prepare: async () => ({ argv: [], env: {}, files: [], cwd: "/" }),
+    resume: async () => ({ argv: [], env: {}, files: [], cwd: "/" }),
+    parseEvent: () => [],
+    sessionId: () => undefined,
+    ...overrides,
+  };
+}
+
 describe("assertVendorAdapter", () => {
   it("accepts a well-formed adapter", () => {
-    const adapter = {
-      id: "acme",
-      prepare: async () => ({ argv: [], env: {}, files: [], cwd: "/" }),
-      resume: async () => ({ argv: [], env: {}, files: [], cwd: "/" }),
-      parseEvent: () => [],
-      sessionId: () => undefined,
-    };
-    expect(() => assertVendorAdapter("acme", adapter)).not.toThrow();
+    expect(() => assertVendorAdapter("acme", validAdapter())).not.toThrow();
   });
 
   it("rejects id mismatch", () => {
-    expect(() =>
-      assertVendorAdapter("acme", {
-        id: "other",
-        prepare: () => {},
-        resume: () => {},
-        parseEvent: () => {},
-        sessionId: () => {},
-      }),
-    ).toThrow(/does not match config key/);
+    expect(() => assertVendorAdapter("acme", validAdapter({ id: "other" }))).toThrow(
+      /does not match config key/,
+    );
+  });
+
+  it("rejects missing or invalid childChannel", () => {
+    expect(() => assertVendorAdapter("acme", validAdapter({ childChannel: undefined }))).toThrow(
+      /childChannel must be one of mcp\|cli\|http/,
+    );
+    expect(() => assertVendorAdapter("acme", validAdapter({ childChannel: "stdio" }))).toThrow(
+      /childChannel must be one of mcp\|cli\|http/,
+    );
   });
 
   it("rejects missing prepare", () => {
     expect(() =>
       assertVendorAdapter("acme", {
         id: "acme",
+        childChannel: "mcp",
         resume: () => {},
         parseEvent: () => {},
         sessionId: () => {},
@@ -77,6 +87,7 @@ describe("assertVendorAdapter", () => {
     expect(() =>
       assertVendorAdapter("acme", {
         id: "acme",
+        childChannel: "mcp",
         prepare: () => {},
         parseEvent: () => {},
         sessionId: () => {},
@@ -88,6 +99,7 @@ describe("assertVendorAdapter", () => {
     expect(() =>
       assertVendorAdapter("acme", {
         id: "acme",
+        childChannel: "mcp",
         prepare: () => {},
         resume: () => {},
         sessionId: () => {},
@@ -99,6 +111,7 @@ describe("assertVendorAdapter", () => {
     expect(() =>
       assertVendorAdapter("acme", {
         id: "acme",
+        childChannel: "mcp",
         prepare: () => {},
         resume: () => {},
         parseEvent: () => {},
@@ -140,6 +153,7 @@ describe("loadPluginAdapter — happy path", () => {
       export default function createAdapter() {
         return {
           id: "acme",
+          childChannel: "cli",
           prepare: async () => ({ argv: [], env: {}, files: [], cwd: "/" }),
           resume: async () => ({ argv: [], env: {}, files: [], cwd: "/" }),
           parseEvent: () => [],
@@ -149,6 +163,7 @@ describe("loadPluginAdapter — happy path", () => {
     `);
     const adapter = await loadPluginAdapter("acme", { plugin: pluginPath }, {}, home);
     expect(adapter.id).toBe("acme");
+    expect(adapter.childChannel).toBe("cli");
   });
 
   it("accepts a file: URL specifier", async () => {
@@ -182,6 +197,7 @@ describe("loadPluginAdapter — validation failures", () => {
       export function createAdapter() {
         return {
           id: "wrong",
+          childChannel: "mcp",
           prepare: async () => ({ argv: [], env: {}, files: [], cwd: "/" }),
           resume: async () => ({ argv: [], env: {}, files: [], cwd: "/" }),
           parseEvent: () => [],
@@ -199,6 +215,7 @@ describe("loadPluginAdapter — validation failures", () => {
       export function createAdapter() {
         return {
           id: "acme",
+          childChannel: "mcp",
           prepare: "nope",
           resume: async () => ({ argv: [], env: {}, files: [], cwd: "/" }),
           parseEvent: () => [],
@@ -241,6 +258,7 @@ describe("createAdapterRegistry — plugin wiring", () => {
       export function createAdapter() {
         return {
           id: "fake",
+          childChannel: "mcp",
           prepare: async () => ({ argv: ["shadow"], env: {}, files: [], cwd: "/" }),
           resume: async () => ({ argv: ["shadow"], env: {}, files: [], cwd: "/" }),
           parseEvent: () => [],

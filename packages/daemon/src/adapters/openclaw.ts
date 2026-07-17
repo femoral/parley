@@ -484,6 +484,7 @@ export function createOpenclawAdapter(env: NodeJS.ProcessEnv = process.env): Ven
 
   return {
     id: "openclaw",
+    childChannel: "mcp",
 
     prepare(task, hub): Promise<SpawnPlan> {
       // Fresh headless one-shot (research §2, §9): embedded agent, stable
