@@ -272,6 +272,46 @@ describe("readConfig — runners.*", () => {
   });
 });
 
+describe("readConfig — defaults.*", () => {
+  it("accepts defaults.vendor and defaults.profile", () => {
+    const file = writeConfig(
+      JSON.stringify({ defaults: { vendor: "fake", profile: "deep" } }),
+    );
+    expect(readConfig(file).defaults).toEqual({ vendor: "fake", profile: "deep" });
+  });
+
+  it("accepts either key alone", () => {
+    const v = writeConfig(JSON.stringify({ defaults: { vendor: "fake" } }));
+    expect(readConfig(v).defaults).toEqual({ vendor: "fake" });
+    const p = writeConfig(JSON.stringify({ defaults: { profile: "deep" } }));
+    expect(readConfig(p).defaults).toEqual({ profile: "deep" });
+  });
+
+  it("rejects empty defaults.vendor", () => {
+    const file = writeConfig(JSON.stringify({ defaults: { vendor: "" } }));
+    expect(() => readConfig(file)).toThrow(/defaults\.vendor must be a non-empty string/);
+  });
+
+  it("rejects empty defaults.profile", () => {
+    const file = writeConfig(JSON.stringify({ defaults: { profile: "" } }));
+    expect(() => readConfig(file)).toThrow(/defaults\.profile must be a non-empty string/);
+  });
+
+  it("rejects non-object defaults", () => {
+    const file = writeConfig(JSON.stringify({ defaults: "fake" }));
+    expect(() => readConfig(file)).toThrow(/defaults must be an object/);
+  });
+
+  it("collectUnknownConfigKeys ignores known defaults keys", () => {
+    const keys = collectUnknownConfigKeys({
+      defaults: { vendor: "fake", profile: "deep", extra: true },
+    });
+    expect(keys).toContain("defaults.extra");
+    expect(keys).not.toContain("defaults.vendor");
+    expect(keys).not.toContain("defaults.profile");
+  });
+});
+
 describe("readConfig — unknown keys preserved", () => {
   it("keeps unknown top-level and nested keys", () => {
     const file = writeConfig(

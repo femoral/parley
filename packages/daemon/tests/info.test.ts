@@ -86,7 +86,29 @@ describe("buildInfo / renderInfoProse (#163)", () => {
     const config = buildInfoConfig({ projectDir: project, paths, adapters });
     expect(config.vendors.some((v) => v.id === "fake")).toBe(true);
     expect(config.profiles.map((p) => p.name)).toEqual(["alpha", "zed"]);
+    expect(config.defaults).toEqual({ vendor: null, profile: null });
     const prose = renderInfoProse(config);
     expect(prose.indexOf("`alpha`")).toBeLessThan(prose.indexOf("`zed`"));
+    expect(prose).toContain("### Defaults");
+    expect(prose).toMatch(/defaults\.profile|defaults\.vendor/);
+  });
+
+  it("surfaces defaults.vendor and defaults.profile in config and prose (#175)", () => {
+    write(
+      home,
+      "parley.json",
+      JSON.stringify({
+        profiles: { deep: { vendor: "fake" } },
+        defaults: { vendor: "codex", profile: "deep" },
+      }),
+    );
+    const paths = homePathsFromEnv({ PARLEY_HOME: home });
+    const adapters = createAdapterRegistrySync({ PARLEY_FAKE_VENDOR_BIN: "fake" });
+    const config = buildInfoConfig({ projectDir: project, paths, adapters });
+    expect(config.defaults).toEqual({ vendor: "codex", profile: "deep" });
+    const prose = renderInfoProse(config);
+    expect(prose).toContain("### Defaults");
+    expect(prose).toContain("`deep`");
+    expect(prose).toContain("`codex`");
   });
 });

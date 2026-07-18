@@ -765,20 +765,44 @@ export class TaskEngine {
   /**
    * Resolve profile + explicit request fields. Precedence for model/effort:
    * explicit request > profile > adapter default (#154). Posture falls back to
-   * ADR defaults. Throws `DelegateError` on unknown profile/vendor.
+   * ADR defaults. When neither vendor nor profile is on the request, apply
+   * `defaults.profile` (wins) or `defaults.vendor` (#175). Throws
+   * `DelegateError` on unknown/stale profile/vendor or missing selection.
    */
   private resolveDelegate(request: DelegateRequest): ResolvedDelegate {
     const config = this.readParleyConfig();
+    // Explicit flags always win. Only when both are omitted do config defaults
+    // apply; when both defaults are set, profile wins (it already names a vendor).
+    let profile = request.profile;
+    let vendorReq = request.vendor;
+    const usedDefaults = profile === null && vendorReq === null;
+    if (usedDefaults) {
+      const defProfile = config.defaults?.profile;
+      const defVendor = config.defaults?.vendor;
+      if (typeof defProfile === "string" && defProfile !== "") {
+        profile = defProfile;
+      } else if (typeof defVendor === "string" && defVendor !== "") {
+        vendorReq = defVendor;
+      } else {
+        throw new DelegateError(
+          "vendor or profile is required (pass -v/--profile, or set defaults.vendor / defaults.profile in config)",
+        );
+      }
+    }
     let profileCfg: ProfileConfig | undefined;
-    if (request.profile !== null) {
-      profileCfg = config.profiles?.[request.profile];
+    if (profile !== null) {
+      profileCfg = config.profiles?.[profile];
       if (profileCfg === undefined) {
         const known = Object.keys(config.profiles ?? {});
         const list = known.length > 0 ? known.join(", ") : "(none)";
-        throw new DelegateError(`unknown profile: ${request.profile} (known: ${list})`);
+        const via =
+          usedDefaults && request.profile === null
+            ? " from defaults.profile"
+            : "";
+        throw new DelegateError(`unknown profile${via}: ${profile} (known: ${list})`);
       }
     }
-    const vendor = request.vendor ?? profileCfg?.vendor ?? null;
+    const vendor = vendorReq ?? profileCfg?.vendor ?? null;
     if (vendor === null || vendor === "") {
       throw new DelegateError("vendor is required (or set via profile)");
     }
@@ -797,7 +821,7 @@ export class TaskEngine {
     );
     return {
       vendor,
-      profile: request.profile,
+      profile,
       model: model.value,
       effort: effort.value,
       model_source: model.source,
@@ -819,7 +843,17 @@ export class TaskEngine {
     const adapter = this.adapters.get(resolved.vendor);
     if (!adapter) {
       const known = [...this.adapters.keys()].join(", ");
-      throw new DelegateError(`unknown vendor: ${resolved.vendor} (known: ${known})`);
+      // When the vendor came only from defaults.vendor (no flags, no profile),
+      // name the setting so a stale default is easy to fix (#175).
+      const via =
+        request.vendor === null &&
+        request.profile === null &&
+        resolved.profile === null
+          ? " from defaults.vendor"
+          : "";
+      throw new DelegateError(
+        `unknown vendor${via}: ${resolved.vendor} (known: ${known})`,
+      );
     }
     // Ids and names are interchangeable task refs, so an id-shaped name would
     // shadow (or be shadowed by) a real task id in `resolveTask`.

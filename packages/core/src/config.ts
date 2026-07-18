@@ -108,6 +108,18 @@ export interface RunnerConfig {
 }
 
 /**
+ * Orchestrator fallbacks when `parley delegate` omits `-v` / `--profile` (#175).
+ * When both are set, `profile` wins (a profile already names a vendor). Explicit
+ * CLI flags always win over these defaults.
+ */
+export interface DefaultsConfig {
+  /** Default vendor id when neither flag nor `defaults.profile` applies. */
+  vendor?: string;
+  /** Default profile name; wins over `defaults.vendor` when both are set. */
+  profile?: string;
+}
+
+/**
  * The parley home config file (`~/.parley/parley.json`). Unknown top-level keys
  * (and unknown keys inside sections) are preserved by callers that round-trip
  * the file but ignored by readers.
@@ -121,6 +133,8 @@ export interface ParleyConfig {
   runners?: Record<string, RunnerConfig>;
   /** Task data retention window for `parley gc` / daemon sweep (#153). */
   retention?: RetentionConfig;
+  /** Fallback vendor/profile when delegate omits `-v` / `--profile` (#175). */
+  defaults?: DefaultsConfig;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -314,6 +328,19 @@ function validateRunners(file: string, raw: unknown): void {
   }
 }
 
+function validateDefaults(file: string, raw: unknown): void {
+  if (raw === undefined) return;
+  if (!isRecord(raw)) {
+    throw new Error(`invalid config at ${file}: defaults must be an object`);
+  }
+  if (raw.vendor !== undefined) {
+    assertNonEmptyString(file, "defaults.vendor", raw.vendor);
+  }
+  if (raw.profile !== undefined) {
+    assertNonEmptyString(file, "defaults.profile", raw.profile);
+  }
+}
+
 /**
  * Validate a parsed config value with the same named field errors as load time.
  * `source` is included in every error message (a filesystem path for file loads,
@@ -333,6 +360,7 @@ export function validateConfig(source: string, raw: unknown): ParleyConfig {
   validateProfiles(source, config.profiles);
   validateRunners(source, config.runners);
   validateRetention(source, config.retention);
+  validateDefaults(source, config.defaults);
   // Validate the fields consumers hand to path/module APIs — a non-string must
   // surface as a named config error here, not a TypeError deep in a consumer.
   // (ui.path / ui.package checked in validateUi above.)
@@ -390,6 +418,7 @@ const KNOWN_TOP_LEVEL = new Set([
   "profiles",
   "runners",
   "retention",
+  "defaults",
 ]);
 const KNOWN_UI = new Set(["path", "package"]);
 const KNOWN_DAEMON = new Set(["url", "idleTimeoutMs"]);
@@ -405,6 +434,7 @@ const KNOWN_PROFILE = new Set([
 ]);
 const KNOWN_RUNNER = new Set(["token"]);
 const KNOWN_RETENTION = new Set(["days"]);
+const KNOWN_DEFAULTS = new Set(["vendor", "profile"]);
 
 /**
  * List dotted paths of unknown keys in a config object (top-level and nested
@@ -459,6 +489,12 @@ export function collectUnknownConfigKeys(config: Record<string, unknown>): strin
   if (isRecord(retention)) {
     for (const key of Object.keys(retention)) {
       if (!KNOWN_RETENTION.has(key)) unknown.push(`retention.${key}`);
+    }
+  }
+  const defaults = config.defaults;
+  if (isRecord(defaults)) {
+    for (const key of Object.keys(defaults)) {
+      if (!KNOWN_DEFAULTS.has(key)) unknown.push(`defaults.${key}`);
     }
   }
   return unknown;

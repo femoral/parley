@@ -52,6 +52,7 @@ describe("parley info — six sections from live config (#163)", () => {
         vendors: {
           fake: { childChannel: "cli", retryWindow: "45m" },
         },
+        defaults: { profile: "fast", vendor: "fake" },
       }),
       "orchestrator/PROMPT.md": "ORCH-HOME-LINE",
     });
@@ -98,6 +99,9 @@ describe("parley info — six sections from live config (#163)", () => {
     expect(out).toContain("`fast`");
     expect(out).toMatch(/vendor=fake/);
     expect(out).toMatch(/model=m-fast/);
+    expect(out).toContain("### Defaults");
+    expect(out).toMatch(/profile: `fast`/);
+    expect(out).toMatch(/vendor: `fake`/);
 
     // Task types from project + automatic other.
     expect(out).toContain("`coding` → rubric `coding`");

@@ -29,7 +29,7 @@ const HELP = `parley — delegate tasks to agent CLIs
 Usage:
   parley delegate [flags] "<prompt>"  Delegate a task ('-' reads stdin);
                                 returns immediately with pending-task JSON
-    -v --vendor <id>   Vendor adapter (required)
+    -v --vendor <id>   Vendor adapter (or --profile / defaults.*)
     -m --model <id>    Model, passed through to the vendor
     --effort <level>   Reasoning effort, passed through to the vendor
     -n --name <label>  Human label; usable wherever a task id is

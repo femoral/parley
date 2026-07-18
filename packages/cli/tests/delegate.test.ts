@@ -10,6 +10,7 @@ import {
   waitFor,
   waitForState,
   watchJson,
+  writeFiles,
   type FakeVendorAction,
 } from "./helpers.js";
 
@@ -693,10 +694,11 @@ describe("delegate usage errors (exit 2)", () => {
     expect(result.stderr).toMatch(/vendor/);
   });
 
-  it("rejects a missing vendor", async () => {
+  it("rejects a missing vendor/profile when no defaults are configured", async () => {
     const result = await runCli(["delegate", "--cwd", "/tmp", "x"], home);
     expect(result.code).toBe(2);
-    expect(result.stderr).toMatch(/vendor/);
+    expect(result.stderr).toMatch(/vendor or profile is required/);
+    expect(result.stderr).toMatch(/defaults\.vendor|defaults\.profile/);
   });
 
   it("rejects a nonexistent --cwd", async () => {
@@ -716,6 +718,66 @@ describe("delegate usage errors (exit 2)", () => {
     );
     expect(result.code).toBe(2);
     expect(result.stderr).toMatch(/name/);
+  });
+});
+
+describe("delegate default vendor/profile (#175)", () => {
+  it("delegates without -v/--profile when defaults.vendor is set", async () => {
+    writeFiles(home, {
+      "parley.json": JSON.stringify({ defaults: { vendor: "fake" } }),
+    });
+    const cwd = taskDir(happyActions());
+    const result = await runCli(["delegate", "--cwd", cwd, "-n", "def-v", "do it"], home);
+    expect(result.code).toBe(0);
+    const ack = JSON.parse(result.stdout) as { task_id: string };
+    const row = await waitForState(home, ack.task_id, "completed");
+    expect(row.vendor).toBe("fake");
+    expect(row.profile).toBeNull();
+  });
+
+  it("delegates without -v/--profile when defaults.profile is set", async () => {
+    writeFiles(home, {
+      "parley.json": JSON.stringify({
+        profiles: { deep: { vendor: "fake", model: "m-def" } },
+        defaults: { profile: "deep" },
+      }),
+    });
+    const cwd = taskDir(happyActions());
+    const result = await runCli(["delegate", "--cwd", cwd, "-n", "def-p", "do it"], home);
+    expect(result.code).toBe(0);
+    const ack = JSON.parse(result.stdout) as { task_id: string };
+    const row = await waitForState(home, ack.task_id, "completed");
+    expect(row.vendor).toBe("fake");
+    expect(row.profile).toBe("deep");
+    expect(row.model).toBe("m-def");
+  });
+
+  it("explicit -v beats defaults.profile", async () => {
+    writeFiles(home, {
+      "parley.json": JSON.stringify({
+        profiles: { deep: { vendor: "fake", model: "from-profile" } },
+        defaults: { profile: "deep" },
+      }),
+    });
+    const cwd = taskDir(happyActions());
+    const result = await runCli(
+      ["delegate", "-v", "fake", "-m", "explicit", "--cwd", cwd, "-n", "override", "do it"],
+      home,
+    );
+    expect(result.code).toBe(0);
+    const ack = JSON.parse(result.stdout) as { task_id: string };
+    const row = await waitForState(home, ack.task_id, "completed");
+    expect(row.profile).toBeNull();
+    expect(row.model).toBe("explicit");
+  });
+
+  it("rejects a stale defaults.profile with exit 2", async () => {
+    writeFiles(home, {
+      "parley.json": JSON.stringify({ defaults: { profile: "missing" } }),
+    });
+    const result = await runCli(["delegate", "--cwd", "/tmp", "x"], home);
+    expect(result.code).toBe(2);
+    expect(result.stderr).toMatch(/unknown profile.*defaults\.profile|unknown profile from defaults/);
   });
 });
 

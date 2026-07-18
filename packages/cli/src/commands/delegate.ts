@@ -64,11 +64,10 @@ export async function runDelegate(ctx: CliContext, args: string[]): Promise<numb
   }
   // Vendor optional when --profile is given; the daemon resolves vendor from
   // the profile (and applies profile defaults). Explicit flags beat the profile.
+  // When both are omitted, the daemon falls back to defaults.profile (wins)
+  // or defaults.vendor (#175); missing both flags and defaults is exit 2.
   const vendor = typeof flags["--vendor"] === "string" ? flags["--vendor"] : null;
   const profile = typeof flags["--profile"] === "string" ? flags["--profile"] : null;
-  if (vendor === null && profile === null) {
-    throw new UsageError("delegate: a vendor or --profile is required");
-  }
   // Orchestrator-run identity (#162): `--session` overrides `PARLEY_SESSION_ID`.
   // When neither is set the daemon binds via process ancestry (or single-live
   // fallback). When evals are on and nothing resolves, the daemon returns

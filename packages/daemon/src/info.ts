@@ -60,6 +60,15 @@ export interface InfoProfile {
   network: boolean | null;
 }
 
+/**
+ * Configured delegate fallbacks (`defaults.vendor` / `defaults.profile`, #175).
+ * When both are set, profile wins at resolve time.
+ */
+export interface InfoDefaults {
+  vendor: string | null;
+  profile: string | null;
+}
+
 /** One work-domain type (configured or automatic `other`). */
 export interface InfoTaskType {
   id: string;
@@ -131,6 +140,8 @@ export interface InfoConfig {
   instructions: string | null;
   vendors: InfoVendor[];
   profiles: InfoProfile[];
+  /** Fallback when delegate omits -v/--profile (#175). */
+  defaults: InfoDefaults;
   taskTypes: InfoTaskType[];
   classification: ClassificationConfig;
   evaluation: InfoEvaluation;
@@ -247,6 +258,17 @@ export function buildInfoConfig(options: BuildInfoOptions): InfoConfig {
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([name, cfg]) => profileEntry(name, cfg));
 
+  const defaults: InfoDefaults = {
+    vendor:
+      typeof daemonConfig.defaults?.vendor === "string"
+        ? daemonConfig.defaults.vendor
+        : null,
+    profile:
+      typeof daemonConfig.defaults?.profile === "string"
+        ? daemonConfig.defaults.profile
+        : null,
+  };
+
   const taskTypesMap = readProjectTaskTypes(projectDir);
   const taskTypes: InfoTaskType[] = Object.entries(taskTypesMap)
     .sort(([a], [b]) => a.localeCompare(b))
@@ -325,6 +347,7 @@ export function buildInfoConfig(options: BuildInfoOptions): InfoConfig {
     instructions,
     vendors,
     profiles,
+    defaults,
     taskTypes,
     classification,
     evaluation,
@@ -373,6 +396,23 @@ export function renderInfoProse(config: InfoConfig): string {
       if (p.sandbox !== null) bits.push(`sandbox=${p.sandbox}`);
       if (p.network !== null) bits.push(`network=${p.network}`);
       lines.push(`- \`${p.name}\`: ${bits.join(" ")}`);
+    }
+  }
+  lines.push("");
+  lines.push("### Defaults");
+  lines.push(
+    "When `parley delegate` omits `-v` / `--profile`, the daemon uses these fallbacks (profile wins if both are set):",
+  );
+  if (config.defaults.profile === null && config.defaults.vendor === null) {
+    lines.push(
+      "(none — set `defaults.profile` or `defaults.vendor` in daemon parley.json)",
+    );
+  } else {
+    if (config.defaults.profile !== null) {
+      lines.push(`- profile: \`${config.defaults.profile}\``);
+    }
+    if (config.defaults.vendor !== null) {
+      lines.push(`- vendor: \`${config.defaults.vendor}\``);
     }
   }
   lines.push("");

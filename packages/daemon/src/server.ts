@@ -232,13 +232,11 @@ function handleDelegate(engine: TaskEngine, res: http.ServerResponse, body: unkn
     sendJson(res, 400, { error: "prompt is required" });
     return;
   }
-  // Vendor optional when profile is set; engine resolves precedence (#113).
+  // Vendor/profile optional when defaults are configured (#175); engine
+  // resolves flags > defaults.profile > defaults.vendor and rejects when still
+  // unresolved or stale.
   const vendor = optionalString(body.vendor);
   const profile = optionalString(body.profile);
-  if (vendor === null && profile === null) {
-    sendJson(res, 400, { error: "vendor or profile is required" });
-    return;
-  }
   // Session id is optional on the wire (#162): daemon binds via ancestry /
   // single-live fallback, and gates with session_required only when evals on.
   const orchSession =

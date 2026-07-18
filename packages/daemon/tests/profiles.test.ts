@@ -148,8 +148,79 @@ describe("profile resolution precedence (#113)", () => {
     );
   });
 
-  it("requires vendor or profile", () => {
-    expect(() => engine().delegate(baseRequest())).toThrow(/vendor is required/);
+  it("requires vendor or profile when no defaults are configured", () => {
+    expect(() => engine().delegate(baseRequest())).toThrow(
+      /vendor or profile is required.*defaults\.vendor/,
+    );
+  });
+});
+
+describe("default vendor/profile fallback (#175)", () => {
+  it("uses defaults.vendor when request omits vendor and profile", () => {
+    writeParleyConfig({ defaults: { vendor: "fake" } });
+    const row = engine().delegate(baseRequest());
+    expect(row.vendor).toBe("fake");
+    expect(row.profile).toBeNull();
+  });
+
+  it("uses defaults.profile when request omits vendor and profile", () => {
+    writeParleyConfig({
+      profiles: {
+        deep: { vendor: "fake", model: "m-default", effort: "high" },
+      },
+      defaults: { profile: "deep" },
+    });
+    const row = engine().delegate(baseRequest());
+    expect(row.vendor).toBe("fake");
+    expect(row.profile).toBe("deep");
+    expect(row.model).toBe("m-default");
+    expect(row.effort).toBe("high");
+  });
+
+  it("prefers defaults.profile over defaults.vendor when both are set", () => {
+    writeParleyConfig({
+      profiles: { deep: { vendor: "fake", model: "from-profile" } },
+      defaults: { vendor: "codex", profile: "deep" },
+    });
+    const row = engine().delegate(baseRequest());
+    expect(row.vendor).toBe("fake");
+    expect(row.profile).toBe("deep");
+    expect(row.model).toBe("from-profile");
+  });
+
+  it("explicit -v/--profile flags beat defaults", () => {
+    writeParleyConfig({
+      profiles: {
+        deep: { vendor: "fake", model: "from-profile" },
+        other: { vendor: "fake", model: "other-model" },
+      },
+      defaults: { profile: "deep", vendor: "codex" },
+    });
+    const byVendor = engine().delegate(baseRequest({ vendor: "fake", model: "explicit" }));
+    expect(byVendor.vendor).toBe("fake");
+    expect(byVendor.profile).toBeNull();
+    expect(byVendor.model).toBe("explicit");
+
+    const byProfile = engine().delegate(baseRequest({ profile: "other" }));
+    expect(byProfile.profile).toBe("other");
+    expect(byProfile.model).toBe("other-model");
+  });
+
+  it("rejects a stale defaults.profile", () => {
+    writeParleyConfig({
+      profiles: { deep: { vendor: "fake" } },
+      defaults: { profile: "gone" },
+    });
+    expect(() => engine().delegate(baseRequest())).toThrow(
+      /unknown profile from defaults\.profile: gone/,
+    );
+  });
+
+  it("rejects a stale defaults.vendor", () => {
+    writeParleyConfig({ defaults: { vendor: "not-a-vendor" } });
+    expect(() => engine().delegate(baseRequest())).toThrow(
+      /unknown vendor from defaults\.vendor: not-a-vendor/,
+    );
   });
 });
 
