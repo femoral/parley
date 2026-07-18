@@ -1,5 +1,12 @@
 import fs from "node:fs";
 import path from "node:path";
+import {
+  SHIPPED_CATALOG_RETRIEVED_AT,
+  SHIPPED_CATALOG_VENDOR_IDS,
+  SHIPPED_MODEL_CATALOG,
+} from "./shipped-model-catalog.js";
+
+export { SHIPPED_CATALOG_RETRIEVED_AT, SHIPPED_CATALOG_VENDOR_IDS, SHIPPED_MODEL_CATALOG };
 
 /**
  * One model an adapter advertises. The catalog is advisory only: `delegate`
@@ -12,6 +19,8 @@ export interface ModelEntry {
   efforts: string[];
   /** The vendor's default effort for this model, or null when unknown. */
   default_effort: string | null;
+  label?: string;
+  notes?: string;
 }
 
 /** One vendor's slice of the catalog file (`~/.parley/models.json`). */
@@ -21,6 +30,8 @@ export interface VendorModels {
   /** Where the entry came from: a probe command (`codex debug models`) or `manual`. */
   source: string;
   models: ModelEntry[];
+  effort_levels?: string[];
+  notes?: string;
 }
 
 /** The whole catalog: vendor id → its models. The file is the source of truth. */
@@ -58,24 +69,67 @@ export interface ModelProber {
  * The seed written when no catalog file exists yet. Gives the user a concrete,
  * hand-editable starting point; refreshing overwrites these with live probes.
  */
-export const DEFAULT_CATALOG: ModelCatalog = {
-  codex: {
-    fetched_at: null,
-    source: "codex debug models",
-    models: [
-      {
-        id: "gpt-5.6-sol",
-        efforts: ["low", "medium", "high", "xhigh", "max", "ultra"],
-        default_effort: "medium",
-      },
-    ],
-  },
-  grok: {
-    fetched_at: null,
-    source: "manual",
-    models: [{ id: "grok-4.5", efforts: ["low", "medium", "high"], default_effort: "high" }],
-  },
-};
+export const DEFAULT_CATALOG: ModelCatalog = SHIPPED_MODEL_CATALOG;
+
+function object(value: unknown, name: string): Record<string, unknown> {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new TypeError(`${name} must be an object`);
+  }
+  return value as Record<string, unknown>;
+}
+
+function strings(value: unknown, name: string): string[] {
+  if (!Array.isArray(value) || value.some((item) => typeof item !== "string")) {
+    throw new TypeError(`${name} must be an array of strings`);
+  }
+  return [...value];
+}
+
+export function parseModelEntry(value: unknown): ModelEntry {
+  const input = object(value, "model entry");
+  if (typeof input.id !== "string") throw new TypeError("model entry id must be a string");
+  if (input.default_effort !== null && typeof input.default_effort !== "string") {
+    throw new TypeError("model entry default_effort must be a string or null");
+  }
+  if (input.label !== undefined && typeof input.label !== "string") throw new TypeError("model entry label must be a string");
+  if (input.notes !== undefined && typeof input.notes !== "string") throw new TypeError("model entry notes must be a string");
+  return {
+    id: input.id,
+    efforts: strings(input.efforts, "model entry efforts"),
+    default_effort: input.default_effort,
+    ...(input.label === undefined ? {} : { label: input.label }),
+    ...(input.notes === undefined ? {} : { notes: input.notes }),
+  };
+}
+
+export function parseVendorModels(value: unknown): VendorModels {
+  const input = object(value, "vendor models");
+  if (input.fetched_at !== null && typeof input.fetched_at !== "string") throw new TypeError("vendor models fetched_at must be a string or null");
+  if (typeof input.source !== "string") throw new TypeError("vendor models source must be a string");
+  if (!Array.isArray(input.models)) throw new TypeError("vendor models models must be an array");
+  if (input.notes !== undefined && typeof input.notes !== "string") throw new TypeError("vendor models notes must be a string");
+  return {
+    fetched_at: input.fetched_at,
+    source: input.source,
+    models: input.models.map(parseModelEntry),
+    ...(input.effort_levels === undefined ? {} : { effort_levels: strings(input.effort_levels, "vendor models effort_levels") }),
+    ...(input.notes === undefined ? {} : { notes: input.notes }),
+  };
+}
+
+export function parseModelCatalog(value: unknown): ModelCatalog {
+  const input = object(value, "model catalog");
+  return Object.fromEntries(Object.entries(input).map(([id, vendor]) => [id, parseVendorModels(vendor)]));
+}
+
+export function getShippedModelCatalog(): ModelCatalog {
+  return structuredClone(SHIPPED_MODEL_CATALOG);
+}
+
+export function getShippedVendorModels(id: string): VendorModels | undefined {
+  const vendor = SHIPPED_MODEL_CATALOG[id];
+  return vendor === undefined ? undefined : structuredClone(vendor);
+}
 
 /** A deep copy of the seed (so callers never mutate the shared constant). */
 function seedCatalog(): ModelCatalog {
