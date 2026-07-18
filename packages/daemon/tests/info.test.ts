@@ -8,7 +8,15 @@ import os from "node:os";
 import path from "node:path";
 import { homePathsFromEnv } from "@useparley/core";
 import { createAdapterRegistrySync } from "../src/adapters/index.js";
-import { buildInfo, buildInfoConfig, renderInfoProse } from "../src/info.js";
+import {
+  buildInfo,
+  buildInfoConfig,
+  formatRubricMarkdown,
+  materializeInfoRubrics,
+  renderInfoProse,
+  writeRubricMarkdownFiles,
+  type InfoTaskType,
+} from "../src/info.js";
 
 let home: string;
 let project: string;
@@ -49,7 +57,7 @@ describe("buildInfo / renderInfoProse (#163 / #169)", () => {
     expect(response.config.fix.retryWindow).toBe("90 seconds");
   });
 
-  it("eval-on includes one rubric summary per type including other", () => {
+  it("eval-on includes one rubric path ref per type including other", () => {
     write(
       project,
       ".parley/config.json",
@@ -62,12 +70,24 @@ describe("buildInfo / renderInfoProse (#163 / #169)", () => {
     const adapters = createAdapterRegistrySync();
     const config = buildInfoConfig({ projectDir: project, paths, adapters });
     expect(config.evaluation.enabled).toBe(true);
-    const types = (config.evaluation.rubrics ?? []).map((r) => r.type).sort();
+    const rubrics = config.evaluation.rubrics ?? [];
+    const types = rubrics.map((r) => r.type).sort();
     expect(types).toEqual(["coding", "other"]);
+    const coding = rubrics.find((r) => r.type === "coding");
+    expect(coding).toEqual({
+      type: "coding",
+      rubricId: "coding",
+      path: ".parley/rubrics-md/coding.md",
+    });
+    expect(coding).not.toHaveProperty("criteria");
+    expect(coding).not.toHaveProperty("version");
+    expect(coding).not.toHaveProperty("baseline");
     const prose = renderInfoProse(config);
     expect(prose).toContain("### How to eval");
-    expect(prose).toContain("#### `coding`");
-    expect(prose).toContain("#### `other`");
+    expect(prose).toContain("`coding` → rubric `.parley/rubrics-md/coding.md`");
+    expect(prose).toContain("`other` → rubric `.parley/rubrics-md/generic.md`");
+    expect(prose).not.toContain("#### `coding`");
+    expect(prose).not.toContain("brief-implemented");
   });
 
   it("eval-off omits taskTypes and classification from config and prose", () => {
@@ -253,5 +273,70 @@ describe("layered config (#178)", () => {
     expect(config.provenance.evaluation).toBe("global");
     expect(config.provenance.retryMax).toBe("project");
     expect(config.provenance.retryWindow).toBe("global");
+  });
+});
+
+
+describe("rubric markdown materialization (#176)", () => {
+  it("formatRubricMarkdown emits only id+text lines with trailing newline", () => {
+    const md = formatRubricMarkdown([
+      { id: "brief-implemented", text: "Did the work." },
+      { id: "broke-existing", text: "Regressions." },
+    ]);
+    expect(md).toBe(
+      "- `brief-implemented`: Did the work.\n- `broke-existing`: Regressions.\n",
+    );
+    expect(md).not.toMatch(/positive|negative|weight|baseline|version/i);
+  });
+
+  it("writeRubricMarkdownFiles creates slim md + gitignore and cleans orphans", () => {
+    const taskTypes: InfoTaskType[] = [
+      { id: "coding", rubric: "coding", automatic: false },
+      { id: "other", rubric: "generic", automatic: true },
+    ];
+    // Seed an orphan that should be deleted.
+    const dir = path.join(project, ".parley", "rubrics-md");
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, "stale.md"), "- `x`: gone\n", "utf8");
+
+    const summaries = writeRubricMarkdownFiles(project, taskTypes);
+    expect(summaries.map((s) => s.type).sort()).toEqual(["coding", "other"]);
+    expect(summaries.find((s) => s.type === "coding")).toEqual({
+      type: "coding",
+      rubricId: "coding",
+      path: ".parley/rubrics-md/coding.md",
+    });
+
+    const codingPath = path.join(project, ".parley", "rubrics-md", "coding.md");
+    const genericPath = path.join(project, ".parley", "rubrics-md", "generic.md");
+    expect(fs.existsSync(codingPath)).toBe(true);
+    expect(fs.existsSync(genericPath)).toBe(true);
+    expect(fs.existsSync(path.join(dir, "stale.md"))).toBe(false);
+
+    const codingMd = fs.readFileSync(codingPath, "utf8");
+    expect(codingMd).toMatch(/^- `brief-implemented`: /m);
+    expect(codingMd).not.toMatch(/\+|−|weight|baseline|version/i);
+    // Only id+text lines.
+    for (const line of codingMd.trimEnd().split("\n")) {
+      expect(line).toMatch(/^- `[a-z0-9-]+`: .+/);
+    }
+
+    const gi = fs.readFileSync(path.join(project, ".parley", ".gitignore"), "utf8");
+    expect(gi.split(/\r?\n/).map((l) => l.trim())).toContain("rubrics-md/");
+  });
+
+  it("materializeInfoRubrics is a no-op when eval is off", () => {
+    const paths = homePathsFromEnv({ PARLEY_HOME: home });
+    const adapters = createAdapterRegistrySync();
+    write(
+      project,
+      ".parley/config.json",
+      JSON.stringify({ eval: { enabled: false } }),
+    );
+    const config = buildInfoConfig({ projectDir: project, paths, adapters });
+    expect(config.evaluation.enabled).toBe(false);
+    const next = materializeInfoRubrics(project, config);
+    expect(next).toBe(config);
+    expect(fs.existsSync(path.join(project, ".parley", "rubrics-md"))).toBe(false);
   });
 });

@@ -17,7 +17,6 @@ import {
   parseDuration,
   readConfig,
   resolveRubricIdForType,
-  scoreRubric,
   type ChildChannel,
   type ClassificationConfig,
   type ConfigLayerSource,
@@ -40,6 +39,128 @@ import {
   DEFAULT_RETRY_WINDOW_MS,
 } from "./retry.js";
 import { loadRubric } from "./rubrics.js";
+
+/** Project-relative directory for slim rubric markdown files (#176). */
+export const RUBRICS_MD_DIR_REL = ".parley/rubrics-md";
+
+/** Entry written under `.parley/.gitignore` so generated rubrics stay untracked. */
+export const RUBRICS_MD_GITIGNORE_ENTRY = "rubrics-md/";
+
+/** Project-relative path for one rubric's markdown file. */
+export function rubricMarkdownRelPath(rubricId: string): string {
+  return `${RUBRICS_MD_DIR_REL}/${rubricId}.md`;
+}
+
+/**
+ * Slim criterion listing for generated rubric markdown: one line per criterion,
+ * id + text only (no kind/weight/version/baseline).
+ */
+export function formatRubricMarkdown(
+  criteria: ReadonlyArray<Pick<Criterion, "id" | "text">>,
+): string {
+  const lines = criteria.map((c) => `- \`${c.id}\`: ${c.text}`);
+  return `${lines.join("\n")}\n`;
+}
+
+/**
+ * Ensure `.parley/.gitignore` ignores generated `rubrics-md/` (#176).
+ * Creates `.parley/` and the gitignore when missing; appends the entry when absent.
+ */
+export function ensureParleyRubricsGitignore(projectDir: string): void {
+  const parleyDir = path.join(projectDir, ".parley");
+  fs.mkdirSync(parleyDir, { recursive: true });
+  const gitignorePath = path.join(parleyDir, ".gitignore");
+  let content = "";
+  try {
+    content = fs.readFileSync(gitignorePath, "utf8");
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+  }
+  const hasEntry = content.split(/\r?\n/).some((line) => {
+    const t = line.trim();
+    return (
+      t === "rubrics-md/" ||
+      t === "rubrics-md" ||
+      t === "/rubrics-md/" ||
+      t === "/rubrics-md"
+    );
+  });
+  if (hasEntry) return;
+  const base =
+    content === "" || content.endsWith("\n") ? content : `${content}\n`;
+  fs.writeFileSync(
+    gitignorePath,
+    `${base}${RUBRICS_MD_GITIGNORE_ENTRY}\n`,
+    "utf8",
+  );
+}
+
+/**
+ * Write slim markdown for each unique rubric referenced by `taskTypes`, delete
+ * orphan `.md` files not in the current set, ensure gitignore, and return path
+ * refs (one per task type). Does not run when eval is off — callers use
+ * {@link materializeInfoRubrics}.
+ */
+export function writeRubricMarkdownFiles(
+  projectDir: string,
+  taskTypes: InfoTaskType[],
+): InfoRubricSummary[] {
+  const dir = path.join(projectDir, RUBRICS_MD_DIR_REL);
+  fs.mkdirSync(dir, { recursive: true });
+
+  const uniqueIds = new Set<string>();
+  for (const t of taskTypes) {
+    uniqueIds.add(t.rubric);
+  }
+
+  for (const rubricId of uniqueIds) {
+    const rubric = loadRubric(projectDir, rubricId);
+    const body = formatRubricMarkdown(rubric.criteria);
+    fs.writeFileSync(path.join(dir, `${rubricId}.md`), body, "utf8");
+  }
+
+  // Delete orphans so stale rubrics do not linger after type/mapping changes.
+  for (const entry of fs.readdirSync(dir)) {
+    if (!entry.endsWith(".md")) continue;
+    const id = entry.slice(0, -".md".length);
+    if (!uniqueIds.has(id)) {
+      fs.unlinkSync(path.join(dir, entry));
+    }
+  }
+
+  ensureParleyRubricsGitignore(projectDir);
+
+  return taskTypes.map((t) => ({
+    type: t.id,
+    rubricId: t.rubric,
+    path: rubricMarkdownRelPath(t.rubric),
+  }));
+}
+
+/**
+ * CLI-side materialization of rubric markdown after layered merge (#176).
+ * When eval is off, returns `config` unchanged and writes nothing. When on,
+ * regenerates files from final `taskTypes` and sets `evaluation.rubrics`.
+ * Not called from {@link buildInfo} / {@link buildInfoConfig} so remote
+ * daemons need no project write access.
+ */
+export function materializeInfoRubrics(
+  projectDir: string,
+  config: InfoConfig,
+): InfoConfig {
+  if (!config.evaluation.enabled) {
+    return config;
+  }
+  const taskTypes = config.taskTypes ?? [];
+  const rubrics = writeRubricMarkdownFiles(projectDir, taskTypes);
+  return {
+    ...config,
+    evaluation: {
+      ...config.evaluation,
+      rubrics,
+    },
+  };
+}
 
 /** One configured vendor as shown by `parley info` (#169). */
 export interface InfoVendor {
@@ -78,22 +199,15 @@ export interface InfoTaskType {
   automatic: boolean;
 }
 
-/** Compact criterion line for rubric summaries. */
-export interface InfoCriterion {
-  id: string;
-  kind: Criterion["kind"];
-  weight: number;
-  text: string;
-}
-
-/** Rubric resolved for one task type (eval-on only). */
+/**
+ * Path ref for one task type's rubric (eval-on only). Criterion text lives in
+ * the markdown file at `path` rather than being inlined (#176).
+ */
 export interface InfoRubricSummary {
   type: string;
   rubricId: string;
-  version: number;
-  /** 0–10 baseline derived from the rubric formula. */
-  baseline: number;
-  criteria: InfoCriterion[];
+  /** Project-relative path, e.g. `.parley/rubrics-md/coding.md`. */
+  path: string;
 }
 
 /** Evaluation section of the structured config. */
@@ -234,28 +348,16 @@ function configuredVendorIds(daemonConfig: ParleyConfig): string[] {
   return [...ids].sort((a, b) => a.localeCompare(b));
 }
 
-function rubricSummary(
-  projectDir: string,
-  typeId: string,
-  taskTypes: TaskTypesMap,
-): InfoRubricSummary {
+/**
+ * Resolve a path-only rubric ref for one task type (no I/O, no criterion load).
+ * Markdown materialization is CLI-side via {@link materializeInfoRubrics}.
+ */
+function rubricRef(typeId: string, taskTypes: TaskTypesMap): InfoRubricSummary {
   const rubricId = resolveRubricIdForType(typeId, taskTypes);
-  const rubric = loadRubric(projectDir, rubricId);
-  // All-false answers: baseline is independent of answers; score is unused.
-  const answers: Record<string, boolean> = {};
-  for (const c of rubric.criteria) answers[c.id] = false;
-  const { baseline } = scoreRubric(rubric, answers);
   return {
     type: typeId,
-    rubricId: rubric.id,
-    version: rubric.version,
-    baseline,
-    criteria: rubric.criteria.map((c) => ({
-      id: c.id,
-      kind: c.kind,
-      weight: c.weight,
-      text: c.text,
-    })),
+    rubricId,
+    path: rubricMarkdownRelPath(rubricId),
   };
 }
 
@@ -348,7 +450,8 @@ export function buildInfoConfig(options: BuildInfoOptions): InfoConfig {
     const typeIds = taskTypes.map((t) => t.id);
     evaluation = {
       enabled: true,
-      rubrics: typeIds.map((id) => rubricSummary(projectDir, id, taskTypesMap)),
+      // Path refs only; CLI materializes markdown after layered merge (#176).
+      rubrics: typeIds.map((id) => rubricRef(id, taskTypesMap)),
       howTo: {
         command:
           'parley eval <task> --answers \'<json>\' --feedback "<text>"',
@@ -537,15 +640,9 @@ export function renderInfoProse(config: InfoConfig): string {
     lines.push("### Rubrics by type");
     lines.push("");
     for (const r of config.evaluation.rubrics ?? []) {
-      lines.push(
-        `#### \`${r.type}\` (rubric \`${r.rubricId}\` v${r.version}, baseline ${r.baseline}/10)`,
-      );
-      for (const c of r.criteria) {
-        const sign = c.kind === "positive" ? "+" : "−";
-        lines.push(`- ${sign}${c.weight} \`${c.id}\`: ${c.text}`);
-      }
-      lines.push("");
+      lines.push(`- \`${r.type}\` → rubric \`${r.path}\``);
     }
+    lines.push("");
   }
 
   // --- Fix & retries ---

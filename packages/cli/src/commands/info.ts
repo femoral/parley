@@ -8,6 +8,7 @@ import {
   type ProjectConfigLayer,
 } from "@useparley/core";
 import {
+  materializeInfoRubrics,
   renderInfoProse,
   type InfoConfig,
   type InfoProvenance,
@@ -197,7 +198,9 @@ export async function runInfo(ctx: CliContext, args: string[]): Promise<number> 
   }
 
   // One merge implementation: daemon-reported globals + local project overrides.
-  const config = applyLayeredSettings(body.config, globalLayer, projectLayer);
+  // Materialize rubric markdown after layered merge so final taskTypes win (#176).
+  const layered = applyLayeredSettings(body.config, globalLayer, projectLayer);
+  const config = materializeInfoRubrics(project, layered);
   const prose = renderInfoProse(config);
 
   if (flags["--json"] === true) {

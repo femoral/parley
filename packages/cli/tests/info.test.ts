@@ -115,12 +115,13 @@ describe("parley info — sections from live config (#163 / #169)", () => {
     expect(out).toContain("`easy`: Easy fixture difficulty.");
     expect(out).not.toContain("`XS`"); // shipped defaults replaced
 
-    // Evaluation on: how-to + rubric summaries.
+    // Evaluation on: how-to + path refs (criteria live in rubric files).
     expect(out).toMatch(/Evaluation is \*\*on\*\*/);
     expect(out).toContain("parley eval <task> --answers");
-    expect(out).toContain("#### `coding`");
-    expect(out).toContain("brief-implemented");
-    expect(out).toContain("broke-existing");
+    expect(out).toContain(".parley/rubrics-md/coding.md");
+    expect(out).not.toContain("#### `coding`");
+    expect(out).not.toContain("brief-implemented");
+    expect(out).not.toContain("broke-existing");
 
     // Fix & retries from project retry/resume.
     expect(out).toContain('parley fix <task> "<brief>"');
@@ -232,7 +233,7 @@ describe("parley info — prose / --json parity (#163 / #169)", () => {
     expect(actual).toBe(expected.endsWith("\n") ? expected : `${expected}\n`);
   });
 
-  it("includes rubric summaries in --json when eval is on", async () => {
+  it("includes rubric path refs in --json when eval is on and writes slim md", async () => {
     const cwd = projectDir();
     writeProject(cwd, {
       ".parley/config.json": JSON.stringify({
@@ -251,12 +252,36 @@ describe("parley info — prose / --json parity (#163 / #169)", () => {
     const coding = config.evaluation.rubrics?.find((r) => r.type === "coding");
     expect(coding).toBeDefined();
     expect(coding!.rubricId).toBe("coding");
-    expect(coding!.criteria.some((c) => c.id === "brief-implemented")).toBe(true);
+    expect(coding!.path).toBe(".parley/rubrics-md/coding.md");
+    expect(coding!).not.toHaveProperty("criteria");
+    expect(coding!).not.toHaveProperty("version");
+    expect(coding!).not.toHaveProperty("baseline");
     expect(config.evaluation.howTo?.command).toMatch(/parley eval/);
 
+    // Materialized files under project.
+    const codingMdPath = path.join(cwd, ".parley", "rubrics-md", "coding.md");
+    expect(fs.existsSync(codingMdPath)).toBe(true);
+    const codingMd = fs.readFileSync(codingMdPath, "utf8");
+    expect(codingMd).toMatch(/^- `brief-implemented`: /m);
+    expect(codingMd).toMatch(/^- `broke-existing`: /m);
+    for (const line of codingMd.trimEnd().split("\n")) {
+      expect(line).toMatch(/^- `[a-z0-9-]+`: .+/);
+    }
+    const gi = fs.readFileSync(path.join(cwd, ".parley", ".gitignore"), "utf8");
+    expect(gi.split(/\r?\n/).map((l) => l.trim())).toContain("rubrics-md/");
+
     const prose = await runCli(["info"], home, { cwd });
-    expect(prose.stdout).toContain("brief-implemented");
+    expect(prose.stdout).toContain(".parley/rubrics-md/coding.md");
+    expect(prose.stdout).not.toContain("brief-implemented");
     expect(renderInfoProse(config).trimEnd()).toBe(prose.stdout.trimEnd());
+  });
+
+  it("does not write rubrics-md when eval is off", async () => {
+    const cwd = projectDir();
+    // Default eval off — no config.
+    const res = await runCli(["info"], home, { cwd });
+    expect(res.code).toBe(0);
+    expect(fs.existsSync(path.join(cwd, ".parley", "rubrics-md"))).toBe(false);
   });
 });
 
