@@ -318,6 +318,14 @@ describe("bundled skill contents", () => {
     expect(skillMd).toMatch(/[Bb]ump.*version|version.*[Bb]ump/);
     expect(skillMd).toMatch(/token/i);
     expect(skillMd).toMatch(/factory-reset|never factory/i);
+    // Fresh-setup scope: detect global home config; ask project/global/both when missing.
+    expect(skillMd).toMatch(/~\/?\.parley\/parley\.json|parley\.json/);
+    expect(skillMd).toMatch(/~\/?\.parley\/config\.json|PARLEY_HOME/);
+    expect(skillMd).toMatch(/project settings only|Project only/i);
+    expect(skillMd).toMatch(/global settings|Global only/i);
+    expect(skillMd).toMatch(/\bboth\b/i);
+    expect(skillMd).toMatch(/defaults\.vendor|defaults\.profile/);
+    expect(skillMd).toMatch(/Skip the scope question|default to \*\*project\*\*/i);
     // No retired skill or issue/ADR sediment in the consumer entry point.
     expect(skillMd).not.toMatch(/parley-rubric/);
     expect(skillMd).not.toMatch(/ADR-\d+/);
