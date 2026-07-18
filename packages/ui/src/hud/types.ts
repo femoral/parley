@@ -217,8 +217,74 @@ export interface SoundingsGroupView {
 }
 
 /**
- * Plain Soundings dashboard props (#119). Status is fully projected so the
- * plate never interprets wire shapes or loading policy.
+ * Composable quality filters for Soundings (#165). Shared shape so #166
+ * heatmap/timeline can subscribe without redefining fields. Empty strings
+ * mean "no constraint"; toggles are explicit booleans.
+ */
+export interface SoundingsFiltersView {
+  type: string;
+  vendor: string;
+  model: string;
+  orch_harness: string;
+  orch_model: string;
+  eval_harness: string;
+  eval_model: string;
+  /** Rubric id or `id@version`. */
+  rubric: string;
+  firstAttemptOnly: boolean;
+  belowBaselineOnly: boolean;
+  /** True when any text filter or toggle is active. */
+  active: boolean;
+}
+
+/** Centre-board sub-view inside Soundings (#165). */
+export type SoundingsViewTab = "groups" | "distribution" | "comparison";
+
+/**
+ * One group on the score-vs-baseline distribution (#165). Positions are 0–1
+ * along a 0–10 score axis so the plate can draw without knowing the scale.
+ */
+export interface SoundingsDistributionRow {
+  key: string | null;
+  label: string;
+  count: number;
+  /** Pre-formatted avg score. */
+  score: string;
+  /** Pre-formatted avg baseline. */
+  baseline: string;
+  /** 0–1 position of avg score on a 0–10 axis; null when unscored. */
+  scorePos: number | null;
+  /** 0–1 position of avg baseline; null when no baseline. */
+  baselinePos: number | null;
+  /** Pre-formatted avg delta. */
+  delta: string;
+  /** Raw delta for tint (negative → below baseline). */
+  deltaValue: number | null;
+}
+
+/**
+ * One group on the comparison board (#165): avg delta, below-baseline rate,
+ * and first-attempt vs fix recovery split.
+ */
+export interface SoundingsComparisonRow {
+  key: string | null;
+  label: string;
+  count: number;
+  avgDelta: string;
+  avgDeltaValue: number | null;
+  belowBaselineRate: string;
+  belowBaselineRateValue: number | null;
+  /** Pre-formatted first-attempt eval avg · n. */
+  firstAttempt: string;
+  firstAttemptCount: number;
+  /** Pre-formatted fix-attempt eval avg · n. */
+  fix: string;
+  fixCount: number;
+}
+
+/**
+ * Plain Soundings dashboard props (#119 / #165). Status is fully projected so
+ * the plate never interprets wire shapes or loading policy.
  */
 export interface SoundingsView {
   /**
@@ -230,10 +296,24 @@ export interface SoundingsView {
   status: "loading" | "ready" | "empty" | "error";
   error: string | null;
   groups: SoundingsGroupView[];
-  /** Active group-by dimension string (vendor|model|profile|size|difficulty|type). */
+  /** Score-vs-baseline rows (same group order as {@link groups}). */
+  distribution: SoundingsDistributionRow[];
+  /** Comparison rows (same group order as {@link groups}). */
+  comparison: SoundingsComparisonRow[];
+  /** Active group-by dimension string. */
   groupBy: string;
   /** Session scope label (`All hands` or short session id). */
   sessionLabel: string;
   /** ISO timestamp from the response, or null before first success. */
   generatedAt: string | null;
+  /** Active quality filters (shared with #166 views). */
+  filters: SoundingsFiltersView;
+  /** Which Soundings sub-view is showing. */
+  viewTab: SoundingsViewTab;
+  /**
+   * Rubric-eval presence for distribution/comparison empty states:
+   * `loading` | `ready` (has evals) | `off` (groups but no rubric scores —
+   * eval disabled or not yet run) | `empty` (no groups).
+   */
+  evalPresence: "loading" | "ready" | "off" | "empty";
 }

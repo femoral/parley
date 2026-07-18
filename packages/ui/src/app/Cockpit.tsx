@@ -42,6 +42,9 @@ export function Cockpit() {
     toggleSoundings,
     soundings,
     setGroupBy,
+    setSoundingsFilters,
+    clearSoundingsFilters,
+    setSoundingsViewTab,
   } = useCockpit();
   const rosterSearchRef = useRef<RosterSearchHandle | null>(null);
   useCockpitKeys({
@@ -105,7 +108,13 @@ export function Cockpit() {
             <CompassRose />
             {mode === "soundings" ? (
               <div className="pc-soundings-stage">
-                <SoundingsPanel soundings={soundings} onGroupBy={setGroupBy} />
+                <SoundingsPanel
+                  soundings={soundings}
+                  onGroupBy={setGroupBy}
+                  onFiltersChange={setSoundingsFilters}
+                  onFiltersClear={clearSoundingsFilters}
+                  onViewTab={setSoundingsViewTab}
+                />
               </div>
             ) : (
               /* Sea is the room's backdrop (#75) — no Plate card chrome. */

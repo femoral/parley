@@ -1,0 +1,303 @@
+/** @vitest-environment happy-dom */
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  EvalComparison,
+  EvalDistribution,
+  EvalFilterBar,
+  SoundingsPanel,
+} from "../src/hud/index.js";
+import type { SoundingsFiltersView, SoundingsView } from "../src/hud/index.js";
+import {
+  projectComparisonRow,
+  projectDistributionRow,
+  projectSoundings,
+} from "../src/app/hooks/metrics.js";
+import type { MetricsGroup, MetricsResponse } from "@useparley/core";
+
+afterEach(cleanup);
+
+function emptyFilters(overrides: Partial<SoundingsFiltersView> = {}): SoundingsFiltersView {
+  return {
+    type: "",
+    vendor: "",
+    model: "",
+    orch_harness: "",
+    orch_model: "",
+    eval_harness: "",
+    eval_model: "",
+    rubric: "",
+    firstAttemptOnly: false,
+    belowBaselineOnly: false,
+    active: false,
+    ...overrides,
+  };
+}
+
+function metricsGroup(overrides: Partial<MetricsGroup> = {}): MetricsGroup {
+  return {
+    key: "codex",
+    tasks: {
+      total: 2,
+      completed: 1,
+      failed: 0,
+      cancelled: 0,
+      running: 1,
+      other: 0,
+    },
+    success_rate: 1,
+    evals: {
+      count: 2,
+      avg: 4.5,
+      avg_baseline: 5,
+      avg_delta: -0.5,
+      below_baseline_rate: 0.5,
+      criterion_failures: {},
+      first_attempt: {
+        count: 1,
+        avg: 4,
+        avg_baseline: 5,
+        avg_delta: -1,
+        below_baseline_rate: 1,
+      },
+      fix: {
+        count: 1,
+        avg: 5,
+        avg_baseline: 5,
+        avg_delta: 0,
+        below_baseline_rate: 0,
+      },
+    },
+    evals_by_size: {},
+    evals_by_difficulty: {},
+    tokens: { input: 100, output: 50, cached: 0, tasks_reporting: 1 },
+    duration_ms: {
+      total: 1000,
+      avg: 1000,
+      p50: 1000,
+      p95: 1000,
+      tasks_reporting: 1,
+    },
+    ...overrides,
+  };
+}
+
+const DIST_ROW = projectDistributionRow(metricsGroup());
+const CMP_ROW = projectComparisonRow(metricsGroup());
+
+function baseView(overrides: Partial<SoundingsView> = {}): SoundingsView {
+  return {
+    status: "ready",
+    error: null,
+    groups: [
+      {
+        key: "codex",
+        label: "codex",
+        tasks: { total: 2, done: 1, failed: 0, running: 1 },
+        successRate: "100%",
+        successRateValue: 1,
+        evals: "4.5 · n=2",
+        tokens: { input: "100", output: "50", cached: "0" },
+        duration: { avg: "1s", p95: "1s" },
+        evalsBySize: [],
+        evalsByDifficulty: [],
+      },
+    ],
+    distribution: [DIST_ROW],
+    comparison: [CMP_ROW],
+    groupBy: "vendor",
+    sessionLabel: "All hands",
+    generatedAt: "2026-07-16T00:00:00.000Z",
+    filters: emptyFilters(),
+    viewTab: "groups",
+    evalPresence: "ready",
+    ...overrides,
+  };
+}
+
+describe("projectDistributionRow / projectComparisonRow (#165)", () => {
+  it("shapes score vs baseline positions on a 0–10 axis", () => {
+    expect(DIST_ROW.score).toBe("4.5");
+    expect(DIST_ROW.baseline).toBe("5");
+    expect(DIST_ROW.scorePos).toBeCloseTo(0.45);
+    expect(DIST_ROW.baselinePos).toBeCloseTo(0.5);
+    expect(DIST_ROW.delta).toBe("−0.5");
+    expect(DIST_ROW.deltaValue).toBe(-0.5);
+  });
+
+  it("shapes comparison stats including recovery split", () => {
+    expect(CMP_ROW.avgDelta).toBe("−0.5");
+    expect(CMP_ROW.belowBaselineRate).toBe("50%");
+    expect(CMP_ROW.firstAttempt).toBe("4 · n=1");
+    expect(CMP_ROW.fix).toBe("5 · n=1");
+  });
+
+  it("marks evalPresence off when groups lack rubric evals", () => {
+    const data: MetricsResponse = {
+      generated_at: "2026-07-16T00:00:00.000Z",
+      groups: [
+        metricsGroup({
+          evals: {
+            count: 0,
+            avg: null,
+            avg_baseline: null,
+            avg_delta: null,
+            below_baseline_rate: null,
+            criterion_failures: {},
+            first_attempt: {
+              count: 0,
+              avg: null,
+              avg_baseline: null,
+              avg_delta: null,
+              below_baseline_rate: null,
+            },
+            fix: {
+              count: 0,
+              avg: null,
+              avg_baseline: null,
+              avg_delta: null,
+              below_baseline_rate: null,
+            },
+          },
+        }),
+      ],
+    };
+    const view = projectSoundings(data, "ready", null, "vendor", "All hands");
+    expect(view.evalPresence).toBe("off");
+    expect(view.distribution[0]!.count).toBe(0);
+  });
+});
+
+describe("EvalFilterBar (#165)", () => {
+  it("fires onChange for text and toggles; clear when active", () => {
+    const onChange = vi.fn();
+    const onClear = vi.fn();
+    render(
+      <EvalFilterBar
+        filters={emptyFilters({ vendor: "codex", active: true })}
+        onChange={onChange}
+        onClear={onClear}
+      />,
+    );
+    fireEvent.change(screen.getByPlaceholderText("coding"), {
+      target: { value: "docs" },
+    });
+    expect(onChange).toHaveBeenCalledWith({ type: "docs" });
+
+    fireEvent.click(screen.getByRole("button", { name: "First attempt only" }));
+    expect(onChange).toHaveBeenCalledWith({ firstAttemptOnly: true });
+
+    fireEvent.click(screen.getByRole("button", { name: "Clear filters" }));
+    expect(onClear).toHaveBeenCalled();
+  });
+});
+
+describe("EvalDistribution (#165)", () => {
+  it("renders score track with baseline mark and legend", () => {
+    render(
+      <EvalDistribution rows={[DIST_ROW]} evalPresence="ready" filtersActive={false} />,
+    );
+    expect(screen.getByLabelText("Score vs baseline distribution")).toBeTruthy();
+    expect(screen.getByText("codex")).toBeTruthy();
+    expect(screen.getByText("4.5")).toBeTruthy();
+    expect(screen.getAllByText("5").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText("Baseline")).toBeTruthy();
+    const track = screen.getByRole("img", { name: /score 4\.5 of 10, baseline 5/i });
+    expect(track.querySelector(".pc-eval-dist__baseline-mark")).toBeTruthy();
+  });
+
+  it("shows eval-off explanatory state", () => {
+    render(<EvalDistribution rows={[]} evalPresence="off" filtersActive={false} />);
+    expect(screen.getByText("No structured evals yet")).toBeTruthy();
+    expect(screen.getByText(/parley eval/)).toBeTruthy();
+  });
+});
+
+describe("EvalComparison (#165)", () => {
+  it("renders three stats and recovery split", () => {
+    render(
+      <EvalComparison
+        rows={[CMP_ROW]}
+        groupBy="vendor"
+        evalPresence="ready"
+        filtersActive={false}
+        onGroupBy={() => {}}
+      />,
+    );
+    expect(screen.getByText("Avg delta")).toBeTruthy();
+    expect(screen.getByText("−0.5")).toBeTruthy();
+    expect(screen.getByText("Below baseline")).toBeTruthy();
+    expect(screen.getByText("50%")).toBeTruthy();
+    expect(screen.getByLabelText("First attempt vs fix recovery")).toBeTruthy();
+    expect(screen.getByText("4 · n=1")).toBeTruthy();
+    expect(screen.getByText("5 · n=1")).toBeTruthy();
+  });
+
+  it("fires onGroupBy when a compare dimension is pressed", () => {
+    const onGroupBy = vi.fn();
+    render(
+      <EvalComparison
+        rows={[CMP_ROW]}
+        groupBy="vendor"
+        evalPresence="ready"
+        filtersActive={false}
+        onGroupBy={onGroupBy}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Judge harness" }));
+    expect(onGroupBy).toHaveBeenCalledWith("eval_harness");
+  });
+});
+
+describe("SoundingsPanel quality views (#165)", () => {
+  it("switches tabs and keeps the filter bar mounted", () => {
+    const onViewTab = vi.fn();
+    const onFiltersChange = vi.fn();
+    render(
+      <SoundingsPanel
+        soundings={baseView({ viewTab: "groups" })}
+        onGroupBy={() => {}}
+        onFiltersChange={onFiltersChange}
+        onFiltersClear={() => {}}
+        onViewTab={onViewTab}
+      />,
+    );
+    expect(screen.getByLabelText("Eval filters")).toBeTruthy();
+    expect(screen.getByText("codex")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("tab", { name: "Score vs baseline" }));
+    expect(onViewTab).toHaveBeenCalledWith("distribution");
+
+    fireEvent.click(screen.getByRole("tab", { name: "Comparison" }));
+    expect(onViewTab).toHaveBeenCalledWith("comparison");
+  });
+
+  it("renders distribution tab content from projected props", () => {
+    render(
+      <SoundingsPanel
+        soundings={baseView({ viewTab: "distribution" })}
+        onGroupBy={() => {}}
+        onFiltersChange={() => {}}
+        onFiltersClear={() => {}}
+        onViewTab={() => {}}
+      />,
+    );
+    expect(screen.getByLabelText("Score vs baseline distribution")).toBeTruthy();
+    expect(screen.getByText("Avg score")).toBeTruthy();
+  });
+
+  it("renders comparison tab with three stats", () => {
+    render(
+      <SoundingsPanel
+        soundings={baseView({ viewTab: "comparison" })}
+        onGroupBy={() => {}}
+        onFiltersChange={() => {}}
+        onFiltersClear={() => {}}
+        onViewTab={() => {}}
+      />,
+    );
+    expect(screen.getByLabelText("Quality comparison")).toBeTruthy();
+    expect(screen.getByText("Avg delta")).toBeTruthy();
+    expect(screen.getByText("Below baseline")).toBeTruthy();
+  });
+});

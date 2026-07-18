@@ -26,6 +26,12 @@ export { SettingsBar } from "./SettingsBar.js";
 export type { SettingsBarProps } from "./SettingsBar.js";
 export { SoundingsPanel, SOUNDINGS_GROUP_BY } from "./SoundingsPanel.js";
 export type { SoundingsPanelProps } from "./SoundingsPanel.js";
+export { EvalFilterBar } from "./EvalFilterBar.js";
+export type { EvalFilterBarProps } from "./EvalFilterBar.js";
+export { EvalDistribution } from "./EvalDistribution.js";
+export type { EvalDistributionProps } from "./EvalDistribution.js";
+export { EvalComparison, COMPARISON_GROUP_BY } from "./EvalComparison.js";
+export type { EvalComparisonProps } from "./EvalComparison.js";
 export type {
   BriefView,
   HealthView,
@@ -40,7 +46,11 @@ export type {
   RosterSessionOption,
   RosterSessionSearchHit,
   RosterTask,
+  SoundingsComparisonRow,
+  SoundingsDistributionRow,
   SoundingsEvalBucket,
+  SoundingsFiltersView,
   SoundingsGroupView,
   SoundingsView,
+  SoundingsViewTab,
 } from "./types.js";

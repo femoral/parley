@@ -1,7 +1,15 @@
 import { memo, type CSSProperties } from "react";
 import { Mark, Plate, PlateHeader } from "../primitives/index.js";
 import { MARK_COMPASS } from "../tokens/chrome-glyphs.js";
-import type { SoundingsGroupView, SoundingsView } from "./types.js";
+import { EvalComparison } from "./EvalComparison.js";
+import { EvalDistribution } from "./EvalDistribution.js";
+import { EvalFilterBar } from "./EvalFilterBar.js";
+import type {
+  SoundingsFiltersView,
+  SoundingsGroupView,
+  SoundingsView,
+  SoundingsViewTab,
+} from "./types.js";
 
 /** Group-by options mirror the wire enum; labels stay short for the chip row. */
 export const SOUNDINGS_GROUP_BY: readonly { value: string; label: string }[] = [
@@ -10,6 +18,20 @@ export const SOUNDINGS_GROUP_BY: readonly { value: string; label: string }[] = [
   { value: "profile", label: "Profile" },
   { value: "size", label: "Size" },
   { value: "difficulty", label: "Difficulty" },
+  { value: "type", label: "Type" },
+  { value: "orch_harness", label: "Orch harness" },
+  { value: "orch_model", label: "Orch model" },
+  { value: "orch_effort", label: "Orch effort" },
+  { value: "eval_harness", label: "Judge harness" },
+  { value: "eval_model", label: "Judge model" },
+  { value: "eval_effort", label: "Judge effort" },
+  { value: "rubric", label: "Rubric" },
+];
+
+const VIEW_TABS: readonly { value: SoundingsViewTab; label: string }[] = [
+  { value: "groups", label: "Groups" },
+  { value: "distribution", label: "Score vs baseline" },
+  { value: "comparison", label: "Comparison" },
 ];
 
 export interface SoundingsPanelProps {
@@ -17,6 +39,12 @@ export interface SoundingsPanelProps {
   soundings: SoundingsView;
   /** Change the aggregation dimension — parent owns state and re-fetch. */
   onGroupBy: (groupBy: string) => void;
+  /** Patch quality filters (#165). */
+  onFiltersChange: (patch: Partial<SoundingsFiltersView>) => void;
+  /** Clear all quality filters. */
+  onFiltersClear: () => void;
+  /** Switch Groups / Distribution / Comparison. */
+  onViewTab: (tab: SoundingsViewTab) => void;
 }
 
 /** Inline SVG success-rate track — no chart library, currentColor-free tokens. */
@@ -136,16 +164,30 @@ function GroupCard({ group }: { group: SoundingsGroupView }) {
 }
 
 /**
- * Layer 2 — the Soundings metrics board (#119). Nautical register for depth
- * readings: per-group task/eval/token/duration aggregates. Plain props only —
- * fetch, SSE refresh, and projection live in the hooks layer. Memoized like
- * RosterPanel; the cockpit clock re-render must not re-paint this board.
+ * Layer 2 — the Soundings metrics board (#119 / #165). Nautical register for
+ * depth readings: group aggregates, score-vs-baseline distribution, and
+ * quality comparison. Shared filter bar drives every sub-view. Plain props
+ * only — fetch, SSE refresh, and projection live in the hooks layer.
  */
 export const SoundingsPanel = memo(function SoundingsPanel({
   soundings,
   onGroupBy,
+  onFiltersChange,
+  onFiltersClear,
+  onViewTab,
 }: SoundingsPanelProps) {
-  const { status, error, groups, groupBy, sessionLabel } = soundings;
+  const {
+    status,
+    error,
+    groups,
+    distribution,
+    comparison,
+    groupBy,
+    sessionLabel,
+    filters,
+    viewTab,
+    evalPresence,
+  } = soundings;
 
   return (
     <Plate padded={false} className="pc-soundings">
@@ -162,63 +204,155 @@ export const SoundingsPanel = memo(function SoundingsPanel({
         }
       />
 
-      <div className="pc-soundings__controls" role="group" aria-label="Group by">
-        {SOUNDINGS_GROUP_BY.map((opt) => {
-          const active = opt.value === groupBy;
+      <EvalFilterBar
+        filters={filters}
+        onChange={onFiltersChange}
+        onClear={onFiltersClear}
+      />
+
+      <div className="pc-soundings__tabs" role="tablist" aria-label="Soundings views">
+        {VIEW_TABS.map((tab) => {
+          const active = tab.value === viewTab;
           return (
             <button
-              key={opt.value}
+              key={tab.value}
               type="button"
-              className={`pc-soundings__chip-btn${active ? " pc-soundings__chip-btn--active" : ""}`}
-              aria-pressed={active}
-              onClick={() => onGroupBy(opt.value)}
+              role="tab"
+              id={`soundings-tab-${tab.value}`}
+              aria-selected={active}
+              aria-controls={`soundings-panel-${tab.value}`}
+              tabIndex={active ? 0 : -1}
+              className={`pc-soundings__tab${active ? " pc-soundings__tab--active" : ""}`}
+              onClick={() => onViewTab(tab.value)}
             >
-              {opt.label}
+              {tab.label}
             </button>
           );
         })}
       </div>
 
-      <div className="pc-soundings__body">
-        {status === "loading" && groups.length === 0 && (
-          <div className="pc-soundings__state" role="status">
-            <p className="pc-soundings__state-title">Taking soundings…</p>
-            <p className="pc-soundings__state-sub">listening for the fleet</p>
-          </div>
-        )}
+      {viewTab === "groups" && (
+        <div className="pc-soundings__controls" role="group" aria-label="Group by">
+          {SOUNDINGS_GROUP_BY.map((opt) => {
+            const active = opt.value === groupBy;
+            return (
+              <button
+                key={opt.value}
+                type="button"
+                className={`pc-soundings__chip-btn${active ? " pc-soundings__chip-btn--active" : ""}`}
+                aria-pressed={active}
+                onClick={() => onGroupBy(opt.value)}
+              >
+                {opt.label}
+              </button>
+            );
+          })}
+        </div>
+      )}
 
-        {status === "error" && groups.length === 0 && (
-          <div className="pc-soundings__state pc-soundings__state--error" role="alert">
-            <p className="pc-soundings__state-title">Soundings failed</p>
-            <p className="pc-soundings__state-sub">
-              {error ?? "Could not reach the daemon."}
-            </p>
-          </div>
-        )}
-
-        {status === "empty" && (
-          <div className="pc-soundings__state" role="status">
-            <p className="pc-soundings__state-title">No tasks yet</p>
-            <p className="pc-soundings__state-sub">
-              Delegate a voyage — soundings appear when the fleet reports.
-            </p>
-          </div>
-        )}
-
-        {status === "error" && groups.length > 0 && (
-          <p className="pc-soundings__banner" role="status">
-            Chart may be stale — {error ?? "could not refresh soundings."}
-          </p>
-        )}
-
-        {groups.length > 0 && (
-          <div className="pc-soundings__list" role="list" aria-label="Metrics groups">
-            {groups.map((g) => (
-              <div key={g.key ?? "(none)"} role="listitem">
-                <GroupCard group={g} />
+      <div
+        className="pc-soundings__body"
+        role="tabpanel"
+        id={`soundings-panel-${viewTab}`}
+        aria-labelledby={`soundings-tab-${viewTab}`}
+      >
+        {viewTab === "groups" && (
+          <>
+            {status === "loading" && groups.length === 0 && (
+              <div className="pc-soundings__state" role="status">
+                <p className="pc-soundings__state-title">Taking soundings…</p>
+                <p className="pc-soundings__state-sub">listening for the fleet</p>
               </div>
-            ))}
-          </div>
+            )}
+
+            {status === "error" && groups.length === 0 && (
+              <div className="pc-soundings__state pc-soundings__state--error" role="alert">
+                <p className="pc-soundings__state-title">Soundings failed</p>
+                <p className="pc-soundings__state-sub">
+                  {error ?? "Could not reach the daemon."}
+                </p>
+              </div>
+            )}
+
+            {status === "empty" && (
+              <div className="pc-soundings__state" role="status">
+                <p className="pc-soundings__state-title">
+                  {filters.active ? "No matching tasks" : "No tasks yet"}
+                </p>
+                <p className="pc-soundings__state-sub">
+                  {filters.active
+                    ? "Loosen filters — or clear them — to see group soundings."
+                    : "Delegate a voyage — soundings appear when the fleet reports."}
+                </p>
+              </div>
+            )}
+
+            {status === "error" && groups.length > 0 && (
+              <p className="pc-soundings__banner" role="status">
+                Chart may be stale — {error ?? "could not refresh soundings."}
+              </p>
+            )}
+
+            {groups.length > 0 && (
+              <div className="pc-soundings__list" role="list" aria-label="Metrics groups">
+                {groups.map((g) => (
+                  <div key={g.key ?? "(none)"} role="listitem">
+                    <GroupCard group={g} />
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+
+        {viewTab === "distribution" && (
+          <>
+            {status === "error" && groups.length > 0 && (
+              <p className="pc-soundings__banner" role="status">
+                Chart may be stale — {error ?? "could not refresh soundings."}
+              </p>
+            )}
+            {status === "error" && groups.length === 0 ? (
+              <div className="pc-soundings__state pc-soundings__state--error" role="alert">
+                <p className="pc-soundings__state-title">Soundings failed</p>
+                <p className="pc-soundings__state-sub">
+                  {error ?? "Could not reach the daemon."}
+                </p>
+              </div>
+            ) : (
+              <EvalDistribution
+                rows={distribution}
+                evalPresence={evalPresence}
+                filtersActive={filters.active}
+              />
+            )}
+          </>
+        )}
+
+        {viewTab === "comparison" && (
+          <>
+            {status === "error" && groups.length > 0 && (
+              <p className="pc-soundings__banner" role="status">
+                Chart may be stale — {error ?? "could not refresh soundings."}
+              </p>
+            )}
+            {status === "error" && groups.length === 0 ? (
+              <div className="pc-soundings__state pc-soundings__state--error" role="alert">
+                <p className="pc-soundings__state-title">Soundings failed</p>
+                <p className="pc-soundings__state-sub">
+                  {error ?? "Could not reach the daemon."}
+                </p>
+              </div>
+            ) : (
+              <EvalComparison
+                rows={comparison}
+                groupBy={groupBy}
+                evalPresence={evalPresence}
+                filtersActive={filters.active}
+                onGroupBy={onGroupBy}
+              />
+            )}
+          </>
         )}
       </div>
     </Plate>

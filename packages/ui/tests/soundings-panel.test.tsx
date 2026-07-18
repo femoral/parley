@@ -22,21 +22,60 @@ const GROUP: SoundingsView["groups"][number] = {
   evalsByDifficulty: [{ key: "easy", avg: "4.2 · n=3", count: 3 }],
 };
 
+const EMPTY_FILTERS: SoundingsView["filters"] = {
+  type: "",
+  vendor: "",
+  model: "",
+  orch_harness: "",
+  orch_model: "",
+  eval_harness: "",
+  eval_model: "",
+  rubric: "",
+  firstAttemptOnly: false,
+  belowBaselineOnly: false,
+  active: false,
+};
+
 function baseView(overrides: Partial<SoundingsView> = {}): SoundingsView {
   return {
     status: "ready",
     error: null,
     groups: [GROUP],
+    distribution: [],
+    comparison: [],
     groupBy: "vendor",
     sessionLabel: "All hands",
     generatedAt: "2026-07-16T00:00:00.000Z",
+    filters: EMPTY_FILTERS,
+    viewTab: "groups",
+    evalPresence: "ready",
     ...overrides,
   };
 }
 
+function renderPanel(
+  soundings: SoundingsView,
+  handlers: {
+    onGroupBy?: (g: string) => void;
+    onFiltersChange?: () => void;
+    onFiltersClear?: () => void;
+    onViewTab?: () => void;
+  } = {},
+) {
+  return render(
+    <SoundingsPanel
+      soundings={soundings}
+      onGroupBy={handlers.onGroupBy ?? (() => {})}
+      onFiltersChange={handlers.onFiltersChange ?? (() => {})}
+      onFiltersClear={handlers.onFiltersClear ?? (() => {})}
+      onViewTab={handlers.onViewTab ?? (() => {})}
+    />,
+  );
+}
+
 describe("SoundingsPanel (#119)", () => {
   it("renders group metrics from plain props", () => {
-    render(<SoundingsPanel soundings={baseView()} onGroupBy={() => {}} />);
+    renderPanel(baseView());
     expect(screen.getByText("SOUNDINGS")).toBeTruthy();
     expect(screen.getByText("codex")).toBeTruthy();
     expect(screen.getByText("75%")).toBeTruthy();
@@ -56,37 +95,24 @@ describe("SoundingsPanel (#119)", () => {
   });
 
   it("shows taking-soundings loading state with no groups yet", () => {
-    render(
-      <SoundingsPanel
-        soundings={baseView({ status: "loading", groups: [], generatedAt: null })}
-        onGroupBy={() => {}}
-      />,
-    );
+    renderPanel(baseView({ status: "loading", groups: [], generatedAt: null }));
     expect(screen.getByText("Taking soundings…")).toBeTruthy();
     expect(screen.getByText("listening for the fleet")).toBeTruthy();
   });
 
   it("shows empty hint when ready with no groups", () => {
-    render(
-      <SoundingsPanel
-        soundings={baseView({ status: "empty", groups: [] })}
-        onGroupBy={() => {}}
-      />,
-    );
+    renderPanel(baseView({ status: "empty", groups: [], evalPresence: "empty" }));
     expect(screen.getByText("No tasks yet")).toBeTruthy();
     expect(screen.getByText(/Delegate a voyage/)).toBeTruthy();
   });
 
   it("shows error state when fetch failed with no prior data", () => {
-    render(
-      <SoundingsPanel
-        soundings={baseView({
-          status: "error",
-          groups: [],
-          error: "daemon offline",
-        })}
-        onGroupBy={() => {}}
-      />,
+    renderPanel(
+      baseView({
+        status: "error",
+        groups: [],
+        error: "daemon offline",
+      }),
     );
     expect(screen.getByRole("alert")).toBeTruthy();
     expect(screen.getByText("Soundings failed")).toBeTruthy();
@@ -94,14 +120,11 @@ describe("SoundingsPanel (#119)", () => {
   });
 
   it("keeps groups and banners error when revalidation fails", () => {
-    render(
-      <SoundingsPanel
-        soundings={baseView({
-          status: "error",
-          error: "stream blip",
-        })}
-        onGroupBy={() => {}}
-      />,
+    renderPanel(
+      baseView({
+        status: "error",
+        error: "stream blip",
+      }),
     );
     expect(screen.getByText("codex")).toBeTruthy();
     expect(screen.getByText(/Chart may be stale/)).toBeTruthy();
@@ -109,13 +132,10 @@ describe("SoundingsPanel (#119)", () => {
   });
 
   it("omits size/difficulty breakdowns when empty", () => {
-    render(
-      <SoundingsPanel
-        soundings={baseView({
-          groups: [{ ...GROUP, evalsBySize: [], evalsByDifficulty: [] }],
-        })}
-        onGroupBy={() => {}}
-      />,
+    renderPanel(
+      baseView({
+        groups: [{ ...GROUP, evalsBySize: [], evalsByDifficulty: [] }],
+      }),
     );
     expect(screen.queryByLabelText("Eval by size")).toBeNull();
     expect(screen.queryByLabelText("Eval by difficulty")).toBeNull();
@@ -123,7 +143,7 @@ describe("SoundingsPanel (#119)", () => {
 
   it("fires onGroupBy when a group-by chip is pressed", () => {
     const onGroupBy = vi.fn();
-    render(<SoundingsPanel soundings={baseView()} onGroupBy={onGroupBy} />);
+    renderPanel(baseView(), { onGroupBy });
     fireEvent.click(screen.getByRole("button", { name: "Model" }));
     expect(onGroupBy).toHaveBeenCalledWith("model");
     fireEvent.click(screen.getByRole("button", { name: "Difficulty" }));
@@ -131,9 +151,7 @@ describe("SoundingsPanel (#119)", () => {
   });
 
   it("marks the active group-by chip as pressed", () => {
-    render(
-      <SoundingsPanel soundings={baseView({ groupBy: "profile" })} onGroupBy={() => {}} />,
-    );
+    renderPanel(baseView({ groupBy: "profile" }));
     expect(screen.getByRole("button", { name: "Profile" }).getAttribute("aria-pressed")).toBe(
       "true",
     );

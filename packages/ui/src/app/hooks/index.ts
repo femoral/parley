@@ -26,11 +26,30 @@ export type { HealthState } from "./useHealth.js";
 export { useLogTail } from "./useLogTail.js";
 export { useMetrics } from "./useMetrics.js";
 export type { MetricsState, MetricsStatus, UseMetricsOptions } from "./useMetrics.js";
+export { useEvalFilters } from "./useEvalFilters.js";
+export type { UseEvalFiltersResult } from "./useEvalFilters.js";
+export {
+  emptyEvalFilters,
+  hasActiveEvalFilters,
+  patchEvalFilters,
+  parseRubricFilter,
+  evalFiltersToMetricsQuery,
+  evalFiltersToSearchParams,
+  parseEvalFiltersFromSearch,
+  EVAL_FILTER_TEXT_KEYS,
+  EVAL_FILTER_FIELD_META,
+} from "./evalFilters.js";
+export type { EvalFilterState, EvalFilterTextKey } from "./evalFilters.js";
 export {
   projectMetricsGroup,
   projectSoundings,
+  projectDistributionRow,
+  projectComparisonRow,
+  projectFiltersView,
+  metricsHasRubricEvals,
   metricsRefreshKey,
   GROUP_BY_OPTIONS,
+  COMPARISON_DIMENSIONS,
 } from "./metrics.js";
 export { useSettings } from "./useSettings.js";
 export type { Settings, SettingsView } from "./useSettings.js";
@@ -61,6 +80,9 @@ export {
   formatUsage,
   formatSuccessRate,
   formatEvalAvg,
+  formatEvalDelta,
+  formatRate,
+  formatScore,
   formatDurationMs,
 } from "./format.js";
 export { classifyLogLine, buildLogLines, LogAccumulator, LOG_LINE_CAP } from "./logClassify.js";

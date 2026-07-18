@@ -67,6 +67,35 @@ export function formatDurationMs(ms: number | null | undefined): string {
 }
 
 /**
+ * Signed eval delta (`+0.5`, `−1.2`, `0`) for score − baseline, or em-dash.
+ * Uses a proper minus sign for negatives (design-manifest mono readouts).
+ */
+export function formatEvalDelta(delta: number | null | undefined): string {
+  if (delta === null || delta === undefined || !Number.isFinite(delta)) return "—";
+  if (delta === 0) return "0";
+  const rounded = Math.round(delta * 10) / 10;
+  const body = Number.isInteger(rounded) ? String(rounded) : rounded.toString();
+  if (rounded > 0) return `+${body}`;
+  // Replace ASCII hyphen with minus for display.
+  return `−${body.replace(/^-/, "")}`;
+}
+
+/**
+ * Rate as a one-decimal percent (`40%`), same rules as success rate.
+ */
+export function formatRate(rate: number | null | undefined): string {
+  return formatSuccessRate(rate);
+}
+
+/**
+ * Compact 0–10 score for distribution axes (`4.5` or `—`).
+ */
+export function formatScore(score: number | null | undefined): string {
+  if (score === null || score === undefined || !Number.isFinite(score)) return "—";
+  return Number.isInteger(score) ? String(score) : (Math.round(score * 10) / 10).toString();
+}
+
+/**
  * Render a task's usage map as the inspector Brief's "in ▸ out tok" reading
  * (design-manifest §4.17). Vendor usage keys are free-form (spec §"@useparley/
  * core exports" — the envelope's `usage` is `Record<string, number> | null`

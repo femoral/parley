@@ -1,6 +1,6 @@
 /**
- * Layer 4 (hooks) — fetch `GET /metrics` for the Soundings dashboard (#119).
- * Refreshes when session/groupBy change and when the live task revision
+ * Layer 4 (hooks) — fetch `GET /metrics` for the Soundings dashboard (#119 / #165).
+ * Refreshes when session/groupBy/filters change and when the live task revision
  * advances (SSE transitions from {@link useSnapshot}), never by polling.
  */
 import { useEffect, useState } from "react";
@@ -8,6 +8,7 @@ import {
   type MetricsGroupBy,
   type MetricsResponse,
   type ParleyClient,
+  type TaskMetricsFilters,
 } from "@useparley/core";
 
 export type MetricsStatus = "idle" | "loading" | "ready" | "error";
@@ -32,6 +33,9 @@ const INITIAL: MetricsState = {
   groupBy: "vendor",
 };
 
+/** Stable empty filters object for default deps. */
+const NO_FILTERS: TaskMetricsFilters = {};
+
 export interface UseMetricsOptions {
   /** `"all"` or a concrete orchestrator session id. */
   session: string;
@@ -44,6 +48,11 @@ export interface UseMetricsOptions {
   refreshKey: string;
   /** When false, the hook stays idle and does not hit the network. */
   enabled?: boolean;
+  /**
+   * Extra AND filters for quality views (#165) — type, vendor, first_attempt,
+   * below_baseline, etc. Session is taken from {@link session}, not here.
+   */
+  filters?: TaskMetricsFilters;
 }
 
 /**
@@ -51,8 +60,12 @@ export interface UseMetricsOptions {
  * `client.metrics` (contract 4).
  */
 export function useMetrics(client: ParleyClient, options: UseMetricsOptions): MetricsState {
-  const { session, groupBy, refreshKey, enabled = true } = options;
+  const { session, groupBy, refreshKey, enabled = true, filters = NO_FILTERS } = options;
   const [state, setState] = useState<MetricsState>(INITIAL);
+
+  // Serialize filters so deep-equal changes (same values, new object) do not
+  // thrash the network; intentional field changes still refetch.
+  const filtersKey = JSON.stringify(filters);
 
   useEffect(() => {
     if (!enabled) {
@@ -74,8 +87,11 @@ export function useMetrics(client: ParleyClient, options: UseMetricsOptions): Me
       error: null,
     }));
 
+    // Re-parse from the stable key so the effect dep list stays primitive.
+    const parsed = JSON.parse(filtersKey) as TaskMetricsFilters;
+
     void client
-      .metrics({ session, groupBy })
+      .metrics({ ...parsed, session, groupBy })
       .then((data) => {
         if (cancelled) return;
         setState({
@@ -101,7 +117,7 @@ export function useMetrics(client: ParleyClient, options: UseMetricsOptions): Me
     return () => {
       cancelled = true;
     };
-  }, [client, session, groupBy, refreshKey, enabled]);
+  }, [client, session, groupBy, refreshKey, enabled, filtersKey]);
 
   return state;
 }

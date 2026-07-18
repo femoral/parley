@@ -124,6 +124,42 @@ describe("useMetrics (#119)", () => {
     expect(urls.some((u) => u.includes("group_by=model"))).toBe(true);
   });
 
+  it("forwards quality filters on the metrics query (#165)", async () => {
+    const urls: string[] = [];
+    const client = new ParleyClient({
+      baseUrl: "",
+      fetch: (async (input: string | URL | Request) => {
+        urls.push(String(input));
+        return new Response(JSON.stringify(metricsFixture()), { status: 200 });
+      }) as typeof fetch,
+    });
+
+    const { result } = renderHook(() =>
+      useMetrics(client, {
+        session: "all",
+        groupBy: "vendor",
+        refreshKey: "k1",
+        enabled: true,
+        filters: {
+          type: "coding",
+          first_attempt: true,
+          below_baseline: true,
+          rubric: "coding",
+          rubric_version: 1,
+        },
+      }),
+    );
+
+    await waitFor(() => expect(result.current.status).toBe("ready"));
+    const hit = urls.find((u) => u.includes("/metrics"));
+    expect(hit).toBeTruthy();
+    expect(hit).toMatch(/type=coding/);
+    expect(hit).toMatch(/first_attempt=true/);
+    expect(hit).toMatch(/below_baseline=true/);
+    expect(hit).toMatch(/rubric=coding/);
+    expect(hit).toMatch(/rubric_version=1/);
+  });
+
   it("refetches when groupBy changes with the new query", async () => {
     const urls: string[] = [];
     const client = new ParleyClient({
@@ -228,6 +264,10 @@ describe("projectSoundings / metricsRefreshKey", () => {
     expect(g.evalsBySize).toHaveLength(1);
     expect(g.evalsByDifficulty).toHaveLength(0);
     expect(view.sessionLabel).toBe("sess-1");
+    expect(view.evalPresence).toBe("ready");
+    expect(view.distribution).toHaveLength(1);
+    expect(view.comparison[0]!.avgDelta).toBe("−0.5");
+    expect(view.comparison[0]!.belowBaselineRate).toBe("100%");
   });
 
   it("builds a stable refresh key from id:state pairs", () => {

@@ -4,13 +4,16 @@ import type {
   HealthView,
   InspectorTask,
   RosterSessionSearchHit,
+  SoundingsFiltersView,
   SoundingsView,
+  SoundingsViewTab,
 } from "../../hud/types.js";
 import { formatClock, formatUptime } from "./format.js";
 import { useHealth } from "./useHealth.js";
 import { projectInspector } from "./inspector.js";
 import { metricsRefreshKey, projectSoundings } from "./metrics.js";
 import { advanceFailedObservations, projectRoster, shortId } from "./roster.js";
+import { useEvalFilters } from "./useEvalFilters.js";
 import { useLogTail } from "./useLogTail.js";
 import { useMetrics } from "./useMetrics.js";
 import { useSettings, type SettingsView } from "./useSettings.js";
@@ -124,6 +127,12 @@ export interface CockpitView {
   soundings: SoundingsView;
   /** Accepts wire group_by strings; invalid values are ignored. */
   setGroupBy: (groupBy: string) => void;
+  /** Patch quality filters (#165); maps hud field names onto filter state. */
+  setSoundingsFilters: (patch: Partial<SoundingsFiltersView>) => void;
+  /** Clear quality filters. */
+  clearSoundingsFilters: () => void;
+  /** Switch Groups / Distribution / Comparison. */
+  setSoundingsViewTab: (tab: SoundingsViewTab) => void;
 }
 /**
  * Layer 4 (app) — the single hook the cockpit shell reads. Owns the same-origin
@@ -147,12 +156,37 @@ export function useCockpit(): CockpitView {
   // Single source of truth for session filter + future scene camera cue (#76).
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
-  // Centre mode + metrics group-by (#119). Ephemeral UI state (like inspector tabs).
+  // Centre mode + metrics group-by (#119) + quality filters/tabs (#165).
+  // Filter state is shared so #166 heatmap/timeline can subscribe later.
   const [mode, setMode] = useState<CockpitMode>("cove");
   const [groupBy, setGroupByState] = useState<MetricsGroupBy>("vendor");
+  const [viewTab, setSoundingsViewTab] = useState<SoundingsViewTab>("groups");
+  const {
+    filters: evalFilterState,
+    setFilters: setEvalFilterState,
+    clearFilters: clearSoundingsFilters,
+    metricsQuery: evalMetricsQuery,
+  } = useEvalFilters();
   const setGroupBy = useCallback((next: string) => {
     if (isMetricsGroupBy(next)) setGroupByState(next);
   }, []);
+  const setSoundingsFilters = useCallback(
+    (patch: Partial<SoundingsFiltersView>) => {
+      const next: Parameters<typeof setEvalFilterState>[0] = {};
+      if (patch.type !== undefined) next.type = patch.type;
+      if (patch.vendor !== undefined) next.vendor = patch.vendor;
+      if (patch.model !== undefined) next.model = patch.model;
+      if (patch.orch_harness !== undefined) next.orch_harness = patch.orch_harness;
+      if (patch.orch_model !== undefined) next.orch_model = patch.orch_model;
+      if (patch.eval_harness !== undefined) next.eval_harness = patch.eval_harness;
+      if (patch.eval_model !== undefined) next.eval_model = patch.eval_model;
+      if (patch.rubric !== undefined) next.rubric = patch.rubric;
+      if (patch.firstAttemptOnly !== undefined) next.first_attempt = patch.firstAttemptOnly;
+      if (patch.belowBaselineOnly !== undefined) next.below_baseline = patch.belowBaselineOnly;
+      setEvalFilterState(next);
+    },
+    [setEvalFilterState],
+  );
   const toggleSoundings = useCallback(() => {
     setMode((prev) => (prev === "soundings" ? "cove" : "soundings"));
   }, []);
@@ -311,8 +345,8 @@ export function useCockpit(): CockpitView {
     [detail, logs, selectedTaskId],
   );
 
-  // Soundings (#119): session scope follows the roster chip; refreshKey advances
-  // on SSE task transitions so metrics revalidate without polling.
+  // Soundings (#119 / #165): session scope follows the roster chip; filters
+  // compose AND with group_by; refreshKey advances on SSE task transitions.
   const metricsSession = selectedSessionId ?? "all";
   const refreshKey = useMemo(() => metricsRefreshKey(live.tasks), [live.tasks]);
   const metrics = useMetrics(client, {
@@ -320,6 +354,7 @@ export function useCockpit(): CockpitView {
     groupBy,
     refreshKey,
     enabled: mode === "soundings",
+    filters: evalMetricsQuery,
   });
   const sessionLabel =
     selectedSessionId === null
@@ -334,8 +369,17 @@ export function useCockpit(): CockpitView {
         metrics.error,
         groupBy,
         sessionLabel,
+        { filters: evalFilterState, viewTab },
       ),
-    [metrics.data, metrics.status, metrics.error, groupBy, sessionLabel],
+    [
+      metrics.data,
+      metrics.status,
+      metrics.error,
+      groupBy,
+      sessionLabel,
+      evalFilterState,
+      viewTab,
+    ],
   );
 
   return {
@@ -352,5 +396,8 @@ export function useCockpit(): CockpitView {
     toggleSoundings,
     soundings,
     setGroupBy,
+    setSoundingsFilters,
+    clearSoundingsFilters,
+    setSoundingsViewTab,
   };
 }
