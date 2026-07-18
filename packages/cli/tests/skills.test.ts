@@ -324,6 +324,51 @@ describe("bundled skill contents", () => {
     expect(skillMd).not.toMatch(/#\d{2,}/);
   });
 
+  it("parley-delegate: step-0 info, session when eval, fix loop; defers config to info", () => {
+    const skillDir = path.join(BUNDLED_SKILLS, "parley-delegate");
+    const skillMd = fs.readFileSync(path.join(skillDir, "SKILL.md"), "utf8");
+    // Step 0 + live config authority.
+    expect(skillMd).toMatch(/parley info/);
+    expect(skillMd).toMatch(/authoritative/i);
+    // Conditional orchestrator session registration.
+    expect(skillMd).toMatch(/parley session/);
+    expect(skillMd).toMatch(/-v <harness>|-m <model>|-e <effort>/);
+    // Delegate typing + eval-when-expected.
+    expect(skillMd).toMatch(/--type/);
+    expect(skillMd).toMatch(/parley eval <task> --answers/);
+    expect(skillMd).not.toMatch(/--score/);
+    // Fix loop covers both retry error codes.
+    expect(skillMd).toMatch(/parley fix <task>/);
+    expect(skillMd).toMatch(/parley fix --fresh/);
+    expect(skillMd).toMatch(/retry_limit_exceeded/);
+    expect(skillMd).toMatch(/reattempt_window_expired/);
+    // Setup problems → wizard.
+    expect(skillMd).toMatch(/\/parley-wizard|parley-wizard/);
+    // Stable workflow preserved.
+    expect(skillMd).toMatch(/parley watch --json/);
+    expect(skillMd).toMatch(/--ack/);
+    expect(skillMd).toMatch(/parley clean/);
+    expect(skillMd).toMatch(/--base-ref/);
+    expect(skillMd).toMatch(/--context/);
+    expect(skillMd).toMatch(/self-contained brief/i);
+    // No config-shaped vendor/classification dumps, retired skill, or lineage.
+    expect(skillMd).not.toMatch(/`codex`,\s*`grok`|Vendors?:\s*`/);
+    expect(skillMd).not.toMatch(/parley-rubric/);
+    expect(skillMd).not.toMatch(/ADR-\d+/);
+    expect(skillMd).not.toMatch(/#\d{2,}/);
+    // Sibling off-path files exist (sessions wiring, shaping, bugs).
+    expect(fs.existsSync(path.join(skillDir, "sessions.md"))).toBe(true);
+    expect(fs.existsSync(path.join(skillDir, "task-shaping.md"))).toBe(true);
+    expect(fs.existsSync(path.join(skillDir, "bug-report.md"))).toBe(true);
+    // Whole skill folder free of retired score/rubric skill surface.
+    for (const name of fs.readdirSync(skillDir)) {
+      if (!name.endsWith(".md")) continue;
+      const body = fs.readFileSync(path.join(skillDir, name), "utf8");
+      expect(body).not.toMatch(/parley-rubric/);
+      expect(body).not.toMatch(/--score/);
+    }
+  });
+
   it("does not ship parley-rubric", () => {
     expect(fs.existsSync(path.join(BUNDLED_SKILLS, "parley-rubric"))).toBe(false);
     expect(fs.existsSync(path.join(BUNDLED_SKILLS, "parley-wizard", "SKILL.md"))).toBe(true);

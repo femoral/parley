@@ -9,6 +9,28 @@ Parley runs a child agent CLI in an isolated git worktree and hands you back a s
 
 **Orchestrate directly — don't wrap parley in subagents.** Unless the user explicitly asks for subagents, the session reading this skill is the orchestrator: it calls `delegate`, blocks on `watch`, answers questions, and reviews branches itself. Per-task babysitter subagents add a token layer, lose the question-answering context you already have, and tend to idle-stop waiting for notifications that never come.
 
+## Step 0 — load live config
+
+At session start, before the first `delegate`:
+
+```
+parley info
+```
+
+Treat that output as **authoritative** for this project: vendors and profiles, valid `--type` ids, size/difficulty classification, whether evaluation is on (and how to record evals), and fix/retry policy with error codes. Do not invent those values; re-run `parley info` if the project may have changed.
+
+**When evaluation is on**, register (or re-anchor after crash/restart) an orchestrator session and self-report your harness, model, and effort:
+
+```
+parley session -v <harness> -m <model> -e <effort>
+# re-anchor a known id:
+parley session -v <harness> -m <model> -e <effort> -s <id>
+```
+
+Use the printed session id (or your harness's) as `--session` / `PARLEY_SESSION_ID` for every later command. See `parley session --help` for the full surface.
+
+**Setup problems** (missing vendors, unconfigured project, eval misconfig): stop and run `/parley-wizard` with the user. Do not invent config mid-orchestration.
+
 ## The delegate loop
 
 There is **one** flow for one task or many: `delegate` always returns immediately; `watch` is the only wait. The single-task case is the fan-out loop with n=1.
@@ -18,15 +40,18 @@ There is **one** flow for one task or many: `delegate` always returns immediatel
 2. **Delegate** (returns immediately with pending-task JSON):
 
    ```
-   parley delegate -v codex -m <model> -n <short-name> --session <id> "<brief>"
+   parley delegate -v <vendor> -m <model> -n <short-name> --session <id> \
+     [--type <id>] [--size <id>] [--difficulty <id>] "<brief>"
    ```
 
    (`-` as the prompt reads stdin — use a heredoc for long briefs.) A vendor (`-v`, or a `--profile` that names one) and a session id (`--session <id>`, or `PARLEY_SESSION_ID` in the environment) are both required — missing either is a usage error (exit 2). `delegate` and `answer` exit only `0` (accepted) or `2` (usage).
 
-   - **Vendors**: `codex`, `grok`, `claude`, `gemini`, `opencode`, `goose`, `pi`, `cline`, `kilo`, `openhands`, `hermes`, `openclaw` — plus any plugin vendors from the user's settings. Unknown vendor errors list what's registered.
-   - **Profiles**: `--profile <name>` pulls vendor/model/effort (and extra args) from the user's `~/.parley/parley.json`; explicit flags win. Prefer a profile when the user has them — profiles are tracked per task and make `parley metrics` comparisons meaningful.
-   - **Classification**: when the project uses evaluation (set up by `parley-wizard`), classify every brief at delegate time: `--size`, `--difficulty`, and optional `--type` using the project's configured ids (see `.parley/classification.json` and `taskTypes`). Metrics slice eval outcomes by these.
-   - **Remote execution**: `--runner <name>` targets a configured remote runner; the task's commits come back as a pushed branch (no local worktree to review — fetch it).
+   Choose vendor, profile, model, and classification from what `parley info` listed:
+
+   - **`--type <id>`** — work-domain type; valid ids come from info (omit ⇒ the automatic fallback listed there).
+   - **`--size <id>` / `--difficulty <id>`** — optional classification for metrics; ids and guidance from info.
+   - **`--profile <name>`** — prefer a named profile when the user has them (tracked per task; makes `parley metrics` comparisons meaningful). Explicit flags win over profile defaults.
+   - **`--runner <name>`** — targets a configured remote runner; the task's commits come back as a pushed branch (no local worktree to review — fetch it).
 
 3. **Run the watch ack-loop** until exit 0 — even for a single task. This is a workflow you step through, not a script: each `watch` call returns one event, you do the real work it demands (answer, review, merge), then call `watch` again.
 
@@ -63,29 +88,51 @@ Rules that leave no room for interpretation:
 
    **A green report isn't proof correctness.** `outcome: success` only means the child's own verification passed. Verify yourself after every merge, not once at the end of a fan-out unless instructed. A later branch can reintroduce what an earlier one had cleared.
 
-   **Record an eval on every reviewed task when eval is enabled**: walk the type's rubric criteria, then `parley eval <task> --answers '<json>' --feedback "<one line per criterion>"` (daemon computes score + baseline). Evals power `parley metrics` — answer honestly, including the failures.
+   **Eval when expected.** When step 0 showed evaluation on, record an eval on every reviewed task:
+
+   ```
+   parley eval <task> --answers '<json>' --feedback "<one line per criterion>"
+   ```
+
+   Map every rubric criterion id (from `parley info`) to a boolean. The daemon computes score and baseline — do not pass a free-form score. Answer honestly, including failures. A later call overwrites the previous result for that task.
+
+5. **Fix loop.** When a completed task needs more work (review found gaps, or you have a concrete fix brief):
+
+   ```
+   parley fix <task> "<what to fix>"
+   ```
+
+   That creates a linked reattempt (inherits profile/workspace; may resume the parent vendor session — policy from `parley info`). Drive it with the same watch loop.
+
+   If `parley fix` exits with `retry_limit_exceeded` (exit 7) or `reattempt_window_expired` (exit 8):
+
+   ```
+   parley fix --fresh <task> "<what to fix>"
+   ```
+
+   `--fresh` starts a blank session, is uncapped by resume retry limits, and stays in the attempt chain. Exact limits and window live in `parley info` — re-read them when unsure.
 
 ## Fan-out: several tasks in parallel
 
 Each task gets its own worktree, so parallel tasks never collide. Batch them however it makes sense, then drive the **entire** set with the same watch loop above:
 
 ```
-parley delegate -v codex -n task-a --session <id> "<brief A>"   # → {task_id, name, state:"pending"}
-parley delegate -v grok  -n task-b --session <id> "<brief B>"
+parley delegate -v <vendor> -n task-a --session <id> --type <id> "<brief A>"
+parley delegate -v <vendor> -n task-b --session <id> --type <id> "<brief B>"
 ```
 
 Do not poll `status` on an interval and do not sleep-and-check. One mechanism for n=1 and n=N.
 
 ## Session ID
 
-The session ID identifies the current orchestration session. It can be passed explicitly with `--session <id>` or via the `PARLEY_SESSION_ID` environment variable. Use your current harness's session concept (if it has one) otherwise synthesize a uuid.
+The session ID identifies the current orchestration session. Pass it with `--session <id>` or export `PARLEY_SESSION_ID`. Prefer the id from `parley session` when you registered one (required when eval is on); otherwise use your harness's session concept, or synthesize a uuid.
 
 ## Context files
 
 `--context <file>` is repeatable; each file lands in the worktree under `.parley/context/`, materialized by **basename**.
 
 ```
-parley delegate -v codex -n task-a --session <id> \
+parley delegate -v <vendor> -n task-a --session <id> \
   --context /path/to/config.json \
   --context /path/to/other.json \
   "<brief A>"
@@ -93,18 +140,20 @@ parley delegate -v codex -n task-a --session <id> \
 
 ### Integrating fan-out branches
 
-When several branches share a fork point. Review each branch on its own, resolving conflicts at pick time. When tasks share files or one builds on another, prefer **dependency waves** over blind parallelism: merge task A first, then delegate task B with `--base-ref` on the freshly-merged target so it forks from its actual prerequisite.
+When several branches share a fork point, review each branch on its own and resolve conflicts at merge time. When tasks share files or one builds on another, prefer **dependency waves** over blind parallelism: merge task A first, then delegate task B with `--base-ref` on the freshly-merged target so it forks from its actual prerequisite.
 
 ## Beyond the golden path
 
 One-liner pointers — read the linked file only when its condition fires:
 
 - **Non-default task shapes** — structured `--report-schema` results, no git worktree `--cwd`, sandbox postures: read [task-shaping.md](task-shaping.md).
-- **Setting up a new orchestrating environment** (wiring `PARLEY_SESSION_ID` from your harness, e.g. a Claude Code hook): read [sessions.md](sessions.md).
+- **Wiring session id from your harness** (e.g. Claude Code hooks, `PARLEY_SESSION_ID`): read [sessions.md](sessions.md).
 
 ## When a task fails
 
 Check the task's `error` field first (`parley status <task> --json | jq '.error'`), then `diag.log` in its `logs_dir`, before touching the raw vendor stream — full order and what each layer means: [docs/agents/troubleshooting.md](../../docs/agents/troubleshooting.md). `parley logs <task>` is the last resort; it burns a lot of context on long tasks.
+
+After triage, if the failure is fixable with a clearer brief, use the fix loop above (`parley fix` / `parley fix --fresh`) rather than starting an unrelated new delegate when you want a linked attempt chain.
 
 ## Reporting parley bugs
 
