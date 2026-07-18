@@ -1,10 +1,12 @@
 /**
- * Effective project configuration for orchestrators (#163 / #142).
+ * Effective project configuration for orchestrators (#163 / #142 / #169).
  *
  * `GET /info?project=<root>` builds one structured config from daemon home +
  * project files, then renders orchestrator-facing prose from that same object
  * so the two can never drift. Retention/gc, traceability, and internals are
- * intentionally omitted.
+ * intentionally omitted. Output is scoped to the effective configuration:
+ * configured vendors only, models only via profiles (no full catalog dump),
+ * and eval-related sections only when evaluation is on (#169).
  */
 import {
   FALLBACK_TASK_TYPE,
@@ -40,7 +42,7 @@ import {
 } from "./retry.js";
 import { loadRubric } from "./rubrics.js";
 
-/** One registered vendor as shown by `parley info`. */
+/** One configured vendor as shown by `parley info` (#169). */
 export interface InfoVendor {
   id: string;
   childChannel: ChildChannel;
@@ -133,17 +135,23 @@ export interface InfoFix {
 /**
  * Structured effective configuration. `parley info --json` prints this object;
  * prose is always rendered from it (never from a parallel read).
+ *
+ * When evaluation is off, `taskTypes` and `classification` are omitted so the
+ * JSON twin stays as slim as the prose (#169).
  */
 export interface InfoConfig {
   project: string;
   /** Compounded orchestrator PROMPT.md (home → project), or null when empty. */
   instructions: string | null;
+  /** Vendors present in daemon config and/or referenced by profiles (#169). */
   vendors: InfoVendor[];
   profiles: InfoProfile[];
   /** Fallback when delegate omits -v/--profile (#175). */
   defaults: InfoDefaults;
-  taskTypes: InfoTaskType[];
-  classification: ClassificationConfig;
+  /** Work-domain types; present only when evaluation is enabled (#169). */
+  taskTypes?: InfoTaskType[];
+  /** Size/difficulty guidance; present only when evaluation is enabled (#169). */
+  classification?: ClassificationConfig;
   evaluation: InfoEvaluation;
   fix: InfoFix;
 }
@@ -162,12 +170,12 @@ export interface BuildInfoOptions {
 }
 
 function effectiveChildChannel(
-  adapter: VendorAdapter,
+  adapter: VendorAdapter | undefined,
   vendorCfg: { childChannel?: ChildChannel } | undefined,
 ): ChildChannel {
   const override = vendorCfg?.childChannel;
   if (typeof override === "string" && isChildChannel(override)) return override;
-  return adapter.childChannel;
+  return adapter?.childChannel ?? "mcp";
 }
 
 function vendorRetryWindowMs(
@@ -196,6 +204,24 @@ function profileEntry(name: string, cfg: ProfileConfig): InfoProfile {
   };
 }
 
+/**
+ * Vendor ids that appear in effective daemon configuration: explicit
+ * `vendors.<id>` entries and vendors named by profiles. Never the full
+ * built-in adapter catalog (#169).
+ */
+function configuredVendorIds(daemonConfig: ParleyConfig): string[] {
+  const ids = new Set<string>();
+  for (const id of Object.keys(daemonConfig.vendors ?? {})) {
+    ids.add(id);
+  }
+  for (const profile of Object.values(daemonConfig.profiles ?? {})) {
+    if (typeof profile.vendor === "string" && profile.vendor !== "") {
+      ids.add(profile.vendor);
+    }
+  }
+  return [...ids].sort((a, b) => a.localeCompare(b));
+}
+
 function rubricSummary(
   projectDir: string,
   typeId: string,
@@ -221,6 +247,25 @@ function rubricSummary(
   };
 }
 
+function buildTaskTypes(projectDir: string): InfoTaskType[] {
+  const taskTypesMap = readProjectTaskTypes(projectDir);
+  const taskTypes: InfoTaskType[] = Object.entries(taskTypesMap)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([id, entry]) => ({
+      id,
+      rubric: entry.rubric,
+      automatic: false,
+    }));
+  if (!Object.prototype.hasOwnProperty.call(taskTypesMap, FALLBACK_TASK_TYPE)) {
+    taskTypes.push({
+      id: FALLBACK_TASK_TYPE,
+      rubric: resolveRubricIdForType(FALLBACK_TASK_TYPE, taskTypesMap),
+      automatic: true,
+    });
+  }
+  return taskTypes;
+}
+
 /**
  * Build the structured effective config for a project (hot-read, no I/O beyond
  * config files already used at spawn/eval/fix time).
@@ -240,20 +285,20 @@ export function buildInfoConfig(options: BuildInfoOptions): InfoConfig {
     projectDir,
   });
 
-  const vendors: InfoVendor[] = [...adapters.keys()]
-    .sort((a, b) => a.localeCompare(b))
-    .map((id) => {
-      const adapter = adapters.get(id)!;
-      const vendorCfg = daemonConfig.vendors?.[id];
-      const windowMs = vendorRetryWindowMs(vendorCfg);
-      return {
-        id,
-        childChannel: effectiveChildChannel(adapter, vendorCfg),
-        retryWindowMs: windowMs,
-        retryWindow: windowMs !== null ? formatDuration(windowMs) : null,
-      };
-    });
+  // #169: only vendors that are configured (vendors.* and/or profile refs).
+  const vendors: InfoVendor[] = configuredVendorIds(daemonConfig).map((id) => {
+    const adapter = adapters.get(id);
+    const vendorCfg = daemonConfig.vendors?.[id];
+    const windowMs = vendorRetryWindowMs(vendorCfg);
+    return {
+      id,
+      childChannel: effectiveChildChannel(adapter, vendorCfg),
+      retryWindowMs: windowMs,
+      retryWindow: windowMs !== null ? formatDuration(windowMs) : null,
+    };
+  });
 
+  // Profiles already carry only configured models (no full models.json dump).
   const profiles: InfoProfile[] = Object.entries(daemonConfig.profiles ?? {})
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([name, cfg]) => profileEntry(name, cfg));
@@ -269,29 +314,19 @@ export function buildInfoConfig(options: BuildInfoOptions): InfoConfig {
         : null,
   };
 
-  const taskTypesMap = readProjectTaskTypes(projectDir);
-  const taskTypes: InfoTaskType[] = Object.entries(taskTypesMap)
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([id, entry]) => ({
-      id,
-      rubric: entry.rubric,
-      automatic: false,
-    }));
-  if (!Object.prototype.hasOwnProperty.call(taskTypesMap, FALLBACK_TASK_TYPE)) {
-    taskTypes.push({
-      id: FALLBACK_TASK_TYPE,
-      rubric: resolveRubricIdForType(FALLBACK_TASK_TYPE, taskTypesMap),
-      automatic: true,
-    });
-  }
-
-  const classification = readProjectClassification(projectDir);
   const evalEnabled = readEvalEnabled(projectDir);
 
+  // #169: task types, classification, rubrics, and how-to only when eval is on.
+  let taskTypes: InfoTaskType[] | undefined;
+  let classification: ClassificationConfig | undefined;
   let evaluation: InfoEvaluation;
+
   if (!evalEnabled) {
     evaluation = { enabled: false };
   } else {
+    const taskTypesMap = readProjectTaskTypes(projectDir);
+    taskTypes = buildTaskTypes(projectDir);
+    classification = readProjectClassification(projectDir);
     const typeIds = taskTypes.map((t) => t.id);
     evaluation = {
       enabled: true,
@@ -342,17 +377,18 @@ export function buildInfoConfig(options: BuildInfoOptions): InfoConfig {
     ],
   };
 
-  return {
+  const config: InfoConfig = {
     project: projectDir,
     instructions,
     vendors,
     profiles,
     defaults,
-    taskTypes,
-    classification,
     evaluation,
     fix,
   };
+  if (taskTypes !== undefined) config.taskTypes = taskTypes;
+  if (classification !== undefined) config.classification = classification;
+  return config;
 }
 
 /** Render orchestrator-facing prose from a structured {@link InfoConfig}. */
@@ -374,7 +410,7 @@ export function renderInfoProse(config: InfoConfig): string {
   lines.push("## Vendors & profiles", "");
   lines.push("### Vendors");
   if (config.vendors.length === 0) {
-    lines.push("(none registered)");
+    lines.push("(none configured)");
   } else {
     for (const v of config.vendors) {
       const extras: string[] = [`child channel: ${v.childChannel}`];
@@ -417,39 +453,39 @@ export function renderInfoProse(config: InfoConfig): string {
   }
   lines.push("");
 
-  // --- Task types ---
-  lines.push("## Task types", "");
-  lines.push(
-    "Pass `--type <id>` on delegate (optional; omitted ⇒ `other`). Valid ids:",
-  );
-  for (const t of config.taskTypes) {
-    const auto = t.automatic ? " — automatic fallback when `--type` is omitted" : "";
-    lines.push(`- \`${t.id}\` → rubric \`${t.rubric}\`${auto}`);
-  }
-  lines.push("");
+  // --- Task types / Classification / Evaluation details: eval-on only (#169) ---
+  if (config.evaluation.enabled) {
+    const taskTypes = config.taskTypes ?? [];
+    lines.push("## Task types", "");
+    lines.push(
+      "Pass `--type <id>` on delegate (optional; omitted ⇒ `other`). Valid ids:",
+    );
+    for (const t of taskTypes) {
+      const auto = t.automatic ? " — automatic fallback when `--type` is omitted" : "";
+      lines.push(`- \`${t.id}\` → rubric \`${t.rubric}\`${auto}`);
+    }
+    lines.push("");
 
-  // --- Classification ---
-  lines.push("## Classification", "");
-  lines.push(
-    "Optional at delegate time: `--size <id>` and `--difficulty <id>` (for metrics).",
-  );
-  lines.push("");
-  lines.push("### Sizes");
-  for (const s of config.classification.sizes) {
-    lines.push(`- \`${s.id}\`: ${s.guidance}`);
-  }
-  lines.push("");
-  lines.push("### Difficulties");
-  for (const d of config.classification.difficulties) {
-    lines.push(`- \`${d.id}\`: ${d.guidance}`);
-  }
-  lines.push("");
+    const classification = config.classification;
+    if (classification !== undefined) {
+      lines.push("## Classification", "");
+      lines.push(
+        "Optional at delegate time: `--size <id>` and `--difficulty <id>` (for metrics).",
+      );
+      lines.push("");
+      lines.push("### Sizes");
+      for (const s of classification.sizes) {
+        lines.push(`- \`${s.id}\`: ${s.guidance}`);
+      }
+      lines.push("");
+      lines.push("### Difficulties");
+      for (const d of classification.difficulties) {
+        lines.push(`- \`${d.id}\`: ${d.guidance}`);
+      }
+      lines.push("");
+    }
 
-  // --- Evaluation ---
-  lines.push("## Evaluation", "");
-  if (!config.evaluation.enabled) {
-    lines.push("Evaluation is off for this project.");
-  } else {
+    lines.push("## Evaluation", "");
     lines.push("Evaluation is **on** for this project.");
     lines.push("");
     if (config.evaluation.howTo !== undefined) {
@@ -475,9 +511,6 @@ export function renderInfoProse(config: InfoConfig): string {
       }
       lines.push("");
     }
-  }
-  if (!config.evaluation.enabled) {
-    lines.push("");
   }
 
   // --- Fix & retries ---

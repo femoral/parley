@@ -1,9 +1,9 @@
 /**
- * CLI integration: `parley info` effective configuration (#163).
+ * CLI integration: `parley info` effective configuration (#163 / #169).
  *
- * Seam: real daemon + fake vendor. Asserts the six prose sections against
- * fixture project/daemon configs, eval collapse when off, prose/--json parity
- * from the same response shape, and that the project root is sent explicitly.
+ * Seam: real daemon + fake vendor. Asserts section headers against fixture
+ * project/daemon configs, eval-related omission when off, configured vendors
+ * only, prose/--json parity, and that the project root is sent explicitly.
  */
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import fs from "node:fs";
@@ -41,8 +41,8 @@ function writeProject(root: string, files: Record<string, string>): void {
   writeFiles(root, files);
 }
 
-describe("parley info — six sections from live config (#163)", () => {
-  it("renders all six section headers against fixture configs", async () => {
+describe("parley info — sections from live config (#163 / #169)", () => {
+  it("renders all six section headers against fixture configs when eval is on", async () => {
     const cwd = projectDir();
     writeFiles(home, {
       "parley.json": JSON.stringify({
@@ -78,7 +78,7 @@ describe("parley info — six sections from live config (#163)", () => {
     expect(res.code).toBe(0);
     const out = res.stdout;
 
-    // Six required section headers.
+    // Six required section headers when eval is on.
     expect(out).toMatch(/^# Parley project info/m);
     expect(out).toContain("## Instructions");
     expect(out).toContain("## Vendors & profiles");
@@ -92,7 +92,7 @@ describe("parley info — six sections from live config (#163)", () => {
     expect(out).toContain("ORCH-PROJECT-LINE");
     expect(out.indexOf("ORCH-HOME-LINE")).toBeLessThan(out.indexOf("ORCH-PROJECT-LINE"));
 
-    // Vendors & profiles from daemon config + adapter registry.
+    // Vendors & profiles from daemon config only (not full catalog).
     expect(out).toContain("`fake`");
     expect(out).toMatch(/child channel: cli/);
     expect(out).toMatch(/retry window: 45 minutes/);
@@ -102,6 +102,8 @@ describe("parley info — six sections from live config (#163)", () => {
     expect(out).toContain("### Defaults");
     expect(out).toMatch(/profile: `fast`/);
     expect(out).toMatch(/vendor: `fake`/);
+    expect(out).not.toContain("`claude`");
+    expect(out).not.toContain("`codex`");
 
     // Task types from project + automatic other.
     expect(out).toContain("`coding` → rubric `coding`");
@@ -131,27 +133,27 @@ describe("parley info — six sections from live config (#163)", () => {
     expect(out).toMatch(/exit 8/);
   });
 
-  it("collapses Evaluation to one line when eval is off (default)", async () => {
+  it("omits Task types, Classification, and Evaluation when eval is off (default)", async () => {
     const cwd = projectDir();
     // No .parley/config.json ⇒ eval off.
     const res = await runCli(["info"], home, { cwd });
     expect(res.code).toBe(0);
-    expect(res.stdout).toContain("## Evaluation");
-    expect(res.stdout).toContain("Evaluation is off for this project.");
-    expect(res.stdout).not.toMatch(/Evaluation is \*\*on\*\*/);
+    expect(res.stdout).toContain("## Instructions");
+    expect(res.stdout).toContain("## Vendors & profiles");
+    expect(res.stdout).toContain("## Fix & retries");
+    expect(res.stdout).not.toContain("## Task types");
+    expect(res.stdout).not.toContain("## Classification");
+    expect(res.stdout).not.toContain("## Evaluation");
+    expect(res.stdout).not.toContain("Evaluation is off");
     expect(res.stdout).not.toContain("### How to eval");
     expect(res.stdout).not.toContain("### Rubrics by type");
-    // Exactly one non-empty line under Evaluation before the next section.
-    const evalBlock = res.stdout.split("## Evaluation")[1]?.split("## Fix & retries")[0] ?? "";
-    const contentLines = evalBlock
-      .split("\n")
-      .map((l) => l.trim())
-      .filter((l) => l.length > 0);
-    expect(contentLines).toEqual(["Evaluation is off for this project."]);
   });
 
-  it("shows shipped defaults when project has no classification/taskTypes", async () => {
+  it("shows shipped defaults when eval is on and project has no classification/taskTypes", async () => {
     const cwd = projectDir();
+    writeProject(cwd, {
+      ".parley/config.json": JSON.stringify({ eval: { enabled: true } }),
+    });
     const res = await runCli(["info"], home, { cwd });
     expect(res.code).toBe(0);
     // Shipped sizes + difficulties present.
@@ -162,9 +164,27 @@ describe("parley info — six sections from live config (#163)", () => {
     expect(res.stdout).toContain("`planning` → rubric `planning`");
     expect(res.stdout).toMatch(/`other`/);
   });
+
+  it("lists only configured vendors in --json, not the full adapter catalog", async () => {
+    const cwd = projectDir();
+    writeFiles(home, {
+      "parley.json": JSON.stringify({
+        vendors: { fake: { childChannel: "mcp" } },
+        profiles: { only: { vendor: "fake", model: "m-only" } },
+      }),
+    });
+    const res = await runCli(["info", "--json"], home, { cwd });
+    expect(res.code).toBe(0);
+    const config = JSON.parse(res.stdout) as InfoConfig;
+    expect(config.vendors.map((v) => v.id)).toEqual(["fake"]);
+    expect(config.vendors.some((v) => v.id === "claude")).toBe(false);
+    expect(config.profiles.map((p) => p.model)).toEqual(["m-only"]);
+    // No full models catalog dump.
+    expect(config).not.toHaveProperty("models");
+  });
 });
 
-describe("parley info — prose / --json parity (#163)", () => {
+describe("parley info — prose / --json parity (#163 / #169)", () => {
   it("prints structured config with --json and prose without; prose matches render(config)", async () => {
     const cwd = projectDir();
     writeFiles(home, {
@@ -194,9 +214,14 @@ describe("parley info — prose / --json parity (#163)", () => {
     expect(config).toHaveProperty("fix");
     expect(config.project).toBe(path.resolve(cwd));
     expect(config.evaluation.enabled).toBe(false);
+    // Eval-off: taskTypes/classification omitted from JSON twin (#169).
+    expect(config.taskTypes).toBeUndefined();
+    expect(config.classification).toBeUndefined();
     expect(config.fix.retryMax).toBe(3);
     expect(config.instructions).toContain("HOME-ORCH");
     expect(config.profiles.some((p) => p.name === "deep")).toBe(true);
+    // Profile vendor alone is enough to configure that vendor.
+    expect(config.vendors.map((v) => v.id)).toEqual(["fake"]);
 
     // Parity: prose is exactly the render of the structured config.
     const expected = renderInfoProse(config);
@@ -221,6 +246,8 @@ describe("parley info — prose / --json parity (#163)", () => {
     const config = JSON.parse(jsonRes.stdout) as InfoConfig;
     expect(config.evaluation.enabled).toBe(true);
     expect(config.evaluation.rubrics).toBeDefined();
+    expect(config.taskTypes?.some((t) => t.id === "coding")).toBe(true);
+    expect(config.classification).toBeDefined();
     const coding = config.evaluation.rubrics?.find((r) => r.type === "coding");
     expect(coding).toBeDefined();
     expect(coding!.rubricId).toBe("coding");
@@ -239,6 +266,7 @@ describe("parley info — remote-safe project root (#163)", () => {
     writeProject(cwd, {
       ".parley/orchestrator/PROMPT.md": "FROM-PROJECT-CWD",
       ".parley/config.json": JSON.stringify({
+        eval: { enabled: true },
         taskTypes: { design: { rubric: "design" } },
       }),
     });
@@ -254,8 +282,8 @@ describe("parley info — remote-safe project root (#163)", () => {
     expect(config.project).toBe(path.resolve(cwd));
     expect(config.instructions).toContain("FROM-PROJECT-CWD");
     expect(config.instructions).toContain("FROM-DAEMON-HOME"); // home layer still compounds
-    expect(config.taskTypes.some((t) => t.id === "design")).toBe(true);
-    expect(config.taskTypes.some((t) => t.id === "coding")).toBe(false);
+    expect(config.taskTypes?.some((t) => t.id === "design")).toBe(true);
+    expect(config.taskTypes?.some((t) => t.id === "coding")).toBe(false);
   });
 
   it("usage: rejects unexpected positionals (exit 2)", async () => {
