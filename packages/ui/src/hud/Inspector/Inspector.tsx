@@ -148,6 +148,7 @@ export const Inspector = memo(function Inspector({ task }: InspectorProps) {
           <BriefTab
             brief={task.brief}
             error={task.state === "failed" ? task.error : null}
+            attempts={task.attempts}
           />
         )}
         {active === "logs" && <LogsTab logs={task.logs} />}

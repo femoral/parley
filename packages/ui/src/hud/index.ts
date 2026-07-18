@@ -32,7 +32,12 @@ export { EvalDistribution } from "./EvalDistribution.js";
 export type { EvalDistributionProps } from "./EvalDistribution.js";
 export { EvalComparison, COMPARISON_GROUP_BY } from "./EvalComparison.js";
 export type { EvalComparisonProps } from "./EvalComparison.js";
+export { EvalHeatmap, HEATMAP_GROUP_BY } from "./EvalHeatmap.js";
+export type { EvalHeatmapProps } from "./EvalHeatmap.js";
+export { AttemptLineage } from "./AttemptLineage.js";
+export type { AttemptLineageProps } from "./AttemptLineage.js";
 export type {
+  AttemptLineageItem,
   BriefView,
   HealthView,
   InboxTask,
@@ -51,6 +56,8 @@ export type {
   SoundingsEvalBucket,
   SoundingsFiltersView,
   SoundingsGroupView,
+  SoundingsHeatmapCell,
+  SoundingsHeatmapView,
   SoundingsView,
   SoundingsViewTab,
 } from "./types.js";

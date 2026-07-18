@@ -136,6 +136,35 @@ export interface QaTurn {
   answeredAt: string | null;
 }
 
+/**
+ * One attempt in the fix chain as the inspector timeline renders it (#166).
+ * Mirrors enriched `parley status` attempt lines: badges + score.
+ */
+export interface AttemptLineageItem {
+  id: string;
+  /** 1-based attempt number in the chain. */
+  attempt: number;
+  /** Wire task state string. */
+  state: string;
+  /** Caps display label from state meta (e.g. COMPLETED). */
+  stateLabel: string;
+  /** CSS colour token for the state badge. */
+  stateColor: string;
+  resumed: boolean;
+  /**
+   * Cache honesty badge: hit when cached tokens > 0, miss when 0,
+   * null when the vendor did not report cached tokens.
+   */
+  cacheBadge: "cache" | "no-cache" | null;
+  /** Pre-formatted score (`9/5`, `8 · legacy`, or null when unscored). */
+  score: string | null;
+  scoreValue: number | null;
+  baselineValue: number | null;
+  legacy: boolean;
+  /** True when this entry is the currently selected task. */
+  current: boolean;
+}
+
 /** The full inspector payload for the selected task (design-manifest §4.17). */
 export interface InspectorTask {
   id: string;
@@ -155,6 +184,8 @@ export interface InspectorTask {
   logs: LogsView;
   report: ReportView | null;
   qa: QaTurn[];
+  /** Full attempt chain root → latest (#166); always at least the current task. */
+  attempts: AttemptLineageItem[];
 }
 
 /** The daemon health readout, fully projected to display values by the hooks layer. */
@@ -237,8 +268,8 @@ export interface SoundingsFiltersView {
   active: boolean;
 }
 
-/** Centre-board sub-view inside Soundings (#165). */
-export type SoundingsViewTab = "groups" | "distribution" | "comparison";
+/** Centre-board sub-view inside Soundings (#165 / #166). */
+export type SoundingsViewTab = "groups" | "distribution" | "comparison" | "heatmap";
 
 /**
  * One group on the score-vs-baseline distribution (#165). Positions are 0–1
@@ -283,8 +314,45 @@ export interface SoundingsComparisonRow {
 }
 
 /**
- * Plain Soundings dashboard props (#119 / #165). Status is fully projected so
- * the plate never interprets wire shapes or loading policy.
+ * One cell on the criterion-failure heatmap (#166): failure rate of one
+ * rubric criterion inside one group (type / vendor / orchestrator).
+ */
+export interface SoundingsHeatmapCell {
+  criterionId: string;
+  groupKey: string | null;
+  groupLabel: string;
+  failures: number;
+  count: number;
+  /** failures / count; null when this group never answered the criterion. */
+  rate: number | null;
+  /** Pre-formatted rate (`33%`) or `—` when missing. */
+  rateLabel: string;
+  /**
+   * 0–1 shading intensity (failure rate). Null when no sample for the cell
+   * so the plate can render a deliberate empty (not zero) tile. Floor-biased
+   * display keeps 1–2 data points legible.
+   */
+  intensity: number | null;
+}
+
+/** Projected heatmap matrix for the Soundings criterion-failure view (#166). */
+export interface SoundingsHeatmapView {
+  /** Sorted criterion ids (row axis). */
+  criteria: string[];
+  /** Group columns for the active dimension. */
+  groups: { key: string | null; label: string }[];
+  /**
+   * Row-major cells: `cells[criterionIndex][groupIndex]`.
+   * Empty when no criterion answers exist under current filters.
+   */
+  cells: SoundingsHeatmapCell[][];
+  /** Sum of rubric-eval counts across groups (sparse messaging). */
+  sampleEvals: number;
+}
+
+/**
+ * Plain Soundings dashboard props (#119 / #165 / #166). Status is fully
+ * projected so the plate never interprets wire shapes or loading policy.
  */
 export interface SoundingsView {
   /**
@@ -300,18 +368,20 @@ export interface SoundingsView {
   distribution: SoundingsDistributionRow[];
   /** Comparison rows (same group order as {@link groups}). */
   comparison: SoundingsComparisonRow[];
+  /** Criterion-failure heatmap matrix (#166). */
+  heatmap: SoundingsHeatmapView;
   /** Active group-by dimension string. */
   groupBy: string;
   /** Session scope label (`All hands` or short session id). */
   sessionLabel: string;
   /** ISO timestamp from the response, or null before first success. */
   generatedAt: string | null;
-  /** Active quality filters (shared with #166 views). */
+  /** Active quality filters (shared heatmap / distribution / comparison). */
   filters: SoundingsFiltersView;
   /** Which Soundings sub-view is showing. */
   viewTab: SoundingsViewTab;
   /**
-   * Rubric-eval presence for distribution/comparison empty states:
+   * Rubric-eval presence for quality-view empty states:
    * `loading` | `ready` (has evals) | `off` (groups but no rubric scores —
    * eval disabled or not yet run) | `empty` (no groups).
    */

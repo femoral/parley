@@ -45,11 +45,13 @@ export {
   projectSoundings,
   projectDistributionRow,
   projectComparisonRow,
+  projectHeatmap,
   projectFiltersView,
   metricsHasRubricEvals,
   metricsRefreshKey,
   GROUP_BY_OPTIONS,
   COMPARISON_DIMENSIONS,
+  HEATMAP_DIMENSIONS,
 } from "./metrics.js";
 export { useSettings } from "./useSettings.js";
 export type { Settings, SettingsView } from "./useSettings.js";
@@ -86,4 +88,8 @@ export {
   formatDurationMs,
 } from "./format.js";
 export { classifyLogLine, buildLogLines, LogAccumulator, LOG_LINE_CAP } from "./logClassify.js";
-export { projectInspector } from "./inspector.js";
+export {
+  projectInspector,
+  projectAttemptLineage,
+  formatAttemptScore,
+} from "./inspector.js";

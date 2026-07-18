@@ -31,6 +31,22 @@ function task(overrides: Partial<InspectorTask> = {}): InspectorTask {
     logs: { lines: [], live: true },
     report: null,
     qa: [],
+    attempts: [
+      {
+        id: "t1abcdef",
+        attempt: 1,
+        state: "running",
+        stateLabel: "RUNNING",
+        stateColor: "var(--state-running)",
+        resumed: false,
+        cacheBadge: null,
+        score: null,
+        scoreValue: null,
+        baselineValue: null,
+        legacy: false,
+        current: true,
+      },
+    ],
     ...overrides,
   };
 }
@@ -49,11 +65,12 @@ describe("Inspector renders a quiet placeholder with no selection (#68)", () => 
 
 describe("Inspector header (#68)", () => {
   it("shows the ship's log kicker, task name, id, and state badge", () => {
-    render(<Inspector task={task()} />);
+    const { container } = render(<Inspector task={task()} />);
     expect(screen.getByText("SHIP'S LOG")).toBeTruthy();
     expect(screen.getByText("chart-the-bay")).toBeTruthy();
-    expect(screen.getByText("t1abcdef")).toBeTruthy();
-    expect(screen.getByText("RUNNING")).toBeTruthy();
+    // Id appears on the header and again on the attempt lineage (#166).
+    expect(container.querySelector(".pc-inspector__id")?.textContent).toBe("t1abcdef");
+    expect(screen.getAllByText("RUNNING").length).toBeGreaterThanOrEqual(1);
   });
 
   it("shows an eval score badge only when present", () => {
@@ -103,6 +120,57 @@ describe("Inspector's four tabs render per the manifest's inspector treatment (#
     expect(
       screen.getByText(/Parley never merges on its own — the branch waits for your orchestrator/),
     ).toBeTruthy();
+  });
+
+  it("renders the attempt-lineage timeline with badges and scores (#166)", () => {
+    render(
+      <Inspector
+        task={task({
+          id: "fix1",
+          attempts: [
+            {
+              id: "root",
+              attempt: 1,
+              state: "completed",
+              stateLabel: "COMPLETED",
+              stateColor: "var(--state-completed)",
+              resumed: false,
+              cacheBadge: null,
+              score: "4/5",
+              scoreValue: 4,
+              baselineValue: 5,
+              legacy: false,
+              current: false,
+            },
+            {
+              id: "fix1",
+              attempt: 2,
+              state: "completed",
+              stateLabel: "COMPLETED",
+              stateColor: "var(--state-completed)",
+              resumed: true,
+              cacheBadge: "cache",
+              score: "9/5",
+              scoreValue: 9,
+              baselineValue: 5,
+              legacy: false,
+              current: true,
+            },
+          ],
+        })}
+      />,
+    );
+    const lineage = screen.getByLabelText("Attempt lineage");
+    expect(lineage).toBeTruthy();
+    expect(lineage.textContent).toContain("#1");
+    expect(lineage.textContent).toContain("#2");
+    expect(lineage.textContent).toContain("root");
+    expect(lineage.textContent).toContain("fix1");
+    expect(lineage.textContent).toContain("★ 4/5");
+    expect(lineage.textContent).toContain("★ 9/5");
+    expect(lineage.textContent).toContain("RESUMED");
+    expect(lineage.textContent).toContain("CACHE");
+    expect(lineage.textContent).toContain("THIS");
   });
 
   it("renders the failure cause at the top of Brief when the task is failed with an error", () => {

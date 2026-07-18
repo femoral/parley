@@ -5,12 +5,14 @@ import {
   EvalComparison,
   EvalDistribution,
   EvalFilterBar,
+  EvalHeatmap,
   SoundingsPanel,
 } from "../src/hud/index.js";
 import type { SoundingsFiltersView, SoundingsView } from "../src/hud/index.js";
 import {
   projectComparisonRow,
   projectDistributionRow,
+  projectHeatmap,
   projectSoundings,
 } from "../src/app/hooks/metrics.js";
 import type { MetricsGroup, MetricsResponse } from "@useparley/core";
@@ -85,6 +87,50 @@ function metricsGroup(overrides: Partial<MetricsGroup> = {}): MetricsGroup {
 const DIST_ROW = projectDistributionRow(metricsGroup());
 const CMP_ROW = projectComparisonRow(metricsGroup());
 
+function groupWithCriteria(
+  key: string,
+  failures: Record<string, { failures: number; count: number; rate: number | null }>,
+  evalCount = 2,
+): MetricsGroup {
+  return metricsGroup({
+    key,
+    evals: {
+      count: evalCount,
+      avg: 4.5,
+      avg_baseline: 5,
+      avg_delta: -0.5,
+      below_baseline_rate: 0.5,
+      criterion_failures: failures,
+      first_attempt: {
+        count: 1,
+        avg: 4,
+        avg_baseline: 5,
+        avg_delta: -1,
+        below_baseline_rate: 1,
+      },
+      fix: {
+        count: 1,
+        avg: 5,
+        avg_baseline: 5,
+        avg_delta: 0,
+        below_baseline_rate: 0,
+      },
+    },
+  });
+}
+
+const HEAT_GROUPS = [
+  groupWithCriteria("coding", {
+    "brief-implemented": { failures: 1, count: 2, rate: 0.5 },
+    "broke-existing": { failures: 0, count: 2, rate: 0 },
+  }),
+  groupWithCriteria("design", {
+    "brief-implemented": { failures: 2, count: 2, rate: 1 },
+    // broke-existing intentionally absent — sparse cell
+  }),
+];
+const HEATMAP = projectHeatmap(HEAT_GROUPS);
+
 function baseView(overrides: Partial<SoundingsView> = {}): SoundingsView {
   return {
     status: "ready",
@@ -105,6 +151,7 @@ function baseView(overrides: Partial<SoundingsView> = {}): SoundingsView {
     ],
     distribution: [DIST_ROW],
     comparison: [CMP_ROW],
+    heatmap: HEATMAP,
     groupBy: "vendor",
     sessionLabel: "All hands",
     generatedAt: "2026-07-16T00:00:00.000Z",
@@ -270,6 +317,9 @@ describe("SoundingsPanel quality views (#165)", () => {
 
     fireEvent.click(screen.getByRole("tab", { name: "Comparison" }));
     expect(onViewTab).toHaveBeenCalledWith("comparison");
+
+    fireEvent.click(screen.getByRole("tab", { name: "Criterion failures" }));
+    expect(onViewTab).toHaveBeenCalledWith("heatmap");
   });
 
   it("renders distribution tab content from projected props", () => {
@@ -299,5 +349,143 @@ describe("SoundingsPanel quality views (#165)", () => {
     expect(screen.getByLabelText("Quality comparison")).toBeTruthy();
     expect(screen.getByText("Avg delta")).toBeTruthy();
     expect(screen.getByText("Below baseline")).toBeTruthy();
+  });
+
+  it("renders heatmap tab from projected matrix", () => {
+    render(
+      <SoundingsPanel
+        soundings={baseView({ viewTab: "heatmap", groupBy: "type" })}
+        onGroupBy={() => {}}
+        onFiltersChange={() => {}}
+        onFiltersClear={() => {}}
+        onViewTab={() => {}}
+      />,
+    );
+    expect(screen.getByLabelText("Criterion failure heatmap")).toBeTruthy();
+    expect(screen.getByText("brief-implemented")).toBeTruthy();
+  });
+});
+
+describe("projectHeatmap (#166)", () => {
+  it("shapes criteria × groups with rates and nulls for missing samples", () => {
+    expect(HEATMAP.criteria).toEqual(["brief-implemented", "broke-existing"]);
+    expect(HEATMAP.groups.map((g) => g.label)).toEqual(["coding", "design"]);
+    expect(HEATMAP.sampleEvals).toBe(4);
+
+    const briefCoding = HEATMAP.cells[0]![0]!;
+    expect(briefCoding.rate).toBe(0.5);
+    expect(briefCoding.rateLabel).toBe("50%");
+    expect(briefCoding.intensity).toBe(0.5);
+    expect(briefCoding.failures).toBe(1);
+    expect(briefCoding.count).toBe(2);
+
+    // design never answered broke-existing → empty tile, not zero.
+    const brokeDesign = HEATMAP.cells[1]![1]!;
+    expect(brokeDesign.rate).toBeNull();
+    expect(brokeDesign.intensity).toBeNull();
+    expect(brokeDesign.rateLabel).toBe("—");
+    expect(brokeDesign.count).toBe(0);
+
+    // design fails brief-implemented always.
+    const briefDesign = HEATMAP.cells[0]![1]!;
+    expect(briefDesign.rate).toBe(1);
+    expect(briefDesign.rateLabel).toBe("100%");
+  });
+
+  it("returns empty criteria when no criterion_failures exist", () => {
+    const empty = projectHeatmap([metricsGroup()]);
+    expect(empty.criteria).toEqual([]);
+    expect(empty.cells).toEqual([]);
+    expect(empty.sampleEvals).toBe(2);
+  });
+
+  it("projects heatmap onto SoundingsView", () => {
+    const data: MetricsResponse = {
+      generated_at: "2026-07-16T00:00:00.000Z",
+      groups: HEAT_GROUPS,
+    };
+    const view = projectSoundings(data, "ready", null, "type", "All hands", {
+      viewTab: "heatmap",
+    });
+    expect(view.heatmap.criteria).toContain("brief-implemented");
+    expect(view.viewTab).toBe("heatmap");
+    expect(view.evalPresence).toBe("ready");
+  });
+});
+
+describe("EvalHeatmap (#166)", () => {
+  it("renders matrix cells and dimension chips", () => {
+    const onGroupBy = vi.fn();
+    render(
+      <EvalHeatmap
+        heatmap={HEATMAP}
+        groupBy="type"
+        evalPresence="ready"
+        filtersActive={false}
+        onGroupBy={onGroupBy}
+      />,
+    );
+    expect(screen.getByLabelText("Criterion failure heatmap")).toBeTruthy();
+    expect(screen.getByText("brief-implemented")).toBeTruthy();
+    expect(screen.getByText("broke-existing")).toBeTruthy();
+    expect(screen.getByText("coding")).toBeTruthy();
+    expect(screen.getByText("design")).toBeTruthy();
+    expect(screen.getByText("50%")).toBeTruthy();
+    expect(screen.getByText("100%")).toBeTruthy();
+    // Missing sample for broke-existing × design.
+    expect(
+      screen.getByLabelText("broke-existing × design: no sample"),
+    ).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Orchestrator" }));
+    expect(onGroupBy).toHaveBeenCalledWith("orch_harness");
+  });
+
+  it("shows eval-off explanatory state", () => {
+    render(
+      <EvalHeatmap
+        heatmap={{ criteria: [], groups: [], cells: [], sampleEvals: 0 }}
+        groupBy="vendor"
+        evalPresence="off"
+        filtersActive={false}
+        onGroupBy={() => {}}
+      />,
+    );
+    expect(screen.getByText("No structured evals yet")).toBeTruthy();
+    expect(screen.getByText(/parley eval/)).toBeTruthy();
+  });
+
+  it("shows sparse empty when evals exist without criterion answers", () => {
+    render(
+      <EvalHeatmap
+        heatmap={{ criteria: [], groups: [{ key: "codex", label: "codex" }], cells: [], sampleEvals: 2 }}
+        groupBy="vendor"
+        evalPresence="ready"
+        filtersActive={false}
+        onGroupBy={() => {}}
+      />,
+    );
+    expect(screen.getByText("No criterion answers yet")).toBeTruthy();
+  });
+
+  it("flags sparse sample banner when n ≤ 2", () => {
+    const sparse = projectHeatmap([
+      groupWithCriteria(
+        "codex",
+        { "brief-implemented": { failures: 1, count: 1, rate: 1 } },
+        1,
+      ),
+    ]);
+    render(
+      <EvalHeatmap
+        heatmap={sparse}
+        groupBy="vendor"
+        evalPresence="ready"
+        filtersActive={false}
+        onGroupBy={() => {}}
+      />,
+    );
+    expect(screen.getByText(/Sparse — n=1 eval/)).toBeTruthy();
+    expect(screen.getByText("100%")).toBeTruthy();
   });
 });

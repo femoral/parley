@@ -1,6 +1,7 @@
 import { Mark } from "../../primitives/index.js";
 import { MARK_SCROLL } from "../../tokens/chrome-glyphs.js";
-import type { BriefView } from "../types.js";
+import { AttemptLineage } from "../AttemptLineage.js";
+import type { AttemptLineageItem, BriefView } from "../types.js";
 
 export interface BriefTabProps {
   brief: BriefView;
@@ -8,17 +9,19 @@ export interface BriefTabProps {
    * null otherwise. Rendered as a coral-bordered well above the grid so the
    * wreck's cause is visible without spelunking raw logs. */
   error?: string | null;
+  /** Full attempt chain (root → latest) for the lineage timeline (#166). */
+  attempts?: AttemptLineageItem[];
 }
 
 /**
  * Layer 2 — the Brief tab (design-manifest §4.17 "Brief"): branch/worktree +
  * model/effort + elapsed·usage key-value grid, the scroll-marked GOAL well (the task's
- * prompt), the sandbox/network posture as constraint bullets, and the
- * standing footnote. When a failed task carries an `error`, a coral-bordered
- * "WHY IT FAILED" well leads so the cause is recognition, not recall. Plain
- * props only (contract 2).
+ * prompt), the sandbox/network posture as constraint bullets, attempt lineage
+ * (#166), and the standing footnote. When a failed task carries an `error`, a
+ * coral-bordered "WHY IT FAILED" well leads so the cause is recognition, not
+ * recall. Plain props only (contract 2).
  */
-export function BriefTab({ brief, error = null }: BriefTabProps) {
+export function BriefTab({ brief, error = null, attempts = [] }: BriefTabProps) {
   const elapsed = [brief.duration, brief.usage].filter(Boolean).join(" · ");
   return (
     <div className="pc-brief">
@@ -57,6 +60,7 @@ export function BriefTab({ brief, error = null }: BriefTabProps) {
           {brief.network !== null && <li>Network: {brief.network ? "enabled" : "disabled"}</li>}
         </ul>
       )}
+      <AttemptLineage attempts={attempts} />
       <p className="pc-brief__footnote">
         Parley never merges on its own — the branch waits for your orchestrator to say the word.
       </p>

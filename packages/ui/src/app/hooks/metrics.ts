@@ -20,6 +20,8 @@ import type {
   SoundingsEvalBucket,
   SoundingsFiltersView,
   SoundingsGroupView,
+  SoundingsHeatmapCell,
+  SoundingsHeatmapView,
   SoundingsView,
   SoundingsViewTab,
 } from "../../hud/types.js";
@@ -52,6 +54,16 @@ export const COMPARISON_DIMENSIONS: readonly { value: MetricsGroupBy; label: str
   { value: "orch_model", label: "Orch model" },
   { value: "eval_harness", label: "Judge harness" },
   { value: "eval_model", label: "Judge model" },
+];
+
+/**
+ * Heatmap column dimensions (#166): task type / vendor / orchestrator.
+ * Switching reuses the shared metrics `group_by` (same as comparison chips).
+ */
+export const HEATMAP_DIMENSIONS: readonly { value: MetricsGroupBy; label: string }[] = [
+  { value: "type", label: "Type" },
+  { value: "vendor", label: "Vendor" },
+  { value: "orch_harness", label: "Orchestrator" },
 ];
 
 function projectEvalBuckets(map: Record<string, { count: number; avg: number | null }>): SoundingsEvalBucket[] {
@@ -132,6 +144,60 @@ export function projectComparisonRow(group: MetricsGroup): SoundingsComparisonRo
   };
 }
 
+/**
+ * Build the criterion × group failure-rate matrix for the heatmap (#166).
+ * Missing criterion answers in a group become null intensity (empty tile),
+ * never a false zero rate — sparse data must stay honest.
+ */
+export function projectHeatmap(groups: readonly MetricsGroup[]): SoundingsHeatmapView {
+  const criterionIds = new Set<string>();
+  let sampleEvals = 0;
+  for (const group of groups) {
+    sampleEvals += group.evals.count;
+    for (const id of Object.keys(group.evals.criterion_failures)) {
+      criterionIds.add(id);
+    }
+  }
+  const criteria = [...criterionIds].sort((a, b) => a.localeCompare(b));
+  const groupCols = groups.map((g) => ({
+    key: g.key,
+    label: g.key ?? "(none)",
+  }));
+
+  const cells: SoundingsHeatmapCell[][] = criteria.map((criterionId) =>
+    groups.map((group) => {
+      const stats = group.evals.criterion_failures[criterionId];
+      const groupLabel = group.key ?? "(none)";
+      if (!stats || stats.count === 0) {
+        return {
+          criterionId,
+          groupKey: group.key,
+          groupLabel,
+          failures: 0,
+          count: 0,
+          rate: null,
+          rateLabel: "—",
+          intensity: null,
+        };
+      }
+      const rate = stats.rate;
+      return {
+        criterionId,
+        groupKey: group.key,
+        groupLabel,
+        failures: stats.failures,
+        count: stats.count,
+        rate,
+        rateLabel: formatRate(rate),
+        // Raw failure rate drives shade; plate applies a legibility floor in CSS.
+        intensity: rate === null || !Number.isFinite(rate) ? null : clamp01(rate),
+      };
+    }),
+  );
+
+  return { criteria, groups: groupCols, cells, sampleEvals };
+}
+
 function clamp01(n: number): number {
   return Math.max(0, Math.min(1, n));
 }
@@ -183,6 +249,7 @@ export function projectSoundings(
   const groups = data?.groups.map(projectMetricsGroup) ?? [];
   const distribution = data?.groups.map(projectDistributionRow) ?? [];
   const comparison = data?.groups.map(projectComparisonRow) ?? [];
+  const heatmap = projectHeatmap(data?.groups ?? []);
   const empty = status === "ready" && groups.length === 0;
   const hasEvals = metricsHasRubricEvals(data);
   /**
@@ -207,6 +274,7 @@ export function projectSoundings(
     groups,
     distribution,
     comparison,
+    heatmap,
     groupBy,
     sessionLabel,
     generatedAt: data?.generated_at ?? null,

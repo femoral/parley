@@ -1,36 +1,61 @@
 import { describe, expect, it } from "vitest";
-import type { QaTurn, TaskDetailResponse } from "@useparley/core";
-import { projectInspector } from "../src/app/hooks/inspector.js";
+import type { AttemptLineageEntry, QaTurn, TaskDetailResponse } from "@useparley/core";
+import {
+  formatAttemptScore,
+  projectAttemptLineage,
+  projectInspector,
+} from "../src/app/hooks/inspector.js";
 import { envelope, row } from "./fixtures.js";
+
+function attemptEntry(
+  overrides: Partial<AttemptLineageEntry> = {},
+): AttemptLineageEntry {
+  return {
+    id: "t1",
+    name: null,
+    attempt: 1,
+    parent_task_id: null,
+    state: "running",
+    resumed: false,
+    cached_input_tokens: null,
+    cache_hit: null,
+    eval_score: null,
+    eval_baseline: null,
+    eval_rubric: null,
+    eval_rubric_version: null,
+    eval_legacy: false,
+    ...overrides,
+  };
+}
 
 function detail(
   overrides: Partial<TaskDetailResponse["task"]> = {},
   rowOverrides: Partial<TaskDetailResponse["row"]> = {},
   qa: QaTurn[] = [],
+  attempts?: AttemptLineageEntry[],
 ): TaskDetailResponse {
   const r = row({ id: "t1", state: "running", orchestrator_session_id: "sess-1", ...rowOverrides });
   return {
     task: envelope({ task_id: "t1", state: "running", vendor: "grok", ...overrides }),
     row: r,
     qa,
-    // #164 detail fields — projection tests only read task/row/qa today.
-    attempts: [
-      {
-        id: r.id,
-        name: r.name,
-        attempt: r.attempt ?? 1,
-        parent_task_id: r.parent_task_id ?? null,
-        state: r.state,
-        resumed: false,
-        cached_input_tokens: r.cached_input_tokens ?? null,
-        cache_hit: null,
-        eval_score: r.eval_score,
-        eval_baseline: r.eval_baseline ?? null,
-        eval_rubric: r.eval_rubric ?? null,
-        eval_rubric_version: r.eval_rubric_version ?? null,
-        eval_legacy: r.eval_score !== null && (r.eval_rubric == null || r.eval_rubric === ""),
-      },
-    ],
+    attempts:
+      attempts ??
+      [
+        attemptEntry({
+          id: r.id,
+          name: r.name,
+          attempt: r.attempt ?? 1,
+          parent_task_id: r.parent_task_id ?? null,
+          state: r.state,
+          cached_input_tokens: r.cached_input_tokens ?? null,
+          eval_score: r.eval_score,
+          eval_baseline: r.eval_baseline ?? null,
+          eval_rubric: r.eval_rubric ?? null,
+          eval_rubric_version: r.eval_rubric_version ?? null,
+          eval_legacy: r.eval_score !== null && (r.eval_rubric == null || r.eval_rubric === ""),
+        }),
+      ],
     session: {
       session_id: r.orchestrator_session_id,
       harness: r.orch_harness ?? null,
@@ -212,5 +237,108 @@ describe("projectInspector passes the log view through untouched (#68)", () => {
     const logs = { lines: [{ key: 0, kind: "stdout" as const, text: "hello" }], live: true };
     const view = projectInspector(detail(), logs);
     expect(view.logs).toBe(logs);
+  });
+});
+
+describe("projectAttemptLineage / formatAttemptScore (#166)", () => {
+  it("formats structured score as score/baseline and legacy with a tag", () => {
+    expect(
+      formatAttemptScore(
+        attemptEntry({ eval_score: 9, eval_baseline: 5, eval_legacy: false }),
+      ),
+    ).toBe("9/5");
+    expect(
+      formatAttemptScore(attemptEntry({ eval_score: 8, eval_baseline: null, eval_legacy: true })),
+    ).toBe("8 · legacy");
+    expect(formatAttemptScore(attemptEntry({ eval_score: null }))).toBeNull();
+  });
+
+  it("projects resumed/cache badges and marks the current task", () => {
+    const chain = projectAttemptLineage(
+      [
+        attemptEntry({
+          id: "root",
+          attempt: 1,
+          state: "completed",
+          resumed: false,
+          cache_hit: null,
+          eval_score: 4,
+          eval_baseline: 5,
+        }),
+        attemptEntry({
+          id: "fix1",
+          attempt: 2,
+          parent_task_id: "root",
+          state: "completed",
+          resumed: true,
+          cache_hit: true,
+          cached_input_tokens: 100,
+          eval_score: 9,
+          eval_baseline: 5,
+        }),
+      ],
+      "fix1",
+    );
+    expect(chain).toHaveLength(2);
+    expect(chain[0]).toMatchObject({
+      id: "root",
+      attempt: 1,
+      resumed: false,
+      cacheBadge: null,
+      score: "4/5",
+      current: false,
+      stateLabel: "COMPLETED",
+    });
+    expect(chain[1]).toMatchObject({
+      id: "fix1",
+      attempt: 2,
+      resumed: true,
+      cacheBadge: "cache",
+      score: "9/5",
+      current: true,
+    });
+  });
+
+  it("maps cache_hit false to no-cache badge", () => {
+    const [item] = projectAttemptLineage(
+      [attemptEntry({ id: "t1", cache_hit: false, cached_input_tokens: 0 })],
+      "t1",
+    );
+    expect(item!.cacheBadge).toBe("no-cache");
+  });
+
+  it("projectInspector attaches the full attempt chain", () => {
+    const view = projectInspector(
+      detail(
+        { task_id: "fix1", state: "completed" },
+        { id: "fix1", state: "completed", eval_score: 9, eval_baseline: 5 },
+        [],
+        [
+          attemptEntry({
+            id: "root",
+            attempt: 1,
+            state: "completed",
+            eval_score: 4,
+            eval_baseline: 5,
+          }),
+          attemptEntry({
+            id: "fix1",
+            attempt: 2,
+            parent_task_id: "root",
+            state: "completed",
+            resumed: true,
+            cache_hit: true,
+            eval_score: 9,
+            eval_baseline: 5,
+          }),
+        ],
+      ),
+      NO_LOGS,
+    );
+    expect(view.attempts.map((a) => a.id)).toEqual(["root", "fix1"]);
+    expect(view.attempts[1]!.resumed).toBe(true);
+    expect(view.attempts[1]!.cacheBadge).toBe("cache");
+    expect(view.attempts[1]!.score).toBe("9/5");
+    expect(view.attempts[1]!.current).toBe(true);
   });
 });

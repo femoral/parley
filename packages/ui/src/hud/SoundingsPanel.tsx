@@ -4,6 +4,7 @@ import { MARK_COMPASS } from "../tokens/chrome-glyphs.js";
 import { EvalComparison } from "./EvalComparison.js";
 import { EvalDistribution } from "./EvalDistribution.js";
 import { EvalFilterBar } from "./EvalFilterBar.js";
+import { EvalHeatmap } from "./EvalHeatmap.js";
 import type {
   SoundingsFiltersView,
   SoundingsGroupView,
@@ -32,6 +33,7 @@ const VIEW_TABS: readonly { value: SoundingsViewTab; label: string }[] = [
   { value: "groups", label: "Groups" },
   { value: "distribution", label: "Score vs baseline" },
   { value: "comparison", label: "Comparison" },
+  { value: "heatmap", label: "Criterion failures" },
 ];
 
 export interface SoundingsPanelProps {
@@ -164,10 +166,11 @@ function GroupCard({ group }: { group: SoundingsGroupView }) {
 }
 
 /**
- * Layer 2 — the Soundings metrics board (#119 / #165). Nautical register for
- * depth readings: group aggregates, score-vs-baseline distribution, and
- * quality comparison. Shared filter bar drives every sub-view. Plain props
- * only — fetch, SSE refresh, and projection live in the hooks layer.
+ * Layer 2 — the Soundings metrics board (#119 / #165 / #166). Nautical register
+ * for depth readings: group aggregates, score-vs-baseline distribution, quality
+ * comparison, and criterion-failure heatmap. Shared filter bar drives every
+ * sub-view. Plain props only — fetch, SSE refresh, and projection live in the
+ * hooks layer.
  */
 export const SoundingsPanel = memo(function SoundingsPanel({
   soundings,
@@ -182,6 +185,7 @@ export const SoundingsPanel = memo(function SoundingsPanel({
     groups,
     distribution,
     comparison,
+    heatmap,
     groupBy,
     sessionLabel,
     filters,
@@ -346,6 +350,32 @@ export const SoundingsPanel = memo(function SoundingsPanel({
             ) : (
               <EvalComparison
                 rows={comparison}
+                groupBy={groupBy}
+                evalPresence={evalPresence}
+                filtersActive={filters.active}
+                onGroupBy={onGroupBy}
+              />
+            )}
+          </>
+        )}
+
+        {viewTab === "heatmap" && (
+          <>
+            {status === "error" && groups.length > 0 && (
+              <p className="pc-soundings__banner" role="status">
+                Chart may be stale — {error ?? "could not refresh soundings."}
+              </p>
+            )}
+            {status === "error" && groups.length === 0 ? (
+              <div className="pc-soundings__state pc-soundings__state--error" role="alert">
+                <p className="pc-soundings__state-title">Soundings failed</p>
+                <p className="pc-soundings__state-sub">
+                  {error ?? "Could not reach the daemon."}
+                </p>
+              </div>
+            ) : (
+              <EvalHeatmap
+                heatmap={heatmap}
                 groupBy={groupBy}
                 evalPresence={evalPresence}
                 filtersActive={filters.active}

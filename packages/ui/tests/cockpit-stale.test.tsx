@@ -78,6 +78,7 @@ function baseView(overrides: Partial<CockpitView> = {}): CockpitView {
       groups: [],
       distribution: [],
       comparison: [],
+      heatmap: { criteria: [], groups: [], cells: [], sampleEvals: 0 },
       groupBy: "vendor",
       sessionLabel: "All hands",
       generatedAt: null,

@@ -36,6 +36,13 @@ const EMPTY_FILTERS: SoundingsView["filters"] = {
   active: false,
 };
 
+const EMPTY_HEATMAP: SoundingsView["heatmap"] = {
+  criteria: [],
+  groups: [],
+  cells: [],
+  sampleEvals: 0,
+};
+
 function baseView(overrides: Partial<SoundingsView> = {}): SoundingsView {
   return {
     status: "ready",
@@ -43,6 +50,7 @@ function baseView(overrides: Partial<SoundingsView> = {}): SoundingsView {
     groups: [GROUP],
     distribution: [],
     comparison: [],
+    heatmap: EMPTY_HEATMAP,
     groupBy: "vendor",
     sessionLabel: "All hands",
     generatedAt: "2026-07-16T00:00:00.000Z",
