@@ -28,7 +28,7 @@ import {
 } from "./db.js";
 import type { DaemonIdentity } from "./identity.js";
 import { isSandboxMode, type SandboxMode } from "./adapters/types.js";
-import type { ContextFile } from "./context.js";
+import { readGlobalConfigLayer, type ContextFile } from "./context.js";
 import { DelegateError, TaskEngine } from "./engine.js";
 import { readLogTail } from "./logtail.js";
 import { handleChildAsk, handleChildReport, handleChildTask } from "./child.js";
@@ -424,10 +424,29 @@ function persistAdminConfig(paths: HomePaths, config: ParleyConfig): void {
  * `GET /config` — full effective config (show/pull). Optional `?key=` returns a
  * single dotted path (`{ key, value }`).
  */
+/**
+ * Config view for show/pull (#156 / #178): admin `parley.json` plus the global
+ * project-settings layer (`config.json` overlay) so CLI merge sees the same
+ * globals the daemon hot-readers use.
+ */
+function loadConfigForPull(paths: HomePaths): ParleyConfig {
+  const admin = loadAdminConfig(paths);
+  const globalProject = readGlobalConfigLayer(paths);
+  const out: ParleyConfig = { ...admin };
+  if (globalProject.eval !== undefined) out.eval = globalProject.eval;
+  if (globalProject.resume !== undefined) out.resume = globalProject.resume;
+  if (globalProject.retry !== undefined) out.retry = globalProject.retry;
+  if (globalProject.taskTypes !== undefined) {
+    out.taskTypes = globalProject.taskTypes as ParleyConfig["taskTypes"];
+  }
+  return out;
+}
+
 function handleConfigGet(paths: HomePaths, res: http.ServerResponse, key: string | null): void {
   let config: ParleyConfig;
   try {
-    config = loadAdminConfig(paths);
+    // Pull merges global project-settings so remote/local CLI share one path.
+    config = loadConfigForPull(paths);
   } catch (err) {
     sendJson(res, 500, { error: err instanceof Error ? err.message : String(err) });
     return;

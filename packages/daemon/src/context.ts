@@ -2,10 +2,16 @@ import fs from "node:fs";
 import path from "node:path";
 import {
   defaultClassification,
-  defaultTaskTypes,
+  extractProjectConfigLayer,
+  homePathsFromEnv,
+  mergeProjectConfigLayers,
   parseClassification,
-  resolveTaskTypes,
+  readConfig,
+  resolveEffectiveProjectSettings,
   type ClassificationConfig,
+  type EffectiveProjectSettings,
+  type HomePaths,
+  type ProjectConfigLayer,
   type TaskTypesMap,
 } from "@useparley/core";
 
@@ -80,77 +86,113 @@ export function contextPointers(dir: string): string[] {
   }
 }
 
+/** Read optional JSON object file → project-settings layer (missing/corrupt ⇒ {}). */
+function readOptionalConfigLayer(file: string): ProjectConfigLayer {
+  let rawText: string;
+  try {
+    rawText = fs.readFileSync(file, "utf8");
+  } catch {
+    return {};
+  }
+  try {
+    return extractProjectConfigLayer(JSON.parse(rawText));
+  } catch {
+    return {};
+  }
+}
+
 /**
- * Whether a project declares (via `.parley/config.json`, sibling to
- * `.parley/context/`) that delegations into it are expected to be eval'd
- * (#45). Absent file, absent `eval` key, or malformed JSON all default to
- * `false` — eval is opt-in per project.
+ * Global project-settings layer for the daemon host (#178).
  *
- * Also accepts `eval.enabled` as the v3 on/off switch (#157): either
- * `enabled: true` or `expected: true` turns evaluation on. Default OFF.
+ * Sources, deep-merged (later wins per key):
+ * 1. Home `parley.json` project-settings keys (same file as `GET /config`)
+ * 2. Home `config.json` when present (same schema as project `.parley/config.json`)
+ *
+ * CLI processes must not call this for user-facing merge — they source the
+ * global layer via `GET /config` instead (transport-agnostic).
  */
-export function readEvalExpected(repo: string | null): boolean {
-  if (repo === null) return false;
+export function readGlobalConfigLayer(
+  paths: HomePaths = homePathsFromEnv(),
+): ProjectConfigLayer {
+  let fromParley: ProjectConfigLayer = {};
   try {
-    const raw = fs.readFileSync(path.join(repo, PARLEY_DIR, "config.json"), "utf8");
-    const config = JSON.parse(raw) as {
-      eval?: { expected?: unknown; enabled?: unknown };
-    };
-    return config.eval?.enabled === true || config.eval?.expected === true;
+    fromParley = extractProjectConfigLayer(readConfig(paths.config));
   } catch {
-    return false;
+    fromParley = {};
   }
+  const fromConfigJson = readOptionalConfigLayer(path.join(paths.home, "config.json"));
+  return mergeProjectConfigLayers(fromParley, fromConfigJson);
 }
 
 /**
- * Whether structured evaluation is enabled for the project (#157). Default
- * OFF — absent file/key/malformed JSON all yield false. Alias of
- * {@link readEvalExpected} (both keys accepted).
+ * Project `.parley/config.json` layer. Missing/corrupt ⇒ `{}` (defaults come
+ * from global + shipped).
  */
-export function readEvalEnabled(repo: string | null): boolean {
-  return readEvalExpected(repo);
+export function readProjectConfigLayer(repo: string | null): ProjectConfigLayer {
+  if (repo === null) return {};
+  return readOptionalConfigLayer(path.join(repo, PARLEY_DIR, "config.json"));
 }
 
 /**
- * Hot-read the project's effective `taskTypes` map from `.parley/config.json`
- * (#151). Missing file or missing `taskTypes` section ⇒ shipped defaults.
- * Malformed `taskTypes` throws so delegate can surface a named error (never
- * coerce unknown shapes into defaults).
+ * Single resolution path for layered project settings (#178):
+ * shipped defaults < global (daemon home) < project.
  */
-export function readProjectTaskTypes(repo: string | null): TaskTypesMap {
-  if (repo === null) return defaultTaskTypes();
+export function resolveProjectSettings(
+  repo: string | null,
+  paths: HomePaths = homePathsFromEnv(),
+  options: { defaultRetryMax?: number } = {},
+): EffectiveProjectSettings {
+  return resolveEffectiveProjectSettings(
+    readGlobalConfigLayer(paths),
+    readProjectConfigLayer(repo),
+    options,
+  );
+}
+
+/**
+ * Whether evaluations are expected/enabled (#45 / #157 / #178). Effective =
+ * global < project; default OFF.
+ */
+export function readEvalExpected(
+  repo: string | null,
+  paths: HomePaths = homePathsFromEnv(),
+): boolean {
+  return resolveProjectSettings(repo, paths).evalEnabled;
+}
+
+/**
+ * Whether structured evaluation is enabled (#157 / #178). Alias of
+ * {@link readEvalExpected}.
+ */
+export function readEvalEnabled(
+  repo: string | null,
+  paths: HomePaths = homePathsFromEnv(),
+): boolean {
+  return readEvalExpected(repo, paths);
+}
+
+/**
+ * Effective `taskTypes` map (#151 / #178). Missing everywhere ⇒ shipped defaults.
+ * Malformed `taskTypes` when present throws (never coerce unknown shapes).
+ */
+export function readProjectTaskTypes(
+  repo: string | null,
+  paths: HomePaths = homePathsFromEnv(),
+): TaskTypesMap {
+  return resolveProjectSettings(repo, paths).taskTypes;
+}
+
+/**
+ * Read a classification.json file. Returns null when missing; throws on
+ * corrupt/invalid content.
+ */
+function readClassificationFile(file: string): ClassificationConfig | null {
   let rawText: string;
   try {
-    rawText = fs.readFileSync(path.join(repo, PARLEY_DIR, "config.json"), "utf8");
-  } catch {
-    return defaultTaskTypes();
-  }
-  let config: { taskTypes?: unknown };
-  try {
-    config = JSON.parse(rawText) as { taskTypes?: unknown };
-  } catch {
-    // Corrupt project config: same posture as eval_expected — degrade to
-    // defaults rather than blocking every delegate on a JSON typo elsewhere.
-    // An *invalid taskTypes shape* (when present) is still a hard error.
-    return defaultTaskTypes();
-  }
-  if (config.taskTypes === undefined) return defaultTaskTypes();
-  return resolveTaskTypes(config.taskTypes);
-}
-
-/**
- * Hot-read the project's effective classification from
- * `.parley/classification.json` (#161). Missing file ⇒ shipped size/difficulty
- * defaults with guidance. Present but invalid throws so delegate can surface a
- * named error (never coerce a bad file into defaults).
- */
-export function readProjectClassification(repo: string | null): ClassificationConfig {
-  if (repo === null) return defaultClassification();
-  let rawText: string;
-  try {
-    rawText = fs.readFileSync(path.join(repo, PARLEY_DIR, "classification.json"), "utf8");
-  } catch {
-    return defaultClassification();
+    rawText = fs.readFileSync(file, "utf8");
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw err;
   }
   let parsed: unknown;
   try {
@@ -163,65 +205,62 @@ export function readProjectClassification(repo: string | null): ClassificationCo
 }
 
 /**
- * Whether `parley fix` should resume the parent's vendor session (#152).
- * Read from the project's `.parley/config.json` (`resume.enabled`). Defaults
- * **on** when the file, key, or project is absent — resume is the common path;
- * opt out explicitly with `"resume": { "enabled": false }`.
+ * Effective classification (#161 / #178): shipped defaults < home
+ * `classification.json` < project `.parley/classification.json`. Whole-file
+ * replace at each layer (arrays are not element-merged).
  */
-export function readResumeEnabled(repo: string | null): boolean {
-  if (repo === null) return true;
-  try {
-    const raw = fs.readFileSync(path.join(repo, PARLEY_DIR, "config.json"), "utf8");
-    const config = JSON.parse(raw) as { resume?: { enabled?: unknown } };
-    if (config.resume?.enabled === false) return false;
-    return true;
-  } catch {
-    return true;
-  }
+export function readProjectClassification(
+  repo: string | null,
+  paths: HomePaths = homePathsFromEnv(),
+): ClassificationConfig {
+  const globalDoc = readClassificationFile(path.join(paths.home, "classification.json"));
+  if (repo === null) return globalDoc ?? defaultClassification();
+  const projectDoc = readClassificationFile(
+    path.join(repo, PARLEY_DIR, "classification.json"),
+  );
+  return projectDoc ?? globalDoc ?? defaultClassification();
 }
 
 /**
- * Project retry budget (`retry.max`, #158). Caps *resumed* fixes per chain.
- * Default 1 when the file, section, or key is absent. Hot-read at fix time.
- * Non-integer / negative values degrade to the default (never block fix).
+ * Whether `parley fix` should resume the parent's vendor session (#152 / #178).
+ * Defaults **on** when unset at every layer.
  */
-export function readRetryMax(repo: string | null, defaultMax = 1): number {
-  if (repo === null) return defaultMax;
-  try {
-    const raw = fs.readFileSync(path.join(repo, PARLEY_DIR, "config.json"), "utf8");
-    const config = JSON.parse(raw) as { retry?: { max?: unknown } };
-    const max = config.retry?.max;
-    if (typeof max === "number" && Number.isInteger(max) && max >= 0) return max;
-    return defaultMax;
-  } catch {
-    return defaultMax;
-  }
+export function readResumeEnabled(
+  repo: string | null,
+  paths: HomePaths = homePathsFromEnv(),
+): boolean {
+  return resolveProjectSettings(repo, paths).resumeEnabled;
 }
 
 /**
- * Project reattempt window (`retry.window`, #158) as milliseconds. Default
- * when unset/unparseable is supplied by the caller (shipped 30m). Accepts the
- * same duration strings as `--answer-timeout` (`30m`, `90s`, `250ms`).
+ * Effective retry budget (`retry.max`, #158 / #178). Caps *resumed* fixes per
+ * chain. Default 1 when unset at every layer.
+ */
+export function readRetryMax(
+  repo: string | null,
+  defaultMax = 1,
+  paths: HomePaths = homePathsFromEnv(),
+): number {
+  return resolveProjectSettings(repo, paths, { defaultRetryMax: defaultMax }).retryMax;
+}
+
+/**
+ * Effective reattempt window (`retry.window`, #158 / #178) as milliseconds.
+ * Default when unset/unparseable is supplied by the caller (shipped 30m).
  */
 export function readRetryWindowMs(
   repo: string | null,
-  parseDuration: (text: string) => number | null,
+  parseDurationFn: (text: string) => number | null,
   defaultMs: number,
+  paths: HomePaths = homePathsFromEnv(),
 ): number {
-  if (repo === null) return defaultMs;
-  try {
-    const raw = fs.readFileSync(path.join(repo, PARLEY_DIR, "config.json"), "utf8");
-    const config = JSON.parse(raw) as { retry?: { window?: unknown } };
-    const window = config.retry?.window;
-    if (typeof window === "string") {
-      const ms = parseDuration(window);
-      if (ms !== null && ms >= 0) return ms;
-    } else if (typeof window === "number" && Number.isFinite(window) && window >= 0) {
-      // Bare number: milliseconds (matches parseDuration bare-number semantics).
-      return Math.round(window);
-    }
-    return defaultMs;
-  } catch {
-    return defaultMs;
+  const settings = resolveProjectSettings(repo, paths);
+  const window = settings.retryWindow;
+  if (typeof window === "string") {
+    const ms = parseDurationFn(window);
+    if (ms !== null && ms >= 0) return ms;
+  } else if (typeof window === "number" && Number.isFinite(window) && window >= 0) {
+    return Math.round(window);
   }
+  return defaultMs;
 }

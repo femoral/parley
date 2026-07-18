@@ -107,6 +107,26 @@ export interface RunnerConfig {
   token: string;
 }
 
+/** Eval on/off for a project or global defaults (#157 / #178). */
+export interface EvalConfig {
+  enabled?: boolean;
+  /** @deprecated alias of enabled (#45) */
+  expected?: boolean;
+}
+
+/** Whether `parley fix` resumes the parent vendor session (#152 / #178). */
+export interface ResumeConfig {
+  enabled?: boolean;
+}
+
+/** Retry budget and reattempt window (#158 / #178). */
+export interface RetryConfig {
+  /** Max *resumed* fixes per attempt chain. */
+  max?: number;
+  /** Duration string (`30m`) or bare milliseconds. */
+  window?: string | number;
+}
+
 /**
  * Orchestrator fallbacks when `parley delegate` omits `-v` / `--profile` (#175).
  * When both are set, `profile` wins (a profile already names a vendor). Explicit
@@ -123,6 +143,10 @@ export interface DefaultsConfig {
  * The parley home config file (`~/.parley/parley.json`). Unknown top-level keys
  * (and unknown keys inside sections) are preserved by callers that round-trip
  * the file but ignored by readers.
+ *
+ * Project-settings keys (`eval`, `resume`, `retry`, `taskTypes`) are the global
+ * layer for layered config (#178); project `.parley/config.json` overrides them
+ * via deep merge. The same keys are exposed by `GET /config` for CLI merge.
  */
 export interface ParleyConfig {
   ui?: UiConfig;
@@ -135,6 +159,18 @@ export interface ParleyConfig {
   retention?: RetentionConfig;
   /** Fallback vendor/profile when delegate omits `-v` / `--profile` (#175). */
   defaults?: DefaultsConfig;
+  /** Global default for evaluation (#178). */
+  eval?: EvalConfig;
+  /** Global default for fix resume (#178). */
+  resume?: ResumeConfig;
+  /** Global default for retry budget/window (#178). */
+  retry?: RetryConfig;
+  /**
+   * Global default taskTypes map (#178). Same shape as project config
+   * (string rubric or `{ rubric }`). Validated loosely here; full resolve is
+   * in classification.ts.
+   */
+  taskTypes?: Record<string, string | { rubric: string }>;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -348,6 +384,94 @@ function validateDefaults(file: string, raw: unknown): void {
  * Unknown keys (top-level and nested) are ignored-but-preserved on the returned
  * object.
  */
+
+function validateEval(file: string, raw: unknown): void {
+  if (raw === undefined) return;
+  if (!isRecord(raw)) {
+    throw new Error(`invalid config at ${file}: eval must be an object`);
+  }
+  for (const key of ["enabled", "expected"] as const) {
+    if (raw[key] !== undefined && typeof raw[key] !== "boolean") {
+      throw new Error(`invalid config at ${file}: eval.${key} must be a boolean`);
+    }
+  }
+}
+
+function validateResume(file: string, raw: unknown): void {
+  if (raw === undefined) return;
+  if (!isRecord(raw)) {
+    throw new Error(`invalid config at ${file}: resume must be an object`);
+  }
+  if (raw.enabled !== undefined && typeof raw.enabled !== "boolean") {
+    throw new Error(`invalid config at ${file}: resume.enabled must be a boolean`);
+  }
+}
+
+function validateRetry(file: string, raw: unknown): void {
+  if (raw === undefined) return;
+  if (!isRecord(raw)) {
+    throw new Error(`invalid config at ${file}: retry must be an object`);
+  }
+  if (raw.max !== undefined) {
+    const v = raw.max;
+    if (typeof v !== "number" || !Number.isInteger(v) || v < 0) {
+      throw new Error(
+        `invalid config at ${file}: retry.max must be a non-negative integer`,
+      );
+    }
+  }
+  if (raw.window !== undefined) {
+    const w = raw.window;
+    if (typeof w === "string") {
+      if (w === "") {
+        throw new Error(
+          `invalid config at ${file}: retry.window must be a non-empty duration string or non-negative number`,
+        );
+      }
+    } else if (typeof w === "number") {
+      if (!Number.isFinite(w) || w < 0) {
+        throw new Error(
+          `invalid config at ${file}: retry.window must be a non-empty duration string or non-negative number`,
+        );
+      }
+    } else {
+      throw new Error(
+        `invalid config at ${file}: retry.window must be a non-empty duration string or non-negative number`,
+      );
+    }
+  }
+}
+
+function validateTaskTypes(file: string, raw: unknown): void {
+  if (raw === undefined) return;
+  if (!isRecord(raw)) {
+    throw new Error(`invalid config at ${file}: taskTypes must be an object`);
+  }
+  for (const [id, entry] of Object.entries(raw)) {
+    if (id === "") {
+      throw new Error(`invalid config at ${file}: taskTypes keys must be non-empty strings`);
+    }
+    if (typeof entry === "string") {
+      if (entry === "") {
+        throw new Error(
+          `invalid config at ${file}: taskTypes.${id} must be a non-empty rubric name`,
+        );
+      }
+      continue;
+    }
+    if (!isRecord(entry)) {
+      throw new Error(
+        `invalid config at ${file}: taskTypes.${id} must be a rubric name string or { rubric: string }`,
+      );
+    }
+    if (typeof entry.rubric !== "string" || entry.rubric === "") {
+      throw new Error(
+        `invalid config at ${file}: taskTypes.${id}.rubric must be a non-empty string`,
+      );
+    }
+  }
+}
+
 export function validateConfig(source: string, raw: unknown): ParleyConfig {
   if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
     throw new Error(`invalid config at ${source}: must be a JSON object`);
@@ -361,6 +485,10 @@ export function validateConfig(source: string, raw: unknown): ParleyConfig {
   validateRunners(source, config.runners);
   validateRetention(source, config.retention);
   validateDefaults(source, config.defaults);
+  validateEval(source, config.eval);
+  validateResume(source, config.resume);
+  validateRetry(source, config.retry);
+  validateTaskTypes(source, config.taskTypes);
   // Validate the fields consumers hand to path/module APIs — a non-string must
   // surface as a named config error here, not a TypeError deep in a consumer.
   // (ui.path / ui.package checked in validateUi above.)
@@ -419,7 +547,14 @@ const KNOWN_TOP_LEVEL = new Set([
   "runners",
   "retention",
   "defaults",
+  "eval",
+  "resume",
+  "retry",
+  "taskTypes",
 ]);
+const KNOWN_EVAL = new Set(["enabled", "expected"]);
+const KNOWN_RESUME = new Set(["enabled"]);
+const KNOWN_RETRY = new Set(["max", "window"]);
 const KNOWN_UI = new Set(["path", "package"]);
 const KNOWN_DAEMON = new Set(["url", "idleTimeoutMs"]);
 const KNOWN_VENDOR = new Set(["bin", "args", "env", "plugin", "childChannel", "retryWindow"]);
@@ -497,6 +632,26 @@ export function collectUnknownConfigKeys(config: Record<string, unknown>): strin
       if (!KNOWN_DEFAULTS.has(key)) unknown.push(`defaults.${key}`);
     }
   }
+  const evalSection = config.eval;
+  if (isRecord(evalSection)) {
+    for (const key of Object.keys(evalSection)) {
+      if (!KNOWN_EVAL.has(key)) unknown.push(`eval.${key}`);
+    }
+  }
+  const resume = config.resume;
+  if (isRecord(resume)) {
+    for (const key of Object.keys(resume)) {
+      if (!KNOWN_RESUME.has(key)) unknown.push(`resume.${key}`);
+    }
+  }
+  const retry = config.retry;
+  if (isRecord(retry)) {
+    for (const key of Object.keys(retry)) {
+      if (!KNOWN_RETRY.has(key)) unknown.push(`retry.${key}`);
+    }
+  }
+  // taskTypes values are free-form entries (string or { rubric }); no nested
+  // unknown-key scan beyond the section itself being known.
   return unknown;
 }
 

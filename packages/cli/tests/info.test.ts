@@ -292,3 +292,72 @@ describe("parley info — remote-safe project root (#163)", () => {
     expect(res.stderr).toMatch(/unexpected argument/);
   });
 });
+
+
+describe("parley info — layered config (#178)", () => {
+  it("eval only in global parley.json shows on via GET /config merge", async () => {
+    const cwd = projectDir();
+    writeFiles(home, {
+      "parley.json": JSON.stringify({ eval: { enabled: true } }),
+    });
+    // Empty project — no .parley/config.json
+    const res = await runCli(["info"], home, { cwd });
+    expect(res.code).toBe(0);
+    expect(res.stdout).toMatch(/Evaluation is \*\*on\*\*/);
+    expect(res.stdout).toContain("source: global");
+
+    const jsonRes = await runCli(["info", "--json"], home, { cwd });
+    expect(jsonRes.code).toBe(0);
+    const config = JSON.parse(jsonRes.stdout) as InfoConfig;
+    expect(config.evaluation.enabled).toBe(true);
+    expect(config.provenance.evaluation).toBe("global");
+  });
+
+  it("project eval.enabled false overrides global true", async () => {
+    const cwd = projectDir();
+    writeFiles(home, {
+      "parley.json": JSON.stringify({ eval: { enabled: true }, retry: { max: 4 } }),
+    });
+    writeProject(cwd, {
+      ".parley/config.json": JSON.stringify({
+        eval: { enabled: false },
+        retry: { max: 2 },
+      }),
+    });
+    const jsonRes = await runCli(["info", "--json"], home, { cwd });
+    expect(jsonRes.code).toBe(0);
+    const config = JSON.parse(jsonRes.stdout) as InfoConfig;
+    expect(config.evaluation.enabled).toBe(false);
+    expect(config.fix.retryMax).toBe(2);
+    expect(config.provenance.evaluation).toBe("project");
+    expect(config.provenance.retryMax).toBe("project");
+  });
+
+  it("deep merge: partial project inherits global eval and retry.window", async () => {
+    const cwd = projectDir();
+    writeFiles(home, {
+      "config.json": JSON.stringify({
+        eval: { enabled: true },
+        retry: { max: 5, window: "1h" },
+      }),
+    });
+    writeProject(cwd, {
+      ".parley/config.json": JSON.stringify({ retry: { max: 2 } }),
+    });
+    const jsonRes = await runCli(["info", "--json"], home, { cwd });
+    expect(jsonRes.code).toBe(0);
+    const config = JSON.parse(jsonRes.stdout) as InfoConfig;
+    expect(config.evaluation.enabled).toBe(true);
+    expect(config.fix.retryMax).toBe(2);
+    expect(config.fix.retryWindowMs).toBe(3_600_000);
+    expect(config.provenance.evaluation).toBe("global");
+    expect(config.provenance.retryMax).toBe("project");
+    expect(config.provenance.retryWindow).toBe("global");
+
+    const prose = await runCli(["info"], home, { cwd });
+    expect(prose.stdout).toMatch(/Evaluation is \*\*on\*\*/);
+    expect(prose.stdout).toMatch(/retry\.max: \*\*2\*\*/);
+    // Prose/--json parity via same layered config.
+    expect(renderInfoProse(config).trimEnd()).toBe(prose.stdout.trimEnd());
+  });
+});

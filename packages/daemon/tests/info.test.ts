@@ -181,3 +181,77 @@ describe("buildInfo / renderInfoProse (#163 / #169)", () => {
     expect(prose).toContain("`codex`");
   });
 });
+
+
+describe("layered config (#178)", () => {
+  it("eval enabled only in global parley.json → info shows on", () => {
+    write(
+      home,
+      "parley.json",
+      JSON.stringify({ eval: { enabled: true } }),
+    );
+    // No project config.
+    const paths = homePathsFromEnv({ PARLEY_HOME: home });
+    const adapters = createAdapterRegistrySync({ PARLEY_FAKE_VENDOR_BIN: "fake" });
+    const config = buildInfoConfig({ projectDir: project, paths, adapters });
+    expect(config.evaluation.enabled).toBe(true);
+    expect(config.provenance.evaluation).toBe("global");
+    const prose = renderInfoProse(config);
+    expect(prose).toMatch(/Evaluation is \*\*on\*\*/);
+    expect(prose).toContain("source: global");
+  });
+
+  it("eval enabled only in home config.json → info shows on", () => {
+    write(
+      home,
+      "config.json",
+      JSON.stringify({ eval: { enabled: true }, retry: { window: "45m" } }),
+    );
+    const paths = homePathsFromEnv({ PARLEY_HOME: home });
+    const adapters = createAdapterRegistrySync();
+    const config = buildInfoConfig({ projectDir: project, paths, adapters });
+    expect(config.evaluation.enabled).toBe(true);
+    expect(config.fix.retryWindow).toBe("45 minutes");
+    expect(config.provenance.evaluation).toBe("global");
+    expect(config.provenance.retryWindow).toBe("global");
+  });
+
+  it("project eval.enabled false overrides global true", () => {
+    write(home, "parley.json", JSON.stringify({ eval: { enabled: true } }));
+    write(
+      project,
+      ".parley/config.json",
+      JSON.stringify({ eval: { enabled: false } }),
+    );
+    const paths = homePathsFromEnv({ PARLEY_HOME: home });
+    const adapters = createAdapterRegistrySync();
+    const config = buildInfoConfig({ projectDir: project, paths, adapters });
+    expect(config.evaluation.enabled).toBe(false);
+    expect(config.provenance.evaluation).toBe("project");
+  });
+
+  it("deep merge: project retry.max inherits global eval and retry.window", () => {
+    write(
+      home,
+      "parley.json",
+      JSON.stringify({
+        eval: { enabled: true },
+        retry: { max: 5, window: "1h" },
+      }),
+    );
+    write(
+      project,
+      ".parley/config.json",
+      JSON.stringify({ retry: { max: 2 } }),
+    );
+    const paths = homePathsFromEnv({ PARLEY_HOME: home });
+    const adapters = createAdapterRegistrySync();
+    const config = buildInfoConfig({ projectDir: project, paths, adapters });
+    expect(config.evaluation.enabled).toBe(true);
+    expect(config.fix.retryMax).toBe(2);
+    expect(config.fix.retryWindow).toBe("1 hour");
+    expect(config.provenance.evaluation).toBe("global");
+    expect(config.provenance.retryMax).toBe("project");
+    expect(config.provenance.retryWindow).toBe("global");
+  });
+});

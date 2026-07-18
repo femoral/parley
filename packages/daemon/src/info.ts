@@ -8,6 +8,8 @@
  * configured vendors only, models only via profiles (no full catalog dump),
  * and eval-related sections only when evaluation is on (#169).
  */
+import fs from "node:fs";
+import path from "node:path";
 import {
   FALLBACK_TASK_TYPE,
   formatDuration,
@@ -18,6 +20,7 @@ import {
   scoreRubric,
   type ChildChannel,
   type ClassificationConfig,
+  type ConfigLayerSource,
   type Criterion,
   type HomePaths,
   type ParleyConfig,
@@ -26,12 +29,8 @@ import {
 } from "@useparley/core";
 import type { VendorAdapter } from "./adapters/types.js";
 import {
-  readEvalEnabled,
   readProjectClassification,
-  readProjectTaskTypes,
-  readResumeEnabled,
-  readRetryMax,
-  readRetryWindowMs,
+  resolveProjectSettings,
 } from "./context.js";
 import { composeOrchestratorInstructions } from "./prompt-layers.js";
 import {
@@ -132,6 +131,17 @@ export interface InfoFix {
   }>;
 }
 
+/** Provenance for layered project settings shown by `parley info` (#178). */
+export interface InfoProvenance {
+  evaluation: ConfigLayerSource;
+  resume: ConfigLayerSource;
+  retryMax: ConfigLayerSource;
+  retryWindow: ConfigLayerSource;
+  taskTypes: ConfigLayerSource;
+  /** Classification is whole-file layered (default / global / project). */
+  classification: ConfigLayerSource;
+}
+
 /**
  * Structured effective configuration. `parley info --json` prints this object;
  * prose is always rendered from it (never from a parallel read).
@@ -154,6 +164,8 @@ export interface InfoConfig {
   classification?: ClassificationConfig;
   evaluation: InfoEvaluation;
   fix: InfoFix;
+  /** Where each layered setting was decided (#178). */
+  provenance: InfoProvenance;
 }
 
 /** Daemon response body for `GET /info`. */
@@ -247,25 +259,6 @@ function rubricSummary(
   };
 }
 
-function buildTaskTypes(projectDir: string): InfoTaskType[] {
-  const taskTypesMap = readProjectTaskTypes(projectDir);
-  const taskTypes: InfoTaskType[] = Object.entries(taskTypesMap)
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([id, entry]) => ({
-      id,
-      rubric: entry.rubric,
-      automatic: false,
-    }));
-  if (!Object.prototype.hasOwnProperty.call(taskTypesMap, FALLBACK_TASK_TYPE)) {
-    taskTypes.push({
-      id: FALLBACK_TASK_TYPE,
-      rubric: resolveRubricIdForType(FALLBACK_TASK_TYPE, taskTypesMap),
-      automatic: true,
-    });
-  }
-  return taskTypes;
-}
-
 /**
  * Build the structured effective config for a project (hot-read, no I/O beyond
  * config files already used at spawn/eval/fix time).
@@ -314,7 +307,19 @@ export function buildInfoConfig(options: BuildInfoOptions): InfoConfig {
         : null,
   };
 
-  const evalEnabled = readEvalEnabled(projectDir);
+  // Layered project settings: defaults < global (home) < project (#178).
+  const settings = resolveProjectSettings(projectDir, paths, {
+    defaultRetryMax: DEFAULT_RETRY_MAX,
+  });
+  const classificationSource: ConfigLayerSource = fs.existsSync(
+    path.join(projectDir, ".parley", "classification.json"),
+  )
+    ? "project"
+    : fs.existsSync(path.join(paths.home, "classification.json"))
+      ? "global"
+      : "default";
+
+  const evalEnabled = settings.evalEnabled;
 
   // #169: task types, classification, rubrics, and how-to only when eval is on.
   let taskTypes: InfoTaskType[] | undefined;
@@ -324,9 +329,22 @@ export function buildInfoConfig(options: BuildInfoOptions): InfoConfig {
   if (!evalEnabled) {
     evaluation = { enabled: false };
   } else {
-    const taskTypesMap = readProjectTaskTypes(projectDir);
-    taskTypes = buildTaskTypes(projectDir);
-    classification = readProjectClassification(projectDir);
+    const taskTypesMap = settings.taskTypes;
+    taskTypes = Object.entries(taskTypesMap)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([id, entry]) => ({
+        id,
+        rubric: entry.rubric,
+        automatic: false,
+      }));
+    if (!Object.prototype.hasOwnProperty.call(taskTypesMap, FALLBACK_TASK_TYPE)) {
+      taskTypes.push({
+        id: FALLBACK_TASK_TYPE,
+        rubric: resolveRubricIdForType(FALLBACK_TASK_TYPE, taskTypesMap),
+        automatic: true,
+      });
+    }
+    classification = readProjectClassification(projectDir, paths);
     const typeIds = taskTypes.map((t) => t.id);
     evaluation = {
       enabled: true,
@@ -344,13 +362,18 @@ export function buildInfoConfig(options: BuildInfoOptions): InfoConfig {
     };
   }
 
-  const retryMax = readRetryMax(projectDir, DEFAULT_RETRY_MAX);
-  const retryWindowMs = readRetryWindowMs(
-    projectDir,
-    parseDuration,
-    DEFAULT_RETRY_WINDOW_MS,
-  );
-  const resumeEnabled = readResumeEnabled(projectDir);
+  const retryMax = settings.retryMax;
+  let retryWindowMs = DEFAULT_RETRY_WINDOW_MS;
+  if (settings.retryWindow !== undefined) {
+    const window = settings.retryWindow;
+    if (typeof window === "string") {
+      const ms = parseDuration(window);
+      if (ms !== null && ms >= 0) retryWindowMs = ms;
+    } else if (typeof window === "number" && Number.isFinite(window) && window >= 0) {
+      retryWindowMs = Math.round(window);
+    }
+  }
+  const resumeEnabled = settings.resumeEnabled;
 
   const fix: InfoFix = {
     resumeEnabled,
@@ -377,6 +400,15 @@ export function buildInfoConfig(options: BuildInfoOptions): InfoConfig {
     ],
   };
 
+  const provenance: InfoProvenance = {
+    evaluation: settings.provenance.eval,
+    resume: settings.provenance.resume,
+    retryMax: settings.provenance.retryMax,
+    retryWindow: settings.provenance.retryWindow,
+    taskTypes: settings.provenance.taskTypes,
+    classification: classificationSource,
+  };
+
   const config: InfoConfig = {
     project: projectDir,
     instructions,
@@ -385,6 +417,7 @@ export function buildInfoConfig(options: BuildInfoOptions): InfoConfig {
     defaults,
     evaluation,
     fix,
+    provenance,
   };
   if (taskTypes !== undefined) config.taskTypes = taskTypes;
   if (classification !== undefined) config.classification = classification;
@@ -458,7 +491,7 @@ export function renderInfoProse(config: InfoConfig): string {
     const taskTypes = config.taskTypes ?? [];
     lines.push("## Task types", "");
     lines.push(
-      "Pass `--type <id>` on delegate (optional; omitted ⇒ `other`). Valid ids:",
+      `Task type set (source: ${config.provenance.taskTypes}). Pass \`--type <id>\` on delegate (optional; omitted ⇒ \`other\`). Valid ids:`,
     );
     for (const t of taskTypes) {
       const auto = t.automatic ? " — automatic fallback when `--type` is omitted" : "";
@@ -470,7 +503,7 @@ export function renderInfoProse(config: InfoConfig): string {
     if (classification !== undefined) {
       lines.push("## Classification", "");
       lines.push(
-        "Optional at delegate time: `--size <id>` and `--difficulty <id>` (for metrics).",
+        `Size/difficulty guidance (source: ${config.provenance.classification}). Optional at delegate time: \`--size <id>\` and \`--difficulty <id>\` (for metrics).`,
       );
       lines.push("");
       lines.push("### Sizes");
@@ -486,7 +519,9 @@ export function renderInfoProse(config: InfoConfig): string {
     }
 
     lines.push("## Evaluation", "");
-    lines.push("Evaluation is **on** for this project.");
+    lines.push(
+      `Evaluation is **on** for this project. (source: ${config.provenance.evaluation})`,
+    );
     lines.push("");
     if (config.evaluation.howTo !== undefined) {
       lines.push("### How to eval");
@@ -523,13 +558,13 @@ export function renderInfoProse(config: InfoConfig): string {
   );
   lines.push("");
   lines.push(
-    `- resume.enabled: **${config.fix.resumeEnabled ? "on" : "off"}** (off ⇒ linked attempt with a fresh session)`,
+    `- resume.enabled: **${config.fix.resumeEnabled ? "on" : "off"}** (source: ${config.provenance.resume}; off ⇒ linked attempt with a fresh session)`,
   );
   lines.push(
-    `- retry.max: **${config.fix.retryMax}** (caps *resumed* fixes per chain)`,
+    `- retry.max: **${config.fix.retryMax}** (source: ${config.provenance.retryMax}; caps *resumed* fixes per chain)`,
   );
   lines.push(
-    `- retry.window: **${config.fix.retryWindow}** (parent must not have been terminal longer than this to resume)`,
+    `- retry.window: **${config.fix.retryWindow}** (source: ${config.provenance.retryWindow}; parent must not have been terminal longer than this to resume)`,
   );
   const vendorOverrides = config.vendors.filter((v) => v.retryWindow !== null);
   if (vendorOverrides.length > 0) {
