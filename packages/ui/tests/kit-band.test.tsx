@@ -16,7 +16,7 @@ describe("KitBand — the dev style-guide strip (#70)", () => {
     }
   });
 
-  it("lists all seven states, each with its manifest label and hint", () => {
+  it("lists all known states, each with its manifest label and hint", () => {
     render(<KitBand />);
     for (const meta of Object.values(STATE_META)) {
       expect(screen.getByText(meta.label)).toBeTruthy();

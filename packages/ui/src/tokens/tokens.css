@@ -82,6 +82,7 @@
 
   /* §2.6 — task states (canonical stateMeta colours) */
   --state-pending: #c9a87a;
+  --state-queued: #d4b06a;
   --state-running: #5fd08a;
   --state-awaiting_answer: #ffcf4d;
   --state-stalled: #7fa8bf;

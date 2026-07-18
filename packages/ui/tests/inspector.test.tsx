@@ -14,6 +14,8 @@ function task(overrides: Partial<InspectorTask> = {}): InspectorTask {
     emblem: { kind: "svg", viewBox: "0 0 24 24", path: "M12 2 L20 7 V17 L12 22 L4 17 V7 Z" },
     faction: "Codex",
     state: "running",
+    queuePosition: null,
+    blockingCap: null,
     error: null,
     evalScore: null,
     evalFeedback: null,

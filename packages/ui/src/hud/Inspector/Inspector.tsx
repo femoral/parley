@@ -102,7 +102,13 @@ export const Inspector = memo(function Inspector({ task }: InspectorProps) {
             <Badge label={`★ ${task.evalScore}/10`} color="var(--brass)" />
           )}
           <Badge
-            label={meta.label}
+            label={
+              task.state === "queued" && task.queuePosition !== null
+                ? task.blockingCap
+                  ? `${meta.label} #${task.queuePosition} · ${task.blockingCap}`
+                  : `${meta.label} #${task.queuePosition}`
+                : meta.label
+            }
             glyph={<Mark mark={meta.mark} size={10} />}
             color={meta.colorVar}
           />

@@ -55,6 +55,7 @@ import {
   listExpiredTasks,
   listQaTurns,
   listSessions,
+  listQueuedTasks,
   listTasks,
   nextQuestionId,
   nextTaskId,
@@ -62,7 +63,10 @@ import {
   updateSession,
   updateTask,
   upsertEventAck,
+  countSlotHoldingForProfile,
+  countSlotHoldingForVendor,
   SETTLED_STATES,
+  SLOT_HOLDING_STATES,
   TERMINAL_STATES,
   type DatabaseHandle,
   type ProcessAnchor,
@@ -531,6 +535,14 @@ export class TaskEngine {
    */
   private readonly dryRunTaskIds = new Set<string>();
   /**
+   * Task ids admitted to spawn but not yet holding a DB slot (`running` /
+   * `awaiting_answer`) — counted toward concurrency caps so prepare races
+   * cannot over-admit (#171).
+   */
+  private readonly admitted = new Set<string>();
+  /** Re-entrancy guard for {@link drainConcurrencyQueue}. */
+  private drainingQueue = false;
+  /**
    * Long-poll waiters parked on `POST /runner/lease` until a matching pending
    * task appears or the poll window elapses.
    */
@@ -557,6 +569,9 @@ export class TaskEngine {
         this.armRunnerHeartbeat(task.id);
       }
     }
+    // #171: re-drain durable queued tasks in original FIFO order after restart.
+    // Synchronous: only admits (async spawn is fire-and-forget via admitAndStart).
+    this.drainConcurrencyQueue();
   }
 
   setHubPort(port: number): void {
@@ -564,7 +579,7 @@ export class TaskEngine {
   }
 
   list(): TaskRow[] {
-    return listTasks(this.db);
+    return listTasks(this.db).map((t) => this.withQueueInfo(t));
   }
 
   /**
@@ -725,7 +740,8 @@ export class TaskEngine {
   }
 
   resolve(ref: string): TaskRow | undefined {
-    return resolveTask(this.db, ref);
+    const task = resolveTask(this.db, ref);
+    return task ? this.withQueueInfo(task) : undefined;
   }
 
   /** Durable Q&A history for a task (#79), ask order — empty when none. */
@@ -1071,10 +1087,8 @@ export class TaskEngine {
       return row;
     }
 
-    void this.run(row, adapter).catch((err: unknown) => {
-      this.fail(row.id, `task runner crashed: ${String(err)}`);
-    });
-    return row;
+    this.scheduleLocalStart(row);
+    return getTask(this.db, row.id) ?? row;
   }
 
   /**
@@ -1122,7 +1136,23 @@ export class TaskEngine {
     const canResume = resumeWanted && parent.session_id !== null;
 
     if (canResume) {
-      this.assertResumeAllowed(parent, vendor);
+      // Budget is always enforced at enqueue (no phantom attempt row).
+      this.assertResumeBudget(parent);
+      // Reattempt-window freshness: if we would start immediately, validate
+      // now so the CLI still gets exit 8 without creating a row. If we would
+      // queue under a concurrency cap, defer to dequeue so wait time cannot
+      // itself cause a stale-session resume (#171).
+      const peek: TaskRow = {
+        ...parent,
+        id: "__peek__",
+        vendor,
+        profile: parent.profile,
+        state: "pending",
+        runner: parent.runner,
+      };
+      if (this.canAdmit(peek)) {
+        this.assertResumeWindow(parent, vendor);
+      }
     }
 
     const id = nextTaskId(this.db);
@@ -1184,18 +1214,8 @@ export class TaskEngine {
       return row;
     }
 
-    if (canResume) {
-      void this.resumeFix(row, adapter, request.prompt).catch((err: unknown) => {
-        this.fail(row.id, `task resume crashed: ${String(err)}`);
-      });
-    } else {
-      // Fresh path: composed opening context (original + history + fix) behind
-      // the channel-matched preamble — used for `--fresh` and resume-off/no-session.
-      void this.runFreshFix(row, adapter, request.prompt).catch((err: unknown) => {
-        this.fail(row.id, `task runner crashed: ${String(err)}`);
-      });
-    }
-    return row;
+    this.scheduleLocalStart(row);
+    return getTask(this.db, row.id) ?? row;
   }
 
   /**
@@ -1204,6 +1224,12 @@ export class TaskEngine {
    * written when this throws). Hot-reads project + vendor config.
    */
   private assertResumeAllowed(parent: TaskRow, vendor: string): void {
+    this.assertResumeBudget(parent);
+    this.assertResumeWindow(parent, vendor);
+  }
+
+  /** Enforce `retry.max` budget for a would-be resumed fix (#158 / #171). */
+  private assertResumeBudget(parent: TaskRow): void {
     const projectRoot = parent.repo ?? parent.cwd;
     const max = readRetryMax(projectRoot, DEFAULT_RETRY_MAX);
     const resumedCount = countResumedAttempts(listTasks(this.db), parent.id);
@@ -1213,7 +1239,15 @@ export class TaskEngine {
         CODE_RETRY_LIMIT_EXCEEDED,
       );
     }
+  }
 
+  /**
+   * Enforce reattempt-window freshness for a would-be resumed fix (#158 / #171).
+   * Called at dequeue/start so time spent `queued` cannot make a resume stale
+   * without a clear window-expired error.
+   */
+  private assertResumeWindow(parent: TaskRow, vendor: string): void {
+    const projectRoot = parent.repo ?? parent.cwd;
     const windowMs = this.resolveRetryWindowMs(projectRoot, vendor);
     const ageMs = parentTerminalAgeMs(parent);
     if (ageMs > windowMs) {
@@ -1455,6 +1489,7 @@ export class TaskEngine {
     if (this.shuttingDown) return;
     this.clearReportFallback(taskId);
     this.clearRunnerHeartbeat(taskId);
+    this.admitted.delete(taskId);
     const task = getTask(this.db, taskId);
     if (!task || TERMINAL_STATES.has(task.state)) return;
     if (task.report === null) return;
@@ -1464,6 +1499,7 @@ export class TaskEngine {
       completed_at: new Date().toISOString(),
       question_id: null,
       question: null,
+      queued_at: null,
     };
     // Prefer the caller's in-memory accumulation (stream-close path); fall
     // back to whatever is already on the row (fallback timer path).
@@ -1763,6 +1799,7 @@ export class TaskEngine {
     // Drop a post-report fallback so it cannot complete after we cancel (#72).
     this.clearReportFallback(task.id);
     this.clearRunnerHeartbeat(task.id);
+    this.admitted.delete(task.id);
     // Terminate the child. Its own `close` handler fires afterwards, but the
     // `cancelled` state is terminal so it will not be overwritten with `failed`.
     const child = this.children.get(task.id);
@@ -1775,6 +1812,7 @@ export class TaskEngine {
       // "question_id/question are null unless awaiting_answer" contract.
       question_id: null,
       question: null,
+      queued_at: null,
     });
     this.transitioned(task.id);
     return getTask(this.db, task.id)!;
@@ -1792,6 +1830,10 @@ export class TaskEngine {
     const seq = bumpTaskSeq(this.db, taskId);
     this.transitions.push({ seq, task_id: taskId, state: row.state });
     this.wakeEventWaiters();
+    // #171: terminal or stalled frees a concurrency slot — drain the FIFO queue.
+    if (TERMINAL_STATES.has(row.state) || row.state === "stalled") {
+      this.drainConcurrencyQueue();
+    }
     // Dry-run (#161): after waiters observe the terminal event, purge the row
     // so list/status leave no record. A short delay lets an already-parked
     // (or just-started) watch read the terminal state before the row vanishes.
@@ -2039,10 +2081,12 @@ export class TaskEngine {
     }
     this.clearReportFallback(taskId);
     this.clearRunnerHeartbeat(taskId);
+    this.admitted.delete(taskId);
     updateTask(this.db, taskId, {
       state: "failed",
       error,
       completed_at: new Date().toISOString(),
+      queued_at: null,
     });
     this.transitioned(taskId);
   }
@@ -2599,7 +2643,257 @@ export class TaskEngine {
     return assemblePromptPreview(preamble, operator);
   }
 
-  /** Fresh run: spawn the vendor child via `prepare` and pump it until exit. */
+
+  // ---------------------------------------------------------------------------
+  // Concurrency queue (#171)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Admit a local (non-runner) task for spawn, or park it in `queued` when a
+   * vendor/profile `maxConcurrent` cap is full. FIFO per cap; both caps must
+   * have a free slot when both apply.
+   */
+  private scheduleLocalStart(task: TaskRow): void {
+    if (task.runner !== null && task.runner !== "") return;
+    if (this.canAdmit(task)) {
+      this.admitAndStart(task);
+      return;
+    }
+    this.enqueueTask(task.id);
+  }
+
+  /** Persist `queued` + `queued_at` and surface a `task.queued` transition. */
+  private enqueueTask(taskId: string): void {
+    const row = getTask(this.db, taskId);
+    if (!row || TERMINAL_STATES.has(row.state)) return;
+    if (row.state === "queued") return;
+    const now = new Date().toISOString();
+    updateTask(this.db, taskId, { state: "queued", queued_at: now });
+    this.transitioned(taskId);
+  }
+
+  /**
+   * True when every configured cap that applies to `task` has a free slot.
+   * Counts DB slot-holders plus in-flight {@link admitted} prepares.
+   */
+  private canAdmit(task: TaskRow): boolean {
+    const caps = this.capsFor(task);
+    if (caps.vendorMax === null && caps.profileMax === null) return true;
+
+    if (caps.vendorMax !== null && task.vendor !== null) {
+      const used = this.slotCountForVendor(task.vendor);
+      if (used >= caps.vendorMax) return false;
+    }
+    if (caps.profileMax !== null && task.profile !== null) {
+      const used = this.slotCountForProfile(task.profile);
+      if (used >= caps.profileMax) return false;
+    }
+    return true;
+  }
+
+  private capsFor(task: TaskRow): {
+    vendorMax: number | null;
+    profileMax: number | null;
+  } {
+    let config: ParleyConfig;
+    try {
+      config = this.readParleyConfig();
+    } catch {
+      // Corrupt config: do not invent a cap (fail open to "no cap").
+      return { vendorMax: null, profileMax: null };
+    }
+    const vendorMax =
+      task.vendor !== null
+        ? (config.vendors?.[task.vendor]?.maxConcurrent ?? null)
+        : null;
+    const profileMax =
+      task.profile !== null
+        ? (config.profiles?.[task.profile]?.maxConcurrent ?? null)
+        : null;
+    return {
+      vendorMax: typeof vendorMax === "number" ? vendorMax : null,
+      profileMax: typeof profileMax === "number" ? profileMax : null,
+    };
+  }
+
+  private slotCountForVendor(vendor: string): number {
+    let n = countSlotHoldingForVendor(this.db, vendor);
+    for (const id of this.admitted) {
+      const t = getTask(this.db, id);
+      if (t && t.vendor === vendor && !SLOT_HOLDING_STATES.has(t.state)) n += 1;
+    }
+    return n;
+  }
+
+  private slotCountForProfile(profile: string): number {
+    let n = countSlotHoldingForProfile(this.db, profile);
+    for (const id of this.admitted) {
+      const t = getTask(this.db, id);
+      if (t && t.profile === profile && !SLOT_HOLDING_STATES.has(t.state)) n += 1;
+    }
+    return n;
+  }
+
+  /**
+   * Which configured caps currently lack a free slot for `task` (#171).
+   * Returns a stable string like `vendor:fake`, `profile:deep`, or
+   * `vendor:fake+profile:deep`. Null when nothing is blocking (or no caps).
+   */
+  blockingCapFor(task: TaskRow): string | null {
+    if (task.state !== "queued") return null;
+    const caps = this.capsFor(task);
+    const parts: string[] = [];
+    if (caps.vendorMax !== null && task.vendor !== null) {
+      if (this.slotCountForVendor(task.vendor) >= caps.vendorMax) {
+        parts.push(`vendor:${task.vendor}`);
+      }
+    }
+    if (caps.profileMax !== null && task.profile !== null) {
+      if (this.slotCountForProfile(task.profile) >= caps.profileMax) {
+        parts.push(`profile:${task.profile}`);
+      }
+    }
+    // If nothing is full right now (race / about to drain), still name the
+    // configured caps so the UI has something to show.
+    if (parts.length === 0) {
+      if (caps.vendorMax !== null && task.vendor !== null) {
+        parts.push(`vendor:${task.vendor}`);
+      } else if (caps.profileMax !== null && task.profile !== null) {
+        parts.push(`profile:${task.profile}`);
+      }
+    }
+    return parts.length > 0 ? parts.join("+") : null;
+  }
+
+  /**
+   * 1-based FIFO position among queued peers for the primary blocking cap
+   * (#171). Null when not queued.
+   */
+  queuePositionFor(task: TaskRow): number | null {
+    if (task.state !== "queued") return null;
+    const queued = listQueuedTasks(this.db);
+    const caps = this.capsFor(task);
+    const peers = queued.filter((t) => {
+      if (caps.vendorMax !== null && task.vendor !== null) {
+        return t.vendor === task.vendor;
+      }
+      if (caps.profileMax !== null && task.profile !== null) {
+        return t.profile === task.profile;
+      }
+      // No cap configured (should not stay queued) — treat all queued as peers.
+      return true;
+    });
+    const idx = peers.findIndex((t) => t.id === task.id);
+    return idx === -1 ? null : idx + 1;
+  }
+
+  /**
+   * Enrich a task row with computed queue observability fields (#171).
+   * Safe for non-queued tasks (fields null).
+   */
+  withQueueInfo(task: TaskRow): TaskRow & {
+    queue_position: number | null;
+    blocking_cap: string | null;
+  } {
+    return {
+      ...task,
+      queue_position: this.queuePositionFor(task),
+      blocking_cap: this.blockingCapFor(task),
+    };
+  }
+
+  /** Reserve a slot and kick off the appropriate spawn path for `task`. */
+  private admitAndStart(task: TaskRow): void {
+    if (this.admitted.has(task.id)) return;
+    if (TERMINAL_STATES.has(task.state)) return;
+    this.admitted.add(task.id);
+    void this.startAdmittedTask(task).catch((err: unknown) => {
+      this.admitted.delete(task.id);
+      this.fail(task.id, `task runner crashed: ${String(err)}`);
+    });
+  }
+
+  /**
+   * Start a previously-admitted task: re-validate resume freshness at dequeue,
+   * then spawn via run / resumeFix / runFreshFix as appropriate.
+   */
+  private async startAdmittedTask(task: TaskRow): Promise<void> {
+    const vendor = task.vendor;
+    if (vendor === null || vendor === "") {
+      this.admitted.delete(task.id);
+      this.fail(task.id, "task has no vendor; cannot start");
+      return;
+    }
+    const adapter = this.adapters.get(vendor);
+    if (!adapter) {
+      this.admitted.delete(task.id);
+      this.fail(task.id, `unknown vendor: ${vendor}`);
+      return;
+    }
+
+    // Freshness at dequeue for resumed fix attempts (#171).
+    if (task.parent_task_id !== null && task.resumed === 1) {
+      const parent = getTask(this.db, task.parent_task_id);
+      if (!parent) {
+        this.admitted.delete(task.id);
+        this.fail(task.id, `parent task ${task.parent_task_id} is gone; cannot resume`);
+        return;
+      }
+      try {
+        this.assertResumeWindow(parent, vendor);
+      } catch (err) {
+        this.admitted.delete(task.id);
+        const message = err instanceof Error ? err.message : String(err);
+        this.fail(task.id, message);
+        return;
+      }
+      const prompt = task.prompt ?? "";
+      await this.resumeFix(task, adapter, prompt);
+      return;
+    }
+
+    if (task.parent_task_id !== null) {
+      const prompt = task.prompt ?? "";
+      await this.runFreshFix(task, adapter, prompt);
+      return;
+    }
+
+    await this.run(task, adapter);
+  }
+
+  /**
+   * Walk the durable FIFO queue and admit any task that now fits under its
+   * caps. Re-entrant safe; stops when no further task can be admitted.
+   */
+  private drainConcurrencyQueue(): void {
+    if (this.drainingQueue || this.shuttingDown) return;
+    this.drainingQueue = true;
+    try {
+      let progressed = true;
+      while (progressed) {
+        progressed = false;
+        let queued: TaskRow[];
+        try {
+          queued = listQueuedTasks(this.db);
+        } catch {
+          // DB may already be closed (tests / shutdown race).
+          return;
+        }
+        for (const task of queued) {
+          if (this.admitted.has(task.id)) continue;
+          if (!this.canAdmit(task)) continue;
+          this.admitAndStart(task);
+          progressed = true;
+          // Re-list after each admit so slot counts stay accurate.
+          break;
+        }
+      }
+    } finally {
+      this.drainingQueue = false;
+    }
+  }
+
+    /** Fresh run: spawn the vendor child via `prepare` and pump it until exit. */
   private async run(task: TaskRow, adapter: VendorAdapter): Promise<void> {
     const prompt = this.initialPrompt(task, adapter);
     const spec: TaskSpec = { ...this.buildSpec(task), prompt };
@@ -2706,7 +3000,11 @@ export class TaskEngine {
     // `cancel` may have landed while the adapter was preparing; don't spawn a
     // child for an already-terminal task.
     const beforeSpawn = getTask(this.db, task.id);
-    if (!beforeSpawn || TERMINAL_STATES.has(beforeSpawn.state)) return;
+    if (!beforeSpawn || TERMINAL_STATES.has(beforeSpawn.state)) {
+      this.admitted.delete(task.id);
+      this.drainConcurrencyQueue();
+      return;
+    }
 
     // Engine-side hub injection for every adapter (ADR-0011): children reach
     // the REST/CLI fallback via these, independent of MCP config quality.
@@ -2776,9 +3074,11 @@ export class TaskEngine {
     });
     this.children.set(task.id, child);
 
-    updateTask(this.db, task.id, { ...onSpawn, launch_command });
-    // The child is live: `pending → running` (fresh run) or `stalled → running`
-    // (resume). Record the transition so `parley watch` sees the task start.
+    this.admitted.delete(task.id);
+    updateTask(this.db, task.id, { ...onSpawn, launch_command, queued_at: null });
+    // The child is live: `pending|queued → running` (fresh run) or
+    // `stalled → running` (resume). Record the transition so `parley watch`
+    // sees the task start.
     this.transitioned(task.id);
 
     const events: VendorEvent[] = [];

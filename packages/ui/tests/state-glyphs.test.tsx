@@ -10,6 +10,7 @@ afterEach(cleanup);
 /** Glyph strings that must remain stable for accessible/text consumers. */
 const EXPECTED_GLYPHS: Record<StateKey, string> = {
   pending: "⏳",
+  queued: "☰",
   running: "⛵",
   awaiting_answer: "🚩",
   stalled: "🧭",

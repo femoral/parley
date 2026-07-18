@@ -196,6 +196,10 @@ export interface Envelope {
    * guessed as 0.
    */
   cached_input_tokens: number | null;
+  /** 1-based FIFO queue position while `queued` (#171); else null. */
+  queue_position: number | null;
+  /** Cap blocking spawn while `queued` (#171), e.g. `vendor:fake`; else null. */
+  blocking_cap: string | null;
 }
 
 /**
@@ -226,7 +230,11 @@ export function parseJsonColumn<T>(value: string | null): T | null {
  * Build the report envelope for a task row. `logsDir` is the task's captured
  * output directory (the diagnostics reference); pass null when unknown.
  */
-export function buildEnvelope(task: TaskRow, logsDir: string | null = null): Envelope {
+export function buildEnvelope(
+  task: TaskRow,
+  logsDir: string | null = null,
+  queue: { position: number | null; blockingCap: string | null } | null = null,
+): Envelope {
   const start = task.started_at ?? task.created_at;
   const end = task.completed_at;
   const duration =
@@ -262,5 +270,7 @@ export function buildEnvelope(task: TaskRow, logsDir: string | null = null): Env
     attempt: task.attempt,
     resumed: task.resumed === 1,
     cached_input_tokens: task.cached_input_tokens,
+    queue_position: queue?.position ?? null,
+    blocking_cap: queue?.blockingCap ?? null,
   };
 }

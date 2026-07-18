@@ -35,6 +35,7 @@ export type DatabaseHandle = DatabaseSyncInstance;
 /** Task lifecycle states (spec §2). */
 export type TaskState =
   | "pending"
+  | "queued"
   | "running"
   | "completed"
   | "failed"
@@ -199,6 +200,11 @@ export interface TaskRow {
   eval_model: string | null;
   /** Judge effort snapshot at eval time (#162). */
   eval_effort: string | null;
+  /**
+   * When the task entered `queued` (ISO-8601) (#171). Null when never
+   * queued or after leaving the queue for a spawn. Orders FIFO restarts.
+   */
+  queued_at: string | null;
 }
 
 /** Fields the daemon writes when creating a task. */
@@ -438,6 +444,9 @@ const MIGRATIONS: string[] = [
    ALTER TABLE tasks ADD COLUMN eval_harness TEXT;
    ALTER TABLE tasks ADD COLUMN eval_model TEXT;
    ALTER TABLE tasks ADD COLUMN eval_effort TEXT;`,
+  // #171: concurrency queue — durable FIFO order for tasks waiting on a
+  // vendor/profile maxConcurrent cap. Null when not (or no longer) queued.
+  `ALTER TABLE tasks ADD COLUMN queued_at TEXT;`,
 ];
 
 /** How many schema migrations have been applied — equals `PRAGMA user_version` after open. */
@@ -520,7 +529,7 @@ const TASK_COLUMNS = `id, name, vendor, model, effort, profile, runner, repo, st
    size, difficulty, type, parent_task_id, attempt, resumed, cached_input_tokens,
    launch_command, model_source, effort_source,
    orch_harness, orch_model, orch_effort,
-   eval_session_id, eval_harness, eval_model, eval_effort`;
+   eval_session_id, eval_harness, eval_model, eval_effort, queued_at`;
 
 /** Cast a node:sqlite row result to a domain shape (driver types are untyped maps). */
 function asRow<T>(row: unknown): T {
@@ -534,6 +543,52 @@ export function listTasks(db: DatabaseHandle): TaskRow[] {
     .all()
     .map((row) => asRow<TaskRow>(row));
 }
+
+/**
+ * States that occupy a concurrency slot (#171): a live child is (or will be)
+ * running. Stalled/pending/queued do not hold a slot.
+ */
+export const SLOT_HOLDING_STATES: ReadonlySet<string> = new Set([
+  "running",
+  "awaiting_answer",
+]);
+
+/** Queued tasks in FIFO order (`queued_at`, then id) for concurrency drain (#171). */
+export function listQueuedTasks(db: DatabaseHandle): TaskRow[] {
+  return db
+    .prepare(
+      `SELECT ${TASK_COLUMNS} FROM tasks
+       WHERE state = 'queued'
+       ORDER BY COALESCE(queued_at, created_at) ASC, id ASC`,
+    )
+    .all()
+    .map((row) => asRow<TaskRow>(row));
+}
+
+/** Count tasks holding a concurrency slot for a vendor (#171). */
+export function countSlotHoldingForVendor(db: DatabaseHandle, vendor: string): number {
+  const placeholders = [...SLOT_HOLDING_STATES].map(() => "?").join(", ");
+  const row = db
+    .prepare(
+      `SELECT COUNT(*) AS n FROM tasks
+       WHERE vendor = ? AND state IN (${placeholders})`,
+    )
+    .get(vendor, ...SLOT_HOLDING_STATES);
+  return row === undefined ? 0 : asRow<{ n: number }>(row).n;
+}
+
+/** Count tasks holding a concurrency slot for a profile (#171). */
+export function countSlotHoldingForProfile(db: DatabaseHandle, profile: string): number {
+  const placeholders = [...SLOT_HOLDING_STATES].map(() => "?").join(", ");
+  const row = db
+    .prepare(
+      `SELECT COUNT(*) AS n FROM tasks
+       WHERE profile = ? AND state IN (${placeholders})`,
+    )
+    .get(profile, ...SLOT_HOLDING_STATES);
+  return row === undefined ? 0 : asRow<{ n: number }>(row).n;
+}
+
 
 /**
  * One orchestrator session aggregated from tasks (#88) — the shape behind
@@ -810,11 +865,14 @@ export function sweepInterruptedTasks(db: DatabaseHandle): number {
   // "Live" is defined as the complement of the settled states, so a future
   // state is swept by default rather than surviving restarts as a zombie.
   // Runner-affine tasks keep their children on the remote host.
+  // Queued tasks (#171) have no child process — they survive restart and are
+  // re-drained by the engine in original FIFO order.
   const placeholders = [...SETTLED_STATES].map(() => "?").join(", ");
   const live = db
     .prepare(
       `SELECT id FROM tasks
        WHERE state NOT IN (${placeholders})
+         AND state != 'queued'
          AND (runner IS NULL OR runner = '')`,
     )
     .all(...SETTLED_STATES)
@@ -823,6 +881,7 @@ export function sweepInterruptedTasks(db: DatabaseHandle): number {
     .prepare(
       `UPDATE tasks SET state = 'stalled', error = ?, updated_at = ?
        WHERE state NOT IN (${placeholders})
+         AND state != 'queued'
          AND (runner IS NULL OR runner = '')`,
     )
     .run(
@@ -873,6 +932,7 @@ export type TaskPatch = Partial<
     | "eval_harness"
     | "eval_model"
     | "eval_effort"
+    | "queued_at"
   >
 >;
 

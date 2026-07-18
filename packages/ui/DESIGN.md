@@ -21,6 +21,7 @@ colors:
   ink-dark-on-gold: "#2a1a08"
   palm-green: "#5e7a4a"
   state-pending: "#c9a87a"
+  state-queued: "#d4b06a"
   state-running: "#5fd08a"
   state-awaiting: "#ffcf4d"
   state-stalled: "#7fa8bf"

@@ -175,6 +175,16 @@ export interface InspectorTask {
   faction: string;
   /** Task state string (matches a `StateKey`) — drives the header's state badge. */
   state: string;
+  /**
+   * While `queued` (#171): 1-based FIFO position, or null. Shown on the
+   * state chip so the operator can see how deep the wait is.
+   */
+  queuePosition: number | null;
+  /**
+   * While `queued` (#171): blocking cap label (`vendor:X` / `profile:Y`),
+   * or null.
+   */
+  blockingCap: string | null;
   /** Terminal failure cause from the task detail payload, or null when none. */
   error: string | null;
   /** Eval score out of 10, when the task has been eval'd (else null). */

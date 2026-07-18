@@ -775,6 +775,18 @@ function watchEventFor(state: string): string {
   return `task.${state}`;
 }
 
+/** Build a task envelope with concurrency-queue observability (#171). */
+function envelopeFor(
+  engine: TaskEngine,
+  row: import("./db.js").TaskRow,
+): ReturnType<typeof buildEnvelope> {
+  const enriched = engine.withQueueInfo(row);
+  return buildEnvelope(enriched, engine.logDir(row.id), {
+    position: enriched.queue_position,
+    blockingCap: enriched.blocking_cap,
+  });
+}
+
 /**
  * Resolve `ids` query param to canonical task ids. Empty is allowed (vacuous
  * all-done / empty firehose). A bad ref is 404 → CLI exit 2.
@@ -856,7 +868,7 @@ async function handleInbox(
     return;
   }
   const row = result.task;
-  const task = buildEnvelope(row, engine.logDir(row.id));
+  const task = envelopeFor(engine, row);
   sendJson(res, 200, {
     event: watchEventFor(row.state),
     seq: row.seq,
@@ -908,7 +920,7 @@ async function handleWatchEvents(
   // The envelope carries the current row for detail, but its `state`/`seq` are
   // pinned to the transition so the event name and the CLI's exit code agree
   // even if the row has since moved on (a superseded non-terminal transition).
-  const task = buildEnvelope(row, engine.logDir(row.id));
+  const task = envelopeFor(engine, row);
   task.state = transition.state;
   task.seq = transition.seq;
   sendJson(res, 200, { event: watchEventFor(transition.state), seq: transition.seq, task });
@@ -925,7 +937,7 @@ async function handleWatchEvents(
 function sseMessageFor(engine: TaskEngine, transition: { seq: number; task_id: string; state: string }): string | null {
   const row = engine.get(transition.task_id);
   if (!row) return null;
-  const task = buildEnvelope(row, engine.logDir(row.id));
+  const task = envelopeFor(engine, row);
   task.state = transition.state;
   task.seq = transition.seq;
   const data = JSON.stringify(task);
@@ -1596,7 +1608,7 @@ function createHandler(
             // #164: attempt lineage + session + eval detail for status / Cove.
             const all = engine.list();
             sendJson(res, 200, {
-              task: buildEnvelope(task, engine.logDir(task.id)),
+              task: envelopeFor(engine, task),
               row: task,
               qa: engine.listQa(task.id),
               attempts: buildAttemptChain(task, all),

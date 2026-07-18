@@ -69,6 +69,7 @@ function row(partial: Partial<TaskRow> & { id: string }): TaskRow {
     eval_harness: null,
     eval_model: null,
     eval_effort: null,
+    queued_at: null,
     ...partial,
   };
 }

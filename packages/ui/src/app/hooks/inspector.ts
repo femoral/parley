@@ -120,6 +120,8 @@ export function projectInspector(detail: TaskDetailResponse, logs: LogsView): In
     emblem: faction.emblem,
     faction: faction.label,
     state: task.state,
+    queuePosition: task.queue_position ?? null,
+    blockingCap: task.blocking_cap ?? null,
     error: task.error,
     evalScore: row.eval_score,
     evalFeedback: row.eval_feedback,

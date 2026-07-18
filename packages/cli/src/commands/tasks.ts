@@ -78,6 +78,24 @@ function cacheHit(cached: number | null | undefined): boolean | null {
   return cached > 0;
 }
 
+/**
+ * STATE column (#171): plain state, or `queued #N (vendor:X)` when waiting
+ * on a concurrency cap so operators see position without --json.
+ */
+function formatState(task: TaskRow): string {
+  if (task.state !== "queued") return task.state;
+  const pos =
+    typeof (task as TaskRow & { queue_position?: number | null }).queue_position === "number"
+      ? (task as TaskRow & { queue_position?: number | null }).queue_position
+      : null;
+  const cap =
+    (task as TaskRow & { blocking_cap?: string | null }).blocking_cap ?? null;
+  const parts: string[] = ["queued"];
+  if (pos !== null) parts.push(`#${pos}`);
+  if (cap) parts.push(`(${cap})`);
+  return parts.join(" ");
+}
+
 function renderTable(ctx: CliContext, tasks: TaskRow[]): void {
   if (tasks.length === 0) {
     ctx.stdout("No tasks.\n");
@@ -106,7 +124,7 @@ function renderTable(ctx: CliContext, tasks: TaskRow[]): void {
     t.profile ?? "-",
     t.runner ?? "-",
     t.model ?? "-",
-    t.state,
+    formatState(t),
     formatAttempt(t),
     formatUsage(parseJsonColumn<Record<string, number>>(t.usage)),
     formatDuration(t),
@@ -226,6 +244,10 @@ function presentRow(row: TaskRow): Record<string, unknown> {
     parent_task_id: row.parent_task_id ?? null,
     cached_input_tokens: cached,
     cache_hit: cacheHit(cached),
+    queue_position:
+      (row as TaskRow & { queue_position?: number | null }).queue_position ?? null,
+    blocking_cap:
+      (row as TaskRow & { blocking_cap?: string | null }).blocking_cap ?? null,
   };
 }
 

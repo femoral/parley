@@ -77,6 +77,12 @@ export interface VendorConfig {
    * replaces the project/global `retry.window` for this vendor only. Hot-read.
    */
   retryWindow?: string | number;
+  /**
+   * Max concurrent live instances of this vendor across the whole daemon (#171).
+   * Positive integer; when unset there is no vendor cap. Excess tasks sit
+   * `queued` (FIFO) until a slot frees.
+   */
+  maxConcurrent?: number;
 }
 
 /**
@@ -95,6 +101,12 @@ export interface ProfileConfig {
   args?: string[];
   /** Env vars merged last (after vendor env). */
   env?: Record<string, string>;
+  /**
+   * Max concurrent live instances of this profile across the whole daemon (#171).
+   * Positive integer; when unset there is no profile cap. Combined with a
+   * vendor cap, a task spawns only when both have a free slot.
+   */
+  maxConcurrent?: number;
 }
 
 /**
@@ -281,6 +293,14 @@ function validateVendorEntry(file: string, id: string, raw: unknown): void {
       );
     }
   }
+  if (raw.maxConcurrent !== undefined) {
+    const v = raw.maxConcurrent;
+    if (typeof v !== "number" || !Number.isInteger(v) || v < 1) {
+      throw new Error(
+        `invalid config at ${file}: vendors.${id}.maxConcurrent must be a positive integer`,
+      );
+    }
+  }
 }
 
 function validateVendors(file: string, raw: unknown): void {
@@ -326,6 +346,14 @@ function validateProfileEntry(file: string, name: string, raw: unknown): void {
   }
   if (raw.args !== undefined) assertStringArray(file, `profiles.${name}.args`, raw.args);
   if (raw.env !== undefined) assertStringRecord(file, `profiles.${name}.env`, raw.env);
+  if (raw.maxConcurrent !== undefined) {
+    const v = raw.maxConcurrent;
+    if (typeof v !== "number" || !Number.isInteger(v) || v < 1) {
+      throw new Error(
+        `invalid config at ${file}: profiles.${name}.maxConcurrent must be a positive integer`,
+      );
+    }
+  }
 }
 
 function validateProfiles(file: string, raw: unknown): void {
@@ -557,7 +585,15 @@ const KNOWN_RESUME = new Set(["enabled"]);
 const KNOWN_RETRY = new Set(["max", "window"]);
 const KNOWN_UI = new Set(["path", "package"]);
 const KNOWN_DAEMON = new Set(["url", "idleTimeoutMs"]);
-const KNOWN_VENDOR = new Set(["bin", "args", "env", "plugin", "childChannel", "retryWindow"]);
+const KNOWN_VENDOR = new Set([
+  "bin",
+  "args",
+  "env",
+  "plugin",
+  "childChannel",
+  "retryWindow",
+  "maxConcurrent",
+]);
 const KNOWN_PROFILE = new Set([
   "vendor",
   "model",
@@ -566,6 +602,7 @@ const KNOWN_PROFILE = new Set([
   "network",
   "args",
   "env",
+  "maxConcurrent",
 ]);
 const KNOWN_RUNNER = new Set(["token"]);
 const KNOWN_RETENTION = new Set(["days"]);

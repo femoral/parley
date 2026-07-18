@@ -91,7 +91,21 @@ export interface TaskEnvelope {
    * Vendor-reported cached input tokens (#152). Null when unreported — never
    * guessed. Optional for older clients.
    */
+  /**
+   * Vendor-reported cached input tokens (#152). Null when unreported — never
+   * guessed. Optional for older clients.
+   */
   cached_input_tokens?: number | null;
+  /**
+   * 1-based FIFO position among tasks waiting on the same concurrency cap
+   * (#171). Null when not `queued`. Optional for older clients.
+   */
+  queue_position?: number | null;
+  /**
+   * Which cap is currently blocking spawn, e.g. `vendor:fake` or
+   * `profile:deep` (or both joined with `+`) (#171). Null when not `queued`.
+   */
+  blocking_cap?: string | null;
 }
 
 /**
@@ -218,6 +232,21 @@ export interface TaskRow {
   eval_model?: string | null;
   /** Judge effort snapshot at eval time (#162). */
   eval_effort?: string | null;
+  /**
+   * When the task entered `queued` (ISO-8601) (#171). Null when never queued
+   * or after leaving the queue. Optional for older clients.
+   */
+  queued_at?: string | null;
+  /**
+   * 1-based FIFO position among tasks waiting on the same concurrency cap
+   * (#171). Null when not `queued`. Computed at response time.
+   */
+  queue_position?: number | null;
+  /**
+   * Which cap is currently blocking spawn (#171). Null when not `queued`.
+   * Computed at response time.
+   */
+  blocking_cap?: string | null;
 }
 
 /** `GET /health` — daemon liveness plus its package version (spec stability §). */

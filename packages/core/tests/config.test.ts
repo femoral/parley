@@ -369,3 +369,41 @@ describe("validateConfig / writeConfig / dotted paths", () => {
     expect(keys).not.toContain("ui.path");
   });
 });
+
+describe("readConfig — maxConcurrent (#171)", () => {
+  it("accepts vendors.<id>.maxConcurrent positive integer", () => {
+    const file = writeConfig(JSON.stringify({ vendors: { fake: { maxConcurrent: 2 } } }));
+    expect(readConfig(file).vendors?.fake?.maxConcurrent).toBe(2);
+  });
+
+  it("accepts profiles.<name>.maxConcurrent positive integer", () => {
+    const file = writeConfig(
+      JSON.stringify({ profiles: { deep: { vendor: "fake", maxConcurrent: 1 } } }),
+    );
+    expect(readConfig(file).profiles?.deep?.maxConcurrent).toBe(1);
+  });
+
+  it("rejects zero maxConcurrent", () => {
+    const file = writeConfig(JSON.stringify({ vendors: { fake: { maxConcurrent: 0 } } }));
+    expect(() => readConfig(file)).toThrow(/vendors\.fake\.maxConcurrent must be a positive integer/);
+  });
+
+  it("rejects non-integer maxConcurrent", () => {
+    const file = writeConfig(
+      JSON.stringify({ profiles: { deep: { vendor: "fake", maxConcurrent: 1.5 } } }),
+    );
+    expect(() => readConfig(file)).toThrow(
+      /profiles\.deep\.maxConcurrent must be a positive integer/,
+    );
+  });
+
+  it("treats maxConcurrent as a known key", () => {
+    expect(
+      collectUnknownConfigKeys({
+        vendors: { fake: { maxConcurrent: 2 } },
+        profiles: { deep: { vendor: "fake", maxConcurrent: 1 } },
+      }),
+    ).toEqual([]);
+  });
+});
+

@@ -14,12 +14,24 @@ export type StateGlyphMark = EmblemMark;
 
 const VIEW = "0 0 24 24";
 
-/** Pending — hourglass (queued & calm). */
+/** Pending — hourglass (calm, not yet started). */
 const MARK_PENDING: StateGlyphMark = {
   kind: "svg",
   viewBox: VIEW,
   // Filled hourglass: wide top/bottom chambers meeting at a waist.
   path: "M5 2.5h14v2.2L13.2 12 19 19.3V21.5H5v-2.2L10.8 12 5 4.7V2.5z",
+};
+
+/** Queued — stacked bars (waiting for a concurrency slot, #171). */
+const MARK_QUEUED: StateGlyphMark = {
+  kind: "svg",
+  viewBox: VIEW,
+  // Three horizontal stack bars — a short queue silhouette.
+  path: [
+    "M4 5.5h16v3.2H4z",
+    "M4 10.4h16v3.2H4z",
+    "M4 15.3h16v3.2H4z",
+  ],
 };
 
 /** Running — full sail (hard at work). */
@@ -104,6 +116,7 @@ export const MARK_UNKNOWN: StateGlyphMark = {
  */
 export const STATE_GLYPH_MARKS = {
   pending: MARK_PENDING,
+  queued: MARK_QUEUED,
   running: MARK_RUNNING,
   awaiting_answer: MARK_AWAITING,
   stalled: MARK_STALLED,

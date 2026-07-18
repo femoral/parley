@@ -15,6 +15,7 @@ import { MARK_UNKNOWN, STATE_GLYPH_MARKS, type StateGlyphMark } from "./state-gl
 
 export type StateKey =
   | "pending"
+  | "queued"
   | "running"
   | "awaiting_answer"
   | "stalled"
@@ -49,8 +50,15 @@ export const STATE_META: Record<StateKey, StateMeta> = {
     label: "PENDING",
     glyph: "⏳",
     mark: STATE_GLYPH_MARKS.pending,
-    hint: "queued & calm",
+    hint: "not yet started",
     colorVar: "var(--state-pending)",
+  },
+  queued: {
+    label: "QUEUED",
+    glyph: "☰",
+    mark: STATE_GLYPH_MARKS.queued,
+    hint: "waiting for a slot",
+    colorVar: "var(--state-queued)",
   },
   running: {
     label: "RUNNING",
@@ -132,6 +140,7 @@ export const ATTENTION_DISPLAY_ORDER: readonly StateKey[] = [
   "awaiting_answer",
   "stalled",
   "running",
+  "queued",
   "pending",
   "completed",
   "failed",

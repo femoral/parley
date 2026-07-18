@@ -7,6 +7,7 @@
 /** Every task lifecycle state, in lifecycle (not attention) order. */
 export const TASK_STATES = [
   "pending",
+  "queued",
   "running",
   "awaiting_answer",
   "completed",
@@ -30,8 +31,8 @@ export const ATTENTION_STATES = ["awaiting_answer", "stalled"] as const;
 
 /**
  * States that contribute a pending event to the orchestrator-session inbox
- * (ADR-0007): demand action or review. Not actionable: `pending`/`running`
- * (nothing to do) and `cancelled` (orchestrator-caused).
+ * (ADR-0007): demand action or review. Not actionable: `pending`/`running`/
+ * `queued` (nothing to do) and `cancelled` (orchestrator-caused).
  */
 export const ACTIONABLE_STATES = [
   "awaiting_answer",
@@ -55,14 +56,16 @@ export const INBOX_PRIORITY: readonly (typeof ACTIONABLE_STATES)[number][] = [
 /**
  * Attention hierarchy order (the brief, via docs/spec/ui-v1-scope.md):
  * `awaiting_answer` > `stalled` > `running` > terminal. A UI groups/sorts its
- * roster by this ranking so the most urgent work floats to the top; `pending`
- * sits between the live `running` state and the quiet terminal states. Exported
- * so no layer re-derives it (docs/spec/ui-component-system.md §6).
+ * roster by this ranking so the most urgent work floats to the top; `queued`
+ * (waiting on a concurrency cap, #171) and `pending` sit between the live
+ * `running` state and the quiet terminal states. Exported so no layer
+ * re-derives it (docs/spec/ui-component-system.md §6).
  */
 export const ATTENTION_ORDER: readonly TaskState[] = [
   "awaiting_answer",
   "stalled",
   "running",
+  "queued",
   "pending",
   "completed",
   "failed",
@@ -115,6 +118,7 @@ export const TASK_EVENT_NAMES = [
   "task.cancelled",
   "task.stalled",
   "task.pending",
+  "task.queued",
 ] as const;
 
 /** One of the watch/SSE event names. */
