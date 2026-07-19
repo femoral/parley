@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import { parseArgs } from "../args.js";
 import { type CliContext, printJson } from "../context.js";
+import { UsageError } from "../errors.js";
 import { createAdapterRegistry } from "@useparley/daemon/adapters/index.js";
 import type { ModelCatalog, VendorModels } from "@useparley/daemon/adapters/types.js";
 import { loadCatalog, readConfig, refreshCatalog, writeCatalog } from "@useparley/core";
@@ -42,21 +43,30 @@ function renderCatalog(ctx: CliContext, catalog: ModelCatalog): void {
 }
 
 /**
- * `parley models [--vendor <id>] [--json] [--refresh]`. Reads the local,
- * hand-editable catalog at `~/.parley/models.json` (seeding it on first run so
- * there is something to edit), optionally re-probing vendors with `--refresh`.
- * The catalog is advisory: this command never talks to the daemon and never
- * gates `delegate`.
+ * `parley models [refresh] [--vendor <id>] [--json] [--refresh]`. Reads the
+ * local, hand-editable catalog at `~/.parley/models.json` (seeding it on first
+ * run so there is something to edit), optionally re-probing vendors with
+ * `refresh` / `--refresh`. When a live probe fails or returns nothing, the
+ * catalog falls back to the shipped reference models (clearly labeled) rather
+ * than leaving an empty entry. The catalog is advisory: this command never
+ * talks to the daemon and never gates `delegate`.
  */
 export async function runModels(ctx: CliContext, args: string[]): Promise<number> {
-  const { flags } = parseArgs(args, {
+  const { positionals, flags } = parseArgs(args, {
     "--vendor": { aliases: ["-v"], value: true },
     "--json": {},
     "--refresh": {},
   });
+  if (positionals.length > 0 && !(positionals.length === 1 && positionals[0] === "refresh")) {
+    throw new UsageError(
+      positionals.length === 1
+        ? `models: unknown subcommand: ${positionals[0]}`
+        : "usage: parley models [refresh] [--vendor <id>] [--json] [--refresh]",
+    );
+  }
   const vendor = typeof flags["--vendor"] === "string" ? flags["--vendor"] : undefined;
   const json = flags["--json"] === true;
-  const refresh = flags["--refresh"] === true;
+  const refresh = flags["--refresh"] === true || positionals[0] === "refresh";
   const file = ctx.paths.models;
 
   // Seed the file on first run so `~/.parley/models.json` always exists for the

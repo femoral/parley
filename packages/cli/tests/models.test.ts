@@ -9,7 +9,12 @@ import type {
   VendorAdapter,
   VendorModels,
 } from "@useparley/daemon/adapters/types.js";
-import { DEFAULT_CATALOG, loadCatalog, refreshCatalog } from "@useparley/core";
+import {
+  DEFAULT_CATALOG,
+  getShippedVendorModels,
+  loadCatalog,
+  refreshCatalog,
+} from "@useparley/core";
 import { cleanupHome, makeHome, runCli } from "./helpers.js";
 
 const CODEX_FIXTURE = fileURLToPath(new URL("./fixtures/codex/debug-models.json", import.meta.url));
@@ -141,6 +146,48 @@ describe("catalog refresh merge semantics", () => {
     const { catalog, warnings } = await refreshCatalog(base, ["grok"], adapters);
     expect(catalog).toEqual(base);
     expect(warnings[0]).toMatch(/no refresh probe/);
+    expect(warnings[0]).toMatch(/kept existing entry/);
+  });
+
+  it("falls back to the shipped catalog when probe fails and the entry is empty", async () => {
+    const empty = {
+      codex: { fetched_at: null, source: "manual", models: [] as [] },
+    };
+    const adapters = new Map([
+      ["codex", fakeAdapter("codex", () => Promise.reject(new Error("codex missing")))],
+    ]);
+    const { catalog, warnings } = await refreshCatalog(empty, ["codex"], adapters);
+    const shipped = getShippedVendorModels("codex")!;
+    expect(catalog.codex!.models).toEqual(shipped.models);
+    expect(catalog.codex!.source).toMatch(/^shipped catalog \(point-in-time reference;/);
+    expect(warnings[0]).toMatch(/probe failed/);
+    expect(warnings[0]).toMatch(/shipped catalog as point-in-time reference/);
+  });
+
+  it("falls back to shipped when probe returns no models and the entry is empty", async () => {
+    const empty = {
+      codex: { fetched_at: null, source: "manual", models: [] as [] },
+    };
+    const adapters = new Map([
+      ["codex", fakeAdapter("codex", () => Promise.resolve({ source: "codex debug models", models: [] }))],
+    ]);
+    const { catalog, warnings } = await refreshCatalog(empty, ["codex"], adapters);
+    expect(catalog.codex!.models.length).toBeGreaterThan(0);
+    expect(catalog.codex!.source).toMatch(/shipped catalog \(point-in-time reference/);
+    expect(warnings[0]).toMatch(/no models/);
+    expect(warnings[0]).toMatch(/shipped catalog/);
+  });
+
+  it("falls back to shipped when no probe hook and the entry is empty", async () => {
+    const empty = {
+      claude: { fetched_at: null, source: "manual", models: [] as [] },
+    };
+    const adapters = new Map([["claude", fakeAdapter("claude", undefined)]]);
+    const { catalog, warnings } = await refreshCatalog(empty, ["claude"], adapters);
+    expect(catalog.claude!.models.length).toBeGreaterThan(0);
+    expect(catalog.claude!.source).toMatch(/shipped catalog \(point-in-time reference/);
+    expect(warnings[0]).toMatch(/no refresh probe/);
+    expect(warnings[0]).toMatch(/shipped catalog/);
   });
 
   it("passes the existing entry into listModels (so grok can carry efforts)", async () => {
@@ -205,5 +252,28 @@ describe("parley models command", () => {
     fs.writeFileSync(file, JSON.stringify(patched));
     const result = await runCli(["models", "--json"], home);
     expect(JSON.parse(result.stdout)).toEqual(patched);
+  });
+
+  it("accepts `refresh` as a subcommand alias for --refresh", async () => {
+    // Empty entry + no working probe → shipped fallback still surfaces models.
+    const file = path.join(home, "models.json");
+    fs.writeFileSync(
+      file,
+      JSON.stringify({
+        codex: { fetched_at: null, source: "manual", models: [] },
+      }),
+    );
+    // codex may or may not be on PATH; either live data or shipped fallback is fine.
+    const result = await runCli(["models", "refresh", "--vendor", "codex", "--json"], home);
+    expect(result.code).toBe(0);
+    const out = JSON.parse(result.stdout) as { codex?: { models: unknown[]; source: string } };
+    expect(out.codex).toBeDefined();
+    // If live probe worked, models non-empty from probe; if not, shipped fallback.
+    if (result.stderr.includes("shipped catalog")) {
+      expect(out.codex!.source).toMatch(/shipped catalog \(point-in-time reference/);
+      expect(out.codex!.models.length).toBeGreaterThan(0);
+    } else {
+      expect(out.codex!.models.length).toBeGreaterThan(0);
+    }
   });
 });

@@ -189,9 +189,53 @@ Unset with `parley config unset daemon.url` when returning to local. Done when l
 Probe PATH (stage 0). For each vendor the user wants:
 
 - Confirm the CLI is installed and credentials exist (vendor-specific env / login).
-- Optional overrides: `parley config set vendors.<id>.bin|args|env|plugin …`
+- Pick a **child channel** (transport) from the defaults table below — set it only when it differs from the adapter default, or when the user chooses an alternate.
+- Optional overrides: `parley config set vendors.<id>.bin|args|env|plugin|childChannel …`
 - Named profiles for real use-cases:  
   `parley config set profiles.<name>.vendor <id>` (+ `.model`, `.effort` as needed).
+
+#### Child-channel defaults (per vendor)
+
+Children reach the daemon three ways: **mcp** (tool calls), **http** (curl/`fetch` against `/child/*`), **cli** (`parley child report|ask|task`). Prefer the default below; **ask the user only when the note says multiple are viable**. Write with:
+
+```
+parley config set vendors.<id>.childChannel mcp|http|cli
+```
+
+| Vendor | Default | Note |
+| --- | --- | --- |
+| `claude` | `mcp` | Native streamable-HTTP MCP + headers via `--mcp-config` / `--strict-mcp-config`. |
+| `cline` | `mcp` | MCP via materialized `cline_mcp_settings.json` under an isolated data-dir. |
+| `codex` | `mcp` | Strong MCP inject via `-c` / `CODEX_HOME`; canonical Parley path. |
+| `gemini` | `mcp` | MCP via project `.gemini/settings.json` (`httpUrl` + headers); no CLI MCP inject flag. |
+| `goose` | `mcp` | Streamable HTTP MCP under `GOOSE_PATH_ROOT` isolation. |
+| `grok` | `mcp` | MCP via worktree `.grok/config.toml` or Claude-format `.mcp.json`. |
+| `hermes` | `mcp` | MCP HTTP + headers in private `HERMES_HOME` `config.yaml`. |
+| `kilo` | `mcp` | Remote MCP via `KILO_CONFIG_CONTENT` / project config. |
+| `kimi` | `mcp` | MCP client with HTTP + headers in project `mcp.json`. |
+| `openclaw` | `mcp` | Agent runtime MCP registry (not the lean `infer` probe path). |
+| `opencode` | `mcp` | Remote MCP via `OPENCODE_CONFIG_CONTENT` (raise server `timeout`). |
+| `openhands` | `mcp` | MCP HTTP/SSE + headers in persistence-dir `mcp.json`. |
+| `pi` | `cli` | **No native MCP.** Default `cli` (`parley child …`). Also viable: `http` (REST via a Parley hub extension) or `mcp` only if `pi-mcp-adapter` (or equivalent) is installed — **ask which** when the user wants something other than CLI. |
+
+Omit `childChannel` when the adapter default already matches (most vendors default to `mcp`). Always set it for `pi` so the preamble teaches CLI tools instead of MCP.
+
+#### Model discovery
+
+During vendor/model setup, refresh the advisory catalog so profiles and the interview use what the vendor actually offers (ids + effort levels):
+
+```
+parley models refresh
+# equivalent: parley models --refresh
+# optional: parley models refresh --vendor <id>
+```
+
+Then show the result (`parley models` or `parley models --vendor <id> --json`).
+
+- **Live probe wins** when the vendor CLI answers.
+- **If refresh cannot fetch** (vendor missing, probe fails, empty list, or no probe hook) and the entry would be empty, the CLI fills **shipped reference catalog** entries and labels the source as a **point-in-time reference** (`shipped catalog (point-in-time reference; …)` — `fetched_at` / provenance come from the catalog). Tell the user those rows are snapshot data, not a live listing. The on-disk catalog (`~/.parley/models.json`) remains the source of truth after refresh.
+
+Use refreshed (or shipped-fallback) model ids and efforts when offering profile `.model` / `.effort` values. Profiles beat ad-hoc flags for metrics. Catalog stays advisory and hand-editable.
 
 When scope includes **global** (or the user wants a home-wide fallback), also offer delegate defaults:
 
@@ -202,9 +246,7 @@ parley config set defaults.profile <name>
 
 (`defaults.profile` wins over `defaults.vendor` when both are set; CLI flags always win.)
 
-Catalog (advisory, hand-editable): `parley models` / `parley models --refresh`. Profiles beat ad-hoc flags for metrics.
-
-Done when the user confirms the vendor set and any profiles (and defaults, if asked).
+Done when the user confirms the vendor set, child channels, any profiles (and defaults, if asked).
 
 ### 9. Write
 

@@ -169,16 +169,51 @@ export function writeCatalog(file: string, catalog: ModelCatalog): void {
 /** The outcome of a `--refresh`: the (possibly) updated catalog plus warnings. */
 export interface RefreshResult {
   catalog: ModelCatalog;
-  /** One per vendor whose entry was kept because the probe failed/was empty. */
+  /** One per vendor whose entry was kept or filled from the shipped catalog. */
   warnings: string[];
 }
 
 /**
+ * When a live probe is unavailable/empty/failed and the catalog entry would
+ * leave the user with no models, fill from the shipped reference catalog
+ * (`getShippedVendorModels`) and label the source clearly. Never clobbers an
+ * existing non-empty entry (manual patches and prior live data survive).
+ */
+function applyRefreshFallback(
+  next: ModelCatalog,
+  id: string,
+  reason: string,
+  warnings: string[],
+): void {
+  const existing = next[id];
+  if (existing !== undefined && existing.models.length > 0) {
+    warnings.push(`${id}: ${reason}; kept existing entry`);
+    return;
+  }
+  const shipped = getShippedVendorModels(id);
+  if (shipped !== undefined && shipped.models.length > 0) {
+    next[id] = {
+      ...shipped,
+      source: `shipped catalog (point-in-time reference; ${shipped.source})`,
+    };
+    const when = shipped.fetched_at ?? "unknown date";
+    warnings.push(
+      `${id}: ${reason}; using shipped catalog as point-in-time reference ` +
+        `(retrieved ${when})`,
+    );
+    return;
+  }
+  warnings.push(`${id}: ${reason}; kept existing entry`);
+}
+
+/**
  * Re-probe `vendorIds` and rewrite their catalog entries from the live vendor
- * CLIs, keeping the existing entry (with a warning) whenever a vendor has no
- * probe hook, its probe rejects, or it returns no models. Pure w.r.t. the input
- * catalog — returns a new object; the caller persists it. `now` is injected for
- * deterministic tests.
+ * CLIs. A successful probe with models always wins. When a vendor has no probe
+ * hook, its probe rejects, or it returns no models: keep any non-empty existing
+ * entry (never clobber a manual patch); if the entry would be empty, fall back
+ * to the shipped reference catalog when it has models, labeled as point-in-time
+ * reference data. Pure w.r.t. the input catalog — returns a new object; the
+ * caller persists it. `now` is injected for deterministic tests.
  */
 export async function refreshCatalog<A extends ModelProber>(
   catalog: ModelCatalog,
@@ -191,20 +226,22 @@ export async function refreshCatalog<A extends ModelProber>(
   for (const id of vendorIds) {
     const adapter = adapters.get(id);
     if (!adapter?.listModels) {
-      warnings.push(`${id}: no refresh probe available; kept existing entry`);
+      applyRefreshFallback(next, id, "no refresh probe available", warnings);
       continue;
     }
     try {
       const probed = await adapter.listModels(next[id]);
       if (probed.models.length === 0) {
-        warnings.push(`${id}: probe returned no models; kept existing entry`);
+        applyRefreshFallback(next, id, "probe returned no models", warnings);
         continue;
       }
       next[id] = { fetched_at: now(), source: probed.source, models: probed.models };
     } catch (err) {
-      warnings.push(
-        `${id}: probe failed (${err instanceof Error ? err.message : String(err)}); ` +
-          "kept existing entry",
+      applyRefreshFallback(
+        next,
+        id,
+        `probe failed (${err instanceof Error ? err.message : String(err)})`,
+        warnings,
       );
     }
   }

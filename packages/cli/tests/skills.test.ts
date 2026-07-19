@@ -326,6 +326,29 @@ describe("bundled skill contents", () => {
     expect(skillMd).toMatch(/\bboth\b/i);
     expect(skillMd).toMatch(/defaults\.vendor|defaults\.profile/);
     expect(skillMd).toMatch(/Skip the scope question|default to \*\*project\*\*/i);
+    // Per-vendor transport defaults + model discovery during setup.
+    expect(skillMd).toMatch(/Child-channel defaults|childChannel/);
+    expect(skillMd).toMatch(/\bpi\b[\s\S]*\bcli\b/i);
+    expect(skillMd).toMatch(/No native MCP|no native MCP/i);
+    expect(skillMd).toMatch(/parley models refresh|models refresh/);
+    expect(skillMd).toMatch(/shipped catalog|point-in-time reference/i);
+    for (const vendor of [
+      "claude",
+      "cline",
+      "codex",
+      "gemini",
+      "goose",
+      "grok",
+      "hermes",
+      "kilo",
+      "kimi",
+      "openclaw",
+      "opencode",
+      "openhands",
+      "pi",
+    ]) {
+      expect(skillMd).toContain("`" + vendor + "`");
+    }
     // No retired skill or issue/ADR sediment in the consumer entry point.
     expect(skillMd).not.toMatch(/parley-rubric/);
     expect(skillMd).not.toMatch(/ADR-\d+/);
