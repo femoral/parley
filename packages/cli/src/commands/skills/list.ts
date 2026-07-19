@@ -26,7 +26,7 @@ export function runSkillsList(ctx: CliContext, args: string[]): number {
     return 0;
   }
 
-  ctx.stdout("Bundled skills (install with `parley skills install`):\n");
+  ctx.stdout("Bundled skills (install with `parley init`):\n");
   for (const s of skills) {
     if (s.description) ctx.stdout(`  ${s.name}  ${s.description}\n`);
     else ctx.stdout(`  ${s.name}\n`);

@@ -343,4 +343,4 @@ Skip the dry run entirely when the user declines. Done when lint is clean and th
 
 Resolution order for project-settings keys: shipped defaults < global home < project. Missing project files mean that layer is empty — still valid. `other` is always a valid `--type`; it is not listed in `taskTypes`.
 
-Orchestrator loop after setup: install `parley-delegate` (`parley skills install`) and use that skill for delegate → watch → review.
+Orchestrator loop after setup: install `parley-delegate` (`parley init`) and use that skill for delegate → watch → review.

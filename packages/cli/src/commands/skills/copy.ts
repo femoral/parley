@@ -83,7 +83,7 @@ export function repoRoot(cwd: string): string {
       encoding: "utf8",
     }).trim();
   } catch {
-    throw new UsageError("skills install: --scope project must run inside a git repository");
+    throw new UsageError("--scope project must run inside a git repository");
   }
 }
 

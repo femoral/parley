@@ -63,9 +63,9 @@ parley eval t1 --score 9 --feedback "clean fix, good test"
 parley clean t1        # removes the worktree, keeps the branch
 ```
 
-Orchestrating from an agent harness? `parley skills install` ships the
-orchestrator skills (`parley-delegate`, `parley-wizard`) into your harness's
-skills directory.
+Orchestrating from an agent harness? `parley init` one-shot setup installs the
+orchestrator skills (`parley-delegate`, `parley-wizard`), ensures config files,
+detects harness CLIs on PATH, and refreshes the model catalog.
 
 ## Vendors
 
@@ -166,8 +166,9 @@ daemon serves it when present.
 | `parley-delegate` | the orchestrator loop: brief → delegate → watch → answer → review |
 | `parley-wizard` | conversational setup: eval, types, rubrics, classification, daemon config |
 
-`parley skills install` — interactive picker, or `--layout`/`--scope`/`--skill`
-for CI.
+`parley init` — one-shot skills + config + harness detection + models
+(`--layout`/`--scope`/`--skill`; defaults: layout=agents, scope=project-in-git).
+`parley skills install` remains as a deprecated skills-only alias.
 
 ## Design notes
 

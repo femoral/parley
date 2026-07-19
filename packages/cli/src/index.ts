@@ -14,6 +14,7 @@ import { runFix } from "./commands/fix.js";
 import { runLogs } from "./commands/logs.js";
 import { runMetrics } from "./commands/metrics.js";
 import { runModels } from "./commands/models.js";
+import { runInit } from "./commands/init.js";
 import { runSkills } from "./commands/skills/index.js";
 import { runStatus } from "./commands/tasks.js";
 import { runUi } from "./commands/ui.js";
@@ -123,7 +124,16 @@ Usage:
                             Register the orchestrating session (provenance for
                             tasks/evals). Fresh id printed when -s omitted;
                             known -s re-anchors after crash/restart.
-  parley skills install         Install bundled orchestrator skill(s)
+  parley init                   One-shot setup: skills, config, harnesses, models
+    --layout claude|agents|<path>
+                              Vendor skill layout, or a custom directory path
+                              (default: agents)
+    --scope global|project    Where to install skills + which config layer
+                              (default: project in a git repo, else global)
+    --skill <name>            Skill to install (repeatable; default: all)
+    --yes                     Accept defaults (no-op for non-interactive init)
+    --json                    Machine-readable result
+  parley skills install         Deprecated alias: install skills only (see init)
     --layout claude|agents|<path>
                               Vendor convention, or a custom directory path
                               (required non-interactive / CI)
@@ -211,6 +221,8 @@ export async function run(argv: string[], ctx: CliContext): Promise<number> {
       return runLint(ctx, rest);
     case "session":
       return runSession(ctx, rest);
+    case "init":
+      return runInit(ctx, rest);
     case "skills":
       return runSkills(ctx, rest);
     case "child":
