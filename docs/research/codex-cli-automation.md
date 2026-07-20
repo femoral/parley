@@ -1,6 +1,6 @@
 # Codex CLI — automation surface for Parley
 
-Research asset for the wayfinder ticket [Research: Codex CLI automation surface](https://github.com/femoral/parley/issues/2). Verified against primary sources on 2026-07-09; Codex CLI release `rust-v0.144.0`. Docs are migrating from `developers.openai.com/codex/*` to `learn.chatgpt.com/docs/*` (308 redirects); the GitHub `docs/` folder is a stub index.
+Research asset for the wayfinder ticket [Research: Codex CLI automation surface](https://github.com/femoral/parley/issues/2). Verified against primary sources on 2026-07-20; Codex CLI release `rust-v0.144.6`. Docs are migrating from `developers.openai.com/codex/*` to `learn.chatgpt.com/docs/*` (308 redirects); the GitHub `docs/` folder is a stub index.
 
 ## TL;DR for Parley
 
@@ -79,18 +79,61 @@ Implication for worktree config translation: Parley generates/symlinks `AGENTS.m
 - **No injecting messages into a running `codex exec`.** Live-steering alternatives: `codex mcp-server` (tools `codex` / `codex-reply` with `threadId`; threads die with the process) or `codex app-server` (JSON-RPC over stdio, supports interrupts and mid-session input — the IDE-integration protocol).
 - `codex fork` can branch a finished session into a new task with transcript preserved.
 
-## 7. Skills & project instructions
+## 7. Session provenance and lifecycle hooks
+
+**Finding: Codex has a deterministic session-start signal, but it cannot implement Parley's four-variable environment contract.** `SessionStart` is a command hook that runs at thread-start scope, rather than as a model-selected tool call. It fires for new and resumed threads (and also for clear/compaction), before the first turn's model work. The hook receives Codex ground truth for the session id and model, but no reasoning-effort field; moreover, its documented outputs can add developer context or stop the hook flow, not update the environment inherited by later shell commands.
+
+The plugin-bundled configuration would be `hooks/hooks.json` at the plugin root (or an explicit `"hooks": "./hooks/hooks.json"` in `.codex-plugin/plugin.json`):
+
+```json
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ${PLUGIN_ROOT}/hooks/session_start.py"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+Only `type: "command"` handlers currently run. Codex invokes the command with the session working directory and sends one JSON object on stdin. Relevant common fields are:
+
+| Parley value | Hook source | Availability |
+| --- | --- | --- |
+| `PARLEY_SESSION_ID` | `session_id` | Yes: current Codex session id. |
+| `PARLEY_HARNESS` | Plugin constant, e.g. `codex` | Yes, but not supplied as session metadata. |
+| `PARLEY_MODEL` | `model` | Yes: active model slug. |
+| `PARLEY_EFFORT` | None | **No:** neither the common `SessionStart` input nor its event-specific fields expose configured/effective reasoning effort. |
+
+`SessionStart` additionally receives `hook_event_name`, `transcript_path`, `cwd`, `permission_mode`, and `source` (`startup`, `resume`, `clear`, or `compact`). The event is therefore deterministic and early enough to observe `session_id` and `model` without model self-reporting. The absence of effort is decisive for the requested all-four provenance record.
+
+It also cannot export variables into the session. The hook is a child command, so shell `export` changes end with that process. Unlike Claude Code's similarly named event, Codex documents no environment-file channel for persisting variables. Its supported stdout result is plain text or `hookSpecificOutput.additionalContext`, both of which become **model-visible developer context**, not process environment. `PLUGIN_ROOT` and `PLUGIN_DATA` (plus compatibility aliases) are environment variables Codex gives the hook itself; they are not a way for the hook to set variables for future tools. A launcher can inject already-known values into Codex before startup, but that is outside the plugin hook and cannot derive the newly allocated Codex session id at launch time.
+
+Installation would use a marketplace entry whose plugin contains `.codex-plugin/plugin.json` and `hooks/hooks.json`, followed by `codex plugin add <plugin>@<marketplace>`. Codex installs a cached copy under `~/.codex/plugins/cache/<marketplace>/<plugin>/<version>/`; plugin hooks require explicit trust review and are skipped until trusted. Removal is `codex plugin remove <plugin>@<marketplace>`, which removes the local configuration and cache entry. A direct user hook could instead live at `~/.codex/hooks.json`, but that bypasses the desired plugin-package lifecycle.
+
+Therefore issue #192 should treat the answer to the actual export requirement as **no**: `SessionStart` is the exact deterministic lifecycle mechanism, but it exposes only two of the three harness-derived values and has no supported session-environment mutation output. There is no complete deterministic plugin implementation on the documented Codex hook surface. This conclusion does not rely on transcript or log scraping.
+
+Sources: [hooks reference](https://developers.openai.com/codex/hooks), [build plugins](https://developers.openai.com/codex/plugins/build), [configuration reference](https://developers.openai.com/codex/config-reference).
+
+## 8. Skills & project instructions
 
 - Skills are first-class, Claude-style `SKILL.md` (name/description frontmatter). Discovery: repo `.agents/skills` (cwd→root walk) → `$HOME/.agents/skills` → `/etc/codex/skills` → built-in. Optional `agents/openai.yaml` per skill (invocation policy, tool deps). Enable/disable via `[[skills.config]]`.
 - Translation note for Parley: `.claude/skills` → `.agents/skills` symlink is plausible since the SKILL.md format matches; verify per-skill compatibility rather than assuming.
 
 Source: [skills docs](https://developers.openai.com/codex/skills).
 
-## 8. Codex as MCP server (alternative integration path)
+## 9. Codex as MCP server (alternative integration path)
 
 `codex mcp-server` runs Codex itself as a stdio MCP server exposing `codex` (new session; prompt + sandbox/approval/model/cwd overrides) and `codex-reply` (continue by `threadId`). Marked experimental; threads persist only for the server process lifetime and accumulate memory. This is a viable *alternative* to `codex exec` for the adapter — it gives multi-turn without respawning — but adds a long-lived process per… evaluate in the channel-design ticket. Interface doc: [codex_mcp_interface.md](https://github.com/openai/codex/blob/main/codex-rs/docs/codex_mcp_interface.md).
 
-## 9. Auth (headless)
+## 10. Auth (headless)
 
 - `CODEX_API_KEY` env var: per-invocation API-key auth, **`codex exec` only** — the clean orchestrator path.
 - Or ChatGPT login cached in `$CODEX_HOME/auth.json` (or OS keyring; `cli_auth_credentials_store`). Headless: `codex login --device-auth` (beta), copying `auth.json`, or enterprise `CODEX_ACCESS_TOKEN`.
