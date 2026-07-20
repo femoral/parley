@@ -9,9 +9,9 @@ driving parley is the **orchestrator**.
 - **Orchestrator** — the agent (or human) that writes briefs, answers child
   questions, and reviews/merges branches. Parley never merges.
 - **Orchestrator session** — the grouping id (`orchestrator_session_id`,
-  set via `--session` / `PARLEY_SESSION_ID`) tying together the tasks one
-  orchestrator run spawned. The unit of listing filters *and* of inbox
-  consumption.
+  set via `PARLEY_SESSION_ID` env > `--session` flag > ancestry; ADR-0013)
+  tying together the tasks one orchestrator run spawned. The unit of listing
+  filters *and* of inbox consumption.
 - **Task state** — exact vocabulary: `pending`, `running`, `awaiting_answer`,
   `stalled`, `completed`, `failed`, `cancelled`. Terminal states: `completed`,
   `failed`, `cancelled`.
@@ -42,6 +42,17 @@ driving parley is the **orchestrator**.
   (the only wait primitive; ADR-0008).
 - **Report envelope** — the schema-validated result object a completed task
   hands back (worktree path, branch, report body).
+- **Session provenance** — the identity of the orchestrator run parley records
+  for eval/traceability: session id, harness, model, effort. Injected
+  deterministically by a **harness plugin** as `PARLEY_SESSION_ID` /
+  `PARLEY_HARNESS` / `PARLEY_MODEL` / `PARLEY_EFFORT`; never self-reported by
+  the model. Harness values use parley vendor ids; sessions without a plugin
+  carry explicit *unknown* provenance and are evaluated under an unknown
+  bucket (ADR-0013).
+- **Harness plugin** — a per-vendor package installed into the orchestrator's
+  own harness (via that harness's native hook/plugin system) that exports the
+  session-provenance env vars at session start. Distinct from a parley
+  vendor **adapter** (ADR-0009), which is daemon-side spawn/parse plumbing.
 
 ## Avoided synonyms
 
