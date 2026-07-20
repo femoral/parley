@@ -447,6 +447,30 @@ const MIGRATIONS: string[] = [
   // #171: concurrency queue — durable FIFO order for tasks waiting on a
   // vendor/profile maxConcurrent cap. Null when not (or no longer) queued.
   `ALTER TABLE tasks ADD COLUMN queued_at TEXT;`,
+  // #190: env-only session provenance — harness/model/effort may be null when
+  // a harness plugin did not inject PARLEY_HARNESS/MODEL/EFFORT (honest unknown).
+  // SQLite cannot ALTER column nullability; rebuild sessions with nullable fields.
+  `CREATE TABLE sessions_new (
+     id              TEXT PRIMARY KEY,
+     harness         TEXT,
+     model           TEXT,
+     effort          TEXT,
+     workspace_root  TEXT NOT NULL,
+     anchor_machine  TEXT NOT NULL,
+     anchor_pid      INTEGER NOT NULL,
+     anchor_start    TEXT NOT NULL,
+     created_at      TEXT NOT NULL,
+     updated_at      TEXT NOT NULL
+   );
+   INSERT INTO sessions_new
+     (id, harness, model, effort, workspace_root,
+      anchor_machine, anchor_pid, anchor_start, created_at, updated_at)
+   SELECT id, harness, model, effort, workspace_root,
+      anchor_machine, anchor_pid, anchor_start, created_at, updated_at
+   FROM sessions;
+   DROP TABLE sessions;
+   ALTER TABLE sessions_new RENAME TO sessions;
+   CREATE INDEX sessions_workspace ON sessions(workspace_root);`,
 ];
 
 /** How many schema migrations have been applied — equals `PRAGMA user_version` after open. */
@@ -1078,12 +1102,15 @@ export interface ProcessAnchor {
   start_time: string;
 }
 
-/** A registered orchestrator session row (#162). */
+/** A registered orchestrator session row (#162 / #190). */
 export interface SessionRow {
   id: string;
-  harness: string;
-  model: string;
-  effort: string;
+  /** Null when registered without PARLEY_HARNESS (unknown provenance). */
+  harness: string | null;
+  /** Null when registered without PARLEY_MODEL (unknown provenance). */
+  model: string | null;
+  /** Null when registered without PARLEY_EFFORT (unknown provenance). */
+  effort: string | null;
   workspace_root: string;
   anchor_machine: string;
   anchor_pid: number;
@@ -1126,15 +1153,16 @@ export function listAllSessions(db: DatabaseHandle): SessionRow[] {
 
 /**
  * Insert a new orchestrator session. Caller allocates `id` (fresh or re-anchor
- * path). Anchor is the registering process's own triple.
+ * path). Anchor is the registering process's own triple. Harness/model/effort
+ * may be null (#190 unknown provenance).
  */
 export function insertSession(
   db: DatabaseHandle,
   session: {
     id: string;
-    harness: string;
-    model: string;
-    effort: string;
+    harness: string | null;
+    model: string | null;
+    effort: string | null;
     workspace_root: string;
     anchor: ProcessAnchor;
   },
@@ -1162,15 +1190,15 @@ export function insertSession(
 
 /**
  * Re-anchor an existing session and/or update harness/model/effort (#162).
- * Never mutates task dual-snapshot columns.
+ * Never mutates task dual-snapshot columns. Null provenance is allowed (#190).
  */
 export function updateSession(
   db: DatabaseHandle,
   id: string,
   patch: {
-    harness: string;
-    model: string;
-    effort: string;
+    harness: string | null;
+    model: string | null;
+    effort: string | null;
     workspace_root: string;
     anchor: ProcessAnchor;
   },

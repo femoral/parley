@@ -732,6 +732,27 @@ describe("aggregateMetrics eval aggregations (#164)", () => {
     const byJudge = aggregateMetrics(listTasks(db), { groupBy: "eval_model" });
     expect(byJudge.groups.map((g) => g.key).sort()).toEqual(["grok-4", "opus"]);
 
+    // Null provenance lands in the explicit "unknown" bucket (#190).
+    seedEvalTask("c", {
+      score: 5,
+      type: "coding",
+      orch_harness: null,
+      orch_model: null,
+      orch_effort: null,
+      eval_harness: null,
+      eval_model: null,
+      eval_effort: null,
+      rubric: "coding",
+      rubric_version: 1,
+    });
+    const byOrchUnknown = aggregateMetrics(listTasks(db), { groupBy: "orch_harness" });
+    expect(byOrchUnknown.groups.map((g) => g.key).sort()).toEqual([
+      "claude",
+      "codex",
+      "unknown",
+    ]);
+    expect(byOrchUnknown.groups.find((g) => g.key === "unknown")!.tasks.total).toBe(1);
+
     const byRubric = aggregateMetrics(listTasks(db), { groupBy: "rubric" });
     expect(byRubric.groups.map((g) => g.key).sort()).toEqual(["coding@1", "design@2"]);
   });

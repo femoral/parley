@@ -1,6 +1,7 @@
 /**
- * #162 — orchestrator session provenance CLI seam: registration, re-anchor,
- * ancestry binding with crafted chains, dual snapshots, session_required gate.
+ * #162 / #190 — orchestrator session provenance CLI seam: env-only harness/
+ * model/effort, env-first session id, registration, re-anchor, ancestry
+ * binding with crafted chains, dual snapshots, session_required gate.
  */
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import fs from "node:fs";
@@ -49,50 +50,54 @@ function enableEvals(cwd: string): void {
   );
 }
 
-/** Register a session with a crafted anchor via PARLEY_ANCESTRY_CHAIN. */
+/** Register a session with crafted anchor + env provenance (#190). */
 async function registerSession(
   opts: {
-    harness?: string;
-    model?: string;
-    effort?: string;
+    harness?: string | null;
+    model?: string | null;
+    effort?: string | null;
     sessionId?: string;
+    /** When set, also put this on PARLEY_SESSION_ID (env wins over -s). */
+    envSessionId?: string;
     anchor: { machine_id: string; pid: number; start_time: string };
     cwd?: string;
   },
-): Promise<{ session_id: string; harness: string; model: string; effort: string }> {
+): Promise<{
+  session_id: string;
+  harness: string | null;
+  model: string | null;
+  effort: string | null;
+}> {
   const chain = JSON.stringify([opts.anchor]);
-  const args = [
-    "session",
-    "-v",
-    opts.harness ?? "Claude",
-    "-m",
-    opts.model ?? "Opus",
-    "-e",
-    opts.effort ?? "High",
-    "--json",
-  ];
+  const args = ["session", "--json"];
   if (opts.sessionId !== undefined) {
     args.push("-s", opts.sessionId);
   }
+  // Always clear parent/process provenance env so tests own the values.
+  // Explicit null opts leave the var unset (honest unknown).
+  const extraEnv: NodeJS.ProcessEnv = {
+    PARLEY_ANCESTRY_CHAIN: chain,
+    PARLEY_SESSION_ID: opts.envSessionId ?? undefined,
+    PARLEY_HARNESS: opts.harness === null ? undefined : (opts.harness ?? "Claude"),
+    PARLEY_MODEL: opts.model === null ? undefined : (opts.model ?? "Opus"),
+    PARLEY_EFFORT: opts.effort === null ? undefined : (opts.effort ?? "High"),
+  };
+
   const res = await runCli(args, home, {
     cwd: opts.cwd,
-    extraEnv: {
-      PARLEY_ANCESTRY_CHAIN: chain,
-      // Clear default freeform so registration is the source of truth.
-      PARLEY_SESSION_ID: undefined,
-    },
+    extraEnv,
   });
   expect(res.code, res.stderr).toBe(0);
   return JSON.parse(res.stdout) as {
     session_id: string;
-    harness: string;
-    model: string;
-    effort: string;
+    harness: string | null;
+    model: string | null;
+    effort: string | null;
   };
 }
 
-describe("parley session registration (#162)", () => {
-  it("registers with required flags, lowercases provenance, prints id", async () => {
+describe("parley session registration (#190 env-only provenance)", () => {
+  it("registers from env vars, lowercases provenance, prints id", async () => {
     const ack = await registerSession({
       harness: "Claude",
       model: "Opus-4",
@@ -103,6 +108,19 @@ describe("parley session registration (#162)", () => {
     expect(ack.harness).toBe("claude");
     expect(ack.model).toBe("opus-4");
     expect(ack.effort).toBe("high");
+  });
+
+  it("registers with all-null provenance when env vars are unset", async () => {
+    const ack = await registerSession({
+      harness: null,
+      model: null,
+      effort: null,
+      anchor: { machine_id: "m", pid: 1, start_time: "t" },
+    });
+    expect(ack.session_id).toMatch(/^s/);
+    expect(ack.harness).toBeNull();
+    expect(ack.model).toBeNull();
+    expect(ack.effort).toBeNull();
   });
 
   it("re-anchors a known session and updates provenance", async () => {
@@ -126,25 +144,66 @@ describe("parley session registration (#162)", () => {
   });
 
   it("errors on unknown -s", async () => {
-    const res = await runCli(
-      ["session", "-v", "h", "-m", "m", "-e", "e", "-s", "no-such-session"],
-      home,
-      {
-        extraEnv: {
-          PARLEY_ANCESTRY_CHAIN: JSON.stringify([
-            { machine_id: "m", pid: 1, start_time: "t" },
-          ]),
-        },
+    const res = await runCli(["session", "-s", "no-such-session", "--json"], home, {
+      extraEnv: {
+        PARLEY_ANCESTRY_CHAIN: JSON.stringify([
+          { machine_id: "m", pid: 1, start_time: "t" },
+        ]),
+        PARLEY_HARNESS: "h",
+        PARLEY_MODEL: "m",
+        PARLEY_EFFORT: "e",
+        PARLEY_SESSION_ID: undefined,
       },
-    );
+    });
     expect(res.code).toBe(2);
     expect(res.stderr).toMatch(/unknown session/);
   });
 
-  it("requires harness, model, and effort", async () => {
-    const res = await runCli(["session", "-v", "h", "-m", "m"], home);
-    expect(res.code).toBe(2);
-    expect(res.stderr).toMatch(/effort/);
+  it("rejects removed -m/--model with env-var message", async () => {
+    for (const flag of ["-m", "--model"] as const) {
+      const res = await runCli(["session", flag, "opus"], home);
+      expect(res.code, res.stderr).toBe(2);
+      expect(res.stderr).toMatch(/removed/i);
+      expect(res.stderr).toMatch(/PARLEY_MODEL|PARLEY_HARNESS|PARLEY_EFFORT/);
+    }
+  });
+
+  it("rejects removed -e/--effort with env-var message", async () => {
+    for (const flag of ["-e", "--effort"] as const) {
+      const res = await runCli(["session", flag, "high"], home);
+      expect(res.code, res.stderr).toBe(2);
+      expect(res.stderr).toMatch(/removed/i);
+      expect(res.stderr).toMatch(/PARLEY_/);
+    }
+  });
+
+  it("rejects removed -v/--harness with env-var message", async () => {
+    for (const flag of ["-v", "--harness"] as const) {
+      const res = await runCli(["session", flag, "claude"], home);
+      expect(res.code, res.stderr).toBe(2);
+      expect(res.stderr).toMatch(/removed/i);
+      expect(res.stderr).toMatch(/PARLEY_HARNESS/);
+    }
+  });
+
+  it("PARLEY_SESSION_ID wins over -s for registration id", async () => {
+    // First create a known session so re-anchor by env id succeeds.
+    const first = await registerSession({
+      harness: "claude",
+      model: "opus",
+      effort: "high",
+      anchor: { machine_id: "m", pid: 1, start_time: "t" },
+    });
+    const second = await registerSession({
+      harness: "grok",
+      model: "fast",
+      effort: "low",
+      sessionId: "would-be-flag",
+      envSessionId: first.session_id,
+      anchor: { machine_id: "m", pid: 2, start_time: "t2" },
+    });
+    expect(second.session_id).toBe(first.session_id);
+    expect(second.harness).toBe("grok");
   });
 });
 
@@ -196,7 +255,7 @@ describe("ancestry binding at CLI seam (#162)", () => {
     expect(row.orchestrator_session_id).not.toBe(s1.session_id);
   });
 
-  it("--session override wins over ancestry", async () => {
+  it("--session override used when env unset; ancestry loses", async () => {
     const cwd = taskDir([{ submit_report: REPORT }]);
     const s1 = await registerSession({
       harness: "h1",
@@ -212,7 +271,7 @@ describe("ancestry binding at CLI seam (#162)", () => {
       anchor: { machine_id: "mac", pid: 222, start_time: "t2" },
       cwd,
     });
-    // Ancestry would pick s2; override forces s1.
+    // Ancestry would pick s2; flag forces s1 when env unset.
     const chain = JSON.stringify([
       { machine_id: "mac", pid: 222, start_time: "t2" },
     ]);
@@ -232,6 +291,38 @@ describe("ancestry binding at CLI seam (#162)", () => {
     expect(row.orchestrator_session_id).toBe(s1.session_id);
     expect(row.orch_harness).toBe("h1");
     void s2;
+  });
+
+  it("PARLEY_SESSION_ID wins over --session on delegate (#190)", async () => {
+    const cwd = taskDir([{ submit_report: REPORT }]);
+    const s1 = await registerSession({
+      harness: "h1",
+      model: "m1",
+      effort: "e1",
+      anchor: { machine_id: "mac", pid: 111, start_time: "t1" },
+      cwd,
+    });
+    const s2 = await registerSession({
+      harness: "h2",
+      model: "m2",
+      effort: "e2",
+      anchor: { machine_id: "mac", pid: 222, start_time: "t2" },
+      cwd,
+    });
+    const del = await runCli(
+      ["delegate", "-v", "fake", "--cwd", cwd, "--session", s1.session_id, "x"],
+      home,
+      {
+        extraEnv: {
+          PARLEY_SESSION_ID: s2.session_id,
+        },
+      },
+    );
+    expect(del.code, del.stderr).toBe(0);
+    const taskId = JSON.parse(del.stdout).task_id as string;
+    const row = JSON.parse((await runCli(["status", taskId, "--json"], home)).stdout);
+    expect(row.orchestrator_session_id).toBe(s2.session_id);
+    expect(row.orch_harness).toBe("h2");
   });
 
   it("falls back to the single live session for the workspace", async () => {
@@ -294,6 +385,37 @@ describe("ancestry binding at CLI seam (#162)", () => {
     );
     expect(del.code).toBe(2);
     expect(del.stderr).toMatch(/ambiguous/i);
+  });
+
+  it("null provenance snapshots through to status JSON", async () => {
+    const cwd = taskDir([{ submit_report: REPORT }]);
+    const s = await registerSession({
+      harness: null,
+      model: null,
+      effort: null,
+      anchor: { machine_id: "mac", pid: 50, start_time: "t0" },
+      cwd,
+    });
+    const chain = JSON.stringify([
+      { machine_id: "mac", pid: 50, start_time: "t0" },
+    ]);
+    const del = await runCli(
+      ["delegate", "-v", "fake", "--cwd", cwd, "x"],
+      home,
+      {
+        extraEnv: {
+          PARLEY_ANCESTRY_CHAIN: chain,
+          PARLEY_SESSION_ID: undefined,
+        },
+      },
+    );
+    expect(del.code, del.stderr).toBe(0);
+    const taskId = JSON.parse(del.stdout).task_id as string;
+    const row = JSON.parse((await runCli(["status", taskId, "--json"], home)).stdout);
+    expect(row.orchestrator_session_id).toBe(s.session_id);
+    expect(row.orch_harness).toBeNull();
+    expect(row.orch_model).toBeNull();
+    expect(row.orch_effort).toBeNull();
   });
 });
 
@@ -512,5 +634,66 @@ describe("session_required gate (#162)", () => {
     const row = JSON.parse((await runCli(["status", taskId, "--json"], home)).stdout);
     expect(row.orchestrator_session_id).toBe("my-orch");
     expect(row.orch_harness).toBeNull();
+  });
+
+  it("unknown-provenance session still accepts eval (null judge snapshot)", async () => {
+    const cwd = taskDir([{ submit_report: REPORT }]);
+    enableEvals(cwd);
+    const s = await registerSession({
+      harness: null,
+      model: null,
+      effort: null,
+      anchor: { machine_id: "mac", pid: 10, start_time: "t" },
+      cwd,
+    });
+    const chain = JSON.stringify([{ machine_id: "mac", pid: 10, start_time: "t" }]);
+    const del = await runCli(
+      ["delegate", "-v", "fake", "--cwd", cwd, "x"],
+      home,
+      {
+        extraEnv: {
+          PARLEY_ANCESTRY_CHAIN: chain,
+          PARLEY_SESSION_ID: undefined,
+        },
+      },
+    );
+    expect(del.code, del.stderr).toBe(0);
+    const taskId = JSON.parse(del.stdout).task_id as string;
+    await waitForState(home, taskId, "completed");
+
+    const answers = {
+      "brief-fulfilled": true,
+      evidenced: true,
+      complete: true,
+      "report-complete": true,
+      "broke-existing": false,
+      "fabricated-claim": false,
+      "scope-creep": false,
+    };
+    const evalRes = await runCli(
+      [
+        "eval",
+        taskId,
+        "--answers",
+        JSON.stringify(answers),
+        "--feedback",
+        "ok",
+      ],
+      home,
+      {
+        cwd,
+        extraEnv: {
+          PARLEY_ANCESTRY_CHAIN: chain,
+          PARLEY_SESSION_ID: undefined,
+        },
+      },
+    );
+    expect(evalRes.code, evalRes.stderr).toBe(0);
+    const row = JSON.parse((await runCli(["status", taskId, "--json"], home)).stdout);
+    expect(row.orchestrator_session_id).toBe(s.session_id);
+    expect(row.orch_harness).toBeNull();
+    expect(row.eval_session_id).toBe(s.session_id);
+    expect(row.eval_harness).toBeNull();
+    expect(row.eval_score).toBeTypeOf("number");
   });
 });

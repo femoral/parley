@@ -144,8 +144,8 @@ describe("eval columns migration (#157)", () => {
     home = fs.mkdtempSync(path.join(os.tmpdir(), "parley-eval-mig-"));
 
     // Schema just before #157 eval columns (after #154 launch_command).
-    // Later migrations: #157, #162, #171 → pre-#157 is SCHEMA_VERSION - 3.
-    const prev = openDatabaseUpTo(homePaths(home), SCHEMA_VERSION - 3);
+    // Later migrations: #157, #162, #171, #190 → pre-#157 is SCHEMA_VERSION - 4.
+    const prev = openDatabaseUpTo(homePaths(home), SCHEMA_VERSION - 4);
     const colsBefore = prev
       .prepare("PRAGMA table_info(tasks)")
       .all()

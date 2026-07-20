@@ -265,10 +265,10 @@ function presentDetail(detail: TaskDetailResponse): Record<string, unknown> {
 }
 
 /**
- * Resolve the orchestrator session a bare listing narrows to. `--session <id>`
- * pins that id; `--session latest` (and the env/no-flag default) resolve to the
- * most-recently-used session — the newest task's non-null session id (tasks
- * arrive newest-first). `undefined` means "no session filter" (show all).
+ * Resolve the orchestrator session a bare listing narrows to. Listing filter
+ * stays flag-first (`--session` > env > latest) so an explicit filter still
+ * works under a plugin env. Binding (delegate/fix/eval) is env-first per
+ * #190 / ADR-0013. `undefined` means "no session filter" (show all).
  */
 function resolveSessionFilter(
   sessionFlag: string | undefined,
@@ -311,8 +311,8 @@ function applySessionScope(
  * CLI plane, and renders it. A task reference may be a short id or a `--name`
  * label — a targeted lookup that bypasses session filtering. With no ref, the
  * listing narrows to one orchestrator session: `--session <id>` (or `latest`),
- * else `PARLEY_SESSION_ID` from the environment, else the most-recently-used
- * session. `--all` shows every task. Dimension filters (#164) match metrics.
+ * else `PARLEY_SESSION_ID`, else the most-recently-used session.
+ * `--all` shows every task. Dimension filters (#164) match metrics.
  * Single-task status renders Session / Eval / Attempts sections.
  */
 export async function runStatus(ctx: CliContext, args: string[]): Promise<number> {

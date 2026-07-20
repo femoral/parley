@@ -101,7 +101,7 @@ import {
 } from "./retry.js";
 import {
   CODE_SESSION_REQUIRED,
-  normalizeProvenance,
+  normalizeOptionalProvenance,
   resolveSessionBinding,
   sessionAmbiguousMessage,
   sessionRequiredMessage,
@@ -407,14 +407,21 @@ export interface FixRequest {
   workspaceRoot?: string | null;
 }
 
-/** `parley session` registration request (#162). */
+/** `parley session` registration request (#162 / #190). */
 export interface RegisterSessionRequest {
-  /** Required free-form harness (lowercased for grouping). */
-  harness: string;
-  /** Required free-form model (lowercased). */
-  model: string;
-  /** Required free-form effort (lowercased). */
-  effort: string;
+  /**
+   * Optional free-form harness (lowercased for grouping). Null/omit → unknown
+   * provenance; never defaulted.
+   */
+  harness?: string | null;
+  /**
+   * Optional free-form model (lowercased). Null/omit → unknown provenance.
+   */
+  model?: string | null;
+  /**
+   * Optional free-form effort (lowercased). Null/omit → unknown provenance.
+   */
+  effort?: string | null;
   /**
    * Known session id to re-anchor, or null/omitted to allocate a fresh id.
    * Unknown id is an error.
@@ -593,20 +600,18 @@ export class TaskEngine {
   }
 
   /**
-   * Register or re-anchor an orchestrator session (#162).
+   * Register or re-anchor an orchestrator session (#162 / #190).
    * - No `sessionId` ⇒ allocate a fresh id and insert.
    * - Known `sessionId` ⇒ re-anchor + update harness/model/effort/workspace.
    * - Unknown `sessionId` ⇒ usage error.
-   * Values are lowercased for grouping. Does not rewrite past task/eval
-   * dual snapshots.
+   * Harness/model/effort are optional (env-only from CLI); null stores as
+   * honest unknown. Non-null values are lowercased for grouping. Does not
+   * rewrite past task/eval dual snapshots.
    */
   registerSession(request: RegisterSessionRequest): SessionRow {
-    const harness = normalizeProvenance(request.harness);
-    const model = normalizeProvenance(request.model);
-    const effort = normalizeProvenance(request.effort);
-    if (harness === "" || model === "" || effort === "") {
-      throw new DelegateError("session: harness, model, and effort are all required");
-    }
+    const harness = normalizeOptionalProvenance(request.harness);
+    const model = normalizeOptionalProvenance(request.model);
+    const effort = normalizeOptionalProvenance(request.effort);
     if (request.workspaceRoot === "" || request.workspaceRoot === null) {
       throw new DelegateError("session: workspace_root is required");
     }

@@ -14,8 +14,9 @@ export const CODE_SESSION_REQUIRED = "session_required";
 export function sessionRequiredMessage(): string {
   return (
     "session_required: register an orchestrator session first " +
-    "(`parley session --harness/-v <h> --model/-m <m> --effort/-e <e>`), " +
-    "or pass --session <id> for a known session"
+    "(`parley session` with PARLEY_HARNESS/PARLEY_MODEL/PARLEY_EFFORT " +
+    "from a harness plugin, or omit them for unknown provenance), " +
+    "or set PARLEY_SESSION_ID / pass --session <id> for a known session"
   );
 }
 
@@ -71,10 +72,10 @@ export function matchSessionByAncestry(
 }
 
 /**
- * Resolve which session binds a call (#162).
+ * Resolve which session binds a call (#162 / #190).
  *
- * Precedence:
- * 1. Explicit session id (`--session` / `PARLEY_SESSION_ID`) — always overrides.
+ * Precedence (CLI resolves env > flag into `explicitSessionId` before call):
+ * 1. Explicit session id (`PARLEY_SESSION_ID` > `--session`) — always overrides.
  *    Known registered id → that row; unknown id → free-form stamp (null row).
  * 2. Deepest ancestry match against all registered sessions.
  * 3. Exactly one live session for `workspaceRoot` → that session.
@@ -88,7 +89,7 @@ export type SessionResolveResult =
   | { kind: "unresolved" };
 
 export function resolveSessionBinding(opts: {
-  /** Explicit override from `--session` / `PARLEY_SESSION_ID`, if any. */
+  /** Explicit id from env/flag resolution (`PARLEY_SESSION_ID` > `--session`). */
   explicitSessionId: string | null;
   /** Caller's process-ancestry chain (self first). */
   ancestryChain: ProcessAnchor[];
@@ -117,9 +118,12 @@ export function resolveSessionBinding(opts: {
 /** Spawn/eval dual-snapshot fields taken from a bound session. */
 export interface ProvenanceSnapshot {
   session_id: string;
-  harness: string;
-  model: string;
-  effort: string;
+  /** Null when the session registered without PARLEY_HARNESS (#190). */
+  harness: string | null;
+  /** Null when the session registered without PARLEY_MODEL (#190). */
+  model: string | null;
+  /** Null when the session registered without PARLEY_EFFORT (#190). */
+  effort: string | null;
 }
 
 export function snapshotFromSession(session: SessionRow): ProvenanceSnapshot {
@@ -129,4 +133,16 @@ export function snapshotFromSession(session: SessionRow): ProvenanceSnapshot {
     model: session.model,
     effort: session.effort,
   };
+}
+
+/**
+ * Normalize optional free-form provenance: trim + lowercase, or null when
+ * absent/blank. Never invents a default (#190).
+ */
+export function normalizeOptionalProvenance(
+  value: string | null | undefined,
+): string | null {
+  if (value === null || value === undefined) return null;
+  const normalized = normalizeProvenance(value);
+  return normalized === "" ? null : normalized;
 }

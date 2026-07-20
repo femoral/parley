@@ -1204,9 +1204,10 @@ function handleFix(
 }
 
 /**
- * `POST /sessions` — register or re-anchor an orchestrator session (#162).
- * Body: `{ harness, model, effort, workspace_root, anchor, session_id? }`.
- * Fresh id when session_id omitted; known id re-anchors; unknown id → 400.
+ * `POST /sessions` — register or re-anchor an orchestrator session (#162 / #190).
+ * Body: `{ harness?, model?, effort?, workspace_root, anchor, session_id? }`.
+ * Provenance fields are optional (null/omit → unknown). Fresh id when
+ * session_id omitted; known id re-anchors; unknown id → 400.
  */
 function handleRegisterSession(
   engine: TaskEngine,
@@ -1217,14 +1218,11 @@ function handleRegisterSession(
     sendJson(res, 400, { error: "request body must be a JSON object" });
     return;
   }
+  // null / omit / empty string all mean unknown provenance (#190).
   const harness = optionalString(body.harness);
   const model = optionalString(body.model);
   const effort = optionalString(body.effort);
   const workspaceRoot = optionalString(body.workspace_root);
-  if (harness === null || model === null || effort === null) {
-    sendJson(res, 400, { error: "harness, model, and effort are all required" });
-    return;
-  }
   if (workspaceRoot === null) {
     sendJson(res, 400, { error: "workspace_root is required" });
     return;

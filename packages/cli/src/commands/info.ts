@@ -61,7 +61,7 @@ function applyLayeredSettings(
         notes: [
           "Map every rubric criterion id to a boolean (true = criterion holds).",
           "The daemon computes score and baseline; do not assert a free score.",
-          "When eval is on, register an orchestrator session first (`parley session -v <harness> -m <model> -e <effort>`).",
+          "When eval is on, register an orchestrator session first (`parley session`; provenance from PARLEY_HARNESS/MODEL/EFFORT via a harness plugin, or unknown when unset).",
           "A later eval call overwrites the previous result for that task.",
         ],
       },

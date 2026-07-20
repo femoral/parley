@@ -302,12 +302,28 @@ function emptyAcc(): GroupAcc {
   };
 }
 
+/**
+ * Provenance dimensions group null/blank under the explicit `"unknown"` bucket
+ * so unknown sessions never contaminate per-harness/model/effort comparisons
+ * (#190 / ADR-0013). Other dimensions keep a null key for "unset".
+ */
+const PROVENANCE_GROUP_BY = new Set<MetricsGroupBy>([
+  "orch_harness",
+  "orch_model",
+  "orch_effort",
+  "eval_harness",
+  "eval_model",
+  "eval_effort",
+]);
+
 function groupKeyFor(task: TaskRow, groupBy: MetricsGroupBy): string | null {
   if (groupBy === "rubric") return rubricGroupKey(task);
   const col = GROUP_COLUMNS[groupBy];
   if (col === undefined) return null;
   const value = task[col];
-  if (value === null || value === undefined || value === "") return null;
+  if (value === null || value === undefined || value === "") {
+    return PROVENANCE_GROUP_BY.has(groupBy) ? "unknown" : null;
+  }
   return String(value);
 }
 

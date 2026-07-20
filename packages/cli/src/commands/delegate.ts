@@ -68,16 +68,17 @@ export async function runDelegate(ctx: CliContext, args: string[]): Promise<numb
   // or defaults.vendor (#175); missing both flags and defaults is exit 2.
   const vendor = typeof flags["--vendor"] === "string" ? flags["--vendor"] : null;
   const profile = typeof flags["--profile"] === "string" ? flags["--profile"] : null;
-  // Orchestrator-run identity (#162): `--session` overrides `PARLEY_SESSION_ID`.
-  // When neither is set the daemon binds via process ancestry (or single-live
+  // Orchestrator-run identity (#162 / #190 / ADR-0013): env-first —
+  // `PARLEY_SESSION_ID` > `--session` > ancestry (daemon). When neither env
+  // nor flag is set the daemon binds via process ancestry (or single-live
   // fallback). When evals are on and nothing resolves, the daemon returns
   // `session_required`. Evals off ⇒ session optional.
   const sessionFlag = flags["--session"];
   const orchestratorSessionId =
-    typeof sessionFlag === "string" && sessionFlag !== ""
-      ? sessionFlag
-      : typeof ctx.env.PARLEY_SESSION_ID === "string" && ctx.env.PARLEY_SESSION_ID !== ""
-        ? ctx.env.PARLEY_SESSION_ID
+    typeof ctx.env.PARLEY_SESSION_ID === "string" && ctx.env.PARLEY_SESSION_ID !== ""
+      ? ctx.env.PARLEY_SESSION_ID
+      : typeof sessionFlag === "string" && sessionFlag !== ""
+        ? sessionFlag
         : null;
   // An unanswered question at this timeout stalls the task (spec §2). Omitted
   // means the daemon default (30m).

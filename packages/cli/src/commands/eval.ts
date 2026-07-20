@@ -78,13 +78,14 @@ export async function runEval(ctx: CliContext, args: string[]): Promise<number> 
     throw new UsageError('eval: feedback is required (--feedback "<text>")');
   }
 
-  // Judge binding (#162): independent of the task's spawn-time session.
+  // Judge binding (#162 / #190): independent of the task's spawn-time session.
+  // Env-first: PARLEY_SESSION_ID > --session > ancestry.
   const sessionFlag = flags["--session"];
   const orchestratorSessionId =
-    typeof sessionFlag === "string" && sessionFlag !== ""
-      ? sessionFlag
-      : typeof ctx.env.PARLEY_SESSION_ID === "string" && ctx.env.PARLEY_SESSION_ID !== ""
-        ? ctx.env.PARLEY_SESSION_ID
+    typeof ctx.env.PARLEY_SESSION_ID === "string" && ctx.env.PARLEY_SESSION_ID !== ""
+      ? ctx.env.PARLEY_SESSION_ID
+      : typeof sessionFlag === "string" && sessionFlag !== ""
+        ? sessionFlag
         : null;
   const ancestryChain = readLiveAncestryChain(ctx.env);
   const workspaceRoot = resolveWorkspaceRoot(process.cwd());

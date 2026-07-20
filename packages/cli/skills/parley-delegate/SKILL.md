@@ -19,15 +19,15 @@ parley info
 
 Treat that output as **authoritative** for this project: vendors and profiles, valid `--type` ids, size/difficulty classification, whether evaluation is on (and how to record evals), and fix/retry policy with error codes. Do not invent those values; re-run `parley info` if the project may have changed.
 
-**When evaluation is on**, register (or re-anchor after crash/restart) an orchestrator session and self-report your harness, model, and effort:
+**When evaluation is on**, install the harness plugin for your orchestrator (exports `PARLEY_SESSION_ID` / `PARLEY_HARNESS` / `PARLEY_MODEL` / `PARLEY_EFFORT`), then register (or re-anchor after crash/restart):
 
 ```
-parley session -v <harness> -m <model> -e <effort>
-# re-anchor a known id:
-parley session -v <harness> -m <model> -e <effort> -s <id>
+parley session
+# re-anchor a known id (or rely on PARLEY_SESSION_ID from the plugin):
+parley session -s <id>
 ```
 
-Use the printed session id (or your harness's) as `--session` / `PARLEY_SESSION_ID` for every later command. See `parley session --help` for the full surface.
+Provenance is env-only — models must not invent model/effort values. Missing env vars register as unknown. Prefer `PARLEY_SESSION_ID` from the plugin for later commands; `--session` is a fallback. See [sessions.md](sessions.md).
 
 **Setup problems** (missing vendors, unconfigured project, eval misconfig): stop and run `/parley-wizard` with the user. Do not invent config mid-orchestration.
 
@@ -125,7 +125,7 @@ Do not poll `status` on an interval and do not sleep-and-check. One mechanism fo
 
 ## Session ID
 
-The session ID identifies the current orchestration session. Pass it with `--session <id>` or export `PARLEY_SESSION_ID`. Prefer the id from `parley session` when you registered one (required when eval is on); otherwise use your harness's session concept, or synthesize a uuid.
+The session ID identifies the current orchestration session. Resolution is env-first: `PARLEY_SESSION_ID` > `--session <id>` > ancestry binding to a registered session. Install the harness plugin so the env vars (session id + harness/model/effort) are set for you; see [sessions.md](sessions.md).
 
 ## Context files
 
@@ -147,7 +147,7 @@ When several branches share a fork point, review each branch on its own and reso
 One-liner pointers — read the linked file only when its condition fires:
 
 - **Non-default task shapes** — structured `--report-schema` results, no git worktree `--cwd`, sandbox postures: read [task-shaping.md](task-shaping.md).
-- **Wiring session id from your harness** (e.g. Claude Code hooks, `PARLEY_SESSION_ID`): read [sessions.md](sessions.md).
+- **Harness plugins and session provenance** (`PARLEY_SESSION_ID` / `HARNESS` / `MODEL` / `EFFORT`): read [sessions.md](sessions.md).
 
 ## When a task fails
 

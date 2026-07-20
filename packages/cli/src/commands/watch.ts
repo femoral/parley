@@ -60,8 +60,9 @@ function resolveRef(tasks: TaskRow[], ref: string): TaskRow | undefined {
 
 /**
  * Resolve the orchestrator session the inbox narrows to — same rules as
- * `status`: `--session <id>`, else `PARLEY_SESSION_ID`, else the newest
- * session. `undefined` means no session filter (no tasks have a session).
+ * `status` (listing filter stays flag-first): `--session <id>`, else
+ * `PARLEY_SESSION_ID`, else the newest session. Binding (delegate/fix/eval)
+ * is env-first per #190. `undefined` means no session filter.
  */
 function resolveSessionFilter(
   sessionFlag: string | undefined,

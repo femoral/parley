@@ -1,10 +1,12 @@
 /**
- * `parley session --harness/-v <h> --model/-m <m> --effort/-e <e> [--session/-s <id>]`
+ * `parley session [--session/-s <id>] [--json]`
  *
- * Registers the orchestrating session (#162). All three provenance values are
- * required (free-form, lowercased by the daemon for grouping). Without `-s` a
- * fresh id is generated and printed; known `-s` re-anchors after crash/restart
- * and applies provenance updates; unknown `-s` errors.
+ * Registers the orchestrating session (#162 / #190 / ADR-0013). Harness,
+ * model, and effort come only from env vars (`PARLEY_HARNESS`,
+ * `PARLEY_MODEL`, `PARLEY_EFFORT`) — missing values store as honest nulls.
+ * The removed `-m/--model` and `-e/--effort` flags error with a pointer at
+ * the env-var/plugin mechanism. Session id resolution is env-first:
+ * `PARLEY_SESSION_ID` > `--session` > fresh id.
  */
 import { parseArgs } from "../args.js";
 import { readLiveAncestryChain, resolveWorkspaceRoot } from "../ancestry.js";
@@ -14,19 +16,71 @@ import { UsageError } from "../errors.js";
 
 interface SessionAck {
   session_id: string;
-  harness: string;
-  model: string;
-  effort: string;
+  harness: string | null;
+  model: string | null;
+  effort: string | null;
   workspace_root: string;
   created_at: string;
   updated_at: string;
 }
 
+/** Message when a removed provenance flag is passed (#190). */
+export function removedProvenanceFlagMessage(flag: string): string {
+  return (
+    `session: ${flag} was removed; set PARLEY_HARNESS / PARLEY_MODEL / ` +
+    `PARLEY_EFFORT via a harness plugin (ADR-0013), or omit them for ` +
+    `unknown provenance`
+  );
+}
+
+/**
+ * Reject removed `-m/--model` and `-e/--effort` (and the former harness
+ * flags) with a teaching message before generic unknown-flag handling.
+ */
+function rejectRemovedProvenanceFlags(args: string[]): void {
+  for (const arg of args) {
+    if (arg === "-" || !arg.startsWith("-")) continue;
+    // Stop at `--` if ever used; session has no positionals that need it.
+    if (arg === "--") break;
+    const bare = arg.includes("=") ? arg.slice(0, arg.indexOf("=")) : arg;
+    if (
+      bare === "-m" ||
+      bare === "--model" ||
+      bare === "-e" ||
+      bare === "--effort" ||
+      bare === "-v" ||
+      bare === "--harness"
+    ) {
+      throw new UsageError(removedProvenanceFlagMessage(bare));
+    }
+  }
+}
+
+/** Non-empty env string, or null when unset/blank. */
+function envProvenance(env: NodeJS.ProcessEnv, key: string): string | null {
+  const raw = env[key];
+  if (typeof raw !== "string") return null;
+  const trimmed = raw.trim();
+  return trimmed === "" ? null : trimmed;
+}
+
+/**
+ * Session id for registration: `PARLEY_SESSION_ID` > `--session` > null
+ * (daemon allocates a fresh id). Supersedes the pre-#190 flag-first order.
+ */
+function resolveRegisterSessionId(
+  flagSession: string | null,
+  env: NodeJS.ProcessEnv,
+): string | null {
+  const fromEnv = envProvenance(env, "PARLEY_SESSION_ID");
+  if (fromEnv !== null) return fromEnv;
+  return flagSession;
+}
+
 export async function runSession(ctx: CliContext, args: string[]): Promise<number> {
+  rejectRemovedProvenanceFlags(args);
+
   const { positionals, flags } = parseArgs(args, {
-    "--harness": { aliases: ["-v"], value: true },
-    "--model": { aliases: ["-m"], value: true },
-    "--effort": { aliases: ["-e"], value: true },
     "--session": { aliases: ["-s"], value: true },
     "--json": {},
   });
@@ -35,23 +89,16 @@ export async function runSession(ctx: CliContext, args: string[]): Promise<numbe
     throw new UsageError(`session: unexpected argument: ${positionals[0]}`);
   }
 
-  const harness = flags["--harness"];
-  const model = flags["--model"];
-  const effort = flags["--effort"];
-  if (typeof harness !== "string" || harness.trim() === "") {
-    throw new UsageError("session: --harness/-v is required");
-  }
-  if (typeof model !== "string" || model.trim() === "") {
-    throw new UsageError("session: --model/-m is required");
-  }
-  if (typeof effort !== "string" || effort.trim() === "") {
-    throw new UsageError("session: --effort/-e is required");
-  }
+  // Env-only provenance (#190): never invent defaults for missing values.
+  const harness = envProvenance(ctx.env, "PARLEY_HARNESS");
+  const model = envProvenance(ctx.env, "PARLEY_MODEL");
+  const effort = envProvenance(ctx.env, "PARLEY_EFFORT");
 
-  const sessionId =
+  const flagSession =
     typeof flags["--session"] === "string" && flags["--session"] !== ""
       ? (flags["--session"] as string)
       : null;
+  const sessionId = resolveRegisterSessionId(flagSession, ctx.env);
 
   // Anchor is the registering process itself (deepest match later binds
   // children whose chain includes this process). Chain[0] is self.

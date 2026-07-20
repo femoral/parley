@@ -361,9 +361,11 @@ describe("bundled skill contents", () => {
     // Step 0 + live config authority.
     expect(skillMd).toMatch(/parley info/);
     expect(skillMd).toMatch(/authoritative/i);
-    // Conditional orchestrator session registration.
+    // Conditional orchestrator session registration (env-only provenance #190).
     expect(skillMd).toMatch(/parley session/);
-    expect(skillMd).toMatch(/-v <harness>|-m <model>|-e <effort>/);
+    expect(skillMd).toMatch(/PARLEY_HARNESS|harness plugin|env-only/i);
+    expect(skillMd).not.toMatch(/self-report your harness|self-report model/i);
+    expect(skillMd).not.toMatch(/parley session -v <harness> -m <model>/);
     // Delegate typing + eval-when-expected.
     expect(skillMd).toMatch(/--type/);
     expect(skillMd).toMatch(/parley eval <task> --answers/);

@@ -185,13 +185,16 @@ describe("eval_expected envelope field (#45)", () => {
     // eval.expected turns the session_required gate on (#162): register first.
     const anchor = { machine_id: "m", pid: 1, start_time: "t" };
     const sess = await runCli(
-      ["session", "-v", "h", "-m", "m", "-e", "e", "--json"],
+      ["session", "--json"],
       home,
       {
         cwd,
         extraEnv: {
           PARLEY_ANCESTRY_CHAIN: JSON.stringify([anchor]),
           PARLEY_SESSION_ID: undefined,
+          PARLEY_HARNESS: "h",
+          PARLEY_MODEL: "m",
+          PARLEY_EFFORT: "e",
         },
       },
     );
@@ -793,7 +796,7 @@ describe("orchestrator session identity (#42)", () => {
     expect(row.orchestrator_session_id).toBe("orch-from-env");
   });
 
-  it("--session overrides PARLEY_SESSION_ID when both are set", async () => {
+  it("PARLEY_SESSION_ID wins over --session when both are set (#190)", async () => {
     const cwd = taskDir(happyActions());
     await runCli(
       ["delegate", "-v", "fake", "--session", "orch-from-flag", "--cwd", cwd, "x"],
@@ -803,7 +806,7 @@ describe("orchestrator session identity (#42)", () => {
     await waitForState(home, "t1", "completed");
 
     const row = JSON.parse((await runCli(["status", "t1", "--json"], home)).stdout);
-    expect(row.orchestrator_session_id).toBe("orch-from-flag");
+    expect(row.orchestrator_session_id).toBe("orch-from-env");
   });
 
   it("allows a missing session when evals are off (#162; free-form still works)", async () => {

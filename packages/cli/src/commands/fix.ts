@@ -51,13 +51,14 @@ export async function runFix(ctx: CliContext, args: string[]): Promise<number> {
   }
 
   const fresh = flags["--fresh"] === true;
-  // Fix resolves orchestrator session fresh at its own spawn (#162).
+  // Fix resolves orchestrator session fresh at its own spawn (#162 / #190).
+  // Env-first: PARLEY_SESSION_ID > --session > ancestry.
   const sessionFlag = flags["--session"];
   const orchestratorSessionId =
-    typeof sessionFlag === "string" && sessionFlag !== ""
-      ? sessionFlag
-      : typeof ctx.env.PARLEY_SESSION_ID === "string" && ctx.env.PARLEY_SESSION_ID !== ""
-        ? ctx.env.PARLEY_SESSION_ID
+    typeof ctx.env.PARLEY_SESSION_ID === "string" && ctx.env.PARLEY_SESSION_ID !== ""
+      ? ctx.env.PARLEY_SESSION_ID
+      : typeof sessionFlag === "string" && sessionFlag !== ""
+        ? sessionFlag
         : null;
   const ancestryChain = readLiveAncestryChain(ctx.env);
   const workspaceRoot = resolveWorkspaceRoot(process.cwd());

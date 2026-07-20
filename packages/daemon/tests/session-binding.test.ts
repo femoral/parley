@@ -156,6 +156,6 @@ describe("resolveSessionBinding (#162)", () => {
 
   it("session_required message teaches the command", () => {
     expect(sessionRequiredMessage()).toMatch(/parley session/);
-    expect(sessionRequiredMessage()).toMatch(/--harness/);
+    expect(sessionRequiredMessage()).toMatch(/PARLEY_HARNESS|harness plugin|unknown provenance/);
   });
 });
