@@ -22,6 +22,7 @@ export default defineWorkspace([
         "packages/ui/tests/**/*.test.ts",
         "packages/ui/tests/**/*.test.tsx",
         "packages/core/tests/**/*.test.ts",
+        "packages/plugins/*/tests/**/*.test.ts",
         "scripts/tests/**/*.test.ts",
       ],
       testTimeout: 10_000,
