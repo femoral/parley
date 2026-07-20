@@ -3,7 +3,7 @@ import type { EmblemMark } from "../tokens/factions.js";
 import { stationOffset, voyageFromFlagship } from "./layout.js";
 import { Wake } from "./effects/Wake.js";
 import sloopUrl from "./assets/charted/sloop.png";
-// Tint masks (sloop-{silhouette,sail,hullband,pennant}-mask.svg) are referenced
+// Tint masks (sloop-{silhouette,sail,hullband,pennant}-mask.png) are referenced
 // directly from scene.css via relative `mask-image: url(...)` — Vite resolves
 // and fingerprints them like any other CSS asset. Kept out of JS/inline style:
 // an earlier attempt setting `mask-image` via React inline `style` silently
@@ -57,10 +57,10 @@ function SailMark({ emblem }: { emblem: EmblemMark }): ReactNode {
  * direction and style-locked composition as the galleon/islands), with the
  * faction coat expressed via CSS `mask-image` + `background-color` recolor
  * layers instead of hand-authored SVG fills. Three tintable regions were
- * traced (potrace) from flat-silhouette generations of the same composition:
+ * segmented as aligned raster masks from the same composition:
  * mainsail+jib and masthead pennant (coat, `mix-blend-mode: color` so the
  * raster's own paint shading/highlights show through the recolor), and the
- * hull waterline band (coat-dark, opaque). A fourth trace of the full sprite's
+ * hull waterline band (coat-dark, opaque). A fourth mask of the full sprite's
  * own alpha silhouette clips the tint layers so a slightly generous mask trace
  * never bleeds paint past the hull/sail edges. The neutral wood-hull/rigging
  * detail underneath is shared by every faction — zero new art per faction,

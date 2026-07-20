@@ -448,12 +448,12 @@
   position: absolute;
   left: 0;
   top: 0;
-  /* Box aspect matches the painted sprite's native canvas (1672×941) so the
+  /* Box aspect matches the painted sprite's native canvas (640×539) so the
      base raster and every mask layer stretch to 100%/100% with zero distortion. */
   width: 84px;
-  height: 47px;
+  height: 71px;
   margin-left: -42px;
-  margin-top: -23px;
+  margin-top: -36px;
 }
 .pc-sloop__art {
   position: relative;
@@ -503,8 +503,8 @@
 .pc-sloop__tints {
   position: absolute;
   inset: 0;
-  -webkit-mask-image: url("./assets/charted/sloop-silhouette-mask.svg");
-  mask-image: url("./assets/charted/sloop-silhouette-mask.svg");
+  -webkit-mask-image: url("./assets/charted/sloop-silhouette-mask.png");
+  mask-image: url("./assets/charted/sloop-silhouette-mask.png");
   mask-repeat: no-repeat;
   mask-size: 100% 100%;
   -webkit-mask-repeat: no-repeat;
@@ -528,18 +528,18 @@
   opacity: 0.92;
 }
 .pc-sloop__tint--sail {
-  -webkit-mask-image: url("./assets/charted/sloop-sail-mask.svg");
-  mask-image: url("./assets/charted/sloop-sail-mask.svg");
+  -webkit-mask-image: url("./assets/charted/sloop-sail-mask.png");
+  mask-image: url("./assets/charted/sloop-sail-mask.png");
 }
 .pc-sloop__tint--pennant {
-  -webkit-mask-image: url("./assets/charted/sloop-pennant-mask.svg");
-  mask-image: url("./assets/charted/sloop-pennant-mask.svg");
+  -webkit-mask-image: url("./assets/charted/sloop-pennant-mask.png");
+  mask-image: url("./assets/charted/sloop-pennant-mask.png");
 }
 /* Hull waterline band: opaque coat-dark fill, same as the old vector waterline. */
 .pc-sloop__tint--hull {
   background: var(--coat-dark);
-  -webkit-mask-image: url("./assets/charted/sloop-hullband-mask.svg");
-  mask-image: url("./assets/charted/sloop-hullband-mask.svg");
+  -webkit-mask-image: url("./assets/charted/sloop-hullband-mask.png");
+  mask-image: url("./assets/charted/sloop-hullband-mask.png");
 }
 .pc-sloop__emblem-layer {
   position: absolute;
@@ -567,7 +567,7 @@
   left: 50%;
   top: 18%;
   width: 84px;
-  height: 47px;
+  height: 71px;
   margin-left: -42px;
   animation: pc-sail-off 2400ms ease-in forwards;
 }

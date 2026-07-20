@@ -17,15 +17,15 @@ const DRESS_HALYARD =
 /** Flag seats sampled along the halyard quadratics (bowsprit → fore → main
  * → mizzen), so every flag hangs from the string instead of floating. */
 const DRESS_FLAGS: ReadonlyArray<{ x: number; y: number }> = [
-  { x: 93, y: 183 },
-  { x: 149, y: 135 },
-  { x: 206, y: 82 },
+  { x: 74, y: 181 },
+  { x: 130, y: 137 },
+  { x: 185, y: 89 },
   { x: fore.x, y: fore.y + 4 },
-  { x: 301, y: 38 },
-  { x: 350, y: 44 },
+  { x: 274, y: 47 },
+  { x: 318, y: 53 },
   { x: main.x, y: main.y + 4 },
-  { x: 444, y: 97 },
-  { x: 487, y: 130 },
+  { x: 403, y: 89 },
+  { x: 443, y: 106 },
 ];
 
 /** The hoisted string of signal flags. Rendered only while every task island in

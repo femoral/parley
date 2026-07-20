@@ -32,33 +32,33 @@ export interface IslandVariant {
  * Three island silhouettes. Peak anchors were tuned against the sprites so the
  * pennant seats on stone, not air or palm fronds.
  *
- *  - v1: single palm right, mid rock  — peak slightly left of centre-top
- *  - v2: twin palms flanking a lower mound — peak mid, lower in frame
- *  - v3: tall central spire, palm right — peak high near frame top
+ *  - v1: single palm right, broad mid-height rock mound
+ *  - v2: twin palms flanking a low central rock mound
+ *  - v3: tall central rock spire with a palm at right
  */
 export const ISLAND_VARIANTS: readonly IslandVariant[] = [
-  { id: 1, src: island1Url, peak: { x: 44, y: 10 } },
-  { id: 2, src: island2Url, peak: { x: 49, y: 30 } },
-  { id: 3, src: island3Url, peak: { x: 45, y: 8 } },
+  { id: 1, src: island1Url, peak: { x: 46, y: 10 } },
+  { id: 2, src: island2Url, peak: { x: 43, y: 32 } },
+  { id: 3, src: island3Url, peak: { x: 45, y: 0 } },
 ] as const;
 
-/** Orchestrator galleon sprite (two-masted, waterline ripple baked in). */
+/** Orchestrator galleon sprite (waterless, with transparent background). */
 export const GALLEON_SRC = galleonUrl;
 
 /**
  * Dressing-lines overlay is authored in the galleon sprite's native pixel
- * space (560×466) so mastheads land on the raster masts. Halyard runs
+ * space (507×414) so mastheads land on the raster masts. Halyard runs
  * stem → fore → main → stern ("dressed overall").
  */
-export const GALLEON_VIEW = { w: 560, h: 466 } as const;
+export const GALLEON_VIEW = { w: 507, h: 414 } as const;
 /** Fore and main mastheads (native px) — dress flags string between them. */
 export const GALLEON_MASTS = {
-  // Measured on the 560×466 sprite (grid overlay): bowsprit tip, the two
+  // Measured on the 507×414 sprite from alpha/dark-pixel scans: bowsprit tip, the two
   // masthead hoists just under their pennants, and the mizzen top aft.
-  fore: { x: 252, y: 34 },
-  main: { x: 400, y: 58 },
-  stem: { x: 24, y: 232 },
-  stern: { x: 525, y: 152 },
+  fore: { x: 229, y: 47 },
+  main: { x: 364, y: 68 },
+  stem: { x: 8, y: 226 },
+  stern: { x: 486, y: 135 },
 } as const;
 
 /** Deterministic island art variant for a task id (stable for the task's life). */
