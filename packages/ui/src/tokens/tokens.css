@@ -14,12 +14,36 @@
   /* Cool crest sampled from the validated flat-sea sailing harness. Canvas
      opacity is applied separately (0.14), keeping the effect understated. */
   --sea-foam: #e4f4fb;
+  /*
+   * Room sea geometry — unitless fractions of the cockpit box. Shared by
+   * --sea-gradient (DOM) and paintBackdrop (canvas) so the sailing viewport
+   * continues the room surface with no seam at .pc-scene (#189).
+   *   cx/cy: gradient centre; rx/ry: ending-shape half-axes (CSS size = 2×).
+   *   colour stops: shallow 0% → mid 30% → deep 60% → abyss 100%.
+   */
+  --sea-grad-cx: 0.5;
+  --sea-grad-cy: -0.06;
+  --sea-grad-rx: 0.65;
+  --sea-grad-ry: 0.5;
+  /*
+   * Room vignette geometry — single source of edge darkening for the whole
+   * cockpit (replaces the old inset box-shadow whose blur was unmatchable in
+   * canvas). DOM .pc-atmos--vignette and the sailing canvas sample the same
+   * ellipse so cover-block copies stay indistinguishable from surrounding water.
+   */
+  --sea-vignette-cx: 0.5;
+  --sea-vignette-cy: 0.46;
+  --sea-vignette-rx: 0.78;
+  --sea-vignette-ry: 0.72;
+  /* Transparent through this radius fraction; then ramps to --sea-vignette. */
+  --sea-vignette-inner: 0.38;
   --sea-gradient: radial-gradient(
-    130% 100% at 50% -6%,
-    #1b5064 0%,
-    #123f52 30%,
-    #0c2c3b 60%,
-    #06171f 100%
+    calc(var(--sea-grad-rx) * 200 * 1%) calc(var(--sea-grad-ry) * 200 * 1%) at
+      calc(var(--sea-grad-cx) * 100 * 1%) calc(var(--sea-grad-cy) * 100 * 1%),
+    var(--sea-shallow) 0%,
+    var(--sea-mid) 30%,
+    var(--sea-deep) 60%,
+    var(--sea-abyss) 100%
   );
 
   /* §2.2 — wood / parchment panel chrome */
@@ -282,7 +306,7 @@
    legible as still imagery. The sailing driver separately freezes its sim
    clock from the same media query. This wildcard catches every CSS animation
    in the app (compass spin, beacon pulse, island rise/sink, shore foam,
-   wake, flare, fog drift, flag wave, camera travel, PARLEY! bob, scene glint)
+   wake, flare, fog drift, flag wave, camera travel, PARLEY! bob)
    without each of them
    needing its own reduced-motion override — audited against every
    `@keyframes`/`animation`/`transition` declaration in the package (#70).

@@ -8,6 +8,7 @@
  *  - One scene-level rAF owns ship travel/swell/orbit and the sea/fx canvases.
  *  - Remaining ambient loops (shore foam, flare pulse, fog drift) stay on the
  *    compositor; island rise/sink and camera travel remain finite CSS motion.
+ *  - No ambient sea motion (stripes/glint removed #124/#189) — the sea is still.
  *  - Every animated element's BASE style is its legible resting state, so the
  *    global reduced-motion rule (tokens.css) leaves every state readable as a
  *    still image. Island rise uses `both` fill, while the sailing driver seats
@@ -35,14 +36,18 @@
   z-index: 2;
 }
 
-/* ── Scene water (behind the camera — parallax, doesn't pan) ────────────── */
+/* ── Scene water (behind the camera — parallax, doesn't pan) ──────────────
+ * Transparent slot: the room's --sea-gradient + .pc-atmos--vignette are the
+ * continuous sea. The sailing canvas (when present) paints the same room-
+ * scoped math so hull cover blocks sample matching pixels (#189). No local
+ * vignette or glint — those terminated at the scene rectangle and read as a box. */
 .pc-scene-sea {
   position: absolute;
   inset: 0;
   overflow: hidden;
   pointer-events: none;
   z-index: 0;
-  background: radial-gradient(120% 90% at 50% 8%, transparent 40%, var(--sea-vignette) 100%);
+  background: none;
 }
 
 /* The span is only a lifecycle/data marker. Its canvases participate directly
@@ -65,41 +70,12 @@
 .pc-sailing-fx {
   z-index: 3;
 }
-/* In a sailing cove the canvas is the sole source of opaque sea pixels, and it
-   bakes the vignette in (see paintBackdrop) so cover blocks copy already-dimmed
-   water — a DOM vignette above the FX canvas leaves every copied block a
-   visibly brighter rectangle. Only the moonlight glint rides above the canvas
-   (below the FX overlay); its thin low-alpha lines breaking across a blurred
-   cover block are imperceptible, unlike the vignette's brightness ramp. The
-   later .pc-world at the same z-index still paints ships above the glint. */
+/* In a sailing cove the canvas is the sole source of opaque sea pixels. It
+   bakes the room-scoped vignette into the water (see paintBackdrop) so cover
+   blocks copy already-dimmed pixels — a DOM vignette above the FX canvas
+   would leave every copied block a visibly brighter rectangle. */
 .pc-scene-view--sailing .pc-scene-sea {
   z-index: 2;
-  background: none;
-}
-/* Moonlight glint — oversized pattern layer, transform-only drift (compositor).
-   Base transform is identity so reduced-motion stills on a legible frame. */
-.pc-scene-sea__glint {
-  position: absolute;
-  /* Oversize past the 300×40 travel so the pattern always covers the sea. */
-  inset: -320px;
-  opacity: 0.4;
-  pointer-events: none;
-  background: repeating-linear-gradient(
-    100deg,
-    transparent 0 70px,
-    rgba(255, 255, 255, 0.04) 70px 72px
-  );
-  animation: pc-scene-glint 22s linear infinite;
-}
-@keyframes pc-scene-glint {
-  from {
-    transform: translate(0, 0);
-  }
-  to {
-    /* The design vector (300px 40px) snapped to 4 whole gradient periods
-       along the 100deg/72px axis, so the 22s loop wraps without a seam. */
-    transform: translate(285.7px, 38.1px);
-  }
 }
 
 /* ── Empty state ───────────────────────────────────────────────────────── */

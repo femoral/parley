@@ -86,6 +86,18 @@ interface SeaTokens {
   abyss: string;
   foam: string;
   vignette: string;
+  /** Room sea radial: centre + half-axes as fractions of the cockpit box. */
+  gradCx: number;
+  gradCy: number;
+  gradRx: number;
+  gradRy: number;
+  /** Room vignette radial: same coordinate system as the DOM atmos overlay. */
+  vignetteCx: number;
+  vignetteCy: number;
+  vignetteRx: number;
+  vignetteRy: number;
+  /** Transparent through this radius fraction; then ramps to vignette colour. */
+  vignetteInner: number;
 }
 
 interface CachedIslandSprite {
@@ -112,6 +124,12 @@ function cssToken(element: Element, name: string): string {
   return getComputedStyle(element).getPropertyValue(name).trim();
 }
 
+function cssNumber(element: Element, name: string, fallback: number): number {
+  const raw = cssToken(element, name);
+  const value = Number.parseFloat(raw);
+  return Number.isFinite(value) ? value : fallback;
+}
+
 function readSeaTokens(scene: HTMLElement): SeaTokens {
   return {
     shallow: cssToken(scene, "--sea-shallow"),
@@ -120,7 +138,50 @@ function readSeaTokens(scene: HTMLElement): SeaTokens {
     abyss: cssToken(scene, "--sea-abyss"),
     foam: cssToken(scene, "--sea-foam"),
     vignette: cssToken(scene, "--sea-vignette"),
+    gradCx: cssNumber(scene, "--sea-grad-cx", 0.5),
+    gradCy: cssNumber(scene, "--sea-grad-cy", -0.06),
+    gradRx: cssNumber(scene, "--sea-grad-rx", 0.65),
+    gradRy: cssNumber(scene, "--sea-grad-ry", 0.5),
+    vignetteCx: cssNumber(scene, "--sea-vignette-cx", 0.5),
+    vignetteCy: cssNumber(scene, "--sea-vignette-cy", 0.46),
+    vignetteRx: cssNumber(scene, "--sea-vignette-rx", 0.78),
+    vignetteRy: cssNumber(scene, "--sea-vignette-ry", 0.72),
+    vignetteInner: cssNumber(scene, "--sea-vignette-inner", 0.38),
   };
+}
+
+/**
+ * Fill an elliptical radial gradient defined in room coordinates, covering the
+ * room box. Caller must have translated so room origin maps to canvas origin
+ * (translate(-sceneOffsetX, -sceneOffsetY) after setTransform to CSS pixels).
+ */
+function fillRoomRadial(
+  ctx: CanvasRenderingContext2D,
+  roomW: number,
+  roomH: number,
+  cxFrac: number,
+  cyFrac: number,
+  rxFrac: number,
+  ryFrac: number,
+  stops: ReadonlyArray<readonly [number, string]>,
+): void {
+  const cx = roomW * cxFrac;
+  const cy = roomH * cyFrac;
+  // Guard degenerate axes (collapsed cockpit during tests / first layout).
+  const rx = Math.max(roomW * rxFrac, 1);
+  const ry = Math.max(roomH * ryFrac, 1);
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.scale(rx, ry);
+  const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, 1);
+  for (const [offset, color] of stops) {
+    gradient.addColorStop(offset, color);
+  }
+  ctx.fillStyle = gradient;
+  const left = (0 - cx) / rx;
+  const top = (0 - cy) / ry;
+  ctx.fillRect(left, top, roomW / rx, roomH / ry);
+  ctx.restore();
 }
 
 function canvasContext(canvas: HTMLCanvasElement): CanvasRenderingContext2D | null {
@@ -228,15 +289,25 @@ function paintBackdrop(
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, width, height);
 
-  // Flat mode won validation. The stops come from the Cove sea tokens, so the
-  // visible backdrop and the pixels copied over submerged hulls are identical.
-  const sea = ctx.createLinearGradient(0, 0, width * 0.35, height);
-  sea.addColorStop(0, tokens.shallow);
-  sea.addColorStop(0.45, tokens.mid);
-  sea.addColorStop(0.75, tokens.deep);
-  sea.addColorStop(1, tokens.abyss);
-  ctx.fillStyle = sea;
-  ctx.fillRect(0, 0, width, height);
+  // One continuous sea (#189): sample the room gradient + room vignette at this
+  // canvas's position inside .pc-cockpit so edge tones match the DOM backdrop
+  // and hull cover blocks (which copy these pixels) stay invisible.
+  const room = scene.closest<HTMLElement>(".pc-cockpit");
+  const roomRect = room ? frameRect(room, rects) : sceneRect;
+  const roomW = Math.max(room?.clientWidth || roomRect.width, 1);
+  const roomH = Math.max(room?.clientHeight || roomRect.height, 1);
+  const originX = sceneRect.left - roomRect.left;
+  const originY = sceneRect.top - roomRect.top;
+
+  ctx.save();
+  ctx.translate(-originX, -originY);
+  fillRoomRadial(ctx, roomW, roomH, tokens.gradCx, tokens.gradCy, tokens.gradRx, tokens.gradRy, [
+    [0, tokens.shallow],
+    [0.3, tokens.mid],
+    [0.6, tokens.deep],
+    [1, tokens.abyss],
+  ]);
+  ctx.restore();
 
   for (const image of scene.querySelectorAll<HTMLImageElement>(".pc-island__sprite")) {
     if (!image.complete || image.naturalWidth === 0) continue;
@@ -249,19 +320,26 @@ function paintBackdrop(
   }
   ctx.globalAlpha = 1;
 
-  // The scene vignette is baked into the backdrop (mirroring .pc-scene-sea's
-  // radial-gradient, whose background is suppressed in sailing mode) so the
-  // cover blocks copy already-dimmed water — a DOM vignette above the FX
-  // canvas would leave every copied block a visibly brighter rectangle.
+  // Bake the room-scoped vignette (same ellipse as .pc-atmos--vignette) so
+  // cover blocks copy already-dimmed water. A DOM vignette above the FX canvas
+  // would leave every copied block a visibly brighter rectangle. The scene-
+  // local vignette that created the centre box is gone.
   ctx.save();
-  ctx.translate(width * 0.5, height * 0.08);
-  ctx.scale(width * 1.2, height * 0.9);
-  const vignette = ctx.createRadialGradient(0, 0, 0, 0, 0, 1);
-  vignette.addColorStop(0, "rgba(0, 0, 0, 0)");
-  vignette.addColorStop(0.4, "rgba(0, 0, 0, 0)");
-  vignette.addColorStop(1, tokens.vignette);
-  ctx.fillStyle = vignette;
-  ctx.fillRect(-2, -2, 4, 4);
+  ctx.translate(-originX, -originY);
+  fillRoomRadial(
+    ctx,
+    roomW,
+    roomH,
+    tokens.vignetteCx,
+    tokens.vignetteCy,
+    tokens.vignetteRx,
+    tokens.vignetteRy,
+    [
+      [0, "rgba(0, 0, 0, 0)"],
+      [tokens.vignetteInner, "rgba(0, 0, 0, 0)"],
+      [1, tokens.vignette],
+    ],
+  );
   ctx.restore();
 }
 
