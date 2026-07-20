@@ -30,6 +30,69 @@ Closest integration shape: **spawn-per-turn** like codex/grok — `claude -p …
 
 ---
 
+## Session provenance: deterministic hook, incomplete metadata
+
+**Finding for [#191](https://github.com/femoral/parley/issues/191): no, not for all four required values.** Claude Code does expose a deterministic, pre-model `SessionStart` hook and an environment-persistence channel. That hook can reliably supply `PARLEY_SESSION_ID=stdin.session_id` and the constant `PARLEY_HARNESS=claude`. It cannot reliably supply harness-ground-truth `PARLEY_MODEL` because the documented `stdin.model` field is optional and was absent in the installed CLI probe, and it cannot supply `PARLEY_EFFORT` because the hook schema exposes no resolved effort field. This is an incomplete metadata surface, not an absent lifecycle signal. **DOCS** [hooks reference](https://code.claude.com/docs/en/hooks#sessionstart); **VERIFIED** on 2.1.216.
+
+### Exact lifecycle and plugin mechanism
+
+A distributable plugin places its optional manifest at `.claude-plugin/plugin.json` and hook configuration at the plugin-root `hooks/hooks.json` (not inside `.claude-plugin/`). The hook entry is a `SessionStart` command hook, normally matching `startup|resume` so it runs for both a new and resumed session:
+
+```json
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/scripts/session-env.sh\""
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+Claude Code invokes the command itself and sends hook input as JSON on stdin. `SessionStart` fires whenever a session starts or resumes; its matcher is the start source (`startup`, `resume`, `clear`, or `compact`). It occurs outside the agentic/model loop: in a 2.1.216 probe, `hook_started` and successful `hook_response` events appeared before `system/init`, and the hook completed before an intentionally invalid API key produced an authentication failure with zero model tokens. The hook input already contained the same generated UUID later emitted by `system/init`. No prompt interpretation or tool choice caused the hook to run. **DOCS** [hook lifecycle and schema](https://code.claude.com/docs/en/hooks#sessionstart); **VERIFIED** with `--include-hook-events`.
+
+There are two operational exceptions to “always”: `--bare` explicitly skips hooks and plugin sync, while `--safe-mode` disables hooks and plugins. Enterprise `allowManagedHooksOnly` policy can also block ordinary user, project, and plugin hooks (managed force-enabled plugin hooks are exempt). These are explicit harness postures/policies rather than nondeterminism in an enabled plugin. **VERIFIED** `claude --help`; **DOCS** [hook locations](https://code.claude.com/docs/en/hooks#hook-locations).
+
+### Metadata available at `SessionStart`
+
+| Parley variable | Hook source | Result |
+| --- | --- | --- |
+| `PARLEY_SESSION_ID` | Required common input `session_id` | **Available.** The probe received a UUID equal to the `system/init.session_id`, before authentication/model execution. |
+| `PARLEY_HARNESS` | Plugin-owned constant `claude` | **Available.** This is identity of the native integration, not inferred from the model. |
+| `PARLEY_MODEL` | Optional SessionStart input `model` | **Not deterministic.** Docs call it the active model identifier but explicitly allow omission after `/clear` or conversation recovery. More importantly, 2.1.216 omitted it on a fresh `startup` even when invoked with `--model sonnet`; the later `system/init` reported `claude-sonnet-5`. A plugin must not substitute the CLI flag, settings, or environment because those are not the harness's resolved ground truth across all precedence/fallback paths. |
+| `PARLEY_EFFORT` | None | **Unavailable.** `--effort`, `/effort`, `CLAUDE_CODE_EFFORT_LEVEL`, and settings `effortLevel` configure effort, but `SessionStart` input has no resolved effort/thinking field. Reading one configuration source would miss precedence, defaults, and later `/effort` changes. |
+
+The other common fields are `transcript_path`, `cwd`, and `hook_event_name`; `SessionStart` adds `source` plus optional `model`, `agent_type`, and `session_title`. There is no documented hook input containing the resolved effort. **DOCS** [SessionStart input](https://code.claude.com/docs/en/hooks#sessionstart-input), [model/effort configuration](https://code.claude.com/docs/en/model-config#adjust-effort-level).
+
+### Environment effect and its boundary
+
+`SessionStart` command hooks receive `CLAUDE_ENV_FILE`. Appending shell-safe `export NAME=value` statements to that file makes the values available to **subsequent Bash commands executed by Claude Code**; Claude Code sources the file as a preamble before each Bash command. This is the supported nearest equivalent to exporting into a running process. A child hook cannot mutate the already-running Claude Code process or its parent shell, so the variables do not become ambient outside Claude's Bash-tool environment. **DOCS** [persist environment variables](https://code.claude.com/docs/en/hooks#persist-environment-variables), [hooks guide](https://code.claude.com/docs/en/hooks-guide#reload-environment-when-directory-or-files-change); **VERIFIED** that `CLAUDE_ENV_FILE` was present in the 2.1.216 hook process.
+
+That channel is sufficient for later `parley` commands launched through Claude Code's Bash tool, without asking the model to report or interpolate provenance. It does not cure the missing `model` and `effort` ground truth. A correct plugin could export the two known values and omit/mark the other two unknown, but it cannot meet ADR-0013's four-variable requirement from current hook metadata. Per the ADR, this finding does not recommend transcript or log scraping.
+
+### Install and uninstall
+
+For development, load the plugin for one session with `claude --plugin-dir ./plugin` (a directory or `.zip`). For persistent distribution, publish the plugin through a Claude Code marketplace containing `.claude-plugin/marketplace.json`, add that marketplace, and install the qualified plugin id:
+
+```bash
+claude plugin marketplace add <owner/repository-or-marketplace-source>
+claude plugin install parley@useparley
+
+# Remove it from the same scope (user is the default):
+claude plugin uninstall parley@useparley
+```
+
+`--scope user|project|local` is accepted by both install and uninstall; user scope writes `~/.claude/settings.json`, project scope writes `.claude/settings.json`, and local scope writes `.claude/settings.local.json`. Marketplace installations are copied into `~/.claude/plugins/cache`; callers should not install by copying directly into that cache. The package name proposed by ADR-0013 (`@useparley/plugin-claude-code`) is the npm/repository artifact identity, while Claude's install operand is the marketplace entry id in `plugin-name@marketplace-name` form. **VERIFIED** `claude plugin install --help` and `uninstall --help`; **DOCS** [plugin reference](https://code.claude.com/docs/en/plugins-reference#cli-commands-reference), [marketplace installation](https://code.claude.com/docs/en/discover-plugins#install-plugins).
+
+---
+
 ## 1. Identity & install
 
 | Field | Value | Evidence |
