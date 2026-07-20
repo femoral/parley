@@ -1,6 +1,12 @@
+import { useEffect, useRef, useState } from "react";
 import type { EmblemMark } from "../tokens/factions.js";
 import { stateMetaFor } from "../tokens/state-meta.js";
 import { islandVariantFor, type IslandVariant } from "./charted.js";
+import {
+  cancelDeathPhase,
+  hasShip,
+  sailoffHoldMs,
+} from "./island-death.js";
 import { Ship } from "./Ship.js";
 import { Flare } from "./effects/Flare.js";
 import { Fog } from "./effects/Fog.js";
@@ -21,11 +27,16 @@ export interface IslandTask {
   emblem: EmblemMark;
 }
 
-/** States where a sloop is present at the island. `completed`/`failed`/`pending`
- * hide the ship (spec: flag / wreck / bare rising island). */
-function hasShip(state: string): boolean {
-  return state === "running" || state === "awaiting_answer" || state === "stalled" || state === "cancelled";
-}
+export {
+  cancelDeathPhase,
+  hasShip,
+  sailoffHoldMs,
+  SAILOFF_MS,
+  SINK_MS,
+  shipEffectsOpacity,
+  shouldPaintShipEffects,
+} from "./island-death.js";
+export type { CancelDeathPhase } from "./island-death.js";
 
 /**
  * Charted-waters island body: a deterministic raster sprite (one of three
@@ -72,9 +83,11 @@ function IslandBody({
  * scene's state contract lives here: `data-state` on the root is the single
  * source every effect and the ambient CSS read, so an island can only ever show
  * one coherent state — and that state is the exact string the roster badges and
- * the inbox card by. Rising on mount and sinking on `cancelled` are finite CSS
- * transitions; everything ambient (foam, station float, flare pulse, fog drift)
- * is a compositor keyframe.
+ * the inbox card by. Rising on mount is a finite CSS transition; sinking on a
+ * *live* cancel is too. A task that mounts already-cancelled skips choreography
+ * and paints the settled aftermath (`data-death="settled"`) so reload never
+ * replays the death sequence (#187). Everything ambient (foam, station float,
+ * flare pulse, fog drift) is a compositor keyframe.
  *
  * `data-variant` (1..3) selects the charted sprite and tunes effect seats
  * (flag peak, wreck beach, foam scale) so nothing floats detached from the art.
@@ -97,6 +110,12 @@ export interface IslandProps {
   focusable?: boolean;
 }
 
+function reducedMotionPreferred(): boolean {
+  return typeof window !== "undefined" && typeof window.matchMedia === "function"
+    ? window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    : false;
+}
+
 export function Island({
   task,
   onSelectTask,
@@ -108,10 +127,44 @@ export function Island({
   const meta = stateMetaFor(state);
   const variant = islandVariantFor(task.id);
 
+  // Captured on first render only: retained cancelled tasks mount settled.
+  const mountedAsCancelledRef = useRef(state === "cancelled");
+  const prevStateRef = useRef(state);
+  const [sailoffComplete, setSailoffComplete] = useState(false);
+
+  useEffect(() => {
+    const previous = prevStateRef.current;
+    prevStateRef.current = state;
+
+    if (state !== "cancelled") {
+      setSailoffComplete(false);
+      return;
+    }
+
+    // Live cancel: was non-cancelled last paint, and we did not mount already dead.
+    if (previous !== "cancelled" && !mountedAsCancelledRef.current) {
+      setSailoffComplete(false);
+      const hold = sailoffHoldMs(reducedMotionPreferred());
+      if (hold <= 0) {
+        setSailoffComplete(true);
+        return;
+      }
+      const timer = window.setTimeout(() => setSailoffComplete(true), hold);
+      return () => window.clearTimeout(timer);
+    }
+  }, [state]);
+
+  const deathPhase = cancelDeathPhase({
+    state,
+    mountedAsCancelled: mountedAsCancelledRef.current,
+    sailoffComplete,
+  });
+
   return (
     <div
       className="pc-island"
       data-state={state}
+      data-death={deathPhase ?? undefined}
       data-variant={variant.id}
       role="button"
       tabIndex={focusable ? 0 : -1}
@@ -130,7 +183,7 @@ export function Island({
         {state === "stalled" && <Fog />}
         {state === "failed" && <Wreck />}
       </div>
-      {hasShip(state) && (
+      {hasShip(state, deathPhase) && (
         <Ship
           coat={task.coat}
           coatDark={task.coatDark}

@@ -18,8 +18,9 @@ import { describe, expect, it } from "vitest";
  * state is already encoded structurally via `data-state` and distinct child
  * elements/markers, not only through motion — see `tests/scene.test.tsx`'s
  * per-state assertions (flare + PARLEY! ribbon for awaiting, fog for stalled,
- * planted flag for completed, wreck for failed, sail-off pose for cancelled,
- * etc.), which hold with or without any animation running at all.
+ * planted flag for completed, wreck for failed, settled cancelled aftermath
+ * (no sloop; `data-death="settled"` — #187), etc.), which hold with or without
+ * any animation running at all.
  */
 
 const TOKENS_CSS = fs.readFileSync(

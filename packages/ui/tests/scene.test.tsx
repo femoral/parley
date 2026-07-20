@@ -130,11 +130,37 @@ describe("Island renders its state through a single data-state (#69)", () => {
     expect(container.querySelector(".pc-flag")).toBeNull();
   });
 
-  it("cancelled — the sloop sails off as the island sinks", () => {
+  it("cancelled on mount — settled aftermath: no sloop, no sink replay (#187)", () => {
     const { container } = render(<Island task={island("cancelled")} onSelectTask={noop} />);
+    const root = container.querySelector(".pc-island");
+    expect(root?.getAttribute("data-state")).toBe("cancelled");
+    expect(root?.getAttribute("data-death")).toBe("settled");
+    // Retained cancelled: no ghost sloop, no sailoff pose to spawn near the galleon.
+    expect(container.querySelector(".pc-sloop")).toBeNull();
+    expect(container.querySelector(".pc-voyage")).toBeNull();
+    expect(container.querySelector(".pc-flag")).toBeNull();
+  });
+
+  it("live cancel — plays sink + sailoff once, then settles without a residual sloop (#187)", () => {
+    vi.useFakeTimers();
+    const { container, rerender } = render(
+      <Island task={island("running")} onSelectTask={noop} />,
+    );
+    expect(container.querySelector(".pc-voyage[data-state='running']")).toBeTruthy();
+
+    rerender(<Island task={island("cancelled")} onSelectTask={noop} />);
+    const root = container.querySelector(".pc-island");
+    expect(root?.getAttribute("data-death")).toBe("live");
     expect(container.querySelector(".pc-sloop--sailoff")).toBeTruthy();
     expect(container.querySelector('.pc-voyage[data-sailing-pose="sailoff"]')).toBeTruthy();
-    expect(container.querySelector(".pc-flag")).toBeNull();
+
+    act(() => {
+      vi.advanceTimersByTime(2400);
+    });
+    expect(root?.getAttribute("data-death")).toBe("settled");
+    expect(container.querySelector(".pc-sloop")).toBeNull();
+    expect(container.querySelector(".pc-voyage")).toBeNull();
+    vi.useRealTimers();
   });
 
   it("labels the island with its name and manifest state label for AT", () => {
@@ -321,7 +347,31 @@ describe("Scene lays out the active session's cove (#69)", () => {
     }
   });
 
-  it("fades a ship out when it first mounts in the cancelled sail-off pose", () => {
+  it("does not mount a sailoff sloop for a retained cancelled task (#187)", () => {
+    const frames: FrameRequestCallback[] = [];
+    vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+      frames.push(callback);
+      return frames.length;
+    });
+    vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => undefined);
+
+    const cancelled = region("cancelled", "cancelled", [island("cancelled")]);
+    const { container } = render(
+      <Scene
+        sessions={[cancelled]}
+        activeSessionId="cancelled"
+        onSelectTask={noop}
+        onSelectSession={noop}
+      />,
+    );
+    act(() => frames.shift()?.(1_000));
+
+    expect(container.querySelector('[data-sailing-pose="sailoff"]')).toBeNull();
+    expect(container.querySelector('[data-sailing-ship="sloop"]')).toBeNull();
+    expect(container.querySelector(".pc-island")?.getAttribute("data-death")).toBe("settled");
+  });
+
+  it("fades a ship out on a live cancel while keeping its on-station origin (#187)", () => {
     vi.spyOn(window, "matchMedia").mockReturnValue({
       matches: false,
       media: "(prefers-reduced-motion: reduce)",
@@ -351,23 +401,41 @@ describe("Scene lays out the active session's cove (#69)", () => {
       return new DOMRect(0, 0, 0, 0);
     });
 
-    const cancelled = region("cancelled", "cancelled", [island("cancelled")]);
-    const { container } = render(
+    const running = region("live-cancel", "live-cancel", [island("running")]);
+    const { container, rerender } = render(
       <Scene
-        sessions={[cancelled]}
-        activeSessionId="cancelled"
+        sessions={[running]}
+        activeSessionId="live-cancel"
         onSelectTask={noop}
         onSelectSession={noop}
       />,
     );
-    act(() => frames.shift()?.(1_000));
+    // Let the sloop arrive on station so sailoff starts from island coords.
+    act(() => {
+      for (let step = 0; step < 40; step += 1) {
+        frames.shift()?.(1_000 + step * 100);
+      }
+    });
+    expect(container.querySelector('[data-sailing-pose="orbit"]')).toBeTruthy();
 
+    rerender(
+      <Scene
+        sessions={[region("live-cancel", "live-cancel", [island("cancelled")])]}
+        activeSessionId="live-cancel"
+        onSelectTask={noop}
+        onSelectSession={noop}
+      />,
+    );
+    expect(container.querySelector(".pc-island")?.getAttribute("data-death")).toBe("live");
+
+    act(() => frames.shift()?.(5_000));
     const ship = container.querySelector('[data-sailing-pose="sailoff"]') as HTMLElement;
+    expect(ship).toBeTruthy();
     expect(Number(ship.style.opacity)).toBeGreaterThan(0.99);
 
     act(() => {
       for (let step = 1; step <= 12; step += 1) {
-        frames.shift()?.(1_000 + step * 100);
+        frames.shift()?.(5_000 + step * 100);
       }
     });
     expect(Number(ship.style.opacity)).toBeGreaterThan(0.4);

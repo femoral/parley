@@ -1,4 +1,5 @@
 import { useLayoutEffect, useRef, useState } from "react";
+import { shouldPaintShipEffects, shipEffectsOpacity } from "./island-death.js";
 import { FLAGSHIP_CENTER, stationOffset, voyageFromFlagship } from "./layout.js";
 
 /**
@@ -67,6 +68,8 @@ interface PaintedShip {
   width: number;
   height: number;
   roll: number;
+  /** Effective DOM opacity (0..1); foam / cover blocks scale with this (#187). */
+  opacity: number;
   islandSprite?: HTMLImageElement;
   islandRect?: DOMRect;
   islandWaterY?: number;
@@ -390,6 +393,10 @@ function paintShipEffects(
   ctx.clearRect(0, 0, width, height);
 
   for (const ship of ships) {
+    // Effects track the ship's effective opacity, not mere DOM presence —
+    // a fully faded sailoff sloop must not leave an immortal foam patch (#187).
+    if (ship.opacity <= 0.02) continue;
+
     const calibration = SHIPS[ship.runtime.kind];
     const topY = pointOnShip(ship, 0, calibration.draftFy).y;
     const bottomY = pointOnShip(ship, 0, calibration.hullBotFy).y;
@@ -397,6 +404,7 @@ function paintShipEffects(
     const edgeB = pointOnShip(ship, calibration.hullHalfW, calibration.draftFy).x;
     const left = Math.min(edgeA, edgeB) - 6;
     const right = Math.max(edgeA, edgeB) + 6;
+    const effectAlpha = ship.opacity;
 
     // The sloop's approved hull bottom sits above its draft line, producing a
     // negative rectangle. Keep the harness guard: its steep mask does the work.
@@ -411,6 +419,7 @@ function paintShipEffects(
       const copyHeight = sourceBottom - sourceY;
       if (copyWidth > 0 && copyHeight > 0) {
         ctx.save();
+        ctx.globalAlpha = effectAlpha;
         ctx.filter = `blur(${FX.blockBlur}px)`;
         ctx.drawImage(
           backdrop,
@@ -434,7 +443,7 @@ function paintShipEffects(
     ctx.lineCap = "round";
     for (let x = left; x < right - 12; x += 12) {
       const u = (x - left) / (right - left);
-      ctx.globalAlpha = FX.foamAlpha * Math.pow(Math.sin(Math.PI * u), 0.7);
+      ctx.globalAlpha = FX.foamAlpha * effectAlpha * Math.pow(Math.sin(Math.PI * u), 0.7);
       ctx.beginPath();
       ctx.moveTo(x, topY + Math.sin(x * 0.08 + t * 3) * 1.6);
       ctx.lineTo(x + 12, topY + Math.sin((x + 12) * 0.08 + t * 3) * 1.6);
@@ -692,6 +701,15 @@ export function SailingScene() {
             cy = geometry.rootRect.top - sceneRect.top + runtime.y * geometry.scale + bob;
           }
 
+          // Inline style is what the driver writes for arrival/sailoff fades;
+          // empty string means full opacity (CSS default).
+          const opacity = shipEffectsOpacity(element.style.opacity);
+          if (!shouldPaintShipEffects(element.style.opacity) && pose === "sailoff") {
+            // Still drive transforms above, but omit fully-faded sailoff hulls
+            // from the painted list so foam cannot outlive the ship (#187).
+            continue;
+          }
+
           painted.push({
             runtime,
             cx,
@@ -699,6 +717,7 @@ export function SailingScene() {
             width: shipWidth,
             height: shipHeight,
             roll,
+            opacity,
             islandSprite: geometry?.sprite,
             islandRect: geometry?.rect,
             islandWaterY: geometry

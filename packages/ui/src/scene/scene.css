@@ -272,9 +272,11 @@
   outline: 2px solid var(--brass-bright);
   outline-offset: 2px;
 }
-/* Rise on mount, sink on cancel — finite CSS transitions. `both` holds the end
-   frame, so reduced-motion (which collapses the duration) lands on the risen
-   island rather than mid-flight. */
+/* Rise on mount, sink on *live* cancel — finite CSS transitions. `both` holds
+   the end frame, so reduced-motion (which collapses the duration) lands on the
+   risen island rather than mid-flight. Settled cancelled (retained / post-
+   fade) jumps to the sunk end state with no animation so remount never replays
+   the death sequence (#187). */
 .pc-island__rise {
   position: absolute;
   inset: 0;
@@ -284,8 +286,13 @@
   animation: pc-island-rise 1050ms cubic-bezier(0.16, 1, 0.3, 1) both;
   transform-origin: 50% 100%;
 }
-.pc-island[data-state="cancelled"] .pc-island__rise {
+.pc-island[data-state="cancelled"][data-death="live"] .pc-island__rise {
   animation: pc-island-sink 2200ms ease-in forwards;
+}
+.pc-island[data-state="cancelled"][data-death="settled"] .pc-island__rise {
+  animation: none;
+  transform: translateY(110px) scale(0.6);
+  opacity: 0;
 }
 @keyframes pc-island-rise {
   0% {

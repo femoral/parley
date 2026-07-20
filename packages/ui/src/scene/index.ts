@@ -16,7 +16,16 @@ export type { SessionRegionData, SessionRegionProps } from "./SessionRegion.js";
 export { EdgeAlerts, EDGE_ALERT_STACK_CAP } from "./EdgeAlerts.js";
 export type { EdgeAlertItem, EdgeAlertSide, EdgeAlertsProps } from "./EdgeAlerts.js";
 export { Flagship } from "./Flagship.js";
-export { Island } from "./Island.js";
-export type { IslandTask } from "./Island.js";
+export {
+  Island,
+  cancelDeathPhase,
+  hasShip,
+  sailoffHoldMs,
+  SAILOFF_MS,
+  SINK_MS,
+  shipEffectsOpacity,
+  shouldPaintShipEffects,
+} from "./Island.js";
+export type { IslandTask, CancelDeathPhase } from "./Island.js";
 export { Ship } from "./Ship.js";
 export type { ShipProps } from "./Ship.js";
