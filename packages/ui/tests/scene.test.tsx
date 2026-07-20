@@ -19,7 +19,10 @@ function endCameraTravel(container: HTMLElement) {
   });
 }
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+});
 
 const noop = () => undefined;
 
@@ -130,7 +133,7 @@ describe("Island renders its state through a single data-state (#69)", () => {
   it("cancelled — the sloop sails off as the island sinks", () => {
     const { container } = render(<Island task={island("cancelled")} onSelectTask={noop} />);
     expect(container.querySelector(".pc-sloop--sailoff")).toBeTruthy();
-    expect(container.querySelector(".pc-voyage")).toBeNull();
+    expect(container.querySelector('.pc-voyage[data-sailing-pose="sailoff"]')).toBeTruthy();
     expect(container.querySelector(".pc-flag")).toBeNull();
   });
 
@@ -165,6 +168,21 @@ describe("Ship carries faction tint on the --coat/--coat-dark pair (#69)", () =>
     expect(voyage.style.getPropertyValue("--coat-dark")).toBe("#141416");
   });
 
+  it("clips the approved sail and pennant tints without shipping a zero-opacity hull layer", () => {
+    const { container } = render(
+      <Ship
+        coat="#10a37f"
+        coatDark="#0b7359"
+        emblem={{ kind: "glyph", char: "C" }}
+        state="running"
+      />,
+    );
+    expect(container.querySelector(".pc-sloop__tints")).toBeTruthy();
+    expect(container.querySelector(".pc-sloop__tint--sail")).toBeTruthy();
+    expect(container.querySelector(".pc-sloop__tint--pennant")).toBeTruthy();
+    expect(container.querySelector(".pc-sloop__tint--hull")).toBeNull();
+  });
+
   it("keeps the tint on the sailing-off pose too", () => {
     const { container } = render(
       <Ship
@@ -177,6 +195,24 @@ describe("Ship carries faction tint on the --coat/--coat-dark pair (#69)", () =>
     const sloop = container.querySelector(".pc-sloop--sailoff") as HTMLElement;
     expect(sloop.style.getPropertyValue("--coat")).toBe("#6c5ce7");
     expect(sloop.style.getPropertyValue("--coat-dark")).toBe("#4a3db8");
+  });
+
+  it.each([
+    ["running", "orbit"],
+    ["awaiting_answer", "anchored"],
+    ["stalled", "adrift"],
+    ["cancelled", "sailoff"],
+  ])("wires the %s state to the sailing driver's %s pose", (state, pose) => {
+    const { container } = render(
+      <Ship
+        coat="#2b2b2e"
+        coatDark="#141416"
+        emblem={{ kind: "glyph", char: "π" }}
+        state={state}
+      />,
+    );
+    const ship = container.querySelector('[data-sailing-ship="sloop"]');
+    expect(ship?.getAttribute("data-sailing-pose")).toBe(pose);
   });
 });
 
@@ -196,6 +232,26 @@ const REGION: SessionRegionData = region("sess-1", "sess-1", [
 ], { state: "awaiting_answer", count: 1, rank: 0 });
 
 describe("Scene lays out the active session's cove (#69)", () => {
+  it("mounts one scene-level sailing driver with a backdrop and overlay canvas", () => {
+    const { container } = render(
+      <Scene sessions={[REGION]} activeSessionId="sess-1" onSelectTask={noop} onSelectSession={noop} />,
+    );
+    expect(container.querySelectorAll(".pc-sailing-layer")).toHaveLength(1);
+    expect(container.querySelectorAll("canvas.pc-sailing-sea")).toHaveLength(1);
+    expect(container.querySelectorAll("canvas.pc-sailing-fx")).toHaveLength(1);
+  });
+
+  it("starts the scene clock on mount and cancels it on unmount", () => {
+    const request = vi.spyOn(window, "requestAnimationFrame").mockReturnValue(41);
+    const cancel = vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => undefined);
+    const view = render(
+      <Scene sessions={[REGION]} activeSessionId="sess-1" onSelectTask={noop} onSelectSession={noop} />,
+    );
+    expect(request).toHaveBeenCalled();
+    view.unmount();
+    expect(cancel).toHaveBeenCalledWith(41);
+  });
+
   it("renders exactly one island per task of the session", () => {
     const { container } = render(
       <Scene sessions={[REGION]} activeSessionId="sess-1" onSelectTask={noop} onSelectSession={noop} />,

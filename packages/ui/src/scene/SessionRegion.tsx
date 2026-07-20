@@ -53,7 +53,15 @@ export function SessionRegion({
   dy,
   active = true,
 }: SessionRegionProps) {
-  const style = { transform: `translate(-50%, -50%) translate(${dx}px, ${dy}px)` };
+  const islandCount = session.tasks.length;
+  // The harness's pull-back is local to this region: spread new berths through
+  // a larger world, then scale the whole region down toward sqrt(5/N). The
+  // scene-level driver eases --region-zoom; Camera continues to own only the
+  // cross-session pan.
+  const spread = Math.max(1, Math.sqrt(islandCount / 5));
+  const style = {
+    transform: `translate(-50%, -50%) translate(${dx}px, ${dy}px) scale(var(--region-zoom, 1))`,
+  };
   // All voyages home — every task island completed. The flagship dresses ship
   // (signal flags between the masts); pure state, so it can never lie.
   const dressed = session.tasks.length > 0 && session.tasks.every((t) => t.state === "completed");
@@ -61,7 +69,8 @@ export function SessionRegion({
 
   const routes = session.tasks.flatMap((task) => {
     if (!hasVoyageRoute(task.state)) return [];
-    const pos = positions.get(task.id);
+    const raw = positions.get(task.id);
+    const pos = raw ? { x: raw.x * spread, y: raw.y * spread } : undefined;
     if (!pos) return [];
     return [{ id: task.id, x: pos.x, y: pos.y }];
   });
@@ -70,6 +79,7 @@ export function SessionRegion({
     <div
       className="pc-region"
       style={style}
+      data-island-count={islandCount}
       aria-label={`Session ${session.label}`}
       // `inert` is belt-and-suspenders with per-island tabIndex={-1}: blocks
       // pointer/keyboard activation of anything still nested off-camera.
@@ -95,7 +105,8 @@ export function SessionRegion({
         <Flagship label={session.label} dressed={dressed} />
       </div>
       {session.tasks.map((task) => {
-        const pos = positions.get(task.id) ?? { x: 0, y: 150 };
+        const raw = positions.get(task.id) ?? { x: 0, y: 150 };
+        const pos = { x: raw.x * spread, y: raw.y * spread };
         return (
           <div
             key={task.id}

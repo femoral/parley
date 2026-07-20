@@ -5,24 +5,14 @@ import { describe, expect, it } from "vitest";
 /**
  * Reduced-motion regression guard (#70's accessibility pass).
  *
- * Every ambient/attention animation in the package (sea drift, compass spin,
- * beacon pulse, galleon/sloop bob, island rise/sink, shore foam, voyage, wake,
- * flare, fog drift, flag wave, sail-off, camera travel, PARLEY! bounce) is
- * driven by plain CSS `animation`/`transition` declarations — there is no
- * JS-side motion logic in the package (grepped: no `requestAnimationFrame`,
- * no `setTimeout`-driven visual tweening; `useLogTail`'s poll timer and the
- * one-second clock in `useCockpit` are data refreshes, not animation). A
- * single wildcard rule in tokens.css (`*, *::before, *::after` under
- * `@media (prefers-reduced-motion: reduce)`) is therefore sufficient to still
- * every one of them, rather than each needing its own override — see that
- * rule's own comment for the audit.
+ * CSS still owns the ambient/attention loops, while the sailing driver owns
+ * ship travel, orbit, and swell. The wildcard CSS rule stills the former; the
+ * companion `reduced-motion-scene.test.tsx` proves the latter reads matchMedia
+ * and freezes its sim clock at the on-station pose.
  *
- * `window.matchMedia` mocking (the task's "test with matchMedia mocking where
- * practical") isn't practical *here*: nothing in this package's JS reads
- * `matchMedia` (the mechanism is pure CSS), and happy-dom/jsdom don't
- * evaluate `@media` blocks or interpolate `@keyframes` against computed
- * style, so a mocked-media component test would assert nothing real. What
- * *is* testable and load-bearing is (a) the override rule actually exists
+ * Happy DOM does not paint canvas pixels or interpolate CSS keyframes, so
+ * canvas compositing remains a browser visual check. What is testable and
+ * load-bearing is (a) the override rule actually exists
  * with the right shape (this file, via source inspection) and (b) that
  * disabling animation timing can never make a state ambiguous, because every
  * state is already encoded structurally via `data-state` and distinct child

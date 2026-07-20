@@ -5,15 +5,13 @@
  * --coat/--coat-dark so a new faction restyles every ship with zero new art.
  *
  * Motion discipline (research doc's recommendation, enforced here):
- *  - Ambient loops (foam, station float, bob, flare pulse, fog drift) are
- *    compositor keyframes on transform/opacity only — zero JS per frame.
- *  - Finite transitions are CSS too: island rise/sink on mount / data-state,
- *    ship voyage from flagship to island, camera travel on a transform
- *    transition. JS sets props/custom properties once; CSS animates.
+ *  - One scene-level rAF owns ship travel/swell/orbit and the sea/fx canvases.
+ *  - Remaining ambient loops (shore foam, flare pulse, fog drift) stay on the
+ *    compositor; island rise/sink and camera travel remain finite CSS motion.
  *  - Every animated element's BASE style is its legible resting state, so the
  *    global reduced-motion rule (tokens.css) leaves every state readable as a
- *    still image. One-shot voyage/rise use `both`/`forwards` fill so
- *    reduced-motion lands on the end frame (ship on station, island risen).
+ *    still image. Island rise uses `both` fill, while the sailing driver seats
+ *    every ship at its on-station pose when the simulation clock is frozen.
  */
 
 /* ── Viewport & camera ─────────────────────────────────────────────────── */
@@ -34,6 +32,7 @@
      only transition in the scene, and the reduced-motion rule zeroes it. */
   transition: transform 1100ms cubic-bezier(0.4, 0, 0.2, 1);
   will-change: transform;
+  z-index: 2;
 }
 
 /* ── Scene water (behind the camera — parallax, doesn't pan) ────────────── */
@@ -42,7 +41,29 @@
   inset: 0;
   overflow: hidden;
   pointer-events: none;
+  z-index: 0;
   background: radial-gradient(120% 90% at 50% 8%, transparent 40%, var(--sea-vignette) 100%);
+}
+
+/* The span is only a lifecycle/data marker. Its canvases participate directly
+   in the scene's stacking order: deterministic sea below the DOM fleet, exact
+   copied-water/foam pixels above it. One pair serves all mounted regions. */
+.pc-sailing-layer {
+  display: contents;
+}
+.pc-sailing-sea,
+.pc-sailing-fx {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+.pc-sailing-sea {
+  z-index: 1;
+}
+.pc-sailing-fx {
+  z-index: 3;
 }
 /* Moonlight glint — oversized pattern layer, transform-only drift (compositor).
    Base transform is identity so reduced-motion stills on a legible frame. */
@@ -113,6 +134,8 @@
   top: 50%;
   width: 1px;
   height: 1px;
+  transform-origin: 0 0;
+  will-change: transform;
 }
 .pc-region__banner {
   position: absolute;
@@ -139,12 +162,29 @@
 
 /* ── Orchestrator galleon (charted raster + dress-lines overlay) ──────── */
 .pc-galleon {
-  position: relative;
-  width: 172px;
-  /* Bob on the wrapper so the dress overlay rides with the hull. */
-  animation: pc-galleon-bob 6.5s ease-in-out infinite;
-  transform-origin: 50% 90%;
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 200px;
+  transform-origin: 50% 80%;
+  will-change: transform;
   filter: drop-shadow(0 6px 10px rgba(0, 0, 0, 0.45));
+  /* draftFy .43 + maskSoft 10: the approved waterline is 93% down the
+     sprite. The cover canvas replaces the softly faded hull with sea pixels. */
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    rgb(0 0 0) 83%,
+    rgb(0 0 0 / 62%) 90%,
+    transparent 96%,
+    transparent 103%
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    rgb(0 0 0) 83%,
+    rgb(0 0 0 / 62%) 90%,
+    transparent 96%,
+    transparent 103%
+  );
 }
 .pc-galleon__sprite {
   display: block;
@@ -161,15 +201,6 @@
   height: 100%;
   pointer-events: none;
   overflow: visible;
-}
-@keyframes pc-galleon-bob {
-  0%,
-  100% {
-    transform: translateY(0) rotate(-0.6deg);
-  }
-  50% {
-    transform: translateY(-4px) rotate(0.6deg);
-  }
 }
 
 /* ── Charted voyage routes (flagship → island, aged-chart dashed) ───────
@@ -315,6 +346,12 @@
   -webkit-mask-image: radial-gradient(120% 92% at 50% 60%, #000 42%, rgba(0, 0, 0, 0.55) 62%, transparent 92%);
   mask-image: radial-gradient(120% 92% at 50% 60%, #000 42%, rgba(0, 0, 0, 0.55) 62%, transparent 92%);
 }
+/* The same loaded image remains in the DOM as the driver's prop-derived image
+   source and geometry probe; the sea canvas paints its visible pixels so a
+   later hull cover block can copy the exact composited backdrop. */
+.pc-scene-view--sailing .pc-island__sprite {
+  opacity: 0;
+}
 .pc-island__flag-layer {
   position: absolute;
   inset: 0;
@@ -391,69 +428,32 @@
 }
 
 /* ── Sloop (faction agent ship) ──────────────────────────────────────────
- * Voyage: one-shot sail from the flagship to the island on mount. JS sets
- * --voyage-from-* / --station-* once; CSS animates transform only.
- * Base/end frame is ON STATION so reduced-motion stills the ship at the island.
- * Station: gentle bob + heading sway + slow drift (boat on swell, not static).
+ * This is the driver's transform-only DOM sprite. Its containing island still
+ * owns interaction/state effects; the driver owns only pose and motion.
  */
 .pc-voyage {
   position: absolute;
-  left: 50%;
-  top: 52%;
-  width: 0;
-  height: 0;
-  /* Resting frame = on station at the island. */
-  transform: translate(var(--station-x, 88px), var(--station-y, 8px));
-  /* Slow start, cruise, gentle arrival — sailing ease (~3.2s). `both` holds
-     the end frame under reduced-motion (duration collapsed to ~0). */
-  animation: pc-voyage 3.2s cubic-bezier(0.33, 0.1, 0.25, 1) both;
-}
-@keyframes pc-voyage {
-  0% {
-    transform: translate(var(--voyage-from-x, 0px), var(--voyage-from-y, -220px));
-  }
-  100% {
-    transform: translate(var(--station-x, 88px), var(--station-y, 8px));
-  }
-}
-/* Station float — small drift loop like a boat riding swell at anchor. */
-.pc-station {
-  position: absolute;
   left: 0;
   top: 0;
-  animation: pc-station-float 5.8s ease-in-out infinite;
+  width: 90px;
+  height: 75.8px;
+  transform-origin: 50% 80%;
+  will-change: transform;
 }
-@keyframes pc-station-float {
-  0%,
-  100% {
-    transform: translate(0, 0) rotate(-1.2deg);
-  }
-  30% {
-    transform: translate(3px, -2px) rotate(1.4deg);
-  }
-  65% {
-    transform: translate(-2px, 1px) rotate(-0.6deg);
-  }
+.pc-station {
+  display: contents;
 }
-/* Port heading: flip the sloop when the island lies west of the flagship. */
 .pc-heading {
   position: absolute;
-  left: 0;
-  top: 0;
-}
-.pc-voyage--port .pc-heading {
-  transform: scaleX(-1);
+  inset: 0;
 }
 .pc-sloop {
   position: absolute;
-  left: 0;
-  top: 0;
+  inset: 0;
   /* Box aspect matches the painted sprite's native canvas (640×539) so the
      base raster and every mask layer stretch to 100%/100% with zero distortion. */
-  width: 84px;
-  height: 71px;
-  margin-left: -42px;
-  margin-top: -36px;
+  width: 100%;
+  height: 100%;
 }
 .pc-sloop__art {
   position: relative;
@@ -461,29 +461,26 @@
   width: 100%;
   height: 100%;
   filter: drop-shadow(0 3px 4px rgba(0, 0, 0, 0.4));
-  animation: pc-sloop-bob 3.6s ease-in-out infinite;
+  transform: scaleX(var(--sailing-heading, 1));
   transform-origin: 50% 80%;
-}
-.pc-voyage[data-state="stalled"] .pc-sloop__art {
-  animation: pc-adrift 7s ease-in-out infinite;
-}
-@keyframes pc-sloop-bob {
-  0%,
-  100% {
-    transform: translateY(0) rotate(-2deg);
-  }
-  50% {
-    transform: translateY(-2px) rotate(2deg);
-  }
-}
-@keyframes pc-adrift {
-  0%,
-  100% {
-    transform: translate(0, 0) rotate(-5deg);
-  }
-  50% {
-    transform: translate(4px, 1px) rotate(4deg);
-  }
+  will-change: transform;
+  /* draftFy .48 + maskSoft 10 => 98% waterline. The sloop's cover rectangle
+     is degenerate, so the steep mask intentionally carries its submersion.
+     Mask only the art: wake and anchor remain free to extend past its box. */
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    rgb(0 0 0) 88%,
+    rgb(0 0 0 / 62%) 95%,
+    transparent 101%,
+    transparent 108%
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    rgb(0 0 0) 88%,
+    rgb(0 0 0 / 62%) 95%,
+    transparent 101%,
+    transparent 108%
+  );
 }
 
 /* Sloop art — painted aged-chart raster sprite, shared unmodified by every
@@ -525,7 +522,7 @@
 .pc-sloop__tint--pennant {
   background: var(--coat);
   mix-blend-mode: color;
-  opacity: 0.92;
+  opacity: 0.74;
 }
 .pc-sloop__tint--sail {
   -webkit-mask-image: url("./assets/charted/sloop-sail-mask.png");
@@ -534,12 +531,6 @@
 .pc-sloop__tint--pennant {
   -webkit-mask-image: url("./assets/charted/sloop-pennant-mask.png");
   mask-image: url("./assets/charted/sloop-pennant-mask.png");
-}
-/* Hull waterline band: opaque coat-dark fill, same as the old vector waterline. */
-.pc-sloop__tint--hull {
-  background: var(--coat-dark);
-  -webkit-mask-image: url("./assets/charted/sloop-hullband-mask.png");
-  mask-image: url("./assets/charted/sloop-hullband-mask.png");
 }
 .pc-sloop__emblem-layer {
   position: absolute;
@@ -561,28 +552,9 @@
   opacity: 0.92;
 }
 
-/* Sail-off (cancelled) — ship leaves the frame as the island sinks. */
+/* Sail-off (cancelled) — the driver moves/fades this same transform wrapper. */
 .pc-sloop--sailoff {
-  position: absolute;
-  left: 50%;
-  top: 18%;
-  width: 84px;
-  height: 71px;
-  margin-left: -42px;
-  animation: pc-sail-off 2400ms ease-in forwards;
-}
-.pc-sloop--sailoff .pc-sloop__art {
-  animation: pc-sloop-bob 3.6s ease-in-out infinite;
-}
-@keyframes pc-sail-off {
-  0% {
-    transform: translate(0, 0) rotate(-3deg);
-    opacity: 1;
-  }
-  100% {
-    transform: translate(210px, -30px) rotate(6deg);
-    opacity: 0;
-  }
+  pointer-events: none;
 }
 
 /* Anchor rode (awaiting only). */

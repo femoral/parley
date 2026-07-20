@@ -52,7 +52,7 @@ function DressLines() {
  * direction"): a two-masted flagship flying a gold standard, anchored at the
  * heart of its session's water region while its task-islands cluster around it.
  * Not a faction ship — it wears the house brass, not a coat — so it takes no tint
- * props. Gentle bob is a compositor keyframe.
+ * props. Gentle bob comes from the shared scene sailing clock.
  *
  * Hull/sails are a charted raster sprite; the dressed-overall signal-flag
  * ceremony is an SVG overlay pinned to the sprite's masts so the hoist
@@ -67,6 +67,8 @@ export function Flagship({ label, dressed = false }: { label: string; dressed?: 
   return (
     <div
       className="pc-galleon"
+      data-sailing-ship="galleon"
+      data-sailing-pose="flagship"
       role="img"
       aria-label={dressed ? `Orchestrator ${label} — all voyages home` : `Orchestrator ${label}`}
     >

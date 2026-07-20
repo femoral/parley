@@ -5,6 +5,7 @@ import { Camera } from "./Camera.js";
 import { EdgeAlerts, type EdgeAlertItem, type EdgeAlertSide } from "./EdgeAlerts.js";
 import { fnv1a } from "./layout.js";
 import { Sea } from "./Sea.js";
+import { SailingScene } from "./SailingScene.js";
 import { SessionRegion, type SessionRegionData } from "./SessionRegion.js";
 
 export interface SceneProps {
@@ -259,8 +260,9 @@ function SceneWithRegions({
   const edgeItems = edgeAlertsFor(placed, active.dx, activeKey);
 
   return (
-    <div className="pc-scene-view" role="group" aria-label={`The cove — sailing with ${label}`}>
+    <div className="pc-scene-view pc-scene-view--sailing" role="group" aria-label={`The cove — sailing with ${label}`}>
       <Sea />
+      <SailingScene />
       <Camera offsetX={active.dx} offsetY={active.dy} onTravelEnd={handleTravelEnd}>
         {mountedRegions.map(({ session, dx, dy, active: isActive, key }) => (
           <SessionRegion

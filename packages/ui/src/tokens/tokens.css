@@ -11,6 +11,9 @@
   --sea-mid: #123f52;
   --sea-shallow: #1b5064;
   --sea-vignette: rgba(3, 12, 18, 0.72);
+  /* Cool crest sampled from the validated flat-sea sailing harness. Canvas
+     opacity is applied separately (0.14), keeping the effect understated. */
+  --sea-foam: #e4f4fb;
   --sea-gradient: radial-gradient(
     130% 100% at 50% -6%,
     #1b5064 0%,
@@ -276,10 +279,11 @@
 }
 
 /* §"Accessibility" — reduced motion stills every ambient loop; states stay
-   legible as still imagery. A single wildcard rule catches every animation in
-   the app (compass spin, beacon pulse, galleon/sloop bob,
-   island rise/sink, shore foam, orbit, wake, flare, fog drift, flag wave,
-   sail-off, camera travel, PARLEY! bob, scene glint) without each of them
+   legible as still imagery. The sailing driver separately freezes its sim
+   clock from the same media query. This wildcard catches every CSS animation
+   in the app (compass spin, beacon pulse, island rise/sink, shore foam,
+   wake, flare, fog drift, flag wave, camera travel, PARLEY! bob, scene glint)
+   without each of them
    needing its own reduced-motion override — audited against every
    `@keyframes`/`animation`/`transition` declaration in the package (#70).
    `animation-delay` is zeroed too (the wake trail staggers its three dashes

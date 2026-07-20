@@ -1,9 +1,8 @@
 import type { CSSProperties, ReactNode } from "react";
 import type { EmblemMark } from "../tokens/factions.js";
-import { stationOffset, voyageFromFlagship } from "./layout.js";
 import { Wake } from "./effects/Wake.js";
 import sloopUrl from "./assets/charted/sloop.png";
-// Tint masks (sloop-{silhouette,sail,hullband,pennant}-mask.png) are referenced
+// Tint masks (sloop-{silhouette,sail,pennant}-mask.png) are referenced
 // directly from scene.css via relative `mask-image: url(...)` — Vite resolves
 // and fingerprints them like any other CSS asset. Kept out of JS/inline style:
 // an earlier attempt setting `mask-image` via React inline `style` silently
@@ -13,11 +12,11 @@ import sloopUrl from "./assets/charted/sloop.png";
 export interface ShipProps {
   /** Faction coat colour (hex) — the one loud hue on the sails/pennant. */
   coat: string;
-  /** Darker coat (hex) — hull waterline and pennant staff. */
+  /** Darker coat (hex) — faction emblem ink. */
   coatDark: string;
   /** Faction emblem mark, worn on the mainsail. */
   emblem: EmblemMark;
-  /** Task state — decides the sloop's pose: floating on station (running),
+  /** Task state — decides the sloop's pose: circling the island (running),
    * anchored close in (awaiting), adrift (stalled), or sailing off (cancelled). */
   state: string;
   /**
@@ -56,11 +55,10 @@ function SailMark({ emblem }: { emblem: EmblemMark }): ReactNode {
  * The sloop art — a painted aged-chart raster sprite (same codex-imagegen art
  * direction and style-locked composition as the galleon/islands), with the
  * faction coat expressed via CSS `mask-image` + `background-color` recolor
- * layers instead of hand-authored SVG fills. Three tintable regions were
- * segmented as aligned raster masks from the same composition:
- * mainsail+jib and masthead pennant (coat, `mix-blend-mode: color` so the
- * raster's own paint shading/highlights show through the recolor), and the
- * hull waterline band (coat-dark, opaque). A fourth mask of the full sprite's
+ * layers instead of hand-authored SVG fills. The mainsail+jib and masthead
+ * pennant use `mix-blend-mode: color` so the raster's own paint shading and
+ * highlights show through. The approved hull tint opacity is zero, so its
+ * dead mask/layer is intentionally omitted. A full-sprite mask
  * own alpha silhouette clips the tint layers so a slightly generous mask trace
  * never bleeds paint past the hull/sail edges. The neutral wood-hull/rigging
  * detail underneath is shared by every faction — zero new art per faction,
@@ -72,7 +70,6 @@ function Sloop({ emblem }: { emblem: EmblemMark }) {
       <span className="pc-sloop__tints" aria-hidden="true">
         <span className="pc-sloop__tint pc-sloop__tint--sail" />
         <span className="pc-sloop__tint pc-sloop__tint--pennant" />
-        <span className="pc-sloop__tint pc-sloop__tint--hull" />
       </span>
       <SailMark emblem={emblem} />
     </span>
@@ -84,15 +81,15 @@ function Sloop({ emblem }: { emblem: EmblemMark }) {
  * direction"). Faction is expressed entirely through the `--coat`/`--coat-dark`
  * pair set here, so a new faction record restyles every ship with zero new art.
  *
- * Pose is state-driven and CSS renders it from `data-state`:
- * - Mount: one-shot voyage from the flagship to the island (transform only).
- * - `running`: float on station with gentle bob/sway/drift + subtle wake.
+ * Pose is state-driven and the scene's single sailing driver renders it from
+ * `data-sailing-pose` using transform-only writes:
+ * - Mount: one-shot voyage from the flagship to the island.
+ * - `running`: orbit the island with gentle bob/sway + subtle wake.
  * - `awaiting_answer`: anchored close in (anchor rode + flare/ribbon on island).
  * - `stalled`: adrift on station.
  * - `cancelled`: sails off the frame.
  *
- * Ambient loops and the voyage are compositor keyframes — zero JS per frame.
- * Base/end frames are on-station at the island so reduced-motion stills there.
+ * Reduced motion freezes the driver's sim clock at the on-station frame.
  */
 export function Ship({
   coat,
@@ -102,36 +99,28 @@ export function Ship({
   islandX = 0,
   islandY = 150,
 }: ShipProps) {
-  const island = { x: islandX, y: islandY };
-  const from = voyageFromFlagship(island);
-  // Awaiting sits closer in; running/stalled hold a bit further offshore.
-  const closeness = state === "awaiting_answer" ? 58 : state === "stalled" ? 96 : 88;
-  const station = stationOffset(island, closeness);
-  // Bow art faces starboard (right); flip when the island lies to port of the
-  // flagship so the voyage reads as sailing outward rather than reverse.
-  const headingPort = islandX < 0;
+  const pose =
+    state === "running"
+      ? "orbit"
+      : state === "awaiting_answer"
+        ? "anchored"
+        : state === "stalled"
+          ? "adrift"
+          : "sailoff";
 
   const style = {
     "--coat": coat,
     "--coat-dark": coatDark,
-    "--voyage-from-x": `${from.x}px`,
-    "--voyage-from-y": `${from.y}px`,
-    "--station-x": `${station.x}px`,
-    "--station-y": `${station.y}px`,
   } as CSSProperties;
-
-  if (state === "cancelled") {
-    return (
-      <span className="pc-sloop pc-sloop--sailoff" data-state={state} style={style} aria-hidden="true">
-        <Sloop emblem={emblem} />
-      </span>
-    );
-  }
 
   return (
     <span
-      className={`pc-voyage${headingPort ? " pc-voyage--port" : ""}`}
+      className={`pc-voyage${state === "cancelled" ? " pc-sloop--sailoff" : ""}`}
       data-state={state}
+      data-sailing-ship="sloop"
+      data-sailing-pose={pose}
+      data-island-x={islandX}
+      data-island-y={islandY}
       style={style}
       aria-hidden="true"
     >
