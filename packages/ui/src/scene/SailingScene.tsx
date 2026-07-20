@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef, useState } from "react";
-import { FLAGSHIP_CENTER, voyageFromFlagship } from "./layout.js";
+import { FLAGSHIP_CENTER, stationOffset, voyageFromFlagship } from "./layout.js";
 
 /**
  * User-approved ship-lab calibration. These are deliberately literals rather
@@ -160,7 +160,6 @@ function localIslandGeometry(element: HTMLElement): {
   rect: DOMRect;
   cx: number;
   cy: number;
-  imageCenterY: number;
   radius: number;
   scale: number;
 } | null {
@@ -176,7 +175,6 @@ function localIslandGeometry(element: HTMLElement): {
     rect,
     cx: (rect.left + rect.width / 2 - rootRect.left) / scale,
     cy: (rect.top + rect.height * ISLAND_WATERLINE_FY - rootRect.top) / scale,
-    imageCenterY: (rect.top + rect.height / 2 - rootRect.top) / scale,
     radius: ORBIT.gapPx + rect.width / (2 * scale),
     scale,
   };
@@ -457,19 +455,24 @@ export function SailingScene() {
               if (motionReduced || elapsed >= runtime.arrivalSeconds) {
                 heading = Math.sin(angle) > 0 ? -1 : 1;
               }
-            } else {
-              const distance = pose === "anchored" ? 145 : 215;
-              targetX = geometry.cx - distance;
-              targetY = geometry.imageCenterY + 115;
+            } else if (pose === "anchored" || pose === "adrift") {
+              const island = {
+                x: Number.parseFloat(element.dataset.islandX ?? "0"),
+                y: Number.parseFloat(element.dataset.islandY ?? "150"),
+              };
+              const station = stationOffset(island, pose === "anchored" ? 58 : 96);
+              targetX = geometry.cx + station.x;
+              // stationOffset locates the hull's waterline on the near-side
+              // bearing; compensate the DOM wrapper by the approved draft so
+              // the sprite itself sits in (rather than on top of) that water.
+              targetY = geometry.cy + station.y - calibration.width * calibration.aspect * calibration.draftFy;
               heading = 1;
               if (pose === "adrift") targetX += Math.sin(t * 0.13) * 22;
-              if (pose === "sailoff") {
-                targetX = runtime.fromX + ease(elapsed / 2.4) * 210;
-                targetY = runtime.fromY - ease(elapsed / 2.4) * 30;
-                element.style.opacity = String(1 - ease(elapsed / 2.4));
-              } else {
-                element.style.opacity = "";
-              }
+              element.style.opacity = "";
+            } else {
+              targetX = runtime.fromX + ease(elapsed / 2.4) * 210;
+              targetY = runtime.fromY - ease(elapsed / 2.4) * 30;
+              element.style.opacity = String(1 - ease(elapsed / 2.4));
             }
 
             if (motionReduced) {

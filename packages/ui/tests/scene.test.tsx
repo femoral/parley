@@ -252,6 +252,75 @@ describe("Scene lays out the active session's cove (#69)", () => {
     expect(cancel).toHaveBeenCalledWith(41);
   });
 
+  it("seats anchored and adrift hulls close to their islands on the flagship bearing", () => {
+    vi.spyOn(window, "matchMedia").mockReturnValue({
+      matches: true,
+      media: "(prefers-reduced-motion: reduce)",
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    });
+    const frames: FrameRequestCallback[] = [];
+    vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+      frames.push(callback);
+      return frames.length;
+    });
+    vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => undefined);
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      if (this.classList.contains("pc-scene-view")) {
+        return new DOMRect(0, 0, 800, 600);
+      }
+      if (this.classList.contains("pc-island")) {
+        return new DOMRect(300, 200, 156, 142);
+      }
+      if (this.classList.contains("pc-island__sprite")) {
+        return new DOMRect(304, 210, 148, 100);
+      }
+      return new DOMRect(0, 0, 0, 0);
+    });
+
+    const closeStations = region("close", "close", [
+      island("awaiting_answer", { id: "anchored" }),
+      island("stalled", { id: "adrift" }),
+    ]);
+    const { container } = render(
+      <Scene
+        sessions={[closeStations]}
+        activeSessionId="close"
+        onSelectTask={noop}
+        onSelectSession={noop}
+      />,
+    );
+    act(() => frames.shift()?.(1_000));
+
+    const islandWaterline = { x: 78, y: 78 };
+    const sloopDraftPx = 90 * (539 / 640) * 0.48;
+    for (const [pose, minDistance, maxDistance] of [
+      ["anchored", 45, 75],
+      ["adrift", 80, 115],
+    ] as const) {
+      const ship = container.querySelector(`[data-sailing-pose="${pose}"]`) as HTMLElement;
+      const match = ship.style.transform.match(/^translate\(([-\d.]+)px, ([-\d.]+)px\)/);
+      expect(match).toBeTruthy();
+      const hullOffset = {
+        x: Number(match![1]) - islandWaterline.x,
+        y: Number(match![2]) + sloopDraftPx - islandWaterline.y,
+      };
+      expect(Math.hypot(hullOffset.x, hullOffset.y)).toBeGreaterThan(minDistance);
+      expect(Math.hypot(hullOffset.x, hullOffset.y)).toBeLessThan(maxDistance);
+
+      // The station lies on the island→flagship half-plane, not at a fixed
+      // screen-left offset that can detach it or cross into a neighbour's cove.
+      const islandX = Number(ship.dataset.islandX);
+      const islandY = Number(ship.dataset.islandY);
+      const towardFlagship = { x: -islandX, y: -70 - islandY };
+      expect(hullOffset.x * towardFlagship.x + hullOffset.y * towardFlagship.y).toBeGreaterThan(0);
+    }
+  });
+
   it("renders exactly one island per task of the session", () => {
     const { container } = render(
       <Scene sessions={[REGION]} activeSessionId="sess-1" onSelectTask={noop} onSelectSession={noop} />,
