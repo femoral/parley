@@ -82,6 +82,7 @@ interface SeaTokens {
   deep: string;
   abyss: string;
   foam: string;
+  vignette: string;
 }
 
 interface CachedIslandSprite {
@@ -115,6 +116,7 @@ function readSeaTokens(scene: HTMLElement): SeaTokens {
     deep: cssToken(scene, "--sea-deep"),
     abyss: cssToken(scene, "--sea-abyss"),
     foam: cssToken(scene, "--sea-foam"),
+    vignette: cssToken(scene, "--sea-vignette"),
   };
 }
 
@@ -243,6 +245,21 @@ function paintBackdrop(
     drawIslandSprite(ctx, image, rect, sceneRect, dpr, islandCache);
   }
   ctx.globalAlpha = 1;
+
+  // The scene vignette is baked into the backdrop (mirroring .pc-scene-sea's
+  // radial-gradient, whose background is suppressed in sailing mode) so the
+  // cover blocks copy already-dimmed water — a DOM vignette above the FX
+  // canvas would leave every copied block a visibly brighter rectangle.
+  ctx.save();
+  ctx.translate(width * 0.5, height * 0.08);
+  ctx.scale(width * 1.2, height * 0.9);
+  const vignette = ctx.createRadialGradient(0, 0, 0, 0, 0, 1);
+  vignette.addColorStop(0, "rgba(0, 0, 0, 0)");
+  vignette.addColorStop(0.4, "rgba(0, 0, 0, 0)");
+  vignette.addColorStop(1, tokens.vignette);
+  ctx.fillStyle = vignette;
+  ctx.fillRect(-2, -2, 4, 4);
+  ctx.restore();
 }
 
 function regionZoom(

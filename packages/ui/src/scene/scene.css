@@ -65,13 +65,16 @@
 .pc-sailing-fx {
   z-index: 3;
 }
-/* In a sailing cove the canvas is the sole source of opaque sea pixels. Lift
-   only the low-alpha vignette/glint above it; the later .pc-world at the same
-   z-index still paints ships above both. Cover blocks deliberately copy the
-   undecorated sea/island backdrop — at blur 2 the tiny decoration mismatch is
-   preferable to double-painting the sea. */
+/* In a sailing cove the canvas is the sole source of opaque sea pixels, and it
+   bakes the vignette in (see paintBackdrop) so cover blocks copy already-dimmed
+   water — a DOM vignette above the FX canvas leaves every copied block a
+   visibly brighter rectangle. Only the moonlight glint rides above the canvas
+   (below the FX overlay); its thin low-alpha lines breaking across a blurred
+   cover block are imperceptible, unlike the vignette's brightness ramp. The
+   later .pc-world at the same z-index still paints ships above the glint. */
 .pc-scene-view--sailing .pc-scene-sea {
   z-index: 2;
+  background: none;
 }
 /* Moonlight glint — oversized pattern layer, transform-only drift (compositor).
    Base transform is identity so reduced-motion stills on a legible frame. */
