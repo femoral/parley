@@ -129,6 +129,14 @@ export interface SpawnPlan {
   /** Vendor-specific files, written pre-spawn (e.g. grok's `.grok/config.toml`). */
   files: MaterializedFile[];
   cwd: string;
+  /**
+   * Spawn-time adapter diagnostics (#186) — `VENDOR_DIAG_PREFIX`-tagged lines
+   * the engine appends to the task's `diag.log` before launch. For anomalies an
+   * adapter detects while *preparing* the spawn (e.g. a preflight probe),
+   * which have no stream event to ride on. Fail-open by contract: diagnostics
+   * never block or fail the spawn.
+   */
+  diagnostics?: string[];
 }
 
 /**
