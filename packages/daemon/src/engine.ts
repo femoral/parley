@@ -3061,6 +3061,11 @@ export class TaskEngine {
     // the full vendor.jsonl to find e.g. a vendor approval gate silently
     // cancelling submit_report/ask_orchestrator.
     const diagLog = fs.createWriteStream(path.join(logDir, "diag.log"), { flags: "a" });
+    // Spawn-time adapter diagnostics (#186) — preflight-probe findings and other
+    // prepare-phase anomalies that have no stream event to ride on.
+    for (const diag of plan.diagnostics ?? []) {
+      diagLog.write(`${new Date().toISOString()} ${diag}\n`);
+    }
 
     const [command, ...args] = plan.argv;
     if (!command) throw new Error(`adapter ${adapter.id} produced an empty argv`);

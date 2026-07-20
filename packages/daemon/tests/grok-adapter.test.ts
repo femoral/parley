@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createGrokAdapter } from "../src/adapters/grok.js";
@@ -210,6 +211,17 @@ describe("grok adapter — env passthrough & leak control", () => {
     expect("XAI_API_KEY" in (await createGrokAdapter({}).prepare(spec(), HUB)).env).toBe(false);
   });
 
+  it("gates the Claude-settings permission import on prepare and resume (#179)", async () => {
+    // The scanner vars don't cover grok's permission-rule import from
+    // ~/.claude/settings.json; a user-scope NotebookEdit deny otherwise maps to
+    // deny-all-edits in the child. Verified against grok 0.2.106.
+    const adapter = createGrokAdapter({});
+    const prepared = await adapter.prepare(spec(), HUB);
+    expect(prepared.env._GROK_CLAUDE_MARKER_OVERRIDE).toBe("1");
+    const resumed = await adapter.resume(spec({ sessionId: "sess-1" }), HUB);
+    expect(resumed.env._GROK_CLAUDE_MARKER_OVERRIDE).toBe("1");
+  });
+
   it("pins MCP_TIMEOUT so a parent (Claude) value cannot leak into the child", async () => {
     // Even when the parent env exports its own MCP_TIMEOUT, the plan overrides it
     // (the engine spreads SpawnPlan.env over process.env, so ours wins).
@@ -312,10 +324,78 @@ describe("grok adapter — parseEvent (tolerant)", () => {
     ]);
   });
 
-  it("surfaces error/fatal events", () => {
+  it("surfaces error/fatal events tagged for diag.log (#186)", () => {
+    // Tagged with PARLEY-DIAG so they land in diag.log — grok's stream has no
+    // structured tool/denial events, so this is its only anomaly channel.
     expect(adapter.parseEvent('{"type":"error","message":"boom"}')).toEqual([
-      { kind: "error", text: "boom" },
+      { kind: "error", fatal: false, text: "PARLEY-DIAG error: boom" },
     ]);
+    expect(adapter.parseEvent('{"type":"fatal","message":"dead"}')).toEqual([
+      { kind: "error", fatal: true, text: "PARLEY-DIAG fatal: dead" },
+    ]);
+  });
+});
+
+describe("grok adapter — preflight permission probe (#186)", () => {
+  /** A fake `grok` binary whose `inspect --json` prints the given JSON. */
+  function stubBin(script: string): string {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "parley-grok-stub-"));
+    scratch.push(dir);
+    const file = path.join(dir, "grok");
+    fs.writeFileSync(file, `#!/bin/sh\n${script}\n`, { mode: 0o755 });
+    return file;
+  }
+
+  function inspectStub(json: string): string {
+    return stubBin(`if [ "$1" = "inspect" ]; then echo '${json}'; fi`);
+  }
+
+  it("emits a tagged diagnostic when Claude permission rules would load", async () => {
+    const bin = inspectStub(
+      '{"permissions":{"loaded":9,"sources":["~/.claude/settings.json (settings)"]}}',
+    );
+    const plan = await createGrokAdapter({ PARLEY_GROK_BIN: bin }).prepare(
+      spec({ cwd: os.tmpdir() }),
+      HUB,
+    );
+    expect(plan.diagnostics).toHaveLength(1);
+    expect(plan.diagnostics![0]).toMatch(/^PARLEY-DIAG claude_permission_import loaded=9/);
+    expect(plan.diagnostics![0]).toContain("~/.claude/settings.json (settings)");
+  });
+
+  it("stays quiet when zero rules load (the expected post-#179 state)", async () => {
+    const bin = inspectStub('{"permissions":{"loaded":0,"sources":[]}}');
+    const plan = await createGrokAdapter({ PARLEY_GROK_BIN: bin }).prepare(
+      spec({ cwd: os.tmpdir() }),
+      HUB,
+    );
+    expect(plan.diagnostics).toEqual([]);
+  });
+
+  it("probes resumes with the same tripwire", async () => {
+    const bin = inspectStub('{"permissions":{"loaded":2,"sources":[]}}');
+    const plan = await createGrokAdapter({ PARLEY_GROK_BIN: bin }).resume(
+      spec({ cwd: os.tmpdir(), sessionId: "sess-1" }),
+      HUB,
+    );
+    expect(plan.diagnostics![0]).toMatch(/^PARLEY-DIAG claude_permission_import loaded=2/);
+  });
+
+  it("is fail-open: missing binary, non-zero exit, and shape drift become diagnostics", async () => {
+    const cases = [
+      path.join(os.tmpdir(), "parley-no-such-grok"), // ENOENT
+      stubBin("exit 3"), // non-zero exit
+      inspectStub('{"unexpected":true}'), // shape drift must not disarm the tripwire
+    ];
+    for (const bin of cases) {
+      const plan = await createGrokAdapter({ PARLEY_GROK_BIN: bin }).prepare(
+        spec({ cwd: os.tmpdir() }),
+        HUB,
+      );
+      expect(plan.argv[0]).toBe(bin); // spawn plan intact
+      expect(plan.diagnostics).toHaveLength(1);
+      expect(plan.diagnostics![0]).toMatch(/^PARLEY-DIAG permission_probe failed: /);
+    }
   });
 });
 

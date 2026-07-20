@@ -9,6 +9,7 @@ import type {
   VendorEvent,
   VendorModels,
 } from "./types.js";
+import { VENDOR_DIAG_PREFIX } from "./types.js";
 import { runProbe } from "./probe.js";
 import { tomlString } from "./toml.js";
 
@@ -50,6 +51,30 @@ const CLAUDE_SCANNER_VARS = [
   "GROK_CLAUDE_MCPS_ENABLED",
   "GROK_CLAUDE_HOOKS_ENABLED",
 ] as const;
+
+/**
+ * Disables grok's permission-rule import from the user's Claude settings
+ * (`~/.claude/settings.json` and friends), which the scanner vars above do NOT
+ * cover (#179): a user-scope `permissions.deny: ["NotebookEdit"]` maps onto
+ * grok's `edit` tool class and denies every file mutation in the child —
+ * deny > allow, so `--always-approve` cannot save it.
+ *
+ * This is an undocumented, underscore-private override (grok's
+ * `permission/claude_settings` "first_gate"); the supported equivalent —
+ * `[claude_compat] imported = true` — is only honoured in the user-scope
+ * `~/.grok/config.toml`, which parley must not mutate. Verified against grok
+ * 0.2.106. Re-verify on a grok bump with:
+ * `_GROK_CLAUDE_MARKER_OVERRIDE=1 grok inspect` → Permissions "0 loaded"
+ * (run in a cwd whose user-level Claude settings contain permission rules).
+ */
+const CLAUDE_PERMISSION_IMPORT_OVERRIDE = "_GROK_CLAUDE_MARKER_OVERRIDE";
+
+/**
+ * Upper bound on the preflight `grok inspect --json` permission probe (#186).
+ * The probe is fail-open: a timeout, missing binary, or unparseable output
+ * becomes a diagnostic line, never a spawn failure. Observed latency ~50ms.
+ */
+const INSPECT_PROBE_TIMEOUT_MS = 5000;
 
 /**
  * Grok honours Claude's `MCP_TIMEOUT` (ms) env **before** its own
@@ -219,6 +244,8 @@ export function createGrokAdapter(env: NodeJS.ProcessEnv = process.env): VendorA
     }
     // Turn off every Claude-config scanner (they default on).
     for (const key of CLAUDE_SCANNER_VARS) result[key] = "0";
+    // Gate the Claude-settings permission import the scanners don't cover (#179).
+    result[CLAUDE_PERMISSION_IMPORT_OVERRIDE] = "1";
     // Auth passes through opaquely (per-token billing); only when the parent set it.
     if (env.XAI_API_KEY !== undefined) result.XAI_API_KEY = env.XAI_API_KEY;
     // Route built-in-model API-key traffic through the daemon proxy for usage
@@ -248,6 +275,51 @@ export function createGrokAdapter(env: NodeJS.ProcessEnv = process.env): VendorA
     return materialized;
   }
 
+  /**
+   * Preflight permission probe (#186): run `grok inspect --json` with the
+   * child's exact cwd and env posture and report any Claude-settings permission
+   * rules that would load. With the `_GROK_CLAUDE_MARKER_OVERRIDE` gate (#179)
+   * the expected count is 0, so a hit means either the gate stopped working
+   * (grok version drift) or another rule source reached the child — the #179
+   * failure class (deny-all-edits) that is otherwise invisible: grok's
+   * streaming JSON has no structured tool/denial events, denials only appear
+   * as words inside streamed thought tokens.
+   *
+   * Fail-open: every failure mode (missing binary, non-zero exit, timeout,
+   * unrecognized JSON shape) becomes a tagged diagnostic, never a spawn error.
+   */
+  async function permissionProbe(task: TaskSpec, childEnv: Record<string, string>): Promise<string[]> {
+    try {
+      const stdout = await runProbe(bin, ["inspect", "--json"], {
+        cwd: task.cwd,
+        // Mirror the engine's spawn env exactly ({...process.env, ...plan.env})
+        // so the probe sees the child's posture, not the daemon's.
+        env: { ...process.env, ...childEnv },
+        timeoutMs: INSPECT_PROBE_TIMEOUT_MS,
+      });
+      const parsed = JSON.parse(stdout) as {
+        permissions?: { loaded?: unknown; sources?: unknown };
+      };
+      const loaded = parsed.permissions?.loaded;
+      if (typeof loaded !== "number") {
+        // Shape drift would silently disarm the tripwire — surface it instead.
+        throw new Error("unrecognized `grok inspect --json` permissions shape");
+      }
+      if (loaded === 0) return [];
+      const sources = Array.isArray(parsed.permissions?.sources)
+        ? parsed.permissions.sources.filter((s): s is string => typeof s === "string").join(", ")
+        : "?";
+      return [
+        `${VENDOR_DIAG_PREFIX} claude_permission_import loaded=${loaded} ` +
+          `sources=[${sources}] — imported permission rules reached the child ` +
+          `despite the #179 gate; edits may be denied`,
+      ];
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return [`${VENDOR_DIAG_PREFIX} permission_probe failed: ${message}`];
+    }
+  }
+
   /** Flags shared by fresh runs and resumes (headless streaming JSONL, pinned). */
   function commonArgv(task: TaskSpec): string[] {
     const argv = [
@@ -273,15 +345,17 @@ export function createGrokAdapter(env: NodeJS.ProcessEnv = process.env): VendorA
     id: "grok",
     childChannel: "mcp",
 
-    prepare(task, hub): Promise<SpawnPlan> {
+    async prepare(task, hub): Promise<SpawnPlan> {
       // Fresh single-turn run: `grok -p <prompt> …`. The session id is captured
       // from the terminal `end` event and persisted for resume.
-      return Promise.resolve({
+      const env = baseEnv(task, hub);
+      return {
         argv: [bin, "-p", task.prompt, ...commonArgv(task)],
-        env: baseEnv(task, hub),
+        env,
         files: files(task, hub),
         cwd: task.cwd,
-      });
+        diagnostics: await permissionProbe(task, env),
+      };
     },
 
     resume(task, hub): Promise<SpawnPlan> {
@@ -300,12 +374,14 @@ export function createGrokAdapter(env: NodeJS.ProcessEnv = process.env): VendorA
         // instead — the engine reruns session-less stalled tasks via prepare().
         return Promise.reject(new Error(`grok resume for task ${task.id} has no session id`));
       }
-      return Promise.resolve({
-        argv: [bin, "-p", task.prompt, "-r", task.sessionId, ...commonArgv(task)],
-        env: baseEnv(task, hub),
+      const env = baseEnv(task, hub);
+      return Promise.resolve(permissionProbe(task, env)).then((diagnostics) => ({
+        argv: [bin, "-p", task.prompt, "-r", task.sessionId!, ...commonArgv(task)],
+        env,
         files: files(task, hub),
         cwd: task.cwd,
-      });
+        diagnostics,
+      }));
     },
 
     parseEvent(line: string): VendorEvent[] {
@@ -333,18 +409,25 @@ export function createGrokAdapter(env: NodeJS.ProcessEnv = process.env): VendorA
             },
           ];
         case "error":
-        case "fatal":
+        case "fatal": {
+          // Tagged with VENDOR_DIAG_PREFIX so vendor-surfaced errors land in
+          // diag.log (#186) — grok's stream has no other anomaly channel.
+          // `fatal` marks the run-terminal variant so the engine can carry it
+          // into the failure detail (`lastError`).
+          const message =
+            typeof event.message === "string"
+              ? event.message
+              : typeof event.data === "string"
+                ? event.data
+                : "";
           return [
             {
               kind: "error",
-              text:
-                typeof event.message === "string"
-                  ? event.message
-                  : typeof event.data === "string"
-                    ? event.data
-                    : "",
+              fatal: event.type === "fatal",
+              text: `${VENDOR_DIAG_PREFIX} ${event.type}: ${message}`,
             },
           ];
+        }
         default:
           // Unknown/changed shapes must never fail the task (schema is
           // undocumented and drifts across releases).
