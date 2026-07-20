@@ -47,6 +47,94 @@ Closest viable integration: **print/JSON spawn-per-turn** + **materialized Parle
 
 ---
 
+## Session provenance: deterministic `session_start` extension hook
+
+**Finding: yes.** Pi exposes a deterministic extension event named
+`session_start`. Pi emits and awaits this event when a session runtime is
+started, loaded, or reloaded; the initial event has `reason: "startup"`. It is
+part of Pi's own startup lifecycle, before `before_agent_start`, `agent_start`,
+or any provider request, so it does not depend on the model following an
+instruction or choosing a tool. It also runs in print and JSON modes. This is
+the correct point for a Pi provenance package to populate the four Parley
+variables. **DOCS + VERIFIED (0.80.10)** with an extension in JSON/print mode
+and no usable provider credentials; the handler ran and a child process saw all
+four variables even though no model request could succeed.
+
+The extension is a TypeScript or JavaScript module whose default export accepts
+Pi's `ExtensionAPI` and registers the handler:
+
+```typescript
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+
+export default function (pi: ExtensionAPI) {
+  pi.on("session_start", (_event, ctx) => {
+    process.env.PARLEY_SESSION_ID = ctx.sessionManager.getSessionId();
+    process.env.PARLEY_HARNESS = "pi";
+    if (ctx.model) {
+      process.env.PARLEY_MODEL = `${ctx.model.provider}/${ctx.model.id}`;
+    } else {
+      delete process.env.PARLEY_MODEL; // Preserve honest unknown provenance.
+    }
+    process.env.PARLEY_EFFORT = pi.getThinkingLevel();
+  });
+}
+```
+
+Ground-truth metadata available when the handler runs:
+
+| Variable | Pi source | Availability at `session_start` |
+|----------|-----------|---------------------------------|
+| `PARLEY_SESSION_ID` | `ctx.sessionManager.getSessionId()` | Always available, including `--no-session`; it is Pi's actual in-memory/persisted session ID. In JSON mode it matches the subsequent `type: "session"` header ID. **VERIFIED (0.80.10)** |
+| `PARLEY_HARNESS` | Package constant `"pi"` | Not session metadata; the harness plugin itself supplies its stable identity. |
+| `PARLEY_MODEL` | `ctx.model.provider` and `ctx.model.id` | The resolved active model is available when selection succeeded. `ctx.model` is explicitly optional, so the plugin must not invent a value if Pi could not select a model. **DOCS + VERIFIED (0.80.10)** |
+| `PARLEY_EFFORT` | `pi.getThinkingLevel()` | The effective, capability-clamped level: `off`, `minimal`, `low`, `medium`, `high`, `xhigh`, or `max`. This is preferable to rereading argv/settings because it is Pi's resolved runtime value. **DOCS + VERIFIED (0.80.10)** |
+
+The `session_start` event object itself contains only `reason` (`startup`,
+`reload`, `new`, `resume`, or `fork`) and, for relevant transitions,
+`previousSessionFile`; the provenance values come from the handler context/API,
+not from event fields. There is no first-class `setSessionEnvironment()` API.
+Because extensions execute in Pi's Node process, setting `process.env` is the
+nearest equivalent and influences Pi's environment plus subsequently spawned
+children. Pi's built-in bash tool constructs its spawn environment from the
+current `process.env`, so model-invoked shell commands inherit the variables.
+The extension's `pi.exec()` children inherit them as well. This cannot modify
+the environment of Pi's already-running parent/orchestrator process.
+
+For a long-lived interactive or RPC session, the active model and thinking
+level can change after startup. Pi provides deterministic notification events
+`model_select` and `thinking_level_select`; a production package should update
+`PARLEY_MODEL` and `PARLEY_EFFORT` from those events to keep future subprocesses
+aligned. Session replacements and reloads emit `session_start` again with a
+fresh extension instance, so the session ID is re-established without model
+involvement.
+
+Package installation and removal:
+
+```bash
+# Published package, user-wide (records it in ~/.pi/agent/settings.json and
+# installs npm contents below ~/.pi/agent/npm/)
+pi install npm:@useparley/plugin-pi
+
+# Project-local alternative (records .pi/settings.json; installs below .pi/npm/)
+pi install -l npm:@useparley/plugin-pi
+
+# Uninstall from the same scope
+pi remove npm:@useparley/plugin-pi
+pi remove -l npm:@useparley/plugin-pi
+```
+
+The npm package should declare its module under `pi.extensions` in
+`package.json` (for example `"extensions": ["./extensions"]`) or use Pi's
+conventional `extensions/` directory. For development, a single extension can
+be loaded without installation using `pi -e ./extension.ts`. Manual global and
+project discovery paths are `~/.pi/agent/extensions/*.ts` (or
+`*/index.ts`) and `.pi/extensions/*.ts` (or `*/index.ts`); project-local
+resources require project trust. See Pi's official
+[extensions documentation](https://github.com/earendil-works/pi-mono/blob/main/packages/coding-agent/docs/extensions.md)
+and [package documentation](https://github.com/earendil-works/pi-mono/blob/main/packages/coding-agent/docs/packages.md).
+
+---
+
 ## 1. Identity & install
 
 ### Identity (choice)
