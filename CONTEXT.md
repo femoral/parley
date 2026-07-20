@@ -49,6 +49,12 @@ driving parley is the **orchestrator**.
   the model. Harness values use parley vendor ids; sessions without a plugin
   carry explicit *unknown* provenance and are evaluated under an unknown
   bucket (ADR-0013).
+- **Launch template** — a profile's opt-in full argv replacing adapter
+  composition, with shell-like `$VAR` expansion from the spawn env
+  (`$PROMPT` = the task prompt). Parley still wraps the process (workspace,
+  sandbox, env, child channel); the profile's vendor/model/effort become
+  **declared provenance** — tracked but unverified, exempt from the model
+  allowlist (ADR-0015). May name a vendor outside the adapter registry.
 - **Model allowlist** — the per-vendor map of permitted model+effort combos
   (explicit efforts, optional *default* combo, optional orchestrator-facing
   *hint*). Vendors are **deny-by-default** until one is configured; every
