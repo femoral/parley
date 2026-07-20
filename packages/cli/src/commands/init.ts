@@ -113,6 +113,15 @@ export interface InitConfigResult {
   scope: "global" | "project";
 }
 
+/** Whether init may use clack prompts for this invocation. */
+export function isInteractiveInit(opts: {
+  stdinIsTTY: boolean | undefined;
+  json: boolean;
+  yes: boolean;
+}): boolean {
+  return Boolean(opts.stdinIsTTY) && !opts.json && !opts.yes;
+}
+
 /**
  * Ensure layered config files exist for the resolved scope.
  * Always creates home `parley.json` when missing; project scope also ensures
@@ -200,18 +209,24 @@ function printModelFallbackGuidance(
 
 /**
  * `parley init` — one-shot setup: skills, config files, harness detection,
- * model catalog refresh. Non-interactive with sane defaults (layout=agents,
- * scope=project if git else global).
+ * model catalog refresh. Interactive on a TTY unless `--yes` or `--json` is
+ * passed; non-interactive runs use sane defaults (layout=agents, scope=project
+ * if git else global).
  */
 export async function runInit(ctx: CliContext, args: string[]): Promise<number> {
   const parsed = parseSkillInstallArgs(args, "init");
   const json = parsed.json;
   const cwd = parsed.cwd;
+  const interactive = isInteractiveInit({
+    stdinIsTTY: process.stdin.isTTY,
+    json,
+    yes: parsed.yes,
+  });
 
   // --- Skills ---
   const skillsResult = await installSkillsFromOptions({
     ...parsed,
-    interactive: false,
+    interactive,
     mode: "init",
   });
   if ("cancelled" in skillsResult) {
@@ -290,8 +305,10 @@ export async function runInit(ctx: CliContext, args: string[]): Promise<number> 
   }
 
   // --- Human output ---
-  ctx.stdout("## Skills\n");
-  ctx.stdout(`${formatInstallSummary(skillsResult.records)}\n`);
+  if (!skillsResult.interactivePrinted) {
+    ctx.stdout("## Skills\n");
+    ctx.stdout(`${formatInstallSummary(skillsResult.records)}\n`);
+  }
 
   ctx.stdout("\n## Configuration\n");
   const homeNote = configResult.homeConfig.created ? "created" : "exists";

@@ -40,7 +40,7 @@ export interface SkillInstallFlags {
 export type SkillInstallMode = "skills-install" | "init";
 
 export interface InstallSkillsFromOptionsInput extends SkillInstallFlags {
-  /** Allow TTY multi-select when layout is omitted (`skills install` only). */
+  /** Allow TTY prompts when install choices are omitted. */
   interactive: boolean;
   mode: SkillInstallMode;
 }
@@ -129,8 +129,8 @@ export async function installSkillsFromOptions(
   let scopeFlag = opts.scope;
 
   if (layoutFlag === undefined) {
-    if (opts.mode === "init") {
-      // Non-interactive one-shot: agents layout + auto scope.
+    if (!opts.interactive && opts.mode === "init") {
+      // Non-interactive init: agents layout + auto scope.
       const scope = scopeFlag ?? defaultInitScope(opts.cwd);
       if (scope !== "global" && scope !== "project") {
         throw new UsageError(`init: --scope must be 'global' or 'project', got '${scope}'`);
@@ -158,7 +158,7 @@ export async function installSkillsFromOptions(
     const known = LAYOUTS[layoutFlag];
     if (known) {
       if (scopeFlag === undefined) {
-        if (opts.mode === "init") {
+        if (!opts.interactive && opts.mode === "init") {
           scopeFlag = defaultInitScope(opts.cwd);
         } else if (!opts.interactive) {
           throw new UsageError(
@@ -191,7 +191,7 @@ export async function installSkillsFromOptions(
 
   let records: InstallRecord[];
   let interactivePrinted = false;
-  if (opts.interactive && opts.mode === "skills-install") {
+  if (opts.interactive) {
     try {
       records = await withInstallSpinner("Installing skills…", runCopy, (r) => ({
         summary: formatInstallSummary(r),

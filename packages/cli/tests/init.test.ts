@@ -3,6 +3,7 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { isInteractiveInit } from "../src/commands/init.js";
 import { cleanupHome, FAKE_VENDOR_BIN, makeHome, runCli } from "./helpers.js";
 
 /** PATH with only git's directory — no vendor CLIs, but repo detection still works. */
@@ -45,6 +46,14 @@ afterEach(() => {
 });
 
 describe("parley init", () => {
+  it("only enables prompts on a TTY without --yes or --json", () => {
+    expect(isInteractiveInit({ stdinIsTTY: true, json: false, yes: false })).toBe(true);
+    expect(isInteractiveInit({ stdinIsTTY: false, json: false, yes: false })).toBe(false);
+    expect(isInteractiveInit({ stdinIsTTY: undefined, json: false, yes: false })).toBe(false);
+    expect(isInteractiveInit({ stdinIsTTY: true, json: true, yes: false })).toBe(false);
+    expect(isInteractiveInit({ stdinIsTTY: true, json: false, yes: true })).toBe(false);
+  });
+
   it("happy path: skills, config, models with fake harness on empty PATH", async () => {
     const repo = makeRepo();
     const fakeHome = mkTemp("parley-init-home-");

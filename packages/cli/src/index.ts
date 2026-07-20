@@ -131,7 +131,7 @@ Usage:
     --scope global|project    Where to install skills + which config layer
                               (default: project in a git repo, else global)
     --skill <name>            Skill to install (repeatable; default: all)
-    --yes                     Accept defaults (no-op for non-interactive init)
+    --yes                     Accept defaults; disable interactive prompts
     --json                    Machine-readable result
   parley skills install         Deprecated alias: install skills only (see init)
     --layout claude|agents|<path>
