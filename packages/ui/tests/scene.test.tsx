@@ -321,6 +321,59 @@ describe("Scene lays out the active session's cove (#69)", () => {
     }
   });
 
+  it("fades a ship out when it first mounts in the cancelled sail-off pose", () => {
+    vi.spyOn(window, "matchMedia").mockReturnValue({
+      matches: false,
+      media: "(prefers-reduced-motion: reduce)",
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    });
+    const frames: FrameRequestCallback[] = [];
+    vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+      frames.push(callback);
+      return frames.length;
+    });
+    vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => undefined);
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      if (this.classList.contains("pc-scene-view")) {
+        return new DOMRect(0, 0, 800, 600);
+      }
+      if (this.classList.contains("pc-island")) {
+        return new DOMRect(300, 200, 156, 142);
+      }
+      if (this.classList.contains("pc-island__sprite")) {
+        return new DOMRect(304, 210, 148, 100);
+      }
+      return new DOMRect(0, 0, 0, 0);
+    });
+
+    const cancelled = region("cancelled", "cancelled", [island("cancelled")]);
+    const { container } = render(
+      <Scene
+        sessions={[cancelled]}
+        activeSessionId="cancelled"
+        onSelectTask={noop}
+        onSelectSession={noop}
+      />,
+    );
+    act(() => frames.shift()?.(1_000));
+
+    const ship = container.querySelector('[data-sailing-pose="sailoff"]') as HTMLElement;
+    expect(Number(ship.style.opacity)).toBeGreaterThan(0.99);
+
+    act(() => {
+      for (let step = 1; step <= 12; step += 1) {
+        frames.shift()?.(1_000 + step * 100);
+      }
+    });
+    expect(Number(ship.style.opacity)).toBeGreaterThan(0.4);
+    expect(Number(ship.style.opacity)).toBeLessThan(0.6);
+  });
+
   it("renders exactly one island per task of the session", () => {
     const { container } = render(
       <Scene sessions={[REGION]} activeSessionId="sess-1" onSelectTask={noop} onSelectSession={noop} />,

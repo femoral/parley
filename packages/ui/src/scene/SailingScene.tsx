@@ -76,6 +76,23 @@ interface RegionRuntime {
   zoom: number;
 }
 
+interface SeaTokens {
+  shallow: string;
+  mid: string;
+  deep: string;
+  abyss: string;
+  foam: string;
+}
+
+interface CachedIslandSprite {
+  canvas: HTMLCanvasElement;
+  pixelWidth: number;
+  pixelHeight: number;
+  source: string;
+}
+
+type IslandSpriteCache = WeakMap<HTMLImageElement, CachedIslandSprite>;
+
 const ease = (value: number): number => {
   const u = Math.max(0, Math.min(1, value));
   return u * u * (3 - 2 * u);
@@ -91,6 +108,16 @@ function cssToken(element: Element, name: string): string {
   return getComputedStyle(element).getPropertyValue(name).trim();
 }
 
+function readSeaTokens(scene: HTMLElement): SeaTokens {
+  return {
+    shallow: cssToken(scene, "--sea-shallow"),
+    mid: cssToken(scene, "--sea-mid"),
+    deep: cssToken(scene, "--sea-deep"),
+    abyss: cssToken(scene, "--sea-abyss"),
+    foam: cssToken(scene, "--sea-foam"),
+  };
+}
+
 function canvasContext(canvas: HTMLCanvasElement): CanvasRenderingContext2D | null {
   try {
     return canvas.getContext("2d");
@@ -101,11 +128,85 @@ function canvasContext(canvas: HTMLCanvasElement): CanvasRenderingContext2D | nu
   }
 }
 
-function sizeCanvas(canvas: HTMLCanvasElement, width: number, height: number, dpr: number): void {
+function sizeCanvas(canvas: HTMLCanvasElement, width: number, height: number, dpr: number): boolean {
   const pixelWidth = Math.max(1, Math.round(width * dpr));
   const pixelHeight = Math.max(1, Math.round(height * dpr));
+  const changed = canvas.width !== pixelWidth || canvas.height !== pixelHeight;
   if (canvas.width !== pixelWidth) canvas.width = pixelWidth;
   if (canvas.height !== pixelHeight) canvas.height = pixelHeight;
+  return changed;
+}
+
+function frameRect(element: Element, rects: Map<Element, DOMRect>): DOMRect {
+  const cached = rects.get(element);
+  if (cached) return cached;
+  const rect = element.getBoundingClientRect();
+  rects.set(element, rect);
+  return rect;
+}
+
+function featheredIslandSprite(
+  image: HTMLImageElement,
+  width: number,
+  height: number,
+  dpr: number,
+  cache: IslandSpriteCache,
+): CanvasImageSource {
+  // One cache entry per mounted island image; rebuild only when its rendered
+  // size (zoom/resize) or source changes, never on steady-state frames.
+  const pixelWidth = Math.max(1, Math.round(width * dpr));
+  const pixelHeight = Math.max(1, Math.round(height * dpr));
+  const source = image.currentSrc || image.src;
+  const cached = cache.get(image);
+  if (
+    cached &&
+    cached.pixelWidth === pixelWidth &&
+    cached.pixelHeight === pixelHeight &&
+    cached.source === source
+  ) {
+    return cached.canvas;
+  }
+
+  const canvas = document.createElement("canvas");
+  canvas.width = pixelWidth;
+  canvas.height = pixelHeight;
+  const ctx = canvasContext(canvas);
+  if (!ctx) return image;
+
+  ctx.drawImage(image, 0, 0, pixelWidth, pixelHeight);
+  ctx.save();
+  ctx.globalCompositeOperation = "destination-in";
+  ctx.translate(pixelWidth * 0.5, pixelHeight * 0.6);
+  ctx.scale(pixelWidth * 1.2, pixelHeight * 0.92);
+  const feather = ctx.createRadialGradient(0, 0, 0, 0, 0, 1);
+  feather.addColorStop(0.42, "rgba(0, 0, 0, 1)");
+  feather.addColorStop(0.62, "rgba(0, 0, 0, 0.55)");
+  feather.addColorStop(0.92, "rgba(0, 0, 0, 0)");
+  feather.addColorStop(1, "rgba(0, 0, 0, 0)");
+  ctx.fillStyle = feather;
+  ctx.fillRect(-2, -2, 4, 4);
+  ctx.restore();
+
+  cache.set(image, { canvas, pixelWidth, pixelHeight, source });
+  return canvas;
+}
+
+function drawIslandSprite(
+  ctx: CanvasRenderingContext2D,
+  image: HTMLImageElement,
+  rect: DOMRect,
+  sceneRect: DOMRect,
+  dpr: number,
+  cache: IslandSpriteCache,
+): void {
+  const sprite = featheredIslandSprite(image, rect.width, rect.height, dpr, cache);
+  ctx.drawImage(
+    sprite,
+    rect.left - sceneRect.left,
+    rect.top - sceneRect.top,
+    rect.width,
+    rect.height,
+  );
 }
 
 function paintBackdrop(
@@ -114,6 +215,10 @@ function paintBackdrop(
   width: number,
   height: number,
   dpr: number,
+  tokens: SeaTokens,
+  sceneRect: DOMRect,
+  islandCache: IslandSpriteCache,
+  rects: Map<Element, DOMRect>,
 ): void {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, width, height);
@@ -121,27 +226,31 @@ function paintBackdrop(
   // Flat mode won validation. The stops come from the Cove sea tokens, so the
   // visible backdrop and the pixels copied over submerged hulls are identical.
   const sea = ctx.createLinearGradient(0, 0, width * 0.35, height);
-  sea.addColorStop(0, cssToken(scene, "--sea-shallow"));
-  sea.addColorStop(0.45, cssToken(scene, "--sea-mid"));
-  sea.addColorStop(0.75, cssToken(scene, "--sea-deep"));
-  sea.addColorStop(1, cssToken(scene, "--sea-abyss"));
+  sea.addColorStop(0, tokens.shallow);
+  sea.addColorStop(0.45, tokens.mid);
+  sea.addColorStop(0.75, tokens.deep);
+  sea.addColorStop(1, tokens.abyss);
   ctx.fillStyle = sea;
   ctx.fillRect(0, 0, width, height);
 
-  const sceneRect = scene.getBoundingClientRect();
   for (const image of scene.querySelectorAll<HTMLImageElement>(".pc-island__sprite")) {
     if (!image.complete || image.naturalWidth === 0) continue;
-    const rect = image.getBoundingClientRect();
+    const rect = frameRect(image, rects);
     const rise = image.closest(".pc-island__rise");
     const opacity = rise ? Number.parseFloat(getComputedStyle(rise).opacity || "1") : 1;
     if (opacity <= 0 || rect.width <= 0 || rect.height <= 0) continue;
     ctx.globalAlpha = Number.isFinite(opacity) ? opacity : 1;
-    ctx.drawImage(image, rect.left - sceneRect.left, rect.top - sceneRect.top, rect.width, rect.height);
+    drawIslandSprite(ctx, image, rect, sceneRect, dpr, islandCache);
   }
   ctx.globalAlpha = 1;
 }
 
-function regionZoom(region: HTMLElement, dt: number, reduced: boolean, states: WeakMap<Element, RegionRuntime>): number {
+function regionZoom(
+  region: HTMLElement,
+  dt: number,
+  reduced: boolean,
+  states: WeakMap<Element, RegionRuntime>,
+): boolean {
   const count = Number.parseInt(region.dataset.islandCount ?? "0", 10);
   const target = count > 0 ? Math.min(1, Math.sqrt(5 / count)) : 1;
   let runtime = states.get(region);
@@ -149,15 +258,17 @@ function regionZoom(region: HTMLElement, dt: number, reduced: boolean, states: W
     runtime = { zoom: reduced ? target : 1 };
     states.set(region, runtime);
   }
+  const previous = runtime.zoom;
   runtime.zoom = reduced ? target : runtime.zoom + (target - runtime.zoom) * Math.min(1, dt * 3);
   region.style.setProperty("--region-zoom", String(runtime.zoom));
-  return runtime.zoom;
+  return Math.abs(runtime.zoom - target) > 0.0005 || Math.abs(runtime.zoom - previous) > 0.0005;
 }
 
-function localIslandGeometry(element: HTMLElement): {
+function localIslandGeometry(element: HTMLElement, rects: Map<Element, DOMRect>): {
   root: HTMLElement;
   sprite: HTMLImageElement;
   rect: DOMRect;
+  rootRect: DOMRect;
   cx: number;
   cy: number;
   radius: number;
@@ -166,13 +277,14 @@ function localIslandGeometry(element: HTMLElement): {
   const root = element.closest<HTMLElement>(".pc-island");
   const sprite = root?.querySelector<HTMLImageElement>(".pc-island__sprite");
   if (!root || !sprite) return null;
-  const rootRect = root.getBoundingClientRect();
-  const rect = sprite.getBoundingClientRect();
+  const rootRect = frameRect(root, rects);
+  const rect = frameRect(sprite, rects);
   const scale = rootRect.width > 0 ? rootRect.width / ISLAND_ROOT_WIDTH : 1;
   return {
     root,
     sprite,
     rect,
+    rootRect,
     cx: (rect.left + rect.width / 2 - rootRect.left) / scale,
     cy: (rect.top + rect.height * ISLAND_WATERLINE_FY - rootRect.top) / scale,
     radius: ORBIT.gapPx + rect.width / (2 * scale),
@@ -224,7 +336,7 @@ function initialRuntime(element: HTMLElement, kind: ShipKind, pose: SailingPose,
     flipTarget: island.x < FLAGSHIP_CENTER.x ? -1 : 1,
     flipStartedAt: t,
     arrivalSeconds: 3.2,
-    firstArrival: true,
+    firstArrival: pose !== "sailoff",
   };
 }
 
@@ -248,16 +360,17 @@ function pointOnShip(ship: PaintedShip, fx: number, fy: number): { x: number; y:
 function paintShipEffects(
   backdrop: HTMLCanvasElement,
   ctx: CanvasRenderingContext2D,
-  scene: HTMLElement,
   ships: PaintedShip[],
   width: number,
   height: number,
   dpr: number,
   t: number,
+  foam: string,
+  sceneRect: DOMRect,
+  islandCache: IslandSpriteCache,
 ): void {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, width, height);
-  const foam = cssToken(scene, "--sea-foam");
 
   for (const ship of ships) {
     const calibration = SHIPS[ship.runtime.kind];
@@ -315,7 +428,6 @@ function paintShipEffects(
 
   // Far orbit leg: the ship's hull waterline moves above the island waterline,
   // so repaint the same island sprite over the sloop to restore depth ordering.
-  const sceneRect = scene.getBoundingClientRect();
   for (const ship of ships) {
     if (
       ship.runtime.kind !== "sloop" ||
@@ -328,14 +440,16 @@ function paintShipEffects(
     if (hullWaterY >= ship.islandWaterY) continue;
     const rect = ship.islandRect;
     if (!ship.islandSprite.complete || ship.islandSprite.naturalWidth === 0) continue;
-    ctx.drawImage(
-      ship.islandSprite,
-      rect.left - sceneRect.left,
-      rect.top - sceneRect.top,
-      rect.width,
-      rect.height,
-    );
+    drawIslandSprite(ctx, ship.islandSprite, rect, sceneRect, dpr, islandCache);
   }
+}
+
+function islandsAnimating(scene: HTMLElement): boolean {
+  for (const rise of scene.querySelectorAll<HTMLElement>(".pc-island__rise")) {
+    if (typeof rise.getAnimations !== "function") continue;
+    if (rise.getAnimations().some((animation) => animation.playState === "running")) return true;
+  }
+  return false;
 }
 
 /**
@@ -370,10 +484,27 @@ export function SailingScene() {
     const overlayCtx = canvasContext(overlay);
     const runtimes = new Map<HTMLElement, RuntimeShip>();
     const regionStates = new WeakMap<Element, RegionRuntime>();
+    const islandCache: IslandSpriteCache = new WeakMap();
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    let tokens = readSeaTokens(scene);
+    let backdropDirty = true;
+    let lastCameraLeft = Number.NaN;
+    let lastCameraTop = Number.NaN;
     let frameId = 0;
     let lastNow = performance.now();
     let simTime = 0;
+
+    const refreshSea = () => {
+      tokens = readSeaTokens(scene);
+      backdropDirty = true;
+    };
+    const sceneAttributeObserver = new MutationObserver(refreshSea);
+    sceneAttributeObserver.observe(scene, { attributes: true });
+    const sceneTreeObserver = new MutationObserver(() => {
+      backdropDirty = true;
+    });
+    sceneTreeObserver.observe(scene, { childList: true, subtree: true });
+    window.addEventListener("resize", refreshSea);
 
     const frame = (now: number) => {
       try {
@@ -383,16 +514,44 @@ export function SailingScene() {
         if (!motionReduced) simTime += dt;
 
         const sceneRect = scene.getBoundingClientRect();
+        const rects = new Map<Element, DOMRect>([[scene, sceneRect]]);
         const width = scene.clientWidth || sceneRect.width;
         const height = scene.clientHeight || sceneRect.height;
-        sizeCanvas(backdrop, width, height, dpr);
+        const backdropResized = sizeCanvas(backdrop, width, height, dpr);
         sizeCanvas(overlay, width, height, dpr);
 
+        let zoomActive = false;
         for (const region of scene.querySelectorAll<HTMLElement>(".pc-region")) {
-          regionZoom(region, dt, motionReduced, regionStates);
+          zoomActive = regionZoom(region, dt, motionReduced, regionStates) || zoomActive;
         }
 
-        if (backdropCtx) paintBackdrop(scene, backdropCtx, width, height, dpr);
+        const camera = scene.querySelector<HTMLElement>(".pc-world");
+        const cameraRect = camera ? frameRect(camera, rects) : undefined;
+        const cameraMoving = cameraRect
+          ? !Number.isFinite(lastCameraLeft) ||
+            Math.abs(cameraRect.left - lastCameraLeft) > 0.01 ||
+            Math.abs(cameraRect.top - lastCameraTop) > 0.01
+          : false;
+        if (cameraRect) {
+          lastCameraLeft = cameraRect.left;
+          lastCameraTop = cameraRect.top;
+        }
+        const repaintBackdrop =
+          backdropDirty || backdropResized || zoomActive || cameraMoving || islandsAnimating(scene);
+        if (backdropCtx && repaintBackdrop) {
+          paintBackdrop(
+            scene,
+            backdropCtx,
+            width,
+            height,
+            dpr,
+            tokens,
+            sceneRect,
+            islandCache,
+            rects,
+          );
+          backdropDirty = false;
+        }
 
         const live = new Set<HTMLElement>();
         const painted: PaintedShip[] = [];
@@ -434,12 +593,12 @@ export function SailingScene() {
           let geometry: ReturnType<typeof localIslandGeometry> = null;
           if (kind === "galleon") {
             const host = element.closest<HTMLElement>(".pc-region__flagship");
-            const hostRect = host?.getBoundingClientRect();
+            const hostRect = host ? frameRect(host, rects) : undefined;
             cx = (hostRect?.left ?? sceneRect.left) - sceneRect.left + sway;
             cy = (hostRect?.top ?? sceneRect.top) - sceneRect.top + bob;
             element.style.transform = `translate(-50%, -50%) translate(${sway / zoom}px, ${bob / zoom}px) rotate(${roll}deg) scaleY(${squash})`;
           } else {
-            geometry = localIslandGeometry(element);
+            geometry = localIslandGeometry(element, rects);
             if (!geometry) continue;
             const elapsed = motionReduced ? Number.POSITIVE_INFINITY : t - runtime.poseStartedAt;
             let targetX = geometry.cx;
@@ -512,9 +671,8 @@ export function SailingScene() {
             const localBob = bob / zoom;
             element.style.transform = `translate(${runtime.x + localSway}px, ${runtime.y + localBob}px) translate(-50%, -50%) rotate(${roll}deg) scaleY(${squash})`;
 
-            const rootRect = geometry.root.getBoundingClientRect();
-            cx = rootRect.left - sceneRect.left + runtime.x * geometry.scale + sway;
-            cy = rootRect.top - sceneRect.top + runtime.y * geometry.scale + bob;
+            cx = geometry.rootRect.left - sceneRect.left + runtime.x * geometry.scale + sway;
+            cy = geometry.rootRect.top - sceneRect.top + runtime.y * geometry.scale + bob;
           }
 
           painted.push({
@@ -536,7 +694,18 @@ export function SailingScene() {
           if (!live.has(element)) runtimes.delete(element);
         }
         if (overlayCtx && backdropCtx) {
-          paintShipEffects(backdrop, overlayCtx, scene, painted, width, height, dpr, simTime);
+          paintShipEffects(
+            backdrop,
+            overlayCtx,
+            painted,
+            width,
+            height,
+            dpr,
+            simTime,
+            tokens.foam,
+            sceneRect,
+            islandCache,
+          );
         }
         layer.removeAttribute("data-error");
       } catch (error) {
@@ -549,7 +718,12 @@ export function SailingScene() {
     };
 
     frameId = window.requestAnimationFrame(frame);
-    return () => window.cancelAnimationFrame(frameId);
+    return () => {
+      window.cancelAnimationFrame(frameId);
+      window.removeEventListener("resize", refreshSea);
+      sceneAttributeObserver.disconnect();
+      sceneTreeObserver.disconnect();
+    };
   }, []);
 
   return (

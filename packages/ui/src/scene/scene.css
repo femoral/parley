@@ -65,6 +65,14 @@
 .pc-sailing-fx {
   z-index: 3;
 }
+/* In a sailing cove the canvas is the sole source of opaque sea pixels. Lift
+   only the low-alpha vignette/glint above it; the later .pc-world at the same
+   z-index still paints ships above both. Cover blocks deliberately copy the
+   undecorated sea/island backdrop — at blur 2 the tiny decoration mismatch is
+   preferable to double-painting the sea. */
+.pc-scene-view--sailing .pc-scene-sea {
+  z-index: 2;
+}
 /* Moonlight glint — oversized pattern layer, transform-only drift (compositor).
    Base transform is identity so reduced-motion stills on a legible frame. */
 .pc-scene-sea__glint {
@@ -446,6 +454,9 @@
 .pc-heading {
   position: absolute;
   inset: 0;
+  transform: scaleX(var(--sailing-heading, 1));
+  transform-origin: 50% 80%;
+  will-change: transform;
 }
 .pc-sloop {
   position: absolute;
@@ -461,9 +472,6 @@
   width: 100%;
   height: 100%;
   filter: drop-shadow(0 3px 4px rgba(0, 0, 0, 0.4));
-  transform: scaleX(var(--sailing-heading, 1));
-  transform-origin: 50% 80%;
-  will-change: transform;
   /* draftFy .48 + maskSoft 10 => 98% waterline. The sloop's cover rectangle
      is degenerate, so the steep mask intentionally carries its submersion.
      Mask only the art: wake and anchor remain free to extend past its box. */
@@ -495,7 +503,7 @@
   pointer-events: none;
 }
 /* Tint group is clipped to the sprite's own alpha silhouette (a fourth trace)
-   so a slightly generous sail/hull-band mask trace never bleeds coat paint
+   so slightly generous sail/pennant mask traces never bleed coat paint
    past the ship's edge into open water. */
 .pc-sloop__tints {
   position: absolute;
