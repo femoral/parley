@@ -49,6 +49,11 @@ driving parley is the **orchestrator**.
   the model. Harness values use parley vendor ids; sessions without a plugin
   carry explicit *unknown* provenance and are evaluated under an unknown
   bucket (ADR-0013).
+- **Model allowlist** — the per-vendor map of permitted model+effort combos
+  (explicit efforts, optional *default* combo, optional orchestrator-facing
+  *hint*). Vendors are **deny-by-default** until one is configured; every
+  spawn path validates against it, rejecting out-of-list combos with a
+  nearest-combo suggestion (ADR-0014). The model catalog remains advisory.
 - **Harness plugin** — a per-vendor package installed into the orchestrator's
   own harness (via that harness's native hook/plugin system) that exports the
   session-provenance env vars at session start. Distinct from a parley
