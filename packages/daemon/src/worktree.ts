@@ -175,6 +175,48 @@ export interface CreateWorktreeOptions {
 }
 
 /**
+ * Whether `dir` is a usable git working tree (has a checkout git can resolve).
+ * Empty plain directories (including a stale path recreated by mkdir) are not.
+ */
+export function isValidGitCheckout(dir: string): boolean {
+  if (!fs.existsSync(dir)) return false;
+  try {
+    if (!fs.statSync(dir).isDirectory()) return false;
+  } catch {
+    return false;
+  }
+  return repoRoot(dir) !== null;
+}
+
+/**
+ * Path parley uses for a task worktree under `worktreesDir` (same layout as
+ * `createWorktree` / `attachWorktree`).
+ */
+export function worktreePathFor(
+  worktreesDir: string,
+  repoRootPath: string,
+  taskId: string,
+): string {
+  return path.join(worktreesDir, path.basename(repoRootPath), taskId);
+}
+
+/**
+ * After `git worktree add`: translate config, exclude parley plumbing, return
+ * HEAD. Shared by create (new branch) and attach (existing branch) so fix
+ * recreation does not duplicate git plumbing (#180).
+ */
+function finalizeWorktree(repoRootPath: string, wtPath: string): string {
+  const baseSha = git(["-C", wtPath, "rev-parse", "HEAD"]);
+  const generated = translateConfig(repoRootPath, wtPath);
+  // Parley always materializes task context under `.parley/` here (spec §7);
+  // exclude it unconditionally so the child can never commit or see it as a
+  // change, whether or not `--context` files were passed.
+  generated.push(`/${PARLEY_DIR}/`);
+  appendExclude(wtPath, generated);
+  return baseSha;
+}
+
+/**
  * Create an isolated worktree for a task: a fresh branch `parley/<id>-<name>`
  * off the base ref (HEAD by default), config translated and plumbing excluded.
  * Throws on git failure (e.g. a bad `--base-ref`) — the caller maps that to a
@@ -182,18 +224,12 @@ export interface CreateWorktreeOptions {
  */
 export function createWorktree(opts: CreateWorktreeOptions): WorktreeInfo {
   const branch = opts.name ? `parley/${opts.taskId}-${slug(opts.name)}` : `parley/${opts.taskId}`;
-  const wtPath = path.join(opts.worktreesDir, path.basename(opts.repoRoot), opts.taskId);
+  const wtPath = worktreePathFor(opts.worktreesDir, opts.repoRoot, opts.taskId);
   fs.mkdirSync(path.dirname(wtPath), { recursive: true });
 
   git(["-C", opts.repoRoot, "worktree", "add", "-b", branch, wtPath, opts.baseRef ?? "HEAD"]);
   try {
-    const baseSha = git(["-C", wtPath, "rev-parse", "HEAD"]);
-    const generated = translateConfig(opts.repoRoot, wtPath);
-    // Parley always materializes task context under `.parley/` here (spec §7);
-    // exclude it unconditionally so the child can never commit or see it as a
-    // change, whether or not `--context` files were passed.
-    generated.push(`/${PARLEY_DIR}/`);
-    appendExclude(wtPath, generated);
+    const baseSha = finalizeWorktree(opts.repoRoot, wtPath);
     return { path: wtPath, branch, baseSha };
   } catch (err) {
     // No task row exists yet, so a half-built worktree would leak untracked:
@@ -201,6 +237,62 @@ export function createWorktree(opts: CreateWorktreeOptions): WorktreeInfo {
     try {
       git(["-C", opts.repoRoot, "worktree", "remove", "--force", wtPath]);
       git(["-C", opts.repoRoot, "branch", "-D", branch]);
+    } catch {
+      /* best-effort rollback; the original error is the one that matters */
+    }
+    throw err;
+  }
+}
+
+export interface AttachWorktreeOptions {
+  /** Top-level of the source repository (from `repoRoot`). */
+  repoRoot: string;
+  /** `~/.parley/worktrees` — the parent for all parley worktrees. */
+  worktreesDir: string;
+  /** Task id that owns this worktree path (usually the new fix attempt). */
+  taskId: string;
+  /** Existing branch to check out (kept by `parley clean`; never deleted). */
+  branch: string;
+}
+
+/**
+ * Re-attach a worktree checkout for an *existing* branch — used when fix needs
+ * a workspace after the parent's parley-managed worktree was cleaned or
+ * otherwise vanished (#180). Does not create a branch (unlike `createWorktree`).
+ *
+ * If a leftover non-git directory already sits at the target path (e.g. a
+ * stale empty dir from a previous mkdir), it is removed first so git can add
+ * a real worktree there.
+ */
+export function attachWorktree(opts: AttachWorktreeOptions): WorktreeInfo {
+  const wtPath = worktreePathFor(opts.worktreesDir, opts.repoRoot, opts.taskId);
+  fs.mkdirSync(path.dirname(wtPath), { recursive: true });
+
+  if (fs.existsSync(wtPath)) {
+    if (isValidGitCheckout(wtPath)) {
+      // Already a usable checkout at this path (e.g. prior partial run).
+      const headBranch = git(["-C", wtPath, "rev-parse", "--abbrev-ref", "HEAD"]);
+      if (headBranch === opts.branch) {
+        const baseSha = git(["-C", wtPath, "rev-parse", "HEAD"]);
+        return { path: wtPath, branch: opts.branch, baseSha };
+      }
+    }
+    // Empty residue or wrong tree: clear so `worktree add` can proceed.
+    fs.rmSync(wtPath, { recursive: true, force: true });
+    try {
+      git(["-C", opts.repoRoot, "worktree", "prune"]);
+    } catch {
+      /* prune is best-effort */
+    }
+  }
+
+  git(["-C", opts.repoRoot, "worktree", "add", wtPath, opts.branch]);
+  try {
+    const baseSha = finalizeWorktree(opts.repoRoot, wtPath);
+    return { path: wtPath, branch: opts.branch, baseSha };
+  } catch (err) {
+    try {
+      git(["-C", opts.repoRoot, "worktree", "remove", "--force", wtPath]);
     } catch {
       /* best-effort rollback; the original error is the one that matters */
     }

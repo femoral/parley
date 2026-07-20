@@ -40,6 +40,19 @@ export function materializeContext(
   brief: string,
   contexts: ContextFile[],
 ): void {
+  // Never create the workspace itself — only `.parley/` under an existing one.
+  // A recursive mkdir here would silently revive a cleaned worktree path as an
+  // empty non-git directory and let fix spawn into it (#180).
+  let isDir = false;
+  try {
+    isDir = fs.statSync(dir).isDirectory();
+  } catch {
+    isDir = false;
+  }
+  if (!isDir) {
+    throw new Error(`workspace directory does not exist: ${dir}`);
+  }
+
   const root = path.join(dir, PARLEY_DIR);
   fs.mkdirSync(root, { recursive: true });
   fs.writeFileSync(path.join(root, "TASK.md"), brief.endsWith("\n") ? brief : `${brief}\n`);

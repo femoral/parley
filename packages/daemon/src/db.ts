@@ -913,6 +913,8 @@ export type TaskPatch = Partial<
     | "question"
     | "worktree"
     | "branch"
+    /** Cleared with worktree on clean so fix can tell cleaned wt from --cwd (#180). */
+    | "cwd"
     | "eval_score"
     | "eval_feedback"
     | "eval_answers"

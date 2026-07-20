@@ -134,10 +134,12 @@ import {
   type ResolvedTraceField,
 } from "./trace.js";
 import {
+  attachWorktree,
   commonGitDir,
   createWorktree,
   excludeMaterializedFiles,
   gitDir,
+  isValidGitCheckout,
   isWorktreeModified,
   removeWorktree,
   repoRoot,
@@ -1156,11 +1158,31 @@ export class TaskEngine {
     }
 
     const id = nextTaskId(this.db);
-    // Reuse the parent's workspace; fix never cuts a new worktree.
-    const workingDir = parent.cwd ?? process.cwd();
+    // Validate / recreate the inherited workspace before materializing context
+    // (#180). Never let mkdir-on-materialize revive a cleaned worktree path as
+    // an empty non-git directory.
+    let workingDir = "";
+    let worktreePath: string | null = null;
+    let branch: string | null = null;
+    let baseSha: string | null = null;
+    let recreatedWorktree = false;
     try {
+      const resolved = this.resolveFixWorkspace(parent, id);
+      workingDir = resolved.workingDir;
+      worktreePath = resolved.worktree;
+      branch = resolved.branch;
+      baseSha = resolved.baseSha;
+      recreatedWorktree = resolved.recreated;
       materializeContext(workingDir, request.prompt, []);
     } catch (err) {
+      if (recreatedWorktree && worktreePath !== null && parent.repo !== null) {
+        try {
+          removeWorktree(parent.repo, worktreePath);
+        } catch {
+          /* best-effort rollback */
+        }
+      }
+      if (err instanceof DelegateError) throw err;
       throw new DelegateError(`failed to materialize task context: ${errorMessage(err)}`);
     }
 
@@ -1191,9 +1213,9 @@ export class TaskEngine {
       orch_harness: snapshot?.harness ?? null,
       orch_model: snapshot?.model ?? null,
       orch_effort: snapshot?.effort ?? null,
-      worktree: parent.worktree,
-      branch: parent.branch,
-      base_sha: parent.base_sha,
+      worktree: worktreePath,
+      branch,
+      base_sha: baseSha,
       sandbox: parent.sandbox,
       network: parent.network === 1,
       answer_timeout_ms: parent.answer_timeout_ms,
@@ -1419,9 +1441,112 @@ export class TaskEngine {
   }
 
   /**
-   * Remove a task's worktree from disk and clear its `worktree` column (the
-   * branch is always kept). Throws on git failure — callers choose whether
-   * that's fatal (clean), reported (sweep), or best-effort (auto-remove).
+   * Resolve the workspace a fix reattempt should use (#180):
+   * - Existing valid parley worktree → reuse as today.
+   * - Parley-managed worktree gone (clean / vanished) but branch + base still
+   *   recorded → recreate a checkout on that branch for the new attempt.
+   * - User `--cwd` missing → fail fast (never mkdir).
+   * - Remote-affine parents keep the recorded cwd; the runner owns the tree.
+   */
+  private resolveFixWorkspace(
+    parent: TaskRow,
+    fixTaskId: string,
+  ): {
+    workingDir: string;
+    worktree: string | null;
+    branch: string | null;
+    baseSha: string | null;
+    recreated: boolean;
+  } {
+    // Remote runners materialize on the runner host; do not recreate locally.
+    if (parent.runner !== null && parent.runner !== "") {
+      const workingDir = parent.cwd ?? parent.repo ?? process.cwd();
+      return {
+        workingDir,
+        worktree: parent.worktree,
+        branch: parent.branch,
+        baseSha: parent.base_sha,
+        recreated: false,
+      };
+    }
+
+    // Local worktree-managed tasks always record branch + base_sha + repo.
+    // After clean/auto-remove, worktree (and cwd) are null but branch/base remain.
+    const wasWorktreeManaged =
+      parent.repo !== null && parent.branch !== null && parent.base_sha !== null;
+
+    if (wasWorktreeManaged) {
+      const existingPath = parent.worktree ?? parent.cwd;
+      if (existingPath !== null && isValidGitCheckout(existingPath)) {
+        return {
+          workingDir: existingPath,
+          worktree: parent.worktree ?? existingPath,
+          branch: parent.branch,
+          baseSha: parent.base_sha,
+          recreated: false,
+        };
+      }
+
+      const missingHint = existingPath ?? `branch ${parent.branch}`;
+      try {
+        const info = attachWorktree({
+          repoRoot: parent.repo!,
+          worktreesDir: this.paths.worktrees,
+          taskId: fixTaskId,
+          branch: parent.branch!,
+        });
+        return {
+          workingDir: info.path,
+          worktree: info.path,
+          // Keep the inherited baseline (not the branch tip) so auto-remove
+          // and "modified vs base" stay consistent across attempts.
+          branch: parent.branch,
+          baseSha: parent.base_sha,
+          recreated: true,
+        };
+      } catch (err) {
+        throw new DelegateError(
+          `workspace missing or not a git checkout (${missingHint}); ` +
+            `failed to recreate worktree on branch ${parent.branch}: ${errorMessage(err)}. ` +
+            `Run a fresh \`parley delegate\` instead.`,
+        );
+      }
+    }
+
+    // User-supplied `--cwd` (never worktree-managed): directory must already exist.
+    const workingDir = parent.cwd;
+    if (workingDir === null || workingDir === "") {
+      throw new DelegateError(
+        `task ${parent.id} has no workspace directory; run a fresh \`parley delegate\``,
+      );
+    }
+    let isDir = false;
+    try {
+      isDir = fs.statSync(workingDir).isDirectory();
+    } catch {
+      isDir = false;
+    }
+    if (!isDir) {
+      throw new DelegateError(
+        `workspace directory is missing: ${workingDir} ` +
+          `(task ${parent.id} used --cwd); restore the directory or run a fresh \`parley delegate\``,
+      );
+    }
+    return {
+      workingDir,
+      worktree: null,
+      branch: parent.branch,
+      baseSha: parent.base_sha,
+      recreated: false,
+    };
+  }
+
+  /**
+   * Remove a task's worktree from disk and clear its `worktree` + `cwd` columns
+   * (the branch is always kept). Clearing `cwd` distinguishes a cleaned
+   * worktree from a user-supplied `--cwd` for later fix (#180). Throws on git
+   * failure — callers choose whether that's fatal (clean), reported (sweep),
+   * or best-effort (auto-remove).
    */
   private removeTaskWorktree(task: TaskRow): void {
     if (task.worktree === null) return;
@@ -1431,7 +1556,8 @@ export class TaskEngine {
       throw new Error(`task ${task.id} has a worktree but no repo recorded`);
     }
     removeWorktree(task.repo, task.worktree);
-    updateTask(this.db, task.id, { worktree: null });
+    // Null both so fix can tell "cleaned worktree" from "user --cwd still set".
+    updateTask(this.db, task.id, { worktree: null, cwd: null });
   }
 
   /**
