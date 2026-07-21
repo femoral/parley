@@ -595,9 +595,10 @@ export function SailingScene() {
     let idleTimer = 0;
     let cameraTravelActive = false;
     let fxDirty = true;
+    const ambientMs = 2_000;
 
     const scheduleFrame = () => {
-      if (frameId || idleTimer) return;
+      if (document.hidden || frameId || idleTimer) return;
       frameId = window.requestAnimationFrame(frame);
     };
 
@@ -609,6 +610,17 @@ export function SailingScene() {
         idleTimer = 0;
       }
       scheduleFrame();
+    };
+
+    const visibilityChanged = () => {
+      if (document.hidden) {
+        window.cancelAnimationFrame(frameId);
+        window.clearTimeout(idleTimer);
+        frameId = 0;
+        idleTimer = 0;
+        return;
+      }
+      wake();
     };
 
     const invalidateGeometry = () => {
@@ -631,6 +643,7 @@ export function SailingScene() {
       subtree: true,
     });
     window.addEventListener("resize", refreshSea);
+    document.addEventListener("visibilitychange", visibilityChanged);
     const cameraTransition = (event: Event) => {
       const transition = event as TransitionEvent;
       if (transition.propertyName && transition.propertyName !== "transform") return;
@@ -645,6 +658,7 @@ export function SailingScene() {
     const frame = (now: number) => {
       frameId = 0;
       idleTimer = 0;
+      if (document.hidden) return;
       loopGate.consume();
       let loopMode = loopGate.mode;
       try {
@@ -858,7 +872,11 @@ export function SailingScene() {
           if (!live.has(element)) runtimes.delete(element);
         }
         loopMode = loopGate.settle({ active: choreographyActive, reducedMotion: motionReduced });
-        if (overlayCtx && backdropCtx && (fxDirty || loopMode !== "idle")) {
+        // Ambient frames only move the resting swell. The existing effect
+        // pixels remain aligned closely enough at this deliberately slow
+        // cadence; repaint blur-heavy foam only after a real invalidation or
+        // while choreography is active.
+        if (overlayCtx && backdropCtx && (fxDirty || loopMode === "active")) {
           paintShipEffects(
             backdrop,
             overlayCtx,
@@ -888,7 +906,7 @@ export function SailingScene() {
           idleTimer = window.setTimeout(() => {
             idleTimer = 0;
             scheduleFrame();
-          }, 100);
+          }, ambientMs);
         }
       }
     };
@@ -898,6 +916,7 @@ export function SailingScene() {
       window.cancelAnimationFrame(frameId);
       window.clearTimeout(idleTimer);
       window.removeEventListener("resize", refreshSea);
+      document.removeEventListener("visibilitychange", visibilityChanged);
       scene.removeEventListener("transitionrun", cameraTransition);
       scene.removeEventListener("transitionstart", cameraTransition);
       scene.removeEventListener("transitionend", cameraTransition);

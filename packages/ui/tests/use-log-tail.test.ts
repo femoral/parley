@@ -1,8 +1,13 @@
 /** @vitest-environment happy-dom */
 import { act, renderHook, waitFor } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { ParleyClient } from "@useparley/core";
 import { useLogTail } from "../src/app/hooks/useLogTail.js";
+
+afterEach(() => {
+  vi.useRealTimers();
+  vi.restoreAllMocks();
+});
 
 interface Step {
   chunk: string;
@@ -222,5 +227,62 @@ describe("useLogTail's returned view is identity-stable across idle re-renders (
     // clock tick re-rendering everything below it.
     rerender({ _n: 1 });
     expect(result.current).toBe(first);
+  });
+});
+
+describe("useLogTail idle polling (#199)", () => {
+  it("backs off on silent responses and resets to the base interval on new bytes", async () => {
+    vi.useFakeTimers();
+    let calls = 0;
+    const client = new ParleyClient({
+      baseUrl: "",
+      fetch: (async () => {
+        calls += 1;
+        const chunk = calls === 4 ? "awake\n" : "";
+        return new Response(JSON.stringify({ chunk, next: chunk ? 6 : 0, eof: false }), { status: 200 });
+      }) as typeof fetch,
+    });
+    renderHook(() => useLogTail(client, "t1", true, 1_000));
+    await act(async () => vi.advanceTimersByTimeAsync(0));
+    expect(calls).toBe(1);
+    await act(async () => vi.advanceTimersByTimeAsync(1_999));
+    expect(calls).toBe(1);
+    await act(async () => vi.advanceTimersByTimeAsync(1));
+    expect(calls).toBe(2);
+    await act(async () => vi.advanceTimersByTimeAsync(3_999));
+    expect(calls).toBe(2);
+    await act(async () => vi.advanceTimersByTimeAsync(1));
+    expect(calls).toBe(3);
+    await act(async () => vi.advanceTimersByTimeAsync(4_000));
+    expect(calls).toBe(4);
+    await act(async () => vi.advanceTimersByTimeAsync(999));
+    expect(calls).toBe(4);
+    await act(async () => vi.advanceTimersByTimeAsync(1));
+    expect(calls).toBe(5);
+  });
+
+  it("pauses while hidden and polls immediately when visible again", async () => {
+    vi.useFakeTimers();
+    let hidden = false;
+    vi.spyOn(document, "hidden", "get").mockImplementation(() => hidden);
+    let calls = 0;
+    const client = new ParleyClient({
+      baseUrl: "",
+      fetch: (async () => {
+        calls += 1;
+        return new Response(JSON.stringify({ chunk: "", next: 0, eof: false }), { status: 200 });
+      }) as typeof fetch,
+    });
+    renderHook(() => useLogTail(client, "t1", true, 1_000));
+    await act(async () => vi.advanceTimersByTimeAsync(0));
+    expect(calls).toBe(1);
+    hidden = true;
+    act(() => document.dispatchEvent(new Event("visibilitychange")));
+    await act(async () => vi.advanceTimersByTimeAsync(20_000));
+    expect(calls).toBe(1);
+    hidden = false;
+    act(() => document.dispatchEvent(new Event("visibilitychange")));
+    await act(async () => vi.advanceTimersByTimeAsync(0));
+    expect(calls).toBe(2);
   });
 });

@@ -71,6 +71,30 @@ export function useCockpitDocumentTitle(awaitingCount: number): void {
   }, [awaitingCount]);
 }
 
+/** A wall clock that creates no React or timer work while the tab is hidden. */
+export function useVisibleClock(intervalMs = 1_000): number {
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    let interval: ReturnType<typeof setInterval> | undefined;
+    const sync = () => {
+      if (interval !== undefined) clearInterval(interval);
+      interval = undefined;
+      if (document.hidden) return;
+      setNow(Date.now());
+      interval = setInterval(() => setNow(Date.now()), intervalMs);
+    };
+    sync();
+    document.addEventListener("visibilitychange", sync);
+    return () => {
+      document.removeEventListener("visibilitychange", sync);
+      if (interval !== undefined) clearInterval(interval);
+    };
+  }, [intervalMs]);
+
+  return now;
+}
+
 /** The roster's selection state — which orchestrator session and task are
  * active (#66). Lives in the app layer: hud rows/selectors take the current
  * selection and an `onSelect*` callback as plain props and never own it.
@@ -150,7 +174,7 @@ export function useCockpit(): CockpitView {
   const chartStale = useChartStale(live.connected, health.online);
   // Inbox count is the awaiting_answer (and any other question-bearing) tally.
   useCockpitDocumentTitle(live.inbox.length);
-  const [now, setNow] = useState(() => Date.now());
+  const now = useVisibleClock();
   // useState setters are identity-stable, so hud components (memoized against
   // the cockpit's one-second clock re-render) can take them as props directly.
   // Single source of truth for session filter + future scene camera cue (#76).
@@ -221,11 +245,6 @@ export function useCockpit(): CockpitView {
   // Re-selecting the active session is a no-op; only "All hands" (null) deselects.
   const selectSession = useCallback((id: string | null) => {
     setSelectedSessionId((prev) => (prev === id ? prev : id));
-  }, []);
-
-  useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(id);
   }, []);
 
   // If the selected session has no tasks left in the live fleet at all, fall

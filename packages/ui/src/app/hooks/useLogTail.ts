@@ -4,6 +4,7 @@ import { LogAccumulator } from "./logClassify.js";
 import type { LogLine, LogsView } from "../../hud/types.js";
 
 const DEFAULT_POLL_MS = 1000;
+const MAX_IDLE_POLL_MS = 4000;
 
 /** Mutable tail state kept in a ref rather than React state — it must survive
  * the `follow` toggle flipping off and back on (pausing must not lose the
@@ -77,8 +78,22 @@ export function useLogTail(
     }
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
+    let idlePollMs = pollMs;
+    let inFlight = false;
+    let pollAfterFlight = false;
+
+    const schedule = (delay: number) => {
+      if (cancelled || document.hidden) return;
+      timer = setTimeout(() => void tick(), delay);
+    };
 
     const tick = async (): Promise<void> => {
+      if (cancelled || document.hidden) return;
+      if (inFlight) {
+        pollAfterFlight = true;
+        return;
+      }
+      inFlight = true;
       try {
         const state = stateRef.current!;
         const res = await client.logs(taskId, state.cursor);
@@ -92,20 +107,45 @@ export function useLogTail(
         }
         if (changed) setLines(state.acc.lines());
         setLive(!res.eof);
-        if (!res.eof) timer = setTimeout(() => void tick(), pollMs);
+        if (!res.eof) {
+          // Bytes, including a trailing partial line, are activity even when
+          // they do not produce a newly classified line yet.
+          if (res.chunk.length > 0) idlePollMs = pollMs;
+          else idlePollMs = Math.min(Math.max(pollMs, MAX_IDLE_POLL_MS), idlePollMs * 2);
+          schedule(idlePollMs);
+        }
       } catch {
         // A transient daemon hiccup — keep trying at the same cadence rather
         // than giving up the tail (mirrors useHealth's tolerance). `live` is
         // left exactly as it was; a failed attempt never optimistically
         // flips it true.
-        if (!cancelled) timer = setTimeout(() => void tick(), pollMs);
+        schedule(pollMs);
+      } finally {
+        inFlight = false;
+        if (pollAfterFlight && !cancelled && !document.hidden) {
+          pollAfterFlight = false;
+          if (timer !== undefined) clearTimeout(timer);
+          timer = undefined;
+          void tick();
+        }
       }
     };
 
+    const visibilityChanged = () => {
+      if (timer !== undefined) clearTimeout(timer);
+      timer = undefined;
+      if (!document.hidden) {
+        idlePollMs = pollMs;
+        void tick();
+      }
+    };
+
+    document.addEventListener("visibilitychange", visibilityChanged);
     void tick();
     return () => {
       cancelled = true;
       if (timer) clearTimeout(timer);
+      document.removeEventListener("visibilitychange", visibilityChanged);
     };
   }, [client, taskId, follow, pollMs]);
 

@@ -61,7 +61,7 @@ describe("the sailing simulation under prefers-reduced-motion", () => {
 });
 
 describe("the sailing simulation ambient scheduler", () => {
-  it("keeps scheduling settled ambient ticks after each timeout fires", () => {
+  it("caps settled ticks far below 10fps and wakes immediately for real scene changes", async () => {
     vi.useFakeTimers();
     vi.spyOn(window, "matchMedia").mockReturnValue({
       matches: false,
@@ -91,7 +91,7 @@ describe("the sailing simulation ambient scheduler", () => {
           {
             id: "ambient",
             label: "ambient",
-            tasks: [{ ...TASK, state: "awaiting_answer" }],
+            tasks: [],
             attention: null,
           },
         ]}
@@ -101,7 +101,66 @@ describe("the sailing simulation ambient scheduler", () => {
       />,
     );
 
-    act(() => vi.advanceTimersByTime(450));
-    expect(frameCount).toBeGreaterThanOrEqual(4);
+    await act(async () => vi.advanceTimersByTimeAsync(450));
+    const settledFrames = frameCount;
+    expect(settledFrames).toBeLessThanOrEqual(2);
+    const settledTransform = document.querySelector<HTMLElement>(".pc-galleon")!.style.transform;
+
+    const region = document.querySelector(".pc-region")!;
+    act(() => region.setAttribute("data-island-count", "2"));
+    await act(async () => vi.advanceTimersByTimeAsync(1));
+    expect(frameCount).toBe(settledFrames + 1);
+
+    await act(async () => vi.advanceTimersByTimeAsync(4_999));
+    expect(frameCount - settledFrames).toBeLessThanOrEqual(4);
+    expect(document.querySelector<HTMLElement>(".pc-galleon")!.style.transform).not.toBe(
+      settledTransform,
+    );
+  });
+
+  it("stops the real scheduling chain while hidden and wakes on visibility", async () => {
+    vi.useFakeTimers();
+    vi.spyOn(window, "matchMedia").mockReturnValue({
+      matches: false,
+      media: "(prefers-reduced-motion: reduce)",
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    });
+    let hidden = false;
+    vi.spyOn(document, "hidden", "get").mockImplementation(() => hidden);
+    let frameCount = 0;
+    vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+      const id = window.setTimeout(() => {
+        frameCount += 1;
+        callback(performance.now());
+      }, 0);
+      return id;
+    });
+    vi.spyOn(window, "cancelAnimationFrame").mockImplementation((id) => window.clearTimeout(id));
+
+    render(
+      <Scene
+        sessions={[{ id: "hidden", label: "hidden", tasks: [], attention: null }]}
+        activeSessionId="hidden"
+        onSelectTask={() => undefined}
+        onSelectSession={() => undefined}
+      />,
+    );
+    await act(async () => vi.advanceTimersByTimeAsync(1));
+    const visibleFrames = frameCount;
+
+    hidden = true;
+    act(() => document.dispatchEvent(new Event("visibilitychange")));
+    await act(async () => vi.advanceTimersByTimeAsync(10_000));
+    expect(frameCount).toBe(visibleFrames);
+
+    hidden = false;
+    act(() => document.dispatchEvent(new Event("visibilitychange")));
+    await act(async () => vi.advanceTimersByTimeAsync(1));
+    expect(frameCount).toBe(visibleFrames + 1);
   });
 });

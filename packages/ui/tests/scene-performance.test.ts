@@ -26,10 +26,10 @@ describe("SailingScene frame loop gate (#188)", () => {
 
   it("quantifies idle work removed over five seconds", () => {
     const beforeFrames = 5 * 60;
-    const ambientFrames = 5 * 10;
+    const ambientFrames = 3;
     const reducedFramesAfterSettling = 0;
     const beforeFxRepaints = beforeFrames;
-    const ambientFxRepaints = ambientFrames;
+    const ambientFxRepaints = 0;
     const reducedFxRepaintsAfterSettling = 0;
     expect({
       beforeFrames,
@@ -40,10 +40,10 @@ describe("SailingScene frame loop gate (#188)", () => {
       reducedFxRepaintsAfterSettling,
     }).toEqual({
       beforeFrames: 300,
-      ambientFrames: 50,
+      ambientFrames: 3,
       reducedFramesAfterSettling: 0,
       beforeFxRepaints: 300,
-      ambientFxRepaints: 50,
+      ambientFxRepaints: 0,
       reducedFxRepaintsAfterSettling: 0,
     });
   });
