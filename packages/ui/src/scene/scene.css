@@ -173,6 +173,13 @@
     transparent 103%
   );
 }
+/* The idle JS driver writes one calibrated swell pose every two seconds.
+   Interpolate those sparse writes on the compositor so the resting hull keeps
+   gliding continuously without waking JS at animation cadence. `wake()` drops
+   this attribute before active choreography's first transform write. */
+[data-sailing-ship][data-ambient-swell="true"] {
+  transition: transform 2000ms linear;
+}
 .pc-galleon__sprite {
   display: block;
   width: 100%;

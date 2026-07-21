@@ -85,7 +85,12 @@ describe("the sailing simulation ambient scheduler", () => {
       window.clearTimeout(id);
     });
 
-    render(
+    const sceneProps = {
+      activeSessionId: "ambient",
+      onSelectTask: () => undefined,
+      onSelectSession: () => undefined,
+    };
+    const { rerender } = render(
       <Scene
         sessions={[
           {
@@ -95,27 +100,38 @@ describe("the sailing simulation ambient scheduler", () => {
             attention: null,
           },
         ]}
-        activeSessionId="ambient"
-        onSelectTask={() => undefined}
-        onSelectSession={() => undefined}
+        {...sceneProps}
       />,
     );
 
     await act(async () => vi.advanceTimersByTimeAsync(450));
     const settledFrames = frameCount;
     expect(settledFrames).toBeLessThanOrEqual(2);
-    const settledTransform = document.querySelector<HTMLElement>(".pc-galleon")!.style.transform;
-
-    const region = document.querySelector(".pc-region")!;
-    act(() => region.setAttribute("data-island-count", "2"));
-    await act(async () => vi.advanceTimersByTimeAsync(1));
-    expect(frameCount).toBe(settledFrames + 1);
+    const galleon = document.querySelector<HTMLElement>(".pc-galleon")!;
+    const settledTransform = galleon.style.transform;
+    expect(galleon.dataset.ambientSwell).toBe("true");
 
     await act(async () => vi.advanceTimersByTimeAsync(4_999));
-    expect(frameCount - settledFrames).toBeLessThanOrEqual(4);
-    expect(document.querySelector<HTMLElement>(".pc-galleon")!.style.transform).not.toBe(
-      settledTransform,
+    const ambientFrames = frameCount;
+    expect(ambientFrames - settledFrames).toBeLessThanOrEqual(3);
+    expect(galleon.style.transform).not.toBe(settledTransform);
+
+    rerender(
+      <Scene
+        sessions={[
+          {
+            id: "ambient",
+            label: "ambient",
+            tasks: [{ ...TASK, state: "running" }],
+            attention: null,
+          },
+        ]}
+        {...sceneProps}
+      />,
     );
+    await act(async () => vi.advanceTimersByTimeAsync(1));
+    expect(frameCount).toBeGreaterThan(ambientFrames);
+    expect(galleon.dataset.ambientSwell).toBeUndefined();
   });
 
   it("stops the real scheduling chain while hidden and wakes on visibility", async () => {

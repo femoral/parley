@@ -592,6 +592,7 @@ export function SailingScene() {
     let frameId = 0;
     let lastNow = performance.now();
     let simTime = 0;
+    let swellTime = 0;
     let idleTimer = 0;
     let cameraTravelActive = false;
     let fxDirty = true;
@@ -602,7 +603,18 @@ export function SailingScene() {
       frameId = window.requestAnimationFrame(frame);
     };
 
+    const setAmbientSmoothing = (enabled: boolean) => {
+      for (const ship of scene.querySelectorAll<HTMLElement>("[data-sailing-ship]")) {
+        if (enabled) ship.dataset.ambientSwell = "true";
+        else delete ship.dataset.ambientSwell;
+      }
+    };
+
     const wake = () => {
+      // Remove interpolation before the wake frame is even queued: active
+      // choreography must never make its first transform write through the
+      // two-second ambient transition.
+      setAmbientSmoothing(false);
       loopGate.wake();
       fxDirty = true;
       if (idleTimer) {
@@ -620,6 +632,8 @@ export function SailingScene() {
         idleTimer = 0;
         return;
       }
+      // Hidden wall time must not advance the swell on the visibility frame.
+      lastNow = performance.now();
       wake();
     };
 
@@ -663,9 +677,15 @@ export function SailingScene() {
       let loopMode = loopGate.mode;
       try {
         const motionReduced = reducedRef.current;
-        const dt = Math.min(Math.max(0, (now - lastNow) / 1000), 0.1);
+        const elapsedSeconds = Math.max(0, (now - lastNow) / 1000);
+        const dt = Math.min(elapsedSeconds, 0.1);
         lastNow = now;
-        if (!motionReduced) simTime += dt;
+        if (!motionReduced) {
+          simTime += dt;
+          // Sparse ambient frames still sample the original real-time swell;
+          // active choreography keeps its existing per-frame values.
+          swellTime += Math.min(elapsedSeconds, ambientMs / 1_000);
+        }
 
         if (cameraTravelActive) geometryCache.invalidate();
         const sceneRect = geometryCache.rect(scene);
@@ -739,6 +759,7 @@ export function SailingScene() {
           const shipWidth = calibration.width * zoom;
           const shipHeight = shipWidth * calibration.aspect;
           const t = simTime;
+          const swellT = swellTime;
           const poseElapsed = motionReduced ? Number.POSITIVE_INFINITY : t - runtime.poseStartedAt;
           choreographyActive =
             choreographyActive ||
@@ -749,12 +770,19 @@ export function SailingScene() {
             Math.abs(runtime.flip - runtime.flipTarget) > 0.001;
           const motion = pose === "anchored" ? 0.45 : pose === "adrift" ? 0.75 : 1;
           const m = motion * calibration.amp;
-          const bob = (Math.sin(t * 0.85 + calibration.phase) * 7 + Math.sin(t * 0.5 + 1.2 + calibration.phase) * 4) * m;
-          const sway = Math.sin(t * 0.37 + calibration.phase) * 8 * m;
+          const bob =
+            (Math.sin(swellT * 0.85 + calibration.phase) * 7 +
+              Math.sin(swellT * 0.5 + 1.2 + calibration.phase) * 4) *
+            m;
+          const sway = Math.sin(swellT * 0.37 + calibration.phase) * 8 * m;
           const rockMultiplier = pose === "adrift" ? 1.6 : 1;
-          const rock = (Math.sin(t * 0.62 + 0.4 + calibration.phase) * 1.7 + Math.sin(t * 0.21 + calibration.phase) * 1.1) * m * rockMultiplier;
+          const rock =
+            (Math.sin(swellT * 0.62 + 0.4 + calibration.phase) * 1.7 +
+              Math.sin(swellT * 0.21 + calibration.phase) * 1.1) *
+            m *
+            rockMultiplier;
           const roll = calibration.baseHeel + rock;
-          const squash = 1 + Math.sin(t * 0.77 + 2 + calibration.phase) * 0.006 * m;
+          const squash = 1 + Math.sin(swellT * 0.77 + 2 + calibration.phase) * 0.006 * m;
 
           let cx = 0;
           let cy = 0;
@@ -872,6 +900,7 @@ export function SailingScene() {
           if (!live.has(element)) runtimes.delete(element);
         }
         loopMode = loopGate.settle({ active: choreographyActive, reducedMotion: motionReduced });
+        setAmbientSmoothing(loopMode === "ambient");
         // Ambient frames only move the resting swell. The existing effect
         // pixels remain aligned closely enough at this deliberately slow
         // cadence; repaint blur-heavy foam only after a real invalidation or
