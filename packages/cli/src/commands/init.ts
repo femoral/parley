@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import * as p from "@clack/prompts";
 import {
   getShippedVendorModels,
   loadCatalog,
@@ -8,7 +9,9 @@ import {
   writeCatalog,
   writeConfig,
   type ModelCatalog,
+  type ModelEntry,
   type ParleyConfig,
+  type VendorModelAllowlistEntry,
 } from "@useparley/core";
 import { createAdapterRegistry } from "@useparley/daemon/adapters/index.js";
 import { type CliContext, printJson } from "../context.js";
@@ -19,6 +22,8 @@ import {
   parseSkillInstallArgs,
 } from "./skills/install.js";
 import { formatInstallSummary, isGitRepo, repoRoot } from "./skills/copy.js";
+import { PromptCancelled } from "./skills/prompts.js";
+import { setupBundledPlugins } from "./plugins/setup.js";
 
 /**
  * Built-in vendor ids and default CLI binary names (adapter DEFAULT_*_BIN).
@@ -166,6 +171,100 @@ export interface HarnessModelResult {
   modelIds: string[];
 }
 
+function modelEntries(catalog: ModelCatalog, vendor: string): ModelEntry[] {
+  const live = catalog[vendor]?.models;
+  if (live && live.length > 0) return live;
+  return getShippedVendorModels(vendor)?.models ?? [];
+}
+
+function defaultMarker(model: ModelEntry): true | string {
+  return model.default_effort && model.efforts.includes(model.default_effort)
+    ? model.default_effort
+    : model.efforts.length === 1
+      ? true
+      : model.efforts[0] ?? true;
+}
+
+/** Build a valid authoritative allowlist from advisory catalog entries. */
+export function seedVendorModels(
+  models: readonly ModelEntry[],
+  selectedIds: readonly string[] = models.map((model) => model.id),
+  defaultId: string | undefined = selectedIds[0],
+): Record<string, VendorModelAllowlistEntry> {
+  const selected = new Set(selectedIds);
+  const allowlist: Record<string, VendorModelAllowlistEntry> = {};
+  for (const model of models) {
+    if (!selected.has(model.id)) continue;
+    allowlist[model.id] = {
+      efforts: [...model.efforts],
+      ...(model.id === defaultId ? { default: defaultMarker(model) } : {}),
+    };
+  }
+  return allowlist;
+}
+
+async function promptVendorModels(
+  vendor: string,
+  models: readonly ModelEntry[],
+): Promise<Record<string, VendorModelAllowlistEntry>> {
+  const selected = await p.multiselect({
+    message: `${vendor}: models to allow`,
+    options: models.map((model) => ({
+      value: model.id,
+      label: model.id,
+      hint: model.efforts.length > 0 ? `efforts: ${model.efforts.join(", ")}` : "no effort flag",
+    })),
+    initialValues: models.map((model) => model.id),
+    required: true,
+  });
+  if (p.isCancel(selected)) throw new PromptCancelled();
+  const defaultId = await p.select({
+    message: `${vendor}: default model`,
+    options: selected.map((id) => ({ value: id, label: id })),
+    initialValue: selected[0],
+  });
+  if (p.isCancel(defaultId)) throw new PromptCancelled();
+  return seedVendorModels(models, selected, defaultId);
+}
+
+/** Populate only missing daemon-owned delegation defaults; never replace values. */
+export async function populateInitConfig(opts: {
+  config: ParleyConfig;
+  harnesses: readonly string[];
+  catalog: ModelCatalog;
+  interactive: boolean;
+}): Promise<{ config: ParleyConfig; changed: boolean; configuredVendors: string[] }> {
+  const config = structuredClone(opts.config);
+  const configuredVendors: string[] = [];
+  let changed = false;
+  for (const vendor of opts.harnesses) {
+    const existing = config.vendors?.[vendor]?.models;
+    if (existing && Object.keys(existing).length > 0) {
+      configuredVendors.push(vendor);
+      continue;
+    }
+    const models = modelEntries(opts.catalog, vendor);
+    if (models.length === 0) continue;
+    const allowlist = opts.interactive
+      ? await promptVendorModels(vendor, models)
+      : seedVendorModels(models);
+    config.vendors ??= {};
+    config.vendors[vendor] = { ...config.vendors[vendor], models: allowlist };
+    configuredVendors.push(vendor);
+    changed = true;
+  }
+  config.defaults ??= {};
+  if (!config.defaults.vendor && configuredVendors.length > 0) {
+    config.defaults.vendor = configuredVendors[0];
+    changed = true;
+  }
+  if (!config.defaults.profile && config.profiles && Object.keys(config.profiles).length > 0) {
+    config.defaults.profile = Object.keys(config.profiles).sort()[0];
+    changed = true;
+  }
+  return { config, changed, configuredVendors };
+}
+
 function catalogEntrySummary(catalog: ModelCatalog, vendor: string): HarnessModelResult {
   const entry = catalog[vendor];
   if (entry === undefined || entry.models.length === 0) {
@@ -278,6 +377,33 @@ export async function runInit(ctx: CliContext, args: string[]): Promise<number> 
     writeCatalog(modelsFile, catalog);
   }
 
+  // Authoritative delegation settings are daemon-owned and always live in the
+  // home config, regardless of the project-settings/skill install scope.
+  let populated;
+  try {
+    populated = await populateInitConfig({ config, harnesses, catalog, interactive });
+  } catch (err) {
+    if (err instanceof PromptCancelled) return 130;
+    throw err;
+  }
+  if (populated.changed) writeConfig(ctx.paths.config, populated.config);
+  config = populated.config;
+
+  let pluginSetup;
+  try {
+    pluginSetup = await setupBundledPlugins({
+      ctx,
+      cwd,
+      harnesses,
+      interactive,
+      yes: parsed.yes,
+      json,
+    });
+  } catch (err) {
+    if (err instanceof PromptCancelled) return 130;
+    throw err;
+  }
+
   if (json) {
     printJson(ctx, {
       skills: {
@@ -300,6 +426,7 @@ export async function runInit(ctx: CliContext, args: string[]): Promise<number> 
         vendors: modelResults,
         warnings: modelWarnings,
       },
+      plugins: pluginSetup,
     });
     return 0;
   }
@@ -320,6 +447,9 @@ export async function runInit(ctx: CliContext, args: string[]): Promise<number> 
     ctx.stdout("  project: (scope=global; no project config written)\n");
   }
   ctx.stdout(`  scope: ${configResult.scope}\n`);
+  if (populated.configuredVendors.length > 0) {
+    ctx.stdout(`  delegation defaults: ${populated.configuredVendors.join(", ")}\n`);
+  }
 
   ctx.stdout("\n## Harnesses\n");
   if (harnesses.length === 0) {
@@ -366,6 +496,16 @@ export async function runInit(ctx: CliContext, args: string[]): Promise<number> 
       }
     }
   }
+
+  ctx.stdout("\n## Provenance plugins\n");
+  if (pluginSetup.available.length === 0) {
+    ctx.stdout("  No first-party provenance plugin matches a detected harness.\n");
+  } else if (pluginSetup.installed.length > 0) {
+    ctx.stdout(`  Set up: ${pluginSetup.installed.join(", ")}\n`);
+  } else {
+    ctx.stdout(`  Available: ${pluginSetup.available.join(", ")}\n`);
+  }
+  for (const warning of pluginSetup.warnings) ctx.stderr(`warning: ${warning}\n`);
 
   return 0;
 }

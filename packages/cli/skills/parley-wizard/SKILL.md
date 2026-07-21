@@ -14,7 +14,7 @@ Walk the user to a correct project setup through conversation. Two branches:
 
 **Ground rules (every run):**
 
-1. **Start from what exists.** Load current project and daemon settings first. Never factory-reset; never wipe files the user didn't ask to change.
+1. **Ask scope first, then start from what exists.** The first prompt always chooses project, global, or both. Then load current project and daemon settings. Never factory-reset; never wipe files the user didn't ask to change.
 2. **Accepting everything is a no-op.** If the user keeps every current value (or every shipped default when nothing is written yet), write nothing.
 3. **Show before write.** Diff or full content of every file you are about to create or change; wait for approval.
 4. **Layers: project, global, daemon.** Project files live under `.parley/` in the repo. Shared project-settings (eval, resume, retry, optional taskTypes) may also live in the global home layer (`~/.parley/parley.json` and/or `~/.parley/config.json`); project overrides global per key. Daemon-only keys (`retention.days`, `daemon.url`, vendors, profiles, `defaults.vendor` / `defaults.profile`) go through `parley config` — same surface for local and remote daemons. Effective resolution: shipped defaults < global home < project.
@@ -26,7 +26,23 @@ Walk the user to a correct project setup through conversation. Two branches:
 
 Work the stages in order. Each stage ends when the user confirms the value (or accepts the current/default). Rubric editing is skippable wholesale; every other stage still needs an explicit accept.
 
-### 0. Load current state
+### 0. Settings scope — always the first prompt
+
+Before reading config or asking any setting value, always ask:
+
+> Where should shared project settings be configured: this project only, your global defaults, or both?
+
+Explain the choices accurately:
+
+- **Project only** — `.parley/config.json`; may hold only the per-key layered settings `eval`, `resume`, `retry`, and `taskTypes`.
+- **Global defaults** — the home layer; may provide shared `eval`, `resume`, `retry`, and `taskTypes` defaults. Daemon-only settings still live in `~/.parley/parley.json`.
+- **Both** — global shared defaults plus intentional project overrides/project-owned types.
+
+Use `$PARLEY_HOME` when set instead of `~/.parley`. Existing global files never suppress this question. The selected scope controls only layerable project settings. Daemon-only keys (`vendors`, `profiles`, `defaults.vendor`, `defaults.profile`, `retention.days`, and `daemon.url`) always go to the home `parley.json` through `parley config`, regardless of this choice.
+
+Done when the user explicitly chooses project, global, or both.
+
+### 0b. Load current state
 
 From the project root:
 
@@ -40,40 +56,7 @@ parley models --json 2>/dev/null
 command -v codex grok claude gemini opencode goose pi cline kilo openhands hermes openclaw kimi 2>/dev/null
 ```
 
-Summarize what is already configured vs still at shipped defaults — including whether a **global home config** is present. Done when you know the baseline you will edit from.
-
-### 0b. Settings scope
-
-On full interview, decide where shared settings will be written **before** the value stages.
-
-**Global home config** means either of:
-
-- `~/.parley/parley.json` (daemon home; also holds vendors, profiles, retention, defaults)
-- `~/.parley/config.json` (optional global project-settings layer; same schema as project `.parley/config.json`)
-
-Use `$PARLEY_HOME` when set instead of `~/.parley`.
-
-| Home state | What to do |
-| --- | --- |
-| **Either global file exists** | Skip the scope question. Default to **project** scope for this run. Tell the user what you found (e.g. "Detected `~/.parley/parley.json` — configuring this project under `.parley/` only; leaving global as-is unless you ask to change it."). |
-| **Neither global file exists** (fresh home) | Ask whether to set up **project settings only**, **global settings**, or **both**. |
-
-Scope outcomes (fresh home only):
-
-| Choice | Write shared defaults (eval, resume, retry, `defaults.vendor` / `defaults.profile`) | Write project-owned (taskTypes when repo-local, classification, rubrics) |
-| --- | --- | --- |
-| **Project only** | `.parley/config.json` (defaults.* still via `parley config` if set) | `.parley/` as today |
-| **Global only** | Global layer (see below) | Only if the user still wants repo-local types/guidance/rubrics; otherwise omit project files |
-| **Both** | Global layer | `.parley/` for project-specific keys and any intentional project overrides |
-
-**Global layer writes** (when scope is global or both):
-
-- Prefer `parley config set` for keys it supports: `eval.enabled`, `resume.enabled`, `retry.max`, `retry.window`, `defaults.vendor`, `defaults.profile` → daemon home `parley.json`.
-- Optional: `~/.parley/config.json` for the same project-settings schema as the project file. Prefer **one** home surface per key — do not duplicate the same key in both `parley.json` and home `config.json`.
-
-Daemon-only stages (retention, remote daemon, vendors/profiles) always use `parley config` regardless of scope; they are not project files.
-
-Done when scope is fixed (asked, or defaulted because global already exists).
+Summarize what is already configured vs still at shipped defaults — including whether a **global home config** is present. Preserve the scope choice already made; discovery never silently changes it. Done when you know the baseline you will edit from.
 
 ### 1. Evaluation on/off
 
@@ -81,7 +64,7 @@ Default is **OFF**. Ask whether structured evaluation of completed tasks should 
 
 **Cost warning (always state when enabling):** turning eval on means every reviewed task needs `parley eval … --answers` (and session provenance when eval is on). That is orchestrator token cost and process overhead — not free. Prefer OFF unless the user wants metrics and scored rubrics.
 
-Write according to [settings scope](#0b-settings-scope):
+Write according to [settings scope](#0-settings-scope--always-the-first-prompt):
 
 ```json
 { "eval": { "enabled": false } }
@@ -159,7 +142,7 @@ Done when the user confirms the number of days.
 
 ### 6. Resume and retries
 
-Shared settings (respect [settings scope](#0b-settings-scope); merge with eval/taskTypes on the same layer):
+Shared settings (respect [settings scope](#0-settings-scope--always-the-first-prompt); merge with eval/taskTypes on the same layer):
 
 | Key | Default | Meaning |
 | --- | --- | --- |
@@ -277,6 +260,8 @@ Then show the result (`parley models` or `parley models --vendor <id> --json`).
 
 Use refreshed (or shipped-fallback) model ids and efforts when offering **allowlist combos** and profile `.model` / `.effort` values. Profiles beat ad-hoc flags for metrics. Catalog stays advisory and hand-editable; the allowlist gates spawn.
 
+Also offer the first-party ADR-0013 session-provenance plugins for detected Claude Code, Codex, Grok, and Pi harnesses. `parley init` surfaces the supported plugin picker and setup commands; it installs `@useparley/plugin-claude-code`, `@useparley/plugin-codex`, `@useparley/plugin-grok`, or `@useparley/plugin-pi` through each harness's native plugin manager. These provenance plugins are unrelated to vendor adapter modules configured at `vendors.<id>.plugin` (ADR-0009).
+
 When scope includes **global** (or the user wants a home-wide fallback), also offer delegate defaults:
 
 ```
@@ -290,7 +275,7 @@ Done when the user confirms the vendor set, **allowlists (combos/default/hints)*
 
 ### 9. Write
 
-Apply only approved diffs, honoring [settings scope](#0b-settings-scope).
+Apply only approved diffs, honoring [settings scope](#0-settings-scope--always-the-first-prompt).
 
 **Project layer** (project-only, or project side of both) — typical `.parley/config.json`:
 
@@ -336,7 +321,7 @@ Map the intent to the smallest set of stages above:
 | point at a remote daemon | 7 |
 | vendors / profiles / models | 8 |
 
-Load current state (stage 0). Skip the full-interview scope question unless the user is doing a from-scratch init: keep writing on the layer that already owns the setting (or project when ambiguous). Change only what the intent needs, show diffs, write, then [After writes](#after-writes).
+Ask the settings-scope question first (stage 0), even for targeted reconfiguration. Then load current state (stage 0b), change only what the intent needs, show diffs, write, then [After writes](#after-writes).
 
 ---
 
