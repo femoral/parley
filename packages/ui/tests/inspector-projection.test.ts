@@ -98,11 +98,11 @@ describe("projectInspector projects a task's Brief tab (#68)", () => {
     expect(view.brief.usage).toBe("1.2k ▸ 340 tok");
   });
 
-  it("carries the faction coat/emblem/label from the vendor", () => {
-    const view = projectInspector(detail({ vendor: "grok" }), NO_LOGS);
-    expect(view.coat).toBe("#2b2b2e");
+  it("carries the vendor emblem and orchestrator harness colour independently", () => {
+    const view = projectInspector(detail({ vendor: "grok" }, { orch_harness: "opencode" }), NO_LOGS);
+    expect(view.coat).toBe("#80A83D");
     expect(view.emblem.kind).toBe("svg");
-    expect(view.faction).toBe("Grok");
+    expect(view.faction).toBe("Grok via OpenCode");
   });
 
   it("projects the task error field (failure cause) through to the inspector view", () => {

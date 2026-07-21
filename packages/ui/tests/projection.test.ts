@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { formatUptime, formatClock } from "../src/app/hooks/format.js";
-import { factionFor, UNALIGNED } from "../src/tokens/factions.js";
+import { harnessColorFor, vendorEmblemFor } from "../src/tokens/factions.js";
 import { stateMetaFor } from "../src/tokens/state-meta.js";
 
 describe("formatUptime (cockpit clock phrasing)", () => {
@@ -23,14 +23,14 @@ describe("formatClock", () => {
   });
 });
 
-describe("factionFor", () => {
-  it("resolves seeded vendors and falls back to Unaligned", () => {
-    expect(factionFor("codex").label).toBe("Codex");
-    expect(factionFor("codex").coat).toBe("#10a37f");
-    expect(factionFor("pi").emblem).toEqual({ kind: "glyph", char: "π" });
-    expect(factionFor("grok").emblem.kind).toBe("svg");
-    expect(factionFor("brand-new")).toBe(UNALIGNED);
-    expect(factionFor(null)).toBe(UNALIGNED);
+describe("task identity resolvers", () => {
+  it("resolves vendor marks and harness colours on separate axes", () => {
+    expect(vendorEmblemFor("codex").label).toBe("Codex");
+    expect(vendorEmblemFor("pi").emblem).toEqual({ kind: "glyph", char: "π" });
+    expect(vendorEmblemFor("grok").emblem.kind).toBe("svg");
+    expect(vendorEmblemFor("brand-new").emblem).toEqual({ kind: "glyph", char: "?" });
+    expect(harnessColorFor("codex").coat).toBe("#18A886");
+    expect(harnessColorFor(null).coat).toBe("#FFFFFF");
   });
 });
 

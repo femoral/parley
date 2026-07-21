@@ -6,6 +6,7 @@ function task(overrides: Partial<RosterTaskInput> & Pick<RosterTaskInput, "id" |
   return {
     name: overrides.id,
     vendor: "codex",
+    orchHarness: "codex",
     branch: "feat/x",
     orchestratorSession: null,
     question: null,
@@ -23,9 +24,9 @@ describe("projectInbox selects tasks blocked on an answer (#67)", () => {
         id: "a",
         name: "a",
         state: "awaiting_answer",
-        coat: "#10a37f",
+        coat: "#18A886",
         emblem: expect.objectContaining({ kind: "svg" }),
-        faction: "Codex",
+        faction: "Codex via Codex",
         meta: "feat/x · a",
         question: "Which port?",
         sessionId: "sess-1",
@@ -65,15 +66,15 @@ describe("projectInbox selects tasks blocked on an answer (#67)", () => {
 
   it("projects faction coat/emblem/label and a branch·id meta line, same shape as the roster", () => {
     const cards = projectInbox([
-      task({ id: "abcdefghij", state: "awaiting_answer", vendor: "grok", question: "Deploy now?" }),
+      task({ id: "abcdefghij", state: "awaiting_answer", vendor: "grok", orchHarness: "opencode", question: "Deploy now?" }),
     ]);
     expect(cards[0]).toEqual({
       id: "abcdefghij",
       name: "abcdefghij",
       state: "awaiting_answer",
-      coat: "#2b2b2e",
+      coat: "#80A83D",
       emblem: expect.objectContaining({ kind: "svg" }),
-      faction: "Grok",
+      faction: "Grok via OpenCode",
       meta: "feat/x · abcdefgh",
       question: "Deploy now?",
       sessionId: null,

@@ -6,7 +6,7 @@
  * (pure, unit-testable, no React/SSE here).
  */
 import type { AttemptLineageEntry, TaskDetailResponse } from "@useparley/core";
-import { factionFor } from "../../tokens/factions.js";
+import { harnessColorFor, vendorEmblemFor } from "../../tokens/factions.js";
 import { stateMetaFor } from "../../tokens/state-meta.js";
 import type {
   AttemptLineageItem,
@@ -111,14 +111,15 @@ export function projectAttemptLineage(
  */
 export function projectInspector(detail: TaskDetailResponse, logs: LogsView): InspectorTask {
   const { task, row } = detail;
-  const faction = factionFor(task.vendor);
+  const vendor = vendorEmblemFor(task.vendor);
+  const harness = harnessColorFor(row.orch_harness);
 
   return {
     id: task.task_id,
     name: task.name ?? task.task_id,
-    coat: faction.coat,
-    emblem: faction.emblem,
-    faction: faction.label,
+    coat: harness.coat,
+    emblem: vendor.emblem,
+    faction: `${vendor.label} via ${harness.label}`,
     state: task.state,
     queuePosition: task.queue_position ?? null,
     blockingCap: task.blocking_cap ?? null,

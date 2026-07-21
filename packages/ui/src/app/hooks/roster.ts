@@ -14,7 +14,7 @@
  * core's `ATTENTION_ORDER` — only the live roster list uses this window.
  */
 import { attentionRank, isTerminalState } from "@useparley/core";
-import { factionFor } from "../../tokens/factions.js";
+import { harnessColorFor, vendorEmblemFor } from "../../tokens/factions.js";
 import type { RosterGroup, RosterSessionOption, RosterTask } from "../../hud/types.js";
 
 /**
@@ -36,6 +36,8 @@ export interface RosterTaskInput {
   id: string;
   name: string;
   vendor: string | null;
+  /** Adapter running the orchestrator model; supplies task identity colour. */
+  orchHarness?: string | null;
   state: string;
   branch: string | null;
   /** The orchestrator session this task belongs to (spec's "big ship"), or
@@ -148,14 +150,15 @@ function toRosterTask(
   task: RosterTaskInput,
   freshness: FailedFreshness | null | undefined,
 ): RosterTask {
-  const faction = factionFor(task.vendor);
+  const vendor = vendorEmblemFor(task.vendor);
+  const harness = harnessColorFor(task.orchHarness);
   const freshFailure = isFreshFailure(task.id, task.state, freshness);
   return {
     id: task.id,
     name: task.name,
-    coat: faction.coat,
-    emblem: faction.emblem,
-    faction: faction.label,
+    coat: harness.coat,
+    emblem: vendor.emblem,
+    faction: `${vendor.label} via ${harness.label}`,
     meta: `${task.branch ?? "no branch"} · ${shortId(task.id)}`,
     // Only meaningful for failed rows; the panel treats undefined as archive
     // defaults from STATE_META.

@@ -60,6 +60,7 @@ function fromRow(row: TaskRow): RosterTaskInput {
     id: row.id,
     name: row.name ?? row.id,
     vendor: row.vendor,
+    orchHarness: row.orch_harness,
     state: row.state,
     branch: row.branch,
     orchestratorSession: row.orchestrator_session_id,
@@ -83,6 +84,7 @@ function mergeEnvelope(prev: RosterTaskInput | undefined, event: StreamEvent): R
     id: t.task_id,
     name: t.name ?? t.task_id,
     vendor: t.vendor,
+    orchHarness: prev?.orchHarness ?? null,
     state: t.state,
     branch: t.branch,
     orchestratorSession: prev?.orchestratorSession ?? null,
@@ -150,11 +152,15 @@ export function useSnapshot(client: ParleyClient): SnapshotView {
       setStreamLostSince((prev) => prev ?? Date.now());
     };
 
-    /** Adopt `session` for `id` when the task is still session-less. */
-    const adoptSession = (id: string, session: string | null): void => {
+    /** Backfill row-only identity/session fields after a task first arrives by SSE. */
+    const adoptRowFields = (id: string, row: TaskRow): void => {
       const current = taskMap.get(id);
-      if (!session || !current || current.orchestratorSession !== null) return;
-      taskMap.set(id, { ...current, orchestratorSession: session });
+      if (!current) return;
+      taskMap.set(id, {
+        ...current,
+        orchestratorSession: current.orchestratorSession ?? row.orchestrator_session_id,
+        orchHarness: row.orch_harness,
+      });
       emit();
     };
 
@@ -164,7 +170,7 @@ export function useSnapshot(client: ParleyClient): SnapshotView {
       sessionFetched.add(id);
       client
         .getTask(id)
-        .then(({ row }) => adoptSession(id, row.orchestrator_session_id))
+        .then(({ row }) => adoptRowFields(id, row))
         .catch(() => sessionFetched.delete(id));
     };
 
@@ -196,7 +202,7 @@ export function useSnapshot(client: ParleyClient): SnapshotView {
         for (const row of snapshot.tasks) {
           sessionFetched.add(row.id);
           if (!taskMap.has(row.id)) taskMap.set(row.id, fromRow(row));
-          else adoptSession(row.id, row.orchestrator_session_id);
+          else adoptRowFields(row.id, row);
         }
         stream = live;
         markConnected();

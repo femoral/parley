@@ -56,21 +56,21 @@ describe("projectScene groups tasks into session regions (#69)", () => {
     expect(after.sessions[0]!.tasks.map((t) => t.id)).toEqual(["a", "b"]);
   });
 
-  it("carries the faction tint pair and emblem onto each island", () => {
+  it("resolves vendor emblem and orchestrator harness colour independently", () => {
     const { sessions } = projectScene([
-      task({ id: "a", state: "running", vendor: "grok", orchestratorSession: "s" }),
+      task({ id: "a", state: "running", vendor: "qwen", orchHarness: "opencode", orchestratorSession: "s" }),
     ]);
     const island = sessions[0]!.tasks[0]!;
-    expect(island.coat).toBe("#2b2b2e");
-    expect(island.coatDark).toBe("#141416");
+    expect(island.coat).toBe("#80A83D");
+    expect(island.coatDark).toBe("#465F1D");
     expect(island.emblem.kind).toBe("svg");
   });
 
-  it("falls back to the unaligned tint for an unknown vendor (zero new art)", () => {
+  it("falls back to white for an unknown harness without changing vendor fallback", () => {
     const { sessions } = projectScene([task({ id: "a", state: "running", vendor: "brand-new" })]);
     const island = sessions[0]!.tasks[0]!;
-    expect(island.coat).toBe("#8a6a34");
-    expect(island.coatDark).toBe("#5b3a24");
+    expect(island.coat).toBe("#FFFFFF");
+    expect(island.emblem).toEqual({ kind: "glyph", char: "?" });
   });
 });
 

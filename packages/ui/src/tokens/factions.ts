@@ -1,115 +1,114 @@
 /*
- * Layer 0 — the faction registry (component-system spec §Layers). A vendor is a
- * faction: `{ label, coat, coatDark, emblem, tagline }` (design-manifest §2.7).
- * Adding a vendor is one record here and zero new art — emblems are original
- * marks (unicode glyphs or authored SVG path data), never fetched brand assets.
- *
- * This layer holds design data only; it never imports `@useparley/core` (that is
- * the hooks layer's job). The hooks layer maps a task's `vendor` string through
- * `factionFor` and hands the plate a plain faction record.
+ * Layer 0 — task identity data. Model vendor supplies the authored mark while
+ * the harness supplies its colour. Keeping those lookups separate is
+ * intentional: any model can sail under any adapter's colours.
  */
 
-/**
- * A faction mark worn on the emblem chip and the sloop sail.
- * - `glyph` — a single unicode character (fallback / simple letterforms).
- * - `svg` — original path data in a square viewBox (evocative, not trademark art).
- */
 export type EmblemMark =
   | { kind: "glyph"; char: string }
   | {
       kind: "svg";
-      /** Square viewBox, e.g. "0 0 24 24". */
       viewBox: string;
-      /** Path `d` attribute(s) — filled with the chip's light mark color. */
       path: string | readonly string[];
       fillRule?: "evenodd" | "nonzero";
     };
 
-export interface Faction {
-  /** Human faction name, e.g. "Codex". */
+export interface VendorEmblem {
   label: string;
-  /** Coat colour — the one loud hue per element (hex). */
-  coat: string;
-  /** Darker coat, for waterlines / hulls / dark tints (hex). */
-  coatDark: string;
-  /** Emblem mark worn on the chip (glyph or original SVG path data). */
   emblem: EmblemMark;
-  /** Decorative flavour tagline (kit band; IM Fell italic). */
-  tagline: string;
 }
 
-/**
- * Original marks — deliberately evocative of each vendor, not pixel-perfect
- * logos. Authored in-repo; never fetched or copied from brand kits.
- *
- * - Codex: hexagonal knot ring (OpenAI-ish geometry, simplified).
- * - Grok: bold X letterform (xAI-ish).
- * - Pi: the π letterform as a glyph (Inflection Pi).
- */
-const MARK_CODEX: EmblemMark = {
+export interface HarnessColor {
+  label: string;
+  coat: string;
+  coatDark: string;
+}
+
+const svg = (path: string, fillRule?: "evenodd" | "nonzero"): EmblemMark => ({
   kind: "svg",
   viewBox: "0 0 24 24",
-  // Outer hex + inner hex → ring via evenodd. Original hexagonal knot motif.
-  path: "M12 2.2 L20.8 7.3 V16.7 L12 21.8 L3.2 16.7 V7.3 Z M12 6.4 L16.7 9.1 V14.9 L12 17.6 L7.3 14.9 V9.1 Z",
-  fillRule: "evenodd",
+  path,
+  ...(fillRule ? { fillRule } : {}),
+});
+
+const MARK_CODEX = svg(
+  "M12 2.2 20.8 7.3v9.4L12 21.8l-8.8-5.1V7.3zM12 6.4 7.3 9.1v5.8l4.7 2.7 4.7-2.7V9.1z",
+  "evenodd",
+);
+const MARK_GROK = svg("M5 3.8h3.6l3.4 5.6 3.4-5.6H19L13.6 12l5.4 8.2h-3.6L12 14.6l-3.4 5.6H5l5.4-8.2z");
+const MARK_CLAUDE = svg("M12 2.8l2.1 6.3 6.6-1.6-5.2 4.5 5.2 4.5-6.6-1.6L12 21.2l-2.1-6.3-6.6 1.6 5.2-4.5-5.2-4.5 6.6 1.6z");
+const MARK_KIMI = svg("M5 3.5h3.2v6.8l6.5-6.8h4.1l-7.2 7.4 7.7 9.6h-4.1l-5.8-7.3-1.2 1.2v6.1H5z");
+const MARK_QWEN = svg("M12 3a9 9 0 1 0 6.4 15.3l2.3 2.3 1.4-1.4-2.3-2.3A9 9 0 0 0 12 3zm0 3a6 6 0 1 1 0 12 6 6 0 0 1 0-12zm2.2 7.2 1.6 1.6-1.4 1.4-1.6-1.6z", "evenodd");
+
+/** Authored model-maker marks. Aliases deliberately share a mark. */
+export const VENDOR_EMBLEMS: Record<string, VendorEmblem> = {
+  gpt: { label: "GPT", emblem: MARK_CODEX },
+  openai: { label: "OpenAI", emblem: MARK_CODEX },
+  codex: { label: "Codex", emblem: MARK_CODEX },
+  claude: { label: "Claude", emblem: MARK_CLAUDE },
+  anthropic: { label: "Anthropic", emblem: MARK_CLAUDE },
+  grok: { label: "Grok", emblem: MARK_GROK },
+  kimi: { label: "Kimi", emblem: MARK_KIMI },
+  moonshot: { label: "Moonshot", emblem: MARK_KIMI },
+  qwen: { label: "Qwen", emblem: MARK_QWEN },
+  alibaba: { label: "Alibaba", emblem: MARK_QWEN },
+  pi: { label: "Pi", emblem: { kind: "glyph", char: "π" } },
 };
 
-const MARK_GROK: EmblemMark = {
-  kind: "svg",
-  viewBox: "0 0 24 24",
-  // Stylized X — two thick diagonals as a single letterform silhouette.
-  path: "M5 3.8h3.6L12 9.4l3.4-5.6H19L13.6 12 19 20.2h-3.6L12 14.6l-3.4 5.6H5L10.4 12 5 3.8z",
-};
-
-const MARK_PI: EmblemMark = {
-  kind: "glyph",
-  char: "π",
-};
-
-/** The seeded vendors (design-manifest §2.7). Extend by adding a record. */
-export const FACTIONS: Record<string, Faction> = {
-  codex: {
-    label: "Codex",
-    // OpenAI-characteristic green (coat) + deeper hull tint.
-    coat: "#10a37f",
-    coatDark: "#0b7359",
-    emblem: MARK_CODEX,
-    tagline: "Green helm. Open charts.",
-  },
-  grok: {
-    label: "Grok",
-    // Lifted near-black so the chip still reads on dark sea backgrounds.
-    coat: "#2b2b2e",
-    coatDark: "#141416",
-    emblem: MARK_GROK,
-    tagline: "Truth under black canvas.",
-  },
-  pi: {
-    label: "Pi",
-    // Inflection Pi purple — distinct from Codex green and Grok charcoal.
-    coat: "#6c5ce7",
-    coatDark: "#4a3db8",
-    emblem: MARK_PI,
-    tagline: "A personal current.",
-  },
+export const UNKNOWN_VENDOR: VendorEmblem = {
+  label: "Unknown vendor",
+  emblem: { kind: "glyph", char: "?" },
 };
 
 /**
- * The faction for an unrecognised (or absent) vendor: a neutral brass privateer,
- * so a brand-new vendor still renders sensibly before it earns a record.
+ * Adapter colours chosen across hue and lightness, with darker companion ink
+ * for the sail mark. None reuse the reserved task-state token values.
  */
-export const UNALIGNED: Faction = {
-  label: "Unaligned",
-  coat: "#8a6a34",
-  coatDark: "#5b3a24",
-  emblem: { kind: "glyph", char: "⚐" },
-  tagline: "Sailing under no colours yet.",
+export const HARNESS_COLORS: Record<string, HarnessColor> = {
+  fake: { label: "Fake", coat: "#A69B8D", coatDark: "#554D44" },
+  codex: { label: "Codex", coat: "#18A886", coatDark: "#08634F" },
+  grok: { label: "Grok", coat: "#59616F", coatDark: "#282D35" },
+  claude: { label: "Claude", coat: "#D1784C", coatDark: "#783A21" },
+  gemini: { label: "Gemini", coat: "#4D8CE8", coatDark: "#244E91" },
+  kilo: { label: "Kilo", coat: "#D64E80", coatDark: "#7C2446" },
+  goose: { label: "Goose", coat: "#B99435", coatDark: "#665019" },
+  openclaw: { label: "OpenClaw", coat: "#D65A45", coatDark: "#7E2A20" },
+  cline: { label: "Cline", coat: "#25A6B5", coatDark: "#11616B" },
+  openhands: { label: "OpenHands", coat: "#A66BD0", coatDark: "#5E347C" },
+  opencode: { label: "OpenCode", coat: "#80A83D", coatDark: "#465F1D" },
+  hermes: { label: "Hermes", coat: "#D18B2F", coatDark: "#754912" },
+  pi: { label: "Pi", coat: "#7567D8", coatDark: "#40358D" },
+  kimi: { label: "Kimi", coat: "#39A06F", coatDark: "#1A5B3D" },
 };
 
-/** Resolve a vendor id to its faction, falling back to {@link UNALIGNED}. */
-export function factionFor(vendor: string | null | undefined): Faction {
-  if (vendor && Object.prototype.hasOwnProperty.call(FACTIONS, vendor)) {
-    return FACTIONS[vendor] as Faction;
-  }
-  return UNALIGNED;
+export const UNKNOWN_HARNESS: HarnessColor = {
+  label: "Unknown harness",
+  coat: "#FFFFFF",
+  coatDark: "#5B3A24",
+};
+
+function normalized(value: string | null | undefined): string | null {
+  const key = value?.trim().toLowerCase();
+  return key || null;
 }
+
+export function vendorEmblemFor(vendor: string | null | undefined): VendorEmblem {
+  const key = normalized(vendor);
+  return key ? VENDOR_EMBLEMS[key] ?? UNKNOWN_VENDOR : UNKNOWN_VENDOR;
+}
+
+export function harnessColorFor(harness: string | null | undefined): HarnessColor {
+  const key = normalized(harness);
+  return key ? HARNESS_COLORS[key] ?? UNKNOWN_HARNESS : UNKNOWN_HARNESS;
+}
+
+/** @deprecated Compatibility for non-task kit/legend consumers. */
+export const FACTIONS = Object.fromEntries(
+  ["gpt", "claude", "grok", "kimi", "qwen", "pi"].map((key) => {
+    const vendor = VENDOR_EMBLEMS[key]!;
+    return [
+    key,
+    { ...vendor, ...UNKNOWN_HARNESS, label: vendor.label, tagline: `${vendor.label} model-maker emblem.` },
+    ];
+  }),
+);
