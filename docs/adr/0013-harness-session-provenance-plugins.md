@@ -57,3 +57,39 @@ level; the resulting eval data looks clean but can be silently wrong.
   superseded by "install the plugin for your harness".
 - One umbrella issue (#181) tracks shared design; per-vendor child issues own
   each plugin.
+
+## Addendum (2026-07-20): session-state file as interim delivery channel
+
+The research passes (#191–#194) found that only **pi** can satisfy the
+four-var env contract from its live hook surface. claude-code and codex expose
+deterministic `SessionStart` hooks but lack a resolved-effort (and sometimes
+model) field; grok's hooks cannot influence the session environment at all —
+its passive-hook stdout is ignored and tool subprocesses inherit nothing.
+Rather than leave those harnesses partial, the maintainer decided:
+
+- **Plugin-written state file**: a plugin may persist provenance to
+  `~/.parley/vendors/<vendor>/sessions/<harness-session-id>/state.json` — a
+  **parley-owned schema** the plugin writes and parley reads. Each plugin
+  translates its harness's internal session records (transcript, `summary.json`,
+  rollout files, …) into this one stable shape, so harness-format churn stays
+  inside the harness's own plugin and parley core never parses vendor
+  internals.
+- **Schema**: `{ harness, harness_session_id, model, effort, pid, started_at,
+  updated_at }`. `model`/`effort` are nullable (honest unknown); `pid` is the
+  harness process id so parley can match the file to a caller. Writes are
+  atomic (write-temp + rename); later hook events may re-write the file as the
+  harness's own records fill in (lazy completion) or values change
+  (model/effort switch mid-session).
+- **Resolution gains a middle tier**: env > **session-state file** > unknown
+  (for harness/model/effort), and env > flag > state file > ancestry for the
+  session id. Matching without env vars uses process ancestry: the caller's
+  ancestry chain must contain the `pid` recorded in the state file — the same
+  anchor mechanism session binding already uses.
+- **Interim status**: this is explicitly a stopgap channel *until a better
+  way exists* (e.g. harnesses growing complete hook metadata or env
+  injection). The env vars remain the primary contract; the state file is a
+  delivery fallback, not a replacement.
+- This supersedes the blanket "no log-scrape" stance for the keyed case: a
+  lookup keyed by the harness's own session id, translated by that harness's
+  plugin, is deterministic in a way blind log scraping is not. Blind scraping
+  (no session id, heuristic parsing in parley core) remains rejected.
