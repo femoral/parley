@@ -46,9 +46,9 @@ export function SessionRegion({
 }: SessionRegionProps) {
   const islandCount = session.tasks.length;
   // The harness's pull-back is local to this region: spread new berths through
-  // a larger world, then scale the whole region down toward sqrt(5/N). The
-  // scene-level driver eases --region-zoom; Camera continues to own only the
-  // cross-session pan.
+  // a larger world, then the scene-level driver eases --region-zoom to fit the
+  // padded island box (plus sloop orbit) to the viewport (#201). Camera still
+  // owns only the cross-session pan.
   const spread = Math.max(1, Math.sqrt(islandCount / 5));
   const style = {
     transform: `translate(-50%, -50%) translate(${dx}px, ${dy}px) scale(var(--region-zoom, 1))`,
@@ -79,6 +79,8 @@ export function SessionRegion({
           <div
             key={task.id}
             className="pc-island-slot"
+            data-x={pos.x}
+            data-y={pos.y}
             style={{ transform: islandSlotTransform(pos) }}
           >
             <Island

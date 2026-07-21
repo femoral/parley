@@ -1,6 +1,11 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import { shouldPaintShipEffects, shipEffectsOpacity } from "./island-death.js";
 import { FLAGSHIP_CENTER, stationOffset, voyageFromFlagship } from "./layout.js";
+import {
+  computeRegionZoomTarget,
+  ORBIT_DRAFT_LIFT_FACTOR,
+  readIslandCentres,
+} from "./region-zoom.js";
 import { GeometryCache, SceneLoopGate } from "./scene-performance.js";
 
 /**
@@ -341,9 +346,18 @@ function regionZoom(
   dt: number,
   reduced: boolean,
   states: WeakMap<Element, RegionRuntime>,
+  viewportW: number,
+  viewportH: number,
 ): boolean {
   const count = Number.parseInt(region.dataset.islandCount ?? "0", 10);
-  const target = count > 0 ? Math.min(1, Math.sqrt(5 / count)) : 1;
+  // Fit the padded island+orbit box to the camera viewport; never exceed the
+  // historical count-based ceiling or zoom past 1 (#201).
+  const target = computeRegionZoomTarget({
+    islandCount: count,
+    centres: readIslandCentres(region),
+    viewportW,
+    viewportH,
+  });
   let runtime = states.get(region);
   if (!runtime) {
     runtime = { zoom: reduced ? target : 1 };
@@ -658,6 +672,16 @@ export function SailingScene() {
     });
     window.addEventListener("resize", refreshSea);
     document.addEventListener("visibilitychange", visibilityChanged);
+    // Viewport size feeds the region zoom fit (#201). Observe the scene/camera
+    // box and reuse the state-observer invalidate/wake path once per size
+    // change — never continuous wakes while idle.
+    let resizeObserver: ResizeObserver | undefined;
+    if (typeof ResizeObserver === "function") {
+      resizeObserver = new ResizeObserver(() => {
+        invalidateGeometry();
+      });
+      resizeObserver.observe(scene);
+    }
     const cameraTransition = (event: Event) => {
       const transition = event as TransitionEvent;
       if (transition.propertyName && transition.propertyName !== "transform") return;
@@ -696,7 +720,8 @@ export function SailingScene() {
 
         let zoomActive = false;
         for (const region of scene.querySelectorAll<HTMLElement>(".pc-region")) {
-          zoomActive = regionZoom(region, dt, motionReduced, regionStates) || zoomActive;
+          zoomActive =
+            regionZoom(region, dt, motionReduced, regionStates, width, height) || zoomActive;
         }
         const islandMotionActive = islandsAnimating(scene);
         if (zoomActive || islandMotionActive) geometryCache.invalidate();
@@ -804,7 +829,12 @@ export function SailingScene() {
             if (pose === "orbit") {
               const angle = t * ORBIT.speed;
               targetX = geometry.cx + Math.cos(angle) * geometry.radius;
-              targetY = geometry.cy + Math.sin(angle) * geometry.radius * ORBIT.squish - calibration.width * calibration.aspect * calibration.draftFy;
+              // Draft lift seats the hull waterline on the ellipse; factor < 1
+              // nudges the whole orbit slightly lower on the island (#201).
+              targetY =
+                geometry.cy +
+                Math.sin(angle) * geometry.radius * ORBIT.squish -
+                calibration.width * calibration.aspect * calibration.draftFy * ORBIT_DRAFT_LIFT_FACTOR;
               // Hold the voyage bearing through arrival; once on orbit, mirror
               // at the side extrema from the ellipse's horizontal derivative.
               if (motionReduced || elapsed >= runtime.arrivalSeconds) {
@@ -946,6 +976,7 @@ export function SailingScene() {
       window.clearTimeout(idleTimer);
       window.removeEventListener("resize", refreshSea);
       document.removeEventListener("visibilitychange", visibilityChanged);
+      resizeObserver?.disconnect();
       scene.removeEventListener("transitionrun", cameraTransition);
       scene.removeEventListener("transitionstart", cameraTransition);
       scene.removeEventListener("transitionend", cameraTransition);
