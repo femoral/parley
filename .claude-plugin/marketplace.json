@@ -1,0 +1,13 @@
+{
+  "name": "useparley",
+  "owner": {
+    "name": "useparley"
+  },
+  "plugins": [
+    {
+      "name": "parley",
+      "source": "./packages/plugins/claude-code",
+      "description": "Writes deterministic Claude Code session provenance for Parley."
+    }
+  ]
+}
