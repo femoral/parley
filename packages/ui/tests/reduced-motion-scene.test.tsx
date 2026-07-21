@@ -6,6 +6,7 @@ import { Scene, type IslandTask } from "../src/scene/index.js";
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  vi.useRealTimers();
 });
 
 const TASK: IslandTask = {
@@ -56,5 +57,51 @@ describe("the sailing simulation under prefers-reduced-motion", () => {
     act(() => frames.shift()?.(9_000));
     expect(ship.style.transform).toBe(firstFrame);
     expect(ship.style.getPropertyValue("--sailing-heading")).toBe(firstHeading);
+  });
+});
+
+describe("the sailing simulation ambient scheduler", () => {
+  it("keeps scheduling settled ambient ticks after each timeout fires", () => {
+    vi.useFakeTimers();
+    vi.spyOn(window, "matchMedia").mockReturnValue({
+      matches: false,
+      media: "(prefers-reduced-motion: reduce)",
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    });
+    let frameCount = 0;
+    vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+      const id = window.setTimeout(() => {
+        frameCount += 1;
+        callback(performance.now());
+      }, 0);
+      return id;
+    });
+    vi.spyOn(window, "cancelAnimationFrame").mockImplementation((id) => {
+      window.clearTimeout(id);
+    });
+
+    render(
+      <Scene
+        sessions={[
+          {
+            id: "ambient",
+            label: "ambient",
+            tasks: [{ ...TASK, state: "awaiting_answer" }],
+            attention: null,
+          },
+        ]}
+        activeSessionId="ambient"
+        onSelectTask={() => undefined}
+        onSelectSession={() => undefined}
+      />,
+    );
+
+    act(() => vi.advanceTimersByTime(450));
+    expect(frameCount).toBeGreaterThanOrEqual(4);
   });
 });

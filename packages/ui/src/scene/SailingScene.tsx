@@ -885,7 +885,10 @@ export function SailingScene() {
           // Settled ships retain the calibrated JS swell, but at a fraction of
           // active-frame cost. State/resize/transition observers bypass this
           // delay and wake the scene immediately.
-          idleTimer = window.setTimeout(scheduleFrame, 100);
+          idleTimer = window.setTimeout(() => {
+            idleTimer = 0;
+            scheduleFrame();
+          }, 100);
         }
       }
     };
