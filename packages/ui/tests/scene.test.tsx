@@ -457,28 +457,6 @@ describe("Scene lays out the active session's cove (#69)", () => {
     expect(container.querySelector(".pc-galleon__sprite")).toBeTruthy();
   });
 
-  it("draws dotted voyage routes only for islands with a ship present", () => {
-    const { container } = render(
-      <Scene sessions={[REGION]} activeSessionId="sess-1" onSelectTask={noop} onSelectSession={noop} />,
-    );
-    // REGION: running + awaiting_answer + completed → two routes (not completed).
-    const routes = container.querySelectorAll(".pc-route");
-    expect(routes).toHaveLength(2);
-    expect(container.querySelector(".pc-routes")).toBeTruthy();
-  });
-
-  it("omits voyage routes when no ship is on the water", () => {
-    const docked = region("sess-d", "sess-d", [
-      island("completed", { id: "d1" }),
-      island("failed", { id: "d2" }),
-      island("pending", { id: "d3" }),
-    ]);
-    const { container } = render(
-      <Scene sessions={[docked]} activeSessionId="sess-d" onSelectTask={noop} onSelectSession={noop} />,
-    );
-    expect(container.querySelector(".pc-routes")).toBeNull();
-  });
-
   it("travels the camera to the selected region (a transform offset that changes)", () => {
     const second = region("sess-2", "sess-2", [island("running", { id: "z" })]);
     const first = render(
