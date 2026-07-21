@@ -260,7 +260,7 @@ Then show the result (`parley models` or `parley models --vendor <id> --json`).
 
 Use refreshed (or shipped-fallback) model ids and efforts when offering **allowlist combos** and profile `.model` / `.effort` values. Profiles beat ad-hoc flags for metrics. Catalog stays advisory and hand-editable; the allowlist gates spawn.
 
-Also offer the first-party ADR-0013 session-provenance plugins for detected Claude Code, Codex, Grok, and Pi harnesses. `parley init` surfaces the supported plugin picker and setup commands; it installs `@useparley/plugin-claude-code`, `@useparley/plugin-codex`, `@useparley/plugin-grok`, or `@useparley/plugin-pi` through each harness's native plugin manager. These provenance plugins are unrelated to vendor adapter modules configured at `vendors.<id>.plugin` (ADR-0009).
+Also offer the first-party session-provenance plugins for detected Claude Code, Codex, Grok, and Pi harnesses. `parley init` surfaces the supported plugin picker and setup commands; it installs `@useparley/plugin-claude-code`, `@useparley/plugin-codex`, `@useparley/plugin-grok`, or `@useparley/plugin-pi` through each harness's native plugin manager. These provenance plugins are unrelated to vendor adapter modules configured at `vendors.<id>.plugin`.
 
 When scope includes **global** (or the user wants a home-wide fallback), also offer delegate defaults:
 

@@ -318,14 +318,15 @@ describe("bundled skill contents", () => {
     expect(skillMd).toMatch(/[Bb]ump.*version|version.*[Bb]ump/);
     expect(skillMd).toMatch(/token/i);
     expect(skillMd).toMatch(/factory-reset|never factory/i);
-    // Fresh-setup scope: detect global home config; ask project/global/both when missing.
+    // Settings scope: always asked first (#202); project/global/both choices explained.
     expect(skillMd).toMatch(/~\/?\.parley\/parley\.json|parley\.json/);
     expect(skillMd).toMatch(/~\/?\.parley\/config\.json|PARLEY_HOME/);
     expect(skillMd).toMatch(/project settings only|Project only/i);
-    expect(skillMd).toMatch(/global settings|Global only/i);
+    expect(skillMd).toMatch(/global settings|Global defaults|Global only/i);
     expect(skillMd).toMatch(/\bboth\b/i);
     expect(skillMd).toMatch(/defaults\.vendor|defaults\.profile/);
-    expect(skillMd).toMatch(/Skip the scope question|default to \*\*project\*\*/i);
+    expect(skillMd).toMatch(/always the first prompt|scope first/i);
+    expect(skillMd).toMatch(/never suppress this question|Existing global files never suppress/i);
     // Per-vendor transport defaults + model discovery during setup.
     expect(skillMd).toMatch(/Child-channel defaults|childChannel/);
     expect(skillMd).toMatch(/\bpi\b[\s\S]*\bcli\b/i);
