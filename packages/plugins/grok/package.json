@@ -1,0 +1,40 @@
+{
+  "name": "@useparley/plugin-grok",
+  "version": "0.0.0",
+  "private": false,
+  "description": "Grok Build plugin that writes Parley session provenance (session-state file) from harness hooks.",
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "files": [
+    "dist",
+    "hooks",
+    "plugin.json",
+    "README.md"
+  ],
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    },
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "access": "public",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "./package.json": "./package.json"
+    }
+  },
+  "scripts": {
+    "build": "tsdown",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@useparley/core": "workspace:*"
+  }
+}

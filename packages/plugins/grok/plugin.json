@@ -1,0 +1,5 @@
+{
+  "name": "parley-provenance",
+  "version": "0.0.0",
+  "description": "Writes Parley session-state provenance for Grok Build sessions (ADR-0013 interim channel)."
+}
