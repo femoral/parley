@@ -4,6 +4,7 @@ import { DaemonRequestError, daemonPost, ensureDaemon } from "../client.js";
 import { type CliContext, printJson } from "../context.js";
 import { UsageError } from "../errors.js";
 import { CODE_SESSION_REQUIRED } from "@useparley/daemon/session-binding.js";
+import { resolveExplicitSessionId } from "../session-state-match.js";
 
 interface EvalAck {
   task_id: string;
@@ -78,16 +79,19 @@ export async function runEval(ctx: CliContext, args: string[]): Promise<number> 
     throw new UsageError('eval: feedback is required (--feedback "<text>")');
   }
 
-  // Judge binding (#162 / #190): independent of the task's spawn-time session.
-  // Env-first: PARLEY_SESSION_ID > --session > ancestry.
+  // Judge binding (#162 / #190 / #196): independent of the task's spawn-time session.
+  // PARLEY_SESSION_ID > --session > state-file > ancestry.
   const sessionFlag = flags["--session"];
-  const orchestratorSessionId =
-    typeof ctx.env.PARLEY_SESSION_ID === "string" && ctx.env.PARLEY_SESSION_ID !== ""
-      ? ctx.env.PARLEY_SESSION_ID
-      : typeof sessionFlag === "string" && sessionFlag !== ""
-        ? sessionFlag
-        : null;
+  const flagSessionId =
+    typeof sessionFlag === "string" && sessionFlag !== "" ? sessionFlag : null;
   const ancestryChain = readLiveAncestryChain(ctx.env);
+  const orchestratorSessionId = resolveExplicitSessionId({
+    env: ctx.env,
+    flagSessionId,
+    parleyHome: ctx.paths.home,
+    ancestryChain,
+    note: (msg) => ctx.stderr(`note: ${msg}\n`),
+  });
   const workspaceRoot = resolveWorkspaceRoot(process.cwd());
 
   const discovery = await ensureDaemon(ctx.paths, ctx.env);

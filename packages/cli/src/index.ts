@@ -121,10 +121,10 @@ Usage:
   parley lint [dir]             Validate project .parley surfaces (config,
                             classification, rubrics). Exit 1 on error (CI).
   parley session [-s <id>] [--json]
-                            Register the orchestrating session. Provenance
-                            from PARLEY_HARNESS / PARLEY_MODEL / PARLEY_EFFORT
-                            (null when unset). Session id: PARLEY_SESSION_ID
-                            > -s > fresh. Known id re-anchors after restart.
+                            Register the orchestrating session. Provenance:
+                            PARLEY_* env > session-state file > null. Session
+                            id: PARLEY_SESSION_ID > -s > state file > fresh.
+                            Known id re-anchors after restart.
   parley init                   One-shot setup: skills, config, harnesses, models
     --layout claude|agents|<path>
                               Vendor skill layout, or a custom directory path

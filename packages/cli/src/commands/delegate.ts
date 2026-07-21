@@ -8,6 +8,7 @@ import { UsageError } from "../errors.js";
 import { parseDuration } from "@useparley/core";
 import { SANDBOX_MODES, isSandboxMode } from "@useparley/daemon/adapters/types.js";
 import { CODE_SESSION_REQUIRED } from "@useparley/daemon/session-binding.js";
+import { resolveExplicitSessionId } from "../session-state-match.js";
 
 interface DelegateAck {
   task_id: string;
@@ -68,18 +69,16 @@ export async function runDelegate(ctx: CliContext, args: string[]): Promise<numb
   // or defaults.vendor (#175); missing both flags and defaults is exit 2.
   const vendor = typeof flags["--vendor"] === "string" ? flags["--vendor"] : null;
   const profile = typeof flags["--profile"] === "string" ? flags["--profile"] : null;
-  // Orchestrator-run identity (#162 / #190 / ADR-0013): env-first —
-  // `PARLEY_SESSION_ID` > `--session` > ancestry (daemon). When neither env
-  // nor flag is set the daemon binds via process ancestry (or single-live
-  // fallback). When evals are on and nothing resolves, the daemon returns
-  // `session_required`. Evals off ⇒ session optional.
+  // Orchestrator-run identity (#162 / #190 / #196 / ADR-0013):
+  // `PARLEY_SESSION_ID` > `--session` > state-file > ancestry (daemon).
+  // When nothing resolves the daemon binds via process ancestry (or
+  // single-live fallback). When evals are on and nothing resolves, the
+  // daemon returns `session_required`. Evals off ⇒ session optional.
   const sessionFlag = flags["--session"];
-  const orchestratorSessionId =
-    typeof ctx.env.PARLEY_SESSION_ID === "string" && ctx.env.PARLEY_SESSION_ID !== ""
-      ? ctx.env.PARLEY_SESSION_ID
-      : typeof sessionFlag === "string" && sessionFlag !== ""
-        ? sessionFlag
-        : null;
+  const flagSessionId =
+    typeof sessionFlag === "string" && sessionFlag !== "" ? sessionFlag : null;
+  // Ancestry chain is built later for the POST body; resolve id after we
+  // have it so the state-file tier can match.
   // An unanswered question at this timeout stalls the task (spec §2). Omitted
   // means the daemon default (30m).
   let answerTimeoutMs: number | null = null;
@@ -203,6 +202,13 @@ export async function runDelegate(ctx: CliContext, args: string[]): Promise<numb
   const dryRun = flags["--dry-run"] === true;
 
   const ancestryChain = readLiveAncestryChain(ctx.env);
+  const orchestratorSessionId = resolveExplicitSessionId({
+    env: ctx.env,
+    flagSessionId,
+    parleyHome: ctx.paths.home,
+    ancestryChain,
+    note: (msg) => ctx.stderr(`note: ${msg}\n`),
+  });
   const workspaceRoot = resolveWorkspaceRoot(cwd);
 
   const discovery = await ensureDaemon(ctx.paths, ctx.env);

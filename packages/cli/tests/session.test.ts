@@ -1,11 +1,12 @@
 /**
- * #162 / #190 — orchestrator session provenance CLI seam: env-only harness/
- * model/effort, env-first session id, registration, re-anchor, ancestry
- * binding with crafted chains, dual snapshots, session_required gate.
+ * #162 / #190 / #196 — orchestrator session provenance CLI seam: env-only
+ * harness/model/effort, env > session-state > unknown, env > flag > state >
+ * ancestry for session id, registration, re-anchor, dual snapshots.
  */
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
+import { sessionStatePath, writeSessionState, type SessionState } from "@useparley/core";
 import {
   cleanupHome,
   makeHome,
@@ -204,6 +205,206 @@ describe("parley session registration (#190 env-only provenance)", () => {
     });
     expect(second.session_id).toBe(first.session_id);
     expect(second.harness).toBe("grok");
+  });
+});
+
+/** Write a plugin session-state file under the test home (#196). */
+function writeState(
+  homeDir: string,
+  vendor: string,
+  over: Partial<SessionState> & Pick<SessionState, "pid" | "harness_session_id">,
+): void {
+  const state: SessionState = {
+    harness: "claude",
+    model: "sonnet",
+    effort: "high",
+    started_at: "2026-07-20T12:00:00.000Z",
+    updated_at: "2026-07-20T12:00:00.000Z",
+    ...over,
+  };
+  writeSessionState(sessionStatePath(homeDir, vendor, state.harness_session_id), state);
+}
+
+describe("session-state file fallback (#196)", () => {
+  it("file-only: registers harness/model/effort and harness session id", async () => {
+    const livePid = process.pid;
+    writeState(home, "claude", {
+      harness: "Claude",
+      harness_session_id: "hs-file-only",
+      model: "Opus-4",
+      effort: "High",
+      pid: livePid,
+    });
+    const res = await runCli(["session", "--json"], home, {
+      extraEnv: {
+        PARLEY_ANCESTRY_CHAIN: JSON.stringify([
+          { machine_id: "m", pid: livePid, start_time: "t" },
+        ]),
+        PARLEY_SESSION_ID: undefined,
+        PARLEY_HARNESS: undefined,
+        PARLEY_MODEL: undefined,
+        PARLEY_EFFORT: undefined,
+      },
+    });
+    expect(res.code, res.stderr).toBe(0);
+    const ack = JSON.parse(res.stdout) as {
+      session_id: string;
+      harness: string | null;
+      model: string | null;
+      effort: string | null;
+    };
+    expect(ack.session_id).toBe("hs-file-only");
+    expect(ack.harness).toBe("claude");
+    expect(ack.model).toBe("opus-4");
+    expect(ack.effort).toBe("high");
+  });
+
+  it("env beats file for provenance and session id", async () => {
+    const livePid = process.pid;
+    writeState(home, "claude", {
+      harness: "file-harness",
+      harness_session_id: "from-file",
+      model: "file-model",
+      effort: "file-effort",
+      pid: livePid,
+    });
+    // Register once so env id re-anchor works if create_if_missing weren't set;
+    // env create_if_missing allows first-time insert of "from-env".
+    const res = await runCli(["session", "--json"], home, {
+      extraEnv: {
+        PARLEY_ANCESTRY_CHAIN: JSON.stringify([
+          { machine_id: "m", pid: livePid, start_time: "t" },
+        ]),
+        PARLEY_SESSION_ID: "from-env",
+        PARLEY_HARNESS: "env-harness",
+        PARLEY_MODEL: "env-model",
+        PARLEY_EFFORT: "env-effort",
+      },
+    });
+    expect(res.code, res.stderr).toBe(0);
+    const ack = JSON.parse(res.stdout);
+    expect(ack.session_id).toBe("from-env");
+    expect(ack.harness).toBe("env-harness");
+    expect(ack.model).toBe("env-model");
+    expect(ack.effort).toBe("env-effort");
+  });
+
+  it("--session flag beats file for session id (re-anchor)", async () => {
+    const livePid = process.pid;
+    const first = await registerSession({
+      harness: "first",
+      model: "m",
+      effort: "e",
+      anchor: { machine_id: "m", pid: livePid, start_time: "t0" },
+    });
+    writeState(home, "claude", {
+      harness: "file-h",
+      harness_session_id: "from-file-id",
+      model: "file-m",
+      effort: "file-e",
+      pid: livePid,
+    });
+    const res = await runCli(["session", "-s", first.session_id, "--json"], home, {
+      extraEnv: {
+        PARLEY_ANCESTRY_CHAIN: JSON.stringify([
+          { machine_id: "m", pid: livePid, start_time: "t1" },
+        ]),
+        PARLEY_SESSION_ID: undefined,
+        // Env unset so provenance can come from the file; id still from -s.
+        PARLEY_HARNESS: undefined,
+        PARLEY_MODEL: undefined,
+        PARLEY_EFFORT: undefined,
+      },
+    });
+    expect(res.code, res.stderr).toBe(0);
+    const ack = JSON.parse(res.stdout);
+    expect(ack.session_id).toBe(first.session_id);
+    expect(ack.session_id).not.toBe("from-file-id");
+    // Provenance still falls back to the matched state file.
+    expect(ack.harness).toBe("file-h");
+    expect(ack.model).toBe("file-m");
+    expect(ack.effort).toBe("file-e");
+  });
+
+  it("dead-pid state file is ignored (unknown provenance, fresh id)", async () => {
+    const deadPid = 2_147_483_640;
+    writeState(home, "claude", {
+      harness: "should-ignore",
+      harness_session_id: "dead-sess",
+      model: "x",
+      effort: "y",
+      pid: deadPid,
+    });
+    const res = await runCli(["session", "--json"], home, {
+      extraEnv: {
+        // Chain includes the dead pid so matching would succeed without liveness.
+        PARLEY_ANCESTRY_CHAIN: JSON.stringify([
+          { machine_id: "m", pid: deadPid, start_time: "t" },
+        ]),
+        PARLEY_SESSION_ID: undefined,
+        PARLEY_HARNESS: undefined,
+        PARLEY_MODEL: undefined,
+        PARLEY_EFFORT: undefined,
+      },
+    });
+    expect(res.code, res.stderr).toBe(0);
+    const ack = JSON.parse(res.stdout);
+    expect(ack.session_id).not.toBe("dead-sess");
+    expect(ack.harness).toBeNull();
+    expect(ack.model).toBeNull();
+    expect(ack.effort).toBeNull();
+    expect(res.stderr).toMatch(/dead pid|session-state/i);
+  });
+
+  it("malformed JSON state file degrades without crash", async () => {
+    const livePid = process.pid;
+    const file = sessionStatePath(home, "claude", "bad");
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, "{ not json");
+    const res = await runCli(["session", "--json"], home, {
+      extraEnv: {
+        PARLEY_ANCESTRY_CHAIN: JSON.stringify([
+          { machine_id: "m", pid: livePid, start_time: "t" },
+        ]),
+        PARLEY_SESSION_ID: undefined,
+        PARLEY_HARNESS: undefined,
+        PARLEY_MODEL: undefined,
+        PARLEY_EFFORT: undefined,
+      },
+    });
+    expect(res.code, res.stderr).toBe(0);
+    const ack = JSON.parse(res.stdout);
+    expect(ack.harness).toBeNull();
+    expect(ack.model).toBeNull();
+    expect(ack.effort).toBeNull();
+  });
+
+  it("partial fields: null model/effort still register harness + session id", async () => {
+    const livePid = process.pid;
+    writeState(home, "codex", {
+      harness: "codex",
+      harness_session_id: "partial-hs",
+      model: null,
+      effort: null,
+      pid: livePid,
+    });
+    const res = await runCli(["session", "--json"], home, {
+      extraEnv: {
+        PARLEY_ANCESTRY_CHAIN: JSON.stringify([
+          { machine_id: "m", pid: livePid, start_time: "t" },
+        ]),
+        PARLEY_SESSION_ID: undefined,
+        PARLEY_HARNESS: undefined,
+        PARLEY_MODEL: undefined,
+        PARLEY_EFFORT: undefined,
+      },
+    });
+    expect(res.code, res.stderr).toBe(0);
+    const ack = JSON.parse(res.stdout);
+    expect(ack.session_id).toBe("partial-hs");
+    expect(ack.harness).toBe("codex");
+    expect(ack.model).toBeNull();
+    expect(ack.effort).toBeNull();
   });
 });
 

@@ -125,7 +125,7 @@ Do not poll `status` on an interval and do not sleep-and-check. One mechanism fo
 
 ## Session ID
 
-The session ID identifies the current orchestration session. Resolution is env-first: `PARLEY_SESSION_ID` > `--session <id>` > ancestry binding to a registered session. Install the harness plugin so the env vars (session id + harness/model/effort) are set for you; see [sessions.md](sessions.md).
+The session ID identifies the current orchestration session. Resolution is env-first: `PARLEY_SESSION_ID` > `--session <id>` > session-state file > ancestry binding to a registered session. Install the harness plugin so provenance (session id + harness/model/effort) is set for you — via env vars or the INTERIM state-file channel; see [sessions.md](sessions.md).
 
 ## Context files
 

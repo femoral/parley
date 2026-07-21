@@ -5,6 +5,7 @@ import { DaemonRequestError, daemonPost, ensureDaemon } from "../client.js";
 import { type CliContext, printJson } from "../context.js";
 import { UsageError } from "../errors.js";
 import { CODE_SESSION_REQUIRED } from "@useparley/daemon/session-binding.js";
+import { resolveExplicitSessionId } from "../session-state-match.js";
 
 interface FixAck {
   task_id: string;
@@ -55,16 +56,19 @@ export async function runFix(ctx: CliContext, args: string[]): Promise<number> {
   }
 
   const fresh = flags["--fresh"] === true;
-  // Fix resolves orchestrator session fresh at its own spawn (#162 / #190).
-  // Env-first: PARLEY_SESSION_ID > --session > ancestry.
+  // Fix resolves orchestrator session fresh at its own spawn (#162 / #190 / #196).
+  // PARLEY_SESSION_ID > --session > state-file > ancestry.
   const sessionFlag = flags["--session"];
-  const orchestratorSessionId =
-    typeof ctx.env.PARLEY_SESSION_ID === "string" && ctx.env.PARLEY_SESSION_ID !== ""
-      ? ctx.env.PARLEY_SESSION_ID
-      : typeof sessionFlag === "string" && sessionFlag !== ""
-        ? sessionFlag
-        : null;
+  const flagSessionId =
+    typeof sessionFlag === "string" && sessionFlag !== "" ? sessionFlag : null;
   const ancestryChain = readLiveAncestryChain(ctx.env);
+  const orchestratorSessionId = resolveExplicitSessionId({
+    env: ctx.env,
+    flagSessionId,
+    parleyHome: ctx.paths.home,
+    ancestryChain,
+    note: (msg) => ctx.stderr(`note: ${msg}\n`),
+  });
   const workspaceRoot = resolveWorkspaceRoot(process.cwd());
 
   const discovery = await ensureDaemon(ctx.paths, ctx.env);

@@ -45,10 +45,13 @@ driving parley is the **orchestrator**.
 - **Session provenance** — the identity of the orchestrator run parley records
   for eval/traceability: session id, harness, model, effort. Injected
   deterministically by a **harness plugin** as `PARLEY_SESSION_ID` /
-  `PARLEY_HARNESS` / `PARLEY_MODEL` / `PARLEY_EFFORT`; never self-reported by
-  the model. Harness values use parley vendor ids; sessions without a plugin
-  carry explicit *unknown* provenance and are evaluated under an unknown
-  bucket (ADR-0013).
+  `PARLEY_HARNESS` / `PARLEY_MODEL` / `PARLEY_EFFORT` (primary), or via an
+  **INTERIM** session-state file under
+  `~/.parley/vendors/<vendor>/sessions/<id>/state.json` when env injection is
+  incomplete; never self-reported by the model. Resolution is env > state file
+  > unknown for harness/model/effort, and env > `--session` > state file >
+  ancestry for session id (ADR-0013). Sessions without a plugin carry explicit
+  *unknown* provenance and are evaluated under an unknown bucket.
 - **Launch template** — a profile's opt-in full argv replacing adapter
   composition, with shell-like `$VAR` expansion from the spawn env
   (`$PROMPT` = the task prompt). Parley still wraps the process (workspace,
@@ -61,9 +64,10 @@ driving parley is the **orchestrator**.
   spawn path validates against it, rejecting out-of-list combos with a
   nearest-combo suggestion (ADR-0014). The model catalog remains advisory.
 - **Harness plugin** — a per-vendor package installed into the orchestrator's
-  own harness (via that harness's native hook/plugin system) that exports the
-  session-provenance env vars at session start. Distinct from a parley
-  vendor **adapter** (ADR-0009), which is daemon-side spawn/parse plumbing.
+  own harness (via that harness's native hook/plugin system) that exports
+  session provenance at session start (env vars and/or INTERIM state file).
+  Distinct from a parley vendor **adapter** (ADR-0009), which is daemon-side
+  spawn/parse plumbing.
 
 ## Avoided synonyms
 

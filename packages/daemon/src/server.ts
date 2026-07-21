@@ -1204,10 +1204,11 @@ function handleFix(
 }
 
 /**
- * `POST /sessions` — register or re-anchor an orchestrator session (#162 / #190).
- * Body: `{ harness?, model?, effort?, workspace_root, anchor, session_id? }`.
- * Provenance fields are optional (null/omit → unknown). Fresh id when
- * session_id omitted; known id re-anchors; unknown id → 400.
+ * `POST /sessions` — register or re-anchor an orchestrator session
+ * (#162 / #190 / #196). Body: `{ harness?, model?, effort?, workspace_root,
+ * anchor, session_id?, create_if_missing? }`. Provenance optional (null/omit
+ * → unknown). Fresh id when session_id omitted; known id re-anchors; unknown
+ * id with create_if_missing inserts; otherwise 400.
  */
 function handleRegisterSession(
   engine: TaskEngine,
@@ -1234,6 +1235,7 @@ function handleRegisterSession(
     });
     return;
   }
+  const createIfMissing = body.create_if_missing === true;
   try {
     const session = engine.registerSession({
       harness,
@@ -1242,6 +1244,7 @@ function handleRegisterSession(
       workspaceRoot,
       anchor,
       sessionId: optionalString(body.session_id),
+      createIfMissing,
     });
     sendJson(res, 201, {
       session_id: session.id,

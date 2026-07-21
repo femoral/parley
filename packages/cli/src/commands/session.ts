@@ -1,18 +1,23 @@
 /**
  * `parley session [--session/-s <id>] [--json]`
  *
- * Registers the orchestrating session (#162 / #190 / ADR-0013). Harness,
- * model, and effort come only from env vars (`PARLEY_HARNESS`,
- * `PARLEY_MODEL`, `PARLEY_EFFORT`) — missing values store as honest nulls.
- * The removed `-m/--model` and `-e/--effort` flags error with a pointer at
- * the env-var/plugin mechanism. Session id resolution is env-first:
- * `PARLEY_SESSION_ID` > `--session` > fresh id.
+ * Registers the orchestrating session (#162 / #190 / #196 / ADR-0013).
+ * Harness, model, and effort: env vars (`PARLEY_HARNESS` / `PARLEY_MODEL` /
+ * `PARLEY_EFFORT`) > ancestry-matched session-state file > null (honest
+ * unknown). The removed `-m/--model` and `-e/--effort` flags error with a
+ * pointer at the env-var/plugin mechanism. Session id resolution:
+ * `PARLEY_SESSION_ID` > `--session` > state-file `harness_session_id` > fresh id.
  */
 import { parseArgs } from "../args.js";
 import { readLiveAncestryChain, resolveWorkspaceRoot } from "../ancestry.js";
 import { DaemonRequestError, daemonPost, ensureDaemon } from "../client.js";
 import { type CliContext, printJson } from "../context.js";
 import { UsageError } from "../errors.js";
+import {
+  resolveMatchedSessionState,
+  resolveOrchestratorSessionId,
+  resolveProvenanceFromEnvAndState,
+} from "../session-state-match.js";
 
 interface SessionAck {
   session_id: string;
@@ -56,27 +61,6 @@ function rejectRemovedProvenanceFlags(args: string[]): void {
   }
 }
 
-/** Non-empty env string, or null when unset/blank. */
-function envProvenance(env: NodeJS.ProcessEnv, key: string): string | null {
-  const raw = env[key];
-  if (typeof raw !== "string") return null;
-  const trimmed = raw.trim();
-  return trimmed === "" ? null : trimmed;
-}
-
-/**
- * Session id for registration: `PARLEY_SESSION_ID` > `--session` > null
- * (daemon allocates a fresh id). Supersedes the pre-#190 flag-first order.
- */
-function resolveRegisterSessionId(
-  flagSession: string | null,
-  env: NodeJS.ProcessEnv,
-): string | null {
-  const fromEnv = envProvenance(env, "PARLEY_SESSION_ID");
-  if (fromEnv !== null) return fromEnv;
-  return flagSession;
-}
-
 export async function runSession(ctx: CliContext, args: string[]): Promise<number> {
   rejectRemovedProvenanceFlags(args);
 
@@ -89,24 +73,49 @@ export async function runSession(ctx: CliContext, args: string[]): Promise<numbe
     throw new UsageError(`session: unexpected argument: ${positionals[0]}`);
   }
 
-  // Env-only provenance (#190): never invent defaults for missing values.
-  const harness = envProvenance(ctx.env, "PARLEY_HARNESS");
-  const model = envProvenance(ctx.env, "PARLEY_MODEL");
-  const effort = envProvenance(ctx.env, "PARLEY_EFFORT");
-
-  const flagSession =
-    typeof flags["--session"] === "string" && flags["--session"] !== ""
-      ? (flags["--session"] as string)
-      : null;
-  const sessionId = resolveRegisterSessionId(flagSession, ctx.env);
-
-  // Anchor is the registering process itself (deepest match later binds
-  // children whose chain includes this process). Chain[0] is self.
+  // Chain[0] is self — also used as the registration anchor.
   const chain = readLiveAncestryChain(ctx.env);
   const anchor = chain[0];
   if (anchor === undefined) {
     throw new UsageError("session: could not determine process ancestry anchor");
   }
+
+  const note = (msg: string): void => {
+    ctx.stderr(`note: ${msg}\n`);
+  };
+
+  // Session-state fallback when env is incomplete (#196).
+  const matched = resolveMatchedSessionState({
+    parleyHome: ctx.paths.home,
+    ancestryChain: chain,
+    note,
+  });
+
+  const { harness, model, effort } = resolveProvenanceFromEnvAndState(
+    ctx.env,
+    matched,
+  );
+
+  const flagSession =
+    typeof flags["--session"] === "string" && flags["--session"] !== ""
+      ? (flags["--session"] as string)
+      : null;
+  // Track whether the id came from env/state (plugin-owned, create-if-missing)
+  // vs --session alone (re-anchor only — unknown id is a usage error).
+  const fromEnv =
+    typeof ctx.env.PARLEY_SESSION_ID === "string" &&
+    ctx.env.PARLEY_SESSION_ID.trim() !== "";
+  const fromState =
+    !fromEnv &&
+    flagSession === null &&
+    matched !== null &&
+    matched.harness_session_id.trim() !== "";
+  const sessionId = resolveOrchestratorSessionId({
+    envSessionId: ctx.env.PARLEY_SESSION_ID,
+    flagSessionId: flagSession,
+    stateSessionId: matched?.harness_session_id ?? null,
+  });
+  const createIfMissing = fromEnv || fromState;
 
   const workspaceRoot = resolveWorkspaceRoot(process.cwd());
   const discovery = await ensureDaemon(ctx.paths, ctx.env);
@@ -119,6 +128,7 @@ export async function runSession(ctx: CliContext, args: string[]): Promise<numbe
       workspace_root: workspaceRoot,
       anchor,
       ...(sessionId !== null ? { session_id: sessionId } : {}),
+      ...(createIfMissing ? { create_if_missing: true } : {}),
     });
   } catch (err) {
     if (err instanceof DaemonRequestError && err.status === 400) {

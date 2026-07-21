@@ -459,10 +459,17 @@ export interface RegisterSessionRequest {
    */
   effort?: string | null;
   /**
-   * Known session id to re-anchor, or null/omitted to allocate a fresh id.
-   * Unknown id is an error.
+   * Session id to re-anchor or (when {@link createIfMissing}) insert.
+   * Null/omitted ⇒ allocate a fresh id. Unknown id without createIfMissing
+   * is an error (typo protection for `--session` re-anchor).
    */
   sessionId?: string | null;
+  /**
+   * When true and `sessionId` is unknown, insert a new session with that id
+   * (#196 plugin env / session-state). Default false preserves `--session`
+   * re-anchor-only behavior.
+   */
+  createIfMissing?: boolean;
   /** Absolute workspace root this session is flying. */
   workspaceRoot: string;
   /** The registering process's own anchor (not the full chain). */
@@ -646,13 +653,15 @@ export class TaskEngine {
   }
 
   /**
-   * Register or re-anchor an orchestrator session (#162 / #190).
+   * Register or re-anchor an orchestrator session (#162 / #190 / #196).
    * - No `sessionId` ⇒ allocate a fresh id and insert.
    * - Known `sessionId` ⇒ re-anchor + update harness/model/effort/workspace.
-   * - Unknown `sessionId` ⇒ usage error.
-   * Harness/model/effort are optional (env-only from CLI); null stores as
-   * honest unknown. Non-null values are lowercased for grouping. Does not
-   * rewrite past task/eval dual snapshots.
+   * - Unknown `sessionId` + `createIfMissing` ⇒ insert with that id (plugin
+   *   env / session-state first registration).
+   * - Unknown `sessionId` without createIfMissing ⇒ usage error.
+   * Harness/model/effort are optional; null stores as honest unknown.
+   * Non-null values are lowercased for grouping. Does not rewrite past
+   * task/eval dual snapshots.
    */
   registerSession(request: RegisterSessionRequest): SessionRow {
     const harness = normalizeOptionalProvenance(request.harness);
@@ -682,10 +691,20 @@ export class TaskEngine {
 
     if (existingId !== null) {
       const existing = getSession(this.db, existingId);
-      if (!existing) {
+      if (existing) {
+        return updateSession(this.db, existingId, {
+          harness,
+          model,
+          effort,
+          workspace_root: request.workspaceRoot,
+          anchor,
+        });
+      }
+      if (request.createIfMissing !== true) {
         throw new DelegateError(`unknown session: ${existingId}`);
       }
-      return updateSession(this.db, existingId, {
+      return insertSession(this.db, {
+        id: existingId,
         harness,
         model,
         effort,
