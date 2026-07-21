@@ -1,0 +1,20 @@
+{
+  "name": "@useparley/plugin-codex",
+  "version": "0.0.0",
+  "private": false,
+  "description": "Codex plugin that records deterministic Parley session provenance.",
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "files": [
+    ".codex-plugin",
+    "dist",
+    "hooks",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsdown",
+    "typecheck": "tsc --noEmit"
+  }
+}

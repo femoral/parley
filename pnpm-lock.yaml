@@ -75,6 +75,8 @@ importers:
         specifier: workspace:*
         version: link:../../core
 
+  packages/plugins/codex: {}
+
   packages/plugins/grok:
     dependencies:
       '@useparley/core':

@@ -1,0 +1,7 @@
+{
+  "hook_event_name": "SessionStart",
+  "source": "startup",
+  "session_id": "codex-session-123",
+  "model": "gpt-5.5-codex",
+  "transcript_path": "/fixture/not-created-yet.jsonl"
+}
