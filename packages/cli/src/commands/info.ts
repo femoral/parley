@@ -6,6 +6,7 @@ import {
   parseDuration,
   resolveEffectiveProjectSettings,
   type ProjectConfigLayer,
+  type ParleyConfig,
 } from "@useparley/core";
 import {
   materializeInfoRubrics,
@@ -17,6 +18,7 @@ import { parseArgs } from "../args.js";
 import { DaemonRequestError, daemonGet, ensureDaemon } from "../client.js";
 import { type CliContext, printJson } from "../context.js";
 import { UsageError } from "../errors.js";
+import { detectHarnesses } from "./init.js";
 
 interface InfoBody {
   prose: string;
@@ -173,9 +175,13 @@ export async function runInfo(ctx: CliContext, args: string[]): Promise<number> 
 
   // Global layer exclusively via daemon API (never read home from CLI).
   let globalLayer: ProjectConfigLayer = {};
+  let globalConfig: ParleyConfig = {};
   try {
     const configBody = await daemonGet<ConfigBody>(discovery, "/config");
     globalLayer = extractProjectConfigLayer(configBody.config);
+    if (typeof configBody.config === "object" && configBody.config !== null) {
+      globalConfig = configBody.config as ParleyConfig;
+    }
   } catch (err) {
     // Unreachable daemon fails hard below on /info; soft-fail here only if
     // /config is missing on an older daemon — treat as empty global.
@@ -200,6 +206,10 @@ export async function runInfo(ctx: CliContext, args: string[]): Promise<number> 
   // One merge implementation: daemon-reported globals + local project overrides.
   // Materialize rubric markdown after layered merge so final taskTypes win (#176).
   const layered = applyLayeredSettings(body.config, globalLayer, projectLayer);
+  const configuredVendorIds = new Set(layered.vendors.map((vendor) => vendor.id));
+  layered.detected_vendors = detectHarnesses(globalConfig, ctx.env)
+    .filter((id) => !configuredVendorIds.has(id))
+    .sort((a, b) => a.localeCompare(b));
   const config = materializeInfoRubrics(project, layered);
   const prose = renderInfoProse(config);
 

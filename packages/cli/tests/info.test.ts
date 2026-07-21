@@ -7,6 +7,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { renderInfoProse, type InfoConfig } from "@useparley/daemon/info.js";
 import {
@@ -22,7 +23,7 @@ let home: string;
 const scratch: string[] = [];
 
 beforeEach(() => {
-  home = makeHome();
+  home = makeHome({ seedAllowlist: false });
 });
 
 afterEach(() => {
@@ -42,7 +43,78 @@ function writeProject(root: string, files: Record<string, string>): void {
   writeFiles(root, files);
 }
 
+function vendorPath(...vendors: string[]): string {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "parley-info-path-"));
+  scratch.push(dir);
+  for (const vendor of vendors) {
+    const file = path.join(dir, vendor);
+    fs.writeFileSync(file, "#!/bin/sh\nexit 0\n");
+    fs.chmodSync(file, 0o755);
+  }
+  return dir;
+}
+
 describe("parley info — sections from live config (#163 / #169)", () => {
+  it("lists PATH-detected vendors separately and explains the allowlist requirement", async () => {
+    const cwd = projectDir();
+    const detectedPath = vendorPath("codex", "grok");
+
+    const prose = await runCli(["info"], home, {
+      cwd,
+      extraEnv: { PATH: detectedPath, PARLEY_FAKE_VENDOR_BIN: "" },
+    });
+    expect(prose.code).toBe(0);
+    expect(prose.stdout).toContain("(none configured");
+    expect(prose.stdout).toContain("### Detected, unconfigured vendors");
+    expect(prose.stdout).toContain("`codex` — detected on PATH");
+    expect(prose.stdout).toContain("`grok` — detected on PATH");
+    expect(prose.stdout).toMatch(/delegation is denied until a model allowlist is configured/);
+    expect(prose.stdout).toContain("/parley-wizard");
+
+    const json = await runCli(["info", "--json"], home, {
+      cwd,
+      extraEnv: { PATH: detectedPath, PARLEY_FAKE_VENDOR_BIN: "" },
+    });
+    expect(json.code).toBe(0);
+    const config = JSON.parse(json.stdout) as InfoConfig;
+    expect(config.vendors).toEqual([]);
+    expect(config.detected_vendors).toEqual(["codex", "grok"]);
+  });
+
+  it("excludes configured vendors from the detected, unconfigured group", async () => {
+    const cwd = projectDir();
+    const detectedPath = vendorPath("codex", "grok");
+    writeFiles(home, {
+      "parley.json": JSON.stringify({
+        vendors: {
+          codex: { models: { "gpt-5": { efforts: ["high"] } } },
+        },
+      }),
+    });
+
+    const res = await runCli(["info", "--json"], home, {
+      cwd,
+      extraEnv: { PATH: detectedPath, PARLEY_FAKE_VENDOR_BIN: "" },
+    });
+    expect(res.code).toBe(0);
+    const config = JSON.parse(res.stdout) as InfoConfig;
+    expect(config.vendors.map((vendor) => vendor.id)).toEqual(["codex"]);
+    expect(config.detected_vendors).toEqual(["grok"]);
+  });
+
+  it("keeps an explicit empty configured state and wizard hint when nothing is detected", async () => {
+    const cwd = projectDir();
+    const emptyPath = vendorPath();
+    const res = await runCli(["info"], home, {
+      cwd,
+      extraEnv: { PATH: emptyPath, PARLEY_FAKE_VENDOR_BIN: "" },
+    });
+    expect(res.code).toBe(0);
+    expect(res.stdout).toContain("(none configured");
+    expect(res.stdout).toContain("/parley-wizard");
+    expect(res.stdout).toContain("(none detected on PATH)");
+  });
+
   it("renders all six section headers against fixture configs when eval is on", async () => {
     const cwd = projectDir();
     writeFiles(home, {
@@ -119,8 +191,12 @@ describe("parley info — sections from live config (#163 / #169)", () => {
     expect(out).toContain("### Defaults");
     expect(out).toMatch(/profile: `fast`/);
     expect(out).toMatch(/vendor: `fake`/);
-    expect(out).not.toContain("`claude`");
-    expect(out).not.toContain("`codex`");
+    const configuredSection = out.slice(
+      out.indexOf("### Vendors"),
+      out.indexOf("### Detected, unconfigured vendors"),
+    );
+    expect(configuredSection).not.toContain("`claude`");
+    expect(configuredSection).not.toContain("`codex`");
 
     // Task types from project + automatic other.
     expect(out).toContain("`coding` → rubric `coding`");

@@ -289,6 +289,8 @@ export interface InfoConfig {
   instructions: string | null;
   /** Vendors present in daemon config and/or referenced by profiles (#169). */
   vendors: InfoVendor[];
+  /** Built-in vendor CLIs found on PATH but absent from effective configuration. */
+  detected_vendors: string[];
   profiles: InfoProfile[];
   /** Fallback when delegate omits -v/--profile (#175). */
   defaults: InfoDefaults;
@@ -571,6 +573,7 @@ export function buildInfoConfig(options: BuildInfoOptions): InfoConfig {
     project: projectDir,
     instructions,
     vendors,
+    detected_vendors: [],
     profiles,
     defaults,
     evaluation,
@@ -602,6 +605,7 @@ export function renderInfoProse(config: InfoConfig): string {
   lines.push("### Vendors");
   if (config.vendors.length === 0) {
     lines.push("(none configured)");
+    lines.push("Run /parley-wizard to configure a vendor and model allowlist.");
   } else {
     for (const v of config.vendors) {
       const extras: string[] = [`child channel: ${v.childChannel}`];
@@ -634,6 +638,17 @@ export function renderInfoProse(config: InfoConfig): string {
           lines.push(`  - \`${m.id}\` (${bits.join("; ")})`);
         }
       }
+    }
+  }
+  lines.push("");
+  lines.push("### Detected, unconfigured vendors");
+  if (config.detected_vendors.length === 0) {
+    lines.push("(none detected on PATH)");
+  } else {
+    for (const id of config.detected_vendors) {
+      lines.push(
+        `- \`${id}\` — detected on PATH, but delegation is denied until a model allowlist is configured; run /parley-wizard`,
+      );
     }
   }
   lines.push("");
