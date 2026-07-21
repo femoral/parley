@@ -66,7 +66,7 @@ describe("projectInbox selects tasks blocked on an answer (#67)", () => {
 
   it("projects faction coat/emblem/label and a branch·id meta line, same shape as the roster", () => {
     const cards = projectInbox([
-      task({ id: "abcdefghij", state: "awaiting_answer", vendor: "grok", orchHarness: "opencode", question: "Deploy now?" }),
+      task({ id: "abcdefghij", state: "awaiting_answer", vendor: "opencode", model: "grok-4.5", orchHarness: "codex", question: "Deploy now?" }),
     ]);
     expect(cards[0]).toEqual({
       id: "abcdefghij",

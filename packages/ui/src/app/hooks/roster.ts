@@ -14,7 +14,7 @@
  * core's `ATTENTION_ORDER` — only the live roster list uses this window.
  */
 import { attentionRank, isTerminalState } from "@useparley/core";
-import { harnessColorFor, vendorEmblemFor } from "../../tokens/factions.js";
+import { harnessColorFor, modelVendorFor } from "../../tokens/factions.js";
 import type { RosterGroup, RosterSessionOption, RosterTask } from "../../hud/types.js";
 
 /**
@@ -36,6 +36,8 @@ export interface RosterTaskInput {
   id: string;
   name: string;
   vendor: string | null;
+  /** Concrete model id; supplies the model-maker emblem. */
+  model?: string | null;
   /** Adapter running the orchestrator model; supplies task identity colour. */
   orchHarness?: string | null;
   state: string;
@@ -150,8 +152,8 @@ function toRosterTask(
   task: RosterTaskInput,
   freshness: FailedFreshness | null | undefined,
 ): RosterTask {
-  const vendor = vendorEmblemFor(task.vendor);
-  const harness = harnessColorFor(task.orchHarness);
+  const vendor = modelVendorFor(task.model, task.vendor);
+  const harness = harnessColorFor(task.vendor);
   const freshFailure = isFreshFailure(task.id, task.state, freshness);
   return {
     id: task.id,

@@ -22,7 +22,7 @@
  * wrong?" even when the trouble sits off-camera.
  */
 import { attentionRank, isAttentionState } from "@useparley/core";
-import { harnessColorFor, vendorEmblemFor, type EmblemMark } from "../../tokens/factions.js";
+import { harnessColorFor, modelVendorFor, type EmblemMark } from "../../tokens/factions.js";
 import { shortId, type RosterTaskInput } from "./roster.js";
 
 /** One task as the scene renders it — an island (+ its sloop and effects). */
@@ -120,8 +120,8 @@ export function rollupSessionAttention(
 }
 
 function toSceneTask(task: RosterTaskInput): SceneTask {
-  const vendor = vendorEmblemFor(task.vendor);
-  const harness = harnessColorFor(task.orchHarness);
+  const vendor = modelVendorFor(task.model, task.vendor);
+  const harness = harnessColorFor(task.vendor);
   return {
     id: task.id,
     name: task.name,

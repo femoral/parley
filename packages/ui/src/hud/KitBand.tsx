@@ -1,7 +1,7 @@
 import { memo, type CSSProperties } from "react";
 import { Button, Divider, Emblem, Mark, Plate, PlateHeader } from "../primitives/index.js";
 import { MARK_BANNER, MARK_MALLET } from "../tokens/chrome-glyphs.js";
-import { FACTIONS } from "../tokens/factions.js";
+import { HARNESS_COLORS, type EmblemMark } from "../tokens/factions.js";
 import { ATTENTION_DISPLAY_ORDER, STATE_META } from "../tokens/state-meta.js";
 import "./KitBand.css";
 
@@ -18,14 +18,14 @@ export const KitBand = memo(function KitBand() {
   return (
     <Plate padded={false} className="pc-kit">
       <div className="pc-kit__col pc-kit__col--factions">
-        <PlateHeader icon={<Mark mark={MARK_BANNER} size={14} />} iconDark title="FACTIONS" />
+        <PlateHeader icon={<Mark mark={MARK_BANNER} size={14} />} iconDark title="HARNESS COATS" />
         <div className="pc-kit__list">
-          {Object.values(FACTIONS).map((faction) => (
-            <div className="pc-kit__faction" key={faction.label}>
-              <Emblem coat={faction.coat} mark={faction.emblem} size={22} label={faction.label} />
+          {Object.values(HARNESS_COLORS).map((harness) => (
+            <div className="pc-kit__faction" key={harness.label}>
+              <Emblem coat={harness.coat} mark={COAT_SWATCH} size={22} label={`${harness.label} harness`} />
               <div className="pc-kit__faction-copy">
-                <span className="pc-kit__faction-label">{faction.label}</span>
-                <span className="pc-kit__faction-tagline">{faction.tagline}</span>
+                <span className="pc-kit__faction-label">{harness.label}</span>
+                <span className="pc-kit__faction-tagline">{harness.label} task adapter coat</span>
               </div>
             </div>
           ))}
@@ -85,3 +85,5 @@ export const KitBand = memo(function KitBand() {
     </Plate>
   );
 });
+
+const COAT_SWATCH: EmblemMark = { kind: "glyph", char: "◆" };

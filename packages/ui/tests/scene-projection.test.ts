@@ -58,12 +58,20 @@ describe("projectScene groups tasks into session regions (#69)", () => {
 
   it("resolves vendor emblem and orchestrator harness colour independently", () => {
     const { sessions } = projectScene([
-      task({ id: "a", state: "running", vendor: "qwen", orchHarness: "opencode", orchestratorSession: "s" }),
+      task({ id: "a", state: "running", vendor: "opencode", model: "qwen-3-max", orchHarness: "codex", orchestratorSession: "s" }),
     ]);
     const island = sessions[0]!.tasks[0]!;
     expect(island.coat).toBe("#80A83D");
     expect(island.coatDark).toBe("#465F1D");
     expect(island.emblem.kind).toBe("svg");
+  });
+
+  it("does not let the orchestrator harness recolor a task", () => {
+    const first = projectScene([task({ id: "a", state: "running", vendor: "codex", model: "gpt-5.6-sol", orchHarness: "grok" })]);
+    const second = projectScene([task({ id: "a", state: "running", vendor: "codex", model: "gpt-5.6-sol", orchHarness: "kimi" })]);
+    expect(first.sessions[0]!.tasks[0]!.coat).toBe("#18A886");
+    expect(second.sessions[0]!.tasks[0]!.coat).toBe("#18A886");
+    expect(first.sessions[0]!.tasks[0]!.emblem).toEqual(second.sessions[0]!.tasks[0]!.emblem);
   });
 
   it("falls back to white for an unknown harness without changing vendor fallback", () => {

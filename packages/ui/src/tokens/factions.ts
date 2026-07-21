@@ -87,6 +87,25 @@ export const UNKNOWN_HARNESS: HarnessColor = {
   coatDark: "#5B3A24",
 };
 
+/** Canonical model-maker records for legends and model-name classification. */
+export const MODEL_VENDORS = {
+  gpt: VENDOR_EMBLEMS.gpt!,
+  claude: VENDOR_EMBLEMS.claude!,
+  grok: VENDOR_EMBLEMS.grok!,
+  kimi: VENDOR_EMBLEMS.kimi!,
+  qwen: VENDOR_EMBLEMS.qwen!,
+  pi: VENDOR_EMBLEMS.pi!,
+} as const;
+
+const MODEL_MAKER_HINTS: readonly [VendorEmblem, readonly string[]][] = [
+  [MODEL_VENDORS.gpt, ["gpt", "chatgpt", "openai", "codex", "o1", "o3", "o4"]],
+  [MODEL_VENDORS.claude, ["claude", "anthropic"]],
+  [MODEL_VENDORS.grok, ["grok", "xai"]],
+  [MODEL_VENDORS.kimi, ["kimi", "moonshot"]],
+  [MODEL_VENDORS.qwen, ["qwen", "alibaba", "dashscope"]],
+  [MODEL_VENDORS.pi, ["inflection", "pi-"]],
+];
+
 function normalized(value: string | null | undefined): string | null {
   const key = value?.trim().toLowerCase();
   return key || null;
@@ -97,18 +116,25 @@ export function vendorEmblemFor(vendor: string | null | undefined): VendorEmblem
   return key ? VENDOR_EMBLEMS[key] ?? UNKNOWN_VENDOR : UNKNOWN_VENDOR;
 }
 
+/**
+ * Resolve the maker from a model id, then fall back to an adapter alias when
+ * the model is absent or opaque. The latter keeps direct Grok/Claude adapters
+ * useful without pretending a generic adapter such as OpenCode is a maker.
+ */
+export function modelVendorFor(
+  model: string | null | undefined,
+  fallbackVendor?: string | null,
+): VendorEmblem {
+  const key = normalized(model);
+  if (key) {
+    for (const [vendor, hints] of MODEL_MAKER_HINTS) {
+      if (hints.some((hint) => key.includes(hint))) return vendor;
+    }
+  }
+  return vendorEmblemFor(fallbackVendor);
+}
+
 export function harnessColorFor(harness: string | null | undefined): HarnessColor {
   const key = normalized(harness);
   return key ? HARNESS_COLORS[key] ?? UNKNOWN_HARNESS : UNKNOWN_HARNESS;
 }
-
-/** @deprecated Compatibility for non-task kit/legend consumers. */
-export const FACTIONS = Object.fromEntries(
-  ["gpt", "claude", "grok", "kimi", "qwen", "pi"].map((key) => {
-    const vendor = VENDOR_EMBLEMS[key]!;
-    return [
-    key,
-    { ...vendor, ...UNKNOWN_HARNESS, label: vendor.label, tagline: `${vendor.label} model-maker emblem.` },
-    ];
-  }),
-);

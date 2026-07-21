@@ -99,7 +99,7 @@ describe("projectInspector projects a task's Brief tab (#68)", () => {
   });
 
   it("carries the vendor emblem and orchestrator harness colour independently", () => {
-    const view = projectInspector(detail({ vendor: "grok" }, { orch_harness: "opencode" }), NO_LOGS);
+    const view = projectInspector(detail({ vendor: "opencode", model: "grok-4.5" }, { orch_harness: "codex" }), NO_LOGS);
     expect(view.coat).toBe("#80A83D");
     expect(view.emblem.kind).toBe("svg");
     expect(view.faction).toBe("Grok via OpenCode");

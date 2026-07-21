@@ -2,7 +2,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { ChartKey } from "../src/hud/index.js";
-import { FACTIONS } from "../src/tokens/factions.js";
+import { HARNESS_COLORS, MODEL_VENDORS } from "../src/tokens/factions.js";
 import { ATTENTION_DISPLAY_ORDER, STATE_META } from "../src/tokens/state-meta.js";
 
 afterEach(cleanup);
@@ -30,13 +30,16 @@ describe("ChartKey production legend (recognition over recall)", () => {
     }
   });
 
-  it("lists every registered faction with its name", () => {
+  it("lists every model-maker mark and harness coat", () => {
     render(<ChartKey />);
     fireEvent.click(screen.getByRole("button", { name: /Chart key/ }));
-    for (const faction of Object.values(FACTIONS)) {
-      // Emblem aria-label + visible name both carry the faction label.
-      expect(screen.getAllByText(faction.label).length).toBeGreaterThanOrEqual(1);
-      expect(screen.getByLabelText(faction.label)).toBeTruthy();
+    for (const vendor of Object.values(MODEL_VENDORS)) {
+      expect(screen.getAllByText(vendor.label).length).toBeGreaterThanOrEqual(1);
+      expect(screen.getByLabelText(vendor.label)).toBeTruthy();
+    }
+    for (const harness of Object.values(HARNESS_COLORS)) {
+      expect(screen.getAllByText(harness.label).length).toBeGreaterThanOrEqual(1);
+      expect(screen.getByLabelText(`${harness.label} harness`)).toBeTruthy();
     }
   });
 

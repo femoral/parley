@@ -5,6 +5,7 @@ import {
   UNKNOWN_VENDOR,
   VENDOR_EMBLEMS,
   harnessColorFor,
+  modelVendorFor,
   vendorEmblemFor,
 } from "../src/tokens/factions.js";
 
@@ -38,5 +39,19 @@ describe("task identity tokens", () => {
   it("normalizes external identity strings", () => {
     expect(vendorEmblemFor(" QWEN ")).toBe(VENDOR_EMBLEMS.qwen);
     expect(harnessColorFor(" OpenCode ")).toBe(HARNESS_COLORS.opencode);
+  });
+
+  it("derives the maker from model ids before consulting adapter aliases", () => {
+    expect(modelVendorFor("qwen-3-max", "opencode").label).toBe("Qwen");
+    expect(modelVendorFor("gpt-5.6-sol", "codex").label).toBe("GPT");
+    expect(modelVendorFor("grok-4.5", "opencode").label).toBe("Grok");
+    expect(modelVendorFor("claude-sonnet-4", "opencode").label).toBe("Claude");
+    expect(modelVendorFor("kimi-k2", "opencode").label).toBe("Kimi");
+  });
+
+  it("falls back from an opaque model to an adapter alias, then unknown", () => {
+    expect(modelVendorFor(null, "grok")).toBe(VENDOR_EMBLEMS.grok);
+    expect(modelVendorFor("custom-model", "claude")).toBe(VENDOR_EMBLEMS.claude);
+    expect(modelVendorFor(null, null)).toBe(UNKNOWN_VENDOR);
   });
 });

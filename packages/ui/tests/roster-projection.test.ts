@@ -75,7 +75,7 @@ describe("projectRoster groups by state in attention order (#66)", () => {
 
   it("projects harness coat and vendor emblem independently with a branch·id meta line", () => {
     const { groups } = projectRoster([
-      task({ id: "abcdefghij", state: "running", vendor: "qwen", orchHarness: "opencode" }),
+      task({ id: "abcdefghij", state: "running", vendor: "opencode", model: "qwen-3-max", orchHarness: "codex" }),
     ]);
     const rosterTask = groups[0]!.tasks[0]!;
     expect(rosterTask.coat).toBe("#80A83D");

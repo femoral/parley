@@ -2,17 +2,18 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 import { KitBand } from "../src/hud/KitBand.js";
-import { FACTIONS } from "../src/tokens/factions.js";
+import { HARNESS_COLORS } from "../src/tokens/factions.js";
 import { STATE_META } from "../src/tokens/state-meta.js";
 
 afterEach(cleanup);
 
 describe("KitBand — the dev style-guide strip (#70)", () => {
-  it("lists every registered faction with its label and tagline", () => {
+  it("lists every registered harness with its coat", () => {
     render(<KitBand />);
-    for (const faction of Object.values(FACTIONS)) {
-      expect(screen.getByText(faction.label)).toBeTruthy();
-      expect(screen.getByText(faction.tagline)).toBeTruthy();
+    for (const harness of Object.values(HARNESS_COLORS)) {
+      expect(screen.getByText(harness.label)).toBeTruthy();
+      expect(screen.getByText(`${harness.label} task adapter coat`)).toBeTruthy();
+      expect(screen.getByLabelText(`${harness.label} harness`)).toBeTruthy();
     }
   });
 
