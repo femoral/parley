@@ -4,10 +4,7 @@ import path from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import {
-  readSessionState,
-  sessionStatePath,
-} from "../../../core/src/session-state.js";
+import { readSessionState, sessionStatePath } from "@useparley/core";
 import {
   effortFromTranscript,
   recordCodexSession,
@@ -99,6 +96,42 @@ describe("Codex SessionStart provenance", () => {
       started_at: "2026-07-20T10:00:00.000Z",
       updated_at: "2026-07-20T11:00:00.000Z",
     });
+  });
+
+  it("keeps the previous model when a later event omits it", () => {
+    const home = temporaryHome();
+    recordCodexSession(
+      { session_id: "s1", model: "gpt-5.5" },
+      { parleyHome: home, harnessPid: 10 },
+    );
+
+    const state = recordCodexSession(
+      { session_id: "s1" },
+      { parleyHome: home, harnessPid: 10 },
+    );
+
+    expect(state?.model).toBe("gpt-5.5");
+  });
+
+  it("keeps the previous effort when a later transcript is unreadable", () => {
+    const home = temporaryHome();
+    const transcript = path.join(home, "rollout.jsonl");
+    fs.copyFileSync(path.join(fixtures, "resumed-rollout.jsonl"), transcript);
+    recordCodexSession(
+      { session_id: "s1", model: "gpt-5.5", transcript_path: transcript },
+      { parleyHome: home, harnessPid: 10 },
+    );
+
+    const state = recordCodexSession(
+      {
+        session_id: "s1",
+        model: "gpt-5.5",
+        transcript_path: path.join(home, "missing.jsonl"),
+      },
+      { parleyHome: home, harnessPid: 10 },
+    );
+
+    expect(state?.effort).toBe("high");
   });
 
   it("ignores malformed or identity-less hook input", () => {

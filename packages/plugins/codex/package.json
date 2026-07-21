@@ -13,8 +13,28 @@
     "hooks",
     "README.md"
   ],
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    },
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "access": "public",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "./package.json": "./package.json"
+    }
+  },
   "scripts": {
     "build": "tsdown",
     "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@useparley/core": "workspace:*"
   }
 }

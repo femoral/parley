@@ -7,7 +7,7 @@ import {
   sessionStatePath,
   writeSessionState,
   type SessionState,
-} from "../../../core/src/session-state.js";
+} from "@useparley/core";
 
 const HARNESS = "codex";
 const TRANSCRIPT_TAIL_BYTES = 1024 * 1024;
@@ -84,8 +84,8 @@ export function recordCodexSession(
   const state: SessionState = {
     harness: HARNESS,
     harness_session_id: sessionId,
-    model,
-    effort,
+    model: model ?? previous?.model ?? null,
+    effort: effort ?? previous?.effort ?? null,
     pid: options.harnessPid ?? process.ppid,
     started_at: previous?.started_at || timestamp,
     updated_at: timestamp,
