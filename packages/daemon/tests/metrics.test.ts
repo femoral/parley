@@ -19,6 +19,7 @@ import {
 } from "../src/db.js";
 import { aggregateMetrics, percentile } from "../src/metrics.js";
 import { startServer, type DaemonServer } from "../src/server.js";
+import { withFakeAllowlist } from "./helpers.js";
 
 let home: string;
 let db: DatabaseHandle;
@@ -50,6 +51,10 @@ function baseNewTask(overrides: Partial<NewTask> & Pick<NewTask, "id">): NewTask
 
 beforeEach(() => {
   home = fs.mkdtempSync(path.join(os.tmpdir(), "parley-metrics-"));
+  fs.writeFileSync(
+    path.join(home, "parley.json"),
+    JSON.stringify(withFakeAllowlist({})),
+  );
   db = openDatabase(homePaths(home));
 });
 

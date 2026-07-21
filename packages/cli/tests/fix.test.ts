@@ -10,6 +10,7 @@ import {
   makeHome,
   makeTaskDir,
   runCli,
+  testFakeVendor,
   waitForState,
   type FakeVendorAction,
 } from "./helpers.js";
@@ -395,7 +396,11 @@ describe("parley fix — retry limits and --fresh (#158)", () => {
   function writeDaemonVendorRetry(window: string | number): void {
     fs.writeFileSync(
       path.join(home, "parley.json"),
-      JSON.stringify({ vendors: { fake: { retryWindow: window } } }, null, 2),
+      JSON.stringify(
+        { vendors: { fake: testFakeVendor({ retryWindow: window }) } },
+        null,
+        2,
+      ),
     );
   }
 

@@ -130,7 +130,14 @@ export function createAdapter(_env) {
       "plugin": "/home/you/.parley/plugins/acme-adapter.mjs",
       "bin": "/usr/local/bin/acme",
       "args": ["--json"],
-      "env": { "ACME_API_KEY": "…" }
+      "env": { "ACME_API_KEY": "…" },
+      "models": {
+        "acme-1": {
+          "efforts": ["low", "medium"],
+          "default": "medium",
+          "hint": "default coding model"
+        }
+      }
     }
   },
   "profiles": {
@@ -142,6 +149,10 @@ export function createAdapter(_env) {
   }
 }
 ```
+
+**Model allowlist (required, #185 / ADR-0014):** `vendors.<id>.models` is deny-by-default.
+Without it, `parley delegate -v acme` fails and points at `/parley-wizard`. Efforts are
+explicit (nothing implied). Use `/parley-wizard` or `parley config set vendors.<id>.models …`.
 
 Specifier forms for `plugin`:
 

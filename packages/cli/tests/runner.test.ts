@@ -7,6 +7,7 @@ import {
   makeHome,
   runCli,
   waitFor,
+  withFakeAllowlist,
 } from "./helpers.js";
 
 let home: string;
@@ -16,7 +17,9 @@ beforeEach(() => {
   home = makeHome();
   fs.writeFileSync(
     path.join(home, "parley.json"),
-    JSON.stringify({ runners: { gpu: { token: "secret-gpu" } } }),
+    JSON.stringify(
+      withFakeAllowlist({ runners: { gpu: { token: "secret-gpu" } } }),
+    ),
   );
 });
 

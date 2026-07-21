@@ -14,6 +14,7 @@ import {
   makeHome,
   makeTaskDir,
   runCli,
+  withFakeAllowlist,
   writeFiles,
 } from "./helpers.js";
 
@@ -45,15 +46,28 @@ describe("parley info — sections from live config (#163 / #169)", () => {
   it("renders all six section headers against fixture configs when eval is on", async () => {
     const cwd = projectDir();
     writeFiles(home, {
-      "parley.json": JSON.stringify({
-        profiles: {
-          fast: { vendor: "fake", model: "m-fast", effort: "low" },
-        },
-        vendors: {
-          fake: { childChannel: "cli", retryWindow: "45m" },
-        },
-        defaults: { profile: "fast", vendor: "fake" },
-      }),
+      "parley.json": JSON.stringify(
+        withFakeAllowlist({
+          profiles: {
+            fast: { vendor: "fake", model: "m-fast", effort: "low" },
+          },
+          vendors: {
+            fake: {
+              childChannel: "cli",
+              retryWindow: "45m",
+              models: {
+                "fake-model": {
+                  efforts: ["low", "medium"],
+                  default: "medium",
+                  hint: "info fixture",
+                },
+                "m-fast": { efforts: ["low", "medium", "high"] },
+              },
+            },
+          },
+          defaults: { profile: "fast", vendor: "fake" },
+        }),
+      ),
       "orchestrator/PROMPT.md": "ORCH-HOME-LINE",
     });
     writeProject(cwd, {
@@ -96,6 +110,9 @@ describe("parley info — sections from live config (#163 / #169)", () => {
     expect(out).toContain("`fake`");
     expect(out).toMatch(/child channel: cli/);
     expect(out).toMatch(/retry window: 45 minutes/);
+    expect(out).toContain("`fake-model`");
+    expect(out).toMatch(/default@medium/);
+    expect(out).toMatch(/hint: info fixture/);
     expect(out).toContain("`fast`");
     expect(out).toMatch(/vendor=fake/);
     expect(out).toMatch(/model=m-fast/);

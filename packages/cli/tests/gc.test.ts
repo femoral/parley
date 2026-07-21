@@ -11,6 +11,7 @@ import {
   runCli,
   waitFor,
   waitForState,
+  withFakeAllowlist,
   type FakeVendorAction,
 } from "./helpers.js";
 
@@ -61,7 +62,7 @@ function worktreePath(home: string, id: string, repoDir: string): string {
 function writeRetention(home: string, days: number): void {
   fs.writeFileSync(
     path.join(home, "parley.json"),
-    `${JSON.stringify({ retention: { days } }, null, 2)}\n`,
+    `${JSON.stringify(withFakeAllowlist({ retention: { days } }), null, 2)}\n`,
   );
 }
 

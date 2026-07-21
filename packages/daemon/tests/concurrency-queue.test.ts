@@ -23,6 +23,7 @@ import {
 } from "../src/db.js";
 import { CODE_REATTEMPT_WINDOW_EXPIRED } from "../src/retry.js";
 import { TaskEngine } from "../src/engine.js";
+import { withFakeAllowlist } from "./helpers.js";
 
 const FAKE_VENDOR_BIN = fileURLToPath(
   new URL("../../cli/tests/fake-vendor.mjs", import.meta.url),
@@ -32,8 +33,8 @@ let home: string;
 let db: DatabaseHandle;
 let cwd: string;
 
-function writeParleyConfig(body: unknown): void {
-  fs.writeFileSync(path.join(home, "parley.json"), JSON.stringify(body));
+function writeParleyConfig(body: Record<string, unknown> = {}): void {
+  fs.writeFileSync(path.join(home, "parley.json"), JSON.stringify(withFakeAllowlist(body)));
 }
 
 beforeEach(() => {

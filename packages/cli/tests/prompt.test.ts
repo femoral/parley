@@ -14,6 +14,7 @@ import {
   makeTaskDir,
   runCli,
   waitForState,
+  withFakeAllowlist,
   writeFiles,
   type FakeVendorAction,
 } from "./helpers.js";
@@ -61,9 +62,9 @@ describe("parley prompt — composition matrices (#159)", () => {
     writePrompt(home, "profiles/deep/PROMPT.md", "HOME-PROFILE");
     writePrompt(cwd, ".parley/profiles/deep/PROMPT.md", "PROJECT-PROFILE");
     writeFiles(home, {
-      "parley.json": JSON.stringify({
+      "parley.json": JSON.stringify(withFakeAllowlist({
         profiles: { deep: { vendor: "fake" } },
-      }),
+      })),
     });
 
     const result = await runCli(
@@ -99,9 +100,9 @@ describe("parley prompt — composition matrices (#159)", () => {
     expect(noProfile.stdout).not.toContain("PROFILE-SKIP");
 
     writeFiles(home, {
-      "parley.json": JSON.stringify({
+      "parley.json": JSON.stringify(withFakeAllowlist({
         profiles: { deep: { vendor: "fake" } },
-      }),
+      })),
     });
     const withProfile = await runCli(
       ["prompt", "-v", "fake", "--profile", "deep"],
@@ -159,9 +160,9 @@ describe("parley prompt — composition matrices (#159)", () => {
   it("resolves vendor from --profile alone", async () => {
     const cwd = taskDir();
     writeFiles(home, {
-      "parley.json": JSON.stringify({
+      "parley.json": JSON.stringify(withFakeAllowlist({
         profiles: { deep: { vendor: "fake" } },
-      }),
+      })),
     });
     writePrompt(home, "vendors/fake/PROMPT.md", "FROM-PROFILE-VENDOR");
     writePrompt(home, "profiles/deep/PROMPT.md", "FROM-PROFILE");
@@ -181,9 +182,9 @@ describe("parley prompt matches spawn (#159)", () => {
     writePrompt(home, "profiles/fast/PROMPT.md", "HOME-P");
     writePrompt(cwd, ".parley/profiles/fast/PROMPT.md", "PROJ-P");
     writeFiles(home, {
-      "parley.json": JSON.stringify({
+      "parley.json": JSON.stringify(withFakeAllowlist({
         profiles: { fast: { vendor: "fake" } },
-      }),
+      })),
     });
 
     const brief = "implement the layering feature";

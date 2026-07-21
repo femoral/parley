@@ -19,7 +19,8 @@ const taskDirs: string[] = [];
 const tempFiles: string[] = [];
 
 beforeEach(() => {
-  home = makeHome();
+  // Config suite asserts empty/seeded home files; do not auto-seed allowlist.
+  home = makeHome({ seedAllowlist: false });
 });
 
 afterEach(() => {
@@ -172,10 +173,25 @@ describe("parley config hot apply", () => {
     // Ensure the daemon is up first so set and delegate share one process.
     expect((await runCli(["daemon", "start"], home)).code).toBe(0);
 
+    // Deny-by-default: allowlist + profile combo must be written before delegate.
+    const setModels = await runCli(
+      [
+        "config",
+        "set",
+        "vendors.fake.models",
+        JSON.stringify({
+          "m-hot": { efforts: ["low", "medium", "high"], default: "medium" },
+        }),
+      ],
+      home,
+    );
+    expect(setModels.code).toBe(0);
     const setVendor = await runCli(["config", "set", "profiles.hot.vendor", "fake"], home);
     expect(setVendor.code).toBe(0);
     const setModel = await runCli(["config", "set", "profiles.hot.model", "m-hot"], home);
     expect(setModel.code).toBe(0);
+    const setEffort = await runCli(["config", "set", "profiles.hot.effort", "low"], home);
+    expect(setEffort.code).toBe(0);
 
     const cwd = taskDir([
       {

@@ -12,6 +12,7 @@ import {
   makeHome,
   makeTaskDir,
   runCli,
+  testFakeVendor,
   waitForState,
   watchJson,
   type FakeVendorAction,
@@ -40,7 +41,11 @@ function taskDir(actions: FakeVendorAction[], resumeActions?: FakeVendorAction[]
 function writeVendorConfig(childChannel: "mcp" | "cli" | "http"): void {
   fs.writeFileSync(
     path.join(home, "parley.json"),
-    JSON.stringify({ vendors: { fake: { childChannel } } }, null, 2),
+    JSON.stringify(
+      { vendors: { fake: testFakeVendor({ childChannel }) } },
+      null,
+      2,
+    ),
   );
 }
 

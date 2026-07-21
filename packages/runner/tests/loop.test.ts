@@ -89,7 +89,19 @@ describe("runner loop integration", () => {
     const home = tmp("parley-runner-home-");
     fs.writeFileSync(
       path.join(home, "parley.json"),
-      JSON.stringify({ runners: { gpu: { token: "secret-gpu" } } }),
+      JSON.stringify({
+        runners: { gpu: { token: "secret-gpu" } },
+        vendors: {
+          fake: {
+            models: {
+              "fake-model": {
+                efforts: ["low", "medium", "high"],
+                default: "medium",
+              },
+            },
+          },
+        },
+      }),
     );
 
     const repo = makeGitRepo([

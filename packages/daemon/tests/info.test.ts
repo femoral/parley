@@ -162,7 +162,16 @@ describe("buildInfo / renderInfoProse (#163 / #169)", () => {
           alpha: { vendor: "fake", model: "m" },
         },
         vendors: {
-          fake: { childChannel: "cli" },
+          fake: {
+            childChannel: "cli",
+            models: {
+              "fake-model": {
+                efforts: ["low", "medium"],
+                default: "medium",
+                hint: "test default",
+              },
+            },
+          },
         },
       }),
     );
@@ -172,12 +181,24 @@ describe("buildInfo / renderInfoProse (#163 / #169)", () => {
     expect(config.vendors.some((v) => v.id === "claude" || v.id === "codex")).toBe(false);
     expect(config.profiles.map((p) => p.name)).toEqual(["alpha", "zed"]);
     expect(config.defaults).toEqual({ vendor: null, profile: null });
-    // Models only via profiles — no full catalog dump.
+    // Models only via allowlist + profiles — no full catalog dump.
     expect(config.profiles.find((p) => p.name === "alpha")?.model).toBe("m");
+    expect(config.vendors[0]?.models).toEqual([
+      {
+        id: "fake-model",
+        efforts: ["low", "medium"],
+        isDefault: true,
+        defaultEffort: "medium",
+        hint: "test default",
+      },
+    ]);
     const prose = renderInfoProse(config);
     expect(prose.indexOf("`alpha`")).toBeLessThan(prose.indexOf("`zed`"));
     expect(prose).toContain("### Defaults");
     expect(prose).toMatch(/defaults\.profile|defaults\.vendor/);
+    expect(prose).toContain("`fake-model`");
+    expect(prose).toContain("default@medium");
+    expect(prose).toContain("hint: test default");
     expect(prose).not.toContain("gpt-5");
     expect(prose).not.toContain("grok-4");
   });

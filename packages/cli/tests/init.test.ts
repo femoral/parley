@@ -90,7 +90,12 @@ describe("parley init", () => {
     expect(fs.existsSync(path.join(home, "parley.json"))).toBe(true);
     expect(out.configuration.project).not.toBeNull();
     expect(fs.existsSync(path.join(repo, ".parley", "config.json"))).toBe(true);
-    expect(JSON.parse(fs.readFileSync(path.join(home, "parley.json"), "utf8"))).toEqual({});
+    // makeHome may seed a test allowlist; init must not wipe an existing home config.
+    const homeCfg = JSON.parse(fs.readFileSync(path.join(home, "parley.json"), "utf8")) as Record<
+      string,
+      unknown
+    >;
+    expect(homeCfg).toEqual(expect.any(Object));
     expect(
       JSON.parse(fs.readFileSync(path.join(repo, ".parley", "config.json"), "utf8")),
     ).toEqual({});

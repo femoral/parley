@@ -167,6 +167,94 @@ describe("readConfig — vendors.*", () => {
     const file = writeConfig(JSON.stringify({ vendors: { x: { plugin: "" } } }));
     expect(() => readConfig(file)).toThrow(/vendors\.x\.plugin must be a non-empty string/);
   });
+
+  it("accepts vendors.<id>.models allowlist (#185)", () => {
+    const file = writeConfig(
+      JSON.stringify({
+        vendors: {
+          codex: {
+            models: {
+              "gpt-5": {
+                efforts: ["low", "medium"],
+                default: "medium",
+                hint: "daily",
+              },
+              o3: { efforts: ["high"], default: false },
+            },
+          },
+        },
+      }),
+    );
+    expect(readConfig(file).vendors?.codex?.models).toEqual({
+      "gpt-5": { efforts: ["low", "medium"], default: "medium", hint: "daily" },
+      o3: { efforts: ["high"], default: false },
+    });
+  });
+
+  it("accepts default: true with a single effort", () => {
+    const file = writeConfig(
+      JSON.stringify({
+        vendors: { v: { models: { m: { efforts: ["low"], default: true } } } },
+      }),
+    );
+    expect(readConfig(file).vendors?.v?.models?.m?.default).toBe(true);
+  });
+
+  it("rejects default: true when multiple efforts are listed", () => {
+    const file = writeConfig(
+      JSON.stringify({
+        vendors: {
+          v: { models: { m: { efforts: ["low", "high"], default: true } } },
+        },
+      }),
+    );
+    expect(() => readConfig(file)).toThrow(/default is true but efforts lists/);
+  });
+
+  it("rejects unknown keys on model entries", () => {
+    const file = writeConfig(
+      JSON.stringify({
+        vendors: {
+          v: { models: { m: { efforts: ["low"], extra: 1 } } },
+        },
+      }),
+    );
+    expect(() => readConfig(file)).toThrow(/unknown key extra/);
+  });
+
+  it("rejects missing efforts", () => {
+    const file = writeConfig(
+      JSON.stringify({ vendors: { v: { models: { m: { default: true } } } } }),
+    );
+    expect(() => readConfig(file)).toThrow(/efforts is required/);
+  });
+
+  it("rejects default effort not in efforts list", () => {
+    const file = writeConfig(
+      JSON.stringify({
+        vendors: {
+          v: { models: { m: { efforts: ["low"], default: "high" } } },
+        },
+      }),
+    );
+    expect(() => readConfig(file)).toThrow(/not listed in efforts/);
+  });
+
+  it("rejects more than one default marker per vendor", () => {
+    const file = writeConfig(
+      JSON.stringify({
+        vendors: {
+          v: {
+            models: {
+              a: { efforts: ["low"], default: true },
+              b: { efforts: ["high"], default: "high" },
+            },
+          },
+        },
+      }),
+    );
+    expect(() => readConfig(file)).toThrow(/at most one model may be the default/);
+  });
 });
 
 describe("readConfig — profiles.*", () => {

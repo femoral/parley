@@ -333,10 +333,85 @@ for (const signal of ["SIGTERM", "SIGINT"] as const) {
   });
 }
 
-/** Create a fresh isolated parley home directory. */
-export function makeHome(): string {
+/**
+ * Default fake-vendor allowlist for CLI integration tests (#185).
+ * Deny-by-default means every delegate needs `vendors.fake.models`; tests that
+ * overwrite `parley.json` must include an allowlist (or call this helper).
+ */
+export const TEST_FAKE_MODELS = {
+  "fake-model": {
+    efforts: ["low", "medium", "high"],
+    default: "medium" as const,
+    hint: "test double default",
+  },
+  "fake-model-1": { efforts: ["low", "medium", "high"] },
+  "my/weird:model@2026-preview": { efforts: ["low", "medium", "high"] },
+  "m-fast": { efforts: ["low", "medium", "high"] },
+  "m-only": { efforts: ["low", "medium", "high"] },
+  m1: { efforts: ["low", "medium", "high"] },
+  "m-def": { efforts: ["low", "medium", "high"] },
+  "m-default": { efforts: ["high", "low", "medium"] },
+  "m-hot": { efforts: ["low", "medium", "high"] },
+  "other-model": { efforts: ["low", "medium", "high"] },
+  "from-profile": { efforts: ["low", "medium", "high"] },
+  explicit: { efforts: ["low", "medium", "high"] },
+  "adapter-model": { efforts: ["adapter-effort", "low", "medium", "high"] },
+  "prof-m": { efforts: ["prof-e", "low", "medium", "high"] },
+  "req-m": { efforts: ["req-e", "low", "medium", "high"] },
+  "request-model": { efforts: ["low", "medium", "high", "xhigh"] },
+  "m-profile": { efforts: ["high", "low", "medium"] },
+  "m-explicit": { efforts: ["low", "high", "medium"] },
+};
+
+/** Vendor entry with a usable fake allowlist (merge extra keys as needed). */
+export function testFakeVendor(
+  extra: Record<string, unknown> = {},
+): Record<string, unknown> {
+  const { models: modelsOverride, ...rest } = extra;
+  return {
+    models: modelsOverride !== undefined ? modelsOverride : { ...TEST_FAKE_MODELS },
+    ...rest,
+  };
+}
+
+/** Merge a body with a seeded `vendors.fake` allowlist. */
+export function withFakeAllowlist(
+  body: Record<string, unknown> = {},
+): Record<string, unknown> {
+  const vendorsIn =
+    typeof body.vendors === "object" && body.vendors !== null && !Array.isArray(body.vendors)
+      ? (body.vendors as Record<string, unknown>)
+      : {};
+  const fakeIn =
+    typeof vendorsIn.fake === "object" &&
+    vendorsIn.fake !== null &&
+    !Array.isArray(vendorsIn.fake)
+      ? (vendorsIn.fake as Record<string, unknown>)
+      : {};
+  return {
+    ...body,
+    vendors: {
+      ...vendorsIn,
+      fake: testFakeVendor(fakeIn),
+    },
+  };
+}
+
+/**
+ * Create a fresh isolated parley home directory.
+ * When `seedAllowlist` is true (default), writes a fake-vendor model allowlist
+ * so deny-by-default (#185) does not block ordinary delegate tests. Pass
+ * `{ seedAllowlist: false }` for config tests that expect an empty home file.
+ */
+export function makeHome(options: { seedAllowlist?: boolean } = {}): string {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), "parley-test-"));
   SPAWNED_HOMES.add(home);
+  if (options.seedAllowlist !== false) {
+    fs.writeFileSync(
+      path.join(home, "parley.json"),
+      JSON.stringify({ vendors: { fake: testFakeVendor() } }, null, 2),
+    );
+  }
   return home;
 }
 

@@ -51,6 +51,36 @@ export interface RetentionConfig {
 export const DEFAULT_RETENTION_DAYS = 30;
 
 /**
+ * One model entry in a vendor's model+effort allowlist
+ * (`vendors.<id>.models.<modelId>`; #185 / ADR-0014).
+ *
+ * Efforts are **explicit** — nothing is implied. Top-tier levels (max/ultra)
+ * must be named to be usable. The optional `default` marker selects the combo
+ * used when `parley delegate` omits `-m`/`-e`.
+ */
+export interface VendorModelAllowlistEntry {
+  /**
+   * Allowed reasoning efforts for this model. Empty means the model is
+   * allowed only with no effort (effort-less vendors).
+   */
+  efforts: string[];
+  /**
+   * Default-combo marker for this model.
+   *
+   * - `true` — this model is the vendor default; `efforts` must list exactly
+   *   one effort (or be empty for effort-less vendors). That pair is the
+   *   combo used when delegate omits model and effort.
+   * - a string — that effort (must appear in `efforts`) completes the default
+   *   combo with this model, allowing multi-effort models to still be default.
+   *
+   * At most one model per vendor may set `default`.
+   */
+  default?: boolean | string;
+  /** Free-text guidance for orchestrators (surfaced by `parley info`). */
+  hint?: string;
+}
+
+/**
  * Per-vendor settings under `vendors.<id>` (#112). `bin`/`args`/`env` customize
  * spawn; `plugin` loads a third-party adapter module (ADR-0009).
  */
@@ -83,6 +113,14 @@ export interface VendorConfig {
    * `queued` (FIFO) until a slot frees.
    */
   maxConcurrent?: number;
+  /**
+   * Model+effort allowlist (#185 / ADR-0014). Deny-by-default: a vendor with
+   * no allowlist (missing or empty) cannot be delegated to. Map keyed by model
+   * id; each entry lists explicit efforts, optional default marker, optional
+   * orchestrator-facing hint. The model catalog is advisory only — this map
+   * is the authority at every spawn path.
+   */
+  models?: Record<string, VendorModelAllowlistEntry>;
 }
 
 /**
@@ -300,6 +338,92 @@ function validateVendorEntry(file: string, id: string, raw: unknown): void {
         `invalid config at ${file}: vendors.${id}.maxConcurrent must be a positive integer`,
       );
     }
+  }
+  if (raw.models !== undefined) {
+    validateVendorModels(file, id, raw.models);
+  }
+}
+
+const KNOWN_VENDOR_MODEL_ENTRY = new Set(["efforts", "default", "hint"]);
+
+function validateVendorModels(file: string, id: string, raw: unknown): void {
+  if (!isRecord(raw)) {
+    throw new Error(`invalid config at ${file}: vendors.${id}.models must be an object`);
+  }
+  let defaultCount = 0;
+  for (const [modelId, entry] of Object.entries(raw)) {
+    if (modelId === "") {
+      throw new Error(
+        `invalid config at ${file}: vendors.${id}.models keys must be non-empty strings`,
+      );
+    }
+    if (!isRecord(entry)) {
+      throw new Error(
+        `invalid config at ${file}: vendors.${id}.models.${modelId} must be an object`,
+      );
+    }
+    for (const key of Object.keys(entry)) {
+      if (!KNOWN_VENDOR_MODEL_ENTRY.has(key)) {
+        throw new Error(
+          `invalid config at ${file}: vendors.${id}.models.${modelId} has unknown key ${key}`,
+        );
+      }
+    }
+    if (entry.efforts === undefined) {
+      throw new Error(
+        `invalid config at ${file}: vendors.${id}.models.${modelId}.efforts is required`,
+      );
+    }
+    if (!Array.isArray(entry.efforts) || entry.efforts.some((e) => typeof e !== "string")) {
+      throw new Error(
+        `invalid config at ${file}: vendors.${id}.models.${modelId}.efforts must be an array of strings`,
+      );
+    }
+    if (entry.efforts.some((e) => e === "")) {
+      throw new Error(
+        `invalid config at ${file}: vendors.${id}.models.${modelId}.efforts entries must be non-empty strings`,
+      );
+    }
+    const efforts = entry.efforts as string[];
+    if (entry.hint !== undefined && typeof entry.hint !== "string") {
+      throw new Error(
+        `invalid config at ${file}: vendors.${id}.models.${modelId}.hint must be a string`,
+      );
+    }
+    if (entry.default !== undefined) {
+      if (typeof entry.default === "boolean") {
+        if (entry.default === true) {
+          defaultCount += 1;
+          if (efforts.length > 1) {
+            throw new Error(
+              `invalid config at ${file}: vendors.${id}.models.${modelId}.default is true but efforts lists ${efforts.length} values — use default: "<effort>" to mark one, or list a single effort`,
+            );
+          }
+        }
+        // Explicit false is allowed but is not a default marker.
+      } else if (typeof entry.default === "string") {
+        defaultCount += 1;
+        if (entry.default === "") {
+          throw new Error(
+            `invalid config at ${file}: vendors.${id}.models.${modelId}.default must be a non-empty effort id when a string`,
+          );
+        }
+        if (!efforts.includes(entry.default)) {
+          throw new Error(
+            `invalid config at ${file}: vendors.${id}.models.${modelId}.default effort ${JSON.stringify(entry.default)} is not listed in efforts`,
+          );
+        }
+      } else {
+        throw new Error(
+          `invalid config at ${file}: vendors.${id}.models.${modelId}.default must be a boolean or effort string`,
+        );
+      }
+    }
+  }
+  if (defaultCount > 1) {
+    throw new Error(
+      `invalid config at ${file}: vendors.${id}.models has ${defaultCount} default markers; at most one model may be the default`,
+    );
   }
 }
 
@@ -593,6 +717,7 @@ const KNOWN_VENDOR = new Set([
   "childChannel",
   "retryWindow",
   "maxConcurrent",
+  "models",
 ]);
 const KNOWN_PROFILE = new Set([
   "vendor",
@@ -636,6 +761,17 @@ export function collectUnknownConfigKeys(config: Record<string, unknown>): strin
       if (!isRecord(entry)) continue;
       for (const key of Object.keys(entry)) {
         if (!KNOWN_VENDOR.has(key)) unknown.push(`vendors.${id}.${key}`);
+      }
+      const models = entry.models;
+      if (isRecord(models)) {
+        for (const [modelId, modelEntry] of Object.entries(models)) {
+          if (!isRecord(modelEntry)) continue;
+          for (const key of Object.keys(modelEntry)) {
+            if (!KNOWN_VENDOR_MODEL_ENTRY.has(key)) {
+              unknown.push(`vendors.${id}.models.${modelId}.${key}`);
+            }
+          }
+        }
       }
     }
   }

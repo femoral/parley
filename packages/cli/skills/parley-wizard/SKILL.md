@@ -190,9 +190,49 @@ Probe PATH (stage 0). For each vendor the user wants:
 
 - Confirm the CLI is installed and credentials exist (vendor-specific env / login).
 - Pick a **child channel** (transport) from the defaults table below — set it only when it differs from the adapter default, or when the user chooses an alternate.
+- **Pick model+effort combos (allowlist)** — required; see below. Deny-by-default: a vendor with no allowlist cannot be delegated to.
 - Optional overrides: `parley config set vendors.<id>.bin|args|env|plugin|childChannel …`
-- Named profiles for real use-cases:  
-  `parley config set profiles.<name>.vendor <id>` (+ `.model`, `.effort` as needed).
+- Named profiles for real use-cases (shortcuts on top of the allowlist):  
+  `parley config set profiles.<name>.vendor <id>` (+ `.model`, `.effort` as needed; must be allowlisted combos).
+
+#### Model+effort allowlist (required per vendor)
+
+**Breaking / deny-by-default:** until `vendors.<id>.models` is set, `parley delegate -v <id>` fails fast and points here. The advisory catalog (`parley models`) is for discovery only — the allowlist is the authority.
+
+For each vendor, walk:
+
+1. **Refresh discovery** (optional but recommended) — see [Model discovery](#model-discovery) below — then show catalog models/efforts for that vendor.
+2. **Pick combos** — which model+effort pairs are allowed. Prefer catalog ids/efforts when present; free-entry (hand-typed model or effort) is fine when the catalog is empty or incomplete. Efforts are **explicit**: listing a model does not unlock max/ultra-class levels unless the user names them.
+3. **Mark one default** — exactly one combo is the default used when `parley delegate` omits `-m`/`-e`. If none is marked, omit-model/effort delegates fail with an error that says so.
+4. **Optional hints** — free-text per model, surfaced by `parley info` so orchestrators know when to pick that model.
+
+Write the map with `parley config set` (JSON value), e.g.:
+
+```
+parley config set vendors.codex.models '{
+  "gpt-5.4": {
+    "efforts": ["low", "medium", "high"],
+    "default": "medium",
+    "hint": "daily coding driver"
+  },
+  "o3": {
+    "efforts": ["medium"],
+    "hint": "hard reasoning only"
+  }
+}'
+```
+
+Field rules:
+
+| Field | Shape | Notes |
+| --- | --- | --- |
+| `efforts` | `string[]` (required) | Explicit allowlist. Empty ⇒ model allowed only with no effort (effort-less vendors). |
+| `default` | `true` or `"<effort>"` | At most one model per vendor. `true` requires exactly one effort (or empty efforts). A string names the default effort and must appear in `efforts`. |
+| `hint` | string (optional) | Orchestrator-facing guidance in `parley info`. |
+
+Profiles remain single-combo shortcuts; they do not replace the allowlist. A profile that names a disallowed combo fails at delegate time with the same error shape as a bad `-m`/`-e`.
+
+Done when each enabled vendor has a non-empty allowlist, one default (unless the user explicitly wants no default and will always pass `-m`/`-e`), and any hints the user wanted.
 
 #### Child-channel defaults (per vendor)
 
@@ -235,7 +275,7 @@ Then show the result (`parley models` or `parley models --vendor <id> --json`).
 - **Live probe wins** when the vendor CLI answers.
 - **If refresh cannot fetch** (vendor missing, probe fails, empty list, or no probe hook) and the entry would be empty, the CLI fills **shipped reference catalog** entries and labels the source as a **point-in-time reference** (`shipped catalog (point-in-time reference; …)` — `fetched_at` / provenance come from the catalog). Tell the user those rows are snapshot data, not a live listing. The on-disk catalog (`~/.parley/models.json`) remains the source of truth after refresh.
 
-Use refreshed (or shipped-fallback) model ids and efforts when offering profile `.model` / `.effort` values. Profiles beat ad-hoc flags for metrics. Catalog stays advisory and hand-editable.
+Use refreshed (or shipped-fallback) model ids and efforts when offering **allowlist combos** and profile `.model` / `.effort` values. Profiles beat ad-hoc flags for metrics. Catalog stays advisory and hand-editable; the allowlist gates spawn.
 
 When scope includes **global** (or the user wants a home-wide fallback), also offer delegate defaults:
 
@@ -246,7 +286,7 @@ parley config set defaults.profile <name>
 
 (`defaults.profile` wins over `defaults.vendor` when both are set; CLI flags always win.)
 
-Done when the user confirms the vendor set, child channels, any profiles (and defaults, if asked).
+Done when the user confirms the vendor set, **allowlists (combos/default/hints)**, child channels, any profiles (and defaults, if asked).
 
 ### 9. Write
 

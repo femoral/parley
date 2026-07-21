@@ -15,12 +15,13 @@ import {
   type DatabaseHandle,
 } from "../src/db.js";
 import { DelegateError, TaskEngine } from "../src/engine.js";
+import { withFakeAllowlist } from "./helpers.js";
 
 let home: string;
 let db: DatabaseHandle;
 
-function writeParleyConfig(body: unknown): void {
-  fs.writeFileSync(path.join(home, "parley.json"), JSON.stringify(body));
+function writeParleyConfig(body: Record<string, unknown> = {}): void {
+  fs.writeFileSync(path.join(home, "parley.json"), JSON.stringify(withFakeAllowlist(body)));
 }
 
 beforeEach(() => {
@@ -179,7 +180,7 @@ describe("default vendor/profile fallback (#175)", () => {
 
   it("prefers defaults.profile over defaults.vendor when both are set", () => {
     writeParleyConfig({
-      profiles: { deep: { vendor: "fake", model: "from-profile" } },
+      profiles: { deep: { vendor: "fake", model: "from-profile", effort: "low" } },
       defaults: { vendor: "codex", profile: "deep" },
     });
     const row = engine().delegate(baseRequest());
@@ -191,12 +192,14 @@ describe("default vendor/profile fallback (#175)", () => {
   it("explicit -v/--profile flags beat defaults", () => {
     writeParleyConfig({
       profiles: {
-        deep: { vendor: "fake", model: "from-profile" },
-        other: { vendor: "fake", model: "other-model" },
+        deep: { vendor: "fake", model: "from-profile", effort: "low" },
+        other: { vendor: "fake", model: "other-model", effort: "high" },
       },
       defaults: { profile: "deep", vendor: "codex" },
     });
-    const byVendor = engine().delegate(baseRequest({ vendor: "fake", model: "explicit" }));
+    const byVendor = engine().delegate(
+      baseRequest({ vendor: "fake", model: "explicit", effort: "low" }),
+    );
     expect(byVendor.vendor).toBe("fake");
     expect(byVendor.profile).toBeNull();
     expect(byVendor.model).toBe("explicit");

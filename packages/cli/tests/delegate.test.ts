@@ -10,6 +10,7 @@ import {
   waitFor,
   waitForState,
   watchJson,
+  withFakeAllowlist,
   writeFiles,
   type FakeVendorAction,
 } from "./helpers.js";
@@ -71,7 +72,7 @@ describe("delegate + watch (the spine, ADR-0008)", () => {
   it("runs end-to-end: pending ack then watch delivers completed envelope", async () => {
     const cwd = taskDir(happyActions());
     const result = await runCli(
-      ["delegate", "-v", "fake", "-m", "fake-model-1", "-n", "spine", "--cwd", cwd, "do the thing"],
+      ["delegate", "-v", "fake", "-m", "fake-model-1", "--effort", "low", "-n", "spine", "--cwd", cwd, "do the thing"],
       home,
     );
     expect(result.stderr).toBe("");
@@ -139,11 +140,11 @@ describe("delegate + watch (the spine, ADR-0008)", () => {
     expect(toolResults[0]!.text).toMatch(/outcome/);
   });
 
-  it("passes model and vendor strings through to the adapter opaquely", async () => {
+  it("passes allowlisted model strings through to the adapter opaquely", async () => {
     const cwd = taskDir(happyActions());
     const weirdModel = "my/weird:model@2026-preview";
     const envelope = await completeEnvelope(
-      ["delegate", "-v", "fake", "-m", weirdModel, "--cwd", cwd, "opaque"],
+      ["delegate", "-v", "fake", "-m", weirdModel, "--effort", "low", "--cwd", cwd, "opaque"],
     );
     expect(envelope.model).toBe(weirdModel);
     // The fake adapter hands the model to the child verbatim; the child echoes it.
@@ -152,10 +153,10 @@ describe("delegate + watch (the spine, ADR-0008)", () => {
     expect(hello.model).toBe(weirdModel);
   });
 
-  it("passes --effort through to the adapter opaquely; omitted when not given", async () => {
+  it("passes --effort through to the adapter opaquely when model is also set", async () => {
     const cwd = taskDir(happyActions());
     const envelope = await completeEnvelope(
-      ["delegate", "-v", "fake", "--effort", "high", "--cwd", cwd, "reason hard"],
+      ["delegate", "-v", "fake", "-m", "fake-model", "--effort", "high", "--cwd", cwd, "reason hard"],
     );
     expect(envelope.effort).toBe("high");
     // The fake adapter hands the effort to the child verbatim; the child echoes it.
@@ -164,13 +165,26 @@ describe("delegate + watch (the spine, ADR-0008)", () => {
     expect(hello.effort).toBe("high");
   });
 
-  it("omits effort from the envelope and child env when --effort is not given", async () => {
+  it("uses the vendor default combo when -m/-e are omitted (#185)", async () => {
     const cwd = taskDir(happyActions());
     const envelope = await completeEnvelope(["delegate", "-v", "fake", "--cwd", cwd, "no effort"]);
-    expect(envelope.effort).toBeNull();
+    expect(envelope.model).toBe("fake-model");
+    expect(envelope.effort).toBe("medium");
     const log = fs.readFileSync(path.join(home, "tasks", "t1", "vendor.jsonl"), "utf8");
     const hello = JSON.parse(log.split("\n").find((l) => l.includes('"hello"'))!);
-    expect(hello.effort).toBeNull();
+    expect(hello.model).toBe("fake-model");
+    expect(hello.effort).toBe("medium");
+  });
+
+  it("rejects a vendor with no allowlist (deny-by-default) (#185)", async () => {
+    writeFiles(home, {
+      "parley.json": JSON.stringify({ vendors: { fake: { childChannel: "mcp" } } }),
+    });
+    const cwd = taskDir(happyActions());
+    const result = await runCli(["delegate", "-v", "fake", "--cwd", cwd, "x"], home);
+    expect(result.code).toBe(2);
+    expect(result.stderr).toMatch(/no models configured/);
+    expect(result.stderr).toMatch(/parley-wizard/);
   });
 });
 
@@ -727,7 +741,7 @@ describe("delegate usage errors (exit 2)", () => {
 describe("delegate default vendor/profile (#175)", () => {
   it("delegates without -v/--profile when defaults.vendor is set", async () => {
     writeFiles(home, {
-      "parley.json": JSON.stringify({ defaults: { vendor: "fake" } }),
+      "parley.json": JSON.stringify(withFakeAllowlist({ defaults: { vendor: "fake" } })),
     });
     const cwd = taskDir(happyActions());
     const result = await runCli(["delegate", "--cwd", cwd, "-n", "def-v", "do it"], home);
@@ -740,10 +754,12 @@ describe("delegate default vendor/profile (#175)", () => {
 
   it("delegates without -v/--profile when defaults.profile is set", async () => {
     writeFiles(home, {
-      "parley.json": JSON.stringify({
-        profiles: { deep: { vendor: "fake", model: "m-def" } },
-        defaults: { profile: "deep" },
-      }),
+      "parley.json": JSON.stringify(
+        withFakeAllowlist({
+          profiles: { deep: { vendor: "fake", model: "m-def", effort: "low" } },
+          defaults: { profile: "deep" },
+        }),
+      ),
     });
     const cwd = taskDir(happyActions());
     const result = await runCli(["delegate", "--cwd", cwd, "-n", "def-p", "do it"], home);
@@ -757,14 +773,16 @@ describe("delegate default vendor/profile (#175)", () => {
 
   it("explicit -v beats defaults.profile", async () => {
     writeFiles(home, {
-      "parley.json": JSON.stringify({
-        profiles: { deep: { vendor: "fake", model: "from-profile" } },
-        defaults: { profile: "deep" },
-      }),
+      "parley.json": JSON.stringify(
+        withFakeAllowlist({
+          profiles: { deep: { vendor: "fake", model: "from-profile", effort: "low" } },
+          defaults: { profile: "deep" },
+        }),
+      ),
     });
     const cwd = taskDir(happyActions());
     const result = await runCli(
-      ["delegate", "-v", "fake", "-m", "explicit", "--cwd", cwd, "-n", "override", "do it"],
+      ["delegate", "-v", "fake", "-m", "explicit", "--effort", "low", "--cwd", cwd, "-n", "override", "do it"],
       home,
     );
     expect(result.code).toBe(0);
@@ -776,7 +794,9 @@ describe("delegate default vendor/profile (#175)", () => {
 
   it("rejects a stale defaults.profile with exit 2", async () => {
     writeFiles(home, {
-      "parley.json": JSON.stringify({ defaults: { profile: "missing" } }),
+      "parley.json": JSON.stringify(
+        withFakeAllowlist({ defaults: { profile: "missing" } }),
+      ),
     });
     const result = await runCli(["delegate", "--cwd", "/tmp", "x"], home);
     expect(result.code).toBe(2);

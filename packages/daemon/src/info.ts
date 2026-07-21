@@ -162,7 +162,22 @@ export function materializeInfoRubrics(
   };
 }
 
-/** One configured vendor as shown by `parley info` (#169). */
+/** One allowed model+effort combo on a vendor (#185 / ADR-0014). */
+export interface InfoVendorModel {
+  id: string;
+  efforts: string[];
+  /** True when this model is the vendor's default combo (see {@link defaultEffort}). */
+  isDefault: boolean;
+  /**
+   * Effort for the default combo when {@link isDefault} is true; null when the
+   * default is effort-less; absent/null when not the default model.
+   */
+  defaultEffort: string | null;
+  /** Orchestrator-facing free-text hint, or null. */
+  hint: string | null;
+}
+
+/** One configured vendor as shown by `parley info` (#169 / #185). */
 export interface InfoVendor {
   id: string;
   childChannel: ChildChannel;
@@ -170,6 +185,11 @@ export interface InfoVendor {
   retryWindowMs: number | null;
   /** Human form of {@link retryWindowMs}, or null. */
   retryWindow: string | null;
+  /**
+   * Model+effort allowlist (#185). Empty when the vendor has no models
+   * configured (deny-by-default — cannot delegate until set).
+   */
+  models: InfoVendorModel[];
 }
 
 /** One named profile from the daemon's `parley.json`. */
@@ -330,6 +350,40 @@ function profileEntry(name: string, cfg: ProfileConfig): InfoProfile {
   };
 }
 
+/** Expand `vendors.<id>.models` for `parley info` (#185). */
+function infoVendorModels(
+  vendorCfg: { models?: Record<string, { efforts?: string[]; default?: boolean | string; hint?: string }> } | undefined,
+): InfoVendorModel[] {
+  const models = vendorCfg?.models;
+  if (models === undefined || typeof models !== "object" || models === null) {
+    return [];
+  }
+  return Object.entries(models)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([id, entry]) => {
+      const efforts = Array.isArray(entry.efforts)
+        ? entry.efforts.filter((e): e is string => typeof e === "string")
+        : [];
+      const d = entry.default;
+      let isDefault = false;
+      let defaultEffort: string | null = null;
+      if (d === true) {
+        isDefault = true;
+        defaultEffort = efforts.length === 1 ? efforts[0]! : null;
+      } else if (typeof d === "string" && d !== "") {
+        isDefault = true;
+        defaultEffort = d;
+      }
+      return {
+        id,
+        efforts,
+        isDefault,
+        defaultEffort: isDefault ? defaultEffort : null,
+        hint: typeof entry.hint === "string" ? entry.hint : null,
+      };
+    });
+}
+
 /**
  * Vendor ids that appear in effective daemon configuration: explicit
  * `vendors.<id>` entries and vendors named by profiles. Never the full
@@ -390,6 +444,7 @@ export function buildInfoConfig(options: BuildInfoOptions): InfoConfig {
       childChannel: effectiveChildChannel(adapter, vendorCfg),
       retryWindowMs: windowMs,
       retryWindow: windowMs !== null ? formatDuration(windowMs) : null,
+      models: infoVendorModels(vendorCfg),
     };
   });
 
@@ -554,6 +609,31 @@ export function renderInfoProse(config: InfoConfig): string {
         extras.push(`retry window: ${v.retryWindow}`);
       }
       lines.push(`- \`${v.id}\` (${extras.join("; ")})`);
+      if (v.models.length === 0) {
+        lines.push(
+          "  - models: (none configured — deny-by-default; run /parley-wizard or set vendors.<id>.models)",
+        );
+      } else {
+        for (const m of v.models) {
+          const bits: string[] = [];
+          if (m.efforts.length === 0) {
+            bits.push("efforts: (none — effort-less)");
+          } else {
+            bits.push(`efforts: ${m.efforts.join(", ")}`);
+          }
+          if (m.isDefault) {
+            const de =
+              m.defaultEffort === null
+                ? "default"
+                : `default@${m.defaultEffort}`;
+            bits.push(de);
+          }
+          if (m.hint !== null && m.hint !== "") {
+            bits.push(`hint: ${m.hint}`);
+          }
+          lines.push(`  - \`${m.id}\` (${bits.join("; ")})`);
+        }
+      }
     }
   }
   lines.push("");

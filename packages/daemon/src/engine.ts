@@ -16,9 +16,11 @@ import {
   isValidDifficulty,
   isValidSize,
   isValidTaskType,
+  ModelAllowlistError,
   normalizeUsage,
   parseDuration,
   readConfig,
+  resolveAllowedCombo,
   retentionDays,
   scoreRubric,
   validateAnswers,
@@ -786,11 +788,14 @@ export class TaskEngine {
   }
 
   /**
-   * Resolve profile + explicit request fields. Precedence for model/effort:
-   * explicit request > profile > adapter default (#154). Posture falls back to
-   * ADR defaults. When neither vendor nor profile is on the request, apply
-   * `defaults.profile` (wins) or `defaults.vendor` (#175). Throws
-   * `DelegateError` on unknown/stale profile/vendor or missing selection.
+   * Resolve profile + explicit request fields, then validate against the vendor
+   * model allowlist (#185 / ADR-0014). Precedence before allowlist default:
+   * explicit request > profile (adapter defaults are no longer fill-ins —
+   * the allowlist default combo is the authority when -m/-e are omitted).
+   * Posture falls back to ADR defaults. When neither vendor nor profile is on
+   * the request, apply `defaults.profile` (wins) or `defaults.vendor` (#175).
+   * Throws `DelegateError` on unknown/stale profile/vendor, missing selection,
+   * or allowlist rejection (no list / no default / out-of-list combo).
    */
   private resolveDelegate(request: DelegateRequest): ResolvedDelegate {
     const config = this.readParleyConfig();
@@ -829,19 +834,12 @@ export class TaskEngine {
     if (vendor === null || vendor === "") {
       throw new DelegateError("vendor is required (or set via profile)");
     }
-    // Adapter defaults only apply when the registry already knows the vendor;
-    // unknown-vendor is rejected by the caller after this returns.
-    const adapter = this.adapters.get(vendor);
-    const model = resolveTraceField(
-      request.model,
-      profileCfg?.model,
-      adapter?.defaultModel,
-    );
-    const effort = resolveTraceField(
-      request.effort,
-      profileCfg?.effort,
-      adapter?.defaultEffort,
-    );
+    // Request/profile only — allowlist supplies the default combo when both
+    // are omitted (#185). Adapter defaults no longer fill model/effort.
+    // Allowlist is applied in `delegate` after the vendor registry check so
+    // "unknown vendor" stays the first error for stale ids.
+    const model = resolveTraceField(request.model, profileCfg?.model, null);
+    const effort = resolveTraceField(request.effort, profileCfg?.effort, null);
     return {
       vendor,
       profile,
@@ -852,6 +850,34 @@ export class TaskEngine {
       sandbox: request.sandbox ?? profileCfg?.sandbox ?? DEFAULT_SANDBOX,
       network: request.network ?? profileCfg?.network ?? DEFAULT_NETWORK,
     };
+  }
+
+  /**
+   * Single choke point for model+effort allowlist validation (#185 / ADR-0014).
+   * Used by `delegate` (after profile resolution) and `fix` (inherited parent
+   * combo). Throws `DelegateError` with the same error shapes on every path.
+   */
+  private resolveModelAllowlist(
+    vendor: string,
+    config: ParleyConfig,
+    model: string | null,
+    effort: string | null,
+  ): { model: string; effort: string | null } {
+    try {
+      const resolved = resolveAllowedCombo({
+        vendor,
+        vendorCfg: config.vendors?.[vendor],
+        model,
+        effort,
+        configPath: this.paths.config,
+      });
+      return { model: resolved.model, effort: resolved.effort };
+    } catch (err) {
+      if (err instanceof ModelAllowlistError) {
+        throw new DelegateError(err.message);
+      }
+      throw err;
+    }
   }
 
   /**
@@ -878,6 +904,19 @@ export class TaskEngine {
         `unknown vendor${via}: ${resolved.vendor} (known: ${known})`,
       );
     }
+    // Model allowlist choke point (#185 / ADR-0014): after vendor is known,
+    // every spawn path (ad-hoc, profile) validates model+effort here.
+    const allowed = this.resolveModelAllowlist(
+      resolved.vendor,
+      this.readParleyConfig(),
+      resolved.model,
+      resolved.effort,
+    );
+    resolved.model = allowed.model;
+    resolved.effort = allowed.effort;
+    resolved.model_source = allowed.model === null ? null : "resolved";
+    resolved.effort_source = allowed.effort === null ? null : "resolved";
+
     // Ids and names are interchangeable task refs, so an id-shaped name would
     // shadow (or be shadowed by) a real task id in `resolveTask`.
     if (request.name !== null && /^t\d+$/.test(request.name)) {
@@ -1135,6 +1174,16 @@ export class TaskEngine {
       throw new DelegateError(`unknown vendor: ${vendor} (known: ${known})`);
     }
 
+    // Same allowlist choke point as delegate (#185): a reattempt inherits the
+    // parent's model+effort but fails fast if that combo is now disallowed.
+    const fixConfig = this.readParleyConfig();
+    const allowed = this.resolveModelAllowlist(
+      vendor,
+      fixConfig,
+      parent.model,
+      parent.effort,
+    );
+
     const fresh = request.fresh === true;
     // Resume when project config allows *and* the parent captured a session,
     // unless the caller forced `--fresh`. Off (or missing session) still creates
@@ -1207,8 +1256,8 @@ export class TaskEngine {
       id,
       name: parent.name,
       vendor,
-      model: parent.model,
-      effort: parent.effort,
+      model: allowed.model,
+      effort: allowed.effort,
       profile: parent.profile,
       runner: parent.runner,
       repo: parent.repo,

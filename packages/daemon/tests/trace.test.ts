@@ -14,7 +14,7 @@ import {
   SCHEMA_VERSION,
   type DatabaseHandle,
 } from "../src/db.js";
-import { TaskEngine } from "../src/engine.js";
+import { DelegateError, TaskEngine } from "../src/engine.js";
 import {
   appendLaunchCommand,
   captureLaunchCommand,
@@ -22,6 +22,7 @@ import {
   resolveTraceField,
   upgradeTraceField,
 } from "../src/trace.js";
+import { withFakeAllowlist } from "./helpers.js";
 
 describe("resolveTraceField (request > profile > adapter default)", () => {
   it("prefers explicit request over profile and adapter default", () => {
@@ -162,13 +163,17 @@ describe("launch_command + model_source migration (#154)", () => {
   });
 });
 
-describe("engine resolution order with adapter defaults (#154)", () => {
+describe("engine resolution order with allowlist default (#154 / #185)", () => {
   let home: string;
   let db: DatabaseHandle;
 
   beforeEach(() => {
     home = fs.mkdtempSync(path.join(os.tmpdir(), "parley-trace-eng-"));
     db = openDatabase(homePaths(home));
+    fs.writeFileSync(
+      path.join(home, "parley.json"),
+      JSON.stringify(withFakeAllowlist({})),
+    );
   });
 
   afterEach(() => {
@@ -180,19 +185,8 @@ describe("engine resolution order with adapter defaults (#154)", () => {
     fs.rmSync(home, { recursive: true, force: true });
   });
 
-  function engineWithDefaults(): TaskEngine {
-    const base = createAdapterRegistrySync({});
-    const fake = base.get("fake");
-    if (!fake) throw new Error("fake adapter missing");
-    // Stamp adapter defaults on a copy so the real registry stays clean.
-    const withDefaults = {
-      ...fake,
-      defaultModel: "adapter-model",
-      defaultEffort: "adapter-effort",
-    };
-    const map = new Map(base);
-    map.set("fake", withDefaults);
-    return new TaskEngine(db, homePaths(home), map);
+  function engineBare(): TaskEngine {
+    return new TaskEngine(db, homePaths(home), createAdapterRegistrySync({}));
   }
 
   function baseRequest(
@@ -222,31 +216,33 @@ describe("engine resolution order with adapter defaults (#154)", () => {
     };
   }
 
-  it("uses adapter defaults when request and profile omit model/effort", () => {
-    const row = engineWithDefaults().delegate(baseRequest());
-    expect(row.model).toBe("adapter-model");
-    expect(row.effort).toBe("adapter-effort");
+  it("uses allowlist default when request and profile omit model/effort", () => {
+    const row = engineBare().delegate(baseRequest());
+    expect(row.model).toBe("fake-model");
+    expect(row.effort).toBe("medium");
     expect(row.model_source).toBe("resolved");
     expect(row.effort_source).toBe("resolved");
   });
 
-  it("profile beats adapter default; request beats profile", () => {
+  it("profile beats allowlist default; request beats profile", () => {
     fs.writeFileSync(
       path.join(home, "parley.json"),
-      JSON.stringify({
-        profiles: {
-          deep: { vendor: "fake", model: "prof-m", effort: "prof-e" },
-        },
-      }),
+      JSON.stringify(
+        withFakeAllowlist({
+          profiles: {
+            deep: { vendor: "fake", model: "prof-m", effort: "prof-e" },
+          },
+        }),
+      ),
     );
-    const viaProfile = engineWithDefaults().delegate(
+    const viaProfile = engineBare().delegate(
       baseRequest({ vendor: null, profile: "deep" }),
     );
     expect(viaProfile.model).toBe("prof-m");
     expect(viaProfile.effort).toBe("prof-e");
     expect(viaProfile.model_source).toBe("resolved");
 
-    const viaRequest = engineWithDefaults().delegate(
+    const viaRequest = engineBare().delegate(
       baseRequest({
         vendor: null,
         profile: "deep",
@@ -259,15 +255,11 @@ describe("engine resolution order with adapter defaults (#154)", () => {
     expect(viaRequest.model_source).toBe("resolved");
   });
 
-  it("leaves model/effort null when nothing resolves", () => {
-    // Bare fake adapter has no defaults.
-    const engine = new TaskEngine(db, homePaths(home), createAdapterRegistrySync({}));
-    const row = engine.delegate(baseRequest());
-    expect(row.model).toBeNull();
-    expect(row.effort).toBeNull();
-    expect(row.model_source).toBeNull();
-    expect(row.effort_source).toBeNull();
-    // Row is readable after insert.
-    expect(getTask(db, row.id)?.model_source).toBeNull();
+  it("fails when vendor has no allowlist (deny-by-default)", () => {
+    fs.writeFileSync(path.join(home, "parley.json"), JSON.stringify({}));
+    const engine = engineBare();
+    expect(() => engine.delegate(baseRequest())).toThrow(DelegateError);
+    expect(() => engine.delegate(baseRequest())).toThrow(/no models configured/);
+    expect(() => engine.delegate(baseRequest())).toThrow(/parley-wizard/);
   });
 });

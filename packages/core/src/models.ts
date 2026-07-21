@@ -9,8 +9,9 @@ import {
 export { SHIPPED_CATALOG_RETRIEVED_AT, SHIPPED_CATALOG_VENDOR_IDS, SHIPPED_MODEL_CATALOG };
 
 /**
- * One model an adapter advertises. The catalog is advisory only: `delegate`
- * never consults it and keeps passing `--model`/`--effort` through opaquely.
+ * One model an adapter advertises. The catalog is advisory only: discovery
+ * (wizard choices, nearest-combo suggestions). The per-vendor allowlist
+ * (`vendors.<id>.models`, #185 / ADR-0014) is the authority that gates spawn.
  * `efforts` is the vendor's advertised reasoning-effort set (may be empty when
  * the vendor exposes none, e.g. grok's text listing).
  */
@@ -61,8 +62,8 @@ export interface ModelProber {
  * code change. `--refresh` re-probes vendors via each adapter's optional
  * `listModels()` hook and rewrites their entry — but a failed or empty probe
  * keeps the existing entry (never clobber a manual patch with nothing). The
- * catalog is advisory only: `delegate` still passes `--model`/`--effort` through
- * opaquely and never consults it.
+ * catalog is advisory only for discovery; spawn is gated by the vendor
+ * allowlist (`vendors.<id>.models`, #185 / ADR-0014).
  */
 
 /**

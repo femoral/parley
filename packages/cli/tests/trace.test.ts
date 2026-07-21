@@ -10,6 +10,7 @@ import {
   makeTaskDir,
   runCli,
   waitForState,
+  withFakeAllowlist,
   type FakeVendorAction,
 } from "./helpers.js";
 
@@ -100,7 +101,20 @@ describe("launch_command + model/effort traceability (#154)", () => {
       { submit_report: REPORT },
     ]);
     await runCli(
-      ["delegate", "-v", "fake", "-m", "m1", "--cwd", cwd, "-n", "logs-trace", "run"],
+      [
+        "delegate",
+        "-v",
+        "fake",
+        "-m",
+        "m1",
+        "--effort",
+        "low",
+        "--cwd",
+        cwd,
+        "-n",
+        "logs-trace",
+        "run",
+      ],
       home,
     );
     await waitForState(home, "t1", "completed");
@@ -167,11 +181,13 @@ describe("launch_command + model/effort traceability (#154)", () => {
   it("profile-only model/effort are resolved with source=resolved", async () => {
     fs.writeFileSync(
       path.join(home, "parley.json"),
-      JSON.stringify({
-        profiles: {
-          deep: { vendor: "fake", model: "from-profile", effort: "medium" },
-        },
-      }),
+      JSON.stringify(
+        withFakeAllowlist({
+          profiles: {
+            deep: { vendor: "fake", model: "from-profile", effort: "medium" },
+          },
+        }),
+      ),
     );
     const cwd = taskDir([
       { emit: { type: "session", session_id: "s" } },

@@ -8,6 +8,7 @@ export * from "./adapter.js";
 export * from "./classification.js";
 export * from "./client.js";
 export * from "./config.js";
+export * from "./model-allowlist.js";
 export * from "./project-config.js";
 export * from "./contract.js";
 export * from "./home.js";

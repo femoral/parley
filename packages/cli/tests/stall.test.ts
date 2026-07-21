@@ -192,7 +192,7 @@ describe("parley answer resumes a stalled task", () => {
 
     const delegate = await runCli(
       [
-        "delegate", "-v", "fake", "--effort", "high", "--cwd", cwd,
+        "delegate", "-v", "fake", "-m", "fake-model", "--effort", "high", "--cwd", cwd,
         "--answer-timeout", "250ms", "pick",
       ],
       home,

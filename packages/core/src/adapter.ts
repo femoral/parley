@@ -220,7 +220,7 @@ export interface VendorAdapter {
    *
    * Model-catalog domain types (`ModelEntry`, `VendorModels`, `ProbedModels`, …)
    * live alongside this contract in `@useparley/core` — the catalog is advisory
-   * only and never gates `delegate`.
+   * for discovery; spawn is gated by the vendor allowlist (#185 / ADR-0014).
    */
   listModels?(existing: VendorModels | undefined): Promise<ProbedModels>;
 }

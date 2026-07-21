@@ -12,7 +12,7 @@ import { homePaths } from "@useparley/core";
 import { createAdapterRegistrySync } from "../src/adapters/index.js";
 import { getTask, openDatabase, updateTask, type DatabaseHandle } from "../src/db.js";
 import { DelegateError, TaskEngine } from "../src/engine.js";
-import { makeGitRepo } from "./helpers.js";
+import { makeGitRepo, withFakeAllowlist } from "./helpers.js";
 
 const FAKE_VENDOR_BIN = fileURLToPath(
   new URL("../../cli/tests/fake-vendor.mjs", import.meta.url),
@@ -26,6 +26,10 @@ beforeEach(() => {
   home = fs.mkdtempSync(path.join(os.tmpdir(), "parley-fix-ws-"));
   scratch.push(home);
   db = openDatabase(homePaths(home));
+  fs.writeFileSync(
+    path.join(home, "parley.json"),
+    JSON.stringify(withFakeAllowlist({})),
+  );
   process.env.PARLEY_HOME = home;
   process.env.PARLEY_FAKE_VENDOR_BIN = FAKE_VENDOR_BIN;
 });

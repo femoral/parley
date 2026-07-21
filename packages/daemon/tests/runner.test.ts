@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { homePaths } from "@useparley/core";
 import { startServer, type DaemonServer } from "../src/server.js";
-import { makeGitRepo } from "./helpers.js";
+import { makeGitRepo, withFakeAllowlist } from "./helpers.js";
 
 const homes: string[] = [];
 const repos: string[] = [];
@@ -15,10 +15,12 @@ function makeHome(config: Record<string, unknown> = {}): string {
   homes.push(home);
   fs.writeFileSync(
     path.join(home, "parley.json"),
-    JSON.stringify({
-      runners: { gpu: { token: "secret-gpu" } },
-      ...config,
-    }),
+    JSON.stringify(
+      withFakeAllowlist({
+        runners: { gpu: { token: "secret-gpu" } },
+        ...config,
+      }),
+    ),
   );
   return home;
 }

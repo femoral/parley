@@ -170,6 +170,21 @@ describe("packed-install smoke (#60, ui install #70)", () => {
     const task = fs.mkdtempSync(path.join(os.tmpdir(), "parley-packed-task-"));
     homes.push(task); // cleanupHome rm -rf's it too (no daemon.json → harmless)
     fs.writeFileSync(
+      path.join(home, "parley.json"),
+      JSON.stringify({
+        vendors: {
+          fake: {
+            models: {
+              "fake-model-1": {
+                efforts: ["low", "medium", "high"],
+                default: "medium",
+              },
+            },
+          },
+        },
+      }),
+    );
+    fs.writeFileSync(
       path.join(task, ".fake-vendor.json"),
       JSON.stringify([
         { emit: { type: "session", session_id: "packed-sess" } },
@@ -187,7 +202,20 @@ describe("packed-install smoke (#60, ui install #70)", () => {
     };
     const stdout = execFileSync(
       installed.binPath,
-      ["delegate", "-v", "fake", "-m", "fake-model-1", "-n", "packed", "--cwd", task, "do the thing"],
+      [
+        "delegate",
+        "-v",
+        "fake",
+        "-m",
+        "fake-model-1",
+        "--effort",
+        "low",
+        "-n",
+        "packed",
+        "--cwd",
+        task,
+        "do the thing",
+      ],
       { encoding: "utf8", timeout: 60_000, env },
     );
 

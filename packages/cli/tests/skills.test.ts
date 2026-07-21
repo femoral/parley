@@ -332,6 +332,12 @@ describe("bundled skill contents", () => {
     expect(skillMd).toMatch(/No native MCP|no native MCP/i);
     expect(skillMd).toMatch(/parley models refresh|models refresh/);
     expect(skillMd).toMatch(/shipped catalog|point-in-time reference/i);
+    // Model+effort allowlist pick/default/hint stage.
+    expect(skillMd).toMatch(/Model\+effort allowlist|deny-by-default/i);
+    expect(skillMd).toMatch(/Pick combos|pick model\+effort/i);
+    expect(skillMd).toMatch(/Mark one default|default.*combo/i);
+    expect(skillMd).toMatch(/Optional hints|hint/i);
+    expect(skillMd).toMatch(/vendors\.\S+\.models/);
     for (const vendor of [
       "claude",
       "cline",
