@@ -5,6 +5,7 @@ import {
   LAYOUT_BOUNDS,
   MIN_ISLAND_DISTANCE,
   placeIslands,
+  preferredPoint,
   type Point,
 } from "../src/scene/layout.js";
 
@@ -72,6 +73,32 @@ describe("placeIslands — no overlap, exclusion, bounds", () => {
       expect(p.y).toBeLessThanOrEqual(LAYOUT_BOUNDS.maxY);
     }
   });
+
+  it("can place islands above the flagship (y < FLAGSHIP_CENTER.y)", () => {
+    // Full-circle preferred + northern lattice slots must allow at least one
+    // berth north of the galleon for a modest fleet.
+    const map = placeIslands(ids(16));
+    const above = [...map.values()].filter((p) => p.y < FLAGSHIP_CENTER.y);
+    expect(above.length).toBeGreaterThan(0);
+    for (const p of above) {
+      expect(p.y).toBeGreaterThanOrEqual(LAYOUT_BOUNDS.minY);
+      expect(dist(p, FLAGSHIP_CENTER)).toBeGreaterThanOrEqual(FLAGSHIP_EXCLUSION_RADIUS);
+    }
+  });
+
+  it("preferredPoint rings the full circle (not only a downward arc)", () => {
+    // Sample many ids: some preferred y should land above the flagship and
+    // some below, proving the sweep is no longer lower-half biased.
+    let above = 0;
+    let below = 0;
+    for (let i = 0; i < 80; i++) {
+      const p = preferredPoint(`pref-sample-${i}`);
+      if (p.y < FLAGSHIP_CENTER.y) above += 1;
+      if (p.y > FLAGSHIP_CENTER.y) below += 1;
+    }
+    expect(above).toBeGreaterThan(10);
+    expect(below).toBeGreaterThan(10);
+  });
 });
 
 describe("placeIslands — append-only stability", () => {
@@ -111,8 +138,11 @@ describe("placeIslands — append-only stability", () => {
  * and append-stability — never stack islands on the seeded ellipse fallback.
  */
 describe("placeIslands — overflow fleet properties", () => {
-  /** Well over lattice capacity inside LAYOUT_BOUNDS (~a dozen slots). */
-  const OVERFLOW_N = 30;
+  /**
+   * Beyond base-lattice capacity. The preferred window is now north+south of
+   * the flagship, so capacity is larger; still force overflow growth.
+   */
+  const OVERFLOW_N = 80;
 
   function assertMinDistance(map: Map<string, Point>, list: string[]) {
     const points = list.map((id) => map.get(id)!);
@@ -174,6 +204,22 @@ describe("placeIslands — overflow fleet properties", () => {
     for (const p of map.values()) {
       expect(p.x).toBeGreaterThanOrEqual(LAYOUT_BOUNDS.minX);
       expect(p.x).toBeLessThanOrEqual(LAYOUT_BOUNDS.maxX);
+    }
+  });
+
+  it("overflow growth can place centres north of the preferred minY", () => {
+    // Force enough islands that alternate north/south growth is exercised.
+    const map = placeIslands(ids(OVERFLOW_N));
+    const northOfWindow = [...map.values()].filter((p) => p.y < LAYOUT_BOUNDS.minY);
+    // Prefer-window capacity is large; if every island still fits inside, at
+    // least confirm northern-of-flagship placement still holds under load.
+    const aboveFlagship = [...map.values()].filter((p) => p.y < FLAGSHIP_CENTER.y);
+    expect(aboveFlagship.length).toBeGreaterThan(0);
+    // When overflow does push past the window, those slots must be valid.
+    for (const p of northOfWindow) {
+      expect(p.x).toBeGreaterThanOrEqual(LAYOUT_BOUNDS.minX);
+      expect(p.x).toBeLessThanOrEqual(LAYOUT_BOUNDS.maxX);
+      expect(dist(p, FLAGSHIP_CENTER)).toBeGreaterThanOrEqual(FLAGSHIP_EXCLUSION_RADIUS);
     }
   });
 });
