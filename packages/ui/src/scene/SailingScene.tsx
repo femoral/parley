@@ -1,6 +1,7 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import { shouldPaintShipEffects, shipEffectsOpacity } from "./island-death.js";
 import { FLAGSHIP_CENTER, stationOffset, voyageFromFlagship } from "./layout.js";
+import { GeometryCache, SceneLoopGate } from "./scene-performance.js";
 
 /**
  * User-approved ship-lab calibration. These are deliberately literals rather
@@ -203,14 +204,6 @@ function sizeCanvas(canvas: HTMLCanvasElement, width: number, height: number, dp
   return changed;
 }
 
-function frameRect(element: Element, rects: Map<Element, DOMRect>): DOMRect {
-  const cached = rects.get(element);
-  if (cached) return cached;
-  const rect = element.getBoundingClientRect();
-  rects.set(element, rect);
-  return rect;
-}
-
 function featheredIslandSprite(
   image: HTMLImageElement,
   width: number,
@@ -284,7 +277,7 @@ function paintBackdrop(
   tokens: SeaTokens,
   sceneRect: DOMRect,
   islandCache: IslandSpriteCache,
-  rects: Map<Element, DOMRect>,
+  geometry: GeometryCache,
 ): void {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, width, height);
@@ -293,7 +286,7 @@ function paintBackdrop(
   // canvas's position inside .pc-cockpit so edge tones match the DOM backdrop
   // and hull cover blocks (which copy these pixels) stay invisible.
   const room = scene.closest<HTMLElement>(".pc-cockpit");
-  const roomRect = room ? frameRect(room, rects) : sceneRect;
+  const roomRect = room ? geometry.rect(room) : sceneRect;
   const roomW = Math.max(room?.clientWidth || roomRect.width, 1);
   const roomH = Math.max(room?.clientHeight || roomRect.height, 1);
   const originX = sceneRect.left - roomRect.left;
@@ -311,7 +304,7 @@ function paintBackdrop(
 
   for (const image of scene.querySelectorAll<HTMLImageElement>(".pc-island__sprite")) {
     if (!image.complete || image.naturalWidth === 0) continue;
-    const rect = frameRect(image, rects);
+    const rect = geometry.rect(image);
     const rise = image.closest(".pc-island__rise");
     const opacity = rise ? Number.parseFloat(getComputedStyle(rise).opacity || "1") : 1;
     if (opacity <= 0 || rect.width <= 0 || rect.height <= 0) continue;
@@ -362,7 +355,7 @@ function regionZoom(
   return Math.abs(runtime.zoom - target) > 0.0005 || Math.abs(runtime.zoom - previous) > 0.0005;
 }
 
-function localIslandGeometry(element: HTMLElement, rects: Map<Element, DOMRect>): {
+function localIslandGeometry(element: HTMLElement, geometry: GeometryCache): {
   root: HTMLElement;
   sprite: HTMLImageElement;
   rect: DOMRect;
@@ -375,8 +368,8 @@ function localIslandGeometry(element: HTMLElement, rects: Map<Element, DOMRect>)
   const root = element.closest<HTMLElement>(".pc-island");
   const sprite = root?.querySelector<HTMLImageElement>(".pc-island__sprite");
   if (!root || !sprite) return null;
-  const rootRect = frameRect(root, rects);
-  const rect = frameRect(sprite, rects);
+  const rootRect = geometry.rect(root);
+  const rect = geometry.rect(sprite);
   const scale = rootRect.width > 0 ? rootRect.width / ISLAND_ROOT_WIDTH : 1;
   return {
     root,
@@ -589,6 +582,8 @@ export function SailingScene() {
     const runtimes = new Map<HTMLElement, RuntimeShip>();
     const regionStates = new WeakMap<Element, RegionRuntime>();
     const islandCache: IslandSpriteCache = new WeakMap();
+    const geometryCache = new GeometryCache();
+    const loopGate = new SceneLoopGate();
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     let tokens = readSeaTokens(scene);
     let backdropDirty = true;
@@ -597,28 +592,69 @@ export function SailingScene() {
     let frameId = 0;
     let lastNow = performance.now();
     let simTime = 0;
+    let idleTimer = 0;
+    let cameraTravelActive = false;
+    let fxDirty = true;
+
+    const scheduleFrame = () => {
+      if (frameId || idleTimer) return;
+      frameId = window.requestAnimationFrame(frame);
+    };
+
+    const wake = () => {
+      loopGate.wake();
+      fxDirty = true;
+      if (idleTimer) {
+        window.clearTimeout(idleTimer);
+        idleTimer = 0;
+      }
+      scheduleFrame();
+    };
+
+    const invalidateGeometry = () => {
+      geometryCache.invalidate();
+      backdropDirty = true;
+      wake();
+    };
 
     const refreshSea = () => {
       tokens = readSeaTokens(scene);
-      backdropDirty = true;
+      invalidateGeometry();
     };
     const sceneAttributeObserver = new MutationObserver(refreshSea);
     sceneAttributeObserver.observe(scene, { attributes: true });
-    const sceneTreeObserver = new MutationObserver(() => {
-      backdropDirty = true;
+    const sceneTreeObserver = new MutationObserver(invalidateGeometry);
+    sceneTreeObserver.observe(scene, {
+      attributes: true,
+      attributeFilter: ["data-sailing-pose", "data-island-count", "data-motion", "class", "src"],
+      childList: true,
+      subtree: true,
     });
-    sceneTreeObserver.observe(scene, { childList: true, subtree: true });
     window.addEventListener("resize", refreshSea);
+    const cameraTransition = (event: Event) => {
+      const transition = event as TransitionEvent;
+      if (transition.propertyName && transition.propertyName !== "transform") return;
+      cameraTravelActive = event.type === "transitionrun" || event.type === "transitionstart";
+      invalidateGeometry();
+    };
+    scene.addEventListener("transitionrun", cameraTransition);
+    scene.addEventListener("transitionstart", cameraTransition);
+    scene.addEventListener("transitionend", cameraTransition);
+    scene.addEventListener("transitioncancel", cameraTransition);
 
     const frame = (now: number) => {
+      frameId = 0;
+      idleTimer = 0;
+      loopGate.consume();
+      let loopMode = loopGate.mode;
       try {
         const motionReduced = reducedRef.current;
         const dt = Math.min(Math.max(0, (now - lastNow) / 1000), 0.1);
         lastNow = now;
         if (!motionReduced) simTime += dt;
 
-        const sceneRect = scene.getBoundingClientRect();
-        const rects = new Map<Element, DOMRect>([[scene, sceneRect]]);
+        if (cameraTravelActive) geometryCache.invalidate();
+        const sceneRect = geometryCache.rect(scene);
         const width = scene.clientWidth || sceneRect.width;
         const height = scene.clientHeight || sceneRect.height;
         const backdropResized = sizeCanvas(backdrop, width, height, dpr);
@@ -628,9 +664,11 @@ export function SailingScene() {
         for (const region of scene.querySelectorAll<HTMLElement>(".pc-region")) {
           zoomActive = regionZoom(region, dt, motionReduced, regionStates) || zoomActive;
         }
+        const islandMotionActive = islandsAnimating(scene);
+        if (zoomActive || islandMotionActive) geometryCache.invalidate();
 
         const camera = scene.querySelector<HTMLElement>(".pc-world");
-        const cameraRect = camera ? frameRect(camera, rects) : undefined;
+        const cameraRect = camera ? geometryCache.rect(camera) : undefined;
         const cameraMoving = cameraRect
           ? !Number.isFinite(lastCameraLeft) ||
             Math.abs(cameraRect.left - lastCameraLeft) > 0.01 ||
@@ -641,7 +679,7 @@ export function SailingScene() {
           lastCameraTop = cameraRect.top;
         }
         const repaintBackdrop =
-          backdropDirty || backdropResized || zoomActive || cameraMoving || islandsAnimating(scene);
+          backdropDirty || backdropResized || zoomActive || cameraMoving || islandMotionActive;
         if (backdropCtx && repaintBackdrop) {
           paintBackdrop(
             scene,
@@ -652,13 +690,15 @@ export function SailingScene() {
             tokens,
             sceneRect,
             islandCache,
-            rects,
+            geometryCache,
           );
           backdropDirty = false;
         }
 
         const live = new Set<HTMLElement>();
         const painted: PaintedShip[] = [];
+        let choreographyActive =
+          zoomActive || cameraMoving || cameraTravelActive || islandMotionActive;
         for (const element of scene.querySelectorAll<HTMLElement>("[data-sailing-ship]")) {
           live.add(element);
           const kind = element.dataset.sailingShip as ShipKind;
@@ -669,6 +709,7 @@ export function SailingScene() {
           if (!runtime) {
             runtime = initialRuntime(element, kind, pose, simTime);
             runtimes.set(element, runtime);
+            choreographyActive = true;
           } else if (runtime.pose !== pose) {
             runtime.pose = pose;
             runtime.poseStartedAt = simTime;
@@ -676,6 +717,7 @@ export function SailingScene() {
             runtime.fromY = runtime.y;
             runtime.arrivalSeconds = 1.6;
             runtime.firstArrival = false;
+            choreographyActive = true;
           }
 
           const region = element.closest<HTMLElement>(".pc-region");
@@ -683,6 +725,14 @@ export function SailingScene() {
           const shipWidth = calibration.width * zoom;
           const shipHeight = shipWidth * calibration.aspect;
           const t = simTime;
+          const poseElapsed = motionReduced ? Number.POSITIVE_INFINITY : t - runtime.poseStartedAt;
+          choreographyActive =
+            choreographyActive ||
+            pose === "orbit" ||
+            pose === "adrift" ||
+            (pose === "sailoff" && poseElapsed < 2.4) ||
+            runtime.firstArrival ||
+            Math.abs(runtime.flip - runtime.flipTarget) > 0.001;
           const motion = pose === "anchored" ? 0.45 : pose === "adrift" ? 0.75 : 1;
           const m = motion * calibration.amp;
           const bob = (Math.sin(t * 0.85 + calibration.phase) * 7 + Math.sin(t * 0.5 + 1.2 + calibration.phase) * 4) * m;
@@ -697,14 +747,14 @@ export function SailingScene() {
           let geometry: ReturnType<typeof localIslandGeometry> = null;
           if (kind === "galleon") {
             const host = element.closest<HTMLElement>(".pc-region__flagship");
-            const hostRect = host ? frameRect(host, rects) : undefined;
+            const hostRect = host ? geometryCache.rect(host) : undefined;
             cx = (hostRect?.left ?? sceneRect.left) - sceneRect.left + sway;
             cy = (hostRect?.top ?? sceneRect.top) - sceneRect.top + bob;
             element.style.transform = `translate(-50%, -50%) translate(${sway / zoom}px, ${bob / zoom}px) rotate(${roll}deg) scaleY(${squash})`;
           } else {
-            geometry = localIslandGeometry(element, rects);
+            geometry = localIslandGeometry(element, geometryCache);
             if (!geometry) continue;
-            const elapsed = motionReduced ? Number.POSITIVE_INFINITY : t - runtime.poseStartedAt;
+            const elapsed = poseElapsed;
             let targetX = geometry.cx;
             let targetY = geometry.cy;
             let heading = runtime.flipTarget;
@@ -807,7 +857,8 @@ export function SailingScene() {
         for (const element of runtimes.keys()) {
           if (!live.has(element)) runtimes.delete(element);
         }
-        if (overlayCtx && backdropCtx) {
+        loopMode = loopGate.settle({ active: choreographyActive, reducedMotion: motionReduced });
+        if (overlayCtx && backdropCtx && (fxDirty || loopMode !== "idle")) {
           paintShipEffects(
             backdrop,
             overlayCtx,
@@ -820,6 +871,7 @@ export function SailingScene() {
             sceneRect,
             islandCache,
           );
+          fxDirty = false;
         }
         layer.removeAttribute("data-error");
       } catch (error) {
@@ -827,14 +879,26 @@ export function SailingScene() {
         layer.dataset.error = message;
         if (import.meta.env.DEV) console.error("Parley Cove sailing frame failed", error);
       } finally {
-        frameId = window.requestAnimationFrame(frame);
+        if (loopMode === "active") {
+          scheduleFrame();
+        } else if (loopMode === "ambient") {
+          // Settled ships retain the calibrated JS swell, but at a fraction of
+          // active-frame cost. State/resize/transition observers bypass this
+          // delay and wake the scene immediately.
+          idleTimer = window.setTimeout(scheduleFrame, 100);
+        }
       }
     };
 
-    frameId = window.requestAnimationFrame(frame);
+    scheduleFrame();
     return () => {
       window.cancelAnimationFrame(frameId);
+      window.clearTimeout(idleTimer);
       window.removeEventListener("resize", refreshSea);
+      scene.removeEventListener("transitionrun", cameraTransition);
+      scene.removeEventListener("transitionstart", cameraTransition);
+      scene.removeEventListener("transitionend", cameraTransition);
+      scene.removeEventListener("transitioncancel", cameraTransition);
       sceneAttributeObserver.disconnect();
       sceneTreeObserver.disconnect();
     };
