@@ -200,6 +200,13 @@ export interface InfoProfile {
   effort: string | null;
   sandbox: string | null;
   network: boolean | null;
+  /**
+   * True when the profile has a launch template (#195 / ADR-0015). Vendor/
+   * model/effort on a template profile are *declared* (unverified) provenance.
+   */
+  template: boolean;
+  /** Orchestrator-facing free-text hint, or null (#195). */
+  hint: string | null;
 }
 
 /**
@@ -349,6 +356,8 @@ function profileEntry(name: string, cfg: ProfileConfig): InfoProfile {
     effort: cfg.effort ?? null,
     sandbox: cfg.sandbox ?? null,
     network: cfg.network ?? null,
+    template: Array.isArray(cfg.template),
+    hint: typeof cfg.hint === "string" ? cfg.hint : null,
   };
 }
 
@@ -658,10 +667,20 @@ export function renderInfoProse(config: InfoConfig): string {
   } else {
     for (const p of config.profiles) {
       const bits = [`vendor=${p.vendor}`];
-      if (p.model !== null) bits.push(`model=${p.model}`);
-      if (p.effort !== null) bits.push(`effort=${p.effort}`);
+      if (p.model !== null) {
+        bits.push(
+          p.template ? `model=${p.model} (declared)` : `model=${p.model}`,
+        );
+      }
+      if (p.effort !== null) {
+        bits.push(
+          p.template ? `effort=${p.effort} (declared)` : `effort=${p.effort}`,
+        );
+      }
       if (p.sandbox !== null) bits.push(`sandbox=${p.sandbox}`);
       if (p.network !== null) bits.push(`network=${p.network}`);
+      if (p.template) bits.push("template");
+      if (p.hint !== null && p.hint !== "") bits.push(`hint: ${p.hint}`);
       lines.push(`- \`${p.name}\`: ${bits.join(" ")}`);
     }
   }
@@ -747,6 +766,9 @@ export function renderInfoProse(config: InfoConfig): string {
   );
   lines.push(
     `\`${config.fix.commands.fresh}\` — blank session, uncapped by retry limits, stays in the attempt chain.`,
+  );
+  lines.push(
+    "Launch-template profiles never resume: `parley fix` on a template-profile task always behaves as `--fresh` (fresh template argv; no vendor-session resume).",
   );
   lines.push("");
   lines.push(

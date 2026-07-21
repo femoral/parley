@@ -6,8 +6,14 @@
  * a vendor stream reports model/effort via `session_meta`.
  */
 
-/** Where a recorded model or effort value came from. */
-export type TraceSource = "resolved" | "vendor";
+/**
+ * Where a recorded model or effort value came from.
+ * - `resolved` — request / profile / allowlist default at spawn (adapter path)
+ * - `vendor` — upgraded from the vendor event stream (adapter path)
+ * - `declared` — template-profile claim; unverified, never merged with verified
+ *   in eval grouping (#195 / ADR-0015)
+ */
+export type TraceSource = "resolved" | "vendor" | "declared";
 
 /** One resolved trace field: concrete value + provenance, or fully unknown. */
 export interface ResolvedTraceField {
@@ -30,6 +36,9 @@ export interface LaunchCommandRecord {
  * Resolve model or effort: explicit request > profile > adapter default.
  * Returns `source: "resolved"` when any tier supplies a value; null/null when
  * none do — never fabricates a guess.
+ *
+ * For launch-template profiles, prefer {@link resolveDeclaredTraceField} so
+ * the value is stored as *declared* (unverified) provenance.
  */
 export function resolveTraceField(
   request: string | null | undefined,
@@ -44,9 +53,27 @@ export function resolveTraceField(
 }
 
 /**
+ * Resolve model or effort as *declared* provenance for a launch-template
+ * profile (#195 / ADR-0015). Same precedence as {@link resolveTraceField} but
+ * never consults adapter defaults (no adapter is on the path) and tags the
+ * source `declared` so eval grouping keeps it separate from verified values.
+ */
+export function resolveDeclaredTraceField(
+  request: string | null | undefined,
+  profile: string | null | undefined,
+): ResolvedTraceField {
+  const value = request ?? profile ?? null;
+  if (value === null || value === undefined || value === "") {
+    return { value: null, source: null };
+  }
+  return { value, source: "declared" };
+}
+
+/**
  * Upgrade a previously resolved (or unknown) field when the vendor stream
  * reports a concrete value. Empty/missing vendor reports leave the current
- * field unchanged.
+ * field unchanged. Declared provenance is never upgraded — template claims
+ * stay unverified (#195).
  */
 export function upgradeTraceField(
   current: ResolvedTraceField,
@@ -55,6 +82,8 @@ export function upgradeTraceField(
   if (vendorReported === null || vendorReported === undefined || vendorReported === "") {
     return current;
   }
+  // Declared (template) provenance must not flip to vendor-verified.
+  if (current.source === "declared") return current;
   return { value: vendorReported, source: "vendor" };
 }
 

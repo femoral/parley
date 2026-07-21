@@ -29,6 +29,10 @@ export const EXIT_REATTEMPT_WINDOW_EXPIRED = 8;
  *
  * `--fresh` (#158) forces a blank session (uncapped by retry.max / window),
  * stays in the chain, and receives daemon-composed context.
+ *
+ * Launch-template profiles (#195 / ADR-0015) never compose resume: `parley fix`
+ * on a template-profile task always behaves as `--fresh` (fresh argv from the
+ * template; no vendor-session resume).
  */
 export async function runFix(ctx: CliContext, args: string[]): Promise<number> {
   const { positionals, flags } = parseArgs(args, {

@@ -285,6 +285,47 @@ describe("readConfig — profiles.*", () => {
     });
   });
 
+  it("accepts template + hint on a profile (#195)", () => {
+    const file = writeConfig(
+      JSON.stringify({
+        profiles: {
+          custom: {
+            vendor: "my-tool",
+            model: "m1",
+            effort: "high",
+            template: ["my-tool", "--prompt", "$PROMPT"],
+            hint: "use for offline tools",
+            env: { X: "1" },
+          },
+        },
+      }),
+    );
+    expect(readConfig(file).profiles?.custom).toEqual({
+      vendor: "my-tool",
+      model: "m1",
+      effort: "high",
+      template: ["my-tool", "--prompt", "$PROMPT"],
+      hint: "use for offline tools",
+      env: { X: "1" },
+    });
+  });
+
+  it("rejects non-array profiles.<name>.template", () => {
+    const file = writeConfig(
+      JSON.stringify({ profiles: { foo: { vendor: "codex", template: "x" } } }),
+    );
+    expect(() => readConfig(file)).toThrow(
+      /profiles\.foo\.template must be an array of strings/,
+    );
+  });
+
+  it("rejects non-string profiles.<name>.hint", () => {
+    const file = writeConfig(
+      JSON.stringify({ profiles: { foo: { vendor: "codex", hint: 1 } } }),
+    );
+    expect(() => readConfig(file)).toThrow(/profiles\.foo\.hint must be a string/);
+  });
+
   it("requires profiles.<name>.vendor", () => {
     const file = writeConfig(JSON.stringify({ profiles: { foo: { model: "x" } } }));
     expect(() => readConfig(file)).toThrow(/profiles\.foo\.vendor is required/);

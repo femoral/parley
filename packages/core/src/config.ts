@@ -127,15 +127,19 @@ export interface VendorConfig {
  * Named agent profile under `profiles.<name>` (#113). Supplies defaults for
  * vendor/model/effort/posture plus optional args/env; explicit request fields
  * win over profile values.
+ *
+ * With {@link template} set (#195 / ADR-0015), the profile replaces adapter
+ * argv composition entirely. Vendor/model/effort become *declared* (unverified)
+ * provenance and the profile is exempt from the model allowlist.
  */
 export interface ProfileConfig {
-  /** Vendor id (built-in or plugin); required. */
+  /** Vendor id (built-in or plugin); required. Template profiles may use any id. */
   vendor: string;
   model?: string;
   effort?: string;
   sandbox?: SandboxMode;
   network?: boolean;
-  /** Extra argv flags, appended after `vendors.<id>.args`. */
+  /** Extra argv flags, appended after `vendors.<id>.args`. Unused when `template` is set. */
   args?: string[];
   /** Env vars merged last (after vendor env). */
   env?: Record<string, string>;
@@ -145,6 +149,19 @@ export interface ProfileConfig {
    * vendor cap, a task spawns only when both have a free slot.
    */
   maxConcurrent?: number;
+  /**
+   * Opt-in full argv that **replaces** adapter composition for this profile
+   * (#195 / ADR-0015). Shape-validated only — a template that does not actually
+   * run an agent fails at spawn, not config load. Elements expand shell-like
+   * (`$VAR` / `${VAR}`) from the spawn env; `$PROMPT` is the task prompt.
+   * Profiles without this field behave exactly as before (`args` splicing).
+   */
+  template?: string[];
+  /**
+   * Optional orchestrator-facing free-text hint (#195), same role as allowlist
+   * model hints — guides when to use this profile.
+   */
+  hint?: string;
 }
 
 /**
@@ -478,6 +495,24 @@ function validateProfileEntry(file: string, name: string, raw: unknown): void {
       );
     }
   }
+  // #195 / ADR-0015: shape-only — do not validate that the command runs an agent.
+  if (raw.template !== undefined) {
+    assertStringArray(file, `profiles.${name}.template`, raw.template);
+  }
+  if (raw.hint !== undefined) {
+    if (typeof raw.hint !== "string") {
+      throw new Error(
+        `invalid config at ${file}: profiles.${name}.hint must be a string`,
+      );
+    }
+  }
+}
+
+/** True when a profile opts into launch-template argv composition (#195). */
+export function profileHasLaunchTemplate(
+  cfg: ProfileConfig | undefined | null,
+): boolean {
+  return cfg !== undefined && cfg !== null && Array.isArray(cfg.template);
 }
 
 function validateProfiles(file: string, raw: unknown): void {

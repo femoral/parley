@@ -17,5 +17,6 @@ export * from "./project-lint.js";
 export * from "./rubric.js";
 export * from "./sdk.js";
 export * from "./states.js";
+export * from "./template-expand.js";
 export * from "./usage.js";
 export * from "./util/time.js";

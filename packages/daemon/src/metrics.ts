@@ -324,7 +324,14 @@ function groupKeyFor(task: TaskRow, groupBy: MetricsGroupBy): string | null {
   if (value === null || value === undefined || value === "") {
     return PROVENANCE_GROUP_BY.has(groupBy) ? "unknown" : null;
   }
-  return String(value);
+  const key = String(value);
+  // Declared (template-profile) model must never share a bucket with verified
+  // adapter-path values (#195 / ADR-0015). Effort is not a groupBy column;
+  // model is the eval combo key.
+  if (groupBy === "model" && task.model_source === "declared") {
+    return `declared:${key}`;
+  }
+  return key;
 }
 
 /**

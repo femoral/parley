@@ -19,10 +19,12 @@ import {
   ModelAllowlistError,
   normalizeUsage,
   parseDuration,
+  profileHasLaunchTemplate,
   readConfig,
   resolveAllowedCombo,
   retentionDays,
   scoreRubric,
+  expandLaunchTemplate,
   validateAnswers,
   type ChildChannel,
   type HomePaths,
@@ -131,6 +133,7 @@ import { buildInfo, type InfoResponse } from "./info.js";
 import {
   appendLaunchCommand,
   captureLaunchCommand,
+  resolveDeclaredTraceField,
   resolveTraceField,
   upgradeTraceField,
   type ResolvedTraceField,
@@ -236,6 +239,37 @@ export class DelegateError extends Error {
 /** Best-effort message from a thrown value (git errors arrive as `Error`). */
 function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
+}
+
+/**
+ * Minimal adapter for free-form launch-template vendors outside the registry
+ * (#195 / ADR-0015). Argv comes from the template, not prepare/resume. Teaches
+ * the HTTP child channel so ask/report work without MCP harness wiring.
+ * parseEvent is a no-op — raw logs remain the durable record.
+ */
+function createGenericTemplateAdapter(vendorId: string): VendorAdapter {
+  const emptyPlan = (task: TaskSpec): SpawnPlan => ({
+    argv: [],
+    env: {},
+    files: [],
+    cwd: task.cwd,
+  });
+  return {
+    id: vendorId,
+    childChannel: "http",
+    prepare(task) {
+      return Promise.resolve(emptyPlan(task));
+    },
+    resume(task) {
+      return Promise.resolve(emptyPlan(task));
+    },
+    parseEvent() {
+      return [];
+    },
+    sessionId() {
+      return undefined;
+    },
+  };
 }
 
 /** Recursively sum on-disk bytes for a path; missing paths contribute 0. */
@@ -482,18 +516,28 @@ interface RunnerMeta {
   base_ref: string | null;
 }
 
-/** Resolved create-time fields after profile + defaults (#113 / #154). */
+/** Resolved create-time fields after profile + defaults (#113 / #154 / #195). */
 interface ResolvedDelegate {
   vendor: string;
   profile: string | null;
   model: string | null;
   effort: string | null;
-  /** Provenance of model (`resolved` or null when unknown) (#154). */
+  /**
+   * Provenance of model: `resolved` (adapter path), `declared` (template
+   * profile), or null when unknown (#154 / #195).
+   */
   model_source: string | null;
-  /** Provenance of effort (`resolved` or null when unknown) (#154). */
+  /**
+   * Provenance of effort: same vocabulary as {@link model_source}.
+   */
   effort_source: string | null;
   sandbox: SandboxMode;
   network: boolean;
+  /**
+   * True when the resolved profile carries a launch template (#195 / ADR-0015).
+   * Skips adapter argv composition, the model allowlist, and resume composition.
+   */
+  launchTemplate: boolean;
 }
 
 /**
@@ -788,14 +832,14 @@ export class TaskEngine {
   }
 
   /**
-   * Resolve profile + explicit request fields, then validate against the vendor
-   * model allowlist (#185 / ADR-0014). Precedence before allowlist default:
-   * explicit request > profile (adapter defaults are no longer fill-ins —
-   * the allowlist default combo is the authority when -m/-e are omitted).
-   * Posture falls back to ADR defaults. When neither vendor nor profile is on
-   * the request, apply `defaults.profile` (wins) or `defaults.vendor` (#175).
-   * Throws `DelegateError` on unknown/stale profile/vendor, missing selection,
-   * or allowlist rejection (no list / no default / out-of-list combo).
+   * Resolve profile + explicit request fields. Adapter-composed paths then
+   * validate against the vendor model allowlist (#185 / ADR-0014); launch-
+   * template profiles skip the allowlist and record declared provenance
+   * (#195 / ADR-0015). Precedence before allowlist default: explicit request >
+   * profile. Posture falls back to ADR defaults. When neither vendor nor
+   * profile is on the request, apply `defaults.profile` (wins) or
+   * `defaults.vendor` (#175). Throws `DelegateError` on unknown/stale
+   * profile/vendor, missing selection, or allowlist rejection.
    */
   private resolveDelegate(request: DelegateRequest): ResolvedDelegate {
     const config = this.readParleyConfig();
@@ -834,12 +878,17 @@ export class TaskEngine {
     if (vendor === null || vendor === "") {
       throw new DelegateError("vendor is required (or set via profile)");
     }
-    // Request/profile only — allowlist supplies the default combo when both
-    // are omitted (#185). Adapter defaults no longer fill model/effort.
-    // Allowlist is applied in `delegate` after the vendor registry check so
-    // "unknown vendor" stays the first error for stale ids.
-    const model = resolveTraceField(request.model, profileCfg?.model, null);
-    const effort = resolveTraceField(request.effort, profileCfg?.effort, null);
+    const launchTemplate = profileHasLaunchTemplate(profileCfg);
+    // Template profiles: declared provenance, no adapter default fill-in.
+    // Adapter paths: request/profile only — allowlist supplies the default
+    // combo when both are omitted (#185). Allowlist runs in `delegate` after
+    // the vendor registry check so "unknown vendor" stays the first error.
+    const model = launchTemplate
+      ? resolveDeclaredTraceField(request.model, profileCfg?.model)
+      : resolveTraceField(request.model, profileCfg?.model, null);
+    const effort = launchTemplate
+      ? resolveDeclaredTraceField(request.effort, profileCfg?.effort)
+      : resolveTraceField(request.effort, profileCfg?.effort, null);
     return {
       vendor,
       profile,
@@ -849,7 +898,23 @@ export class TaskEngine {
       effort_source: effort.source,
       sandbox: request.sandbox ?? profileCfg?.sandbox ?? DEFAULT_SANDBOX,
       network: request.network ?? profileCfg?.network ?? DEFAULT_NETWORK,
+      launchTemplate,
     };
+  }
+
+  /**
+   * Hot-read whether a named profile currently has a launch template (#195).
+   * Used by fix/resume paths so template reattempts stay fresh even if the
+   * profile is edited after the parent row was created.
+   */
+  private profileUsesLaunchTemplate(profileName: string | null): boolean {
+    if (profileName === null || profileName === "") return false;
+    try {
+      const config = this.readParleyConfig();
+      return profileHasLaunchTemplate(config.profiles?.[profileName]);
+    } catch {
+      return false;
+    }
   }
 
   /**
@@ -891,31 +956,37 @@ export class TaskEngine {
     const resolved = this.resolveDelegate(request);
     const adapter = this.adapters.get(resolved.vendor);
     if (!adapter) {
-      const known = [...this.adapters.keys()].join(", ");
-      // When the vendor came only from defaults.vendor (no flags, no profile),
-      // name the setting so a stale default is easy to fix (#175).
-      const via =
-        request.vendor === null &&
-        request.profile === null &&
-        resolved.profile === null
-          ? " from defaults.vendor"
-          : "";
-      throw new DelegateError(
-        `unknown vendor${via}: ${resolved.vendor} (known: ${known})`,
-      );
+      // Template profiles may declare a free-form vendor outside the registry
+      // (#195 / ADR-0015). Without a template the same id is still unknown.
+      if (!resolved.launchTemplate) {
+        const known = [...this.adapters.keys()].join(", ");
+        // When the vendor came only from defaults.vendor (no flags, no profile),
+        // name the setting so a stale default is easy to fix (#175).
+        const via =
+          request.vendor === null &&
+          request.profile === null &&
+          resolved.profile === null
+            ? " from defaults.vendor"
+            : "";
+        throw new DelegateError(
+          `unknown vendor${via}: ${resolved.vendor} (known: ${known})`,
+        );
+      }
     }
-    // Model allowlist choke point (#185 / ADR-0014): after vendor is known,
-    // every spawn path (ad-hoc, profile) validates model+effort here.
-    const allowed = this.resolveModelAllowlist(
-      resolved.vendor,
-      this.readParleyConfig(),
-      resolved.model,
-      resolved.effort,
-    );
-    resolved.model = allowed.model;
-    resolved.effort = allowed.effort;
-    resolved.model_source = allowed.model === null ? null : "resolved";
-    resolved.effort_source = allowed.effort === null ? null : "resolved";
+    // Model allowlist choke point (#185 / ADR-0014): adapter-composed paths
+    // only. Template profiles are exempt and keep declared provenance (#195).
+    if (!resolved.launchTemplate) {
+      const allowed = this.resolveModelAllowlist(
+        resolved.vendor,
+        this.readParleyConfig(),
+        resolved.model,
+        resolved.effort,
+      );
+      resolved.model = allowed.model;
+      resolved.effort = allowed.effort;
+      resolved.model_source = allowed.model === null ? null : "resolved";
+      resolved.effort_source = allowed.effort === null ? null : "resolved";
+    }
 
     // Ids and names are interchangeable task refs, so an id-shaped name would
     // shadow (or be shadowed by) a real task id in `resolveTask`.
@@ -1149,6 +1220,9 @@ export class TaskEngine {
    * 30m, `vendors.<id>.retryWindow` override). `--fresh` skips both gates,
    * forces a blank session, and receives daemon-composed context.
    *
+   * Launch-template profiles never resume (#195 / ADR-0015): reattempts always
+   * use fresh composition (same as `--fresh`), documented on the CLI surface.
+   *
    * The work-domain `type` (#151) is inherited alongside size/difficulty.
    */
   fix(request: FixRequest): TaskRow {
@@ -1168,26 +1242,46 @@ export class TaskEngine {
     if (vendor === null || vendor === "") {
       throw new DelegateError(`task ${parent.id} has no vendor; cannot fix`);
     }
+    const parentIsTemplate = this.profileUsesLaunchTemplate(parent.profile);
     const adapter = this.adapters.get(vendor);
-    if (!adapter) {
+    if (!adapter && !parentIsTemplate) {
       const known = [...this.adapters.keys()].join(", ");
       throw new DelegateError(`unknown vendor: ${vendor} (known: ${known})`);
     }
 
-    // Same allowlist choke point as delegate (#185): a reattempt inherits the
-    // parent's model+effort but fails fast if that combo is now disallowed.
+    // Allowlist only for adapter-composed paths (#185). Template parents keep
+    // the declared combo as-is (#195).
     const fixConfig = this.readParleyConfig();
-    const allowed = this.resolveModelAllowlist(
-      vendor,
-      fixConfig,
-      parent.model,
-      parent.effort,
-    );
+    let allowedModel = parent.model;
+    let allowedEffort = parent.effort;
+    let modelSource = parent.model_source;
+    let effortSource = parent.effort_source;
+    if (!parentIsTemplate) {
+      const allowed = this.resolveModelAllowlist(
+        vendor,
+        fixConfig,
+        parent.model,
+        parent.effort,
+      );
+      allowedModel = allowed.model;
+      allowedEffort = allowed.effort;
+      modelSource = allowed.model === null ? null : "resolved";
+      effortSource = allowed.effort === null ? null : "resolved";
+    } else {
+      // Preserve declared provenance on the reattempt row.
+      if (allowedModel !== null && modelSource !== "declared") {
+        modelSource = "declared";
+      }
+      if (allowedEffort !== null && effortSource !== "declared") {
+        effortSource = "declared";
+      }
+    }
 
-    const fresh = request.fresh === true;
+    const fresh = request.fresh === true || parentIsTemplate;
     // Resume when project config allows *and* the parent captured a session,
-    // unless the caller forced `--fresh`. Off (or missing session) still creates
-    // a linked attempt with a blank session — lineage is independent of resume.
+    // unless the caller forced `--fresh` or the parent is a template profile
+    // (#195 — templates never compose resume). Off (or missing session) still
+    // creates a linked attempt with a blank session — lineage is independent.
     const resumeWanted = !fresh && readResumeEnabled(parent.repo ?? parent.cwd);
     const canResume = resumeWanted && parent.session_id !== null;
 
@@ -1256,8 +1350,10 @@ export class TaskEngine {
       id,
       name: parent.name,
       vendor,
-      model: allowed.model,
-      effort: allowed.effort,
+      model: allowedModel,
+      effort: allowedEffort,
+      model_source: modelSource,
+      effort_source: effortSource,
       profile: parent.profile,
       runner: parent.runner,
       repo: parent.repo,
@@ -1872,7 +1968,7 @@ export class TaskEngine {
     }
 
     if (task.state === "stalled") {
-      const adapter = this.adapters.get(task.vendor ?? "");
+      const adapter = this.adapterForTask(task);
       if (!adapter) {
         throw new DelegateError(`task ${task.id} has an unknown vendor: ${task.vendor ?? "?"}`);
       }
@@ -1887,11 +1983,16 @@ export class TaskEngine {
         question: null,
         error: null,
       });
-      // A vendor session can only be resumed if one was ever captured. A task
-      // swept stalled before its child spoke (e.g. daemon died right after
-      // delegate) has none — rerun it fresh with its original prompt instead.
+      // Template profiles never compose resume (#195) — always fresh.
+      // Otherwise a vendor session can only be resumed if one was ever
+      // captured. A task swept stalled before its child spoke (e.g. daemon
+      // died right after delegate) has none — rerun it fresh with its
+      // original prompt instead.
+      const useTemplate = this.profileUsesLaunchTemplate(task.profile);
       const revive =
-        task.session_id !== null ? this.resume(task, adapter, text) : this.run(task, adapter);
+        !useTemplate && task.session_id !== null
+          ? this.resume(task, adapter, text)
+          : this.run(task, adapter);
       void revive.catch((err: unknown) => {
         this.fail(task.id, `task resume crashed: ${String(err)}`);
       });
@@ -3004,15 +3105,18 @@ export class TaskEngine {
       this.fail(task.id, "task has no vendor; cannot start");
       return;
     }
-    const adapter = this.adapters.get(vendor);
+    const adapter = this.adapterForTask(task);
     if (!adapter) {
       this.admitted.delete(task.id);
       this.fail(task.id, `unknown vendor: ${vendor}`);
       return;
     }
 
+    // Template profiles never resume (#195) — treat any residual resumed=1 as fresh.
+    const useTemplate = this.profileUsesLaunchTemplate(task.profile);
+
     // Freshness at dequeue for resumed fix attempts (#171).
-    if (task.parent_task_id !== null && task.resumed === 1) {
+    if (!useTemplate && task.parent_task_id !== null && task.resumed === 1) {
       const parent = getTask(this.db, task.parent_task_id);
       if (!parent) {
         this.admitted.delete(task.id);
@@ -3039,6 +3143,21 @@ export class TaskEngine {
     }
 
     await this.run(task, adapter);
+  }
+
+  /**
+   * Resolve the adapter for a task: registered adapter when present; for a
+   * launch-template free-form vendor, a generic HTTP-channel adapter that
+   * only supplies parseEvent/sessionId stubs (#195).
+   */
+  private adapterForTask(task: TaskRow): VendorAdapter | undefined {
+    const vendor = task.vendor ?? "";
+    const registered = this.adapters.get(vendor);
+    if (registered) return registered;
+    if (this.profileUsesLaunchTemplate(task.profile)) {
+      return createGenericTemplateAdapter(vendor);
+    }
+    return undefined;
   }
 
   /**
@@ -3073,11 +3192,12 @@ export class TaskEngine {
     }
   }
 
-    /** Fresh run: spawn the vendor child via `prepare` and pump it until exit. */
+    /** Fresh run: spawn the vendor child via `prepare` (or template) and pump until exit. */
   private async run(task: TaskRow, adapter: VendorAdapter): Promise<void> {
     const prompt = this.initialPrompt(task, adapter);
-    const spec: TaskSpec = { ...this.buildSpec(task), prompt };
-    const plan = this.applyVendorConfig(task, await adapter.prepare(spec, this.hubFor(task.id)));
+    const plan = this.profileUsesLaunchTemplate(task.profile)
+      ? this.buildTemplatePlan(task, prompt)
+      : this.applyVendorConfig(task, await adapter.prepare({ ...this.buildSpec(task), prompt }, this.hubFor(task.id)));
     await this.runChild(task, adapter, plan, prompt, {
       state: "running",
       started_at: new Date().toISOString(),
@@ -3127,12 +3247,77 @@ export class TaskEngine {
     fixBrief: string,
   ): Promise<void> {
     const prompt = this.freshFixPrompt(task, adapter, fixBrief);
-    const spec: TaskSpec = { ...this.buildSpec(task), prompt };
-    const plan = this.applyVendorConfig(task, await adapter.prepare(spec, this.hubFor(task.id)));
+    const plan = this.profileUsesLaunchTemplate(task.profile)
+      ? this.buildTemplatePlan(task, prompt)
+      : this.applyVendorConfig(
+          task,
+          await adapter.prepare({ ...this.buildSpec(task), prompt }, this.hubFor(task.id)),
+        );
     await this.runChild(task, adapter, plan, prompt, {
       state: "running",
       started_at: new Date().toISOString(),
     });
+  }
+
+  /**
+   * Build a spawn plan from a profile's launch template (#195 / ADR-0015).
+   * Replaces adapter argv composition entirely. Parley still owns env merge,
+   * posture env, cwd, and (via runChild) hub injection + child-channel teaching.
+   * `$VAR` / `$PROMPT` expand against the merged env + assembled prompt.
+   */
+  private buildTemplatePlan(task: TaskRow, prompt: string): SpawnPlan {
+    let config: ParleyConfig;
+    try {
+      config = readConfig(this.paths.config);
+    } catch (err) {
+      throw new Error(`config: ${errorMessage(err)}`);
+    }
+    const profileName = task.profile;
+    const profileCfg =
+      profileName !== null ? config.profiles?.[profileName] : undefined;
+    if (!profileHasLaunchTemplate(profileCfg) || profileCfg?.template === undefined) {
+      throw new Error(
+        `profile ${profileName ?? "(none)"} has no launch template at spawn`,
+      );
+    }
+    const vendorId = task.vendor ?? "";
+    const vendorCfg = config.vendors?.[vendorId];
+    // Env merge order matches applyVendorConfig: plan base < vendor < profile.
+    // Posture is exposed for expansion / child visibility (adapters map it
+    // themselves; templates have no adapter mapping).
+    const planEnv: Record<string, string> = {
+      PARLEY_SANDBOX: task.sandbox,
+      PARLEY_NETWORK: task.network === 1 ? "1" : "0",
+      ...(vendorCfg?.env ?? {}),
+      ...(profileCfg.env ?? {}),
+    };
+    // Hub vars are also injected in runChild; include them here so $PARLEY_*
+    // expands correctly when the template references them.
+    let hubUrl = "";
+    try {
+      hubUrl = this.hubBaseUrl();
+    } catch {
+      /* hub port not ready — expansion leaves them empty; runChild still injects */
+    }
+    const expandEnv: Record<string, string> = {
+      ...planEnv,
+      ...(hubUrl !== ""
+        ? { PARLEY_HUB_URL: hubUrl, PARLEY_TASK_ID: task.id }
+        : { PARLEY_TASK_ID: task.id }),
+      PROMPT: prompt,
+    };
+    const argv = expandLaunchTemplate(profileCfg.template, expandEnv);
+    if (argv.length === 0 || argv[0] === "") {
+      throw new Error(
+        `launch template for profile ${profileName} produced an empty argv`,
+      );
+    }
+    return {
+      argv,
+      env: planEnv,
+      files: [],
+      cwd: task.cwd ?? process.cwd(),
+    };
   }
 
   /**
