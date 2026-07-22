@@ -98,7 +98,7 @@
   margin: 0;
   font-family: var(--font-body);
   font-style: italic;
-  font-size: 15px;
+  font-size: var(--text-lead);
   line-height: 1.4;
   /* --ink-on-sea on --sea-shallow ≈ 5.73:1 (≥4.5:1 AA); see tokens.css. */
   color: var(--ink-on-sea);
@@ -108,7 +108,7 @@
   margin: 0;
   font-family: var(--font-body);
   font-style: italic;
-  font-size: 13px;
+  font-size: var(--text-body);
   line-height: 1.5;
   /* Sea backdrop: --ink-faint fails AA here (≈2.4:1); --ink-on-sea ≈ 5.73:1. */
   color: var(--ink-on-sea);
@@ -918,7 +918,7 @@
     inset 0 0 0 1px rgba(240, 194, 90, 0.14);
   color: var(--ink-parchment);
   font-family: var(--font-body);
-  font-size: 11px;
+  font-size: var(--text-sub);
   font-weight: 600;
   line-height: 1;
   cursor: pointer;
@@ -967,13 +967,13 @@ button.pc-edge-alert:focus-visible {
   text-overflow: ellipsis;
   white-space: nowrap;
   font-family: var(--font-body);
-  font-size: 11px;
+  font-size: var(--text-sub);
   font-weight: 600;
   color: var(--ink-parchment);
 }
 .pc-edge-alert__count {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--text-mono);
   font-weight: 600;
   color: var(--ink-soft);
   min-width: 0.75em;

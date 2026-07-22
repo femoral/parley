@@ -12,9 +12,11 @@ describe("SettingsBar renders the three persisted toggles (#70)", () => {
         ornaments
         showKit={false}
         followLogs
+        shortcuts
         onToggleOrnaments={() => {}}
         onToggleShowKit={() => {}}
         onToggleFollowLogs={() => {}}
+        onToggleShortcuts={() => {}}
       />,
     );
     expect(screen.getByRole("button", { name: /Ornaments/ }).getAttribute("aria-pressed")).toBe("true");
@@ -28,9 +30,11 @@ describe("SettingsBar renders the three persisted toggles (#70)", () => {
         ornaments
         showKit={false}
         followLogs
+        shortcuts
         onToggleOrnaments={() => {}}
         onToggleShowKit={() => {}}
         onToggleFollowLogs={() => {}}
+        onToggleShortcuts={() => {}}
       />,
     );
     expect(screen.getByRole("group", { name: "Cockpit settings" })).toBeTruthy();
@@ -45,9 +49,11 @@ describe("SettingsBar renders the three persisted toggles (#70)", () => {
         ornaments={false}
         showKit={false}
         followLogs={false}
+        shortcuts={false}
         onToggleOrnaments={onToggleOrnaments}
         onToggleShowKit={onToggleShowKit}
         onToggleFollowLogs={onToggleFollowLogs}
+        onToggleShortcuts={() => {}}
       />,
     );
 
@@ -67,9 +73,11 @@ describe("SettingsBar renders the three persisted toggles (#70)", () => {
         ornaments
         showKit={false}
         followLogs
+        shortcuts
         onToggleOrnaments={() => {}}
         onToggleShowKit={() => {}}
         onToggleFollowLogs={() => {}}
+        onToggleShortcuts={() => {}}
       />,
     );
     for (const button of screen.getAllByRole("button")) {

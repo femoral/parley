@@ -142,19 +142,23 @@ export const EvalHeatmap = memo(function EvalHeatmap({
                 } as CSSProperties
               }
             >
-              <div className="pc-eval-heat__corner" role="columnheader">
-                Criterion
-              </div>
-              {groups.map((g) => (
-                <div
-                  key={g.key ?? "(none)"}
-                  className="pc-eval-heat__colhead"
-                  role="columnheader"
-                  title={g.label}
-                >
-                  {g.label}
+              {/* ARIA requires columnheaders inside a row; display:contents keeps
+                  the wrapper out of the grid's layout. */}
+              <div className="pc-eval-heat__contents" role="row">
+                <div className="pc-eval-heat__corner" role="columnheader">
+                  Criterion
                 </div>
-              ))}
+                {groups.map((g) => (
+                  <div
+                    key={g.key ?? "(none)"}
+                    className="pc-eval-heat__colhead"
+                    role="columnheader"
+                    title={g.label}
+                  >
+                    {g.label}
+                  </div>
+                ))}
+              </div>
 
               {criteria.map((criterionId, rowIdx) => {
                 const row = cells[rowIdx] ?? [];

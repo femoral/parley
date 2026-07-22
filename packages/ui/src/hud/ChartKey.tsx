@@ -16,6 +16,7 @@ import { ATTENTION_DISPLAY_ORDER, STATE_META } from "../tokens/state-meta.js";
 export const ChartKey = memo(function ChartKey() {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
   const panelId = useId();
 
   // Close on outside click / Escape.
@@ -27,7 +28,12 @@ export const ChartKey = memo(function ChartKey() {
       }
     };
     const onKey = (event: KeyboardEvent): void => {
-      if (event.key === "Escape") setOpen(false);
+      if (event.key === "Escape") {
+        setOpen(false);
+        // Focus may sit inside the unmounting popover — restore it to the
+        // trigger so Escape never strands keyboard users on <body>.
+        triggerRef.current?.focus();
+      }
     };
     document.addEventListener("mousedown", onPointer);
     document.addEventListener("keydown", onKey);
@@ -41,6 +47,7 @@ export const ChartKey = memo(function ChartKey() {
     <div className="pc-chart-key" ref={rootRef}>
       <button
         type="button"
+        ref={triggerRef}
         className={`pc-settings__toggle${open ? " pc-settings__toggle--on" : ""}`}
         aria-expanded={open}
         aria-controls={panelId}
@@ -85,7 +92,7 @@ export const ChartKey = memo(function ChartKey() {
             <ul className="pc-chart-key__list">
               {Object.values(MODEL_VENDORS).map((vendor) => (
                 <li className="pc-chart-key__row" key={vendor.label}>
-                  <Emblem coat="#8a6a34" mark={vendor.emblem} size={20} label={vendor.label} />
+                  <Emblem coat="var(--brass-frame)" mark={vendor.emblem} size={20} label={vendor.label} />
                   <span className="pc-chart-key__label pc-chart-key__label--faction">
                     {vendor.label}
                   </span>

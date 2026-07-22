@@ -24,6 +24,10 @@ export function useHealth(client: ParleyClient, pollMs = 5000): HealthState {
   useEffect(() => {
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
+    // Gate on visibility like useVisibleClock/useLogTail: a hidden tab issues
+    // no probes all night; returning re-probes immediately so the panel is
+    // honest again within one beat instead of a stale poll interval.
+    const hidden = (): boolean => typeof document !== "undefined" && document.hidden;
 
     const poll = async (): Promise<void> => {
       try {
@@ -39,13 +43,26 @@ export function useHealth(client: ParleyClient, pollMs = 5000): HealthState {
       } catch {
         if (!cancelled) setState((prev) => ({ ...prev, online: false }));
       }
-      if (!cancelled) timer = setTimeout(() => void poll(), pollMs);
+      if (!cancelled && !hidden()) timer = setTimeout(() => void poll(), pollMs);
+    };
+
+    const onVisibility = (): void => {
+      if (cancelled) return;
+      if (timer) clearTimeout(timer);
+      timer = undefined;
+      if (!hidden()) void poll();
     };
 
     void poll();
+    if (typeof document !== "undefined") {
+      document.addEventListener("visibilitychange", onVisibility);
+    }
     return () => {
       cancelled = true;
       if (timer) clearTimeout(timer);
+      if (typeof document !== "undefined") {
+        document.removeEventListener("visibilitychange", onVisibility);
+      }
     };
   }, [client, pollMs]);
 

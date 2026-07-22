@@ -107,8 +107,11 @@ export function InboxCard({ task, onSelectTask }: InboxCardProps) {
 
       <div className="pc-inbox-card__footer">
         <span className="pc-inbox-card__refs">
+          {/* title is mouse-only — the visually-hidden spans expose the full
+              ids to keyboard/AT users too. */}
           <span className="pc-inbox-card__ref" title={task.id}>
-            {taskRef}
+            <span aria-hidden="true">{taskRef}</span>
+            <span className="pc-visually-hidden">task id {task.id}</span>
           </span>
           <span className="pc-inbox-card__ref-sep" aria-hidden="true">
             ·
@@ -117,7 +120,10 @@ export function InboxCard({ task, onSelectTask }: InboxCardProps) {
             className="pc-inbox-card__ref"
             title={task.sessionId ?? undefined}
           >
-            {sessionRef ?? "no session"}
+            <span aria-hidden="true">{sessionRef ?? "no session"}</span>
+            <span className="pc-visually-hidden">
+              {task.sessionId ? `session id ${task.sessionId}` : "no session"}
+            </span>
           </span>
           {/* Hidden scaffold text for select-on-click fallback when clipboard fails. */}
           <span ref={scaffoldRef} className="pc-inbox-card__scaffold" aria-hidden="true">

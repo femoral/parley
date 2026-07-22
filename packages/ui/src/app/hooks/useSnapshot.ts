@@ -99,6 +99,44 @@ function mergeEnvelope(prev: RosterTaskInput | undefined, event: StreamEvent): R
 
 const RETRY_MS = 3000;
 
+/** States that no longer change on their own — the only eviction candidates. */
+const TERMINAL_STATES = new Set(["completed", "failed", "cancelled"]);
+
+/**
+ * How many terminal (completed/failed/cancelled) tasks the live map retains.
+ * Active tasks are never evicted. Generous enough that a realistic day's
+ * archive stays fully visible in the roster, while bounding the one true
+ * unbounded-growth vector of an all-day session: without a cap, memory and
+ * the per-SSE-event projection cost grow with every task ever seen.
+ */
+export const TERMINAL_TASK_CAP = 500;
+
+/**
+ * Drop the oldest terminal tasks over {@link TERMINAL_TASK_CAP}, oldest
+ * `updatedAt` first (ISO strings — lexicographic order is chronological).
+ * Mutates `taskMap` (and `fetched`, so the asked-once set stays bounded too).
+ */
+export function evictTerminalOverflow(
+  taskMap: Map<string, RosterTaskInput>,
+  fetched?: Set<string>,
+  cap: number = TERMINAL_TASK_CAP,
+): void {
+  const terminals: RosterTaskInput[] = [];
+  for (const task of taskMap.values()) {
+    if (TERMINAL_STATES.has(task.state)) terminals.push(task);
+  }
+  if (terminals.length <= cap) return;
+  // updatedAt may be null on freshly-merged rows — treat missing as oldest.
+  const key = (t: RosterTaskInput): string => t.updatedAt ?? "";
+  terminals.sort((a, b) => (key(a) < key(b) ? -1 : key(a) > key(b) ? 1 : 0));
+  const drop = terminals.length - cap;
+  for (let i = 0; i < drop; i++) {
+    const id = terminals[i]!.id;
+    taskMap.delete(id);
+    fetched?.delete(id);
+  }
+}
+
 /**
  * Layer 4 (hooks) — bootstrap `GET /tasks` then follow the SSE transition stream
  * (contract's bootstrap: snapshot seq → stream from that seq, no gaps). Maintains
@@ -135,9 +173,13 @@ export function useSnapshot(client: ParleyClient): SnapshotView {
     // is what stops the refetching; a failed fetch retries on the next event).
     const sessionFetched = new Set<string>();
     // A `Map`'s `.values()` iterator is single-use — materialize it once so
-    // both projections (each a full pass) see every task.
+    // both projections (each a full pass) see every task. Eviction runs here —
+    // the one funnel every mutation passes through — so the map can never
+    // grow past the cap between emits.
     const emit = (): void => {
-      if (!cancelled) setTasks([...taskMap.values()]);
+      if (cancelled) return;
+      evictTerminalOverflow(taskMap, sessionFetched);
+      setTasks([...taskMap.values()]);
     };
 
     /** Mark the stream live (bootstrap success or post-error event after reconnect). */

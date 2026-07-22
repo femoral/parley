@@ -53,6 +53,7 @@ describe("useSettings' defaults and localStorage round-trip (#70)", () => {
       ornaments: false,
       showKit: true,
       followLogs: false,
+      shortcuts: true,
     });
   });
 

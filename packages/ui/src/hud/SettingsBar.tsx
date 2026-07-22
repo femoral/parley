@@ -1,14 +1,17 @@
 import { memo } from "react";
 import { Mark } from "../primitives/index.js";
-import { MARK_MALLET, MARK_SPARK, MARK_SPYGLASS } from "../tokens/chrome-glyphs.js";
+import { MARK_MALLET, MARK_SCROLL, MARK_SPARK, MARK_SPYGLASS } from "../tokens/chrome-glyphs.js";
 
 export interface SettingsBarProps {
   ornaments: boolean;
   showKit: boolean;
   followLogs: boolean;
+  /** Single-key accelerators on/off (WCAG 2.1.4 opt-out). */
+  shortcuts: boolean;
   onToggleOrnaments: () => void;
   onToggleShowKit: () => void;
   onToggleFollowLogs: () => void;
+  onToggleShortcuts: () => void;
 }
 
 /**
@@ -27,9 +30,11 @@ export const SettingsBar = memo(function SettingsBar({
   ornaments,
   showKit,
   followLogs,
+  shortcuts,
   onToggleOrnaments,
   onToggleShowKit,
   onToggleFollowLogs,
+  onToggleShortcuts,
 }: SettingsBarProps) {
   return (
     <div className="pc-settings" role="group" aria-label="Cockpit settings">
@@ -67,6 +72,17 @@ export const SettingsBar = memo(function SettingsBar({
           <Mark mark={MARK_SPYGLASS} size={11} />
         </span>{" "}
         Follow logs
+      </button>
+      <button
+        type="button"
+        className={`pc-settings__toggle${shortcuts ? " pc-settings__toggle--on" : ""}`}
+        aria-pressed={shortcuts}
+        onClick={onToggleShortcuts}
+      >
+        <span aria-hidden="true">
+          <Mark mark={MARK_SCROLL} size={11} />
+        </span>{" "}
+        Shortcuts
       </button>
     </div>
   );

@@ -14,9 +14,12 @@ export interface Settings {
   /** Whether the inspector's Logs tab keeps polling/tailing the selected
    * task's raw log, or sits paused on what it already has. */
   followLogs: boolean;
+  /** Single-key accelerators (`/`, `n`, `m`). Off switch required by WCAG
+   * 2.1.4 (Character Key Shortcuts); `Esc` stays active either way. */
+  shortcuts: boolean;
 }
 
-const DEFAULTS: Settings = { ornaments: true, showKit: false, followLogs: true };
+const DEFAULTS: Settings = { ornaments: true, showKit: false, followLogs: true, shortcuts: true };
 
 /** One versioned key — a shape change bumps the suffix rather than migrating
  * old shapes, since these are cosmetic prefs a user can just re-toggle. */
@@ -40,6 +43,7 @@ function readSettings(): Settings {
       ornaments: typeof parsed.ornaments === "boolean" ? parsed.ornaments : DEFAULTS.ornaments,
       showKit: typeof parsed.showKit === "boolean" ? parsed.showKit : DEFAULTS.showKit,
       followLogs: typeof parsed.followLogs === "boolean" ? parsed.followLogs : DEFAULTS.followLogs,
+      shortcuts: typeof parsed.shortcuts === "boolean" ? parsed.shortcuts : DEFAULTS.shortcuts,
     };
   } catch {
     // Private-mode storage access, a foreign non-JSON value, whatever — the
@@ -52,6 +56,7 @@ export interface SettingsView extends Settings {
   toggleOrnaments: () => void;
   toggleShowKit: () => void;
   toggleFollowLogs: () => void;
+  toggleShortcuts: () => void;
 }
 
 /**
@@ -86,6 +91,10 @@ export function useSettings(): SettingsView {
     () => setSettings((prev) => ({ ...prev, followLogs: !prev.followLogs })),
     [],
   );
+  const toggleShortcuts = useCallback(
+    () => setSettings((prev) => ({ ...prev, shortcuts: !prev.shortcuts })),
+    [],
+  );
 
-  return { ...settings, toggleOrnaments, toggleShowKit, toggleFollowLogs };
+  return { ...settings, toggleOrnaments, toggleShowKit, toggleFollowLogs, toggleShortcuts };
 }

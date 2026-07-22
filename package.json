@@ -10,6 +10,7 @@
   },
   "scripts": {
     "parley": "node packages/cli/bin/parley.mjs",
+    "dev": "pnpm --filter @useparley/ui dev",
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
     "test": "vitest run",

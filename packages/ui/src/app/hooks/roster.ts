@@ -133,18 +133,24 @@ export function displayAttentionRank(
  * Advance the failed-observation map for the current task list. Pure: callers
  * (useCockpit) keep the previous map across renders so a failure's clock starts
  * once per spell, not on every re-project. Tasks that leave `failed` drop out;
- * re-entry gets a new `now` stamp.
+ * re-entry gets a new `now` stamp. Returns `prev` itself when nothing changed,
+ * so downstream memos (the roster projection) keep their identity across the
+ * cockpit's one-second clock re-render instead of recomputing every tick.
  */
 export function advanceFailedObservations(
   tasks: Iterable<RosterTaskInput>,
   prev: ReadonlyMap<string, number>,
   now: number,
-): Map<string, number> {
+): ReadonlyMap<string, number> {
   const next = new Map<string, number>();
+  let changed = false;
   for (const task of tasks) {
     if (task.state !== "failed") continue;
-    next.set(task.id, prev.get(task.id) ?? now);
+    const stamp = prev.get(task.id);
+    if (stamp === undefined) changed = true;
+    next.set(task.id, stamp ?? now);
   }
+  if (!changed && next.size === prev.size) return prev;
   return next;
 }
 

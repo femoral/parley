@@ -82,9 +82,12 @@ function Group({
   const labelStyle = { "--group-color": meta.colorVar } as CSSProperties;
 
   return (
-    <div>
+    /* role=group: a listbox may only own option/group children — the bare div
+       broke the accessible owns-tree. The label carries what the (aria-hidden)
+       visual head shows, so AT hears one group name, not the head twice. */
+    <div role="group" aria-label={`${meta.label} (${group.tasks.length})`}>
       {/* Group headers stay non-focusable; state lives on each option's name. */}
-      <div className="pc-roster__group-head">
+      <div className="pc-roster__group-head" aria-hidden="true">
         {/* Decorative: the group label next to the dot carries the state for
             AT; title still gives mouse users a hover hint without duplicating
             the label in the accessibility tree. */}
@@ -179,6 +182,7 @@ function SessionSearch({
   const [hits, setHits] = useState<RosterSessionSearchHit[]>([]);
   const [status, setStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const inputRef = useRef<HTMLInputElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   const listId = useId();
   // Keep a live open flag for the imperative isOpen() without forcing
@@ -209,7 +213,12 @@ function SessionSearch({
       }
     };
     const onKey = (event: KeyboardEvent): void => {
-      if (event.key === "Escape") setOpen(false);
+      if (event.key === "Escape") {
+        setOpen(false);
+        // Closing unmounts the focused input; without this, focus falls to
+        // <body> and keyboard users lose their place (WCAG 2.4.3).
+        triggerRef.current?.focus();
+      }
     };
     document.addEventListener("mousedown", onPointer);
     document.addEventListener("keydown", onKey);
@@ -256,6 +265,8 @@ function SessionSearch({
       setQuery("");
       setHits([]);
       setStatus("idle");
+      // The hit button unmounts with the popover — return focus to the trigger.
+      triggerRef.current?.focus();
     },
     [onSelectSession],
   );
@@ -264,6 +275,7 @@ function SessionSearch({
     <div className="pc-roster__search" ref={rootRef}>
       <button
         type="button"
+        ref={triggerRef}
         className={`pc-roster__session pc-roster__session--search${open ? " pc-roster__session--active" : ""}`}
         aria-expanded={open}
         aria-controls={listId}

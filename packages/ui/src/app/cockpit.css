@@ -14,6 +14,28 @@
   overflow: hidden;
 }
 
+/* Skip link — visually hidden until keyboard-focused, then a small brass
+   plate pinned to the board's top-left, above every region. */
+.pc-skip-link {
+  position: absolute;
+  top: var(--board-inset);
+  left: var(--board-inset);
+  z-index: var(--z-popover);
+  padding: 7px 14px;
+  border-radius: var(--radius-control);
+  background: var(--btn-gold-fill);
+  color: var(--ink-dark-on-gold);
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--text-chrome);
+  letter-spacing: var(--track-micro);
+  text-decoration: none;
+  transform: translateY(-200%);
+}
+.pc-skip-link:focus-visible {
+  transform: none;
+}
+
 /* ── Atmosphere (§2.11) ────────────────────────────────────────────────── */
 .pc-atmos {
   position: absolute;
@@ -176,7 +198,7 @@
   box-shadow: inset 0 0 0 1px var(--attn-stalled-border), 0 4px 14px rgba(0, 0, 0, 0.35);
   color: var(--ink-parchment);
   font-family: var(--font-body);
-  font-size: 12.5px;
+  font-size: var(--text-body);
   font-weight: 500;
   line-height: 1.45;
   pointer-events: auto;
@@ -200,7 +222,7 @@
 .pc-region--right::-webkit-scrollbar-thumb,
 .pc-roster__scroll::-webkit-scrollbar-thumb {
   background: var(--scroll-thumb);
-  border-radius: 4px;
+  border-radius: var(--radius-tight);
 }
 .pc-region--right::-webkit-scrollbar-thumb:hover,
 .pc-roster__scroll::-webkit-scrollbar-thumb:hover {

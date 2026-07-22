@@ -27,7 +27,7 @@ export function PlateHeader({
   divider = false,
 }: PlateHeaderProps) {
   const iconStyle: CSSProperties | undefined = iconColor
-    ? { background: iconColor, color: "#fff" }
+    ? { background: iconColor, color: "var(--ink-on-coat)" }
     : undefined;
   return (
     <>
@@ -41,7 +41,9 @@ export function PlateHeader({
           </span>
         )}
         <span className="pc-plate-header__titles">
-          <span className="pc-plate-header__title">{title}</span>
+          {/* Panel titles are the cockpit's h2 tier (h1 = cartouche), so the
+              document outline lists every plate instead of jumping h1 → h3. */}
+          <h2 className="pc-plate-header__title">{title}</h2>
           {subtitle && <span className="pc-plate-header__subtitle">{subtitle}</span>}
         </span>
         {aside !== undefined && <span className="pc-plate-header__aside">{aside}</span>}

@@ -26,6 +26,12 @@ export interface CockpitKeysOptions {
   clearTask: () => void;
   /** Toggle Cove ↔ Soundings (`m` accelerator, #119). */
   toggleSoundings?: () => void;
+  /**
+   * Master switch for the single-character accelerators (`/`, `n`, `m`) —
+   * the WCAG 2.1.4 opt-out, wired to the settings strip. `Esc` is not a
+   * character key and stays active regardless.
+   */
+  enabled?: boolean;
 }
 /** True when the event target is a text-entry control (or contenteditable). */
 export function isTypingTarget(target: EventTarget | null): boolean {
@@ -97,7 +103,12 @@ export function useCockpitKeys(options: CockpitKeysOptions): void {
         selectTask,
         clearTask,
         toggleSoundings,
+        enabled = true,
       } = optionsRef.current;
+
+      // Character-key accelerators honour the settings opt-out (WCAG 2.1.4);
+      // Escape below is exempt.
+      if (!enabled && event.key !== "Escape") return;
 
       if (event.key === "/") {
         event.preventDefault();

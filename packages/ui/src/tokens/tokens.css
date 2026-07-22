@@ -93,6 +93,9 @@
   /* Quiet warm mono metadata (e.g. day-chip wind) — ≥4.5:1 on plate wood. */
   --ink-meta: #a08a62;
   --ink-dark-on-gold: #2a1a08;
+  /* Max-contrast glyph ink on a run-time --coat fill (DESIGN.md emblem
+     textColor) — the one place warm ink would fight the faction colour. */
+  --ink-on-coat: #ffffff;
   /* Sea empty-state body (on --sea-shallow #1b5064). Plate --ink-faint fails
      here at ≈2.4:1; parchment-ward #e0cfa4 computes ≈5.73:1 (≥4.5:1 AA). */
   --ink-on-sea: #e0cfa4;
@@ -198,6 +201,28 @@
   --font-body: "Outfit", system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, monospace;
 
+  /* §2.9 — type scale. Semantic rem steps (product register: fixed rem, ~1.1
+     ratio) replacing the old per-rule px literals, which ignored the browser's
+     font-size preference and shrank physically on high-DPI monitors. Values sit
+     one notch above the old px tiers (9→10, 10.5→11, 11→12, 12.5→13, 13→14) —
+     a deliberate readability lift; glyph *slots* (icon chips, state dots,
+     marker ◆s) and world-scaled scene art keep px on purpose.
+     Same-value aliases are separate seams: chrome (Cinzel), mono, and prose
+     tiers can be retuned independently without another migration. */
+  --text-label: 0.625rem; /* 10px — uppercase micro-labels under stats/fields */
+  --text-meta: 0.6875rem; /* 11px — mono ids, counts, timestamps, small meta */
+  --text-chrome-sm: 0.6875rem; /* 11px — small Cinzel chrome (sub-tabs, chip buttons) */
+  --text-sub: 0.75rem; /* 12px — secondary prose, values, chips */
+  --text-mono: 0.75rem; /* 12px — log lines, inputs, mono values */
+  --text-chrome: 0.75rem; /* 12px — Cinzel buttons, view tabs, group labels */
+  --text-flavor: 0.75rem; /* 12px — IM Fell English atmosphere */
+  --text-body: 0.8125rem; /* 13px — primary prose, names, questions */
+  --text-title: 0.875rem; /* 14px — Cinzel panel titles */
+  --text-lead: 1rem; /* 16px — scene empty-state lead line */
+  --text-stat-sm: 1.125rem; /* 18px — secondary numerals (soundings counts) */
+  --text-stat: 1.25rem; /* 20px — stat readouts, day chip, clock */
+  --text-display: clamp(1.625rem, 3.4vw, 2.5rem); /* cartouche title */
+
   --track-title: 7px;
   --track-caps: 2px;
   --track-subtitle: 6px;
@@ -209,6 +234,7 @@
   --region-roster: 300px;
   --region-right: 344px;
 
+  --radius-tight: 4px;
   --radius-panel: 11px;
   --radius-cartouche: 13px;
   --radius-card: 10px;
@@ -270,7 +296,9 @@
   /* §4.6 — roster row selection/hover tints (alpha variants of --brass) and
      the beacon flag's glow (alpha of --brass-bright) */
   --brass-tint-06: rgba(240, 194, 90, 0.06);
+  --brass-tint-08: rgba(240, 194, 90, 0.08);
   --brass-tint-12: rgba(240, 194, 90, 0.12);
+  --brass-tint-25: rgba(240, 194, 90, 0.25);
   --brass-border-selected: #f0c25a88;
   --beacon-glow: rgba(255, 207, 77, 0.6);
   /* Coral twin of --beacon-glow for fresh failed rows (--state-failed #ff7a6b). */

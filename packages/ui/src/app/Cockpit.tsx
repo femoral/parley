@@ -54,15 +54,21 @@ export function Cockpit() {
     selectTask: roster.selectTask,
     clearTask: roster.clearTask,
     toggleSoundings,
+    enabled: settings.shortcuts,
   });
 
   return (
     <div className={`pc-cockpit${chartStale ? " pc-cockpit--stale" : ""}`} data-stale={chartStale ? "true" : undefined}>
+      {/* Keyboard users land here first; the cockpit has no nav to skip past
+          except the atmosphere layers, so the target is the main region. */}
+      <a className="pc-skip-link" href="#pc-main">
+        Skip to cockpit
+      </a>
       <div className="pc-atmos pc-atmos--sea" />
       <div className="pc-atmos pc-atmos--vignette" />
 
       <div className="pc-cockpit__layout">
-        <div className="pc-cockpit__main">
+        <main id="pc-main" className="pc-cockpit__main">
           <section className="pc-region--roster" aria-label="Fleet roster">
             <RosterPanel
               groups={snapshot.groups}
@@ -143,19 +149,21 @@ export function Cockpit() {
             <InboxPanel tasks={snapshot.inbox} onSelectTask={roster.selectTask} />
             <Inspector task={inspector} />
           </aside>
-        </div>
+        </main>
 
-        <div className="pc-settings-row">
+        <footer className="pc-settings-row" aria-label="Chart key and settings">
           <ChartKey />
           <SettingsBar
             ornaments={settings.ornaments}
             showKit={settings.showKit}
             followLogs={settings.followLogs}
+            shortcuts={settings.shortcuts}
             onToggleOrnaments={settings.toggleOrnaments}
             onToggleShowKit={settings.toggleShowKit}
             onToggleFollowLogs={settings.toggleFollowLogs}
+            onToggleShortcuts={settings.toggleShortcuts}
           />
-        </div>
+        </footer>
         {DevKitBand && settings.showKit && (
           <Suspense fallback={null}>
             <DevKitBand />

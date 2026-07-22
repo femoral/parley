@@ -40,48 +40,67 @@ colors:
 typography:
   display:
     fontFamily: "Cinzel, 'Times New Roman', serif"
-    fontSize: "40px"
+    fontSize: "clamp(1.625rem, 3.4vw, 2.5rem)"
     fontWeight: 900
     lineHeight: 1.1
     letterSpacing: "7px"
   headline:
     fontFamily: "Cinzel, 'Times New Roman', serif"
-    fontSize: "19px"
+    fontSize: "1.25rem"
     fontWeight: 700
     lineHeight: 1.2
     letterSpacing: "1px"
   title:
     fontFamily: "Cinzel, 'Times New Roman', serif"
-    fontSize: "13px"
+    fontSize: "0.875rem"
     fontWeight: 700
     lineHeight: 1.15
     letterSpacing: "2px"
+  chrome:
+    fontFamily: "Cinzel, 'Times New Roman', serif"
+    fontSize: "0.75rem"
+    fontWeight: 700
+    lineHeight: 1.2
+    letterSpacing: "1px"
   body:
     fontFamily: "Outfit, system-ui, sans-serif"
-    fontSize: "12.5px"
+    fontSize: "0.8125rem"
     fontWeight: 500
     lineHeight: 1.45
     letterSpacing: "normal"
+  sub:
+    fontFamily: "Outfit, system-ui, sans-serif"
+    fontSize: "0.75rem"
+    fontWeight: 500
+    lineHeight: 1.4
+    letterSpacing: "normal"
   label:
     fontFamily: "Outfit, system-ui, sans-serif"
-    fontSize: "9px"
+    fontSize: "0.625rem"
     fontWeight: 600
     lineHeight: 1.4
     letterSpacing: "1px"
   mono:
     fontFamily: "'JetBrains Mono', ui-monospace, monospace"
-    fontSize: "19px"
+    fontSize: "1.25rem"
     fontWeight: 500
     lineHeight: 1
     letterSpacing: "normal"
+  meta:
+    fontFamily: "'JetBrains Mono', ui-monospace, monospace"
+    fontSize: "0.6875rem"
+    fontWeight: 500
+    lineHeight: 1.4
+    letterSpacing: "normal"
   flavor:
     fontFamily: "'IM Fell English', Georgia, serif"
-    fontSize: "10.5px"
+    fontSize: "0.75rem"
     fontWeight: 400
     lineHeight: 1.4
     letterSpacing: "normal"
 rounded:
   cartouche: "13px"
+  tight: "4px"
   panel: "11px"
   card: "10px"
   inbox: "9px"
@@ -203,13 +222,15 @@ A warm-on-cold palette: cool teal seas underneath, warm brass and parchment on t
 **Character:** A deliberate three-way contrast, not a similar-fonts pairing. Cinzel's carved caps give the chrome its monumental, chart-engraving feel; Outfit keeps all readable data plain and modern; JetBrains Mono grounds the technical layer. IM Fell English is the room's handwriting — atmospheric marginalia, never operational text.
 
 ### Hierarchy
-- **Display** (Cinzel 900, 40px, tracking 7px): the cove title in the cartouche. One per screen.
-- **Headline** (Cinzel 700, ~19px, tracking 1px): major panel headers and stat-adjacent titles.
-- **Title** (Cinzel 700, 13px, tracking 2px): panel-header titles, tabs, buttons — the tracked engraved caps that label every plate.
-- **Body** (Outfit 500, 11.5–13px, line-height ~1.45): all functional prose — agent questions, empty-state guidance, goals, status. Keep prose columns comfortable; wrap rather than run a wall.
-- **Label** (Outfit 600, 9–10px, tracking 1px, UPPERCASE): micro-labels under stats and on chips.
-- **Numerals** (JetBrains Mono 500, 17–21px): stat readouts and the clock; 11px for log lines, 10–10.5px for ids and meta.
-- **Flavor** (IM Fell English italic, 10.5–11px): taglines, footnotes, weather, legend hints.
+- **Display** (Cinzel 900, `--text-display` clamp(1.625rem…2.5rem), tracking 7px): the cove title in the cartouche. One per screen.
+- **Headline** (Cinzel 700, `--text-stat` 1.25rem/20px, tracking 1px): major panel headers and stat-adjacent titles.
+- **Title** (Cinzel 700, `--text-title` 0.875rem/14px, tracking 2px): panel-header titles; smaller chrome (buttons, tabs, group labels) steps down to `--text-chrome` 0.75rem/12px and `--text-chrome-sm` 0.6875rem/11px.
+- **Body** (Outfit 500, `--text-body` 0.8125rem/13px, line-height ~1.45): all functional prose — agent questions, empty-state guidance, goals, status; secondary prose sits at `--text-sub` 0.75rem/12px. Keep prose columns comfortable; wrap rather than run a wall.
+- **Label** (Outfit 600, `--text-label` 0.625rem/10px, tracking 1px, UPPERCASE): micro-labels under stats and on chips.
+- **Numerals** (JetBrains Mono 500, `--text-stat` 1.25rem/20px and `--text-stat-sm` 1.125rem/18px): stat readouts and the clock; `--text-mono` 0.75rem/12px for log lines, `--text-meta` 0.6875rem/11px for ids and meta.
+- **Flavor** (IM Fell English italic, `--text-flavor` 0.75rem/12px): taglines, footnotes, weather, legend hints.
+
+All steps are rem so browser font-size preferences scale the whole HUD (the old px ramp ignored them and shrank physically on high-DPI monitors). Glyph slots and world-scaled scene art keep px on purpose.
 
 ### Named Rules
 **The Flavor-Font Rule.** Reach for IM Fell English (`--font-flavor`) only when the answer to *"Must the user read this to use the feature?"* is **no**. Taglines, footnotes, and atmosphere get it; agent questions, empty-state guidance, errors, and any copy carrying state or data stay in Outfit. Borderline copy defaults to functional. Never set operational prose in the flavor serif.

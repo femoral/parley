@@ -34,13 +34,13 @@
 .pc-kit__faction-label {
   font-family: var(--font-body);
   font-weight: 600;
-  font-size: 11.5px;
+  font-size: var(--text-sub);
   color: var(--ink-warm);
 }
 .pc-kit__faction-tagline {
   font-family: var(--font-flavor);
   font-style: italic;
-  font-size: 10.5px;
+  font-size: var(--text-flavor);
   color: var(--ink-label);
 }
 .pc-kit__legend-row {
@@ -62,13 +62,13 @@
 .pc-kit__legend-label {
   font-family: var(--font-display);
   font-weight: 700;
-  font-size: 10.5px;
+  font-size: var(--text-chrome-sm);
   letter-spacing: var(--track-micro);
 }
 .pc-kit__legend-hint {
   font-family: var(--font-flavor);
   font-style: italic;
-  font-size: 10.5px;
+  font-size: var(--text-flavor);
   color: var(--ink-label);
 }
 .pc-kit__buttons {

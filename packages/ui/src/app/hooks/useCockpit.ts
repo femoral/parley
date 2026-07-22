@@ -30,6 +30,13 @@ export const COCKPIT_DOCUMENT_TITLE = "Parley Cove — parley cockpit";
  */
 export const CHART_STALE_DEBOUNCE_MS = 4000;
 
+/**
+ * Granularity of the failed-freshness decay clock. Coarse on purpose: the
+ * 5-minute freshness window only needs to expire within ~30s, and quantizing
+ * keeps the roster projection's identity stable across one-second clock ticks.
+ */
+export const FRESHNESS_TICK_MS = 30_000;
+
 /** Tab title with an optional inbox badge: `(N) Parley Cove — parley cockpit`. */
 export function formatCockpitDocumentTitle(awaitingCount: number): string {
   return awaitingCount > 0 ? `(${awaitingCount}) ${COCKPIT_DOCUMENT_TITLE}` : COCKPIT_DOCUMENT_TITLE;
@@ -223,7 +230,7 @@ export function useCockpit(): CockpitView {
   // Observation stamps for the freshness timeout — ref so the map advances
   // during render without an extra effect tick (first paint after a failure
   // is already loud). The one-second `now` clock drives timeout decay.
-  const failedObservedAtRef = useRef<Map<string, number>>(new Map());
+  const failedObservedAtRef = useRef<ReadonlyMap<string, number>>(new Map());
   const tasksRef = useRef(live.tasks);
   tasksRef.current = live.tasks;
 
@@ -287,16 +294,20 @@ export function useCockpit(): CockpitView {
   // Filter groups + cap/pin session chips at derivation time so header counts
   // match filtered contents and a search-selected session stays visible (#76/#88).
   // Health totals stay fleet-wide (unfiltered `live`); the roster list/footer
-  // use the session-scoped projection. Freshness rides the one-second clock so
-  // the 5-minute decay does not need wall-clock inside the panel.
+  // use the session-scoped projection. Freshness is quantized to a 30s tick:
+  // the 5-minute decay doesn't need 1s granularity, and depending on the raw
+  // one-second clock minted fresh groups/sessions identities every tick —
+  // defeating RosterPanel's memo 86 400×/day for a boundary that moves twice
+  // a minute at most.
+  const freshnessNow = now - (now % FRESHNESS_TICK_MS);
   const filteredRoster = useMemo(
     () =>
       projectRoster(live.tasks, selectedSessionId, {
         observedAt: failedObservedAt,
         acknowledged: acknowledgedFailed,
-        now,
+        now: freshnessNow,
       }),
-    [live.tasks, selectedSessionId, failedObservedAt, acknowledgedFailed, now],
+    [live.tasks, selectedSessionId, failedObservedAt, acknowledgedFailed, freshnessNow],
   );
 
   const snapshot: SnapshotView = useMemo(
