@@ -672,27 +672,29 @@
   min-width: 0;
   flex: 1;
 }
-.pc-inspector__kicker {
+/* Panel heading (rendered <h2>) — a peer of the other plates' PlateHeader
+ * titles (FLEET ROSTER, INBOX, SOUNDINGS…): engraved brass caps at the same
+ * --text-title tier, with the task name·id as a quiet subtitle beneath. */
+.pc-inspector__title {
+  margin: 0;
   font-family: var(--font-display);
-  font-weight: 500;
-  font-size: var(--text-label);
-  letter-spacing: 1.5px;
-  color: var(--ink-tan);
-}
-.pc-inspector__name {
-  font-family: var(--font-body);
-  font-weight: 600;
-  font-size: var(--text-body);
-  color: var(--ink-parchment);
+  font-weight: 700;
+  font-size: var(--text-title);
+  letter-spacing: var(--track-caps);
+  color: var(--brass);
+  line-height: 1.15;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.pc-inspector__id {
-  font-family: var(--font-mono);
-  font-size: var(--text-meta);
-  color: var(--ink-faint);
-  overflow-wrap: anywhere;
+.pc-inspector__name-sub {
+  font-family: var(--font-body);
+  font-weight: 500;
+  font-size: var(--text-sub);
+  color: var(--ink-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .pc-inspector__head-aside {
   display: flex;
@@ -1041,6 +1043,120 @@
   line-height: 1.5;
   color: var(--report-text);
   align-self: stretch;
+}
+/* Summary disclosure (mirrors the Brief's GOAL well): the report clamps to a
+ * 3-line excerpt with a character count so the panel never scrolls open; "Read
+ * full report" opens the full dispatch in the brass-framed "Ship's Report"
+ * popover — a plate over the vignetted sea (native Popover API). */
+.pc-report__summary--log {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.pc-report__summary-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.pc-report__summary-label {
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: var(--text-label);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--report-label);
+}
+.pc-report__summary-count {
+  font-family: var(--font-mono);
+  font-size: var(--text-meta);
+  color: var(--report-label);
+}
+.pc-report__excerpt {
+  margin: 0;
+  white-space: pre-wrap;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  overflow: hidden;
+}
+.pc-report__orders-open {
+  align-self: flex-start;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--text-chrome-sm);
+  letter-spacing: var(--track-micro);
+  text-transform: uppercase;
+  color: var(--brass-soft);
+  background: var(--btn-secondary-bg);
+  border: 1px solid var(--btn-secondary-border);
+  border-radius: var(--radius-control);
+  padding: 5px 10px;
+  cursor: pointer;
+}
+.pc-report__orders-open:hover {
+  background: var(--btn-secondary-bg-hover);
+  border-color: var(--brass);
+}
+.pc-report__orders {
+  width: min(560px, calc(100vw - 48px));
+  max-height: min(74vh, 640px);
+  padding: 0;
+  border: 1px solid var(--brass-border);
+  border-radius: var(--radius-panel);
+  background: var(--plate-fill);
+  box-shadow: var(--plate-shadow-premium);
+  color: var(--ink-parchment);
+}
+.pc-report__orders:popover-open {
+  display: flex;
+  flex-direction: column;
+}
+.pc-report__orders::backdrop {
+  background: var(--sea-vignette);
+}
+.pc-report__orders-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 11px 15px 8px;
+  border-bottom: 1px solid var(--line-faint);
+}
+.pc-report__orders-title {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--text-title);
+  letter-spacing: var(--track-caps);
+  text-transform: uppercase;
+  color: var(--brass);
+}
+.pc-report__orders-close {
+  font-family: var(--font-body);
+  font-size: var(--text-body);
+  color: var(--ink-faint);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-control);
+  padding: 2px 8px;
+  cursor: pointer;
+}
+.pc-report__orders-close:hover {
+  color: var(--brass);
+}
+.pc-report__orders-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding: 12px 14px;
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: var(--text-body);
+  font-weight: 500;
+  line-height: 1.5;
+  color: var(--ink-warm);
+  white-space: pre-wrap;
 }
 .pc-report__files {
   display: flex;

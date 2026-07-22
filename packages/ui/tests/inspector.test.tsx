@@ -66,12 +66,13 @@ describe("Inspector renders a quiet placeholder with no selection (#68)", () => 
 });
 
 describe("Inspector header (#68)", () => {
-  it("shows the ship's log kicker, task name, id, and state badge", () => {
+  it("shows the LOGBOOK title, task name, id, and state badge", () => {
     const { container } = render(<Inspector task={task()} />);
-    expect(screen.getByText("SHIP'S LOG")).toBeTruthy();
-    expect(screen.getByText("chart-the-bay")).toBeTruthy();
-    // Id appears on the header and again on the attempt lineage (#166).
-    expect(container.querySelector(".pc-inspector__id")?.textContent).toBe("t1abcdef");
+    expect(screen.getByText("LOGBOOK")).toBeTruthy();
+    // Name and id share the header's subtitle line beneath the brass title.
+    const sub = container.querySelector(".pc-inspector__name-sub");
+    expect(sub?.textContent).toContain("chart-the-bay");
+    expect(sub?.textContent).toContain("t1abcdef");
     expect(screen.getAllByText("RUNNING").length).toBeGreaterThanOrEqual(1);
   });
 
@@ -247,7 +248,8 @@ describe("Inspector's four tabs render per the manifest's inspector treatment (#
     );
     openTab("REPORT");
     expect(screen.getByText("SUCCESS")).toBeTruthy();
-    expect(screen.getByText("Charted the bay end to end.")).toBeTruthy();
+    // Summary renders twice: the clamped excerpt and the "Ship's Report" popover body.
+    expect(screen.getAllByText("Charted the bay end to end.").length).toBeGreaterThanOrEqual(1);
     // Neutral path listing — no "+" add/delete claim the data doesn't carry.
     expect(screen.getByText("src/chart.ts")).toBeTruthy();
     expect(screen.queryByText(/^\+\s/)).toBeNull();

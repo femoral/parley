@@ -24,6 +24,11 @@ const OUTCOME_COLOR: Record<ReportView["outcome"], string> = {
  * panels only from data parley exposes today"). Paths render with a neutral
  * diamond mark — never `+`/`−`, which would imply add/delete semantics the
  * contract does not carry.
+ *
+ * The summary mirrors the Brief's GOAL well: long reports clamp to a 3-line
+ * excerpt with a character count so the panel never scrolls open, and "Read
+ * full report" opens the whole dispatch in the brass-framed "Ship's Report"
+ * popover over the vignetted sea (native Popover API).
  */
 export function ReportPanel({
   report,
@@ -35,7 +40,31 @@ export function ReportPanel({
   return (
     <div className="pc-report">
       <Badge label={report.outcome.toUpperCase()} color={OUTCOME_COLOR[report.outcome]} />
-      <p className="pc-report__summary">{report.summary}</p>
+      <div className="pc-report__summary pc-report__summary--log">
+        <span className="pc-report__summary-head">
+          <span className="pc-report__summary-label">Summary</span>
+          <span className="pc-report__summary-count">{report.summary.length} ch</span>
+        </span>
+        <p className="pc-report__excerpt">{report.summary}</p>
+        <button type="button" className="pc-report__orders-open" popoverTarget="pc-report-orders">
+          Read full report
+        </button>
+        <div id="pc-report-orders" popover="auto" className="pc-report__orders">
+          <div className="pc-report__orders-head">
+            <span className="pc-report__orders-title">Ship&rsquo;s Report</span>
+            <button
+              type="button"
+              className="pc-report__orders-close"
+              popoverTarget="pc-report-orders"
+              popoverTargetAction="hide"
+              aria-label="Close full report"
+            >
+              ✕
+            </button>
+          </div>
+          <p className="pc-report__orders-body">{report.summary}</p>
+        </div>
+      </div>
       {report.files.length > 0 && (
         <div className="pc-report__files">
           <span className="pc-report__files-label">FILES CHANGED</span>

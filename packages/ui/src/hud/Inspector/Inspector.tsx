@@ -25,16 +25,16 @@ export interface InspectorProps {
 
 /**
  * Layer 2 — the active task inspector (design-manifest §4.17, #68). Premium
- * plate; header (faction emblem, "SHIP'S LOG" kicker, name + mono id,
- * state badge, eval score badge when present); a four-tab bar (Brief | Logs |
- * Report | Q&A) with local tab-selection state (ephemeral UI state owned
- * here, same as `InboxCard`'s draft text — not a fetch, contract 2 is about
- * data, not interaction state); a scrollable body per tab. Plain props
- * throughout — the hooks layer (`useTaskDetail`, `useLogTail`,
- * `projectInspector`) does every fetch and projection. Memoized like
- * `RosterPanel`/`InboxPanel` — the cockpit shell re-renders every second for
- * its clock, and `task` is identity-stable between real data changes (the
- * hooks layer memoizes the projection).
+ * plate; header (faction emblem, engraved LOGBOOK title + name·id subtitle —
+ * a peer of the other plates' PlateHeader titles; state badge, eval score
+ * badge when present); a four-tab bar (Brief | Logs | Report | Q&A) with local
+ * tab-selection state (ephemeral UI state owned here, same as `InboxCard`'s
+ * draft text — not a fetch, contract 2 is about data, not interaction state);
+ * a scrollable body per tab. Plain props throughout — the hooks layer
+ * (`useTaskDetail`, `useLogTail`, `projectInspector`) does every fetch and
+ * projection. Memoized like `RosterPanel`/`InboxPanel` — the cockpit shell
+ * re-renders every second for its clock, and `task` is identity-stable between
+ * real data changes (the hooks layer memoizes the projection).
  */
 export const Inspector = memo(function Inspector({ task }: InspectorProps) {
   const [active, setActive] = useState<TabKey>("brief");
@@ -80,7 +80,7 @@ export const Inspector = memo(function Inspector({ task }: InspectorProps) {
           <span aria-hidden="true">
             <Mark mark={MARK_ANCHOR} size={13} />
           </span>{" "}
-          Select a soul from the roster to open the ship's log.
+          Select a soul from the roster to open the logbook.
         </p>
       </Plate>
     );
@@ -93,9 +93,10 @@ export const Inspector = memo(function Inspector({ task }: InspectorProps) {
       <div className="pc-inspector__head">
         <Emblem coat={task.coat} mark={task.emblem} size={28} label={task.faction} />
         <div className="pc-inspector__head-titles">
-          <span className="pc-inspector__kicker">SHIP'S LOG</span>
-          <span className="pc-inspector__name">{task.name}</span>
-          <span className="pc-inspector__id">{task.id}</span>
+          <h2 className="pc-inspector__title">LOGBOOK</h2>
+          <span className="pc-inspector__name-sub">
+            {task.name} · {task.id}
+          </span>
         </div>
         <div className="pc-inspector__head-aside">
           {task.evalScore !== null && (
