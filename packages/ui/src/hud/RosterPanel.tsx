@@ -288,7 +288,7 @@ function SessionSearch({
         Find
       </button>
       {open && (
-        <div className="pc-roster__search-pop" role="search">
+        <div className="pc-roster__search-pop" role="search" aria-label="Session search">
           <label className="pc-roster__search-label" htmlFor={listId + "-input"}>
             Session id
           </label>

@@ -47,7 +47,7 @@ export function BriefTab({ brief, error = null, attempts = [] }: BriefTabProps) 
         <span className="pc-brief__value">{elapsed || "—"}</span>
       </div>
       <div className="pc-brief__well">
-        <span className="pc-brief__well-label" aria-hidden="true">
+        <span className="pc-brief__well-label">
           <Mark mark={MARK_SCROLL} size={10} /> GOAL
         </span>
         <p className="pc-brief__goal">

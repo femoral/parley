@@ -94,6 +94,7 @@
    the chart-key popover can open upward without being clipped here. */
 .pc-settings-row {
   display: flex;
+  flex-wrap: wrap;
   justify-content: flex-end;
   align-items: center;
   gap: 8px;
@@ -138,11 +139,13 @@
 /* Centre column pieces */
 .pc-center__head {
   display: flex;
+  flex-wrap: wrap;
   gap: var(--gutter);
   align-items: stretch;
 }
 .pc-center__head > :first-child {
   flex: 1;
+  min-width: 0;
 }
 /* The scene mounts here (#69/#75): a positioned, clipped viewport the living
    view fills absolutely. No plate chrome — the sea is the room's backdrop. */

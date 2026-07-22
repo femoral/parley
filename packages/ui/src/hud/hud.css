@@ -250,7 +250,7 @@
 }
 .pc-roster__search-input:focus {
   border-color: var(--brass-mid);
-  box-shadow: 0 0 0 1px var(--brass-tint-12);
+  box-shadow: 0 0 0 1px var(--brass-tint-25);
 }
 .pc-roster__search-results {
   display: flex;
@@ -411,6 +411,7 @@
   font-family: var(--font-mono);
   font-size: var(--text-meta);
   color: var(--ink-faint);
+  overflow-wrap: anywhere;
 }
 .pc-roster__empty {
   padding: 20px 14px;
@@ -543,6 +544,7 @@
   font-size: var(--text-meta);
   /* ink-muted (not faint): ≥4.5:1 on both stops of --attn-awaiting-fill. */
   color: var(--ink-muted);
+  overflow-wrap: anywhere;
 }
 .pc-inbox-card__question {
   display: flex;
@@ -690,6 +692,7 @@
   font-family: var(--font-mono);
   font-size: var(--text-meta);
   color: var(--ink-faint);
+  overflow-wrap: anywhere;
 }
 .pc-inspector__head-aside {
   display: flex;
@@ -1081,6 +1084,7 @@
  */
 .pc-settings {
   display: flex;
+  flex-wrap: wrap;
   justify-content: flex-end;
   gap: 8px;
   flex: 0 0 auto;
