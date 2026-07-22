@@ -37,9 +37,7 @@ const SHIPS = {
 } as const;
 
 const FX = {
-  foamAlpha: 0.14,
   blockBlur: 2,
-  foamBlur: 1.5,
 } as const;
 
 const ORBIT = { gapPx: 60, squish: 0.4, speed: 0.22 } as const;
@@ -90,7 +88,6 @@ interface SeaTokens {
   mid: string;
   deep: string;
   abyss: string;
-  foam: string;
   vignette: string;
   /** Room sea radial: centre + half-axes as fractions of the cockpit box. */
   gradCx: number;
@@ -142,7 +139,6 @@ function readSeaTokens(scene: HTMLElement): SeaTokens {
     mid: cssToken(scene, "--sea-mid"),
     deep: cssToken(scene, "--sea-deep"),
     abyss: cssToken(scene, "--sea-abyss"),
-    foam: cssToken(scene, "--sea-foam"),
     vignette: cssToken(scene, "--sea-vignette"),
     gradCx: cssNumber(scene, "--sea-grad-cx", 0.5),
     gradCy: cssNumber(scene, "--sea-grad-cy", -0.06),
@@ -469,8 +465,6 @@ function paintShipEffects(
   width: number,
   height: number,
   dpr: number,
-  t: number,
-  foam: string,
   sceneRect: DOMRect,
   islandCache: IslandSpriteCache,
 ): void {
@@ -521,20 +515,6 @@ function paintShipEffects(
       }
     }
 
-    ctx.save();
-    ctx.filter = `blur(${FX.foamBlur}px)`;
-    ctx.strokeStyle = foam;
-    ctx.lineWidth = 2.5;
-    ctx.lineCap = "round";
-    for (let x = left; x < right - 12; x += 12) {
-      const u = (x - left) / (right - left);
-      ctx.globalAlpha = FX.foamAlpha * effectAlpha * Math.pow(Math.sin(Math.PI * u), 0.7);
-      ctx.beginPath();
-      ctx.moveTo(x, topY + Math.sin(x * 0.08 + t * 3) * 1.6);
-      ctx.lineTo(x + 12, topY + Math.sin((x + 12) * 0.08 + t * 3) * 1.6);
-      ctx.stroke();
-    }
-    ctx.restore();
   }
 
   // Far orbit leg: the ship's hull waterline moves above the island waterline,
@@ -939,8 +919,8 @@ export function SailingScene() {
         setAmbientSmoothing(loopMode === "ambient");
         // Ambient frames only move the resting swell. The existing effect
         // pixels remain aligned closely enough at this deliberately slow
-        // cadence; repaint blur-heavy foam only after a real invalidation or
-        // while choreography is active.
+        // cadence; repaint the blur-heavy hull band only after a real
+        // invalidation or while choreography is active.
         if (overlayCtx && backdropCtx && (fxDirty || loopMode === "active")) {
           paintShipEffects(
             backdrop,
@@ -949,8 +929,6 @@ export function SailingScene() {
             width,
             height,
             dpr,
-            simTime,
-            tokens.foam,
             sceneRect,
             islandCache,
           );
