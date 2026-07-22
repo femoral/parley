@@ -108,17 +108,19 @@ function baseView(overrides: Partial<CockpitView> = {}): CockpitView {
 }
 
 describe("Cockpit view nav framed by Plate (#126)", () => {
-  it("wraps the Cove/Soundings toggle in a standard Plate", () => {
+  it("engraves the Cove/Soundings toggle onto the cartouche plate", () => {
     cockpitState.view = baseView();
     const { container } = render(<Cockpit />);
     const nav = screen.getByRole("navigation", { name: "Cockpit views" });
     expect(nav.classList.contains("pc-view-nav")).toBe(true);
-    const plate = nav.closest(".pc-plate");
-    expect(plate).toBeTruthy();
-    // Standard variant — no premium/ember/cartouche/report modifier.
-    expect(plate?.className).toBe("pc-plate");
-    // Sits in the centre head with Cartouche + DayChip plates.
-    expect(container.querySelector(".pc-center__head")?.contains(plate)).toBe(true);
+    expect(nav.classList.contains("pc-view-nav--cartouche")).toBe(true);
+    // No standalone plate of its own — it overlays the cartouche's plate via
+    // the title stack (the nav is positioned on the title plate's bottom edge).
+    const stack = nav.closest(".pc-center__title-stack");
+    expect(stack).toBeTruthy();
+    expect(stack?.querySelector(".pc-plate--cartouche")).toBeTruthy();
+    // Sits in the centre head with the Cartouche + DayChip.
+    expect(container.querySelector(".pc-center__head")?.contains(nav)).toBe(true);
   });
 
   it("keeps active state and click handling on the tabs", () => {

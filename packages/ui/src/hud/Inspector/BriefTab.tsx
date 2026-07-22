@@ -47,12 +47,39 @@ export function BriefTab({ brief, error = null, attempts = [] }: BriefTabProps) 
         <span className="pc-brief__value">{elapsed || "—"}</span>
       </div>
       <div className="pc-brief__well">
-        <span className="pc-brief__well-label">
-          <Mark mark={MARK_SCROLL} size={10} /> GOAL
+        <span className="pc-brief__well-head">
+          <span className="pc-brief__well-label">
+            <Mark mark={MARK_SCROLL} size={10} /> GOAL
+          </span>
+          {brief.goal !== null && brief.goal !== undefined && (
+            <span className="pc-brief__goal-count">{brief.goal.length} ch</span>
+          )}
         </span>
-        <p className="pc-brief__goal">
+        <p className="pc-brief__goal pc-brief__goal--excerpt">
           {brief.goal ?? "No brief filed — the orders never reached this ship."}
         </p>
+        <button type="button" className="pc-brief__orders-open" popoverTarget="pc-brief-orders">
+          Read full orders
+        </button>
+        <div id="pc-brief-orders" popover="auto" className="pc-brief__orders">
+          <div className="pc-brief__orders-head">
+            <span className="pc-brief__orders-title">
+              <Mark mark={MARK_SCROLL} size={12} /> Standing Orders
+            </span>
+            <button
+              type="button"
+              className="pc-brief__orders-close"
+              popoverTarget="pc-brief-orders"
+              popoverTargetAction="hide"
+              aria-label="Close full orders"
+            >
+              ✕
+            </button>
+          </div>
+          <p className="pc-brief__orders-body">
+            {brief.goal ?? "No brief filed — the orders never reached this ship."}
+          </p>
+        </div>
       </div>
       {(brief.sandbox !== null || brief.network !== null) && (
         <ul className="pc-brief__constraints">

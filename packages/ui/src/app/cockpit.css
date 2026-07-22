@@ -147,6 +147,16 @@
   flex: 1;
   min-width: 0;
 }
+/* Title stack: the view nav is engraved onto the cartouche plate itself
+   (bottom-right) instead of floating in its own plate between the cartouche
+   and the day chip. */
+.pc-center__title-stack {
+  position: relative;
+  display: flex;
+}
+.pc-center__title-stack > * {
+  flex: 1;
+}
 /* The scene mounts here (#69/#75): a positioned, clipped viewport the living
    view fills absolutely. No plate chrome — the sea is the room's backdrop. */
 .pc-scene {

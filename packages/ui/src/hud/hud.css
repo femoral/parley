@@ -825,6 +825,105 @@
   line-height: 1.45;
   color: var(--ink-warm);
 }
+/* GOAL well disclosure: long prompts clamp to a 3-line excerpt so the brief
+ * never scrolls; the full text opens in the "Standing Orders" popover — a
+ * brass-framed plate over the vignetted sea (native Popover API). */
+.pc-brief__well-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.pc-brief__goal-count {
+  font-family: var(--font-mono);
+  font-size: var(--text-meta);
+  color: var(--ink-meta);
+}
+.pc-brief__goal--excerpt {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  overflow: hidden;
+  white-space: pre-wrap;
+}
+.pc-brief__orders-open {
+  align-self: flex-start;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--text-chrome-sm);
+  letter-spacing: var(--track-micro);
+  text-transform: uppercase;
+  color: var(--brass-soft);
+  background: var(--btn-secondary-bg);
+  border: 1px solid var(--btn-secondary-border);
+  border-radius: var(--radius-control);
+  padding: 5px 10px;
+  cursor: pointer;
+}
+.pc-brief__orders-open:hover {
+  background: var(--btn-secondary-bg-hover);
+  border-color: var(--brass);
+}
+.pc-brief__orders {
+  width: min(560px, calc(100vw - 48px));
+  max-height: min(74vh, 640px);
+  padding: 0;
+  border: 1px solid var(--brass-border);
+  border-radius: var(--radius-panel);
+  background: var(--plate-fill);
+  box-shadow: var(--plate-shadow-premium);
+  color: var(--ink-parchment);
+}
+.pc-brief__orders:popover-open {
+  display: flex;
+  flex-direction: column;
+}
+.pc-brief__orders::backdrop {
+  background: var(--sea-vignette);
+}
+.pc-brief__orders-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 11px 15px 8px;
+  border-bottom: 1px solid var(--line-faint);
+}
+.pc-brief__orders-title {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--text-title);
+  letter-spacing: var(--track-caps);
+  text-transform: uppercase;
+  color: var(--brass);
+}
+.pc-brief__orders-close {
+  font-family: var(--font-body);
+  font-size: var(--text-body);
+  color: var(--ink-faint);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-control);
+  padding: 2px 8px;
+  cursor: pointer;
+}
+.pc-brief__orders-close:hover {
+  color: var(--brass);
+}
+.pc-brief__orders-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding: 12px 14px;
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: var(--text-body);
+  font-weight: 500;
+  line-height: 1.5;
+  color: var(--ink-warm);
+  white-space: pre-wrap;
+}
 .pc-brief__constraints {
   margin: 0;
   padding: 0;
@@ -2199,4 +2298,21 @@
 .pc-view-nav__tab:focus-visible {
   outline: 2px solid var(--brass-bright);
   outline-offset: 2px;
+}
+/* Engraved-on-cartouche placement: the nav sits at the title plate's
+   bottom-right edge, tabs one step smaller so the nameplate stays loudest. */
+.pc-view-nav--cartouche {
+  position: absolute;
+  bottom: 7px;
+  right: 44px;
+  height: auto;
+  padding: 0;
+  gap: 2px;
+}
+.pc-view-nav--cartouche .pc-view-nav__tab {
+  font-size: var(--text-chrome-sm);
+  padding: 4px 10px;
+}
+.pc-view-nav--cartouche .pc-view-nav__tab--active {
+  background: var(--brass-tint-08);
 }

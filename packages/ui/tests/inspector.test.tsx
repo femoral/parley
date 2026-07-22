@@ -113,7 +113,9 @@ describe("Inspector's four tabs render per the manifest's inspector treatment (#
   it("opens on the Brief tab by default, showing goal/branch/model/usage", () => {
     render(<Inspector task={task()} />);
     expect(screen.getByRole("tab", { name: "BRIEF" }).getAttribute("aria-selected")).toBe("true");
-    expect(screen.getByText("Survey the northern shoal and report depth.")).toBeTruthy();
+    // The goal renders twice: the clamped excerpt in the well plus the full
+    // text inside the "Standing Orders" popover.
+    expect(screen.getAllByText("Survey the northern shoal and report depth.")).toHaveLength(2);
     expect(screen.getByText("feat/bay")).toBeTruthy();
     expect(screen.getByText(/codex-5/)).toBeTruthy();
     expect(screen.getByText(/3m 41s/)).toBeTruthy();
