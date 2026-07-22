@@ -134,6 +134,63 @@ describe("the sailing simulation ambient scheduler", () => {
     expect(galleon.dataset.ambientSwell).toBeUndefined();
   });
 
+  it("ignores ship swell transitions as camera travel; only .pc-world wakes the loop", async () => {
+    vi.useFakeTimers();
+    vi.spyOn(window, "matchMedia").mockReturnValue({
+      matches: false,
+      media: "(prefers-reduced-motion: reduce)",
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    });
+    let frameCount = 0;
+    vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+      const id = window.setTimeout(() => {
+        frameCount += 1;
+        callback(performance.now());
+      }, 0);
+      return id;
+    });
+    vi.spyOn(window, "cancelAnimationFrame").mockImplementation((id) => {
+      window.clearTimeout(id);
+    });
+
+    render(
+      <Scene
+        sessions={[{ id: "ambient", label: "ambient", tasks: [], attention: null }]}
+        activeSessionId="ambient"
+        onSelectTask={() => undefined}
+        onSelectSession={() => undefined}
+      />,
+    );
+    await act(async () => vi.advanceTimersByTimeAsync(450));
+    const galleon = document.querySelector<HTMLElement>(".pc-galleon")!;
+    expect(galleon.dataset.ambientSwell).toBe("true");
+
+    // The swell glide restarts a transform transition on every settled pose
+    // write. Bubbling into the camera-travel listener must not wake the loop —
+    // that feedback held the scene at full rate forever (#199 regression).
+    const settledFrames = frameCount;
+    act(() => {
+      galleon.dispatchEvent(new Event("transitionrun", { bubbles: true }));
+    });
+    await act(async () => vi.advanceTimersByTimeAsync(4_999));
+    expect(frameCount - settledFrames).toBeLessThanOrEqual(3);
+    expect(galleon.dataset.ambientSwell).toBe("true");
+
+    // The camera's own travel still registers and wakes the loop.
+    const world = document.querySelector<HTMLElement>(".pc-world")!;
+    const beforeCamera = frameCount;
+    act(() => {
+      world.dispatchEvent(new Event("transitionrun", { bubbles: true }));
+    });
+    await act(async () => vi.advanceTimersByTimeAsync(200));
+    expect(frameCount).toBeGreaterThan(beforeCamera + 3);
+  });
+
   it("stops the real scheduling chain while hidden and wakes on visibility", async () => {
     vi.useFakeTimers();
     vi.spyOn(window, "matchMedia").mockReturnValue({

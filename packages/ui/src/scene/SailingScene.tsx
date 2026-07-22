@@ -685,6 +685,12 @@ export function SailingScene() {
     const cameraTransition = (event: Event) => {
       const transition = event as TransitionEvent;
       if (transition.propertyName && transition.propertyName !== "transform") return;
+      // Only the camera's own travel counts. Other transform transitions
+      // bubble past here too — notably the ambient swell glide restarting on
+      // every settled pose write — and treating those as camera travel locks
+      // the loop into a full-rate invalidate/repaint cycle at rest (#199).
+      const target = event.target as HTMLElement | null;
+      if (!target?.classList?.contains("pc-world")) return;
       cameraTravelActive = event.type === "transitionrun" || event.type === "transitionstart";
       invalidateGeometry();
     };
