@@ -377,8 +377,13 @@ export function useCockpit(): CockpitView {
 
   // Soundings (#119 / #165): session scope follows the roster chip; filters
   // compose AND with group_by; refreshKey advances on SSE task transitions.
+  // Gate the O(n) id:state join to Soundings only — useMetrics is disabled in
+  // Cove and its docs call for a stable empty string when the view is unmounted.
   const metricsSession = selectedSessionId ?? "all";
-  const refreshKey = useMemo(() => metricsRefreshKey(live.tasks), [live.tasks]);
+  const refreshKey = useMemo(
+    () => (mode === "soundings" ? metricsRefreshKey(live.tasks) : ""),
+    [live.tasks, mode],
+  );
   const metrics = useMetrics(client, {
     session: metricsSession,
     groupBy,

@@ -1,5 +1,10 @@
+/** @vitest-environment happy-dom */
 import { describe, expect, it, vi } from "vitest";
-import { GeometryCache, SceneLoopGate } from "../src/scene/scene-performance.js";
+import {
+  GeometryCache,
+  islandRiseOpacity,
+  SceneLoopGate,
+} from "../src/scene/scene-performance.js";
 
 describe("SailingScene frame loop gate (#188)", () => {
   it("sleeps for settled reduced-motion scenes and wakes for every trigger class", () => {
@@ -72,5 +77,94 @@ describe("SailingScene geometry cache (#188)", () => {
     for (let frame = 0; frame < 300; frame += 1) cache.rect(element);
     expect(cache.reads).toBe(1);
     expect(element.getBoundingClientRect).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("islandRiseOpacity (backdrop paint, no per-frame style flush)", () => {
+  it("returns 1 with no rise wrapper", () => {
+    expect(islandRiseOpacity(null)).toBe(1);
+  });
+
+  it("returns 0 for settled cancelled without reading computed style", () => {
+    const getComputedStyle = vi.spyOn(window, "getComputedStyle");
+    const island = document.createElement("div");
+    island.className = "pc-island";
+    island.setAttribute("data-death", "settled");
+    const rise = document.createElement("div");
+    rise.className = "pc-island__rise";
+    island.appendChild(rise);
+    document.body.appendChild(island);
+
+    expect(islandRiseOpacity(rise)).toBe(0);
+    expect(getComputedStyle).not.toHaveBeenCalled();
+
+    island.remove();
+    getComputedStyle.mockRestore();
+  });
+
+  it("returns 1 for idle risen islands without reading computed style", () => {
+    const getComputedStyle = vi.spyOn(window, "getComputedStyle");
+    const island = document.createElement("div");
+    island.className = "pc-island";
+    island.setAttribute("data-state", "running");
+    const rise = document.createElement("div");
+    rise.className = "pc-island__rise";
+    // Finished rise fill — present in getAnimations but not running.
+    rise.getAnimations = () =>
+      [
+        { playState: "finished", animationName: "pc-island-rise" },
+      ] as unknown as Animation[];
+    island.appendChild(rise);
+    document.body.appendChild(island);
+
+    expect(islandRiseOpacity(rise)).toBe(1);
+    expect(getComputedStyle).not.toHaveBeenCalled();
+
+    island.remove();
+    getComputedStyle.mockRestore();
+  });
+
+  it("returns 0 for a finished sink before data-death flips to settled", () => {
+    const getComputedStyle = vi.spyOn(window, "getComputedStyle");
+    const island = document.createElement("div");
+    island.className = "pc-island";
+    island.setAttribute("data-state", "cancelled");
+    island.setAttribute("data-death", "live");
+    const rise = document.createElement("div");
+    rise.className = "pc-island__rise";
+    rise.getAnimations = () =>
+      [
+        { playState: "finished", animationName: "pc-island-sink" },
+      ] as unknown as Animation[];
+    island.appendChild(rise);
+    document.body.appendChild(island);
+
+    // Matches CSS fill forwards at sink end (opacity 0) without a style flush.
+    expect(islandRiseOpacity(rise)).toBe(0);
+    expect(getComputedStyle).not.toHaveBeenCalled();
+
+    island.remove();
+    getComputedStyle.mockRestore();
+  });
+
+  it("samples computed style only while a rise/sink animation is running", () => {
+    const getComputedStyle = vi
+      .spyOn(window, "getComputedStyle")
+      .mockReturnValue({ opacity: "0.42" } as CSSStyleDeclaration);
+    const island = document.createElement("div");
+    island.className = "pc-island";
+    const rise = document.createElement("div");
+    rise.className = "pc-island__rise";
+    rise.getAnimations = () =>
+      [{ playState: "running", animationName: "pc-island-rise" }] as unknown as Animation[];
+    island.appendChild(rise);
+    document.body.appendChild(island);
+
+    expect(islandRiseOpacity(rise)).toBe(0.42);
+    expect(getComputedStyle).toHaveBeenCalledTimes(1);
+    expect(getComputedStyle).toHaveBeenCalledWith(rise);
+
+    island.remove();
+    getComputedStyle.mockRestore();
   });
 });

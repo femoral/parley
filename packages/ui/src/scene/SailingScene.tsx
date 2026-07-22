@@ -6,7 +6,7 @@ import {
   ORBIT_DRAFT_LIFT_FACTOR,
   readIslandCentres,
 } from "./region-zoom.js";
-import { GeometryCache, SceneLoopGate } from "./scene-performance.js";
+import { GeometryCache, islandRiseOpacity, SceneLoopGate } from "./scene-performance.js";
 
 /**
  * User-approved ship-lab calibration. These are deliberately literals rather
@@ -307,7 +307,9 @@ function paintBackdrop(
     if (!image.complete || image.naturalWidth === 0) continue;
     const rect = geometry.rect(image);
     const rise = image.closest(".pc-island__rise");
-    const opacity = rise ? Number.parseFloat(getComputedStyle(rise).opacity || "1") : 1;
+    // Flush-free for settled/idle islands; samples computed style only while
+    // this rise/sink animation is actively running (see islandRiseOpacity).
+    const opacity = islandRiseOpacity(rise);
     if (opacity <= 0 || rect.width <= 0 || rect.height <= 0) continue;
     ctx.globalAlpha = Number.isFinite(opacity) ? opacity : 1;
     drawIslandSprite(ctx, image, rect, sceneRect, dpr, islandCache);
