@@ -3628,3 +3628,209 @@ button.pc-roster__meta--copy:focus-visible {
   flex: 0 1 9em;
   min-width: 0;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ * Resting LOGBOOK fleet digest (empty selection)
+ * Appended only — quiet tallies / last reports / freshest failure so the
+ * empty plate earns its acreage without becoming a second dashboard.
+ * Degrades: digest scrolls; keyboard hints stay pinned below.
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
+.pc-inspector--empty {
+  align-items: stretch;
+  justify-content: flex-start;
+  gap: 0;
+  min-height: 12rem;
+  /* Absorb remaining right-rail height so the digest can breathe. */
+  flex: 1 1 380px;
+}
+.pc-inspector--empty > .pc-plate-header {
+  flex: 0 0 auto;
+  padding: 12px 15px 8px;
+}
+.pc-inspector__rest {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 10px 14px 14px;
+  overflow: hidden;
+}
+/* Hint-centric empty fleet: centre the select prompt + keys. */
+.pc-inspector--empty:not(.pc-inspector--digest) .pc-inspector__rest {
+  align-items: center;
+  justify-content: center;
+}
+.pc-inspector--empty:not(.pc-inspector--digest) .pc-inspector__placeholder {
+  flex: 0 0 auto;
+}
+.pc-inspector--empty:not(.pc-inspector--digest) .pc-inspector__rest-keys {
+  flex: 0 0 auto;
+}
+
+/* Digest path: scroll the digest groups; pin shortcuts under them. */
+.pc-inspector__digest {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding-right: 2px;
+  /* Prefer hiding the digest body before the keyboard hints on short plates. */
+  max-height: 100%;
+}
+.pc-inspector--digest .pc-inspector__rest-keys {
+  flex: 0 0 auto;
+  align-self: stretch;
+  min-width: 0;
+  padding-top: 4px;
+  border-top: 1px solid color-mix(in srgb, var(--line-faint) 70%, transparent);
+}
+
+.pc-inspector__digest-flavor {
+  margin: 0;
+  font-family: var(--font-flavor);
+  font-size: var(--text-flavor);
+  font-weight: 400;
+  font-style: italic;
+  line-height: 1.4;
+  color: var(--ink-label);
+  text-align: left;
+}
+
+.pc-inspector__digest-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+}
+.pc-inspector__digest-label {
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: var(--text-label);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-label);
+  line-height: 1.3;
+}
+
+.pc-inspector__digest-tallies {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 14px 18px;
+}
+.pc-inspector__digest-tally {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-width: 3.25rem;
+}
+.pc-inspector__digest-tally-glyph {
+  display: inline-flex;
+  color: var(--digest-tally-color, var(--ink-label));
+  line-height: 1;
+}
+.pc-inspector__digest-tally-value {
+  font-family: var(--font-mono);
+  font-size: var(--text-stat, 1.25rem);
+  font-weight: 500;
+  line-height: 1;
+  color: var(--digest-tally-color, var(--brass-soft));
+}
+.pc-inspector__digest-tally-label {
+  font-family: var(--font-body);
+  font-size: var(--text-label);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-label);
+  line-height: 1.3;
+}
+
+.pc-inspector__digest-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.pc-inspector__digest-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 1.75rem;
+  padding: 4px 6px;
+  border-radius: var(--radius-well);
+  background: color-mix(in srgb, var(--plate-bottom) 55%, transparent);
+}
+.pc-inspector__digest-row-body {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.pc-inspector__digest-row-name {
+  font-family: var(--font-body);
+  font-size: var(--text-sub);
+  font-weight: 500;
+  line-height: 1.3;
+  color: var(--ink-soft, var(--ink-muted));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pc-inspector__digest-row-age {
+  flex: 0 0 auto;
+  font-family: var(--font-mono);
+  font-size: var(--text-meta);
+  font-weight: 500;
+  line-height: 1.3;
+  color: var(--ink-label);
+}
+.pc-inspector__digest-row-state {
+  flex: 0 0 auto;
+  display: inline-flex;
+  line-height: 1;
+  /* Colour set inline from state token; glyph dual-codes status. */
+}
+.pc-inspector__digest-row--failed {
+  background: color-mix(in srgb, var(--state-failed) 8%, var(--plate-bottom));
+  box-shadow: inset 2px 0 0 0 color-mix(in srgb, var(--state-failed) 55%, transparent);
+}
+.pc-inspector__digest-row--failed .pc-inspector__digest-row-name {
+  color: var(--ink-muted);
+}
+.pc-inspector__digest-row--failed .pc-inspector__digest-row-age {
+  color: color-mix(in srgb, var(--state-failed) 70%, var(--ink-label));
+}
+
+/* Short plates: collapse digest before the pinned keyboard hints. */
+@media (max-height: 720px) {
+  .pc-inspector--digest .pc-inspector__digest {
+    flex: 1 1 0;
+    min-height: 0;
+  }
+  .pc-inspector__digest-flavor {
+    display: none;
+  }
+}
+@media (max-height: 560px) {
+  .pc-inspector--digest .pc-inspector__digest {
+    display: none;
+  }
+  .pc-inspector--digest .pc-inspector__rest {
+    justify-content: center;
+    align-items: center;
+  }
+  .pc-inspector--digest .pc-inspector__rest-keys {
+    border-top: none;
+    padding-top: 0;
+  }
+}

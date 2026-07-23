@@ -1,8 +1,13 @@
 /** @vitest-environment happy-dom */
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { Inspector } from "../src/hud/index.js";
-import type { InspectorTask } from "../src/hud/index.js";
+import { Inspector, projectLogbookDigest } from "../src/hud/index.js";
+import type {
+  InspectorTask,
+  LogbookDigest,
+  RosterGroup,
+  RosterTask,
+} from "../src/hud/index.js";
 
 afterEach(cleanup);
 
@@ -86,6 +91,69 @@ function firePopoverToggle(el: HTMLElement, newState: "open" | "closed"): void {
   el.dispatchEvent(event);
 }
 
+const EMBLEM = {
+  kind: "svg" as const,
+  viewBox: "0 0 24 24",
+  path: "M12 2 L20 7 V17 L12 22 L4 17 V7 Z",
+};
+
+function rosterTask(overrides: Partial<RosterTask> & Pick<RosterTask, "id" | "name">): RosterTask {
+  return {
+    coat: "#10a37f",
+    emblem: EMBLEM,
+    faction: "Codex",
+    meta: `main · ${overrides.id.slice(0, 8)}`,
+    updatedAt: null,
+    ...overrides,
+  };
+}
+
+function sampleDigest(nowMs = Date.parse("2026-07-23T12:00:00.000Z")): LogbookDigest {
+  const groups: RosterGroup[] = [
+    {
+      state: "running",
+      tasks: [
+        rosterTask({ id: "run1", name: "still-sailing", updatedAt: "2026-07-23T11:50:00.000Z" }),
+      ],
+    },
+    {
+      state: "completed",
+      tasks: [
+        rosterTask({
+          id: "done-old",
+          name: "older-report",
+          updatedAt: "2026-07-23T10:00:00.000Z",
+        }),
+        rosterTask({
+          id: "done-new",
+          name: "fresh-report",
+          coat: "#2b2b2e",
+          faction: "Grok",
+          updatedAt: "2026-07-23T11:30:00.000Z",
+        }),
+      ],
+    },
+    {
+      state: "failed",
+      tasks: [
+        rosterTask({
+          id: "fail-old",
+          name: "ancient-wreck",
+          updatedAt: "2026-07-22T08:00:00.000Z",
+        }),
+        rosterTask({
+          id: "fail-new",
+          name: "fresh-wreck",
+          coat: "#6c5ce7",
+          faction: "Pi",
+          updatedAt: "2026-07-23T11:45:00.000Z",
+        }),
+      ],
+    },
+  ];
+  return projectLogbookDigest(groups, nowMs);
+}
+
 describe("Inspector renders a quiet placeholder with no selection (#68)", () => {
   it("shows a select-a-task prompt and no tabs when task is null", () => {
     render(<Inspector task={null} />);
@@ -101,6 +169,78 @@ describe("Inspector renders a quiet placeholder with no selection (#68)", () => 
     expect(keys.textContent).toMatch(/next flag that needs you/);
     expect(keys.textContent).toMatch(/toggle Soundings/);
     expect(keys.textContent).toMatch(/clear task selection/);
+  });
+
+  it("empty fleet keeps the hint-centric resting state (no digest)", () => {
+    const empty = projectLogbookDigest([], Date.now());
+    render(<Inspector task={null} digest={empty} />);
+    expect(screen.getByText(/Select a soul from the roster/)).toBeTruthy();
+    expect(screen.queryByTestId("logbook-digest")).toBeNull();
+    expect(screen.getByLabelText("Keyboard shortcuts")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "LOGBOOK" })).toBeTruthy();
+  });
+});
+
+describe("Inspector resting fleet digest", () => {
+  it("renders tallies and latest items from a projected digest", () => {
+    const digest = sampleDigest();
+    render(<Inspector task={null} digest={digest} />);
+
+    const root = screen.getByTestId("logbook-digest");
+    expect(root).toBeTruthy();
+    // Tallies: 2 completed, 2 failed, 1 running
+    const tallies = screen.getByLabelText("Fleet tallies");
+    expect(tallies.textContent).toMatch(/2/);
+    expect(tallies.textContent).toMatch(/done/);
+    expect(tallies.textContent).toMatch(/failed/);
+    expect(tallies.textContent).toMatch(/at sea/);
+    // Completions newest-first
+    const reports = screen.getByLabelText("Last reports in");
+    expect(reports.textContent).toMatch(/fresh-report/);
+    expect(reports.textContent).toMatch(/older-report/);
+    expect(reports.textContent?.indexOf("fresh-report")).toBeLessThan(
+      reports.textContent?.indexOf("older-report") ?? Infinity,
+    );
+    // Freshest failure only
+    const failure = screen.getByLabelText("Latest failure");
+    expect(failure.textContent).toMatch(/fresh-wreck/);
+    expect(failure.textContent).not.toMatch(/ancient-wreck/);
+    // Hints remain under the digest
+    expect(screen.getByLabelText("Keyboard shortcuts")).toBeTruthy();
+    // Select prompt is fleet-digest mode, not the empty-fleet copy
+    expect(screen.queryByText(/Select a soul from the roster/)).toBeNull();
+  });
+
+  it("does not leak digest content into the selected-task view", () => {
+    const digest = sampleDigest();
+    render(<Inspector task={task()} digest={digest} />);
+    expect(screen.queryByTestId("logbook-digest")).toBeNull();
+    expect(screen.queryByLabelText("Fleet tallies")).toBeNull();
+    expect(screen.queryByLabelText("Last reports in")).toBeNull();
+    expect(screen.queryByLabelText("Latest failure")).toBeNull();
+    expect(screen.queryByLabelText("Keyboard shortcuts")).toBeNull();
+    expect(screen.getByRole("tablist", { name: "Task inspector" })).toBeTruthy();
+    expect(screen.getByText("chart-the-bay")).toBeTruthy();
+  });
+});
+
+describe("projectLogbookDigest", () => {
+  it("marks empty groups as no-fleet", () => {
+    const digest = projectLogbookDigest([], Date.now());
+    expect(digest.hasFleet).toBe(false);
+    expect(digest.recentCompletions).toEqual([]);
+    expect(digest.latestFailure).toBeNull();
+  });
+
+  it("caps recent completions and picks the freshest failure", () => {
+    const digest = sampleDigest();
+    expect(digest.hasFleet).toBe(true);
+    expect(digest.completed).toBe(2);
+    expect(digest.failed).toBe(2);
+    expect(digest.running).toBe(1);
+    expect(digest.recentCompletions.map((r) => r.id)).toEqual(["done-new", "done-old"]);
+    expect(digest.latestFailure?.id).toBe("fail-new");
+    expect(digest.latestFailure?.age).toBe("15m");
   });
 });
 

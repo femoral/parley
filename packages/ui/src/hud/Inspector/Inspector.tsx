@@ -4,10 +4,11 @@ import {
   useId,
   useRef,
   useState,
+  type CSSProperties,
   type KeyboardEvent,
   type MouseEvent as ReactMouseEvent,
 } from "react";
-import { Badge, Divider, Emblem, Mark, Plate } from "../../primitives/index.js";
+import { Badge, Divider, Emblem, Mark, Plate, PlateHeader } from "../../primitives/index.js";
 import { MARK_ANCHOR } from "../../tokens/chrome-glyphs.js";
 import { stateMetaFor } from "../../tokens/state-meta.js";
 import { KEYBOARD_SHORTCUTS } from "../keyboardShortcuts.js";
@@ -16,7 +17,7 @@ import { BriefTab } from "./BriefTab.js";
 import { LogsTab } from "./LogsTab.js";
 import { ReportTab } from "./ReportTab.js";
 import { QaTab } from "./QaTab.js";
-import type { InspectorTask } from "../types.js";
+import type { LogbookDigest, LogbookDigestItem, InspectorTask } from "../types.js";
 
 const TABS = [
   { key: "brief", label: "BRIEF" },
@@ -81,6 +82,71 @@ export interface InspectorProps {
    * (e.g. inbox → Q&A again) re-applies {@link initialTab}.
    */
   openSeq?: number;
+  /**
+   * Quiet fleet digest for the resting (no-selection) plate. Projected from
+   * the roster snapshot in the cockpit shell; ignored while a task is open.
+   * Omit or pass a no-fleet digest for the hint-centric empty state.
+   */
+  digest?: LogbookDigest | null;
+}
+
+/** One quiet dual-coded tally chip (glyph + colour + label; never hue alone). */
+function DigestTally({
+  count,
+  state,
+  shortLabel,
+}: {
+  count: number;
+  state: "completed" | "failed" | "running";
+  shortLabel: string;
+}) {
+  const meta = stateMetaFor(state);
+  const style = { "--digest-tally-color": meta.colorVar } as CSSProperties;
+  return (
+    <div className="pc-inspector__digest-tally" style={style}>
+      <span className="pc-inspector__digest-tally-glyph" aria-hidden="true">
+        <Mark mark={meta.mark} size={11} />
+      </span>
+      <span className="pc-inspector__digest-tally-value">{count}</span>
+      <span className="pc-inspector__digest-tally-label">{shortLabel}</span>
+    </div>
+  );
+}
+
+/** Quiet digest row — emblem + name + relative age (roster idioms, no click). */
+function DigestRow({
+  item,
+  state,
+  failed,
+}: {
+  item: LogbookDigestItem;
+  state: "completed" | "failed";
+  failed?: boolean;
+}) {
+  const meta = stateMetaFor(state);
+  return (
+    <li
+      className={`pc-inspector__digest-row${failed ? " pc-inspector__digest-row--failed" : ""}`}
+    >
+      <Emblem coat={item.coat} mark={item.emblem} size={20} label={item.faction} />
+      <span className="pc-inspector__digest-row-body">
+        <span className="pc-inspector__digest-row-name">{item.name}</span>
+      </span>
+      {item.age && (
+        <span className="pc-inspector__digest-row-age" aria-hidden="true">
+          {item.age}
+        </span>
+      )}
+      <span
+        className="pc-inspector__digest-row-state"
+        style={{ color: meta.colorVar }}
+        title={meta.label}
+        aria-label={meta.label}
+      >
+        <Mark mark={meta.mark} size={11} />
+      </span>
+    </li>
+  );
 }
 
 /**
@@ -100,6 +166,7 @@ export const Inspector = memo(function Inspector({
   task,
   initialTab = "brief",
   openSeq = 0,
+  digest = null,
 }: InspectorProps) {
   const [active, setActive] = useState<InspectorTabKey>(initialTab);
   const [evalExpanded, setEvalExpanded] = useState(false);
@@ -208,24 +275,95 @@ export const Inspector = memo(function Inspector({
   };
 
   if (!task) {
+    const showDigest = Boolean(digest?.hasFleet);
     return (
-      <Plate variant="premium" className="pc-inspector pc-inspector--empty">
+      <Plate
+        variant="premium"
+        padded={false}
+        className={`pc-inspector pc-inspector--empty${showDigest ? " pc-inspector--digest" : ""}`}
+      >
         <div ref={scrollAnchorRef} className="pc-inspector__scroll-anchor" aria-hidden="true" />
-        <p className="pc-inspector__placeholder">
-          <span aria-hidden="true">
-            <Mark mark={MARK_ANCHOR} size={13} />
-          </span>{" "}
-          Select a soul from the roster to open the logbook.
-        </p>
-        {/* Quiet resting content — earns the empty plate's footprint without noise. */}
-        <ul className="pc-inspector__rest-keys" aria-label="Keyboard shortcuts">
-          {KEYBOARD_SHORTCUTS.map((row) => (
-            <li className="pc-inspector__rest-key" key={row.key}>
-              <kbd className="pc-inspector__rest-kbd">{row.key}</kbd>
-              <span className="pc-inspector__rest-hint">{row.hint}</span>
-            </li>
-          ))}
-        </ul>
+        <PlateHeader
+          icon={<Mark mark={MARK_ANCHOR} size={14} />}
+          title="LOGBOOK"
+          divider
+        />
+        <div className="pc-inspector__rest">
+          {showDigest && digest ? (
+            <div className="pc-inspector__digest" data-testid="logbook-digest">
+              <p className="pc-inspector__digest-flavor">
+                The log rests. The fleet is still out.
+              </p>
+              <section
+                className="pc-inspector__digest-group"
+                aria-label="Fleet tallies"
+              >
+                <h3 className="pc-inspector__digest-label">TODAY</h3>
+                <div className="pc-inspector__digest-tallies">
+                  <DigestTally
+                    count={digest.completed}
+                    state="completed"
+                    shortLabel="done"
+                  />
+                  <DigestTally
+                    count={digest.failed}
+                    state="failed"
+                    shortLabel="failed"
+                  />
+                  <DigestTally
+                    count={digest.running}
+                    state="running"
+                    shortLabel="at sea"
+                  />
+                </div>
+              </section>
+              {digest.recentCompletions.length > 0 && (
+                <section
+                  className="pc-inspector__digest-group"
+                  aria-label="Last reports in"
+                >
+                  <h3 className="pc-inspector__digest-label">LAST REPORTS IN</h3>
+                  <ul className="pc-inspector__digest-list">
+                    {digest.recentCompletions.map((item) => (
+                      <DigestRow key={item.id} item={item} state="completed" />
+                    ))}
+                  </ul>
+                </section>
+              )}
+              {digest.latestFailure && (
+                <section
+                  className="pc-inspector__digest-group"
+                  aria-label="Latest failure"
+                >
+                  <h3 className="pc-inspector__digest-label">LATEST FAILURE</h3>
+                  <ul className="pc-inspector__digest-list">
+                    <DigestRow
+                      item={digest.latestFailure}
+                      state="failed"
+                      failed
+                    />
+                  </ul>
+                </section>
+              )}
+            </div>
+          ) : (
+            <p className="pc-inspector__placeholder">
+              <span aria-hidden="true">
+                <Mark mark={MARK_ANCHOR} size={13} />
+              </span>{" "}
+              Select a soul from the roster to open the logbook.
+            </p>
+          )}
+          {/* Quiet resting content — earns the empty plate's footprint without noise. */}
+          <ul className="pc-inspector__rest-keys" aria-label="Keyboard shortcuts">
+            {KEYBOARD_SHORTCUTS.map((row) => (
+              <li className="pc-inspector__rest-key" key={row.key}>
+                <kbd className="pc-inspector__rest-kbd">{row.key}</kbd>
+                <span className="pc-inspector__rest-hint">{row.hint}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
       </Plate>
     );
   }

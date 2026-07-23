@@ -1,4 +1,4 @@
-import { lazy, Suspense, useRef } from "react";
+import { lazy, Suspense, useMemo, useRef } from "react";
 import {
   Cartouche,
   ChartKey,
@@ -6,6 +6,7 @@ import {
   HealthPanel,
   InboxPanel,
   Inspector,
+  projectLogbookDigest,
   RosterPanel,
   SettingsBar,
   SoundingsPanel,
@@ -56,6 +57,13 @@ export function Cockpit() {
     toggleSoundings,
     enabled: settings.shortcuts,
   });
+
+  // Quiet resting LOGBOOK digest from the already-projected roster groups.
+  // Re-derives when groups change or the HH:MM clock ticks (minute-floor ages).
+  const logbookDigest = useMemo(
+    () => projectLogbookDigest(snapshot.groups, Date.now()),
+    [snapshot.groups, clock],
+  );
 
   return (
     <div className={`pc-cockpit${chartStale ? " pc-cockpit--stale" : ""}`} data-stale={chartStale ? "true" : undefined}>
@@ -163,6 +171,7 @@ export function Cockpit() {
               task={inspector}
               initialTab={roster.inspectorIntent.tab}
               openSeq={roster.inspectorIntent.seq}
+              digest={logbookDigest}
             />
           </aside>
         </main>

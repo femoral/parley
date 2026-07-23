@@ -16,6 +16,10 @@ export { InboxPanel } from "./InboxPanel.js";
 export type { InboxPanelProps } from "./InboxPanel.js";
 export { Inspector } from "./Inspector/index.js";
 export type { InspectorProps, InspectorTabKey } from "./Inspector/index.js";
+export {
+  projectLogbookDigest,
+  LOGBOOK_DIGEST_COMPLETION_CAP,
+} from "./logbookDigest.js";
 export { LogStream } from "./LogStream.js";
 export type { LogStreamProps } from "./LogStream.js";
 export { ReportPanel } from "./ReportPanel.js";
@@ -53,6 +57,8 @@ export type {
   HealthView,
   InboxTask,
   InspectorTask,
+  LogbookDigest,
+  LogbookDigestItem,
   LogLine,
   LogTailHookStatus,
   LogTailStatus,

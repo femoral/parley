@@ -277,6 +277,42 @@ export interface InspectorTask {
   attempts: AttemptLineageItem[];
 }
 
+/**
+ * One quiet row on the resting LOGBOOK fleet digest (no task selected).
+ * Identity + pre-formatted age only — pure informational, no handlers.
+ */
+export interface LogbookDigestItem {
+  id: string;
+  name: string;
+  coat: string;
+  emblem: EmblemMark;
+  /** Faction/vendor display name for the emblem's accessible label. */
+  faction: string;
+  /** Compact relative age (`12m`, `4h`), or null when no clock. */
+  age: string | null;
+}
+
+/**
+ * Resting LOGBOOK plate content when nothing is selected. Projected from the
+ * already-grouped roster snapshot so the empty plate can show a quiet fleet
+ * digest without a second data path. `hasFleet: false` keeps the hint-centric
+ * empty state (no tasks at all).
+ */
+export interface LogbookDigest {
+  /** True when the live fleet has at least one task. */
+  hasFleet: boolean;
+  /** Completed task count in the current roster projection. */
+  completed: number;
+  /** Failed task count. */
+  failed: number;
+  /** Running task count. */
+  running: number;
+  /** Most recent completions, newest first (capped). */
+  recentCompletions: LogbookDigestItem[];
+  /** Freshest failure if any; quiet coral accent, no navigation. */
+  latestFailure: LogbookDigestItem | null;
+}
+
 /** The daemon health readout, fully projected to display values by the hooks layer. */
 export interface HealthView {
   /** Probe lifecycle; connecting is reserved for the unresolved first probe. */
