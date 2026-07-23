@@ -574,6 +574,43 @@ describe("Inspector's four tabs render per the manifest's inspector treatment (#
     expect(screen.getByText("No report yet — this soul is still at sea.")).toBeTruthy();
   });
 
+  it("mounts a more-below scroll cue on the inspector body for the Report tab", () => {
+    const { container } = render(
+      <Inspector
+        task={task({
+          state: "completed",
+          report: {
+            outcome: "success",
+            summary: "Charted the bay end to end.",
+            files: [
+              { path: "src/a.ts" },
+              { path: "src/b.ts" },
+              { path: "src/c.ts" },
+            ],
+          },
+        })}
+      />,
+    );
+    openTab("REPORT");
+    const body = container.querySelector(".pc-inspector__body") as HTMLElement;
+    expect(body).toBeTruthy();
+    const cue = body.querySelector(".pc-inspector__scroll-cue");
+    expect(cue).toBeTruthy();
+    // happy-dom has no real overflow geometry — content "fits", cue starts hidden.
+    expect(cue?.classList.contains("pc-inspector__scroll-cue--hidden")).toBe(true);
+    expect(cue?.textContent).toContain("More below");
+
+    Object.defineProperty(body, "scrollHeight", { configurable: true, get: () => 800 });
+    Object.defineProperty(body, "clientHeight", { configurable: true, get: () => 200 });
+    Object.defineProperty(body, "scrollTop", { configurable: true, get: () => 0, set: () => {} });
+    fireEvent.scroll(body);
+    expect(cue?.classList.contains("pc-inspector__scroll-cue--hidden")).toBe(false);
+
+    Object.defineProperty(body, "scrollTop", { configurable: true, get: () => 600, set: () => {} });
+    fireEvent.scroll(body);
+    expect(cue?.classList.contains("pc-inspector__scroll-cue--hidden")).toBe(true);
+  });
+
   it("switches to the Q&A tab and renders a question/answer transcript", () => {
     render(
       <Inspector

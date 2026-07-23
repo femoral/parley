@@ -3140,3 +3140,54 @@ button.pc-roster__meta--copy:focus-visible {
   color: var(--ink-label);
   white-space: nowrap;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ * Inspector body scroll cue + report fold (identity / scene-presence pass)
+ * Appended only — do not edit earlier selector blocks in parallel.
+ * Chart-key-style sticky bottom fade so "FILES CHANGED" never sits clipped
+ * at the inspector fold with no hint that the body scrolls.
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
+.pc-inspector__body {
+  /* Position sticky cue against the scrollport bottom. */
+  position: relative;
+}
+
+.pc-inspector__scroll-cue {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  height: 2.75rem;
+  margin-top: -2.75rem;
+  padding-bottom: 6px;
+  pointer-events: none;
+  background: linear-gradient(
+    180deg,
+    transparent 0%,
+    color-mix(in srgb, var(--plate-bottom) 55%, transparent) 45%,
+    var(--plate-bottom) 100%
+  );
+  opacity: 1;
+  transition: opacity 160ms ease;
+}
+.pc-inspector__scroll-cue--hidden {
+  opacity: 0;
+}
+.pc-inspector__scroll-cue-label {
+  font-family: var(--font-body);
+  font-size: var(--text-label);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
+}
+
+/* Extra breath so a short report's FILES CHANGED heading is less likely to
+ * land exactly on the fold when the body is just barely overflowing. */
+.pc-report-tab {
+  padding-bottom: 1.25rem;
+}

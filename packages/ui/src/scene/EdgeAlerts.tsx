@@ -7,24 +7,35 @@ export const EDGE_ALERT_STACK_CAP = 3;
 
 export type EdgeAlertSide = "left" | "right";
 
-/** One off-camera region that needs notice at the viewport edge. */
+/** One off-camera region surfaced at the viewport edge. */
 export interface EdgeAlertItem {
   /** Named session id, or `null` for the open-water region (no roster filter). */
   sessionId: string | null;
   /** Short session label (matches the region banner). */
   label: string;
-  /** Loudest edge-attention state on that session (hooks rollup). */
+  /**
+   * Loudest edge-attention state on that session (hooks rollup), or unused
+   * when {@link quiet} — calm presence chips carry task count only.
+   */
   state: string;
-  /** Count of tasks in that loudest state. */
+  /** Count of tasks in that loudest state, or total tasks when quiet. */
   count: number;
-  /** Core attention rank from the hooks rollup (lower = louder). */
+  /**
+   * Core attention rank from the hooks rollup (lower = louder).
+   * Quiet chips use a sentinel rank so they always stack after attention.
+   */
   rank: number;
   /** Which horizontal edge the region lies on relative to the framed one. */
   side: EdgeAlertSide;
+  /**
+   * Calm off-frame presence (no attention rollup). Whisper chrome: neutral
+   * ink, no state glyph/colour. Still frames the region on click.
+   */
+  quiet?: boolean;
 }
 
 export interface EdgeAlertsProps {
-  /** Off-camera attention items, already ordered loudest-first per side. */
+  /** Off-camera items, already ordered loudest-first per side (attention then quiet). */
   items: EdgeAlertItem[];
   /**
    * Activates the region represented by a clicked chip. Named sessions receive
@@ -48,6 +59,10 @@ function attentionProse(state: string, count: number): string {
   }
 }
 
+function quietProse(count: number): string {
+  return count === 1 ? "1 task" : `${count} tasks`;
+}
+
 function edgeChipKey(item: EdgeAlertItem): string {
   return item.sessionId ?? "open-water";
 }
@@ -59,9 +74,46 @@ function EdgeAlertButton({
   item: EdgeAlertItem;
   onSelectSession: (sessionId: string | null) => void;
 }) {
-  const meta = stateMetaFor(item.state);
+  const quiet = item.quiet === true;
   const direction = item.side === "left" ? "to the left" : "to the right";
   const chevron = item.side === "left" ? "◀" : "▶";
+  // Named sessions keep the "Session …" head; open water uses its in-register label.
+  const head = item.sessionId === null ? item.label : `Session ${item.label}`;
+  const prose = quiet ? quietProse(item.count) : attentionProse(item.state, item.count);
+
+  if (quiet) {
+    return (
+      <button
+        type="button"
+        className="pc-edge-alert pc-edge-alert--quiet"
+        aria-label={`${head} — ${prose}, ${direction}`}
+        onClick={() => onSelectSession(item.sessionId)}
+      >
+        {item.side === "left" && (
+          <span className="pc-edge-alert__chevron" aria-hidden="true">
+            {chevron}
+          </span>
+        )}
+        {/* Visible payload: "label · count" whisper (no state glyph/colour). */}
+        <span className="pc-edge-alert__label" aria-hidden="true">
+          {item.label}
+        </span>
+        <span className="pc-edge-alert__dot" aria-hidden="true">
+          ·
+        </span>
+        <span className="pc-edge-alert__count" aria-hidden="true">
+          {item.count}
+        </span>
+        {item.side === "right" && (
+          <span className="pc-edge-alert__chevron" aria-hidden="true">
+            {chevron}
+          </span>
+        )}
+      </button>
+    );
+  }
+
+  const meta = stateMetaFor(item.state);
   const style = { "--edge-state": meta.colorVar } as CSSProperties;
   const className = [
     "pc-edge-alert",
@@ -69,15 +121,13 @@ function EdgeAlertButton({
   ]
     .filter(Boolean)
     .join(" ");
-  // Named sessions keep the "Session …" head; open water uses its in-register label.
-  const head = item.sessionId === null ? item.label : `Session ${item.label}`;
 
   return (
     <button
       type="button"
       className={className}
       style={style}
-      aria-label={`${head} — ${attentionProse(item.state, item.count)}, ${direction}`}
+      aria-label={`${head} — ${prose}, ${direction}`}
       onClick={() => onSelectSession(item.sessionId)}
     >
       {item.side === "left" && (
@@ -106,13 +156,15 @@ function EdgeAlertButton({
 }
 
 /**
- * Layer 3 — edge-of-frame attention chips (PRODUCT.md "a single glance answers:
- * is anything wrong?"). Renders brass-framed pills on the sea at the left/right
- * viewport edge for off-camera sessions carrying awaiting / stalled / failed
- * work. Prop-driven and core-free: the app projects the rollup, Scene decides
- * side + stack order, this component only paints the chrome.
+ * Layer 3 — edge-of-frame chips (PRODUCT.md "a single glance answers:
+ * is anything wrong?" + fleet presence). Attention chips for awaiting /
+ * stalled / failed work stay loud; quiet chips whisper for calm off-camera
+ * regions so a second coast is never invisible on the sea. Prop-driven and
+ * core-free: the app projects the rollup, Scene decides side + stack order,
+ * this component only paints the chrome.
  *
- * One Loud Hue: the state colour rides only on the glyph; the frame stays brass.
+ * One Loud Hue: the state colour rides only on the glyph of attention chips;
+ * the frame stays brass. Quiet chips use label-tier neutral ink only.
  * Base styles are the legible resting state — the awaiting beacon pulse collapses
  * under the global reduced-motion rule in tokens.css.
  */
@@ -125,7 +177,15 @@ export function EdgeAlerts({ items, onSelectSession }: EdgeAlertsProps) {
   return (
     <>
       {left.length > 0 && (
-        <div className="pc-edge-alerts pc-edge-alerts--left" role="group" aria-label="Attention to the left">
+        <div
+          className="pc-edge-alerts pc-edge-alerts--left"
+          role="group"
+          aria-label={
+            left.some((i) => !i.quiet)
+              ? "Attention to the left"
+              : "Sessions to the left"
+          }
+        >
           {left.slice(0, EDGE_ALERT_STACK_CAP).map((item) => (
             <EdgeAlertButton key={edgeChipKey(item)} item={item} onSelectSession={onSelectSession} />
           ))}
@@ -137,7 +197,15 @@ export function EdgeAlerts({ items, onSelectSession }: EdgeAlertsProps) {
         </div>
       )}
       {right.length > 0 && (
-        <div className="pc-edge-alerts pc-edge-alerts--right" role="group" aria-label="Attention to the right">
+        <div
+          className="pc-edge-alerts pc-edge-alerts--right"
+          role="group"
+          aria-label={
+            right.some((i) => !i.quiet)
+              ? "Attention to the right"
+              : "Sessions to the right"
+          }
+        >
           {right.slice(0, EDGE_ALERT_STACK_CAP).map((item) => (
             <EdgeAlertButton key={edgeChipKey(item)} item={item} onSelectSession={onSelectSession} />
           ))}

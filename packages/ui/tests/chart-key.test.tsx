@@ -1,7 +1,7 @@
 /** @vitest-environment happy-dom */
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { ChartKey } from "../src/hud/index.js";
+import { ChartKey, RosterPanel } from "../src/hud/index.js";
 import { HARNESS_COLORS, MODEL_VENDORS } from "../src/tokens/factions.js";
 import { ATTENTION_DISPLAY_ORDER, STATE_META } from "../src/tokens/state-meta.js";
 
@@ -104,5 +104,57 @@ describe("ChartKey production legend (recognition over recall)", () => {
     Object.defineProperty(panel, "scrollTop", { configurable: true, get: () => 600, set: () => {} });
     fireEvent.scroll(panel);
     expect(cue?.classList.contains("pc-chart-key__scroll-cue--hidden")).toBe(true);
+  });
+});
+
+describe("hand-rolled popover single-open invariant", () => {
+  it("opening Chart key closes session Find, and vice versa", () => {
+    const groups = [
+      {
+        state: "running" as const,
+        tasks: [
+          {
+            id: "t1",
+            name: "chart-the-bay",
+            coat: "#10a37f",
+            emblem: { kind: "glyph" as const, char: "π" },
+            faction: "Codex",
+            meta: "feat/bay · t1",
+          },
+        ],
+      },
+    ];
+    render(
+      <>
+        <ChartKey />
+        <RosterPanel
+          groups={groups}
+          sessions={[{ id: "sess-abc12345", label: "sess-abc1", count: 1 }]}
+          selectedSessionId={null}
+          onSelectSession={() => {}}
+          searchSessions={async () => []}
+          selectedTaskId={null}
+          onSelectTask={() => {}}
+          totalTasks={1}
+          activeTasks={1}
+        />
+      </>,
+    );
+
+    // Open Find first.
+    fireEvent.click(screen.getByRole("button", { name: "Search sessions" }));
+    expect(screen.getByLabelText("Session id")).toBeTruthy();
+    expect(document.querySelector(".pc-roster__search-pop")).toBeTruthy();
+
+    // Opening Chart key must close Find (single-open).
+    fireEvent.click(screen.getByRole("button", { name: /Chart key/ }));
+    expect(screen.getByRole("region", { name: "Chart key" })).toBeTruthy();
+    expect(screen.queryByLabelText("Session id")).toBeNull();
+    expect(document.querySelector(".pc-roster__search-pop")).toBeNull();
+
+    // Re-open Find — Chart key must close.
+    fireEvent.click(screen.getByRole("button", { name: "Search sessions" }));
+    expect(screen.getByLabelText("Session id")).toBeTruthy();
+    expect(screen.queryByRole("region", { name: "Chart key" })).toBeNull();
   });
 });

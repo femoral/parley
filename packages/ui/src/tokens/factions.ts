@@ -106,9 +106,15 @@ export const HARNESS_COLORS: Record<string, HarnessColor> = {
   kimi: { label: "Kimi", coat: "#39A06F", coatDark: "#1A5B3D" },
 };
 
+/**
+ * Neutral privateer coat for adapters not in {@link HARNESS_COLORS}.
+ * Brass-frame (not white): white-on-white used to blank the emblem mark
+ * (`--ink-on-coat` is white) and flash the loudest chip on the dark plate.
+ * Same family as ChartKey's model-mark chips / faction-unaligned.
+ */
 export const UNKNOWN_HARNESS: HarnessColor = {
   label: "Unknown harness",
-  coat: "#FFFFFF",
+  coat: "#8A6A34",
   coatDark: "#5B3A24",
 };
 

@@ -30,7 +30,8 @@ describe("task identity resolvers", () => {
     expect(vendorEmblemFor("grok").emblem.kind).toBe("svg");
     expect(vendorEmblemFor("brand-new").emblem).toEqual({ kind: "glyph", char: "?" });
     expect(harnessColorFor("codex").coat).toBe("#18A886");
-    expect(harnessColorFor(null).coat).toBe("#FFFFFF");
+    // Unknown harness uses brass-frame privateer coat (not white-on-white).
+    expect(harnessColorFor(null).coat.toUpperCase()).toBe("#8A6A34");
   });
 });
 

@@ -871,8 +871,12 @@ describe("Scene edge-of-frame attention indicators", () => {
     expect(container.querySelector(".pc-edge-alert")).toBeNull();
   });
 
-  it("shows no indicator for an off-camera calm session", () => {
-    const calm = region("sess-2", "sess-2", [island("running", { id: "z" })]);
+  it("renders a quiet presence chip for an off-camera calm session with tasks", () => {
+    const calm = region("sess-2", "sess-2", [
+      island("running", { id: "z1" }),
+      island("running", { id: "z2" }),
+    ]);
+    const side = regionWorldOffset("sess-2").dx < regionWorldOffset("sess-1").dx ? "left" : "right";
     const { container } = render(
       <Scene
         sessions={[REGION, calm]}
@@ -881,7 +885,29 @@ describe("Scene edge-of-frame attention indicators", () => {
         onSelectSession={noop}
       />,
     );
-    // REGION is framed (has attention but on-camera); calm is off-camera with null attention.
+    // REGION is framed (attention on-camera); calm is off-camera — whisper chip.
+    const btn = screen.getByRole("button", {
+      name: `Session sess-2 — 2 tasks, to the ${side}`,
+    });
+    expect(btn.classList.contains("pc-edge-alert--quiet")).toBe(true);
+    expect(btn.classList.contains("pc-edge-alert--beacon")).toBe(false);
+    expect(btn.querySelector(".pc-edge-alert__glyph")).toBeNull();
+    expect(btn.querySelector(".pc-edge-alert__label")?.textContent).toBe("sess-2");
+    expect(btn.querySelector(".pc-edge-alert__dot")?.textContent).toBe("·");
+    expect(btn.querySelector(".pc-edge-alert__count")?.textContent).toBe("2");
+    expect(container.querySelector(`.pc-edge-alerts--${side}`)).toBeTruthy();
+  });
+
+  it("does not chip an empty calm off-camera region", () => {
+    const empty = region("sess-empty", "sess-empty", []);
+    const { container } = render(
+      <Scene
+        sessions={[REGION, empty]}
+        activeSessionId="sess-1"
+        onSelectTask={noop}
+        onSelectSession={noop}
+      />,
+    );
     expect(container.querySelector(".pc-edge-alert")).toBeNull();
   });
 
@@ -988,9 +1014,10 @@ describe("Scene edge-of-frame attention indicators", () => {
   });
 
   it("under All hands, frames the loudest region (indicators for quieter off-camera attention)", () => {
-    // awaitingRight (rank 0) is loudest — framed; failedFar still chips.
+    // awaitingRight (rank 0) is loudest — framed; failedFar still chips loud; calm whispers.
     const framedDx = regionWorldOffset("sess-b").dx;
     const sideC = regionWorldOffset("sess-c").dx < framedDx ? "left" : "right";
+    const sideA = regionWorldOffset("sess-a").dx < framedDx ? "left" : "right";
     render(
       <Scene
         sessions={[calmLeft, awaitingRight, failedFar]}
@@ -999,16 +1026,81 @@ describe("Scene edge-of-frame attention indicators", () => {
         onSelectSession={noop}
       />,
     );
-    // Framed loud region has no chip; calm has no attention.
+    // Framed loud region has no chip.
     expect(screen.queryByRole("button", { name: /Session sess-b/ })).toBeNull();
-    expect(screen.queryByRole("button", { name: /Session sess-a/ })).toBeNull();
     expect(
       screen.getByRole("button", { name: `Session sess-c — 1 failed, to the ${sideC}` }),
     ).toBeTruthy();
+    // Calm off-frame still has presence (task count whisper).
+    const quiet = screen.getByRole("button", {
+      name: `Session sess-a — 1 task, to the ${sideA}`,
+    });
+    expect(quiet.classList.contains("pc-edge-alert--quiet")).toBe(true);
+  });
+
+  it("stacks attention chips ahead of quiet chips on the same side", () => {
+    const calm = region("calm-z", "calm-z", [
+      island("running", { id: "cz1" }),
+      island("completed", { id: "cz2" }),
+    ]);
+    const loud = region(
+      "loud-z",
+      "loud-z",
+      [island("awaiting_answer", { id: "lz1" })],
+      { state: "awaiting_answer", count: 1, rank: 0 },
+    );
+    const framed = region("frame-z", "frame-z", [island("running", { id: "fz1" })]);
+    const { container } = render(
+      <Scene
+        sessions={[framed, calm, loud]}
+        activeSessionId="frame-z"
+        onSelectTask={noop}
+        onSelectSession={noop}
+      />,
+    );
+    const buttons = [...container.querySelectorAll("button.pc-edge-alert")];
+    expect(buttons.length).toBeGreaterThanOrEqual(2);
+    // Attention before quiet regardless of world side grouping within each stack.
+    const labels = buttons.map((b) => b.querySelector(".pc-edge-alert__label")?.textContent);
+    const loudIdx = labels.indexOf("loud-z");
+    const calmIdx = labels.indexOf("calm-z");
+    expect(loudIdx).toBeGreaterThanOrEqual(0);
+    expect(calmIdx).toBeGreaterThanOrEqual(0);
+    // Same-side ordering is what we care about when they share a side.
+    const loudSide = buttons[loudIdx]!.closest(".pc-edge-alerts")?.className;
+    const calmSide = buttons[calmIdx]!.closest(".pc-edge-alerts")?.className;
+    if (loudSide === calmSide) {
+      expect(loudIdx).toBeLessThan(calmIdx);
+    }
+    expect(buttons[loudIdx]!.classList.contains("pc-edge-alert--quiet")).toBe(false);
+    expect(buttons[calmIdx]!.classList.contains("pc-edge-alert--quiet")).toBe(true);
+  });
+
+  it("selects the session when a quiet edge chip is clicked", () => {
+    const onSelectSession = vi.fn();
+    const calm = region("sess-quiet", "sess-quiet", [island("running", { id: "q1" })]);
+    const side =
+      regionWorldOffset("sess-quiet").dx < regionWorldOffset("sess-a").dx ? "left" : "right";
+    render(
+      <Scene
+        sessions={[calmLeft, calm]}
+        activeSessionId="sess-a"
+        onSelectTask={noop}
+        onSelectSession={onSelectSession}
+      />,
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: `Session sess-quiet — 1 task, to the ${side}` }),
+    );
+    expect(onSelectSession).toHaveBeenCalledOnce();
+    expect(onSelectSession).toHaveBeenCalledWith("sess-quiet");
   });
 
   it("does not invent indicators for stalledMid when framed on that session", () => {
-    const { container } = render(
+    // Framed attention region: no self-chip. Off-frame calm still whispers presence.
+    const sideA =
+      regionWorldOffset("sess-a").dx < regionWorldOffset("sess-d").dx ? "left" : "right";
+    render(
       <Scene
         sessions={[stalledMid, calmLeft]}
         activeSessionId="sess-d"
@@ -1016,7 +1108,10 @@ describe("Scene edge-of-frame attention indicators", () => {
         onSelectSession={noop}
       />,
     );
-    expect(container.querySelector(".pc-edge-alert")).toBeNull();
+    expect(screen.queryByRole("button", { name: /Session sess-d/ })).toBeNull();
+    expect(
+      screen.getByRole("button", { name: `Session sess-a — 1 task, to the ${sideA}` }),
+    ).toBeTruthy();
   });
 
   it("renders an open-water edge chip when session-less tasks need notice", () => {
@@ -1077,8 +1172,31 @@ describe("Scene edge-of-frame attention indicators", () => {
     expect(container.querySelector('.pc-island[aria-label="orphan-q — AWAITING"]')).toBeTruthy();
   });
 
-  it("does not chip open water when it is calm", () => {
-    const openWater = region(null, "Open water", [island("running", { id: "ow-1" })]);
+  it("renders a quiet open-water chip when calm open water still has tasks", () => {
+    const openWater = region(null, "Open water", [
+      island("running", { id: "ow-1" }),
+      island("running", { id: "ow-2" }),
+    ]);
+    const framed = region("sess-a", "sess-a", [island("running", { id: "a1" })]);
+    const side = regionWorldOffset(null).dx < regionWorldOffset("sess-a").dx ? "left" : "right";
+    render(
+      <Scene
+        sessions={[framed, openWater]}
+        activeSessionId="sess-a"
+        onSelectTask={noop}
+        onSelectSession={noop}
+      />,
+    );
+    const btn = screen.getByRole("button", {
+      name: `Open water — 2 tasks, to the ${side}`,
+    });
+    expect(btn.classList.contains("pc-edge-alert--quiet")).toBe(true);
+    expect(btn.querySelector(".pc-edge-alert__label")?.textContent).toBe("Open water");
+    expect(btn.querySelector(".pc-edge-alert__count")?.textContent).toBe("2");
+  });
+
+  it("does not chip empty calm open water", () => {
+    const openWater = region(null, "Open water", []);
     const framed = region("sess-a", "sess-a", [island("running", { id: "a1" })]);
     const { container } = render(
       <Scene
