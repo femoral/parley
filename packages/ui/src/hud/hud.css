@@ -571,7 +571,8 @@
   gap: 6px;
   margin: 0;
   font-family: var(--font-body);
-  font-style: italic;
+  /* Operational prose — Flavor-Font Rule: never italic/flavor. */
+  font-style: normal;
   font-size: var(--text-body);
   line-height: 1.4;
   color: var(--question-parchment);
@@ -2936,4 +2937,88 @@
 .pc-roster__empty-copy:focus-visible {
   outline: 2px solid var(--brass-bright);
   outline-offset: 1px;
+}
+
+/* ── HUD polish batch (t57) ──────────────────────────────────────────────────
+ * Appended only — empty-inspector rest, heatmap low-n cue, popover focus ring.
+ */
+
+/* Empty logbook: quiet shortcut hints so the plate earns its footprint. */
+.pc-inspector--empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  min-height: 12rem;
+}
+.pc-inspector__rest-keys {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 11rem;
+}
+.pc-inspector__rest-key {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+.pc-inspector__rest-kbd {
+  flex: 0 0 auto;
+  min-width: 1.75rem;
+  padding: 1px 5px;
+  border: 1px solid var(--line-faint);
+  border-radius: var(--radius-tight);
+  background: rgba(0, 0, 0, 0.22);
+  font-family: var(--font-mono);
+  font-size: var(--text-meta);
+  font-weight: 500;
+  color: var(--ink-label);
+  text-align: center;
+  line-height: 1.4;
+}
+.pc-inspector__rest-hint {
+  font-family: var(--font-body);
+  font-size: var(--text-label);
+  font-weight: 500;
+  letter-spacing: 0.4px;
+  color: var(--ink-label);
+  line-height: 1.4;
+}
+
+/* Heatmap: low-sample honesty — visible n cue so the ramp can't overstate thin data. */
+.pc-eval-heat__cell {
+  flex-direction: column;
+  gap: 2px;
+}
+.pc-eval-heat__cell--low-n {
+  outline: 1px dashed color-mix(in srgb, var(--ink-label) 55%, transparent);
+  outline-offset: -2px;
+}
+.pc-eval-heat__cell-n {
+  font-family: var(--font-mono);
+  font-size: 0.5625rem;
+  font-weight: 500;
+  line-height: 1;
+  color: var(--ink-label);
+  opacity: 0.9;
+  letter-spacing: 0.02em;
+}
+.pc-eval-heat__swatch--low-n {
+  background: color-mix(in srgb, var(--quality-poor) 45%, rgba(0, 0, 0, 0.35));
+  outline: 1px dashed color-mix(in srgb, var(--ink-label) 55%, transparent);
+  outline-offset: -1px;
+  box-sizing: border-box;
+}
+
+/* Native popover focus target (tabIndex=-1 container receives focus on open). */
+.pc-brief__orders:focus,
+.pc-brief__orders:focus-visible,
+.pc-report__orders:focus,
+.pc-report__orders:focus-visible {
+  outline: 2px solid var(--brass-bright);
+  outline-offset: 2px;
 }

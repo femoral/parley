@@ -16,13 +16,23 @@ import type { RosterGroup } from "../../hud/types.js";
 
 export type { RosterSearchHandle };
 
+/** Tab landing option for {@link CockpitKeysOptions.selectTask} (mirrors SelectTaskOptions). */
+export interface CockpitSelectTaskOptions {
+  /** Inspector tab to land on. Defaults to `"brief"` in the cockpit shell. */
+  tab?: "brief" | "logs" | "report" | "qa";
+}
+
 export interface CockpitKeysOptions {
   /** Ref to the roster's imperative search handle (may be null while mounting). */
   rosterRef: RefObject<RosterSearchHandle | null>;
   /** Projected roster groups (attention order) — used to find awaiting tasks. */
   groups: RosterGroup[];
   selectedTaskId: string | null;
-  selectTask: (id: string) => void;
+  /**
+   * Select a task. The `n` accelerator passes `{ tab: "qa" }` so awaiting
+   * flags open on the question (same path as inbox click / selectInboxTask).
+   */
+  selectTask: (id: string, options?: CockpitSelectTaskOptions) => void;
   clearTask: () => void;
   /** Toggle Cove ↔ Soundings (`m` accelerator, #119). */
   toggleSoundings?: () => void;
@@ -120,7 +130,8 @@ export function useCockpitKeys(options: CockpitKeysOptions): void {
         const next = nextAwaitingId(awaitingTaskIds(groups), selectedTaskId);
         if (next !== null) {
           event.preventDefault();
-          selectTask(next);
+          // Land on Q&A — the flag is the outstanding question, not the brief.
+          selectTask(next, { tab: "qa" });
         }
         return;
       }

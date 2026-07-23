@@ -1,4 +1,4 @@
-import { useId } from "react";
+import { useCallback, useId, type ToggleEvent } from "react";
 import { Badge } from "../primitives/index.js";
 import type { ReportView } from "./types.js";
 
@@ -36,13 +36,22 @@ function hasReportSummary(summary: string | null | undefined): boolean {
  * vignetted sea (native Popover API). The open control is gated on a non-empty
  * summary so an empty dispatch never shows a button whose popover repeats
  * nothing. Popover element ids are useId-derived so multiple instances never
- * collide.
+ * collide. On open, focus moves into the popover container (tabIndex=-1);
+ * native close still returns focus to the invoker.
  */
 export function ReportPanel({
   report,
   emptyMessage = "No report yet — this soul is still at sea.",
 }: ReportPanelProps) {
   const ordersId = `${useId()}-orders`;
+  /** Native popovers don't move focus on open — land keyboard/SR users inside. */
+  const onOrdersToggle = useCallback((event: ToggleEvent<HTMLDivElement>) => {
+    if (event.newState === "open") {
+      event.currentTarget.focus();
+    }
+    // Close: Popover API returns focus to the invoker; leave that alone.
+  }, []);
+
   if (!report) {
     return <p className="pc-report__empty">{emptyMessage}</p>;
   }
@@ -60,7 +69,13 @@ export function ReportPanel({
             <button type="button" className="pc-report__orders-open" popoverTarget={ordersId}>
               Read full report
             </button>
-            <div id={ordersId} popover="auto" className="pc-report__orders">
+            <div
+              id={ordersId}
+              popover="auto"
+              className="pc-report__orders"
+              tabIndex={-1}
+              onToggle={onOrdersToggle}
+            >
               <div className="pc-report__orders-head">
                 <span className="pc-report__orders-title">Ship&rsquo;s Report</span>
                 <button
