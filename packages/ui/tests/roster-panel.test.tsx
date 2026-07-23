@@ -1,7 +1,7 @@
 /** @vitest-environment happy-dom */
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { RosterPanel } from "../src/hud/index.js";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { delegateScaffold, RosterPanel } from "../src/hud/index.js";
 import type { RosterGroup, RosterSessionOption } from "../src/hud/index.js";
 
 afterEach(cleanup);
@@ -107,6 +107,18 @@ describe("RosterPanel renders groups it is given, in attention order (#66)", () 
     expect(screen.queryByText(/Taking soundings/)).toBeNull();
   });
 
+  it("offers a copyable parley delegate starter in the empty state", () => {
+    const { container } = render(
+      <RosterPanel {...baseProps()} groups={[]} sessions={[]} totalTasks={0} activeTasks={0} />,
+    );
+    expect(screen.getByText(/The cove is quiet/)).toBeTruthy();
+    expect(screen.getByText(/Cast off from your shell/)).toBeTruthy();
+    const snippet = container.querySelector(".pc-roster__empty-snippet");
+    expect(snippet?.textContent).toBe(delegateScaffold());
+    expect(snippet?.textContent).toBe('parley delegate -n <name> "<goal>"');
+    expect(screen.getByRole("button", { name: /Copy delegate command/i })).toBeTruthy();
+  });
+
   it("shows taking-soundings copy before the first snapshot (connecting)", () => {
     render(
       <RosterPanel
@@ -121,6 +133,30 @@ describe("RosterPanel renders groups it is given, in attention order (#66)", () 
     expect(screen.getByText(/Taking soundings/)).toBeTruthy();
     expect(screen.getByText(/listening for the fleet/)).toBeTruthy();
     expect(screen.queryByText(/The cove is quiet/)).toBeNull();
+    expect(screen.queryByRole("button", { name: /Copy delegate command/i })).toBeNull();
+  });
+});
+
+describe("RosterPanel empty-state copy delegate scaffold", () => {
+  const writeText = vi.fn(async () => undefined);
+
+  beforeEach(() => {
+    writeText.mockClear();
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
+  });
+
+  it("copies a parley delegate scaffold and shows confirmation text", async () => {
+    render(<RosterPanel {...baseProps()} groups={[]} sessions={[]} totalTasks={0} activeTasks={0} />);
+    const copyBtn = screen.getByRole("button", { name: /Copy delegate command/i });
+    fireEvent.click(copyBtn);
+    await waitFor(() => {
+      expect(writeText).toHaveBeenCalledWith('parley delegate -n <name> "<goal>"');
+    });
+    expect(screen.getByText("copied ✓")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Copied delegate command/i })).toBeTruthy();
   });
 });
 

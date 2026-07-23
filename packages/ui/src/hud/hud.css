@@ -2697,3 +2697,80 @@
   letter-spacing: normal;
 }
 
+
+/* ── Roster empty starter + ack-on-deselect polish (t51) ─────────────────────
+ * Appended section only — parallel agents edit cartouche/day-chip elsewhere.
+ * 1) Empty-fleet copyable `parley delegate` scaffold (mirrors inbox/brief).
+ */
+
+.pc-roster__empty-hint {
+  margin: 10px 0 6px;
+  font-family: var(--font-body);
+  font-style: normal;
+  font-weight: 500;
+  font-size: var(--text-sub);
+  color: var(--ink-muted);
+}
+.pc-roster__empty-scaffold-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  position: relative;
+  margin: 0 auto;
+  max-width: 100%;
+}
+.pc-roster__empty-snippet {
+  display: inline-block;
+  max-width: 100%;
+  padding: 4px 8px;
+  border: 1px solid var(--line-faint);
+  border-radius: var(--radius-control);
+  background: var(--brass-tint-06, rgba(0, 0, 0, 0.18));
+  font-family: var(--font-mono);
+  font-style: normal;
+  font-weight: 500;
+  font-size: var(--text-meta);
+  line-height: 1.4;
+  color: var(--ink-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* Off-screen scaffold used when clipboard.writeText is unavailable. */
+.pc-roster__empty-scaffold {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+.pc-roster__empty-copy {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 3px 8px;
+  border: 1px solid var(--btn-tertiary-border);
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--ink-muted);
+  font-family: var(--font-body);
+  font-style: normal;
+  font-weight: 600;
+  font-size: var(--text-meta);
+  letter-spacing: 0.3px;
+  cursor: pointer;
+  transition: border-color var(--ease), color var(--ease);
+}
+.pc-roster__empty-copy:hover {
+  border-color: var(--brass-frame);
+  color: var(--ink-warm);
+}
+.pc-roster__empty-copy:focus-visible {
+  outline: 2px solid var(--brass-bright);
+  outline-offset: 1px;
+}

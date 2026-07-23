@@ -242,9 +242,11 @@ export function useCockpit(): CockpitView {
   const toggleSoundings = useCallback(() => {
     setMode((prev) => (prev === "soundings" ? "cove" : "soundings"));
   }, []);
-  // Failed-freshness acknowledgement: selecting a failed task once decays it
-  // to the archive treatment (dim, quiet rank). Cleared when the task leaves
-  // failed so a re-failure is loud again.
+  // Failed-freshness acknowledgement: selecting a failed task marks it
+  // acknowledged, but elevated rank / loud treatment hold while it stays
+  // selected (projectRoster + selectedTaskId). Demotion applies on
+  // deselection or 5-minute timeout. Cleared when the task leaves failed so
+  // a re-failure is loud again.
   const [acknowledgedFailed, setAcknowledgedFailed] = useState<Set<string>>(
     () => new Set(),
   );
@@ -336,9 +338,17 @@ export function useCockpit(): CockpitView {
       projectRoster(live.tasks, selectedSessionId, {
         observedAt: failedObservedAt,
         acknowledged: acknowledgedFailed,
+        selectedTaskId: selectedTaskId,
         now: freshnessNow,
       }),
-    [live.tasks, selectedSessionId, failedObservedAt, acknowledgedFailed, freshnessNow],
+    [
+      live.tasks,
+      selectedSessionId,
+      failedObservedAt,
+      acknowledgedFailed,
+      selectedTaskId,
+      freshnessNow,
+    ],
   );
 
   const snapshot: SnapshotView = useMemo(
