@@ -3,8 +3,9 @@ name: Release
 # Manually dispatched, lockstep publish workflow. See docs/spec/release-process.md.
 #
 # A maintainer picks the bump, the workflow versions every @useparley/*
-# package in lockstep, runs the full gate (build/test/typecheck/lint),
-# publishes public packages to npm via trusted publishing (OIDC) with
+# package in lockstep, runs the gate (build/unit-test/typecheck/lint —
+# integration tests are run locally beforehand), publishes public packages
+# to npm via trusted publishing (OIDC) with
 # provenance, commits the bump, tags, and creates the GitHub release.
 # @useparley/ui publishes alongside core/daemon/cli as of ticket #70 — it has
 # no `private: true` left to skip it, so `pnpm -r publish` includes it like
@@ -103,7 +104,10 @@ jobs:
         run: pnpm build
 
       - name: Test
-        run: pnpm test
+        # Integration tests are run locally before dispatching this workflow
+        # (they're slow and would otherwise eat Actions minutes on every
+        # release); this gate only covers unit tests.
+        run: pnpm test:unit
 
       - name: Typecheck
         run: pnpm typecheck
