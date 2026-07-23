@@ -149,3 +149,30 @@ describe("Cockpit view nav framed by Plate (#126)", () => {
     expect(container.querySelector(".pc-compass")).toBeNull();
   });
 });
+
+describe("Cockpit skip links (island tab-stop wall)", () => {
+  it("offers Skip to status stack targeting the right rail after Skip to cockpit", () => {
+    cockpitState.view = baseView();
+    render(<Cockpit />);
+
+    const skipCockpit = screen.getByRole("link", { name: "Skip to cockpit" });
+    expect(skipCockpit.getAttribute("href")).toBe("#pc-main");
+    expect(document.getElementById("pc-main")).toBeTruthy();
+
+    const skipStatus = screen.getByRole("link", { name: "Skip to status stack" });
+    expect(skipStatus.getAttribute("href")).toBe("#pc-status-stack");
+
+    const statusStack = document.getElementById("pc-status-stack");
+    expect(statusStack).toBeTruthy();
+    expect(statusStack?.getAttribute("aria-label")).toBe("Status stack");
+    // Focusable skip target so activating the link lands keyboard focus.
+    expect(statusStack?.getAttribute("tabindex")).toBe("-1");
+
+    // Status-stack skip comes after the main skip in tab order.
+    const links = screen.getAllByRole("link");
+    const cockpitIdx = links.indexOf(skipCockpit);
+    const statusIdx = links.indexOf(skipStatus);
+    expect(cockpitIdx).toBeGreaterThanOrEqual(0);
+    expect(statusIdx).toBe(cockpitIdx + 1);
+  });
+});

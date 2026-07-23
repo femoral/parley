@@ -2,6 +2,7 @@ import {
   useCallback,
   useLayoutEffect,
   useRef,
+  useState,
   type CSSProperties,
   type UIEvent,
 } from "react";
@@ -22,6 +23,18 @@ function isNearBottom(el: HTMLElement): boolean {
 }
 
 /**
+ * Status copy for the live-tail head. Honesty over charm:
+ * - live + following → "Live · Follow"
+ * - live + scrolled up → "Paused" (user/scroll pause; stream still open)
+ * - not live → "Ended" (eof / terminal tail — not a temporary pause)
+ */
+export function logStreamStatus(live: boolean, following: boolean): string {
+  if (!live) return "Ended";
+  if (!following) return "Paused";
+  return "Live · Follow";
+}
+
+/**
  * Layer 2 — the raw vendor log well (design-manifest §4.17 "Logs" / §2.8's
  * per-kind colours). Plain props, no polling here (contract 2) —
  * `Inspector`'s Logs tab is the only current caller, but this stays a
@@ -36,6 +49,11 @@ function isNearBottom(el: HTMLElement): boolean {
  * order stays chronological (select/copy, screen readers) and the empty
  * state can keep using the same flex column. Pinning is independent of
  * `live`: a finished log still opens on its last line.
+ *
+ * Accessibility: `role="log"` stays for discoverability, but `aria-live`
+ * is forced off while the tail is live so a fast vendor stream cannot
+ * chatter. Status transitions (Live / Paused / Ended) are announced from
+ * the head instead.
  */
 export function LogStream({
   lines,
@@ -46,9 +64,13 @@ export function LogStream({
   // Defaults true so first non-empty paint (and remount for a new task) lands
   // on the tail; only a deliberate scroll-up clears it.
   const stickToBottomRef = useRef(true);
+  // Mirror of the ref for status label re-renders (Paused vs Live · Follow).
+  const [following, setFollowing] = useState(true);
 
   const onScroll = useCallback((event: UIEvent<HTMLDivElement>) => {
-    stickToBottomRef.current = isNearBottom(event.currentTarget);
+    const near = isNearBottom(event.currentTarget);
+    stickToBottomRef.current = near;
+    setFollowing(near);
   }, []);
 
   useLayoutEffect(() => {
@@ -57,14 +79,23 @@ export function LogStream({
     el.scrollTop = el.scrollHeight;
   }, [lines]);
 
+  const status = logStreamStatus(live, following);
   const dotStyle = { "--dot-color": live ? "var(--healthy-dot)" : "var(--ink-label)" } as CSSProperties;
   return (
     <div className="pc-logstream">
       <div className="pc-logstream__head">
         <span className={`pc-dot${live ? " pc-dot--beacon" : ""}`} style={dotStyle} aria-hidden="true" />
-        <span className="pc-logstream__status">{live ? "Live · Follow" : "Paused"}</span>
+        <span className="pc-logstream__status" aria-live="polite" aria-atomic="true">
+          {status}
+        </span>
       </div>
-      <div className="pc-logstream__body" role="log" ref={bodyRef} onScroll={onScroll}>
+      <div
+        className="pc-logstream__body"
+        role="log"
+        aria-live="off"
+        ref={bodyRef}
+        onScroll={onScroll}
+      >
         {lines.length === 0 ? (
           <p className="pc-logstream__empty">{emptyMessage}</p>
         ) : (

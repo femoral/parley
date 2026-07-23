@@ -83,4 +83,26 @@ describe("ChartKey production legend (recognition over recall)", () => {
     expect(screen.getByText("Esc")).toBeTruthy();
     expect(screen.getByText("clear task selection")).toBeTruthy();
   });
+
+  it("renders a more-below scroll cue that hides when content fits or is scrolled to end", () => {
+    render(<ChartKey />);
+    fireEvent.click(screen.getByRole("button", { name: /Chart key/ }));
+    const panel = screen.getByRole("region", { name: "Chart key" });
+    const cue = panel.querySelector(".pc-chart-key__scroll-cue");
+    expect(cue).toBeTruthy();
+    // happy-dom has no real overflow geometry — content "fits", so the cue
+    // starts hidden. Mock overflow and re-fire scroll to show/hide it.
+    expect(cue?.classList.contains("pc-chart-key__scroll-cue--hidden")).toBe(true);
+
+    Object.defineProperty(panel, "scrollHeight", { configurable: true, get: () => 800 });
+    Object.defineProperty(panel, "clientHeight", { configurable: true, get: () => 200 });
+    Object.defineProperty(panel, "scrollTop", { configurable: true, get: () => 0, set: () => {} });
+    fireEvent.scroll(panel);
+    expect(cue?.classList.contains("pc-chart-key__scroll-cue--hidden")).toBe(false);
+    expect(cue?.textContent).toContain("More below");
+
+    Object.defineProperty(panel, "scrollTop", { configurable: true, get: () => 600, set: () => {} });
+    fireEvent.scroll(panel);
+    expect(cue?.classList.contains("pc-chart-key__scroll-cue--hidden")).toBe(true);
+  });
 });

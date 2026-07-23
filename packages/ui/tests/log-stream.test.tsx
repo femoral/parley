@@ -1,7 +1,7 @@
 /** @vitest-environment happy-dom */
 import { afterEach, describe, expect, it } from "vitest";
-import { cleanup, fireEvent, render } from "@testing-library/react";
-import { LogStream } from "../src/hud/LogStream.js";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { LogStream, logStreamStatus } from "../src/hud/LogStream.js";
 import type { LogLine } from "../src/hud/types.js";
 
 afterEach(cleanup);
@@ -113,7 +113,9 @@ describe("LogStream stick-to-bottom follow behaviour", () => {
     rerender(<LogStream lines={logLines("done", "eof")} live={false} />);
 
     expect(metrics.scrollTop).toBe(900);
-    expect(container.textContent).toContain("Paused");
+    // Tail at eof is Ended, not a temporary Paused.
+    expect(container.textContent).toContain("Ended");
+    expect(container.textContent).not.toContain("Paused");
   });
 
   it("starts at the tail again after remount (new task)", () => {
@@ -131,5 +133,48 @@ describe("LogStream stick-to-bottom follow behaviour", () => {
     second.rerender(<LogStream lines={logLines("new-1", "new-2", "new-3")} live />);
 
     expect(metrics.scrollTop).toBe(450);
+  });
+});
+
+describe("LogStream status wording (honesty over charm)", () => {
+  it("maps live+following / live+scrolled / ended distinctly", () => {
+    expect(logStreamStatus(true, true)).toBe("Live · Follow");
+    expect(logStreamStatus(true, false)).toBe("Paused");
+    expect(logStreamStatus(false, true)).toBe("Ended");
+    expect(logStreamStatus(false, false)).toBe("Ended");
+  });
+
+  it("shows Live · Follow while the tail is live and pinned", () => {
+    render(<LogStream lines={logLines("tick")} live />);
+    expect(screen.getByText("Live · Follow")).toBeTruthy();
+  });
+
+  it("shows Ended when the tail is no longer live (eof), not Paused", () => {
+    render(<LogStream lines={logLines("done")} live={false} />);
+    expect(screen.getByText("Ended")).toBeTruthy();
+    expect(screen.queryByText("Paused")).toBeNull();
+  });
+
+  it("shows Paused when the user scrolls up while the stream is still live", () => {
+    const { container } = render(<LogStream lines={logLines("a", "b", "c")} live />);
+    const body = bodyOf(container);
+    mockOverflow(body, { scrollHeight: 500, clientHeight: 100, scrollTop: 0 });
+    fireEvent.scroll(body);
+    expect(screen.getByText("Paused")).toBeTruthy();
+    expect(screen.queryByText("Ended")).toBeNull();
+  });
+
+  it("keeps role=log for discoverability but sets aria-live=off to avoid chatter", () => {
+    const { container } = render(<LogStream lines={logLines("noise")} live />);
+    const body = bodyOf(container);
+    expect(body.getAttribute("role")).toBe("log");
+    expect(body.getAttribute("aria-live")).toBe("off");
+  });
+
+  it("announces status changes from the head, not the log body", () => {
+    render(<LogStream lines={logLines("x")} live />);
+    const status = screen.getByText("Live · Follow");
+    expect(status.getAttribute("aria-live")).toBe("polite");
+    expect(status.getAttribute("aria-atomic")).toBe("true");
   });
 });
