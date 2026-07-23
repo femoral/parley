@@ -2,8 +2,10 @@ import { Emblem, Mark } from "../../primitives/index.js";
 import { MARK_ANCHOR } from "../../tokens/chrome-glyphs.js";
 import type { EmblemMark } from "../../tokens/factions.js";
 import type { QaTurn } from "../types.js";
+import { useCopyScaffold } from "../useCopyScaffold.js";
 
 export interface QaTabProps {
+  taskId: string;
   qa: QaTurn[];
   /** The task's faction coat/emblem — the question bubble's avatar. */
   coat: string;
@@ -54,6 +56,29 @@ function QaTime({ iso, label }: { iso: string; label: string }) {
   );
 }
 
+function AnswerScaffold({ taskId }: { taskId: string }) {
+  const scaffoldText = `parley answer ${taskId} "..."`;
+  const { copied, canCopy, scaffoldRef, copy } = useCopyScaffold(scaffoldText);
+
+  return (
+    <div className="pc-qa__answer-scaffold">
+      <span ref={scaffoldRef} className="pc-qa__scaffold">
+        {scaffoldText}
+      </span>
+      {canCopy && (
+        <button
+          type="button"
+          className="pc-qa__copy"
+          onClick={() => void copy()}
+          aria-label={copied ? "Copied answer command" : "Copy answer command"}
+        >
+          {copied ? "copied ✓" : "copy"}
+        </button>
+      )}
+    </div>
+  );
+}
+
 /**
  * Layer 2 — the Q&A tab: a chat transcript (design-manifest §4.17 "Q&A"),
  * the agent's question bubble left, the operator's answer right-aligned.
@@ -65,7 +90,7 @@ function QaTime({ iso, label }: { iso: string; label: string }) {
  * The transcript is a semantic list so screen-reader users can skim entries;
  * each bubble carries an accessible name of speaker + wall-clock time.
  */
-export function QaTab({ qa, coat, emblem, faction }: QaTabProps) {
+export function QaTab({ taskId, qa, coat, emblem, faction }: QaTabProps) {
   if (qa.length === 0) {
     return <p className="pc-qa__empty">No parley yet — this soul hasn't raised a flag.</p>;
   }
@@ -86,6 +111,7 @@ export function QaTab({ qa, coat, emblem, faction }: QaTabProps) {
               <QaTime iso={turn.askedAt} label="Asked" />
             </div>
           </div>
+          {turn.answer === null && <AnswerScaffold taskId={taskId} />}
           {turn.answer !== null && (
             <div
               className="pc-qa__bubble pc-qa__bubble--answer"

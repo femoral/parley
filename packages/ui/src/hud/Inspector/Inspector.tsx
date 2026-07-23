@@ -71,9 +71,9 @@ export interface InspectorProps {
    * has no selection — renders a quiet placeholder rather than empty tabs. */
   task: InspectorTask | null;
   /**
-   * Tab to land on when a selection is opened. Defaults to `"brief"`.
-   * Re-applied whenever {@link openSeq} advances (each selection), so the user
-   * can still switch tabs freely after landing.
+   * Explicit tab intent for a selection. `"qa"` is re-applied whenever
+   * {@link openSeq} advances; the ordinary `"brief"` default leaves a user's
+   * current tab sticky across task switches.
    */
   initialTab?: InspectorTabKey;
   /**
@@ -116,10 +116,12 @@ export const Inspector = memo(function Inspector({
   const evalFeedbackId = `${baseId}-eval-feedback`;
   const tabId = (key: InspectorTabKey): string => `${baseId}-tab-${key}`;
 
-  // Apply the open intent on every selection (openSeq), not only when the task
-  // id changes — so inbox re-click of the same awaiting task still lands on Q&A.
+  // The selection layer represents "no explicit tab intent" as its historical
+  // `brief` default. Preserve the locally chosen tab in that case. Non-default
+  // intents still win on every selection, including inbox re-clicks of the same
+  // awaiting task.
   useEffect(() => {
-    setActive(initialTab);
+    if (initialTab !== "brief") setActive(initialTab);
     setEvalExpanded(false);
   }, [initialTab, openSeq]);
 
@@ -341,7 +343,13 @@ export const Inspector = memo(function Inspector({
         {active === "logs" && <LogsTab logs={task.logs} />}
         {active === "report" && <ReportTab report={task.report} />}
         {active === "qa" && (
-          <QaTab qa={task.qa} coat={task.coat} emblem={task.emblem} faction={task.faction} />
+          <QaTab
+            taskId={task.id}
+            qa={task.qa}
+            coat={task.coat}
+            emblem={task.emblem}
+            faction={task.faction}
+          />
         )}
       </div>
     </Plate>

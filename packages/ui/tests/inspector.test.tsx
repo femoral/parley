@@ -582,6 +582,48 @@ describe("Inspector's four tabs render per the manifest's inspector treatment (#
     expect(screen.getByText("feat/bay")).toBeTruthy();
   });
 
+  it("keeps a manual Logs choice when switching tasks without explicit tab intent", () => {
+    const { rerender } = render(<Inspector task={task()} openSeq={1} />);
+    openTab("LOGS");
+
+    rerender(
+      <Inspector
+        task={task({ id: "t2abcdef", name: "sound-the-cove" })}
+        initialTab="brief"
+        openSeq={2}
+      />,
+    );
+
+    expect(screen.getByRole("tab", { name: "LOGS" }).getAttribute("aria-selected")).toBe("true");
+  });
+
+  it("lets an inbox Q&A intent override a manual Logs choice on task switch", () => {
+    const { rerender } = render(<Inspector task={task()} openSeq={1} />);
+    openTab("LOGS");
+
+    rerender(
+      <Inspector
+        task={task({
+          id: "t2abcdef",
+          qa: [
+            {
+              id: "q2",
+              question: "Which inlet?",
+              answer: null,
+              askedAt: "2026-01-01T00:00:00Z",
+              answeredAt: null,
+            },
+          ],
+        })}
+        initialTab="qa"
+        openSeq={2}
+      />,
+    );
+
+    expect(screen.getByRole("tab", { name: "Q&A" }).getAttribute("aria-selected")).toBe("true");
+    expect(screen.getByText("Which inlet?")).toBeTruthy();
+  });
+
   it("omits debug character counts from the GOAL well", () => {
     const { container } = render(<Inspector task={task()} />);
     expect(container.querySelector(".pc-brief__goal-count")).toBeNull();
@@ -751,6 +793,59 @@ describe("Inspector's four tabs render per the manifest's inspector treatment (#
     expect(screen.getByText("Which shoal?")).toBeTruthy();
     expect(screen.getByText("The northern one.")).toBeTruthy();
     expect(screen.getByText("Deep or shallow anchorage?")).toBeTruthy();
+  });
+
+  it("shows an answer scaffold with the task id under an unanswered turn", () => {
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText: vi.fn(async () => undefined) },
+    });
+    const { container } = render(
+      <Inspector
+        task={task({
+          id: "t-answer-me",
+          qa: [
+            {
+              id: "q1",
+              question: "Which shoal?",
+              answer: null,
+              askedAt: "2026-01-01T14:02:00.000Z",
+              answeredAt: null,
+            },
+          ],
+        })}
+      />,
+    );
+
+    openTab("Q&A");
+
+    expect(screen.getByRole("button", { name: "Copy answer command" })).toBeTruthy();
+    expect(container.querySelector(".pc-qa__scaffold")?.textContent).toBe(
+      'parley answer t-answer-me "..."',
+    );
+  });
+
+  it("does not show an answer scaffold under an answered turn", () => {
+    const { container } = render(
+      <Inspector
+        task={task({
+          qa: [
+            {
+              id: "q1",
+              question: "Which shoal?",
+              answer: "The northern one.",
+              askedAt: "2026-01-01T14:02:00.000Z",
+              answeredAt: "2026-01-01T14:05:00.000Z",
+            },
+          ],
+        })}
+      />,
+    );
+
+    openTab("Q&A");
+
+    expect(screen.queryByRole("button", { name: /answer command/i })).toBeNull();
+    expect(container.querySelector(".pc-qa__scaffold")).toBeNull();
   });
 
   it("exposes the Q&A transcript as a list with speaker+time entry labels", () => {

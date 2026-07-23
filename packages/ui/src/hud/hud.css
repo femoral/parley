@@ -3563,4 +3563,50 @@ button.pc-roster__meta--copy:focus-visible {
 /* A tail awaiting its first daemon response is neutral and quiet. */
 .pc-logstream__status--connecting {
   color: var(--ink-label);
+
+/* Unanswered Q&A command handoff — the same mono well + compact copy idiom
+ * used by inbox scaffolds, kept visible here so the inspector never dead-ends. */
+.pc-qa__answer-scaffold {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 88%;
+  margin-left: 28px;
+  padding: 6px 8px;
+  border: 1px solid var(--plate-well-border);
+  border-radius: var(--radius-well);
+  background: var(--plate-well);
+}
+.pc-qa__scaffold {
+  min-width: 0;
+  flex: 1;
+  font-family: var(--font-mono);
+  font-size: var(--text-meta);
+  line-height: 1.4;
+  color: var(--question-parchment);
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+.pc-qa__copy {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 3px 8px;
+  border: 1px solid var(--btn-tertiary-border);
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--ink-muted);
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: var(--text-meta);
+  letter-spacing: 0.3px;
+  cursor: pointer;
+  transition: border-color var(--ease), color var(--ease);
+}
+.pc-qa__copy:hover {
+  border-color: var(--brass-frame);
+  color: var(--ink-warm);
+}
+.pc-qa__copy:focus-visible {
+  outline: 2px solid var(--brass-bright);
+  outline-offset: 1px;
 }
