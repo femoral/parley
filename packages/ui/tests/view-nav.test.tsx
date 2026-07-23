@@ -61,6 +61,8 @@ function baseView(overrides: Partial<CockpitView> = {}): CockpitView {
     },
     clock: "12:00",
     day: 1,
+    daemonUptimeDays: 1,
+    freshFailureTaskIds: [],
     inspector: null,
     settings: {
       ornaments: false,

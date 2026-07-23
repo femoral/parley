@@ -3,6 +3,7 @@
  * Power-user shortcuts (recognition over recall via ChartKey's Keys section):
  *   `/`  — open and focus the roster session search
  *   `n`  — cycle to the next fleet-wide inbox task
+ *   `⇧n` — cycle to the next fleet-wide fresh failure
  *   `m`  — toggle Soundings metrics board (#119)
  *   `Esc` — clear the selected task (when no popover/search is open)
  *
@@ -27,6 +28,8 @@ export interface CockpitKeysOptions {
   rosterRef: RefObject<RosterSearchHandle | null>;
   /** Fleet-wide inbox projection, in the same stable order shown by the inbox plate. */
   inbox: readonly { id: string }[];
+  /** Fleet-wide fresh failures, in the stable order projected by the roster. */
+  freshFailureTaskIds: readonly string[];
   selectedTaskId: string | null;
   /**
    * Select a task. The `n` accelerator passes `{ tab: "qa" }` so awaiting
@@ -37,7 +40,7 @@ export interface CockpitKeysOptions {
   /** Toggle Cove ↔ Soundings (`m` accelerator, #119). */
   toggleSoundings?: () => void;
   /**
-   * Master switch for the single-character accelerators (`/`, `n`, `m`) —
+   * Master switch for the single-character accelerators (`/`, `n`, `⇧n`, `m`) —
    * the WCAG 2.1.4 opt-out, wired to the settings strip. `Esc` is not a
    * character key and stays active regardless.
    */
@@ -105,6 +108,7 @@ export function useCockpitKeys(options: CockpitKeysOptions): void {
       const {
         rosterRef,
         inbox,
+        freshFailureTaskIds,
         selectedTaskId,
         selectTask,
         clearTask,
@@ -119,6 +123,15 @@ export function useCockpitKeys(options: CockpitKeysOptions): void {
       if (event.key === "/") {
         event.preventDefault();
         rosterRef.current?.openSearch();
+        return;
+      }
+
+      if ((event.key === "n" || event.key === "N") && event.shiftKey) {
+        const next = nextAwaitingId(freshFailureTaskIds, selectedTaskId);
+        if (next !== null) {
+          event.preventDefault();
+          selectTask(next, { tab: "brief" });
+        }
         return;
       }
 

@@ -7,20 +7,21 @@ const WEATHER_CHECK_INTERVAL_MS = 30 * 1000;
 
 export interface DayChipProps {
   /**
-   * Daemon uptime in whole days (min 1), projected from `/health` `started_at`
-   * in `useCockpit` — flavour "days at sea", not a calendar session day.
+   * Browser-local Cove tenure in whole days (min 1).
    */
   day: number;
+  /** Daemon process uptime in whole days (min 1), shown honestly in the title. */
+  daemonUptimeDays: number;
   /** Wall-clock string, e.g. "14:32". */
   clock: string;
 }
 
 /**
- * Layer 2 — the day/weather chip (design-manifest §4.4). Daemon-uptime "days
- * at sea" beside a real clock; the decorative weather rotates deterministically
+ * Layer 2 — the day/weather chip (design-manifest §4.4). Cove-tenure "days at
+ * sea" beside a real clock; the decorative weather rotates deterministically
  * every five minutes.
  */
-export function DayChip({ day, clock }: DayChipProps) {
+export function DayChip({ day, daemonUptimeDays, clock }: DayChipProps) {
   const [weatherBucket, setWeatherBucket] = useState(weatherBucketAt);
   const weather = weatherForBucket(weatherBucket);
 
@@ -35,7 +36,10 @@ export function DayChip({ day, clock }: DayChipProps) {
     return () => window.clearInterval(interval);
   }, []);
 
-  const dayTitle = day === 1 ? "Daemon up 1 day" : `Daemon up ${day} days`;
+  const dayTitle =
+    daemonUptimeDays === 1
+      ? "Daemon up 1 day"
+      : `Daemon up ${daemonUptimeDays} days`;
   // Optional bearing ("NE 8kn") or bare speed ("0kn") — always mono the kn token.
   const windParts = weather.wind.match(/^(?:(.+)\s)?(\d+kn)$/);
 

@@ -35,6 +35,8 @@ export function Cockpit() {
     roster,
     clock,
     day,
+    daemonUptimeDays,
+    freshFailureTaskIds,
     inspector,
     settings,
     chartStale,
@@ -51,6 +53,7 @@ export function Cockpit() {
   useCockpitKeys({
     rosterRef: rosterSearchRef,
     inbox: snapshot.inbox,
+    freshFailureTaskIds,
     selectedTaskId: roster.selectedTaskId,
     selectTask: roster.selectTask,
     clearTask: roster.clearTask,
@@ -122,7 +125,7 @@ export function Cockpit() {
                   </button>
                 </nav>
               </div>
-              <DayChip day={day} clock={clock} />
+              <DayChip day={day} daemonUptimeDays={daemonUptimeDays} clock={clock} />
             </div>
             {mode === "soundings" ? (
               <div className="pc-soundings-stage">

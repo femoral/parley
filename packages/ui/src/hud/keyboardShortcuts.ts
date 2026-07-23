@@ -6,6 +6,7 @@
 export const KEYBOARD_SHORTCUTS: readonly { key: string; hint: string }[] = [
   { key: "/", hint: "find session" },
   { key: "n", hint: "next flag that needs you" },
+  { key: "⇧N", hint: "next fresh failure" },
   { key: "m", hint: "toggle Soundings" },
   { key: "Esc", hint: "clear task selection" },
 ];

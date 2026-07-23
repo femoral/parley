@@ -35,11 +35,14 @@ describe("cockpit chrome polish", () => {
   });
 
   it("renders day and wind numerals in dedicated mono data tokens", () => {
-    const { container } = render(<DayChip day={1} clock="14:32" />);
+    const { container } = render(
+      <DayChip day={8} daemonUptimeDays={2} clock="14:32" />,
+    );
 
     expect(container.querySelector(".pc-daychip__day-number")?.textContent).toBe(
-      "1",
+      "8",
     );
+    expect(screen.getByTitle("Daemon up 2 days")).toBeTruthy();
     expect(
       container.querySelector(".pc-daychip__wind-speed")?.textContent,
     ).toMatch(/^\d+kn$/);

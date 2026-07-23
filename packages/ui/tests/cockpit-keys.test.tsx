@@ -87,18 +87,22 @@ describe("awaitingTaskIds / nextAwaitingId pure helpers", () => {
 function KeysHarness({
   groups = GROUPS,
   inbox = INBOX,
+  freshFailureTaskIds = [] as readonly string[],
   selectedSessionId = null as string | null,
   initialTaskId = null as string | null,
   onToggleSoundings,
   onSelectTask,
+  enabled = true,
   withChartKey = false,
 }: {
   groups?: RosterGroup[];
   inbox?: readonly { id: string }[];
+  freshFailureTaskIds?: readonly string[];
   selectedSessionId?: string | null;
   initialTaskId?: string | null;
   onToggleSoundings?: () => void;
   onSelectTask?: (id: string, options?: { tab?: string }) => void;
+  enabled?: boolean;
   /** Mount ChartKey so hand-rolled popover Esc can be tested against selection. */
   withChartKey?: boolean;
 }) {
@@ -111,10 +115,12 @@ function KeysHarness({
   useCockpitKeys({
     rosterRef,
     inbox,
+    freshFailureTaskIds,
     selectedTaskId,
     selectTask,
     clearTask: () => setSelectedTaskId(null),
     toggleSoundings: onToggleSoundings,
+    enabled,
   });
   return (
     <div>
@@ -199,6 +205,45 @@ describe("useCockpitKeys window keydown accelerators", () => {
       fireEvent.keyDown(window, { key: "n" });
     });
     expect(calls[1]).toEqual({ id: "t2", options: { tab: "qa" } });
+  });
+
+  it("Shift+N cycles fleet-wide fresh failures and lands on Brief", () => {
+    const calls: Array<{ id: string; options?: { tab?: string } }> = [];
+    render(
+      <KeysHarness
+        freshFailureTaskIds={["failed-other-session", "failed-here"]}
+        onSelectTask={(id, options) => calls.push({ id, options })}
+      />,
+    );
+
+    act(() => {
+      fireEvent.keyDown(window, { key: "N", shiftKey: true });
+    });
+    act(() => {
+      fireEvent.keyDown(window, { key: "N", shiftKey: true });
+    });
+
+    expect(calls).toEqual([
+      { id: "failed-other-session", options: { tab: "brief" } },
+      { id: "failed-here", options: { tab: "brief" } },
+    ]);
+  });
+
+  it("Shift+N honours the character-shortcut opt-out", () => {
+    const calls: string[] = [];
+    render(
+      <KeysHarness
+        enabled={false}
+        freshFailureTaskIds={["failed"]}
+        onSelectTask={(id) => calls.push(id)}
+      />,
+    );
+
+    act(() => {
+      fireEvent.keyDown(window, { key: "N", shiftKey: true });
+    });
+
+    expect(calls).toEqual([]);
   });
 
   it("Escape clears the task selection when no popover is open", () => {

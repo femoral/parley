@@ -44,6 +44,8 @@ export const CHART_STALE_DEBOUNCE_MS = 4000;
  * keeps the roster projection's identity stable across one-second clock ticks.
  */
 export const FRESHNESS_TICK_MS = 30_000;
+export const COVE_FIRST_SEEN_STORAGE_KEY = "pc-cove-first-seen";
+const DAY_MS = 86_400_000;
 
 /** Format uptime only while a health probe confirms the daemon is online. */
 export function deriveUptime(
@@ -52,6 +54,31 @@ export function deriveUptime(
   now: number,
 ): string {
   return status === "online" && startedAt !== null ? formatUptime(now - startedAt) : "";
+}
+
+/** Whole voyage day since this browser first saw the Cove (minimum day 1). */
+export function deriveVoyageDay(firstSeenAt: number, now: number): number {
+  return Math.max(1, Math.floor((now - firstSeenAt) / DAY_MS) + 1);
+}
+
+/**
+ * Read the Cove's browser-local first-seen timestamp, setting it once when
+ * absent. Returns null when storage is unavailable so callers can retain the
+ * daemon-derived fallback as health data arrives.
+ */
+export function readCoveFirstSeen(now: number): number | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const stored = window.localStorage.getItem(COVE_FIRST_SEEN_STORAGE_KEY);
+    if (stored !== null) {
+      const parsed = Number(stored);
+      if (Number.isFinite(parsed) && parsed > 0 && parsed <= now) return parsed;
+    }
+    window.localStorage.setItem(COVE_FIRST_SEEN_STORAGE_KEY, String(now));
+    return now;
+  } catch {
+    return null;
+  }
 }
 
 /** Tab title with an optional inbox badge: `(N) Parley Cove — parley cockpit`. */
@@ -188,8 +215,12 @@ export interface CockpitView {
   roster: RosterSelection;
   /** Wall-clock `HH:MM` for the day chip. */
   clock: string;
-  /** Daemon uptime in whole days (min 1) — day chip's "days at sea". */
+  /** Browser-local Cove tenure in whole days (min 1). */
   day: number;
+  /** Daemon process uptime in whole days (min 1), for the day chip tooltip. */
+  daemonUptimeDays: number;
+  /** Fleet-wide failures carrying the roster's fresh coral treatment. */
+  freshFailureTaskIds: string[];
   /** The selected task's inspector payload (#68), or `null` with no selection. */
   inspector: InspectorTask | null;
   /** Persisted cockpit preferences (#70): ornaments, kit band, log follow. */
@@ -409,6 +440,25 @@ export function useCockpit(): CockpitView {
     ],
   );
 
+  const fleetFreshFailureTaskIds = useMemo(
+    () =>
+      projectRoster(live.tasks, null, {
+        observedAt: failedObservedAt,
+        acknowledged: acknowledgedFailed,
+        selectedTaskId,
+        now: freshnessNow,
+      }).groups.flatMap((group) =>
+        group.tasks.filter((task) => task.freshFailure).map((task) => task.id),
+      ),
+    [
+      live.tasks,
+      failedObservedAt,
+      acknowledgedFailed,
+      selectedTaskId,
+      freshnessNow,
+    ],
+  );
+
   const snapshot: SnapshotView = useMemo(
     () => ({
       ...live,
@@ -491,10 +541,12 @@ export function useCockpit(): CockpitView {
     durableSessions: live.durableSessions,
   };
 
-  const day =
+  const daemonUptimeDays =
     health.startedAt !== null
-      ? Math.max(1, Math.floor((now - health.startedAt) / 86_400_000) + 1)
+      ? deriveVoyageDay(health.startedAt, now)
       : 1;
+  const [firstSeenAt] = useState(() => readCoveFirstSeen(now));
+  const day = deriveVoyageDay(firstSeenAt ?? health.startedAt ?? now, now);
 
   const roster: RosterSelection = {
     selectedSessionId,
@@ -570,6 +622,8 @@ export function useCockpit(): CockpitView {
     roster,
     clock: formatClock(new Date(now)),
     day,
+    daemonUptimeDays,
+    freshFailureTaskIds: fleetFreshFailureTaskIds,
     inspector,
     settings,
     chartStale,
