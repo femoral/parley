@@ -1,6 +1,6 @@
 {
   "name": "@useparley/runner",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Remote runner for parley: leases tasks from a daemon and executes them on this host (ADR-0012).",
   "type": "module",
   "bin": {
@@ -32,7 +32,8 @@
   },
   "scripts": {
     "build": "tsdown",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run build"
   },
   "dependencies": {
     "@useparley/core": "workspace:*",

@@ -1,6 +1,6 @@
 {
   "name": "@useparley/plugin-pi",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "private": false,
   "description": "Pi extension that exposes deterministic Parley session provenance to spawned tools.",
   "type": "module",
@@ -35,7 +35,8 @@
   },
   "scripts": {
     "build": "tsdown",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run build"
   },
   "dependencies": {
     "@useparley/core": "workspace:*"

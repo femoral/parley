@@ -1,6 +1,6 @@
 {
   "name": "@useparley/daemon",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "The parley daemon: engine, vendor adapters, sqlite storage, HTTP server, and MCP channel.",
   "type": "module",
   "engines": {
@@ -44,7 +44,8 @@
   },
   "scripts": {
     "build": "tsdown",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run build"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
