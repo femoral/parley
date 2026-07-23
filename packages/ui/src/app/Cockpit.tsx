@@ -102,31 +102,14 @@ export function Cockpit() {
           </section>
 
           <section className="pc-region--center" aria-label={mode === "soundings" ? "Soundings" : "The cove"}>
+
             <div className="pc-center__head">
               <div className="pc-center__title-stack">
                 <Cartouche ornaments={settings.ornaments} />
-                <nav className="pc-view-nav pc-view-nav--cartouche" aria-label="Cockpit views">
-                  {/* Toggle pair (not page links): aria-pressed, not aria-current="page". */}
-                  <button
-                    type="button"
-                    className={`pc-view-nav__tab${mode === "cove" ? " pc-view-nav__tab--active" : ""}`}
-                    aria-pressed={mode === "cove"}
-                    onClick={() => setMode("cove")}
-                  >
-                    Cove
-                  </button>
-                  <button
-                    type="button"
-                    className={`pc-view-nav__tab${mode === "soundings" ? " pc-view-nav__tab--active" : ""}`}
-                    aria-pressed={mode === "soundings"}
-                    onClick={() => setMode("soundings")}
-                  >
-                    Soundings
-                  </button>
-                </nav>
               </div>
               <DayChip day={day} daemonUptimeDays={daemonUptimeDays} clock={clock} />
             </div>
+
             {mode === "soundings" ? (
               <div className="pc-soundings-stage">
                 <SoundingsPanel
@@ -181,6 +164,24 @@ export function Cockpit() {
 
         <footer className="pc-settings-row" aria-label="Chart key and settings">
           <ChartKey />
+          <nav className="pc-footer-nav" aria-label="Cockpit views">
+            <button
+              type="button"
+              className={`pc-footer-nav__tab${mode === "cove" ? " pc-footer-nav__tab--active" : ""}`}
+              aria-pressed={mode === "cove"}
+              onClick={() => setMode("cove")}
+            >
+              Cove
+            </button>
+            <button
+              type="button"
+              className={`pc-footer-nav__tab${mode === "soundings" ? " pc-footer-nav__tab--active" : ""}`}
+              aria-pressed={mode === "soundings"}
+              onClick={() => setMode("soundings")}
+            >
+              Soundings
+            </button>
+          </nav>
           <SettingsBar
             ornaments={settings.ornaments}
             showKit={settings.showKit}

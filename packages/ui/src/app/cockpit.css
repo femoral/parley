@@ -90,16 +90,66 @@
   min-height: 0;
 }
 /* Settings strip + production chart key sit on one row; overflow visible so
-   the chart-key popover can open upward without being clipped here. */
+   the chart-key popover can open upward without being clipped here. The
+   Cove/Soundings view toggle docks in the centre column (moved here from the
+   cartouche corner per live-mode design pass): a 3-up grid keeps it truly
+   centred regardless of how wide the chart-key / settings groups are. */
 .pc-settings-row {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
   align-items: center;
   gap: 8px;
   flex: 0 0 auto;
   position: relative;
   z-index: var(--z-popover);
+}
+.pc-settings-row > .pc-chart-key {
+  justify-self: start;
+}
+.pc-settings-row > .pc-settings {
+  justify-self: end;
+}
+
+/* View nav, footer placement — a compact well-set segmented pill matching
+   the settings strip's density (DESIGN.md §Navigation is the corner-engraved
+   form; this variant sits on bare footer real estate instead of a plate, so
+   it borrows the sunken-well language of .pc-settings__toggle's neighbours). */
+.pc-footer-nav {
+  justify-self: center;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  background: var(--input-bg);
+  border: 1px solid var(--plate-well-border);
+  border-radius: var(--radius-pill);
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.45);
+}
+.pc-footer-nav__tab {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--ink-faint);
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: var(--text-label);
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  padding: 6px 15px;
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  line-height: 1.15;
+}
+.pc-footer-nav__tab:hover {
+  color: var(--brass-soft);
+}
+.pc-footer-nav__tab--active {
+  color: var(--ink-dark-on-gold);
+  background: var(--btn-gold-fill);
+}
+.pc-footer-nav__tab:focus-visible {
+  outline: 2px solid var(--brass-bright);
+  outline-offset: 2px;
 }
 .pc-cockpit__main {
   flex: 1;
