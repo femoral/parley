@@ -3,10 +3,8 @@ import { parseArgs } from "../args.js";
 import { DaemonRequestError, daemonGet, ensureDaemon } from "../client.js";
 import type { CliContext } from "../context.js";
 import { UsageError } from "../errors.js";
-import { isTerminalState, sleep } from "@useparley/core";
-import { type TaskRow } from "@useparley/daemon/db.js";
+import { isTerminalState, sleep, type TaskDetailResponse } from "@useparley/core";
 import { readLogTail } from "@useparley/daemon/logtail.js";
-import type { Envelope } from "@useparley/daemon/report.js";
 import { parseLaunchCommands } from "@useparley/daemon/trace.js";
 
 const FOLLOW_POLL_MS = 100;
@@ -16,11 +14,6 @@ const FOLLOW_POLL_MS = 100;
  * terminal state, keep draining until the log stops growing for this long.
  */
 const SETTLE_MS = 500;
-
-interface TaskResponse {
-  task: Envelope;
-  row: TaskRow;
-}
 
 /**
  * Event types that end a turn rather than continue one — grok's own `error`/
@@ -159,22 +152,23 @@ export async function runLogs(ctx: CliContext, args: string[]): Promise<number> 
   if (ref === undefined) throw new UsageError("usage: parley logs <task> [--follow] [--json]");
 
   const discovery = await ensureDaemon(ctx.paths, ctx.env);
-  let task: TaskResponse;
+  let detail: TaskDetailResponse;
   try {
-    task = await daemonGet<TaskResponse>(discovery, `/tasks/${encodeURIComponent(ref)}`);
+    detail = await daemonGet<TaskDetailResponse>(discovery, `/tasks/${encodeURIComponent(ref)}`);
   } catch (err) {
     if (err instanceof DaemonRequestError && err.status === 404) {
       throw new UsageError(`logs: ${err.message}`);
     }
     throw err;
   }
-  const taskId = task.row.id;
+  const taskId = detail.task.task_id;
   const logFile = path.join(ctx.paths.tasks, taskId, "vendor.jsonl");
 
   // #154: launch_command header — one line before the vendor stream so operators
   // can see the resolved argv/cwd/env names without grepping the DB. Prompt is
   // already elided in the stored record; env values are never present.
-  const launches = parseLaunchCommands(task.row.launch_command);
+  // Detail still carries a storage-shaped `row` for this inspector column (#208).
+  const launches = parseLaunchCommands(detail.row?.launch_command);
   if (launches.length > 0) {
     ctx.stdout(`# launch_command ${JSON.stringify(launches)}\n`);
   }
@@ -198,13 +192,13 @@ export async function runLogs(ctx: CliContext, args: string[]): Promise<number> 
   // failure mode; buffering for coalescing must not trade it away.
   try {
     for (;;) {
-      const { row } = await daemonGet<TaskResponse>(
+      const { task } = await daemonGet<TaskDetailResponse>(
         discovery,
         `/tasks/${encodeURIComponent(taskId)}`,
       );
       offset = drain(logFile, offset, onBytes);
       coalescer?.flushPending();
-      if (isTerminalState(row.state)) break;
+      if (isTerminalState(task.state)) break;
       await sleep(FOLLOW_POLL_MS);
     }
 

@@ -3,19 +3,16 @@ import type {
   EvalDetail,
   SessionProvenance,
   TaskDetailResponse,
+  TaskEnvelope,
   TaskMetricsFilters,
+  TaskRow,
+  TasksResponse,
 } from "@useparley/core";
 import { filtersToSearchParams } from "@useparley/core";
 import { parseArgs } from "../args.js";
 import { type CliContext, printJson } from "../context.js";
 import { daemonGet, ensureDaemon } from "../client.js";
-import type { TaskRow } from "@useparley/daemon/db.js";
-import { parseJsonColumn } from "@useparley/daemon/report.js";
 import { filtersFromFlags, METRICS_FILTER_FLAGS } from "./metrics.js";
-
-interface TasksResponse {
-  tasks: TaskRow[];
-}
 
 /** Compact `<n>k` rendering of a raw token count, e.g. 1234 -> "1.2k". */
 function formatTokenCount(n: number): string {
@@ -38,15 +35,20 @@ function formatUsage(usage: Record<string, number> | null): string {
 }
 
 /**
- * `MmSSs` elapsed time from `started_at ?? created_at` through `completed_at`;
- * a still-running task (no `completed_at` yet) is measured against now and
- * suffixed `...` to mark it as a live, growing figure.
+ * Prefer daemon-computed `duration_ms` when set; otherwise measure from
+ * `started_at ?? created_at` through `completed_at` (or now while live).
+ * A still-running task is suffixed `...` to mark it as a growing figure.
  */
-function formatDuration(task: TaskRow): string {
-  const startMs = Date.parse(task.started_at ?? task.created_at);
+function formatDuration(task: TaskEnvelope): string {
   const running = task.completed_at === null;
-  const endMs = task.completed_at === null ? Date.now() : Date.parse(task.completed_at);
-  const totalSeconds = Math.max(0, Math.floor((endMs - startMs) / 1000));
+  let totalSeconds: number;
+  if (task.duration_ms !== null && !running) {
+    totalSeconds = Math.max(0, Math.floor(task.duration_ms / 1000));
+  } else {
+    const startMs = Date.parse(task.started_at ?? task.created_at);
+    const endMs = task.completed_at === null ? Date.now() : Date.parse(task.completed_at);
+    totalSeconds = Math.max(0, Math.floor((endMs - startMs) / 1000));
+  }
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
   const formatted = `${minutes}m${String(seconds).padStart(2, "0")}s`;
@@ -64,7 +66,7 @@ function shortSession(id: string | null): string {
  * are `1`; each `parley fix` increments. Always present so the column is
  * stable even when every row is a first attempt.
  */
-function formatAttempt(task: TaskRow): string {
+function formatAttempt(task: TaskEnvelope): string {
   return String(task.attempt ?? 1);
 }
 
@@ -82,21 +84,17 @@ function cacheHit(cached: number | null | undefined): boolean | null {
  * STATE column (#171): plain state, or `queued #N (vendor:X)` when waiting
  * on a concurrency cap so operators see position without --json.
  */
-function formatState(task: TaskRow): string {
+function formatState(task: TaskEnvelope): string {
   if (task.state !== "queued") return task.state;
-  const pos =
-    typeof (task as TaskRow & { queue_position?: number | null }).queue_position === "number"
-      ? (task as TaskRow & { queue_position?: number | null }).queue_position
-      : null;
-  const cap =
-    (task as TaskRow & { blocking_cap?: string | null }).blocking_cap ?? null;
+  const pos = typeof task.queue_position === "number" ? task.queue_position : null;
+  const cap = task.blocking_cap ?? null;
   const parts: string[] = ["queued"];
   if (pos !== null) parts.push(`#${pos}`);
   if (cap) parts.push(`(${cap})`);
   return parts.join(" ");
 }
 
-function renderTable(ctx: CliContext, tasks: TaskRow[]): void {
+function renderTable(ctx: CliContext, tasks: TaskEnvelope[]): void {
   if (tasks.length === 0) {
     ctx.stdout("No tasks.\n");
     return;
@@ -116,7 +114,7 @@ function renderTable(ctx: CliContext, tasks: TaskRow[]): void {
     "DURATION",
   ];
   const rows = tasks.map((t) => [
-    t.id,
+    t.task_id,
     shortSession(t.orchestrator_session_id),
     t.name ?? "-",
     t.type || "other",
@@ -126,7 +124,7 @@ function renderTable(ctx: CliContext, tasks: TaskRow[]): void {
     t.model ?? "-",
     formatState(t),
     formatAttempt(t),
-    formatUsage(parseJsonColumn<Record<string, number>>(t.usage)),
+    formatUsage(t.usage),
     formatDuration(t),
   ]);
   const widths = header.map((h, i) =>
@@ -224,40 +222,65 @@ function renderDetailSections(
   }
 }
 
-/** Present a task row for list `--json` output: JSON columns become objects. */
-function presentRow(row: TaskRow): Record<string, unknown> {
+/** CLI-only adornments on an already-decoded list envelope for `--json`. */
+function presentEnvelope(task: TaskEnvelope): Record<string, unknown> {
+  const cached = task.cached_input_tokens === undefined ? null : task.cached_input_tokens;
+  return {
+    ...task,
+    attempt: task.attempt ?? 1,
+    parent_task_id: task.parent_task_id ?? null,
+    cached_input_tokens: cached,
+    cache_hit: cacheHit(cached),
+    queue_position: task.queue_position ?? null,
+    blocking_cap: task.blocking_cap ?? null,
+  };
+}
+
+/**
+ * Decode storage-shaped detail `row` fields for status `--json` scripts that
+ * still read inspector columns (prompt, launch_command, eval_*, sandbox).
+ * List path never uses this — it ships envelopes only (#208).
+ */
+function presentStorageRow(row: TaskRow): Record<string, unknown> {
   const cached =
     row.cached_input_tokens === undefined ? null : row.cached_input_tokens;
+  const parseJson = (value: string | null | undefined): unknown => {
+    if (value === null || value === undefined) return null;
+    try {
+      return JSON.parse(value);
+    } catch {
+      return null;
+    }
+  };
   return {
     ...row,
-    usage: parseJsonColumn(row.usage),
-    report: parseJsonColumn(row.report),
-    // #154: launch_command is stored as a JSON array of spawn records.
-    launch_command: parseJsonColumn(row.launch_command),
-    // #157: eval_answers is a JSON object of criterion id → boolean.
-    eval_answers: parseJsonColumn(row.eval_answers ?? null),
-    // `network` is stored as SQLite 0/1; surface it as a boolean.
+    usage: parseJson(row.usage),
+    report: parseJson(row.report),
+    launch_command: parseJson(row.launch_command),
+    eval_answers: parseJson(row.eval_answers ?? null),
     network: row.network === 1,
-    // Attempt chain (#152): boolean + derived tri-state for cache honesty.
     resumed: row.resumed === 1,
     attempt: row.attempt ?? 1,
     parent_task_id: row.parent_task_id ?? null,
     cached_input_tokens: cached,
     cache_hit: cacheHit(cached),
-    queue_position:
-      (row as TaskRow & { queue_position?: number | null }).queue_position ?? null,
-    blocking_cap:
-      (row as TaskRow & { blocking_cap?: string | null }).blocking_cap ?? null,
+    queue_position: row.queue_position ?? null,
+    blocking_cap: row.blocking_cap ?? null,
   };
 }
 
 /**
- * Present single-task status `--json`: row fields plus Session/Eval/Attempts
- * sections (#164) so scripts see the same data as human output.
+ * Present single-task status `--json`: storage row (decoded) plus Session /
+ * Eval / Attempts sections (#164) so scripts see the same data as human
+ * output. Detail still carries a storage `row` during the #208 migration.
  */
 function presentDetail(detail: TaskDetailResponse): Record<string, unknown> {
+  const base =
+    detail.row !== undefined
+      ? presentStorageRow(detail.row)
+      : presentEnvelope(detail.task);
   return {
-    ...presentRow(detail.row as TaskRow),
+    ...base,
     session: detail.session,
     eval_detail: detail.eval_detail,
     attempts: detail.attempts,
@@ -273,7 +296,7 @@ function presentDetail(detail: TaskDetailResponse): Record<string, unknown> {
 function resolveSessionFilter(
   sessionFlag: string | undefined,
   env: NodeJS.ProcessEnv,
-  tasks: TaskRow[],
+  tasks: TaskEnvelope[],
 ): string | undefined {
   const latest = (): string | undefined =>
     tasks.find((t) => t.orchestrator_session_id !== null)?.orchestrator_session_id ?? undefined;
@@ -290,14 +313,14 @@ function resolveSessionFilter(
  * uses CLI defaulting (latest / env / --all).
  */
 function applySessionScope(
-  tasks: TaskRow[],
+  tasks: TaskEnvelope[],
   ref: string | undefined,
   all: boolean,
   sessionFlag: string | undefined,
   env: NodeJS.ProcessEnv,
-): TaskRow[] {
+): TaskEnvelope[] {
   if (ref) {
-    return tasks.filter((t) => t.id === ref || t.name === ref);
+    return tasks.filter((t) => t.task_id === ref || t.name === ref);
   }
   if (all) return tasks;
   const session = resolveSessionFilter(sessionFlag, env, tasks);
@@ -339,7 +362,7 @@ export async function runStatus(ctx: CliContext, args: string[]): Promise<number
       discovery,
       listQs === "" ? "/tasks" : `/tasks?${listQs}`,
     );
-    const match = tasks.find((t) => t.id === ref || t.name === ref);
+    const match = tasks.find((t) => t.task_id === ref || t.name === ref);
     if (!match) {
       if (json) {
         printJson(ctx, null);
@@ -350,12 +373,12 @@ export async function runStatus(ctx: CliContext, args: string[]): Promise<number
     }
     const detail = await daemonGet<TaskDetailResponse>(
       discovery,
-      `/tasks/${encodeURIComponent(match.id)}`,
+      `/tasks/${encodeURIComponent(match.task_id)}`,
     );
     if (json) {
       printJson(ctx, presentDetail(detail));
     } else {
-      renderTable(ctx, [detail.row as TaskRow]);
+      renderTable(ctx, [detail.task]);
       renderDetailSections(ctx, detail);
     }
     return 0;
@@ -371,7 +394,7 @@ export async function runStatus(ctx: CliContext, args: string[]): Promise<number
   const filtered = applySessionScope(tasks, undefined, all, sessionFlag, ctx.env);
 
   if (json) {
-    printJson(ctx, filtered.map(presentRow));
+    printJson(ctx, filtered.map(presentEnvelope));
   } else {
     renderTable(ctx, filtered);
   }

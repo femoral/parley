@@ -141,9 +141,9 @@ export const TASK_EVENT_NAMES = [
 export type TaskEventName = (typeof TASK_EVENT_NAMES)[number];
 
 /**
- * The watch/SSE event name for a transition into `state` (spec §3). Mirrors the
- * daemon's `watchEventFor`: `running` → `task.started`, `awaiting_answer` →
- * `task.question`, everything else `task.<state>`.
+ * The watch/SSE event name for a transition into `state` (spec §3). Sole
+ * authority for the wire event string (#208): `running` → `task.started`,
+ * `awaiting_answer` → `task.question`, everything else `task.<state>`.
  */
 export function eventNameForState(state: string): TaskEventName {
   if (state === "running") return "task.started";

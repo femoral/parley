@@ -97,8 +97,9 @@ export class ParleyClient {
   }
 
   /**
-   * `GET /tasks` — tasks plus the atomic "start from now" seq baseline.
-   * Optional filters (#164) narrow the list the same way as metrics.
+   * `GET /tasks` — envelope snapshot plus the atomic "start from now" seq
+   * baseline (#208). Optional filters (#164) narrow the list the same way as
+   * metrics.
    */
   listTasks(filters?: TaskMetricsFilters): Promise<TasksResponse> {
     const params = filtersToSearchParams(filters);
@@ -127,7 +128,7 @@ export class ParleyClient {
     return this.request<MetricsResponse>(qs === "" ? "/metrics" : `/metrics?${qs}`);
   }
 
-  /** `GET /tasks/:ref` — a task's envelope alongside its raw row. */
+  /** `GET /tasks/:ref` — envelope plus decoded detail companions (and deprecated row). */
   getTask(ref: string): Promise<TaskDetailResponse> {
     return this.request<TaskDetailResponse>(`/tasks/${encodeURIComponent(ref)}`);
   }

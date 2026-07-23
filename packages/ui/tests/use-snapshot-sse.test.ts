@@ -1,23 +1,15 @@
 /** @vitest-environment happy-dom */
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
-import { ParleyClient, type TaskRow, type TasksResponse } from "@useparley/core";
+import { ParleyClient, type TasksResponse } from "@useparley/core";
 import { useSnapshot } from "../src/app/hooks/useSnapshot.js";
-import { envelope, FakeEventSource, row } from "./fixtures.js";
+import { envelope, FakeEventSource } from "./fixtures.js";
 
-/** A same-origin fetch stand-in serving `GET /tasks` and `GET /tasks/:ref`. */
-function fakeDaemon(snapshot: TasksResponse, detailRows: Record<string, TaskRow>): typeof fetch {
+/** A same-origin fetch stand-in serving `GET /tasks` (envelope list, #208). */
+function fakeDaemon(snapshot: TasksResponse): typeof fetch {
   return (async (input: string | URL | Request) => {
     const path = String(input);
     if (path === "/tasks") return new Response(JSON.stringify(snapshot), { status: 200 });
-    const match = /^\/tasks\/([^/?]+)$/.exec(path);
-    const detail = match && detailRows[decodeURIComponent(match[1]!)];
-    if (detail) {
-      return new Response(
-        JSON.stringify({ task: envelope({ task_id: detail.id, state: detail.state }), row: detail }),
-        { status: 200 },
-      );
-    }
     return new Response(JSON.stringify({ error: "not found" }), { status: 404 });
   }) as typeof fetch;
 }
@@ -29,23 +21,25 @@ afterEach(() => {
   FakeEventSource.current = undefined;
 });
 
-describe("useSnapshot regroups live on SSE transitions (#66)", () => {
+describe("useSnapshot regroups live on SSE transitions (#66 / #208)", () => {
   it("a fake-vendor task moving states visibly re-sorts the roster without reload", async () => {
     (globalThis as { EventSource?: unknown }).EventSource = FakeEventSource;
 
     const snapshot: TasksResponse = {
       seq: 1,
       tasks: [
-        row({
-          id: "t1",
+        envelope({
+          task_id: "t1",
           state: "running",
           orchestrator_session_id: "sess-1",
           name: "chart-the-bay",
           branch: "feat/bay",
+          orch_harness: "claude",
+          updated_at: "2026-01-01T00:00:01.000Z",
         }),
       ],
     };
-    const client = new ParleyClient({ baseUrl: "", fetch: fakeDaemon(snapshot, {}) });
+    const client = new ParleyClient({ baseUrl: "", fetch: fakeDaemon(snapshot) });
 
     const { result } = renderHook(() => useSnapshot(client));
 
@@ -58,18 +52,25 @@ describe("useSnapshot regroups live on SSE transitions (#66)", () => {
     expect(result.current.durableSessions).toBe(1);
 
     // The fake vendor raises a question — task.question moves t1 to
-    // awaiting_answer, the top of the attention order.
+    // awaiting_answer, the top of the attention order. Session rides the
+    // envelope (#208), so grouping survives without a row fetch.
     act(() => {
       FakeEventSource.current!.emit(
         "task.question",
         2,
-        envelope({ task_id: "t1", name: "chart-the-bay", state: "awaiting_answer", branch: "feat/bay" }),
+        envelope({
+          task_id: "t1",
+          name: "chart-the-bay",
+          state: "awaiting_answer",
+          branch: "feat/bay",
+          orchestrator_session_id: "sess-1",
+          orch_harness: "claude",
+          updated_at: "2026-01-01T00:00:02.000Z",
+        }),
       );
     });
     await waitFor(() => expect(result.current.groups.map((g) => g.state)).toEqual(["awaiting_answer"]));
     expect(result.current.groups[0]!.tasks[0]!.name).toBe("chart-the-bay");
-    // The envelope carries no orchestrator_session_id — the session grouping
-    // must survive the transition, not blank out (the merge invariant).
     expect(result.current.sessions).toEqual([{ id: "sess-1", label: "sess-1", count: 1 }]);
     expect(result.current.durableSessions).toBe(1);
 
@@ -79,7 +80,15 @@ describe("useSnapshot regroups live on SSE transitions (#66)", () => {
       FakeEventSource.current!.emit(
         "task.completed",
         3,
-        envelope({ task_id: "t1", name: "chart-the-bay", state: "completed", branch: "feat/bay" }),
+        envelope({
+          task_id: "t1",
+          name: "chart-the-bay",
+          state: "completed",
+          branch: "feat/bay",
+          orchestrator_session_id: "sess-1",
+          orch_harness: "claude",
+          updated_at: "2026-01-01T00:00:03.000Z",
+        }),
       );
     });
     await waitFor(() => expect(result.current.groups.map((g) => g.state)).toEqual(["completed"]));
@@ -88,30 +97,35 @@ describe("useSnapshot regroups live on SSE transitions (#66)", () => {
     expect(result.current.durableSessions).toBe(0);
   });
 
-  it("a task born after bootstrap fetches its row once and joins its session", async () => {
+  it("a task born after bootstrap joins its session from the envelope alone", async () => {
     (globalThis as { EventSource?: unknown }).EventSource = FakeEventSource;
 
     const snapshot: TasksResponse = { seq: 1, tasks: [] };
-    // Only GET /tasks/t2 knows the session — envelopes never carry it.
     const client = new ParleyClient({
       baseUrl: "",
-      fetch: fakeDaemon(snapshot, {
-        t2: row({ id: "t2", state: "running", orchestrator_session_id: "sess-2", name: "new-voyage" }),
-      }),
+      fetch: fakeDaemon(snapshot),
     });
 
     const { result } = renderHook(() => useSnapshot(client));
     await waitFor(() => expect(result.current.totalTasks).toBe(0));
 
     // The orchestrator delegates a new task while the cockpit is open: it
-    // arrives only as an envelope, which has no orchestrator_session_id.
+    // arrives as a full envelope with session/recency (#208) — no GET detail.
     act(() => {
-      FakeEventSource.current!.emit("task.started", 2, envelope({ task_id: "t2", state: "running" }));
+      FakeEventSource.current!.emit(
+        "task.started",
+        2,
+        envelope({
+          task_id: "t2",
+          state: "running",
+          name: "new-voyage",
+          orchestrator_session_id: "sess-2",
+          orch_harness: "codex",
+          updated_at: "2026-01-01T00:00:02.000Z",
+        }),
+      );
     });
     await waitFor(() => expect(result.current.totalTasks).toBe(1));
-
-    // The hook repairs the missing session from the task's row — the new task
-    // must appear under its session chip without a page reload.
     await waitFor(() =>
       expect(result.current.sessions).toEqual([{ id: "sess-2", label: "sess-2", count: 1 }]),
     );
@@ -124,7 +138,7 @@ describe("useSnapshot connection / stream-lost signal", () => {
     (globalThis as { EventSource?: unknown }).EventSource = FakeEventSource;
     const client = new ParleyClient({
       baseUrl: "",
-      fetch: fakeDaemon({ seq: 1, tasks: [] }, {}),
+      fetch: fakeDaemon({ seq: 1, tasks: [] }),
     });
     const { result } = renderHook(() => useSnapshot(client));
     expect(result.current.ready).toBe(false);
@@ -138,7 +152,7 @@ describe("useSnapshot connection / stream-lost signal", () => {
 
     const client = new ParleyClient({
       baseUrl: "",
-      fetch: fakeDaemon({ seq: 1, tasks: [] }, {}),
+      fetch: fakeDaemon({ seq: 1, tasks: [] }),
     });
     const { result } = renderHook(() => useSnapshot(client));
 
@@ -174,9 +188,15 @@ describe("useSnapshot connection / stream-lost signal", () => {
 
     const snapshot: TasksResponse = {
       seq: 1,
-      tasks: [row({ id: "t1", state: "running", orchestrator_session_id: "sess-1" })],
+      tasks: [
+        envelope({
+          task_id: "t1",
+          state: "running",
+          orchestrator_session_id: "sess-1",
+        }),
+      ],
     };
-    const client = new ParleyClient({ baseUrl: "", fetch: fakeDaemon(snapshot, {}) });
+    const client = new ParleyClient({ baseUrl: "", fetch: fakeDaemon(snapshot) });
     const { result } = renderHook(() => useSnapshot(client));
 
     await waitFor(() => expect(result.current.connected).toBe(true));
@@ -193,7 +213,12 @@ describe("useSnapshot connection / stream-lost signal", () => {
       FakeEventSource.current!.emit(
         "task.started",
         2,
-        envelope({ task_id: "t1", state: "running", name: "still-here" }),
+        envelope({
+          task_id: "t1",
+          state: "running",
+          name: "still-here",
+          orchestrator_session_id: "sess-1",
+        }),
       );
     });
     await waitFor(() => expect(result.current.connected).toBe(true));

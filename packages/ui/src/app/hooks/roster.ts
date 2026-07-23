@@ -43,17 +43,15 @@ export interface RosterTaskInput {
   state: string;
   branch: string | null;
   /** The orchestrator session this task belongs to (spec's "big ship"), or
-   * null when unknown (e.g. a task first observed via an SSE envelope, which
-   * does not carry this field — see `useSnapshot`'s merge comment). */
+   * null when unbound. Carried on the wire envelope (#208). */
   orchestratorSession: string | null;
   /** The outstanding question text while `awaiting_answer` (else null) — the
    * `useSnapshot`-maintained map this feeds both the roster and inbox
    * projections (#67), so it lives on the shared input shape. */
   question: string | null;
   /**
-   * ISO-8601 last-activity timestamp when known (from the task row's
-   * `updated_at`, or the wall clock of an SSE transition). Used only to order
-   * session chips by recency (#88); absent values sort last.
+   * ISO-8601 last-activity timestamp from the envelope's `updated_at` (#208).
+   * Used to order session chips by recency (#88); absent values sort last.
    */
   updatedAt?: string | null;
 }

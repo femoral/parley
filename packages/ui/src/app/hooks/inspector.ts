@@ -21,7 +21,9 @@ import { formatScore, formatUptime, formatUsage } from "./format.js";
 function projectBrief(detail: TaskDetailResponse): BriefView {
   const { task, row } = detail;
   return {
-    goal: row.prompt,
+    // Prompt is still detail-only (not on list/stream envelopes); fall back
+    // when the deprecated storage `row` is absent (#208).
+    goal: row?.prompt ?? null,
     branch: task.branch,
     worktree: task.worktree,
     model: task.model,
@@ -128,8 +130,9 @@ export function projectInspector(detail: TaskDetailResponse, logs: LogsView): In
     queuePosition: task.queue_position ?? null,
     blockingCap: task.blocking_cap ?? null,
     error: task.error,
-    evalScore: row.eval_score,
-    evalFeedback: row.eval_feedback,
+    // Prefer structured eval_detail when present; row is a deprecated mirror.
+    evalScore: detail.eval_detail?.score ?? row?.eval_score ?? null,
+    evalFeedback: detail.eval_detail?.feedback ?? row?.eval_feedback ?? null,
     brief: projectBrief(detail),
     logs,
     report: projectReport(detail),

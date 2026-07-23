@@ -235,7 +235,8 @@ describe("SSE transition stream (#62)", () => {
       expect(env.seq).toBe(Number(started.id));
       // The row itself has moved to completed — prove the envelope was pinned.
       const detail = await new ParleyClient({ baseUrl: baseUrl() }).getTask("t1");
-      expect(detail.row.state).toBe("completed");
+      expect(detail.row?.state ?? detail.task.state).toBe("completed");
+      expect(detail.task.state).toBe("completed");
       // The stream also surfaced the awaiting_answer transition in order.
       expect(sse.frames.map((f) => f.event)).toEqual([
         "task.started",
@@ -329,7 +330,7 @@ describe("health version + core SDK (#62)", () => {
     });
     try {
       // Snapshot captured the settled t1 and an atomic seq baseline.
-      expect(snapshot.tasks.some((t) => t.id === "t1")).toBe(true);
+      expect(snapshot.tasks.some((t) => t.task_id === "t1")).toBe(true);
       expect(typeof snapshot.seq).toBe("number");
 
       // A new task after bootstrap streams through the helper, decoded.

@@ -1,35 +1,16 @@
-import { isActionableState, isTerminalState } from "@useparley/core";
+import {
+  isActionableState,
+  isTerminalState,
+  type FollowEventResponse,
+  type InboxEventResponse,
+  type TaskEnvelope,
+  type TasksResponse,
+} from "@useparley/core";
 import { parseArgs } from "../args.js";
 import { daemonGet, ensureDaemon } from "../client.js";
 import { type CliContext, printJson } from "../context.js";
 import { UsageError } from "../errors.js";
-import type { TaskRow } from "@useparley/daemon/db.js";
-import type { Envelope } from "@useparley/daemon/report.js";
 import type { Discovery } from "@useparley/daemon/discovery.js";
-
-interface TasksResponse {
-  tasks: TaskRow[];
-  /** Current global transition seq — firehose "start from now" baseline. */
-  seq: number;
-}
-
-/** One inbox long-poll response (`GET /tasks/inbox`). */
-interface InboxEvent {
-  /** `task.question` / `task.stalled` / `task.failed` / `task.completed`, or null. */
-  event: string | null;
-  /** Event id (transition seq) when an event is present; else current global seq. */
-  seq: number;
-  task: Envelope | null;
-  /** True when every watched task is terminal and every event is acked. */
-  all_done: boolean;
-}
-
-/** One multi-task transition firehose response (`GET /tasks/events`). */
-interface FollowEvent {
-  event: string | null;
-  seq: number;
-  task: Envelope | null;
-}
 
 /**
  * How long each long-poll request may take; must exceed the daemon's window so
@@ -52,10 +33,10 @@ function exitFor(state: string): number {
 }
 
 /** Resolve a task ref (id first, then most-recent name) against a snapshot. */
-function resolveRef(tasks: TaskRow[], ref: string): TaskRow | undefined {
+function resolveRef(tasks: TaskEnvelope[], ref: string): TaskEnvelope | undefined {
   // `tasks` is newest-first, so the first name match is the most recent — the
   // same precedence as the daemon's `resolveTask`.
-  return tasks.find((t) => t.id === ref) ?? tasks.find((t) => t.name === ref);
+  return tasks.find((t) => t.task_id === ref) ?? tasks.find((t) => t.name === ref);
 }
 
 /**
@@ -67,7 +48,7 @@ function resolveRef(tasks: TaskRow[], ref: string): TaskRow | undefined {
 function resolveSessionFilter(
   sessionFlag: string | undefined,
   env: NodeJS.ProcessEnv,
-  tasks: TaskRow[],
+  tasks: TaskEnvelope[],
 ): string | undefined {
   const latest = (): string | undefined =>
     tasks.find((t) => t.orchestrator_session_id !== null)?.orchestrator_session_id ?? undefined;
@@ -140,7 +121,7 @@ export async function runWatch(ctx: CliContext, args: string[]): Promise<number>
     });
   }
 
-  const ids = [...new Set(scoped.map((t) => t.id))];
+  const ids = [...new Set(scoped.map((t) => t.task_id))];
 
   const query = (): string => {
     const params = new URLSearchParams();
@@ -151,7 +132,7 @@ export async function runWatch(ctx: CliContext, args: string[]): Promise<number>
   };
 
   for (;;) {
-    const ev = await daemonGet<InboxEvent>(discovery, query(), LONG_POLL_TIMEOUT_MS);
+    const ev = await daemonGet<InboxEventResponse>(discovery, query(), LONG_POLL_TIMEOUT_MS);
     // Ack is one-shot: only the first request carries it.
     ack = null;
 
@@ -178,11 +159,11 @@ export async function runWatch(ctx: CliContext, args: string[]): Promise<number>
 async function runFollow(
   ctx: CliContext,
   discovery: Discovery,
-  tasks: TaskRow[],
+  tasks: TaskEnvelope[],
   positionals: string[],
   baseline: number,
 ): Promise<number> {
-  let watched: TaskRow[];
+  let watched: TaskEnvelope[];
   if (positionals.length > 0) {
     watched = positionals.map((ref) => {
       const row = resolveRef(tasks, ref);
@@ -193,18 +174,18 @@ async function runFollow(
     watched = tasks.filter((t) => !isTerminalState(t.state));
   }
 
-  const ids = [...new Set(watched.map((t) => t.id))];
+  const ids = [...new Set(watched.map((t) => t.task_id))];
   if (ids.length === 0) return 0;
 
   const remaining = new Set(
-    watched.filter((t) => !isTerminalState(t.state)).map((t) => t.id),
+    watched.filter((t) => !isTerminalState(t.state)).map((t) => t.task_id),
   );
   if (remaining.size === 0) return 0;
 
   let cursor = baseline;
   for (;;) {
     const q = `/tasks/events?ids=${encodeURIComponent(ids.join(","))}&since=${cursor}&wait=true`;
-    const ev = await daemonGet<FollowEvent>(discovery, q, LONG_POLL_TIMEOUT_MS);
+    const ev = await daemonGet<FollowEventResponse>(discovery, q, LONG_POLL_TIMEOUT_MS);
     if (ev.event === null || ev.task === null) {
       cursor = ev.seq;
       continue;
@@ -217,7 +198,7 @@ async function runFollow(
 }
 
 /** Print a single inbox event: JSON when asked, else a concise human line. */
-function report(ctx: CliContext, ev: InboxEvent, json: boolean): void {
+function report(ctx: CliContext, ev: InboxEventResponse, json: boolean): void {
   if (json) {
     printJson(ctx, { event: ev.event, seq: ev.seq, task: ev.task });
     return;

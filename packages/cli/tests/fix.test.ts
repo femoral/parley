@@ -346,8 +346,8 @@ describe("parley fix — attempt chains (#152)", () => {
 
     const listJson = JSON.parse(
       (await runCli(["status", "--all", "--json"], home)).stdout,
-    ) as Array<{ id: string; attempt: number; parent_task_id: string | null }>;
-    const byId = Object.fromEntries(listJson.map((r) => [r.id, r]));
+    ) as Array<{ task_id: string; attempt: number; parent_task_id: string | null }>;
+    const byId = Object.fromEntries(listJson.map((r) => [r.task_id, r]));
     expect(byId[parentId]?.attempt).toBe(1);
     expect(byId[parentId]?.parent_task_id).toBeNull();
     expect(byId[fixId]?.attempt).toBe(2);
@@ -440,9 +440,12 @@ describe("parley fix — retry limits and --fresh (#158)", () => {
     // Rejection creates no new task row — chain still has one resumed attempt.
     const list = JSON.parse(
       (await runCli(["status", "--all", "--json"], home)).stdout,
-    ) as Array<{ id: string; resumed: boolean; parent_task_id: string | null }>;
+    ) as Array<{ task_id: string; resumed: boolean; parent_task_id: string | null }>;
     const chain = list.filter(
-      (t) => t.id === parentId || t.parent_task_id === parentId || t.id === firstAck.task_id,
+      (t) =>
+        t.task_id === parentId ||
+        t.parent_task_id === parentId ||
+        t.task_id === firstAck.task_id,
     );
     expect(chain.filter((t) => t.resumed).length).toBe(1);
   });

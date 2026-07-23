@@ -25,8 +25,11 @@ export interface Report {
 
 /**
  * The report envelope the daemon wraps around a task (spec §4) — the primary
- * task shape a UI renders. On a transition stream its `state`/`seq` are pinned
- * to the transition, even if the underlying row has since moved on.
+ * task shape on list, watch, and SSE. Storage never appears here: JSON columns
+ * are objects, booleans are booleans, and session/recency fields live on the
+ * envelope so live consumers need no row backfill. On a transition stream its
+ * `state`/`seq` are pinned to the transition, even if the underlying row has
+ * since moved on; `updated_at` reflects the storage row's last write.
  */
 export interface TaskEnvelope {
   task_id: string;
@@ -50,6 +53,28 @@ export interface TaskEnvelope {
   runner?: string | null;
   posture: Posture;
   session_id: string | null;
+  /**
+   * Orchestrator-run grouping (CONTEXT.md / `PARLEY_SESSION_ID`). Null when
+   * unbound (#208).
+   */
+  orchestrator_session_id: string | null;
+  /** ISO-8601 last activity on the storage row (recency / eviction) (#208). */
+  updated_at: string;
+  /** ISO-8601 task creation time (#208). */
+  created_at: string;
+  /** ISO-8601 when the task first entered `running`; null until then (#208). */
+  started_at: string | null;
+  /** ISO-8601 when the task reached a terminal state; null while live (#208). */
+  completed_at: string | null;
+  /**
+   * Spawn-time orchestrator harness snapshot (#162 / #208). Null when unbound.
+   * Optional so older clients remain assignable.
+   */
+  orch_harness?: string | null;
+  /** Spawn-time orchestrator model snapshot (#162 / #208). */
+  orch_model?: string | null;
+  /** Spawn-time orchestrator effort snapshot (#162 / #208). */
+  orch_effort?: string | null;
   usage: Record<string, number> | null;
   duration_ms: number | null;
   state: string;
@@ -91,10 +116,6 @@ export interface TaskEnvelope {
    * Vendor-reported cached input tokens (#152). Null when unreported — never
    * guessed. Optional for older clients.
    */
-  /**
-   * Vendor-reported cached input tokens (#152). Null when unreported — never
-   * guessed. Optional for older clients.
-   */
   cached_input_tokens?: number | null;
   /**
    * 1-based FIFO position among tasks waiting on the same concurrency cap
@@ -109,9 +130,10 @@ export interface TaskEnvelope {
 }
 
 /**
- * A task row as surfaced by `GET /tasks` and the `row` of `GET /tasks/:ref`.
- * The envelope is the richer view; the row exposes the raw persisted columns a
- * UI's inspector may want (timestamps, prompt, orchestrator session, eval).
+ * Storage-shaped task columns as still mirrored on `GET /tasks/:ref`'s
+ * deprecated `row` field. List and stream endpoints never ship this shape —
+ * they use {@link TaskEnvelope}. Prefer decoded detail sections
+ * (`session` / `eval_detail` / `attempts` / `qa`) over reading `row`.
  */
 export interface TaskRow {
   id: string;
@@ -264,10 +286,37 @@ export interface HealthResponse {
   started_at: string;
 }
 
-/** `GET /tasks` — every task plus the atomic "start from now" seq baseline. */
+/**
+ * `GET /tasks` — bootstrap snapshot: every task as a {@link TaskEnvelope}
+ * plus the atomic "start from now" seq baseline (#208).
+ */
 export interface TasksResponse {
-  tasks: TaskRow[];
+  tasks: TaskEnvelope[];
   seq: number;
+}
+
+/**
+ * `GET /tasks/inbox` — one acked attention-inbox long-poll response
+ * (ADR-0007 / #91 / #208).
+ */
+export interface InboxEventResponse {
+  /** Watch event name, or null when the poll window elapsed / all-done. */
+  event: string | null;
+  /** Event id (transition seq) when an event is present; else current global seq. */
+  seq: number;
+  task: TaskEnvelope | null;
+  /** True when every watched task is terminal and every event is acked. */
+  all_done: boolean;
+}
+
+/**
+ * `GET /tasks/events` — one multi-task transition firehose long-poll response
+ * (`watch --follow`, #208).
+ */
+export interface FollowEventResponse {
+  event: string | null;
+  seq: number;
+  task: TaskEnvelope | null;
 }
 
 /**
@@ -311,13 +360,18 @@ export interface QaTurn {
 }
 
 /**
- * `GET /tasks/:ref` — the task envelope alongside its raw row and the durable
- * Q&A history for the inspector (ask order). List endpoints omit `qa`.
+ * `GET /tasks/:ref` — the task envelope plus decoded detail companions for the
+ * inspector (ask order). List/stream endpoints omit these sections.
  * #164 adds attempt lineage, eval detail, and spawn-session provenance for Cove.
+ * #208: prefer decoded sections over the storage-shaped `row`.
  */
 export interface TaskDetailResponse {
   task: TaskEnvelope;
-  row: TaskRow;
+  /**
+   * @deprecated Storage-shaped mirror; remove after CLI/UI stop reading it.
+   * Prefer `task`, `session`, `eval_detail`, `attempts`, and `qa`.
+   */
+  row?: TaskRow;
   /** Per-task `ask_orchestrator` turns in ask order; empty when none. */
   qa: QaTurn[];
   /**

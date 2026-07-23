@@ -181,9 +181,10 @@ describe("context materialization (spec §7)", () => {
     );
     expect(fs.existsSync(path.join(cwd, ".parley", "context", "brief.md"))).toBe(true);
 
+    // #206: stalled-resume ack may still report `stalled` until the child is live.
     const answer = await runCli(["answer", "t1", "the-target"], home);
     expect(answer.code).toBe(0);
-    expect(JSON.parse(answer.stdout).state).toBe("running");
+    expect(["running", "stalled"]).toContain(JSON.parse(answer.stdout).state);
     await waitForState(home, "t1", "completed");
 
     // The resume run's prompt re-prepends the preamble and carries the answer.

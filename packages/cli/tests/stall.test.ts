@@ -162,9 +162,11 @@ describe("parley answer resumes a stalled task", () => {
     await waitForState(home, "t1", "stalled");
 
     // Late answer on the stalled task: respawn through resume(), run to completion.
+    // #206: stalled-resume ack may still report `stalled` until the child is
+    // live (the published →running edge comes from runChild, not answer()).
     const answer = await runCli(["answer", "t1", "option-b"], home);
     expect(answer.code).toBe(0);
-    expect(JSON.parse(answer.stdout).state).toBe("running");
+    expect(["running", "stalled"]).toContain(JSON.parse(answer.stdout).state);
     const row = await waitForState(home, "t1", "completed");
     const envelope = (await watchJson(home, ["t1"])).task!;
     expect(envelope.state).toBe("completed");
@@ -279,8 +281,8 @@ describe("daemon crash recovery (spec §3)", () => {
     const status = await runCli(["status", "--json"], home);
     expect(status.code).toBe(0);
     const rows = JSON.parse(status.stdout) as Record<string, unknown>[];
-    const t1 = rows.find((r) => r.id === "t1")!;
-    const t2 = rows.find((r) => r.id === "t2")!;
+    const t1 = rows.find((r) => r.task_id === "t1")!;
+    const t2 = rows.find((r) => r.task_id === "t2")!;
     expect(t1.state).toBe("stalled");
     expect(t2.state).toBe("completed");
     expect(t2.report).toEqual({

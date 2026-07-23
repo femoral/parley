@@ -3,6 +3,7 @@ import http from "node:http";
 import path from "node:path";
 import {
   collectUnknownConfigKeys,
+  eventNameForState,
   getConfigPath,
   isMetricsGroupBy,
   isTerminalState,
@@ -15,6 +16,7 @@ import {
   type HomePaths,
   type ParleyConfig,
   readConfig,
+  type TaskEnvelope,
 } from "@useparley/core";
 import { createAdapterRegistry } from "./adapters/index.js";
 import {
@@ -765,21 +767,11 @@ function handleLogs(
   sendJson(res, 200, { chunk, next, eof });
 }
 
-/**
- * Map a transition's state to the `parley watch` event name (spec §3). Watch
- * surfaces every transition — including `running` as `task.started`.
- */
-function watchEventFor(state: string): string {
-  if (state === "running") return "task.started";
-  if (state === "awaiting_answer") return "task.question";
-  return `task.${state}`;
-}
-
-/** Build a task envelope with concurrency-queue observability (#171). */
+/** Build a task envelope with concurrency-queue observability (#171 / #208). */
 function envelopeFor(
   engine: TaskEngine,
   row: import("./db.js").TaskRow,
-): ReturnType<typeof buildEnvelope> {
+): TaskEnvelope {
   const enriched = engine.withQueueInfo(row);
   return buildEnvelope(enriched, engine.logDir(row.id), {
     position: enriched.queue_position,
@@ -870,7 +862,7 @@ async function handleInbox(
   const row = result.task;
   const task = envelopeFor(engine, row);
   sendJson(res, 200, {
-    event: watchEventFor(row.state),
+    event: eventNameForState(row.state),
     seq: row.seq,
     task,
     all_done: false,
@@ -920,10 +912,15 @@ async function handleWatchEvents(
   // The envelope carries the current row for detail, but its `state`/`seq` are
   // pinned to the transition so the event name and the CLI's exit code agree
   // even if the row has since moved on (a superseded non-terminal transition).
+  // `updated_at` stays on the row's last write — do not pin it backwards.
   const task = envelopeFor(engine, row);
   task.state = transition.state;
   task.seq = transition.seq;
-  sendJson(res, 200, { event: watchEventFor(transition.state), seq: transition.seq, task });
+  sendJson(res, 200, {
+    event: eventNameForState(transition.state),
+    seq: transition.seq,
+    task,
+  });
 }
 
 /**
@@ -941,7 +938,7 @@ function sseMessageFor(engine: TaskEngine, transition: { seq: number; task_id: s
   task.state = transition.state;
   task.seq = transition.seq;
   const data = JSON.stringify(task);
-  return `id: ${transition.seq}\nevent: ${watchEventFor(transition.state)}\ndata: ${data}\n\n`;
+  return `id: ${transition.seq}\nevent: ${eventNameForState(transition.state)}\ndata: ${data}\n\n`;
 }
 
 /**
@@ -1575,14 +1572,16 @@ function createHandler(
           // The current global seq rides along so `parley watch` can capture a
           // "start from now" baseline atomically with the task snapshot (#34).
           // Optional filters (#164) narrow the list the same way as /metrics.
+          // #208: list ships envelopes, not storage rows.
           const filters = parseTaskMetricsFilters(url.searchParams);
           // List default: no session filter (return everything) — only apply
           // when the client explicitly passes session=.
           const all = engine.list();
-          const tasks =
+          const rows =
             Object.keys(filters).length === 0
               ? all
               : all.filter((t) => taskMatchesFilters(t, filters));
+          const tasks = rows.map((row) => envelopeFor(engine, row));
           sendJson(res, 200, { tasks, seq: engine.currentSeq() });
           return;
         }

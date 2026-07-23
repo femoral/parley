@@ -1,11 +1,16 @@
 import Ajv, { type ValidateFunction } from "ajv";
-import type { QaTurn as WireQaTurn, TaskEnvelope, TaskRow as WireTaskRow } from "@useparley/core";
+import type {
+  JsonSchema as CoreJsonSchema,
+  QaTurn as WireQaTurn,
+  Report as CoreReport,
+  TaskEnvelope,
+  TaskRow as WireTaskRow,
+} from "@useparley/core";
 import type { QaTurnRow, TaskRow } from "./db.js";
-import type { Posture } from "./adapters/types.js";
 import { readEvalExpected } from "./context.js";
 
 /** A JSON Schema — an object of keywords (or a boolean schema). */
-export type JsonSchema = Record<string, unknown> | boolean;
+export type JsonSchema = CoreJsonSchema;
 
 /**
  * Parley's default report schema (spec §4): the shape `submit_report` payloads
@@ -24,11 +29,7 @@ export const DEFAULT_REPORT_SCHEMA: JsonSchema = {
 };
 
 /** The body of a report accepted against the default schema. */
-export interface Report {
-  summary: string;
-  outcome: "success" | "partial" | "blocked";
-  files_changed: string[];
-}
+export type Report = CoreReport;
 
 // Compiling a schema is not free; cache validators keyed by their serialized
 // form so repeated `submit_report` calls (and re-validation across tasks that
@@ -131,88 +132,20 @@ export function summarizeReportSchema(schema: JsonSchema): string {
   return `Call \`submit_report\` with an object:\n${lines.join("\n")}`;
 }
 
-/** The report envelope the daemon wraps around a task's outcome (spec §4). */
-export interface Envelope {
-  task_id: string;
-  name: string | null;
-  repo: string | null;
-  /** The parley worktree path; null when `--cwd` bypassed worktree creation. */
-  worktree: string | null;
-  /** The branch parley created; the child's commits live here (parley never merges). */
-  branch: string | null;
-  vendor: string | null;
-  model: string | null;
-  /** Opaque reasoning-effort string (spec §9); passed through to the vendor unchanged. */
-  effort: string | null;
-  /** Profile name used at create time, if any (#113). */
-  profile: string | null;
-  /**
-   * Remote runner affinity (`--runner <name>`), if any (#111 / ADR-0012).
-   * Null means the task executes in-daemon (default).
-   */
-  runner: string | null;
-  /** The child's sandbox posture (spec §8): `{ sandbox, network }`. */
-  posture: Posture;
-  session_id: string | null;
-  usage: Record<string, number> | null;
-  duration_ms: number | null;
-  state: string;
-  report: Report | null;
-  /** The report schema actually applied to this task (default when omitted). */
-  report_schema: JsonSchema;
-  error: string | null;
-  /**
-   * Directory holding the task's captured vendor output (`vendor.jsonl`,
-   * `stderr.log`) — the diagnostics reference, most useful on a `failed` task.
-   */
-  logs_dir: string | null;
-  /** The outstanding question id while `awaiting_answer` (else null). */
-  question_id: string | null;
-  /** The outstanding question text while `awaiting_answer` (else null). */
-  question: string | null;
-  /**
-   * Global transition sequence number as of this response (#34 / ADR-0007): the
-   * seq of the task's most recent state change. For the attention inbox this
-   * is the event id passed to `watch --ack`. 0 before the task's first
-   * transition.
-   */
-  seq: number;
-  /** Whether the task's repo declares delegations into it are eval'd (#45). */
-  eval_expected: boolean;
-  /** Task size classification (XS|S|M|L|XL); null when unset (#118). */
-  size: string | null;
-  /** Task difficulty (trivial|easy|medium|hard|extreme); null when unset (#118). */
-  difficulty: string | null;
-  /** Work-domain task type (#151). Always set (default `other`). */
-  type: string;
-  /** Prior attempt this envelope reattempts (#152); null for first delegations. */
-  parent_task_id: string | null;
-  /** 1-based attempt number in a fix chain (#152). */
-  attempt: number;
-  /** Whether vendor-session resume was requested for this attempt (#152). */
-  resumed: boolean;
-  /**
-   * Vendor-reported cached input tokens (#152). Null when unreported — never
-   * guessed as 0.
-   */
-  cached_input_tokens: number | null;
-  /** 1-based FIFO queue position while `queued` (#171); else null. */
-  queue_position: number | null;
-  /** Cap blocking spawn while `queued` (#171), e.g. `vendor:fake`; else null. */
-  blocking_cap: string | null;
-}
+/**
+ * @deprecated Use {@link TaskEnvelope} from `@useparley/core`. Kept as an
+ * alias so residual deep imports compile during the #208 cutover.
+ */
+export type Envelope = TaskEnvelope;
 
 /**
- * Compile-time guard that the daemon keeps producing values assignable to the
- * public wire contract in `@useparley/core` (the SDK UIs consume). If a field
- * is renamed, dropped, or retyped incompatibly on either side, one of these
- * assignments stops compiling — the drift is caught here, not in a UI.
+ * Compile-time guard that storage rows and Q&A turns remain assignable to the
+ * public wire contract in `@useparley/core`. Envelope production is checked by
+ * {@link buildEnvelope}'s return type being `TaskEnvelope` directly.
  */
 type Assignable<From, To> = From extends To ? true : never;
-const _envelopeMatchesContract: Assignable<Envelope, TaskEnvelope> = true;
 const _rowMatchesContract: Assignable<TaskRow, WireTaskRow> = true;
 const _qaTurnMatchesContract: Assignable<QaTurnRow, WireQaTurn> = true;
-void _envelopeMatchesContract;
 void _rowMatchesContract;
 void _qaTurnMatchesContract;
 
@@ -227,14 +160,15 @@ export function parseJsonColumn<T>(value: string | null): T | null {
 }
 
 /**
- * Build the report envelope for a task row. `logsDir` is the task's captured
- * output directory (the diagnostics reference); pass null when unknown.
+ * Map one storage row (+ optional queue enrichment) to the public wire
+ * envelope. Daemon-internal only — the HTTP/SSE seam is the sole caller.
+ * `logsDir` is the task's captured output directory; pass null when unknown.
  */
 export function buildEnvelope(
   task: TaskRow,
   logsDir: string | null = null,
   queue: { position: number | null; blockingCap: string | null } | null = null,
-): Envelope {
+): TaskEnvelope {
   const start = task.started_at ?? task.created_at;
   const end = task.completed_at;
   const duration =
@@ -252,6 +186,14 @@ export function buildEnvelope(
     runner: task.runner,
     posture: { sandbox: task.sandbox, network: task.network === 1 },
     session_id: task.session_id,
+    orchestrator_session_id: task.orchestrator_session_id,
+    updated_at: task.updated_at,
+    created_at: task.created_at,
+    started_at: task.started_at,
+    completed_at: task.completed_at,
+    orch_harness: task.orch_harness,
+    orch_model: task.orch_model,
+    orch_effort: task.orch_effort,
     usage: parseJsonColumn<Record<string, number>>(task.usage),
     duration_ms: duration,
     state: task.state,

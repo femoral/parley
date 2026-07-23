@@ -1,5 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
-import { bootstrapTaskStream, type ParleyClient, type StreamEvent, type TaskRow } from "@useparley/core";
+import {
+  bootstrapTaskStream,
+  type ParleyClient,
+  type StreamEvent,
+  type TaskEnvelope,
+} from "@useparley/core";
 import { projectInbox } from "./inbox.js";
 import { projectRoster, type RosterTaskInput } from "./roster.js";
 import { projectScene, type SceneView } from "./scene.js";
@@ -55,45 +60,36 @@ const EMPTY_PROJECTION = {
   durableSessions: 0,
 };
 
-function fromRow(row: TaskRow): RosterTaskInput {
+/** Project a wire envelope into the roster input DTO (#208). */
+function fromEnvelope(task: TaskEnvelope): RosterTaskInput {
   return {
-    id: row.id,
-    name: row.name ?? row.id,
-    vendor: row.vendor,
-    model: row.model,
-    orchHarness: row.orch_harness,
-    state: row.state,
-    branch: row.branch,
-    orchestratorSession: row.orchestrator_session_id,
-    question: row.question,
-    updatedAt: row.updated_at,
+    id: task.task_id,
+    name: task.name ?? task.task_id,
+    vendor: task.vendor,
+    model: task.model,
+    orchHarness: task.orch_harness ?? null,
+    state: task.state,
+    branch: task.branch,
+    orchestratorSession: task.orchestrator_session_id,
+    question: task.question,
+    updatedAt: task.updated_at,
   };
 }
 
 /**
- * Merge a live transition envelope onto the previously known task. The wire
- * envelope (unlike `GET /tasks`'s row) carries no `orchestrator_session_id`
- * (docs/spec/ui-interface-contract.md's SSE payload is the pinned envelope,
- * not the row), so a plain overwrite would blank the session grouping on
- * every transition. Carrying the prior value forward keeps a bootstrap-seeded
- * session stable; a task first observed via SSE starts at `null` and is
- * repaired by the row fetch in {@link useSnapshot}.
+ * Merge a live transition envelope onto the previously known task. Session,
+ * recency, and orch harness now ride the envelope (#208) so the common path
+ * needs no row backfill. Prior values only fill gaps when an older envelope
+ * omits an optional field.
  */
 function mergeEnvelope(prev: RosterTaskInput | undefined, event: StreamEvent): RosterTaskInput {
-  const t = event.task;
+  const next = fromEnvelope(event.task);
   return {
-    id: t.task_id,
-    name: t.name ?? t.task_id,
-    vendor: t.vendor,
-    model: t.model,
-    orchHarness: prev?.orchHarness ?? null,
-    state: t.state,
-    branch: t.branch,
-    orchestratorSession: prev?.orchestratorSession ?? null,
-    question: t.question,
-    // A transition is activity — stamp now so session chips re-rank by recency
-    // (#88). The wire envelope has no `updated_at`.
-    updatedAt: new Date().toISOString(),
+    ...next,
+    orchHarness: next.orchHarness ?? prev?.orchHarness ?? null,
+    orchestratorSession: next.orchestratorSession ?? prev?.orchestratorSession ?? null,
+    // Prefer the wire timestamp; fall back to prior or wall clock if absent.
+    updatedAt: next.updatedAt || prev?.updatedAt || new Date().toISOString(),
   };
 }
 
@@ -114,7 +110,7 @@ export const TERMINAL_TASK_CAP = 500;
 /**
  * Drop the oldest terminal tasks over {@link TERMINAL_TASK_CAP}, oldest
  * `updatedAt` first (ISO strings — lexicographic order is chronological).
- * Mutates `taskMap` (and `fetched`, so the asked-once set stays bounded too).
+ * Mutates `taskMap` (and optional `fetched`, so any companion set stays bounded).
  */
 export function evictTerminalOverflow(
   taskMap: Map<string, RosterTaskInput>,
@@ -144,11 +140,9 @@ export function evictTerminalOverflow(
  * layer, with {@link useHealth}, importing the core SDK (contract 4). Retries the
  * bootstrap when the daemon is unreachable so the cockpit self-heals on restart.
  *
- * Session attribution: only `GET /tasks` rows carry `orchestrator_session_id`,
- * so a task born after bootstrap (first seen as an SSE envelope) fetches its
- * row once via `GET /tasks/:ref` to join its session group — otherwise every
- * task delegated while the cockpit is open would sit outside the session
- * selector until a reload.
+ * List and stream both ship {@link TaskEnvelope} (#208), so session grouping
+ * and recency come straight off the wire — no per-task detail fetch on the
+ * live path. Detail inspector still uses `GET /tasks/:ref` for qa/eval/attempts.
  */
 export function useSnapshot(client: ParleyClient): SnapshotView {
   // Live task list — projected into groups/inbox/scene below. Exposed so
@@ -168,17 +162,13 @@ export function useSnapshot(client: ParleyClient): SnapshotView {
     let stream: { close(): void } | null = null;
     let retry: ReturnType<typeof setTimeout> | undefined;
     const taskMap = new Map<string, RosterTaskInput>();
-    // Task ids whose row we've already asked for (a row may legitimately have
-    // no orchestrator session — e.g. CLI-delegated — so "asked" not "found"
-    // is what stops the refetching; a failed fetch retries on the next event).
-    const sessionFetched = new Set<string>();
     // A `Map`'s `.values()` iterator is single-use — materialize it once so
     // both projections (each a full pass) see every task. Eviction runs here —
     // the one funnel every mutation passes through — so the map can never
     // grow past the cap between emits.
     const emit = (): void => {
       if (cancelled) return;
-      evictTerminalOverflow(taskMap, sessionFetched);
+      evictTerminalOverflow(taskMap);
       setTasks([...taskMap.values()]);
     };
 
@@ -196,28 +186,6 @@ export function useSnapshot(client: ParleyClient): SnapshotView {
       setStreamLostSince((prev) => prev ?? Date.now());
     };
 
-    /** Backfill row-only identity/session fields after a task first arrives by SSE. */
-    const adoptRowFields = (id: string, row: TaskRow): void => {
-      const current = taskMap.get(id);
-      if (!current) return;
-      taskMap.set(id, {
-        ...current,
-        orchestratorSession: current.orchestratorSession ?? row.orchestrator_session_id,
-        orchHarness: row.orch_harness,
-      });
-      emit();
-    };
-
-    /** Fetch the row of a task first seen over SSE, once, for its session. */
-    const fetchSession = (id: string): void => {
-      if (sessionFetched.has(id)) return;
-      sessionFetched.add(id);
-      client
-        .getTask(id)
-        .then(({ row }) => adoptRowFields(id, row))
-        .catch(() => sessionFetched.delete(id));
-    };
-
     const connect = async (): Promise<void> => {
       try {
         const { snapshot, stream: live } = await bootstrapTaskStream({
@@ -227,7 +195,6 @@ export function useSnapshot(client: ParleyClient): SnapshotView {
             markConnected();
             const merged = mergeEnvelope(taskMap.get(event.task.task_id), event);
             taskMap.set(event.task.task_id, merged);
-            if (merged.orchestratorSession === null) fetchSession(merged.id);
             emit();
           },
           onError: () => {
@@ -241,12 +208,9 @@ export function useSnapshot(client: ParleyClient): SnapshotView {
         // Seed from the snapshot without clobbering any transition that already
         // arrived while we awaited: the stream opens at `snapshot.seq`, so every
         // event is newer than the snapshot. Only fill in tasks an event hasn't
-        // already set (`taskMap.clear()` here would regress those to stale state)
-        // — but do backfill the session, which only rows carry.
-        for (const row of snapshot.tasks) {
-          sessionFetched.add(row.id);
-          if (!taskMap.has(row.id)) taskMap.set(row.id, fromRow(row));
-          else adoptRowFields(row.id, row);
+        // already set (`taskMap.clear()` here would regress those to stale state).
+        for (const task of snapshot.tasks) {
+          if (!taskMap.has(task.task_id)) taskMap.set(task.task_id, fromEnvelope(task));
         }
         stream = live;
         markConnected();

@@ -17,31 +17,52 @@ daemon process:
 
 ## Data contract
 
-### Existing surface (unchanged, now public contract)
+### Existing surface (public contract)
 
-- `GET /health` — `{ status, pid }`.
-- `GET /tasks` — `{ tasks, seq }`; `seq` is the atomic "start from now" baseline.
-- `GET /tasks/:ref` — task envelope + row + durable Q&A history (`qa`).
-- `GET /tasks/events?ids=…&since=<seq>&wait=true` — seq-based long-poll
-  (stays; the CLI keeps using it).
+- `GET /health` — `{ status, pid, version, started_at }`.
+- `GET /tasks` — `{ tasks, seq }` where **`tasks` is an array of
+  `TaskEnvelope`** (not storage rows; #208) and `seq` is the atomic "start
+  from now" baseline for SSE / long-poll bootstrap.
+- `GET /tasks/:ref` — `{ task, qa, attempts, session, eval_detail, row? }`:
+  the envelope plus decoded detail companions. `row` is a deprecated
+  storage-shaped mirror; prefer the decoded sections and the envelope.
+- `GET /tasks/inbox?ids=…&ack=<seq>&wait=true` — acked attention inbox
+  long-poll (`InboxEventResponse`).
+- `GET /tasks/events?ids=…&since=<seq>&wait=true` — multi-task transition
+  firehose long-poll (`FollowEventResponse`; the CLI keeps using it).
 - `POST /tasks`, `POST /tasks/:ref/answer`, `POST /tasks/:ref/eval`,
   `POST /tasks/:ref/cancel`, `POST /clean` — writes a UI may issue.
 
-### New: SSE event stream
+### Task envelope (primary wire shape)
+
+`TaskEnvelope` in `@useparley/core` is the **only** task shape on list, watch,
+and SSE. Notable fields beyond identity/lifecycle:
+
+- Presentation encodings: `posture.network` boolean, parsed `usage` / `report`,
+  `duration_ms`, `logs_dir`, queue fields (`queue_position`, `blocking_cap`).
+- Session / recency (#208): `orchestrator_session_id`, `updated_at`,
+  `created_at`, `started_at`, `completed_at`, plus optional `orch_harness` /
+  `orch_model` / `orch_effort`.
+- On transition streams, `state` and `seq` are **pinned** to the transition
+  (even if the row has moved on); `updated_at` reflects the row's last write
+  and is not pinned backwards.
+
+### SSE event stream
 
 - `GET /events/stream` — Server-Sent Events over the same transition feed the
   long-poll reads. Browser-native `EventSource`, auto-reconnect.
-- Each SSE message: `id:` = transition `seq`, `event:` = the existing watch
-  event names (`task.started`, `task.question`, `task.completed`, `task.failed`,
-  `task.cancelled`, `task.stalled`, `task.pending`), `data:` = the task envelope
-  pinned to the transition (same pinning rule as the long-poll).
+- Each SSE message: `id:` = transition `seq`, `event:` = watch event name from
+  core `eventNameForState` (`task.started`, `task.question`, `task.completed`,
+  `task.failed`, `task.cancelled`, `task.stalled`, `task.pending`,
+  `task.queued`, …), `data:` = the task envelope pinned to the transition
+  (same pinning rule as the long-poll).
 - Reconnect: `Last-Event-ID` header maps to `since` — missed transitions replay
-  in order. Bootstrap: `GET /tasks` for the snapshot, then connect the stream
-  from the returned `seq`.
+  in order. Bootstrap: `GET /tasks` for the envelope snapshot, then connect the
+  stream from the returned `seq`.
 - No `ids` filter in v1 — the stream carries all tasks; UIs filter client-side
   (single-user localhost, volume is small).
 
-### New: per-task logs
+### Per-task logs
 
 - `GET /tasks/:ref/logs?since=<offset>` — reads the task's log dir; returns
   `{ chunk, next, eof }` where `next` is the offset for the follow-up call.
@@ -52,12 +73,14 @@ daemon process:
   `GET /tasks/:ref` only (not on list envelopes): turns of
   `{ question, answer, question_id, asked_at, answered_at }` in ask order,
   written at ask time (`answer` null) and updated in place when answered. The
-  outstanding-question fields on the envelope/row stay for lifecycle only.
+  outstanding-question fields on the envelope stay for lifecycle only.
 
 ### `@useparley/core` exports (the SDK)
 
-- Task/state/envelope types and the state machine constants (attention
-  hierarchy order included — UIs shouldn't re-derive it).
+- Task/state/envelope types (`TaskEnvelope`, `TasksResponse`,
+  `InboxEventResponse`, `FollowEventResponse`, `StreamEvent`, detail companions)
+  and the state machine constants (attention hierarchy + `eventNameForState` —
+  UIs shouldn't re-derive them).
 - The HTTP client (typed wrappers for the routes above).
 - SSE helper (wraps `EventSource` wiring + snapshot/seq bootstrap).
 - Discovery-file reader — how a same-machine process finds the daemon's
@@ -67,8 +90,10 @@ daemon process:
 ### Stability
 
 The routes and envelope fields above are the versioned surface: breaking
-changes bump `@useparley/core` major. `GET /health` gains a `version` field
-(daemon package version) so UIs can detect mismatch.
+changes bump `@useparley/core` major (pre-1.0 policy may still move the
+contract per `docs/spec/release-process.md`). `GET /tasks` returning envelopes
+instead of storage rows is such a move (#208). `GET /health` includes a
+`version` field (daemon package version) so UIs can detect mismatch.
 
 ## Serving convention
 

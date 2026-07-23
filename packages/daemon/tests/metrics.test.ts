@@ -946,12 +946,17 @@ describe("GET /tasks detail enrichment (#164)", () => {
     server = await startServer(homePaths(home));
 
     const byType = await fetch(`http://127.0.0.1:${server.port}/tasks?type=coding`);
-    const typeBody = (await byType.json()) as { tasks: { id: string }[] };
-    expect(typeBody.tasks.map((t) => t.id)).toEqual(["a"]);
+    const typeBody = (await byType.json()) as { tasks: { task_id: string; usage: unknown; posture: { network: boolean } }[] };
+    expect(typeBody.tasks.map((t) => t.task_id)).toEqual(["a"]);
+    // #208: list ships envelopes, not storage rows.
+    expect(typeBody.tasks[0]!.posture.network).toBe(true);
+    expect(typeBody.tasks[0]!.usage === null || typeof typeBody.tasks[0]!.usage === "object").toBe(
+      true,
+    );
 
     const first = await fetch(`http://127.0.0.1:${server.port}/tasks?first_attempt=true`);
-    const firstBody = (await first.json()) as { tasks: { id: string }[] };
-    expect(firstBody.tasks.map((t) => t.id)).toEqual(["a"]);
+    const firstBody = (await first.json()) as { tasks: { task_id: string }[] };
+    expect(firstBody.tasks.map((t) => t.task_id)).toEqual(["a"]);
 
     db = openDatabase(homePaths(home));
   });

@@ -464,14 +464,17 @@ describe("status", () => {
       expect.objectContaining({ id: "t1", attempt: 1 }),
     ]);
 
-    const listing = JSON.parse((await runCli(["status", "--json"], home)).stdout) as unknown[];
-    expect(listing).toHaveLength(1);
-    // List rows carry the same task fields but omit the detail sections.
-    const { session: _s, eval_detail: _e, attempts: _a, ...rowFields } = byId as Record<
-      string,
-      unknown
+    // List ships envelopes (#208): task_id + decoded presentation fields, no detail sections.
+    const listing = JSON.parse((await runCli(["status", "--json"], home)).stdout) as Array<
+      Record<string, unknown>
     >;
-    expect(listing[0]).toEqual(rowFields);
+    expect(listing).toHaveLength(1);
+    expect(listing[0]!.task_id).toBe("t1");
+    expect(listing[0]!.state).toBe("completed");
+    expect(listing[0]!.name).toBe("fix-auth");
+    expect(listing[0]!).not.toHaveProperty("session");
+    expect(listing[0]!).not.toHaveProperty("attempts");
+    expect(listing[0]!).not.toHaveProperty("id");
   });
 
   it("shows compact token counts in USAGE for a task that reports usage", async () => {
@@ -850,9 +853,12 @@ describe("session grouping & filtering (#46)", () => {
       extraEnv: { PARLEY_SESSION_ID: session },
     });
     // Tasks are sequential t1, t2, … under one home; wait for newest completed via status list.
-    const rows = JSON.parse((await runCli(["status", "--json", "--all"], home)).stdout) as { id: string; state: string }[];
+    const rows = JSON.parse((await runCli(["status", "--json", "--all"], home)).stdout) as {
+      task_id: string;
+      state: string;
+    }[];
     const pending = rows.filter((r) => r.state !== "completed");
-    for (const r of pending) await waitForState(home, r.id, "completed");
+    for (const r of pending) await waitForState(home, r.task_id, "completed");
   }
 
   const sessionsOf = (stdout: string): string[] =>
