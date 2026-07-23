@@ -7,6 +7,20 @@
 
 import type { EmblemMark } from "../tokens/factions.js";
 
+/** Shared visual identity produced once by hooks and sliced into each Cove view. */
+export interface DisplayIdentity {
+  /** Faction coat colour (hex) for emblem chips and scene vessels. */
+  coat: string;
+  /** Darker coat (hex) for scene hulls, waterlines, and pennants. */
+  coatDark: string;
+  /** Model-maker emblem mark (glyph or original SVG path data). */
+  emblem: EmblemMark;
+  /** Model-maker/harness display name for accessible labels and tooltips. */
+  faction: string;
+  /** `branch · id` style meta line. */
+  meta: string;
+}
+
 /** One task as the roster renders it. */
 export interface RosterTask {
   id: string;

@@ -6,7 +6,6 @@
  * (pure, unit-testable, no React/SSE here).
  */
 import type { AttemptLineageEntry, TaskDetailResponse } from "@useparley/core";
-import { harnessColorFor, modelVendorFor } from "../../tokens/factions.js";
 import { stateMetaFor } from "../../tokens/state-meta.js";
 import type {
   AttemptLineageItem,
@@ -16,6 +15,7 @@ import type {
   QaTurn,
   ReportView,
 } from "../../hud/types.js";
+import { toDisplayTask } from "./displayTask.js";
 import { formatScore, formatUptime, formatUsage } from "./format.js";
 
 function projectBrief(detail: TaskDetailResponse): BriefView {
@@ -111,15 +111,19 @@ export function projectAttemptLineage(
  */
 export function projectInspector(detail: TaskDetailResponse, logs: LogsView): InspectorTask {
   const { task, row } = detail;
-  const vendor = modelVendorFor(task.model, task.vendor);
-  const harness = harnessColorFor(task.vendor);
+  const identity = toDisplayTask({
+    id: task.task_id,
+    model: task.model,
+    vendor: task.vendor,
+    branch: task.branch,
+  });
 
   return {
     id: task.task_id,
     name: task.name ?? task.task_id,
-    coat: harness.coat,
-    emblem: vendor.emblem,
-    faction: `${vendor.label} via ${harness.label}`,
+    coat: identity.coat,
+    emblem: identity.emblem,
+    faction: identity.faction,
     state: task.state,
     queuePosition: task.queue_position ?? null,
     blockingCap: task.blocking_cap ?? null,

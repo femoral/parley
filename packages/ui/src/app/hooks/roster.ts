@@ -14,8 +14,8 @@
  * core's `ATTENTION_ORDER` — only the live roster list uses this window.
  */
 import { attentionRank, isTerminalState } from "@useparley/core";
-import { harnessColorFor, modelVendorFor } from "../../tokens/factions.js";
 import type { RosterGroup, RosterSessionOption, RosterTask } from "../../hud/types.js";
+import { toDisplayTask } from "./displayTask.js";
 
 /**
  * How many most-recently-active session chips the roster shows before the
@@ -158,16 +158,15 @@ function toRosterTask(
   task: RosterTaskInput,
   freshness: FailedFreshness | null | undefined,
 ): RosterTask {
-  const vendor = modelVendorFor(task.model, task.vendor);
-  const harness = harnessColorFor(task.vendor);
+  const identity = toDisplayTask(task);
   const freshFailure = isFreshFailure(task.id, task.state, freshness);
   return {
     id: task.id,
     name: task.name,
-    coat: harness.coat,
-    emblem: vendor.emblem,
-    faction: `${vendor.label} via ${harness.label}`,
-    meta: `${task.branch ?? "no branch"} · ${shortId(task.id)}`,
+    coat: identity.coat,
+    emblem: identity.emblem,
+    faction: identity.faction,
+    meta: identity.meta,
     // Only meaningful for failed rows; the panel treats undefined as archive
     // defaults from STATE_META.
     freshFailure: task.state === "failed" ? freshFailure : undefined,

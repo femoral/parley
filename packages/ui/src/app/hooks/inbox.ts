@@ -14,9 +14,9 @@
  * awaiting-first if a second attention state ever gains a question.
  */
 import { attentionRank, isAttentionState } from "@useparley/core";
-import { harnessColorFor, modelVendorFor } from "../../tokens/factions.js";
 import type { InboxTask } from "../../hud/types.js";
-import { shortId, type RosterTaskInput } from "./roster.js";
+import { toDisplayTask } from "./displayTask.js";
+import type { RosterTaskInput } from "./roster.js";
 
 /** Project the flat task list into the inbox's question cards, sorted
  * awaiting-first. Carries `state` through so the card can render its badge
@@ -29,16 +29,15 @@ export function projectInbox(tasks: Iterable<RosterTaskInput>): InboxTask[] {
   );
   blocked.sort((a, b) => attentionRank(a.state) - attentionRank(b.state));
   return blocked.map((task) => {
-    const vendor = modelVendorFor(task.model, task.vendor);
-    const harness = harnessColorFor(task.vendor);
+    const identity = toDisplayTask(task);
     return {
       id: task.id,
       name: task.name,
       state: task.state,
-      coat: harness.coat,
-      emblem: vendor.emblem,
-      faction: `${vendor.label} via ${harness.label}`,
-      meta: `${task.branch ?? "no branch"} · ${shortId(task.id)}`,
+      coat: identity.coat,
+      emblem: identity.emblem,
+      faction: identity.faction,
+      meta: identity.meta,
       question: task.question,
       sessionId: task.orchestratorSession,
     };

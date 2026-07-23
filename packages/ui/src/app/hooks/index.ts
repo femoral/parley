@@ -57,6 +57,7 @@ export { useSettings } from "./useSettings.js";
 export type { Settings, SettingsView } from "./useSettings.js";
 export { useSnapshot } from "./useSnapshot.js";
 export type { SnapshotView } from "./useSnapshot.js";
+export { toDisplayTask } from "./displayTask.js";
 export { projectScene, rollupSessionAttention, isSceneAttentionState } from "./scene.js";
 export type {
   SceneView,
