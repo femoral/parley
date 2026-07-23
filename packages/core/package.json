@@ -37,5 +37,6 @@
   "scripts": {
     "build": "tsdown",
     "typecheck": "tsc --noEmit"
-  }
+  },
+  "license": "MIT"
 }

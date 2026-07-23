@@ -39,5 +39,6 @@
   },
   "dependencies": {
     "@useparley/core": "workspace:*"
-  }
+  },
+  "license": "MIT"
 }
