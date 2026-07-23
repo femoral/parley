@@ -2432,3 +2432,101 @@
 .pc-view-nav--cartouche .pc-view-nav__tab--active {
   background: var(--brass-tint-08);
 }
+
+/* ── Inspector polish (t48) ────────────────────────────────────────────────
+ * Appended section only — parallel agents edit existing selectors elsewhere.
+ * 1) Failed-task `parley fix` copy scaffold (mirrors .pc-inbox-card__copy).
+ * 2) Accessible eval-feedback more/less disclosure (replaces title-only).
+ */
+
+/* Failed well: copy scaffold footer (read-only cockpit — scaffold, not run). */
+.pc-brief__fix-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 4px;
+  position: relative;
+}
+.pc-brief__fix-hint {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-family: var(--font-body);
+  font-weight: 500;
+  font-size: var(--text-meta);
+  line-height: 1.4;
+  color: var(--ink-muted);
+}
+/* Off-screen scaffold used when clipboard.writeText is unavailable. */
+.pc-brief__fix-scaffold {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+.pc-brief__fix-copy {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 3px 8px;
+  border: 1px solid var(--btn-tertiary-border);
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--ink-muted);
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: var(--text-meta);
+  letter-spacing: 0.3px;
+  cursor: pointer;
+  transition: border-color var(--ease), color var(--ease);
+}
+.pc-brief__fix-copy:hover {
+  border-color: var(--brass-frame);
+  color: var(--ink-warm);
+}
+.pc-brief__fix-copy:focus-visible {
+  outline: 2px solid var(--brass-bright);
+  outline-offset: 1px;
+}
+
+/* Eval feedback: body stack + unclamp + keyboard-reachable more/less. */
+.pc-inspector__eval-feedback-body {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+.pc-inspector__eval-feedback-text--open {
+  display: block;
+  -webkit-line-clamp: unset;
+  line-clamp: unset;
+  overflow: visible;
+}
+.pc-inspector__eval-feedback-toggle {
+  margin: 0;
+  padding: 2px 6px;
+  border: 1px solid var(--btn-tertiary-border);
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--ink-muted);
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: var(--text-meta);
+  letter-spacing: 0.3px;
+  cursor: pointer;
+  transition: border-color var(--ease), color var(--ease);
+}
+.pc-inspector__eval-feedback-toggle:hover {
+  border-color: var(--brass-frame);
+  color: var(--ink-warm);
+}
+.pc-inspector__eval-feedback-toggle:focus-visible {
+  outline: 2px solid var(--brass-bright);
+  outline-offset: 1px;
+}

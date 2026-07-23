@@ -15,7 +15,7 @@ export type { InboxCardProps } from "./InboxCard.js";
 export { InboxPanel } from "./InboxPanel.js";
 export type { InboxPanelProps } from "./InboxPanel.js";
 export { Inspector } from "./Inspector/index.js";
-export type { InspectorProps } from "./Inspector/index.js";
+export type { InspectorProps, InspectorTabKey } from "./Inspector/index.js";
 export { LogStream } from "./LogStream.js";
 export type { LogStreamProps } from "./LogStream.js";
 export { ReportPanel } from "./ReportPanel.js";

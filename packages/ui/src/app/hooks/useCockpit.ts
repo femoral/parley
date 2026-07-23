@@ -8,6 +8,7 @@ import type {
   SoundingsView,
   SoundingsViewTab,
 } from "../../hud/types.js";
+import type { InspectorTabKey } from "../../hud/Inspector/index.js";
 import { formatClock, formatUptime } from "./format.js";
 import { useHealth } from "./useHealth.js";
 import { projectInspector } from "./inspector.js";
@@ -102,6 +103,12 @@ export function useVisibleClock(intervalMs = 1_000): number {
   return now;
 }
 
+/** Options for {@link RosterSelection.selectTask}. */
+export interface SelectTaskOptions {
+  /** Inspector tab to land on when this selection opens. Defaults to `"brief"`. */
+  tab?: InspectorTabKey;
+}
+
 /** The roster's selection state — which orchestrator session and task are
  * active (#66). Lives in the app layer: hud rows/selectors take the current
  * selection and an `onSelect*` callback as plain props and never own it.
@@ -112,7 +119,12 @@ export interface RosterSelection {
   selectedSessionId: string | null;
   selectedTaskId: string | null;
   selectSession: (id: string | null) => void;
-  selectTask: (id: string) => void;
+  selectTask: (id: string, options?: SelectTaskOptions) => void;
+  /**
+   * Select a task from the inbox and land the inspector on Q&A. Identity-stable
+   * so memoized `InboxPanel` does not re-render every clock tick.
+   */
+  selectInboxTask: (id: string) => void;
   /** Clear the selected task (Escape accelerator; inspector shows empty state). */
   clearTask: () => void;
   /**
@@ -120,6 +132,11 @@ export interface RosterSelection {
    * — selection of a hit goes through {@link selectSession}.
    */
   searchSessions: (query: string) => Promise<RosterSessionSearchHit[]>;
+  /**
+   * Inspector open intent for the current selection — tab to land on plus a
+   * sequence bumped every select so re-opening re-applies the tab.
+   */
+  inspectorIntent: { tab: InspectorTabKey; seq: number };
 }
 
 /** Which primary board the centre column shows (#119). */
@@ -187,6 +204,10 @@ export function useCockpit(): CockpitView {
   // Single source of truth for session filter + future scene camera cue (#76).
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const [inspectorIntent, setInspectorIntent] = useState<{
+    tab: InspectorTabKey;
+    seq: number;
+  }>({ tab: "brief", seq: 0 });
   // Centre mode + metrics group-by (#119) + quality filters/tabs (#165).
   // Filter state is shared so #166 heatmap/timeline can subscribe later.
   const [mode, setMode] = useState<CockpitMode>("cove");
@@ -234,8 +255,12 @@ export function useCockpit(): CockpitView {
   const tasksRef = useRef(live.tasks);
   tasksRef.current = live.tasks;
 
-  const selectTask = useCallback((id: string) => {
+  const selectTask = useCallback((id: string, options?: SelectTaskOptions) => {
     setSelectedTaskId(id);
+    setInspectorIntent((prev) => ({
+      tab: options?.tab ?? "brief",
+      seq: prev.seq + 1,
+    }));
     const task = tasksRef.current.find((t) => t.id === id);
     if (task?.state === "failed") {
       setAcknowledgedFailed((prev) => {
@@ -246,6 +271,12 @@ export function useCockpit(): CockpitView {
       });
     }
   }, []);
+  const selectInboxTask = useCallback(
+    (id: string) => {
+      selectTask(id, { tab: "qa" });
+    },
+    [selectTask],
+  );
   const clearTask = useCallback(() => {
     setSelectedTaskId(null);
   }, []);
@@ -357,8 +388,10 @@ export function useCockpit(): CockpitView {
     selectedTaskId,
     selectSession,
     selectTask,
+    selectInboxTask,
     clearTask,
     searchSessions,
+    inspectorIntent,
   };
 
   const detail = useTaskDetail(client, selectedTaskId);
