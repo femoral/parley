@@ -254,6 +254,9 @@ export function useCockpit(): CockpitView {
   // during render without an extra effect tick (first paint after a failure
   // is already loud). The one-second `now` clock drives timeout decay.
   const failedObservedAtRef = useRef<ReadonlyMap<string, number>>(new Map());
+  // Prior-frame task states so advanceFailedObservations can stamp `now` on a
+  // live non-failed→failed transition instead of re-seeding from wire time.
+  const knownTaskStatesRef = useRef<ReadonlyMap<string, string>>(new Map());
   const tasksRef = useRef(live.tasks);
   tasksRef.current = live.tasks;
 
@@ -317,12 +320,18 @@ export function useCockpit(): CockpitView {
   }, [live.tasks]);
 
   // Advance failed-observation stamps once per render from the previous map.
+  // Pass prior-frame states first so a live fail is stamped `now`; then
+  // refresh the known-state map for the next frame.
   const failedObservedAt = advanceFailedObservations(
     live.tasks,
     failedObservedAtRef.current,
     now,
+    knownTaskStatesRef.current,
   );
   failedObservedAtRef.current = failedObservedAt;
+  const nextKnownStates = new Map<string, string>();
+  for (const t of live.tasks) nextKnownStates.set(t.id, t.state);
+  knownTaskStatesRef.current = nextKnownStates;
 
   // Filter groups + cap/pin session chips at derivation time so header counts
   // match filtered contents and a search-selected session stays visible (#76/#88).

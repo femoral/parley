@@ -9,6 +9,12 @@ export interface InboxPanelProps {
   tasks: InboxTask[];
   /** Select a task in the roster/inspector — same callback the roster rows use. */
   onSelectTask: (id: string) => void;
+  /**
+   * True when the roster is scoped to one orchestrator session. Inbox counts
+   * stay fleet-wide; when set, a quiet "fleet-wide" qualifier explains the
+   * mismatch with a session-filtered roster that may show no awaiting group.
+   */
+  sessionFilterActive?: boolean;
 }
 
 /**
@@ -26,7 +32,11 @@ export interface InboxPanelProps {
  * changes when `count` changes, so memoized re-renders with the same tasks
  * identity do not spam announcements.
  */
-export const InboxPanel = memo(function InboxPanel({ tasks, onSelectTask }: InboxPanelProps) {
+export const InboxPanel = memo(function InboxPanel({
+  tasks,
+  onSelectTask,
+  sessionFilterActive = false,
+}: InboxPanelProps) {
   const count = tasks.length;
   // Count after the words so the tiny pill never scans as "I NEEDS YOU".
   const liveMessage =
@@ -35,24 +45,38 @@ export const InboxPanel = memo(function InboxPanel({ tasks, onSelectTask }: Inbo
       : count === 1
         ? "1 task needs you"
         : `${count} tasks need you`;
+  // When the roster is session-scoped, inbox counts remain fleet-wide — say so.
+  const pillLabel =
+    sessionFilterActive && count > 0 ? `${liveMessage}, fleet-wide` : liveMessage;
+  const subtitle =
+    sessionFilterActive && count > 0
+      ? "the flags that need you · fleet-wide"
+      : "the flags that need you";
   return (
     <Plate variant="ember" padded={false} className="pc-inbox">
       <PlateHeader
         icon={<Mark mark={MARK_BANNER} size={14} />}
         title="INBOX"
-        subtitle="the flags that need you"
+        subtitle={subtitle}
         divider
         aside={
           count > 0 ? (
-            <span className="pc-inbox__pill" aria-label={liveMessage}>
-              NEEDS YOU · {count}
+            <span className="pc-inbox__aside">
+              {sessionFilterActive ? (
+                <span className="pc-inbox__fleet-wide" aria-hidden="true">
+                  fleet-wide
+                </span>
+              ) : null}
+              <span className="pc-inbox__pill" aria-label={pillLabel}>
+                NEEDS YOU · {count}
+              </span>
             </span>
           ) : undefined
         }
       />
       {/* Live region outside the pill so empty→non-empty still announces. */}
       <div className="pc-visually-hidden" aria-live="polite" aria-atomic="true">
-        {liveMessage}
+        {pillLabel}
       </div>
       <div className="pc-inbox__list">
         {count === 0 ? (

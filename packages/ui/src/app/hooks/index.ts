@@ -73,6 +73,7 @@ export {
   isFreshFailure,
   displayAttentionRank,
   advanceFailedObservations,
+  terminalTransitionMs,
 } from "./roster.js";
 export type { RosterTaskInput, RosterProjection, FailedFreshness } from "./roster.js";
 export { useTaskDetail } from "./useTaskDetail.js";

@@ -141,7 +141,7 @@ export function BriefTab({ brief, taskId, error = null, attempts = [] }: BriefTa
           </span>
         </span>
         <p className="pc-brief__goal pc-brief__goal--excerpt">
-          {goalFiled ? brief.goal : "No brief filed — the orders never reached this ship."}
+          {goalFiled ? brief.goal : "No brief on file for this voyage."}
         </p>
         {goalFiled && (
           <>

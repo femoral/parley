@@ -153,7 +153,11 @@ export function Cockpit() {
 
           <aside id="pc-status-stack" className="pc-region--right" aria-label="Status stack" tabIndex={-1}>
             <HealthPanel health={health} />
-            <InboxPanel tasks={snapshot.inbox} onSelectTask={roster.selectInboxTask} />
+            <InboxPanel
+              tasks={snapshot.inbox}
+              onSelectTask={roster.selectInboxTask}
+              sessionFilterActive={roster.selectedSessionId !== null}
+            />
             <Inspector
               task={inspector}
               initialTab={roster.inspectorIntent.tab}

@@ -199,7 +199,7 @@ describe("Inspector's four tabs render per the manifest's inspector treatment (#
         })}
       />,
     );
-    expect(screen.getByText("No brief filed — the orders never reached this ship.")).toBeTruthy();
+    expect(screen.getByText("No brief on file for this voyage.")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Read full orders" })).toBeNull();
     expect(screen.queryByText("Standing Orders")).toBeNull();
   });

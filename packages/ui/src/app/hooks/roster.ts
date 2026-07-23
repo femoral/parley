@@ -53,8 +53,16 @@ export interface RosterTaskInput {
   /**
    * ISO-8601 last-activity timestamp from the envelope's `updated_at` (#208).
    * Used to order session chips by recency (#88); absent values sort last.
+   * Also seeds failed-freshness on first observation when `completedAt` is
+   * missing (terminal transition time fallback).
    */
   updatedAt?: string | null;
+  /**
+   * ISO-8601 when the task reached a terminal state (`completed_at` on the
+   * wire). Seeds the failed-observation stamp on cold load so archive wrecks
+   * do not re-flare as "fresh" after a hard reload.
+   */
+  completedAt?: string | null;
 }
 
 /**
@@ -104,11 +112,27 @@ export function shortId(id: string): string {
 }
 
 /**
+ * Epoch ms of the task's terminal transition from wire fields, or `undefined`
+ * when neither timestamp is parseable. Prefers `completed_at` (true terminal
+ * time) and falls back to `updated_at`.
+ */
+export function terminalTransitionMs(task: RosterTaskInput): number | undefined {
+  const raw = task.completedAt ?? task.updatedAt;
+  if (!raw) return undefined;
+  const ms = Date.parse(raw);
+  return Number.isFinite(ms) ? ms : undefined;
+}
+
+/**
  * True when a failed task is still inside its freshness window: observed less
  * than {@link FAILED_FRESHNESS_MS} ago, and either not yet acknowledged or
  * still selected (so acknowledging on click does not demote the FAILED group
  * under the user's pointer / keyboard spatial model). Non-failed states are
  * never fresh. The 5-minute timeout always wins, even while selected.
+ *
+ * Observation stamps come from {@link advanceFailedObservations}: wire
+ * terminal time on first sight of an already-failed task (cold load / reload),
+ * or `now` when a live non-failed→failed transition is observed.
  */
 export function isFreshFailure(
   taskId: string,
@@ -117,10 +141,10 @@ export function isFreshFailure(
 ): boolean {
   if (state !== "failed" || !freshness) return false;
   const observedAt = freshness.observedAt.get(taskId);
-  // Missing observation = just entered failed this frame; treat as fresh so
-  // the first paint after a transition is already loud — unless already past
-  // the window (impossible without a stamp, so fall through as true below).
-  if (observedAt !== undefined && freshness.now - observedAt >= FAILED_FRESHNESS_MS) {
+  // No stamp yet: not loud. Callers seed via advanceFailedObservations before
+  // projecting; treating missing as fresh would re-flare archive wrecks.
+  if (observedAt === undefined) return false;
+  if (freshness.now - observedAt >= FAILED_FRESHNESS_MS) {
     return false;
   }
   // Keep elevated rank while the operator still has this wreck selected, even
@@ -151,22 +175,46 @@ export function displayAttentionRank(
  * Advance the failed-observation map for the current task list. Pure: callers
  * (useCockpit) keep the previous map across renders so a failure's clock starts
  * once per spell, not on every re-project. Tasks that leave `failed` drop out;
- * re-entry gets a new `now` stamp. Returns `prev` itself when nothing changed,
- * so downstream memos (the roster projection) keep their identity across the
- * cockpit's one-second clock re-render instead of recomputing every tick.
+ * re-entry gets a new stamp.
+ *
+ * **Seeding rule** (first observation of a failed spell, no prior stamp):
+ * 1. Live transition — task was previously known in a non-failed state
+ *    (`prevKnownStates` has a non-`failed` entry) → stamp `now` so the beacon
+ *    flares from the moment the operator saw it fail over SSE.
+ * 2. Otherwise (cold load / hard reload / first paint of an already-failed
+ *    task) → seed from the wire terminal time (`completed_at`, falling back
+ *    to `updated_at`). A wreck is loud only when that time is still within
+ *    {@link FAILED_FRESHNESS_MS} of `now`. Missing/unparseable wire time
+ *    falls back to `now` (same as a just-failed spell with no clock).
+ *
+ * Returns `prev` itself when nothing changed, so downstream memos (the roster
+ * projection) keep their identity across the cockpit's one-second clock
+ * re-render instead of recomputing every tick.
  */
 export function advanceFailedObservations(
   tasks: Iterable<RosterTaskInput>,
   prev: ReadonlyMap<string, number>,
   now: number,
+  prevKnownStates?: ReadonlyMap<string, string>,
 ): ReadonlyMap<string, number> {
   const next = new Map<string, number>();
   let changed = false;
   for (const task of tasks) {
     if (task.state !== "failed") continue;
     const stamp = prev.get(task.id);
-    if (stamp === undefined) changed = true;
-    next.set(task.id, stamp ?? now);
+    if (stamp !== undefined) {
+      next.set(task.id, stamp);
+      continue;
+    }
+    changed = true;
+    const priorState = prevKnownStates?.get(task.id);
+    // Live non-failed → failed: clock starts at the transition moment.
+    if (priorState !== undefined && priorState !== "failed") {
+      next.set(task.id, now);
+      continue;
+    }
+    // Cold load / first sight already failed: honesty from the wire clock.
+    next.set(task.id, terminalTransitionMs(task) ?? now);
   }
   if (!changed && next.size === prev.size) return prev;
   return next;

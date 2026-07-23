@@ -69,6 +69,32 @@ describe("InboxPanel display-only question cards (#78)", () => {
     expect(screen.getByLabelText("2 tasks need you")).toBeTruthy();
   });
 
+  it("adds a quiet fleet-wide qualifier only when a session filter is active", () => {
+    const { rerender } = render(
+      <InboxPanel tasks={[AWAITING_1, AWAITING_2]} onSelectTask={() => {}} />,
+    );
+    expect(screen.queryByText("fleet-wide")).toBeNull();
+    expect(screen.getByLabelText("2 tasks need you")).toBeTruthy();
+    expect(screen.getByText("the flags that need you")).toBeTruthy();
+
+    rerender(
+      <InboxPanel
+        tasks={[AWAITING_1, AWAITING_2]}
+        onSelectTask={() => {}}
+        sessionFilterActive
+      />,
+    );
+    expect(screen.getByText("fleet-wide")).toBeTruthy();
+    expect(screen.getByLabelText("2 tasks need you, fleet-wide")).toBeTruthy();
+    expect(screen.getByText("the flags that need you · fleet-wide")).toBeTruthy();
+  });
+
+  it("does not show fleet-wide in the empty state even with a session filter", () => {
+    render(<InboxPanel tasks={[]} onSelectTask={() => {}} sessionFilterActive />);
+    expect(screen.queryByText("fleet-wide")).toBeNull();
+    expect(screen.getByText("the flags that need you")).toBeTruthy();
+  });
+
   it("renders the manifest's empty-state copy with no cards, and no count pill", () => {
     render(<InboxPanel tasks={[]} onSelectTask={() => {}} />);
     expect(screen.getByText(/All hands accounted for\. No flags flying\./)).toBeTruthy();
