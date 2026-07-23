@@ -115,6 +115,35 @@ describe("InboxPanel display-only question cards (#78)", () => {
     ).toBeTruthy();
   });
 
+  it("places the scope caption above the card list (not on the clamp cut edge)", () => {
+    const { container } = render(
+      <InboxPanel tasks={[AWAITING_1, AWAITING_2]} onSelectTask={() => {}} />,
+    );
+    const scope = container.querySelector(".pc-inbox__scope");
+    const list = container.querySelector(".pc-inbox__list");
+    expect(scope).toBeTruthy();
+    expect(list).toBeTruthy();
+    // Scope must precede the list so the inspector-open max-height clamp
+    // never paints the caption across a mid-card cut.
+    expect(
+      scope!.compareDocumentPosition(list!) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("mounts a hidden-by-default scroll cue inside the list (chart-key pattern)", () => {
+    const { container } = render(
+      <InboxPanel tasks={[AWAITING_1, AWAITING_2]} onSelectTask={() => {}} />,
+    );
+    const cue = container.querySelector(".pc-inbox__scroll-cue");
+    expect(cue).toBeTruthy();
+    expect(cue?.classList.contains("pc-inbox__scroll-cue--hidden")).toBe(true);
+    expect(container.querySelector(".pc-inbox__scroll-cue-label")?.textContent).toBe(
+      "More below",
+    );
+    // Cue lives inside the scroll container so sticky bottom fade works.
+    expect(container.querySelector(".pc-inbox__list .pc-inbox__scroll-cue")).toBeTruthy();
+  });
+
   it("hides the scope line in the empty state", () => {
     render(<InboxPanel tasks={[]} onSelectTask={() => {}} />);
     expect(screen.queryByText(/orchestrator session/)).toBeNull();

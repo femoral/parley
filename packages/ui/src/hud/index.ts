@@ -32,7 +32,18 @@ export { EvalDistribution } from "./EvalDistribution.js";
 export type { EvalDistributionProps } from "./EvalDistribution.js";
 export { EvalComparison, COMPARISON_GROUP_BY } from "./EvalComparison.js";
 export type { EvalComparisonProps } from "./EvalComparison.js";
-export { EvalHeatmap, HEATMAP_GROUP_BY } from "./EvalHeatmap.js";
+export {
+  EvalHeatmap,
+  HEATMAP_GROUP_BY,
+  HEATMAP_DARK_INK_AT,
+  HEATMAP_LOW_SAMPLE_THRESHOLD,
+  HEATMAP_PARCHMENT_INK_AT,
+  cellStyle,
+  formatHeatmapRateDisplay,
+  heatmapCellInk,
+  isLowSampleCell,
+  isSuspectHeatmapRate,
+} from "./EvalHeatmap.js";
 export type { EvalHeatmapProps } from "./EvalHeatmap.js";
 export { AttemptLineage } from "./AttemptLineage.js";
 export type { AttemptLineageProps } from "./AttemptLineage.js";

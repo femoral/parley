@@ -1,5 +1,5 @@
 import { memo, type CSSProperties } from "react";
-import type { SoundingsHeatmapView, SoundingsView } from "./types.js";
+import type { SoundingsHeatmapCell, SoundingsHeatmapView, SoundingsView } from "./types.js";
 
 /** Column dimensions for the criterion-failure heatmap (#166). */
 export const HEATMAP_GROUP_BY: readonly { value: string; label: string }[] = [
@@ -14,6 +14,26 @@ export const HEATMAP_GROUP_BY: readonly { value: string; label: string }[] = [
  */
 export const HEATMAP_LOW_SAMPLE_THRESHOLD = 3;
 
+/**
+ * Intensity at which cell text switches from soft ink to parchment (mid ramp).
+ * Soft on the dark floor mix stays legible; parchment carries the mid band.
+ */
+export const HEATMAP_PARCHMENT_INK_AT = 0.45;
+
+/**
+ * Intensity at which cell text flips from parchment to dark-on-gold.
+ * Above this, the quality-poor mix lightens enough that parchment fails AA.
+ *
+ * Contrast on pure --quality-poor (#e888a0) — WCAG AA body ≥4.5:1:
+ *   --ink-parchment (#f2e3c4)     ≈ 1.96:1  (fails AA)
+ *   --ink-dark-on-gold (#2a1a08)  ≈ 6.77:1  (passes AA; ≥4.5:1)
+ *
+ * At intensity 0.55 the mix is ~63% quality-poor; parchment dips below
+ * 4.5:1 while dark-on-gold climbs through the AA floor toward 6.77:1 at
+ * full intensity. Flip here so worst cells stay readable.
+ */
+export const HEATMAP_DARK_INK_AT = 0.55;
+
 export interface EvalHeatmapProps {
   heatmap: SoundingsHeatmapView;
   groupBy: string;
@@ -23,22 +43,56 @@ export interface EvalHeatmapProps {
 }
 
 /**
- * Map failure rate → CSS background. Floor opacity so 1–2 data points stay
- * legible; missing cells stay unshaded (not a false zero).
+ * Resolve cell text ink for a failure-rate intensity.
+ * Exported for contrast / honesty tests.
  */
-function cellStyle(intensity: number | null): CSSProperties | undefined {
+export function heatmapCellInk(intensity: number): string {
+  if (intensity >= HEATMAP_DARK_INK_AT) return "var(--ink-dark-on-gold)";
+  if (intensity >= HEATMAP_PARCHMENT_INK_AT) return "var(--ink-parchment)";
+  return "var(--ink-soft)";
+}
+
+/**
+ * Map failure rate → CSS background + ink. Floor opacity so 1–2 data points
+ * stay legible; missing cells stay unshaded (not a false zero).
+ */
+export function cellStyle(intensity: number | null): CSSProperties | undefined {
   if (intensity === null) return undefined;
   // Floor ~18% so a single failure is visible on the dark plate; full rate → quality-poor.
   const pct = Math.round((0.18 + intensity * 0.82) * 100);
   return {
     background: `color-mix(in srgb, var(--quality-poor) ${pct}%, rgba(0, 0, 0, 0.35))`,
-    color: intensity >= 0.45 ? "var(--ink-parchment)" : "var(--ink-soft)",
+    color: heatmapCellInk(intensity),
   };
 }
 
 /** True when a sampled cell is too thin for the ramp to stand alone. */
 export function isLowSampleCell(count: number): boolean {
   return count > 0 && count < HEATMAP_LOW_SAMPLE_THRESHOLD;
+}
+
+/**
+ * Wire can send failures > count (rate > 1). Never paint impossible percents —
+ * clamp the visible label at 100% and mark the cell as suspect data.
+ */
+export function isSuspectHeatmapRate(cell: Pick<SoundingsHeatmapCell, "rate" | "failures" | "count">): boolean {
+  if (cell.count > 0 && cell.failures > cell.count) return true;
+  if (cell.rate !== null && Number.isFinite(cell.rate) && cell.rate > 1) return true;
+  return false;
+}
+
+/**
+ * Display rate for a heatmap cell. Caps impossible rates at `100%!` so the
+ * plate never quietly trusts bad wire data.
+ */
+export function formatHeatmapRateDisplay(
+  cell: Pick<SoundingsHeatmapCell, "rate" | "rateLabel" | "failures" | "count" | "intensity">,
+): string {
+  if (cell.intensity === null && (cell.count === 0 || cell.rate === null)) {
+    return cell.rateLabel || "—";
+  }
+  if (isSuspectHeatmapRate(cell)) return "100%!";
+  return cell.rateLabel;
 }
 
 /**
@@ -190,21 +244,23 @@ export const EvalHeatmap = memo(function EvalHeatmap({
                       const cell = row[colIdx];
                       const missing = !cell || cell.intensity === null;
                       const lowN = !missing && cell != null && isLowSampleCell(cell.count);
+                      const suspect = !missing && cell != null && isSuspectHeatmapRate(cell);
                       const style = cellStyle(cell?.intensity ?? null);
+                      const rateDisplay = cell ? formatHeatmapRateDisplay(cell) : "—";
                       const label = missing
                         ? `${criterionId} × ${g.label}: no sample`
-                        : `${criterionId} × ${g.label}: ${cell.rateLabel} failed (${cell.failures}/${cell.count})${lowN ? ", low sample" : ""}`;
+                        : `${criterionId} × ${g.label}: ${rateDisplay} failed (${cell.failures}/${cell.count})${lowN ? ", low sample" : ""}${suspect ? ", suspect data (rate exceeds 100%)" : ""}`;
                       return (
                         <div
                           key={`${criterionId}:${g.key ?? "(none)"}`}
-                          className={`pc-eval-heat__cell${missing ? " pc-eval-heat__cell--empty" : ""}${lowN ? " pc-eval-heat__cell--low-n" : ""}`}
+                          className={`pc-eval-heat__cell${missing ? " pc-eval-heat__cell--empty" : ""}${lowN ? " pc-eval-heat__cell--low-n" : ""}${suspect ? " pc-eval-heat__cell--suspect" : ""}`}
                           role="cell"
                           style={style}
                           title={label}
                           aria-label={label}
                         >
                           <span className="pc-eval-heat__cell-rate">
-                            {cell?.rateLabel ?? "—"}
+                            {rateDisplay}
                           </span>
                           {lowN && cell != null && (
                             <span className="pc-eval-heat__cell-n" aria-hidden="true">
