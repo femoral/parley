@@ -14,7 +14,9 @@ describe("task identity tokens", () => {
     const required = ["gpt", "claude", "grok", "kimi", "qwen"];
     const signatures = required.map((vendor) => JSON.stringify(vendorEmblemFor(vendor).emblem));
     expect(new Set(signatures).size).toBe(required.length);
-    expect(Object.keys(VENDOR_EMBLEMS)).toEqual(expect.arrayContaining([...required, "codex", "pi"]));
+    expect(Object.keys(VENDOR_EMBLEMS)).toEqual(expect.arrayContaining([...required, "codex"]));
+    // Pi (Inflection) no longer ships an authored mark; it resolves as unknown.
+    expect(Object.keys(VENDOR_EMBLEMS)).not.toContain("pi");
   });
 
   it("uses a question mark for absent and unknown vendors", () => {

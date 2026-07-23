@@ -26,7 +26,7 @@ describe("formatClock", () => {
 describe("task identity resolvers", () => {
   it("resolves vendor marks and harness colours on separate axes", () => {
     expect(vendorEmblemFor("codex").label).toBe("Codex");
-    expect(vendorEmblemFor("pi").emblem).toEqual({ kind: "glyph", char: "π" });
+    expect(vendorEmblemFor("pi").emblem).toEqual({ kind: "glyph", char: "?" });
     expect(vendorEmblemFor("grok").emblem.kind).toBe("svg");
     expect(vendorEmblemFor("brand-new").emblem).toEqual({ kind: "glyph", char: "?" });
     expect(harnessColorFor("codex").coat).toBe("#18A886");
