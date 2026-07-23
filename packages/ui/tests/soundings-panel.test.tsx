@@ -90,7 +90,13 @@ describe("SoundingsPanel (#119)", () => {
     // Overall eval + difficulty chip share the same formatted average.
     expect(screen.getAllByText("4.2 · n=3").length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText("12.0k")).toBeTruthy();
+    // Duration pair is self-describing: quiet avg / p95 labels next to values.
     expect(screen.getByText("2m 10s")).toBeTruthy();
+    expect(screen.getByText("avg")).toBeTruthy();
+    expect(screen.getByText("p95")).toBeTruthy();
+    expect(
+      screen.getByLabelText("average 2m 10s, 95th percentile 5m 00s"),
+    ).toBeTruthy();
     expect(screen.getByText("Done")).toBeTruthy();
     expect(screen.getByText("Failed")).toBeTruthy();
     expect(screen.getByText("Running")).toBeTruthy();

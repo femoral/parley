@@ -231,6 +231,27 @@
 .pc-region--right > :not(.pc-inspector) {
   flex: 0 0 auto;
 }
+/* When the LOGBOOK is open (inspector has a selected task — not the empty
+   placeholder), clamp the inbox card list so the inspector always claims
+   majority rail height. Cards stay reachable via internal scroll; empty /
+   unselected rail still lets the list grow with content. */
+.pc-region--right:has(.pc-inspector:not(.pc-inspector--empty)) .pc-inbox__list {
+  max-height: min(28vh, 220px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--scroll-thumb) var(--scroll-track);
+}
+.pc-region--right:has(.pc-inspector:not(.pc-inspector--empty)) .pc-inbox__list::-webkit-scrollbar {
+  width: 6px;
+}
+.pc-region--right:has(.pc-inspector:not(.pc-inspector--empty)) .pc-inbox__list::-webkit-scrollbar-thumb {
+  background: var(--scroll-thumb);
+  border-radius: 3px;
+}
+.pc-region--right:has(.pc-inspector:not(.pc-inspector--empty)) .pc-inbox__list::-webkit-scrollbar-track {
+  background: var(--scroll-track);
+}
 /* The scene mounts here (#69/#75): a positioned, clipped viewport the living
    view fills absolutely. No plate chrome — the sea is the room's backdrop. */
 .pc-scene {

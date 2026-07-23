@@ -145,11 +145,13 @@ function RosterEmptyStarter() {
 }
 
 /**
- * Quiet mono copy control for the selected roster row's full task id.
+ * Selected-row meta is itself the task-id copy affordance (click / keyboard).
+ * Keeps the visible id/meta text at full width — a separate side button used
+ * to compete with the single-line ellipsis and truncate the id to "tsk-…".
  * Mirrors InboxCard / BriefTab: clipboard.writeText with select-on-click
  * fallback. Only mounted on the selected row so the rail stays quiet.
  */
-function TaskIdCopy({ taskId }: { taskId: string }) {
+function TaskIdMetaCopy({ taskId, meta }: { taskId: string; meta: string }) {
   const [copied, setCopied] = useState(false);
   const [canCopy, setCanCopy] = useState(true);
   const revertTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -197,30 +199,37 @@ function TaskIdCopy({ taskId }: { taskId: string }) {
     [taskId, markCopied],
   );
 
-  if (!canCopy) return null;
+  if (!canCopy) {
+    // Clipboard unavailable — still show the meta (same as unselected rows).
+    return (
+      <span className="pc-roster__meta" title={taskId}>
+        <span aria-hidden="true">{meta}</span>
+        <span className="pc-visually-hidden">task id {taskId}</span>
+      </span>
+    );
+  }
 
   return (
-    <span className="pc-roster__id-copy-wrap">
+    <button
+      type="button"
+      className="pc-roster__meta pc-roster__meta--copy"
+      title={copied ? "Copied task id" : `Copy task id ${taskId}`}
+      aria-label={copied ? "Copied task id" : "Copy task id"}
+      onClick={handleCopy}
+      onKeyDown={(event) => {
+        // Space/Enter on the button must not bubble to the listbox's
+        // manual-activation handler (which would re-select the row).
+        if (event.key === " " || event.key === "Enter") {
+          event.stopPropagation();
+        }
+      }}
+    >
       {/* Hidden scaffold text for select-on-click fallback when clipboard fails. */}
       <span ref={scaffoldRef} className="pc-roster__id-scaffold" aria-hidden="true">
         {taskId}
       </span>
-      <button
-        type="button"
-        className="pc-roster__id-copy"
-        onClick={handleCopy}
-        onKeyDown={(event) => {
-          // Space/Enter on the button must not bubble to the listbox's
-          // manual-activation handler (which would re-select the row).
-          if (event.key === " " || event.key === "Enter") {
-            event.stopPropagation();
-          }
-        }}
-        aria-label={copied ? "Copied task id" : "Copy task id"}
-      >
-        {copied ? "copied ✓" : "id"}
-      </button>
-    </span>
+      <span aria-hidden="true">{copied ? "copied ✓" : meta}</span>
+    </button>
   );
 }
 
@@ -312,13 +321,19 @@ function Group({
               <span className="pc-roster__name">{task.name}</span>
               {/* title is mouse-only — the visually-hidden span exposes the
                   full task id to keyboard/AT (InboxCard shortRef pattern).
-                  Visible meta stays branch · shortId with single-line ellipsis. */}
-              <span className="pc-roster__meta" title={task.id}>
-                <span aria-hidden="true">{task.meta}</span>
-                <span className="pc-visually-hidden">task id {task.id}</span>
-              </span>
+                  Visible meta stays branch · shortId with single-line ellipsis.
+                  Selected: the meta text itself is the copy affordance so a
+                  side button never competes with the ellipsis and truncates
+                  the id to "tsk-…". */}
+              {selected ? (
+                <TaskIdMetaCopy taskId={task.id} meta={task.meta} />
+              ) : (
+                <span className="pc-roster__meta" title={task.id}>
+                  <span aria-hidden="true">{task.meta}</span>
+                  <span className="pc-visually-hidden">task id {task.id}</span>
+                </span>
+              )}
             </span>
-            {selected && <TaskIdCopy taskId={task.id} />}
             {showBeacon && (
               <span
                 className="pc-roster__beacon pc-dot--beacon"

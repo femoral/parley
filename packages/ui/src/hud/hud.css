@@ -460,14 +460,9 @@
 .pc-roster__row--quiet-archive .pc-emblem {
   opacity: 0.72;
 }
-/* Selected-row task-id copy (quiet mono; mirrors inbox/brief copy pattern). */
-.pc-roster__id-copy-wrap {
-  position: relative;
-  flex: 0 0 auto;
-  margin-left: auto;
-  display: inline-flex;
-  align-items: center;
-}
+/* Selected-row task-id copy: the meta line itself is the affordance so a
+ * side button never steals flex from the single-line ellipsis (visible id
+ * must not shrink to "tsk-…" on select). Quiet mono; mirrors inbox/brief. */
 .pc-roster__id-scaffold {
   position: absolute;
   width: 1px;
@@ -479,31 +474,34 @@
   white-space: nowrap;
   border: 0;
 }
-.pc-roster__id-copy {
+button.pc-roster__meta--copy {
+  position: relative;
+  display: block;
+  width: 100%;
+  max-width: 100%;
   margin: 0;
-  padding: 2px 6px;
-  border: 1px solid transparent;
+  padding: 0;
+  border: none;
   border-radius: var(--radius-tight);
   background: transparent;
-  color: var(--ink-label);
+  font: inherit;
   font-family: var(--font-mono);
-  font-weight: 500;
   font-size: var(--text-meta);
-  letter-spacing: 0.02em;
+  font-weight: 500;
+  color: var(--ink-faint);
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   cursor: pointer;
-  transition: border-color var(--ease), color var(--ease);
+  transition: color var(--ease);
 }
-.pc-roster__id-copy:hover {
-  border-color: var(--brass-frame);
+button.pc-roster__meta--copy:hover {
   color: var(--ink-warm);
 }
-.pc-roster__id-copy:focus-visible {
+button.pc-roster__meta--copy:focus-visible {
   outline: 2px solid var(--brass-bright);
   outline-offset: 1px;
-}
-/* Beacon already uses margin-left:auto; when both show, keep beacon after copy. */
-.pc-roster__row--selected .pc-roster__beacon {
-  margin-left: 0;
 }
 .pc-roster__empty {
   padding: 20px 14px;
@@ -779,6 +777,14 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+/* Programmatic focus target on selection open (tabIndex=-1) — quiet ring. */
+.pc-inspector__title:focus {
+  outline: none;
+}
+.pc-inspector__title:focus-visible {
+  outline: 2px solid var(--brass-bright);
+  outline-offset: 2px;
 }
 .pc-inspector__name-sub {
   font-family: var(--font-body);
@@ -1784,6 +1790,18 @@
 .pc-soundings__sep {
   margin: 0 0.3em;
   color: var(--ink-label);
+}
+/* Quiet inline avg / p95 labels so the duration pair is self-describing. */
+.pc-soundings__dur-label {
+  font-family: var(--font-body);
+  font-size: var(--text-label);
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  text-transform: lowercase;
+  color: var(--ink-label);
+  text-decoration: none;
+  border: none;
+  cursor: help;
 }
 .pc-soundings__bar {
   flex: 0 0 auto;

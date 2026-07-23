@@ -1,6 +1,6 @@
 /** @vitest-environment happy-dom */
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { Inspector } from "../src/hud/index.js";
 import type { InspectorTask } from "../src/hud/index.js";
 
@@ -275,7 +275,7 @@ describe("Inspector's four tabs render per the manifest's inspector treatment (#
     expect(document.activeElement).toBe(pop);
   });
 
-  it("scrolls the inspector into view when openSeq advances", () => {
+  it("scrolls the inspector into view with block:start when openSeq advances", () => {
     const scrollIntoView = vi.fn();
     const original = Element.prototype.scrollIntoView;
     Element.prototype.scrollIntoView = scrollIntoView;
@@ -283,12 +283,16 @@ describe("Inspector's four tabs render per the manifest's inspector treatment (#
       const { rerender } = render(<Inspector task={task()} openSeq={1} />);
       expect(scrollIntoView).toHaveBeenCalled();
       const firstCall = scrollIntoView.mock.calls.at(-1)?.[0] as ScrollIntoViewOptions;
-      expect(firstCall).toMatchObject({ block: "nearest" });
+      // block:"start" pins the LOGBOOK header at the top of the rail (not a
+      // bottom-edge sliver from block:"nearest").
+      expect(firstCall).toMatchObject({ block: "start" });
       expect(["smooth", "auto"]).toContain(firstCall.behavior);
 
       scrollIntoView.mockClear();
       rerender(<Inspector task={task()} openSeq={2} />);
       expect(scrollIntoView).toHaveBeenCalled();
+      const secondCall = scrollIntoView.mock.calls.at(-1)?.[0] as ScrollIntoViewOptions;
+      expect(secondCall).toMatchObject({ block: "start" });
     } finally {
       Element.prototype.scrollIntoView = original;
     }
@@ -301,6 +305,58 @@ describe("Inspector's four tabs render per the manifest's inspector treatment (#
     try {
       render(<Inspector task={null} openSeq={3} />);
       expect(scrollIntoView).not.toHaveBeenCalled();
+    } finally {
+      Element.prototype.scrollIntoView = original;
+    }
+  });
+
+  it("moves focus to the LOGBOOK heading when openSeq advances", async () => {
+    const scrollIntoView = vi.fn();
+    const original = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = scrollIntoView;
+    try {
+      const { rerender } = render(<Inspector task={task()} openSeq={1} />);
+      const heading = screen.getByRole("heading", { name: "LOGBOOK" });
+      expect(heading.getAttribute("tabindex")).toBe("-1");
+      // Focus is deferred to rAF so the heading lands after scroll.
+      await waitFor(() => {
+        expect(document.activeElement).toBe(heading);
+      });
+
+      // Re-open (same task, new seq) re-applies focus.
+      const outside = document.createElement("button");
+      document.body.appendChild(outside);
+      outside.focus();
+      expect(document.activeElement).toBe(outside);
+      rerender(<Inspector task={task()} openSeq={2} />);
+      await waitFor(() => {
+        expect(document.activeElement).toBe(
+          screen.getByRole("heading", { name: "LOGBOOK" }),
+        );
+      });
+      outside.remove();
+    } finally {
+      Element.prototype.scrollIntoView = original;
+    }
+  });
+
+  it("does not steal focus from a text field when openSeq advances", async () => {
+    const scrollIntoView = vi.fn();
+    const original = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = scrollIntoView;
+    try {
+      const input = document.createElement("input");
+      input.type = "text";
+      document.body.appendChild(input);
+      input.focus();
+      expect(document.activeElement).toBe(input);
+
+      render(<Inspector task={task()} openSeq={5} />);
+      // Let rAF settle if any were scheduled for focus.
+      await new Promise((r) => requestAnimationFrame(() => r(undefined)));
+      await new Promise((r) => requestAnimationFrame(() => r(undefined)));
+      expect(document.activeElement).toBe(input);
+      input.remove();
     } finally {
       Element.prototype.scrollIntoView = original;
     }

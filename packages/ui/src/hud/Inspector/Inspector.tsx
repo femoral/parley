@@ -68,6 +68,9 @@ export const Inspector = memo(function Inspector({
    * the right rail without wrapping the plate (Cockpit flex targets
    * `.pc-region--right > .pc-inspector` as a direct child). */
   const scrollAnchorRef = useRef<HTMLDivElement | null>(null);
+  /** Focus target when a selection opens — announces LOGBOOK to AT without
+   * nesting a second tab stop in the tablist (tabIndex=-1 programatic only). */
+  const headingRef = useRef<HTMLHeadingElement | null>(null);
   const panelId = `${baseId}-panel`;
   const evalFeedbackId = `${baseId}-eval-feedback`;
   const tabId = (key: InspectorTabKey): string => `${baseId}-tab-${key}`;
@@ -81,7 +84,11 @@ export const Inspector = memo(function Inspector({
 
   // When a selection opens/changes, scroll the inspector plate into view within
   // the right rail so WHY IT FAILED / logs aren't left below the fold.
+  // block:"start" pins the plate header/tab strip at the top of the rail
+  // viewport (block:"nearest" was satisfied by a ~90px sliver at the bottom).
   // Respect prefers-reduced-motion: smooth only when motion is allowed.
+  // Also move focus to the LOGBOOK heading so keyboard/AT users hear the
+  // selection — but never steal focus from a text field the user is typing in.
   useEffect(() => {
     if (!task) return;
     const el = scrollAnchorRef.current;
@@ -90,8 +97,25 @@ export const Inspector = memo(function Inspector({
       typeof window !== "undefined" &&
       window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     el.scrollIntoView({
-      block: "nearest",
+      block: "start",
       behavior: reduceMotion ? "auto" : "smooth",
+    });
+
+    const active = document.activeElement;
+    if (active instanceof HTMLElement) {
+      const tag = active.tagName;
+      if (
+        tag === "INPUT" ||
+        tag === "TEXTAREA" ||
+        tag === "SELECT" ||
+        active.isContentEditable
+      ) {
+        return;
+      }
+    }
+    // Defer so scrollIntoView and tab state settle first.
+    requestAnimationFrame(() => {
+      headingRef.current?.focus({ preventScroll: true });
     });
   }, [openSeq, task]);
 
@@ -156,7 +180,13 @@ export const Inspector = memo(function Inspector({
       <div className="pc-inspector__head">
         <Emblem coat={task.coat} mark={task.emblem} size={28} label={task.faction} />
         <div className="pc-inspector__head-titles">
-          <h2 className="pc-inspector__title">LOGBOOK</h2>
+          <h2
+            ref={headingRef}
+            className="pc-inspector__title"
+            tabIndex={-1}
+          >
+            LOGBOOK
+          </h2>
           <span className="pc-inspector__name-sub">
             {task.name} · {task.id}
           </span>

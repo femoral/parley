@@ -151,11 +151,26 @@ function GroupCard({ group }: { group: SoundingsGroupView }) {
           </span>
         </div>
         <div className="pc-soundings__cell">
-          <span className="pc-soundings__label">Duration avg · p95</span>
-          <span className="pc-soundings__value">
-            <span>{group.duration.avg}</span>
-            <span className="pc-soundings__sep">·</span>
-            <span>{group.duration.p95}</span>
+          <span className="pc-soundings__label">Duration</span>
+          <span
+            className="pc-soundings__value"
+            aria-label={`average ${group.duration.avg}, 95th percentile ${group.duration.p95}`}
+          >
+            <span>
+              <abbr className="pc-soundings__dur-label" title="average">
+                avg
+              </abbr>{" "}
+              {group.duration.avg}
+            </span>
+            <span className="pc-soundings__sep" aria-hidden="true">
+              ·
+            </span>
+            <span>
+              <abbr className="pc-soundings__dur-label" title="95th percentile">
+                p95
+              </abbr>{" "}
+              {group.duration.p95}
+            </span>
           </span>
         </div>
       </div>
