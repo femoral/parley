@@ -1,6 +1,6 @@
 {
   "name": "@useparley/runner",
-  "version": "0.0.0",
+  "version": "0.0.1",
   "description": "Remote runner for parley: leases tasks from a daemon and executes them on this host (ADR-0012).",
   "type": "module",
   "bin": {

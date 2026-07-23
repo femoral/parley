@@ -1,6 +1,6 @@
 {
   "name": "@useparley/core",
-  "version": "0.0.0",
+  "version": "0.0.1",
   "description": "Shared heart of parley: domain types, model catalog, home-dir resolution, and shared utilities.",
   "type": "module",
   "engines": {

@@ -1,6 +1,6 @@
 {
   "name": "@useparley/cli",
-  "version": "0.0.0",
+  "version": "0.0.1",
   "description": "The parley command-line interface: commands, arg parsing, spawn/wait UX, and the orchestrator skills it ships.",
   "type": "module",
   "bin": {
