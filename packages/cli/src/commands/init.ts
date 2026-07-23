@@ -218,7 +218,7 @@ export async function promptVendorModels(
   models: readonly ModelEntry[],
 ): Promise<Record<string, VendorModelAllowlistEntry>> {
   const selected = await p.multiselect({
-    message: `${vendor}: models to allow`,
+    message: `${vendor}: models to allow (a: toggle all, i: invert)`,
     options: models.map((model) => ({
       value: model.id,
       label: model.id,
