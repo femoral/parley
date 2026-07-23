@@ -1,8 +1,25 @@
-import { memo, useEffect, useId, useRef, useState, type CSSProperties } from "react";
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type UIEvent,
+} from "react";
 import { Emblem, Mark } from "../primitives/index.js";
 import { MARK_RING } from "../tokens/chrome-glyphs.js";
 import { HARNESS_COLORS, MODEL_VENDORS, type EmblemMark } from "../tokens/factions.js";
 import { ATTENTION_DISPLAY_ORDER, STATE_META } from "../tokens/state-meta.js";
+
+/** Distance from the true bottom still treated as "scrolled to end". */
+const CHART_KEY_END_PX = 8;
+
+function isNearScrollEnd(el: HTMLElement): boolean {
+  return el.scrollHeight - el.scrollTop - el.clientHeight <= CHART_KEY_END_PX;
+}
 
 /**
  * Layer 2 — the production chart key (design-manifest §4 / recognition-over-
@@ -15,9 +32,31 @@ import { ATTENTION_DISPLAY_ORDER, STATE_META } from "../tokens/state-meta.js";
  */
 export const ChartKey = memo(function ChartKey() {
   const [open, setOpen] = useState(false);
+  /** True while overflow content remains below the fold (fade / "more" cue). */
+  const [moreBelow, setMoreBelow] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const popRef = useRef<HTMLDivElement>(null);
   const panelId = useId();
+
+  const measureMoreBelow = useCallback(() => {
+    const el = popRef.current;
+    if (!el) {
+      setMoreBelow(false);
+      return;
+    }
+    const overflows = el.scrollHeight > el.clientHeight + 1;
+    setMoreBelow(overflows && !isNearScrollEnd(el));
+  }, []);
+
+  const onPopScroll = useCallback(
+    (event: UIEvent<HTMLDivElement>) => {
+      const el = event.currentTarget;
+      const overflows = el.scrollHeight > el.clientHeight + 1;
+      setMoreBelow(overflows && !isNearScrollEnd(el));
+    },
+    [],
+  );
 
   // Close on outside click / Escape.
   useEffect(() => {
@@ -43,6 +82,21 @@ export const ChartKey = memo(function ChartKey() {
     };
   }, [open]);
 
+  // Measure overflow after open (and on resize) so the fade appears when the
+  // Harness coats section is clipped at short viewport heights.
+  useLayoutEffect(() => {
+    if (!open) {
+      setMoreBelow(false);
+      return;
+    }
+    measureMoreBelow();
+    const el = popRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(() => measureMoreBelow());
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [open, measureMoreBelow]);
+
   return (
     <div className="pc-chart-key" ref={rootRef}>
       <button
@@ -64,6 +118,8 @@ export const ChartKey = memo(function ChartKey() {
           className="pc-chart-key__pop"
           role="region"
           aria-label="Chart key"
+          ref={popRef}
+          onScroll={onPopScroll}
         >
           <section className="pc-chart-key__section" aria-label="Task states">
             <h3 className="pc-chart-key__heading">States</h3>
@@ -125,6 +181,13 @@ export const ChartKey = memo(function ChartKey() {
               ))}
             </ul>
           </section>
+          {/* Sticky bottom fade + "more below" cue — new classes only (hud.css end). */}
+          <div
+            className={`pc-chart-key__scroll-cue${moreBelow ? "" : " pc-chart-key__scroll-cue--hidden"}`}
+            aria-hidden="true"
+          >
+            <span className="pc-chart-key__scroll-cue-label">More below</span>
+          </div>
         </div>
       )}
     </div>

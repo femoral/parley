@@ -2738,5 +2738,48 @@
   text-transform: uppercase;
   color: var(--ink-label);
   line-height: 1.4;
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ * A11y / honesty addenda (scene + log stream + chart key scroll cue)
+ * Appended only — do not edit the selector blocks above.
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
+/*
+ * Chart key scroll cue — sticky bottom fade + "More below" label when the
+ * popover content overflows (e.g. Harness coats clipped at ~800px-tall
+ * windows). Hidden at scroll end / when content fits. Lives inside
+ * .pc-chart-key__pop so the existing max-height + overflow rules stay put.
+ */
+.pc-chart-key__scroll-cue {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  height: 2.75rem;
+  margin-top: -2.75rem;
+  padding-bottom: 6px;
+  pointer-events: none;
+  background: linear-gradient(
+    180deg,
+    transparent 0%,
+    color-mix(in srgb, var(--plate-bottom) 55%, transparent) 45%,
+    var(--plate-bottom) 100%
+  );
+  opacity: 1;
+  transition: opacity 160ms ease;
+}
+.pc-chart-key__scroll-cue--hidden {
+  opacity: 0;
+}
+.pc-chart-key__scroll-cue-label {
+  font-family: var(--font-body);
+  font-size: var(--text-label);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
 }
 

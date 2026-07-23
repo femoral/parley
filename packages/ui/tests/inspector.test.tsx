@@ -292,10 +292,11 @@ describe("Inspector's four tabs render per the manifest's inspector treatment (#
     expect(screen.getByText("Live · Follow")).toBeTruthy();
   });
 
-  it("shows Paused once the log tail is no longer live", () => {
+  it("shows Ended once the log tail is no longer live (eof), not Paused", () => {
     render(<Inspector task={task({ logs: { lines: [{ key: 0, kind: "stdout", text: "done" }], live: false } })} />);
     openTab("LOGS");
-    expect(screen.getByText("Paused")).toBeTruthy();
+    expect(screen.getByText("Ended")).toBeTruthy();
+    expect(screen.queryByText("Paused")).toBeNull();
   });
 
   it("switches to the Report tab and renders outcome/summary/files for a completed task", () => {

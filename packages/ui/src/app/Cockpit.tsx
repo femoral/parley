@@ -60,9 +60,14 @@ export function Cockpit() {
   return (
     <div className={`pc-cockpit${chartStale ? " pc-cockpit--stale" : ""}`} data-stale={chartStale ? "true" : undefined}>
       {/* Keyboard users land here first; the cockpit has no nav to skip past
-          except the atmosphere layers, so the target is the main region. */}
+          except the atmosphere layers, so the target is the main region.
+          A second skip jumps past the roster + scene island wall into the
+          right rail (Inbox / Inspector) without 12 island tab stops. */}
       <a className="pc-skip-link" href="#pc-main">
         Skip to cockpit
+      </a>
+      <a className="pc-skip-link" href="#pc-status-stack">
+        Skip to status stack
       </a>
       <div className="pc-atmos pc-atmos--sea" />
       <div className="pc-atmos pc-atmos--vignette" />
@@ -145,7 +150,7 @@ export function Cockpit() {
             )}
           </section>
 
-          <aside className="pc-region--right" aria-label="Status stack">
+          <aside id="pc-status-stack" className="pc-region--right" aria-label="Status stack" tabIndex={-1}>
             <HealthPanel health={health} />
             <InboxPanel tasks={snapshot.inbox} onSelectTask={roster.selectInboxTask} />
             <Inspector
