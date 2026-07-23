@@ -7,10 +7,10 @@ export const EDGE_ALERT_STACK_CAP = 3;
 
 export type EdgeAlertSide = "left" | "right";
 
-/** One off-camera session that needs notice at the viewport edge. */
+/** One off-camera region that needs notice at the viewport edge. */
 export interface EdgeAlertItem {
-  /** Named session id (open-water / null is never selectable via the roster). */
-  sessionId: string;
+  /** Named session id, or `null` for the open-water region (no roster filter). */
+  sessionId: string | null;
   /** Short session label (matches the region banner). */
   label: string;
   /** Loudest edge-attention state on that session (hooks rollup). */
@@ -26,8 +26,12 @@ export interface EdgeAlertItem {
 export interface EdgeAlertsProps {
   /** Off-camera attention items, already ordered loudest-first per side. */
   items: EdgeAlertItem[];
-  /** Selects the session represented by a clicked chip (camera sails there). */
-  onSelectSession: (sessionId: string) => void;
+  /**
+   * Activates the region represented by a clicked chip. Named sessions receive
+   * their id (roster select + camera sail). Open water receives `null` so the
+   * scene can pan without setting a roster session filter.
+   */
+  onSelectSession: (sessionId: string | null) => void;
 }
 
 /** Prose phrase for the accessible label — never colour alone (PRODUCT.md a11y). */
@@ -44,12 +48,16 @@ function attentionProse(state: string, count: number): string {
   }
 }
 
+function edgeChipKey(item: EdgeAlertItem): string {
+  return item.sessionId ?? "open-water";
+}
+
 function EdgeAlertButton({
   item,
   onSelectSession,
 }: {
   item: EdgeAlertItem;
-  onSelectSession: (sessionId: string) => void;
+  onSelectSession: (sessionId: string | null) => void;
 }) {
   const meta = stateMetaFor(item.state);
   const direction = item.side === "left" ? "to the left" : "to the right";
@@ -61,13 +69,15 @@ function EdgeAlertButton({
   ]
     .filter(Boolean)
     .join(" ");
+  // Named sessions keep the "Session …" head; open water uses its in-register label.
+  const head = item.sessionId === null ? item.label : `Session ${item.label}`;
 
   return (
     <button
       type="button"
       className={className}
       style={style}
-      aria-label={`Session ${item.label} — ${attentionProse(item.state, item.count)}, ${direction}`}
+      aria-label={`${head} — ${attentionProse(item.state, item.count)}, ${direction}`}
       onClick={() => onSelectSession(item.sessionId)}
     >
       {item.side === "left" && (
@@ -117,7 +127,7 @@ export function EdgeAlerts({ items, onSelectSession }: EdgeAlertsProps) {
       {left.length > 0 && (
         <div className="pc-edge-alerts pc-edge-alerts--left" role="group" aria-label="Attention to the left">
           {left.slice(0, EDGE_ALERT_STACK_CAP).map((item) => (
-            <EdgeAlertButton key={item.sessionId} item={item} onSelectSession={onSelectSession} />
+            <EdgeAlertButton key={edgeChipKey(item)} item={item} onSelectSession={onSelectSession} />
           ))}
           {left.length > EDGE_ALERT_STACK_CAP && (
             <span className="pc-edge-alert pc-edge-alert--more" aria-label={`${left.length - EDGE_ALERT_STACK_CAP} more sessions to the left`}>
@@ -129,7 +139,7 @@ export function EdgeAlerts({ items, onSelectSession }: EdgeAlertsProps) {
       {right.length > 0 && (
         <div className="pc-edge-alerts pc-edge-alerts--right" role="group" aria-label="Attention to the right">
           {right.slice(0, EDGE_ALERT_STACK_CAP).map((item) => (
-            <EdgeAlertButton key={item.sessionId} item={item} onSelectSession={onSelectSession} />
+            <EdgeAlertButton key={edgeChipKey(item)} item={item} onSelectSession={onSelectSession} />
           ))}
           {right.length > EDGE_ALERT_STACK_CAP && (
             <span className="pc-edge-alert pc-edge-alert--more" aria-label={`${right.length - EDGE_ALERT_STACK_CAP} more sessions to the right`}>

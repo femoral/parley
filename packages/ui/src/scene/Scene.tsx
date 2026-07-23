@@ -13,12 +13,13 @@ export interface SceneProps {
    * by the app's `projectScene`. Structurally the hooks-layer `SceneSession[]`. */
   sessions: SessionRegionData[];
   /** The roster's selected session (the camera target). `null` ("All hands")
-   * frames the first region rather than filtering the sea. */
+   * frames the loudest attention region rather than filtering the sea. */
   activeSessionId: string | null;
   /** Selects the task represented by a clicked island. */
   onSelectTask: (taskId: string) => void;
   /** Selects a session from an edge-of-frame attention chip (camera sails there).
-   * Wired to the roster's `selectSession` — same source of truth as the chips. */
+   * Wired to the roster's `selectSession` — same source of truth as the chips.
+   * Not called for the open-water chip (no roster filter target). */
   onSelectSession: (sessionId: string) => void;
   /**
    * True before the first snapshot has resolved. Distinguishes "taking
@@ -59,11 +60,60 @@ export function regionWorldOffset(sessionId: string | null): { dx: number; dy: n
 }
 
 /**
- * Build the edge-of-frame attention list: named sessions outside the framed
- * region that carry a hooks-layer attention rollup, ordered loudest-first
- * within each side. Membership, loudest state, and rank all arrive on
- * `session.attention` from `projectScene` — this only places them on a side
- * and sorts by the projected rank (never re-derives state sets).
+ * All-hands camera target: the region with the highest-priority (lowest rank)
+ * attention rollup. Calm regions rank as Infinity. Tie-break is first-placed
+ * (stable projection order from `projectScene`).
+ *
+ * PRODUCT.md attention hierarchy is law — a fresh wreck or awaiting ship must
+ * read on-camera under "All hands", not sit off-frame behind placed[0].
+ */
+export function loudestRegionIndex(
+  placed: ReadonlyArray<{ session: SessionRegionData }>,
+): number {
+  let best = 0;
+  let bestRank = Infinity;
+  for (let i = 0; i < placed.length; i++) {
+    const rank = placed[i]!.session.attention?.rank ?? Infinity;
+    if (rank < bestRank) {
+      bestRank = rank;
+      best = i;
+    }
+  }
+  return best;
+}
+
+/**
+ * Resolve which placed region the camera frames.
+ * - Manual open-water chip focus wins (no roster filter).
+ * - Named roster selection frames that session (fallback to loudest if aged out).
+ * - "All hands" (null) frames the loudest attention region.
+ */
+export function resolveFramedIndex(
+  placed: ReadonlyArray<{ session: SessionRegionData }>,
+  activeSessionId: string | null,
+  manualFrameKey: string | undefined,
+): number {
+  if (placed.length === 0) return 0;
+  if (manualFrameKey !== undefined) {
+    const manual = placed.findIndex((p) => regionKey(p.session.id) === manualFrameKey);
+    if (manual >= 0) return manual;
+  }
+  if (activeSessionId !== null) {
+    const named = placed.findIndex((p) => p.session.id === activeSessionId);
+    if (named >= 0) return named;
+  }
+  return loudestRegionIndex(placed);
+}
+
+/**
+ * Build the edge-of-frame attention list: regions outside the framed one that
+ * carry a hooks-layer attention rollup, ordered loudest-first within each side.
+ * Membership, loudest state, and rank all arrive on `session.attention` from
+ * `projectScene` — this only places them on a side and sorts by the projected
+ * rank (never re-derives state sets).
+ *
+ * Includes the open-water region (session.id null) when it holds attention —
+ * session-less wrecks and awaiting ships must still read at the edge.
  *
  * Placement uses id-stable world offsets, not array index, so chip sides stay
  * consistent when the sessions array is reordered.
@@ -77,8 +127,7 @@ function edgeAlertsFor(
 
   for (const { session, dx } of placed) {
     if (regionKey(session.id) === activeKey) continue;
-    // Open water (id null) has no roster select target — skip the chip.
-    if (session.id === null || session.attention === null) continue;
+    if (session.attention === null) continue;
     const side: EdgeAlertSide = dx < activeDx ? "left" : "right";
     items.push({
       sessionId: session.id,
@@ -94,7 +143,9 @@ function edgeAlertsFor(
   items.sort((a, b) => {
     if (a.side !== b.side) return a.side === "left" ? -1 : 1;
     if (a.rank !== b.rank) return a.rank - b.rank;
-    return a.sessionId.localeCompare(b.sessionId);
+    const ka = a.sessionId ?? "";
+    const kb = b.sessionId ?? "";
+    return ka.localeCompare(kb);
   });
 
   return items;
@@ -179,15 +230,23 @@ function SceneWithRegions({
     return { session, dx, dy };
   });
 
-  // "All hands" (null) frames the first region; a named selection frames its own,
-  // falling back to the first if that session has already aged out of the sea.
-  const activeIndex =
-    activeSessionId === null
-      ? 0
-      : Math.max(
-          0,
-          placed.findIndex((p) => p.session.id === activeSessionId),
-        );
+  // Open-water chip frames that region without a roster session filter. Cleared
+  // whenever the roster selection changes so we never fight an explicit pick.
+  const [manualFrameKey, setManualFrameKey] = useState<string | undefined>(undefined);
+  const [trackedSessionId, setTrackedSessionId] = useState(activeSessionId);
+  if (activeSessionId !== trackedSessionId) {
+    setTrackedSessionId(activeSessionId);
+    setManualFrameKey(undefined);
+  }
+  // Drop a stale manual target if that region left the sea.
+  if (
+    manualFrameKey !== undefined &&
+    !placed.some((p) => regionKey(p.session.id) === manualFrameKey)
+  ) {
+    setManualFrameKey(undefined);
+  }
+
+  const activeIndex = resolveFramedIndex(placed, activeSessionId, manualFrameKey);
   const active = placed[activeIndex] ?? placed[0]!;
   const activeKey = regionKey(active.session.id);
 
@@ -226,6 +285,19 @@ function SceneWithRegions({
       setDepartingKey(undefined);
     }
   }, [departingKey, activeKey, active.dx, active.dy]);
+
+  const handleEdgeSelect = useCallback(
+    (sessionId: string | null) => {
+      if (sessionId === null) {
+        // Open water has no roster select target — frame it in-scene only.
+        setManualFrameKey("open-water");
+        return;
+      }
+      setManualFrameKey(undefined);
+      onSelectSession(sessionId);
+    },
+    [onSelectSession],
+  );
 
   const mountedKeys = new Set<string>([activeKey]);
   if (departingKey !== undefined && departingKey !== activeKey) {
@@ -277,7 +349,7 @@ function SceneWithRegions({
       </Camera>
       {/* Edge chips live in viewport space (not the panning world) so they pin
           to the sea's left/right margins while the camera sails. */}
-      <EdgeAlerts items={edgeItems} onSelectSession={onSelectSession} />
+      <EdgeAlerts items={edgeItems} onSelectSession={handleEdgeSelect} />
     </div>
   );
 }

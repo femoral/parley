@@ -128,8 +128,9 @@ export function Cockpit() {
               </div>
             ) : (
               <div className="pc-scene">
-                {/* Icon-scale rose: top-left of the scene stage, under the head. */}
-                <CompassRose />
+                {/* Icon-scale rose: top-left of the scene stage, under the head.
+                    Ornaments-off stills this ambient chrome with the rest. */}
+                <CompassRose ornaments={settings.ornaments} />
                 {/* Sea is the room's backdrop (#75) — no Plate card chrome. */}
                 {chartStale && (
                   <div className="pc-stale-band" role="status" aria-live="polite">

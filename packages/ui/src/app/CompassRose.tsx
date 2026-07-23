@@ -1,7 +1,10 @@
 /** Layer 4 — icon-scale compass rose (design-manifest §2.11 lineage): two rings
  * and a four-point star, brass, spinning over 140s via CSS. Decorative; sits
- * top-left of the centre stage under the cartouche. */
-export function CompassRose() {
+ * top-left of the centre stage under the cartouche. Stilled by the global
+ * prefers-reduced-motion rule, and hidden when Ornaments is off so the toggle's
+ * promise covers ambient chrome consistently. */
+export function CompassRose({ ornaments = true }: { ornaments?: boolean }) {
+  if (!ornaments) return null;
   return (
     <svg className="pc-compass" viewBox="0 0 100 100" aria-hidden="true">
       <circle cx="50" cy="50" r="46" fill="none" stroke="currentColor" strokeWidth="0.5" />
