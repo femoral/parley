@@ -2738,6 +2738,7 @@
   text-transform: uppercase;
   color: var(--ink-label);
   line-height: 1.4;
+}
 
 /* ═══════════════════════════════════════════════════════════════════════════
  * A11y / honesty addenda (scene + log stream + chart key scroll cue)
