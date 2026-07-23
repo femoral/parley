@@ -9,7 +9,6 @@ import {
   useState,
   type CSSProperties,
   type KeyboardEvent as ReactKeyboardEvent,
-  type MouseEvent as ReactMouseEvent,
   type MutableRefObject,
   type Ref,
 } from "react";
@@ -148,93 +147,74 @@ function RosterEmptyStarter() {
   );
 }
 
+/** 8-char short ref — same truncation as InboxCard / hooks `shortId`. */
+function shortRef(id: string): string {
+  return id.length > 8 ? id.slice(0, 8) : id;
+}
+
 /**
- * Selected-row meta is itself the task-id copy affordance (click / keyboard).
- * Keeps the visible id/meta text at full width — a separate side button used
- * to compete with the single-line ellipsis and truncate the id to "tsk-…".
- * Mirrors InboxCard / BriefTab: clipboard.writeText with select-on-click
- * fallback. Only mounted on the selected row so the rail stays quiet.
+ * Split projected meta (`branch · shortId` or branch-alone when the id is
+ * already embedded) so the short id can sit outside the ellipsis flex and
+ * stay legible at narrow roster widths.
  */
-function TaskIdMetaCopy({ taskId, meta }: { taskId: string; meta: string }) {
-  const [copied, setCopied] = useState(false);
-  const [canCopy, setCanCopy] = useState(true);
-  const revertTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const scaffoldRef = useRef<HTMLSpanElement>(null);
-
-  useEffect(() => {
-    setCanCopy(clipboardAvailable());
-    return () => {
-      if (revertTimer.current) clearTimeout(revertTimer.current);
-    };
-  }, []);
-
-  const markCopied = useCallback(() => {
-    setCopied(true);
-    if (revertTimer.current) clearTimeout(revertTimer.current);
-    revertTimer.current = setTimeout(() => setCopied(false), 1500);
-  }, []);
-
-  const handleCopy = useCallback(
-    async (event: ReactMouseEvent<HTMLButtonElement>) => {
-      // Keep the listbox option from treating this as a re-select activation
-      // for keyboard users who land focus on the button.
-      event.stopPropagation();
-      if (clipboardAvailable()) {
-        try {
-          await navigator.clipboard.writeText(taskId);
-          markCopied();
-          return;
-        } catch {
-          // Fall through to select-on-click fallback.
-        }
-      }
-      const el = scaffoldRef.current;
-      if (el) {
-        const range = document.createRange();
-        range.selectNodeContents(el);
-        const selection = window.getSelection();
-        selection?.removeAllRanges();
-        selection?.addRange(range);
-        markCopied();
-      } else {
-        setCanCopy(false);
-      }
-    },
-    [taskId, markCopied],
-  );
-
-  if (!canCopy) {
-    // Clipboard unavailable — still show the meta (same as unselected rows).
-    return (
-      <span className="pc-roster__meta" title={taskId}>
-        <span aria-hidden="true">{meta}</span>
-        <span className="pc-visually-hidden">task id {taskId}</span>
-      </span>
-    );
+function metaBranchAndId(
+  meta: string,
+  taskId: string,
+): { branch: string | null; idRef: string } {
+  const idRef = shortRef(taskId);
+  const sep = " · ";
+  const idx = meta.lastIndexOf(sep);
+  if (idx === -1) {
+    // Branch alone (id already a path segment) — no separate id chip.
+    return { branch: meta, idRef };
   }
+  const right = meta.slice(idx + sep.length);
+  // Only treat the right segment as the id when it matches the short ref
+  // (projection contract); otherwise keep the whole string as branch.
+  if (right === idRef || right === taskId) {
+    return { branch: meta.slice(0, idx), idRef };
+  }
+  return { branch: meta, idRef };
+}
 
-  return (
-    <button
-      type="button"
-      className="pc-roster__meta pc-roster__meta--copy"
-      title={copied ? "Copied task id" : `Copy task id ${taskId}`}
-      aria-label={copied ? "Copied task id" : "Copy task id"}
-      onClick={handleCopy}
-      onKeyDown={(event) => {
-        // Space/Enter on the button must not bubble to the listbox's
-        // manual-activation handler (which would re-select the row).
-        if (event.key === " " || event.key === "Enter") {
-          event.stopPropagation();
-        }
-      }}
-    >
-      {/* Hidden scaffold text for select-on-click fallback when clipboard fails. */}
-      <span ref={scaffoldRef} className="pc-roster__id-scaffold" aria-hidden="true">
-        {taskId}
-      </span>
-      <span aria-hidden="true">{copied ? "copied ✓" : meta}</span>
-    </button>
-  );
+/**
+ * Compact relative age for attention triage ("4h", "20s"). One unit only so
+ * it stays subordinate to the state label.
+ */
+function formatRelativeAge(iso: string, nowMs: number): string | null {
+  const then = Date.parse(iso);
+  if (!Number.isFinite(then)) return null;
+  const sec = Math.max(0, Math.floor((nowMs - then) / 1000));
+  if (sec < 60) return `${sec}s`;
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `${min}m`;
+  const hr = Math.floor(min / 60);
+  if (hr < 48) return `${hr}h`;
+  return `${Math.floor(hr / 24)}d`;
+}
+
+/** Coarse clock for attention-row ages — not the cockpit's 1s tick. */
+const AGE_TICK_MS = 30_000;
+
+function useCoarseNow(enabled: boolean): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!enabled) return;
+    setNow(Date.now());
+    const id = setInterval(() => setNow(Date.now()), AGE_TICK_MS);
+    return () => clearInterval(id);
+  }, [enabled]);
+  return now;
+}
+
+/** Attention states where "how long" is the triage variable. */
+function showAttentionAge(
+  state: string,
+  freshFailure: boolean | undefined,
+): boolean {
+  if (state === "awaiting_answer" || state === "stalled") return true;
+  if (state === "failed" && freshFailure) return true;
+  return false;
 }
 
 function Group({
@@ -244,6 +224,7 @@ function Group({
   onSelectTask,
   onFocusTask,
   rowRefs,
+  nowMs,
 }: {
   group: RosterGroup;
   selectedTaskId: string | null;
@@ -252,6 +233,7 @@ function Group({
   onSelectTask: (id: string) => void;
   onFocusTask: (id: string) => void;
   rowRefs: MutableRefObject<Map<string, HTMLDivElement | null>>;
+  nowMs: number;
 }) {
   const meta = stateMetaFor(group.state);
   const dotStyle = { "--dot-color": meta.colorVar } as CSSProperties;
@@ -300,7 +282,17 @@ function Group({
         // Group headers are skipped by Tab-through; put the state in each
         // row's accessible name so a screen-reader user hears which task is
         // failed / awaiting / … without leaving the row list.
-        const accessibleName = `${task.name} — ${meta.label}`;
+        const age =
+          showAttentionAge(group.state, task.freshFailure) && task.updatedAt
+            ? formatRelativeAge(task.updatedAt, nowMs)
+            : null;
+        const accessibleName = age
+          ? `${task.name} — ${meta.label}, ${age}`
+          : `${task.name} — ${meta.label}`;
+        const { branch, idRef } = metaBranchAndId(task.meta, task.id);
+        // When meta is "branch · id", protect the short id from ellipsis; when
+        // the branch already embeds the id, show meta as a single ellipsized line.
+        const splitId = task.meta.includes(" · ");
         return (
           <div
             role="option"
@@ -325,19 +317,27 @@ function Group({
               <span className="pc-roster__name">{task.name}</span>
               {/* title is mouse-only — the visually-hidden span exposes the
                   full task id to keyboard/AT (InboxCard shortRef pattern).
-                  Visible meta stays branch · shortId with single-line ellipsis.
-                  Selected: the meta text itself is the copy affordance so a
-                  side button never competes with the ellipsis and truncates
-                  the id to "tsk-…". */}
-              {selected ? (
-                <TaskIdMetaCopy taskId={task.id} meta={task.meta} />
-              ) : (
-                <span className="pc-roster__meta" title={task.id}>
+                  Visible meta: branch may ellipsize; 8-char short ref is
+                  flex-shrink:0 so rows stay identifiable at rest. Copy lives
+                  on the Inspector head — ARIA options must not nest buttons. */}
+              <span className="pc-roster__meta" title={task.id}>
+                {splitId ? (
+                  <span className="pc-roster__meta-parts" aria-hidden="true">
+                    <span className="pc-roster__meta-branch">{branch}</span>
+                    <span className="pc-roster__meta-sep"> · </span>
+                    <span className="pc-roster__meta-id">{idRef}</span>
+                  </span>
+                ) : (
                   <span aria-hidden="true">{task.meta}</span>
-                  <span className="pc-visually-hidden">task id {task.id}</span>
-                </span>
-              )}
+                )}
+                <span className="pc-visually-hidden">task id {task.id}</span>
+              </span>
             </span>
+            {age && (
+              <span className="pc-roster__age" title={task.updatedAt ?? undefined} aria-hidden="true">
+                {age}
+              </span>
+            )}
             {showBeacon && (
               <span
                 className="pc-roster__beacon pc-dot--beacon"
@@ -622,6 +622,21 @@ export const RosterPanel = memo(function RosterPanel({
     [groups],
   );
 
+  // Coarse clock only while attention rows (awaiting / stalled / fresh-failed)
+  // are present — keeps relative ages honest without a 1s re-render.
+  const needsAgeClock = useMemo(
+    () =>
+      groups.some(
+        (g) =>
+          (g.state === "awaiting_answer" || g.state === "stalled") &&
+          g.tasks.some((t) => t.updatedAt) ||
+          (g.state === "failed" &&
+            g.tasks.some((t) => t.freshFailure && t.updatedAt)),
+      ),
+    [groups],
+  );
+  const nowMs = useCoarseNow(needsAgeClock);
+
   // Roving tabindex: one tab stop among options (APG listbox / Inspector house style).
   // Prefer the selected task when present; else the first row.
   const [focusedTaskId, setFocusedTaskId] = useState<string | null>(null);
@@ -742,6 +757,7 @@ export const RosterPanel = memo(function RosterPanel({
               onSelectTask={onSelectTask}
               onFocusTask={setFocusedTaskId}
               rowRefs={rowRefs}
+              nowMs={nowMs}
             />
           ))
         )}

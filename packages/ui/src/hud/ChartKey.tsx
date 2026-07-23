@@ -17,6 +17,7 @@ import {
 import { MARK_RING } from "../tokens/chrome-glyphs.js";
 import { HARNESS_COLORS, MODEL_VENDORS, type EmblemMark } from "../tokens/factions.js";
 import { ATTENTION_DISPLAY_ORDER, STATE_META } from "../tokens/state-meta.js";
+import { KEYBOARD_SHORTCUTS } from "./keyboardShortcuts.js";
 
 /** Distance from the true bottom still treated as "scrolled to end". */
 const CHART_KEY_END_PX = 8;
@@ -203,12 +204,5 @@ export const ChartKey = memo(function ChartKey() {
     </div>
   );
 });
-
-const KEYBOARD_SHORTCUTS: readonly { key: string; hint: string }[] = [
-  { key: "/", hint: "find session" },
-  { key: "n", hint: "next flag that needs you" },
-  { key: "m", hint: "toggle Soundings" },
-  { key: "Esc", hint: "clear task selection" },
-];
 
 const COAT_SWATCH: EmblemMark = { kind: "glyph", char: "◆" };

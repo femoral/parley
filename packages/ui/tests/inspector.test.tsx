@@ -115,6 +115,22 @@ describe("Inspector header (#68)", () => {
     expect(screen.getAllByText("RUNNING").length).toBeGreaterThanOrEqual(1);
   });
 
+  it("offers a task-id copy affordance on the head (not nested in roster options)", async () => {
+    const writeText = vi.fn(async () => undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
+    render(<Inspector task={task()} />);
+    const copyBtn = screen.getByRole("button", { name: /Copy task id/i });
+    expect(copyBtn.classList.contains("pc-inspector__id-copy")).toBe(true);
+    fireEvent.click(copyBtn);
+    await waitFor(() => {
+      expect(writeText).toHaveBeenCalledWith("t1abcdef");
+    });
+    expect(screen.getByRole("button", { name: /Copied task id/i })).toBeTruthy();
+  });
+
   it("shows an eval score badge only when present", () => {
     render(<Inspector task={task({ evalScore: 8 })} />);
     expect(screen.getByText("★ 8/10")).toBeTruthy();
@@ -340,6 +356,35 @@ describe("Inspector's four tabs render per the manifest's inspector treatment (#
     }
   });
 
+  it("does not re-steal focus when only the task projection identity changes", async () => {
+    const scrollIntoView = vi.fn();
+    const original = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = scrollIntoView;
+    try {
+      const { rerender } = render(<Inspector task={task()} openSeq={1} />);
+      await waitFor(() => {
+        expect(document.activeElement).toBe(
+          screen.getByRole("heading", { name: "LOGBOOK" }),
+        );
+      });
+      // User moves into the roster list (arrow browse) — a new task object with
+      // the same openSeq must not yank focus back to LOGBOOK.
+      const outside = document.createElement("button");
+      document.body.appendChild(outside);
+      outside.focus();
+      expect(document.activeElement).toBe(outside);
+      scrollIntoView.mockClear();
+      rerender(<Inspector task={task({ name: "chart-the-bay" })} openSeq={1} />);
+      await new Promise((r) => requestAnimationFrame(() => r(undefined)));
+      await new Promise((r) => requestAnimationFrame(() => r(undefined)));
+      expect(document.activeElement).toBe(outside);
+      expect(scrollIntoView).not.toHaveBeenCalled();
+      outside.remove();
+    } finally {
+      Element.prototype.scrollIntoView = original;
+    }
+  });
+
   it("does not steal focus from a text field when openSeq advances", async () => {
     const scrollIntoView = vi.fn();
     const original = Element.prototype.scrollIntoView;
@@ -357,6 +402,33 @@ describe("Inspector's four tabs render per the manifest's inspector treatment (#
       await new Promise((r) => requestAnimationFrame(() => r(undefined)));
       expect(document.activeElement).toBe(input);
       input.remove();
+    } finally {
+      Element.prototype.scrollIntoView = original;
+    }
+  });
+
+  it("does not steal focus from an unselected roster option while browsing", async () => {
+    const scrollIntoView = vi.fn();
+    const original = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = scrollIntoView;
+    try {
+      const listbox = document.createElement("div");
+      listbox.setAttribute("role", "listbox");
+      listbox.setAttribute("aria-label", "Fleet tasks");
+      const option = document.createElement("div");
+      option.setAttribute("role", "option");
+      option.setAttribute("aria-selected", "false");
+      option.tabIndex = 0;
+      listbox.appendChild(option);
+      document.body.appendChild(listbox);
+      option.focus();
+      expect(document.activeElement).toBe(option);
+
+      render(<Inspector task={task()} openSeq={7} />);
+      await new Promise((r) => requestAnimationFrame(() => r(undefined)));
+      await new Promise((r) => requestAnimationFrame(() => r(undefined)));
+      expect(document.activeElement).toBe(option);
+      listbox.remove();
     } finally {
       Element.prototype.scrollIntoView = original;
     }

@@ -1,7 +1,17 @@
-import { memo, useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type MouseEvent as ReactMouseEvent,
+} from "react";
 import { Badge, Divider, Emblem, Mark, Plate } from "../../primitives/index.js";
 import { MARK_ANCHOR } from "../../tokens/chrome-glyphs.js";
 import { stateMetaFor } from "../../tokens/state-meta.js";
+import { KEYBOARD_SHORTCUTS } from "../keyboardShortcuts.js";
 import { BriefTab } from "./BriefTab.js";
 import { LogsTab } from "./LogsTab.js";
 import { ReportTab } from "./ReportTab.js";
@@ -15,13 +25,81 @@ const TABS = [
   { key: "qa", label: "Q&A" },
 ] as const;
 
-/** Power-user accelerators (mirrors ChartKey Keys) — quiet empty-logbook rest. */
-const EMPTY_SHORTCUTS: readonly { key: string; hint: string }[] = [
-  { key: "/", hint: "find session" },
-  { key: "n", hint: "next flag that needs you" },
-  { key: "m", hint: "toggle Soundings" },
-  { key: "Esc", hint: "clear task selection" },
-];
+function clipboardAvailable(): boolean {
+  return typeof navigator !== "undefined" && typeof navigator.clipboard?.writeText === "function";
+}
+
+/**
+ * Task-id copy on the LOGBOOK head (not inside roster options — ARIA options
+ * must not nest interactive descendants). Mirrors InboxCard / BriefTab:
+ * clipboard.writeText with select-on-click fallback.
+ */
+function TaskIdCopy({ taskId }: { taskId: string }) {
+  const [copied, setCopied] = useState(false);
+  const [canCopy, setCanCopy] = useState(true);
+  const revertTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scaffoldRef = useRef<HTMLSpanElement>(null);
+
+  useEffect(() => {
+    setCanCopy(clipboardAvailable());
+    return () => {
+      if (revertTimer.current) clearTimeout(revertTimer.current);
+    };
+  }, []);
+
+  const markCopied = useCallback(() => {
+    setCopied(true);
+    if (revertTimer.current) clearTimeout(revertTimer.current);
+    revertTimer.current = setTimeout(() => setCopied(false), 1500);
+  }, []);
+
+  const handleCopy = useCallback(
+    async (event: ReactMouseEvent<HTMLButtonElement>) => {
+      event.stopPropagation();
+      if (clipboardAvailable()) {
+        try {
+          await navigator.clipboard.writeText(taskId);
+          markCopied();
+          return;
+        } catch {
+          // Fall through to select-on-click fallback.
+        }
+      }
+      const el = scaffoldRef.current;
+      if (el) {
+        const range = document.createRange();
+        range.selectNodeContents(el);
+        const selection = window.getSelection();
+        selection?.removeAllRanges();
+        selection?.addRange(range);
+        markCopied();
+      } else {
+        setCanCopy(false);
+      }
+    },
+    [taskId, markCopied],
+  );
+
+  if (!canCopy) return null;
+
+  return (
+    <>
+      {/* Hidden scaffold text for select-on-click fallback when clipboard fails. */}
+      <span ref={scaffoldRef} className="pc-inspector__id-scaffold" aria-hidden="true">
+        {taskId}
+      </span>
+      <button
+        type="button"
+        className="pc-inspector__id-copy"
+        title={copied ? "Copied task id" : `Copy task id ${taskId}`}
+        aria-label={copied ? "Copied task id" : "Copy task id"}
+        onClick={handleCopy}
+      >
+        {copied ? "copied ✓" : "copy"}
+      </button>
+    </>
+  );
+}
 
 export type InspectorTabKey = (typeof TABS)[number]["key"];
 
@@ -82,15 +160,21 @@ export const Inspector = memo(function Inspector({
     setEvalExpanded(false);
   }, [initialTab, openSeq]);
 
-  // When a selection opens/changes, scroll the inspector plate into view within
-  // the right rail so WHY IT FAILED / logs aren't left below the fold.
-  // block:"start" pins the plate header/tab strip at the top of the rail
+  // When a selection opens (openSeq advances), scroll the inspector plate into
+  // view within the right rail so WHY IT FAILED / logs aren't left below the
+  // fold. block:"start" pins the plate header/tab strip at the top of the rail
   // viewport (block:"nearest" was satisfied by a ~90px sliver at the bottom).
   // Respect prefers-reduced-motion: smooth only when motion is allowed.
-  // Also move focus to the LOGBOOK heading so keyboard/AT users hear the
-  // selection — but never steal focus from a text field the user is typing in.
+  //
+  // Focus moves to the LOGBOOK heading only on openSeq (explicit activation:
+  // click / Enter / inbox / scene / n-key) — never on snapshot-driven task
+  // identity churn, which would yank focus out of the roster while arrowing.
+  // Also never steal focus from a text field the user is typing in, or from
+  // an unselected roster option (browse without activate).
+  // `hasTask` (not the task object) keeps the effect free of projection churn.
+  const hasTask = task !== null;
   useEffect(() => {
-    if (!task) return;
+    if (!hasTask) return;
     const el = scrollAnchorRef.current;
     if (!el) return;
     const reduceMotion =
@@ -112,12 +196,21 @@ export const Inspector = memo(function Inspector({
       ) {
         return;
       }
+      // Roving listbox browse: focus is on an option that is not the active
+      // selection — leave the user in the fleet list.
+      if (
+        active.getAttribute("role") === "option" &&
+        active.getAttribute("aria-selected") !== "true" &&
+        active.closest('[aria-label="Fleet tasks"]')
+      ) {
+        return;
+      }
     }
     // Defer so scrollIntoView and tab state settle first.
     requestAnimationFrame(() => {
       headingRef.current?.focus({ preventScroll: true });
     });
-  }, [openSeq, task]);
+  }, [openSeq, hasTask]);
 
   const focusTabAt = (index: number): void => {
     tabRefs.current[index]?.focus();
@@ -161,7 +254,7 @@ export const Inspector = memo(function Inspector({
         </p>
         {/* Quiet resting content — earns the empty plate's footprint without noise. */}
         <ul className="pc-inspector__rest-keys" aria-label="Keyboard shortcuts">
-          {EMPTY_SHORTCUTS.map((row) => (
+          {KEYBOARD_SHORTCUTS.map((row) => (
             <li className="pc-inspector__rest-key" key={row.key}>
               <kbd className="pc-inspector__rest-kbd">{row.key}</kbd>
               <span className="pc-inspector__rest-hint">{row.hint}</span>
@@ -188,7 +281,10 @@ export const Inspector = memo(function Inspector({
             LOGBOOK
           </h2>
           <span className="pc-inspector__name-sub">
-            {task.name} · {task.id}
+            <span className="pc-inspector__name-sub-text">
+              {task.name} · {task.id}
+            </span>
+            <TaskIdCopy taskId={task.id} />
           </span>
         </div>
         <div className="pc-inspector__head-aside">

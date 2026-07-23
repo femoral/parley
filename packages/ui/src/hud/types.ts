@@ -34,6 +34,12 @@ export interface RosterTask {
   /** `branch · id` style meta line. */
   meta: string;
   /**
+   * ISO-8601 last-activity timestamp from the wire (`updated_at`). Used for
+   * quiet relative age on attention-state rows (awaiting / stalled / fresh
+   * failed). Absent when the projection has no clock for this row.
+   */
+  updatedAt?: string | null;
+  /**
    * Display-layer freshness for `failed` rows only (hooks-projected). When
    * true, the row is undimmed with a coral beacon and the failed group sorts
    * just under stalled. When false/undefined, archive treatment from

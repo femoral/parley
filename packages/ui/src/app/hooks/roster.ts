@@ -233,6 +233,8 @@ function toRosterTask(
     emblem: identity.emblem,
     faction: identity.faction,
     meta: identity.meta,
+    // Quiet relative age on attention rows (RosterPanel); null/absent = hide.
+    updatedAt: task.updatedAt ?? null,
     // Only meaningful for failed rows; the panel treats undefined as archive
     // defaults from STATE_META.
     freshFailure: task.state === "failed" ? freshFailure : undefined,

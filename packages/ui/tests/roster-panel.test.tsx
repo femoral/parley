@@ -311,46 +311,74 @@ describe("RosterPanel state treatment (#66)", () => {
   });
 });
 
-describe("RosterPanel selected-row task id copy", () => {
-  const writeText = vi.fn(async () => undefined);
-
-  beforeEach(() => {
-    writeText.mockClear();
-    Object.defineProperty(navigator, "clipboard", {
-      configurable: true,
-      value: { writeText },
-    });
-  });
-
-  it("shows a copy affordance only on the selected row (meta itself, not a side button)", () => {
-    const { rerender } = render(<RosterPanel {...baseProps()} selectedTaskId={null} />);
+describe("RosterPanel option has no nested interactive copy (a11y)", () => {
+  it("does not mount a task-id copy button inside roster options", () => {
+    render(<RosterPanel {...baseProps()} selectedTaskId="t2" />);
+    // Copy moved to Inspector head — ARIA options must not nest interactive descendants.
     expect(screen.queryByRole("button", { name: /Copy task id/i })).toBeNull();
-    rerender(<RosterPanel {...baseProps()} selectedTaskId="t2" />);
-    const copyBtn = screen.getByRole("button", { name: /Copy task id/i });
-    expect(copyBtn).toBeTruthy();
-    // Meta line is the control — keeps full width so the id does not shrink.
-    expect(copyBtn.classList.contains("pc-roster__meta")).toBe(true);
-    expect(copyBtn.classList.contains("pc-roster__meta--copy")).toBe(true);
-    // Only one copy control — not one per row.
-    expect(screen.getAllByRole("button", { name: /Copy task id/i })).toHaveLength(1);
-    // Visible meta text still present (not replaced by a bare "id" chip).
-    expect(copyBtn.textContent).toMatch(/feat\/depth · t2/);
+    const option = screen.getByRole("option", { name: "sound-the-depths — RUNNING" });
+    expect(option.querySelector("button")).toBeNull();
   });
 
-  it("does not mount a separate id-copy wrap that would compete with meta ellipsis", () => {
+  it("keeps visible short-ref meta on every row without a side copy control", () => {
     const { container } = render(<RosterPanel {...baseProps()} selectedTaskId="t1" />);
     expect(container.querySelector(".pc-roster__id-copy-wrap")).toBeNull();
-    expect(container.querySelector(".pc-roster__id-copy")).toBeNull();
+    expect(container.querySelector(".pc-roster__meta--copy")).toBeNull();
+    // 8-char short ref is a protected flex child so ellipsis cannot eat it.
+    const idChip = container.querySelector(".pc-roster__meta-id");
+    expect(idChip?.textContent).toBe("t1");
+  });
+});
+
+describe("RosterPanel attention-row relative age", () => {
+  it("shows a quiet age on awaiting rows when updatedAt is present", () => {
+    const groups: RosterGroup[] = [
+      {
+        state: "awaiting_answer",
+        tasks: [
+          {
+            id: "t-age",
+            name: "needs-you",
+            coat: "#10a37f",
+            emblem: { kind: "glyph", char: "?" },
+            faction: "Codex",
+            meta: "feat/age · t-age",
+            // ~2 hours ago — stable for the coarse clock.
+            updatedAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
+          },
+        ],
+      },
+    ];
+    const { container } = render(
+      <RosterPanel {...baseProps()} groups={groups} totalTasks={1} activeTasks={1} />,
+    );
+    const age = container.querySelector(".pc-roster__age");
+    expect(age?.textContent).toMatch(/^\d+h$/);
+    // Age rides in the accessible name so AT hears the triage variable.
+    expect(screen.getByRole("option", { name: /needs-you — AWAITING, \d+h/ })).toBeTruthy();
   });
 
-  it("copies the full task id and shows confirmation", async () => {
-    render(<RosterPanel {...baseProps()} selectedTaskId="t1" />);
-    fireEvent.click(screen.getByRole("button", { name: /Copy task id/i }));
-    await waitFor(() => {
-      expect(writeText).toHaveBeenCalledWith("t1");
-    });
-    expect(screen.getByText("copied ✓")).toBeTruthy();
-    expect(screen.getByRole("button", { name: /Copied task id/i })).toBeTruthy();
+  it("omits age on calm running rows", () => {
+    const groups: RosterGroup[] = [
+      {
+        state: "running",
+        tasks: [
+          {
+            id: "t-run",
+            name: "sailing",
+            coat: "#10a37f",
+            emblem: { kind: "glyph", char: "?" },
+            faction: "Codex",
+            meta: "feat/run · t-run",
+            updatedAt: new Date(Date.now() - 60_000).toISOString(),
+          },
+        ],
+      },
+    ];
+    const { container } = render(
+      <RosterPanel {...baseProps()} groups={groups} totalTasks={1} activeTasks={1} />,
+    );
+    expect(container.querySelector(".pc-roster__age")).toBeNull();
   });
 });
 
