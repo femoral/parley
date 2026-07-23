@@ -67,7 +67,12 @@ describe("Island renders its state through a single data-state (#69)", () => {
 
   it("pending — rising island, no ship, no terminal or attention effect", () => {
     const { container } = render(<Island task={island("pending")} onSelectTask={noop} />);
-    expect(container.querySelector(".pc-island__rise")).toBeTruthy();
+    const rise = container.querySelector(".pc-island__rise");
+    const plank = container.querySelector(".pc-plank");
+    expect(rise).toBeTruthy();
+    expect(plank).toBeTruthy();
+    expect(rise?.contains(plank)).toBe(false);
+    expect(plank?.parentElement?.classList.contains("pc-island__plank-rise")).toBe(true);
     expect(container.querySelector(".pc-sloop")).toBeNull();
     expect(container.querySelector(".pc-voyage")).toBeNull();
     expect(container.querySelector(".pc-flare")).toBeNull();

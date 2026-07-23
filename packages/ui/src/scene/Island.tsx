@@ -44,11 +44,9 @@ export type { CancelDeathPhase } from "./island-death.js";
  * on top. The completed flag is an SVG overlay pinned to the variant's peak.
  */
 function IslandBody({
-  name,
   completed,
   variant,
 }: {
-  name: string;
   completed: boolean;
   variant: IslandVariant;
 }) {
@@ -69,11 +67,6 @@ function IslandBody({
           </svg>
         )}
       </div>
-      <span className="pc-plank" aria-hidden="true">
-        <span className="pc-plank__label" title={name}>
-          {name}
-        </span>
-      </span>
     </>
   );
 }
@@ -179,9 +172,16 @@ export function Island({
     >
       <div className="pc-island__rise">
         {state === "awaiting_answer" && <Flare />}
-        <IslandBody name={task.name} completed={state === "completed"} variant={variant} />
+        <IslandBody completed={state === "completed"} variant={variant} />
         {state === "stalled" && <Fog />}
         {state === "failed" && <Wreck />}
+      </div>
+      <div className="pc-island__plank-rise">
+        <span className="pc-plank" aria-hidden="true">
+          <span className="pc-plank__label" title={task.name}>
+            {task.name}
+          </span>
+        </span>
       </div>
       {hasShip(state, deathPhase) && (
         <Ship
