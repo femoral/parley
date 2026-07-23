@@ -108,9 +108,9 @@ describe("SoundingsPanel (#119)", () => {
     expect(screen.getByText("All hands")).toBeTruthy();
   });
 
-  it("shows taking-soundings loading state with no groups yet", () => {
+  it("shows ledger-reading loading state with no groups yet", () => {
     renderPanel(baseView({ status: "loading", groups: [], generatedAt: null }));
-    expect(screen.getByText("Taking soundings…")).toBeTruthy();
+    expect(screen.getByText("Reading the ledger…")).toBeTruthy();
     expect(screen.getByText("listening for the fleet")).toBeTruthy();
   });
 

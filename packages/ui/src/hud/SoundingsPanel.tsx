@@ -330,7 +330,7 @@ export const SoundingsPanel = memo(function SoundingsPanel({
           <>
             {status === "loading" && groups.length === 0 && (
               <div className="pc-soundings__state" role="status">
-                <p className="pc-soundings__state-title">Taking soundings…</p>
+                <p className="pc-soundings__state-title">Reading the ledger…</p>
                 <p className="pc-soundings__state-sub">listening for the fleet</p>
               </div>
             )}

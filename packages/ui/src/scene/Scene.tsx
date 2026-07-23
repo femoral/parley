@@ -225,7 +225,7 @@ export const Scene = memo(function Scene({
           </span>
           {connecting ? (
             <>
-              <p className="pc-scene-empty__title">Taking soundings…</p>
+              <p className="pc-scene-empty__title">Awaiting the fleet…</p>
               <p className="pc-scene-empty__body">
                 Charting the cove — islands will rise as the fleet reports in.
               </p>

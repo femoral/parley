@@ -688,7 +688,7 @@ export const RosterPanel = memo(function RosterPanel({
         {groups.length === 0 ? (
           connecting ? (
             <div className="pc-roster__empty" role="status">
-              <p className="pc-roster__empty-title">Taking soundings…</p>
+              <p className="pc-roster__empty-title">Hailing the fleet…</p>
               <p className="pc-roster__empty-sub">listening for the fleet</p>
             </div>
           ) : (

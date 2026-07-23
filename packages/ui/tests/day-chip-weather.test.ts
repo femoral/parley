@@ -20,4 +20,12 @@ describe("weatherForBucket", () => {
       1,
     );
   });
+
+  it("does not duplicate the calm wind reading with an em dash", () => {
+    const calm = Array.from({ length: 24 }, (_, bucket) =>
+      weatherForBucket(bucket),
+    ).find((weather) => weather.condition === "Glass calm");
+
+    expect(calm?.wind).toBe("0kn");
+  });
 });

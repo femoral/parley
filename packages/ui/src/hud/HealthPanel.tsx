@@ -9,7 +9,7 @@ import type { HealthView } from "./types.js";
  * {@link HealthView}. Daemon facts only (connection, version, host/port/pid,
  * uptime, durable sessions) — fleet counts (total/active) live on the roster.
  *
- * Compact density: at a glance the probe lifecycle matters (neutral SOUNDING…
+ * Compact density: at a glance the probe lifecycle matters (neutral HAILING…
  * until resolved, then HEALTHY/OFFLINE). Host/port/PID/uptime/sessions stay
  * visible as dense mono meta so the right rail frees vertical space for the
  * inspector (LOGBOOK payoff).
@@ -26,7 +26,7 @@ export function HealthPanel({ health }: { health: HealthView }) {
     "--health-chip-color": chipColor,
     "--dot-color": connecting ? "var(--brass-frame)" : chipColor,
   } as CSSProperties;
-  const chipLabel = connecting ? "SOUNDING…" : health.online ? "HEALTHY" : "OFFLINE";
+  const chipLabel = connecting ? "HAILING…" : health.online ? "HEALTHY" : "OFFLINE";
   const pid = health.pid !== null ? String(health.pid) : "—";
   const uptime = health.uptime || "—";
   return (

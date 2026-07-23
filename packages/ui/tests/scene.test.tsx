@@ -625,10 +625,10 @@ describe("Scene lays out the active session's cove (#69)", () => {
     expect(container.querySelector(".pc-scene-empty")).toBeTruthy();
     expect(container.querySelector(".pc-region")).toBeNull();
     expect(screen.getByText(/The tide is calm/)).toBeTruthy();
-    expect(screen.queryByText(/Taking soundings/)).toBeNull();
+    expect(screen.queryByText(/Awaiting the fleet/)).toBeNull();
   });
 
-  it("shows taking-soundings copy before the first snapshot (connecting)", () => {
+  it("shows awaiting-fleet copy before the first snapshot (connecting)", () => {
     render(
       <Scene
         sessions={[]}
@@ -638,7 +638,7 @@ describe("Scene lays out the active session's cove (#69)", () => {
         connecting
       />,
     );
-    expect(screen.getByText(/Taking soundings/)).toBeTruthy();
+    expect(screen.getByText(/Awaiting the fleet/)).toBeTruthy();
     expect(screen.queryByText(/The tide is calm/)).toBeNull();
   });
 

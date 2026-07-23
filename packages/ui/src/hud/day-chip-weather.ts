@@ -91,7 +91,7 @@ const MARK_MOON: EmblemMark = {
 const WEATHER_ENTRIES: readonly DayChipWeather[] = [
   { mark: MARK_FAIR, condition: "Fair over the cove", wind: "NE 8kn" },
   { mark: MARK_RAIN, condition: "Squall rolling in", wind: "SW 14kn" },
-  { mark: MARK_WAVE, condition: "Glass calm", wind: "— 0kn" },
+  { mark: MARK_WAVE, condition: "Glass calm", wind: "0kn" },
   { mark: MARK_OVERCAST, condition: "Soft grey off the point", wind: "N 3kn" },
   { mark: MARK_SUN, condition: "Sun on the harbour", wind: "E 6kn" },
   { mark: MARK_CLOUD, condition: "Clouds over the shoals", wind: "NW 10kn" },

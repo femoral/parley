@@ -38,6 +38,11 @@ describe("HealthPanel renders daemon status from plain props (#65)", () => {
     expect(screen.getByText("—")).toBeTruthy();
   });
 
+  it("reads HAILING while attempting to reach the daemon", () => {
+    render(<HealthPanel health={{ ...HEALTH, status: "connecting", online: false }} />);
+    expect(screen.getByText("HAILING…")).toBeTruthy();
+  });
+
   it("renders a compact dense meta layout (not the tall grid + wells)", () => {
     const { container } = render(<HealthPanel health={HEALTH} />);
     expect(container.querySelector(".pc-health__compact")).toBeTruthy();

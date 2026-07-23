@@ -104,7 +104,7 @@ describe("RosterPanel renders groups it is given, in attention order (#66)", () 
   it("shows the quiet-cove empty state with no groups", () => {
     render(<RosterPanel {...baseProps()} groups={[]} sessions={[]} totalTasks={0} activeTasks={0} />);
     expect(screen.getByText(/The cove is quiet/)).toBeTruthy();
-    expect(screen.queryByText(/Taking soundings/)).toBeNull();
+    expect(screen.queryByText(/Hailing the fleet/)).toBeNull();
   });
 
   it("offers a copyable parley delegate starter in the empty state", () => {
@@ -119,7 +119,7 @@ describe("RosterPanel renders groups it is given, in attention order (#66)", () 
     expect(screen.getByRole("button", { name: /Copy delegate command/i })).toBeTruthy();
   });
 
-  it("shows taking-soundings copy before the first snapshot (connecting)", () => {
+  it("shows hailing copy before the first snapshot (connecting)", () => {
     render(
       <RosterPanel
         {...baseProps()}
@@ -130,7 +130,7 @@ describe("RosterPanel renders groups it is given, in attention order (#66)", () 
         connecting
       />,
     );
-    expect(screen.getByText(/Taking soundings/)).toBeTruthy();
+    expect(screen.getByText(/Hailing the fleet/)).toBeTruthy();
     expect(screen.getByText(/listening for the fleet/)).toBeTruthy();
     expect(screen.queryByText(/The cove is quiet/)).toBeNull();
     expect(screen.queryByRole("button", { name: /Copy delegate command/i })).toBeNull();
