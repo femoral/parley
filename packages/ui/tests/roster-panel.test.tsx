@@ -277,6 +277,17 @@ describe("RosterPanel session selector (#66)", () => {
     expect(onSelectSession).toHaveBeenCalledWith("sess-old-history");
   });
 
+  it("uses chart-search copy while a Find request is loading", async () => {
+    const searchSessions = vi.fn(() => new Promise<never>(() => {}));
+    render(<RosterPanel {...baseProps()} searchSessions={searchSessions} />);
+    fireEvent.click(screen.getByRole("button", { name: "Search fleet" }));
+    fireEvent.change(screen.getByLabelText("Find tasks or sessions"), {
+      target: { value: "charted" },
+    });
+    expect(await screen.findByText("Scouring the charts…")).toBeTruthy();
+    expect(screen.queryByText(/Sounding.*deep/i)).toBeNull();
+  });
+
   it("task-name search hit selects the task (not the session)", async () => {
     const onSelectTask = vi.fn();
     const onSelectSession = vi.fn();

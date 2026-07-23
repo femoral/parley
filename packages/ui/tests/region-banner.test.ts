@@ -41,6 +41,18 @@ describe("region banner legibility (.pc-region__banner)", () => {
     expect(block).not.toMatch(/letter-spacing:\s*var\(--track-caps\)/);
   });
 
+  it("counter-scales the banner against the live region zoom from its anchor", () => {
+    const match = SCENE_CSS.match(
+      /\.pc-region__banner\s*\{([^}]+)\}/,
+    );
+    expect(match).toBeTruthy();
+    const block = match![1]!;
+    expect(block).toMatch(/transform-origin:\s*50%\s+50%/);
+    expect(block).toMatch(
+      /transform:\s*translate\(-50%,\s*-50%\)\s+translateY\(-186px\)\s+scale\(calc\(1\s*\/\s*var\(--region-zoom,\s*1\)\)\)/,
+    );
+  });
+
   it("inks with the sea-legible token (≥4.5:1 on sea)", () => {
     const match = SCENE_CSS.match(
       /\.pc-region__banner\s*\{([^}]+)\}/,

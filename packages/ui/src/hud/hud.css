@@ -3620,3 +3620,11 @@ button.pc-roster__meta--copy:focus-visible {
   font-size: var(--text-meta);
   line-height: 1.4;
 }
+
+/* Give the session handle a real flex item box so its existing ellipsis clips
+ * the label itself without changing the chip's measured or painted shape. */
+.pc-roster__session-handle {
+  display: block;
+  flex: 0 1 9em;
+  min-width: 0;
+}

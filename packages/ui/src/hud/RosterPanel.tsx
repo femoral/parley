@@ -534,7 +534,7 @@ function SessionSearch({
           >
             {status === "loading" && (
               <p className="pc-roster__search-status" role="presentation">
-                Sounding the deep…
+                Scouring the charts…
               </p>
             )}
             {status === "error" && (

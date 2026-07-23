@@ -128,7 +128,11 @@
   position: absolute;
   left: 0;
   top: 0;
-  transform: translate(-50%, -50%) translateY(-186px);
+  transform-origin: 50% 50%;
+  transform:
+    translate(-50%, -50%)
+    translateY(-186px)
+    scale(calc(1 / var(--region-zoom, 1)));
   white-space: nowrap;
   font-family: var(--font-display);
   font-weight: 700;
