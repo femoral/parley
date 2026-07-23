@@ -17,6 +17,8 @@ const AWAITING_1: InboxTask = {
   question: "Should the survey favor the northern shoal?",
   updatedAt: "2026-07-23T12:00:00.000Z",
   sessionId: "sess-abcdef12",
+  sessionHandle: "chart-the-bay",
+  sessionShortRef: "sess-abc",
 };
 
 const AWAITING_2: InboxTask = {
@@ -30,16 +32,25 @@ const AWAITING_2: InboxTask = {
   question: "Deep or shallow anchorage?",
   updatedAt: "2026-07-23T10:00:00.000Z",
   sessionId: null,
+  sessionHandle: null,
+  sessionShortRef: null,
 };
 
 describe("InboxPanel display-only question cards (#78)", () => {
   it("renders one card per awaiting task with its question text", () => {
-    render(<InboxPanel tasks={[AWAITING_1, AWAITING_2]} onSelectTask={() => {}} />);
-    expect(screen.getByText("chart-the-bay")).toBeTruthy();
+    const { container } = render(
+      <InboxPanel tasks={[AWAITING_1, AWAITING_2]} onSelectTask={() => {}} />,
+    );
+    const names = [...container.querySelectorAll(".pc-inbox-card__name")].map((el) => el.textContent);
+    expect(names).toEqual(["chart-the-bay", "sound-the-depths"]);
     expect(screen.getByText(AWAITING_1.question)).toBeTruthy();
-    expect(screen.getByText("sound-the-depths")).toBeTruthy();
     expect(screen.getByText(AWAITING_2.question)).toBeTruthy();
     expect(screen.getByText("feat/bay · t1")).toBeTruthy();
+    // Session rope: humane handle + mono short ref.
+    expect(container.querySelector(".pc-inbox-card__session-handle")?.textContent).toBe(
+      "chart-the-bay",
+    );
+    expect(container.querySelector(".pc-inbox-card__session-ref")?.textContent).toMatch(/sess-abc/);
     expect(screen.queryByRole("textbox")).toBeNull();
     expect(screen.queryByRole("button", { name: /Send/ })).toBeNull();
   });
@@ -74,8 +85,10 @@ describe("InboxPanel display-only question cards (#78)", () => {
   });
 
   it("sorts awaiting-first (hooks layer order is preserved, not re-sorted)", () => {
-    render(<InboxPanel tasks={[AWAITING_2, AWAITING_1]} onSelectTask={() => {}} />);
-    const names = screen.getAllByText(/chart-the-bay|sound-the-depths/).map((el) => el.textContent);
+    const { container } = render(
+      <InboxPanel tasks={[AWAITING_2, AWAITING_1]} onSelectTask={() => {}} />,
+    );
+    const names = [...container.querySelectorAll(".pc-inbox-card__name")].map((el) => el.textContent);
     expect(names).toEqual(["sound-the-depths", "chart-the-bay"]);
   });
 
@@ -120,8 +133,10 @@ describe("InboxPanel display-only question cards (#78)", () => {
 
   it("calls onSelectTask with the task id when a card is clicked", () => {
     const onSelectTask = vi.fn();
-    render(<InboxPanel tasks={[AWAITING_1, AWAITING_2]} onSelectTask={onSelectTask} />);
-    fireEvent.click(screen.getByText("chart-the-bay"));
+    const { container } = render(
+      <InboxPanel tasks={[AWAITING_1, AWAITING_2]} onSelectTask={onSelectTask} />,
+    );
+    fireEvent.click(container.querySelector(".pc-inbox-card__name")!);
     expect(onSelectTask).toHaveBeenCalledWith("t1");
   });
 

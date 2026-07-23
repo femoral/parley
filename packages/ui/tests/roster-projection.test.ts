@@ -102,10 +102,46 @@ describe("projectRoster session grouping (#66)", () => {
       task({ id: "d", state: "completed", orchestratorSession: null }),
     ]);
     // Most-recently-active first (sess-2 newer than sess-1).
+    // Handle = first task name by id order; shortRef = shortId; label includes unit.
     expect(sessions).toEqual([
-      { id: "sess-2", label: "sess-2", count: 1 },
-      { id: "sess-1", label: "sess-1", count: 2 },
+      {
+        id: "sess-2",
+        handle: "c",
+        shortRef: "sess-2",
+        label: "c · 1 task",
+        count: 1,
+      },
+      {
+        id: "sess-1",
+        handle: "a",
+        shortRef: "sess-1",
+        label: "a · 2 tasks",
+        count: 2,
+      },
     ]);
+  });
+
+  it("session label leads with first task name and keeps shortRef as secondary", () => {
+    const { sessions } = projectRoster([
+      task({
+        id: "z-later",
+        name: "later-task",
+        state: "running",
+        orchestratorSession: "abcdef0123456789",
+      }),
+      task({
+        id: "a-first",
+        name: "fix-auth-fanout",
+        state: "running",
+        orchestratorSession: "abcdef0123456789",
+      }),
+    ]);
+    expect(sessions).toHaveLength(1);
+    const s = sessions[0]!;
+    expect(s.handle).toBe("fix-auth-fanout");
+    expect(s.shortRef).toBe("abcdef01");
+    expect(s.label).toBe("fix-auth-fanout · 2 tasks");
+    expect(s.count).toBe(2);
   });
 
   it("counts durable sessions as distinct orchestrator sessions with a non-terminal task", () => {

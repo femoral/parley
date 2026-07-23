@@ -899,7 +899,7 @@ describe("Scene edge-of-frame attention indicators", () => {
     expect(btn.querySelector(".pc-edge-alert__glyph")).toBeNull();
     expect(btn.querySelector(".pc-edge-alert__label")?.textContent).toBe("sess-2");
     expect(btn.querySelector(".pc-edge-alert__dot")?.textContent).toBe("·");
-    expect(btn.querySelector(".pc-edge-alert__count")?.textContent).toBe("2");
+    expect(btn.querySelector(".pc-edge-alert__count")?.textContent).toBe("2 tasks");
     expect(container.querySelector(`.pc-edge-alerts--${side}`)).toBeTruthy();
   });
 
@@ -1197,7 +1197,7 @@ describe("Scene edge-of-frame attention indicators", () => {
     });
     expect(btn.classList.contains("pc-edge-alert--quiet")).toBe(true);
     expect(btn.querySelector(".pc-edge-alert__label")?.textContent).toBe("Open water");
-    expect(btn.querySelector(".pc-edge-alert__count")?.textContent).toBe("2");
+    expect(btn.querySelector(".pc-edge-alert__count")?.textContent).toBe("2 tasks");
   });
 
   it("does not chip empty calm open water", () => {

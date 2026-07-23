@@ -16,20 +16,25 @@
 import { attentionRank, isAttentionState } from "@useparley/core";
 import type { InboxTask } from "../../hud/types.js";
 import { toDisplayTask } from "./displayTask.js";
-import type { RosterTaskInput } from "./roster.js";
+import { collectSessionIdentities, shortId, type RosterTaskInput } from "./roster.js";
 
 /** Project the flat task list into the inbox's question cards, sorted
  * awaiting-first. Carries `state` through so the card can render its badge
  * via the layer-0 `stateMetaFor` lookup (the same source `RosterPanel` reads)
- * instead of hardcoding "awaiting_answer" display strings. */
+ * instead of hardcoding "awaiting_answer" display strings. Session rope uses
+ * the same humane handle as roster chips (first task name across the fleet). */
 export function projectInbox(tasks: Iterable<RosterTaskInput>): InboxTask[] {
-  const blocked = [...tasks].filter(
+  const all = [...tasks];
+  const sessionIds = collectSessionIdentities(all);
+  const blocked = all.filter(
     (task): task is RosterTaskInput & { question: string } =>
       isAttentionState(task.state) && task.question !== null,
   );
   blocked.sort((a, b) => attentionRank(a.state) - attentionRank(b.state));
   return blocked.map((task) => {
     const identity = toDisplayTask(task);
+    const sid = task.orchestratorSession;
+    const session = sid ? sessionIds.get(sid) : undefined;
     return {
       id: task.id,
       name: task.name,
@@ -40,7 +45,9 @@ export function projectInbox(tasks: Iterable<RosterTaskInput>): InboxTask[] {
       meta: identity.meta,
       question: task.question,
       updatedAt: task.updatedAt ?? null,
-      sessionId: task.orchestratorSession,
+      sessionId: sid,
+      sessionHandle: session?.handle ?? (sid ? shortId(sid) : null),
+      sessionShortRef: session?.shortRef ?? (sid ? shortId(sid) : null),
     };
   });
 }

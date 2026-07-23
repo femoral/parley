@@ -74,6 +74,9 @@ export type {
 export {
   projectRoster,
   shortId,
+  formatTaskCount,
+  deriveSessionIdentity,
+  collectSessionIdentities,
   RECENT_SESSION_CHIP_CAP,
   FAILED_FRESHNESS_MS,
   isFreshFailure,
@@ -81,7 +84,12 @@ export {
   advanceFailedObservations,
   terminalTransitionMs,
 } from "./roster.js";
-export type { RosterTaskInput, RosterProjection, FailedFreshness } from "./roster.js";
+export type {
+  RosterTaskInput,
+  RosterProjection,
+  FailedFreshness,
+  SessionIdentity,
+} from "./roster.js";
 export { useTaskDetail } from "./useTaskDetail.js";
 export {
   formatUptime,

@@ -29,6 +29,11 @@ describe("projectScene groups tasks into session regions (#69)", () => {
     expect(sessions.map((s) => s.id)).toEqual(["sess-1", "sess-2"]);
     expect(sessions[0]!.tasks.map((t) => t.id)).toEqual(["a", "b"]);
     expect(sessions[1]!.tasks.map((t) => t.id)).toEqual(["c"]);
+    // Humane handle from first task name; shortRef secondary; label has unit.
+    expect(sessions[0]!.handle).toBe("a");
+    expect(sessions[0]!.shortRef).toBe("sess-1");
+    expect(sessions[0]!.label).toBe("a · 2 tasks");
+    expect(sessions[1]!.label).toBe("c · 1 task");
   });
 
   it("gathers session-less tasks into an open-water region (id null), sorted last", () => {

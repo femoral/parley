@@ -138,7 +138,7 @@ describe("hand-rolled popover single-open invariant", () => {
         <ChartKey />
         <RosterPanel
           groups={groups}
-          sessions={[{ id: "sess-abc12345", label: "sess-abc1", count: 1 }]}
+          sessions={[{ id: "sess-abc12345", handle: "chart-the-bay", shortRef: "sess-abc", label: "chart-the-bay · 1 task", count: 1 }]}
           selectedSessionId={null}
           onSelectSession={() => {}}
           searchSessions={async () => []}
@@ -151,19 +151,19 @@ describe("hand-rolled popover single-open invariant", () => {
     );
 
     // Open Find first.
-    fireEvent.click(screen.getByRole("button", { name: "Search sessions" }));
-    expect(screen.getByLabelText("Session id")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Search fleet" }));
+    expect(screen.getByLabelText("Find tasks or sessions")).toBeTruthy();
     expect(document.querySelector(".pc-roster__search-pop")).toBeTruthy();
 
     // Opening Chart key must close Find (single-open).
     fireEvent.click(screen.getByRole("button", { name: /Chart key/ }));
     expect(screen.getByRole("region", { name: "Chart key" })).toBeTruthy();
-    expect(screen.queryByLabelText("Session id")).toBeNull();
+    expect(screen.queryByLabelText("Find tasks or sessions")).toBeNull();
     expect(document.querySelector(".pc-roster__search-pop")).toBeNull();
 
     // Re-open Find — Chart key must close.
-    fireEvent.click(screen.getByRole("button", { name: "Search sessions" }));
-    expect(screen.getByLabelText("Session id")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Search fleet" }));
+    expect(screen.getByLabelText("Find tasks or sessions")).toBeTruthy();
     expect(screen.queryByRole("region", { name: "Chart key" })).toBeNull();
   });
 });
@@ -224,7 +224,7 @@ describe("hand-rolled popover bus truthfulness", () => {
         <ChartKey />
         <RosterPanel
           groups={groups}
-          sessions={[{ id: "sess-abc12345", label: "sess-abc1", count: 1 }]}
+          sessions={[{ id: "sess-abc12345", handle: "chart-the-bay", shortRef: "sess-abc", label: "chart-the-bay · 1 task", count: 1 }]}
           selectedSessionId={null}
           onSelectSession={() => {}}
           searchSessions={async () => []}
@@ -246,10 +246,10 @@ describe("hand-rolled popover bus truthfulness", () => {
     expect(screen.queryByRole("region", { name: "Chart key" })).toBeNull();
 
     // Session Find: open via click ( / is useCockpitKeys), Esc closes + bus clears.
-    fireEvent.click(screen.getByRole("button", { name: "Search sessions" }));
+    fireEvent.click(screen.getByRole("button", { name: "Search fleet" }));
     expect(isAnyHandRolledPopoverOpen()).toBe(true);
     fireEvent.keyDown(document, { key: "Escape" });
     expect(isAnyHandRolledPopoverOpen()).toBe(false);
-    expect(screen.queryByLabelText("Session id")).toBeNull();
+    expect(screen.queryByLabelText("Find tasks or sessions")).toBeNull();
   });
 });

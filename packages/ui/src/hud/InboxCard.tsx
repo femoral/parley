@@ -42,7 +42,9 @@ export function InboxCard({ task, onSelectTask }: InboxCardProps) {
   }, []);
 
   const taskRef = shortRef(task.id);
-  const sessionRef = task.sessionId ? shortRef(task.sessionId) : null;
+  const sessionHandle = task.sessionHandle;
+  const sessionShortRef =
+    task.sessionShortRef ?? (task.sessionId ? shortRef(task.sessionId) : null);
   const relativeAge = formatRelativeAge(task.updatedAt, now) ?? "—";
 
   return (
@@ -96,13 +98,30 @@ export function InboxCard({ task, onSelectTask }: InboxCardProps) {
             ·
           </span>
           <span
-            className="pc-inbox-card__ref"
+            className="pc-inbox-card__ref pc-inbox-card__ref--session"
             title={task.sessionId ?? undefined}
           >
-            <span aria-hidden="true">{sessionRef ?? "no session"}</span>
-            <span className="pc-visually-hidden">
-              {task.sessionId ? `session id ${task.sessionId}` : "no session"}
-            </span>
+            {task.sessionId ? (
+              <>
+                <span className="pc-inbox-card__session-handle" aria-hidden="true">
+                  {sessionHandle ?? sessionShortRef}
+                </span>
+                {sessionHandle && sessionShortRef && sessionHandle !== sessionShortRef && (
+                  <span className="pc-inbox-card__session-ref" aria-hidden="true">
+                    {" "}
+                    {sessionShortRef}
+                  </span>
+                )}
+                <span className="pc-visually-hidden">
+                  session {sessionHandle ?? sessionShortRef}, id {task.sessionId}
+                </span>
+              </>
+            ) : (
+              <>
+                <span aria-hidden="true">no session</span>
+                <span className="pc-visually-hidden">no session</span>
+              </>
+            )}
           </span>
           {/* Hidden scaffold text for select-on-click fallback when clipboard fails. */}
           <span ref={scaffoldRef} className="pc-inbox-card__scaffold" aria-hidden="true">

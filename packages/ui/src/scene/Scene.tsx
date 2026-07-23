@@ -152,10 +152,13 @@ function edgeAlertsFor(
   for (const { session, dx } of placed) {
     if (regionKey(session.id) === activeKey) continue;
     const side: EdgeAlertSide = dx < activeDx ? "left" : "right";
+    // Prefer the short handle on edge chips; full "handle · N tasks" stays on
+    // the region banner. Open water keeps its in-register label.
+    const chipLabel = session.handle ?? session.label;
     if (session.attention !== null) {
       items.push({
         sessionId: session.id,
-        label: session.label,
+        label: chipLabel,
         state: session.attention.state,
         count: session.attention.count,
         rank: session.attention.rank,
@@ -168,7 +171,7 @@ function edgeAlertsFor(
     if (taskCount === 0) continue;
     items.push({
       sessionId: session.id,
-      label: session.label,
+      label: chipLabel,
       state: "quiet",
       count: taskCount,
       rank: QUIET_EDGE_RANK,

@@ -11,7 +11,7 @@ export type EdgeAlertSide = "left" | "right";
 export interface EdgeAlertItem {
   /** Named session id, or `null` for the open-water region (no roster filter). */
   sessionId: string | null;
-  /** Short session label (matches the region banner). */
+  /** Session label (matches the region banner — humane handle + task count). */
   label: string;
   /**
    * Loudest edge-attention state on that session (hooks rollup), or unused
@@ -94,7 +94,7 @@ function EdgeAlertButton({
             {chevron}
           </span>
         )}
-        {/* Visible payload: "label · count" whisper (no state glyph/colour). */}
+        {/* Visible payload: handle (or Open water) · unit count. */}
         <span className="pc-edge-alert__label" aria-hidden="true">
           {item.label}
         </span>
@@ -102,7 +102,7 @@ function EdgeAlertButton({
           ·
         </span>
         <span className="pc-edge-alert__count" aria-hidden="true">
-          {item.count}
+          {quietProse(item.count)}
         </span>
         {item.side === "right" && (
           <span className="pc-edge-alert__chevron" aria-hidden="true">

@@ -5,8 +5,15 @@ import { islandSlotTransform, placeIslands } from "./layout.js";
 export interface SessionRegionData {
   /** Orchestrator session id, or null for the open-water region. */
   id: string | null;
-  /** Short banner label. */
+  /**
+   * Banner label — humane `"handle · N tasks"` for named sessions, or
+   * `"Open water"`. Full session id stays on the title attribute.
+   */
   label: string;
+  /** Human handle alone for tight chips; null/omit for open water. */
+  handle?: string | null;
+  /** 8-char short ref for mono meta; null/omit for open water. */
+  shortRef?: string | null;
   tasks: IslandTask[];
   /** Loudest edge-attention rollup from `projectScene`; null = calm region.
    * Structurally the hooks-layer `SceneSessionAttention | null`. */
@@ -70,12 +77,18 @@ export function SessionRegion({
       className="pc-region"
       style={style}
       data-island-count={islandCount}
-      aria-label={`Session ${session.label}`}
+      aria-label={
+        session.id === null
+          ? `Session ${session.label}`
+          : `Session ${session.label}${session.id ? `, id ${session.id}` : ""}`
+      }
       // `inert` is belt-and-suspenders with per-island tabIndex={-1}: blocks
       // pointer/keyboard activation of anything still nested off-camera.
       inert={!active || undefined}
     >
-      <span className="pc-region__banner">{session.label}</span>
+      <span className="pc-region__banner" title={session.id ?? undefined}>
+        {session.label}
+      </span>
       <div className="pc-region__flagship">
         <Flagship label={session.label} dressed={dressed} />
       </div>

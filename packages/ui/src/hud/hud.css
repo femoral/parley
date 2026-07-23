@@ -245,7 +245,7 @@
   right: auto;
   z-index: var(--z-popover);
   box-sizing: border-box;
-  width: min(240px, 100%);
+  width: min(280px, 100%);
   max-width: 100%;
   padding: 8px;
   border-radius: var(--radius-control);
@@ -3467,4 +3467,95 @@ button.pc-roster__meta--copy:focus-visible {
 .pc-logstream__status--paused-by-scroll,
 .pc-logstream__status--ended {
   color: var(--ink-label);
+}
+
+/* Session identity + Find combobox (session-search-identity) */
+.pc-roster__session-handle {
+  font-family: var(--font-body);
+  font-weight: 500;
+  max-width: 9em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pc-roster__session-ref {
+  font-family: var(--font-mono);
+  font-size: var(--text-meta);
+  font-weight: 500;
+  color: var(--ink-faint);
+  opacity: 0.9;
+  flex: 0 0 auto;
+}
+.pc-roster__session--active .pc-roster__session-ref {
+  color: inherit;
+  opacity: 0.75;
+}
+.pc-roster__session-count {
+  font-family: var(--font-body);
+  font-size: var(--text-meta);
+  opacity: 0.8;
+  white-space: nowrap;
+}
+.pc-roster__search-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.pc-roster__search-group + .pc-roster__search-group {
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px solid var(--brass-tint-08);
+}
+.pc-roster__search-group-label {
+  margin: 0 0 2px;
+  padding: 0 2px;
+  font-family: var(--font-body);
+  font-size: var(--text-label);
+  font-weight: 600;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--ink-label);
+}
+.pc-roster__search-hit {
+  cursor: pointer;
+}
+.pc-roster__search-hit--active,
+.pc-roster__search-hit[aria-selected="true"] {
+  border-color: var(--brass-frame);
+  background: var(--brass-tint-12);
+  color: var(--brass);
+}
+.pc-roster__search-hit--task .pc-roster__search-hit-id {
+  font-family: var(--font-body);
+  font-weight: 500;
+}
+.pc-roster__search-hit-primary {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  overflow: hidden;
+}
+.pc-roster__search-hit-handle {
+  font-family: var(--font-body);
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pc-roster__search-hit-ref {
+  flex: 0 0 auto;
+  font-family: var(--font-mono);
+  font-size: var(--text-meta);
+  color: var(--ink-label);
+  opacity: 0.9;
+}
+.pc-inbox-card__session-handle {
+  font-family: var(--font-body);
+  font-weight: 500;
+}
+.pc-inbox-card__session-ref {
+  font-family: var(--font-mono);
+  font-size: var(--text-meta);
+  color: var(--ink-faint);
 }

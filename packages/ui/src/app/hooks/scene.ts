@@ -24,7 +24,11 @@
 import { attentionRank, isAttentionState } from "@useparley/core";
 import type { EmblemMark } from "../../tokens/factions.js";
 import { toDisplayTask } from "./displayTask.js";
-import { shortId, type RosterTaskInput } from "./roster.js";
+import {
+  collectSessionIdentities,
+  deriveSessionIdentity,
+  type RosterTaskInput,
+} from "./roster.js";
 
 /** One task as the scene renders it — an island (+ its sloop and effects). */
 export interface SceneTask {
@@ -61,8 +65,15 @@ export interface SceneSession {
   /** Orchestrator session id, or null for session-less (e.g. CLI-delegated)
    * tasks that still deserve an island in open water. */
   id: string | null;
-  /** Short display label for the region banner. */
+  /**
+   * Human primary for the region banner (`"handle · N tasks"`, or
+   * `"Open water"` for the unbound region). Full session id stays on title.
+   */
   label: string;
+  /** Human handle alone (first task name); null for open water. */
+  handle: string | null;
+  /** 8-char short ref for mono meta; null for open water. */
+  shortRef: string | null;
   tasks: SceneTask[];
   /** Per-session attention rollup for edge-of-frame indicators; null = calm. */
   attention: SceneSessionAttention | null;
@@ -139,8 +150,10 @@ function toSceneTask(task: RosterTaskInput): SceneTask {
  * carries its attention rollup for the edge-of-frame chips.
  */
 export function projectScene(tasks: Iterable<RosterTaskInput>): SceneView {
+  const all = [...tasks];
+  const identities = collectSessionIdentities(all);
   const bySession = new Map<string, SceneTask[]>();
-  for (const task of tasks) {
+  for (const task of all) {
     const key = task.orchestratorSession ?? OPEN_WATER;
     if (!bySession.has(key)) bySession.set(key, []);
     bySession.get(key)!.push(toSceneTask(task));
@@ -155,9 +168,27 @@ export function projectScene(tasks: Iterable<RosterTaskInput>): SceneView {
     })
     .map(([key, sceneTasks]) => {
       const sorted = sceneTasks.sort((a, b) => a.id.localeCompare(b.id));
+      if (key === OPEN_WATER) {
+        return {
+          id: null,
+          label: "Open water",
+          handle: null,
+          shortRef: null,
+          tasks: sorted,
+          attention: rollupSessionAttention(sorted),
+        };
+      }
+      const identity =
+        identities.get(key) ??
+        deriveSessionIdentity(
+          key,
+          sorted.map((t) => ({ id: t.id, name: t.name })),
+        );
       return {
-        id: key === OPEN_WATER ? null : key,
-        label: key === OPEN_WATER ? "Open water" : shortId(key),
+        id: key,
+        label: identity.label,
+        handle: identity.handle,
+        shortRef: identity.shortRef,
         tasks: sorted,
         attention: rollupSessionAttention(sorted),
       };

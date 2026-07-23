@@ -59,23 +59,54 @@ export interface RosterGroup {
  * how many tasks it currently has in the roster (live and historical). */
 export interface RosterSessionOption {
   id: string;
-  /** Short display label (truncated id). */
+  /**
+   * Human primary handle (first task name, or shortRef fallback). Outfit body
+   * tier on chips; never a bare hex when a task name exists.
+   */
+  handle: string;
+  /** 8-char short ref — mono meta secondary identifier. */
+  shortRef: string;
+  /**
+   * Single-string display for tight surfaces (Soundings scope, edge chips,
+   * scene banners): `"handle · N tasks"`.
+   */
   label: string;
   count: number;
 }
 
 /**
- * One hit from the roster's historical session search (#88). Plain hud shape —
- * the hooks layer maps the wire `OrchestratorSession` into this.
+ * One session hit from the roster Find surface (#88). Plain hud shape — the
+ * hooks layer maps the wire `OrchestratorSession` (and live enrichment) into this.
  */
 export interface RosterSessionSearchHit {
+  kind: "session";
   id: string;
-  /** Short display label (truncated id). */
+  /** Human handle when known from the live fleet; else shortRef. */
+  handle: string;
+  /** 8-char short ref — mono meta. */
+  shortRef: string;
+  /** Single-string display: `"handle · N tasks"`. */
   label: string;
   taskCount: number;
   /** ISO-8601 last activity; used for ordering results, not displayed. */
   lastActivityAt: string;
 }
+
+/**
+ * One task hit from the roster Find surface — matches name or branch across
+ * the live fleet. Selecting calls `onSelectTask` (scene frame follows).
+ */
+export interface RosterTaskSearchHit {
+  kind: "task";
+  taskId: string;
+  sessionId: string | null;
+  name: string;
+  /** Branch (or empty) for the secondary meta line. */
+  branch: string | null;
+}
+
+/** Discriminated Find result: task hits list above session hits. */
+export type RosterSearchHit = RosterTaskSearchHit | RosterSessionSearchHit;
 
 /** One task awaiting an answer, as the inbox renders it (design-manifest §4.15). */
 export interface InboxTask {
@@ -99,6 +130,13 @@ export interface InboxTask {
   updatedAt: string | null;
   /** Orchestrator session this task belongs to, or null when unknown. */
   sessionId: string | null;
+  /**
+   * Human session handle for the card's session rope (first task name of the
+   * session when projected from the full fleet). Null when unbound.
+   */
+  sessionHandle: string | null;
+  /** 8-char short session ref for mono meta on the rope; null when unbound. */
+  sessionShortRef: string | null;
 }
 
 /** One raw log line as the Logs tab renders it (design-manifest §4.17/§2.8). */

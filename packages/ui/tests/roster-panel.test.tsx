@@ -48,7 +48,15 @@ const GROUPS: RosterGroup[] = [
   },
 ];
 
-const SESSIONS: RosterSessionOption[] = [{ id: "sess-abc12345", label: "sess-abc1", count: 2 }];
+const SESSIONS: RosterSessionOption[] = [
+  {
+    id: "sess-abc12345",
+    handle: "chart-the-bay",
+    shortRef: "sess-abc",
+    label: "chart-the-bay · 2 tasks",
+    count: 2,
+  },
+];
 
 function baseProps() {
   return {
@@ -70,9 +78,9 @@ describe("RosterPanel renders groups it is given, in attention order (#66)", () 
     expect(screen.getByText("AWAITING")).toBeTruthy();
     expect(screen.getByText("RUNNING")).toBeTruthy();
     expect(screen.getByText("FAILED")).toBeTruthy();
-    expect(screen.getByText("chart-the-bay")).toBeTruthy();
-    expect(screen.getByText("sound-the-depths")).toBeTruthy();
-    expect(screen.getByText("lost-at-sea")).toBeTruthy();
+    expect(screen.getByRole("option", { name: /chart-the-bay/ })).toBeTruthy();
+    expect(screen.getByRole("option", { name: /sound-the-depths/ })).toBeTruthy();
+    expect(screen.getByRole("option", { name: /lost-at-sea/ })).toBeTruthy();
   });
 
   it("labels each row emblem with its faction/vendor name", () => {
@@ -164,7 +172,7 @@ describe("RosterPanel row selection (#66)", () => {
   it("calls onSelectTask when a row is clicked", () => {
     const onSelectTask = vi.fn();
     render(<RosterPanel {...baseProps()} onSelectTask={onSelectTask} />);
-    fireEvent.click(screen.getByText("chart-the-bay"));
+    fireEvent.click(screen.getByRole("option", { name: /chart-the-bay/ }));
     expect(onSelectTask).toHaveBeenCalledWith("t1");
   });
 
@@ -186,22 +194,43 @@ describe("RosterPanel row selection (#66)", () => {
 
 describe("RosterPanel session selector (#66)", () => {
   it("renders a chip per distinct orchestrator session plus an all-sessions chip", () => {
-    render(<RosterPanel {...baseProps()} />);
+    const { container } = render(<RosterPanel {...baseProps()} />);
     expect(screen.getByRole("button", { name: /All hands/ })).toBeTruthy();
-    expect(screen.getByText("sess-abc1")).toBeTruthy();
+    // Humane handle + mono short ref + unit count.
+    expect(container.querySelector(".pc-roster__session-handle")?.textContent).toBe("chart-the-bay");
+    expect(container.querySelector(".pc-roster__session-ref")?.textContent).toBe("sess-abc");
+    expect(container.querySelector(".pc-roster__session-count")?.textContent).toBe("2 tasks");
+  });
+
+  it("session chip leads with human handle and keeps short ref secondary", () => {
+    const { container } = render(<RosterPanel {...baseProps()} />);
+    const chip = container.querySelector(".pc-roster__session-handle")?.closest("button");
+    expect(chip).toBeTruthy();
+    expect(chip?.querySelector(".pc-roster__session-handle")?.textContent).toBe("chart-the-bay");
+    expect(chip?.querySelector(".pc-roster__session-ref")?.textContent).toBe("sess-abc");
+    expect(chip?.querySelector(".pc-roster__session-count")?.textContent).toBe("2 tasks");
+    expect(chip?.getAttribute("title")).toBe("sess-abc12345");
+    // Full id available; short ref is mono meta tier.
+    expect(container.querySelector(".pc-roster__session-ref")).toBeTruthy();
   });
 
   it("calls onSelectSession with the session id when a chip is clicked", () => {
     const onSelectSession = vi.fn();
-    render(<RosterPanel {...baseProps()} onSelectSession={onSelectSession} />);
-    fireEvent.click(screen.getByText("sess-abc1").closest("button")!);
+    const { container } = render(
+      <RosterPanel {...baseProps()} onSelectSession={onSelectSession} />,
+    );
+    fireEvent.click(container.querySelector(".pc-roster__session-handle")!.closest("button")!);
     expect(onSelectSession).toHaveBeenCalledWith("sess-abc12345");
   });
 
   it("marks the active session pressed", () => {
-    render(<RosterPanel {...baseProps()} selectedSessionId="sess-abc12345" />);
+    const { container } = render(
+      <RosterPanel {...baseProps()} selectedSessionId="sess-abc12345" />,
+    );
     expect(screen.getByRole("button", { name: /All hands/ }).getAttribute("aria-pressed")).toBe("false");
-    expect(screen.getByText("sess-abc1").closest("button")?.getAttribute("aria-pressed")).toBe("true");
+    expect(
+      container.querySelector(".pc-roster__session-handle")?.closest("button")?.getAttribute("aria-pressed"),
+    ).toBe("true");
   });
 
   it("still renders All hands + Find when there are no recent session chips", () => {
@@ -209,7 +238,7 @@ describe("RosterPanel session selector (#66)", () => {
     render(<RosterPanel {...baseProps()} sessions={[]} />);
     expect(screen.getByRole("group", { name: "Orchestrator sessions" })).toBeTruthy();
     expect(screen.getByRole("button", { name: /All hands/ })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Search sessions" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Search fleet" })).toBeTruthy();
   });
 
   it("labels the session strip as a group of buttons", () => {
@@ -220,7 +249,15 @@ describe("RosterPanel session selector (#66)", () => {
   it("opens session search and selects a hit like a chip click (#88)", async () => {
     const onSelectSession = vi.fn();
     const searchSessions = vi.fn(async () => [
-      { id: "sess-old-history", label: "sess-old", taskCount: 3, lastActivityAt: "2020-01-01T00:00:00.000Z" },
+      {
+        kind: "session" as const,
+        id: "sess-old-history",
+        handle: "sess-old",
+        shortRef: "sess-old",
+        label: "sess-old · 3 tasks",
+        taskCount: 3,
+        lastActivityAt: "2020-01-01T00:00:00.000Z",
+      },
     ]);
     render(
       <RosterPanel
@@ -229,39 +266,118 @@ describe("RosterPanel session selector (#66)", () => {
         searchSessions={searchSessions}
       />,
     );
-    fireEvent.click(screen.getByRole("button", { name: "Search sessions" }));
-    const input = screen.getByLabelText("Session id");
+    fireEvent.click(screen.getByRole("button", { name: "Search fleet" }));
+    const input = screen.getByLabelText("Find tasks or sessions");
     fireEvent.change(input, { target: { value: "old" } });
     // Debounced lookup — wait for the hit to appear.
-    expect(await screen.findByText("sess-old")).toBeTruthy();
+    const sessionOpt = await screen.findByRole("option", { name: /sess-old/ });
+    expect(sessionOpt).toBeTruthy();
     expect(searchSessions).toHaveBeenCalledWith("old");
-    fireEvent.click(screen.getByText("sess-old"));
+    fireEvent.click(sessionOpt);
     expect(onSelectSession).toHaveBeenCalledWith("sess-old-history");
   });
 
-  it("exposes search hits as a plain list of buttons, not a listbox", async () => {
+  it("task-name search hit selects the task (not the session)", async () => {
+    const onSelectTask = vi.fn();
+    const onSelectSession = vi.fn();
     const searchSessions = vi.fn(async () => [
-      { id: "sess-old-history", label: "sess-old", taskCount: 3, lastActivityAt: "2020-01-01T00:00:00.000Z" },
+      {
+        kind: "task" as const,
+        taskId: "t-auth",
+        sessionId: "sess-1",
+        name: "fix-auth-fanout",
+        branch: "feat/auth",
+      },
+      {
+        kind: "session" as const,
+        id: "sess-1",
+        handle: "fix-auth-fanout",
+        shortRef: "sess-1",
+        label: "fix-auth-fanout · 1 task",
+        taskCount: 1,
+        lastActivityAt: "2020-01-01T00:00:00.000Z",
+      },
+    ]);
+    render(
+      <RosterPanel
+        {...baseProps()}
+        onSelectTask={onSelectTask}
+        onSelectSession={onSelectSession}
+        searchSessions={searchSessions}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Search fleet" }));
+    const input = screen.getByLabelText("Find tasks or sessions");
+    fireEvent.change(input, { target: { value: "auth" } });
+    // Task hits render above session hits; pick the task option by branch meta.
+    const taskOption = await screen.findByRole("option", { name: /feat\/auth/ });
+    fireEvent.click(taskOption);
+    expect(onSelectTask).toHaveBeenCalledWith("t-auth");
+    expect(onSelectSession).not.toHaveBeenCalled();
+  });
+
+  it("combobox keyboard: ArrowDown + Enter selects the active option", async () => {
+    const onSelectTask = vi.fn();
+    const searchSessions = vi.fn(async () => [
+      {
+        kind: "task" as const,
+        taskId: "t-first",
+        sessionId: "sess-1",
+        name: "alpha-task",
+        branch: "feat/a",
+      },
+      {
+        kind: "task" as const,
+        taskId: "t-second",
+        sessionId: "sess-1",
+        name: "beta-task",
+        branch: "feat/b",
+      },
+    ]);
+    render(
+      <RosterPanel
+        {...baseProps()}
+        onSelectTask={onSelectTask}
+        searchSessions={searchSessions}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Search fleet" }));
+    const input = screen.getByRole("combobox");
+    fireEvent.change(input, { target: { value: "task" } });
+    expect(await screen.findByText("alpha-task")).toBeTruthy();
+    // First option is auto-active; ArrowDown moves to the second, Enter picks it.
+    fireEvent.keyDown(input, { key: "ArrowDown" });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(onSelectTask).toHaveBeenCalledWith("t-second");
+  });
+
+  it("implements APG combobox semantics on the Find surface", async () => {
+    const searchSessions = vi.fn(async () => [
+      {
+        kind: "session" as const,
+        id: "sess-old-history",
+        handle: "sess-old",
+        shortRef: "sess-old",
+        label: "sess-old · 3 tasks",
+        taskCount: 3,
+        lastActivityAt: "2020-01-01T00:00:00.000Z",
+      },
     ]);
     render(<RosterPanel {...baseProps()} searchSessions={searchSessions} />);
-    fireEvent.click(screen.getByRole("button", { name: "Search sessions" }));
-    const input = screen.getByLabelText("Session id");
-    expect(input.getAttribute("aria-autocomplete")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Search fleet" }));
+    const input = screen.getByRole("combobox");
+    expect(input.getAttribute("aria-autocomplete")).toBe("list");
+    expect(input.getAttribute("aria-expanded")).toBe("true");
     fireEvent.change(input, { target: { value: "old" } });
-    expect(await screen.findByText("sess-old")).toBeTruthy();
+    const opt = await screen.findByRole("option", { name: /sess-old/ });
+    expect(opt).toBeTruthy();
+    expect(opt.textContent).toMatch(/3 tasks/);
 
-    const results = screen.getByRole("list", { name: "Matching sessions" });
+    const results = screen.getByRole("listbox", { name: "Matching tasks and sessions" });
     expect(results).toBeTruthy();
-    // Search hits stay a plain list; the fleet task listbox is a sibling surface.
-    expect(results.getAttribute("role")).toBe("list");
-    expect(results.querySelector("[role='option']")).toBeNull();
-    expect(results.querySelector("[role='listbox']")).toBeNull();
-
-    const hit = screen.getByRole("button", { name: /sess-old/ });
-    expect(hit.getAttribute("aria-selected")).toBeNull();
-    expect(hit.closest("[role='listitem']")).toBeTruthy();
-    // Results region remains a meaningful aria-controls target.
+    expect(results.querySelectorAll("[role='option']").length).toBeGreaterThan(0);
     expect(input.getAttribute("aria-controls")).toBe(results.getAttribute("id"));
+    expect(input.getAttribute("aria-activedescendant")).toBeTruthy();
   });
 });
 
@@ -392,9 +508,10 @@ describe("RosterPanel row accessible names include state", () => {
   });
 
   it("keeps the visible row name text unchanged", () => {
-    render(<RosterPanel {...baseProps()} />);
-    expect(screen.getByText("chart-the-bay")).toBeTruthy();
-    expect(screen.getByText("lost-at-sea")).toBeTruthy();
+    const { container } = render(<RosterPanel {...baseProps()} />);
+    const names = [...container.querySelectorAll(".pc-roster__name")].map((el) => el.textContent);
+    expect(names).toContain("chart-the-bay");
+    expect(names).toContain("lost-at-sea");
   });
 });
 

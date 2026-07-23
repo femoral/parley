@@ -111,6 +111,70 @@ export function shortId(id: string): string {
   return id.length > 8 ? id.slice(0, 8) : id;
 }
 
+/** Count with unit for session chips / search hits ("7 tasks", never bare "7"). */
+export function formatTaskCount(count: number): string {
+  return count === 1 ? "1 task" : `${count} tasks`;
+}
+
+/**
+ * Human session identity derived from already-projected fleet data. Lead with
+ * the first task's name (stable id order); keep the 8-hex short ref as the mono
+ * secondary; compose a single-string `label` for tight surfaces.
+ */
+export interface SessionIdentity {
+  handle: string;
+  shortRef: string;
+  count: number;
+  /** `"handle · N tasks"` — Soundings scope, edge chips, scene banners. */
+  label: string;
+}
+
+/**
+ * Derive a humane session label from tasks already known for that session.
+ * No invented ship-name table: first task name by stable id order, else shortRef.
+ */
+export function deriveSessionIdentity(
+  sessionId: string,
+  tasks: readonly { id: string; name: string }[],
+): SessionIdentity {
+  const shortRef = shortId(sessionId);
+  const count = tasks.length;
+  const sorted = [...tasks].sort((a, b) => a.id.localeCompare(b.id));
+  const handle = sorted[0]?.name?.trim() || shortRef;
+  return {
+    handle,
+    shortRef,
+    count,
+    label: `${handle} · ${formatTaskCount(count)}`,
+  };
+}
+
+/**
+ * Build session identities for every orchestrator session present in the fleet.
+ * Used by roster chips, scene regions, inbox ropes, and search enrichment so
+ * every surface shares one handle.
+ */
+export function collectSessionIdentities(
+  tasks: Iterable<RosterTaskInput>,
+): Map<string, SessionIdentity> {
+  const bySession = new Map<string, { id: string; name: string }[]>();
+  for (const task of tasks) {
+    const sid = task.orchestratorSession;
+    if (!sid) continue;
+    let list = bySession.get(sid);
+    if (!list) {
+      list = [];
+      bySession.set(sid, list);
+    }
+    list.push({ id: task.id, name: task.name });
+  }
+  const out = new Map<string, SessionIdentity>();
+  for (const [sid, members] of bySession) {
+    out.set(sid, deriveSessionIdentity(sid, members));
+  }
+  return out;
+}
+
 /**
  * Epoch ms of the task's terminal transition from wire fields, or `undefined`
  * when neither timestamp is parseable. Prefers `completed_at` (true terminal
@@ -317,9 +381,22 @@ export function projectRoster(
       return a.state.localeCompare(b.state);
     });
 
+  // Humane handles from first task name; shortRef stays the mono secondary.
+  const identities = collectSessionIdentities(all);
+
   // Most-recently-active first; id tie-break for stable ordering.
   const allSessions: RosterSessionOption[] = [...sessionCounts.entries()]
-    .map(([id, count]) => ({ id, label: shortId(id), count }))
+    .map(([id, count]) => {
+      const identity = identities.get(id) ?? deriveSessionIdentity(id, []);
+      // count from sessionCounts is authoritative (identity.count matches).
+      return {
+        id,
+        handle: identity.handle,
+        shortRef: identity.shortRef,
+        label: identity.label,
+        count,
+      };
+    })
     .sort((a, b) => {
       const aAt = sessionLastActivity.get(a.id) ?? "";
       const bAt = sessionLastActivity.get(b.id) ?? "";

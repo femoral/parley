@@ -56,7 +56,15 @@ const GROUPS: RosterGroup[] = [
 
 const INBOX = [{ id: "t1" }, { id: "t2" }];
 
-const SESSIONS: RosterSessionOption[] = [{ id: "sess-abc12345", label: "sess-abc1", count: 2 }];
+const SESSIONS: RosterSessionOption[] = [
+  {
+    id: "sess-abc12345",
+    handle: "chart-the-bay",
+    shortRef: "sess-abc",
+    label: "chart-the-bay · 2 tasks",
+    count: 2,
+  },
+];
 
 describe("awaitingTaskIds / nextAwaitingId pure helpers", () => {
   it("pulls ids from the fleet-wide inbox projection in its stable order", () => {
@@ -220,12 +228,12 @@ describe("useCockpitKeys window keydown accelerators", () => {
 
   it("/ opens the session search and focuses the Find input", () => {
     render(<KeysHarness />);
-    expect(screen.queryByLabelText("Session id")).toBeNull();
+    expect(screen.queryByLabelText("Find tasks or sessions")).toBeNull();
 
     act(() => {
       fireEvent.keyDown(window, { key: "/" });
     });
-    const input = screen.getByLabelText("Session id") as HTMLInputElement;
+    const input = screen.getByLabelText("Find tasks or sessions") as HTMLInputElement;
     expect(input).toBeTruthy();
     expect(document.activeElement).toBe(input);
   });
@@ -236,7 +244,7 @@ describe("useCockpitKeys window keydown accelerators", () => {
     act(() => {
       fireEvent.keyDown(window, { key: "/" });
     });
-    const input = screen.getByLabelText("Session id");
+    const input = screen.getByLabelText("Find tasks or sessions");
     expect(document.activeElement).toBe(input);
 
     // Typing "n" into the search field must not cycle tasks.
@@ -254,7 +262,7 @@ describe("useCockpitKeys window keydown accelerators", () => {
     act(() => {
       fireEvent.keyDown(document, { key: "Escape" });
     });
-    expect(screen.queryByLabelText("Session id")).toBeNull();
+    expect(screen.queryByLabelText("Find tasks or sessions")).toBeNull();
     expect(screen.getByTestId("selected").textContent).toBe("none");
   });
 
@@ -267,7 +275,7 @@ describe("useCockpitKeys window keydown accelerators", () => {
       fireEvent.keyDown(window, { key: "/", ctrlKey: true });
     });
     expect(screen.getByTestId("selected").textContent).toBe("none");
-    expect(screen.queryByLabelText("Session id")).toBeNull();
+    expect(screen.queryByLabelText("Find tasks or sessions")).toBeNull();
   });
 
   it("n is a no-op when there are no awaiting tasks", () => {
@@ -301,11 +309,11 @@ describe("useCockpitKeys window keydown accelerators", () => {
     act(() => {
       fireEvent.keyDown(window, { key: "/" });
     });
-    expect(screen.getByLabelText("Session id")).toBeTruthy();
+    expect(screen.getByLabelText("Find tasks or sessions")).toBeTruthy();
     act(() => {
       fireEvent.keyDown(document, { key: "Escape" });
     });
-    expect(screen.queryByLabelText("Session id")).toBeNull();
+    expect(screen.queryByLabelText("Find tasks or sessions")).toBeNull();
     expect(screen.getByTestId("selected").textContent).toBe("t1");
 
     // With no popover open, Esc clears the selection.

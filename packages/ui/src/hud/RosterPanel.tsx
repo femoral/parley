@@ -21,8 +21,13 @@ import {
   notifyHandRolledPopoverOpen,
   subscribeHandRolledPopoverOpen,
 } from "./handRolledPopover.js";
-import type { RosterGroup, RosterSessionOption, RosterSessionSearchHit } from "./types.js";
+import type {
+  RosterGroup,
+  RosterSearchHit,
+  RosterSessionOption,
+} from "./types.js";
 import { useCopyScaffold } from "./useCopyScaffold.js";
+import { formatTaskCount } from "../app/hooks/roster.js";
 
 /** Scaffold the operator pastes into a shell to start a voyage. */
 export function delegateScaffold(): string {
@@ -52,10 +57,11 @@ export interface RosterPanelProps {
   selectedSessionId: string | null;
   onSelectSession: (id: string | null) => void;
   /**
-   * Look up historical sessions by id substring (#88). Results drive the
-   * search popover; selecting a hit calls {@link onSelectSession}.
+   * Find across the fleet: task name/branch hits plus historical sessions by
+   * id substring (#88). Task hits list first; selecting a task calls
+   * {@link onSelectTask}, a session calls {@link onSelectSession}.
    */
-  searchSessions: (query: string) => Promise<RosterSessionSearchHit[]>;
+  searchSessions: (query: string) => Promise<RosterSearchHit[]>;
   /** The selected task (feeds the inspector/scene, built in later tickets). */
   selectedTaskId: string | null;
   onSelectTask: (id: string) => void;
@@ -306,23 +312,32 @@ interface SessionSearchHandle {
   isOpen: () => boolean;
 }
 
+function hitKey(hit: RosterSearchHit): string {
+  return hit.kind === "task" ? `task:${hit.taskId}` : `session:${hit.id}`;
+}
+
 function SessionSearch({
   searchSessions,
   onSelectSession,
+  onSelectTask,
   searchHandleRef,
 }: {
-  searchSessions: (query: string) => Promise<RosterSessionSearchHit[]>;
+  searchSessions: (query: string) => Promise<RosterSearchHit[]>;
   onSelectSession: (id: string | null) => void;
+  onSelectTask: (id: string) => void;
   searchHandleRef?: Ref<SessionSearchHandle | null>;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
-  const [hits, setHits] = useState<RosterSessionSearchHit[]>([]);
+  const [hits, setHits] = useState<RosterSearchHit[]>([]);
   const [status, setStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
+  /** Combobox active option index into `hits`; -1 = none. */
+  const [activeIndex, setActiveIndex] = useState(-1);
   const inputRef = useRef<HTMLInputElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   const listId = useId();
+  const inputId = listId + "-input";
   // Keep a live open flag for the imperative isOpen() without forcing
   // useImperativeHandle to rebuild every toggle (ref-stable identity).
   const openRef = useRef(open);
@@ -336,6 +351,14 @@ function SessionSearch({
     }),
     [],
   );
+
+  const closeSearch = useCallback(() => {
+    setOpen(false);
+    setQuery("");
+    setHits([]);
+    setStatus("idle");
+    setActiveIndex(-1);
+  }, []);
 
   // Focus the field when the search well opens.
   useEffect(() => {
@@ -354,12 +377,12 @@ function SessionSearch({
     notifyHandRolledPopoverOpen("session-find", rootRef.current);
     const onPointer = (event: MouseEvent): void => {
       if (rootRef.current && !rootRef.current.contains(event.target as Node)) {
-        setOpen(false);
+        closeSearch();
       }
     };
     const onKey = (event: KeyboardEvent): void => {
       if (event.key === "Escape") {
-        setOpen(false);
+        closeSearch();
         // Closing unmounts the focused input; without this, focus falls to
         // <body> and keyboard users lose their place (WCAG 2.4.3).
         triggerRef.current?.focus();
@@ -373,7 +396,7 @@ function SessionSearch({
       // Toggle, peer open, outside click, Esc, unmount — keep bus truthful.
       notifyHandRolledPopoverClosed("session-find");
     };
-  }, [open]);
+  }, [open, closeSearch]);
 
   // Debounced lookup — read-only, never mutates the fleet.
   useEffect(() => {
@@ -382,6 +405,7 @@ function SessionSearch({
     if (q === "") {
       setHits([]);
       setStatus("idle");
+      setActiveIndex(-1);
       return;
     }
     setStatus("loading");
@@ -392,11 +416,14 @@ function SessionSearch({
           if (cancelled) return;
           setHits(results);
           setStatus("ready");
+          // Auto-highlight first option so Enter works without ArrowDown.
+          setActiveIndex(results.length > 0 ? 0 : -1);
         })
         .catch(() => {
           if (cancelled) return;
           setHits([]);
           setStatus("error");
+          setActiveIndex(-1);
         });
     }, SEARCH_DEBOUNCE_MS);
     return () => {
@@ -405,17 +432,60 @@ function SessionSearch({
     };
   }, [query, open, searchSessions]);
 
-  const pick = useCallback(
-    (id: string) => {
-      onSelectSession(id);
-      setOpen(false);
-      setQuery("");
-      setHits([]);
-      setStatus("idle");
-      // The hit button unmounts with the popover — return focus to the trigger.
+  const pickHit = useCallback(
+    (hit: RosterSearchHit) => {
+      if (hit.kind === "task") {
+        onSelectTask(hit.taskId);
+      } else {
+        onSelectSession(hit.id);
+      }
+      closeSearch();
+      // The hit unmounts with the popover — return focus to the trigger.
       triggerRef.current?.focus();
     },
-    [onSelectSession],
+    [onSelectSession, onSelectTask, closeSearch],
+  );
+
+  const onComboboxKeyDown = useCallback(
+    (event: ReactKeyboardEvent<HTMLInputElement>) => {
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        if (hits.length === 0) return;
+        setActiveIndex((i) => (i < 0 ? 0 : (i + 1) % hits.length));
+        return;
+      }
+      if (event.key === "ArrowUp") {
+        event.preventDefault();
+        if (hits.length === 0) return;
+        setActiveIndex((i) => (i <= 0 ? hits.length - 1 : i - 1));
+        return;
+      }
+      if (event.key === "Enter") {
+        if (activeIndex >= 0 && activeIndex < hits.length) {
+          event.preventDefault();
+          pickHit(hits[activeIndex]!);
+        }
+        return;
+      }
+      if (event.key === "Escape") {
+        // Document listener also closes; prevent bubbling into roster listbox.
+        event.preventDefault();
+        event.stopPropagation();
+        closeSearch();
+        triggerRef.current?.focus();
+      }
+    },
+    [hits, activeIndex, pickHit, closeSearch],
+  );
+
+  const activeHit = activeIndex >= 0 ? hits[activeIndex] : undefined;
+  const activeDescendantId = activeHit
+    ? `${listId}-opt-${hitKey(activeHit)}`
+    : undefined;
+
+  const taskHits = hits.filter((h): h is Extract<RosterSearchHit, { kind: "task" }> => h.kind === "task");
+  const sessionHits = hits.filter(
+    (h): h is Extract<RosterSearchHit, { kind: "session" }> => h.kind === "session",
   );
 
   return (
@@ -425,8 +495,8 @@ function SessionSearch({
         ref={triggerRef}
         className={`pc-roster__session pc-roster__session--search${open ? " pc-roster__session--active" : ""}`}
         aria-expanded={open}
-        aria-controls={listId}
-        aria-label="Search sessions"
+        aria-controls={open ? listId : undefined}
+        aria-label="Search fleet"
         onClick={() => setOpen((v) => !v)}
       >
         <span aria-hidden="true">
@@ -435,49 +505,123 @@ function SessionSearch({
         Find
       </button>
       {open && (
-        <div className="pc-roster__search-pop" role="search" aria-label="Session search">
-          <label className="pc-roster__search-label" htmlFor={listId + "-input"}>
-            Session id
+        <div className="pc-roster__search-pop" role="search" aria-label="Fleet search">
+          <label className="pc-roster__search-label" htmlFor={inputId}>
+            Find tasks or sessions
           </label>
           <input
-            id={listId + "-input"}
+            id={inputId}
             ref={inputRef}
             type="search"
+            role="combobox"
             className="pc-roster__search-input"
-            placeholder="substring of session id…"
+            placeholder="task name, branch, or session id…"
             value={query}
             autoComplete="off"
             spellCheck={false}
+            aria-expanded={true}
             aria-controls={listId}
+            aria-autocomplete="list"
+            aria-activedescendant={activeDescendantId}
             onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={onComboboxKeyDown}
           />
-          <div id={listId} className="pc-roster__search-results" role="list" aria-label="Matching sessions">
+          <div
+            id={listId}
+            className="pc-roster__search-results"
+            role="listbox"
+            aria-label="Matching tasks and sessions"
+          >
             {status === "loading" && (
-              <p className="pc-roster__search-status">Sounding the deep…</p>
+              <p className="pc-roster__search-status" role="presentation">
+                Sounding the deep…
+              </p>
             )}
             {status === "error" && (
-              <p className="pc-roster__search-status">Could not reach the daemon.</p>
+              <p className="pc-roster__search-status" role="presentation">
+                Could not reach the daemon.
+              </p>
             )}
             {status === "idle" && query.trim() === "" && (
-              <p className="pc-roster__search-status">Type part of a session id.</p>
+              <p className="pc-roster__search-status" role="presentation">
+                Type a task name, branch, or session id.
+              </p>
             )}
             {status === "ready" && hits.length === 0 && (
-              <p className="pc-roster__search-status">No sessions match.</p>
+              <p className="pc-roster__search-status" role="presentation">
+                No tasks or sessions match.
+              </p>
             )}
-            {hits.map((hit) => (
-              <div key={hit.id} role="listitem">
-                <button
-                  type="button"
-                  className="pc-roster__search-hit"
-                  onClick={() => pick(hit.id)}
-                >
-                  <span className="pc-roster__search-hit-id" title={hit.id}>
-                    {hit.label}
-                  </span>
-                  <span className="pc-roster__search-hit-meta">{hit.taskCount}</span>
-                </button>
+            {taskHits.length > 0 && (
+              <div className="pc-roster__search-group" role="presentation">
+                <p className="pc-roster__search-group-label" role="presentation">
+                  Tasks
+                </p>
+                {taskHits.map((hit) => {
+                  const key = hitKey(hit);
+                  const optionId = `${listId}-opt-${key}`;
+                  const idx = hits.indexOf(hit);
+                  const active = idx === activeIndex;
+                  return (
+                    <div
+                      key={key}
+                      id={optionId}
+                      role="option"
+                      aria-selected={active}
+                      className={`pc-roster__search-hit pc-roster__search-hit--task${
+                        active ? " pc-roster__search-hit--active" : ""
+                      }`}
+                      onClick={() => pickHit(hit)}
+                      onMouseEnter={() => setActiveIndex(idx)}
+                    >
+                      <span className="pc-roster__search-hit-id" title={hit.taskId}>
+                        {hit.name}
+                      </span>
+                      <span className="pc-roster__search-hit-meta">
+                        {hit.branch ?? "no branch"}
+                      </span>
+                    </div>
+                  );
+                })}
               </div>
-            ))}
+            )}
+            {sessionHits.length > 0 && (
+              <div className="pc-roster__search-group" role="presentation">
+                <p className="pc-roster__search-group-label" role="presentation">
+                  Sessions
+                </p>
+                {sessionHits.map((hit) => {
+                  const key = hitKey(hit);
+                  const optionId = `${listId}-opt-${key}`;
+                  const idx = hits.indexOf(hit);
+                  const active = idx === activeIndex;
+                  return (
+                    <div
+                      key={key}
+                      id={optionId}
+                      role="option"
+                      aria-selected={active}
+                      className={`pc-roster__search-hit pc-roster__search-hit--session${
+                        active ? " pc-roster__search-hit--active" : ""
+                      }`}
+                      title={hit.id}
+                      onClick={() => pickHit(hit)}
+                      onMouseEnter={() => setActiveIndex(idx)}
+                    >
+                      <span className="pc-roster__search-hit-primary">
+                        <span className="pc-roster__search-hit-handle">{hit.handle}</span>
+                        <span className="pc-roster__search-hit-ref" title={hit.id}>
+                          {hit.shortRef}
+                        </span>
+                      </span>
+                      <span className="pc-roster__search-hit-meta">
+                        {formatTaskCount(hit.taskCount)}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -489,13 +633,15 @@ function SessionSelector({
   sessions,
   selectedSessionId,
   onSelectSession,
+  onSelectTask,
   searchSessions,
   searchHandleRef,
 }: {
   sessions: RosterSessionOption[];
   selectedSessionId: string | null;
   onSelectSession: (id: string | null) => void;
-  searchSessions: (query: string) => Promise<RosterSessionSearchHit[]>;
+  onSelectTask: (id: string) => void;
+  searchSessions: (query: string) => Promise<RosterSearchHit[]>;
   searchHandleRef?: Ref<SessionSearchHandle | null>;
 }) {
   // Always mount SessionSearch so `/` can open Find even when there are no
@@ -518,18 +664,23 @@ function SessionSelector({
             selectedSessionId === session.id ? " pc-roster__session--active" : ""
           }`}
           aria-pressed={selectedSessionId === session.id}
+          title={session.id}
           onClick={() => onSelectSession(session.id)}
         >
           <span aria-hidden="true">
             <Mark mark={MARK_ANCHOR} size={10} />
           </span>{" "}
-          {session.label}
-          <span className="pc-roster__session-count">{session.count}</span>
+          <span className="pc-roster__session-handle">{session.handle}</span>
+          <span className="pc-roster__session-ref" title={session.id}>
+            {session.shortRef}
+          </span>
+          <span className="pc-roster__session-count">{formatTaskCount(session.count)}</span>
         </button>
       ))}
       <SessionSearch
         searchSessions={searchSessions}
         onSelectSession={onSelectSession}
+        onSelectTask={onSelectTask}
         searchHandleRef={searchHandleRef}
       />
     </div>
@@ -676,6 +827,7 @@ export const RosterPanel = memo(function RosterPanel({
         sessions={sessions}
         selectedSessionId={selectedSessionId}
         onSelectSession={onSelectSession}
+        onSelectTask={onSelectTask}
         searchSessions={searchSessions}
         searchHandleRef={sessionSearchRef}
       />

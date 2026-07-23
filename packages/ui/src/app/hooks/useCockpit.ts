@@ -3,7 +3,7 @@ import { isMetricsGroupBy, ParleyClient, type MetricsGroupBy } from "@useparley/
 import type {
   HealthView,
   InspectorTask,
-  RosterSessionSearchHit,
+  RosterSearchHit,
   SoundingsFiltersView,
   SoundingsView,
   SoundingsViewTab,
@@ -13,7 +13,14 @@ import { formatClock, formatUptime } from "./format.js";
 import { useHealth, type HealthStatus } from "./useHealth.js";
 import { projectInspector } from "./inspector.js";
 import { metricsRefreshKey, projectSoundings } from "./metrics.js";
-import { advanceFailedObservations, projectRoster, shortId } from "./roster.js";
+import {
+  advanceFailedObservations,
+  collectSessionIdentities,
+  deriveSessionIdentity,
+  formatTaskCount,
+  projectRoster,
+  shortId,
+} from "./roster.js";
 import { useEvalFilters } from "./useEvalFilters.js";
 import { useLogTail } from "./useLogTail.js";
 import { useMetrics } from "./useMetrics.js";
@@ -148,10 +155,11 @@ export interface RosterSelection {
   /** Clear the selected task (Escape accelerator; inspector shows empty state). */
   clearTask: () => void;
   /**
-   * Look up historical orchestrator sessions by id substring (#88). Read-only
-   * — selection of a hit goes through {@link selectSession}.
+   * Find across the live fleet (task name / branch) and historical sessions
+   * (id substring via the daemon). Task hits list first; selecting a task uses
+   * {@link selectTask}, a session uses {@link selectSession}.
    */
-  searchSessions: (query: string) => Promise<RosterSessionSearchHit[]>;
+  searchSessions: (query: string) => Promise<RosterSearchHit[]>;
   /**
    * Inspector open intent for the current selection — tab to land on plus a
    * sequence bumped every select so re-opening re-applies the tab.
@@ -412,18 +420,62 @@ export function useCockpit(): CockpitView {
     [live, filteredRoster],
   );
 
-  // Historical session lookup for the roster search affordance (#88). Read-only.
+  // Fleet Find: task name/branch locally, plus historical session ids (#88).
+  // Task hits list above session hits; labels reuse the same session identity.
   const searchSessions = useCallback(
-    async (query: string): Promise<RosterSessionSearchHit[]> => {
+    async (query: string): Promise<RosterSearchHit[]> => {
+      const q = query.trim().toLowerCase();
+      if (q === "") return [];
+
+      const identities = collectSessionIdentities(live.tasks);
+      const taskHits: RosterSearchHit[] = [];
+      for (const task of live.tasks) {
+        const nameHit = task.name.toLowerCase().includes(q);
+        const branchHit = (task.branch ?? "").toLowerCase().includes(q);
+        if (!nameHit && !branchHit) continue;
+        taskHits.push({
+          kind: "task",
+          taskId: task.id,
+          sessionId: task.orchestratorSession,
+          name: task.name,
+          branch: task.branch,
+        });
+      }
+      // Stable order for the combobox: name then id.
+      taskHits.sort((a, b) => {
+        if (a.kind !== "task" || b.kind !== "task") return 0;
+        const byName = a.name.localeCompare(b.name);
+        return byName !== 0 ? byName : a.taskId.localeCompare(b.taskId);
+      });
+
       const { sessions } = await client.listSessions(query);
-      return sessions.map((s) => ({
-        id: s.id,
-        label: shortId(s.id),
-        taskCount: s.task_count,
-        lastActivityAt: s.last_activity_at,
-      }));
+      const sessionHits: RosterSearchHit[] = sessions.map((s) => {
+        const identity =
+          identities.get(s.id) ??
+          deriveSessionIdentity(s.id, []);
+        // Prefer live count when the session is still in the fleet; else wire.
+        const taskCount =
+          identities.has(s.id) ? identity.count : s.task_count;
+        const handle =
+          identities.has(s.id) ? identity.handle : identity.shortRef;
+        const shortRef = identity.shortRef;
+        const label = identities.has(s.id)
+          ? identity.label
+          : `${shortRef} · ${formatTaskCount(taskCount)}`;
+        return {
+          kind: "session" as const,
+          id: s.id,
+          handle,
+          shortRef,
+          label,
+          taskCount,
+          lastActivityAt: s.last_activity_at,
+        };
+      });
+
+      return [...taskHits, ...sessionHits];
     },
-    [client],
+    [client, live.tasks],
   );
 
   const origin = typeof window !== "undefined" ? window.location : undefined;

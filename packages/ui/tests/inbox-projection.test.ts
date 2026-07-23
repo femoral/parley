@@ -31,6 +31,8 @@ describe("projectInbox selects tasks blocked on an answer (#67)", () => {
         question: "Which port?",
         updatedAt: null,
         sessionId: "sess-1",
+        sessionHandle: "a",
+        sessionShortRef: "sess-1",
       },
     ]);
   });
@@ -80,6 +82,8 @@ describe("projectInbox selects tasks blocked on an answer (#67)", () => {
       question: "Deploy now?",
       updatedAt: null,
       sessionId: null,
+      sessionHandle: null,
+      sessionShortRef: null,
     });
   });
 
@@ -93,5 +97,7 @@ describe("projectInbox selects tasks blocked on an answer (#67)", () => {
       }),
     ]);
     expect(cards[0]?.sessionId).toBe("orch-session-xyz");
+    expect(cards[0]?.sessionHandle).toBe("task-1");
+    expect(cards[0]?.sessionShortRef).toBe("orch-ses");
   });
 });

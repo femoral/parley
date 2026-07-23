@@ -48,7 +48,15 @@ describe("useSnapshot regroups live on SSE transitions (#66 / #208)", () => {
     expect(result.current.connected).toBe(true);
     expect(result.current.streamLostSince).toBeNull();
     expect(result.current.groups[0]!.tasks[0]!.name).toBe("chart-the-bay");
-    expect(result.current.sessions).toEqual([{ id: "sess-1", label: "sess-1", count: 1 }]);
+    expect(result.current.sessions).toEqual([
+      {
+        id: "sess-1",
+        handle: "chart-the-bay",
+        shortRef: "sess-1",
+        label: "chart-the-bay · 1 task",
+        count: 1,
+      },
+    ]);
     expect(result.current.durableSessions).toBe(1);
 
     // The fake vendor raises a question — task.question moves t1 to
@@ -71,7 +79,15 @@ describe("useSnapshot regroups live on SSE transitions (#66 / #208)", () => {
     });
     await waitFor(() => expect(result.current.groups.map((g) => g.state)).toEqual(["awaiting_answer"]));
     expect(result.current.groups[0]!.tasks[0]!.name).toBe("chart-the-bay");
-    expect(result.current.sessions).toEqual([{ id: "sess-1", label: "sess-1", count: 1 }]);
+    expect(result.current.sessions).toEqual([
+      {
+        id: "sess-1",
+        handle: "chart-the-bay",
+        shortRef: "sess-1",
+        label: "chart-the-bay · 1 task",
+        count: 1,
+      },
+    ]);
     expect(result.current.durableSessions).toBe(1);
 
     // ...then completes — it moves to the quiet tail of the order, live,
@@ -93,7 +109,15 @@ describe("useSnapshot regroups live on SSE transitions (#66 / #208)", () => {
     });
     await waitFor(() => expect(result.current.groups.map((g) => g.state)).toEqual(["completed"]));
     // Session chip stays (history keeps its grouping); durable count drops.
-    expect(result.current.sessions).toEqual([{ id: "sess-1", label: "sess-1", count: 1 }]);
+    expect(result.current.sessions).toEqual([
+      {
+        id: "sess-1",
+        handle: "chart-the-bay",
+        shortRef: "sess-1",
+        label: "chart-the-bay · 1 task",
+        count: 1,
+      },
+    ]);
     expect(result.current.durableSessions).toBe(0);
   });
 
@@ -127,7 +151,15 @@ describe("useSnapshot regroups live on SSE transitions (#66 / #208)", () => {
     });
     await waitFor(() => expect(result.current.totalTasks).toBe(1));
     await waitFor(() =>
-      expect(result.current.sessions).toEqual([{ id: "sess-2", label: "sess-2", count: 1 }]),
+      expect(result.current.sessions).toEqual([
+        {
+          id: "sess-2",
+          handle: "new-voyage",
+          shortRef: "sess-2",
+          label: "new-voyage · 1 task",
+          count: 1,
+        },
+      ]),
     );
     expect(result.current.durableSessions).toBe(1);
   });
