@@ -42,9 +42,12 @@ describe("InboxPanel display-only question cards (#78)", () => {
     expect(screen.queryByRole("button", { name: /Send/ })).toBeNull();
   });
 
-  it("badges each card from the task's state via the shared state-meta lookup", () => {
+  it("includes state in the card accessible name without a redundant AWAITING badge", () => {
     render(<InboxPanel tasks={[AWAITING_1]} onSelectTask={() => {}} />);
-    expect(screen.getAllByText("AWAITING")).toHaveLength(1);
+    // Plate header already announces NEEDS YOU · N — no per-card badge.
+    expect(document.querySelector(".pc-inbox-card .pc-badge")).toBeNull();
+    // State still rides in the select control's accessible name (state-meta).
+    expect(screen.getByRole("button", { name: /AWAITING/ })).toBeTruthy();
   });
 
   it("labels each card emblem with its faction/vendor name", () => {

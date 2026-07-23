@@ -1,22 +1,17 @@
 import type { CSSProperties } from "react";
-import { Mark, Plate, PlateHeader, Stat } from "../primitives/index.js";
+import { Mark, Plate, PlateHeader } from "../primitives/index.js";
 import { MARK_ANCHOR } from "../tokens/chrome-glyphs.js";
 import type { HealthView } from "./types.js";
-
-function Cell({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="pc-health__cell">
-      <span className="pc-health__label">{label}</span>
-      <span className="pc-health__value">{value}</span>
-    </div>
-  );
-}
 
 /**
  * Layer 2 — the daemon health panel (design-manifest §4.14). Plain props only:
  * the hooks layer probes `/health` + `/tasks` and hands this a fully-projected
  * {@link HealthView}. Daemon facts only (connection, version, host/port/pid,
  * uptime, durable sessions) — fleet counts (total/active) live on the roster.
+ *
+ * Compact density: at a glance only HEALTHY/OFFLINE matters (loud chip in the
+ * header). Host/port/PID/uptime/sessions stay visible as dense mono meta so
+ * the right rail frees vertical space for the inspector (LOGBOOK payoff).
  */
 export function HealthPanel({ health }: { health: HealthView }) {
   const chipColor = health.online ? "var(--healthy-dot)" : "var(--state-failed)";
@@ -24,6 +19,8 @@ export function HealthPanel({ health }: { health: HealthView }) {
     "--health-chip-color": chipColor,
     "--dot-color": chipColor,
   } as CSSProperties;
+  const pid = health.pid !== null ? String(health.pid) : "—";
+  const uptime = health.uptime || "—";
   return (
     <Plate padded={false}>
       <PlateHeader
@@ -39,19 +36,39 @@ export function HealthPanel({ health }: { health: HealthView }) {
         }
       />
       <div className="pc-plate__body">
-        <div className="pc-health__grid">
-          <Cell label="Host" value={health.host} />
-          <Cell label="Port" value={health.port} />
-          <Cell label="PID" value={health.pid !== null ? String(health.pid) : "—"} />
-          <Cell label="Uptime" value={health.uptime || "—"} />
-        </div>
-        <div className="pc-health__wells">
-          <div className="pc-well">
-            <Stat
-              value={String(health.durableSessions)}
-              label="Sessions"
-              color="var(--sessions-blue)"
-            />
+        <div className="pc-health__compact" data-testid="health-compact">
+          <div className="pc-health__compact-row">
+            <span className="pc-health__compact-item">
+              <span className="pc-health__compact-k">Host</span>
+              <span className="pc-health__compact-v">{health.host}</span>
+            </span>
+            <span className="pc-health__compact-sep" aria-hidden="true">
+              ·
+            </span>
+            <span className="pc-health__compact-item">
+              <span className="pc-health__compact-k">Port</span>
+              <span className="pc-health__compact-v">{health.port}</span>
+            </span>
+            <span className="pc-health__compact-sep" aria-hidden="true">
+              ·
+            </span>
+            <span className="pc-health__compact-item">
+              <span className="pc-health__compact-k">PID</span>
+              <span className="pc-health__compact-v">{pid}</span>
+            </span>
+          </div>
+          <div className="pc-health__compact-row">
+            <span className="pc-health__compact-item">
+              <span className="pc-health__compact-k">Uptime</span>
+              <span className="pc-health__compact-v">{uptime}</span>
+            </span>
+            <span className="pc-health__compact-sep" aria-hidden="true">
+              ·
+            </span>
+            <span className="pc-health__compact-item">
+              <span className="pc-health__compact-k">Sessions</span>
+              <span className="pc-health__compact-v">{String(health.durableSessions)}</span>
+            </span>
           </div>
         </div>
       </div>

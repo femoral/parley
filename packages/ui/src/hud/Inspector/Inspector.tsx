@@ -56,6 +56,10 @@ export const Inspector = memo(function Inspector({
   const [evalExpanded, setEvalExpanded] = useState(false);
   const baseId = useId();
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  /** Anchor at the top of the plate so scrollIntoView brings the LOGBOOK into
+   * the right rail without wrapping the plate (Cockpit flex targets
+   * `.pc-region--right > .pc-inspector` as a direct child). */
+  const scrollAnchorRef = useRef<HTMLDivElement | null>(null);
   const panelId = `${baseId}-panel`;
   const evalFeedbackId = `${baseId}-eval-feedback`;
   const tabId = (key: InspectorTabKey): string => `${baseId}-tab-${key}`;
@@ -66,6 +70,22 @@ export const Inspector = memo(function Inspector({
     setActive(initialTab);
     setEvalExpanded(false);
   }, [initialTab, openSeq]);
+
+  // When a selection opens/changes, scroll the inspector plate into view within
+  // the right rail so WHY IT FAILED / logs aren't left below the fold.
+  // Respect prefers-reduced-motion: smooth only when motion is allowed.
+  useEffect(() => {
+    if (!task) return;
+    const el = scrollAnchorRef.current;
+    if (!el) return;
+    const reduceMotion =
+      typeof window !== "undefined" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    el.scrollIntoView({
+      block: "nearest",
+      behavior: reduceMotion ? "auto" : "smooth",
+    });
+  }, [openSeq, task]);
 
   const focusTabAt = (index: number): void => {
     tabRefs.current[index]?.focus();
@@ -100,6 +120,7 @@ export const Inspector = memo(function Inspector({
   if (!task) {
     return (
       <Plate variant="premium" className="pc-inspector pc-inspector--empty">
+        <div ref={scrollAnchorRef} className="pc-inspector__scroll-anchor" aria-hidden="true" />
         <p className="pc-inspector__placeholder">
           <span aria-hidden="true">
             <Mark mark={MARK_ANCHOR} size={13} />
@@ -114,6 +135,7 @@ export const Inspector = memo(function Inspector({
 
   return (
     <Plate variant="premium" padded={false} className="pc-inspector">
+      <div ref={scrollAnchorRef} className="pc-inspector__scroll-anchor" aria-hidden="true" />
       <div className="pc-inspector__head">
         <Emblem coat={task.coat} mark={task.emblem} size={28} label={task.faction} />
         <div className="pc-inspector__head-titles">

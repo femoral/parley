@@ -2697,3 +2697,63 @@
   letter-spacing: normal;
 }
 
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ * Inspector rail density (P2 compact health + scroll anchor)
+ * Appended only — do not edit earlier cartouche/day-chip sections in parallel.
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Compact daemon health meta — two dense mono rows under the status chip.
+ * Reclaims vertical space so the LOGBOOK (inspector) sits higher in the rail. */
+.pc-health__compact {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 2px 0 4px;
+}
+.pc-health__compact-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 6px;
+  min-width: 0;
+}
+.pc-health__compact-item {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  min-width: 0;
+}
+.pc-health__compact-k {
+  font-family: var(--font-body);
+  font-size: var(--text-label);
+  font-weight: 600;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: var(--ink-label);
+  flex-shrink: 0;
+}
+.pc-health__compact-v {
+  font-family: var(--font-mono);
+  font-size: var(--text-meta);
+  font-weight: 500;
+  color: var(--brass-soft);
+  overflow-wrap: anywhere;
+}
+.pc-health__compact-sep {
+  font-family: var(--font-mono);
+  font-size: var(--text-meta);
+  color: var(--ink-label);
+  opacity: 0.7;
+  user-select: none;
+}
+
+/* Zero-box scroll target at the top of the inspector plate. scrollIntoView
+ * on selection uses this so the LOGBOOK enters the rail viewport without
+ * wrapping .pc-inspector (Cockpit flex targets it as a direct rail child). */
+.pc-inspector__scroll-anchor {
+  width: 0;
+  height: 0;
+  overflow: hidden;
+  pointer-events: none;
+}

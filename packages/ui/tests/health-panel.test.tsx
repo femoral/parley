@@ -36,4 +36,33 @@ describe("HealthPanel renders daemon status from plain props (#65)", () => {
     render(<HealthPanel health={{ ...HEALTH, online: false }} />);
     expect(screen.getByText("OFFLINE")).toBeTruthy();
   });
+
+  it("renders a compact dense meta layout (not the tall grid + wells)", () => {
+    const { container } = render(<HealthPanel health={HEALTH} />);
+    expect(container.querySelector(".pc-health__compact")).toBeTruthy();
+    expect(container.querySelector("[data-testid='health-compact']")).toBeTruthy();
+    // Compact rows replace the previous 2×2 grid and Stat well.
+    expect(container.querySelector(".pc-health__grid")).toBeNull();
+    expect(container.querySelector(".pc-health__wells")).toBeNull();
+    expect(container.querySelector(".pc-stat")).toBeNull();
+    // All facts still present as mono meta.
+    const compact = container.querySelector(".pc-health__compact");
+    expect(compact?.textContent).toContain("Host");
+    expect(compact?.textContent).toContain("127.0.0.1");
+    expect(compact?.textContent).toContain("Port");
+    expect(compact?.textContent).toContain("57123");
+    expect(compact?.textContent).toContain("PID");
+    expect(compact?.textContent).toContain("4242");
+    expect(compact?.textContent).toContain("Uptime");
+    expect(compact?.textContent).toContain("3m 41s");
+    expect(compact?.textContent).toContain("Sessions");
+    expect(compact?.textContent).toContain("1");
+  });
+
+  it("keeps the OFFLINE chip loud in the header while meta stays compact", () => {
+    const { container } = render(<HealthPanel health={{ ...HEALTH, online: false }} />);
+    const chip = container.querySelector(".pc-health-chip");
+    expect(chip?.textContent).toContain("OFFLINE");
+    expect(container.querySelector(".pc-health__compact")).toBeTruthy();
+  });
 });
