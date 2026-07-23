@@ -179,6 +179,9 @@
   gap: 10px;
 }
 .pc-roster__sessions {
+  /* Containing block for the Find popover — left-anchored so chips wrapping
+     the Find trigger to the row's left edge never shove the pop off-plate. */
+  position: relative;
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
@@ -217,9 +220,12 @@
   opacity: 0.75;
 }
 /* Session search well (#88) — sits in the chip row; popover is a small parchment
-   chart of older session ids, same brass frame language as the chips. */
+   chart of older session ids, same brass frame language as the chips.
+   Popover is positioned against `.pc-roster__sessions` (not the Find trigger):
+   when chips fill the first row and Find wraps left, `right:0` on the trigger
+   used to paint the well at x≈-155px. Left-anchor + width clamped to the
+   sessions plate keeps input + hits fully on-board. */
 .pc-roster__search {
-  position: relative;
   display: inline-flex;
 }
 .pc-roster__session--search {
@@ -229,9 +235,12 @@
 .pc-roster__search-pop {
   position: absolute;
   top: calc(100% + 6px);
-  right: 0;
+  left: 0;
+  right: auto;
   z-index: var(--z-popover);
-  width: min(240px, 70vw);
+  box-sizing: border-box;
+  width: min(240px, 100%);
+  max-width: 100%;
   padding: 8px;
   border-radius: var(--radius-control);
   border: 1px solid var(--brass-frame);
@@ -431,6 +440,70 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+/* Quiet terminals (STATE_META.quiet) — token ink steps, not opacity.
+   Ratios on plate wood #1d140c; see state-meta.ts for the full write-up. */
+.pc-roster__row--quiet-soft .pc-roster__name {
+  color: var(--ink-soft); /* #d8c39a ≈10.5:1 */
+}
+.pc-roster__row--quiet-archive .pc-roster__name {
+  color: var(--ink-muted); /* #c9b184 ≈8.7:1 */
+}
+.pc-roster__row--quiet-archive .pc-roster__meta {
+  color: var(--ink-label); /* #967c54 ≈4.6:1 — quietest functional AA tier */
+}
+/* Decorative only — emblem recession does not affect text contrast. */
+.pc-roster__row--quiet-soft .pc-emblem,
+.pc-roster__row--quiet-archive .pc-emblem {
+  opacity: 0.82;
+}
+.pc-roster__row--quiet-archive .pc-emblem {
+  opacity: 0.72;
+}
+/* Selected-row task-id copy (quiet mono; mirrors inbox/brief copy pattern). */
+.pc-roster__id-copy-wrap {
+  position: relative;
+  flex: 0 0 auto;
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+}
+.pc-roster__id-scaffold {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+.pc-roster__id-copy {
+  margin: 0;
+  padding: 2px 6px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-tight);
+  background: transparent;
+  color: var(--ink-label);
+  font-family: var(--font-mono);
+  font-weight: 500;
+  font-size: var(--text-meta);
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: border-color var(--ease), color var(--ease);
+}
+.pc-roster__id-copy:hover {
+  border-color: var(--brass-frame);
+  color: var(--ink-warm);
+}
+.pc-roster__id-copy:focus-visible {
+  outline: 2px solid var(--brass-bright);
+  outline-offset: 1px;
+}
+/* Beacon already uses margin-left:auto; when both show, keep beacon after copy. */
+.pc-roster__row--selected .pc-roster__beacon {
+  margin-left: 0;
 }
 .pc-roster__empty {
   padding: 20px 14px;

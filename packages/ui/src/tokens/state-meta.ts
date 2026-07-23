@@ -40,9 +40,22 @@ export interface StateMeta {
   /** Whether the state carries the beacon flag treatment (manifest §5 —
    * "loudest thing on screen"; the roster row's pulsing beacon). */
   beacon?: boolean;
-  /** Row opacity for quiet states (manifest §5 — terminals render dimmed so
-   * history never competes with live work). Absent = full opacity. */
-  dim?: number;
+  /**
+   * Quiet-history treatment (manifest §5 — terminals recede so history never
+   * competes with live work). Applied as a roster CSS class that switches text
+   * to quieter AA ink tokens — NOT whole-row opacity. Opacity composites every
+   * child against plate wood and drops body contrast below WCAG AA 4.5:1
+   * (prior `dim: 0.62` took --ink-faint ≈2.7:1 and coral failed ≈3.5:1;
+   * `dim: 0.9` took --ink-faint ≈4.2:1). Absent beacon + lower list rank still
+   * carry "archive recedes".
+   *
+   * Token steps on plate wood (#1d140c), all ≥4.5:1 AA:
+   * - soft (completed): name → --ink-soft #d8c39a ≈10.5:1; meta stays
+   *   --ink-faint #9c8154 ≈4.9:1
+   * - archive (failed/cancelled): name → --ink-muted #c9b184 ≈8.7:1; meta →
+   *   --ink-label #967c54 ≈4.6:1 (quietest functional tier)
+   */
+  quiet?: "soft" | "archive";
 }
 
 export const STATE_META: Record<StateKey, StateMeta> = {
@@ -88,7 +101,7 @@ export const STATE_META: Record<StateKey, StateMeta> = {
     mark: STATE_GLYPH_MARKS.completed,
     hint: "report ready",
     colorVar: "var(--state-completed)",
-    dim: 0.9,
+    quiet: "soft",
   },
   failed: {
     label: "FAILED",
@@ -96,7 +109,7 @@ export const STATE_META: Record<StateKey, StateMeta> = {
     mark: STATE_GLYPH_MARKS.failed,
     hint: "terminal state",
     colorVar: "var(--state-failed)",
-    dim: 0.62,
+    quiet: "archive",
   },
   cancelled: {
     label: "CANCELLED",
@@ -104,7 +117,7 @@ export const STATE_META: Record<StateKey, StateMeta> = {
     mark: STATE_GLYPH_MARKS.cancelled,
     hint: "called back",
     colorVar: "var(--state-cancelled)",
-    dim: 0.62,
+    quiet: "archive",
   },
 };
 

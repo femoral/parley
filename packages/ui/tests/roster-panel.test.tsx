@@ -274,15 +274,17 @@ describe("RosterPanel state treatment (#66)", () => {
     expect(runningRow.querySelector(".pc-roster__beacon")).toBeNull();
   });
 
-  it("dims terminal rows per the manifest's quiet-history treatment", () => {
+  it("applies archive quiet class (not opacity) on terminal rows", () => {
     render(<RosterPanel {...baseProps()} />);
     const failedRow = screen.getByRole("option", { name: "lost-at-sea — FAILED" }) as HTMLElement;
-    expect(failedRow.style.opacity).toBe("0.62");
+    expect(failedRow.classList.contains("pc-roster__row--quiet-archive")).toBe(true);
+    expect(failedRow.style.opacity).toBe("");
     const awaitingRow = screen.getByRole("option", { name: "chart-the-bay — AWAITING" }) as HTMLElement;
-    expect(awaitingRow.style.opacity).toBe("");
+    expect(awaitingRow.classList.contains("pc-roster__row--quiet-archive")).toBe(false);
+    expect(awaitingRow.classList.contains("pc-roster__row--quiet-soft")).toBe(false);
   });
 
-  it("renders a fresh failure undimmed with a coral beacon", () => {
+  it("renders a fresh failure loud (no quiet class) with a coral beacon", () => {
     const groups: RosterGroup[] = [
       {
         state: "failed",
@@ -301,10 +303,42 @@ describe("RosterPanel state treatment (#66)", () => {
     ];
     render(<RosterPanel {...baseProps()} groups={groups} totalTasks={1} activeTasks={0} />);
     const row = screen.getByRole("option", { name: "fresh-wreck — FAILED" }) as HTMLElement;
+    expect(row.classList.contains("pc-roster__row--quiet-archive")).toBe(false);
     expect(row.style.opacity).toBe("");
     const beacon = row.querySelector(".pc-roster__beacon") as HTMLElement;
     expect(beacon).toBeTruthy();
     expect(beacon.style.getPropertyValue("--beacon-color")).toBe("var(--state-failed)");
+  });
+});
+
+describe("RosterPanel selected-row task id copy", () => {
+  const writeText = vi.fn(async () => undefined);
+
+  beforeEach(() => {
+    writeText.mockClear();
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
+  });
+
+  it("shows a copy affordance only on the selected row", () => {
+    const { rerender } = render(<RosterPanel {...baseProps()} selectedTaskId={null} />);
+    expect(screen.queryByRole("button", { name: /Copy task id/i })).toBeNull();
+    rerender(<RosterPanel {...baseProps()} selectedTaskId="t2" />);
+    expect(screen.getByRole("button", { name: /Copy task id/i })).toBeTruthy();
+    // Only one copy control — not one per row.
+    expect(screen.getAllByRole("button", { name: /Copy task id/i })).toHaveLength(1);
+  });
+
+  it("copies the full task id and shows confirmation", async () => {
+    render(<RosterPanel {...baseProps()} selectedTaskId="t1" />);
+    fireEvent.click(screen.getByRole("button", { name: /Copy task id/i }));
+    await waitFor(() => {
+      expect(writeText).toHaveBeenCalledWith("t1");
+    });
+    expect(screen.getByText("copied ✓")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Copied task id/i })).toBeTruthy();
   });
 });
 

@@ -9,6 +9,7 @@ import {
   useState,
   type CSSProperties,
   type KeyboardEvent as ReactKeyboardEvent,
+  type MouseEvent as ReactMouseEvent,
   type MutableRefObject,
   type Ref,
 } from "react";
@@ -143,6 +144,86 @@ function RosterEmptyStarter() {
   );
 }
 
+/**
+ * Quiet mono copy control for the selected roster row's full task id.
+ * Mirrors InboxCard / BriefTab: clipboard.writeText with select-on-click
+ * fallback. Only mounted on the selected row so the rail stays quiet.
+ */
+function TaskIdCopy({ taskId }: { taskId: string }) {
+  const [copied, setCopied] = useState(false);
+  const [canCopy, setCanCopy] = useState(true);
+  const revertTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scaffoldRef = useRef<HTMLSpanElement>(null);
+
+  useEffect(() => {
+    setCanCopy(clipboardAvailable());
+    return () => {
+      if (revertTimer.current) clearTimeout(revertTimer.current);
+    };
+  }, []);
+
+  const markCopied = useCallback(() => {
+    setCopied(true);
+    if (revertTimer.current) clearTimeout(revertTimer.current);
+    revertTimer.current = setTimeout(() => setCopied(false), 1500);
+  }, []);
+
+  const handleCopy = useCallback(
+    async (event: ReactMouseEvent<HTMLButtonElement>) => {
+      // Keep the listbox option from treating this as a re-select activation
+      // for keyboard users who land focus on the button.
+      event.stopPropagation();
+      if (clipboardAvailable()) {
+        try {
+          await navigator.clipboard.writeText(taskId);
+          markCopied();
+          return;
+        } catch {
+          // Fall through to select-on-click fallback.
+        }
+      }
+      const el = scaffoldRef.current;
+      if (el) {
+        const range = document.createRange();
+        range.selectNodeContents(el);
+        const selection = window.getSelection();
+        selection?.removeAllRanges();
+        selection?.addRange(range);
+        markCopied();
+      } else {
+        setCanCopy(false);
+      }
+    },
+    [taskId, markCopied],
+  );
+
+  if (!canCopy) return null;
+
+  return (
+    <span className="pc-roster__id-copy-wrap">
+      {/* Hidden scaffold text for select-on-click fallback when clipboard fails. */}
+      <span ref={scaffoldRef} className="pc-roster__id-scaffold" aria-hidden="true">
+        {taskId}
+      </span>
+      <button
+        type="button"
+        className="pc-roster__id-copy"
+        onClick={handleCopy}
+        onKeyDown={(event) => {
+          // Space/Enter on the button must not bubble to the listbox's
+          // manual-activation handler (which would re-select the row).
+          if (event.key === " " || event.key === "Enter") {
+            event.stopPropagation();
+          }
+        }}
+        aria-label={copied ? "Copied task id" : "Copy task id"}
+      >
+        {copied ? "copied ✓" : "id"}
+      </button>
+    </span>
+  );
+}
+
 function Group({
   group,
   selectedTaskId,
@@ -184,12 +265,18 @@ function Group({
       {group.tasks.map((task) => {
         const selected = task.id === selectedTaskId;
         const focused = task.id === focusedTaskId;
-        // Fresh failures arrive undimmed with a coral beacon; archive failures
-        // (and other quiet terminals) keep STATE_META.dim. Per-row, not group-
-        // wide — a mixed failed group can hold both treatments.
+        // Fresh failures arrive loud with a coral beacon; archive failures
+        // (and other quiet terminals) take STATE_META.quiet token ink steps —
+        // not opacity. Per-row, not group-wide — a mixed failed group can
+        // hold both treatments.
         const freshFailure = Boolean(task.freshFailure);
-        const dim = freshFailure ? undefined : meta.dim;
-        const rowStyle = dim !== undefined ? { opacity: dim } : undefined;
+        const quiet = freshFailure ? undefined : meta.quiet;
+        const quietClass =
+          quiet === "soft"
+            ? " pc-roster__row--quiet-soft"
+            : quiet === "archive"
+              ? " pc-roster__row--quiet-archive"
+              : "";
         const showBeacon = Boolean(meta.beacon) || freshFailure;
         const beaconStyle = freshFailure
           ? ({
@@ -204,8 +291,7 @@ function Group({
         return (
           <div
             role="option"
-            className={`pc-roster__row${selected ? " pc-roster__row--selected" : ""}`}
-            style={rowStyle}
+            className={`pc-roster__row${selected ? " pc-roster__row--selected" : ""}${quietClass}`}
             key={task.id}
             id={`roster-option-${task.id}`}
             aria-label={accessibleName}
@@ -232,6 +318,7 @@ function Group({
                 <span className="pc-visually-hidden">task id {task.id}</span>
               </span>
             </span>
+            {selected && <TaskIdCopy taskId={task.id} />}
             {showBeacon && (
               <span
                 className="pc-roster__beacon pc-dot--beacon"
