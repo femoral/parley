@@ -10,7 +10,7 @@ export interface EvalDistributionProps {
 function DistributionRow({ row }: { row: SoundingsDistributionRow }) {
   const below =
     row.deltaValue !== null && Number.isFinite(row.deltaValue) && row.deltaValue < 0;
-  const fill = below ? "var(--state-failed)" : "var(--state-completed)";
+  const fill = below ? "var(--quality-poor)" : "var(--quality-good)";
   const scoreWidth =
     row.scorePos === null ? 0 : Math.max(0, Math.min(100, row.scorePos * 100));
   const baselineLeft =

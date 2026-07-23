@@ -2697,3 +2697,46 @@
   letter-spacing: normal;
 }
 
+/* ═══════════════════════════════════════════════════════════════════════════
+ * Soundings quality-token + filter-group polish — NEW rules only.
+ * Do not merge into earlier .pc-eval-* / .pc-soundings selectors;
+ * parallel work edits those blocks. Overrides re-point metric chrome at the
+ * quality verdict tokens (State-Color Reservation).
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Metric fills/swatches: quality verdicts, not task-state hues */
+.pc-eval-dist__legend-fill {
+  background: var(--quality-good);
+}
+.pc-eval-heat__swatch--low {
+  background: color-mix(in srgb, var(--quality-poor) 22%, rgba(0, 0, 0, 0.35));
+}
+.pc-eval-heat__swatch--high {
+  background: color-mix(in srgb, var(--quality-poor) 92%, rgba(0, 0, 0, 0.2));
+}
+
+/* Filter field groups — Task / Orchestrator / Judge headings */
+.pc-eval-filters__groups {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.pc-eval-filters__group {
+  margin: 0;
+  padding: 0;
+  border: none;
+  min-width: 0;
+}
+.pc-eval-filters__group-heading {
+  display: block;
+  padding: 0;
+  margin: 0 0 4px;
+  font-family: var(--font-body);
+  font-size: var(--text-label);
+  font-weight: 600;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--ink-label);
+  line-height: 1.4;
+}
+

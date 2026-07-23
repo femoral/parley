@@ -211,7 +211,7 @@ A warm-on-cold palette: cool teal seas underneath, warm brass and parchment on t
 
 **The Warm-Ink Rule.** Text is never neutral gray. Every ink tone carries the parchment/brass hue. Gray body text on the wood panels is forbidden — it reads washed-out and off-brand. When contrast is close, move toward Parchment Ink, never toward gray.
 
-**The State-Color Reservation.** The luminous state palette is spent on status alone. Do not reuse Running Green or Failed Coral as decorative accents; their meaning depends on their rarity.
+**The State-Color Reservation.** The luminous state palette is spent on status alone. Do not reuse Running Green or Failed Coral as decorative accents; their meaning depends on their rarity. Metric quality — scores, deltas, success rate, below-baseline, heatmap fail intensity — uses the separate **quality verdict** group (`--quality-good` / `--quality-poor` / `--quality-neutral`). State colors answer *what a task IS*; quality colors answer *how good work WAS*.
 
 ## 3. Typography
 

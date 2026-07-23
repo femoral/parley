@@ -128,9 +128,26 @@
   --alert-cream: #ffe6a8;
   --question-parchment: #ffe6c2;
   --question-marker: #d99a5a;
+  /* Daemon chrome aliases — deliberate reuse of running/completed *hues* for
+     health/session chrome, outside the task-state family (not status badges). */
   --healthy-dot: #5fd08a;
   --healthy-text: #8fe0a8;
   --sessions-blue: #7fd0ff;
+
+  /* §2.7 — quality verdicts (Soundings metrics only; NOT task state).
+     Distinct from reserved state hues so a color always means one thing:
+     state = what a task IS; quality = how good work WAS.
+       --quality-good  #3ec8c0 sea-glass teal  (hue ~174°) vs --state-completed
+         #7fd0ff sky (~199°) and --state-running #5fd08a (~145°).
+         On plate wood #1d140c ≈ 8.84:1; on progress-track #0c0904 ≈ 9.68:1.
+       --quality-poor  #e888a0 mulberry rose  (hue ~340°) vs --state-failed
+         #ff7a6b coral (~6°). On plate ≈ 7.31:1; on progress-track ≈ 8.01:1.
+       --quality-neutral #b8a078 sand tan — zero-delta / unset metric text.
+         On plate ≈ 7.20:1; on progress-track ≈ 7.89:1.
+     All three ≥4.5:1 AA for body/score text on plate chrome. */
+  --quality-good: #3ec8c0;
+  --quality-poor: #e888a0;
+  --quality-neutral: #b8a078;
 
   /* §2.8 — ember (inbox) plate */
   --ember-fill: linear-gradient(180deg, #241206, #180d05);

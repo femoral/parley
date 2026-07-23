@@ -22,10 +22,10 @@ export interface EvalHeatmapProps {
  */
 function cellStyle(intensity: number | null): CSSProperties | undefined {
   if (intensity === null) return undefined;
-  // Floor ~18% so a single failure is visible on the dark plate; full rate → coral.
+  // Floor ~18% so a single failure is visible on the dark plate; full rate → quality-poor.
   const pct = Math.round((0.18 + intensity * 0.82) * 100);
   return {
-    background: `color-mix(in srgb, var(--state-failed) ${pct}%, rgba(0, 0, 0, 0.35))`,
+    background: `color-mix(in srgb, var(--quality-poor) ${pct}%, rgba(0, 0, 0, 0.35))`,
     color: intensity >= 0.45 ? "var(--ink-parchment)" : "var(--ink-soft)",
   };
 }
