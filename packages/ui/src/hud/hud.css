@@ -39,6 +39,11 @@
   font-size: var(--text-chrome);
   letter-spacing: var(--track-subtitle);
   color: var(--ink-tan);
+  /* When the view-nav is absolute (wide title-stack), keep the centered line
+     out of the tab footprint (right: 44px + Cove/Soundings tabs ≈ 13rem). */
+  max-width: calc(100% - 13rem);
+  margin-inline: auto;
+  box-sizing: border-box;
 }
 
 /* ── Day / weather chip ────────────────────────────────────────────────── */
@@ -411,7 +416,9 @@
   font-family: var(--font-mono);
   font-size: var(--text-meta);
   color: var(--ink-faint);
-  overflow-wrap: anywhere;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .pc-roster__empty {
   padding: 20px 14px;
@@ -2416,7 +2423,10 @@
   outline-offset: 2px;
 }
 /* Engraved-on-cartouche placement: the nav sits at the title plate's
-   bottom-right edge, tabs one step smaller so the nameplate stays loudest. */
+   bottom-right edge, tabs one step smaller so the nameplate stays loudest.
+   On narrow title stacks (see .pc-center__title-stack container query in
+   cockpit.css) this reflows into the document so it never underlaps the
+   subtitle — wide boards keep the absolute engraving. */
 .pc-view-nav--cartouche {
   position: absolute;
   bottom: 7px;
