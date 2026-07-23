@@ -57,6 +57,7 @@ function baseView(overrides: Partial<CockpitView> = {}): CockpitView {
       clearTask: () => {},
       searchSessions: async () => [],
       inspectorIntent: { tab: "brief" as const, seq: 0 },
+      sceneFrameIntent: null,
     },
     clock: "12:00",
     day: 1,

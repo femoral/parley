@@ -11,7 +11,13 @@ export {
   COCKPIT_DOCUMENT_TITLE,
   CHART_STALE_DEBOUNCE_MS,
 } from "./useCockpit.js";
-export type { CockpitView, CockpitMode, RosterSelection, SelectTaskOptions } from "./useCockpit.js";
+export type {
+  CockpitView,
+  CockpitMode,
+  RosterSelection,
+  SelectTaskOptions,
+  SceneFrameIntent,
+} from "./useCockpit.js";
 export {
   useCockpitKeys,
   awaitingTaskIds,

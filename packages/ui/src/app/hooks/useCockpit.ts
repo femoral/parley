@@ -109,6 +109,17 @@ export interface SelectTaskOptions {
   tab?: InspectorTabKey;
 }
 
+/**
+ * Camera cue from task selection: sail the cove to the task's session region
+ * without changing the roster session filter. `sessionKey` matches Scene's
+ * region key (session id, or `"open-water"` for session-less tasks). `seq`
+ * bumps on every select so re-selecting re-applies when the camera has moved.
+ */
+export interface SceneFrameIntent {
+  sessionKey: string;
+  seq: number;
+}
+
 /** The roster's selection state — which orchestrator session and task are
  * active (#66). Lives in the app layer: hud rows/selectors take the current
  * selection and an `onSelect*` callback as plain props and never own it.
@@ -137,6 +148,12 @@ export interface RosterSelection {
    * sequence bumped every select so re-opening re-applies the tab.
    */
   inspectorIntent: { tab: InspectorTabKey; seq: number };
+  /**
+   * Scene camera cue from the latest {@link selectTask} — frames the task's
+   * orchestrator session via the scene's manual-frame path without touching
+   * {@link selectedSessionId}. `null` until the first task select.
+   */
+  sceneFrameIntent: SceneFrameIntent | null;
 }
 
 /** Which primary board the centre column shows (#119). */
@@ -201,13 +218,18 @@ export function useCockpit(): CockpitView {
   const now = useVisibleClock();
   // useState setters are identity-stable, so hud components (memoized against
   // the cockpit's one-second clock re-render) can take them as props directly.
-  // Single source of truth for session filter + future scene camera cue (#76).
+  // Session filter (roster chips) and scene camera cue (task select → sail)
+  // are separate: selecting a task may reframe the cove without changing the
+  // roster filter (#76 / scene-focus-steer).
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [inspectorIntent, setInspectorIntent] = useState<{
     tab: InspectorTabKey;
     seq: number;
   }>({ tab: "brief", seq: 0 });
+  const [sceneFrameIntent, setSceneFrameIntent] = useState<SceneFrameIntent | null>(
+    null,
+  );
   // Centre mode + metrics group-by (#119) + quality filters/tabs (#165).
   // Filter state is shared so #166 heatmap/timeline can subscribe later.
   const [mode, setMode] = useState<CockpitMode>("cove");
@@ -267,6 +289,16 @@ export function useCockpit(): CockpitView {
       seq: prev.seq + 1,
     }));
     const task = tasksRef.current.find((t) => t.id === id);
+    if (task) {
+      // Cue the scene to frame this task's region. Does not touch the roster
+      // session filter — only the camera sails (manual-frame in Scene).
+      // "open-water" matches Scene's regionKey(null).
+      const sessionKey = task.orchestratorSession ?? "open-water";
+      setSceneFrameIntent((prev) => ({
+        sessionKey,
+        seq: (prev?.seq ?? 0) + 1,
+      }));
+    }
     if (task?.state === "failed") {
       setAcknowledgedFailed((prev) => {
         if (prev.has(id)) return prev;
@@ -412,6 +444,7 @@ export function useCockpit(): CockpitView {
     clearTask,
     searchSessions,
     inspectorIntent,
+    sceneFrameIntent,
   };
 
   const detail = useTaskDetail(client, selectedTaskId);

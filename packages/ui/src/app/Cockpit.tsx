@@ -145,6 +145,7 @@ export function Cockpit() {
                   activeSessionId={roster.selectedSessionId}
                   onSelectTask={roster.selectTask}
                   onSelectSession={roster.selectSession}
+                  frameIntent={roster.sceneFrameIntent}
                   connecting={!snapshot.ready}
                 />
               </div>

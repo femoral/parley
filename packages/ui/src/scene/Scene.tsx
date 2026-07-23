@@ -8,6 +8,16 @@ import { Sea } from "./Sea.js";
 import { SailingScene } from "./SailingScene.js";
 import { SessionRegion, type SessionRegionData } from "./SessionRegion.js";
 
+/**
+ * Camera cue from task selection (hooks-layer {@link SceneFrameIntent}).
+ * `sessionKey` is a region key (session id or `"open-water"`); `seq` bumps on
+ * every select so the scene can re-apply after the camera has moved elsewhere.
+ */
+export interface SceneFrameIntentProp {
+  sessionKey: string;
+  seq: number;
+}
+
 export interface SceneProps {
   /** The session regions to lay out — one per orchestrator session, projected
    * by the app's `projectScene`. Structurally the hooks-layer `SceneSession[]`. */
@@ -21,6 +31,12 @@ export interface SceneProps {
    * Wired to the roster's `selectSession` — same source of truth as the chips.
    * Not called for the open-water chip (no roster filter target). */
   onSelectSession: (sessionId: string) => void;
+  /**
+   * Task-selection camera cue: when `seq` advances, frame `sessionKey` via the
+   * manual-frame path if that region is not already on camera. Does not change
+   * the roster session filter — only the camera sails.
+   */
+  frameIntent?: SceneFrameIntentProp | null;
   /**
    * True before the first snapshot has resolved. Distinguishes "taking
    * soundings" from a genuinely empty cove (PRODUCT.md honesty).
@@ -196,6 +212,7 @@ export const Scene = memo(function Scene({
   activeSessionId,
   onSelectTask,
   onSelectSession,
+  frameIntent = null,
   connecting = false,
 }: SceneProps) {
   if (sessions.length === 0) {
@@ -229,6 +246,7 @@ export const Scene = memo(function Scene({
       activeSessionId={activeSessionId}
       onSelectTask={onSelectTask}
       onSelectSession={onSelectSession}
+      frameIntent={frameIntent}
     />
   );
 });
@@ -242,19 +260,24 @@ function SceneWithRegions({
   activeSessionId,
   onSelectTask,
   onSelectSession,
+  frameIntent,
 }: {
   sessions: SessionRegionData[];
   activeSessionId: string | null;
   onSelectTask: (taskId: string) => void;
   onSelectSession: (sessionId: string) => void;
+  frameIntent: SceneFrameIntentProp | null;
 }) {
   const placed = sessions.map((session) => {
     const { dx, dy } = regionWorldOffset(session.id);
     return { session, dx, dy };
   });
 
-  // Open-water chip frames that region without a roster session filter. Cleared
-  // whenever the roster selection changes so we never fight an explicit pick.
+  // Manual frame: open-water edge chip, or a task-select cue for a region that
+  // is not already on camera. Cleared whenever the roster session filter
+  // changes so we never fight an explicit chip pick; also dropped when the
+  // target region leaves the sea. Deselect/Escape leaves this alone so the
+  // camera is not stranded mid-coast — only an explicit session change releases.
   const [manualFrameKey, setManualFrameKey] = useState<string | undefined>(undefined);
   const [trackedSessionId, setTrackedSessionId] = useState(activeSessionId);
   if (activeSessionId !== trackedSessionId) {
@@ -267,6 +290,24 @@ function SceneWithRegions({
     !placed.some((p) => regionKey(p.session.id) === manualFrameKey)
   ) {
     setManualFrameKey(undefined);
+  }
+
+  // Task-select camera cue: only set manual frame when the target region is
+  // not already framed (loudest / named selection / prior manual). Avoids
+  // locking All-hands auto-loudest when the operator inspects a task that is
+  // already on camera.
+  const [appliedFrameSeq, setAppliedFrameSeq] = useState(0);
+  if (frameIntent !== null && frameIntent.seq !== appliedFrameSeq) {
+    setAppliedFrameSeq(frameIntent.seq);
+    const targetKey = frameIntent.sessionKey;
+    const targetExists = placed.some((p) => regionKey(p.session.id) === targetKey);
+    if (targetExists) {
+      const currentIdx = resolveFramedIndex(placed, activeSessionId, manualFrameKey);
+      const currentKey = regionKey((placed[currentIdx] ?? placed[0]!).session.id);
+      if (targetKey !== currentKey) {
+        setManualFrameKey(targetKey);
+      }
+    }
   }
 
   const activeIndex = resolveFramedIndex(placed, activeSessionId, manualFrameKey);

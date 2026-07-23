@@ -8,7 +8,7 @@
 import "./scene.css";
 
 export { Scene, regionWorldOffset, loudestRegionIndex, resolveFramedIndex } from "./Scene.js";
-export type { SceneProps } from "./Scene.js";
+export type { SceneFrameIntentProp, SceneProps } from "./Scene.js";
 export { Camera } from "./Camera.js";
 export { Sea } from "./Sea.js";
 export { SessionRegion } from "./SessionRegion.js";

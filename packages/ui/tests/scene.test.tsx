@@ -1222,6 +1222,42 @@ describe("loudest-region framing helpers", () => {
     expect(loudestRegionIndex(placed)).toBe(1);
   });
 
+  it("loudestRegionIndex frames a 2-awaiting region over a calm first-placed coast", () => {
+    // Regression: awaiting work must not sit on an edge chip while a calm
+    // region holds the All-hands camera.
+    const placed = [
+      { session: region("calm", "calm", [], null) },
+      {
+        session: region(
+          "loud",
+          "loud",
+          [],
+          { state: "awaiting_answer", count: 2, rank: 0 },
+        ),
+      },
+    ];
+    expect(loudestRegionIndex(placed)).toBe(1);
+    expect(resolveFramedIndex(placed, null, undefined)).toBe(1);
+  });
+
+  it("loudestRegionIndex prefers awaiting over stalled over failed over calm", () => {
+    const placed = [
+      { session: region("calm", "calm", [], null) },
+      { session: region("failed", "failed", [], { state: "failed", count: 1, rank: 6 }) },
+      { session: region("stalled", "stalled", [], { state: "stalled", count: 1, rank: 1 }) },
+      { session: region("awaiting", "awaiting", [], { state: "awaiting_answer", count: 1, rank: 0 }) },
+    ];
+    expect(loudestRegionIndex(placed)).toBe(3);
+    // Drop awaiting — stalled wins over failed and calm.
+    expect(
+      loudestRegionIndex(placed.filter((_, i) => i !== 3)),
+    ).toBe(2);
+    // Drop awaiting + stalled — failed still beats calm.
+    expect(
+      loudestRegionIndex(placed.filter((_, i) => i === 0 || i === 1)),
+    ).toBe(1);
+  });
+
   it("loudestRegionIndex falls back to first-placed when all calm", () => {
     const placed = [
       { session: region("a", "a", [], null) },
@@ -1245,5 +1281,172 @@ describe("loudest-region framing helpers", () => {
       { session: region(null, "Open water", [], { state: "failed", count: 1, rank: 5 }) },
     ];
     expect(resolveFramedIndex(placed, "sess", "open-water")).toBe(1);
+  });
+});
+
+describe("task-select frameIntent steers the camera without roster filter", () => {
+  it("sails to the task's session when that region is not already framed", () => {
+    const calm = region("sess-calm", "calm", [island("running", { id: "c1", name: "calm-run" })]);
+    const wreck = region(
+      "sess-wreck",
+      "wreck",
+      [island("failed", { id: "w1", name: "the-wreck" })],
+      { state: "failed", count: 1, rank: 6 },
+    );
+    // Roster filter holds the calm session; task select cues the wreck.
+    const { container, rerender } = render(
+      <Scene
+        sessions={[calm, wreck]}
+        activeSessionId="sess-calm"
+        onSelectTask={noop}
+        onSelectSession={noop}
+        frameIntent={null}
+      />,
+    );
+    const calmOff = regionWorldOffset("sess-calm");
+    expect((container.querySelector(".pc-world") as HTMLElement).style.transform).toBe(
+      `translate(${-calmOff.dx}px, ${-calmOff.dy}px)`,
+    );
+
+    rerender(
+      <Scene
+        sessions={[calm, wreck]}
+        activeSessionId="sess-calm"
+        onSelectTask={noop}
+        onSelectSession={noop}
+        frameIntent={{ sessionKey: "sess-wreck", seq: 1 }}
+      />,
+    );
+    const wreckOff = regionWorldOffset("sess-wreck");
+    expect((container.querySelector(".pc-world") as HTMLElement).style.transform).toBe(
+      `translate(${-wreckOff.dx}px, ${-wreckOff.dy}px)`,
+    );
+    // Wreck islands mount; calm unmounts after travel end.
+    expect(container.querySelector('.pc-island[aria-label="the-wreck — FAILED"]')).toBeTruthy();
+    // Roster filter prop unchanged (caller responsibility) — we only check camera.
+    expect(container.querySelector(".pc-scene-view")?.getAttribute("aria-label")).toContain(
+      "wreck",
+    );
+  });
+
+  it("does not lock manual frame when the task's region is already on camera", () => {
+    // All hands: loudest is awaiting. Selecting a task there must not pin
+    // manual frame, so a later louder? — same rank — wait: if already framed,
+    // auto-loudest should still reframe when another region becomes louder.
+    const calm = region("sess-calm", "calm", [island("running", { id: "c1" })]);
+    const awaiting = region(
+      "sess-a",
+      "awaiting",
+      [
+        island("awaiting_answer", { id: "a1", name: "q1" }),
+        island("awaiting_answer", { id: "a2", name: "q2" }),
+      ],
+      { state: "awaiting_answer", count: 2, rank: 0 },
+    );
+    const { container, rerender } = render(
+      <Scene
+        sessions={[calm, awaiting]}
+        activeSessionId={null}
+        onSelectTask={noop}
+        onSelectSession={noop}
+        frameIntent={{ sessionKey: "sess-a", seq: 1 }}
+      />,
+    );
+    const aOff = regionWorldOffset("sess-a");
+    expect((container.querySelector(".pc-world") as HTMLElement).style.transform).toBe(
+      `translate(${-aOff.dx}px, ${-aOff.dy}px)`,
+    );
+
+    // A new region becomes louder (same rank 0 first-placed would stay on
+    // sess-a; use stalled on calm which is quieter — instead flip calm to
+    // also awaiting and add a failed that is quieter). Better: introduce a
+    // second awaiting that would not win by rank, then introduce stalled…
+    // Real case: move awaiting off sess-a and put awaiting on calm — if
+    // manual were locked to sess-a, camera would stick on the now-calm region.
+    const calmNowLoud = region(
+      "sess-calm",
+      "calm",
+      [island("awaiting_answer", { id: "c1", name: "now-loud" })],
+      { state: "awaiting_answer", count: 1, rank: 0 },
+    );
+    const aNowCalm = region("sess-a", "awaiting", [island("running", { id: "a1" })], null);
+    rerender(
+      <Scene
+        sessions={[calmNowLoud, aNowCalm]}
+        activeSessionId={null}
+        onSelectTask={noop}
+        onSelectSession={noop}
+        frameIntent={{ sessionKey: "sess-a", seq: 1 }}
+      />,
+    );
+    // Auto-loudest should follow the rollup to sess-calm (first-placed among
+    // rank 0, and only rank 0 left on calm).
+    const calmOff = regionWorldOffset("sess-calm");
+    expect((container.querySelector(".pc-world") as HTMLElement).style.transform).toBe(
+      `translate(${-calmOff.dx}px, ${-calmOff.dy}px)`,
+    );
+  });
+
+  it("frames open-water tasks via the open-water region key", () => {
+    const named = region("sess-1", "sess-1", [island("running", { id: "n1" })]);
+    const open = region(null, "Open water", [
+      island("failed", { id: "loose", name: "loose-wreck" }),
+    ], { state: "failed", count: 1, rank: 6 });
+    const { container, rerender } = render(
+      <Scene
+        sessions={[named, open]}
+        activeSessionId="sess-1"
+        onSelectTask={noop}
+        onSelectSession={noop}
+        frameIntent={null}
+      />,
+    );
+    rerender(
+      <Scene
+        sessions={[named, open]}
+        activeSessionId="sess-1"
+        onSelectTask={noop}
+        onSelectSession={noop}
+        frameIntent={{ sessionKey: "open-water", seq: 1 }}
+      />,
+    );
+    const o = regionWorldOffset(null);
+    expect((container.querySelector(".pc-world") as HTMLElement).style.transform).toBe(
+      `translate(${-o.dx}px, ${-o.dy}px)`,
+    );
+    expect(container.querySelector('.pc-island[aria-label="loose-wreck — FAILED"]')).toBeTruthy();
+  });
+
+  it("releases task-select manual frame when the roster session filter changes", () => {
+    const a = region("sess-a", "a", [island("running", { id: "a1" })]);
+    const b = region("sess-b", "b", [island("running", { id: "b1", name: "b-run" })]);
+    const { container, rerender } = render(
+      <Scene
+        sessions={[a, b]}
+        activeSessionId={null}
+        onSelectTask={noop}
+        onSelectSession={noop}
+        frameIntent={{ sessionKey: "sess-b", seq: 1 }}
+      />,
+    );
+    const bOff = regionWorldOffset("sess-b");
+    expect((container.querySelector(".pc-world") as HTMLElement).style.transform).toBe(
+      `translate(${-bOff.dx}px, ${-bOff.dy}px)`,
+    );
+
+    // Explicit session pick clears manual frame (existing release path).
+    rerender(
+      <Scene
+        sessions={[a, b]}
+        activeSessionId="sess-a"
+        onSelectTask={noop}
+        onSelectSession={noop}
+        frameIntent={{ sessionKey: "sess-b", seq: 1 }}
+      />,
+    );
+    const aOff = regionWorldOffset("sess-a");
+    expect((container.querySelector(".pc-world") as HTMLElement).style.transform).toBe(
+      `translate(${-aOff.dx}px, ${-aOff.dy}px)`,
+    );
   });
 });
