@@ -61,7 +61,9 @@ describe("InboxPanel display-only question cards (#78)", () => {
 
   it("shows a NEEDS-YOU count pill matching the number of cards", () => {
     render(<InboxPanel tasks={[AWAITING_1, AWAITING_2]} onSelectTask={() => {}} />);
-    expect(screen.getByText("2 NEEDS YOU")).toBeTruthy();
+    // Count after the words so tiny type never scans as "I NEEDS YOU".
+    expect(screen.getByText("NEEDS YOU · 2")).toBeTruthy();
+    expect(screen.getByLabelText("2 tasks need you")).toBeTruthy();
   });
 
   it("renders the manifest's empty-state copy with no cards, and no count pill", () => {

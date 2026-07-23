@@ -40,8 +40,8 @@ const MARK_WAVE: EmblemMark = {
   path: "M2.5 13c1.8-2.2 3.6-3.3 5.5-3.3 1.9 0 3.2 1.1 4.5 2.2 1.3 1.1 2.6 2.2 4.5 2.2 1.9 0 3.7-1.1 5.5-3.3v3.2c-1.8 2.2-3.6 3.3-5.5 3.3-1.9 0-3.2-1.1-4.5-2.2-1.3-1.1-2.6-2.2-4.5-2.2-1.9 0-3.7 1.1-5.5 3.3V13z",
 };
 
-/** Fog — three soft bars. */
-const MARK_FOG: EmblemMark = {
+/** Soft overcast — three soft bars (decorative mark; not stalled-state fog). */
+const MARK_OVERCAST: EmblemMark = {
   kind: "svg",
   viewBox: VIEW,
   path: [
@@ -92,7 +92,7 @@ const WEATHER_ENTRIES: readonly DayChipWeather[] = [
   { mark: MARK_FAIR, condition: "Fair over the cove", wind: "NE 8kn" },
   { mark: MARK_RAIN, condition: "Squall rolling in", wind: "SW 14kn" },
   { mark: MARK_WAVE, condition: "Glass calm", wind: "— 0kn" },
-  { mark: MARK_FOG, condition: "Fog off the point", wind: "N 3kn" },
+  { mark: MARK_OVERCAST, condition: "Soft grey off the point", wind: "N 3kn" },
   { mark: MARK_SUN, condition: "Sun on the harbour", wind: "E 6kn" },
   { mark: MARK_CLOUD, condition: "Clouds over the shoals", wind: "NW 10kn" },
   { mark: MARK_WIND, condition: "Fresh breeze", wind: "SE 12kn" },

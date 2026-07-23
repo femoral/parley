@@ -90,10 +90,11 @@ export function Cockpit() {
               <div className="pc-center__title-stack">
                 <Cartouche ornaments={settings.ornaments} />
                 <nav className="pc-view-nav pc-view-nav--cartouche" aria-label="Cockpit views">
+                  {/* Toggle pair (not page links): aria-pressed, not aria-current="page". */}
                   <button
                     type="button"
                     className={`pc-view-nav__tab${mode === "cove" ? " pc-view-nav__tab--active" : ""}`}
-                    aria-current={mode === "cove" ? "page" : undefined}
+                    aria-pressed={mode === "cove"}
                     onClick={() => setMode("cove")}
                   >
                     Cove
@@ -101,7 +102,7 @@ export function Cockpit() {
                   <button
                     type="button"
                     className={`pc-view-nav__tab${mode === "soundings" ? " pc-view-nav__tab--active" : ""}`}
-                    aria-current={mode === "soundings" ? "page" : undefined}
+                    aria-pressed={mode === "soundings"}
                     onClick={() => setMode("soundings")}
                   >
                     Soundings
