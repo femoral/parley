@@ -17,6 +17,15 @@ import { MARK_ANCHOR, MARK_LENS, MARK_SLOOP } from "../tokens/chrome-glyphs.js";
 import { stateMetaFor } from "../tokens/state-meta.js";
 import type { RosterGroup, RosterSessionOption, RosterSessionSearchHit } from "./types.js";
 
+/** Scaffold the operator pastes into a shell to start a voyage. */
+export function delegateScaffold(): string {
+  return 'parley delegate -n <name> "<goal>"';
+}
+
+function clipboardAvailable(): boolean {
+  return typeof navigator !== "undefined" && typeof navigator.clipboard?.writeText === "function";
+}
+
 /**
  * Imperative surface the roster exposes for the `/` cockpit accelerator
  * (wired in `useCockpitKeys`). Lives in the hud layer so app hooks depend on
@@ -59,6 +68,79 @@ export interface RosterPanelProps {
    * Optional so existing call sites and tests stay prop-only.
    */
   searchRef?: Ref<RosterSearchHandle | null>;
+}
+
+/**
+ * Quiet empty-fleet state: flavor line plus a copyable `parley delegate`
+ * starter (mirrors InboxCard / BriefTab scaffold pattern). Read-only —
+ * the cove stays watch-only; the operator pastes into their own shell.
+ */
+function RosterEmptyStarter() {
+  const [copied, setCopied] = useState(false);
+  const [canCopy, setCanCopy] = useState(true);
+  const revertTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scaffoldRef = useRef<HTMLSpanElement>(null);
+  const text = delegateScaffold();
+
+  useEffect(() => {
+    setCanCopy(clipboardAvailable());
+    return () => {
+      if (revertTimer.current) clearTimeout(revertTimer.current);
+    };
+  }, []);
+
+  const markCopied = useCallback(() => {
+    setCopied(true);
+    if (revertTimer.current) clearTimeout(revertTimer.current);
+    revertTimer.current = setTimeout(() => setCopied(false), 1500);
+  }, []);
+
+  const handleCopy = useCallback(async () => {
+    if (clipboardAvailable()) {
+      try {
+        await navigator.clipboard.writeText(text);
+        markCopied();
+        return;
+      } catch {
+        // Fall through to select-on-click fallback.
+      }
+    }
+    const el = scaffoldRef.current;
+    if (el) {
+      const range = document.createRange();
+      range.selectNodeContents(el);
+      const selection = window.getSelection();
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+      markCopied();
+    } else {
+      setCanCopy(false);
+    }
+  }, [text, markCopied]);
+
+  return (
+    <div className="pc-roster__empty">
+      <p className="pc-roster__empty-title">The cove is quiet — no voyages under way.</p>
+      <p className="pc-roster__empty-hint">Cast off from your shell:</p>
+      <div className="pc-roster__empty-scaffold-row">
+        <code className="pc-roster__empty-snippet">{text}</code>
+        {/* Hidden scaffold text for select-on-click fallback when clipboard fails. */}
+        <span ref={scaffoldRef} className="pc-roster__empty-scaffold" aria-hidden="true">
+          {text}
+        </span>
+        {canCopy && (
+          <button
+            type="button"
+            className="pc-roster__empty-copy"
+            onClick={handleCopy}
+            aria-label={copied ? "Copied delegate command" : "Copy delegate command"}
+          >
+            {copied ? "copied ✓" : "copy"}
+          </button>
+        )}
+      </div>
+    </div>
+  );
 }
 
 function Group({
@@ -536,7 +618,7 @@ export const RosterPanel = memo(function RosterPanel({
               <p className="pc-roster__empty-sub">listening for the fleet</p>
             </div>
           ) : (
-            <p className="pc-roster__empty">The cove is quiet — no voyages under way.</p>
+            <RosterEmptyStarter />
           )
         ) : (
           groups.map((group) => (

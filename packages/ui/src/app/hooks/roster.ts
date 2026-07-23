@@ -25,7 +25,8 @@ export const RECENT_SESSION_CHIP_CAP = 5;
 
 /**
  * How long a failure stays "fresh" (loud) before decaying to the quiet archive
- * treatment, unless the operator acknowledges it sooner by selecting the task.
+ * treatment, unless the operator acknowledges it sooner by selecting the task
+ * (demotion applies on deselection — see {@link isFreshFailure}).
  * Five minutes — long enough to notice on an ambient second monitor, short
  * enough that yesterday's wrecks don't keep shouting.
  */
@@ -68,8 +69,19 @@ export interface FailedFreshness {
    * spell (cleared when the task leaves failed so a re-failure is loud again).
    */
   observedAt: ReadonlyMap<string, number>;
-  /** Task ids the operator has selected at least once while failed. */
+  /**
+   * Task ids the operator has selected at least once while failed. Demotion
+   * still waits until the task is no longer selected (see
+   * {@link selectedTaskId}) so a click does not reshuffle the list under the
+   * pointer / keyboard focus.
+   */
   acknowledged: ReadonlySet<string>;
+  /**
+   * Currently selected task id. An acknowledged failure keeps its elevated
+   * rank and loud treatment while it remains selected; demotion applies on
+   * deselection (Esc/clear or selecting another task).
+   */
+  selectedTaskId?: string | null;
   /** Clock used for timeout decay (cockpit one-second tick). */
   now: number;
 }
@@ -92,9 +104,11 @@ export function shortId(id: string): string {
 }
 
 /**
- * True when a failed task is still inside its freshness window: not
- * acknowledged by selection, and observed less than {@link FAILED_FRESHNESS_MS}
- * ago. Non-failed states are never fresh.
+ * True when a failed task is still inside its freshness window: observed less
+ * than {@link FAILED_FRESHNESS_MS} ago, and either not yet acknowledged or
+ * still selected (so acknowledging on click does not demote the FAILED group
+ * under the user's pointer / keyboard spatial model). Non-failed states are
+ * never fresh. The 5-minute timeout always wins, even while selected.
  */
 export function isFreshFailure(
   taskId: string,
@@ -102,12 +116,18 @@ export function isFreshFailure(
   freshness: FailedFreshness | null | undefined,
 ): boolean {
   if (state !== "failed" || !freshness) return false;
-  if (freshness.acknowledged.has(taskId)) return false;
   const observedAt = freshness.observedAt.get(taskId);
   // Missing observation = just entered failed this frame; treat as fresh so
-  // the first paint after a transition is already loud.
-  if (observedAt === undefined) return true;
-  return freshness.now - observedAt < FAILED_FRESHNESS_MS;
+  // the first paint after a transition is already loud — unless already past
+  // the window (impossible without a stamp, so fall through as true below).
+  if (observedAt !== undefined && freshness.now - observedAt >= FAILED_FRESHNESS_MS) {
+    return false;
+  }
+  // Keep elevated rank while the operator still has this wreck selected, even
+  // after selection has marked it acknowledged. Demotion lands on deselection.
+  if (freshness.selectedTaskId === taskId) return true;
+  if (freshness.acknowledged.has(taskId)) return false;
+  return true;
 }
 
 /**

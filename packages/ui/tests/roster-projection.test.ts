@@ -28,6 +28,7 @@ function freshness(
   return {
     observedAt: overrides.observedAt ?? new Map(),
     acknowledged: overrides.acknowledged ?? new Set(),
+    selectedTaskId: overrides.selectedTaskId,
     now: overrides.now,
   };
 }
@@ -277,7 +278,7 @@ describe("projectRoster failed freshness window (display layer)", () => {
     expect(groups.find((g) => g.state === "failed")!.tasks[0]!.freshFailure).toBe(false);
   });
 
-  it("decays immediately when the task id is acknowledged (selected once)", () => {
+  it("decays when the task id is acknowledged and no longer selected", () => {
     const { groups } = projectRoster(
       [task({ id: "r", state: "running" }), task({ id: "f", state: "failed" })],
       null,
@@ -285,6 +286,61 @@ describe("projectRoster failed freshness window (display layer)", () => {
         now,
         observedAt: new Map([["f", now - 500]]),
         acknowledged: new Set(["f"]),
+        selectedTaskId: null,
+      }),
+    );
+    expect(groups.map((g) => g.state)).toEqual(["running", "failed"]);
+    expect(groups.find((g) => g.state === "failed")!.tasks[0]!.freshFailure).toBe(false);
+  });
+
+  it("keeps elevated rank while an acknowledged failure stays selected (ack-on-deselect)", () => {
+    // Selecting a fresh wreck marks it acknowledged, but demoting under the
+    // click breaks pointer/keyboard spatial model — hold loud rank until leave.
+    const { groups } = projectRoster(
+      [
+        task({ id: "r", state: "running" }),
+        task({ id: "s", state: "stalled" }),
+        task({ id: "f", state: "failed" }),
+      ],
+      null,
+      freshness({
+        now,
+        observedAt: new Map([["f", now - 500]]),
+        acknowledged: new Set(["f"]),
+        selectedTaskId: "f",
+      }),
+    );
+    expect(groups.map((g) => g.state)).toEqual(["stalled", "failed", "running"]);
+    expect(groups.find((g) => g.state === "failed")!.tasks[0]!.freshFailure).toBe(true);
+  });
+
+  it("demotes the acknowledged failure once another task is selected", () => {
+    const { groups } = projectRoster(
+      [
+        task({ id: "r", state: "running" }),
+        task({ id: "f", state: "failed" }),
+      ],
+      null,
+      freshness({
+        now,
+        observedAt: new Map([["f", now - 500]]),
+        acknowledged: new Set(["f"]),
+        selectedTaskId: "r",
+      }),
+    );
+    expect(groups.map((g) => g.state)).toEqual(["running", "failed"]);
+    expect(groups.find((g) => g.state === "failed")!.tasks[0]!.freshFailure).toBe(false);
+  });
+
+  it("still decays on the 5-minute timeout even while the failure is selected", () => {
+    const { groups } = projectRoster(
+      [task({ id: "r", state: "running" }), task({ id: "f", state: "failed" })],
+      null,
+      freshness({
+        now,
+        observedAt: new Map([["f", now - FAILED_FRESHNESS_MS]]),
+        acknowledged: new Set(["f"]),
+        selectedTaskId: "f",
       }),
     );
     expect(groups.map((g) => g.state)).toEqual(["running", "failed"]);
@@ -317,6 +373,33 @@ describe("failed freshness helpers", () => {
   it("isFreshFailure is false for non-failed states and without a freshness bag", () => {
     expect(isFreshFailure("t", "running", freshness({ now: 0 }))).toBe(false);
     expect(isFreshFailure("t", "failed", null)).toBe(false);
+  });
+
+  it("isFreshFailure stays true for an acknowledged task while it remains selected", () => {
+    expect(
+      isFreshFailure(
+        "f",
+        "failed",
+        freshness({
+          now: 1_000,
+          observedAt: new Map([["f", 500]]),
+          acknowledged: new Set(["f"]),
+          selectedTaskId: "f",
+        }),
+      ),
+    ).toBe(true);
+    expect(
+      isFreshFailure(
+        "f",
+        "failed",
+        freshness({
+          now: 1_000,
+          observedAt: new Map([["f", 500]]),
+          acknowledged: new Set(["f"]),
+          selectedTaskId: null,
+        }),
+      ),
+    ).toBe(false);
   });
 
   it("displayAttentionRank lifts fresh failed just under stalled", () => {
