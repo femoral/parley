@@ -1,55 +1,81 @@
 # parley
 
-**Delegate coding tasks to agent CLIs — any of them — and stay in command.**
+**Give your agent a crew: one orchestrating agent, many coding agents, every
+branch reviewed before it lands.**
 
-Parley runs child coding agents (Codex, Claude Code, Grok, Gemini, OpenCode,
-Goose, and more) in isolated git worktrees, coordinated by one local daemon.
-You — or the agent driving you — write the brief, answer questions, review the
-branch, and record how well it went. Parley never merges; judgment stays with
-the orchestrator.
+Parley is built for agent-to-agent delegation. The agent you already work in —
+Claude Code or any other harness — uses the `parley` CLI to spawn child coding
+agents (Codex, Grok, and more) in isolated git worktrees, coordinated by one
+local daemon. The orchestrator writes the brief, answers the child's questions,
+reviews the branch, and decides what merges. Parley never merges; judgment
+stays with the orchestrator.
 
+```mermaid
+flowchart LR
+    O["🧭 Orchestrating agent<br/>(your main harness)"] -- "delegate · watch · answer" --> D["parley daemon<br/>(local, sqlite state)"]
+    D --> C1["Codex child<br/>worktree 1"]
+    D --> C2["Grok child<br/>worktree 2"]
+    D --> C3["…any harness<br/>worktree N"]
+    C1 -. "questions · reports" .-> D
+    C2 -. "questions · reports" .-> D
+    C3 -. "questions · reports" .-> D
+    D -- "attention-inbox events" --> O
 ```
-┌─────────────┐   delegate / watch / answer   ┌────────┐   spawn-per-turn   ┌─────────────┐
-│ orchestrator │ ────────────────────────────▶ │ daemon │ ─────────────────▶ │ child agent │
-│ (you / an    │ ◀──────────────────────────── │ sqlite │ ◀───────────────── │ in its own  │
-│  agent CLI)  │      attention inbox          │  state │   MCP · HTTP · CLI │  worktree   │
-└─────────────┘                               └────────┘                    └─────────────┘
-```
 
-## Why
-
-- **Fan-out**: ten briefs, ten worktrees, ten agents in parallel — no
-  stepping on each other, every branch reviewable on its own.
-- **One wait primitive**: `parley watch` delivers exactly the events that
-  need you (question, stall, failure, completion), priority-ordered, with
-  at-least-once redelivery until you ack. No polling loops.
-- **Vendor-agnostic**: one interface over 12 harnesses, plus a public plugin
-  contract for your own.
-- **Accountable**: every task records tokens (input/output/cached), duration,
-  profile, size/difficulty classification, and your evaluation — sliceable by
-  vendor, model, or profile with `parley metrics`.
+- **Fan-out**: ten briefs, ten worktrees, ten agents in parallel — no stepping
+  on each other, every branch reviewable on its own.
+- **One wait primitive**: `parley watch` delivers exactly the events that need
+  the orchestrator (question, stall, failure, completion), with at-least-once
+  redelivery until acked. No polling loops.
+- **Vendor-agnostic**: one interface over the supported harnesses, plus a
+  public adapter contract for your own.
+- **Accountable**: every task records tokens, duration, profile, and
+  classification — sliceable by vendor, model, or profile with `parley metrics`.
 
 ## Install
 
 ```bash
-npm install -g @useparley/cli        # the CLI (daemon auto-spawns on first use)
-npm install -g @useparley/ui        # optional: the web cockpit (parley ui)
+npm install -g @useparley/cli   # the CLI (daemon auto-spawns on first use)
+npm install -g @useparley/ui    # optional: the web cockpit (parley ui)
 ```
 
 Requires Node ≥ 24 and git. Each vendor CLI you delegate to must be installed
 and authenticated on the machine that runs it.
 
-## Quickstart
+## Set up: `parley init`
+
+One command, run in your repo:
 
 ```bash
-cd your-repo
+parley init
+```
+
+It installs the orchestrator skills, detects which harness CLIs are on your
+PATH, refreshes the model catalog, and walks you through an opt-in picker:
+which vendors to configure, which models to allow, which efforts, and the
+defaults. Everything is skippable — submit an empty selection to move on.
+
+| Skill | Purpose |
+| ----- | ------- |
+| `parley-delegate` | the orchestrator loop: brief → delegate → watch → answer → review |
+| `parley-wizard` | conversational setup: profiles, task types, project config |
+
+Both skills ship with model invocation **disabled by default** — they load only
+when invoked explicitly (`/parley-delegate`, `/parley-wizard`), since that is
+how they are used most of the time. Re-enable auto-triggering by removing
+`disable-model-invocation: true` from a skill's frontmatter.
+
+## Usage: the delegation loop
+
+```bash
+parley session                    # register the orchestrating session once
 
 # 1. Delegate (returns immediately with a pending task)
-parley delegate -v codex -n fix-flaky --session s1 \
+parley delegate -v codex -m gpt-5.6-sol --effort low -n fix-flaky \
   "Fix the flaky retry test in packages/api. Done when 'pnpm test' is green."
 
 # 2. Wait — the only wait primitive. Exit codes tell you what happened:
-parley watch --json --session s1
+parley watch --json
 #   3 = child asked a question  → parley answer <task> "…"
 #   4 = stalled                 → parley answer resumes it
 #   5 = failed                  → triage, then watch --ack <seq>
@@ -59,43 +85,66 @@ parley watch --json --session s1
 
 # 3. Review & integrate — the branch is yours to judge
 git diff main..parley/t1-fix-flaky
-parley eval t1 --score 9 --feedback "clean fix, good test"
-parley clean t1        # removes the worktree, keeps the branch
+parley clean t1                   # removes the worktree, keeps the branch
 ```
 
-Orchestrating from an agent harness? `parley init` one-shot setup installs the
-orchestrator skills (`parley-delegate`, `parley-wizard`), detects harness CLIs,
-refreshes the model catalog, writes delegation-ready vendor allowlists/defaults,
-and offers first-party session-provenance plugin setup. The wizard is optional
-after init; use it when you want to customize eval, task types, rubrics, profiles,
-or other advanced settings.
+Every event that needs attention flows back through the same loop — questions
+mid-task, stalls, failures, and the final report:
+
+```mermaid
+sequenceDiagram
+    participant O as Orchestrating agent
+    participant P as parley CLI
+    participant D as daemon
+    participant C as child harness
+
+    O->>P: delegate -v codex … "brief"
+    D->>C: spawn in isolated worktree
+    O->>P: watch (blocks)
+    C-->>D: ask_orchestrator("which retry policy?")
+    D-->>O: task.question (exit 3)
+    O->>P: answer t1 "exponential, cap 30s"
+    O->>P: watch (blocks)
+    C-->>D: submit_report + commits on branch
+    D-->>O: task.completed (exit 6)
+    O->>O: review diff, merge or reject
+    O->>P: watch --ack <seq>
+    P-->>O: exit 0 — inbox empty
+```
+
+`parley fix <task> "<brief>"` opens a linked reattempt when a review finds
+gaps; `parley status`, `parley logs`, and `parley metrics` cover inspection
+and aggregates. `parley info` prints the effective project configuration as
+orchestrator-readable prose.
 
 ## Vendors
 
-| Vendor | CLI | Notes |
-| ------ | --- | ----- |
-| `codex` | OpenAI Codex CLI | flags-only injection, rich usage |
-| `grok` | Grok Build | config-file injection, custom sandbox profiles |
-| `claude` | Claude Code | stream-json + strict MCP isolation |
-| `gemini` | Gemini CLI | project settings injection |
-| `opencode` | OpenCode | hermetic `OPENCODE_CONFIG_CONTENT` |
-| `goose` | Goose | hermetic `GOOSE_PATH_ROOT`, name-based resume fallback |
-| `pi` | Pi coding agent | MCP via `pi-mcp-adapter` |
-| `cline` | Cline CLI | private data-dir isolation |
-| `kilo` | Kilo CLI | `KILO_CONFIG_CONTENT` injection |
-| `openhands` | OpenHands | env-isolated persistence dirs |
-| `hermes` | Hermes Agent | quiet-mode text surface, private `HERMES_HOME` |
-| `openclaw` | OpenClaw | session-key resume, state-dir isolation |
+| Vendor | CLI | Status |
+| ------ | --- | ------ |
+| `codex` | OpenAI Codex CLI | ✅ tested |
+| `grok` | Grok Build | ✅ tested |
+| `claude` | Claude Code | 🧪 under testing |
+| `gemini` | Gemini CLI | 🧪 under testing |
+| `opencode` | OpenCode | 🧪 under testing |
+| `goose` | Goose | 🧪 under testing |
+| `pi` | Pi coding agent | 🧪 under testing |
+| `cline` | Cline CLI | 🧪 under testing |
+| `kilo` | Kilo CLI | 🧪 under testing |
+| `openhands` | OpenHands | 🧪 under testing |
+| `hermes` | Hermes Agent | 🧪 under testing |
+| `openclaw` | OpenClaw | 🧪 under testing |
 
-Every adapter is written against a pinned, live-verified research doc in
-[`docs/research/`](docs/research/) and normalizes the same posture surface:
-`--sandbox read-only|workspace|full` and `--no-network` (ADR-0006). Model and
-reasoning effort pass through opaquely (`-m`, `--effort`).
+Every adapter normalizes the same posture surface — `--sandbox
+read-only|workspace|full` and `--no-network` — and passes model and reasoning
+effort through opaquely (`-m`, `--effort`).
 
-**Write your own**: adapters are a public contract in `@useparley/core`.
-Point `vendors.<id>.plugin` at your module and the daemon loads it at startup
-— see [docs/agents/adapter-authoring.md](docs/agents/adapter-authoring.md)
-and ADR-0009.
+**Write your own**: adapters are a public contract in `@useparley/core`. Point
+`vendors.<id>.plugin` at your module and the daemon loads it at startup — see
+[docs/agents/adapter-authoring.md](docs/agents/adapter-authoring.md).
+
+> **Note:** adapter support exists for all vendors listed, but only `codex`
+> and `grok` have been exercised in sustained real-world orchestration so far.
+> The rest are implemented and pass their suites, and are still being tested.
 
 ## Settings & profiles
 
@@ -103,23 +152,21 @@ and ADR-0009.
 
 ```json
 {
-  "daemon":  { "url": "http://build-box:7777" },
   "vendors": {
-    "grok":   { "env": { "XAI_API_KEY": "…" } },
-    "mycli":  { "plugin": "parley-adapter-mycli" }
+    "grok":  { "env": { "XAI_API_KEY": "…" } },
+    "mycli": { "plugin": "parley-adapter-mycli" }
   },
   "profiles": {
     "heavy": { "vendor": "grok",  "model": "grok-4.5", "effort": "high" },
-    "cheap": { "vendor": "codex", "effort": "low", "args": ["--foo"] }
-  },
-  "runners": { "gpu-box": { "token": "…" } }
+    "cheap": { "vendor": "codex", "effort": "low" }
+  }
 }
 ```
 
 `parley delegate --profile heavy …` replaces the vendor/model/effort flags;
 the profile is recorded on the task, so metrics can compare profiles
 head-to-head. Vendor `bin`/`args`/`env` apply to every spawn of that vendor;
-explicit flags always win. (ADR-0010)
+explicit flags always win.
 
 ## How children talk back
 
@@ -131,30 +178,7 @@ Three transports, one contract (`submit_report`, `ask_orchestrator`):
   gets `PARLEY_HUB_URL` / `PARLEY_TASK_ID` in env and `.parley/child.json`
   in its workspace.
 - **CLI** — `parley child report|ask|task` wraps the HTTP surface for shell
-  scripts and MCP-less harnesses. (ADR-0011)
-
-## Remote runners
-
-Run children on other machines while keeping one daemon and one inbox:
-install `@useparley/runner` on the remote host, give it the daemon URL +
-a token from `runners.<name>`, and delegate with `--runner <name>`. The
-runner leases tasks, executes them with the same adapters and worktree
-semantics, streams logs and heartbeats back, and pushes the finished branch
-to your git remote for review. Outbound-only from the runner — no reach-in
-credentials. (ADR-0012, [docs/agents/remote-runners.md](docs/agents/remote-runners.md))
-
-## Metrics & evaluation
-
-```bash
-parley metrics --group-by profile        # tokens I/O/C, durations, evals
-parley eval t42 --score 8 --feedback "…" # your judgment, recorded
-parley delegate --size M --difficulty hard …   # classify at delegate time
-```
-
-`/parley-wizard` interviews you into project eval settings, task types,
-versioned rubrics, and classification guidance under `.parley/` — so scoring
-and metrics stay consistent across orchestrators. The web cockpit (`parley ui`)
-renders the same aggregates.
+  scripts and MCP-less harnesses.
 
 ## The cockpit
 
@@ -162,25 +186,45 @@ renders the same aggregates.
 transcript tail, Q&A history, usage, and metrics. Optional install; the
 daemon serves it when present.
 
-## Skills
+## Experimental
 
-| Skill | Purpose |
-| ----- | ------- |
-| `parley-delegate` | the orchestrator loop: brief → delegate → watch → answer → review |
-| `parley-wizard` | conversational setup: eval, types, rubrics, classification, daemon config |
+These features work but have not been thoroughly tested yet — expect rough
+edges.
 
-`parley init` — one-shot skills + delegation-ready config + harness detection +
-models + provenance-plugin setup
-(`--layout`/`--scope`/`--skill`; defaults: layout=agents, scope=project-in-git).
-`parley skills install` remains as a deprecated skills-only alias.
+### Remote runners & remote daemon
 
-## Design notes
+Run children on other machines while keeping one daemon and one inbox:
 
-The decision record lives in [`docs/adr/`](docs/adr/) — worth reading in
-order if you want the why: spawn-per-turn adapters (0004), parley-owned
-worktrees (0005), sandbox posture (0006), the attention inbox (0007/0008),
-plugins (0009), settings/profiles (0010), child channels (0011), remote
-runners (0012). Domain vocabulary: [`CONTEXT.md`](CONTEXT.md).
+```bash
+# on the remote host
+npm install -g @useparley/runner    # give it the daemon URL + a token
+
+# in ~/.parley/parley.json
+# "daemon":  { "url": "http://build-box:7777" },
+# "runners": { "gpu-box": { "token": "…" } }
+
+parley delegate --runner gpu-box …
+```
+
+The runner leases tasks, executes them with the same adapters and worktree
+semantics, streams logs and heartbeats back, and pushes the finished branch to
+your git remote for review. Outbound-only from the runner — no reach-in
+credentials. Details: [docs/agents/remote-runners.md](docs/agents/remote-runners.md).
+
+### Evaluation flow
+
+Structured, rubric-based scoring of every delegated task:
+
+```bash
+parley eval t42 --answers '{"tests-pass": true, "brief-followed": true}' \
+  --feedback "clean fix, good regression test"
+parley delegate --size M --difficulty hard …   # classify at delegate time
+```
+
+Set it up with `/parley-wizard`, which interviews you into project eval
+settings, task types, versioned rubrics, and classification guidance under
+`.parley/` — the daemon computes scores and baselines from your boolean
+answers, and `parley metrics` (and the cockpit) render the aggregates.
 
 ## Development
 
@@ -190,6 +234,4 @@ pnpm typecheck && pnpm test && pnpm lint
 node packages/cli/bin/parley.mjs --help
 ```
 
-Issues are triaged with the labels in
-[docs/agents/triage-labels.md](docs/agents/triage-labels.md); bug reports per
-the template in the delegate skill. PRs welcome — adapters especially.
+PRs welcome — adapters especially.
