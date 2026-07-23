@@ -3563,6 +3563,7 @@ button.pc-roster__meta--copy:focus-visible {
 /* A tail awaiting its first daemon response is neutral and quiet. */
 .pc-logstream__status--connecting {
   color: var(--ink-label);
+}
 
 /* Unanswered Q&A command handoff — the same mono well + compact copy idiom
  * used by inbox scaffolds, kept visible here so the inspector never dead-ends. */
