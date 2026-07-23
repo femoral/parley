@@ -1,14 +1,12 @@
 import { memo } from "react";
 import { Mark } from "../primitives/index.js";
-import { MARK_MALLET, MARK_SCROLL, MARK_SPARK, MARK_SPYGLASS } from "../tokens/chrome-glyphs.js";
+import { MARK_MALLET, MARK_SCROLL, MARK_SPYGLASS } from "../tokens/chrome-glyphs.js";
 
 export interface SettingsBarProps {
-  ornaments: boolean;
   showKit: boolean;
   followLogs: boolean;
   /** Single-key accelerators on/off (WCAG 2.1.4 opt-out). */
   shortcuts: boolean;
-  onToggleOrnaments: () => void;
   onToggleShowKit: () => void;
   onToggleFollowLogs: () => void;
   onToggleShortcuts: () => void;
@@ -17,7 +15,7 @@ export interface SettingsBarProps {
 /**
  * Layer 2 — the cockpit's settings strip (design-manifest §7's "Toggles ...
  * all worth keeping as settings"; component-system spec contract 5: "settings
- * toggles from day one" — ornaments, kit band, live-log follow, #70). Plain
+ * toggles from day one" — kit band, live-log follow, #70). Plain
  * booleans + callbacks (contract 2) — the app layer owns the persisted state
  * (`useSettings`), this only renders it. Each toggle is a native
  * `aria-pressed` button, same pattern as the roster's session chips, so it
@@ -27,28 +25,15 @@ export interface SettingsBarProps {
  * identity-stable (`useCallback`) between real preference changes.
  */
 export const SettingsBar = memo(function SettingsBar({
-  ornaments,
   showKit,
   followLogs,
   shortcuts,
-  onToggleOrnaments,
   onToggleShowKit,
   onToggleFollowLogs,
   onToggleShortcuts,
 }: SettingsBarProps) {
   return (
     <div className="pc-settings" role="group" aria-label="Cockpit settings">
-      <button
-        type="button"
-        className={`pc-settings__toggle${ornaments ? " pc-settings__toggle--on" : ""}`}
-        aria-pressed={ornaments}
-        onClick={onToggleOrnaments}
-      >
-        <span aria-hidden="true">
-          <Mark mark={MARK_SPARK} size={11} />
-        </span>{" "}
-        Ornaments
-      </button>
       {import.meta.env.DEV && (
         <button
           type="button"

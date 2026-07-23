@@ -2,12 +2,10 @@ import { useCallback, useEffect, useState } from "react";
 
 /**
  * The cockpit's persisted preferences (component-system spec contract 5:
- * "settings toggles from day one" — ornaments, kit band, live-log follow;
+ * "settings toggles from day one" — kit band, live-log follow;
  * design-manifest §7's "Toggles ... all worth keeping as settings", #70).
  */
 export interface Settings {
-  /** Corner flourishes on the cartouche/premium plates (design-manifest §2.11). */
-  ornaments: boolean;
   /** The bottom style-guide strip (design-manifest §3's "kit band ships behind
    * a dev toggle") — off by default; this is that toggle. */
   showKit: boolean;
@@ -19,7 +17,7 @@ export interface Settings {
   shortcuts: boolean;
 }
 
-const DEFAULTS: Settings = { ornaments: true, showKit: false, followLogs: true, shortcuts: true };
+const DEFAULTS: Settings = { showKit: false, followLogs: true, shortcuts: true };
 
 /** One versioned key — a shape change bumps the suffix rather than migrating
  * old shapes, since these are cosmetic prefs a user can just re-toggle. */
@@ -40,7 +38,6 @@ function readSettings(): Settings {
     const parsed: unknown = JSON.parse(raw);
     if (!isSettings(parsed)) return DEFAULTS;
     return {
-      ornaments: typeof parsed.ornaments === "boolean" ? parsed.ornaments : DEFAULTS.ornaments,
       showKit: typeof parsed.showKit === "boolean" ? parsed.showKit : DEFAULTS.showKit,
       followLogs: typeof parsed.followLogs === "boolean" ? parsed.followLogs : DEFAULTS.followLogs,
       shortcuts: typeof parsed.shortcuts === "boolean" ? parsed.shortcuts : DEFAULTS.shortcuts,
@@ -53,7 +50,6 @@ function readSettings(): Settings {
 }
 
 export interface SettingsView extends Settings {
-  toggleOrnaments: () => void;
   toggleShowKit: () => void;
   toggleFollowLogs: () => void;
   toggleShortcuts: () => void;
@@ -79,10 +75,6 @@ export function useSettings(): SettingsView {
     }
   }, [settings]);
 
-  const toggleOrnaments = useCallback(
-    () => setSettings((prev) => ({ ...prev, ornaments: !prev.ornaments })),
-    [],
-  );
   const toggleShowKit = useCallback(
     () => setSettings((prev) => ({ ...prev, showKit: !prev.showKit })),
     [],
@@ -96,5 +88,5 @@ export function useSettings(): SettingsView {
     [],
   );
 
-  return { ...settings, toggleOrnaments, toggleShowKit, toggleFollowLogs, toggleShortcuts };
+  return { ...settings, toggleShowKit, toggleFollowLogs, toggleShortcuts };
 }

@@ -1523,8 +1523,11 @@ button.pc-roster__meta--copy:focus-visible {
  * that opens a brass-framed popover above the settings strip. Anchor is
  * position:relative; the popover uses --z-popover and opens upward so it
  * is not clipped by the board inset (ancestors do not set overflow on the
- * settings strip). Content reuses the layer-0 state/faction language —
- * see ChartKey.tsx.
+ * settings strip). Anchored left (`left: 0`) rather than right, since the
+ * trigger sits at the left edge of the footer row (`justify-self: start`
+ * in cockpit.css) — a right-anchored popover would grow off-screen past
+ * the viewport's left edge. Content reuses the layer-0 state/faction
+ * language — see ChartKey.tsx.
  */
 .pc-chart-key {
   position: relative;
@@ -1533,7 +1536,7 @@ button.pc-roster__meta--copy:focus-visible {
 .pc-chart-key__pop {
   position: absolute;
   bottom: calc(100% + 8px);
-  right: 0;
+  left: 0;
   z-index: var(--z-popover);
   width: min(320px, 82vw);
   max-height: min(420px, 55vh);

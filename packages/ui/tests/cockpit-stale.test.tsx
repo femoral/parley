@@ -66,11 +66,9 @@ function baseView(overrides: Partial<CockpitView> = {}): CockpitView {
     freshFailureTaskIds: [],
     inspector: null,
     settings: {
-      ornaments: false,
       showKit: false,
       followLogs: true,
       shortcuts: true,
-      toggleOrnaments: () => {},
       toggleShowKit: () => {},
       toggleFollowLogs: () => {},
       toggleShortcuts: () => {},

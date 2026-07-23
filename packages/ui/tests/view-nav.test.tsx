@@ -65,11 +65,9 @@ function baseView(overrides: Partial<CockpitView> = {}): CockpitView {
     freshFailureTaskIds: [],
     inspector: null,
     settings: {
-      ornaments: false,
       showKit: false,
       followLogs: true,
       shortcuts: true,
-      toggleOrnaments: () => {},
       toggleShowKit: () => {},
       toggleFollowLogs: () => {},
       toggleShortcuts: () => {},
@@ -142,55 +140,13 @@ describe("Cockpit view nav framed by Plate (#126)", () => {
     expect(cockpitState.setMode).toHaveBeenCalledWith("soundings");
   });
 
-  it("renders the compass rose only in Cove mode when ornaments are on", () => {
-    cockpitState.view = baseView({
-      mode: "cove",
-      settings: {
-        ornaments: true,
-        showKit: false,
-        followLogs: true,
-        shortcuts: true,
-        toggleOrnaments: () => {},
-        toggleShowKit: () => {},
-        toggleFollowLogs: () => {},
-        toggleShortcuts: () => {},
-      },
-    });
+  it("renders the compass rose only in Cove mode", () => {
+    cockpitState.view = baseView({ mode: "cove" });
     const { container, rerender } = render(<Cockpit />);
     expect(container.querySelector(".pc-compass")).toBeTruthy();
 
-    cockpitState.view = baseView({
-      mode: "soundings",
-      settings: {
-        ornaments: true,
-        showKit: false,
-        followLogs: true,
-        shortcuts: true,
-        toggleOrnaments: () => {},
-        toggleShowKit: () => {},
-        toggleFollowLogs: () => {},
-        toggleShortcuts: () => {},
-      },
-    });
+    cockpitState.view = baseView({ mode: "soundings" });
     rerender(<Cockpit />);
-    expect(container.querySelector(".pc-compass")).toBeNull();
-  });
-
-  it("hides the compass rose when Ornaments is off", () => {
-    cockpitState.view = baseView({
-      mode: "cove",
-      settings: {
-        ornaments: false,
-        showKit: false,
-        followLogs: true,
-        shortcuts: true,
-        toggleOrnaments: () => {},
-        toggleShowKit: () => {},
-        toggleFollowLogs: () => {},
-        toggleShortcuts: () => {},
-      },
-    });
-    const { container } = render(<Cockpit />);
     expect(container.querySelector(".pc-compass")).toBeNull();
   });
 });

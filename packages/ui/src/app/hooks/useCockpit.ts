@@ -223,7 +223,7 @@ export interface CockpitView {
   freshFailureTaskIds: string[];
   /** The selected task's inspector payload (#68), or `null` with no selection. */
   inspector: InspectorTask | null;
-  /** Persisted cockpit preferences (#70): ornaments, kit band, log follow. */
+  /** Persisted cockpit preferences (#70): kit band, log follow. */
   settings: SettingsView;
   /**
    * Debounced chart honesty signal: snapshot stream lost and/or health

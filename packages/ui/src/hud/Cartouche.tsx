@@ -14,9 +14,9 @@ function Flank() {
 
 /** Layer 2 — the title cartouche: PARLEY COVE engraved in brass, flanked by
  * spark–anchor–spark marks, with corner flourishes (design-manifest §4.3). */
-export function Cartouche({ ornaments = true }: { ornaments?: boolean }) {
+export function Cartouche() {
   return (
-    <Plate variant="cartouche" ornaments={ornaments} padded={false}>
+    <Plate variant="cartouche" ornaments padded={false}>
       <div className="pc-cartouche">
         <div className="pc-cartouche__title-row">
           <Flank />

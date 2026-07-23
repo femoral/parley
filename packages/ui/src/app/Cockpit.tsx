@@ -105,7 +105,7 @@ export function Cockpit() {
 
             <div className="pc-center__head">
               <div className="pc-center__title-stack">
-                <Cartouche ornaments={settings.ornaments} />
+                <Cartouche />
               </div>
               <DayChip day={day} daemonUptimeDays={daemonUptimeDays} clock={clock} />
             </div>
@@ -122,9 +122,8 @@ export function Cockpit() {
               </div>
             ) : (
               <div className="pc-scene">
-                {/* Icon-scale rose: top-left of the scene stage, under the head.
-                    Ornaments-off stills this ambient chrome with the rest. */}
-                <CompassRose ornaments={settings.ornaments} />
+                {/* Icon-scale rose: top-left of the scene stage, under the head. */}
+                <CompassRose />
                 {/* Sea is the room's backdrop (#75) — no Plate card chrome. */}
                 {chartStale && (
                   <div className="pc-stale-band" role="status" aria-live="polite">
@@ -183,11 +182,9 @@ export function Cockpit() {
             </button>
           </nav>
           <SettingsBar
-            ornaments={settings.ornaments}
             showKit={settings.showKit}
             followLogs={settings.followLogs}
             shortcuts={settings.shortcuts}
-            onToggleOrnaments={settings.toggleOrnaments}
             onToggleShowKit={settings.toggleShowKit}
             onToggleFollowLogs={settings.toggleFollowLogs}
             onToggleShortcuts={settings.toggleShortcuts}
