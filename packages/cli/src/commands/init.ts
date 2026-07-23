@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { styleText } from "node:util";
 import * as p from "@clack/prompts";
 import {
   getShippedVendorModels,
@@ -188,28 +189,52 @@ function defaultMarker(model: ModelEntry): true | string {
 /**
  * Build a valid authoritative allowlist from advisory catalog entries.
  *
- * When `defaultEffort` is provided it is used as the default-combo marker for
- * the default model; otherwise the marker is derived via `defaultMarker`
- * (catalog `default_effort` when valid, else first effort / `true`).
+ * `effortsById` narrows a model's allowed efforts (interactive opt-in);
+ * omitted models keep every catalog effort. When `defaultEffort` is provided
+ * it is used as the default-combo marker for the default model; otherwise the
+ * marker is derived via `defaultMarker` over the *allowed* efforts (catalog
+ * `default_effort` when still allowed, else first allowed effort / `true`).
  */
 export function seedVendorModels(
   models: readonly ModelEntry[],
   selectedIds: readonly string[] = models.map((model) => model.id),
   defaultId: string | undefined = selectedIds[0],
   defaultEffort?: true | string,
+  effortsById?: Readonly<Record<string, readonly string[]>>,
 ): Record<string, VendorModelAllowlistEntry> {
   const selected = new Set(selectedIds);
   const allowlist: Record<string, VendorModelAllowlistEntry> = {};
   for (const model of models) {
     if (!selected.has(model.id)) continue;
+    const efforts = [...(effortsById?.[model.id] ?? model.efforts)];
     allowlist[model.id] = {
-      efforts: [...model.efforts],
+      efforts,
       ...(model.id === defaultId
-        ? { default: defaultEffort ?? defaultMarker(model) }
+        ? { default: defaultEffort ?? defaultMarker({ ...model, efforts }) }
         : {}),
     };
   }
   return allowlist;
+}
+
+/**
+ * Surface clack's native `a` (toggle all) / `i` (invert) multiselect shortcuts
+ * in the instructions footer rendered below the option list, next to the
+ * Space/Enter hints. The exported instructions array is module state, so this
+ * runs once per process; the guard also tolerates test mocks of the module
+ * that don't export the array.
+ */
+let multiselectShortcutHintsInstalled = false;
+function ensureMultiselectShortcutHints(): void {
+  if (multiselectShortcutHintsInstalled) return;
+  multiselectShortcutHintsInstalled = true;
+  const instructions = (p as { MULTISELECT_INSTRUCTIONS?: string[] }).MULTISELECT_INSTRUCTIONS;
+  if (Array.isArray(instructions)) {
+    instructions.push(
+      `${styleText("dim", "a:")} toggle all`,
+      `${styleText("dim", "i:")} invert`,
+    );
+  }
 }
 
 /** Interactive model/effort allowlist for one vendor. Exported for unit tests. */
@@ -217,17 +242,37 @@ export async function promptVendorModels(
   vendor: string,
   models: readonly ModelEntry[],
 ): Promise<Record<string, VendorModelAllowlistEntry>> {
+  ensureMultiselectShortcutHints();
   const selected = await p.multiselect({
-    message: `${vendor}: models to allow (a: toggle all, i: invert)`,
+    message: `${vendor}: models to allow`,
     options: models.map((model) => ({
       value: model.id,
       label: model.id,
       hint: model.efforts.length > 0 ? `efforts: ${model.efforts.join(", ")}` : "no effort flag",
     })),
-    initialValues: models.map((model) => model.id),
+    initialValues: [],
     required: true,
   });
   if (p.isCancel(selected)) throw new PromptCancelled();
+
+  // Efforts are opt-in per model; single-effort models have nothing to narrow.
+  const effortsById: Record<string, string[]> = {};
+  for (const model of models) {
+    if (!selected.includes(model.id) || model.efforts.length < 2) continue;
+    const efforts = await p.multiselect({
+      message: `${vendor}: efforts to allow for ${model.id}`,
+      options: model.efforts.map((effort) => ({
+        value: effort,
+        label: effort,
+        ...(effort === model.default_effort ? { hint: "catalog default" } : {}),
+      })),
+      initialValues: [],
+      required: true,
+    });
+    if (p.isCancel(efforts)) throw new PromptCancelled();
+    effortsById[model.id] = efforts;
+  }
+
   const defaultId = await p.select({
     message: `${vendor}: default model`,
     options: selected.map((id) => ({ value: id, label: id })),
@@ -236,22 +281,25 @@ export async function promptVendorModels(
   if (p.isCancel(defaultId)) throw new PromptCancelled();
 
   const defaultModel = models.find((model) => model.id === defaultId);
+  const allowedEfforts = defaultModel
+    ? effortsById[defaultModel.id] ?? defaultModel.efforts
+    : [];
   let defaultEffort: true | string | undefined;
-  if (defaultModel && defaultModel.efforts.length >= 2) {
-    const resolved = defaultMarker(defaultModel);
+  if (defaultModel && allowedEfforts.length >= 2) {
+    const resolved = defaultMarker({ ...defaultModel, efforts: [...allowedEfforts] });
     // defaultMarker returns a string when efforts.length >= 2 (catalog default
     // or first effort); never `true` in that branch.
-    const initialEffort = typeof resolved === "string" ? resolved : defaultModel.efforts[0]!;
+    const initialEffort = typeof resolved === "string" ? resolved : allowedEfforts[0]!;
     const effort = await p.select({
       message: `${vendor}: default effort for ${defaultId}`,
-      options: defaultModel.efforts.map((e) => ({ value: e, label: e })),
+      options: allowedEfforts.map((e) => ({ value: e, label: e })),
       initialValue: initialEffort,
     });
     if (p.isCancel(effort)) throw new PromptCancelled();
     defaultEffort = effort;
   }
 
-  return seedVendorModels(models, selected, defaultId, defaultEffort);
+  return seedVendorModels(models, selected, defaultId, defaultEffort, effortsById);
 }
 
 /** Populate only missing daemon-owned delegation defaults; never replace values. */

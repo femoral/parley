@@ -21,6 +21,7 @@ vi.mock("@clack/prompts", () => ({
   multiselect: vi.fn(),
   select: vi.fn(),
   isCancel: (value: unknown) => value === CANCEL,
+  MULTISELECT_INSTRUCTIONS: [] as string[],
 }));
 
 /** PATH with only git's directory — no vendor CLIs, but repo detection still works. */
@@ -100,6 +101,24 @@ describe("parley init", () => {
     });
   });
 
+  it("narrows a model's efforts via effortsById and derives the marker from the allowed set", () => {
+    const models = seedVendorModels(
+      [
+        { id: "one", efforts: ["low", "medium", "high"], default_effort: "low" },
+        { id: "two", efforts: ["low", "high"], default_effort: null },
+      ],
+      ["one", "two"],
+      "one",
+      undefined,
+      { one: ["medium", "high"], two: ["low"] },
+    );
+    expect(models).toEqual({
+      // Catalog default_effort "low" is no longer allowed → first allowed effort.
+      one: { efforts: ["medium", "high"], default: "medium" },
+      two: { efforts: ["low"] },
+    });
+  });
+
   it("falls back to defaultMarker when default effort is not passed", () => {
     // Non-interactive path: single-arg seed must remain derivation-only.
     const models = seedVendorModels([
@@ -120,18 +139,51 @@ describe("parley init", () => {
       vi.mocked(p.select).mockReset();
     });
 
-    it("prompts for default effort when the default model has two or more efforts", async () => {
+    it("starts the model multiselect deselected and surfaces a/i in the instructions footer", async () => {
+      const catalog = [{ id: "solo", efforts: ["low"], default_effort: null }];
+      vi.mocked(p.multiselect).mockResolvedValueOnce(["solo"]);
+      vi.mocked(p.select).mockResolvedValueOnce("solo");
+
+      await promptVendorModels("fake", catalog);
+
+      const modelCall = vi.mocked(p.multiselect).mock.calls[0]![0] as {
+        message: string;
+        initialValues: string[];
+      };
+      expect(modelCall.message).toBe("fake: models to allow");
+      expect(modelCall.initialValues).toEqual([]);
+      // Footer hints installed exactly once, no matter how often init prompts.
+      const shortcuts = (p as unknown as { MULTISELECT_INSTRUCTIONS: string[] })
+        .MULTISELECT_INSTRUCTIONS;
+      expect(shortcuts.filter((entry) => entry.includes("toggle all"))).toHaveLength(1);
+      expect(shortcuts.filter((entry) => entry.includes("invert"))).toHaveLength(1);
+    });
+
+    it("prompts opt-in efforts per selected multi-effort model, then the default effort", async () => {
       const catalog = [
         { id: "a", efforts: ["low", "medium", "high"], default_effort: "medium" },
         { id: "b", efforts: ["low"], default_effort: null },
       ];
-      vi.mocked(p.multiselect).mockResolvedValueOnce(["a", "b"]);
-      // default model select, then effort select
+      vi.mocked(p.multiselect)
+        .mockResolvedValueOnce(["a", "b"]) // models
+        .mockResolvedValueOnce(["medium", "high"]); // efforts for "a"
       vi.mocked(p.select)
-        .mockResolvedValueOnce("a")
-        .mockResolvedValueOnce("high");
+        .mockResolvedValueOnce("a") // default model
+        .mockResolvedValueOnce("high"); // default effort
 
       const allowlist = await promptVendorModels("fake", catalog);
+
+      expect(p.multiselect).toHaveBeenCalledTimes(2);
+      const effortsCall = vi.mocked(p.multiselect).mock.calls[1]![0] as {
+        message: string;
+        options: { value: string; hint?: string }[];
+        initialValues: string[];
+      };
+      expect(effortsCall.message).toBe("fake: efforts to allow for a");
+      expect(effortsCall.options.map((o) => o.value)).toEqual(["low", "medium", "high"]);
+      expect(effortsCall.options.find((o) => o.value === "medium")?.hint).toBe("catalog default");
+      // Opt-in: nothing preselected.
+      expect(effortsCall.initialValues).toEqual([]);
 
       expect(p.select).toHaveBeenCalledTimes(2);
       const effortCall = vi.mocked(p.select).mock.calls[1]![0] as {
@@ -140,60 +192,74 @@ describe("parley init", () => {
         initialValue: string;
       };
       expect(effortCall.message).toBe("fake: default effort for a");
-      expect(effortCall.options.map((o) => o.value)).toEqual(["low", "medium", "high"]);
-      // Catalog default_effort pre-selected.
+      // Only the allowed efforts are offered; catalog default_effort pre-selected.
+      expect(effortCall.options.map((o) => o.value)).toEqual(["medium", "high"]);
       expect(effortCall.initialValue).toBe("medium");
       expect(allowlist).toEqual({
-        a: { efforts: ["low", "medium", "high"], default: "high" },
+        a: { efforts: ["medium", "high"], default: "high" },
         b: { efforts: ["low"] },
       });
     });
 
-    it("pre-selects the first effort when catalog default_effort is missing", async () => {
-      const catalog = [{ id: "solo", efforts: ["low", "high"], default_effort: null }];
-      vi.mocked(p.multiselect).mockResolvedValueOnce(["solo"]);
-      vi.mocked(p.select).mockResolvedValueOnce("solo").mockResolvedValueOnce("low");
+    it("pre-selects the first allowed effort when the catalog default is not allowed", async () => {
+      const catalog = [{ id: "solo", efforts: ["low", "medium", "high"], default_effort: "low" }];
+      vi.mocked(p.multiselect)
+        .mockResolvedValueOnce(["solo"])
+        .mockResolvedValueOnce(["medium", "high"]);
+      vi.mocked(p.select).mockResolvedValueOnce("solo").mockResolvedValueOnce("medium");
 
       await promptVendorModels("codex", catalog);
 
       const effortCall = vi.mocked(p.select).mock.calls[1]![0] as { initialValue: string };
-      expect(effortCall.initialValue).toBe("low");
+      expect(effortCall.initialValue).toBe("medium");
     });
 
-    it("skips the effort prompt when the default model has one effort", async () => {
-      const catalog = [
-        { id: "one-effort", efforts: ["high"], default_effort: null },
-        { id: "other", efforts: ["low", "high"], default_effort: "low" },
-      ];
-      vi.mocked(p.multiselect).mockResolvedValueOnce(["one-effort", "other"]);
-      vi.mocked(p.select).mockResolvedValueOnce("one-effort");
+    it("skips the default-effort select when only one effort is allowed", async () => {
+      const catalog = [{ id: "a", efforts: ["low", "high"], default_effort: "low" }];
+      vi.mocked(p.multiselect)
+        .mockResolvedValueOnce(["a"])
+        .mockResolvedValueOnce(["high"]); // narrow to one effort
+      vi.mocked(p.select).mockResolvedValueOnce("a");
 
       const allowlist = await promptVendorModels("fake", catalog);
 
       expect(p.select).toHaveBeenCalledTimes(1);
-      // Single effort → defaultMarker yields true (no catalog default_effort).
+      // Single allowed effort → defaultMarker yields true.
       expect(allowlist).toEqual({
-        "one-effort": { efforts: ["high"], default: true },
-        other: { efforts: ["low", "high"] },
+        a: { efforts: ["high"], default: true },
       });
     });
 
-    it("skips the effort prompt when the default model has zero efforts", async () => {
-      const catalog = [{ id: "effortless", efforts: [], default_effort: null }];
-      vi.mocked(p.multiselect).mockResolvedValueOnce(["effortless"]);
-      vi.mocked(p.select).mockResolvedValueOnce("effortless");
+    it("skips the effort prompts entirely for single- and zero-effort models", async () => {
+      const catalog = [
+        { id: "one-effort", efforts: ["high"], default_effort: null },
+        { id: "effortless", efforts: [], default_effort: null },
+      ];
+      vi.mocked(p.multiselect).mockResolvedValueOnce(["one-effort", "effortless"]);
+      vi.mocked(p.select).mockResolvedValueOnce("one-effort");
 
       const allowlist = await promptVendorModels("pi", catalog);
 
+      expect(p.multiselect).toHaveBeenCalledTimes(1);
       expect(p.select).toHaveBeenCalledTimes(1);
       expect(allowlist).toEqual({
-        effortless: { efforts: [], default: true },
+        "one-effort": { efforts: ["high"], default: true },
+        effortless: { efforts: [] },
       });
     });
 
-    it("throws PromptCancelled when the effort prompt is cancelled", async () => {
+    it("throws PromptCancelled when the per-model efforts prompt is cancelled", async () => {
       const catalog = [{ id: "a", efforts: ["low", "high"], default_effort: "low" }];
-      vi.mocked(p.multiselect).mockResolvedValueOnce(["a"]);
+      vi.mocked(p.multiselect).mockResolvedValueOnce(["a"]).mockResolvedValueOnce(CANCEL);
+
+      await expect(promptVendorModels("fake", catalog)).rejects.toBeInstanceOf(PromptCancelled);
+    });
+
+    it("throws PromptCancelled when the default-effort prompt is cancelled", async () => {
+      const catalog = [{ id: "a", efforts: ["low", "high"], default_effort: "low" }];
+      vi.mocked(p.multiselect)
+        .mockResolvedValueOnce(["a"])
+        .mockResolvedValueOnce(["low", "high"]);
       vi.mocked(p.select).mockResolvedValueOnce("a").mockResolvedValueOnce(CANCEL);
 
       await expect(promptVendorModels("fake", catalog)).rejects.toBeInstanceOf(PromptCancelled);
