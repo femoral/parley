@@ -10,7 +10,7 @@ import type {
 } from "../../hud/types.js";
 import type { InspectorTabKey } from "../../hud/Inspector/index.js";
 import { formatClock, formatUptime } from "./format.js";
-import { useHealth } from "./useHealth.js";
+import { useHealth, type HealthStatus } from "./useHealth.js";
 import { projectInspector } from "./inspector.js";
 import { metricsRefreshKey, projectSoundings } from "./metrics.js";
 import { advanceFailedObservations, projectRoster, shortId } from "./roster.js";
@@ -37,6 +37,15 @@ export const CHART_STALE_DEBOUNCE_MS = 4000;
  * keeps the roster projection's identity stable across one-second clock ticks.
  */
 export const FRESHNESS_TICK_MS = 30_000;
+
+/** Format uptime only while a health probe confirms the daemon is online. */
+export function deriveUptime(
+  status: HealthStatus,
+  startedAt: number | null,
+  now: number,
+): string {
+  return status === "online" && startedAt !== null ? formatUptime(now - startedAt) : "";
+}
 
 /** Tab title with an optional inbox badge: `(N) Parley Cove — parley cockpit`. */
 export function formatCockpitDocumentTitle(awaitingCount: number): string {
@@ -425,7 +434,7 @@ export function useCockpit(): CockpitView {
     pid: health.pid,
     host: origin?.hostname || "127.0.0.1",
     port: origin?.port || "—",
-    uptime: health.startedAt !== null ? formatUptime(now - health.startedAt) : "",
+    uptime: deriveUptime(health.status, health.startedAt, now),
     // Daemon-side session count only — fleet totals/active live on the roster.
     durableSessions: live.durableSessions,
   };

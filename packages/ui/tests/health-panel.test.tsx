@@ -33,8 +33,9 @@ describe("HealthPanel renders daemon status from plain props (#65)", () => {
   });
 
   it("reads OFFLINE when the daemon is unreachable", () => {
-    render(<HealthPanel health={{ ...HEALTH, online: false }} />);
+    render(<HealthPanel health={{ ...HEALTH, status: "offline", online: false, uptime: "" }} />);
     expect(screen.getByText("OFFLINE")).toBeTruthy();
+    expect(screen.getByText("—")).toBeTruthy();
   });
 
   it("renders a compact dense meta layout (not the tall grid + wells)", () => {
