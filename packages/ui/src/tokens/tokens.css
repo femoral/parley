@@ -190,8 +190,12 @@
   --log-question: #ffcf4d;
   /* fallback kind reuses --ink-tan, the manifest's #c9a87a */
 
-  /* Report outcome badge colours (§2.6 — reuse the state palette) */
-  --outcome-success: var(--state-running);
+  /* Report outcome badge colours.
+     Success is a quality verdict (how good work WAS), not a live task state —
+     use --quality-good (sea-glass teal) rather than --state-running green so
+     the reserved state palette stays exclusive to what a task IS. Partial /
+     blocked still borrow awaiting / failed state hues (honest urgency). */
+  --outcome-success: var(--quality-good);
   --outcome-partial: var(--state-awaiting_answer);
   --outcome-blocked: var(--state-failed);
 

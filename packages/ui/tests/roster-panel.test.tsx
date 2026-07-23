@@ -322,13 +322,25 @@ describe("RosterPanel selected-row task id copy", () => {
     });
   });
 
-  it("shows a copy affordance only on the selected row", () => {
+  it("shows a copy affordance only on the selected row (meta itself, not a side button)", () => {
     const { rerender } = render(<RosterPanel {...baseProps()} selectedTaskId={null} />);
     expect(screen.queryByRole("button", { name: /Copy task id/i })).toBeNull();
     rerender(<RosterPanel {...baseProps()} selectedTaskId="t2" />);
-    expect(screen.getByRole("button", { name: /Copy task id/i })).toBeTruthy();
+    const copyBtn = screen.getByRole("button", { name: /Copy task id/i });
+    expect(copyBtn).toBeTruthy();
+    // Meta line is the control — keeps full width so the id does not shrink.
+    expect(copyBtn.classList.contains("pc-roster__meta")).toBe(true);
+    expect(copyBtn.classList.contains("pc-roster__meta--copy")).toBe(true);
     // Only one copy control — not one per row.
     expect(screen.getAllByRole("button", { name: /Copy task id/i })).toHaveLength(1);
+    // Visible meta text still present (not replaced by a bare "id" chip).
+    expect(copyBtn.textContent).toMatch(/feat\/depth · t2/);
+  });
+
+  it("does not mount a separate id-copy wrap that would compete with meta ellipsis", () => {
+    const { container } = render(<RosterPanel {...baseProps()} selectedTaskId="t1" />);
+    expect(container.querySelector(".pc-roster__id-copy-wrap")).toBeNull();
+    expect(container.querySelector(".pc-roster__id-copy")).toBeNull();
   });
 
   it("copies the full task id and shows confirmation", async () => {
