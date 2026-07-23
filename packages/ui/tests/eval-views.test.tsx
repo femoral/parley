@@ -254,6 +254,23 @@ describe("EvalFilterBar (#165)", () => {
     expect(disclosure.textContent).toContain("2");
     expect(screen.queryByPlaceholderText("e.g. coding")).toBeNull();
   });
+
+  it("chunks expanded fields under Task / Orchestrator / Judge headings", () => {
+    render(
+      <EvalFilterBar
+        filters={emptyFilters()}
+        onChange={() => {}}
+        onClear={() => {}}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Filters" }));
+    expect(screen.getByRole("group", { name: "Task" })).toBeTruthy();
+    expect(screen.getByRole("group", { name: "Orchestrator" })).toBeTruthy();
+    expect(screen.getByRole("group", { name: "Judge" })).toBeTruthy();
+    // Toggles stay outside the field groups.
+    expect(screen.getByRole("button", { name: "First attempt only" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Below baseline only" })).toBeTruthy();
+  });
 });
 
 describe("EvalDistribution (#165)", () => {

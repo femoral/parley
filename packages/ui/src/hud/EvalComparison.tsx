@@ -21,22 +21,22 @@ export interface EvalComparisonProps {
 
 function deltaColor(value: number | null): string | undefined {
   if (value === null || !Number.isFinite(value)) return undefined;
-  if (value < 0) return "var(--state-failed)";
-  if (value > 0) return "var(--state-completed)";
+  if (value < 0) return "var(--quality-poor)";
+  if (value > 0) return "var(--quality-good)";
   return undefined;
 }
 
 function ComparisonCard({ row }: { row: SoundingsComparisonRow }) {
   const deltaStyle = {
-    color: deltaColor(row.avgDeltaValue) ?? "var(--brass-soft)",
+    color: deltaColor(row.avgDeltaValue) ?? "var(--quality-neutral)",
   } as CSSProperties;
   const rateStyle = {
     color:
       row.belowBaselineRateValue !== null &&
       Number.isFinite(row.belowBaselineRateValue) &&
       row.belowBaselineRateValue > 0
-        ? "var(--state-failed)"
-        : "var(--brass-soft)",
+        ? "var(--quality-poor)"
+        : "var(--quality-neutral)",
   } as CSSProperties;
 
   return (

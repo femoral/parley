@@ -27,6 +27,21 @@ const TEXT_FIELDS: readonly {
   { key: "rubric", label: "Rubric", placeholder: "e.g. coding@1" },
 ];
 
+/** Chunked under group headings so the expanded panel is not a flat wall. */
+const FILTER_GROUPS: readonly {
+  heading: string;
+  keys: readonly (typeof TEXT_FIELDS)[number]["key"][];
+}[] = [
+  { heading: "Task", keys: ["type", "vendor", "model"] },
+  { heading: "Orchestrator", keys: ["orch_harness", "orch_model"] },
+  { heading: "Judge", keys: ["eval_harness", "eval_model", "rubric"] },
+];
+
+const FIELD_BY_KEY = Object.fromEntries(TEXT_FIELDS.map((f) => [f.key, f])) as Record<
+  (typeof TEXT_FIELDS)[number]["key"],
+  (typeof TEXT_FIELDS)[number]
+>;
+
 /** Count each non-empty text field and each pressed toggle as one active filter. */
 export function countActiveFilters(filters: SoundingsFiltersView): number {
   let n = 0;
@@ -104,20 +119,30 @@ export const EvalFilterBar = memo(function EvalFilterBar({
           role="region"
           aria-label="Filter fields"
         >
-          <div className="pc-eval-filters__fields">
-            {TEXT_FIELDS.map((field) => (
-              <label key={field.key} className="pc-eval-filters__field">
-                <span className="pc-eval-filters__label">{field.label}</span>
-                <input
-                  type="text"
-                  className="pc-eval-filters__input"
-                  value={filters[field.key]}
-                  placeholder={field.placeholder}
-                  spellCheck={false}
-                  autoComplete="off"
-                  onChange={(e) => onChange({ [field.key]: e.target.value })}
-                />
-              </label>
+          <div className="pc-eval-filters__groups">
+            {FILTER_GROUPS.map((group) => (
+              <fieldset key={group.heading} className="pc-eval-filters__group">
+                <legend className="pc-eval-filters__group-heading">{group.heading}</legend>
+                <div className="pc-eval-filters__fields">
+                  {group.keys.map((key) => {
+                    const field = FIELD_BY_KEY[key];
+                    return (
+                      <label key={field.key} className="pc-eval-filters__field">
+                        <span className="pc-eval-filters__label">{field.label}</span>
+                        <input
+                          type="text"
+                          className="pc-eval-filters__input"
+                          value={filters[field.key]}
+                          placeholder={field.placeholder}
+                          spellCheck={false}
+                          autoComplete="off"
+                          onChange={(e) => onChange({ [field.key]: e.target.value })}
+                        />
+                      </label>
+                    );
+                  })}
+                </div>
+              </fieldset>
             ))}
           </div>
 

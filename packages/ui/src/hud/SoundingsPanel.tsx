@@ -49,6 +49,11 @@ const OVERFLOW_GROUP_BY = SOUNDINGS_GROUP_BY.filter(
   (o) => !PRIMARY_GROUP_BY_VALUES.has(o.value),
 );
 
+/** Accessible scent of overflow dimensions (size, orch, judge, rubric, …). */
+const MORE_GROUP_BY_ARIA =
+  "More dimensions: size, orchestrator, judge, rubric…";
+const MORE_GROUP_BY_LABEL = `More (${OVERFLOW_GROUP_BY.length})`;
+
 const VIEW_TABS: readonly { value: SoundingsViewTab; label: string }[] = [
   { value: "groups", label: "Groups" },
   { value: "distribution", label: "Score vs baseline" },
@@ -72,7 +77,7 @@ export interface SoundingsPanelProps {
 /** Inline SVG success-rate track — no chart library, currentColor-free tokens. */
 function SuccessBar({ value }: { value: number | null }) {
   const pct = value === null ? 0 : Math.max(0, Math.min(1, value));
-  const fill = value === null ? "var(--ink-ghost)" : "var(--state-completed)";
+  const fill = value === null ? "var(--ink-ghost)" : "var(--quality-good)";
   return (
     <svg
       className="pc-soundings__bar"
@@ -271,8 +276,8 @@ export const SoundingsPanel = memo(function SoundingsPanel({
               </button>
             );
           })}
-          <label className="pc-soundings__group-more">
-            <span className="pc-soundings__group-more-sr">More group-by options</span>
+          <label className="pc-soundings__group-more" title={MORE_GROUP_BY_ARIA}>
+            <span className="pc-soundings__group-more-sr">{MORE_GROUP_BY_ARIA}</span>
             <select
               className={`pc-soundings__group-more-select${
                 OVERFLOW_GROUP_BY.some((o) => o.value === groupBy)
@@ -282,13 +287,14 @@ export const SoundingsPanel = memo(function SoundingsPanel({
               value={
                 OVERFLOW_GROUP_BY.some((o) => o.value === groupBy) ? groupBy : ""
               }
-              aria-label="More group-by options"
+              aria-label={MORE_GROUP_BY_ARIA}
+              title={MORE_GROUP_BY_ARIA}
               onChange={(e) => {
                 const v = e.target.value;
                 if (v !== "") onGroupBy(v);
               }}
             >
-              <option value="">More…</option>
+              <option value="">{MORE_GROUP_BY_LABEL}</option>
               {OVERFLOW_GROUP_BY.map((opt) => (
                 <option key={opt.value} value={opt.value}>
                   {opt.label}
