@@ -77,7 +77,6 @@
   opacity: 0.4;
   color: var(--brass);
   animation: pc-spin-rose 140s linear infinite;
-  will-change: transform;
 }
 
 /* ── Regions ───────────────────────────────────────────────────────────── */

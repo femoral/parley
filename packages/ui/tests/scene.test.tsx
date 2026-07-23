@@ -2,7 +2,15 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { islandVariantFor } from "../src/scene/charted.js";
-import { Island, Scene, Ship, regionWorldOffset, type IslandTask } from "../src/scene/index.js";
+import {
+  Island,
+  Scene,
+  Ship,
+  loudestRegionIndex,
+  regionWorldOffset,
+  resolveFramedIndex,
+  type IslandTask,
+} from "../src/scene/index.js";
 import type { SessionRegionData } from "../src/scene/SessionRegion.js";
 
 /** Dispatch the camera world's transform transitionend (happy-dom does not run CSS transitions).
@@ -478,7 +486,7 @@ describe("Scene lays out the active session's cove (#69)", () => {
     expect(atSecond).toBe(`translate(${-o2.dx}px, ${-o2.dy}px)`);
   });
 
-  it("frames the first region for 'All hands' (null) rather than filtering", () => {
+  it("frames the loudest attention region for 'All hands' (null) rather than filtering", () => {
     const second = region("sess-2", "sess-2", [
       island("running", { id: "z", name: "distant-shoal" }),
     ]);
@@ -490,12 +498,123 @@ describe("Scene lays out the active session's cove (#69)", () => {
         onSelectSession={noop}
       />,
     );
-    // First region (REGION) is framed — its three islands, not the second session's.
+    // REGION carries awaiting (rank 0) — loudest — so its three islands mount, not sess-2.
     expect(container.querySelectorAll(".pc-island")).toHaveLength(3);
     expect(container.querySelector('.pc-island[aria-label="distant-shoal — RUNNING"]')).toBeNull();
     const o = regionWorldOffset("sess-1");
     expect((container.querySelector(".pc-world") as HTMLElement).style.transform).toBe(
       `translate(${-o.dx}px, ${-o.dy}px)`,
+    );
+  });
+
+  it("under All hands, frames a later region when it holds louder attention than placed[0]", () => {
+    const calmFirst = region("sess-calm", "calm", [island("running", { id: "c1", name: "calm-run" })]);
+    const loudSecond = region(
+      "sess-loud",
+      "loud",
+      [island("awaiting_answer", { id: "l1", name: "needs-answer" })],
+      { state: "awaiting_answer", count: 1, rank: 0 },
+    );
+    const { container } = render(
+      <Scene
+        sessions={[calmFirst, loudSecond]}
+        activeSessionId={null}
+        onSelectTask={noop}
+        onSelectSession={noop}
+      />,
+    );
+    // Camera sails to the loud region, not placed[0].
+    const o = regionWorldOffset("sess-loud");
+    expect((container.querySelector(".pc-world") as HTMLElement).style.transform).toBe(
+      `translate(${-o.dx}px, ${-o.dy}px)`,
+    );
+    expect(container.querySelector('.pc-island[aria-label="needs-answer — AWAITING"]')).toBeTruthy();
+    expect(container.querySelector('.pc-island[aria-label="calm-run — RUNNING"]')).toBeNull();
+  });
+
+  it("under All hands, recomputes framing when a new louder rollup appears", () => {
+    const calm = region("sess-calm", "calm", [island("running", { id: "c1" })]);
+    const failed = region(
+      "sess-fail",
+      "fail",
+      [island("failed", { id: "f1", name: "wreck" })],
+      { state: "failed", count: 1, rank: 5 },
+    );
+    const { container, rerender } = render(
+      <Scene
+        sessions={[calm, failed]}
+        activeSessionId={null}
+        onSelectTask={noop}
+        onSelectSession={noop}
+      />,
+    );
+    // Failed is the only attention — framed.
+    const failOff = regionWorldOffset("sess-fail");
+    expect((container.querySelector(".pc-world") as HTMLElement).style.transform).toBe(
+      `translate(${-failOff.dx}px, ${-failOff.dy}px)`,
+    );
+
+    // Awaiting (rank 0) appears on the calm region — louder; camera reframes.
+    const awaiting = region(
+      "sess-calm",
+      "calm",
+      [island("awaiting_answer", { id: "c1", name: "now-awaiting" })],
+      { state: "awaiting_answer", count: 1, rank: 0 },
+    );
+    rerender(
+      <Scene
+        sessions={[awaiting, failed]}
+        activeSessionId={null}
+        onSelectTask={noop}
+        onSelectSession={noop}
+      />,
+    );
+    const calmOff = regionWorldOffset("sess-calm");
+    expect((container.querySelector(".pc-world") as HTMLElement).style.transform).toBe(
+      `translate(${-calmOff.dx}px, ${-calmOff.dy}px)`,
+    );
+  });
+
+  it("does not auto-reframe away from an explicit named session selection", () => {
+    const named = region("sess-named", "named", [island("running", { id: "n1", name: "named-run" })]);
+    const loud = region(
+      "sess-loud",
+      "loud",
+      [island("awaiting_answer", { id: "l1", name: "needs-answer" })],
+      { state: "awaiting_answer", count: 1, rank: 0 },
+    );
+    const { container, rerender } = render(
+      <Scene
+        sessions={[named, loud]}
+        activeSessionId="sess-named"
+        onSelectTask={noop}
+        onSelectSession={noop}
+      />,
+    );
+    const namedOff = regionWorldOffset("sess-named");
+    expect((container.querySelector(".pc-world") as HTMLElement).style.transform).toBe(
+      `translate(${-namedOff.dx}px, ${-namedOff.dy}px)`,
+    );
+    // Loud rollup intensifies — still frames the explicit selection.
+    const louder = region(
+      "sess-loud",
+      "loud",
+      [
+        island("awaiting_answer", { id: "l1", name: "needs-answer" }),
+        island("awaiting_answer", { id: "l2", name: "also-needs" }),
+      ],
+      { state: "awaiting_answer", count: 2, rank: 0 },
+    );
+    rerender(
+      <Scene
+        sessions={[named, louder]}
+        activeSessionId="sess-named"
+        onSelectTask={noop}
+        onSelectSession={noop}
+      />,
+    );
+    expect((container.querySelector(".pc-world") as HTMLElement).style.transform).toBe(
+      `translate(${-namedOff.dx}px, ${-namedOff.dy}px)`,
     );
   });
 
@@ -868,9 +987,9 @@ describe("Scene edge-of-frame attention indicators", () => {
     expect(more?.textContent).toBe("+1");
   });
 
-  it("under All hands, treats the first region as framed (indicators for the rest)", () => {
-    const framedDx = regionWorldOffset("sess-a").dx;
-    const sideB = regionWorldOffset("sess-b").dx < framedDx ? "left" : "right";
+  it("under All hands, frames the loudest region (indicators for quieter off-camera attention)", () => {
+    // awaitingRight (rank 0) is loudest — framed; failedFar still chips.
+    const framedDx = regionWorldOffset("sess-b").dx;
     const sideC = regionWorldOffset("sess-c").dx < framedDx ? "left" : "right";
     render(
       <Scene
@@ -880,14 +999,12 @@ describe("Scene edge-of-frame attention indicators", () => {
         onSelectSession={noop}
       />,
     );
-    expect(
-      screen.getByRole("button", { name: `Session sess-b — 1 awaiting answer, to the ${sideB}` }),
-    ).toBeTruthy();
+    // Framed loud region has no chip; calm has no attention.
+    expect(screen.queryByRole("button", { name: /Session sess-b/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Session sess-a/ })).toBeNull();
     expect(
       screen.getByRole("button", { name: `Session sess-c — 1 failed, to the ${sideC}` }),
     ).toBeTruthy();
-    // No indicator for the framed calm first region.
-    expect(screen.queryByRole("button", { name: /Session sess-a/ })).toBeNull();
   });
 
   it("does not invent indicators for stalledMid when framed on that session", () => {
@@ -900,5 +1017,115 @@ describe("Scene edge-of-frame attention indicators", () => {
       />,
     );
     expect(container.querySelector(".pc-edge-alert")).toBeNull();
+  });
+
+  it("renders an open-water edge chip when session-less tasks need notice", () => {
+    const openWater = region(
+      null,
+      "Open water",
+      [island("failed", { id: "wreck-1", name: "fresh-wreck" })],
+      { state: "failed", count: 1, rank: 5 },
+    );
+    const framed = region("sess-a", "sess-a", [island("running", { id: "a1" })]);
+    const side = regionWorldOffset(null).dx < regionWorldOffset("sess-a").dx ? "left" : "right";
+    const { container } = render(
+      <Scene
+        sessions={[framed, openWater]}
+        activeSessionId="sess-a"
+        onSelectTask={noop}
+        onSelectSession={noop}
+      />,
+    );
+    const btn = screen.getByRole("button", {
+      name: `Open water — 1 failed, to the ${side}`,
+    });
+    expect(btn).toBeTruthy();
+    expect(btn.querySelector(".pc-edge-alert__label")?.textContent).toBe("Open water");
+    expect(btn.querySelector(".pc-edge-alert__count")?.textContent).toBe("1");
+    expect(container.querySelector(`.pc-edge-alerts--${side}`)).toBeTruthy();
+  });
+
+  it("pans to open water without calling onSelectSession (no roster filter)", () => {
+    const openWater = region(
+      null,
+      "Open water",
+      [island("awaiting_answer", { id: "ow-1", name: "orphan-q" })],
+      { state: "awaiting_answer", count: 1, rank: 0 },
+    );
+    const framed = region("sess-a", "sess-a", [island("running", { id: "a1" })]);
+    const onSelectSession = vi.fn();
+    const side = regionWorldOffset(null).dx < regionWorldOffset("sess-a").dx ? "left" : "right";
+    const { container } = render(
+      <Scene
+        sessions={[framed, openWater]}
+        activeSessionId="sess-a"
+        onSelectTask={noop}
+        onSelectSession={onSelectSession}
+      />,
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: `Open water — 1 awaiting answer, to the ${side}` }),
+    );
+    // No roster session filter — open water is not a named session.
+    expect(onSelectSession).not.toHaveBeenCalled();
+    // Camera frames the open-water region origin.
+    const o = regionWorldOffset(null);
+    expect((container.querySelector(".pc-world") as HTMLElement).style.transform).toBe(
+      `translate(${-o.dx}px, ${-o.dy}px)`,
+    );
+    // Open-water island is now mounted (framed).
+    expect(container.querySelector('.pc-island[aria-label="orphan-q — AWAITING"]')).toBeTruthy();
+  });
+
+  it("does not chip open water when it is calm", () => {
+    const openWater = region(null, "Open water", [island("running", { id: "ow-1" })]);
+    const framed = region("sess-a", "sess-a", [island("running", { id: "a1" })]);
+    const { container } = render(
+      <Scene
+        sessions={[framed, openWater]}
+        activeSessionId="sess-a"
+        onSelectTask={noop}
+        onSelectSession={noop}
+      />,
+    );
+    expect(container.querySelector(".pc-edge-alert")).toBeNull();
+  });
+});
+
+describe("loudest-region framing helpers", () => {
+  it("loudestRegionIndex picks lowest rank and tie-breaks first-placed", () => {
+    const placed = [
+      { session: region("a", "a", [], { state: "failed", count: 1, rank: 5 }) },
+      { session: region("b", "b", [], { state: "awaiting_answer", count: 1, rank: 0 }) },
+      { session: region("c", "c", [], { state: "awaiting_answer", count: 2, rank: 0 }) },
+      { session: region("d", "d", [], null) },
+    ];
+    // b and c share rank 0; first-placed wins → index 1.
+    expect(loudestRegionIndex(placed)).toBe(1);
+  });
+
+  it("loudestRegionIndex falls back to first-placed when all calm", () => {
+    const placed = [
+      { session: region("a", "a", [], null) },
+      { session: region("b", "b", [], null) },
+    ];
+    expect(loudestRegionIndex(placed)).toBe(0);
+  });
+
+  it("resolveFramedIndex prefers named selection over loudest", () => {
+    const placed = [
+      { session: region("calm", "calm", [], null) },
+      { session: region("loud", "loud", [], { state: "awaiting_answer", count: 1, rank: 0 }) },
+    ];
+    expect(resolveFramedIndex(placed, "calm", undefined)).toBe(0);
+    expect(resolveFramedIndex(placed, null, undefined)).toBe(1);
+  });
+
+  it("resolveFramedIndex prefers manual open-water frame over selection", () => {
+    const placed = [
+      { session: region("sess", "sess", [], null) },
+      { session: region(null, "Open water", [], { state: "failed", count: 1, rank: 5 }) },
+    ];
+    expect(resolveFramedIndex(placed, "sess", "open-water")).toBe(1);
   });
 });
