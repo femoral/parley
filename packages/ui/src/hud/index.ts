@@ -54,6 +54,8 @@ export type {
   InboxTask,
   InspectorTask,
   LogLine,
+  LogTailHookStatus,
+  LogTailStatus,
   LogsView,
   QaTurn,
   ReportFile,

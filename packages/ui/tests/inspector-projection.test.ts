@@ -67,7 +67,7 @@ function detail(
   };
 }
 
-const NO_LOGS = { lines: [], live: false };
+const NO_LOGS = { lines: [], status: "ended" as const };
 
 describe("projectInspector projects a task's Brief tab (#68)", () => {
   it("carries branch/worktree/model/effort/posture straight from the envelope", () => {
@@ -243,7 +243,7 @@ describe("projectInspector projects the Q&A tab from the server detail response 
 
 describe("projectInspector passes the log view through untouched (#68)", () => {
   it("carries whatever useLogTail produced", () => {
-    const logs = { lines: [{ key: 0, kind: "stdout" as const, text: "hello" }], live: true };
+    const logs = { lines: [{ key: 0, kind: "stdout" as const, text: "hello" }], status: "tailing" as const };
     const view = projectInspector(detail(), logs);
     expect(view.logs).toBe(logs);
   });

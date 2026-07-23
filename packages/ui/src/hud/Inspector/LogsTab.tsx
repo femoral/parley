@@ -8,5 +8,5 @@ export interface LogsTabProps {
 /** Layer 2 — the Logs tab: thin wrapper over the standalone {@link LogStream}
  * (design-manifest §4.17 "Logs"). */
 export function LogsTab({ logs }: LogsTabProps) {
-  return <LogStream lines={logs.lines} live={logs.live} />;
+  return <LogStream lines={logs.lines} status={logs.status} />;
 }

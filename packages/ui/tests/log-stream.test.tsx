@@ -1,7 +1,12 @@
 /** @vitest-environment happy-dom */
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { LogStream, logStreamStatus } from "../src/hud/LogStream.js";
+import {
+  LogStream,
+  composeLogStreamStatus,
+  logStreamDotColor,
+  logStreamStatusLabel,
+} from "../src/hud/LogStream.js";
 import type { LogLine } from "../src/hud/types.js";
 
 afterEach(cleanup);
@@ -61,34 +66,46 @@ function bodyOf(container: HTMLElement): HTMLElement {
   return el;
 }
 
+function headDot(container: HTMLElement): HTMLElement {
+  const el = container.querySelector(".pc-logstream__head .pc-dot");
+  if (!(el instanceof HTMLElement)) throw new Error("expected status beacon");
+  return el;
+}
+
 describe("LogStream stick-to-bottom follow behaviour", () => {
   it("pins to the tail when new lines arrive while the view is at the bottom", () => {
-    const { container, rerender } = render(<LogStream lines={logLines("one", "two")} live />);
+    const { container, rerender } = render(
+      <LogStream lines={logLines("one", "two")} status="tailing" />,
+    );
     const body = bodyOf(container);
     const metrics = mockOverflow(body, { scrollHeight: 400, clientHeight: 100, scrollTop: 300 });
     // Near-bottom: remaining distance 0 — establish stick state via scroll.
     fireEvent.scroll(body);
 
     metrics.setScrollHeight(600);
-    rerender(<LogStream lines={logLines("one", "two", "three", "four")} live />);
+    rerender(<LogStream lines={logLines("one", "two", "three", "four")} status="tailing" />);
 
     expect(metrics.scrollTop).toBe(600);
   });
 
   it("does not yank the view down when the user has scrolled up to read history", () => {
-    const { container, rerender } = render(<LogStream lines={logLines("one", "two", "three")} live />);
+    const { container, rerender } = render(
+      <LogStream lines={logLines("one", "two", "three")} status="tailing" />,
+    );
     const body = bodyOf(container);
     const metrics = mockOverflow(body, { scrollHeight: 500, clientHeight: 100, scrollTop: 0 });
     fireEvent.scroll(body);
 
     metrics.setScrollHeight(700);
-    rerender(<LogStream lines={logLines("one", "two", "three", "four", "five")} live />);
+    rerender(<LogStream lines={logLines("one", "two", "three", "four", "five")} status="tailing" />);
 
     expect(metrics.scrollTop).toBe(0);
   });
 
   it("re-pins after the user scrolls back to the bottom", () => {
-    const { container, rerender } = render(<LogStream lines={logLines("a", "b", "c")} live />);
+    const { container, rerender } = render(
+      <LogStream lines={logLines("a", "b", "c")} status="tailing" />,
+    );
     const body = bodyOf(container);
     const metrics = mockOverflow(body, { scrollHeight: 500, clientHeight: 100, scrollTop: 50 });
     fireEvent.scroll(body);
@@ -98,19 +115,19 @@ describe("LogStream stick-to-bottom follow behaviour", () => {
     fireEvent.scroll(body);
 
     metrics.setScrollHeight(800);
-    rerender(<LogStream lines={logLines("a", "b", "c", "d", "e")} live />);
+    rerender(<LogStream lines={logLines("a", "b", "c", "d", "e")} status="tailing" />);
 
     expect(metrics.scrollTop).toBe(800);
   });
 
-  it("opens scrolled to the tail on first non-empty paint, even when not live", () => {
+  it("opens scrolled to the tail on first non-empty paint, even when ended", () => {
     // Mount empty first so overflow geometry can be mocked before the lines
     // effect runs — happy-dom has no real layout on the initial paint.
-    const { container, rerender } = render(<LogStream lines={[]} live={false} />);
+    const { container, rerender } = render(<LogStream lines={[]} status="ended" />);
     const body = bodyOf(container);
     const metrics = mockOverflow(body, { scrollHeight: 900, clientHeight: 160, scrollTop: 0 });
 
-    rerender(<LogStream lines={logLines("done", "eof")} live={false} />);
+    rerender(<LogStream lines={logLines("done", "eof")} status="ended" />);
 
     expect(metrics.scrollTop).toBe(900);
     // Tail at eof is Ended, not a temporary Paused.
@@ -119,7 +136,7 @@ describe("LogStream stick-to-bottom follow behaviour", () => {
   });
 
   it("starts at the tail again after remount (new task)", () => {
-    const first = render(<LogStream lines={logLines("old-task-line")} live />);
+    const first = render(<LogStream lines={logLines("old-task-line")} status="tailing" />);
     const firstBody = bodyOf(first.container);
     // Scroll up so stick is cleared on this instance.
     mockOverflow(firstBody, { scrollHeight: 500, clientHeight: 100, scrollTop: 0 });
@@ -127,54 +144,106 @@ describe("LogStream stick-to-bottom follow behaviour", () => {
     first.unmount();
 
     // Fresh mount: stick defaults true again; pin when lines update after mock.
-    const second = render(<LogStream lines={logLines("new-1", "new-2")} live />);
+    const second = render(<LogStream lines={logLines("new-1", "new-2")} status="tailing" />);
     const body = bodyOf(second.container);
     const metrics = mockOverflow(body, { scrollHeight: 450, clientHeight: 120, scrollTop: 0 });
-    second.rerender(<LogStream lines={logLines("new-1", "new-2", "new-3")} live />);
+    second.rerender(<LogStream lines={logLines("new-1", "new-2", "new-3")} status="tailing" />);
 
     expect(metrics.scrollTop).toBe(450);
   });
 });
 
 describe("LogStream status wording (honesty over charm)", () => {
-  it("maps live+following / live+scrolled / ended distinctly", () => {
-    expect(logStreamStatus(true, true)).toBe("Live · Follow");
-    expect(logStreamStatus(true, false)).toBe("Paused");
-    expect(logStreamStatus(false, true)).toBe("Ended");
-    expect(logStreamStatus(false, false)).toBe("Ended");
+  it("maps every discriminated status to distinct honest copy", () => {
+    expect(logStreamStatusLabel("tailing")).toBe("Live · Follow");
+    expect(logStreamStatusLabel("paused-by-setting")).toBe("Paused — follow off");
+    expect(logStreamStatusLabel("paused-by-scroll")).toBe("Paused — scrolled up");
+    expect(logStreamStatusLabel("ended")).toBe("Ended");
+    expect(logStreamStatusLabel("unreachable")).toBe("Connection lost — retrying…");
+  });
+
+  it("composes scroll pause only while genuinely tailing", () => {
+    expect(composeLogStreamStatus("tailing", true)).toBe("tailing");
+    expect(composeLogStreamStatus("tailing", false)).toBe("paused-by-scroll");
+    // Hook pauses win over scroll geometry.
+    expect(composeLogStreamStatus("paused-by-setting", false)).toBe("paused-by-setting");
+    expect(composeLogStreamStatus("ended", false)).toBe("ended");
+    expect(composeLogStreamStatus("unreachable", false)).toBe("unreachable");
   });
 
   it("shows Live · Follow while the tail is live and pinned", () => {
-    render(<LogStream lines={logLines("tick")} live />);
+    render(<LogStream lines={logLines("tick")} status="tailing" />);
     expect(screen.getByText("Live · Follow")).toBeTruthy();
   });
 
-  it("shows Ended when the tail is no longer live (eof), not Paused", () => {
-    render(<LogStream lines={logLines("done")} live={false} />);
+  it("shows Ended when the tail is terminal (eof), not Paused", () => {
+    render(<LogStream lines={logLines("done")} status="ended" />);
     expect(screen.getByText("Ended")).toBeTruthy();
-    expect(screen.queryByText("Paused")).toBeNull();
+    expect(screen.queryByText(/Paused/)).toBeNull();
   });
 
-  it("shows Paused when the user scrolls up while the stream is still live", () => {
-    const { container } = render(<LogStream lines={logLines("a", "b", "c")} live />);
+  it("shows Paused — follow off when the settings toggle paused the tail", () => {
+    const { container } = render(
+      <LogStream lines={logLines("still-running")} status="paused-by-setting" />,
+    );
+    expect(screen.getByText("Paused — follow off")).toBeTruthy();
+    expect(screen.queryByText("Ended")).toBeNull();
+    expect(screen.queryByText("Live · Follow")).toBeNull();
+    // No healthy pulse while paused by setting.
+    expect(headDot(container).classList.contains("pc-dot--beacon")).toBe(false);
+  });
+
+  it("shows Paused — scrolled up when the user scrolls up while the stream is still tailing", () => {
+    const { container } = render(<LogStream lines={logLines("a", "b", "c")} status="tailing" />);
     const body = bodyOf(container);
     mockOverflow(body, { scrollHeight: 500, clientHeight: 100, scrollTop: 0 });
     fireEvent.scroll(body);
-    expect(screen.getByText("Paused")).toBeTruthy();
+    expect(screen.getByText("Paused — scrolled up")).toBeTruthy();
     expect(screen.queryByText("Ended")).toBeNull();
+    expect(headDot(container).classList.contains("pc-dot--beacon")).toBe(false);
+  });
+
+  it("shows Connection lost — retrying… on unreachable (not Live)", () => {
+    const { container } = render(
+      <LogStream lines={logLines("last-good")} status="unreachable" />,
+    );
+    expect(screen.getByText("Connection lost — retrying…")).toBeTruthy();
+    expect(screen.queryByText("Live · Follow")).toBeNull();
+    expect(screen.queryByText("Ended")).toBeNull();
+    const dot = headDot(container);
+    expect(dot.classList.contains("pc-dot--beacon")).toBe(false);
+    expect(logStreamDotColor("unreachable")).toBe("var(--state-stalled)");
+  });
+
+  it("pulses the beacon only while genuinely tailing", () => {
+    const { container, rerender } = render(
+      <LogStream lines={logLines("x")} status="tailing" />,
+    );
+    expect(headDot(container).classList.contains("pc-dot--beacon")).toBe(true);
+
+    for (const status of ["paused-by-setting", "ended", "unreachable"] as const) {
+      rerender(<LogStream lines={logLines("x")} status={status} />);
+      expect(headDot(container).classList.contains("pc-dot--beacon")).toBe(false);
+    }
   });
 
   it("keeps role=log for discoverability but sets aria-live=off to avoid chatter", () => {
-    const { container } = render(<LogStream lines={logLines("noise")} live />);
+    const { container } = render(<LogStream lines={logLines("noise")} status="tailing" />);
     const body = bodyOf(container);
     expect(body.getAttribute("role")).toBe("log");
     expect(body.getAttribute("aria-live")).toBe("off");
   });
 
   it("announces status changes from the head, not the log body", () => {
-    render(<LogStream lines={logLines("x")} live />);
+    render(<LogStream lines={logLines("x")} status="tailing" />);
     const status = screen.getByText("Live · Follow");
     expect(status.getAttribute("aria-live")).toBe("polite");
     expect(status.getAttribute("aria-atomic")).toBe("true");
+  });
+
+  it("aria-live region announces Connection lost when unreachable", () => {
+    render(<LogStream lines={logLines("x")} status="unreachable" />);
+    const status = screen.getByText("Connection lost — retrying…");
+    expect(status.getAttribute("aria-live")).toBe("polite");
   });
 });

@@ -3448,3 +3448,23 @@ button.pc-roster__meta--copy:focus-visible {
 .pc-inspector__title:focus:not(:focus-visible) {
   outline: none;
 }
+
+/* ── Log stream truthful status (append-only) ────────────────────────────
+ * Discriminated statuses dual-code label colour + beacon treatment.
+ * Pulse only while genuinely tailing (`.pc-dot--beacon`); reduced-motion
+ * stills via the global tokens rule. Contrast ≥4.5:1 on plate backgrounds:
+ *   tailing healthy-text #8fe0a8 on plate ≈ high
+ *   unreachable stalled #7fa8bf on plate ≈ high (stale-chart idiom)
+ *   paused/ended ink-label #967c54 on plate ≈ AA label size
+ */
+.pc-logstream__status--tailing {
+  color: var(--healthy-text);
+}
+.pc-logstream__status--unreachable {
+  color: var(--state-stalled);
+}
+.pc-logstream__status--paused-by-setting,
+.pc-logstream__status--paused-by-scroll,
+.pc-logstream__status--ended {
+  color: var(--ink-label);
+}

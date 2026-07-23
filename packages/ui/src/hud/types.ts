@@ -111,11 +111,29 @@ export interface LogLine {
   text: string;
 }
 
+/**
+ * Discriminated log-tail status. Honesty over charm: never map a temporary
+ * pause or a fetch failure to "ended" / "live". `paused-by-scroll` is
+ * composed in {@link LogStream} (stick-to-bottom); the hook emits the rest.
+ */
+export type LogTailStatus =
+  | "tailing"
+  | "paused-by-setting"
+  | "paused-by-scroll"
+  | "ended"
+  | "unreachable";
+
+/** Status values the hook can produce (scroll pause is display-only). */
+export type LogTailHookStatus = Exclude<LogTailStatus, "paused-by-scroll">;
+
 /** The Logs tab's plain props (design-manifest §4.17 "Logs"). */
 export interface LogsView {
   lines: LogLine[];
-  /** Whether the tail is still following (task not yet at `eof`). */
-  live: boolean;
+  /**
+   * Truthful tail lifecycle from {@link useLogTail}. Scroll pause is folded
+   * in at the LogStream display layer, not here.
+   */
+  status: LogTailHookStatus;
 }
 
 /** The Brief tab's plain props (design-manifest §4.17 "Brief"). */

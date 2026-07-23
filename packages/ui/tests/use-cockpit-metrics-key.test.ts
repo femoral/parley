@@ -103,7 +103,7 @@ vi.mock("../src/app/hooks/useTaskDetail.js", () => ({
 }));
 
 vi.mock("../src/app/hooks/useLogTail.js", () => ({
-  useLogTail: () => ({ lines: [], live: false }),
+  useLogTail: () => ({ lines: [], status: "ended" as const }),
 }));
 
 import { useCockpit } from "../src/app/hooks/useCockpit.js";

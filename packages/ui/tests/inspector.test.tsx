@@ -30,7 +30,7 @@ function task(overrides: Partial<InspectorTask> = {}): InspectorTask {
       duration: "3m 41s",
       usage: "1.2k ▸ 340 tok",
     },
-    logs: { lines: [], live: true },
+    logs: { lines: [], status: "tailing" },
     report: null,
     qa: [],
     attempts: [
@@ -541,7 +541,7 @@ describe("Inspector's four tabs render per the manifest's inspector treatment (#
         task={task({
           state: "failed",
           error: "vendor exited 1",
-          logs: { lines: [{ key: 0, kind: "error", text: "diagnostic trail" }], live: false },
+          logs: { lines: [{ key: 0, kind: "error", text: "diagnostic trail" }], status: "ended" },
         })}
       />,
     );
@@ -613,7 +613,7 @@ describe("Inspector's four tabs render per the manifest's inspector treatment (#
               { key: 0, kind: "shell", text: "ls -la" },
               { key: 1, kind: "error", text: "boom" },
             ],
-            live: true,
+            status: "tailing",
           },
         })}
       />,
@@ -625,10 +625,12 @@ describe("Inspector's four tabs render per the manifest's inspector treatment (#
   });
 
   it("shows Ended once the log tail is no longer live (eof), not Paused", () => {
-    render(<Inspector task={task({ logs: { lines: [{ key: 0, kind: "stdout", text: "done" }], live: false } })} />);
+    render(
+      <Inspector task={task({ logs: { lines: [{ key: 0, kind: "stdout", text: "done" }], status: "ended" } })} />,
+    );
     openTab("LOGS");
     expect(screen.getByText("Ended")).toBeTruthy();
-    expect(screen.queryByText("Paused")).toBeNull();
+    expect(screen.queryByText(/Paused/)).toBeNull();
   });
 
   it("switches to the Report tab and renders outcome/summary/files for a completed task", () => {
