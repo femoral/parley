@@ -28,10 +28,24 @@ colors:
   state-completed: "#7fd0ff"
   state-failed: "#ff7a6b"
   state-cancelled: "#9a8a72"
-  faction-codex: "#10a37f"
-  faction-grok: "#2b2b2e"
-  faction-pi: "#6c5ce7"
-  faction-unaligned: "#8a6a34"
+  quality-good: "#3ec8c0"
+  quality-poor: "#e888a0"
+  quality-neutral: "#b8a078"
+  faction-fake: "#A69B8D"
+  faction-codex: "#18A886"
+  faction-grok: "#59616F"
+  faction-claude: "#D1784C"
+  faction-gemini: "#4D8CE8"
+  faction-kilo: "#D64E80"
+  faction-goose: "#B99435"
+  faction-openclaw: "#D65A45"
+  faction-cline: "#25A6B5"
+  faction-openhands: "#A66BD0"
+  faction-opencode: "#80A83D"
+  faction-hermes: "#D18B2F"
+  faction-pi: "#7567D8"
+  faction-kimi: "#39A06F"
+  faction-unaligned: "#8A6A34"
   ember-border: "#d97e3a"
   report-border: "#3f8f68"
   alert-red-top: "#c22b1f"
@@ -193,7 +207,9 @@ A warm-on-cold palette: cool teal seas underneath, warm brass and parchment on t
 - **Deep Teal Sea** — a four-stop depth ramp from **Sea Shallow** (`#1b5064`) at the top to **Sea Abyss** (`#06171f`) at the bottom. Rendered as the room's radial-gradient backdrop, not a panel fill. This is the only cool family and it stays behind everything.
 
 ### Tertiary
-- **Faction Coats** — one loud hue per vendor, worn only on that vendor's emblem, sail, and hull: **Codex Green** (`#10a37f`), **Grok Charcoal** (`#2b2b2e`, lifted off true black so it reads on the sea), **Pi Purple** (`#6c5ce7`), **Unaligned Brass** (`#8a6a34`, the neutral privateer for unknown vendors). Faction color is the only run-time color in the system; everything else is a fixed token.
+- **Faction Coats** — one loud hue per harness, worn only on that harness's emblem, sail, and hull. Flagship examples are **Codex Green** (`#18A886`), **Grok Slate** (`#59616F`), **Claude Terracotta** (`#D1784C`), **Gemini Blue** (`#4D8CE8`), **Pi Purple** (`#7567D8`), and **Unaligned Brass** (`#8A6A34`, the neutral privateer for unknown harnesses); the full list lives in `src/tokens/factions.ts`. Faction color is the only run-time color in the system; everything else is a fixed token.
+
+`src/tokens/factions.ts` is the source of truth for faction coats, reflecting PRODUCT.md's data-driven vendor-as-faction model.
 
 ### Neutral
 - **Parchment Ink** (`#f2e3c4`): default body text on dark panels — warm, high-contrast, never gray.
