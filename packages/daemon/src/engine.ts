@@ -10,8 +10,6 @@ import {
   formatValidDifficulties,
   formatValidSizes,
   formatValidTaskTypes,
-  inboxRank,
-  isActionableState,
   isChildChannel,
   isSettledState,
   isTerminalState,
@@ -50,11 +48,9 @@ import {
   deleteTask,
   getSession,
   getTask,
-  getTaskBySeq,
   insertQaTurn,
   insertSession,
   insertTask,
-  isEventAcked,
   listAllSessions,
   listExpiredSessions,
   listExpiredTasks,
@@ -67,7 +63,6 @@ import {
   resolveTask,
   updateSession,
   updateTask,
-  upsertEventAck,
   countSlotHoldingForProfile,
   countSlotHoldingForVendor,
   SLOT_HOLDING_STATES,
@@ -79,6 +74,12 @@ import {
   type TaskDataPatch,
   type TaskRow,
 } from "./db.js";
+import {
+  createInbox,
+  sqliteAckStore,
+  sqliteTaskSnapshot,
+  type Inbox,
+} from "./inbox.js";
 import {
   createTaskTransitions,
   type TaskTransitions,
@@ -565,6 +566,11 @@ export class TaskEngine {
    * through here so seq / log / wake / concurrency drain cannot be forgotten.
    */
   private readonly taskTransitions: TaskTransitions;
+  /**
+   * ADR-0007 inbox (peek / ack / waitFor / allDone) — level-triggered view over
+   * task rows + acks (#207). Wake bus stays on {@link eventWaiters}.
+   */
+  private readonly inbox: Inbox<TaskRow>;
   /** Long-poll waiters (inbox / firehose / SSE) parked until the next transition. */
   private readonly eventWaiters = new Set<() => void>();
   /**
@@ -644,6 +650,7 @@ export class TaskEngine {
         }
       },
     });
+    this.inbox = createInbox(sqliteTaskSnapshot(db), sqliteAckStore(db));
     // Re-arm heartbeats for runner tasks that survived a daemon restart
     // (excluded from the process-group crash sweep).
     for (const task of listTasks(this.db)) {
@@ -2190,6 +2197,26 @@ export class TaskEngine {
     for (const wake of waiters) wake();
   }
 
+  /**
+   * Park until the next transition wake or `timeoutMs` elapses.
+   * Shared wake bus for firehose/SSE (`waitForTransition`) and inbox `waitFor`.
+   * #206 left waiters on TaskEngine; inbox injects this as {@link WakeSource}.
+   */
+  private parkEventWaiter(timeoutMs: number): Promise<boolean> {
+    return new Promise<boolean>((resolve) => {
+      const wake = (): void => {
+        clearTimeout(timer);
+        this.eventWaiters.delete(wake);
+        resolve(true);
+      };
+      const timer = setTimeout(() => {
+        this.eventWaiters.delete(wake);
+        resolve(false);
+      }, timeoutMs);
+      this.eventWaiters.add(wake);
+    });
+  }
+
   /** The current global transition seq — `parley watch`'s "start from now" baseline. */
   currentSeq(): number {
     return currentSeq(this.db);
@@ -2230,18 +2257,7 @@ export class TaskEngine {
     for (;;) {
       const found = peek();
       if (found) return found;
-      const woke = await new Promise<boolean>((resolve) => {
-        const wake = (): void => {
-          clearTimeout(timer);
-          this.eventWaiters.delete(wake);
-          resolve(true);
-        };
-        const timer = setTimeout(() => {
-          this.eventWaiters.delete(wake);
-          resolve(false);
-        }, timeoutMs);
-        this.eventWaiters.add(wake);
-      });
+      const woke = await this.parkEventWaiter(timeoutMs);
       if (!woke) return null; // poll window elapsed, no matching transition yet
     }
   }
@@ -2277,12 +2293,7 @@ export class TaskEngine {
    * un-acked events redeliver on the next `watch`.
    */
   ackEvent(eventId: number): void {
-    if (!Number.isInteger(eventId) || eventId < 1) return;
-    const task = getTaskBySeq(this.db, eventId);
-    if (!task) return; // superseded or unknown
-    if (!isActionableState(task.state)) return; // left actionable state
-    if (task.seq !== eventId) return;
-    upsertEventAck(this.db, task.id, task.state, eventId);
+    this.inbox.ack(eventId);
   }
 
   /**
@@ -2292,22 +2303,7 @@ export class TaskEngine {
    * stalled > failed > completed; FIFO by seq within a tier.
    */
   peekInbox(ids: readonly string[]): TaskRow | null {
-    const watched = new Set(ids);
-    const pending: TaskRow[] = [];
-    for (const id of watched) {
-      const task = getTask(this.db, id);
-      if (!task) continue;
-      if (!isActionableState(task.state)) continue;
-      if (isEventAcked(this.db, task)) continue;
-      pending.push(task);
-    }
-    if (pending.length === 0) return null;
-    pending.sort((a, b) => {
-      const rank = inboxRank(a.state) - inboxRank(b.state);
-      if (rank !== 0) return rank;
-      return a.seq - b.seq;
-    });
-    return pending[0] ?? null;
+    return this.inbox.peek(ids);
   }
 
   /**
@@ -2315,13 +2311,7 @@ export class TaskEngine {
    * remain (ADR-0007 all-done). Empty set is vacuously all-done.
    */
   isInboxAllDone(ids: readonly string[]): boolean {
-    if (this.peekInbox(ids) !== null) return false;
-    for (const id of ids) {
-      const task = getTask(this.db, id);
-      if (!task) continue;
-      if (!isTerminalState(task.state)) return false;
-    }
-    return true;
+    return this.inbox.allDone(ids);
   }
 
   /**
@@ -2334,31 +2324,9 @@ export class TaskEngine {
     ids: readonly string[],
     timeoutMs: number,
   ): Promise<{ task: TaskRow } | { allDone: true } | null> {
-    for (;;) {
-      const pending = this.peekInbox(ids);
-      if (pending) return { task: pending };
-      if (this.isInboxAllDone(ids)) return { allDone: true };
-      const woke = await new Promise<boolean>((resolve) => {
-        const wake = (): void => {
-          clearTimeout(timer);
-          this.eventWaiters.delete(wake);
-          resolve(true);
-        };
-        const timer = setTimeout(() => {
-          this.eventWaiters.delete(wake);
-          resolve(false);
-        }, timeoutMs);
-        this.eventWaiters.add(wake);
-      });
-      if (!woke) {
-        // Window elapsed — re-check once more in case a transition landed in the
-        // gap between the last peek and the timer firing.
-        const late = this.peekInbox(ids);
-        if (late) return { task: late };
-        if (this.isInboxAllDone(ids)) return { allDone: true };
-        return null;
-      }
-    }
+    return this.inbox.waitFor(ids, timeoutMs, {
+      park: (ms) => this.parkEventWaiter(ms),
+    });
   }
 
   /**
