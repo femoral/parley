@@ -12,7 +12,7 @@ import { createAdapterRegistrySync } from "../src/adapters/index.js";
 import {
   getTask,
   openDatabase,
-  updateTask,
+  writeTaskState,
   type DatabaseHandle,
 } from "../src/db.js";
 import { DelegateError, TaskEngine } from "../src/engine.js";
@@ -214,8 +214,7 @@ describe("delegate allowlist choke point (#185)", () => {
       baseRequest({ model: "fake-model", effort: "high" }),
     );
     // Force terminal so fix is allowed.
-    updateTask(db, parent.id, {
-      state: "completed",
+    writeTaskState(db, parent.id, "completed", {
       completed_at: new Date().toISOString(),
     });
 

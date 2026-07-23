@@ -18,7 +18,7 @@ import {
   nextTaskId,
   openDatabase,
   sweepInterruptedTasks,
-  updateTask,
+  updateTask, writeTaskState,
   type DatabaseHandle,
 } from "../src/db.js";
 import { CODE_REATTEMPT_WINDOW_EXPIRED } from "../src/retry.js";
@@ -121,8 +121,7 @@ function insertRunningSlot(opts: {
     difficulty: null,
     type: "other",
   });
-  updateTask(db, id, {
-    state: "running",
+  writeTaskState(db, id, "running", {
     started_at: new Date().toISOString(),
   });
   return id;
@@ -233,7 +232,7 @@ describe("concurrency queue (#171)", () => {
         difficulty: null,
         type: "other",
       });
-      updateTask(db, id, { state: "queued", queued_at: at });
+      writeTaskState(db, id, "queued", { queued_at: at });
     }
 
     // Sweep stalls the synthetic running holder (no process group child) but
@@ -321,8 +320,7 @@ describe("concurrency queue (#171)", () => {
       difficulty: null,
       type: "other",
     });
-    updateTask(db, parentId, {
-      state: "completed",
+    writeTaskState(db, parentId, "completed", {
       completed_at: new Date().toISOString(),
       report: JSON.stringify({
         summary: "done",
@@ -386,8 +384,7 @@ describe("concurrency queue (#171)", () => {
       session_id: "sess-parent",
     });
     // Parent just completed — within window at enqueue.
-    updateTask(db, parentId, {
-      state: "completed",
+    writeTaskState(db, parentId, "completed", {
       completed_at: new Date().toISOString(),
       session_id: "sess-parent",
       report: JSON.stringify({

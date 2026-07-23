@@ -6,7 +6,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { homePaths, type SessionsResponse } from "@useparley/core";
-import { insertTask, listSessions, openDatabase, updateTask, type DatabaseHandle } from "../src/db.js";
+import { insertTask, listSessions, openDatabase, writeTaskState, type DatabaseHandle } from "../src/db.js";
 import { startServer, type DaemonServer } from "../src/server.js";
 
 let home: string;
@@ -83,7 +83,7 @@ describe("listSessions (#88)", () => {
     // Ensure a measurable gap so MAX(updated_at) differs across sessions.
     await new Promise((r) => setTimeout(r, 5));
     seedTask("t2", "sess-new");
-    updateTask(db, "t2", { state: "running" });
+    writeTaskState(db, "t2", "running");
 
     const sessions = listSessions(db);
     expect(sessions.map((s) => s.id)).toEqual(["sess-new", "sess-old"]);

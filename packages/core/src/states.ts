@@ -23,6 +23,14 @@ export type TaskState = (typeof TASK_STATES)[number];
 export const TERMINAL_STATES = ["completed", "failed", "cancelled"] as const;
 
 /**
+ * States where the task's child is gone and nothing a child says may move the
+ * task: the terminal states plus `stalled` (child stopped; only a `parley
+ * answer` resume revives it). Daemon MCP calls and child exits check against
+ * this (#206 — single authority; formerly duplicated in daemon `db.ts`).
+ */
+export const SETTLED_STATES = ["completed", "failed", "cancelled", "stalled"] as const;
+
+/**
  * States that need the orchestrator/operator to act before the task can make
  * progress: a pending question (`awaiting_answer`) or a dropped child that only
  * a resume revives (`stalled`).
@@ -98,6 +106,14 @@ export function isActionableState(state: string): boolean {
 /** True when a task in `state` will never transition again. */
 export function isTerminalState(state: string): boolean {
   return (TERMINAL_STATES as readonly string[]).includes(state);
+}
+
+/**
+ * True when a task in `state` is settled: terminal or `stalled`. A live child
+ * must not move a settled task (MCP, stream close, exit handlers).
+ */
+export function isSettledState(state: string): boolean {
+  return (SETTLED_STATES as readonly string[]).includes(state);
 }
 
 /** True when a task in `state` is waiting on the orchestrator/operator. */

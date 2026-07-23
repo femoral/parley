@@ -6,14 +6,14 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { homePaths, type MetricsResponse } from "@useparley/core";
+import { homePaths, type MetricsResponse, type TaskState } from "@useparley/core";
 import {
   insertTask,
   listTasks,
   openDatabase,
   openDatabaseUpTo,
   SCHEMA_VERSION,
-  updateTask,
+  writeTaskState,
   type DatabaseHandle,
   type NewTask,
 } from "../src/db.js";
@@ -214,7 +214,7 @@ describe("aggregateMetrics (#118)", () => {
         profile?: string | null;
         size?: string | null;
         difficulty?: string | null;
-        state?: string;
+        state?: TaskState;
         session?: string;
         usage?: Record<string, number> | null;
         /** Structured rubric score; pairs with baseline=5 coding@1 by default. */
@@ -256,8 +256,7 @@ describe("aggregateMetrics (#118)", () => {
                   },
                 ),
               };
-      updateTask(db, id, {
-        state: patch.state ?? "completed",
+      writeTaskState(db, id, patch.state ?? "completed", {
         usage: patch.usage === undefined || patch.usage === null ? null : JSON.stringify(patch.usage),
         ...evalPatch,
         started_at: patch.started ?? "2026-01-01T00:00:00.000Z",
@@ -442,7 +441,7 @@ describe("aggregateMetrics (#118)", () => {
 
   it("success_rate is null when no completed or failed tasks", () => {
     insertTask(db, baseNewTask({ id: "t1", vendor: "codex" }));
-    updateTask(db, "t1", { state: "running" });
+    writeTaskState(db, "t1", "running");
     const { groups } = aggregateMetrics(listTasks(db), { groupBy: "vendor" });
     expect(groups[0]!.success_rate).toBeNull();
     expect(groups[0]!.tasks.running).toBe(1);
@@ -476,8 +475,7 @@ describe("GET /metrics (#118)", () => {
         difficulty: "medium",
       }),
     );
-    updateTask(db, "t1", {
-      state: "completed",
+    writeTaskState(db, "t1", "completed", {
       usage: JSON.stringify({ input_tokens: 10, output_tokens: 5, cached_input_tokens: 1 }),
       eval_score: 7,
       eval_baseline: 5,
@@ -607,16 +605,14 @@ describe("aggregateMetrics eval aggregations (#164)", () => {
       }),
     );
     if (patch.legacy) {
-      updateTask(db, id, {
-        state: "completed",
+      writeTaskState(db, id, "completed", {
         eval_score: patch.score,
         completed_at: "2026-01-01T00:00:01.000Z",
         started_at: "2026-01-01T00:00:00.000Z",
       });
       return;
     }
-    updateTask(db, id, {
-      state: "completed",
+    writeTaskState(db, id, "completed", {
       eval_score: patch.score,
       eval_baseline: patch.baseline ?? 5,
       eval_rubric: patch.rubric ?? "coding",
@@ -825,7 +821,7 @@ describe("aggregateMetrics eval aggregations (#164)", () => {
 
   it("handles empty groups and zero-eval edges", () => {
     insertTask(db, baseNewTask({ id: "bare", vendor: "fake" }));
-    updateTask(db, "bare", { state: "running" });
+    writeTaskState(db, "bare", "running");
     const { groups } = aggregateMetrics(listTasks(db), { groupBy: "vendor" });
     expect(groups[0]!.evals.count).toBe(0);
     expect(groups[0]!.evals.avg).toBeNull();
@@ -863,8 +859,7 @@ describe("GET /tasks detail enrichment (#164)", () => {
         orch_effort: "high",
       }),
     );
-    updateTask(db, "root", {
-      state: "completed",
+    writeTaskState(db, "root", "completed", {
       eval_score: 4,
       eval_baseline: 5,
       eval_rubric: "coding",
@@ -898,8 +893,7 @@ describe("GET /tasks detail enrichment (#164)", () => {
         orch_effort: "high",
       }),
     );
-    updateTask(db, "fix1", {
-      state: "completed",
+    writeTaskState(db, "fix1", "completed", {
       eval_score: 9,
       eval_baseline: 5,
       eval_rubric: "coding",

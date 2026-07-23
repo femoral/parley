@@ -14,7 +14,7 @@ import {
   listTasks,
   nextTaskId,
   openDatabase,
-  updateTask,
+  updateTask, writeTaskState,
   type DatabaseHandle,
 } from "../src/db.js";
 import { DelegateError, TaskEngine } from "../src/engine.js";
@@ -516,8 +516,7 @@ describe("eval groups declared separately (#195)", () => {
       difficulty: null,
       type: "other",
     });
-    updateTask(db, a, {
-      state: "completed",
+    writeTaskState(db, a, "completed", {
       completed_at: new Date().toISOString(),
       eval_score: 8,
       eval_baseline: 5,
@@ -550,8 +549,7 @@ describe("eval groups declared separately (#195)", () => {
       difficulty: null,
       type: "other",
     });
-    updateTask(db, b, {
-      state: "completed",
+    writeTaskState(db, b, "completed", {
       completed_at: new Date().toISOString(),
       eval_score: 6,
       eval_baseline: 5,

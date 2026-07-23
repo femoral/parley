@@ -13,6 +13,8 @@ import {
   inboxRank,
   isActionableState,
   isChildChannel,
+  isSettledState,
+  isTerminalState,
   isValidDifficulty,
   isValidSize,
   isValidTaskType,
@@ -42,7 +44,6 @@ import type {
 import { VENDOR_DIAG_PREFIX } from "./adapters/types.js";
 import {
   answerQaTurn,
-  bumpTaskSeq,
   claimOldestPendingRunnerTask,
   currentSeq,
   deleteSession,
@@ -69,17 +70,20 @@ import {
   upsertEventAck,
   countSlotHoldingForProfile,
   countSlotHoldingForVendor,
-  SETTLED_STATES,
   SLOT_HOLDING_STATES,
-  TERMINAL_STATES,
   type DatabaseHandle,
   type ProcessAnchor,
   type QaTurnRow,
   type SessionRow,
   type SessionSummary,
-  type TaskPatch,
+  type TaskDataPatch,
   type TaskRow,
 } from "./db.js";
+import {
+  createTaskTransitions,
+  type TaskTransitions,
+  type Transition,
+} from "./transition.js";
 import {
   materializeChildHub,
   materializeContext,
@@ -150,6 +154,9 @@ import {
   repoRoot,
 } from "./worktree.js";
 
+/** Re-export transition type for callers that imported it from the engine. */
+export type { Transition } from "./transition.js";
+
 /** Correlation header children send on every MCP request (ADR-0003). */
 export const TASK_HEADER = "x-parley-task";
 
@@ -207,18 +214,6 @@ interface PendingQuestion {
   questionId: string;
   resolve: (outcome: AskOutcome) => void;
   timer: NodeJS.Timeout;
-}
-
-/**
- * One recorded task-state transition (#34): the global `seq` it was assigned,
- * the task that changed, and the state it moved to. Appended to the engine's
- * in-memory event log so `parley watch`'s multi-task long-poll can replay a
- * transition that happened after a caller's `since`.
- */
-export interface Transition {
-  seq: number;
-  task_id: string;
-  state: string;
 }
 
 /**
@@ -565,6 +560,11 @@ export class TaskEngine {
    * from the current seq; nothing before connect is replayed (spec §3).
    */
   private readonly transitions: Transition[] = [];
+  /**
+   * Paired state-write + notify path (#206). All lifecycle state mutations go
+   * through here so seq / log / wake / concurrency drain cannot be forgotten.
+   */
+  private readonly taskTransitions: TaskTransitions;
   /** Long-poll waiters (inbox / firehose / SSE) parked until the next transition. */
   private readonly eventWaiters = new Set<() => void>();
   /**
@@ -624,10 +624,35 @@ export class TaskEngine {
     private readonly paths: HomePaths,
     private readonly adapters: Map<string, VendorAdapter>,
   ) {
+    this.taskTransitions = createTaskTransitions(db, {
+      append: (t) => {
+        this.transitions.push(t);
+      },
+      wake: () => {
+        this.wakeEventWaiters();
+      },
+      onSlotFreed: () => {
+        this.drainConcurrencyQueue();
+      },
+      onTerminal: (taskId) => {
+        // Dry-run (#161): after waiters observe the terminal event, purge the
+        // row so list/status leave no record. A short delay lets an already-
+        // parked (or just-started) watch read the terminal state first.
+        if (this.dryRunTaskIds.has(taskId)) {
+          const timer = setTimeout(() => this.purgeDryRunTask(taskId), 250);
+          timer.unref();
+        }
+      },
+    });
     // Re-arm heartbeats for runner tasks that survived a daemon restart
     // (excluded from the process-group crash sweep).
     for (const task of listTasks(this.db)) {
-      if (task.runner !== null && task.runner !== "" && !TERMINAL_STATES.has(task.state) && task.state !== "pending") {
+      if (
+        task.runner !== null &&
+        task.runner !== "" &&
+        !isTerminalState(task.state) &&
+        task.state !== "pending"
+      ) {
         this.armRunnerHeartbeat(task.id);
       }
     }
@@ -791,7 +816,7 @@ export class TaskEngine {
         merged[key] = value;
       }
     }
-    const patch: TaskPatch = { usage: JSON.stringify(merged) };
+    const patch: TaskDataPatch = { usage: JSON.stringify(merged) };
     // Best-effort cache column (#152): only write when the vendor reported a
     // cache count — never invent 0 for silent vendors (tri-state honesty).
     const cached = normalizeUsage(merged).cached;
@@ -804,8 +829,8 @@ export class TaskEngine {
    * durable `cached_input_tokens` column (#152). Leaves the column null when
    * cache is unreported so metrics/status never guess a hit or miss.
    */
-  private usagePatch(usage: Record<string, number>): TaskPatch {
-    const patch: TaskPatch = { usage: JSON.stringify(usage) };
+  private usagePatch(usage: Record<string, number>): TaskDataPatch {
+    const patch: TaskDataPatch = { usage: JSON.stringify(usage) };
     const cached = normalizeUsage(usage).cached;
     if (cached !== null) patch.cached_input_tokens = cached;
     return patch;
@@ -1249,7 +1274,7 @@ export class TaskEngine {
     if (!parent) {
       throw new DelegateError(`no such task: ${request.parentRef}`);
     }
-    if (!TERMINAL_STATES.has(parent.state)) {
+    if (!isTerminalState(parent.state)) {
       throw new DelegateError(
         `task ${parent.id} is ${parent.state}; fix requires a terminal attempt (completed|failed|cancelled)`,
       );
@@ -1485,7 +1510,7 @@ export class TaskEngine {
   clean(ref: string): { task_id: string; worktree: string | null; removed: boolean } {
     const task = resolveTask(this.db, ref);
     if (!task) throw new DelegateError(`no such task: ${ref}`);
-    if (!TERMINAL_STATES.has(task.state)) {
+    if (!isTerminalState(task.state)) {
       throw new DelegateError(
         `task ${task.id} is ${task.state}; refusing to clean a task that is still running`,
       );
@@ -1510,7 +1535,7 @@ export class TaskEngine {
     const cleaned: { task_id: string; worktree: string }[] = [];
     const failed: { task_id: string; worktree: string; error: string }[] = [];
     for (const task of listTasks(this.db)) {
-      if (!TERMINAL_STATES.has(task.state) || task.worktree === null) continue;
+      if (!isTerminalState(task.state) || task.worktree === null) continue;
       try {
         this.removeTaskWorktree(task);
         cleaned.push({ task_id: task.id, worktree: task.worktree });
@@ -1744,7 +1769,7 @@ export class TaskEngine {
     if (!task) return [`unknown task: ${taskId}`];
     // Settled tasks, or a prior accepted report while still `running` — a
     // second/straggling report must not re-accept or move the task.
-    if (SETTLED_STATES.has(task.state)) {
+    if (isSettledState(task.state)) {
       return [`task ${taskId} is already ${task.state}`];
     }
     if (task.report !== null) {
@@ -1761,13 +1786,19 @@ export class TaskEngine {
     // Store the report only. Stay `running` (or return from `awaiting_answer`
     // to `running`) — completion waits for stream close / fallback.
     const wasAwaiting = task.state === "awaiting_answer";
-    updateTask(this.db, taskId, {
+    const reportFields = {
       report: JSON.stringify(payload as Report),
       question_id: null,
       question: null,
-      ...(wasAwaiting ? { state: "running" as const } : {}),
-    });
-    if (wasAwaiting) this.transitioned(taskId);
+    };
+    if (wasAwaiting) {
+      this.taskTransitions.apply(taskId, "running", {
+        cause: "submit_report_unawait",
+        fields: reportFields,
+      });
+    } else {
+      updateTask(this.db, taskId, reportFields);
+    }
     this.scheduleReportFallback(taskId);
     return null;
   }
@@ -1786,11 +1817,10 @@ export class TaskEngine {
     this.clearRunnerHeartbeat(taskId);
     this.admitted.delete(taskId);
     const task = getTask(this.db, taskId);
-    if (!task || TERMINAL_STATES.has(task.state)) return;
+    if (!task || isTerminalState(task.state)) return;
     if (task.report === null) return;
 
-    const patch: TaskPatch = {
-      state: "completed",
+    const fields: TaskDataPatch = {
       completed_at: new Date().toISOString(),
       question_id: null,
       question: null,
@@ -1799,10 +1829,12 @@ export class TaskEngine {
     // Prefer the caller's in-memory accumulation (stream-close path); fall
     // back to whatever is already on the row (fallback timer path).
     if (usage !== undefined) {
-      Object.assign(patch, this.usagePatch(usage));
+      Object.assign(fields, this.usagePatch(usage));
     }
-    updateTask(this.db, taskId, patch);
-    this.transitioned(taskId);
+    this.taskTransitions.apply(taskId, "completed", {
+      cause: "complete",
+      fields,
+    });
   }
 
   /** Arm the post-report fallback so a hung child cannot leave the task running forever. */
@@ -1851,7 +1883,7 @@ export class TaskEngine {
   async askOrchestrator(taskId: string, question: string): Promise<AskOutcome> {
     const task = getTask(this.db, taskId);
     if (!task) return { error: `unknown task: ${taskId}` };
-    if (SETTLED_STATES.has(task.state)) {
+    if (isSettledState(task.state)) {
       return { error: `task ${taskId} is already ${task.state}` };
     }
     // Report already accepted (task still `running` until stream close) — same
@@ -1869,11 +1901,6 @@ export class TaskEngine {
     // Durable history first (#79): the turn is visible on detail even if the
     // process dies before the awaiting_answer transition is observed live.
     insertQaTurn(this.db, taskId, questionId, question);
-    updateTask(this.db, taskId, {
-      state: "awaiting_answer",
-      question_id: questionId,
-      question,
-    });
     return new Promise<AskOutcome>((resolve) => {
       const timeoutMs = task.answer_timeout_ms ?? DEFAULT_ANSWER_TIMEOUT_MS;
       const timer = setTimeout(() => {
@@ -1881,8 +1908,11 @@ export class TaskEngine {
       }, timeoutMs);
       timer.unref();
       this.pending.set(taskId, { questionId, resolve, timer });
-      // Wake `parley watch` (the `awaiting_answer` transition).
-      this.transitioned(taskId);
+      // Publish `awaiting_answer` + wake `parley watch`.
+      this.taskTransitions.apply(taskId, "awaiting_answer", {
+        cause: "ask",
+        fields: { question_id: questionId, question },
+      });
     });
   }
 
@@ -1897,22 +1927,23 @@ export class TaskEngine {
     if (!pending) return; // answered in the meantime
     this.pending.delete(taskId);
     const task = getTask(this.db, taskId);
-    if (!task || SETTLED_STATES.has(task.state)) {
+    if (!task || isSettledState(task.state)) {
       // Settled by other means: just release the parked call, no transition.
       pending.resolve({ error: `task ${taskId} is already ${task?.state ?? "gone"}` });
       return;
     }
     // Stall before stopping the child so its exit is read as part of the
     // stall, not as a report-less failure.
-    updateTask(this.db, taskId, {
-      state: "stalled",
-      error: `answer timeout: question ${pending.questionId} was not answered in time`,
+    this.taskTransitions.apply(taskId, "stalled", {
+      cause: "answer_timeout",
+      fields: {
+        error: `answer timeout: question ${pending.questionId} was not answered in time`,
+      },
     });
     pending.resolve({
       error: "answer timeout — the task is stalled; the orchestrator can resume it with `parley answer`",
     });
     this.stopChild(taskId);
-    this.transitioned(taskId);
   }
 
   /** SIGTERM a task's child, escalating to SIGKILL after a short grace. */
@@ -1978,10 +2009,11 @@ export class TaskEngine {
       clearTimeout(pending.timer);
       // Update the history turn in place (#79) before clearing the outstanding fields.
       answerQaTurn(this.db, task.id, pending.questionId, text);
-      updateTask(this.db, task.id, { state: "running", question_id: null, question: null });
-      // `awaiting_answer → running` — a transition `parley watch` surfaces. The
-      // stalled-resume path below transitions via `runChild`'s onSpawn instead.
-      this.transitioned(task.id);
+      // `awaiting_answer → running` — a transition `parley watch` surfaces.
+      this.taskTransitions.apply(task.id, "running", {
+        cause: "answer",
+        fields: { question_id: null, question: null },
+      });
       pending.resolve({ answer: text });
       return getTask(this.db, task.id)!;
     }
@@ -1995,9 +2027,10 @@ export class TaskEngine {
       if (task.question_id !== null) {
         answerQaTurn(this.db, task.id, task.question_id, text);
       }
-      // The answered question is no longer outstanding; the stall reason is spent.
+      // Clear question/error while still `stalled` (#206 Recommendation A). The
+      // single published `→ running` edge comes from `runChild` when the child
+      // is actually live — no silent intermediate state write.
       updateTask(this.db, task.id, {
-        state: "running",
         question_id: null,
         question: null,
         error: null,
@@ -2090,7 +2123,7 @@ export class TaskEngine {
   cancel(ref: string): TaskRow {
     const task = resolveTask(this.db, ref);
     if (!task) throw new DelegateError(`no such task: ${ref}`);
-    if (TERMINAL_STATES.has(task.state)) {
+    if (isTerminalState(task.state)) {
       throw new DelegateError(`task ${task.id} is already ${task.state}`);
     }
     // Free any parked `ask_orchestrator` promise; the child is about to die, so
@@ -2104,43 +2137,19 @@ export class TaskEngine {
     // `cancelled` state is terminal so it will not be overwritten with `failed`.
     const child = this.children.get(task.id);
     if (child) child.kill("SIGTERM");
-    updateTask(this.db, task.id, {
-      state: "cancelled",
-      error: "cancelled by parley cancel",
-      completed_at: new Date().toISOString(),
-      // Clear any outstanding question so the terminal envelope honours the
-      // "question_id/question are null unless awaiting_answer" contract.
-      question_id: null,
-      question: null,
-      queued_at: null,
+    this.taskTransitions.apply(task.id, "cancelled", {
+      cause: "cancel",
+      fields: {
+        error: "cancelled by parley cancel",
+        completed_at: new Date().toISOString(),
+        // Clear any outstanding question so the terminal envelope honours the
+        // "question_id/question are null unless awaiting_answer" contract.
+        question_id: null,
+        question: null,
+        queued_at: null,
+      },
     });
-    this.transitioned(task.id);
     return getTask(this.db, task.id)!;
-  }
-
-  /**
-   * Record a task-state transition (#34): stamp the row with the next global
-   * `seq`, append it to the in-memory event log, and wake multi-task watchers
-   * (`parley watch` inbox / firehose / SSE). Call this after every state
-   * change — including `pending → running` and `awaiting_answer → running`.
-   */
-  private transitioned(taskId: string): void {
-    const row = getTask(this.db, taskId);
-    if (!row) return;
-    const seq = bumpTaskSeq(this.db, taskId);
-    this.transitions.push({ seq, task_id: taskId, state: row.state });
-    this.wakeEventWaiters();
-    // #171: terminal or stalled frees a concurrency slot — drain the FIFO queue.
-    if (TERMINAL_STATES.has(row.state) || row.state === "stalled") {
-      this.drainConcurrencyQueue();
-    }
-    // Dry-run (#161): after waiters observe the terminal event, purge the row
-    // so list/status leave no record. A short delay lets an already-parked
-    // (or just-started) watch read the terminal state before the row vanishes.
-    if (TERMINAL_STATES.has(row.state) && this.dryRunTaskIds.has(taskId)) {
-      const timer = setTimeout(() => this.purgeDryRunTask(taskId), 250);
-      timer.unref();
-    }
   }
 
   /**
@@ -2152,7 +2161,7 @@ export class TaskEngine {
     this.dryRunTaskIds.delete(taskId);
     const task = getTask(this.db, taskId);
     if (!task) return;
-    if (!TERMINAL_STATES.has(task.state)) return;
+    if (!isTerminalState(task.state)) return;
     try {
       if (task.worktree !== null) {
         try {
@@ -2310,7 +2319,7 @@ export class TaskEngine {
     for (const id of ids) {
       const task = getTask(this.db, id);
       if (!task) continue;
-      if (!TERMINAL_STATES.has(task.state)) return false;
+      if (!isTerminalState(task.state)) return false;
     }
     return true;
   }
@@ -2373,7 +2382,7 @@ export class TaskEngine {
 
   private fail(taskId: string, error: string): void {
     const task = getTask(this.db, taskId);
-    if (!task || TERMINAL_STATES.has(task.state)) return;
+    if (!task || isTerminalState(task.state)) return;
     // An accepted report wins over any subsequent failure path (#72).
     if (task.report !== null) {
       this.completeAcceptedReport(taskId);
@@ -2382,13 +2391,14 @@ export class TaskEngine {
     this.clearReportFallback(taskId);
     this.clearRunnerHeartbeat(taskId);
     this.admitted.delete(taskId);
-    updateTask(this.db, taskId, {
-      state: "failed",
-      error,
-      completed_at: new Date().toISOString(),
-      queued_at: null,
+    this.taskTransitions.apply(taskId, "failed", {
+      cause: "fail",
+      fields: {
+        error,
+        completed_at: new Date().toISOString(),
+        queued_at: null,
+      },
     });
-    this.transitioned(taskId);
   }
 
   // ---------------------------------------------------------------------------
@@ -2495,11 +2505,10 @@ export class TaskEngine {
   private tryClaimRunnerTask(runnerName: string): RunnerLeaseSpec | null {
     const pending = claimOldestPendingRunnerTask(this.db, runnerName);
     if (!pending) return null;
-    updateTask(this.db, pending.id, {
-      state: "running",
-      started_at: new Date().toISOString(),
+    this.taskTransitions.apply(pending.id, "running", {
+      cause: "runner_claim",
+      fields: { started_at: new Date().toISOString() },
     });
-    this.transitioned(pending.id);
     this.armRunnerHeartbeat(pending.id);
     const claimed = getTask(this.db, pending.id);
     if (!claimed) return null;
@@ -2550,7 +2559,7 @@ export class TaskEngine {
     if (task.runner !== runnerName) {
       throw new DelegateError(`task ${taskId} is not leased to runner ${runnerName}`);
     }
-    if (TERMINAL_STATES.has(task.state)) {
+    if (isTerminalState(task.state)) {
       throw new DelegateError(`task ${taskId} is already ${task.state}`);
     }
     this.armRunnerHeartbeat(taskId);
@@ -2566,7 +2575,7 @@ export class TaskEngine {
     if (task.runner !== runnerName) {
       throw new DelegateError(`task ${taskId} is not leased to runner ${runnerName}`);
     }
-    if (TERMINAL_STATES.has(task.state) && task.state !== "completed") {
+    if (isTerminalState(task.state) && task.state !== "completed") {
       // Allow trailing events after completed (usage) but not after fail/cancel.
       if (task.state === "failed" || task.state === "cancelled") {
         throw new DelegateError(`task ${taskId} is already ${task.state}`);
@@ -2626,7 +2635,7 @@ export class TaskEngine {
       fs.appendFileSync(diagLogPath, `${appendDiag.join("\n")}\n`);
     }
 
-    const patch: TaskPatch = {};
+    const patch: TaskDataPatch = {};
     if (usageChanged && usage !== undefined) Object.assign(patch, this.usagePatch(usage));
     if (sessionChanged && sessionId !== undefined) patch.session_id = sessionId;
     if (Object.keys(patch).length > 0) updateTask(this.db, taskId, patch);
@@ -2647,7 +2656,7 @@ export class TaskEngine {
       throw new DelegateError("branch must be a non-empty string");
     }
     updateTask(this.db, taskId, { branch });
-    if (task.report !== null && !TERMINAL_STATES.has(task.state)) {
+    if (task.report !== null && !isTerminalState(task.state)) {
       this.completeAcceptedReport(taskId);
     }
     return getTask(this.db, taskId)!;
@@ -2965,11 +2974,12 @@ export class TaskEngine {
   /** Persist `queued` + `queued_at` and surface a `task.queued` transition. */
   private enqueueTask(taskId: string): void {
     const row = getTask(this.db, taskId);
-    if (!row || TERMINAL_STATES.has(row.state)) return;
+    if (!row || isTerminalState(row.state)) return;
     if (row.state === "queued") return;
-    const now = new Date().toISOString();
-    updateTask(this.db, taskId, { state: "queued", queued_at: now });
-    this.transitioned(taskId);
+    this.taskTransitions.apply(taskId, "queued", {
+      cause: "enqueue",
+      fields: { queued_at: new Date().toISOString() },
+    });
   }
 
   /**
@@ -3105,7 +3115,7 @@ export class TaskEngine {
   /** Reserve a slot and kick off the appropriate spawn path for `task`. */
   private admitAndStart(task: TaskRow): void {
     if (this.admitted.has(task.id)) return;
-    if (TERMINAL_STATES.has(task.state)) return;
+    if (isTerminalState(task.state)) return;
     this.admitted.add(task.id);
     void this.startAdmittedTask(task).catch((err: unknown) => {
       this.admitted.delete(task.id);
@@ -3218,7 +3228,6 @@ export class TaskEngine {
       ? this.buildTemplatePlan(task, prompt)
       : this.applyVendorConfig(task, await adapter.prepare({ ...this.buildSpec(task), prompt }, this.hubFor(task.id)));
     await this.runChild(task, adapter, plan, prompt, {
-      state: "running",
       started_at: new Date().toISOString(),
     });
   }
@@ -3234,7 +3243,6 @@ export class TaskEngine {
     const spec: TaskSpec = { ...this.buildSpec(task), prompt };
     const plan = this.applyVendorConfig(task, await adapter.resume(spec, this.hubFor(task.id)));
     await this.runChild(task, adapter, plan, prompt, {
-      state: "running",
       // Kept from the original run; stamped here only if that never happened.
       ...(task.started_at === null ? { started_at: new Date().toISOString() } : {}),
     });
@@ -3250,7 +3258,6 @@ export class TaskEngine {
     const spec: TaskSpec = { ...this.buildSpec(task), prompt };
     const plan = this.applyVendorConfig(task, await adapter.resume(spec, this.hubFor(task.id)));
     await this.runChild(task, adapter, plan, prompt, {
-      state: "running",
       started_at: new Date().toISOString(),
     });
   }
@@ -3273,7 +3280,6 @@ export class TaskEngine {
           await adapter.prepare({ ...this.buildSpec(task), prompt }, this.hubFor(task.id)),
         );
     await this.runChild(task, adapter, plan, prompt, {
-      state: "running",
       started_at: new Date().toISOString(),
     });
   }
@@ -3379,12 +3385,12 @@ export class TaskEngine {
     plan: SpawnPlan,
     /** Exact prompt string in argv — elided as `"<prompt>"` in launch_command. */
     prompt: string,
-    onSpawn: TaskPatch,
+    onSpawn: TaskDataPatch,
   ): Promise<void> {
     // `cancel` may have landed while the adapter was preparing; don't spawn a
     // child for an already-terminal task.
     const beforeSpawn = getTask(this.db, task.id);
-    if (!beforeSpawn || TERMINAL_STATES.has(beforeSpawn.state)) {
+    if (!beforeSpawn || isTerminalState(beforeSpawn.state)) {
       this.admitted.delete(task.id);
       this.drainConcurrencyQueue();
       return;
@@ -3464,11 +3470,12 @@ export class TaskEngine {
     this.children.set(task.id, child);
 
     this.admitted.delete(task.id);
-    updateTask(this.db, task.id, { ...onSpawn, launch_command, queued_at: null });
     // The child is live: `pending|queued → running` (fresh run) or
-    // `stalled → running` (resume). Record the transition so `parley watch`
-    // sees the task start.
-    this.transitioned(task.id);
+    // `stalled → running` (resume). Single published edge via transition module.
+    this.taskTransitions.apply(task.id, "running", {
+      cause: "spawn",
+      fields: { ...onSpawn, launch_command, queued_at: null },
+    });
 
     const events: VendorEvent[] = [];
     let sessionId: string | undefined;
@@ -3498,7 +3505,7 @@ export class TaskEngine {
       if (lineEvents.length === 0) return;
       events.push(...lineEvents);
 
-      const patch: TaskPatch = {};
+      const patch: TaskDataPatch = {};
       let usageChanged = false;
       for (const event of lineEvents) {
         if (event.kind === "session_meta" && event.usage !== undefined) {
@@ -3609,7 +3616,7 @@ export class TaskEngine {
           error: "vendor child exited while its question was pending",
         });
         const row = getTask(this.db, task.id);
-        if (row && !SETTLED_STATES.has(row.state)) {
+        if (row && !isSettledState(row.state)) {
           if (row.report !== null) {
             // Accepted report wins over exit status (#72): commit completed +
             // final accumulated usage atomically, then notify waiters.

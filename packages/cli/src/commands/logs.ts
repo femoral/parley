@@ -3,8 +3,8 @@ import { parseArgs } from "../args.js";
 import { DaemonRequestError, daemonGet, ensureDaemon } from "../client.js";
 import type { CliContext } from "../context.js";
 import { UsageError } from "../errors.js";
-import { sleep } from "@useparley/core";
-import { TERMINAL_STATES, type TaskRow } from "@useparley/daemon/db.js";
+import { isTerminalState, sleep } from "@useparley/core";
+import { type TaskRow } from "@useparley/daemon/db.js";
 import { readLogTail } from "@useparley/daemon/logtail.js";
 import type { Envelope } from "@useparley/daemon/report.js";
 import { parseLaunchCommands } from "@useparley/daemon/trace.js";
@@ -204,7 +204,7 @@ export async function runLogs(ctx: CliContext, args: string[]): Promise<number> 
       );
       offset = drain(logFile, offset, onBytes);
       coalescer?.flushPending();
-      if (TERMINAL_STATES.has(row.state)) break;
+      if (isTerminalState(row.state)) break;
       await sleep(FOLLOW_POLL_MS);
     }
 

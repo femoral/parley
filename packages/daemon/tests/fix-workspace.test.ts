@@ -10,7 +10,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { homePaths } from "@useparley/core";
 import { createAdapterRegistrySync } from "../src/adapters/index.js";
-import { getTask, openDatabase, updateTask, type DatabaseHandle } from "../src/db.js";
+import { getTask, openDatabase, updateTask, writeTaskState, type DatabaseHandle } from "../src/db.js";
 import { DelegateError, TaskEngine } from "../src/engine.js";
 import { makeGitRepo, withFakeAllowlist } from "./helpers.js";
 
@@ -105,8 +105,7 @@ function delegateRetainedWorktree(eng: TaskEngine, repo: string): {
     type: null,
   });
   // Force terminal so clean/fix can run without waiting on the child.
-  updateTask(db, row.id, {
-    state: "completed",
+  writeTaskState(db, row.id, "completed", {
     completed_at: new Date().toISOString(),
     report: JSON.stringify({
       summary: "done",
@@ -217,8 +216,7 @@ describe("fix workspace validation (#180)", () => {
       difficulty: null,
       type: null,
     });
-    updateTask(db, row.id, {
-      state: "completed",
+    writeTaskState(db, row.id, "completed", {
       completed_at: new Date().toISOString(),
       report: JSON.stringify({
         summary: "done",

@@ -5,6 +5,7 @@ import {
   collectUnknownConfigKeys,
   getConfigPath,
   isMetricsGroupBy,
+  isTerminalState,
   METRICS_GROUP_BY,
   parseTaskMetricsFilters,
   setConfigPath,
@@ -23,7 +24,6 @@ import {
   openDatabase,
   setMeta,
   sweepInterruptedTasks,
-  TERMINAL_STATES,
   type DatabaseHandle,
 } from "./db.js";
 import type { DaemonIdentity } from "./identity.js";
@@ -734,7 +734,7 @@ function handleGc(engine: TaskEngine, res: http.ServerResponse, body: unknown): 
  * log (spec §"New: per-task logs"). Offset-cursor contract: `{ chunk, next,
  * eof }`, where `next` is the byte offset the follow-up call passes back as
  * `since`. `eof` is true only once the task is in one of `db.js`'s
- * `TERMINAL_STATES` (`completed`/`failed`/`cancelled`) *and* its child has
+ * terminal states (`completed`/`failed`/`cancelled`) *and* its child has
  * actually exited — `stalled` is deliberately excluded (a `parley answer`
  * resume can append more to the same file later), and a `completed` row with
  * a still-open child (the post-report fallback can complete before the child
@@ -759,7 +759,7 @@ function handleLogs(
     sendJson(res, 400, { error: "since must be a non-negative integer" });
     return;
   }
-  const eof = TERMINAL_STATES.has(task.state) && !engine.hasLiveChild(task.id);
+  const eof = isTerminalState(task.state) && !engine.hasLiveChild(task.id);
   const logPath = path.join(engine.logDir(task.id), "vendor.jsonl");
   const { bytes: chunk, next } = readLogTail(logPath, since);
   sendJson(res, 200, { chunk, next, eof });

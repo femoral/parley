@@ -1,8 +1,16 @@
 import fs from "node:fs";
 import { createRequire } from "node:module";
 import type { DatabaseSync as DatabaseSyncInstance } from "node:sqlite";
-import type { HomePaths } from "@useparley/core";
+import {
+  SETTLED_STATES,
+  TERMINAL_STATES,
+  type HomePaths,
+  type TaskState,
+} from "@useparley/core";
 import type { SandboxMode } from "./adapters/types.js";
+
+/** Re-export core lifecycle type so daemon callers need not dual-import. */
+export type { TaskState };
 
 /**
  * Load `node:sqlite`'s DatabaseSync without a static import so we can silence
@@ -31,31 +39,6 @@ function loadDatabaseSync(): new (
 const DatabaseSync = loadDatabaseSync();
 
 export type DatabaseHandle = DatabaseSyncInstance;
-
-/** Task lifecycle states (spec §2). */
-export type TaskState =
-  | "pending"
-  | "queued"
-  | "running"
-  | "completed"
-  | "failed"
-  | "cancelled"
-  | "awaiting_answer"
-  | "stalled";
-
-/** States from which a task never moves again (v1 tracer subset). */
-export const TERMINAL_STATES: ReadonlySet<string> = new Set([
-  "completed",
-  "failed",
-  "cancelled",
-]);
-
-/**
- * States where the task's child is gone and nothing a child says may move the
- * task: the terminal states plus `stalled` (child stopped; only a `parley
- * answer` resume revives it). MCP calls and child exits check against this.
- */
-export const SETTLED_STATES: ReadonlySet<string> = new Set([...TERMINAL_STATES, "stalled"]);
 
 /** A task row as surfaced to the CLI plane (`status` / `list`). */
 export interface TaskRow {
@@ -913,20 +896,23 @@ export function sweepInterruptedTasks(db: DatabaseHandle): number {
       new Date().toISOString(),
       ...SETTLED_STATES,
     );
-  // The sweep is a transition too — stamp each swept task with a fresh seq so
-  // its envelope reflects the stall (#34). No in-memory event log exists yet
-  // (the engine is not constructed until after the sweep), so watchers that
-  // attach later simply see the post-sweep state, never the stall as an event.
+  // Bootstrap transition (#206): bulk SQL state write + per-id seq bump only.
+  // No in-memory event log / waiter wake — the engine is not constructed until
+  // after the sweep. Watchers that attach later see the post-sweep state, never
+  // the stall as a live event. Optional `recordExternal` on TaskTransitions can
+  // append to the log once the engine exists; today we only stamp seq.
   for (const { id } of live) bumpTaskSeq(db, id);
   // node:sqlite types `changes` as number | bigint; for our UPDATE counts it is a number.
   return Number(result.changes);
 }
 
-/** The mutable task fields `updateTask` accepts. */
-export type TaskPatch = Partial<
+/**
+ * Mutable task fields excluding `state` (#206). Lifecycle state writes go
+ * through `writeTaskState` / `TaskTransitions.apply` so seq + notify stay paired.
+ */
+export type TaskDataPatch = Partial<
   Pick<
     TaskRow,
-    | "state"
     | "session_id"
     | "usage"
     | "report"
@@ -962,8 +948,37 @@ export type TaskPatch = Partial<
   >
 >;
 
-/** Patch mutable task fields; bumps `updated_at`. */
-export function updateTask(db: DatabaseHandle, id: string, patch: TaskPatch): void {
+/**
+ * @deprecated Alias of {@link TaskDataPatch}. Prefer `TaskDataPatch`; `state` is
+ * no longer part of the public patch surface (#206).
+ */
+export type TaskPatch = TaskDataPatch;
+
+/** Patch mutable non-state task fields; bumps `updated_at`. */
+export function updateTask(db: DatabaseHandle, id: string, patch: TaskDataPatch): void {
+  applyTaskPatch(db, id, patch);
+}
+
+/**
+ * Privileged lifecycle write: set `state` (+ optional co-fields) in one UPDATE.
+ * Intended for `transition.ts` (and tests). Production call sites should use
+ * `TaskTransitions.apply` so seq / log / wake stay paired (#206).
+ */
+export function writeTaskState(
+  db: DatabaseHandle,
+  id: string,
+  state: TaskState,
+  fields?: TaskDataPatch,
+): void {
+  applyTaskPatch(db, id, { ...fields, state });
+}
+
+/** Internal SQL patch helper — accepts state only via {@link writeTaskState}. */
+function applyTaskPatch(
+  db: DatabaseHandle,
+  id: string,
+  patch: TaskDataPatch & { state?: TaskState },
+): void {
   const fields = Object.keys(patch);
   if (fields.length === 0) return;
   const assignments = fields.map((f) => `${f} = ?`).join(", ");
