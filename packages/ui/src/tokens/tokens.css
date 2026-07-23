@@ -1,5 +1,5 @@
 /*
- * Layer 0 — tokens. Every value in docs/design/design-manifest.md §2, expressed
+ * Layer 0 — tokens. Every value in §2, expressed
  * as a CSS custom property. Nothing above this layer may hard-code a hex literal
  * (component-system spec, contract 1); a faction tint is the only run-time colour
  * and it rides on the `--coat` / `--coat-dark` pair set by a wrapper.

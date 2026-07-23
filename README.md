@@ -65,9 +65,10 @@ when invoked explicitly (`/parley-delegate`, `/parley-wizard`), since that is
 how they are used most of the time. Re-enable auto-triggering by removing
 `disable-model-invocation: true` from a skill's frontmatter.
 
-## Usage: the delegation loop
+## Usage: the delegation loop (What the orchestrator runs)
 
 ```bash
+parley info                       # prints instructions based on your configuration
 parley session                    # register the orchestrating session once
 
 # 1. Delegate (returns immediately with a pending task)
@@ -225,13 +226,3 @@ Set it up with `/parley-wizard`, which interviews you into project eval
 settings, task types, versioned rubrics, and classification guidance under
 `.parley/` — the daemon computes scores and baselines from your boolean
 answers, and `parley metrics` (and the cockpit) render the aggregates.
-
-## Development
-
-```bash
-pnpm install
-pnpm typecheck && pnpm test && pnpm lint
-node packages/cli/bin/parley.mjs --help
-```
-
-PRs welcome — adapters especially.
