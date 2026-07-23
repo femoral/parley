@@ -149,13 +149,43 @@
 }
 /* Title stack: the view nav is engraved onto the cartouche plate itself
    (bottom-right) instead of floating in its own plate between the cartouche
-   and the day chip. */
+   and the day chip. container-type lets a CQ reflow the nav when the stack
+   is too narrow for subtitle + absolute tabs (laptop centre columns). */
 .pc-center__title-stack {
   position: relative;
   display: flex;
+  flex-wrap: wrap;
+  container-type: inline-size;
+  container-name: title-stack;
 }
 .pc-center__title-stack > * {
   flex: 1;
+}
+/* Subtitle + tabs need ~760px side-by-side before the absolute nav underlaps
+   "DELEGATED FLEET COCKPIT". Below that, dock the nav on its own row under
+   the plate (right-aligned) so title/subtitle/nav never collide ≥1024px. */
+@container title-stack (max-width: 760px) {
+  .pc-view-nav--cartouche {
+    position: static;
+    flex: 0 0 100%;
+    display: flex;
+    justify-content: flex-end;
+    box-sizing: border-box;
+    padding: 0 28px 10px 0;
+    margin: 0;
+    right: auto;
+    bottom: auto;
+  }
+  .pc-cartouche__subtitle {
+    max-width: 100%;
+  }
+}
+/* Health + Inbox keep their content height; only the Inspector flexes and
+   scrolls with the rail (overflow-y: auto above). Without this, a populated
+   .pc-inspector (flex: 1 1 380px; min-height: 380px) crushes siblings and
+   clips the Daemon Health Sessions well mid-glyph. */
+.pc-region--right > :not(.pc-inspector) {
+  flex: 0 0 auto;
 }
 /* The scene mounts here (#69/#75): a positioned, clipped viewport the living
    view fills absolutely. No plate chrome — the sea is the room's backdrop. */

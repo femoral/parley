@@ -142,7 +142,13 @@ function Group({
             <Emblem coat={task.coat} mark={task.emblem} size={23} label={task.faction} />
             <span className="pc-roster__row-body">
               <span className="pc-roster__name">{task.name}</span>
-              <span className="pc-roster__meta">{task.meta}</span>
+              {/* title is mouse-only — the visually-hidden span exposes the
+                  full task id to keyboard/AT (InboxCard shortRef pattern).
+                  Visible meta stays branch · shortId with single-line ellipsis. */}
+              <span className="pc-roster__meta" title={task.id}>
+                <span aria-hidden="true">{task.meta}</span>
+                <span className="pc-visually-hidden">task id {task.id}</span>
+              </span>
             </span>
             {showBeacon && (
               <span
