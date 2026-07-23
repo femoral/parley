@@ -3095,3 +3095,23 @@
   outline: 2px solid var(--brass-bright);
   outline-offset: 2px;
 }
+
+/* ── Inbox fleet-wide qualifier (session filter active) ───────────────────
+ * Quiet honesty label: inbox counts stay fleet-wide while the roster may be
+ * session-scoped. Label-tier type; not a second alert. Do not restyle the
+ * existing .pc-inbox__pill.
+ */
+.pc-inbox__aside {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.pc-inbox__fleet-wide {
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: var(--text-label);
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: var(--ink-label);
+  white-space: nowrap;
+}

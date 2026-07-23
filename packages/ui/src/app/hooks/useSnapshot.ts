@@ -73,6 +73,8 @@ function fromEnvelope(task: TaskEnvelope): RosterTaskInput {
     orchestratorSession: task.orchestrator_session_id,
     question: task.question,
     updatedAt: task.updated_at,
+    // Terminal clock seeds failed-freshness on cold load (see roster.ts).
+    completedAt: task.completed_at,
   };
 }
 
@@ -90,6 +92,8 @@ function mergeEnvelope(prev: RosterTaskInput | undefined, event: StreamEvent): R
     orchestratorSession: next.orchestratorSession ?? prev?.orchestratorSession ?? null,
     // Prefer the wire timestamp; fall back to prior or wall clock if absent.
     updatedAt: next.updatedAt || prev?.updatedAt || new Date().toISOString(),
+    // Keep a prior terminal clock if this event omits it (older partial envelopes).
+    completedAt: next.completedAt ?? prev?.completedAt ?? null,
   };
 }
 

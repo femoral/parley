@@ -6,6 +6,7 @@ import {
   isFreshFailure,
   projectRoster,
   RECENT_SESSION_CHIP_CAP,
+  terminalTransitionMs,
   type FailedFreshness,
   type RosterTaskInput,
 } from "../src/app/hooks/roster.js";
@@ -18,8 +19,14 @@ function task(overrides: Partial<RosterTaskInput> & Pick<RosterTaskInput, "id" |
     orchestratorSession: null,
     question: null,
     updatedAt: null,
+    completedAt: null,
     ...overrides,
   };
+}
+
+/** ISO for epoch-ms relative to a fixed `now` (freshness tests). */
+function isoAt(now: number, offsetMs: number): string {
+  return new Date(now + offsetMs).toISOString();
 }
 
 function freshness(
@@ -416,7 +423,144 @@ describe("failed freshness helpers", () => {
       999,
     );
     expect(next.get("a")).toBe(100);
+    // No prior known state + no wire terminal time → fall back to now.
     expect(next.get("b")).toBe(999);
     expect(next.has("gone")).toBe(false);
+  });
+
+  it("isFreshFailure is false when the observation stamp is missing", () => {
+    expect(
+      isFreshFailure("f", "failed", freshness({ now: 1_000, observedAt: new Map() })),
+    ).toBe(false);
+  });
+
+  it("terminalTransitionMs prefers completedAt over updatedAt", () => {
+    const t = task({
+      id: "f",
+      state: "failed",
+      completedAt: "2026-01-01T00:00:10.000Z",
+      updatedAt: "2026-01-01T00:00:20.000Z",
+    });
+    expect(terminalTransitionMs(t)).toBe(Date.parse("2026-01-01T00:00:10.000Z"));
+    expect(
+      terminalTransitionMs(
+        task({ id: "f", state: "failed", completedAt: null, updatedAt: "2026-01-01T00:00:20.000Z" }),
+      ),
+    ).toBe(Date.parse("2026-01-01T00:00:20.000Z"));
+    expect(terminalTransitionMs(task({ id: "f", state: "failed" }))).toBeUndefined();
+  });
+});
+
+describe("failed freshness honesty — cold load vs live transition", () => {
+  const now = 1_700_000_000_000; // fixed epoch for deterministic ISO stamps
+
+  it("(a) cold-load with an old failure is NOT fresh and does not lift FAILED above RUNNING", () => {
+    // Hard reload: empty observation map + empty known states; wire says 26h ago.
+    const oldIso = isoAt(now, -26 * 60 * 60 * 1000);
+    const failed = task({
+      id: "old-wreck",
+      state: "failed",
+      completedAt: oldIso,
+      updatedAt: oldIso,
+    });
+    const observedAt = advanceFailedObservations([failed], new Map(), now, new Map());
+    expect(observedAt.get("old-wreck")).toBe(Date.parse(oldIso));
+
+    const { groups } = projectRoster(
+      [task({ id: "r", state: "running" }), failed],
+      null,
+      freshness({ now, observedAt }),
+    );
+    expect(groups.map((g) => g.state)).toEqual(["running", "failed"]);
+    expect(groups.find((g) => g.state === "failed")!.tasks[0]!.freshFailure).toBe(false);
+  });
+
+  it("(b) cold-load with a failure 2 minutes old is fresh and lifts FAILED under stalled", () => {
+    const recentIso = isoAt(now, -2 * 60 * 1000);
+    const failed = task({
+      id: "fresh-wreck",
+      state: "failed",
+      completedAt: recentIso,
+      updatedAt: recentIso,
+    });
+    const observedAt = advanceFailedObservations([failed], new Map(), now, new Map());
+    expect(observedAt.get("fresh-wreck")).toBe(Date.parse(recentIso));
+
+    const { groups } = projectRoster(
+      [
+        task({ id: "r", state: "running" }),
+        task({ id: "s", state: "stalled" }),
+        failed,
+      ],
+      null,
+      freshness({ now, observedAt }),
+    );
+    expect(groups.map((g) => g.state)).toEqual(["stalled", "failed", "running"]);
+    expect(groups.find((g) => g.state === "failed")!.tasks[0]!.freshFailure).toBe(true);
+  });
+
+  it("(c) live non-failed→failed transition stamps now (fresh from transition moment)", () => {
+    // Operator saw it running; SSE delivers failed. Wire may lag; stamp is wall clock.
+    const wireSlightlyEarlier = isoAt(now, -500);
+    const failed = task({
+      id: "live",
+      state: "failed",
+      completedAt: wireSlightlyEarlier,
+      updatedAt: wireSlightlyEarlier,
+    });
+    const prevKnown = new Map([["live", "running"]]);
+    const observedAt = advanceFailedObservations([failed], new Map(), now, prevKnown);
+    expect(observedAt.get("live")).toBe(now);
+
+    const { groups } = projectRoster(
+      [task({ id: "r", state: "running" }), failed],
+      null,
+      freshness({ now, observedAt }),
+    );
+    expect(groups.find((g) => g.state === "failed")!.tasks[0]!.freshFailure).toBe(true);
+  });
+
+  it("(d) reload after a live fail within the window stays fresh via wire timestamp", () => {
+    // Browser lost the observation map; cold seed from completed_at still inside window.
+    const failIso = isoAt(now, -90_000); // 90s ago — within 5 min
+    const failed = task({
+      id: "live",
+      state: "failed",
+      completedAt: failIso,
+      updatedAt: failIso,
+    });
+    // No prevKnownStates (reload) → wire seed, not wall-clock now.
+    const observedAt = advanceFailedObservations([failed], new Map(), now, new Map());
+    expect(observedAt.get("live")).toBe(Date.parse(failIso));
+    expect(observedAt.get("live")).not.toBe(now);
+
+    const { groups } = projectRoster(
+      [task({ id: "r", state: "running" }), failed],
+      null,
+      freshness({ now, observedAt }),
+    );
+    expect(groups.map((g) => g.state)).toEqual(["failed", "running"]);
+    expect(groups.find((g) => g.state === "failed")!.tasks[0]!.freshFailure).toBe(true);
+  });
+
+  it("cold-load falls back to updatedAt when completedAt is missing", () => {
+    const recentIso = isoAt(now, -60_000);
+    const failed = task({
+      id: "f",
+      state: "failed",
+      completedAt: null,
+      updatedAt: recentIso,
+    });
+    const observedAt = advanceFailedObservations([failed], new Map(), now);
+    expect(observedAt.get("f")).toBe(Date.parse(recentIso));
+  });
+
+  it("keeps an existing stamp across re-advances (live clock does not reset)", () => {
+    const failed = task({ id: "f", state: "failed", completedAt: isoAt(now, -1_000) });
+    const first = advanceFailedObservations([failed], new Map(), now, new Map([["f", "running"]]));
+    expect(first.get("f")).toBe(now);
+    const second = advanceFailedObservations([failed], first, now + 30_000, new Map([["f", "failed"]]));
+    expect(second.get("f")).toBe(now);
+    expect(second).toBe(first); // identity-stable when unchanged
   });
 });
