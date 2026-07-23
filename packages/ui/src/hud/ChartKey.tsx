@@ -11,6 +11,7 @@ import {
 } from "react";
 import { Emblem, Mark } from "../primitives/index.js";
 import {
+  notifyHandRolledPopoverClosed,
   notifyHandRolledPopoverOpen,
   subscribeHandRolledPopoverOpen,
 } from "./handRolledPopover.js";
@@ -69,9 +70,10 @@ export const ChartKey = memo(function ChartKey() {
   }, []);
 
   // Announce open so peers close; close on outside click / Escape.
+  // Register the surface root so inside clicks do not falsely clear the bus.
   useEffect(() => {
     if (!open) return;
-    notifyHandRolledPopoverOpen("chart-key");
+    notifyHandRolledPopoverOpen("chart-key", rootRef.current);
     const onPointer = (event: MouseEvent): void => {
       if (rootRef.current && !rootRef.current.contains(event.target as Node)) {
         setOpen(false);
@@ -90,6 +92,8 @@ export const ChartKey = memo(function ChartKey() {
     return () => {
       document.removeEventListener("mousedown", onPointer);
       document.removeEventListener("keydown", onKey);
+      // Toggle, peer open, outside click, Esc, unmount — keep bus truthful.
+      notifyHandRolledPopoverClosed("chart-key");
     };
   }, [open]);
 

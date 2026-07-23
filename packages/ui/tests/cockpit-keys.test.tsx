@@ -2,15 +2,20 @@
 import { useRef, useState } from "react";
 import { afterEach, describe, expect, it } from "vitest";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { RosterPanel } from "../src/hud/index.js";
+import { ChartKey, RosterPanel } from "../src/hud/index.js";
 import type { RosterGroup, RosterSearchHandle, RosterSessionOption } from "../src/hud/index.js";
+import { notifyHandRolledPopoverClosed } from "../src/hud/handRolledPopover.js";
 import {
   awaitingTaskIds,
   nextAwaitingId,
   useCockpitKeys,
 } from "../src/app/hooks/useCockpitKeys.js";
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  notifyHandRolledPopoverClosed("chart-key");
+  notifyHandRolledPopoverClosed("session-find");
+});
 
 const GROUPS: RosterGroup[] = [
   {
@@ -74,11 +79,14 @@ function KeysHarness({
   initialTaskId = null as string | null,
   onToggleSoundings,
   onSelectTask,
+  withChartKey = false,
 }: {
   groups?: RosterGroup[];
   initialTaskId?: string | null;
   onToggleSoundings?: () => void;
   onSelectTask?: (id: string, options?: { tab?: string }) => void;
+  /** Mount ChartKey so hand-rolled popover Esc can be tested against selection. */
+  withChartKey?: boolean;
 }) {
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(initialTaskId);
   const rosterRef = useRef<RosterSearchHandle | null>(null);
@@ -97,6 +105,7 @@ function KeysHarness({
   return (
     <div>
       <span data-testid="selected">{selectedTaskId ?? "none"}</span>
+      {withChartKey ? <ChartKey /> : null}
       <RosterPanel
         groups={groups}
         sessions={SESSIONS}
@@ -272,6 +281,41 @@ describe("useCockpitKeys window keydown accelerators", () => {
     expect(screen.getByTestId("selected").textContent).toBe("t1");
 
     // With no popover open, Esc clears the selection.
+    act(() => {
+      fireEvent.keyDown(window, { key: "Escape" });
+    });
+    expect(screen.getByTestId("selected").textContent).toBe("none");
+  });
+
+  it("click inside open ChartKey then Esc closes popover and keeps task selection", () => {
+    // Regression: bus used to clear openPopover on any document mousedown,
+    // so a click inside Chart key + Esc also cleared the inspector selection.
+    render(<KeysHarness initialTaskId="t1" withChartKey />);
+    expect(screen.getByTestId("selected").textContent).toBe("t1");
+
+    act(() => {
+      fireEvent.click(screen.getByRole("button", { name: /Chart key/ }));
+    });
+    const panel = screen.getByRole("region", { name: "Chart key" });
+    expect(panel).toBeTruthy();
+
+    act(() => {
+      fireEvent.pointerDown(panel);
+      fireEvent.mouseDown(panel);
+    });
+    // Still open after an inside click.
+    expect(screen.getByRole("region", { name: "Chart key" })).toBeTruthy();
+
+    // Esc closes Chart key only — selection must survive (useCockpitKeys
+    // sees isAnyHandRolledPopoverOpen and returns early). One event bubbles
+    // document → window so the WeakSet dismissal mark is shared.
+    act(() => {
+      fireEvent.keyDown(document, { key: "Escape" });
+    });
+    expect(screen.queryByRole("region", { name: "Chart key" })).toBeNull();
+    expect(screen.getByTestId("selected").textContent).toBe("t1");
+
+    // Second Esc (no popover) clears selection as usual.
     act(() => {
       fireEvent.keyDown(window, { key: "Escape" });
     });

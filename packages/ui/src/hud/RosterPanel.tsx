@@ -16,6 +16,7 @@ import { Plate, PlateHeader, Emblem, Mark, Stat } from "../primitives/index.js";
 import { MARK_ANCHOR, MARK_LENS, MARK_SLOOP } from "../tokens/chrome-glyphs.js";
 import { stateMetaFor } from "../tokens/state-meta.js";
 import {
+  notifyHandRolledPopoverClosed,
   notifyHandRolledPopoverOpen,
   subscribeHandRolledPopoverOpen,
 } from "./handRolledPopover.js";
@@ -404,9 +405,10 @@ function SessionSearch({
   }, []);
 
   // Announce open so peers close; close on outside click / Escape.
+  // Register the surface root so inside clicks do not falsely clear the bus.
   useEffect(() => {
     if (!open) return;
-    notifyHandRolledPopoverOpen("session-find");
+    notifyHandRolledPopoverOpen("session-find", rootRef.current);
     const onPointer = (event: MouseEvent): void => {
       if (rootRef.current && !rootRef.current.contains(event.target as Node)) {
         setOpen(false);
@@ -425,6 +427,8 @@ function SessionSearch({
     return () => {
       document.removeEventListener("mousedown", onPointer);
       document.removeEventListener("keydown", onKey);
+      // Toggle, peer open, outside click, Esc, unmount — keep bus truthful.
+      notifyHandRolledPopoverClosed("session-find");
     };
   }, [open]);
 

@@ -2,10 +2,19 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { ChartKey, RosterPanel } from "../src/hud/index.js";
+import {
+  isAnyHandRolledPopoverOpen,
+  notifyHandRolledPopoverClosed,
+} from "../src/hud/handRolledPopover.js";
 import { HARNESS_COLORS, MODEL_VENDORS } from "../src/tokens/factions.js";
 import { ATTENTION_DISPLAY_ORDER, STATE_META } from "../src/tokens/state-meta.js";
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  // Ensure module bus is idle between tests (unmount may already have closed).
+  notifyHandRolledPopoverClosed("chart-key");
+  notifyHandRolledPopoverClosed("session-find");
+});
 
 describe("ChartKey production legend (recognition over recall)", () => {
   it("starts collapsed — no legend panel until the toggle is opened", () => {
@@ -156,5 +165,91 @@ describe("hand-rolled popover single-open invariant", () => {
     fireEvent.click(screen.getByRole("button", { name: "Search sessions" }));
     expect(screen.getByLabelText("Session id")).toBeTruthy();
     expect(screen.queryByRole("region", { name: "Chart key" })).toBeNull();
+  });
+});
+
+describe("hand-rolled popover bus truthfulness", () => {
+  it("click inside open ChartKey keeps the bus open; Esc then closes it", () => {
+    render(<ChartKey />);
+    fireEvent.click(screen.getByRole("button", { name: /Chart key/ }));
+    expect(isAnyHandRolledPopoverOpen()).toBe(true);
+
+    const panel = screen.getByRole("region", { name: "Chart key" });
+    // Inside pointer must not clear the bus (regression: was nulling on any mousedown).
+    fireEvent.pointerDown(panel);
+    fireEvent.mouseDown(panel);
+    expect(isAnyHandRolledPopoverOpen()).toBe(true);
+    expect(screen.getByRole("region", { name: "Chart key" })).toBeTruthy();
+
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("region", { name: "Chart key" })).toBeNull();
+    expect(isAnyHandRolledPopoverOpen()).toBe(false);
+  });
+
+  it("click outside closes the popover and the bus reports closed", () => {
+    render(
+      <div>
+        <ChartKey />
+        <button type="button">outside</button>
+      </div>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /Chart key/ }));
+    expect(isAnyHandRolledPopoverOpen()).toBe(true);
+    expect(screen.getByRole("region", { name: "Chart key" })).toBeTruthy();
+
+    fireEvent.pointerDown(screen.getByRole("button", { name: "outside" }));
+    fireEvent.mouseDown(screen.getByRole("button", { name: "outside" }));
+    expect(screen.queryByRole("region", { name: "Chart key" })).toBeNull();
+    expect(isAnyHandRolledPopoverOpen()).toBe(false);
+  });
+
+  it("open/close via keyboard keeps the bus truthful", () => {
+    const groups = [
+      {
+        state: "running" as const,
+        tasks: [
+          {
+            id: "t1",
+            name: "chart-the-bay",
+            coat: "#10a37f",
+            emblem: { kind: "glyph" as const, char: "π" },
+            faction: "Codex",
+            meta: "feat/bay · t1",
+          },
+        ],
+      },
+    ];
+    render(
+      <>
+        <ChartKey />
+        <RosterPanel
+          groups={groups}
+          sessions={[{ id: "sess-abc12345", label: "sess-abc1", count: 1 }]}
+          selectedSessionId={null}
+          onSelectSession={() => {}}
+          searchSessions={async () => []}
+          selectedTaskId={null}
+          onSelectTask={() => {}}
+          totalTasks={1}
+          activeTasks={1}
+        />
+      </>,
+    );
+
+    // Chart key: open with Space/Enter on the toggle, close with Escape.
+    const chartToggle = screen.getByRole("button", { name: /Chart key/ });
+    fireEvent.keyDown(chartToggle, { key: " " });
+    fireEvent.click(chartToggle); // native button activation
+    expect(isAnyHandRolledPopoverOpen()).toBe(true);
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(isAnyHandRolledPopoverOpen()).toBe(false);
+    expect(screen.queryByRole("region", { name: "Chart key" })).toBeNull();
+
+    // Session Find: open via click ( / is useCockpitKeys), Esc closes + bus clears.
+    fireEvent.click(screen.getByRole("button", { name: "Search sessions" }));
+    expect(isAnyHandRolledPopoverOpen()).toBe(true);
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(isAnyHandRolledPopoverOpen()).toBe(false);
+    expect(screen.queryByLabelText("Session id")).toBeNull();
   });
 });
