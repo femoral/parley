@@ -1,4 +1,9 @@
-import { memo, type CSSProperties } from "react";
+import {
+  memo,
+  useRef,
+  type CSSProperties,
+  type KeyboardEvent,
+} from "react";
 import { Mark, Plate, PlateHeader } from "../primitives/index.js";
 import { MARK_COMPASS } from "../tokens/chrome-glyphs.js";
 import { EvalComparison } from "./EvalComparison.js";
@@ -205,6 +210,25 @@ function GroupCard({ group }: { group: SoundingsGroupView }) {
   );
 }
 
+function SoundingsError({ error }: { error: string | null }) {
+  return (
+    <div className="pc-soundings__state pc-soundings__state--error" role="alert">
+      <p className="pc-soundings__state-title">Soundings failed</p>
+      <p className="pc-soundings__state-sub">
+        {error ?? "Could not reach the daemon."}
+      </p>
+    </div>
+  );
+}
+
+function StaleChartBanner({ error }: { error: string | null }) {
+  return (
+    <p className="pc-soundings__banner" role="status">
+      Chart may be stale — {error ?? "could not refresh soundings."}
+    </p>
+  );
+}
+
 /**
  * Layer 2 — the Soundings metrics board (#119 / #165 / #166). Nautical register
  * for depth readings: group aggregates, score-vs-baseline distribution, quality
@@ -232,6 +256,35 @@ export const SoundingsPanel = memo(function SoundingsPanel({
     viewTab,
     evalPresence,
   } = soundings;
+  const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
+
+  // Manual-activation tabs (WAI-ARIA APG): arrows/Home/End move focus;
+  // Enter/Space activate through the button's native click.
+  const onTabKeyDown = (
+    event: KeyboardEvent<HTMLButtonElement>,
+    index: number,
+  ): void => {
+    const last = VIEW_TABS.length - 1;
+    let next: number | null = null;
+    switch (event.key) {
+      case "ArrowRight":
+        next = index === last ? 0 : index + 1;
+        break;
+      case "ArrowLeft":
+        next = index === 0 ? last : index - 1;
+        break;
+      case "Home":
+        next = 0;
+        break;
+      case "End":
+        next = last;
+        break;
+      default:
+        return;
+    }
+    event.preventDefault();
+    tabRefs.current[next]?.focus();
+  };
 
   return (
     <Plate padded={false} className="pc-soundings">
@@ -255,10 +308,13 @@ export const SoundingsPanel = memo(function SoundingsPanel({
       />
 
       <div className="pc-soundings__tabs" role="tablist" aria-label="Soundings views">
-        {VIEW_TABS.map((tab) => {
+        {VIEW_TABS.map((tab, index) => {
           const active = tab.value === viewTab;
           return (
             <button
+              ref={(node) => {
+                tabRefs.current[index] = node;
+              }}
               key={tab.value}
               type="button"
               role="tab"
@@ -267,6 +323,7 @@ export const SoundingsPanel = memo(function SoundingsPanel({
               aria-controls={`soundings-panel-${tab.value}`}
               tabIndex={active ? 0 : -1}
               className={`pc-soundings__tab${active ? " pc-soundings__tab--active" : ""}`}
+              onKeyDown={(event) => onTabKeyDown(event, index)}
               onClick={() => onViewTab(tab.value)}
             >
               {tab.label}
@@ -336,12 +393,7 @@ export const SoundingsPanel = memo(function SoundingsPanel({
             )}
 
             {status === "error" && groups.length === 0 && (
-              <div className="pc-soundings__state pc-soundings__state--error" role="alert">
-                <p className="pc-soundings__state-title">Soundings failed</p>
-                <p className="pc-soundings__state-sub">
-                  {error ?? "Could not reach the daemon."}
-                </p>
-              </div>
+              <SoundingsError error={error} />
             )}
 
             {status === "empty" && (
@@ -358,9 +410,7 @@ export const SoundingsPanel = memo(function SoundingsPanel({
             )}
 
             {status === "error" && groups.length > 0 && (
-              <p className="pc-soundings__banner" role="status">
-                Chart may be stale — {error ?? "could not refresh soundings."}
-              </p>
+              <StaleChartBanner error={error} />
             )}
 
             {groups.length > 0 && (
@@ -378,17 +428,10 @@ export const SoundingsPanel = memo(function SoundingsPanel({
         {viewTab === "distribution" && (
           <>
             {status === "error" && groups.length > 0 && (
-              <p className="pc-soundings__banner" role="status">
-                Chart may be stale — {error ?? "could not refresh soundings."}
-              </p>
+              <StaleChartBanner error={error} />
             )}
             {status === "error" && groups.length === 0 ? (
-              <div className="pc-soundings__state pc-soundings__state--error" role="alert">
-                <p className="pc-soundings__state-title">Soundings failed</p>
-                <p className="pc-soundings__state-sub">
-                  {error ?? "Could not reach the daemon."}
-                </p>
-              </div>
+              <SoundingsError error={error} />
             ) : (
               <EvalDistribution
                 rows={distribution}
@@ -402,17 +445,10 @@ export const SoundingsPanel = memo(function SoundingsPanel({
         {viewTab === "comparison" && (
           <>
             {status === "error" && groups.length > 0 && (
-              <p className="pc-soundings__banner" role="status">
-                Chart may be stale — {error ?? "could not refresh soundings."}
-              </p>
+              <StaleChartBanner error={error} />
             )}
             {status === "error" && groups.length === 0 ? (
-              <div className="pc-soundings__state pc-soundings__state--error" role="alert">
-                <p className="pc-soundings__state-title">Soundings failed</p>
-                <p className="pc-soundings__state-sub">
-                  {error ?? "Could not reach the daemon."}
-                </p>
-              </div>
+              <SoundingsError error={error} />
             ) : (
               <EvalComparison
                 rows={comparison}
@@ -428,17 +464,10 @@ export const SoundingsPanel = memo(function SoundingsPanel({
         {viewTab === "heatmap" && (
           <>
             {status === "error" && groups.length > 0 && (
-              <p className="pc-soundings__banner" role="status">
-                Chart may be stale — {error ?? "could not refresh soundings."}
-              </p>
+              <StaleChartBanner error={error} />
             )}
             {status === "error" && groups.length === 0 ? (
-              <div className="pc-soundings__state pc-soundings__state--error" role="alert">
-                <p className="pc-soundings__state-title">Soundings failed</p>
-                <p className="pc-soundings__state-sub">
-                  {error ?? "Could not reach the daemon."}
-                </p>
-              </div>
+              <SoundingsError error={error} />
             ) : (
               <EvalHeatmap
                 heatmap={heatmap}

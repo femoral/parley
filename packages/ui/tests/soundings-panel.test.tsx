@@ -1,8 +1,9 @@
 /** @vitest-environment happy-dom */
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { useState } from "react";
 import { SoundingsPanel } from "../src/hud/index.js";
-import type { SoundingsView } from "../src/hud/index.js";
+import type { SoundingsView, SoundingsViewTab } from "../src/hud/index.js";
 
 afterEach(cleanup);
 
@@ -82,6 +83,51 @@ function renderPanel(
 }
 
 describe("SoundingsPanel (#119)", () => {
+  it("reaches and activates every view tab from the keyboard", () => {
+    function KeyboardHarness() {
+      const [viewTab, setViewTab] = useState<SoundingsViewTab>("groups");
+      return (
+        <SoundingsPanel
+          soundings={baseView({ viewTab })}
+          onGroupBy={() => {}}
+          onFiltersChange={() => {}}
+          onFiltersClear={() => {}}
+          onViewTab={setViewTab}
+        />
+      );
+    }
+
+    render(<KeyboardHarness />);
+    const labels = [
+      "Groups",
+      "Score vs baseline",
+      "Comparison",
+      "Criterion failures",
+    ] as const;
+    const tabs = labels.map((name) => screen.getByRole("tab", { name }));
+    tabs[0]!.focus();
+
+    for (let index = 1; index < tabs.length; index += 1) {
+      const tab = tabs[index]!;
+      fireEvent.keyDown(document.activeElement!, { key: "ArrowRight" });
+      expect(document.activeElement).toBe(tab);
+      expect(tab.getAttribute("aria-selected")).toBe("false");
+      // A native button click is the activation event produced by Enter/Space.
+      fireEvent.click(tab);
+      expect(tab.getAttribute("aria-selected")).toBe("true");
+    }
+
+    fireEvent.keyDown(tabs[3]!, { key: "Home" });
+    expect(document.activeElement).toBe(tabs[0]!);
+    fireEvent.click(tabs[0]!);
+    expect(tabs[0]!.getAttribute("aria-selected")).toBe("true");
+
+    fireEvent.keyDown(tabs[0]!, { key: "ArrowLeft" });
+    expect(document.activeElement).toBe(tabs[3]!);
+    fireEvent.keyDown(tabs[3]!, { key: "End" });
+    expect(document.activeElement).toBe(tabs[3]!);
+  });
+
   it("renders group metrics from plain props", () => {
     renderPanel(baseView());
     expect(screen.getByText("SOUNDINGS")).toBeTruthy();
