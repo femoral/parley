@@ -29,6 +29,7 @@ describe("projectInbox selects tasks blocked on an answer (#67)", () => {
         faction: "Codex via Codex",
         meta: "feat/x · a",
         question: "Which port?",
+        updatedAt: null,
         sessionId: "sess-1",
       },
     ]);
@@ -77,6 +78,7 @@ describe("projectInbox selects tasks blocked on an answer (#67)", () => {
       faction: "Grok via OpenCode",
       meta: "feat/x · abcdefgh",
       question: "Deploy now?",
+      updatedAt: null,
       sessionId: null,
     });
   });

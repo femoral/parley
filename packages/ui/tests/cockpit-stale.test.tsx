@@ -116,7 +116,7 @@ describe("Cockpit stale-chart band", () => {
     cockpitState.view = baseView({ chartStale: false });
     const { container } = render(<Cockpit />);
     expect(container.querySelector(".pc-cockpit--stale")).toBeNull();
-    expect(screen.queryByRole("status")).toBeNull();
+    expect(container.querySelector(".pc-stale-band")).toBeNull();
     expect(screen.queryByText(/Chart may be stale/)).toBeNull();
   });
 
@@ -127,8 +127,9 @@ describe("Cockpit stale-chart band", () => {
     expect(shell?.classList.contains("pc-cockpit--stale")).toBe(true);
     expect(shell?.getAttribute("data-stale")).toBe("true");
 
-    const band = screen.getByRole("status");
-    expect(band.classList.contains("pc-stale-band")).toBe(true);
+    // The health chip is also role="status", so target the band by class.
+    const band = container.querySelector(".pc-stale-band")!;
+    expect(band).toBeTruthy();
     expect(band.textContent).toMatch(/Chart may be stale — reconnecting/);
     // Glyph carries state independently of colour — the authored stalled
     // mark (SVG via Mark), not a platform emoji.
@@ -138,11 +139,11 @@ describe("Cockpit stale-chart band", () => {
   it("removes the band when chartStale clears", () => {
     cockpitState.view = baseView({ chartStale: true });
     const { rerender, container } = render(<Cockpit />);
-    expect(screen.getByRole("status")).toBeTruthy();
+    expect(container.querySelector(".pc-stale-band")).toBeTruthy();
 
     cockpitState.view = baseView({ chartStale: false });
     rerender(<Cockpit />);
     expect(container.querySelector(".pc-cockpit--stale")).toBeNull();
-    expect(screen.queryByRole("status")).toBeNull();
+    expect(container.querySelector(".pc-stale-band")).toBeNull();
   });
 });
