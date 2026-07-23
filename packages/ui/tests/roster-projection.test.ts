@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import {
   advanceFailedObservations,
   displayAttentionRank,
@@ -6,10 +6,15 @@ import {
   isFreshFailure,
   projectRoster,
   RECENT_SESSION_CHIP_CAP,
+  resetStickySessionHandles,
   terminalTransitionMs,
   type FailedFreshness,
   type RosterTaskInput,
 } from "../src/app/hooks/roster.js";
+
+afterEach(() => {
+  resetStickySessionHandles();
+});
 
 function task(overrides: Partial<RosterTaskInput> & Pick<RosterTaskInput, "id" | "state">): RosterTaskInput {
   return {

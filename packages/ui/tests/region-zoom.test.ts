@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
+  BOTTOM_SCENE_MARGIN_PX,
   computeRegionZoomTarget,
   contentFrameOffset,
   countZoomTarget,
+  EDGE_CHIP_GUTTER_PX,
   ORBIT_DRAFT_LIFT_FACTOR,
   ORBIT_RADIUS_MIN,
   orbitRadiusForNearest,
@@ -73,18 +75,105 @@ describe("region zoom fit (#201)", () => {
     const tightW = bodyOnlyW + 20; // body fits with room
     expect(padded.width).toBeGreaterThan(tightW);
 
+    // Zero chrome gutters so the assertion isolates orbit pad vs body-only.
     const withOrbit = computeRegionZoomTarget({
       islandCount: 1,
       centres: [{ x: 0, y: 0 }],
       viewportW: tightW,
       viewportH: 2000,
       topHeadroomPx: 0,
+      bottomMarginPx: 0,
+      edgeChipGutterPx: 0,
     });
     const bodyFitOnly = Math.min(1, tightW / bodyOnlyW);
     // Body-only fit would stay at 1; orbit pad forces zoom-out.
     expect(bodyFitOnly).toBe(1);
     expect(withOrbit).toBeLessThan(1);
     expect(withOrbit).toBeCloseTo(tightW / padded.width, 5);
+  });
+
+  it("reserves horizontal gutters for edge chips so islands do not fit under them", () => {
+    const centres = [{ x: 0, y: 0 }];
+    const padded = paddedIslandBounds(centres)!;
+    // Modest gutter keeps usable width above REGION_ZOOM_MIN so we can assert
+    // the exact fit ratio (production EDGE_CHIP_GUTTER_PX is larger).
+    const gutter = 80;
+    expect(gutter).toBeLessThan(EDGE_CHIP_GUTTER_PX);
+    // Viewport just large enough that full width fits at zoom 1, but width
+    // minus 2× edge gutters forces zoom-out.
+    const viewportW = padded.width + 40;
+    const withoutGutter = computeRegionZoomTarget({
+      islandCount: 1,
+      centres,
+      viewportW,
+      viewportH: 2000,
+      topHeadroomPx: 0,
+      bottomMarginPx: 0,
+      edgeChipGutterPx: 0,
+    });
+    const withGutter = computeRegionZoomTarget({
+      islandCount: 1,
+      centres,
+      viewportW,
+      viewportH: 2000,
+      topHeadroomPx: 0,
+      bottomMarginPx: 0,
+      edgeChipGutterPx: gutter,
+    });
+    expect(withoutGutter).toBe(1);
+    expect(withGutter).toBeLessThan(withoutGutter);
+    const usableW = viewportW - 2 * gutter;
+    expect(withGutter).toBeCloseTo(usableW / padded.width, 5);
+    // Default production gutters also reduce fit: full viewport still fits the
+    // box, but usable width after 2× EDGE_CHIP_GUTTER_PX does not.
+    const productionViewportW = padded.width + EDGE_CHIP_GUTTER_PX;
+    const withDefaultGutter = computeRegionZoomTarget({
+      islandCount: 1,
+      centres,
+      viewportW: productionViewportW,
+      viewportH: 2000,
+      topHeadroomPx: 0,
+      bottomMarginPx: 0,
+    });
+    const zeroDefault = computeRegionZoomTarget({
+      islandCount: 1,
+      centres,
+      viewportW: productionViewportW,
+      viewportH: 2000,
+      topHeadroomPx: 0,
+      bottomMarginPx: 0,
+      edgeChipGutterPx: 0,
+    });
+    expect(zeroDefault).toBe(1);
+    expect(withDefaultGutter).toBeLessThan(zeroDefault);
+  });
+
+  it("reserves bottom margin so southern islands are not packed to the scene edge", () => {
+    const centres = [{ x: 0, y: 0 }];
+    const padded = paddedIslandBounds(centres)!;
+    // Tall enough that height is the constraining axis once bottom margin applies.
+    const viewportH = padded.height + TOP_OVERLAY_HEADROOM_PX + 10;
+    const viewportW = 4000;
+    const withoutBottom = computeRegionZoomTarget({
+      islandCount: 1,
+      centres,
+      viewportW,
+      viewportH,
+      topHeadroomPx: TOP_OVERLAY_HEADROOM_PX,
+      bottomMarginPx: 0,
+      edgeChipGutterPx: 0,
+    });
+    const withBottom = computeRegionZoomTarget({
+      islandCount: 1,
+      centres,
+      viewportW,
+      viewportH,
+      topHeadroomPx: TOP_OVERLAY_HEADROOM_PX,
+      bottomMarginPx: BOTTOM_SCENE_MARGIN_PX,
+      edgeChipGutterPx: 0,
+    });
+    expect(withoutBottom).toBe(1);
+    expect(withBottom).toBeLessThan(withoutBottom);
   });
 
   it("clamps to REGION_ZOOM_MIN and never exceeds 1", () => {
@@ -158,12 +247,15 @@ describe("region zoom fit (#201)", () => {
     const box = paddedIslandBounds(centres)!;
     const viewportW = 4000; // never width-limited
     const viewportH = box.height; // exact fit without headroom
+    // Zero side/bottom chrome so this isolates top headroom only.
     const noHead = computeRegionZoomTarget({
       islandCount: 2,
       centres,
       viewportW,
       viewportH,
       topHeadroomPx: 0,
+      bottomMarginPx: 0,
+      edgeChipGutterPx: 0,
     });
     const withHead = computeRegionZoomTarget({
       islandCount: 2,
@@ -171,6 +263,8 @@ describe("region zoom fit (#201)", () => {
       viewportW,
       viewportH,
       topHeadroomPx: TOP_OVERLAY_HEADROOM_PX,
+      bottomMarginPx: 0,
+      edgeChipGutterPx: 0,
     });
     expect(noHead).toBeCloseTo(1, 5);
     expect(withHead).toBeLessThan(noHead);
@@ -196,7 +290,8 @@ describe("content framing (centroid + headroom)", () => {
       { x: 0, y: 100 },
     ];
     const box = paddedIslandBounds(centres)!;
-    const frame = contentFrameOffset(centres, 1, 0);
+    // Zero chrome margins so frame equals the padded centroid.
+    const frame = contentFrameOffset(centres, 1, 0, 0);
     expect(frame.x).toBeCloseTo(box.cx, 5);
     expect(frame.y).toBeCloseTo(box.cy, 5);
     expect(frame.y).not.toBe(0);
@@ -204,8 +299,9 @@ describe("content framing (centroid + headroom)", () => {
 
   it("biases the frame north so content sits below viewport centre (top headroom)", () => {
     const centres = [{ x: 0, y: 0 }];
-    const plain = contentFrameOffset(centres, 1, 0);
-    const headed = contentFrameOffset(centres, 1, 48);
+    // Isolate top headroom with bottom margin held at 0.
+    const plain = contentFrameOffset(centres, 1, 0, 0);
+    const headed = contentFrameOffset(centres, 1, 48, 0);
     expect(headed.y).toBeLessThan(plain.y);
     expect(plain.y - headed.y).toBeCloseTo(24, 5);
   });

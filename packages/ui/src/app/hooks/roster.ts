@@ -132,6 +132,10 @@ export interface SessionIdentity {
 /**
  * Derive a humane session label from tasks already known for that session.
  * No invented ship-name table: first task name by stable id order, else shortRef.
+ *
+ * Pure per call — does not consult the sticky handle cache. Prefer
+ * {@link collectSessionIdentities} for live fleet projections so handles stay
+ * stable for the page lifetime when the deriving task is cleaned.
  */
 export function deriveSessionIdentity(
   sessionId: string,
@@ -150,9 +154,25 @@ export function deriveSessionIdentity(
 }
 
 /**
+ * Client-side sticky handles: once a session id receives a handle, keep it for
+ * the lifetime of the page even if the lexically-first task that produced it is
+ * cleaned or removed. Module-scoped so every `collectSessionIdentities` caller
+ * (roster, scene, inbox, search) stays consistent.
+ */
+const stickySessionHandles = new Map<string, string>();
+
+/** Test-only: clear sticky handles between cases so page-lifetime cache does not leak. */
+export function resetStickySessionHandles(): void {
+  stickySessionHandles.clear();
+}
+
+/**
  * Build session identities for every orchestrator session present in the fleet.
  * Used by roster chips, scene regions, inbox ropes, and search enrichment so
  * every surface shares one handle.
+ *
+ * Handles are sticky for the page lifetime: the first derived handle for a
+ * session id is retained even when the deriving task disappears mid-watch.
  */
 export function collectSessionIdentities(
   tasks: Iterable<RosterTaskInput>,
@@ -170,7 +190,18 @@ export function collectSessionIdentities(
   }
   const out = new Map<string, SessionIdentity>();
   for (const [sid, members] of bySession) {
-    out.set(sid, deriveSessionIdentity(sid, members));
+    const derived = deriveSessionIdentity(sid, members);
+    const sticky = stickySessionHandles.get(sid);
+    if (sticky === undefined) {
+      stickySessionHandles.set(sid, derived.handle);
+      out.set(sid, derived);
+    } else {
+      out.set(sid, {
+        ...derived,
+        handle: sticky,
+        label: `${sticky} · ${formatTaskCount(derived.count)}`,
+      });
+    }
   }
   return out;
 }

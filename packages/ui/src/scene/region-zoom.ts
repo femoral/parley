@@ -68,6 +68,20 @@ export const PLANK_CLEARANCE = ISLAND_SPRITE_WIDTH / 2 + 8;
  */
 export const TOP_OVERLAY_HEADROOM_PX = 48;
 
+/**
+ * Viewport pixels reserved on each horizontal edge for edge-of-frame session
+ * chips (`.pc-edge-alerts`). Chips stay z-on-top for navigation; framing must
+ * keep islands + name planks out of those gutters at typical widths.
+ * ~chip max width (label 11ch + glyph + count + pad) + 10px inset.
+ */
+export const EDGE_CHIP_GUTTER_PX = 168;
+
+/**
+ * Viewport pixels reserved at the bottom of the scene so a southern island
+ * sprite + plank is not clipped mid-body at the scene boundary (stacked 900px).
+ */
+export const BOTTOM_SCENE_MARGIN_PX = 36;
+
 /** Floor on per-island orbit radius so a tight pack still reads as sailing. */
 export const ORBIT_RADIUS_MIN = 78;
 
@@ -180,6 +194,8 @@ export function paddedIslandBounds(centres: readonly Point[]): ContentBounds | n
 /**
  * Region-local framing point for the content centroid, biased north so the
  * visual mass sits slightly below viewport centre and leaves top headroom.
+ * Bottom margin is mirrored so southern islands are not clipped at the scene
+ * edge; horizontal chip gutters are symmetric so no lateral bias is needed.
  *
  * The region transform applies `scale(z) translate(-fx, -fy)` so this point
  * lands on the camera target (region world origin).
@@ -188,12 +204,14 @@ export function contentFrameOffset(
   centres: readonly Point[],
   zoom: number,
   topHeadroomPx: number = TOP_OVERLAY_HEADROOM_PX,
+  bottomMarginPx: number = BOTTOM_SCENE_MARGIN_PX,
 ): Point {
   const box = paddedIslandBounds(centres);
   if (!box) return { x: 0, y: 0 };
   const z = zoom > 0 ? zoom : 1;
-  // Bias framing point north (smaller y) → content appears lower in the view.
-  const headroomBias = topHeadroomPx / (2 * z);
+  // Net vertical chrome: more top reserve → bias north (content sits lower).
+  const netHeadroom = topHeadroomPx - bottomMarginPx;
+  const headroomBias = netHeadroom / (2 * z);
   return { x: box.cx, y: box.cy - headroomBias };
 }
 
@@ -205,8 +223,8 @@ export function countZoomTarget(islandCount: number): number {
 /**
  * Combined zoom target: min of count-based target and viewport fit, clamped to
  * [REGION_ZOOM_MIN, 1]. Small fleets whose padded box already fits keep 1.
- * Usable height subtracts top-overlay headroom so fit does not pack content
- * into the chrome band.
+ * Usable size subtracts top-overlay headroom, bottom margin, and edge-chip
+ * gutters so fit does not pack content under chrome or navigation chips.
  */
 export function computeRegionZoomTarget(input: {
   islandCount: number;
@@ -214,6 +232,8 @@ export function computeRegionZoomTarget(input: {
   viewportW: number;
   viewportH: number;
   topHeadroomPx?: number;
+  bottomMarginPx?: number;
+  edgeChipGutterPx?: number;
 }): number {
   const countTarget = countZoomTarget(input.islandCount);
   if (input.centres.length === 0 || input.viewportW <= 0 || input.viewportH <= 0) {
@@ -224,8 +244,11 @@ export function computeRegionZoomTarget(input: {
   if (!box) return countTarget;
 
   const headroom = input.topHeadroomPx ?? TOP_OVERLAY_HEADROOM_PX;
-  const usableH = Math.max(1, input.viewportH - headroom);
-  const fit = Math.min(input.viewportW / box.width, usableH / box.height);
+  const bottom = input.bottomMarginPx ?? BOTTOM_SCENE_MARGIN_PX;
+  const sideGutter = input.edgeChipGutterPx ?? EDGE_CHIP_GUTTER_PX;
+  const usableW = Math.max(1, input.viewportW - 2 * sideGutter);
+  const usableH = Math.max(1, input.viewportH - headroom - bottom);
+  const fit = Math.min(usableW / box.width, usableH / box.height);
   // Never over-zoom (max 1); never ignore the count ceiling; floor at REGION_ZOOM_MIN.
   return Math.max(REGION_ZOOM_MIN, Math.min(1, countTarget, fit));
 }

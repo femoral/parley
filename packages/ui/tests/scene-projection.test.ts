@@ -1,12 +1,20 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { attentionRank } from "@useparley/core";
 import {
   projectScene,
   rollupSessionAttention,
   isSceneAttentionState,
 } from "../src/app/hooks/scene.js";
-import { projectRoster, type RosterTaskInput } from "../src/app/hooks/roster.js";
+import {
+  projectRoster,
+  resetStickySessionHandles,
+  type RosterTaskInput,
+} from "../src/app/hooks/roster.js";
 import { projectInbox } from "../src/app/hooks/inbox.js";
+
+afterEach(() => {
+  resetStickySessionHandles();
+});
 
 function task(overrides: Partial<RosterTaskInput> & Pick<RosterTaskInput, "id" | "state">): RosterTaskInput {
   return {

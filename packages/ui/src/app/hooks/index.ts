@@ -77,6 +77,7 @@ export {
   formatTaskCount,
   deriveSessionIdentity,
   collectSessionIdentities,
+  resetStickySessionHandles,
   RECENT_SESSION_CHIP_CAP,
   FAILED_FRESHNESS_MS,
   isFreshFailure,

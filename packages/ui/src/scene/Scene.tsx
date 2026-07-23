@@ -142,12 +142,34 @@ const QUIET_EDGE_RANK = Number.POSITIVE_INFINITY;
  * Placement uses id-stable world offsets, not array index, so chip sides stay
  * consistent when the sessions array is reordered.
  */
+/**
+ * Handles that collide among named sessions currently on the sea. Used so edge
+ * chips can show mono short-refs only when two coasts share a name.
+ */
+function collidingHandles(
+  placed: ReadonlyArray<{ session: SessionRegionData }>,
+): Set<string> {
+  const counts = new Map<string, number>();
+  for (const { session } of placed) {
+    if (session.id === null) continue;
+    const handle = (session.handle ?? session.label).trim();
+    if (!handle) continue;
+    counts.set(handle, (counts.get(handle) ?? 0) + 1);
+  }
+  const out = new Set<string>();
+  for (const [handle, n] of counts) {
+    if (n > 1) out.add(handle);
+  }
+  return out;
+}
+
 function edgeAlertsFor(
   placed: ReadonlyArray<{ session: SessionRegionData; dx: number }>,
   activeDx: number,
   activeKey: string,
 ): EdgeAlertItem[] {
   const items: EdgeAlertItem[] = [];
+  const collisions = collidingHandles(placed);
 
   for (const { session, dx } of placed) {
     if (regionKey(session.id) === activeKey) continue;
@@ -155,10 +177,15 @@ function edgeAlertsFor(
     // Prefer the short handle on edge chips; full "handle · N tasks" stays on
     // the region banner. Open water keeps its in-register label.
     const chipLabel = session.handle ?? session.label;
+    const shortRef = session.shortRef ?? null;
+    const handleCollision =
+      session.id !== null && collisions.has(chipLabel.trim());
     if (session.attention !== null) {
       items.push({
         sessionId: session.id,
         label: chipLabel,
+        shortRef,
+        handleCollision,
         state: session.attention.state,
         count: session.attention.count,
         rank: session.attention.rank,
@@ -172,6 +199,8 @@ function edgeAlertsFor(
     items.push({
       sessionId: session.id,
       label: chipLabel,
+      shortRef,
+      handleCollision,
       state: "quiet",
       count: taskCount,
       rank: QUIET_EDGE_RANK,

@@ -36,7 +36,8 @@ export function DayChip({ day, clock }: DayChipProps) {
   }, []);
 
   const dayTitle = day === 1 ? "Daemon up 1 day" : `Daemon up ${day} days`;
-  const windParts = weather.wind.match(/^(.+)\s(\d+kn)$/);
+  // Optional bearing ("NE 8kn") or bare speed ("0kn") — always mono the kn token.
+  const windParts = weather.wind.match(/^(?:(.+)\s)?(\d+kn)$/);
 
   return (
     <Plate padded={false}>
@@ -56,12 +57,12 @@ export function DayChip({ day, clock }: DayChipProps) {
           </span>
           <span>{weather.condition}</span>
           <span className="pc-daychip__wind">
-            · {windParts?.[1] ?? weather.wind}
-            {windParts && (
-              <>
-                {" "}
-                <span className="pc-daychip__wind-speed">{windParts[2]}</span>
-              </>
+            ·{" "}
+            {windParts?.[1] ? `${windParts[1]} ` : null}
+            {windParts ? (
+              <span className="pc-daychip__wind-speed">{windParts[2]}</span>
+            ) : (
+              weather.wind
             )}
           </span>
         </div>

@@ -132,9 +132,12 @@
   white-space: nowrap;
   font-family: var(--font-display);
   font-weight: 700;
-  font-size: 11px;
-  letter-spacing: var(--track-caps);
-  color: var(--brass-soft);
+  /* sub tier (12px) — was 11px / chrome-sm; raised for sea legibility. */
+  font-size: var(--text-sub);
+  /* Quieter than --track-caps (2px) so wide Cinzel still reads at small sizes. */
+  letter-spacing: var(--track-micro);
+  /* --ink-on-sea on sea ≈ 5.73:1 (≥4.5:1 AA); badge-bg is translucent dark. */
+  color: var(--ink-on-sea);
   padding: 4px 12px;
   border-radius: var(--radius-pill);
   background: var(--badge-bg);
@@ -991,6 +994,18 @@ button.pc-edge-alert:focus-visible {
   font-weight: 600;
   color: var(--ink-parchment);
 }
+/* Collision disambiguation — mono short-ref only when two chips share a handle. */
+.pc-edge-alert__short-ref {
+  font-family: var(--font-mono);
+  font-size: var(--text-meta);
+  font-weight: 500;
+  color: var(--ink-soft);
+  letter-spacing: 0;
+  max-width: 9ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .pc-edge-alert__count {
   font-family: var(--font-mono);
   font-size: var(--text-mono);
@@ -998,6 +1013,10 @@ button.pc-edge-alert:focus-visible {
   color: var(--ink-soft);
   min-width: 0.75em;
   text-align: center;
+}
+.pc-edge-alert--quiet .pc-edge-alert__short-ref {
+  font-size: var(--text-label);
+  color: var(--ink-dim);
 }
 .pc-edge-alert--more {
   cursor: default;

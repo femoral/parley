@@ -14,6 +14,16 @@ export interface EdgeAlertItem {
   /** Session label (matches the region banner — humane handle + task count). */
   label: string;
   /**
+   * 8-char short ref for named sessions. Always in title + accessible name;
+   * rendered visibly only when {@link handleCollision} is true.
+   */
+  shortRef?: string | null;
+  /**
+   * True when another visible session shares this chip's handle — show the
+   * mono short-ref so colliding chips stay distinguishable.
+   */
+  handleCollision?: boolean;
+  /**
    * Loudest edge-attention state on that session (hooks rollup), or unused
    * when {@link quiet} — calm presence chips carry task count only.
    */
@@ -67,6 +77,14 @@ function edgeChipKey(item: EdgeAlertItem): string {
   return item.sessionId ?? "open-water";
 }
 
+/** Accessible / title head: handle always paired with short-ref for named sessions. */
+function chipHead(item: EdgeAlertItem): string {
+  if (item.sessionId === null) return item.label;
+  const ref = item.shortRef?.trim();
+  const withRef = ref ? `${item.label} (${ref})` : item.label;
+  return `Session ${withRef}`;
+}
+
 function EdgeAlertButton({
   item,
   onSelectSession,
@@ -77,15 +95,21 @@ function EdgeAlertButton({
   const quiet = item.quiet === true;
   const direction = item.side === "left" ? "to the left" : "to the right";
   const chevron = item.side === "left" ? "◀" : "▶";
-  // Named sessions keep the "Session …" head; open water uses its in-register label.
-  const head = item.sessionId === null ? item.label : `Session ${item.label}`;
+  const head = chipHead(item);
   const prose = quiet ? quietProse(item.count) : attentionProse(item.state, item.count);
+  const title = `${head} — ${prose}`;
+  const showShortRef =
+    item.handleCollision === true &&
+    item.sessionId !== null &&
+    Boolean(item.shortRef?.trim());
+  const shortRef = item.shortRef?.trim() ?? "";
 
   if (quiet) {
     return (
       <button
         type="button"
         className="pc-edge-alert pc-edge-alert--quiet"
+        title={title}
         aria-label={`${head} — ${prose}, ${direction}`}
         onClick={() => onSelectSession(item.sessionId)}
       >
@@ -98,6 +122,11 @@ function EdgeAlertButton({
         <span className="pc-edge-alert__label" aria-hidden="true">
           {item.label}
         </span>
+        {showShortRef && (
+          <span className="pc-edge-alert__short-ref" aria-hidden="true">
+            {shortRef}
+          </span>
+        )}
         <span className="pc-edge-alert__dot" aria-hidden="true">
           ·
         </span>
@@ -127,6 +156,7 @@ function EdgeAlertButton({
       type="button"
       className={className}
       style={style}
+      title={title}
       aria-label={`${head} — ${prose}, ${direction}`}
       onClick={() => onSelectSession(item.sessionId)}
     >
@@ -138,11 +168,16 @@ function EdgeAlertButton({
       <span className="pc-edge-alert__glyph" aria-hidden="true">
         <Mark mark={meta.mark} size={13} />
       </span>
-      {/* Visible payload: session label + count. aria-label keeps the fuller
-          prose; these must not contradict it (label and count are the same). */}
+      {/* Visible payload: session label + optional collision short-ref + count.
+          aria-label keeps the fuller prose; these must not contradict it. */}
       <span className="pc-edge-alert__label" aria-hidden="true">
         {item.label}
       </span>
+      {showShortRef && (
+        <span className="pc-edge-alert__short-ref" aria-hidden="true">
+          {shortRef}
+        </span>
+      )}
       <span className="pc-edge-alert__count" aria-hidden="true">
         {item.count}
       </span>

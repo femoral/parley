@@ -260,8 +260,9 @@ function region(
   label: string,
   tasks: IslandTask[],
   attention: SessionRegionData["attention"] = null,
+  extras: Partial<Pick<SessionRegionData, "handle" | "shortRef">> = {},
 ): SessionRegionData {
-  return { id, label, tasks, attention };
+  return { id, label, tasks, attention, ...extras };
 }
 
 const REGION: SessionRegionData = region("sess-1", "sess-1", [
@@ -1420,6 +1421,76 @@ describe("task-select frameIntent steers the camera without roster filter", () =
       `translate(${-o.dx}px, ${-o.dy}px)`,
     );
     expect(container.querySelector('.pc-island[aria-label="loose-wreck — FAILED"]')).toBeTruthy();
+  });
+
+  it("shows mono short-ref on edge chips when two sessions share a handle", () => {
+    const framed = region(
+      "sess-frame",
+      "shared-name · 1 task",
+      [island("running", { id: "f1" })],
+      null,
+      { handle: "shared-name", shortRef: "sess-fra" },
+    );
+    const twinA = region(
+      "sess-twin-a",
+      "shared-name · 1 task",
+      [island("awaiting_answer", { id: "a1" })],
+      { state: "awaiting_answer", count: 1, rank: 0 },
+      { handle: "shared-name", shortRef: "sess-twa" },
+    );
+    const twinB = region(
+      "sess-twin-b",
+      "shared-name · 1 task",
+      [island("running", { id: "b1" })],
+      null,
+      { handle: "shared-name", shortRef: "sess-twb" },
+    );
+    const unique = region(
+      "sess-unique",
+      "other-coast · 1 task",
+      [island("running", { id: "u1" })],
+      null,
+      { handle: "other-coast", shortRef: "sess-uni" },
+    );
+    render(
+      <Scene
+        sessions={[framed, twinA, twinB, unique]}
+        activeSessionId="sess-frame"
+        onSelectTask={noop}
+        onSelectSession={noop}
+      />,
+    );
+
+    const sideA =
+      regionWorldOffset("sess-twin-a").dx < regionWorldOffset("sess-frame").dx
+        ? "left"
+        : "right";
+    const sideB =
+      regionWorldOffset("sess-twin-b").dx < regionWorldOffset("sess-frame").dx
+        ? "left"
+        : "right";
+    const sideU =
+      regionWorldOffset("sess-unique").dx < regionWorldOffset("sess-frame").dx
+        ? "left"
+        : "right";
+
+    const chipA = screen.getByRole("button", {
+      name: `Session shared-name (sess-twa) — 1 awaiting answer, to the ${sideA}`,
+    });
+    const chipB = screen.getByRole("button", {
+      name: `Session shared-name (sess-twb) — 1 task, to the ${sideB}`,
+    });
+    const chipU = screen.getByRole("button", {
+      name: `Session other-coast (sess-uni) — 1 task, to the ${sideU}`,
+    });
+
+    // Collision chips render the mono short-ref visibly.
+    expect(chipA.querySelector(".pc-edge-alert__short-ref")?.textContent).toBe("sess-twa");
+    expect(chipB.querySelector(".pc-edge-alert__short-ref")?.textContent).toBe("sess-twb");
+    // Non-colliding handle: short-ref stays in title/aria only (not visible).
+    expect(chipU.querySelector(".pc-edge-alert__short-ref")).toBeNull();
+    expect(chipA.getAttribute("title")).toContain("sess-twa");
+    expect(chipU.getAttribute("title")).toContain("sess-uni");
   });
 
   it("releases task-select manual frame when the roster session filter changes", () => {
