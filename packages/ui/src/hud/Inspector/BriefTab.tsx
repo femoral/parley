@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useId, useRef, useState, type ToggleEvent } from "react";
+import { useCallback, useId, type ToggleEvent } from "react";
 import { Mark } from "../../primitives/index.js";
 import { MARK_SCROLL } from "../../tokens/chrome-glyphs.js";
 import { AttemptLineage } from "../AttemptLineage.js";
 import type { AttemptLineageItem, BriefView } from "../types.js";
+import { useCopyScaffold } from "../useCopyScaffold.js";
 
 export interface BriefTabProps {
   brief: BriefView;
@@ -21,10 +22,6 @@ export interface BriefTabProps {
 /** Scaffold the orchestrator pastes into their session to re-brief a failed task. */
 export function fixScaffold(taskId: string): string {
   return `parley fix ${taskId} "..."`;
-}
-
-function clipboardAvailable(): boolean {
-  return typeof navigator !== "undefined" && typeof navigator.clipboard?.writeText === "function";
 }
 
 function hasBriefGoal(goal: string | null | undefined): boolean {
@@ -48,25 +45,10 @@ export function BriefTab({
   onOpenLogs,
 }: BriefTabProps) {
   const elapsed = [brief.duration, brief.usage].filter(Boolean).join(" · ");
-  const [copied, setCopied] = useState(false);
-  const [canCopy, setCanCopy] = useState(true);
-  const revertTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const scaffoldRef = useRef<HTMLSpanElement>(null);
+  const scaffoldText = fixScaffold(taskId);
+  const { copied, canCopy, scaffoldRef, copy } = useCopyScaffold(scaffoldText);
   const ordersId = `${useId()}-orders`;
   const goalFiled = hasBriefGoal(brief.goal);
-
-  useEffect(() => {
-    setCanCopy(clipboardAvailable());
-    return () => {
-      if (revertTimer.current) clearTimeout(revertTimer.current);
-    };
-  }, []);
-
-  const markCopied = useCallback(() => {
-    setCopied(true);
-    if (revertTimer.current) clearTimeout(revertTimer.current);
-    revertTimer.current = setTimeout(() => setCopied(false), 1500);
-  }, []);
 
   /** Native popovers don't move focus on open — land keyboard/SR users inside. */
   const onOrdersToggle = useCallback((event: ToggleEvent<HTMLDivElement>) => {
@@ -75,30 +57,6 @@ export function BriefTab({
     }
     // Close: Popover API returns focus to the invoker; leave that alone.
   }, []);
-
-  const handleCopy = useCallback(async () => {
-    const text = fixScaffold(taskId);
-    if (clipboardAvailable()) {
-      try {
-        await navigator.clipboard.writeText(text);
-        markCopied();
-        return;
-      } catch {
-        // Fall through to select-on-click fallback.
-      }
-    }
-    const el = scaffoldRef.current;
-    if (el) {
-      const range = document.createRange();
-      range.selectNodeContents(el);
-      const selection = window.getSelection();
-      selection?.removeAllRanges();
-      selection?.addRange(range);
-      markCopied();
-    } else {
-      setCanCopy(false);
-    }
-  }, [taskId, markCopied]);
 
   return (
     <div className="pc-brief">
@@ -114,13 +72,13 @@ export function BriefTab({
             </span>
             {/* Hidden scaffold text for select-on-click fallback when clipboard fails. */}
             <span ref={scaffoldRef} className="pc-brief__fix-scaffold" aria-hidden="true">
-              {fixScaffold(taskId)}
+              {scaffoldText}
             </span>
             {canCopy && (
               <button
                 type="button"
                 className="pc-brief__fix-copy"
-                onClick={handleCopy}
+                onClick={() => void copy()}
                 aria-label={copied ? "Copied fix command" : "Copy fix command"}
               >
                 {copied ? "copied ✓" : "copy"}

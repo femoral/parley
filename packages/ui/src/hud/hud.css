@@ -3406,3 +3406,44 @@ button.pc-roster__meta--copy:focus-visible {
   font-weight: 500;
   letter-spacing: normal;
 }
+
+/* ── Shared-affordance polish (copy/age dedup) ───────────────────────────────
+ * Appended only. Inspector name-sub: protect short ref from ellipsis (roster
+ * meta pattern). LOGBOOK focus ring already uses :focus-visible above; reinforce
+ * pointer-vs-keyboard here so mouse-activated programmatic focus stays quiet.
+ */
+
+/* Name may shrink/ellipsize; sep + short id + copy stay visible. */
+.pc-inspector__name-sub {
+  /* Parent early rule sets nowrap/ellipsis on the whole line — flex children
+   * own truncation so clear those so the id chip is never clipped mid-string. */
+  overflow: hidden;
+  text-overflow: unset;
+  white-space: nowrap;
+}
+.pc-inspector__name-sub-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pc-inspector__name-sub-sep {
+  flex: 0 0 auto;
+  white-space: pre;
+}
+.pc-inspector__name-sub-id {
+  flex: 0 0 auto;
+  font-family: var(--font-mono);
+  font-size: var(--text-meta);
+  font-weight: 500;
+  color: var(--ink-faint);
+  white-space: nowrap;
+}
+
+/* LOGBOOK heading: programmatic focus on selection open (AT). Suppress the
+ * visible ring for pointer-driven activation; keyboard (Enter in roster) still
+ * matches :focus-visible in Chrome after programmatic focus. */
+.pc-inspector__title:focus:not(:focus-visible) {
+  outline: none;
+}

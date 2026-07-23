@@ -1,7 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { Emblem } from "../primitives/index.js";
 import { stateMetaFor } from "../tokens/state-meta.js";
+import { formatRelativeAge } from "./formatRelativeAge.js";
 import type { InboxTask } from "./types.js";
+import { useCopyScaffold } from "./useCopyScaffold.js";
 
 export interface InboxCardProps {
   task: InboxTask;
@@ -17,22 +19,6 @@ function shortRef(id: string): string {
   return id.length > 8 ? id.slice(0, 8) : id;
 }
 
-function clipboardAvailable(): boolean {
-  return typeof navigator !== "undefined" && typeof navigator.clipboard?.writeText === "function";
-}
-
-function formatRelativeAge(iso: string | null, now: number): string {
-  if (iso === null) return "—";
-  const updatedAt = new Date(iso).getTime();
-  if (Number.isNaN(updatedAt)) return "—";
-  const elapsedMinutes = Math.max(0, Math.floor((now - updatedAt) / 60_000));
-  if (elapsedMinutes < 1) return "now";
-  if (elapsedMinutes < 60) return `${elapsedMinutes}m`;
-  const elapsedHours = Math.floor(elapsedMinutes / 60);
-  if (elapsedHours < 24) return `${elapsedHours}h`;
-  return `${Math.floor(elapsedHours / 24)}d`;
-}
-
 /**
  * Layer 2 — one ember inbox card (design-manifest §4.15, awaiting variant).
  * Display-only answers: selecting opens the inspector; the copy affordance hands
@@ -46,54 +32,18 @@ function formatRelativeAge(iso: string | null, now: number): string {
  */
 export function InboxCard({ task, onSelectTask }: InboxCardProps) {
   const meta = stateMetaFor(task.state);
-  const [copied, setCopied] = useState(false);
-  const [canCopy, setCanCopy] = useState(true);
   const [now, setNow] = useState(() => Date.now());
-  const revertTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const scaffoldRef = useRef<HTMLSpanElement>(null);
+  const scaffoldText = answerScaffold(task.id);
+  const { copied, canCopy, scaffoldRef, copy } = useCopyScaffold(scaffoldText);
 
   useEffect(() => {
-    setCanCopy(clipboardAvailable());
     const ageTimer = setInterval(() => setNow(Date.now()), 60_000);
-    return () => {
-      if (revertTimer.current) clearTimeout(revertTimer.current);
-      clearInterval(ageTimer);
-    };
+    return () => clearInterval(ageTimer);
   }, []);
-
-  const markCopied = useCallback(() => {
-    setCopied(true);
-    if (revertTimer.current) clearTimeout(revertTimer.current);
-    revertTimer.current = setTimeout(() => setCopied(false), 1500);
-  }, []);
-
-  const handleCopy = useCallback(async () => {
-    const text = answerScaffold(task.id);
-    if (clipboardAvailable()) {
-      try {
-        await navigator.clipboard.writeText(text);
-        markCopied();
-        return;
-      } catch {
-        // Fall through to select-on-click fallback.
-      }
-    }
-    const el = scaffoldRef.current;
-    if (el) {
-      const range = document.createRange();
-      range.selectNodeContents(el);
-      const selection = window.getSelection();
-      selection?.removeAllRanges();
-      selection?.addRange(range);
-      markCopied();
-    } else {
-      setCanCopy(false);
-    }
-  }, [task.id, markCopied]);
 
   const taskRef = shortRef(task.id);
   const sessionRef = task.sessionId ? shortRef(task.sessionId) : null;
-  const relativeAge = formatRelativeAge(task.updatedAt, now);
+  const relativeAge = formatRelativeAge(task.updatedAt, now) ?? "—";
 
   return (
     <article className="pc-inbox-card">
@@ -115,8 +65,8 @@ export function InboxCard({ task, onSelectTask }: InboxCardProps) {
             aria-label={
               task.updatedAt === null
                 ? "Update time unavailable"
-                : relativeAge === "now"
-                  ? "Updated now"
+                : relativeAge === "<1m"
+                  ? "Updated less than a minute ago"
                   : `Updated ${relativeAge} ago`
             }
           >
@@ -156,14 +106,14 @@ export function InboxCard({ task, onSelectTask }: InboxCardProps) {
           </span>
           {/* Hidden scaffold text for select-on-click fallback when clipboard fails. */}
           <span ref={scaffoldRef} className="pc-inbox-card__scaffold" aria-hidden="true">
-            {answerScaffold(task.id)}
+            {scaffoldText}
           </span>
         </span>
         {canCopy && (
           <button
             type="button"
             className="pc-inbox-card__copy"
-            onClick={handleCopy}
+            onClick={() => void copy()}
             aria-label={copied ? "Copied answer command" : "Copy answer command"}
           >
             {copied ? "copied ✓" : "copy"}

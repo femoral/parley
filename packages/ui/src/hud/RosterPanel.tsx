@@ -15,20 +15,18 @@ import {
 import { Plate, PlateHeader, Emblem, Mark, Stat } from "../primitives/index.js";
 import { MARK_ANCHOR, MARK_LENS, MARK_SLOOP } from "../tokens/chrome-glyphs.js";
 import { stateMetaFor } from "../tokens/state-meta.js";
+import { formatRelativeAge } from "./formatRelativeAge.js";
 import {
   notifyHandRolledPopoverClosed,
   notifyHandRolledPopoverOpen,
   subscribeHandRolledPopoverOpen,
 } from "./handRolledPopover.js";
 import type { RosterGroup, RosterSessionOption, RosterSessionSearchHit } from "./types.js";
+import { useCopyScaffold } from "./useCopyScaffold.js";
 
 /** Scaffold the operator pastes into a shell to start a voyage. */
 export function delegateScaffold(): string {
   return 'parley delegate -n <name> "<goal>"';
-}
-
-function clipboardAvailable(): boolean {
-  return typeof navigator !== "undefined" && typeof navigator.clipboard?.writeText === "function";
 }
 
 /**
@@ -81,47 +79,8 @@ export interface RosterPanelProps {
  * the cove stays watch-only; the operator pastes into their own shell.
  */
 function RosterEmptyStarter() {
-  const [copied, setCopied] = useState(false);
-  const [canCopy, setCanCopy] = useState(true);
-  const revertTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const scaffoldRef = useRef<HTMLSpanElement>(null);
   const text = delegateScaffold();
-
-  useEffect(() => {
-    setCanCopy(clipboardAvailable());
-    return () => {
-      if (revertTimer.current) clearTimeout(revertTimer.current);
-    };
-  }, []);
-
-  const markCopied = useCallback(() => {
-    setCopied(true);
-    if (revertTimer.current) clearTimeout(revertTimer.current);
-    revertTimer.current = setTimeout(() => setCopied(false), 1500);
-  }, []);
-
-  const handleCopy = useCallback(async () => {
-    if (clipboardAvailable()) {
-      try {
-        await navigator.clipboard.writeText(text);
-        markCopied();
-        return;
-      } catch {
-        // Fall through to select-on-click fallback.
-      }
-    }
-    const el = scaffoldRef.current;
-    if (el) {
-      const range = document.createRange();
-      range.selectNodeContents(el);
-      const selection = window.getSelection();
-      selection?.removeAllRanges();
-      selection?.addRange(range);
-      markCopied();
-    } else {
-      setCanCopy(false);
-    }
-  }, [text, markCopied]);
+  const { copied, canCopy, scaffoldRef, copy } = useCopyScaffold(text);
 
   return (
     <div className="pc-roster__empty">
@@ -137,7 +96,7 @@ function RosterEmptyStarter() {
           <button
             type="button"
             className="pc-roster__empty-copy"
-            onClick={handleCopy}
+            onClick={() => void copy()}
             aria-label={copied ? "Copied delegate command" : "Copy delegate command"}
           >
             {copied ? "copied ✓" : "copy"}
@@ -176,22 +135,6 @@ function metaBranchAndId(
     return { branch: meta.slice(0, idx), idRef };
   }
   return { branch: meta, idRef };
-}
-
-/**
- * Compact relative age for attention triage ("4h", "20s"). One unit only so
- * it stays subordinate to the state label.
- */
-function formatRelativeAge(iso: string, nowMs: number): string | null {
-  const then = Date.parse(iso);
-  if (!Number.isFinite(then)) return null;
-  const sec = Math.max(0, Math.floor((nowMs - then) / 1000));
-  if (sec < 60) return `${sec}s`;
-  const min = Math.floor(sec / 60);
-  if (min < 60) return `${min}m`;
-  const hr = Math.floor(min / 60);
-  if (hr < 48) return `${hr}h`;
-  return `${Math.floor(hr / 24)}d`;
 }
 
 /** Coarse clock for attention-row ages — not the cockpit's 1s tick. */
@@ -632,8 +575,8 @@ export const RosterPanel = memo(function RosterPanel({
     () =>
       groups.some(
         (g) =>
-          (g.state === "awaiting_answer" || g.state === "stalled") &&
-          g.tasks.some((t) => t.updatedAt) ||
+          ((g.state === "awaiting_answer" || g.state === "stalled") &&
+            g.tasks.some((t) => t.updatedAt)) ||
           (g.state === "failed" &&
             g.tasks.some((t) => t.freshFailure && t.updatedAt)),
       ),

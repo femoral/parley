@@ -108,11 +108,25 @@ describe("Inspector header (#68)", () => {
   it("shows the LOGBOOK title, task name, id, and state badge", () => {
     const { container } = render(<Inspector task={task()} />);
     expect(screen.getByText("LOGBOOK")).toBeTruthy();
-    // Name and id share the header's subtitle line beneath the brass title.
+    // Name and short id share the header's subtitle line; id is protected
+    // from ellipsis (flex:0) so the tail stays visible before the copy button.
     const sub = container.querySelector(".pc-inspector__name-sub");
-    expect(sub?.textContent).toContain("chart-the-bay");
-    expect(sub?.textContent).toContain("t1abcdef");
+    expect(sub?.querySelector(".pc-inspector__name-sub-text")?.textContent).toBe("chart-the-bay");
+    expect(sub?.querySelector(".pc-inspector__name-sub-id")?.textContent).toContain("t1abcdef");
     expect(screen.getAllByText("RUNNING").length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("protects the short id from ellipsis so name shrinks first", () => {
+    const longName = "vector-save-endpoints-with-a-very-long-task-name";
+    const longId = "abcdefghijklmnop";
+    const { container } = render(
+      <Inspector task={task({ name: longName, id: longId })} />,
+    );
+    const idChip = container.querySelector(".pc-inspector__name-sub-id");
+    // Visible short ref is the first 8 chars; full id stays on title / AT.
+    expect(idChip?.textContent).toContain("abcdefgh");
+    expect(idChip?.getAttribute("title")).toBe(longId);
+    expect(container.querySelector(".pc-inspector__name-sub-text")?.textContent).toBe(longName);
   });
 
   it("offers a task-id copy affordance on the head (not nested in roster options)", async () => {

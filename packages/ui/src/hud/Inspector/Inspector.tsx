@@ -1,6 +1,5 @@
 import {
   memo,
-  useCallback,
   useEffect,
   useId,
   useRef,
@@ -12,6 +11,7 @@ import { Badge, Divider, Emblem, Mark, Plate } from "../../primitives/index.js";
 import { MARK_ANCHOR } from "../../tokens/chrome-glyphs.js";
 import { stateMetaFor } from "../../tokens/state-meta.js";
 import { KEYBOARD_SHORTCUTS } from "../keyboardShortcuts.js";
+import { useCopyScaffold } from "../useCopyScaffold.js";
 import { BriefTab } from "./BriefTab.js";
 import { LogsTab } from "./LogsTab.js";
 import { ReportTab } from "./ReportTab.js";
@@ -25,62 +25,25 @@ const TABS = [
   { key: "qa", label: "Q&A" },
 ] as const;
 
-function clipboardAvailable(): boolean {
-  return typeof navigator !== "undefined" && typeof navigator.clipboard?.writeText === "function";
+/** 8-char short ref — same truncation as roster meta / InboxCard. */
+function shortRef(id: string): string {
+  return id.length > 8 ? id.slice(0, 8) : id;
 }
 
 /**
  * Task-id copy on the LOGBOOK head (not inside roster options — ARIA options
- * must not nest interactive descendants). Mirrors InboxCard / BriefTab:
- * clipboard.writeText with select-on-click fallback.
+ * must not nest interactive descendants). Shared scaffold: clipboard.writeText
+ * with select-on-click fallback.
  */
 function TaskIdCopy({ taskId }: { taskId: string }) {
-  const [copied, setCopied] = useState(false);
-  const [canCopy, setCanCopy] = useState(true);
-  const revertTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const scaffoldRef = useRef<HTMLSpanElement>(null);
-
-  useEffect(() => {
-    setCanCopy(clipboardAvailable());
-    return () => {
-      if (revertTimer.current) clearTimeout(revertTimer.current);
-    };
-  }, []);
-
-  const markCopied = useCallback(() => {
-    setCopied(true);
-    if (revertTimer.current) clearTimeout(revertTimer.current);
-    revertTimer.current = setTimeout(() => setCopied(false), 1500);
-  }, []);
-
-  const handleCopy = useCallback(
-    async (event: ReactMouseEvent<HTMLButtonElement>) => {
-      event.stopPropagation();
-      if (clipboardAvailable()) {
-        try {
-          await navigator.clipboard.writeText(taskId);
-          markCopied();
-          return;
-        } catch {
-          // Fall through to select-on-click fallback.
-        }
-      }
-      const el = scaffoldRef.current;
-      if (el) {
-        const range = document.createRange();
-        range.selectNodeContents(el);
-        const selection = window.getSelection();
-        selection?.removeAllRanges();
-        selection?.addRange(range);
-        markCopied();
-      } else {
-        setCanCopy(false);
-      }
-    },
-    [taskId, markCopied],
-  );
+  const { copied, canCopy, scaffoldRef, copy } = useCopyScaffold(taskId);
 
   if (!canCopy) return null;
+
+  const handleCopy = (event: ReactMouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+    void copy();
+  };
 
   return (
     <>
@@ -281,8 +244,16 @@ export const Inspector = memo(function Inspector({
             LOGBOOK
           </h2>
           <span className="pc-inspector__name-sub">
-            <span className="pc-inspector__name-sub-text">
-              {task.name} · {task.id}
+            {/* Name may ellipsize; short ref + copy stay flex:0 so the id tail
+                is never cut off before the copy button (roster meta pattern). */}
+            <span className="pc-inspector__name-sub-text">{task.name}</span>
+            <span className="pc-inspector__name-sub-sep" aria-hidden="true">
+              {" "}
+              ·{" "}
+            </span>
+            <span className="pc-inspector__name-sub-id" title={task.id}>
+              <span aria-hidden="true">{shortRef(task.id)}</span>
+              <span className="pc-visually-hidden">task id {task.id}</span>
             </span>
             <TaskIdCopy taskId={task.id} />
           </span>
