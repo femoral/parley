@@ -1,6 +1,7 @@
 ---
 name: parley-delegate
 description: Delegate tasks to other agent CLIs (e.g codex, grok, opencode, pi, etc) with the parley CLI. Use when the user asks to delegate to other agents, or mentions parley.
+disable-model-invocation: true
 ---
 
 # Delegating to parley

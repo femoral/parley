@@ -1,6 +1,7 @@
 ---
 name: parley-wizard
 description: Configure a parley project by interview — full init (eval, types, rubrics, classification, retention, resume/retries, remote daemon, vendors) or targeted reconfig. Use when the user wants to set up parley, run /parley-wizard, reconfigure .parley, turn eval on/off, edit task types or rubrics, or fix project config.
+disable-model-invocation: true
 ---
 
 # Configuring parley

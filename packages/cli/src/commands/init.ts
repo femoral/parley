@@ -24,7 +24,6 @@ import {
 } from "./skills/install.js";
 import { formatInstallSummary, isGitRepo, repoRoot } from "./skills/copy.js";
 import { PromptCancelled } from "./skills/prompts.js";
-import { setupBundledPlugins } from "./plugins/setup.js";
 
 /**
  * Built-in vendor ids and default CLI binary names (adapter DEFAULT_*_BIN).
@@ -501,20 +500,8 @@ export async function runInit(ctx: CliContext, args: string[]): Promise<number> 
   if (populated.changed) writeConfig(ctx.paths.config, populated.config);
   config = populated.config;
 
-  let pluginSetup;
-  try {
-    pluginSetup = await setupBundledPlugins({
-      ctx,
-      cwd,
-      harnesses,
-      interactive,
-      yes: parsed.yes,
-      json,
-    });
-  } catch (err) {
-    if (err instanceof PromptCancelled) return 130;
-    throw err;
-  }
+  // Provenance-plugin setup is deliberately not part of init while the
+  // plugins are still being validated; see setupBundledPlugins.
 
   if (json) {
     printJson(ctx, {
@@ -538,7 +525,6 @@ export async function runInit(ctx: CliContext, args: string[]): Promise<number> 
         vendors: modelResults,
         warnings: modelWarnings,
       },
-      plugins: pluginSetup,
     });
     return 0;
   }
@@ -608,16 +594,6 @@ export async function runInit(ctx: CliContext, args: string[]): Promise<number> 
       }
     }
   }
-
-  ctx.stdout("\n## Provenance plugins\n");
-  if (pluginSetup.available.length === 0) {
-    ctx.stdout("  No first-party provenance plugin matches a detected harness.\n");
-  } else if (pluginSetup.installed.length > 0) {
-    ctx.stdout(`  Set up: ${pluginSetup.installed.join(", ")}\n`);
-  } else {
-    ctx.stdout(`  Available: ${pluginSetup.available.join(", ")}\n`);
-  }
-  for (const warning of pluginSetup.warnings) ctx.stderr(`warning: ${warning}\n`);
 
   return 0;
 }
