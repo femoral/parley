@@ -255,5 +255,27 @@ describe("useCockpitKeys window keydown accelerators", () => {
     });
     expect(screen.getByTestId("selected").textContent).toBe("none");
   });
+
+  it("Escape clears selection once the last hand-rolled popover closes", () => {
+    render(<KeysHarness initialTaskId="t1" />);
+    expect(screen.getByTestId("selected").textContent).toBe("t1");
+
+    // Open Find — Esc should close it, not clear the task.
+    act(() => {
+      fireEvent.keyDown(window, { key: "/" });
+    });
+    expect(screen.getByLabelText("Session id")).toBeTruthy();
+    act(() => {
+      fireEvent.keyDown(document, { key: "Escape" });
+    });
+    expect(screen.queryByLabelText("Session id")).toBeNull();
+    expect(screen.getByTestId("selected").textContent).toBe("t1");
+
+    // With no popover open, Esc clears the selection.
+    act(() => {
+      fireEvent.keyDown(window, { key: "Escape" });
+    });
+    expect(screen.getByTestId("selected").textContent).toBe("none");
+  });
 });
 

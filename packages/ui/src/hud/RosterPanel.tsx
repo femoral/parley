@@ -16,6 +16,10 @@ import {
 import { Plate, PlateHeader, Emblem, Mark, Stat } from "../primitives/index.js";
 import { MARK_ANCHOR, MARK_LENS, MARK_SLOOP } from "../tokens/chrome-glyphs.js";
 import { stateMetaFor } from "../tokens/state-meta.js";
+import {
+  notifyHandRolledPopoverOpen,
+  subscribeHandRolledPopoverOpen,
+} from "./handRolledPopover.js";
 import type { RosterGroup, RosterSessionOption, RosterSessionSearchHit } from "./types.js";
 
 /** Scaffold the operator pastes into a shell to start a voyage. */
@@ -394,9 +398,15 @@ function SessionSearch({
     if (open) inputRef.current?.focus();
   }, [open]);
 
-  // Close on outside click / Escape.
+  // Single-open invariant with Chart key (and any future hand-rolled peer).
+  useEffect(() => {
+    return subscribeHandRolledPopoverOpen("session-find", () => setOpen(false));
+  }, []);
+
+  // Announce open so peers close; close on outside click / Escape.
   useEffect(() => {
     if (!open) return;
+    notifyHandRolledPopoverOpen("session-find");
     const onPointer = (event: MouseEvent): void => {
       if (rootRef.current && !rootRef.current.contains(event.target as Node)) {
         setOpen(false);

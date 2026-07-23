@@ -10,6 +10,10 @@ import {
   type UIEvent,
 } from "react";
 import { Emblem, Mark } from "../primitives/index.js";
+import {
+  notifyHandRolledPopoverOpen,
+  subscribeHandRolledPopoverOpen,
+} from "./handRolledPopover.js";
 import { MARK_RING } from "../tokens/chrome-glyphs.js";
 import { HARNESS_COLORS, MODEL_VENDORS, type EmblemMark } from "../tokens/factions.js";
 import { ATTENTION_DISPLAY_ORDER, STATE_META } from "../tokens/state-meta.js";
@@ -58,9 +62,15 @@ export const ChartKey = memo(function ChartKey() {
     [],
   );
 
-  // Close on outside click / Escape.
+  // Single-open invariant with session Find (and any future hand-rolled peer).
+  useEffect(() => {
+    return subscribeHandRolledPopoverOpen("chart-key", () => setOpen(false));
+  }, []);
+
+  // Announce open so peers close; close on outside click / Escape.
   useEffect(() => {
     if (!open) return;
+    notifyHandRolledPopoverOpen("chart-key");
     const onPointer = (event: MouseEvent): void => {
       if (rootRef.current && !rootRef.current.contains(event.target as Node)) {
         setOpen(false);

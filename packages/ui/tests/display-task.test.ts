@@ -42,7 +42,7 @@ describe("toDisplayTask", () => {
         branch: null,
       }),
     ).toEqual({
-      coat: "#FFFFFF",
+      coat: "#8A6A34",
       coatDark: "#5B3A24",
       emblem: { kind: "glyph", char: "?" },
       faction: "Unknown vendor via Unknown harness",

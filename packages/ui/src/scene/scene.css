@@ -987,3 +987,43 @@ button.pc-edge-alert:focus-visible {
   letter-spacing: 0.4px;
   pointer-events: none;
 }
+/* Calm off-frame presence — whisper chrome (label tier, low-emphasis border).
+ * Attention chips above stay louder: full parchment ink, brass frame, state glyph. */
+.pc-edge-alert--quiet {
+  border-color: color-mix(in srgb, var(--brass-frame) 42%, transparent);
+  box-shadow:
+    0 1px 6px rgba(0, 0, 0, 0.32),
+    inset 0 0 0 1px rgba(240, 194, 90, 0.06);
+  color: var(--ink-label);
+  min-height: 24px;
+  padding: 3px 8px;
+  gap: 4px;
+}
+button.pc-edge-alert--quiet:hover {
+  border-color: color-mix(in srgb, var(--brass-frame) 65%, transparent);
+  box-shadow:
+    0 1px 8px rgba(0, 0, 0, 0.38),
+    inset 0 0 0 1px rgba(240, 194, 90, 0.12);
+}
+.pc-edge-alert--quiet .pc-edge-alert__label {
+  font-size: var(--text-label);
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  color: var(--ink-label);
+}
+.pc-edge-alert--quiet .pc-edge-alert__dot {
+  font-size: var(--text-label);
+  line-height: 1;
+  color: var(--ink-dim);
+  opacity: 0.85;
+}
+.pc-edge-alert--quiet .pc-edge-alert__count {
+  font-size: var(--text-label);
+  font-weight: 600;
+  color: var(--ink-dim);
+}
+.pc-edge-alert--quiet .pc-edge-alert__chevron {
+  color: var(--ink-label);
+  opacity: 0.75;
+  font-size: 9px;
+}

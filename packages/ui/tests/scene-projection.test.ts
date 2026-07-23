@@ -74,10 +74,10 @@ describe("projectScene groups tasks into session regions (#69)", () => {
     expect(first.sessions[0]!.tasks[0]!.emblem).toEqual(second.sessions[0]!.tasks[0]!.emblem);
   });
 
-  it("falls back to white for an unknown harness without changing vendor fallback", () => {
+  it("falls back to brass-frame coat for an unknown harness without changing vendor fallback", () => {
     const { sessions } = projectScene([task({ id: "a", state: "running", vendor: "brand-new" })]);
     const island = sessions[0]!.tasks[0]!;
-    expect(island.coat).toBe("#FFFFFF");
+    expect(island.coat).toBe("#8A6A34");
     expect(island.emblem).toEqual({ kind: "glyph", char: "?" });
   });
 });

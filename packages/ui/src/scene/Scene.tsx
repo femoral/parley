@@ -106,14 +106,22 @@ export function resolveFramedIndex(
 }
 
 /**
- * Build the edge-of-frame attention list: regions outside the framed one that
- * carry a hooks-layer attention rollup, ordered loudest-first within each side.
- * Membership, loudest state, and rank all arrive on `session.attention` from
- * `projectScene` — this only places them on a side and sorts by the projected
- * rank (never re-derives state sets).
+ * Sentinel rank for calm presence chips — always stacks after real attention
+ * ranks from core (awaiting/stalled/failed), so loud work stays louder.
+ */
+const QUIET_EDGE_RANK = Number.POSITIVE_INFINITY;
+
+/**
+ * Build the edge-of-frame chip list: off-frame regions with an attention
+ * rollup (loud), plus calm off-frame regions that still hold tasks (quiet
+ * presence — so a second coast is never invisible on the sea).
  *
- * Includes the open-water region (session.id null) when it holds attention —
- * session-less wrecks and awaiting ships must still read at the edge.
+ * Attention membership, loudest state, and rank arrive on `session.attention`
+ * from `projectScene` — this only places them on a side and sorts by rank
+ * (never re-derives state sets). Quiet chips use task count + a sentinel rank.
+ *
+ * Includes the open-water region (session.id null) when it holds attention or
+ * calm tasks — session-less work must still read at the edge.
  *
  * Placement uses id-stable world offsets, not array index, so chip sides stay
  * consistent when the sessions array is reordered.
@@ -127,19 +135,33 @@ function edgeAlertsFor(
 
   for (const { session, dx } of placed) {
     if (regionKey(session.id) === activeKey) continue;
-    if (session.attention === null) continue;
     const side: EdgeAlertSide = dx < activeDx ? "left" : "right";
+    if (session.attention !== null) {
+      items.push({
+        sessionId: session.id,
+        label: session.label,
+        state: session.attention.state,
+        count: session.attention.count,
+        rank: session.attention.rank,
+        side,
+      });
+      continue;
+    }
+    // Calm presence: whisper chip when the region still has work at sea.
+    const taskCount = session.tasks.length;
+    if (taskCount === 0) continue;
     items.push({
       sessionId: session.id,
       label: session.label,
-      state: session.attention.state,
-      count: session.attention.count,
-      rank: session.attention.rank,
+      state: "quiet",
+      count: taskCount,
+      rank: QUIET_EDGE_RANK,
       side,
+      quiet: true,
     });
   }
 
-  // Loudest first within each side (hooks-projected rank); id tie-break.
+  // Loudest first within each side (hooks-projected rank; quiet last); id tie-break.
   items.sort((a, b) => {
     if (a.side !== b.side) return a.side === "left" ? -1 : 1;
     if (a.rank !== b.rank) return a.rank - b.rank;
@@ -158,10 +180,11 @@ function edgeAlertsFor(
  * `transitionend`. Prop-driven and core-free: the app feeds projected regions
  * and the current selection; CSS owns travel duration/easing.
  *
- * Edge-of-frame attention chips (PRODUCT.md "is anything wrong?") surface when
- * an off-camera region carries awaiting / stalled / failed work — the rollup
- * is projected by the hooks layer so this file never re-derives state sets.
- * Chips live in viewport space and do not require off-camera regions mounted.
+ * Edge-of-frame chips (PRODUCT.md "is anything wrong?" + fleet presence)
+ * surface when an off-camera region carries awaiting / stalled / failed work
+ * (loud) or calm tasks (quiet whisper) — attention rollups are projected by
+ * the hooks layer so this file never re-derives state sets. Chips live in
+ * viewport space and do not require off-camera regions mounted.
  *
  * Memoized for the same reason RosterPanel/InboxPanel are: the cockpit shell
  * re-renders every second for its clock, but `sessions` and `activeSessionId`
