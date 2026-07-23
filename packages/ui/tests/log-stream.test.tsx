@@ -155,6 +155,7 @@ describe("LogStream stick-to-bottom follow behaviour", () => {
 
 describe("LogStream status wording (honesty over charm)", () => {
   it("maps every discriminated status to distinct honest copy", () => {
+    expect(logStreamStatusLabel("connecting")).toBe("Opening the tail…");
     expect(logStreamStatusLabel("tailing")).toBe("Live · Follow");
     expect(logStreamStatusLabel("paused-by-setting")).toBe("Paused — follow off");
     expect(logStreamStatusLabel("paused-by-scroll")).toBe("Paused — scrolled up");
@@ -163,6 +164,7 @@ describe("LogStream status wording (honesty over charm)", () => {
   });
 
   it("composes scroll pause only while genuinely tailing", () => {
+    expect(composeLogStreamStatus("connecting", false)).toBe("connecting");
     expect(composeLogStreamStatus("tailing", true)).toBe("tailing");
     expect(composeLogStreamStatus("tailing", false)).toBe("paused-by-scroll");
     // Hook pauses win over scroll geometry.
@@ -174,6 +176,13 @@ describe("LogStream status wording (honesty over charm)", () => {
   it("shows Live · Follow while the tail is live and pinned", () => {
     render(<LogStream lines={logLines("tick")} status="tailing" />);
     expect(screen.getByText("Live · Follow")).toBeTruthy();
+  });
+
+  it("shows a quiet opening state before the daemon confirms the tail", () => {
+    const { container } = render(<LogStream lines={[]} status="connecting" />);
+    expect(screen.getByText("Opening the tail…")).toBeTruthy();
+    expect(screen.queryByText("Ended")).toBeNull();
+    expect(headDot(container).classList.contains("pc-dot--beacon")).toBe(false);
   });
 
   it("shows Ended when the tail is terminal (eof), not Paused", () => {
@@ -221,7 +230,7 @@ describe("LogStream status wording (honesty over charm)", () => {
     );
     expect(headDot(container).classList.contains("pc-dot--beacon")).toBe(true);
 
-    for (const status of ["paused-by-setting", "ended", "unreachable"] as const) {
+    for (const status of ["connecting", "paused-by-setting", "ended", "unreachable"] as const) {
       rerender(<LogStream lines={logLines("x")} status={status} />);
       expect(headDot(container).classList.contains("pc-dot--beacon")).toBe(false);
     }

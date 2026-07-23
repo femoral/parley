@@ -80,6 +80,12 @@ function projectEvalBuckets(map: Record<string, { count: number; avg: number | n
 }
 
 export function projectMetricsGroup(group: MetricsGroup): SoundingsGroupView {
+  const hasCompletedWork = group.tasks.completed > 0;
+  const hasReportedTokens =
+    group.tokens.input + group.tokens.output + group.tokens.cached !== 0;
+  const tokenCount = (count: number) =>
+    formatTokenCount(hasCompletedWork && !hasReportedTokens ? null : count);
+
   return {
     key: group.key,
     label: group.key ?? "(none)",
@@ -93,9 +99,9 @@ export function projectMetricsGroup(group: MetricsGroup): SoundingsGroupView {
     successRateValue: group.success_rate,
     evals: formatEvalAvg(group.evals.avg, group.evals.count),
     tokens: {
-      input: formatTokenCount(group.tokens.input),
-      output: formatTokenCount(group.tokens.output),
-      cached: formatTokenCount(group.tokens.cached),
+      input: tokenCount(group.tokens.input),
+      output: tokenCount(group.tokens.output),
+      cached: tokenCount(group.tokens.cached),
     },
     duration: {
       avg: formatDurationMs(group.duration_ms.avg),

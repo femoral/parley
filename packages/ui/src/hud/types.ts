@@ -155,6 +155,7 @@ export interface LogLine {
  * composed in {@link LogStream} (stick-to-bottom); the hook emits the rest.
  */
 export type LogTailStatus =
+  | "connecting"
   | "tailing"
   | "paused-by-setting"
   | "paused-by-scroll"

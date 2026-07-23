@@ -114,6 +114,27 @@ describe("useLogTail follows a running fake-vendor task and stops cleanly at eof
     await waitFor(() => expect(result.current.lines.map((l) => l.text)).toEqual(["from-t2"]));
   });
 
+  it("returns to connecting when a new task's first tail request is still pending", async () => {
+    const client = new ParleyClient({
+      baseUrl: "",
+      fetch: (async (input: string | URL | Request) => {
+        const taskId = new URL(String(input), "http://localhost").pathname.split("/").at(-2);
+        if (taskId === "t2") return new Promise(() => {});
+        return new Response(JSON.stringify({ chunk: "done\n", next: 5, eof: true }), {
+          status: 200,
+        });
+      }) as typeof fetch,
+    });
+    const { result, rerender } = renderHook(({ id }) => useLogTail(client, id), {
+      initialProps: { id: "t1" },
+    });
+    await waitFor(() => expect(result.current.status).toBe("ended"));
+
+    rerender({ id: "t2" });
+
+    expect(result.current).toEqual({ lines: [], status: "connecting" });
+  });
+
   it("returns an empty, ended view with no task selected", () => {
     const client = new ParleyClient({ baseUrl: "", fetch: scriptedLogFetch({}) });
     const { result } = renderHook(() => useLogTail(client, null));
@@ -191,14 +212,14 @@ describe("useLogTail's `follow` toggle (the settings bar's 'Follow logs' control
 });
 
 describe("useLogTail never reports tailing optimistically (#70 regression: it must reflect a confirmed response, not a guess)", () => {
-  it("starts status=ended synchronously, even before the very first fetch has resolved", () => {
+  it("starts status=connecting synchronously before the first fetch resolves", () => {
     // A fetch that never resolves within this test — proves the initial
     // render itself (before any `await`/`waitFor`) is the conservative
-    // {lines: [], status: "ended"}, not an optimistic tailing guess derived
-    // from `follow`/`taskId` alone.
+    // {lines: [], status: "connecting"}, not a false ended or optimistic
+    // tailing claim derived from `follow`/`taskId` alone.
     const client = new ParleyClient({ baseUrl: "", fetch: (() => new Promise(() => {})) as typeof fetch });
     const { result } = renderHook(() => useLogTail(client, "t1"));
-    expect(result.current).toEqual({ lines: [], status: "ended" });
+    expect(result.current).toEqual({ lines: [], status: "connecting" });
   });
 
   it("flips to unreachable (not tailing) when every fetch attempt throws (daemon unreachable)", async () => {

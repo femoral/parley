@@ -41,13 +41,14 @@ function freshTailState(): TailState {
  * selected task changes.
  *
  * Status is a discriminated union (never a single `live` boolean that lies):
+ * - `connecting` — selected tail is opening; no response has confirmed its state
  * - `tailing` — confirmed open stream, actively polling
  * - `paused-by-setting` — SettingsBar "Follow logs" off (stream may still be open)
  * - `ended` — daemon reported `eof` (or no task selected)
  * - `unreachable` — last fetch failed; polling keeps retrying
  *
  * `tailing` is only ever set from a *confirmed* server response (or resume
- * after a prior confirmed open). It starts `ended` and stays non-tailing
+ * after a prior confirmed open). It starts `connecting` and stays non-tailing
  * through every retry of a fetch that keeps failing — a daemon that's down
  * reports `unreachable`, never optimistically `tailing`.
  *
@@ -66,7 +67,9 @@ export function useLogTail(
   pollMs = DEFAULT_POLL_MS,
 ): LogsView {
   const [lines, setLines] = useState<LogLine[]>([]);
-  const [status, setStatus] = useState<LogTailHookStatus>("ended");
+  const [status, setStatus] = useState<LogTailHookStatus>(() =>
+    !taskId ? "ended" : follow ? "connecting" : "paused-by-setting",
+  );
   // Lazy ref init (React docs' pattern for an expensive/allocating initial
   // value): `useRef(freshTailState())` would evaluate a fresh accumulator on
   // every render even though only the very first one is ever kept.
@@ -78,7 +81,7 @@ export function useLogTail(
   useEffect(() => {
     stateRef.current = freshTailState();
     setLines([]);
-    setStatus("ended");
+    setStatus(taskId ? "connecting" : "ended");
   }, [taskId]);
 
   useEffect(() => {
@@ -100,6 +103,8 @@ export function useLogTail(
     // rather than flashing a false pause/ended while the first poll is in flight.
     if (stateRef.current!.sawOpen) {
       setStatus("tailing");
+    } else {
+      setStatus("connecting");
     }
 
     let cancelled = false;

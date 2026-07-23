@@ -270,6 +270,21 @@ describe("projectSoundings / metricsRefreshKey", () => {
     expect(view.comparison[0]!.belowBaselineRate).toBe("100%");
   });
 
+  it("renders absent token telemetry as unknown after completed work", () => {
+    const fixture = metricsFixture();
+    fixture.groups[0]!.tokens = { input: 0, output: 0, cached: 0, tasks_reporting: 0 };
+    const group = projectSoundings(fixture, "ready", null, "vendor", "sess-1").groups[0]!;
+    expect(group.tokens).toEqual({ input: "—", output: "—", cached: "—" });
+  });
+
+  it("keeps genuine token zeros for groups without completed work", () => {
+    const fixture = metricsFixture();
+    fixture.groups[0]!.tasks.completed = 0;
+    fixture.groups[0]!.tokens = { input: 0, output: 0, cached: 0, tasks_reporting: 0 };
+    const group = projectSoundings(fixture, "ready", null, "vendor", "sess-1").groups[0]!;
+    expect(group.tokens).toEqual({ input: "0", output: "0", cached: "0" });
+  });
+
   it("builds a stable refresh key from id:state pairs", () => {
     expect(metricsRefreshKey([])).toBe("0");
     expect(
@@ -292,5 +307,6 @@ describe("format helpers used by metrics projection", () => {
     expect(formatDurationMs(125_000)).toBe("2m 05s");
     expect(formatDurationMs(null)).toBe("—");
     expect(formatTokenCount(1_500_000)).toBe("1.5M");
+    expect(formatTokenCount(null)).toBe("—");
   });
 });

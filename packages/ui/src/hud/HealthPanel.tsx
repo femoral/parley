@@ -78,8 +78,11 @@ export function HealthPanel({ health }: { health: HealthView }) {
             <span className="pc-health__compact-sep" aria-hidden="true">
               ·
             </span>
-            <span className="pc-health__compact-item">
-              <span className="pc-health__compact-k">Sessions</span>
+            <span
+              className="pc-health__compact-item"
+              title="Sessions with non-terminal work"
+            >
+              <span className="pc-health__compact-k">Active sessions</span>
               <span className="pc-health__compact-v">{String(health.durableSessions)}</span>
             </span>
           </div>

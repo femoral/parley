@@ -3559,3 +3559,8 @@ button.pc-roster__meta--copy:focus-visible {
   font-size: var(--text-meta);
   color: var(--ink-faint);
 }
+
+/* A tail awaiting its first daemon response is neutral and quiet. */
+.pc-logstream__status--connecting {
+  color: var(--ink-label);
+}

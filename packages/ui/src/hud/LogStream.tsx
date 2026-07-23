@@ -27,13 +27,14 @@ function isNearBottom(el: HTMLElement): boolean {
 
 /**
  * Fold hook status + stick-to-bottom into one display status. Priority:
- * ended / unreachable / paused-by-setting win over scroll pause; scroll
+ * connecting / ended / unreachable / paused-by-setting win over scroll pause; scroll
  * pause only applies while the stream is genuinely tailing.
  */
 export function composeLogStreamStatus(
   hookStatus: LogTailHookStatus,
   stickFollowing: boolean,
 ): LogTailStatus {
+  if (hookStatus === "connecting") return "connecting";
   if (hookStatus === "ended") return "ended";
   if (hookStatus === "unreachable") return "unreachable";
   if (hookStatus === "paused-by-setting") return "paused-by-setting";
@@ -47,6 +48,8 @@ export function composeLogStreamStatus(
  */
 export function logStreamStatusLabel(status: LogTailStatus): string {
   switch (status) {
+    case "connecting":
+      return "Opening the tail…";
     case "tailing":
       return "Live · Follow";
     case "paused-by-setting":
@@ -63,6 +66,8 @@ export function logStreamStatusLabel(status: LogTailStatus): string {
 /** Beacon colour dual-codes the status (never hue alone — label matches). */
 export function logStreamDotColor(status: LogTailStatus): string {
   switch (status) {
+    case "connecting":
+      return "var(--ink-label)";
     case "tailing":
       return "var(--healthy-dot)";
     case "unreachable":

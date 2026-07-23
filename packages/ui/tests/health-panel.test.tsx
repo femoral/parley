@@ -25,9 +25,10 @@ describe("HealthPanel renders daemon status from plain props (#65)", () => {
     expect(screen.getByText("3m 41s")).toBeTruthy();
     expect(screen.getByText("57123")).toBeTruthy();
     expect(screen.getByText("127.0.0.1")).toBeTruthy();
-    // Sessions is the one non-grid daemon count; fleet totals live on the roster.
+    // Active sessions is the one non-grid daemon count; fleet totals live on the roster.
     expect(screen.getByText("1")).toBeTruthy();
-    expect(screen.getByText("Sessions")).toBeTruthy();
+    expect(screen.getByText("Active sessions")).toBeTruthy();
+    expect(screen.getByTitle("Sessions with non-terminal work")).toBeTruthy();
     expect(screen.queryByText("Total tasks")).toBeNull();
     expect(screen.queryByText("Active agents")).toBeNull();
   });
@@ -61,7 +62,7 @@ describe("HealthPanel renders daemon status from plain props (#65)", () => {
     expect(compact?.textContent).toContain("4242");
     expect(compact?.textContent).toContain("Uptime");
     expect(compact?.textContent).toContain("3m 41s");
-    expect(compact?.textContent).toContain("Sessions");
+    expect(compact?.textContent).toContain("Active sessions");
     expect(compact?.textContent).toContain("1");
   });
 
