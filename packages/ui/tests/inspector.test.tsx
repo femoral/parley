@@ -57,11 +57,50 @@ function openTab(label: string): void {
   fireEvent.click(screen.getByRole("tab", { name: label }));
 }
 
+/** Dispatch a Popover API `toggle` with `newState` (happy-dom may lack full popover support). */
+function firePopoverToggle(el: HTMLElement, newState: "open" | "closed"): void {
+  const ToggleEventCtor = (globalThis as unknown as { ToggleEvent?: typeof Event }).ToggleEvent;
+  if (typeof ToggleEventCtor === "function") {
+    try {
+      el.dispatchEvent(
+        new (ToggleEventCtor as unknown as new (
+          type: string,
+          init: { newState: string; oldState: string; bubbles?: boolean },
+        ) => Event)("toggle", {
+          newState,
+          oldState: newState === "open" ? "closed" : "open",
+          bubbles: true,
+        }),
+      );
+      return;
+    } catch {
+      // Fall through to synthetic Event.
+    }
+  }
+  const event = new Event("toggle", { bubbles: true });
+  Object.defineProperty(event, "newState", { value: newState, enumerable: true });
+  Object.defineProperty(event, "oldState", {
+    value: newState === "open" ? "closed" : "open",
+    enumerable: true,
+  });
+  el.dispatchEvent(event);
+}
+
 describe("Inspector renders a quiet placeholder with no selection (#68)", () => {
   it("shows a select-a-task prompt and no tabs when task is null", () => {
     render(<Inspector task={null} />);
     expect(screen.getByText(/Select a soul from the roster/)).toBeTruthy();
     expect(screen.queryByRole("tablist")).toBeNull();
+  });
+
+  it("shows quiet shortcut hints so the empty plate earns its footprint", () => {
+    render(<Inspector task={null} />);
+    const keys = screen.getByLabelText("Keyboard shortcuts");
+    expect(keys).toBeTruthy();
+    expect(keys.textContent).toMatch(/find session/);
+    expect(keys.textContent).toMatch(/next flag that needs you/);
+    expect(keys.textContent).toMatch(/toggle Soundings/);
+    expect(keys.textContent).toMatch(/clear task selection/);
   });
 });
 
@@ -194,6 +233,46 @@ describe("Inspector's four tabs render per the manifest's inspector treatment (#
     expect(target).toBeTruthy();
     expect(target).not.toBe("pc-brief-orders");
     expect(container.querySelector(`#${CSS.escape(target!)}`)).toBeTruthy();
+  });
+
+  it("moves focus into the full-orders popover on open", () => {
+    const { container } = render(<Inspector task={task()} />);
+    const open = screen.getByRole("button", { name: "Read full orders" });
+    const target = open.getAttribute("popovertarget")!;
+    const pop = container.querySelector(`#${CSS.escape(target)}`) as HTMLElement;
+    expect(pop).toBeTruthy();
+    expect(pop.getAttribute("tabindex")).toBe("-1");
+
+    // happy-dom may not fully implement Popover API open — dispatch the
+    // toggle event the component listens for (newState: open).
+    open.focus();
+    expect(document.activeElement).toBe(open);
+    firePopoverToggle(pop, "open");
+    expect(document.activeElement).toBe(pop);
+  });
+
+  it("moves focus into the full-report popover on open", () => {
+    const { container } = render(
+      <Inspector
+        task={task({
+          state: "completed",
+          report: {
+            outcome: "success",
+            summary: "Charted the bay end to end.",
+            files: [],
+          },
+        })}
+      />,
+    );
+    openTab("REPORT");
+    const open = screen.getByRole("button", { name: "Read full report" });
+    const target = open.getAttribute("popovertarget")!;
+    const pop = container.querySelector(`#${CSS.escape(target)}`) as HTMLElement;
+    expect(pop.getAttribute("tabindex")).toBe("-1");
+
+    open.focus();
+    firePopoverToggle(pop, "open");
+    expect(document.activeElement).toBe(pop);
   });
 
   it("scrolls the inspector into view when openSeq advances", () => {
@@ -466,6 +545,33 @@ describe("Inspector's four tabs render per the manifest's inspector treatment (#
     expect(screen.getByText("Which shoal?")).toBeTruthy();
     expect(screen.getByText("The northern one.")).toBeTruthy();
     expect(screen.getByText("Deep or shallow anchorage?")).toBeTruthy();
+  });
+
+  it("exposes the Q&A transcript as a list with speaker+time entry labels", () => {
+    const asked = new Date(2026, 0, 1, 14, 2, 0);
+    const answered = new Date(2026, 0, 1, 14, 5, 0);
+    render(
+      <Inspector
+        task={task({
+          qa: [
+            {
+              id: "q1",
+              question: "Which shoal?",
+              answer: "The northern one.",
+              askedAt: asked.toISOString(),
+              answeredAt: answered.toISOString(),
+            },
+          ],
+        })}
+      />,
+    );
+    openTab("Q&A");
+    const list = screen.getByRole("list", { name: "Q&A transcript" });
+    expect(list).toBeTruthy();
+    const items = screen.getAllByRole("listitem");
+    expect(items.length).toBe(2);
+    expect(items[0]!.getAttribute("aria-label")).toMatch(/^Agent,/);
+    expect(items[1]!.getAttribute("aria-label")).toMatch(/^You,/);
   });
 
   it("renders quiet absolute HH:MM timestamps on each Q&A bubble", () => {

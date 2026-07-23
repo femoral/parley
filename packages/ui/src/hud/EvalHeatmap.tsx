@@ -8,6 +8,12 @@ export const HEATMAP_GROUP_BY: readonly { value: string; label: string }[] = [
   { value: "orch_harness", label: "Orchestrator" },
 ];
 
+/**
+ * Cells with fewer samples than this get a visible low-n cue so the color
+ * ramp cannot overstate thin data (n was previously tooltip/aria only).
+ */
+export const HEATMAP_LOW_SAMPLE_THRESHOLD = 3;
+
 export interface EvalHeatmapProps {
   heatmap: SoundingsHeatmapView;
   groupBy: string;
@@ -28,6 +34,11 @@ function cellStyle(intensity: number | null): CSSProperties | undefined {
     background: `color-mix(in srgb, var(--quality-poor) ${pct}%, rgba(0, 0, 0, 0.35))`,
     color: intensity >= 0.45 ? "var(--ink-parchment)" : "var(--ink-soft)",
   };
+}
+
+/** True when a sampled cell is too thin for the ramp to stand alone. */
+export function isLowSampleCell(count: number): boolean {
+  return count > 0 && count < HEATMAP_LOW_SAMPLE_THRESHOLD;
 }
 
 /**
@@ -124,6 +135,10 @@ export const EvalHeatmap = memo(function EvalHeatmap({
               <span className="pc-eval-heat__swatch pc-eval-heat__swatch--empty" aria-hidden="true" />
               No sample
             </span>
+            <span className="pc-eval-heat__legend-item">
+              <span className="pc-eval-heat__swatch pc-eval-heat__swatch--low-n" aria-hidden="true" />
+              Low n (n&lt;{HEATMAP_LOW_SAMPLE_THRESHOLD})
+            </span>
             {sampleEvals <= 2 && (
               <span className="pc-eval-heat__sparse" role="status">
                 Sparse — n={sampleEvals} eval{sampleEvals === 1 ? "" : "s"}
@@ -174,14 +189,15 @@ export const EvalHeatmap = memo(function EvalHeatmap({
                     {groups.map((g, colIdx) => {
                       const cell = row[colIdx];
                       const missing = !cell || cell.intensity === null;
+                      const lowN = !missing && cell != null && isLowSampleCell(cell.count);
                       const style = cellStyle(cell?.intensity ?? null);
                       const label = missing
                         ? `${criterionId} × ${g.label}: no sample`
-                        : `${criterionId} × ${g.label}: ${cell.rateLabel} failed (${cell.failures}/${cell.count})`;
+                        : `${criterionId} × ${g.label}: ${cell.rateLabel} failed (${cell.failures}/${cell.count})${lowN ? ", low sample" : ""}`;
                       return (
                         <div
                           key={`${criterionId}:${g.key ?? "(none)"}`}
-                          className={`pc-eval-heat__cell${missing ? " pc-eval-heat__cell--empty" : ""}`}
+                          className={`pc-eval-heat__cell${missing ? " pc-eval-heat__cell--empty" : ""}${lowN ? " pc-eval-heat__cell--low-n" : ""}`}
                           role="cell"
                           style={style}
                           title={label}
@@ -190,6 +206,11 @@ export const EvalHeatmap = memo(function EvalHeatmap({
                           <span className="pc-eval-heat__cell-rate">
                             {cell?.rateLabel ?? "—"}
                           </span>
+                          {lowN && cell != null && (
+                            <span className="pc-eval-heat__cell-n" aria-hidden="true">
+                              n={cell.count}
+                            </span>
+                          )}
                         </div>
                       );
                     })}

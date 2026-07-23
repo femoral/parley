@@ -61,17 +61,25 @@ function QaTime({ iso, label }: { iso: string; label: string }) {
  * a turn's `answer` is `null` while still outstanding. Quiet absolute
  * timestamps (HH:MM, matching the day-chip clock) sit on each bubble so an
  * operator diagnosing a stall can see when the exchange happened.
+ *
+ * The transcript is a semantic list so screen-reader users can skim entries;
+ * each bubble carries an accessible name of speaker + wall-clock time.
  */
 export function QaTab({ qa, coat, emblem, faction }: QaTabProps) {
   if (qa.length === 0) {
     return <p className="pc-qa__empty">No parley yet — this soul hasn't raised a flag.</p>;
   }
   return (
-    <div className="pc-qa">
+    <div className="pc-qa" role="list" aria-label="Q&A transcript">
       {qa.map((turn) => (
         // id is wire question_id — stable across rehydrate; never key on question text (duplicates collide).
+        // Turn is a layout group only; each bubble is a listitem so SRs can skim speaker+time.
         <div className="pc-qa__turn" key={turn.id}>
-          <div className="pc-qa__bubble pc-qa__bubble--question">
+          <div
+            className="pc-qa__bubble pc-qa__bubble--question"
+            role="listitem"
+            aria-label={`Agent, ${formatQaTitle(turn.askedAt)}`}
+          >
             <Emblem coat={coat} mark={emblem} size={20} label={faction} />
             <div className="pc-qa__body">
               <p>{turn.question}</p>
@@ -79,7 +87,15 @@ export function QaTab({ qa, coat, emblem, faction }: QaTabProps) {
             </div>
           </div>
           {turn.answer !== null && (
-            <div className="pc-qa__bubble pc-qa__bubble--answer">
+            <div
+              className="pc-qa__bubble pc-qa__bubble--answer"
+              role="listitem"
+              aria-label={
+                turn.answeredAt !== null
+                  ? `You, ${formatQaTitle(turn.answeredAt)}`
+                  : "You"
+              }
+            >
               <span className="pc-qa__avatar" aria-hidden="true">
                 <Mark mark={MARK_ANCHOR} size={11} />
               </span>

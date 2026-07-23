@@ -400,6 +400,25 @@ describe("SoundingsPanel quality views (#165)", () => {
   });
 });
 
+describe("EvalHeatmap low-sample honesty", () => {
+  it("renders a visible n cue and legend entry for thin cells", () => {
+    const { container } = render(
+      <EvalHeatmap
+        heatmap={HEATMAP}
+        groupBy="type"
+        evalPresence="ready"
+        filtersActive={false}
+        onGroupBy={() => {}}
+      />,
+    );
+    // HEATMAP cells with count=2 are below the low-sample threshold (3).
+    const lowN = container.querySelectorAll(".pc-eval-heat__cell--low-n");
+    expect(lowN.length).toBeGreaterThan(0);
+    expect(container.querySelector(".pc-eval-heat__cell-n")?.textContent).toMatch(/^n=\d+$/);
+    expect(screen.getByText(/Low n/)).toBeTruthy();
+  });
+});
+
 describe("projectHeatmap (#166)", () => {
   it("shapes criteria × groups with rates and nulls for missing samples", () => {
     expect(HEATMAP.criteria).toEqual(["brief-implemented", "broke-existing"]);

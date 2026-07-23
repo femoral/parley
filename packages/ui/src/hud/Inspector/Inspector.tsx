@@ -15,6 +15,14 @@ const TABS = [
   { key: "qa", label: "Q&A" },
 ] as const;
 
+/** Power-user accelerators (mirrors ChartKey Keys) — quiet empty-logbook rest. */
+const EMPTY_SHORTCUTS: readonly { key: string; hint: string }[] = [
+  { key: "/", hint: "find session" },
+  { key: "n", hint: "next flag that needs you" },
+  { key: "m", hint: "toggle Soundings" },
+  { key: "Esc", hint: "clear task selection" },
+];
+
 export type InspectorTabKey = (typeof TABS)[number]["key"];
 
 export interface InspectorProps {
@@ -127,6 +135,15 @@ export const Inspector = memo(function Inspector({
           </span>{" "}
           Select a soul from the roster to open the logbook.
         </p>
+        {/* Quiet resting content — earns the empty plate's footprint without noise. */}
+        <ul className="pc-inspector__rest-keys" aria-label="Keyboard shortcuts">
+          {EMPTY_SHORTCUTS.map((row) => (
+            <li className="pc-inspector__rest-key" key={row.key}>
+              <kbd className="pc-inspector__rest-kbd">{row.key}</kbd>
+              <span className="pc-inspector__rest-hint">{row.hint}</span>
+            </li>
+          ))}
+        </ul>
       </Plate>
     );
   }

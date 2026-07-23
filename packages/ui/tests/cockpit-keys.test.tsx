@@ -73,18 +73,24 @@ function KeysHarness({
   groups = GROUPS,
   initialTaskId = null as string | null,
   onToggleSoundings,
+  onSelectTask,
 }: {
   groups?: RosterGroup[];
   initialTaskId?: string | null;
   onToggleSoundings?: () => void;
+  onSelectTask?: (id: string, options?: { tab?: string }) => void;
 }) {
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(initialTaskId);
   const rosterRef = useRef<RosterSearchHandle | null>(null);
+  const selectTask = (id: string, options?: { tab?: string }) => {
+    setSelectedTaskId(id);
+    onSelectTask?.(id, options);
+  };
   useCockpitKeys({
     rosterRef,
     groups,
     selectedTaskId,
-    selectTask: setSelectedTaskId,
+    selectTask,
     clearTask: () => setSelectedTaskId(null),
     toggleSoundings: onToggleSoundings,
   });
@@ -126,6 +132,28 @@ describe("useCockpitKeys window keydown accelerators", () => {
       fireEvent.keyDown(window, { key: "n" });
     });
     expect(screen.getByTestId("selected").textContent).toBe("t1");
+  });
+
+  it("n lands the inspector on Q&A (passes { tab: 'qa' })", () => {
+    const calls: Array<{ id: string; options?: { tab?: string } }> = [];
+    render(
+      <KeysHarness
+        onSelectTask={(id, options) => {
+          calls.push({ id, options });
+        }}
+      />,
+    );
+
+    act(() => {
+      fireEvent.keyDown(window, { key: "n" });
+    });
+    expect(screen.getByTestId("selected").textContent).toBe("t1");
+    expect(calls).toEqual([{ id: "t1", options: { tab: "qa" } }]);
+
+    act(() => {
+      fireEvent.keyDown(window, { key: "n" });
+    });
+    expect(calls[1]).toEqual({ id: "t2", options: { tab: "qa" } });
   });
 
   it("Escape clears the task selection when no popover is open", () => {

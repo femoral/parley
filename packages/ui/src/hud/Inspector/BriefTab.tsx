@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState, type ToggleEvent } from "react";
 import { Mark } from "../../primitives/index.js";
 import { MARK_SCROLL } from "../../tokens/chrome-glyphs.js";
 import { AttemptLineage } from "../AttemptLineage.js";
@@ -58,6 +58,14 @@ export function BriefTab({ brief, taskId, error = null, attempts = [] }: BriefTa
     setCopied(true);
     if (revertTimer.current) clearTimeout(revertTimer.current);
     revertTimer.current = setTimeout(() => setCopied(false), 1500);
+  }, []);
+
+  /** Native popovers don't move focus on open — land keyboard/SR users inside. */
+  const onOrdersToggle = useCallback((event: ToggleEvent<HTMLDivElement>) => {
+    if (event.newState === "open") {
+      event.currentTarget.focus();
+    }
+    // Close: Popover API returns focus to the invoker; leave that alone.
   }, []);
 
   const handleCopy = useCallback(async () => {
@@ -140,7 +148,13 @@ export function BriefTab({ brief, taskId, error = null, attempts = [] }: BriefTa
             <button type="button" className="pc-brief__orders-open" popoverTarget={ordersId}>
               Read full orders
             </button>
-            <div id={ordersId} popover="auto" className="pc-brief__orders">
+            <div
+              id={ordersId}
+              popover="auto"
+              className="pc-brief__orders"
+              tabIndex={-1}
+              onToggle={onOrdersToggle}
+            >
               <div className="pc-brief__orders-head">
                 <span className="pc-brief__orders-title">
                   <Mark mark={MARK_SCROLL} size={12} /> Standing Orders
