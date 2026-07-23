@@ -1,4 +1,4 @@
-import { memo } from "react";
+import { memo, useId, useMemo, useState } from "react";
 import type { SoundingsFiltersView } from "./types.js";
 
 /** Field descriptors for the text filter row — keep labels short for the bar. */
@@ -17,15 +17,26 @@ const TEXT_FIELDS: readonly {
   label: string;
   placeholder: string;
 }[] = [
-  { key: "type", label: "Type", placeholder: "coding" },
-  { key: "vendor", label: "Vendor", placeholder: "codex" },
-  { key: "model", label: "Model", placeholder: "…" },
-  { key: "orch_harness", label: "Orch harness", placeholder: "claude" },
-  { key: "orch_model", label: "Orch model", placeholder: "…" },
-  { key: "eval_harness", label: "Judge", placeholder: "harness" },
-  { key: "eval_model", label: "Judge model", placeholder: "…" },
-  { key: "rubric", label: "Rubric", placeholder: "coding@1" },
+  { key: "type", label: "Type", placeholder: "e.g. coding" },
+  { key: "vendor", label: "Vendor", placeholder: "e.g. codex" },
+  { key: "model", label: "Model", placeholder: "e.g. …" },
+  { key: "orch_harness", label: "Orch harness", placeholder: "e.g. claude" },
+  { key: "orch_model", label: "Orch model", placeholder: "e.g. …" },
+  { key: "eval_harness", label: "Judge", placeholder: "e.g. harness" },
+  { key: "eval_model", label: "Judge model", placeholder: "e.g. …" },
+  { key: "rubric", label: "Rubric", placeholder: "e.g. coding@1" },
 ];
+
+/** Count each non-empty text field and each pressed toggle as one active filter. */
+export function countActiveFilters(filters: SoundingsFiltersView): number {
+  let n = 0;
+  for (const field of TEXT_FIELDS) {
+    if (filters[field.key].trim() !== "") n += 1;
+  }
+  if (filters.firstAttemptOnly) n += 1;
+  if (filters.belowBaselineOnly) n += 1;
+  return n;
+}
 
 export interface EvalFilterBarProps {
   filters: SoundingsFiltersView;
@@ -39,58 +50,97 @@ export interface EvalFilterBarProps {
  * Layer 2 — composable quality filter bar for Soundings (#165).
  * Designed so #166 (heatmap / lineage) can mount the same control against
  * shared filter state. Plain props only — no SDK types.
+ *
+ * Collapsed by default (calm first paint); expands to the full field grid.
+ * Active-filter count badge keeps state legible when collapsed.
  */
 export const EvalFilterBar = memo(function EvalFilterBar({
   filters,
   onChange,
   onClear,
 }: EvalFilterBarProps) {
+  const [open, setOpen] = useState(false);
+  const panelId = useId();
+  const activeCount = useMemo(() => countActiveFilters(filters), [filters]);
+
   return (
     <div className="pc-eval-filters" role="search" aria-label="Eval filters">
-      <div className="pc-eval-filters__fields">
-        {TEXT_FIELDS.map((field) => (
-          <label key={field.key} className="pc-eval-filters__field">
-            <span className="pc-eval-filters__label">{field.label}</span>
-            <input
-              type="text"
-              className="pc-eval-filters__input"
-              value={filters[field.key]}
-              placeholder={field.placeholder}
-              spellCheck={false}
-              autoComplete="off"
-              onChange={(e) => onChange({ [field.key]: e.target.value })}
-            />
-          </label>
-        ))}
-      </div>
-
-      <div className="pc-eval-filters__toggles" role="group" aria-label="Eval filter toggles">
+      <div className="pc-eval-filters__summary">
         <button
           type="button"
-          className={`pc-soundings__chip-btn${filters.firstAttemptOnly ? " pc-soundings__chip-btn--active" : ""}`}
-          aria-pressed={filters.firstAttemptOnly}
-          onClick={() => onChange({ firstAttemptOnly: !filters.firstAttemptOnly })}
+          className="pc-eval-filters__disclosure"
+          aria-expanded={open}
+          aria-controls={panelId}
+          aria-label={
+            activeCount > 0
+              ? `Filters, ${activeCount} active`
+              : "Filters"
+          }
+          onClick={() => setOpen((v) => !v)}
         >
-          First attempt only
-        </button>
-        <button
-          type="button"
-          className={`pc-soundings__chip-btn${filters.belowBaselineOnly ? " pc-soundings__chip-btn--active" : ""}`}
-          aria-pressed={filters.belowBaselineOnly}
-          onClick={() => onChange({ belowBaselineOnly: !filters.belowBaselineOnly })}
-        >
-          Below baseline only
+          <span className="pc-eval-filters__disclosure-label" aria-hidden="true">
+            {open ? "▾" : "▸"}
+          </span>
+          <span className="pc-eval-filters__disclosure-text" aria-hidden="true">
+            Filters
+          </span>
+          {activeCount > 0 && (
+            <span className="pc-eval-filters__badge" aria-hidden="true">
+              {activeCount}
+            </span>
+          )}
         </button>
         {filters.active && (
-          <button
-            type="button"
-            className="pc-eval-filters__clear"
-            onClick={onClear}
-          >
+          <button type="button" className="pc-eval-filters__clear" onClick={onClear}>
             Clear filters
           </button>
         )}
       </div>
+
+      {open && (
+        <div
+          id={panelId}
+          className="pc-eval-filters__panel"
+          role="region"
+          aria-label="Filter fields"
+        >
+          <div className="pc-eval-filters__fields">
+            {TEXT_FIELDS.map((field) => (
+              <label key={field.key} className="pc-eval-filters__field">
+                <span className="pc-eval-filters__label">{field.label}</span>
+                <input
+                  type="text"
+                  className="pc-eval-filters__input"
+                  value={filters[field.key]}
+                  placeholder={field.placeholder}
+                  spellCheck={false}
+                  autoComplete="off"
+                  onChange={(e) => onChange({ [field.key]: e.target.value })}
+                />
+              </label>
+            ))}
+          </div>
+
+          <div className="pc-eval-filters__toggles" role="group" aria-label="Eval filter toggles">
+            <button
+              type="button"
+              className={`pc-soundings__chip-btn${filters.firstAttemptOnly ? " pc-soundings__chip-btn--active" : ""}`}
+              aria-pressed={filters.firstAttemptOnly}
+              onClick={() => onChange({ firstAttemptOnly: !filters.firstAttemptOnly })}
+            >
+              First attempt only
+            </button>
+            <button
+              type="button"
+              className={`pc-soundings__chip-btn${filters.belowBaselineOnly ? " pc-soundings__chip-btn--active" : ""}`}
+              aria-pressed={filters.belowBaselineOnly}
+              onClick={() => onChange({ belowBaselineOnly: !filters.belowBaselineOnly })}
+            >
+              Below baseline only
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 });

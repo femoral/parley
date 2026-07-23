@@ -2432,3 +2432,161 @@
 .pc-view-nav--cartouche .pc-view-nav__tab--active {
   background: var(--brass-tint-08);
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ * Soundings declutter (first-paint cognitive load) — NEW rules only.
+ * Do not merge into earlier .pc-eval-filters / .pc-soundings selectors;
+ * parallel work edits those blocks. Classes introduced here are additive.
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Filters disclosure — collapsed summary row + expand panel */
+.pc-eval-filters__summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+}
+.pc-eval-filters__disclosure {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--card-border-idle);
+  background: rgba(0, 0, 0, 0.25);
+  color: var(--brass-soft);
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--text-chrome-sm);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  padding: 5px 10px;
+  border-radius: var(--radius-control);
+  cursor: pointer;
+  line-height: 1.2;
+  min-height: 28px;
+  transition: border-color var(--ease), color var(--ease), background var(--ease);
+}
+.pc-eval-filters__disclosure:hover {
+  border-color: var(--brass-frame);
+  color: var(--brass);
+  background: var(--brass-tint-06);
+}
+.pc-eval-filters__disclosure:focus-visible {
+  outline: 2px solid var(--brass-bright);
+  outline-offset: 2px;
+}
+.pc-eval-filters__disclosure[aria-expanded="true"] {
+  border-color: var(--brass);
+  color: var(--brass);
+  background: var(--brass-tint-12);
+}
+.pc-eval-filters__disclosure-label {
+  font-size: 0.65rem;
+  line-height: 1;
+  opacity: 0.85;
+}
+.pc-eval-filters__disclosure-text {
+  line-height: 1.2;
+}
+.pc-eval-filters__badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.25rem;
+  height: 1.25rem;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--brass-tint-25);
+  border: 1px solid var(--brass-frame);
+  color: var(--brass-bright);
+  font-family: var(--font-mono);
+  font-size: var(--text-label);
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+  line-height: 1;
+}
+.pc-eval-filters__panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 8px;
+}
+
+/* Placeholder distinctness — "e.g. …" prefix + italic vs filled parchment values.
+ * Keep --ink-faint (not ghost) so placeholder text still meets functional contrast. */
+.pc-eval-filters .pc-eval-filters__input::placeholder {
+  color: var(--ink-faint);
+  font-style: italic;
+  opacity: 1;
+}
+.pc-eval-filters .pc-eval-filters__input:not(:placeholder-shown) {
+  color: var(--ink-parchment);
+  font-style: normal;
+}
+
+/* Group-by overflow (More…) — native select, plate control vocabulary */
+.pc-soundings__group-more {
+  display: inline-flex;
+  align-items: center;
+  margin: 0;
+  min-width: 0;
+}
+.pc-soundings__group-more-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+.pc-soundings__group-more-select {
+  appearance: none;
+  border: 1px solid var(--card-border-idle);
+  background: rgba(0, 0, 0, 0.25);
+  color: var(--ink-faint);
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--text-chrome-sm);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  padding: 5px 22px 5px 10px;
+  border-radius: var(--radius-control);
+  cursor: pointer;
+  line-height: 1.2;
+  min-height: 28px;
+  /* Chevron via background so native select stays keyboard-native */
+  background-image: linear-gradient(45deg, transparent 50%, var(--ink-faint) 50%),
+    linear-gradient(135deg, var(--ink-faint) 50%, transparent 50%);
+  background-position: calc(100% - 12px) calc(50% - 1px), calc(100% - 7px) calc(50% - 1px);
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+  transition: border-color var(--ease), color var(--ease), background-color var(--ease);
+}
+.pc-soundings__group-more-select:hover {
+  border-color: var(--brass-frame);
+  color: var(--brass-soft);
+  background-color: var(--brass-tint-06);
+}
+.pc-soundings__group-more-select--active {
+  border-color: var(--brass);
+  color: var(--brass);
+  background-color: var(--brass-tint-12);
+}
+.pc-soundings__group-more-select:focus-visible {
+  outline: 2px solid var(--brass-bright);
+  outline-offset: 2px;
+}
+.pc-soundings__group-more-select option {
+  background: var(--plate-bottom, #150e07);
+  color: var(--ink-parchment);
+  font-family: var(--font-body);
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: normal;
+}
+

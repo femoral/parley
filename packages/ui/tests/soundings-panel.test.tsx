@@ -167,4 +167,12 @@ describe("SoundingsPanel (#119)", () => {
       "false",
     );
   });
+
+  it("reaches overflow group-by options via the More select", () => {
+    const onGroupBy = vi.fn();
+    renderPanel(baseView(), { onGroupBy });
+    const more = screen.getByRole("combobox", { name: "More group-by options" });
+    fireEvent.change(more, { target: { value: "rubric" } });
+    expect(onGroupBy).toHaveBeenCalledWith("rubric");
+  });
 });

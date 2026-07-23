@@ -174,12 +174,12 @@ export const EVAL_FILTER_FIELD_META: readonly {
   label: string;
   placeholder: string;
 }[] = [
-  { key: "type", label: "Type", placeholder: "coding" },
-  { key: "vendor", label: "Vendor", placeholder: "codex" },
-  { key: "model", label: "Model", placeholder: "…" },
-  { key: "orch_harness", label: "Orch harness", placeholder: "claude" },
-  { key: "orch_model", label: "Orch model", placeholder: "…" },
-  { key: "eval_harness", label: "Judge", placeholder: "harness" },
-  { key: "eval_model", label: "Judge model", placeholder: "…" },
-  { key: "rubric", label: "Rubric", placeholder: "coding@1" },
+  { key: "type", label: "Type", placeholder: "e.g. coding" },
+  { key: "vendor", label: "Vendor", placeholder: "e.g. codex" },
+  { key: "model", label: "Model", placeholder: "e.g. …" },
+  { key: "orch_harness", label: "Orch harness", placeholder: "e.g. claude" },
+  { key: "orch_model", label: "Orch model", placeholder: "e.g. …" },
+  { key: "eval_harness", label: "Judge", placeholder: "e.g. harness" },
+  { key: "eval_model", label: "Judge model", placeholder: "e.g. …" },
+  { key: "rubric", label: "Rubric", placeholder: "e.g. coding@1" },
 ];

@@ -29,6 +29,26 @@ export const SOUNDINGS_GROUP_BY: readonly { value: string; label: string }[] = [
   { value: "rubric", label: "Rubric" },
 ];
 
+/**
+ * Primary group-by chips on first paint (≤5). Remainder live in the More…
+ * overflow select so the control wall does not greet the user.
+ * Session scope is the roster chip (header), not a group-by dimension.
+ */
+const PRIMARY_GROUP_BY_VALUES = new Set([
+  "vendor",
+  "model",
+  "type",
+  "profile",
+  "difficulty",
+]);
+
+const PRIMARY_GROUP_BY = SOUNDINGS_GROUP_BY.filter((o) =>
+  PRIMARY_GROUP_BY_VALUES.has(o.value),
+);
+const OVERFLOW_GROUP_BY = SOUNDINGS_GROUP_BY.filter(
+  (o) => !PRIMARY_GROUP_BY_VALUES.has(o.value),
+);
+
 const VIEW_TABS: readonly { value: SoundingsViewTab; label: string }[] = [
   { value: "groups", label: "Groups" },
   { value: "distribution", label: "Score vs baseline" },
@@ -237,7 +257,7 @@ export const SoundingsPanel = memo(function SoundingsPanel({
 
       {viewTab === "groups" && (
         <div className="pc-soundings__controls" role="group" aria-label="Group by">
-          {SOUNDINGS_GROUP_BY.map((opt) => {
+          {PRIMARY_GROUP_BY.map((opt) => {
             const active = opt.value === groupBy;
             return (
               <button
@@ -251,6 +271,31 @@ export const SoundingsPanel = memo(function SoundingsPanel({
               </button>
             );
           })}
+          <label className="pc-soundings__group-more">
+            <span className="pc-soundings__group-more-sr">More group-by options</span>
+            <select
+              className={`pc-soundings__group-more-select${
+                OVERFLOW_GROUP_BY.some((o) => o.value === groupBy)
+                  ? " pc-soundings__group-more-select--active"
+                  : ""
+              }`}
+              value={
+                OVERFLOW_GROUP_BY.some((o) => o.value === groupBy) ? groupBy : ""
+              }
+              aria-label="More group-by options"
+              onChange={(e) => {
+                const v = e.target.value;
+                if (v !== "") onGroupBy(v);
+              }}
+            >
+              <option value="">More…</option>
+              {OVERFLOW_GROUP_BY.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </label>
         </div>
       )}
 

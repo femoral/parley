@@ -226,7 +226,9 @@ describe("EvalFilterBar (#165)", () => {
         onClear={onClear}
       />,
     );
-    fireEvent.change(screen.getByPlaceholderText("coding"), {
+    // Filters disclosure is collapsed by default — expand before field access.
+    fireEvent.click(screen.getByRole("button", { name: "Filters, 1 active" }));
+    fireEvent.change(screen.getByPlaceholderText("e.g. coding"), {
       target: { value: "docs" },
     });
     expect(onChange).toHaveBeenCalledWith({ type: "docs" });
@@ -236,6 +238,21 @@ describe("EvalFilterBar (#165)", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Clear filters" }));
     expect(onClear).toHaveBeenCalled();
+  });
+
+  it("shows active-filter count on the collapsed disclosure", () => {
+    render(
+      <EvalFilterBar
+        filters={emptyFilters({ vendor: "codex", firstAttemptOnly: true, active: true })}
+        onChange={() => {}}
+        onClear={() => {}}
+      />,
+    );
+    // vendor + firstAttemptOnly → 2
+    const disclosure = screen.getByRole("button", { name: "Filters, 2 active" });
+    expect(disclosure.getAttribute("aria-expanded")).toBe("false");
+    expect(disclosure.textContent).toContain("2");
+    expect(screen.queryByPlaceholderText("e.g. coding")).toBeNull();
   });
 });
 
