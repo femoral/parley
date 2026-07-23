@@ -17,7 +17,10 @@ export const SHIPPED_MODEL_CATALOG: ModelCatalog = {
   claude: {
     fetched_at: SHIPPED_CATALOG_RETRIEVED_AT,
     source: "claude --help 2026-07-18 + docs/research/claude-code-cli-automation.md",
-    models: ["sonnet", "opus", "haiku", "fable", "best", "default", "opusplan", "sonnet[1m]", "opus[1m]", "fable[1m]"].map((id) => entry(id, [...claudeEfforts])),
+    // Real models only — the CLI's routing aliases (best, default, opusplan)
+    // and [1m] context variants are accepted by claude but are not distinct
+    // models worth an allowlist slot.
+    models: ["sonnet", "opus", "haiku", "fable"].map((id) => entry(id, [...claudeEfforts])),
   },
   cline: {
     fetched_at: SHIPPED_CATALOG_RETRIEVED_AT,
