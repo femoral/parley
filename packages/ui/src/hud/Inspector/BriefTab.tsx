@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { Mark } from "../../primitives/index.js";
 import { MARK_SCROLL } from "../../tokens/chrome-glyphs.js";
 import { AttemptLineage } from "../AttemptLineage.js";
@@ -25,6 +25,10 @@ function clipboardAvailable(): boolean {
   return typeof navigator !== "undefined" && typeof navigator.clipboard?.writeText === "function";
 }
 
+function hasBriefGoal(goal: string | null | undefined): boolean {
+  return typeof goal === "string" && goal.trim().length > 0;
+}
+
 /**
  * Layer 2 — the Brief tab (design-manifest §4.17 "Brief"): branch/worktree +
  * model/effort + elapsed·usage key-value grid, the scroll-marked GOAL well (the task's
@@ -40,6 +44,8 @@ export function BriefTab({ brief, taskId, error = null, attempts = [] }: BriefTa
   const [canCopy, setCanCopy] = useState(true);
   const revertTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scaffoldRef = useRef<HTMLSpanElement>(null);
+  const ordersId = `${useId()}-orders`;
+  const goalFiled = hasBriefGoal(brief.goal);
 
   useEffect(() => {
     setCanCopy(clipboardAvailable());
@@ -127,30 +133,32 @@ export function BriefTab({ brief, taskId, error = null, attempts = [] }: BriefTa
           </span>
         </span>
         <p className="pc-brief__goal pc-brief__goal--excerpt">
-          {brief.goal ?? "No brief filed — the orders never reached this ship."}
+          {goalFiled ? brief.goal : "No brief filed — the orders never reached this ship."}
         </p>
-        <button type="button" className="pc-brief__orders-open" popoverTarget="pc-brief-orders">
-          Read full orders
-        </button>
-        <div id="pc-brief-orders" popover="auto" className="pc-brief__orders">
-          <div className="pc-brief__orders-head">
-            <span className="pc-brief__orders-title">
-              <Mark mark={MARK_SCROLL} size={12} /> Standing Orders
-            </span>
-            <button
-              type="button"
-              className="pc-brief__orders-close"
-              popoverTarget="pc-brief-orders"
-              popoverTargetAction="hide"
-              aria-label="Close full orders"
-            >
-              ✕
+        {goalFiled && (
+          <>
+            <button type="button" className="pc-brief__orders-open" popoverTarget={ordersId}>
+              Read full orders
             </button>
-          </div>
-          <p className="pc-brief__orders-body">
-            {brief.goal ?? "No brief filed — the orders never reached this ship."}
-          </p>
-        </div>
+            <div id={ordersId} popover="auto" className="pc-brief__orders">
+              <div className="pc-brief__orders-head">
+                <span className="pc-brief__orders-title">
+                  <Mark mark={MARK_SCROLL} size={12} /> Standing Orders
+                </span>
+                <button
+                  type="button"
+                  className="pc-brief__orders-close"
+                  popoverTarget={ordersId}
+                  popoverTargetAction="hide"
+                  aria-label="Close full orders"
+                >
+                  ✕
+                </button>
+              </div>
+              <p className="pc-brief__orders-body">{brief.goal}</p>
+            </div>
+          </>
+        )}
       </div>
       {(brief.sandbox !== null || brief.network !== null) && (
         <ul className="pc-brief__constraints">

@@ -1,3 +1,4 @@
+import { useId } from "react";
 import { Badge } from "../primitives/index.js";
 import type { ReportView } from "./types.js";
 
@@ -12,6 +13,10 @@ const OUTCOME_COLOR: Record<ReportView["outcome"], string> = {
   partial: "var(--outcome-partial)",
   blocked: "var(--outcome-blocked)",
 };
+
+function hasReportSummary(summary: string | null | undefined): boolean {
+  return typeof summary === "string" && summary.trim().length > 0;
+}
 
 /**
  * Layer 2 — the structured report (design-manifest §4.13/§4.17 "Report").
@@ -28,15 +33,20 @@ const OUTCOME_COLOR: Record<ReportView["outcome"], string> = {
  * The summary mirrors the Brief's GOAL well: long reports clamp to a 3-line
  * excerpt so the panel never scrolls open, and "Read full report" opens the
  * whole dispatch in the brass-framed "Ship's Report" popover over the
- * vignetted sea (native Popover API).
+ * vignetted sea (native Popover API). The open control is gated on a non-empty
+ * summary so an empty dispatch never shows a button whose popover repeats
+ * nothing. Popover element ids are useId-derived so multiple instances never
+ * collide.
  */
 export function ReportPanel({
   report,
   emptyMessage = "No report yet — this soul is still at sea.",
 }: ReportPanelProps) {
+  const ordersId = `${useId()}-orders`;
   if (!report) {
     return <p className="pc-report__empty">{emptyMessage}</p>;
   }
+  const summaryFiled = hasReportSummary(report.summary);
   return (
     <div className="pc-report">
       <Badge label={report.outcome.toUpperCase()} color={OUTCOME_COLOR[report.outcome]} />
@@ -45,24 +55,28 @@ export function ReportPanel({
           <span className="pc-report__summary-label">Summary</span>
         </span>
         <p className="pc-report__excerpt">{report.summary}</p>
-        <button type="button" className="pc-report__orders-open" popoverTarget="pc-report-orders">
-          Read full report
-        </button>
-        <div id="pc-report-orders" popover="auto" className="pc-report__orders">
-          <div className="pc-report__orders-head">
-            <span className="pc-report__orders-title">Ship&rsquo;s Report</span>
-            <button
-              type="button"
-              className="pc-report__orders-close"
-              popoverTarget="pc-report-orders"
-              popoverTargetAction="hide"
-              aria-label="Close full report"
-            >
-              ✕
+        {summaryFiled && (
+          <>
+            <button type="button" className="pc-report__orders-open" popoverTarget={ordersId}>
+              Read full report
             </button>
-          </div>
-          <p className="pc-report__orders-body">{report.summary}</p>
-        </div>
+            <div id={ordersId} popover="auto" className="pc-report__orders">
+              <div className="pc-report__orders-head">
+                <span className="pc-report__orders-title">Ship&rsquo;s Report</span>
+                <button
+                  type="button"
+                  className="pc-report__orders-close"
+                  popoverTarget={ordersId}
+                  popoverTargetAction="hide"
+                  aria-label="Close full report"
+                >
+                  ✕
+                </button>
+              </div>
+              <p className="pc-report__orders-body">{report.summary}</p>
+            </div>
+          </>
+        )}
       </div>
       {report.files.length > 0 && (
         <div className="pc-report__files">

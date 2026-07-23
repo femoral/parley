@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Badge, Emblem, Mark } from "../primitives/index.js";
+import { Emblem } from "../primitives/index.js";
 import { stateMetaFor } from "../tokens/state-meta.js";
 import type { InboxTask } from "./types.js";
 
@@ -27,11 +27,12 @@ function clipboardAvailable(): boolean {
  * the user a `parley answer` scaffold for their orchestrator session. Head/body
  * is a native button so selection is honest; the footer copy control sits outside
  * it so interactive elements never nest.
+ *
+ * No per-card state badge — the plate header already announces NEEDS YOU · N.
+ * State still rides in the select control's accessible name via a visually-
+ * hidden label from the shared state-meta lookup (contract 6).
  */
 export function InboxCard({ task, onSelectTask }: InboxCardProps) {
-  // The badge reads the same layer-0 state language `RosterPanel` does
-  // (contract 6) rather than a hardcoded "AWAITING" literal, so it can't
-  // silently drift if the inbox ever admits a second attention state.
   const meta = stateMetaFor(task.state);
   const [copied, setCopied] = useState(false);
   const [canCopy, setCanCopy] = useState(true);
@@ -91,11 +92,9 @@ export function InboxCard({ task, onSelectTask }: InboxCardProps) {
             <span className="pc-inbox-card__name">{task.name}</span>
             <span className="pc-inbox-card__meta">{task.meta}</span>
           </span>
-          <Badge
-            label={meta.label}
-            glyph={<Mark mark={meta.mark} size={10} />}
-            color={meta.colorVar}
-          />
+          {/* State is redundant with the plate NEEDS YOU header visually;
+              keep it in the accessible name so AT still hears attention rank. */}
+          <span className="pc-visually-hidden">{meta.label}</span>
         </div>
         <p className="pc-inbox-card__question">
           <span className="pc-inbox-card__marker" aria-hidden="true">

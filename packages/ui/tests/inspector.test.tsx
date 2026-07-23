@@ -1,5 +1,5 @@
 /** @vitest-environment happy-dom */
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { Inspector } from "../src/hud/index.js";
 import type { InspectorTask } from "../src/hud/index.js";
@@ -131,6 +131,7 @@ describe("Inspector's four tabs render per the manifest's inspector treatment (#
     // The goal renders twice: the clamped excerpt in the well plus the full
     // text inside the "Standing Orders" popover.
     expect(screen.getAllByText("Survey the northern shoal and report depth.")).toHaveLength(2);
+    expect(screen.getByRole("button", { name: "Read full orders" })).toBeTruthy();
     expect(screen.getByText("feat/bay")).toBeTruthy();
     expect(screen.getByText(/codex-5/)).toBeTruthy();
     expect(screen.getByText(/3m 41s/)).toBeTruthy();
@@ -139,6 +140,91 @@ describe("Inspector's four tabs render per the manifest's inspector treatment (#
     expect(
       screen.getByText(/Parley never merges on its own — the branch waits for your orchestrator/),
     ).toBeTruthy();
+  });
+
+  it("omits Read full orders when no brief goal is filed", () => {
+    render(
+      <Inspector
+        task={task({
+          brief: {
+            goal: null,
+            branch: "feat/bay",
+            worktree: "/parley/worktrees/t1",
+            model: "codex-5",
+            effort: "high",
+            sandbox: "workspace",
+            network: false,
+            duration: "3m 41s",
+            usage: "1.2k ▸ 340 tok",
+          },
+        })}
+      />,
+    );
+    expect(screen.getByText("No brief filed — the orders never reached this ship.")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Read full orders" })).toBeNull();
+    expect(screen.queryByText("Standing Orders")).toBeNull();
+  });
+
+  it("omits Read full orders when the brief goal is only whitespace", () => {
+    render(
+      <Inspector
+        task={task({
+          brief: {
+            goal: "   \n\t  ",
+            branch: null,
+            worktree: null,
+            model: null,
+            effort: null,
+            sandbox: null,
+            network: null,
+            duration: null,
+            usage: null,
+          },
+        })}
+      />,
+    );
+    expect(screen.queryByRole("button", { name: "Read full orders" })).toBeNull();
+  });
+
+  it("uses useId-derived popover ids (not hardcoded pc-brief-orders)", () => {
+    const { container } = render(<Inspector task={task()} />);
+    expect(container.querySelector("#pc-brief-orders")).toBeNull();
+    const open = screen.getByRole("button", { name: "Read full orders" });
+    const target = open.getAttribute("popovertarget");
+    expect(target).toBeTruthy();
+    expect(target).not.toBe("pc-brief-orders");
+    expect(container.querySelector(`#${CSS.escape(target!)}`)).toBeTruthy();
+  });
+
+  it("scrolls the inspector into view when openSeq advances", () => {
+    const scrollIntoView = vi.fn();
+    const original = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = scrollIntoView;
+    try {
+      const { rerender } = render(<Inspector task={task()} openSeq={1} />);
+      expect(scrollIntoView).toHaveBeenCalled();
+      const firstCall = scrollIntoView.mock.calls.at(-1)?.[0] as ScrollIntoViewOptions;
+      expect(firstCall).toMatchObject({ block: "nearest" });
+      expect(["smooth", "auto"]).toContain(firstCall.behavior);
+
+      scrollIntoView.mockClear();
+      rerender(<Inspector task={task()} openSeq={2} />);
+      expect(scrollIntoView).toHaveBeenCalled();
+    } finally {
+      Element.prototype.scrollIntoView = original;
+    }
+  });
+
+  it("does not scroll when there is no selected task", () => {
+    const scrollIntoView = vi.fn();
+    const original = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = scrollIntoView;
+    try {
+      render(<Inspector task={null} openSeq={3} />);
+      expect(scrollIntoView).not.toHaveBeenCalled();
+    } finally {
+      Element.prototype.scrollIntoView = original;
+    }
   });
 
   it("renders the attempt-lineage timeline with badges and scores (#166)", () => {
@@ -300,7 +386,7 @@ describe("Inspector's four tabs render per the manifest's inspector treatment (#
   });
 
   it("switches to the Report tab and renders outcome/summary/files for a completed task", () => {
-    render(
+    const { container } = render(
       <Inspector
         task={task({
           state: "completed",
@@ -316,10 +402,35 @@ describe("Inspector's four tabs render per the manifest's inspector treatment (#
     expect(screen.getByText("SUCCESS")).toBeTruthy();
     // Summary renders twice: the clamped excerpt and the "Ship's Report" popover body.
     expect(screen.getAllByText("Charted the bay end to end.").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByRole("button", { name: "Read full report" })).toBeTruthy();
+    // useId-derived report popover id (not hardcoded pc-report-orders).
+    expect(container.querySelector("#pc-report-orders")).toBeNull();
+    const reportOpen = screen.getByRole("button", { name: "Read full report" });
+    const reportTarget = reportOpen.getAttribute("popovertarget");
+    expect(reportTarget).toBeTruthy();
+    expect(reportTarget).not.toBe("pc-report-orders");
     // Neutral path listing — no "+" add/delete claim the data doesn't carry.
     expect(screen.getByText("src/chart.ts")).toBeTruthy();
     expect(screen.queryByText(/^\+\s/)).toBeNull();
     expect(screen.queryByText(/Review & plant the branch/)).toBeNull();
+  });
+
+  it("omits Read full report when the summary is empty", () => {
+    render(
+      <Inspector
+        task={task({
+          state: "completed",
+          report: {
+            outcome: "success",
+            summary: "",
+            files: [{ path: "src/chart.ts" }],
+          },
+        })}
+      />,
+    );
+    openTab("REPORT");
+    expect(screen.getByText("SUCCESS")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Read full report" })).toBeNull();
   });
 
   it("shows the manifest's empty-state copy on the Report tab when there's no report yet", () => {
