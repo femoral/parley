@@ -49,7 +49,7 @@ export function Cockpit() {
   const rosterSearchRef = useRef<RosterSearchHandle | null>(null);
   useCockpitKeys({
     rosterRef: rosterSearchRef,
-    groups: snapshot.groups,
+    inbox: snapshot.inbox,
     selectedTaskId: roster.selectedTaskId,
     selectTask: roster.selectTask,
     clearTask: roster.clearTask,

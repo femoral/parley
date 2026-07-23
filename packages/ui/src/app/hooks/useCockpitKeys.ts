@@ -2,7 +2,7 @@
  * Layer 4 (hooks) — global keyboard accelerators for the cockpit shell.
  * Power-user shortcuts (recognition over recall via ChartKey's Keys section):
  *   `/`  — open and focus the roster session search
- *   `n`  — cycle to the next `awaiting_answer` task (roster attention order)
+ *   `n`  — cycle to the next fleet-wide inbox task
  *   `m`  — toggle Soundings metrics board (#119)
  *   `Esc` — clear the selected task (when no popover/search is open)
  *
@@ -13,7 +13,6 @@
 import { useEffect, useRef, type RefObject } from "react";
 import { isAnyHandRolledPopoverOpen } from "../../hud/handRolledPopover.js";
 import type { RosterSearchHandle } from "../../hud/RosterPanel.js";
-import type { RosterGroup } from "../../hud/types.js";
 
 export type { RosterSearchHandle };
 
@@ -26,8 +25,8 @@ export interface CockpitSelectTaskOptions {
 export interface CockpitKeysOptions {
   /** Ref to the roster's imperative search handle (may be null while mounting). */
   rosterRef: RefObject<RosterSearchHandle | null>;
-  /** Projected roster groups (attention order) — used to find awaiting tasks. */
-  groups: RosterGroup[];
+  /** Fleet-wide inbox projection, in the same stable order shown by the inbox plate. */
+  inbox: readonly { id: string }[];
   selectedTaskId: string | null;
   /**
    * Select a task. The `n` accelerator passes `{ tab: "qa" }` so awaiting
@@ -61,12 +60,11 @@ export function hasModifier(event: KeyboardEvent): boolean {
 }
 
 /**
- * Task ids in the `awaiting_answer` group, in the roster's projected order
- * (groups already sorted by attention rank; don't re-derive states).
+ * Task ids in the fleet-wide inbox projection's stable order.
+ * The projection already selects tasks needing attention; don't re-derive state.
  */
-export function awaitingTaskIds(groups: readonly RosterGroup[]): string[] {
-  const group = groups.find((g) => g.state === "awaiting_answer");
-  return group ? group.tasks.map((t) => t.id) : [];
+export function awaitingTaskIds(inbox: readonly { id: string }[]): string[] {
+  return inbox.map((task) => task.id);
 }
 
 /**
@@ -106,7 +104,7 @@ export function useCockpitKeys(options: CockpitKeysOptions): void {
 
       const {
         rosterRef,
-        groups,
+        inbox,
         selectedTaskId,
         selectTask,
         clearTask,
@@ -125,7 +123,7 @@ export function useCockpitKeys(options: CockpitKeysOptions): void {
       }
 
       if (event.key === "n" || event.key === "N") {
-        const next = nextAwaitingId(awaitingTaskIds(groups), selectedTaskId);
+        const next = nextAwaitingId(awaitingTaskIds(inbox), selectedTaskId);
         if (next !== null) {
           event.preventDefault();
           // Land on Q&A — the flag is the outstanding question, not the brief.

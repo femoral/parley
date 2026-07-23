@@ -54,11 +54,13 @@ const GROUPS: RosterGroup[] = [
   },
 ];
 
+const INBOX = [{ id: "t1" }, { id: "t2" }];
+
 const SESSIONS: RosterSessionOption[] = [{ id: "sess-abc12345", label: "sess-abc1", count: 2 }];
 
 describe("awaitingTaskIds / nextAwaitingId pure helpers", () => {
-  it("pulls ids only from the awaiting_answer group in roster order", () => {
-    expect(awaitingTaskIds(GROUPS)).toEqual(["t1", "t2"]);
+  it("pulls ids from the fleet-wide inbox projection in its stable order", () => {
+    expect(awaitingTaskIds(INBOX)).toEqual(["t1", "t2"]);
   });
 
   it("cycles to the next awaiting id, wrapping around", () => {
@@ -76,12 +78,16 @@ describe("awaitingTaskIds / nextAwaitingId pure helpers", () => {
  */
 function KeysHarness({
   groups = GROUPS,
+  inbox = INBOX,
+  selectedSessionId = null as string | null,
   initialTaskId = null as string | null,
   onToggleSoundings,
   onSelectTask,
   withChartKey = false,
 }: {
   groups?: RosterGroup[];
+  inbox?: readonly { id: string }[];
+  selectedSessionId?: string | null;
   initialTaskId?: string | null;
   onToggleSoundings?: () => void;
   onSelectTask?: (id: string, options?: { tab?: string }) => void;
@@ -96,7 +102,7 @@ function KeysHarness({
   };
   useCockpitKeys({
     rosterRef,
-    groups,
+    inbox,
     selectedTaskId,
     selectTask,
     clearTask: () => setSelectedTaskId(null),
@@ -109,7 +115,7 @@ function KeysHarness({
       <RosterPanel
         groups={groups}
         sessions={SESSIONS}
-        selectedSessionId={null}
+        selectedSessionId={selectedSessionId}
         onSelectSession={() => {}}
         searchSessions={async () => []}
         selectedTaskId={selectedTaskId}
@@ -141,6 +147,28 @@ describe("useCockpitKeys window keydown accelerators", () => {
       fireEvent.keyDown(window, { key: "n" });
     });
     expect(screen.getByTestId("selected").textContent).toBe("t1");
+  });
+
+  it("n reaches an inbox flag outside the active session-filtered roster", () => {
+    const filteredGroups: RosterGroup[] = [
+      {
+        state: "running",
+        tasks: GROUPS[1]!.tasks,
+      },
+    ];
+    render(
+      <KeysHarness
+        groups={filteredGroups}
+        inbox={[{ id: "flag-in-other-session" }]}
+        selectedSessionId="sess-abc12345"
+      />,
+    );
+
+    act(() => {
+      fireEvent.keyDown(window, { key: "n" });
+    });
+
+    expect(screen.getByTestId("selected").textContent).toBe("flag-in-other-session");
   });
 
   it("n lands the inspector on Q&A (passes { tab: 'qa' })", () => {
@@ -258,7 +286,7 @@ describe("useCockpitKeys window keydown accelerators", () => {
         ],
       },
     ];
-    render(<KeysHarness groups={onlyRunning} />);
+    render(<KeysHarness groups={onlyRunning} inbox={[]} />);
     act(() => {
       fireEvent.keyDown(window, { key: "n" });
     });
@@ -322,4 +350,3 @@ describe("useCockpitKeys window keydown accelerators", () => {
     expect(screen.getByTestId("selected").textContent).toBe("none");
   });
 });
-
