@@ -1,6 +1,6 @@
 {
   "name": "@useparley/plugin-pi",
-  "version": "0.0.2",
+  "version": "0.0.4",
   "private": false,
   "description": "Pi extension that exposes deterministic Parley session provenance to spawned tools.",
   "type": "module",

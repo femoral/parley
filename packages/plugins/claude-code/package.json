@@ -1,6 +1,6 @@
 {
   "name": "@useparley/plugin-claude-code",
-  "version": "0.0.2",
+  "version": "0.0.4",
   "private": false,
   "description": "Claude Code plugin that records deterministic Parley session provenance.",
   "type": "module",
