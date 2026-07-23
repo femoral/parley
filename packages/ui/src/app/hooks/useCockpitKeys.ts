@@ -11,6 +11,7 @@
  * components depend on them).
  */
 import { useEffect, useRef, type RefObject } from "react";
+import { isAnyHandRolledPopoverOpen } from "../../hud/handRolledPopover.js";
 import type { RosterSearchHandle } from "../../hud/RosterPanel.js";
 import type { RosterGroup } from "../../hud/types.js";
 
@@ -83,12 +84,9 @@ export function nextAwaitingId(
   return ids[(idx + 1) % ids.length]!;
 }
 
-/** True when a known cockpit popover is open (Chart key, session search, …). */
-export function hasOpenPopover(): boolean {
-  return Boolean(
-    document.querySelector(".pc-roster__search-pop") ||
-      document.querySelector(".pc-chart-key__pop"),
-  );
+/** True when a bus-managed cockpit popover is open (Chart key, session search, …). */
+export function hasOpenPopover(event?: Event): boolean {
+  return isAnyHandRolledPopoverOpen(event);
 }
 
 /**
@@ -146,7 +144,7 @@ export function useCockpitKeys(options: CockpitKeysOptions): void {
 
       if (event.key === "Escape") {
         // Let open popovers consume Escape (ChartKey / SessionSearch own it).
-        if (hasOpenPopover()) return;
+        if (hasOpenPopover(event)) return;
         if (rosterRef.current?.isSearchOpen()) return;
         if (selectedTaskId !== null) {
           event.preventDefault();

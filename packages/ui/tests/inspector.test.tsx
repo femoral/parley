@@ -441,6 +441,23 @@ describe("Inspector's four tabs render per the manifest's inspector treatment (#
     expect(scaffold?.textContent).toBe('parley fix t-failed-1 "..."');
   });
 
+  it("opens the full log trail from the failed well", () => {
+    render(
+      <Inspector
+        task={task({
+          state: "failed",
+          error: "vendor exited 1",
+          logs: { lines: [{ key: 0, kind: "error", text: "diagnostic trail" }], live: false },
+        })}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Full trail in Logs →" }));
+
+    expect(screen.getByRole("tab", { name: "LOGS" }).getAttribute("aria-selected")).toBe("true");
+    expect(screen.getByText("diagnostic trail")).toBeTruthy();
+  });
+
   it("lands on the Q&A tab when initialTab is qa", () => {
     render(
       <Inspector

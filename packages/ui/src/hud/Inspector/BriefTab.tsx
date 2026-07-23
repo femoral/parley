@@ -14,6 +14,8 @@ export interface BriefTabProps {
   error?: string | null;
   /** Full attempt chain (root → latest) for the lineage timeline (#166). */
   attempts?: AttemptLineageItem[];
+  /** Open the task's complete diagnostic trail in the inspector Logs tab. */
+  onOpenLogs?: () => void;
 }
 
 /** Scaffold the orchestrator pastes into their session to re-brief a failed task. */
@@ -38,7 +40,13 @@ function hasBriefGoal(goal: string | null | undefined): boolean {
  * recall — with a read-only `parley fix` copy scaffold (mirrors InboxCard's
  * `parley answer` affordance). Plain props only (contract 2).
  */
-export function BriefTab({ brief, taskId, error = null, attempts = [] }: BriefTabProps) {
+export function BriefTab({
+  brief,
+  taskId,
+  error = null,
+  attempts = [],
+  onOpenLogs,
+}: BriefTabProps) {
   const elapsed = [brief.duration, brief.usage].filter(Boolean).join(" · ");
   const [copied, setCopied] = useState(false);
   const [canCopy, setCanCopy] = useState(true);
@@ -119,6 +127,11 @@ export function BriefTab({ brief, taskId, error = null, attempts = [] }: BriefTa
               </button>
             )}
           </div>
+          {onOpenLogs && (
+            <button type="button" className="pc-brief__failure-trail" onClick={onOpenLogs}>
+              Full trail in Logs →
+            </button>
+          )}
         </div>
       )}
       <div className="pc-brief__grid">

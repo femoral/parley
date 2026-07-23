@@ -268,6 +268,7 @@ export const Inspector = memo(function Inspector({
             taskId={task.id}
             error={task.state === "failed" ? task.error : null}
             attempts={task.attempts}
+            onOpenLogs={() => setActive("logs")}
           />
         )}
         {active === "logs" && <LogsTab logs={task.logs} />}

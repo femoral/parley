@@ -3244,3 +3244,30 @@ button.pc-roster__meta--copy:focus-visible {
 .pc-health-chip--connecting {
   background: var(--brass-tint-08);
 }
+
+/* Quiet diagnostic continuation from a failed brief into the full log trail.
+ * Outfit sub-tier in warm muted ink (AA on the failure well), warming to the
+ * established brass link color on hover/focus. Appended for parallel safety. */
+.pc-brief__failure-trail {
+  appearance: none;
+  align-self: flex-start;
+  margin: 2px 0 0;
+  padding: 2px 0;
+  border: 0;
+  border-radius: var(--radius-tight);
+  background: transparent;
+  color: var(--ink-muted);
+  font-family: var(--font-body);
+  font-size: var(--text-sub);
+  font-weight: 500;
+  line-height: 1.4;
+  cursor: pointer;
+}
+.pc-brief__failure-trail:hover {
+  color: var(--brass-link);
+}
+.pc-brief__failure-trail:focus-visible {
+  color: var(--brass-link);
+  outline: 2px solid var(--brass-bright);
+  outline-offset: 2px;
+}
