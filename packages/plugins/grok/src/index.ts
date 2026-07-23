@@ -15,10 +15,8 @@ import os from "node:os";
 import path from "node:path";
 
 import {
-  readSessionState,
-  resolveHome,
-  sessionStatePath,
-  writeSessionState,
+  nonEmptyString,
+  recordSessionState,
   type SessionState,
 } from "@useparley/core";
 
@@ -60,10 +58,10 @@ export function resolveSessionId(
   env: HookEnv = {},
   stdin: HookStdin = {},
 ): string | null {
-  const fromEnv = optionalNonEmptyString(env.GROK_SESSION_ID);
+  const fromEnv = nonEmptyString(env.GROK_SESSION_ID);
   if (fromEnv !== null && isSafeSessionId(fromEnv)) return fromEnv;
 
-  const fromStdin = optionalNonEmptyString(stdin.sessionId);
+  const fromStdin = nonEmptyString(stdin.sessionId);
   if (fromStdin !== null && isSafeSessionId(fromStdin)) return fromStdin;
 
   return null;
@@ -78,9 +76,9 @@ function isSafeSessionId(id: string): boolean {
 
 /** Resolve Grok home (`GROK_HOME` or `~/.grok`). */
 export function resolveGrokHome(env: HookEnv = process.env): string {
-  const override = optionalNonEmptyString(env.GROK_HOME);
+  const override = nonEmptyString(env.GROK_HOME);
   if (override !== null) return path.resolve(override);
-  const home = optionalNonEmptyString(env.HOME) ?? os.homedir();
+  const home = nonEmptyString(env.HOME) ?? os.homedir();
   return path.join(home, ".grok");
 }
 
@@ -148,16 +146,10 @@ export function readSummaryProvenance(
   }
   const o = parsed as Record<string, unknown>;
   return {
-    model: optionalNonEmptyString(o.current_model_id),
-    effort: optionalNonEmptyString(o.reasoning_effort),
+    model: nonEmptyString(o.current_model_id),
+    effort: nonEmptyString(o.reasoning_effort),
     found: true,
   };
-}
-
-function optionalNonEmptyString(value: unknown): string | null {
-  if (typeof value !== "string") return null;
-  const trimmed = value.trim();
-  return trimmed === "" ? null : trimmed;
 }
 
 /**
@@ -177,44 +169,25 @@ export function runHook(options: RunHookOptions = {}): SessionState | null {
     return null;
   }
 
-  const now = (options.now ?? (() => new Date()))().toISOString();
-  const parleyHome = resolveHome(env);
-  const stateFile = sessionStatePath(parleyHome, HARNESS, sessionId);
-  const existing = readSessionState(stateFile);
-
   const grokHome = resolveGrokHome(env);
   const summaryPath = findSessionSummaryPath(grokHome, sessionId);
   const summary = readSummaryProvenance(summaryPath);
 
-  // When summary is readable, trust its fields (including honest nulls).
-  // When missing/unreadable, keep any previously recorded values.
-  const model = summary.found ? summary.model : (existing?.model ?? null);
-  const effort = summary.found ? summary.effort : (existing?.effort ?? null);
-
-  const state: SessionState = {
-    harness: HARNESS,
-    harness_session_id: sessionId,
-    model,
-    effort,
-    pid,
-    started_at: existing?.started_at && existing.started_at !== ""
-      ? existing.started_at
-      : now,
-    updated_at: now,
-  };
-
-  // Skip rewrite when nothing material changed (still first-write always).
-  if (
-    existing &&
-    existing.harness === state.harness &&
-    existing.harness_session_id === state.harness_session_id &&
-    existing.model === state.model &&
-    existing.effort === state.effort &&
-    existing.pid === state.pid
-  ) {
-    return existing;
-  }
-
-  writeSessionState(stateFile, state);
-  return state;
+  const result = recordSessionState(
+    {
+      harness: HARNESS,
+      harness_session_id: sessionId,
+      model: summary.model,
+      effort: summary.effort,
+      pid,
+      modelPolicy: "replace",
+      effortPolicy: "replace",
+      observed: { model: summary.found, effort: summary.found },
+    },
+    {
+      env,
+      now: options.now,
+    },
+  );
+  return result?.state ?? null;
 }

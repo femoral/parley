@@ -1,3 +1,5 @@
+import { applyProvenanceEnv } from "@useparley/core";
+
 type Model = { provider: string; id: string };
 
 interface ProvenanceAPI {
@@ -21,6 +23,10 @@ interface ProvenanceAPI {
 
 const HARNESS = "pi";
 
+function modelSlug(model: Model | undefined): string | null {
+  return model ? `${model.provider}/${model.id}` : null;
+}
+
 function setModel(model: Model | undefined): void {
   if (model) {
     process.env.PARLEY_MODEL = `${model.provider}/${model.id}`;
@@ -31,10 +37,12 @@ function setModel(model: Model | undefined): void {
 
 export default function parleyProvenance(pi: ProvenanceAPI): void {
   pi.on("session_start", (_event, ctx) => {
-    process.env.PARLEY_SESSION_ID = ctx.sessionManager.getSessionId();
-    process.env.PARLEY_HARNESS = HARNESS;
-    setModel(ctx.model);
-    process.env.PARLEY_EFFORT = pi.getThinkingLevel();
+    applyProvenanceEnv({
+      harness_session_id: ctx.sessionManager.getSessionId(),
+      harness: HARNESS,
+      model: modelSlug(ctx.model),
+      effort: pi.getThinkingLevel(),
+    });
   });
 
   pi.on("model_select", (event) => {

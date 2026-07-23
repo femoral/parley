@@ -1,12 +1,14 @@
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import {
+  nonEmptyString,
+  provenanceEnvVars,
   readSessionState,
+  recordSessionState,
+  resolveHome,
   sessionStatePath,
-  writeSessionState,
   type SessionState,
 } from "@useparley/core";
 
@@ -32,67 +34,92 @@ export function runHook(rawInput: string, options: HookOptions = {}): void {
     const input = parseInput(rawInput);
     if (!input) return;
 
-    const parleyHome =
-      options.parleyHome ?? process.env.PARLEY_HOME ?? path.join(os.homedir(), ".parley");
-    const stateFile = sessionStatePath(parleyHome, HARNESS, input.session_id);
-    const now = (options.now ?? (() => new Date().toISOString()))();
+    const nowIso = options.now ?? (() => new Date().toISOString());
+    const now = () => new Date(nowIso());
     const pid = options.harnessPid ?? process.ppid;
+    const parleyHome = options.parleyHome ?? resolveHome();
 
     if (input.hook_event_name === "SessionStart") {
-      const previous = readSessionState(stateFile);
-      const state: SessionState = {
-        harness: HARNESS,
-        harness_session_id: input.session_id,
-        model: nonEmpty(input.model),
-        effort: null,
-        pid,
-        started_at: previous?.started_at || now,
-        updated_at: now,
-      };
-      writeSessionState(stateFile, state);
-      appendEnvironment(options.envFile ?? process.env.CLAUDE_ENV_FILE, state);
+      // fill policy: resume SessionStart no longer wipes lazy-filled model/effort
+      // when the event omits them (null observation does not clobber previous).
+      const result = recordSessionState(
+        {
+          harness: HARNESS,
+          harness_session_id: input.session_id,
+          model: nonEmptyString(input.model),
+          // Omit effort when unknown so fill keeps any prior lazy value.
+          effort: undefined,
+          pid,
+          modelPolicy: "fill",
+          effortPolicy: "fill",
+        },
+        { parleyHome, now },
+      );
+      if (result) {
+        appendEnvironment(
+          options.envFile ?? process.env.CLAUDE_ENV_FILE,
+          result.state,
+        );
+      }
       return;
     }
 
-    const previous = readSessionState(stateFile);
+    // Post-start events only update an existing session-state file.
+    const previous = readSessionState(
+      sessionStatePath(parleyHome, HARNESS, input.session_id),
+    );
     if (!previous) return;
+
     const transcript = readTranscriptMetadata(input.transcript_path);
-    const model = transcript.model ?? previous.model;
-    const effort = transcript.effort ?? previous.effort;
-    if (model === previous.model && effort === previous.effort) return;
-    writeSessionState(stateFile, {
-      ...previous,
-      model,
-      effort,
-      pid,
-      updated_at: now,
-    });
+    recordSessionState(
+      {
+        harness: HARNESS,
+        harness_session_id: input.session_id,
+        model: transcript.model,
+        effort: transcript.effort,
+        pid,
+        modelPolicy: "fill",
+        effortPolicy: "fill",
+      },
+      { parleyHome, now },
+    );
   } catch {
     // Claude hooks are fail-open: provenance must never interrupt a session.
   }
 }
 
-function parseInput(rawInput: string): Required<Pick<HookInput, "session_id">> & HookInput | null {
+function parseInput(
+  rawInput: string,
+): (Required<Pick<HookInput, "session_id">> & HookInput) | null {
   let value: unknown;
   try {
     value = JSON.parse(rawInput);
   } catch {
     return null;
   }
-  if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return null;
+  }
   const input = value as HookInput;
-  const sessionId = nonEmpty(input.session_id);
+  const sessionId = nonEmptyString(input.session_id);
   if (!sessionId) return null;
   return { ...input, session_id: sessionId };
 }
 
-function appendEnvironment(envFile: string | undefined, state: SessionState): void {
+function appendEnvironment(
+  envFile: string | undefined,
+  state: SessionState,
+): void {
   if (!envFile) return;
+  const vars = provenanceEnvVars(state);
   const exports = [
-    shellExport("PARLEY_SESSION_ID", state.harness_session_id),
-    shellExport("PARLEY_HARNESS", HARNESS),
+    shellExport("PARLEY_SESSION_ID", vars.PARLEY_SESSION_ID),
+    shellExport("PARLEY_HARNESS", vars.PARLEY_HARNESS),
   ];
-  if (state.model) exports.push(shellExport("PARLEY_MODEL", state.model));
+  if (vars.PARLEY_MODEL) {
+    exports.push(shellExport("PARLEY_MODEL", vars.PARLEY_MODEL));
+  }
+  // Effort is intentionally omitted from Claude env-file (prior behavior).
   fs.appendFileSync(envFile, `${exports.join("\n")}\n`, "utf8");
 }
 
@@ -124,18 +151,20 @@ function readTranscriptMetadata(transcriptPath: string | undefined): {
       continue;
     }
     if (!isInitEvent(event)) continue;
-    model = nonEmpty(event.model) ?? model;
+    model = nonEmptyString(event.model) ?? model;
     effort =
-      nonEmpty(event.effort) ??
-      nonEmpty(event.effort_level) ??
-      nonEmpty(event.thinking_level) ??
+      nonEmptyString(event.effort) ??
+      nonEmptyString(event.effort_level) ??
+      nonEmptyString(event.thinking_level) ??
       effort;
   }
   return { model, effort };
 }
 
 function readTranscriptEdges(transcriptPath: string, size: number): string {
-  if (size <= TRANSCRIPT_CHUNK_BYTES * 2) return fs.readFileSync(transcriptPath, "utf8");
+  if (size <= TRANSCRIPT_CHUNK_BYTES * 2) {
+    return fs.readFileSync(transcriptPath, "utf8");
+  }
   const fd = fs.openSync(transcriptPath, "r");
   try {
     const first = Buffer.allocUnsafe(TRANSCRIPT_CHUNK_BYTES);
@@ -149,15 +178,11 @@ function readTranscriptEdges(transcriptPath: string, size: number): string {
 }
 
 function isInitEvent(value: unknown): value is Record<string, unknown> {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return false;
+  }
   const event = value as Record<string, unknown>;
   return event.type === "system" && event.subtype === "init";
-}
-
-function nonEmpty(value: unknown): string | null {
-  if (typeof value !== "string") return null;
-  const trimmed = value.trim();
-  return trimmed === "" ? null : trimmed;
 }
 
 async function main(): Promise<void> {
@@ -166,6 +191,9 @@ async function main(): Promise<void> {
   runHook(input);
 }
 
-if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
+if (
+  process.argv[1] &&
+  fileURLToPath(import.meta.url) === path.resolve(process.argv[1])
+) {
   void main();
 }

@@ -36,5 +36,8 @@
   "scripts": {
     "build": "tsdown",
     "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@useparley/core": "workspace:*"
   }
 }

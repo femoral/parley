@@ -1,11 +1,8 @@
 import fs from "node:fs";
-import os from "node:os";
-import path from "node:path";
 
 import {
-  readSessionState,
-  sessionStatePath,
-  writeSessionState,
+  nonEmptyString,
+  recordSessionState,
   type SessionState,
 } from "@useparley/core";
 
@@ -74,29 +71,22 @@ export function recordCodexSession(
   const transcriptPath = nonEmptyString(input.transcript_path);
   const effort =
     transcriptPath === null ? null : effortFromTranscript(transcriptPath);
-  const parleyHome =
-    options.parleyHome ??
-    process.env.PARLEY_HOME ??
-    path.join(os.homedir(), ".parley");
-  const file = sessionStatePath(parleyHome, HARNESS, sessionId);
-  const previous = readSessionState(file);
-  const timestamp = (options.now ?? (() => new Date()))().toISOString();
-  const state: SessionState = {
-    harness: HARNESS,
-    harness_session_id: sessionId,
-    model: model ?? previous?.model ?? null,
-    effort: effort ?? previous?.effort ?? null,
-    pid: options.harnessPid ?? process.ppid,
-    started_at: previous?.started_at || timestamp,
-    updated_at: timestamp,
-  };
+  const pid = options.harnessPid ?? process.ppid;
 
-  writeSessionState(file, state);
-  return state;
-}
-
-function nonEmptyString(value: unknown): string | null {
-  if (typeof value !== "string") return null;
-  const trimmed = value.trim();
-  return trimmed === "" ? null : trimmed;
+  const result = recordSessionState(
+    {
+      harness: HARNESS,
+      harness_session_id: sessionId,
+      model,
+      effort,
+      pid,
+      modelPolicy: "fill",
+      effortPolicy: "fill",
+    },
+    {
+      parleyHome: options.parleyHome,
+      now: options.now,
+    },
+  );
+  return result?.state ?? null;
 }

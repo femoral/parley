@@ -87,7 +87,11 @@ importers:
         specifier: workspace:*
         version: link:../../core
 
-  packages/plugins/pi: {}
+  packages/plugins/pi:
+    dependencies:
+      '@useparley/core':
+        specifier: workspace:*
+        version: link:../../core
 
   packages/runner:
     dependencies:

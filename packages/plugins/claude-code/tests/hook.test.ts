@@ -83,6 +83,50 @@ describe("Claude Code session provenance hook", () => {
     });
   });
 
+  it("preserves lazy-filled model/effort across a resume SessionStart without them", () => {
+    const root = fixtureRoot();
+    const transcript = path.join(root, "transcript.jsonl");
+    const options = {
+      parleyHome: root,
+      harnessPid: 11,
+      now: () => "2026-07-20T11:00:00.000Z",
+    };
+    runHook(
+      JSON.stringify({
+        hook_event_name: "SessionStart",
+        session_id: "resume-keep",
+        transcript_path: transcript,
+      }),
+      options,
+    );
+    fs.writeFileSync(
+      transcript,
+      '{"type":"system","subtype":"init","model":"claude-opus-5","effort":"high"}\n',
+    );
+    runHook(
+      JSON.stringify({
+        hook_event_name: "UserPromptSubmit",
+        session_id: "resume-keep",
+        transcript_path: transcript,
+      }),
+      { ...options, now: () => "2026-07-20T11:05:00.000Z" },
+    );
+
+    // Resume SessionStart omits model and effort — fill policy must keep prior values.
+    runHook(
+      JSON.stringify({ hook_event_name: "SessionStart", session_id: "resume-keep" }),
+      { ...options, harnessPid: 22, now: () => "2026-07-20T13:00:00.000Z" },
+    );
+
+    expect(readSessionState(sessionStatePath(root, "claude", "resume-keep"))).toMatchObject({
+      model: "claude-opus-5",
+      effort: "high",
+      pid: 22,
+      started_at: "2026-07-20T11:00:00.000Z",
+      updated_at: "2026-07-20T13:00:00.000Z",
+    });
+  });
+
   it("fills model from a later transcript event and preserves session start time", () => {
     const root = fixtureRoot();
     const transcript = path.join(root, "transcript.jsonl");
