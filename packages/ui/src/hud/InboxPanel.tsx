@@ -14,7 +14,7 @@ export interface InboxPanelProps {
 /**
  * Layer 2 — the inbox (design-manifest §4.15/§4.16, docs/spec/ui-v1-scope.md's
  * read-only cockpit). Ember-tinted plate holding one card per task blocked
- * on an answer, a red "N NEEDS YOU" count pill in the header, and the
+ * on an answer, a red "NEEDS YOU · N" count pill in the header, and the
  * manifest's quiet-cove empty state when nothing needs a flag raised. Plain
  * props throughout — the hooks layer sorts/filters the tasks. Memoized like
  * `RosterPanel` because the cockpit shell re-renders every second for its
@@ -28,6 +28,7 @@ export interface InboxPanelProps {
  */
 export const InboxPanel = memo(function InboxPanel({ tasks, onSelectTask }: InboxPanelProps) {
   const count = tasks.length;
+  // Count after the words so the tiny pill never scans as "I NEEDS YOU".
   const liveMessage =
     count === 0
       ? "No tasks need you"
@@ -43,7 +44,9 @@ export const InboxPanel = memo(function InboxPanel({ tasks, onSelectTask }: Inbo
         divider
         aside={
           count > 0 ? (
-            <span className="pc-inbox__pill">{count} NEEDS YOU</span>
+            <span className="pc-inbox__pill" aria-label={liveMessage}>
+              NEEDS YOU · {count}
+            </span>
           ) : undefined
         }
       />

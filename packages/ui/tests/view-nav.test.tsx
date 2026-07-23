@@ -123,15 +123,15 @@ describe("Cockpit view nav framed by Plate (#126)", () => {
     expect(container.querySelector(".pc-center__head")?.contains(nav)).toBe(true);
   });
 
-  it("keeps active state and click handling on the tabs", () => {
+  it("keeps active state and click handling on the toggle buttons", () => {
     cockpitState.view = baseView({ mode: "cove" });
     render(<Cockpit />);
     const cove = screen.getByRole("button", { name: "Cove" });
     const soundings = screen.getByRole("button", { name: "Soundings" });
     expect(cove.classList.contains("pc-view-nav__tab--active")).toBe(true);
-    expect(cove.getAttribute("aria-current")).toBe("page");
+    expect(cove.getAttribute("aria-pressed")).toBe("true");
     expect(soundings.classList.contains("pc-view-nav__tab--active")).toBe(false);
-    expect(soundings.getAttribute("aria-current")).toBeNull();
+    expect(soundings.getAttribute("aria-pressed")).toBe("false");
 
     fireEvent.click(soundings);
     expect(cockpitState.setMode).toHaveBeenCalledWith("soundings");
