@@ -36,13 +36,14 @@ export function DayChip({ day, clock }: DayChipProps) {
   }, []);
 
   const dayTitle = day === 1 ? "Daemon up 1 day" : `Daemon up ${day} days`;
+  const windParts = weather.wind.match(/^(.+)\s(\d+kn)$/);
 
   return (
     <Plate padded={false}>
       <div className="pc-daychip">
         <div className="pc-daychip__row">
           <span className="pc-daychip__day" title={dayTitle}>
-            Day {day} at sea
+            Day <span className="pc-daychip__day-number">{day}</span> at sea
           </span>
           <span aria-hidden="true" style={{ color: "var(--ink-dot)" }}>
             ·
@@ -54,7 +55,15 @@ export function DayChip({ day, clock }: DayChipProps) {
             <Mark mark={weather.mark} size={12} />
           </span>
           <span>{weather.condition}</span>
-          <span className="pc-daychip__wind">· {weather.wind}</span>
+          <span className="pc-daychip__wind">
+            · {windParts?.[1] ?? weather.wind}
+            {windParts && (
+              <>
+                {" "}
+                <span className="pc-daychip__wind-speed">{windParts[2]}</span>
+              </>
+            )}
+          </span>
         </div>
       </div>
     </Plate>

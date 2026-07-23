@@ -190,7 +190,11 @@ export function EdgeAlerts({ items, onSelectSession }: EdgeAlertsProps) {
             <EdgeAlertButton key={edgeChipKey(item)} item={item} onSelectSession={onSelectSession} />
           ))}
           {left.length > EDGE_ALERT_STACK_CAP && (
-            <span className="pc-edge-alert pc-edge-alert--more" aria-label={`${left.length - EDGE_ALERT_STACK_CAP} more sessions to the left`}>
+            <span
+              className="pc-edge-alert pc-edge-alert--more"
+              role="img"
+              aria-label={`${left.length - EDGE_ALERT_STACK_CAP} more sessions to the left`}
+            >
               +{left.length - EDGE_ALERT_STACK_CAP}
             </span>
           )}
@@ -210,7 +214,11 @@ export function EdgeAlerts({ items, onSelectSession }: EdgeAlertsProps) {
             <EdgeAlertButton key={edgeChipKey(item)} item={item} onSelectSession={onSelectSession} />
           ))}
           {right.length > EDGE_ALERT_STACK_CAP && (
-            <span className="pc-edge-alert pc-edge-alert--more" aria-label={`${right.length - EDGE_ALERT_STACK_CAP} more sessions to the right`}>
+            <span
+              className="pc-edge-alert pc-edge-alert--more"
+              role="img"
+              aria-label={`${right.length - EDGE_ALERT_STACK_CAP} more sessions to the right`}
+            >
               +{right.length - EDGE_ALERT_STACK_CAP}
             </span>
           )}

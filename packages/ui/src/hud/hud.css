@@ -3390,3 +3390,19 @@ button.pc-roster__meta--copy:focus-visible {
   color: var(--ink-label);
   line-height: 1.4;
 }
+
+/* ── Day-chip data-token legibility (t75) ─────────────────────────────────
+ * Keep the nautical wording in its flavor/chrome faces while numeric data
+ * uses the mono meta tier. Both inherit the existing AA-safe ink colors. */
+.pc-daychip__day-number {
+  font-family: var(--font-mono);
+  font-weight: 500;
+  letter-spacing: normal;
+}
+.pc-daychip__wind-speed {
+  font-family: var(--font-mono);
+  font-size: var(--text-meta);
+  font-style: normal;
+  font-weight: 500;
+  letter-spacing: normal;
+}
