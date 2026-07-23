@@ -11,17 +11,25 @@
   gap: 4px;
   padding: 16px 22px;
   text-align: center;
+  /* Title row may approach the plate edge at laptop centre widths; keep
+     flanks/title from painting outside the cartouche frame. */
+  min-width: 0;
+  box-sizing: border-box;
 }
 .pc-cartouche__title-row {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 16px;
+  min-width: 0;
+  max-width: 100%;
 }
 .pc-cartouche__flank {
   display: inline-flex;
   align-items: center;
   gap: 9px;
   color: var(--brass-frame);
+  flex: 0 0 auto;
 }
 .pc-cartouche__title {
   font-family: var(--font-display);
@@ -32,6 +40,10 @@
   text-shadow: 0 2px 0 var(--brass-shadow), 0 0 26px rgba(255, 207, 77, 0.25);
   line-height: 1;
   margin: 0;
+  /* Brand mark stays one line; letter-spacing/floor step down via title-stack
+     container queries in cockpit.css rather than wrapping mid-word. */
+  white-space: nowrap;
+  min-width: 0;
 }
 .pc-cartouche__subtitle {
   font-family: var(--font-display);
@@ -2425,8 +2437,9 @@
 /* Engraved-on-cartouche placement: the nav sits at the title plate's
    bottom-right edge, tabs one step smaller so the nameplate stays loudest.
    On narrow title stacks (see .pc-center__title-stack container query in
-   cockpit.css) this reflows into the document so it never underlaps the
-   subtitle — wide boards keep the absolute engraving. */
+   cockpit.css) this reflows into a plate-sliver under the cartouche so it
+   never underlaps the subtitle or floats on bare sea — wide boards keep
+   the absolute engraving. */
 .pc-view-nav--cartouche {
   position: absolute;
   bottom: 7px;

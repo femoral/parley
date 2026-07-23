@@ -141,11 +141,19 @@
   display: flex;
   flex-wrap: wrap;
   gap: var(--gutter);
-  align-items: stretch;
+  align-items: flex-start;
 }
-.pc-center__head > :first-child {
-  flex: 1;
-  min-width: 0;
+/* Title stack owns the brand mark — never let flex crush it below Cinzel's
+   intrinsic width at the display clamp floor. DayChip (min-width ~200px)
+   wraps under the cartouche first. */
+.pc-center__head > .pc-center__title-stack {
+  flex: 1 1 24rem;
+  min-width: min(100%, 24rem);
+}
+/* DayChip plate keeps natural height (head no longer stretch-aligns). */
+.pc-center__head > .pc-plate {
+  flex: 0 0 auto;
+  align-self: flex-start;
 }
 /* Title stack: the view nav is engraved onto the cartouche plate itself
    (bottom-right) instead of floating in its own plate between the cartouche
@@ -158,23 +166,60 @@
   container-type: inline-size;
   container-name: title-stack;
 }
-.pc-center__title-stack > * {
-  flex: 1;
+/* Cartouche claims the row; docked nav forces its own row via CQ below. */
+.pc-center__title-stack > .pc-plate {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+/* Narrow title stacks: brand mark sizes to the plate (cqi), not the viewport
+   (vw). Laptop centre columns are much narrower than 3.4vw implies, which
+   was the shear at ~1080–1200px. Letter-spacing steps down with the stack. */
+@container title-stack (max-width: 40rem) {
+  .pc-cartouche__title {
+    font-size: clamp(1.25rem, 6.5cqi, 2.5rem);
+    letter-spacing: 4px;
+  }
+}
+@container title-stack (max-width: 32rem) {
+  .pc-cartouche__title {
+    font-size: clamp(1.25rem, 6cqi, 2.5rem);
+    letter-spacing: 2px;
+  }
+}
+@container title-stack (max-width: 26rem) {
+  .pc-cartouche__title {
+    font-size: clamp(1.25rem, 5.5cqi, 2.5rem);
+    letter-spacing: 1px;
+  }
+  .pc-cartouche__flank {
+    gap: 5px;
+  }
+  .pc-cartouche__title-row {
+    gap: 10px;
+  }
 }
 /* Subtitle + tabs need ~760px side-by-side before the absolute nav underlaps
-   "DELEGATED FLEET COCKPIT". Below that, dock the nav on its own row under
-   the plate (right-aligned) so title/subtitle/nav never collide ≥1024px. */
+   "DELEGATED FLEET COCKPIT". Below that, dock the nav on its own full-width
+   plate sliver under the cartouche (tabs right-aligned) so it never floats
+   on bare sea or steals horizontal space from the brand mark. */
 @container title-stack (max-width: 760px) {
   .pc-view-nav--cartouche {
     position: static;
+    /* Own row under the cartouche — do not sit beside and crush the title. */
     flex: 0 0 100%;
     display: flex;
     justify-content: flex-end;
     box-sizing: border-box;
-    padding: 0 28px 10px 0;
+    width: 100%;
     margin: 0;
+    padding: 3px 6px;
     right: auto;
     bottom: auto;
+    /* Crafted chrome — same wood fill + brass frame as other plates. */
+    background: var(--plate-fill);
+    border: 1px solid var(--brass-border);
+    border-radius: var(--radius-control);
+    box-shadow: var(--plate-shadow);
   }
   .pc-cartouche__subtitle {
     max-width: 100%;
