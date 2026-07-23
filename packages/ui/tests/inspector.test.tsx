@@ -678,6 +678,7 @@ describe("Inspector's four tabs render per the manifest's inspector treatment (#
     openTab("Q&A");
     const list = screen.getByRole("list", { name: "Q&A transcript" });
     expect(list).toBeTruthy();
+    expect(list.querySelector(".pc-qa__turn")?.getAttribute("role")).toBe("presentation");
     const items = screen.getAllByRole("listitem");
     expect(items.length).toBe(2);
     expect(items[0]!.getAttribute("aria-label")).toMatch(/^Agent,/);

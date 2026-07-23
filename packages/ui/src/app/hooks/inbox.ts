@@ -39,6 +39,7 @@ export function projectInbox(tasks: Iterable<RosterTaskInput>): InboxTask[] {
       faction: identity.faction,
       meta: identity.meta,
       question: task.question,
+      updatedAt: task.updatedAt ?? null,
       sessionId: task.orchestratorSession,
     };
   });

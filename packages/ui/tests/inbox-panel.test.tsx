@@ -15,6 +15,7 @@ const AWAITING_1: InboxTask = {
   faction: "Codex",
   meta: "feat/bay · t1",
   question: "Should the survey favor the northern shoal?",
+  updatedAt: "2026-07-23T12:00:00.000Z",
   sessionId: "sess-abcdef12",
 };
 
@@ -27,6 +28,7 @@ const AWAITING_2: InboxTask = {
   faction: "Grok",
   meta: "feat/depth · t2",
   question: "Deep or shallow anchorage?",
+  updatedAt: "2026-07-23T10:00:00.000Z",
   sessionId: null,
 };
 
@@ -40,6 +42,21 @@ describe("InboxPanel display-only question cards (#78)", () => {
     expect(screen.getByText("feat/bay · t1")).toBeTruthy();
     expect(screen.queryByRole("textbox")).toBeNull();
     expect(screen.queryByRole("button", { name: /Send/ })).toBeNull();
+  });
+
+  it("uses phrasing content in the select button and shows a quiet relative age", () => {
+    const updatedAt = new Date(Date.now() - 12 * 60_000).toISOString();
+    const { container } = render(
+      <InboxPanel
+        tasks={[{ ...AWAITING_1, updatedAt }]}
+        onSelectTask={() => {}}
+      />,
+    );
+    const select = container.querySelector(".pc-inbox-card__select");
+    expect(select?.querySelector(":scope > div, :scope > p")).toBeNull();
+    const age = select?.querySelector("time.pc-inbox-card__age");
+    expect(age?.textContent).toBe("12m");
+    expect(age?.getAttribute("datetime")).toBe(updatedAt);
   });
 
   it("includes state in the card accessible name without a redundant AWAITING badge", () => {

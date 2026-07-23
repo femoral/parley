@@ -74,7 +74,7 @@ export function QaTab({ qa, coat, emblem, faction }: QaTabProps) {
       {qa.map((turn) => (
         // id is wire question_id — stable across rehydrate; never key on question text (duplicates collide).
         // Turn is a layout group only; each bubble is a listitem so SRs can skim speaker+time.
-        <div className="pc-qa__turn" key={turn.id}>
+        <div className="pc-qa__turn" role="presentation" key={turn.id}>
           <div
             className="pc-qa__bubble pc-qa__bubble--question"
             role="listitem"

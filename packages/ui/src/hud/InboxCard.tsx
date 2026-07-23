@@ -21,6 +21,18 @@ function clipboardAvailable(): boolean {
   return typeof navigator !== "undefined" && typeof navigator.clipboard?.writeText === "function";
 }
 
+function formatRelativeAge(iso: string | null, now: number): string {
+  if (iso === null) return "—";
+  const updatedAt = new Date(iso).getTime();
+  if (Number.isNaN(updatedAt)) return "—";
+  const elapsedMinutes = Math.max(0, Math.floor((now - updatedAt) / 60_000));
+  if (elapsedMinutes < 1) return "now";
+  if (elapsedMinutes < 60) return `${elapsedMinutes}m`;
+  const elapsedHours = Math.floor(elapsedMinutes / 60);
+  if (elapsedHours < 24) return `${elapsedHours}h`;
+  return `${Math.floor(elapsedHours / 24)}d`;
+}
+
 /**
  * Layer 2 — one ember inbox card (design-manifest §4.15, awaiting variant).
  * Display-only answers: selecting opens the inspector; the copy affordance hands
@@ -36,13 +48,16 @@ export function InboxCard({ task, onSelectTask }: InboxCardProps) {
   const meta = stateMetaFor(task.state);
   const [copied, setCopied] = useState(false);
   const [canCopy, setCanCopy] = useState(true);
+  const [now, setNow] = useState(() => Date.now());
   const revertTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scaffoldRef = useRef<HTMLSpanElement>(null);
 
   useEffect(() => {
     setCanCopy(clipboardAvailable());
+    const ageTimer = setInterval(() => setNow(Date.now()), 60_000);
     return () => {
       if (revertTimer.current) clearTimeout(revertTimer.current);
+      clearInterval(ageTimer);
     };
   }, []);
 
@@ -78,6 +93,7 @@ export function InboxCard({ task, onSelectTask }: InboxCardProps) {
 
   const taskRef = shortRef(task.id);
   const sessionRef = task.sessionId ? shortRef(task.sessionId) : null;
+  const relativeAge = formatRelativeAge(task.updatedAt, now);
 
   return (
     <article className="pc-inbox-card">
@@ -86,22 +102,36 @@ export function InboxCard({ task, onSelectTask }: InboxCardProps) {
         className="pc-inbox-card__select"
         onClick={() => onSelectTask(task.id)}
       >
-        <div className="pc-inbox-card__head">
+        <span className="pc-inbox-card__head">
           <Emblem coat={task.coat} mark={task.emblem} size={23} label={task.faction} />
           <span className="pc-inbox-card__body">
             <span className="pc-inbox-card__name">{task.name}</span>
             <span className="pc-inbox-card__meta">{task.meta}</span>
           </span>
+          <time
+            className="pc-inbox-card__age"
+            dateTime={task.updatedAt ?? undefined}
+            title={task.updatedAt ?? "Update time unavailable"}
+            aria-label={
+              task.updatedAt === null
+                ? "Update time unavailable"
+                : relativeAge === "now"
+                  ? "Updated now"
+                  : `Updated ${relativeAge} ago`
+            }
+          >
+            {relativeAge}
+          </time>
           {/* State is redundant with the plate NEEDS YOU header visually;
               keep it in the accessible name so AT still hears attention rank. */}
           <span className="pc-visually-hidden">{meta.label}</span>
-        </div>
-        <p className="pc-inbox-card__question">
+        </span>
+        <span className="pc-inbox-card__question">
           <span className="pc-inbox-card__marker" aria-hidden="true">
             ⌐
           </span>
           {task.question}
-        </p>
+        </span>
       </button>
 
       <div className="pc-inbox-card__footer">

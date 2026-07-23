@@ -89,6 +89,8 @@ export interface InboxTask {
   meta: string;
   /** The outstanding question text. */
   question: string;
+  /** ISO-8601 last activity; displayed as the card's quiet relative age. */
+  updatedAt: string | null;
   /** Orchestrator session this task belongs to, or null when unknown. */
   sessionId: string | null;
 }
