@@ -237,48 +237,61 @@ function ensureMultiselectShortcutHints(): void {
   }
 }
 
-/** Interactive model/effort allowlist for one vendor. Exported for unit tests. */
+/**
+ * Interactive model/effort allowlist for one vendor. Exported for unit tests.
+ * Returns `null` when the user submits an empty model selection — the vendor
+ * is skipped and no allowlist is written.
+ */
 export async function promptVendorModels(
   vendor: string,
   models: readonly ModelEntry[],
-): Promise<Record<string, VendorModelAllowlistEntry>> {
+): Promise<Record<string, VendorModelAllowlistEntry> | null> {
   ensureMultiselectShortcutHints();
   const selected = await p.multiselect({
-    message: `${vendor}: models to allow`,
+    message: `${vendor}: models to allow (submit empty to skip)`,
     options: models.map((model) => ({
       value: model.id,
       label: model.id,
       hint: model.efforts.length > 0 ? `efforts: ${model.efforts.join(", ")}` : "no effort flag",
     })),
     initialValues: [],
-    required: true,
+    required: false,
   });
   if (p.isCancel(selected)) throw new PromptCancelled();
+  if (selected.length === 0) return null;
 
-  // Efforts are opt-in per model; single-effort models have nothing to narrow.
+  // Efforts are opt-in per model; single-effort models have nothing to narrow
+  // and an empty submission keeps the full catalog set.
   const effortsById: Record<string, string[]> = {};
   for (const model of models) {
     if (!selected.includes(model.id) || model.efforts.length < 2) continue;
     const efforts = await p.multiselect({
-      message: `${vendor}: efforts to allow for ${model.id}`,
+      message: `${vendor}: efforts to allow for ${model.id} (submit empty to keep all)`,
       options: model.efforts.map((effort) => ({
         value: effort,
         label: effort,
         ...(effort === model.default_effort ? { hint: "catalog default" } : {}),
       })),
       initialValues: [],
-      required: true,
+      required: false,
     });
     if (p.isCancel(efforts)) throw new PromptCancelled();
-    effortsById[model.id] = efforts;
+    if (efforts.length > 0) effortsById[model.id] = efforts;
   }
 
-  const defaultId = await p.select({
-    message: `${vendor}: default model`,
-    options: selected.map((id) => ({ value: id, label: id })),
-    initialValue: selected[0],
-  });
-  if (p.isCancel(defaultId)) throw new PromptCancelled();
+  // A single selected model is the default by construction.
+  let defaultId: string;
+  if (selected.length === 1) {
+    defaultId = selected[0]!;
+  } else {
+    const picked = await p.select({
+      message: `${vendor}: default model`,
+      options: selected.map((id) => ({ value: id, label: id })),
+      initialValue: selected[0],
+    });
+    if (p.isCancel(picked)) throw new PromptCancelled();
+    defaultId = picked;
+  }
 
   const defaultModel = models.find((model) => model.id === defaultId);
   const allowedEfforts = defaultModel
@@ -312,6 +325,7 @@ export async function populateInitConfig(opts: {
   const config = structuredClone(opts.config);
   const configuredVendors: string[] = [];
   let changed = false;
+  const pending: { vendor: string; models: ModelEntry[] }[] = [];
   for (const vendor of opts.harnesses) {
     const existing = config.vendors?.[vendor]?.models;
     if (existing && Object.keys(existing).length > 0) {
@@ -320,9 +334,32 @@ export async function populateInitConfig(opts: {
     }
     const models = modelEntries(opts.catalog, vendor);
     if (models.length === 0) continue;
+    pending.push({ vendor, models });
+  }
+  // Interactive runs pick which vendors to walk through up front; submitting
+  // nothing shortcuts vendor configuration entirely.
+  let chosen = pending;
+  if (opts.interactive && pending.length > 0) {
+    ensureMultiselectShortcutHints();
+    const picked = await p.multiselect({
+      message: "vendors to configure (submit empty to skip)",
+      options: pending.map(({ vendor, models }) => ({
+        value: vendor,
+        label: vendor,
+        hint: `${models.length} model${models.length === 1 ? "" : "s"}`,
+      })),
+      initialValues: [],
+      required: false,
+    });
+    if (p.isCancel(picked)) throw new PromptCancelled();
+    const pickedSet = new Set(picked);
+    chosen = pending.filter(({ vendor }) => pickedSet.has(vendor));
+  }
+  for (const { vendor, models } of chosen) {
     const allowlist = opts.interactive
       ? await promptVendorModels(vendor, models)
       : seedVendorModels(models);
+    if (allowlist === null) continue;
     config.vendors ??= {};
     config.vendors[vendor] = { ...config.vendors[vendor], models: allowlist };
     configuredVendors.push(vendor);

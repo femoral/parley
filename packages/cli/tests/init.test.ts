@@ -142,7 +142,6 @@ describe("parley init", () => {
     it("starts the model multiselect deselected and surfaces a/i in the instructions footer", async () => {
       const catalog = [{ id: "solo", efforts: ["low"], default_effort: null }];
       vi.mocked(p.multiselect).mockResolvedValueOnce(["solo"]);
-      vi.mocked(p.select).mockResolvedValueOnce("solo");
 
       await promptVendorModels("fake", catalog);
 
@@ -150,7 +149,7 @@ describe("parley init", () => {
         message: string;
         initialValues: string[];
       };
-      expect(modelCall.message).toBe("fake: models to allow");
+      expect(modelCall.message).toBe("fake: models to allow (submit empty to skip)");
       expect(modelCall.initialValues).toEqual([]);
       // Footer hints installed exactly once, no matter how often init prompts.
       const shortcuts = (p as unknown as { MULTISELECT_INSTRUCTIONS: string[] })
@@ -179,7 +178,7 @@ describe("parley init", () => {
         options: { value: string; hint?: string }[];
         initialValues: string[];
       };
-      expect(effortsCall.message).toBe("fake: efforts to allow for a");
+      expect(effortsCall.message).toBe("fake: efforts to allow for a (submit empty to keep all)");
       expect(effortsCall.options.map((o) => o.value)).toEqual(["low", "medium", "high"]);
       expect(effortsCall.options.find((o) => o.value === "medium")?.hint).toBe("catalog default");
       // Opt-in: nothing preselected.
@@ -206,11 +205,14 @@ describe("parley init", () => {
       vi.mocked(p.multiselect)
         .mockResolvedValueOnce(["solo"])
         .mockResolvedValueOnce(["medium", "high"]);
-      vi.mocked(p.select).mockResolvedValueOnce("solo").mockResolvedValueOnce("medium");
+      // Single selected model → the default-model select is skipped, so the
+      // only select is the default effort.
+      vi.mocked(p.select).mockResolvedValueOnce("medium");
 
       await promptVendorModels("codex", catalog);
 
-      const effortCall = vi.mocked(p.select).mock.calls[1]![0] as { initialValue: string };
+      expect(p.select).toHaveBeenCalledTimes(1);
+      const effortCall = vi.mocked(p.select).mock.calls[0]![0] as { initialValue: string };
       expect(effortCall.initialValue).toBe("medium");
     });
 
@@ -219,14 +221,38 @@ describe("parley init", () => {
       vi.mocked(p.multiselect)
         .mockResolvedValueOnce(["a"])
         .mockResolvedValueOnce(["high"]); // narrow to one effort
-      vi.mocked(p.select).mockResolvedValueOnce("a");
 
       const allowlist = await promptVendorModels("fake", catalog);
 
-      expect(p.select).toHaveBeenCalledTimes(1);
-      // Single allowed effort → defaultMarker yields true.
+      // Single model and single allowed effort → no selects at all.
+      expect(p.select).not.toHaveBeenCalled();
       expect(allowlist).toEqual({
         a: { efforts: ["high"], default: true },
+      });
+    });
+
+    it("returns null when the model multiselect is submitted empty", async () => {
+      const catalog = [{ id: "a", efforts: ["low", "high"], default_effort: "low" }];
+      vi.mocked(p.multiselect).mockResolvedValueOnce([]);
+
+      const allowlist = await promptVendorModels("fake", catalog);
+
+      expect(allowlist).toBeNull();
+      expect(p.multiselect).toHaveBeenCalledTimes(1);
+      expect(p.select).not.toHaveBeenCalled();
+    });
+
+    it("keeps all catalog efforts when the effort multiselect is submitted empty", async () => {
+      const catalog = [{ id: "a", efforts: ["low", "high"], default_effort: "high" }];
+      vi.mocked(p.multiselect)
+        .mockResolvedValueOnce(["a"])
+        .mockResolvedValueOnce([]); // continue without narrowing
+      vi.mocked(p.select).mockResolvedValueOnce("high"); // default effort over full set
+
+      const allowlist = await promptVendorModels("fake", catalog);
+
+      expect(allowlist).toEqual({
+        a: { efforts: ["low", "high"], default: "high" },
       });
     });
 
@@ -260,9 +286,115 @@ describe("parley init", () => {
       vi.mocked(p.multiselect)
         .mockResolvedValueOnce(["a"])
         .mockResolvedValueOnce(["low", "high"]);
-      vi.mocked(p.select).mockResolvedValueOnce("a").mockResolvedValueOnce(CANCEL);
+      // Single model → no default-model select; first select is the effort.
+      vi.mocked(p.select).mockResolvedValueOnce(CANCEL);
 
       await expect(promptVendorModels("fake", catalog)).rejects.toBeInstanceOf(PromptCancelled);
+    });
+  });
+
+  describe("interactive vendor picker", () => {
+    beforeEach(() => {
+      vi.mocked(p.multiselect).mockReset();
+      vi.mocked(p.select).mockReset();
+    });
+
+    const catalog = {
+      fake: {
+        fetched_at: null,
+        source: "stub",
+        models: [{ id: "fake-model", efforts: ["low", "high"], default_effort: "low" }],
+      },
+      other: {
+        fetched_at: null,
+        source: "stub",
+        models: [{ id: "other-model", efforts: [], default_effort: null }],
+      },
+    };
+
+    it("prompts which vendors to configure and only walks the chosen ones", async () => {
+      vi.mocked(p.multiselect)
+        .mockResolvedValueOnce(["fake"]) // vendor picker
+        .mockResolvedValueOnce(["fake-model"]) // models for fake
+        .mockResolvedValueOnce([]); // efforts: keep all
+      vi.mocked(p.select).mockResolvedValueOnce("high"); // default effort
+
+      const result = await populateInitConfig({
+        config: {},
+        harnesses: ["fake", "other"],
+        catalog,
+        interactive: true,
+      });
+
+      const pickerCall = vi.mocked(p.multiselect).mock.calls[0]![0] as {
+        message: string;
+        options: { value: string; hint?: string }[];
+        initialValues: string[];
+      };
+      expect(pickerCall.message).toBe("vendors to configure (submit empty to skip)");
+      expect(pickerCall.options.map((o) => o.value)).toEqual(["fake", "other"]);
+      expect(pickerCall.initialValues).toEqual([]);
+      expect(result.configuredVendors).toEqual(["fake"]);
+      expect(result.config.vendors).toEqual({
+        fake: { models: { "fake-model": { efforts: ["low", "high"], default: "high" } } },
+      });
+      expect(result.config.defaults?.vendor).toBe("fake");
+    });
+
+    it("submitting an empty vendor pick shortcuts vendor configuration", async () => {
+      vi.mocked(p.multiselect).mockResolvedValueOnce([]);
+
+      const result = await populateInitConfig({
+        config: {},
+        harnesses: ["fake", "other"],
+        catalog,
+        interactive: true,
+      });
+
+      expect(p.multiselect).toHaveBeenCalledTimes(1);
+      expect(result.configuredVendors).toEqual([]);
+      expect(result.config.vendors).toBeUndefined();
+      expect(result.changed).toBe(false);
+    });
+
+    it("a vendor skipped at the model prompt is not marked configured", async () => {
+      vi.mocked(p.multiselect)
+        .mockResolvedValueOnce(["fake", "other"]) // vendor picker
+        .mockResolvedValueOnce([]) // fake: submit empty models → skip
+        .mockResolvedValueOnce(["other-model"]); // other: pick its model
+
+      const result = await populateInitConfig({
+        config: {},
+        harnesses: ["fake", "other"],
+        catalog,
+        interactive: true,
+      });
+
+      expect(result.configuredVendors).toEqual(["other"]);
+      expect(result.config.vendors).toEqual({
+        other: { models: { "other-model": { efforts: [], default: true } } },
+      });
+      expect(result.config.defaults?.vendor).toBe("other");
+    });
+
+    it("does not prompt for vendors that already have models configured", async () => {
+      const existing = { efforts: ["max"], default: "max" as const };
+      vi.mocked(p.multiselect)
+        .mockResolvedValueOnce(["other"])
+        .mockResolvedValueOnce(["other-model"]);
+
+      const result = await populateInitConfig({
+        config: { vendors: { fake: { models: { custom: existing } } } },
+        harnesses: ["fake", "other"],
+        catalog,
+        interactive: true,
+      });
+
+      const pickerCall = vi.mocked(p.multiselect).mock.calls[0]![0] as {
+        options: { value: string }[];
+      };
+      expect(pickerCall.options.map((o) => o.value)).toEqual(["other"]);
+      expect(result.configuredVendors).toEqual(["fake", "other"]);
     });
   });
 
