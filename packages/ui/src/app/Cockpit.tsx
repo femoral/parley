@@ -110,8 +110,6 @@ export function Cockpit() {
               </div>
               <DayChip day={day} clock={clock} />
             </div>
-            {/* Icon-scale rose: top-left of the scene/soundings stage, under the head. */}
-            <CompassRose />
             {mode === "soundings" ? (
               <div className="pc-soundings-stage">
                 <SoundingsPanel
@@ -123,8 +121,10 @@ export function Cockpit() {
                 />
               </div>
             ) : (
-              /* Sea is the room's backdrop (#75) — no Plate card chrome. */
               <div className="pc-scene">
+                {/* Icon-scale rose: top-left of the scene stage, under the head. */}
+                <CompassRose />
+                {/* Sea is the room's backdrop (#75) — no Plate card chrome. */}
                 {chartStale && (
                   <div className="pc-stale-band" role="status" aria-live="polite">
                     <span className="pc-stale-band__glyph" aria-hidden="true">

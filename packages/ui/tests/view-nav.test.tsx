@@ -136,4 +136,14 @@ describe("Cockpit view nav framed by Plate (#126)", () => {
     fireEvent.click(soundings);
     expect(cockpitState.setMode).toHaveBeenCalledWith("soundings");
   });
+
+  it("renders the compass rose only in Cove mode", () => {
+    cockpitState.view = baseView({ mode: "cove" });
+    const { container, rerender } = render(<Cockpit />);
+    expect(container.querySelector(".pc-compass")).toBeTruthy();
+
+    cockpitState.view = baseView({ mode: "soundings" });
+    rerender(<Cockpit />);
+    expect(container.querySelector(".pc-compass")).toBeNull();
+  });
 });
