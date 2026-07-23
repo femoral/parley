@@ -106,10 +106,12 @@
 .pc-daychip__weather-icon svg {
   display: block;
 }
+/* Flavor decoration — never mono/data voice (DESIGN.md Flavor-Font Rule). */
 .pc-daychip__wind {
-  font-family: var(--font-mono);
-  font-size: var(--text-meta);
-  color: var(--ink-meta);
+  font-family: var(--font-flavor);
+  font-style: italic;
+  font-size: var(--text-flavor);
+  color: var(--ink-soft);
 }
 
 /* ── Health panel ──────────────────────────────────────────────────────── */
@@ -719,10 +721,11 @@ button.pc-roster__meta--copy:focus-visible {
   outline: 2px solid var(--brass-bright);
   outline-offset: 1px;
 }
-/* Panel-level scope line: Outfit functional voice, not flavor serif. */
+/* Panel-level scope line: Outfit functional voice, not flavor serif.
+ * Sits *above* the card list so the inspector-open clamp never cuts it. */
 .pc-inbox__scope {
   margin: 0;
-  padding: 0 14px 12px;
+  padding: 6px 14px 4px;
   font-family: var(--font-body);
   font-weight: 500;
   font-size: var(--text-sub);
@@ -3139,4 +3142,48 @@ button.pc-roster__meta--copy:focus-visible {
   text-transform: uppercase;
   color: var(--ink-label);
   white-space: nowrap;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ * Inbox list scroll cue (inspector-open clamp honesty)
+ * Appended only — do not edit the selector blocks above.
+ * Mirrors .pc-chart-key__scroll-cue: sticky bottom fade + "More below" when
+ * the clamped .pc-inbox__list overflows. Hidden at scroll end / when content
+ * fits. Scope caption lives above the list (InboxPanel) so it never paints
+ * across a mid-card cut edge.
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
+.pc-inbox__scroll-cue {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  height: 2.75rem;
+  margin-top: -2.75rem;
+  padding-bottom: 6px;
+  pointer-events: none;
+  background: linear-gradient(
+    180deg,
+    transparent 0%,
+    color-mix(in srgb, var(--plate-bottom) 55%, transparent) 45%,
+    var(--plate-bottom) 100%
+  );
+  opacity: 1;
+  transition: opacity 160ms ease;
+  /* Do not snap the fade strip as a card edge. */
+  scroll-snap-align: none;
+}
+.pc-inbox__scroll-cue--hidden {
+  opacity: 0;
+}
+.pc-inbox__scroll-cue-label {
+  font-family: var(--font-body);
+  font-size: var(--text-label);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
 }

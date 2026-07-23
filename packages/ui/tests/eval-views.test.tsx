@@ -6,7 +6,13 @@ import {
   EvalDistribution,
   EvalFilterBar,
   EvalHeatmap,
+  HEATMAP_DARK_INK_AT,
+  HEATMAP_PARCHMENT_INK_AT,
   SoundingsPanel,
+  cellStyle,
+  formatHeatmapRateDisplay,
+  heatmapCellInk,
+  isSuspectHeatmapRate,
 } from "../src/hud/index.js";
 import type { SoundingsFiltersView, SoundingsView } from "../src/hud/index.js";
 import {
@@ -540,5 +546,118 @@ describe("EvalHeatmap (#166)", () => {
     );
     expect(screen.getByText(/Sparse — n=1 eval/)).toBeTruthy();
     expect(screen.getByText("100%")).toBeTruthy();
+  });
+});
+
+describe("EvalHeatmap cell ink AA flip", () => {
+  it("uses soft ink below parchment threshold, parchment mid, dark-on-gold at worst", () => {
+    expect(heatmapCellInk(0)).toBe("var(--ink-soft)");
+    expect(heatmapCellInk(HEATMAP_PARCHMENT_INK_AT - 0.01)).toBe("var(--ink-soft)");
+    expect(heatmapCellInk(HEATMAP_PARCHMENT_INK_AT)).toBe("var(--ink-parchment)");
+    expect(heatmapCellInk(0.5)).toBe("var(--ink-parchment)");
+    expect(heatmapCellInk(HEATMAP_DARK_INK_AT - 0.01)).toBe("var(--ink-parchment)");
+    // Above ~0.55: parchment on quality-poor is ≈1.96:1 (fails AA);
+    // --ink-dark-on-gold on #e888a0 is ≈6.77:1 (≥4.5:1 AA).
+    expect(heatmapCellInk(HEATMAP_DARK_INK_AT)).toBe("var(--ink-dark-on-gold)");
+    expect(heatmapCellInk(1)).toBe("var(--ink-dark-on-gold)");
+  });
+
+  it("cellStyle color tracks the ink ramp", () => {
+    expect(cellStyle(null)).toBeUndefined();
+    expect(cellStyle(0.2)?.color).toBe("var(--ink-soft)");
+    expect(cellStyle(0.5)?.color).toBe("var(--ink-parchment)");
+    expect(cellStyle(1)?.color).toBe("var(--ink-dark-on-gold)");
+    // Full intensity still mixes toward quality-poor (not a different fill).
+    expect(String(cellStyle(1)?.background)).toMatch(/quality-poor/);
+  });
+
+  it("paints dark-on-gold on a full-intensity rendered cell", () => {
+    const heatmap = projectHeatmap([
+      groupWithCriteria(
+        "coding",
+        { "brief-implemented": { failures: 4, count: 4, rate: 1 } },
+        4,
+      ),
+    ]);
+    const { container } = render(
+      <EvalHeatmap
+        heatmap={heatmap}
+        groupBy="type"
+        evalPresence="ready"
+        filtersActive={false}
+        onGroupBy={() => {}}
+      />,
+    );
+    const cell = container.querySelector(".pc-eval-heat__cell:not(.pc-eval-heat__cell--empty)");
+    expect(cell).toBeTruthy();
+    expect((cell as HTMLElement).style.color).toBe("var(--ink-dark-on-gold)");
+  });
+});
+
+describe("EvalHeatmap rate >100% honesty clamp", () => {
+  it("flags failures > count and rate > 1 as suspect", () => {
+    expect(isSuspectHeatmapRate({ rate: 1.5, failures: 3, count: 2 })).toBe(true);
+    expect(isSuspectHeatmapRate({ rate: 1, failures: 2, count: 2 })).toBe(false);
+    expect(isSuspectHeatmapRate({ rate: 0.5, failures: 1, count: 2 })).toBe(false);
+    expect(isSuspectHeatmapRate({ rate: null, failures: 5, count: 2 })).toBe(true);
+  });
+
+  it("clamps display label at 100%! and never paints verbatim over-100%", () => {
+    expect(
+      formatHeatmapRateDisplay({
+        rate: 1.5,
+        rateLabel: "150%",
+        failures: 3,
+        count: 2,
+        intensity: 1,
+      }),
+    ).toBe("100%!");
+    expect(
+      formatHeatmapRateDisplay({
+        rate: 0.5,
+        rateLabel: "50%",
+        failures: 1,
+        count: 2,
+        intensity: 0.5,
+      }),
+    ).toBe("50%");
+  });
+
+  it("renders 100%! with suspect aria note when wire rate exceeds 100%", () => {
+    // Bypass projectHeatmap clamp01 so the plate sees raw impossible data.
+    const heatmap: SoundingsView["heatmap"] = {
+      criteria: ["brief-implemented"],
+      groups: [{ key: "coding", label: "coding" }],
+      sampleEvals: 2,
+      cells: [
+        [
+          {
+            criterionId: "brief-implemented",
+            groupKey: "coding",
+            groupLabel: "coding",
+            failures: 3,
+            count: 2,
+            rate: 1.5,
+            rateLabel: "150%",
+            intensity: 1,
+          },
+        ],
+      ],
+    };
+    render(
+      <EvalHeatmap
+        heatmap={heatmap}
+        groupBy="type"
+        evalPresence="ready"
+        filtersActive={false}
+        onGroupBy={() => {}}
+      />,
+    );
+    expect(screen.getByText("100%!")).toBeTruthy();
+    expect(screen.queryByText("150%")).toBeNull();
+    expect(
+      screen.getByLabelText(/suspect data \(rate exceeds 100%\)/),
+    ).toBeTruthy();
+    expect(document.querySelector(".pc-eval-heat__cell--suspect")).toBeTruthy();
   });
 });

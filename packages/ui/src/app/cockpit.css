@@ -233,14 +233,20 @@
 }
 /* When the LOGBOOK is open (inspector has a selected task — not the empty
    placeholder), clamp the inbox card list so the inspector always claims
-   majority rail height. Cards stay reachable via internal scroll; empty /
-   unselected rail still lets the list grow with content. */
+   majority rail height. Scope caption lives above the list (InboxPanel) so
+   it never paints across a mid-card cut. Cards stay reachable via internal
+   scroll + keyboard; empty / unselected rail still lets the list grow.
+   scroll-snap biases the clamp toward whole-card boundaries when cheap. */
 .pc-region--right:has(.pc-inspector:not(.pc-inspector--empty)) .pc-inbox__list {
   max-height: min(28vh, 220px);
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-width: thin;
   scrollbar-color: var(--scroll-thumb) var(--scroll-track);
+  scroll-snap-type: y proximity;
+}
+.pc-region--right:has(.pc-inspector:not(.pc-inspector--empty)) .pc-inbox__list .pc-inbox-card {
+  scroll-snap-align: start;
 }
 .pc-region--right:has(.pc-inspector:not(.pc-inspector--empty)) .pc-inbox__list::-webkit-scrollbar {
   width: 6px;

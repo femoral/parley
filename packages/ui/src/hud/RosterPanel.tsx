@@ -738,7 +738,10 @@ export const RosterPanel = memo(function RosterPanel({
       </div>
       <div className="pc-roster__footer">
         <Stat value={String(totalTasks)} label="Total tasks" color="var(--brass)" />
-        <Stat value={String(activeTasks)} label="Active" color="var(--state-running)" />
+        {/* Active is a metric (running+queued+pending+stalled+awaiting), not
+            the running *state* — State-Color Reservation: use brass, not
+            --state-running. */}
+        <Stat value={String(activeTasks)} label="Active" color="var(--brass)" />
       </div>
     </Plate>
   );
