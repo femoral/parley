@@ -71,6 +71,12 @@ export function BriefTab({
   const { copied, canCopy, scaffoldRef, copy } = useCopyScaffold(scaffoldText);
   const ordersId = `${useId()}-orders`;
   const goalFiled = hasBriefGoal(brief.goal);
+  const currentAttempt = attempts.find((attempt) => attempt.current);
+  const terminal =
+    error !== null ||
+    currentAttempt?.state === "completed" ||
+    currentAttempt?.state === "failed" ||
+    currentAttempt?.state === "cancelled";
 
   /** Native popovers don't move focus on open — land keyboard/SR users inside. */
   const onOrdersToggle = useCallback((event: ToggleEvent<HTMLDivElement>) => {
@@ -126,7 +132,7 @@ export function BriefTab({
           {brief.model ?? "—"}
           {brief.effort ? ` · ${brief.effort}` : ""}
         </span>
-        <span className="pc-brief__label">Elapsed</span>
+        <span className="pc-brief__label">{terminal ? "Took" : "Elapsed"}</span>
         <span className="pc-brief__value">{elapsed || "—"}</span>
       </div>
       <div className="pc-brief__well">

@@ -146,12 +146,38 @@ describe("SoundingsPanel (#119)", () => {
     expect(screen.getByText("Done")).toBeTruthy();
     expect(screen.getByText("Failed")).toBeTruthy();
     expect(screen.getByText("Running")).toBeTruthy();
+    expect(screen.getByText("Other")).toBeTruthy();
     // Breakdowns only when present.
     expect(screen.getByLabelText("Eval by size")).toBeTruthy();
     expect(screen.getByText("S")).toBeTruthy();
     expect(screen.getByLabelText("Eval by difficulty")).toBeTruthy();
     expect(screen.getByText("easy")).toBeTruthy();
     expect(screen.getByText("All hands")).toBeTruthy();
+  });
+
+  it("accounts for task states outside done, failed, and running", () => {
+    renderPanel(
+      baseView({
+        groups: [
+          {
+            ...GROUP,
+            tasks: { total: 8, done: 3, failed: 1, running: 1 },
+          },
+        ],
+      }),
+    );
+
+    expect(screen.getByLabelText("Task counts").textContent).toContain("3Other");
+  });
+
+  it("explains an absent group eval", () => {
+    renderPanel(
+      baseView({
+        groups: [{ ...GROUP, evals: "—" }],
+      }),
+    );
+
+    expect(screen.getByTitle("No evals recorded for this group")).toBeTruthy();
   });
 
   it("shows ledger-reading loading state with no groups yet", () => {

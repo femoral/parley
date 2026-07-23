@@ -110,6 +110,13 @@ function GroupCard({ group }: { group: SoundingsGroupView }) {
   const failStyle = { color: "var(--state-failed)" } as CSSProperties;
   const runStyle = { color: "var(--state-running)" } as CSSProperties;
   const doneStyle = { color: "var(--state-completed)" } as CSSProperties;
+  const otherTasks = Math.max(
+    0,
+    group.tasks.total -
+      group.tasks.done -
+      group.tasks.failed -
+      group.tasks.running,
+  );
 
   return (
     <article className="pc-soundings__card" aria-label={`Metrics for ${group.label}`}>
@@ -131,6 +138,10 @@ function GroupCard({ group }: { group: SoundingsGroupView }) {
           <span className="pc-soundings__count-n">{group.tasks.running}</span>
           <span className="pc-soundings__count-l">Running</span>
         </span>
+        <span className="pc-soundings__count pc-soundings__count--other">
+          <span className="pc-soundings__count-n">{otherTasks}</span>
+          <span className="pc-soundings__count-l">Other</span>
+        </span>
       </div>
 
       <div className="pc-soundings__grid">
@@ -143,7 +154,12 @@ function GroupCard({ group }: { group: SoundingsGroupView }) {
         </div>
         <div className="pc-soundings__cell">
           <span className="pc-soundings__label">Eval</span>
-          <span className="pc-soundings__value">{group.evals}</span>
+          <span
+            className="pc-soundings__value"
+            title={group.evals === "—" ? "No evals recorded for this group" : undefined}
+          >
+            {group.evals}
+          </span>
         </div>
         <div className="pc-soundings__cell">
           <span className="pc-soundings__label">Tokens I / O / C</span>

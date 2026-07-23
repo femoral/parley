@@ -211,6 +211,35 @@ describe("Inspector's four tabs render per the manifest's inspector treatment (#
     ).toBeTruthy();
   });
 
+  it("labels duration as elapsed while the task is running", () => {
+    render(<Inspector task={task()} />);
+    expect(screen.getByText("Elapsed")).toBeTruthy();
+    expect(screen.queryByText("Took")).toBeNull();
+  });
+
+  it.each(["completed", "failed", "cancelled"])(
+    "labels duration as took when the task is %s",
+    (state) => {
+      const base = task();
+      render(
+        <Inspector
+          task={task({
+            state,
+            attempts: [
+              {
+                ...base.attempts[0]!,
+                state,
+                stateLabel: state.toUpperCase(),
+              },
+            ],
+          })}
+        />,
+      );
+      expect(screen.getByText("Took")).toBeTruthy();
+      expect(screen.queryByText("Elapsed")).toBeNull();
+    },
+  );
+
   it("offers line breaks after worktree path separators without splitting tokens", () => {
     render(<Inspector task={task()} />);
 

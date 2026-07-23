@@ -3611,3 +3611,12 @@ button.pc-roster__meta--copy:focus-visible {
   outline: 2px solid var(--brass-bright);
   outline-offset: 1px;
 }
+
+/* The remainder bucket reconciles Soundings totals without competing with active states. */
+.pc-soundings__count--other {
+  color: var(--state-cancelled);
+}
+.pc-soundings__count--other .pc-soundings__count-n {
+  font-size: var(--text-meta);
+  line-height: 1.4;
+}
