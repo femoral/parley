@@ -26,9 +26,9 @@ const OUTCOME_COLOR: Record<ReportView["outcome"], string> = {
  * contract does not carry.
  *
  * The summary mirrors the Brief's GOAL well: long reports clamp to a 3-line
- * excerpt with a character count so the panel never scrolls open, and "Read
- * full report" opens the whole dispatch in the brass-framed "Ship's Report"
- * popover over the vignetted sea (native Popover API).
+ * excerpt so the panel never scrolls open, and "Read full report" opens the
+ * whole dispatch in the brass-framed "Ship's Report" popover over the
+ * vignetted sea (native Popover API).
  */
 export function ReportPanel({
   report,
@@ -43,7 +43,6 @@ export function ReportPanel({
       <div className="pc-report__summary pc-report__summary--log">
         <span className="pc-report__summary-head">
           <span className="pc-report__summary-label">Summary</span>
-          <span className="pc-report__summary-count">{report.summary.length} ch</span>
         </span>
         <p className="pc-report__excerpt">{report.summary}</p>
         <button type="button" className="pc-report__orders-open" popoverTarget="pc-report-orders">

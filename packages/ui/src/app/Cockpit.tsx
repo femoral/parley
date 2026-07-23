@@ -147,8 +147,12 @@ export function Cockpit() {
 
           <aside className="pc-region--right" aria-label="Status stack">
             <HealthPanel health={health} />
-            <InboxPanel tasks={snapshot.inbox} onSelectTask={roster.selectTask} />
-            <Inspector task={inspector} />
+            <InboxPanel tasks={snapshot.inbox} onSelectTask={roster.selectInboxTask} />
+            <Inspector
+              task={inspector}
+              initialTab={roster.inspectorIntent.tab}
+              openSeq={roster.inspectorIntent.seq}
+            />
           </aside>
         </main>
 

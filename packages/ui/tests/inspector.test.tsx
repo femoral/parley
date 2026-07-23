@@ -92,6 +92,20 @@ describe("Inspector header (#68)", () => {
     expect(screen.getByText("Strong result; tighten the final summary.")).toBeTruthy();
   });
 
+  it("exposes eval feedback via a more/less disclosure (not title-only)", () => {
+    const feedback = "Strong result; tighten the final summary.";
+    const { container } = render(
+      <Inspector task={task({ evalScore: 8, evalFeedback: feedback })} />,
+    );
+    const text = container.querySelector(".pc-inspector__eval-feedback-text");
+    expect(text?.getAttribute("title")).toBeNull();
+    const toggle = screen.getByRole("button", { name: "more" });
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    fireEvent.click(toggle);
+    expect(screen.getByRole("button", { name: "less" }).getAttribute("aria-expanded")).toBe("true");
+    expect(container.querySelector(".pc-inspector__eval-feedback-text--open")).toBeTruthy();
+  });
+
   it("omits eval feedback when absent", () => {
     render(<Inspector task={task({ evalFeedback: null })} />);
     expect(screen.queryByText("EVALUATION")).toBeNull();
@@ -189,6 +203,57 @@ describe("Inspector's four tabs render per the manifest's inspector treatment (#
     );
     expect(screen.getByText("WHY IT FAILED")).toBeTruthy();
     expect(screen.getByText("vendor exited 1: workspace sandbox denied network")).toBeTruthy();
+  });
+
+  it("offers a parley fix copy scaffold next to the failed well", () => {
+    const { container } = render(
+      <Inspector
+        task={task({
+          id: "t-failed-1",
+          state: "failed",
+          error: "vendor exited 1",
+        })}
+      />,
+    );
+    expect(screen.getByRole("button", { name: "Copy fix command" })).toBeTruthy();
+    const scaffold = container.querySelector(".pc-brief__fix-scaffold");
+    expect(scaffold?.textContent).toBe('parley fix t-failed-1 "..."');
+  });
+
+  it("lands on the Q&A tab when initialTab is qa", () => {
+    render(
+      <Inspector
+        task={task({
+          qa: [
+            {
+              id: "q1",
+              question: "Which bay?",
+              answer: null,
+              askedAt: "2026-01-01T00:00:00Z",
+              answeredAt: null,
+            },
+          ],
+        })}
+        initialTab="qa"
+        openSeq={1}
+      />,
+    );
+    expect(screen.getByRole("tab", { name: "Q&A" }).getAttribute("aria-selected")).toBe("true");
+    expect(screen.getByText("Which bay?")).toBeTruthy();
+  });
+
+  it("still lets the user switch tabs after an initialTab landing", () => {
+    render(<Inspector task={task()} initialTab="qa" openSeq={1} />);
+    expect(screen.getByRole("tab", { name: "Q&A" }).getAttribute("aria-selected")).toBe("true");
+    openTab("BRIEF");
+    expect(screen.getByRole("tab", { name: "BRIEF" }).getAttribute("aria-selected")).toBe("true");
+    expect(screen.getByText("feat/bay")).toBeTruthy();
+  });
+
+  it("omits debug character counts from the GOAL well", () => {
+    const { container } = render(<Inspector task={task()} />);
+    expect(container.querySelector(".pc-brief__goal-count")).toBeNull();
+    expect(container.textContent).not.toMatch(/\d+\s+ch\b/);
   });
 
   it("omits the failure well when the task is not failed, even if error is set", () => {

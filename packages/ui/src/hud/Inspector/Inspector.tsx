@@ -1,4 +1,4 @@
-import { memo, useId, useRef, useState, type KeyboardEvent } from "react";
+import { memo, useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 import { Badge, Divider, Emblem, Mark, Plate } from "../../primitives/index.js";
 import { MARK_ANCHOR } from "../../tokens/chrome-glyphs.js";
 import { stateMetaFor } from "../../tokens/state-meta.js";
@@ -15,12 +15,23 @@ const TABS = [
   { key: "qa", label: "Q&A" },
 ] as const;
 
-type TabKey = (typeof TABS)[number]["key"];
+export type InspectorTabKey = (typeof TABS)[number]["key"];
 
 export interface InspectorProps {
   /** The selected task's full inspector payload, or `null` when the roster
    * has no selection — renders a quiet placeholder rather than empty tabs. */
   task: InspectorTask | null;
+  /**
+   * Tab to land on when a selection is opened. Defaults to `"brief"`.
+   * Re-applied whenever {@link openSeq} advances (each selection), so the user
+   * can still switch tabs freely after landing.
+   */
+  initialTab?: InspectorTabKey;
+  /**
+   * Monotonic counter bumped on every selection so re-opening the same task
+   * (e.g. inbox → Q&A again) re-applies {@link initialTab}.
+   */
+  openSeq?: number;
 }
 
 /**
@@ -36,12 +47,25 @@ export interface InspectorProps {
  * re-renders every second for its clock, and `task` is identity-stable between
  * real data changes (the hooks layer memoizes the projection).
  */
-export const Inspector = memo(function Inspector({ task }: InspectorProps) {
-  const [active, setActive] = useState<TabKey>("brief");
+export const Inspector = memo(function Inspector({
+  task,
+  initialTab = "brief",
+  openSeq = 0,
+}: InspectorProps) {
+  const [active, setActive] = useState<InspectorTabKey>(initialTab);
+  const [evalExpanded, setEvalExpanded] = useState(false);
   const baseId = useId();
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const panelId = `${baseId}-panel`;
-  const tabId = (key: TabKey): string => `${baseId}-tab-${key}`;
+  const evalFeedbackId = `${baseId}-eval-feedback`;
+  const tabId = (key: InspectorTabKey): string => `${baseId}-tab-${key}`;
+
+  // Apply the open intent on every selection (openSeq), not only when the task
+  // id changes — so inbox re-click of the same awaiting task still lands on Q&A.
+  useEffect(() => {
+    setActive(initialTab);
+    setEvalExpanded(false);
+  }, [initialTab, openSeq]);
 
   const focusTabAt = (index: number): void => {
     tabRefs.current[index]?.focus();
@@ -118,9 +142,27 @@ export const Inspector = memo(function Inspector({ task }: InspectorProps) {
       {task.evalFeedback !== null && (
         <div className="pc-inspector__eval-feedback">
           <span className="pc-inspector__eval-feedback-label">EVALUATION</span>
-          <p className="pc-inspector__eval-feedback-text" title={task.evalFeedback}>
-            {task.evalFeedback}
-          </p>
+          <div className="pc-inspector__eval-feedback-body">
+            <p
+              id={evalFeedbackId}
+              className={
+                evalExpanded
+                  ? "pc-inspector__eval-feedback-text pc-inspector__eval-feedback-text--open"
+                  : "pc-inspector__eval-feedback-text"
+              }
+            >
+              {task.evalFeedback}
+            </p>
+            <button
+              type="button"
+              className="pc-inspector__eval-feedback-toggle"
+              aria-expanded={evalExpanded}
+              aria-controls={evalFeedbackId}
+              onClick={() => setEvalExpanded((open) => !open)}
+            >
+              {evalExpanded ? "less" : "more"}
+            </button>
+          </div>
         </div>
       )}
       <Divider />
@@ -154,6 +196,7 @@ export const Inspector = memo(function Inspector({ task }: InspectorProps) {
         {active === "brief" && (
           <BriefTab
             brief={task.brief}
+            taskId={task.id}
             error={task.state === "failed" ? task.error : null}
             attempts={task.attempts}
           />
