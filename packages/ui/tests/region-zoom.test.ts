@@ -1,12 +1,18 @@
 import { describe, expect, it } from "vitest";
 import {
   computeRegionZoomTarget,
+  contentFrameOffset,
   countZoomTarget,
   ORBIT_DRAFT_LIFT_FACTOR,
+  ORBIT_RADIUS_MIN,
+  orbitRadiusForNearest,
   paddedIslandBounds,
+  PLANK_CLEARANCE,
+  PLANK_EXTENT_BELOW,
   REGION_ZOOM_MIN,
   sloopOrbitDraftLift,
   sloopOrbitRadius,
+  TOP_OVERLAY_HEADROOM_PX,
 } from "../src/scene/region-zoom.js";
 
 describe("region zoom fit (#201)", () => {
@@ -53,10 +59,9 @@ describe("region zoom fit (#201)", () => {
     // Single island whose body half-extent fits a 400-wide view when centered,
     // but body + orbit pad does not.
     const viewportW = 400;
-    const viewportH = 300;
     const islandHalfW = 117 / 2;
     // Place so island body is inside: centre at 0, body extends ±58.5 → width 117 < 400.
-    // Padded width = 117 + 2*radius; for radius ~115 that is ~347 — still < 400.
+    // Padded width = 117 + 2*radius; for radius ~102 that is ~321 — still < 400.
     // Push centre toward the edge so body+orbit exceeds while body alone would be
     // measured as the fleet box of one island at origin still uses full pad both sides.
     // One island at origin: padded box width = 2*(halfW+radius). Compare:
@@ -73,6 +78,7 @@ describe("region zoom fit (#201)", () => {
       centres: [{ x: 0, y: 0 }],
       viewportW: tightW,
       viewportH: 2000,
+      topHeadroomPx: 0,
     });
     const bodyFitOnly = Math.min(1, tightW / bodyOnlyW);
     // Body-only fit would stay at 1; orbit pad forces zoom-out.
@@ -108,8 +114,18 @@ describe("region zoom fit (#201)", () => {
     const lift = sloopOrbitDraftLift();
     expect(lift).toBeGreaterThan(0);
     const box = paddedIslandBounds([{ x: 0, y: 0 }])!;
-    // Lift raises the orbit center, so top extent is farther than bottom from 0.
-    expect(Math.abs(box.minY)).toBeGreaterThan(Math.abs(box.maxY));
+    // Lift raises the orbit center, so top extent is farther than body-only top.
+    // Plank extends south of the body, so bottom can exceed |top| depending on
+    // constants — assert the orbit contribution is present above the body.
+    const halfH = 107 / 2;
+    expect(box.minY).toBeLessThan(-halfH);
+  });
+
+  it("includes the name plank below the island body", () => {
+    const box = paddedIslandBounds([{ x: 0, y: 0 }])!;
+    const halfH = 107 / 2;
+    expect(box.maxY).toBeGreaterThanOrEqual(PLANK_EXTENT_BELOW - 0.01);
+    expect(PLANK_EXTENT_BELOW).toBeGreaterThan(halfH);
   });
 
   it("re-evaluates when the viewport shrinks", () => {
@@ -131,5 +147,90 @@ describe("region zoom fit (#201)", () => {
     });
     expect(wide).toBe(1);
     expect(narrow).toBeLessThan(wide);
+  });
+
+  it("subtracts top headroom from usable height when fitting", () => {
+    // Tall thin fleet: height-limited fit.
+    const centres = [
+      { x: 0, y: -400 },
+      { x: 0, y: 400 },
+    ];
+    const box = paddedIslandBounds(centres)!;
+    const viewportW = 4000; // never width-limited
+    const viewportH = box.height; // exact fit without headroom
+    const noHead = computeRegionZoomTarget({
+      islandCount: 2,
+      centres,
+      viewportW,
+      viewportH,
+      topHeadroomPx: 0,
+    });
+    const withHead = computeRegionZoomTarget({
+      islandCount: 2,
+      centres,
+      viewportW,
+      viewportH,
+      topHeadroomPx: TOP_OVERLAY_HEADROOM_PX,
+    });
+    expect(noHead).toBeCloseTo(1, 5);
+    expect(withHead).toBeLessThan(noHead);
+  });
+});
+
+describe("content framing (centroid + headroom)", () => {
+  it("exposes the padded-box centroid on bounds", () => {
+    const box = paddedIslandBounds([
+      { x: -100, y: -400 },
+      { x: 100, y: 0 },
+    ])!;
+    expect(box.cx).toBeCloseTo((box.minX + box.maxX) / 2, 5);
+    expect(box.cy).toBeCloseTo((box.minY + box.maxY) / 2, 5);
+    // Northern-heavy fleet: centroid sits north of origin.
+    expect(box.cy).toBeLessThan(0);
+  });
+
+  it("frames on the content centroid, not the region origin", () => {
+    const centres = [
+      { x: -100, y: -500 },
+      { x: 100, y: -500 },
+      { x: 0, y: 100 },
+    ];
+    const box = paddedIslandBounds(centres)!;
+    const frame = contentFrameOffset(centres, 1, 0);
+    expect(frame.x).toBeCloseTo(box.cx, 5);
+    expect(frame.y).toBeCloseTo(box.cy, 5);
+    expect(frame.y).not.toBe(0);
+  });
+
+  it("biases the frame north so content sits below viewport centre (top headroom)", () => {
+    const centres = [{ x: 0, y: 0 }];
+    const plain = contentFrameOffset(centres, 1, 0);
+    const headed = contentFrameOffset(centres, 1, 48);
+    expect(headed.y).toBeLessThan(plain.y);
+    expect(plain.y - headed.y).toBeCloseTo(24, 5);
+  });
+
+  it("returns origin frame when there are no islands", () => {
+    expect(contentFrameOffset([], 1)).toEqual({ x: 0, y: 0 });
+  });
+});
+
+describe("orbit radius nearest-neighbour clamp", () => {
+  it("leaves the base radius alone when the neighbour is far", () => {
+    const base = sloopOrbitRadius();
+    expect(orbitRadiusForNearest(400, base)).toBe(base);
+  });
+
+  it("clamps when the neighbour is within plank-rake range", () => {
+    const base = sloopOrbitRadius();
+    const tight = base + PLANK_CLEARANCE - 20; // forces a clamp
+    const clamped = orbitRadiusForNearest(tight, base);
+    expect(clamped).toBeLessThan(base);
+    expect(clamped).toBeGreaterThanOrEqual(ORBIT_RADIUS_MIN);
+    expect(clamped).toBeCloseTo(Math.max(ORBIT_RADIUS_MIN, tight - PLANK_CLEARANCE), 5);
+  });
+
+  it("never drops below ORBIT_RADIUS_MIN", () => {
+    expect(orbitRadiusForNearest(10, sloopOrbitRadius())).toBe(ORBIT_RADIUS_MIN);
   });
 });

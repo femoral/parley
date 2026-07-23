@@ -48,10 +48,17 @@ export function SessionRegion({
   // The harness's pull-back is local to this region: spread new berths through
   // a larger world, then the scene-level driver eases --region-zoom to fit the
   // padded island box (plus sloop orbit) to the viewport (#201). Camera still
-  // owns only the cross-session pan.
+  // owns only the cross-session pan. Content framing (--region-frame-x/y) is
+  // the padded-bounds centroid so northern lattices are not origin-clipped.
   const spread = Math.max(1, Math.sqrt(islandCount / 5));
   const style = {
-    transform: `translate(-50%, -50%) translate(${dx}px, ${dy}px) scale(var(--region-zoom, 1))`,
+    // Order: frame offset (region-local) → scale → world place. transform-origin
+    // is 0 0 on .pc-region, so scale(z) translate(-fx,-fy) centres the content
+    // centroid on the camera target at (dx, dy).
+    transform:
+      `translate(-50%, -50%) translate(${dx}px, ${dy}px) ` +
+      `scale(var(--region-zoom, 1)) ` +
+      `translate(calc(var(--region-frame-x, 0) * -1px), calc(var(--region-frame-y, 0) * -1px))`,
   };
   // All voyages home — every task island completed. The flagship dresses ship
   // (signal flags between the masts); pure state, so it can never lie.

@@ -1,14 +1,19 @@
 /**
- * Bounds-aware region zoom (#201).
+ * Bounds-aware region zoom + content framing (#201 / scene composition).
  *
  * The historical target is count-only: `min(1, sqrt(5/N))`, the exact reciprocal
  * of SessionRegion's layout spread. That keeps berth spacing count-invariant but
  * never fits the placed fleet to the camera viewport.
  *
  * This module computes a fit target from the padded bounding box of spread-scaled
- * island centres. Padding covers each island's half-extent plus the sloop orbit
- * ellipse (radius horizontally, radius×squish vertically), including the draft
- * lift that shifts the orbit center.
+ * island centres. Padding covers each island's half-extent, the name plank below,
+ * and the sloop orbit ellipse (radius horizontally, radius×squish vertically),
+ * including the draft lift that shifts the orbit center.
+ *
+ * Framing rule: the camera / region scale should centre on the padded content
+ * centroid (not the region origin), with headroom reserved for the scene's top
+ * overlay. Otherwise a northern-heavy lattice is clipped even when zoom "fits"
+ * the box dimensions (origin ≠ centroid).
  *
  * All measurements are in region-local CSS pixels — the same space that
  * `scale(var(--region-zoom))` shrinks. Island slot positions are already
@@ -38,8 +43,33 @@ export const ISLAND_SPRITE_WIDTH = 111;
  */
 export const ISLAND_ROOT_WIDTH = 156;
 
-/** Orbit constants — mirror SailingScene ORBIT (gap + squish only). */
-export const ORBIT_FIT = { gapPx: 60, squish: 0.4 } as const;
+/**
+ * Orbit constants — mirror SailingScene ORBIT (gap + squish only).
+ * gapPx is deliberately tight so a sloop at common lattice pitch does not
+ * rake a neighbour's name plank (see `orbitRadiusForNearest`).
+ */
+export const ORBIT_FIT = { gapPx: 28, squish: 0.4 } as const;
+
+/**
+ * Name-plank extent below the island centre (half-height + hung plank).
+ * `.pc-plank` sits at `bottom: -6px` with ~16px body.
+ */
+export const PLANK_EXTENT_BELOW = ISLAND_LAYOUT.height / 2 + 22;
+
+/**
+ * Horizontal clearance from island centre to the far edge of a neighbour's
+ * plank — used when clamping orbit radius against nearest-neighbour distance.
+ */
+export const PLANK_CLEARANCE = ISLAND_SPRITE_WIDTH / 2 + 8;
+
+/**
+ * Viewport pixels reserved at the top of the scene when fitting / framing
+ * (cartouche / head chrome sits above the sea; content must not kiss the edge).
+ */
+export const TOP_OVERLAY_HEADROOM_PX = 48;
+
+/** Floor on per-island orbit radius so a tight pack still reads as sailing. */
+export const ORBIT_RADIUS_MIN = 78;
 
 /** Sloop calibration slice needed for draft lift (mirrors SHIPS.sloop). */
 const SLOOP_LIFT = {
@@ -53,6 +83,18 @@ export interface Point {
   y: number;
 }
 
+export interface ContentBounds {
+  width: number;
+  height: number;
+  minX: number;
+  maxX: number;
+  minY: number;
+  maxY: number;
+  /** Centre of the padded box — the default framing target. */
+  cx: number;
+  cy: number;
+}
+
 /**
  * Sloop orbit radius in region-local units — same formula as
  * `localIslandGeometry`: gapPx + half sprite width / scale.
@@ -60,6 +102,22 @@ export interface Point {
 export function sloopOrbitRadius(): number {
   const scale = ISLAND_LAYOUT.width / ISLAND_ROOT_WIDTH;
   return ORBIT_FIT.gapPx + ISLAND_SPRITE_WIDTH / (2 * scale);
+}
+
+/**
+ * Clamp a base orbit radius so the far leg stays clear of a neighbour's plank
+ * at the given centre distance. No full collision solver — nearest neighbour
+ * only, which cleans up the common lattice densities.
+ */
+export function orbitRadiusForNearest(
+  nearestCentreDist: number,
+  baseRadius: number = sloopOrbitRadius(),
+): number {
+  if (!Number.isFinite(nearestCentreDist) || nearestCentreDist <= 0) {
+    return baseRadius;
+  }
+  const maxClear = nearestCentreDist - PLANK_CLEARANCE;
+  return Math.max(ORBIT_RADIUS_MIN, Math.min(baseRadius, maxClear));
 }
 
 /** Upward lift (px) applied to the orbit center; reduced vs historical full draft. */
@@ -71,16 +129,10 @@ export function sloopOrbitDraftLift(): number {
 
 /**
  * Padded axis-aligned box of all island centres (spread-scaled, region-local).
+ * Includes island body, hung name plank, and sloop orbit ellipse.
  * Returns null when there are no centres to fit.
  */
-export function paddedIslandBounds(centres: readonly Point[]): {
-  width: number;
-  height: number;
-  minX: number;
-  maxX: number;
-  minY: number;
-  maxY: number;
-} | null {
+export function paddedIslandBounds(centres: readonly Point[]): ContentBounds | null {
   if (centres.length === 0) return null;
 
   const radius = sloopOrbitRadius();
@@ -101,6 +153,8 @@ export function paddedIslandBounds(centres: readonly Point[]): {
     // Island body
     minY = Math.min(minY, c.y - halfH);
     maxY = Math.max(maxY, c.y + halfH);
+    // Hung name plank below the island body
+    maxY = Math.max(maxY, c.y + PLANK_EXTENT_BELOW);
     // Orbit ellipse: center is lifted above the island centre by `lift`
     // (negative y). Reducing ORBIT_DRAFT_LIFT_FACTOR lowers this center and
     // shifts the padded vertical extent accordingly.
@@ -109,14 +163,38 @@ export function paddedIslandBounds(centres: readonly Point[]): {
     maxY = Math.max(maxY, orbitCy + orbitHalfY);
   }
 
+  const width = Math.max(maxX - minX, 1);
+  const height = Math.max(maxY - minY, 1);
   return {
-    width: Math.max(maxX - minX, 1),
-    height: Math.max(maxY - minY, 1),
+    width,
+    height,
     minX,
     maxX,
     minY,
     maxY,
+    cx: (minX + maxX) / 2,
+    cy: (minY + maxY) / 2,
   };
+}
+
+/**
+ * Region-local framing point for the content centroid, biased north so the
+ * visual mass sits slightly below viewport centre and leaves top headroom.
+ *
+ * The region transform applies `scale(z) translate(-fx, -fy)` so this point
+ * lands on the camera target (region world origin).
+ */
+export function contentFrameOffset(
+  centres: readonly Point[],
+  zoom: number,
+  topHeadroomPx: number = TOP_OVERLAY_HEADROOM_PX,
+): Point {
+  const box = paddedIslandBounds(centres);
+  if (!box) return { x: 0, y: 0 };
+  const z = zoom > 0 ? zoom : 1;
+  // Bias framing point north (smaller y) → content appears lower in the view.
+  const headroomBias = topHeadroomPx / (2 * z);
+  return { x: box.cx, y: box.cy - headroomBias };
 }
 
 /** Count-only zoom target (historical behaviour; also the fit ceiling). */
@@ -127,12 +205,15 @@ export function countZoomTarget(islandCount: number): number {
 /**
  * Combined zoom target: min of count-based target and viewport fit, clamped to
  * [REGION_ZOOM_MIN, 1]. Small fleets whose padded box already fits keep 1.
+ * Usable height subtracts top-overlay headroom so fit does not pack content
+ * into the chrome band.
  */
 export function computeRegionZoomTarget(input: {
   islandCount: number;
   centres: readonly Point[];
   viewportW: number;
   viewportH: number;
+  topHeadroomPx?: number;
 }): number {
   const countTarget = countZoomTarget(input.islandCount);
   if (input.centres.length === 0 || input.viewportW <= 0 || input.viewportH <= 0) {
@@ -142,7 +223,9 @@ export function computeRegionZoomTarget(input: {
   const box = paddedIslandBounds(input.centres);
   if (!box) return countTarget;
 
-  const fit = Math.min(input.viewportW / box.width, input.viewportH / box.height);
+  const headroom = input.topHeadroomPx ?? TOP_OVERLAY_HEADROOM_PX;
+  const usableH = Math.max(1, input.viewportH - headroom);
+  const fit = Math.min(input.viewportW / box.width, usableH / box.height);
   // Never over-zoom (max 1); never ignore the count ceiling; floor at REGION_ZOOM_MIN.
   return Math.max(REGION_ZOOM_MIN, Math.min(1, countTarget, fit));
 }
@@ -156,4 +239,28 @@ export function readIslandCentres(region: HTMLElement): Point[] {
     if (Number.isFinite(x) && Number.isFinite(y)) centres.push({ x, y });
   }
   return centres;
+}
+
+/**
+ * Nearest sibling island centre distance (region-local) for an island slot.
+ * Returns Infinity when the island is alone.
+ */
+export function nearestIslandDistance(
+  region: HTMLElement,
+  slot: HTMLElement,
+): number {
+  const x = Number.parseFloat(slot.dataset.x ?? "");
+  const y = Number.parseFloat(slot.dataset.y ?? "");
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return Infinity;
+
+  let best = Infinity;
+  for (const other of region.querySelectorAll<HTMLElement>(".pc-island-slot")) {
+    if (other === slot) continue;
+    const ox = Number.parseFloat(other.dataset.x ?? "");
+    const oy = Number.parseFloat(other.dataset.y ?? "");
+    if (!Number.isFinite(ox) || !Number.isFinite(oy)) continue;
+    const d = Math.hypot(x - ox, y - oy);
+    if (d < best) best = d;
+  }
+  return best;
 }

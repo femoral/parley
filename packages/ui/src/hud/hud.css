@@ -15,6 +15,10 @@
      flanks/title from painting outside the cartouche frame. */
   min-width: 0;
   box-sizing: border-box;
+  /* Shared with .pc-view-nav--cartouche: tab-count knob for subtitle clearance.
+     Bump --pc-view-nav-tabs when a third view tab is engraved on the plate. */
+  --pc-view-nav-tabs: 2;
+  --pc-view-nav-reserve: calc(var(--pc-view-nav-tabs) * 5.5rem + 2.75rem);
 }
 .pc-cartouche__title-row {
   display: flex;
@@ -51,9 +55,9 @@
   font-size: var(--text-chrome);
   letter-spacing: var(--track-subtitle);
   color: var(--ink-tan);
-  /* When the view-nav is absolute (wide title-stack), keep the centered line
-     out of the tab footprint (right: 44px + Cove/Soundings tabs ≈ 13rem). */
-  max-width: calc(100% - 13rem);
+  /* Clear the absolute cartouche nav via a shared reserve (set with the nav
+     chrome below). Narrow title-stacks override to 100% in cockpit.css CQ. */
+  max-width: calc(100% - var(--pc-view-nav-reserve, 13rem));
   margin-inline: auto;
   box-sizing: border-box;
 }
@@ -2521,6 +2525,9 @@
   height: auto;
   padding: 0;
   gap: 2px;
+  /* Keep in sync with .pc-cartouche --pc-view-nav-tabs / --pc-view-nav-reserve. */
+  --pc-view-nav-tabs: 2;
+  --pc-view-nav-reserve: calc(var(--pc-view-nav-tabs) * 5.5rem + 2.75rem);
 }
 .pc-view-nav--cartouche .pc-view-nav__tab {
   font-size: var(--text-chrome-sm);

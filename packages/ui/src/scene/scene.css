@@ -686,10 +686,12 @@
 }
 .pc-parley {
   position: absolute;
-  top: -14px;
-  right: -22px;
+  /* Pulled in from the historical far overhang so the ribbon does not sit on
+     a neighbouring island's name plank at lattice pitch. */
+  top: -12px;
+  right: -8px;
   transform: rotate(3deg);
-  padding: 3px 12px;
+  padding: 3px 10px;
   border-radius: 3px;
   font-family: var(--font-display);
   font-weight: 900;
@@ -705,11 +707,11 @@
 }
 .pc-island[data-variant="2"] .pc-parley {
   top: -8px;
-  right: -18px;
+  right: -6px;
 }
 .pc-island[data-variant="3"] .pc-parley {
-  top: -20px;
-  right: -20px;
+  top: -16px;
+  right: -8px;
 }
 /* A hover bob like the sloop/galleon's — the ribbon floats, it doesn't bounce. */
 @keyframes pc-parley-bob {
@@ -959,10 +961,10 @@ button.pc-edge-alert:focus-visible {
   font-size: 10px;
   line-height: 1;
 }
-/* Short session label (already truncated to ≤8 chars in projection). Caps
-   width so an unexpected long id never blows the peripheral pill. */
+/* Short session label (named sessions truncated in projection; open-water is
+   the authored "Open water" = 10ch). Budget 11ch so that full label fits. */
 .pc-edge-alert__label {
-  max-width: 8ch;
+  max-width: 11ch;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
