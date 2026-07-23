@@ -214,6 +214,8 @@ export interface InspectorTask {
 
 /** The daemon health readout, fully projected to display values by the hooks layer. */
 export interface HealthView {
+  /** Probe lifecycle; connecting is reserved for the unresolved first probe. */
+  status?: "connecting" | "online" | "offline";
   /** Whether the daemon answered the last probe. */
   online: boolean;
   /** Daemon package version, or null before the first successful probe. */

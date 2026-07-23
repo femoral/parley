@@ -9,16 +9,24 @@ import type { HealthView } from "./types.js";
  * {@link HealthView}. Daemon facts only (connection, version, host/port/pid,
  * uptime, durable sessions) — fleet counts (total/active) live on the roster.
  *
- * Compact density: at a glance only HEALTHY/OFFLINE matters (loud chip in the
- * header). Host/port/PID/uptime/sessions stay visible as dense mono meta so
- * the right rail frees vertical space for the inspector (LOGBOOK payoff).
+ * Compact density: at a glance the probe lifecycle matters (neutral SOUNDING…
+ * until resolved, then HEALTHY/OFFLINE). Host/port/PID/uptime/sessions stay
+ * visible as dense mono meta so the right rail frees vertical space for the
+ * inspector (LOGBOOK payoff).
  */
 export function HealthPanel({ health }: { health: HealthView }) {
-  const chipColor = health.online ? "var(--healthy-dot)" : "var(--state-failed)";
+  const status = health.status ?? (health.online ? "online" : "offline");
+  const connecting = status === "connecting";
+  const chipColor = connecting
+    ? "var(--brass-soft)"
+    : health.online
+      ? "var(--healthy-dot)"
+      : "var(--state-failed)";
   const chipStyle = {
     "--health-chip-color": chipColor,
-    "--dot-color": chipColor,
+    "--dot-color": connecting ? "var(--brass-frame)" : chipColor,
   } as CSSProperties;
+  const chipLabel = connecting ? "SOUNDING…" : health.online ? "HEALTHY" : "OFFLINE";
   const pid = health.pid !== null ? String(health.pid) : "—";
   const uptime = health.uptime || "—";
   return (
@@ -29,9 +37,14 @@ export function HealthPanel({ health }: { health: HealthView }) {
         subtitle={health.version ? `v${health.version}` : "connecting…"}
         divider
         aside={
-          <span className="pc-health-chip" style={chipStyle}>
+          <span
+            className={`pc-health-chip${connecting ? " pc-health-chip--connecting" : ""}`}
+            style={chipStyle}
+            role="status"
+            aria-live="polite"
+          >
             <span className={`pc-dot${health.online ? " pc-dot--beacon" : ""}`} />
-            {health.online ? "HEALTHY" : "OFFLINE"}
+            {chipLabel}
           </span>
         }
       />

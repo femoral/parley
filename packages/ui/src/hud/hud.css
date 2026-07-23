@@ -3238,3 +3238,9 @@ button.pc-roster__meta--copy:focus-visible {
 .pc-report-tab {
   padding-bottom: 1.25rem;
 }
+
+/* Neutral first-probe state. Brass/ink keeps unresolved connectivity outside
+ * the luminous task-state palette; the SOUNDING… label carries the meaning. */
+.pc-health-chip--connecting {
+  background: var(--brass-tint-08);
+}

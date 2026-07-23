@@ -387,6 +387,7 @@ export function useCockpit(): CockpitView {
 
   const origin = typeof window !== "undefined" ? window.location : undefined;
   const healthView: HealthView = {
+    status: health.status,
     online: health.online,
     version: health.version,
     pid: health.pid,

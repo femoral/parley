@@ -2,7 +2,11 @@ import { useEffect, useState } from "react";
 import type { ParleyClient } from "@useparley/core";
 
 /** Raw daemon health, as probed (uptime is derived in {@link useCockpit}). */
+export type HealthStatus = "connecting" | "online" | "offline";
+
 export interface HealthState {
+  /** Probe lifecycle; connecting is reserved for the unresolved first probe. */
+  status: HealthStatus;
   online: boolean;
   version: string | null;
   pid: number | null;
@@ -10,7 +14,13 @@ export interface HealthState {
   startedAt: number | null;
 }
 
-const INITIAL: HealthState = { online: false, version: null, pid: null, startedAt: null };
+const INITIAL: HealthState = {
+  status: "connecting",
+  online: false,
+  version: null,
+  pid: null,
+  startedAt: null,
+};
 
 /**
  * Layer 4 (hooks) — poll `GET /health` and expose liveness + version + pid +
@@ -35,13 +45,14 @@ export function useHealth(client: ParleyClient, pollMs = 5000): HealthState {
         if (cancelled) return;
         const startedAt = Date.parse(health.started_at);
         setState({
+          status: "online",
           online: true,
           version: health.version,
           pid: health.pid,
           startedAt: Number.isNaN(startedAt) ? null : startedAt,
         });
       } catch {
-        if (!cancelled) setState((prev) => ({ ...prev, online: false }));
+        if (!cancelled) setState((prev) => ({ ...prev, status: "offline", online: false }));
       }
       if (!cancelled && !hidden()) timer = setTimeout(() => void poll(), pollMs);
     };
