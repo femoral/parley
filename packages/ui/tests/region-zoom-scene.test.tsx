@@ -154,6 +154,42 @@ describe("region zoom on a mounted scene (#201)", () => {
     expect(zoom).toBe(1);
   });
 
+  it("sets --region-frame-x/y to the content centroid (not origin) for a northern-heavy fleet", () => {
+    reducedMotion();
+    const frames = captureFrames();
+    mockSceneViewport(1440, 900);
+
+    // Prefer ids that place mass north of the flagship so centroid ≠ origin.
+    const ids = Array.from({ length: 12 }, (_, i) => `north-fleet-${i}`);
+    const { container } = render(
+      <Scene
+        sessions={[
+          {
+            id: "north",
+            label: "north",
+            tasks: ids.map((id) => task(id)),
+            attention: null,
+          },
+        ]}
+        activeSessionId="north"
+        onSelectTask={() => undefined}
+        onSelectSession={() => undefined}
+      />,
+    );
+
+    act(() => frames.shift()?.(1_000));
+    const region = container.querySelector(".pc-region") as HTMLElement;
+    const frameX = Number.parseFloat(region.style.getPropertyValue("--region-frame-x"));
+    const frameY = Number.parseFloat(region.style.getPropertyValue("--region-frame-y"));
+    expect(Number.isFinite(frameX)).toBe(true);
+    expect(Number.isFinite(frameY)).toBe(true);
+    // Northern-biased scatter: framing y should sit off the origin.
+    expect(Math.abs(frameY)).toBeGreaterThan(1);
+    // Transform must consume the frame vars (centroid framing, not origin).
+    expect(region.style.transform).toContain("--region-frame-x");
+    expect(region.style.transform).toContain("--region-frame-y");
+  });
+
   it("re-evaluates fit after a ResizeObserver size change", () => {
     reducedMotion();
     const frames = captureFrames();

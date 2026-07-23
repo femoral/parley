@@ -34,8 +34,12 @@ export interface Point {
   y: number;
 }
 
-/** Min centre-to-centre distance — island body 117×107 plus name-plank air. */
-export const MIN_ISLAND_DISTANCE = 145;
+/**
+ * Min centre-to-centre distance — island body 117×107 plus name-plank air and
+ * enough clearance that a sloop on the tightened orbit (see region-zoom
+ * ORBIT_FIT.gapPx) does not rake a neighbour's plank at common densities.
+ */
+export const MIN_ISLAND_DISTANCE = 168;
 
 /** No island centre within this radius of the flagship centre. */
 export const FLAGSHIP_EXCLUSION_RADIUS = 170;

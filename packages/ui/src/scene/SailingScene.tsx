@@ -3,7 +3,11 @@ import { shouldPaintShipEffects, shipEffectsOpacity } from "./island-death.js";
 import { FLAGSHIP_CENTER, stationOffset, voyageFromFlagship } from "./layout.js";
 import {
   computeRegionZoomTarget,
+  contentFrameOffset,
+  nearestIslandDistance,
   ORBIT_DRAFT_LIFT_FACTOR,
+  ORBIT_FIT,
+  orbitRadiusForNearest,
   readIslandCentres,
 } from "./region-zoom.js";
 import { GeometryCache, islandRiseOpacity, SceneLoopGate } from "./scene-performance.js";
@@ -40,7 +44,8 @@ const FX = {
   blockBlur: 2,
 } as const;
 
-const ORBIT = { gapPx: 60, squish: 0.4, speed: 0.22 } as const;
+/** gap/squish stay shared with region-zoom ORBIT_FIT (orbit pad + collision). */
+const ORBIT = { gapPx: ORBIT_FIT.gapPx, squish: ORBIT_FIT.squish, speed: 0.22 } as const;
 const SPAWN_RADIUS = 0.85 * SHIPS.galleon.width;
 const ISLAND_WATERLINE_FY = 0.68; // image centre + 18% of image height
 const ISLAND_ROOT_WIDTH = 156;
@@ -81,6 +86,8 @@ interface PaintedShip {
 
 interface RegionRuntime {
   zoom: number;
+  frameX: number;
+  frameY: number;
 }
 
 interface SeaTokens {
@@ -348,23 +355,45 @@ function regionZoom(
   viewportH: number,
 ): boolean {
   const count = Number.parseInt(region.dataset.islandCount ?? "0", 10);
-  // Fit the padded island+orbit box to the camera viewport; never exceed the
-  // historical count-based ceiling or zoom past 1 (#201).
+  const centres = readIslandCentres(region);
+  // Fit the padded island+orbit+plank box to the camera viewport (top headroom
+  // reserved); never exceed the historical count-based ceiling or zoom past 1.
   const target = computeRegionZoomTarget({
     islandCount: count,
-    centres: readIslandCentres(region),
+    centres,
     viewportW,
     viewportH,
   });
   let runtime = states.get(region);
   if (!runtime) {
-    runtime = { zoom: reduced ? target : 1 };
+    const z0 = reduced ? target : 1;
+    const f0 = contentFrameOffset(centres, z0);
+    runtime = { zoom: z0, frameX: f0.x, frameY: f0.y };
     states.set(region, runtime);
   }
-  const previous = runtime.zoom;
-  runtime.zoom = reduced ? target : runtime.zoom + (target - runtime.zoom) * Math.min(1, dt * 3);
+  const previousZoom = runtime.zoom;
+  const previousFX = runtime.frameX;
+  const previousFY = runtime.frameY;
+  const ease = Math.min(1, dt * 3);
+  runtime.zoom = reduced ? target : runtime.zoom + (target - runtime.zoom) * ease;
+  // Frame offset tracks the eased zoom so headroom bias (∝ 1/z) stays consistent.
+  const frameTarget = contentFrameOffset(centres, runtime.zoom);
+  if (reduced) {
+    runtime.frameX = frameTarget.x;
+    runtime.frameY = frameTarget.y;
+  } else {
+    runtime.frameX += (frameTarget.x - runtime.frameX) * ease;
+    runtime.frameY += (frameTarget.y - runtime.frameY) * ease;
+  }
   region.style.setProperty("--region-zoom", String(runtime.zoom));
-  return Math.abs(runtime.zoom - target) > 0.0005 || Math.abs(runtime.zoom - previous) > 0.0005;
+  region.style.setProperty("--region-frame-x", String(runtime.frameX));
+  region.style.setProperty("--region-frame-y", String(runtime.frameY));
+  return (
+    Math.abs(runtime.zoom - target) > 0.0005 ||
+    Math.abs(runtime.zoom - previousZoom) > 0.0005 ||
+    Math.abs(runtime.frameX - previousFX) > 0.05 ||
+    Math.abs(runtime.frameY - previousFY) > 0.05
+  );
 }
 
 function localIslandGeometry(element: HTMLElement, geometry: GeometryCache): {
@@ -383,6 +412,13 @@ function localIslandGeometry(element: HTMLElement, geometry: GeometryCache): {
   const rootRect = geometry.rect(root);
   const rect = geometry.rect(sprite);
   const scale = rootRect.width > 0 ? rootRect.width / ISLAND_ROOT_WIDTH : 1;
+  const baseRadius = ORBIT.gapPx + rect.width / (2 * scale);
+  // Nearest-neighbour clamp: keep the far orbit leg off a sibling's name plank
+  // at common lattice densities (full collision solver not required).
+  const region = root.closest<HTMLElement>(".pc-region");
+  const slot = root.closest<HTMLElement>(".pc-island-slot");
+  const nearest =
+    region && slot ? nearestIslandDistance(region, slot) : Number.POSITIVE_INFINITY;
   return {
     root,
     sprite,
@@ -390,7 +426,7 @@ function localIslandGeometry(element: HTMLElement, geometry: GeometryCache): {
     rootRect,
     cx: (rect.left + rect.width / 2 - rootRect.left) / scale,
     cy: (rect.top + rect.height * ISLAND_WATERLINE_FY - rootRect.top) / scale,
-    radius: ORBIT.gapPx + rect.width / (2 * scale),
+    radius: orbitRadiusForNearest(nearest, baseRadius),
     scale,
   };
 }
