@@ -185,11 +185,18 @@ function defaultMarker(model: ModelEntry): true | string {
       : model.efforts[0] ?? true;
 }
 
-/** Build a valid authoritative allowlist from advisory catalog entries. */
+/**
+ * Build a valid authoritative allowlist from advisory catalog entries.
+ *
+ * When `defaultEffort` is provided it is used as the default-combo marker for
+ * the default model; otherwise the marker is derived via `defaultMarker`
+ * (catalog `default_effort` when valid, else first effort / `true`).
+ */
 export function seedVendorModels(
   models: readonly ModelEntry[],
   selectedIds: readonly string[] = models.map((model) => model.id),
   defaultId: string | undefined = selectedIds[0],
+  defaultEffort?: true | string,
 ): Record<string, VendorModelAllowlistEntry> {
   const selected = new Set(selectedIds);
   const allowlist: Record<string, VendorModelAllowlistEntry> = {};
@@ -197,13 +204,16 @@ export function seedVendorModels(
     if (!selected.has(model.id)) continue;
     allowlist[model.id] = {
       efforts: [...model.efforts],
-      ...(model.id === defaultId ? { default: defaultMarker(model) } : {}),
+      ...(model.id === defaultId
+        ? { default: defaultEffort ?? defaultMarker(model) }
+        : {}),
     };
   }
   return allowlist;
 }
 
-async function promptVendorModels(
+/** Interactive model/effort allowlist for one vendor. Exported for unit tests. */
+export async function promptVendorModels(
   vendor: string,
   models: readonly ModelEntry[],
 ): Promise<Record<string, VendorModelAllowlistEntry>> {
@@ -224,7 +234,24 @@ async function promptVendorModels(
     initialValue: selected[0],
   });
   if (p.isCancel(defaultId)) throw new PromptCancelled();
-  return seedVendorModels(models, selected, defaultId);
+
+  const defaultModel = models.find((model) => model.id === defaultId);
+  let defaultEffort: true | string | undefined;
+  if (defaultModel && defaultModel.efforts.length >= 2) {
+    const resolved = defaultMarker(defaultModel);
+    // defaultMarker returns a string when efforts.length >= 2 (catalog default
+    // or first effort); never `true` in that branch.
+    const initialEffort = typeof resolved === "string" ? resolved : defaultModel.efforts[0]!;
+    const effort = await p.select({
+      message: `${vendor}: default effort for ${defaultId}`,
+      options: defaultModel.efforts.map((e) => ({ value: e, label: e })),
+      initialValue: initialEffort,
+    });
+    if (p.isCancel(effort)) throw new PromptCancelled();
+    defaultEffort = effort;
+  }
+
+  return seedVendorModels(models, selected, defaultId, defaultEffort);
 }
 
 /** Populate only missing daemon-owned delegation defaults; never replace values. */

@@ -1,11 +1,27 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { isInteractiveInit, populateInitConfig, seedVendorModels } from "../src/commands/init.js";
+import * as p from "@clack/prompts";
+import {
+  isInteractiveInit,
+  populateInitConfig,
+  promptVendorModels,
+  seedVendorModels,
+} from "../src/commands/init.js";
+import { PromptCancelled } from "../src/commands/skills/prompts.js";
 import { listBundledPlugins } from "../src/commands/plugins/list.js";
 import { cleanupHome, FAKE_VENDOR_BIN, makeHome, runCli } from "./helpers.js";
+
+/** Sentinel returned by mocked clack prompts to simulate cancel. */
+const { CANCEL } = vi.hoisted(() => ({ CANCEL: Symbol("clack-cancel") }));
+
+vi.mock("@clack/prompts", () => ({
+  multiselect: vi.fn(),
+  select: vi.fn(),
+  isCancel: (value: unknown) => value === CANCEL,
+}));
 
 /** PATH with only git's directory — no vendor CLIs, but repo detection still works. */
 function pathWithGitOnly(): string {
@@ -66,6 +82,122 @@ describe("parley init", () => {
       two: { efforts: [] },
     });
     expect(Object.values(models).filter((model) => model.default !== undefined)).toHaveLength(1);
+  });
+
+  it("accepts an explicit default effort instead of deriving via defaultMarker", () => {
+    const models = seedVendorModels(
+      [
+        { id: "one", efforts: ["low", "medium", "high"], default_effort: "high" },
+        { id: "two", efforts: ["low"], default_effort: null },
+      ],
+      ["one", "two"],
+      "one",
+      "low",
+    );
+    expect(models).toEqual({
+      one: { efforts: ["low", "medium", "high"], default: "low" },
+      two: { efforts: ["low"] },
+    });
+  });
+
+  it("falls back to defaultMarker when default effort is not passed", () => {
+    // Non-interactive path: single-arg seed must remain derivation-only.
+    const models = seedVendorModels([
+      { id: "multi", efforts: ["low", "high"], default_effort: "high" },
+      { id: "single", efforts: ["max"], default_effort: null },
+      { id: "none", efforts: [], default_effort: null },
+    ]);
+    expect(models).toEqual({
+      multi: { efforts: ["low", "high"], default: "high" },
+      single: { efforts: ["max"] },
+      none: { efforts: [] },
+    });
+  });
+
+  describe("promptVendorModels", () => {
+    beforeEach(() => {
+      vi.mocked(p.multiselect).mockReset();
+      vi.mocked(p.select).mockReset();
+    });
+
+    it("prompts for default effort when the default model has two or more efforts", async () => {
+      const catalog = [
+        { id: "a", efforts: ["low", "medium", "high"], default_effort: "medium" },
+        { id: "b", efforts: ["low"], default_effort: null },
+      ];
+      vi.mocked(p.multiselect).mockResolvedValueOnce(["a", "b"]);
+      // default model select, then effort select
+      vi.mocked(p.select)
+        .mockResolvedValueOnce("a")
+        .mockResolvedValueOnce("high");
+
+      const allowlist = await promptVendorModels("fake", catalog);
+
+      expect(p.select).toHaveBeenCalledTimes(2);
+      const effortCall = vi.mocked(p.select).mock.calls[1]![0] as {
+        message: string;
+        options: { value: string }[];
+        initialValue: string;
+      };
+      expect(effortCall.message).toBe("fake: default effort for a");
+      expect(effortCall.options.map((o) => o.value)).toEqual(["low", "medium", "high"]);
+      // Catalog default_effort pre-selected.
+      expect(effortCall.initialValue).toBe("medium");
+      expect(allowlist).toEqual({
+        a: { efforts: ["low", "medium", "high"], default: "high" },
+        b: { efforts: ["low"] },
+      });
+    });
+
+    it("pre-selects the first effort when catalog default_effort is missing", async () => {
+      const catalog = [{ id: "solo", efforts: ["low", "high"], default_effort: null }];
+      vi.mocked(p.multiselect).mockResolvedValueOnce(["solo"]);
+      vi.mocked(p.select).mockResolvedValueOnce("solo").mockResolvedValueOnce("low");
+
+      await promptVendorModels("codex", catalog);
+
+      const effortCall = vi.mocked(p.select).mock.calls[1]![0] as { initialValue: string };
+      expect(effortCall.initialValue).toBe("low");
+    });
+
+    it("skips the effort prompt when the default model has one effort", async () => {
+      const catalog = [
+        { id: "one-effort", efforts: ["high"], default_effort: null },
+        { id: "other", efforts: ["low", "high"], default_effort: "low" },
+      ];
+      vi.mocked(p.multiselect).mockResolvedValueOnce(["one-effort", "other"]);
+      vi.mocked(p.select).mockResolvedValueOnce("one-effort");
+
+      const allowlist = await promptVendorModels("fake", catalog);
+
+      expect(p.select).toHaveBeenCalledTimes(1);
+      // Single effort → defaultMarker yields true (no catalog default_effort).
+      expect(allowlist).toEqual({
+        "one-effort": { efforts: ["high"], default: true },
+        other: { efforts: ["low", "high"] },
+      });
+    });
+
+    it("skips the effort prompt when the default model has zero efforts", async () => {
+      const catalog = [{ id: "effortless", efforts: [], default_effort: null }];
+      vi.mocked(p.multiselect).mockResolvedValueOnce(["effortless"]);
+      vi.mocked(p.select).mockResolvedValueOnce("effortless");
+
+      const allowlist = await promptVendorModels("pi", catalog);
+
+      expect(p.select).toHaveBeenCalledTimes(1);
+      expect(allowlist).toEqual({
+        effortless: { efforts: [], default: true },
+      });
+    });
+
+    it("throws PromptCancelled when the effort prompt is cancelled", async () => {
+      const catalog = [{ id: "a", efforts: ["low", "high"], default_effort: "low" }];
+      vi.mocked(p.multiselect).mockResolvedValueOnce(["a"]);
+      vi.mocked(p.select).mockResolvedValueOnce("a").mockResolvedValueOnce(CANCEL);
+
+      await expect(promptVendorModels("fake", catalog)).rejects.toBeInstanceOf(PromptCancelled);
+    });
   });
 
   it("populates missing delegation config without clobbering existing values", async () => {
