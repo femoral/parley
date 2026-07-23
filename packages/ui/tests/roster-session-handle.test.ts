@@ -8,10 +8,11 @@ const HUD_CSS = fs.readFileSync(
 );
 
 describe("roster session handle overflow box", () => {
-  it("clips the ellipsis on a bounded flex item box", () => {
+  it("clips the ellipsis on a single bounded flex item box", () => {
     const blocks = [...HUD_CSS.matchAll(/\.pc-roster__session-handle\s*\{([^}]+)\}/g)];
-    expect(blocks.length).toBeGreaterThanOrEqual(2);
-    const combined = blocks.map((match) => match[1]).join("\n");
+    // Consolidated: exactly one definition (no append-only override layer).
+    expect(blocks.length).toBe(1);
+    const combined = blocks[0]![1];
     expect(combined).toMatch(/display:\s*block/);
     expect(combined).toMatch(/flex:\s*0\s+1\s+9em/);
     expect(combined).toMatch(/min-width:\s*0/);

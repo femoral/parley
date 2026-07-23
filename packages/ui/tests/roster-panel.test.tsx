@@ -1,10 +1,15 @@
 /** @vitest-environment happy-dom */
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { delegateScaffold, RosterPanel } from "../src/hud/index.js";
 import type { RosterGroup, RosterSessionOption } from "../src/hud/index.js";
 
 afterEach(cleanup);
+
+// process.cwd() is packages/ui under vitest; import.meta.url is not file: in happy-dom.
+const HUD_CSS = readFileSync(resolve(process.cwd(), "src/hud/hud.css"), "utf8");
 
 const GROUPS: RosterGroup[] = [
   {
@@ -389,6 +394,77 @@ describe("RosterPanel session selector (#66)", () => {
     expect(results.querySelectorAll("[role='option']").length).toBeGreaterThan(0);
     expect(input.getAttribute("aria-controls")).toBe(results.getAttribute("id"));
     expect(input.getAttribute("aria-activedescendant")).toBeTruthy();
+  });
+});
+
+/**
+ * Find-hit name priority: the CSS selector
+ * `.pc-roster__search-hit--task .pc-roster__search-hit-id` only wins if
+ * RosterPanel actually paints the `--task` modifier. A prior CSS-only test
+ * matched a contract that never held in the browser (meta stayed flex:0 0 auto).
+ */
+describe("RosterPanel task find-hit name priority", () => {
+  it("renders the --task modifier and id/meta children the flex rules select", async () => {
+    const searchSessions = vi.fn(async () => [
+      {
+        kind: "task" as const,
+        taskId: "t-auth-long",
+        sessionId: "sess-1",
+        name: "short",
+        branch: "feat/very-long-branch-name-that-should-shrink-first",
+      },
+    ]);
+    const { container } = render(
+      <RosterPanel {...baseProps()} searchSessions={searchSessions} />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Search fleet" }));
+    fireEvent.change(screen.getByLabelText("Find tasks or sessions"), {
+      target: { value: "short" },
+    });
+
+    const taskOpt = await screen.findByRole("option", {
+      name: /feat\/very-long-branch-name/,
+    });
+    // Markup contract the CSS depends on — without --task the flex fix is dead.
+    expect(taskOpt.classList.contains("pc-roster__search-hit")).toBe(true);
+    expect(taskOpt.classList.contains("pc-roster__search-hit--task")).toBe(true);
+    expect(taskOpt.classList.contains("pc-roster__search-hit--session")).toBe(false);
+
+    const nameEl = taskOpt.querySelector(".pc-roster__search-hit-id");
+    const metaEl = taskOpt.querySelector(".pc-roster__search-hit-meta");
+    expect(nameEl).toBeTruthy();
+    expect(metaEl).toBeTruthy();
+    expect(nameEl!.textContent).toBe("short");
+    expect(metaEl!.textContent).toMatch(/feat\/very-long-branch/);
+
+    // Ensure no stray duplicate hit markup under the listbox.
+    const hits = container.querySelectorAll(".pc-roster__search-hit--task");
+    expect(hits.length).toBe(1);
+  });
+
+  it("CSS: task name keeps ≥8ch; branch meta shrinks/ellipsizes first", () => {
+    // Single consolidated rule (no append-layer override that can drift).
+    const idBlocks = [
+      ...HUD_CSS.matchAll(
+        /\.pc-roster__search-hit--task\s+\.pc-roster__search-hit-id\s*\{([^}]+)\}/g,
+      ),
+    ];
+    const metaBlocks = [
+      ...HUD_CSS.matchAll(
+        /\.pc-roster__search-hit--task\s+\.pc-roster__search-hit-meta\s*\{([^}]+)\}/g,
+      ),
+    ];
+    expect(idBlocks.length).toBe(1);
+    expect(metaBlocks.length).toBe(1);
+    const idCss = idBlocks[0]![1];
+    const metaCss = metaBlocks[0]![1];
+    expect(idCss).toMatch(/flex:\s*0\s+1\s+auto/);
+    expect(idCss).toMatch(/min-width:\s*8ch/);
+    expect(metaCss).toMatch(/flex:\s*1\s+1\s+0/);
+    expect(metaCss).toMatch(/min-width:\s*0/);
+    expect(metaCss).toMatch(/overflow:\s*hidden/);
+    expect(metaCss).toMatch(/text-overflow:\s*ellipsis/);
+    expect(metaCss).toMatch(/white-space:\s*nowrap/);
   });
 });
 

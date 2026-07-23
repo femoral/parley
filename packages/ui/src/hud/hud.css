@@ -221,9 +221,11 @@
   color: var(--brass);
 }
 .pc-roster__session-count {
-  font-family: var(--font-mono);
+  font-family: var(--font-body);
+  font-size: var(--text-meta);
   color: inherit;
-  opacity: 0.75;
+  opacity: 0.8;
+  white-space: nowrap;
 }
 /* Session search well (#88) — sits in the chip row; popover is a small parchment
    chart of older session ids, same brass frame language as the chips.
@@ -323,16 +325,58 @@
   color: var(--brass);
   outline: none;
 }
+.pc-roster__search-hit--active,
+.pc-roster__search-hit[aria-selected="true"] {
+  border-color: var(--brass-frame);
+  background: var(--brass-tint-12);
+  color: var(--brass);
+}
+/* Task name wins the flex fight: keep ≥8ch before ellipsis; branch meta
+ * shrinks first. Session hits keep meta (task count) as flex:0 0 auto. */
 .pc-roster__search-hit-id {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.pc-roster__search-hit--task .pc-roster__search-hit-id {
+  flex: 0 1 auto;
+  min-width: 8ch;
+  font-family: var(--font-body);
+  font-weight: 500;
 }
 .pc-roster__search-hit-meta {
   flex: 0 0 auto;
   font-size: var(--text-meta);
   color: var(--ink-label);
   opacity: 0.85;
+}
+.pc-roster__search-hit--task .pc-roster__search-hit-meta {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pc-roster__search-hit-primary {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  overflow: hidden;
+}
+.pc-roster__search-hit-handle {
+  font-family: var(--font-body);
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pc-roster__search-hit-ref {
+  flex: 0 0 auto;
+  font-family: var(--font-mono);
+  font-size: var(--text-meta);
+  color: var(--ink-label);
+  opacity: 0.9;
 }
 @media (prefers-reduced-motion: reduce) {
   .pc-roster__session,
@@ -744,10 +788,15 @@ button.pc-roster__meta--copy:focus-visible {
   flex-direction: column;
 }
 .pc-inspector--empty {
-  flex: 1 1 160px;
-  min-height: 160px;
-  display: grid;
-  place-items: center;
+  /* Final resting-empty plate: stretch for digest; non-digest centres via
+   * .pc-inspector--empty:not(.pc-inspector--digest) .pc-inspector__rest. */
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  gap: 0;
+  min-height: 12rem;
+  flex: 1 1 380px;
 }
 .pc-inspector__placeholder {
   margin: 0;
@@ -793,14 +842,39 @@ button.pc-roster__meta--copy:focus-visible {
   outline: 2px solid var(--brass-bright);
   outline-offset: 2px;
 }
+/* Name may shrink/ellipsize; sep + short id + copy stay visible (flex children
+ * own truncation — text-overflow unset so the id chip is never clipped). */
 .pc-inspector__name-sub {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
   font-family: var(--font-body);
   font-weight: 500;
   font-size: var(--text-sub);
   color: var(--ink-muted);
   white-space: nowrap;
   overflow: hidden;
+  text-overflow: unset;
+}
+.pc-inspector__name-sub-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pc-inspector__name-sub-sep {
+  flex: 0 0 auto;
+  white-space: pre;
+}
+.pc-inspector__name-sub-id {
+  flex: 0 0 auto;
+  font-family: var(--font-mono);
+  font-size: var(--text-meta);
+  font-weight: 500;
+  color: var(--ink-faint);
+  white-space: nowrap;
 }
 .pc-inspector__head-aside {
   display: flex;
@@ -869,6 +943,8 @@ button.pc-roster__meta--copy:focus-visible {
   min-height: 0;
   overflow-y: auto;
   padding: 12px 14px;
+  /* Position sticky scroll-cue against the scrollport bottom. */
+  position: relative;
 }
 .pc-inspector__body::-webkit-scrollbar {
   width: 8px;
@@ -1470,6 +1546,8 @@ button.pc-roster__meta--copy:focus-visible {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  scrollbar-color: var(--scroll-thumb) var(--scroll-track);
+  scrollbar-width: thin;
 }
 .pc-chart-key__section {
   display: flex;
@@ -1559,11 +1637,6 @@ button.pc-roster__meta--copy:focus-visible {
   background: var(--scroll-thumb);
   border-radius: var(--radius-tight);
 }
-.pc-chart-key__pop {
-  scrollbar-color: var(--scroll-thumb) var(--scroll-track);
-  scrollbar-width: thin;
-}
-
 /* ── Brief "why it failed" well (coral-bordered, functional voice) ────────
  * Reuses .pc-brief__well; border tinted with --state-failed. Body text uses
  * --ink-parchment on --plate-well (14.6:1, well above WCAG AA 4.5:1); the
@@ -2000,7 +2073,8 @@ button.pc-roster__meta--copy:focus-visible {
   width: 14px;
   height: 6px;
   border-radius: 2px;
-  background: var(--state-completed);
+  /* Quality verdict, not task-state hue (State-Color Reservation). */
+  background: var(--quality-good);
 }
 .pc-eval-dist__legend-mark {
   width: 2px;
@@ -2252,10 +2326,10 @@ button.pc-roster__meta--copy:focus-visible {
   box-sizing: border-box;
 }
 .pc-eval-heat__swatch--low {
-  background: color-mix(in srgb, var(--state-failed) 22%, rgba(0, 0, 0, 0.35));
+  background: color-mix(in srgb, var(--quality-poor) 22%, rgba(0, 0, 0, 0.35));
 }
 .pc-eval-heat__swatch--high {
-  background: color-mix(in srgb, var(--state-failed) 92%, rgba(0, 0, 0, 0.2));
+  background: color-mix(in srgb, var(--quality-poor) 92%, rgba(0, 0, 0, 0.2));
 }
 .pc-eval-heat__swatch--empty {
   background: rgba(0, 0, 0, 0.28);
@@ -2324,8 +2398,10 @@ button.pc-roster__meta--copy:focus-visible {
 }
 .pc-eval-heat__cell {
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 2px;
   min-height: 2.25rem;
   padding: 6px 4px;
   border-radius: var(--radius-well);
@@ -2559,10 +2635,8 @@ button.pc-roster__meta--copy:focus-visible {
   background: var(--brass-tint-08);
 }
 
-/* ── Inspector polish (t48) ────────────────────────────────────────────────
- * Appended section only — parallel agents edit existing selectors elsewhere.
- * 1) Failed-task `parley fix` copy scaffold (mirrors .pc-inbox-card__copy).
- * 2) Accessible eval-feedback more/less disclosure (replaces title-only).
+/* ── Inspector polish ────────────────────────────────────────────────────
+ * Failed-task `parley fix` copy scaffold; accessible eval-feedback more/less.
  */
 
 /* Failed well: copy scaffold footer (read-only cockpit — scaffold, not run). */
@@ -2813,23 +2887,10 @@ button.pc-roster__meta--copy:focus-visible {
   letter-spacing: normal;
 }
 
-/* ═══════════════════════════════════════════════════════════════════════════
- * Soundings quality-token + filter-group polish — NEW rules only.
- * Do not merge into earlier .pc-eval-* / .pc-soundings selectors;
- * parallel work edits those blocks. Overrides re-point metric chrome at the
- * quality verdict tokens (State-Color Reservation).
- * ═══════════════════════════════════════════════════════════════════════════ */
-
-/* Metric fills/swatches: quality verdicts, not task-state hues */
-.pc-eval-dist__legend-fill {
-  background: var(--quality-good);
-}
-.pc-eval-heat__swatch--low {
-  background: color-mix(in srgb, var(--quality-poor) 22%, rgba(0, 0, 0, 0.35));
-}
-.pc-eval-heat__swatch--high {
-  background: color-mix(in srgb, var(--quality-poor) 92%, rgba(0, 0, 0, 0.2));
-}
+/* ── Soundings filter-group polish ─────────────────────────────────────────
+ * Filter field groups (Task / Orchestrator / Judge). Quality swatch tokens
+ * live on the base .pc-eval-* rules above.
+ */
 
 /* Filter field groups — Task / Orchestrator / Judge headings */
 .pc-eval-filters__groups {
@@ -2856,13 +2917,8 @@ button.pc-roster__meta--copy:focus-visible {
   line-height: 1.4;
 }
 
-/* ═══════════════════════════════════════════════════════════════════════════
- * A11y / honesty addenda (scene + log stream + chart key scroll cue)
- * Appended only — do not edit the selector blocks above.
- * ═══════════════════════════════════════════════════════════════════════════ */
-
-/*
- * Chart key scroll cue — sticky bottom fade + "More below" label when the
+/* ── Chart key scroll cue ──────────────────────────────────────────────────
+ * Sticky bottom fade + "More below" label when the
  * popover content overflows (e.g. Harness coats clipped at ~800px-tall
  * windows). Hidden at scroll end / when content fits. Lives inside
  * .pc-chart-key__pop so the existing max-height + overflow rules stay put.
@@ -2901,12 +2957,7 @@ button.pc-roster__meta--copy:focus-visible {
 }
 
 
-/* ═══════════════════════════════════════════════════════════════════════════
-
-/* ═══════════════════════════════════════════════════════════════════════════
- * Inspector rail density (P2 compact health + scroll anchor)
- * Appended only — do not edit earlier cartouche/day-chip sections in parallel.
- * ═══════════════════════════════════════════════════════════════════════════ */
+/* ── Inspector rail density (compact health + scroll anchor) ─────────────── */
 
 /* Compact daemon health meta — two dense mono rows under the status chip.
  * Reclaims vertical space so the LOGBOOK (inspector) sits higher in the rail. */
@@ -2964,9 +3015,8 @@ button.pc-roster__meta--copy:focus-visible {
 }
 
 
-/* ── Roster empty starter + ack-on-deselect polish (t51) ─────────────────────
- * Appended section only — parallel agents edit cartouche/day-chip elsewhere.
- * 1) Empty-fleet copyable `parley delegate` scaffold (mirrors inbox/brief).
+/* ── Roster empty starter ──────────────────────────────────────────────────
+ * Empty-fleet copyable `parley delegate` scaffold (mirrors inbox/brief).
  */
 
 .pc-roster__empty-hint {
@@ -3041,19 +3091,8 @@ button.pc-roster__meta--copy:focus-visible {
   outline-offset: 1px;
 }
 
-/* ── HUD polish batch (t57) ──────────────────────────────────────────────────
- * Appended only — empty-inspector rest, heatmap low-n cue, popover focus ring.
- */
+/* ── Empty logbook rest + heatmap low-n + popover focus ──────────────────── */
 
-/* Empty logbook: quiet shortcut hints so the plate earns its footprint. */
-.pc-inspector--empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 18px;
-  min-height: 12rem;
-}
 .pc-inspector__rest-keys {
   list-style: none;
   margin: 0;
@@ -3082,20 +3121,17 @@ button.pc-roster__meta--copy:focus-visible {
   text-align: center;
   line-height: 1.4;
 }
+/* Rest-hint: mixed-case prose at sub tier (12px) — 10px is UPPERCASE micro only. */
 .pc-inspector__rest-hint {
   font-family: var(--font-body);
-  font-size: var(--text-label);
+  font-size: var(--text-sub);
   font-weight: 500;
-  letter-spacing: 0.4px;
+  letter-spacing: normal;
   color: var(--ink-label);
   line-height: 1.4;
 }
 
 /* Heatmap: low-sample honesty — visible n cue so the ramp can't overstate thin data. */
-.pc-eval-heat__cell {
-  flex-direction: column;
-  gap: 2px;
-}
 .pc-eval-heat__cell--low-n {
   outline: 1px dashed color-mix(in srgb, var(--ink-label) 55%, transparent);
   outline-offset: -2px;
@@ -3145,14 +3181,12 @@ button.pc-roster__meta--copy:focus-visible {
   white-space: nowrap;
 }
 
-/* ═══════════════════════════════════════════════════════════════════════════
- * Inbox list scroll cue (inspector-open clamp honesty)
- * Appended only — do not edit the selector blocks above.
+/* ── Inbox list scroll cue ─────────────────────────────────────────────────
  * Mirrors .pc-chart-key__scroll-cue: sticky bottom fade + "More below" when
  * the clamped .pc-inbox__list overflows. Hidden at scroll end / when content
  * fits. Scope caption lives above the list (InboxPanel) so it never paints
  * across a mid-card cut edge.
- * ═══════════════════════════════════════════════════════════════════════════ */
+ */
 
 .pc-inbox__scroll-cue {
   position: sticky;
@@ -3189,17 +3223,10 @@ button.pc-roster__meta--copy:focus-visible {
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
 }
 
-/* ═══════════════════════════════════════════════════════════════════════════
- * Inspector body scroll cue + report fold (identity / scene-presence pass)
- * Appended only — do not edit earlier selector blocks in parallel.
+/* ── Inspector body scroll cue + report fold ───────────────────────────────
  * Chart-key-style sticky bottom fade so "FILES CHANGED" never sits clipped
  * at the inspector fold with no hint that the body scrolls.
- * ═══════════════════════════════════════════════════════════════════════════ */
-
-.pc-inspector__body {
-  /* Position sticky cue against the scrollport bottom. */
-  position: relative;
-}
+ */
 
 .pc-inspector__scroll-cue {
   position: sticky;
@@ -3248,7 +3275,7 @@ button.pc-roster__meta--copy:focus-visible {
 
 /* Quiet diagnostic continuation from a failed brief into the full log trail.
  * Outfit sub-tier in warm muted ink (AA on the failure well), warming to the
- * established brass link color on hover/focus. Appended for parallel safety. */
+ * established brass link color on hover/focus. */
 .pc-brief__failure-trail {
   appearance: none;
   align-self: flex-start;
@@ -3284,9 +3311,8 @@ button.pc-roster__meta--copy:focus-visible {
   color: var(--ink-muted);
 }
 
-/* ── Roster / inspector a11y + triage polish (t65) ───────────────────────────
- * Appended only. Nested option copy removed; short-ref meta; attention age;
- * inspector id copy; rest-hint type-tier fix.
+/* ── Roster meta parts + attention age + inspector id copy ──────────────────
+ * Nested option copy removed; short-ref meta; attention age; inspector id copy.
  */
 
 /* Meta: branch may ellipsize; 8-char short id is flex-shrink:0 so rows stay
@@ -3334,19 +3360,8 @@ button.pc-roster__meta--copy:focus-visible {
   white-space: nowrap;
 }
 
-/* Inspector head: task-id copy (moved out of roster option for ARIA). */
-.pc-inspector__name-sub {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  min-width: 0;
-}
-.pc-inspector__name-sub-text {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
+/* Inspector head: task-id copy (moved out of roster option for ARIA).
+ * name-sub / name-sub-text / sep / id live with the base inspector head rules. */
 .pc-inspector__id-scaffold {
   position: absolute;
   width: 1px;
@@ -3382,16 +3397,6 @@ button.pc-roster__meta--copy:focus-visible {
   outline-offset: 1px;
 }
 
-/* Rest-hint: mixed-case prose at sub tier (12px) — 10px is UPPERCASE micro only. */
-.pc-inspector__rest-hint {
-  font-family: var(--font-body);
-  font-size: var(--text-sub);
-  font-weight: 500;
-  letter-spacing: normal;
-  color: var(--ink-label);
-  line-height: 1.4;
-}
-
 /* ── Day-chip data-token legibility (t75) ─────────────────────────────────
  * Keep the nautical wording in its flavor/chrome faces while numeric data
  * uses the mono meta tier. Both inherit the existing AA-safe ink colors. */
@@ -3408,40 +3413,6 @@ button.pc-roster__meta--copy:focus-visible {
   letter-spacing: normal;
 }
 
-/* ── Shared-affordance polish (copy/age dedup) ───────────────────────────────
- * Appended only. Inspector name-sub: protect short ref from ellipsis (roster
- * meta pattern). LOGBOOK focus ring already uses :focus-visible above; reinforce
- * pointer-vs-keyboard here so mouse-activated programmatic focus stays quiet.
- */
-
-/* Name may shrink/ellipsize; sep + short id + copy stay visible. */
-.pc-inspector__name-sub {
-  /* Parent early rule sets nowrap/ellipsis on the whole line — flex children
-   * own truncation so clear those so the id chip is never clipped mid-string. */
-  overflow: hidden;
-  text-overflow: unset;
-  white-space: nowrap;
-}
-.pc-inspector__name-sub-text {
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.pc-inspector__name-sub-sep {
-  flex: 0 0 auto;
-  white-space: pre;
-}
-.pc-inspector__name-sub-id {
-  flex: 0 0 auto;
-  font-family: var(--font-mono);
-  font-size: var(--text-meta);
-  font-weight: 500;
-  color: var(--ink-faint);
-  white-space: nowrap;
-}
-
 /* LOGBOOK heading: programmatic focus on selection open (AT). Suppress the
  * visible ring for pointer-driven activation; keyboard (Enter in roster) still
  * matches :focus-visible in Chrome after programmatic focus. */
@@ -3449,7 +3420,7 @@ button.pc-roster__meta--copy:focus-visible {
   outline: none;
 }
 
-/* ── Log stream truthful status (append-only) ────────────────────────────
+/* ── Log stream truthful status ──────────────────────────────────────────
  * Discriminated statuses dual-code label colour + beacon treatment.
  * Pulse only while genuinely tailing (`.pc-dot--beacon`); reduced-motion
  * stills via the global tokens rule. Contrast ≥4.5:1 on plate backgrounds:
@@ -3469,8 +3440,12 @@ button.pc-roster__meta--copy:focus-visible {
   color: var(--ink-label);
 }
 
-/* Session identity + Find combobox (session-search-identity) */
+/* Session identity + Find combobox groups (hit row styles live with search-hit) */
 .pc-roster__session-handle {
+  /* Block flex item so ellipsis clips the label without changing chip shape. */
+  display: block;
+  flex: 0 1 9em;
+  min-width: 0;
   font-family: var(--font-body);
   font-weight: 500;
   max-width: 9em;
@@ -3489,12 +3464,6 @@ button.pc-roster__meta--copy:focus-visible {
 .pc-roster__session--active .pc-roster__session-ref {
   color: inherit;
   opacity: 0.75;
-}
-.pc-roster__session-count {
-  font-family: var(--font-body);
-  font-size: var(--text-meta);
-  opacity: 0.8;
-  white-space: nowrap;
 }
 .pc-roster__search-group {
   display: flex;
@@ -3515,40 +3484,6 @@ button.pc-roster__meta--copy:focus-visible {
   letter-spacing: 1px;
   text-transform: uppercase;
   color: var(--ink-label);
-}
-.pc-roster__search-hit {
-  cursor: pointer;
-}
-.pc-roster__search-hit--active,
-.pc-roster__search-hit[aria-selected="true"] {
-  border-color: var(--brass-frame);
-  background: var(--brass-tint-12);
-  color: var(--brass);
-}
-.pc-roster__search-hit--task .pc-roster__search-hit-id {
-  font-family: var(--font-body);
-  font-weight: 500;
-}
-.pc-roster__search-hit-primary {
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-  min-width: 0;
-  overflow: hidden;
-}
-.pc-roster__search-hit-handle {
-  font-family: var(--font-body);
-  font-weight: 500;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.pc-roster__search-hit-ref {
-  flex: 0 0 auto;
-  font-family: var(--font-mono);
-  font-size: var(--text-meta);
-  color: var(--ink-label);
-  opacity: 0.9;
 }
 .pc-inbox-card__session-handle {
   font-family: var(--font-body);
@@ -3621,29 +3556,12 @@ button.pc-roster__meta--copy:focus-visible {
   line-height: 1.4;
 }
 
-/* Give the session handle a real flex item box so its existing ellipsis clips
- * the label itself without changing the chip's measured or painted shape. */
-.pc-roster__session-handle {
-  display: block;
-  flex: 0 1 9em;
-  min-width: 0;
-}
+/* ── Resting LOGBOOK fleet digest (empty selection) ────────────────────────
+ * Quiet tallies / last reports / freshest failure so the empty plate earns
+ * its acreage without becoming a second dashboard. Degrades: digest scrolls;
+ * keyboard hints stay pinned below. Base .pc-inspector--empty layout is above.
+ */
 
-/* ═══════════════════════════════════════════════════════════════════════════
- * Resting LOGBOOK fleet digest (empty selection)
- * Appended only — quiet tallies / last reports / freshest failure so the
- * empty plate earns its acreage without becoming a second dashboard.
- * Degrades: digest scrolls; keyboard hints stay pinned below.
- * ═══════════════════════════════════════════════════════════════════════════ */
-
-.pc-inspector--empty {
-  align-items: stretch;
-  justify-content: flex-start;
-  gap: 0;
-  min-height: 12rem;
-  /* Absorb remaining right-rail height so the digest can breathe. */
-  flex: 1 1 380px;
-}
 .pc-inspector--empty > .pc-plate-header {
   flex: 0 0 auto;
   padding: 12px 15px 8px;
@@ -3811,7 +3729,8 @@ button.pc-roster__meta--copy:focus-visible {
   color: color-mix(in srgb, var(--state-failed) 70%, var(--ink-label));
 }
 
-/* Short plates: collapse digest before the pinned keyboard hints. */
+/* Short plates: collapse digest before the pinned keyboard hints.
+ * Deliberate cascade: 720px softens; 560px drops the digest body entirely. */
 @media (max-height: 720px) {
   .pc-inspector--digest .pc-inspector__digest {
     flex: 1 1 0;
