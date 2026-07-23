@@ -14,6 +14,10 @@
       "types": "./src/index.ts",
       "default": "./src/index.ts"
     },
+    "./session-state": {
+      "types": "./src/session-state.ts",
+      "default": "./src/session-state.ts"
+    },
     "./package.json": "./package.json"
   },
   "publishConfig": {
@@ -22,6 +26,10 @@
       ".": {
         "types": "./dist/index.d.ts",
         "default": "./dist/index.js"
+      },
+      "./session-state": {
+        "types": "./dist/session-state.d.ts",
+        "default": "./dist/session-state.js"
       },
       "./package.json": "./package.json"
     }

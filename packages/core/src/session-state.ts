@@ -8,9 +8,15 @@
  *
  * (`PARLEY_HOME` replaces `~/.parley` when set.) Schema is parley-owned so
  * harness-format churn stays inside each vendor plugin.
+ *
+ * Write-side recorder (`recordSessionState`, #211): plugins own observation;
+ * core owns merge policy, skip-if-unchanged, and atomic I/O. Does not swallow
+ * I/O errors — callers choose fail-open.
  */
 import fs from "node:fs";
 import path from "node:path";
+
+import { resolveHome } from "./home.js";
 
 /**
  * Parley-owned session-state schema written by harness plugins.
@@ -77,17 +83,17 @@ export function parseSessionState(value: unknown): SessionState | null {
   }
   const o = value as Record<string, unknown>;
 
-  const harnessSessionId = optionalNonEmptyString(o.harness_session_id);
+  const harnessSessionId = nonEmptyString(o.harness_session_id);
   if (harnessSessionId === null) return null;
 
   const pid = parsePid(o.pid);
   if (pid === null) return null;
 
-  const harness = optionalNonEmptyString(o.harness) ?? "";
+  const harness = nonEmptyString(o.harness) ?? "";
   const model = nullableString(o.model);
   const effort = nullableString(o.effort);
-  const started_at = optionalNonEmptyString(o.started_at) ?? "";
-  const updated_at = optionalNonEmptyString(o.updated_at) ?? started_at;
+  const started_at = nonEmptyString(o.started_at) ?? "";
+  const updated_at = nonEmptyString(o.updated_at) ?? started_at;
 
   return {
     harness,
@@ -100,8 +106,8 @@ export function parseSessionState(value: unknown): SessionState | null {
   };
 }
 
-/** Non-empty trimmed string, or null. */
-function optionalNonEmptyString(value: unknown): string | null {
+/** Non-empty trimmed string, or null. Shared by plugins + parser. */
+export function nonEmptyString(value: unknown): string | null {
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
   return trimmed === "" ? null : trimmed;
@@ -218,4 +224,209 @@ export function scanSessionStates(
 
 function errMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
+}
+
+// ---------------------------------------------------------------------------
+// Write-side provenance recorder (#211)
+// ---------------------------------------------------------------------------
+
+/**
+ * How an observed field combines with a previously written value.
+ *
+ * - `fill` (default): `observed ?? previous ?? null` — never clobber a known
+ *   value with “not available this event” (codex / claude post-start).
+ * - `replace`: when the observation *supplies* the field (including explicit
+ *   null from a successful read), that value wins (grok summary.found path).
+ */
+export type FieldMergePolicy = "fill" | "replace";
+
+/**
+ * Vendor-agnostic observation the plugin hands the recorder after parsing
+ * harness-specific artifacts. Plugins own observation; core owns policy + I/O.
+ */
+export interface ProvenanceObservation {
+  harness: string;
+  harness_session_id: string;
+  /** Absent or undefined ⇒ treat as “not observed this event”. */
+  model?: string | null;
+  effort?: string | null;
+  pid: number;
+  modelPolicy?: FieldMergePolicy; // default "fill"
+  effortPolicy?: FieldMergePolicy; // default "fill"
+  /**
+   * When policy is `replace`, whether this event actually produced a field
+   * observation. Grok sets `{ model: true, effort: true }` only when
+   * summary.found; otherwise both false and previous is kept.
+   */
+  observed?: { model?: boolean; effort?: boolean };
+}
+
+export interface RecordSessionOptions {
+  parleyHome?: string;
+  env?: NodeJS.ProcessEnv; // for resolveHome; default process.env
+  now?: () => Date;
+  /** Default true. First write always lands. */
+  skipIfUnchanged?: boolean;
+}
+
+export interface RecordSessionResult {
+  state: SessionState;
+  previous: SessionState | null;
+  /** False when skip-if-unchanged suppressed the write. */
+  written: boolean;
+}
+
+/**
+ * Read → merge → skip-if-unchanged → atomic write.
+ * Throws only on write I/O failure (same contract as writeSessionState).
+ * Returns null only when harness_session_id / pid are invalid.
+ */
+export function recordSessionState(
+  observation: ProvenanceObservation,
+  options: RecordSessionOptions = {},
+): RecordSessionResult | null {
+  const sessionId = nonEmptyString(observation.harness_session_id);
+  if (sessionId === null) return null;
+
+  const harness = nonEmptyString(observation.harness);
+  if (harness === null) return null;
+
+  if (!isSafePathSegment(sessionId) || !isSafePathSegment(harness)) {
+    return null;
+  }
+
+  const pid = observation.pid;
+  if (typeof pid !== "number" || !Number.isInteger(pid) || pid <= 0) {
+    return null;
+  }
+
+  const parleyHome =
+    options.parleyHome ?? resolveHome(options.env ?? process.env);
+  const file = sessionStatePath(parleyHome, harness, sessionId);
+  const previous = readSessionState(file);
+  const timestamp = (options.now ?? (() => new Date()))().toISOString();
+
+  const model = mergeProvenanceField(
+    observation.model,
+    previous?.model ?? null,
+    observation.modelPolicy ?? "fill",
+    observation.observed?.model === true,
+  );
+  const effort = mergeProvenanceField(
+    observation.effort,
+    previous?.effort ?? null,
+    observation.effortPolicy ?? "fill",
+    observation.observed?.effort === true,
+  );
+
+  const state: SessionState = {
+    harness,
+    harness_session_id: sessionId,
+    model,
+    effort,
+    pid,
+    started_at:
+      previous?.started_at && previous.started_at !== ""
+        ? previous.started_at
+        : timestamp,
+    updated_at: timestamp,
+  };
+
+  const skipIfUnchanged = options.skipIfUnchanged !== false;
+  if (
+    skipIfUnchanged &&
+    previous !== null &&
+    previous.harness === state.harness &&
+    previous.harness_session_id === state.harness_session_id &&
+    previous.model === state.model &&
+    previous.effort === state.effort &&
+    previous.pid === state.pid
+  ) {
+    return { state: previous, previous, written: false };
+  }
+
+  writeSessionState(file, state);
+  return { state, previous, written: true };
+}
+
+/**
+ * Merge one nullable provenance field under fill or replace policy.
+ *
+ * - fill: non-empty observation wins; else previous; else null.
+ * - replace + observed: nonEmpty(observation) wins (may be honest null).
+ * - replace without observed: keep previous.
+ */
+function mergeProvenanceField(
+  observed: string | null | undefined,
+  previous: string | null,
+  policy: FieldMergePolicy,
+  fieldObserved: boolean,
+): string | null {
+  if (policy === "fill") {
+    return nonEmptyString(observed) ?? previous ?? null;
+  }
+  // replace
+  if (fieldObserved) {
+    return nonEmptyString(observed);
+  }
+  return previous ?? null;
+}
+
+function isSafePathSegment(value: string): boolean {
+  if (value === "." || value === "..") return false;
+  if (value.includes("/") || value.includes("\\") || value.includes("\0")) {
+    return false;
+  }
+  return true;
+}
+
+/** Materialize the four ADR-0013 env names from a resolved state. */
+export function provenanceEnvVars(
+  state: Pick<
+    SessionState,
+    "harness_session_id" | "harness" | "model" | "effort"
+  >,
+): {
+  PARLEY_SESSION_ID: string;
+  PARLEY_HARNESS: string;
+  PARLEY_MODEL?: string;
+  PARLEY_EFFORT?: string;
+} {
+  const out: {
+    PARLEY_SESSION_ID: string;
+    PARLEY_HARNESS: string;
+    PARLEY_MODEL?: string;
+    PARLEY_EFFORT?: string;
+  } = {
+    PARLEY_SESSION_ID: state.harness_session_id,
+    PARLEY_HARNESS: state.harness,
+  };
+  const model = nonEmptyString(state.model);
+  if (model !== null) out.PARLEY_MODEL = model;
+  const effort = nonEmptyString(state.effort);
+  if (effort !== null) out.PARLEY_EFFORT = effort;
+  return out;
+}
+
+/** Apply provenanceEnvVars onto an env object (default process.env). */
+export function applyProvenanceEnv(
+  state: Pick<
+    SessionState,
+    "harness_session_id" | "harness" | "model" | "effort"
+  >,
+  env: NodeJS.ProcessEnv = process.env,
+): void {
+  const vars = provenanceEnvVars(state);
+  env.PARLEY_SESSION_ID = vars.PARLEY_SESSION_ID;
+  env.PARLEY_HARNESS = vars.PARLEY_HARNESS;
+  if (vars.PARLEY_MODEL !== undefined) {
+    env.PARLEY_MODEL = vars.PARLEY_MODEL;
+  } else {
+    delete env.PARLEY_MODEL;
+  }
+  if (vars.PARLEY_EFFORT !== undefined) {
+    env.PARLEY_EFFORT = vars.PARLEY_EFFORT;
+  } else {
+    delete env.PARLEY_EFFORT;
+  }
 }
