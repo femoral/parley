@@ -211,6 +211,14 @@ describe("Inspector's four tabs render per the manifest's inspector treatment (#
     ).toBeTruthy();
   });
 
+  it("offers line breaks after worktree path separators without splitting tokens", () => {
+    render(<Inspector task={task()} />);
+
+    const worktreeValue = screen.getByText("Worktree").nextElementSibling;
+    expect(worktreeValue?.textContent).toBe("/parley/worktrees/t1");
+    expect(worktreeValue?.querySelectorAll("wbr")).toHaveLength(3);
+  });
+
   it("omits Read full orders when no brief goal is filed", () => {
     render(
       <Inspector

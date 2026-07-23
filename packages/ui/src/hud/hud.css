@@ -901,7 +901,8 @@ button.pc-roster__meta--copy:focus-visible {
   font-family: var(--font-mono);
   font-size: var(--text-mono);
   color: var(--ink-soft);
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
+  word-break: normal;
 }
 .pc-brief__value--mono-green {
   color: var(--report-green);

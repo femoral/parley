@@ -366,6 +366,22 @@
     max-height: 40vh;
     min-height: 0;
   }
+  /* The stacked roster is deliberately capped. Feather its scrollport edge so
+     a partially visible final row reads as more content, not hard truncation. */
+  .pc-region--roster .pc-roster__scroll {
+    -webkit-mask-image: linear-gradient(
+      to bottom,
+      #000 0,
+      #000 calc(100% - 2.75rem),
+      transparent 100%
+    );
+    mask-image: linear-gradient(
+      to bottom,
+      #000 0,
+      #000 calc(100% - 2.75rem),
+      transparent 100%
+    );
+  }
   .pc-region--center {
     order: 1;
     flex: 0 0 auto;

@@ -1,4 +1,10 @@
-import { useCallback, useId, type ToggleEvent } from "react";
+import {
+  Fragment,
+  useCallback,
+  useId,
+  type ReactNode,
+  type ToggleEvent,
+} from "react";
 import { Mark } from "../../primitives/index.js";
 import { MARK_SCROLL } from "../../tokens/chrome-glyphs.js";
 import { AttemptLineage } from "../AttemptLineage.js";
@@ -26,6 +32,22 @@ export function fixScaffold(taskId: string): string {
 
 function hasBriefGoal(goal: string | null | undefined): boolean {
   return typeof goal === "string" && goal.trim().length > 0;
+}
+
+/** Preserve path tokens while giving the browser natural breaks after separators. */
+function breakablePath(path: string | null | undefined): ReactNode {
+  if (!path) return "—";
+
+  return path.split("/").map((segment, index, segments) => (
+    <Fragment key={`${index}-${segment}`}>
+      {segment}
+      {index < segments.length - 1 && (
+        <>
+          /<wbr />
+        </>
+      )}
+    </Fragment>
+  ));
 }
 
 /**
@@ -96,7 +118,9 @@ export function BriefTab({
         <span className="pc-brief__label">Branch</span>
         <span className="pc-brief__value pc-brief__value--mono-green">{brief.branch ?? "—"}</span>
         <span className="pc-brief__label">Worktree</span>
-        <span className="pc-brief__value pc-brief__value--mono-green">{brief.worktree ?? "—"}</span>
+        <span className="pc-brief__value pc-brief__value--mono-green">
+          {breakablePath(brief.worktree)}
+        </span>
         <span className="pc-brief__label">Model</span>
         <span className="pc-brief__value">
           {brief.model ?? "—"}
