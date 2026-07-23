@@ -3,6 +3,16 @@
  * The CLI entry is `parley-runner` (`bin/parley-runner.mjs` → `main.ts`).
  */
 export { loadRunnerConfig, resolveRepoPath, type RunnerConfig } from "./config.js";
-export { RunnerClient } from "./client.js";
-export { RunnerLoop, type RunnerLoopOptions } from "./loop.js";
+export {
+  RunnerLoop,
+  type RunnerHost,
+  type RunnerLoopOptions,
+} from "./loop.js";
 export { startHubProxy, type HubProxy } from "./hub-proxy.js";
+/** Lease wire types + HTTP transport live in core (#209). */
+export {
+  createLeaseHttpTransport,
+  TASK_HEADER,
+  type LeaseTransport,
+  type RunnerLeaseSpec,
+} from "@useparley/core";

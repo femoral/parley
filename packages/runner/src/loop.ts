@@ -3,23 +3,37 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import readline from "node:readline";
-import type { JsonSchema } from "@useparley/core";
+import {
+  createLeaseHttpTransport,
+  homePathsFromEnv,
+  TASK_HEADER,
+  type ChildChannel,
+  type HubInfo,
+  type JsonSchema,
+  type LeaseTransport,
+  type RunnerLeaseSpec,
+  type SpawnPlan,
+  type TaskSpec,
+  type VendorAdapter,
+} from "@useparley/core";
 import { createBuiltinAdapters } from "@useparley/daemon/adapters/index.js";
-import type { RunnerLeaseSpec } from "@useparley/daemon/engine.js";
-import { TASK_HEADER } from "@useparley/daemon/engine.js";
 import {
   materializeChildHub,
+  materializeContext,
 } from "@useparley/daemon/context.js";
+import { DEFAULT_REPORT_SCHEMA } from "@useparley/daemon/report.js";
+import { buildProtocolPreamble } from "@useparley/daemon/preamble.js";
+import {
+  assembleChildPrompt,
+  composeOperatorInstructions,
+} from "@useparley/daemon/prompt-layers.js";
 import {
   createWorktree,
   excludeMaterializedFiles,
   removeWorktree,
 } from "@useparley/daemon/worktree.js";
-import type { HubInfo, SpawnPlan, TaskSpec, VendorAdapter } from "@useparley/core";
-import { RunnerClient } from "./client.js";
 import { type RunnerConfig, resolveRepoPath } from "./config.js";
 import { startHubProxy, type HubProxy } from "./hub-proxy.js";
-import { fullPrompt, materializeTaskContext } from "./protocol.js";
 
 /** Default heartbeat interval — well under the daemon's 90s window. */
 const HEARTBEAT_INTERVAL_MS = 20_000;
@@ -27,12 +41,42 @@ const HEARTBEAT_INTERVAL_MS = 20_000;
 /** How long a stopped child gets to exit on SIGTERM before SIGKILL. */
 const CHILD_STOP_GRACE_MS = 2_000;
 
+/**
+ * Host-side seams for unit tests. Production uses real worktree/git/proxy
+ * implementations; inject fakes to exercise fail branches without a daemon.
+ */
+export interface RunnerHost {
+  createWorktree: typeof createWorktree;
+  removeWorktree: typeof removeWorktree;
+  pushBranch: (repoRoot: string, worktreePath: string, branch: string) => void;
+  startHubProxy: typeof startHubProxy;
+  materializeContext: typeof materializeContext;
+  materializeChildHub: typeof materializeChildHub;
+  /**
+   * Optional override of spawn+stream. When set, the real child process is
+   * not launched (tests inject a fixed exit code / event stream).
+   */
+  spawnAndStream?: (
+    taskId: string,
+    plan: SpawnPlan,
+  ) => Promise<number | null>;
+}
+
 export interface RunnerLoopOptions {
   config: RunnerConfig;
   /** Process env for adapters (e.g. PARLEY_FAKE_VENDOR_BIN in tests). */
   env?: NodeJS.ProcessEnv;
   /** Optional log sink (default stderr). */
   log?: (line: string) => void;
+  /**
+   * Lease wire transport. Defaults to HTTP against `config.daemonUrl` with
+   * `config.token` (production). Tests inject a recording fake.
+   */
+  transport?: LeaseTransport;
+  /** Partial host overrides for unit tests. */
+  host?: Partial<RunnerHost>;
+  /** Override the adapter registry (tests). */
+  adapters?: Map<string, VendorAdapter>;
 }
 
 /**
@@ -40,16 +84,31 @@ export interface RunnerLoopOptions {
  * SIGINT/SIGTERM stop leasing and fail or finish the in-flight task.
  */
 export class RunnerLoop {
-  private readonly client: RunnerClient;
+  private readonly transport: LeaseTransport;
   private readonly adapters: Map<string, VendorAdapter>;
+  private readonly host: RunnerHost;
   private readonly log: (line: string) => void;
   private stopping = false;
   private inFlight: { taskId: string; child: ChildProcess | null; proxy: HubProxy | null } | null =
     null;
 
   constructor(private readonly options: RunnerLoopOptions) {
-    this.client = new RunnerClient(options.config.daemonUrl, options.config.token);
-    this.adapters = createBuiltinAdapters(options.env ?? process.env);
+    this.transport =
+      options.transport ??
+      createLeaseHttpTransport({
+        daemonUrl: options.config.daemonUrl,
+        token: options.config.token,
+      });
+    this.adapters = options.adapters ?? createBuiltinAdapters(options.env ?? process.env);
+    this.host = {
+      createWorktree,
+      removeWorktree,
+      pushBranch,
+      startHubProxy,
+      materializeContext,
+      materializeChildHub,
+      ...options.host,
+    };
     this.log =
       options.log ?? ((line: string) => process.stderr.write(`parley-runner: ${line}\n`));
   }
@@ -67,7 +126,7 @@ export class RunnerLoop {
     while (!this.stopping) {
       let lease: RunnerLeaseSpec | null;
       try {
-        lease = await this.client.lease(this.options.config.name);
+        lease = await this.transport.lease(this.options.config.name);
       } catch (err) {
         if (this.stopping) break;
         this.log(`lease error: ${err instanceof Error ? err.message : String(err)}`);
@@ -78,7 +137,7 @@ export class RunnerLoop {
       if (this.stopping) {
         // Claimed but shutting down — fail so the task is not stuck running.
         try {
-          await this.client.fail(lease.task_id, "runner shutting down before execute");
+          await this.transport.fail(lease.task_id, "runner shutting down before execute");
         } catch {
           /* best-effort */
         }
@@ -95,7 +154,7 @@ export class RunnerLoop {
     this.inFlight = { taskId, child: null, proxy: null };
 
     const heartbeat = setInterval(() => {
-      void this.client.heartbeat(taskId).catch((err: unknown) => {
+      void this.transport.heartbeat(taskId).catch((err: unknown) => {
         this.log(
           `heartbeat error for ${taskId}: ${err instanceof Error ? err.message : String(err)}`,
         );
@@ -110,21 +169,21 @@ export class RunnerLoop {
     try {
       repoLocal = resolveRepoPath(this.options.config.repos, lease.repo);
       if (repoLocal === null) {
-        await this.client.fail(
+        await this.transport.fail(
           taskId,
           `no local repo mapping for ${lease.repo} — configure runner.repos`,
         );
         return;
       }
       if (!fs.existsSync(repoLocal)) {
-        await this.client.fail(taskId, `mapped repo path does not exist: ${repoLocal}`);
+        await this.transport.fail(taskId, `mapped repo path does not exist: ${repoLocal}`);
         return;
       }
 
       const adapter = this.adapters.get(lease.vendor);
       if (!adapter) {
         const known = [...this.adapters.keys()].join(", ");
-        await this.client.fail(
+        await this.transport.fail(
           taskId,
           `unknown vendor on runner: ${lease.vendor} (known: ${known})`,
         );
@@ -134,7 +193,7 @@ export class RunnerLoop {
       const baseRef = lease.base_sha ?? lease.base_ref ?? "HEAD";
       let info;
       try {
-        info = createWorktree({
+        info = this.host.createWorktree({
           repoRoot: repoLocal,
           worktreesDir: this.options.config.worktreesDir,
           taskId,
@@ -142,7 +201,7 @@ export class RunnerLoop {
           baseRef,
         });
       } catch (err) {
-        await this.client.fail(
+        await this.transport.fail(
           taskId,
           `failed to create worktree: ${err instanceof Error ? err.message : String(err)}`,
         );
@@ -151,16 +210,16 @@ export class RunnerLoop {
       worktreePath = info.path;
       branch = info.branch;
 
-      materializeTaskContext(worktreePath, lease.prompt, lease.contexts);
+      this.host.materializeContext(worktreePath, lease.prompt, lease.contexts);
 
-      const proxy = await startHubProxy({
+      const proxy = await this.host.startHubProxy({
         daemonUrl: this.options.config.daemonUrl,
         token: this.options.config.token,
         taskId,
       });
       this.inFlight.proxy = proxy;
 
-      materializeChildHub(worktreePath, proxy.url, taskId);
+      this.host.materializeChildHub(worktreePath, proxy.url, taskId);
 
       const prompt = fullPrompt(
         worktreePath,
@@ -214,18 +273,21 @@ export class RunnerLoop {
         fs.writeFileSync(target, file.contents);
       }
 
-      const exitCode = await this.spawnAndStream(taskId, adapter, plan);
+      const exitCode =
+        this.host.spawnAndStream !== undefined
+          ? await this.host.spawnAndStream(taskId, plan)
+          : await this.spawnAndStream(taskId, adapter, plan);
       // Push the task branch so the orchestrator can fetch it. Report submission
       // already flowed through /child/report (completes via fallback or branch).
       if (branch !== null && worktreePath !== null && repoLocal !== null) {
         try {
-          pushBranch(repoLocal, worktreePath, branch);
-          await this.client.branch(taskId, branch);
+          this.host.pushBranch(repoLocal, worktreePath, branch);
+          await this.transport.branch(taskId, branch);
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
           this.log(`branch push/record failed for ${taskId}: ${msg}`);
           try {
-            await this.client.fail(taskId, `branch handoff failed: ${msg}`);
+            await this.transport.fail(taskId, `branch handoff failed: ${msg}`);
           } catch {
             /* task may already be terminal */
           }
@@ -234,7 +296,7 @@ export class RunnerLoop {
       // Safety net: if the child exited without a report, fail the task. When a
       // report was already accepted, fail promotes to completed (#72).
       try {
-        await this.client.fail(
+        await this.transport.fail(
           taskId,
           `vendor child exited (code ${exitCode ?? "?"}) without submitting a report`,
         );
@@ -245,7 +307,7 @@ export class RunnerLoop {
       const msg = err instanceof Error ? err.message : String(err);
       this.log(`execute error for ${taskId}: ${msg}`);
       try {
-        await this.client.fail(taskId, msg);
+        await this.transport.fail(taskId, msg);
       } catch {
         /* best-effort */
       }
@@ -261,7 +323,7 @@ export class RunnerLoop {
       // Best-effort local cleanup; remote review is on the pushed branch.
       if (worktreePath !== null && repoLocal !== null) {
         try {
-          removeWorktree(repoLocal, worktreePath);
+          this.host.removeWorktree(repoLocal, worktreePath);
         } catch {
           /* leave for manual cleanup */
         }
@@ -303,7 +365,7 @@ export class RunnerLoop {
     const flush = (): void => {
       if (pendingLines.length === 0) return;
       const batch = pendingLines.splice(0);
-      void this.client.events(taskId, batch).catch((err: unknown) => {
+      void this.transport.events(taskId, batch).catch((err: unknown) => {
         this.log(
           `events error for ${taskId}: ${err instanceof Error ? err.message : String(err)}`,
         );
@@ -369,11 +431,47 @@ export class RunnerLoop {
       });
     }
     try {
-      await this.client.fail(flight.taskId, reason);
+      await this.transport.fail(flight.taskId, reason);
     } catch {
       /* already terminal */
     }
   }
+}
+
+/**
+ * Full child prompt for a remote-runner spawn (#159). Project PROMPT.md layers
+ * are read from the workspace (`cwd`) at spawn; home layers from the runner
+ * host's parley home. Operator section order matches the daemon engine.
+ * (Previously packages/runner/src/protocol.ts — inlined after #209 delete.)
+ */
+function fullPrompt(
+  cwd: string,
+  branch: string | null,
+  answerTimeoutMs: number,
+  reportSchema: JsonSchema,
+  brief: string,
+  childChannel: ChildChannel = "mcp",
+  options: {
+    vendorId?: string | null;
+    profileName?: string | null;
+    homeDir?: string;
+  } = {},
+): string {
+  const preamble = buildProtocolPreamble({
+    cwd,
+    branch,
+    answerTimeoutMs,
+    reportSchema: reportSchema ?? DEFAULT_REPORT_SCHEMA,
+    childChannel: childChannel ?? "mcp",
+  });
+  const homeDir = options.homeDir ?? homePathsFromEnv().home;
+  const operator = composeOperatorInstructions({
+    homeDir,
+    projectDir: cwd,
+    vendorId: options.vendorId ?? null,
+    profileName: options.profileName ?? null,
+  });
+  return assembleChildPrompt(preamble, operator, brief);
 }
 
 function applyLeaseEnv(plan: SpawnPlan, lease: RunnerLeaseSpec): SpawnPlan {

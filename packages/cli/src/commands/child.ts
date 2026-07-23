@@ -1,11 +1,9 @@
 import fs from "node:fs";
 import path from "node:path";
+import { TASK_HEADER } from "@useparley/core";
 import { parseArgs } from "../args.js";
 import { type CliContext, printJson } from "../context.js";
 import { HelpRequested, UsageError } from "../errors.js";
-
-/** Correlation header children send on every child REST request (ADR-0011). */
-const TASK_HEADER = "x-parley-task";
 
 interface ChildHub {
   url: string;

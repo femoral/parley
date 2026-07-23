@@ -11,6 +11,7 @@ export * from "./config.js";
 export * from "./model-allowlist.js";
 export * from "./project-config.js";
 export * from "./contract.js";
+export * from "./lease.js";
 export * from "./home.js";
 export * from "./models.js";
 export * from "./project-lint.js";

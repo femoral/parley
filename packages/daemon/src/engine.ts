@@ -5,6 +5,7 @@ import readline from "node:readline";
 import {
   DEFAULT_NETWORK,
   DEFAULT_RETENTION_DAYS,
+  DEFAULT_RUNNER_HEARTBEAT_TIMEOUT_MS,
   DEFAULT_SANDBOX,
   FALLBACK_TASK_TYPE,
   formatValidDifficulties,
@@ -25,12 +26,17 @@ import {
   retentionDays,
   scoreRubric,
   expandLaunchTemplate,
+  TASK_HEADER,
   validateAnswers,
   type ChildChannel,
   type HomePaths,
   type ParleyConfig,
   type ProfileConfig,
+  type RunnerLeaseSpec,
 } from "@useparley/core";
+
+/** Compat re-exports for deep imports (`@useparley/daemon/engine.js`) during #209 migration. */
+export { DEFAULT_RUNNER_HEARTBEAT_TIMEOUT_MS, TASK_HEADER, type RunnerLeaseSpec };
 import type {
   HubInfo,
   SandboxMode,
@@ -158,14 +164,8 @@ import {
 /** Re-export transition type for callers that imported it from the engine. */
 export type { Transition } from "./transition.js";
 
-/** Correlation header children send on every MCP request (ADR-0003). */
-export const TASK_HEADER = "x-parley-task";
-
 /** Default `--answer-timeout`: 30 minutes (spec §2). */
 export const DEFAULT_ANSWER_TIMEOUT_MS = 30 * 60 * 1000;
-
-/** Default runner heartbeat window: 90 seconds (#111 / ADR-0012). */
-export const DEFAULT_RUNNER_HEARTBEAT_TIMEOUT_MS = 90_000;
 
 /**
  * How long a leased remote task may go without a runner heartbeat before the
@@ -479,38 +479,6 @@ export interface SessionBindInput {
   workspaceRoot: string | null;
   /** Repo (or cwd) used to read `eval.enabled`. */
   evalProjectRoot: string | null;
-}
-
-/**
- * Full task spec returned by `POST /runner/lease` (#111 / ADR-0012). Resolved
- * daemon-side (profile/vendor args+env) so the runner mirrors local spawn.
- */
-export interface RunnerLeaseSpec {
-  task_id: string;
-  name: string | null;
-  prompt: string;
-  vendor: string;
-  model: string | null;
-  effort: string | null;
-  profile: string | null;
-  sandbox: SandboxMode;
-  network: boolean;
-  answer_timeout_ms: number;
-  report_schema: JsonSchema;
-  /** Caller's base ref, when set; null means HEAD at create time. */
-  base_ref: string | null;
-  /** Resolved base commit at create time; null when the daemon could not resolve it. */
-  base_sha: string | null;
-  /**
-   * Repo path as recorded at create time — the runner maps this identifier to
-   * a local clone via its `repos` config.
-   */
-  repo: string;
-  contexts: ContextFile[];
-  /** `vendors.<id>.args` then `profiles.<name>.args`. */
-  extra_args: string[];
-  /** `vendors.<id>.env` then `profiles.<name>.env` (profile wins on key clash). */
-  env: Record<string, string>;
 }
 
 /** Sidecar written for runner-affine tasks (contexts survive until lease). */

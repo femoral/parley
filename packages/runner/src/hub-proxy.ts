@@ -1,5 +1,5 @@
 import http from "node:http";
-import { TASK_HEADER } from "@useparley/daemon/engine.js";
+import { TASK_HEADER } from "@useparley/core";
 
 /**
  * Local hub proxy: children on the runner host talk to `127.0.0.1:<port>`;
