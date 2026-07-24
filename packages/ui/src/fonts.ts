@@ -3,6 +3,11 @@
  * the bundle's `assets/`, so the cockpit works fully offline — nothing is ever
  * fetched from a CDN at runtime. Only the weights/styles the manifest actually
  * uses are loaded.
+ *
+ * Critical faces for first paint (Cinzel 700 panel titles, Outfit 500 prose)
+ * are also preloaded from `vite.config.ts` (`preloadCriticalFonts`) so the
+ * browser starts fetching them before this CSS is parsed. Preload targets the
+ * latin (not latin-ext) `.woff2` only — the same files these imports emit.
  */
 // Cinzel — engraved caps (titles, headers, tabs, buttons): 500 / 700 / 900.
 import "@fontsource/cinzel/500.css";

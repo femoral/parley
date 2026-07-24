@@ -14,6 +14,23 @@ function fakeDaemon(snapshot: TasksResponse): typeof fetch {
   }) as typeof fetch;
 }
 
+/**
+ * Flush the coalesced `emit()` rAF/setTimeout tick so assertions see the
+ * projected roster after a burst of SSE mutations (map updates are immediate;
+ * React state is trailing-frame).
+ */
+async function flushEmitTick(): Promise<void> {
+  await act(async () => {
+    await new Promise<void>((resolve) => {
+      if (typeof requestAnimationFrame === "function") {
+        requestAnimationFrame(() => resolve());
+      } else {
+        setTimeout(resolve, 0);
+      }
+    });
+  });
+}
+
 const originalEventSource = (globalThis as { EventSource?: unknown }).EventSource;
 
 afterEach(() => {
@@ -77,6 +94,7 @@ describe("useSnapshot regroups live on SSE transitions (#66 / #208)", () => {
         }),
       );
     });
+    await flushEmitTick();
     await waitFor(() => expect(result.current.groups.map((g) => g.state)).toEqual(["awaiting_answer"]));
     expect(result.current.groups[0]!.tasks[0]!.name).toBe("chart-the-bay");
     expect(result.current.sessions).toEqual([
@@ -107,6 +125,7 @@ describe("useSnapshot regroups live on SSE transitions (#66 / #208)", () => {
         }),
       );
     });
+    await flushEmitTick();
     await waitFor(() => expect(result.current.groups.map((g) => g.state)).toEqual(["completed"]));
     // Session chip stays (history keeps its grouping); durable count drops.
     expect(result.current.sessions).toEqual([
@@ -149,6 +168,7 @@ describe("useSnapshot regroups live on SSE transitions (#66 / #208)", () => {
         }),
       );
     });
+    await flushEmitTick();
     await waitFor(() => expect(result.current.totalTasks).toBe(1));
     await waitFor(() =>
       expect(result.current.sessions).toEqual([
@@ -253,6 +273,7 @@ describe("useSnapshot connection / stream-lost signal", () => {
         }),
       );
     });
+    await flushEmitTick();
     await waitFor(() => expect(result.current.connected).toBe(true));
     expect(result.current.streamLostSince).toBeNull();
   });

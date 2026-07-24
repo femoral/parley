@@ -165,15 +165,53 @@ export function useSnapshot(client: ParleyClient): SnapshotView {
     let cancelled = false;
     let stream: { close(): void } | null = null;
     let retry: ReturnType<typeof setTimeout> | undefined;
+    // Coalesced emission: mutations update `taskMap` immediately; React state is
+    // flushed once per frame so a burst of SSE transitions costs one projection
+    // pass, not one per event. rAF preferred; setTimeout(0) when no browser rAF.
+    let emitRafId: number | null = null;
+    let emitTimeoutId: ReturnType<typeof setTimeout> | null = null;
     const taskMap = new Map<string, RosterTaskInput>();
-    // A `Map`'s `.values()` iterator is single-use — materialize it once so
-    // both projections (each a full pass) see every task. Eviction runs here —
-    // the one funnel every mutation passes through — so the map can never
-    // grow past the cap between emits.
-    const emit = (): void => {
+
+    /** Publish the current map to React. Never runs after unmount. */
+    const flush = (): void => {
       if (cancelled) return;
-      evictTerminalOverflow(taskMap);
       setTasks([...taskMap.values()]);
+    };
+
+    const cancelScheduledFlush = (): void => {
+      if (emitRafId !== null) {
+        cancelAnimationFrame(emitRafId);
+        emitRafId = null;
+      }
+      if (emitTimeoutId !== null) {
+        clearTimeout(emitTimeoutId);
+        emitTimeoutId = null;
+      }
+    };
+
+    const scheduleFlush = (): void => {
+      if (cancelled || emitRafId !== null || emitTimeoutId !== null) return;
+      if (typeof requestAnimationFrame === "function") {
+        emitRafId = requestAnimationFrame(() => {
+          emitRafId = null;
+          flush();
+        });
+      } else {
+        emitTimeoutId = setTimeout(() => {
+          emitTimeoutId = null;
+          flush();
+        }, 0);
+      }
+    };
+
+    /**
+     * Funnel every mutation passes through: evict so the map never grows past
+     * the terminal cap between flushes, then schedule a trailing React update.
+     * Events are never dropped or reordered — only the emission is coalesced.
+     */
+    const emit = (): void => {
+      evictTerminalOverflow(taskMap);
+      scheduleFlush();
     };
 
     /** Mark the stream live (bootstrap success or post-error event after reconnect). */
@@ -229,6 +267,7 @@ export function useSnapshot(client: ParleyClient): SnapshotView {
     void connect();
     return () => {
       cancelled = true;
+      cancelScheduledFlush();
       if (retry) clearTimeout(retry);
       stream?.close();
     };
