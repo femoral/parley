@@ -18,8 +18,13 @@
    * Room sea geometry — unitless fractions of the cockpit box. Shared by
    * --sea-gradient (DOM) and paintBackdrop (canvas) so the sailing viewport
    * continues the room surface with no seam at .pc-scene (#189).
-   *   cx/cy: gradient centre; rx/ry: ending-shape half-axes (CSS size = 2×).
+   *   cx/cy: gradient centre; rx/ry: the ellipse's half-axes (radii).
    *   colour stops: shallow 0% → mid 30% → deep 60% → abyss 100%.
+   *
+   * CSS `radial-gradient(<rx> <ry> at …)` takes *radii*, the same quantity
+   * fillRoomRadial() uses — so both sides multiply by 100, not 200. The old
+   * 200× here drew the DOM sea at double scale, leaving the (correct) canvas
+   * a visibly darker rectangle exactly at the .pc-scene edge.
    */
   --sea-grad-cx: 0.5;
   --sea-grad-cy: -0.06;
@@ -38,7 +43,7 @@
   /* Transparent through this radius fraction; then ramps to --sea-vignette. */
   --sea-vignette-inner: 0.38;
   --sea-gradient: radial-gradient(
-    calc(var(--sea-grad-rx) * 200 * 1%) calc(var(--sea-grad-ry) * 200 * 1%) at
+    calc(var(--sea-grad-rx) * 100 * 1%) calc(var(--sea-grad-ry) * 100 * 1%) at
       calc(var(--sea-grad-cx) * 100 * 1%) calc(var(--sea-grad-cy) * 100 * 1%),
     var(--sea-shallow) 0%,
     var(--sea-mid) 30%,

@@ -84,7 +84,12 @@ export function Cockpit() {
       <div className="pc-atmos pc-atmos--vignette" />
 
       <div className="pc-cockpit__layout">
-        <main id="pc-main" className="pc-cockpit__main">
+        {/* Below 1080px this column is the scrollport (the triptych stacks), so
+            it carries an accessible name like every other scrollport. tabIndex
+            -1 also makes it a reliable skip-link target — same pattern as
+            #pc-status-stack — without adding a desktop tab stop for a region
+            that does not scroll there. */}
+        <main id="pc-main" className="pc-cockpit__main" aria-label="Cockpit board" tabIndex={-1}>
           <section className="pc-region--roster" aria-label="Fleet roster">
             <RosterPanel
               groups={snapshot.groups}

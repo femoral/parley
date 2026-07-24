@@ -15,10 +15,6 @@
      flanks/title from painting outside the cartouche frame. */
   min-width: 0;
   box-sizing: border-box;
-  /* Shared with .pc-view-nav--cartouche: tab-count knob for subtitle clearance.
-     Bump --pc-view-nav-tabs when a third view tab is engraved on the plate. */
-  --pc-view-nav-tabs: 2;
-  --pc-view-nav-reserve: calc(var(--pc-view-nav-tabs) * 5.5rem + 2.75rem);
 }
 .pc-cartouche__title-row {
   display: flex;
@@ -55,9 +51,8 @@
   font-size: var(--text-chrome);
   letter-spacing: var(--track-subtitle);
   color: var(--ink-tan);
-  /* Clear the absolute cartouche nav via a shared reserve (set with the nav
-     chrome below). Narrow title-stacks override to 100% in cockpit.css CQ. */
-  max-width: calc(100% - var(--pc-view-nav-reserve, 13rem));
+  /* The view nav lives in the footer strip, not engraved on this plate, so the
+     subtitle needs no horizontal reserve — it uses the cartouche's full width. */
   margin-inline: auto;
   box-sizing: border-box;
 }
@@ -220,12 +215,16 @@
   background: var(--brass-tint-12);
   color: var(--brass);
 }
+/* Quiet tier via ink token, not opacity: inherit @0.8 composited to ≈3.59:1 on
+   plate wood, under AA for 11px text. --ink-label is the quietest passing tier. */
 .pc-roster__session-count {
   font-family: var(--font-body);
   font-size: var(--text-meta);
-  color: inherit;
-  opacity: 0.8;
+  color: var(--ink-label); /* #967c54 ≈4.6:1 on plate wood */
   white-space: nowrap;
+}
+.pc-roster__session--active .pc-roster__session-count {
+  color: var(--brass-dim);
 }
 /* Session search well (#88) — sits in the chip row; popover is a small parchment
    chart of older session ids, same brass frame language as the chips.
@@ -344,11 +343,12 @@
   font-family: var(--font-body);
   font-weight: 500;
 }
+/* --ink-label is already the quietest AA tier (≈4.6:1); the old 0.85 opacity
+   composited it to ≈3.65:1, under AA at 11px. Quiet comes from the token. */
 .pc-roster__search-hit-meta {
   flex: 0 0 auto;
   font-size: var(--text-meta);
   color: var(--ink-label);
-  opacity: 0.85;
 }
 .pc-roster__search-hit--task .pc-roster__search-hit-meta {
   flex: 1 1 0;
@@ -375,8 +375,7 @@
   flex: 0 0 auto;
   font-family: var(--font-mono);
   font-size: var(--text-meta);
-  color: var(--ink-label);
-  opacity: 0.9;
+  color: var(--ink-label); /* was 0.9 opacity → ≈3.97:1, under AA */
 }
 @media (prefers-reduced-motion: reduce) {
   .pc-roster__session,
@@ -614,7 +613,14 @@ button.pc-roster__meta--copy:focus-visible {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding: 4px 12px 12px;
+  /* Bottom breathing room rides on the last card, not the list: a sticky
+     element cannot be positioned past its containing block's content edge, so
+     list padding-bottom would strand the scroll cue 12px short of the fold and
+     leave a sliced card painting below the fade. */
+  padding: 4px 12px 0;
+}
+.pc-inbox__list > .pc-inbox-card:last-of-type {
+  margin-bottom: 12px;
 }
 .pc-inbox__empty {
   display: flex;
@@ -728,7 +734,7 @@ button.pc-roster__meta--copy:focus-visible {
 }
 .pc-inbox-card__ref-sep {
   flex: 0 0 auto;
-  opacity: 0.7;
+  color: var(--ink-label);
 }
 /* Off-screen scaffold used when clipboard.writeText is unavailable. */
 .pc-inbox-card__scaffold {
@@ -816,12 +822,18 @@ button.pc-roster__meta--copy:focus-visible {
   align-items: center;
   gap: 10px;
   padding: 12px 15px 8px;
+  /* Emblem + titles + score badge + state pill do not fit one row in a 344px
+     rail; the aside drops to its own line rather than starving the name. */
+  flex-wrap: wrap;
 }
 .pc-inspector__head-titles {
   display: flex;
   flex-direction: column;
   gap: 1px;
-  min-width: 0;
+  /* Floor the title column so flex-wrap fires instead of crushing the task
+     name to an initial ("r…") while the opaque id and copy chip keep full
+     width. The name is the identifying thing in this row. */
+  min-width: 11rem;
   flex: 1;
 }
 /* Panel heading (rendered <h2>) — a peer of the other plates' PlateHeader
@@ -862,8 +874,11 @@ button.pc-roster__meta--copy:focus-visible {
   overflow: hidden;
   text-overflow: unset;
 }
+/* Take only the width the name needs (still shrinking to an ellipsis when the
+   row is tight) so "· t221 copy" stays beside it instead of being pushed to the
+   far edge with the separator stranded mid-row. */
 .pc-inspector__name-sub-text {
-  flex: 1 1 auto;
+  flex: 0 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2591,69 +2606,6 @@ button.pc-roster__meta--copy:focus-visible {
   align-items: center;
 }
 
-/* View nav — Cove ↔ Soundings (engraved tab chrome, DESIGN.md §Navigation).
-   Outer frame comes from Plate (standard, padded=false); no standalone pill. */
-.pc-view-nav {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  padding: 3px;
-  height: 100%;
-  box-sizing: border-box;
-}
-.pc-view-nav__tab {
-  appearance: none;
-  border: none;
-  background: transparent;
-  color: var(--ink-faint);
-  font-family: var(--font-display);
-  font-weight: 700;
-  font-size: var(--text-chrome);
-  letter-spacing: 1.5px;
-  text-transform: uppercase;
-  padding: 7px 12px;
-  border-radius: calc(var(--radius-control) - var(--radius-hairline));
-  cursor: pointer;
-  line-height: 1.15;
-}
-.pc-view-nav__tab:hover {
-  color: var(--brass-soft);
-  background: var(--brass-tint-06);
-}
-.pc-view-nav__tab--active {
-  color: var(--brass);
-  background: var(--brass-tint-12);
-  box-shadow: inset 0 -2px 0 var(--brass);
-}
-.pc-view-nav__tab:focus-visible {
-  outline: 2px solid var(--brass-bright);
-  outline-offset: 2px;
-}
-/* Engraved-on-cartouche placement: the nav sits at the title plate's
-   bottom-right edge, tabs one step smaller so the nameplate stays loudest.
-   On narrow title stacks (see .pc-center__title-stack container query in
-   cockpit.css) this reflows into a plate-sliver under the cartouche so it
-   never underlaps the subtitle or floats on bare sea — wide boards keep
-   the absolute engraving. */
-.pc-view-nav--cartouche {
-  position: absolute;
-  bottom: 7px;
-  right: 44px;
-  height: auto;
-  padding: 0;
-  gap: 2px;
-  /* Keep in sync with .pc-cartouche --pc-view-nav-tabs / --pc-view-nav-reserve. */
-  --pc-view-nav-tabs: 2;
-  --pc-view-nav-reserve: calc(var(--pc-view-nav-tabs) * 5.5rem + 2.75rem);
-}
-.pc-view-nav--cartouche .pc-view-nav__tab {
-  font-size: var(--text-chrome-sm);
-  padding: 4px 10px;
-}
-.pc-view-nav--cartouche .pc-view-nav__tab--active {
-  background: var(--brass-tint-08);
-}
-
 /* ── Inspector polish ────────────────────────────────────────────────────
  * Failed-task `parley fix` copy scaffold; accessible eval-feedback more/less.
  */
@@ -2797,8 +2749,10 @@ button.pc-roster__meta--copy:focus-visible {
   color: var(--brass);
   background: var(--brass-tint-12);
 }
+/* aria-hidden caret glyph — decorative, so opacity here does not quiet any
+   text the contrast tokens guarantee (same precedent as .pc-emblem). */
 .pc-eval-filters__disclosure-label {
-  font-size: 0.65rem;
+  font-size: var(--text-label);
   line-height: 1;
   opacity: 0.85;
 }
@@ -3018,8 +2972,7 @@ button.pc-roster__meta--copy:focus-visible {
 .pc-health__compact-sep {
   font-family: var(--font-mono);
   font-size: var(--text-meta);
-  color: var(--ink-label);
-  opacity: 0.7;
+  color: var(--ink-label); /* was 0.7 opacity → ≈2.89:1, well under AA */
   user-select: none;
 }
 
@@ -3214,6 +3167,9 @@ button.pc-roster__meta--copy:focus-visible {
   display: flex;
   align-items: flex-end;
   justify-content: center;
+  /* The list is a flex column, so without this the strip shrinks to its label
+     (~19px) and the fade is far too short to cover a sliced card. */
+  flex: 0 0 2.75rem;
   height: 2.75rem;
   margin-top: -2.75rem;
   padding-bottom: 6px;
@@ -3221,7 +3177,8 @@ button.pc-roster__meta--copy:focus-visible {
   background: linear-gradient(
     180deg,
     transparent 0%,
-    color-mix(in srgb, var(--plate-bottom) 55%, transparent) 45%,
+    color-mix(in srgb, var(--plate-bottom) 65%, transparent) 40%,
+    var(--plate-bottom) 78%,
     var(--plate-bottom) 100%
   );
   opacity: 1;
@@ -3476,13 +3433,11 @@ button.pc-roster__meta--copy:focus-visible {
   font-family: var(--font-mono);
   font-size: var(--text-meta);
   font-weight: 500;
-  color: var(--ink-faint);
-  opacity: 0.9;
+  color: var(--ink-label); /* was --ink-faint @0.9 → ≈4.2:1, under AA */
   flex: 0 0 auto;
 }
 .pc-roster__session--active .pc-roster__session-ref {
-  color: inherit;
-  opacity: 0.75;
+  color: var(--brass-dim);
 }
 .pc-roster__search-group {
   display: flex;
@@ -3609,7 +3564,13 @@ button.pc-roster__meta--copy:focus-visible {
 /* Digest path: scroll the digest groups; pin shortcuts under them. */
 .pc-inspector__digest {
   flex: 1 1 auto;
-  min-height: 0;
+  /* Floor at roughly one tally row + a report line. With min-height 0 the flex
+     shrink landed on arbitrary slivers between the height breakpoints — 37px at
+     1440x900, 0px at 1280x800 — which renders a half-row cut in two rather than
+     either showing the digest or hiding it. Below this the rail scrolls (it is
+     a scrollport already); genuinely short plates still drop the digest via the
+     height media queries below. */
+  min-height: 6.5rem;
   overflow-x: hidden;
   overflow-y: auto;
   display: flex;
@@ -3618,6 +3579,20 @@ button.pc-roster__meta--copy:focus-visible {
   padding-right: 2px;
   /* Prefer hiding the digest body before the keyboard hints on short plates. */
   max-height: 100%;
+  /* Soften the fold so a half-visible report row reads as "more below" rather
+     than truncation — same feather the stacked roster uses at <=1080px. */
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    var(--wash-black) 0,
+    var(--wash-black) calc(100% - 1.5rem),
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    var(--wash-black) 0,
+    var(--wash-black) calc(100% - 1.5rem),
+    transparent 100%
+  );
 }
 .pc-inspector--digest .pc-inspector__rest-keys {
   flex: 0 0 auto;
@@ -3748,19 +3723,14 @@ button.pc-roster__meta--copy:focus-visible {
   color: color-mix(in srgb, var(--state-failed) 70%, var(--ink-label));
 }
 
-/* Short plates: collapse digest before the pinned keyboard hints.
- * Deliberate cascade: 720px softens; 560px drops the digest body entirely. */
+/* Short plates: drop the digest before the pinned keyboard hints.
+ * Below this the plate cannot seat even one tally row plus a report line, and
+ * flexing it to a sliver only cut a row in half. It is removed outright rather
+ * than shrunk to zero height, so it also leaves the a11y tree instead of
+ * lingering as a named "Fleet digest" region with nothing in it. */
 @media (max-height: 720px) {
-  .pc-inspector--digest .pc-inspector__digest {
-    flex: 1 1 0;
-    min-height: 0;
-  }
+  .pc-inspector--digest .pc-inspector__digest,
   .pc-inspector__digest-flavor {
-    display: none;
-  }
-}
-@media (max-height: 560px) {
-  .pc-inspector--digest .pc-inspector__digest {
     display: none;
   }
   .pc-inspector--digest .pc-inspector__rest {

@@ -2,7 +2,13 @@
  * Layer 4 — project `MetricsResponse` into plain Soundings view props (#119 / #165).
  * Keeps `@useparley/core` types out of the hud layer (contract 2).
  */
-import type { MetricsGroup, MetricsGroupBy, MetricsResponse } from "@useparley/core";
+import {
+  TASK_DIFFICULTIES,
+  TASK_SIZES,
+  type MetricsGroup,
+  type MetricsGroupBy,
+  type MetricsResponse,
+} from "@useparley/core";
 import {
   formatDurationMs,
   formatEvalAvg,
@@ -66,17 +72,35 @@ export const HEATMAP_DIMENSIONS: readonly { value: MetricsGroupBy; label: string
   { value: "orch_harness", label: "Orchestrator" },
 ];
 
-function projectEvalBuckets(map: Record<string, { count: number; avg: number | null }>): SoundingsEvalBucket[] {
-  return Object.keys(map)
-    .sort((a, b) => a.localeCompare(b))
-    .map((key) => {
-      const e = map[key]!;
-      return {
-        key,
-        avg: formatEvalAvg(e.avg, e.count),
-        count: e.count,
-      };
-    });
+/**
+ * Order bucket keys along a scale rather than by name. Size and difficulty are
+ * ordinal vocabularies, so alphabetical order (L, M, S, XL, XS) scrambles the
+ * ramp and hides the one thing these rows exist to show — how score moves as
+ * the work gets bigger or harder. Keys outside the canonical scale (older rows,
+ * a future vocabulary) sort alphabetically after it, never dropped.
+ */
+function orderedBucketKeys(keys: string[], scale: readonly string[]): string[] {
+  const rank = new Map(scale.map((k, i) => [k.toLowerCase(), i]));
+  return keys.slice().sort((a, b) => {
+    const ra = rank.get(a.toLowerCase()) ?? Infinity;
+    const rb = rank.get(b.toLowerCase()) ?? Infinity;
+    if (ra !== rb) return ra - rb;
+    return a.localeCompare(b);
+  });
+}
+
+function projectEvalBuckets(
+  map: Record<string, { count: number; avg: number | null }>,
+  scale: readonly string[],
+): SoundingsEvalBucket[] {
+  return orderedBucketKeys(Object.keys(map), scale).map((key) => {
+    const e = map[key]!;
+    return {
+      key,
+      avg: formatEvalAvg(e.avg, e.count),
+      count: e.count,
+    };
+  });
 }
 
 export function projectMetricsGroup(group: MetricsGroup): SoundingsGroupView {
@@ -107,8 +131,8 @@ export function projectMetricsGroup(group: MetricsGroup): SoundingsGroupView {
       avg: formatDurationMs(group.duration_ms.avg),
       p95: formatDurationMs(group.duration_ms.p95),
     },
-    evalsBySize: projectEvalBuckets(group.evals_by_size),
-    evalsByDifficulty: projectEvalBuckets(group.evals_by_difficulty),
+    evalsBySize: projectEvalBuckets(group.evals_by_size, TASK_SIZES),
+    evalsByDifficulty: projectEvalBuckets(group.evals_by_difficulty, TASK_DIFFICULTIES),
   };
 }
 

@@ -137,10 +137,16 @@ export const InboxPanel = memo(function InboxPanel({
           Answer from your orchestrator session — the cove keeps watch.
         </p>
       ) : null}
+      {/* The list is clamped and scrolls, so it carries a tab stop and a name
+          like every other scrollport — otherwise the cards below the fold are
+          only reachable by tabbing through the ones above them. */}
       <div
         ref={listRef}
         className="pc-inbox__list"
         onScroll={onListScroll}
+        role="region"
+        aria-label="Tasks needing an answer"
+        tabIndex={0}
       >
         {count === 0 ? (
           <p className="pc-inbox__empty">

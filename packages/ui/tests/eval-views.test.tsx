@@ -171,7 +171,7 @@ function baseView(overrides: Partial<SoundingsView> = {}): SoundingsView {
 describe("projectDistributionRow / projectComparisonRow (#165)", () => {
   it("shapes score vs baseline positions on a 0–10 axis", () => {
     expect(DIST_ROW.score).toBe("4.5");
-    expect(DIST_ROW.baseline).toBe("5");
+    expect(DIST_ROW.baseline).toBe("5.0");
     expect(DIST_ROW.scorePos).toBeCloseTo(0.45);
     expect(DIST_ROW.baselinePos).toBeCloseTo(0.5);
     expect(DIST_ROW.delta).toBe("−0.5");
@@ -181,8 +181,8 @@ describe("projectDistributionRow / projectComparisonRow (#165)", () => {
   it("shapes comparison stats including recovery split", () => {
     expect(CMP_ROW.avgDelta).toBe("−0.5");
     expect(CMP_ROW.belowBaselineRate).toBe("50%");
-    expect(CMP_ROW.firstAttempt).toBe("4 · n=1");
-    expect(CMP_ROW.fix).toBe("5 · n=1");
+    expect(CMP_ROW.firstAttempt).toBe("4.0 · n=1");
+    expect(CMP_ROW.fix).toBe("5.0 · n=1");
   });
 
   it("marks evalPresence off when groups lack rubric evals", () => {
@@ -287,9 +287,9 @@ describe("EvalDistribution (#165)", () => {
     expect(screen.getByLabelText("Score vs baseline distribution")).toBeTruthy();
     expect(screen.getByText("codex")).toBeTruthy();
     expect(screen.getByText("4.5")).toBeTruthy();
-    expect(screen.getAllByText("5").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("5.0").length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText("Baseline")).toBeTruthy();
-    const track = screen.getByRole("img", { name: /score 4\.5 of 10, baseline 5/i });
+    const track = screen.getByRole("img", { name: /score 4\.5 of 10, baseline 5\.0/i });
     expect(track.querySelector(".pc-eval-dist__baseline-mark")).toBeTruthy();
   });
 
@@ -316,8 +316,8 @@ describe("EvalComparison (#165)", () => {
     expect(screen.getByText("Below baseline")).toBeTruthy();
     expect(screen.getByText("50%")).toBeTruthy();
     expect(screen.getByLabelText("First attempt vs fix recovery")).toBeTruthy();
-    expect(screen.getByText("4 · n=1")).toBeTruthy();
-    expect(screen.getByText("5 · n=1")).toBeTruthy();
+    expect(screen.getByText("4.0 · n=1")).toBeTruthy();
+    expect(screen.getByText("5.0 · n=1")).toBeTruthy();
   });
 
   it("fires onGroupBy when a compare dimension is pressed", () => {

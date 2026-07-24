@@ -255,10 +255,10 @@ describe("projectAttemptLineage / formatAttemptScore (#166)", () => {
       formatAttemptScore(
         attemptEntry({ eval_score: 9, eval_baseline: 5, eval_legacy: false }),
       ),
-    ).toBe("9/5");
+    ).toBe("9.0/5.0");
     expect(
       formatAttemptScore(attemptEntry({ eval_score: 8, eval_baseline: null, eval_legacy: true })),
-    ).toBe("8 · legacy");
+    ).toBe("8.0 · legacy");
     expect(formatAttemptScore(attemptEntry({ eval_score: null }))).toBeNull();
   });
 
@@ -294,7 +294,7 @@ describe("projectAttemptLineage / formatAttemptScore (#166)", () => {
       attempt: 1,
       resumed: false,
       cacheBadge: null,
-      score: "4/5",
+      score: "4.0/5.0",
       current: false,
       stateLabel: "COMPLETED",
     });
@@ -303,7 +303,7 @@ describe("projectAttemptLineage / formatAttemptScore (#166)", () => {
       attempt: 2,
       resumed: true,
       cacheBadge: "cache",
-      score: "9/5",
+      score: "9.0/5.0",
       current: true,
     });
   });
@@ -347,7 +347,7 @@ describe("projectAttemptLineage / formatAttemptScore (#166)", () => {
     expect(view.attempts.map((a) => a.id)).toEqual(["root", "fix1"]);
     expect(view.attempts[1]!.resumed).toBe(true);
     expect(view.attempts[1]!.cacheBadge).toBe("cache");
-    expect(view.attempts[1]!.score).toBe("9/5");
+    expect(view.attempts[1]!.score).toBe("9.0/5.0");
     expect(view.attempts[1]!.current).toBe(true);
   });
 });
