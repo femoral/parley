@@ -398,6 +398,7 @@ export const SoundingsPanel = memo(function SoundingsPanel({
         role="tabpanel"
         id={`soundings-panel-${viewTab}`}
         aria-labelledby={`soundings-tab-${viewTab}`}
+        tabIndex={0}
       >
         {viewTab === "groups" && (
           <>

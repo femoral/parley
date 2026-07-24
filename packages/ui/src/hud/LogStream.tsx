@@ -149,7 +149,9 @@ export function LogStream({
       <div
         className="pc-logstream__body"
         role="log"
+        aria-label="Task log"
         aria-live="off"
+        tabIndex={0}
         ref={bodyRef}
         onScroll={onScroll}
       >

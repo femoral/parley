@@ -2329,10 +2329,10 @@ button.pc-roster__meta--copy:focus-visible {
   box-sizing: border-box;
 }
 .pc-eval-heat__swatch--low {
-  background: color-mix(in srgb, var(--quality-poor) 22%, rgba(0, 0, 0, 0.35));
+  background: color-mix(in srgb, var(--quality-poor) 22%, var(--plate-top));
 }
 .pc-eval-heat__swatch--high {
-  background: color-mix(in srgb, var(--quality-poor) 92%, rgba(0, 0, 0, 0.2));
+  background: color-mix(in srgb, var(--quality-poor) 92%, var(--plate-top));
 }
 .pc-eval-heat__swatch--empty {
   background: rgba(0, 0, 0, 0.28);
@@ -3139,17 +3139,17 @@ button.pc-roster__meta--copy:focus-visible {
   outline: 1px dashed color-mix(in srgb, var(--ink-label) 55%, transparent);
   outline-offset: -2px;
 }
+/* Operational low-n cue — same ink as the rate (inherits cell color), label floor. */
 .pc-eval-heat__cell-n {
   font-family: var(--font-mono);
-  font-size: 0.5625rem;
+  font-size: var(--text-label);
   font-weight: 500;
   line-height: 1;
-  color: var(--ink-label);
-  opacity: 0.9;
+  color: inherit;
   letter-spacing: 0.02em;
 }
 .pc-eval-heat__swatch--low-n {
-  background: color-mix(in srgb, var(--quality-poor) 45%, rgba(0, 0, 0, 0.35));
+  background: color-mix(in srgb, var(--quality-poor) 45%, var(--plate-top));
   outline: 1px dashed color-mix(in srgb, var(--ink-label) 55%, transparent);
   outline-offset: -1px;
   box-sizing: border-box;

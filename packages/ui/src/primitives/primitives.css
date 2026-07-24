@@ -245,11 +245,16 @@
     transform: rotate(360deg);
   }
 }
-/* Disabled / loading — dim the whole control (non-interactive); stay ≥~40%. */
+/* Disabled / loading — dim the whole control; stay ≥~40%.
+ * pointer-events:none only on native :disabled. aria-disabled must stay
+ * focusable and hoverable (title, no-op handler) — that is the point of the
+ * ARIA pattern over the disabled attribute. */
 .pc-btn:disabled,
 .pc-btn[aria-disabled="true"] {
   opacity: 0.45;
   cursor: default;
+}
+.pc-btn:disabled {
   pointer-events: none;
 }
 .pc-btn--primary {

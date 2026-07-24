@@ -290,7 +290,13 @@ export const Inspector = memo(function Inspector({
         />
         <div className="pc-inspector__rest">
           {showDigest && digest ? (
-            <div className="pc-inspector__digest" data-testid="logbook-digest">
+            <div
+              className="pc-inspector__digest"
+              data-testid="logbook-digest"
+              role="region"
+              aria-label="Fleet digest"
+              tabIndex={0}
+            >
               <p className="pc-inspector__digest-flavor">
                 The log rests. The fleet is still out.
               </p>

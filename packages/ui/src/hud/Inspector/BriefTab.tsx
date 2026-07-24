@@ -93,7 +93,14 @@ export function BriefTab({
           <span className="pc-brief__well-label pc-brief__well-label--failed">
             WHY IT FAILED
           </span>
-          <p className="pc-brief__error">{error}</p>
+          <p
+            className="pc-brief__error"
+            role="region"
+            aria-label="Failure reason"
+            tabIndex={0}
+          >
+            {error}
+          </p>
           <div className="pc-brief__fix-footer">
             <span className="pc-brief__fix-hint">
               Re-brief from your orchestrator — the cove stays watch-only.
@@ -170,7 +177,14 @@ export function BriefTab({
                   ✕
                 </button>
               </div>
-              <p className="pc-brief__orders-body">{brief.goal}</p>
+              <p
+                className="pc-brief__orders-body"
+                role="region"
+                aria-label="Full orders"
+                tabIndex={0}
+              >
+                {brief.goal}
+              </p>
             </div>
           </>
         )}

@@ -133,6 +133,7 @@ export const ChartKey = memo(function ChartKey() {
           className="pc-chart-key__pop"
           role="region"
           aria-label="Chart key"
+          tabIndex={0}
           ref={popRef}
           onScroll={onPopScroll}
         >

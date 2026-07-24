@@ -16,23 +16,30 @@ export const HEATMAP_LOW_SAMPLE_THRESHOLD = 3;
 
 /**
  * Intensity at which cell text switches from soft ink to parchment (mid ramp).
- * Soft on the dark floor mix stays legible; parchment carries the mid band.
+ * Soft on the dark plate mix stays ≥4.5:1 through ~0.29; parchment takes over.
  */
-export const HEATMAP_PARCHMENT_INK_AT = 0.45;
+export const HEATMAP_PARCHMENT_INK_AT = 0.3;
 
 /**
  * Intensity at which cell text flips from parchment to dark-on-gold.
- * Above this, the quality-poor mix lightens enough that parchment fails AA.
  *
- * Contrast on pure --quality-poor (#e888a0) — WCAG AA body ≥4.5:1:
- *   --ink-parchment (#f2e3c4)     ≈ 1.96:1  (fails AA)
- *   --ink-dark-on-gold (#2a1a08)  ≈ 6.77:1  (passes AA; ≥4.5:1)
- *
- * At intensity 0.55 the mix is ~63% quality-poor; parchment dips below
- * 4.5:1 while dark-on-gold climbs through the AA floor toward 6.77:1 at
- * full intensity. Flip here so worst cells stay readable.
+ * Contrast is computed against the *composited* cell (quality-poor mixed into
+ * opaque --plate-top), not pure --quality-poor. Mid-rose plate mixes (~57–77%
+ * quality-poor) sit in a luminance band where no warm-ink token clears 4.5:1;
+ * heatmapMixPercent clamps out of that band, and dark-on-gold takes over once
+ * the mix is light enough (≥78% → ≥4.52:1, rising to ≈6.77:1 at full intensity).
  */
-export const HEATMAP_DARK_INK_AT = 0.55;
+export const HEATMAP_DARK_INK_AT = 0.6;
+
+/**
+ * Safe mix-percent bands for quality-poor on plate-top (WCAG AA body ≥4.5:1
+ * with the warm-ink pair parchment / dark-on-gold):
+ *   ≤56%  → parchment (and soft at the dark floor) pass
+ *   ≥78%  → dark-on-gold passes
+ *   57–77% → impossible valley; clamp to the nearer safe band
+ */
+export const HEATMAP_MIX_PARCHMENT_MAX = 56;
+export const HEATMAP_MIX_DARK_MIN = 78;
 
 export interface EvalHeatmapProps {
   heatmap: SoundingsHeatmapView;
@@ -40,6 +47,24 @@ export interface EvalHeatmapProps {
   evalPresence: SoundingsView["evalPresence"];
   filtersActive: boolean;
   onGroupBy: (groupBy: string) => void;
+}
+
+/**
+ * Percent of --quality-poor mixed into opaque --plate-top for a failure
+ * intensity. Floor ~18% so a single failure is visible; full rate → 100%.
+ * Clamps out of the mid-rose AA valley (see HEATMAP_MIX_*).
+ * Exported for contrast / honesty tests.
+ */
+export function heatmapMixPercent(intensity: number): number {
+  const raw = Math.round((0.18 + intensity * 0.82) * 100);
+  if (raw <= HEATMAP_MIX_PARCHMENT_MAX) return raw;
+  if (raw < HEATMAP_MIX_DARK_MIN) {
+    // Prefer the light band once ink has flipped to dark-on-gold.
+    return intensity >= HEATMAP_DARK_INK_AT
+      ? HEATMAP_MIX_DARK_MIN
+      : HEATMAP_MIX_PARCHMENT_MAX;
+  }
+  return raw;
 }
 
 /**
@@ -53,15 +78,17 @@ export function heatmapCellInk(intensity: number): string {
 }
 
 /**
- * Map failure rate → CSS background + ink. Floor opacity so 1–2 data points
- * stay legible; missing cells stay unshaded (not a false zero).
+ * Map failure rate → CSS background + ink. Mixes quality-poor into opaque
+ * plate-top (not a translucent black wash) so published contrast math holds
+ * against the real composite. Missing cells stay unshaded (not a false zero).
  */
 export function cellStyle(intensity: number | null): CSSProperties | undefined {
   if (intensity === null) return undefined;
-  // Floor ~18% so a single failure is visible on the dark plate; full rate → quality-poor.
-  const pct = Math.round((0.18 + intensity * 0.82) * 100);
+  const pct = heatmapMixPercent(intensity);
   return {
-    background: `color-mix(in srgb, var(--quality-poor) ${pct}%, rgba(0, 0, 0, 0.35))`,
+    // Opaque plate-top mix: prior rgba(0,0,0,0.35) composited over plate wood
+    // and made pure-quality-poor endpoint math a lie.
+    background: `color-mix(in srgb, var(--quality-poor) ${pct}%, var(--plate-top))`,
     color: heatmapCellInk(intensity),
   };
 }
@@ -200,7 +227,12 @@ export const EvalHeatmap = memo(function EvalHeatmap({
             )}
           </p>
 
-          <div className="pc-eval-heat__scroll">
+          <div
+            className="pc-eval-heat__scroll"
+            tabIndex={0}
+            role="region"
+            aria-label="Heatmap grid"
+          >
             <div
               className="pc-eval-heat__grid"
               role="table"

@@ -41,10 +41,13 @@ export {
   HEATMAP_GROUP_BY,
   HEATMAP_DARK_INK_AT,
   HEATMAP_LOW_SAMPLE_THRESHOLD,
+  HEATMAP_MIX_DARK_MIN,
+  HEATMAP_MIX_PARCHMENT_MAX,
   HEATMAP_PARCHMENT_INK_AT,
   cellStyle,
   formatHeatmapRateDisplay,
   heatmapCellInk,
+  heatmapMixPercent,
   isLowSampleCell,
   isSuspectHeatmapRate,
 } from "./EvalHeatmap.js";

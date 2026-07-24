@@ -12,6 +12,7 @@ import {
   cellStyle,
   formatHeatmapRateDisplay,
   heatmapCellInk,
+  heatmapMixPercent,
   isSuspectHeatmapRate,
 } from "../src/hud/index.js";
 import type { SoundingsFiltersView, SoundingsView } from "../src/hud/index.js";
@@ -556,8 +557,7 @@ describe("EvalHeatmap cell ink AA flip", () => {
     expect(heatmapCellInk(HEATMAP_PARCHMENT_INK_AT)).toBe("var(--ink-parchment)");
     expect(heatmapCellInk(0.5)).toBe("var(--ink-parchment)");
     expect(heatmapCellInk(HEATMAP_DARK_INK_AT - 0.01)).toBe("var(--ink-parchment)");
-    // Above ~0.55: parchment on quality-poor is ≈1.96:1 (fails AA);
-    // --ink-dark-on-gold on #e888a0 is ≈6.77:1 (≥4.5:1 AA).
+    // Above HEATMAP_DARK_INK_AT the mix is light enough for dark-on-gold (≥4.5:1 AA).
     expect(heatmapCellInk(HEATMAP_DARK_INK_AT)).toBe("var(--ink-dark-on-gold)");
     expect(heatmapCellInk(1)).toBe("var(--ink-dark-on-gold)");
   });
@@ -567,8 +567,10 @@ describe("EvalHeatmap cell ink AA flip", () => {
     expect(cellStyle(0.2)?.color).toBe("var(--ink-soft)");
     expect(cellStyle(0.5)?.color).toBe("var(--ink-parchment)");
     expect(cellStyle(1)?.color).toBe("var(--ink-dark-on-gold)");
-    // Full intensity still mixes toward quality-poor (not a different fill).
+    // Full intensity still mixes toward quality-poor on opaque plate-top.
     expect(String(cellStyle(1)?.background)).toMatch(/quality-poor/);
+    expect(String(cellStyle(1)?.background)).toMatch(/plate-top/);
+    expect(String(cellStyle(1)?.background)).not.toMatch(/rgba/);
   });
 
   it("paints dark-on-gold on a full-intensity rendered cell", () => {
@@ -592,7 +594,68 @@ describe("EvalHeatmap cell ink AA flip", () => {
     expect(cell).toBeTruthy();
     expect((cell as HTMLElement).style.color).toBe("var(--ink-dark-on-gold)");
   });
+
+  /**
+   * WCAG 2.x relative-luminance contrast of cell ink vs the composited cell
+   * background. Mix is opaque color-mix(quality-poor, plate-top) — no alpha
+   * wash — matching cellStyle after the H1 fix.
+   */
+  it("keeps ink ≥4.5:1 against the composited cell at every 0.05 intensity step", () => {
+    // Token hex from tokens.css (layer 0) — mirrored here so the test does not
+    // depend on a CSSOM that happy-dom will not resolve from var().
+    const QUALITY_POOR: Rgb = [232, 136, 160]; // --quality-poor #e888a0
+    const PLATE_TOP: Rgb = [29, 20, 12]; // --plate-top #1d140c
+    const INKS: Record<string, Rgb> = {
+      "var(--ink-soft)": [216, 195, 154], // #d8c39a
+      "var(--ink-parchment)": [242, 227, 196], // #f2e3c4
+      "var(--ink-dark-on-gold)": [42, 26, 8], // #2a1a08
+    };
+
+    for (let step = 0; step <= 20; step++) {
+      const intensity = step / 20;
+      const pct = heatmapMixPercent(intensity);
+      const bg = mixSrgb(QUALITY_POOR, PLATE_TOP, pct);
+      const inkVar = heatmapCellInk(intensity);
+      const ink = INKS[inkVar];
+      expect(ink, `unknown ink token at intensity ${intensity}`).toBeDefined();
+      const ratio = contrastRatio(ink!, bg);
+      expect(
+        ratio,
+        `intensity ${intensity.toFixed(2)} mix ${pct}% ${inkVar} on rgb(${bg}) = ${ratio.toFixed(2)}:1`,
+      ).toBeGreaterThanOrEqual(4.5);
+    }
+  });
 });
+
+type Rgb = [number, number, number];
+
+function srgbToLinear(c: number): number {
+  const s = c / 255;
+  return s <= 0.04045 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+}
+
+function relativeLuminance([r, g, b]: Rgb): number {
+  return 0.2126 * srgbToLinear(r) + 0.7152 * srgbToLinear(g) + 0.0722 * srgbToLinear(b);
+}
+
+/** WCAG 2.x contrast ratio of two opaque sRGB colours. */
+function contrastRatio(a: Rgb, b: Rgb): number {
+  const L1 = relativeLuminance(a);
+  const L2 = relativeLuminance(b);
+  const lighter = Math.max(L1, L2);
+  const darker = Math.min(L1, L2);
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
+/** CSS color-mix(in srgb, a pct%, b) for opaque colours — matches the browser. */
+function mixSrgb(a: Rgb, b: Rgb, pctA: number): Rgb {
+  const t = pctA / 100;
+  return [
+    Math.round(a[0] * t + b[0] * (1 - t)),
+    Math.round(a[1] * t + b[1] * (1 - t)),
+    Math.round(a[2] * t + b[2] * (1 - t)),
+  ];
+}
 
 describe("EvalHeatmap rate >100% honesty clamp", () => {
   it("flags failures > count and rate > 1 as suspect", () => {

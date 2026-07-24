@@ -1020,7 +1020,8 @@ button.pc-edge-alert:focus-visible {
 }
 .pc-edge-alert--quiet .pc-edge-alert__short-ref {
   font-size: var(--text-label);
-  color: var(--ink-dim);
+  /* --ink-dim is flavour-only (~3.2:1 on plate); label is the quietest functional tier (≥4.5:1). */
+  color: var(--ink-label);
 }
 .pc-edge-alert--more {
   cursor: default;
@@ -1055,13 +1056,13 @@ button.pc-edge-alert--quiet:hover {
 .pc-edge-alert--quiet .pc-edge-alert__dot {
   font-size: var(--text-label);
   line-height: 1;
-  color: var(--ink-dim);
+  color: var(--ink-label);
   opacity: 0.85;
 }
 .pc-edge-alert--quiet .pc-edge-alert__count {
   font-size: var(--text-label);
   font-weight: 600;
-  color: var(--ink-dim);
+  color: var(--ink-label);
 }
 .pc-edge-alert--quiet .pc-edge-alert__chevron {
   color: var(--ink-label);
