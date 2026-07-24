@@ -15,31 +15,17 @@ export const HEATMAP_GROUP_BY: readonly { value: string; label: string }[] = [
 export const HEATMAP_LOW_SAMPLE_THRESHOLD = 3;
 
 /**
- * Intensity at which cell text switches from soft ink to parchment (mid ramp).
- * Soft on the dark plate mix stays ≥4.5:1 through ~0.29; parchment takes over.
- */
-export const HEATMAP_PARCHMENT_INK_AT = 0.3;
-
-/**
- * Intensity at which cell text flips from parchment to dark-on-gold.
+ * Floor / ceiling of quality-poor mixed into opaque --plate-top.
  *
- * Contrast is computed against the *composited* cell (quality-poor mixed into
- * opaque --plate-top), not pure --quality-poor. Mid-rose plate mixes (~57–77%
- * quality-poor) sit in a luminance band where no warm-ink token clears 4.5:1;
- * heatmapMixPercent clamps out of that band, and dark-on-gold takes over once
- * the mix is light enough (≥78% → ≥4.52:1, rising to ≈6.77:1 at full intensity).
+ * The ramp stays inside the parchment-safe band so a single warm ink
+ * (--ink-parchment) clears WCAG AA (≥4.5:1) at every intensity. Climbing
+ * past ~56% into mid-rose plate mixes creates a luminance valley where no
+ * warm ink passes AA; capping the top (muted rose, not pure quality-poor)
+ * keeps the encoding strictly monotonic — two different failure rates always
+ * paint two different shades. Floor 18% so a single failure stays visible.
  */
-export const HEATMAP_DARK_INK_AT = 0.6;
-
-/**
- * Safe mix-percent bands for quality-poor on plate-top (WCAG AA body ≥4.5:1
- * with the warm-ink pair parchment / dark-on-gold):
- *   ≤56%  → parchment (and soft at the dark floor) pass
- *   ≥78%  → dark-on-gold passes
- *   57–77% → impossible valley; clamp to the nearer safe band
- */
-export const HEATMAP_MIX_PARCHMENT_MAX = 56;
-export const HEATMAP_MIX_DARK_MIN = 78;
+export const HEATMAP_MIX_FLOOR = 18;
+export const HEATMAP_MIX_CEILING = 56;
 
 export interface EvalHeatmapProps {
   heatmap: SoundingsHeatmapView;
@@ -51,36 +37,18 @@ export interface EvalHeatmapProps {
 
 /**
  * Percent of --quality-poor mixed into opaque --plate-top for a failure
- * intensity. Floor ~18% so a single failure is visible; full rate → 100%.
- * Clamps out of the mid-rose AA valley (see HEATMAP_MIX_*).
- * Exported for contrast / honesty tests.
+ * intensity. Plain linear map: floor → ceiling across [0, 1]. Strictly
+ * monotonic — no plateaus, no clamps. Exported for contrast / honesty tests.
  */
 export function heatmapMixPercent(intensity: number): number {
-  const raw = Math.round((0.18 + intensity * 0.82) * 100);
-  if (raw <= HEATMAP_MIX_PARCHMENT_MAX) return raw;
-  if (raw < HEATMAP_MIX_DARK_MIN) {
-    // Prefer the light band once ink has flipped to dark-on-gold.
-    return intensity >= HEATMAP_DARK_INK_AT
-      ? HEATMAP_MIX_DARK_MIN
-      : HEATMAP_MIX_PARCHMENT_MAX;
-  }
-  return raw;
+  return HEATMAP_MIX_FLOOR + intensity * (HEATMAP_MIX_CEILING - HEATMAP_MIX_FLOOR);
 }
 
 /**
- * Resolve cell text ink for a failure-rate intensity.
- * Exported for contrast / honesty tests.
- */
-export function heatmapCellInk(intensity: number): string {
-  if (intensity >= HEATMAP_DARK_INK_AT) return "var(--ink-dark-on-gold)";
-  if (intensity >= HEATMAP_PARCHMENT_INK_AT) return "var(--ink-parchment)";
-  return "var(--ink-soft)";
-}
-
-/**
- * Map failure rate → CSS background + ink. Mixes quality-poor into opaque
- * plate-top (not a translucent black wash) so published contrast math holds
- * against the real composite. Missing cells stay unshaded (not a false zero).
+ * Map failure rate → CSS background + parchment ink. Mixes quality-poor into
+ * opaque plate-top (not a translucent black wash) so published contrast math
+ * holds against the real composite. Single ink across the whole ramp —
+ * missing cells stay unshaded (not a false zero).
  */
 export function cellStyle(intensity: number | null): CSSProperties | undefined {
   if (intensity === null) return undefined;
@@ -89,7 +57,7 @@ export function cellStyle(intensity: number | null): CSSProperties | undefined {
     // Opaque plate-top mix: prior rgba(0,0,0,0.35) composited over plate wood
     // and made pure-quality-poor endpoint math a lie.
     background: `color-mix(in srgb, var(--quality-poor) ${pct}%, var(--plate-top))`,
-    color: heatmapCellInk(intensity),
+    color: "var(--ink-parchment)",
   };
 }
 

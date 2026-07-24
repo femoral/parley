@@ -6,12 +6,11 @@ import {
   EvalDistribution,
   EvalFilterBar,
   EvalHeatmap,
-  HEATMAP_DARK_INK_AT,
-  HEATMAP_PARCHMENT_INK_AT,
+  HEATMAP_MIX_CEILING,
+  HEATMAP_MIX_FLOOR,
   SoundingsPanel,
   cellStyle,
   formatHeatmapRateDisplay,
-  heatmapCellInk,
   heatmapMixPercent,
   isSuspectHeatmapRate,
 } from "../src/hud/index.js";
@@ -550,30 +549,27 @@ describe("EvalHeatmap (#166)", () => {
   });
 });
 
-describe("EvalHeatmap cell ink AA flip", () => {
-  it("uses soft ink below parchment threshold, parchment mid, dark-on-gold at worst", () => {
-    expect(heatmapCellInk(0)).toBe("var(--ink-soft)");
-    expect(heatmapCellInk(HEATMAP_PARCHMENT_INK_AT - 0.01)).toBe("var(--ink-soft)");
-    expect(heatmapCellInk(HEATMAP_PARCHMENT_INK_AT)).toBe("var(--ink-parchment)");
-    expect(heatmapCellInk(0.5)).toBe("var(--ink-parchment)");
-    expect(heatmapCellInk(HEATMAP_DARK_INK_AT - 0.01)).toBe("var(--ink-parchment)");
-    // Above HEATMAP_DARK_INK_AT the mix is light enough for dark-on-gold (≥4.5:1 AA).
-    expect(heatmapCellInk(HEATMAP_DARK_INK_AT)).toBe("var(--ink-dark-on-gold)");
-    expect(heatmapCellInk(1)).toBe("var(--ink-dark-on-gold)");
+describe("EvalHeatmap cell ink AA (monotonic parchment ramp)", () => {
+  it("maps intensity linearly from mix floor to ceiling with no clamp", () => {
+    expect(heatmapMixPercent(0)).toBe(HEATMAP_MIX_FLOOR);
+    expect(heatmapMixPercent(1)).toBe(HEATMAP_MIX_CEILING);
+    expect(heatmapMixPercent(0.5)).toBe(
+      HEATMAP_MIX_FLOOR + 0.5 * (HEATMAP_MIX_CEILING - HEATMAP_MIX_FLOOR),
+    );
   });
 
-  it("cellStyle color tracks the ink ramp", () => {
+  it("cellStyle uses parchment ink and an opaque plate-top mix throughout", () => {
     expect(cellStyle(null)).toBeUndefined();
-    expect(cellStyle(0.2)?.color).toBe("var(--ink-soft)");
+    expect(cellStyle(0)?.color).toBe("var(--ink-parchment)");
     expect(cellStyle(0.5)?.color).toBe("var(--ink-parchment)");
-    expect(cellStyle(1)?.color).toBe("var(--ink-dark-on-gold)");
-    // Full intensity still mixes toward quality-poor on opaque plate-top.
+    expect(cellStyle(1)?.color).toBe("var(--ink-parchment)");
     expect(String(cellStyle(1)?.background)).toMatch(/quality-poor/);
     expect(String(cellStyle(1)?.background)).toMatch(/plate-top/);
+    expect(String(cellStyle(1)?.background)).toMatch(String(HEATMAP_MIX_CEILING));
     expect(String(cellStyle(1)?.background)).not.toMatch(/rgba/);
   });
 
-  it("paints dark-on-gold on a full-intensity rendered cell", () => {
+  it("paints parchment ink on a full-intensity rendered cell", () => {
     const heatmap = projectHeatmap([
       groupWithCriteria(
         "coding",
@@ -592,36 +588,36 @@ describe("EvalHeatmap cell ink AA flip", () => {
     );
     const cell = container.querySelector(".pc-eval-heat__cell:not(.pc-eval-heat__cell--empty)");
     expect(cell).toBeTruthy();
-    expect((cell as HTMLElement).style.color).toBe("var(--ink-dark-on-gold)");
+    expect((cell as HTMLElement).style.color).toBe("var(--ink-parchment)");
   });
 
   /**
-   * WCAG 2.x relative-luminance contrast of cell ink vs the composited cell
-   * background. Mix is opaque color-mix(quality-poor, plate-top) — no alpha
-   * wash — matching cellStyle after the H1 fix.
+   * WCAG 2.x relative-luminance contrast of --ink-parchment vs the composited
+   * cell background, plus strict mix monotonicity. Mix is opaque
+   * color-mix(quality-poor, plate-top) capped at HEATMAP_MIX_CEILING.
    */
-  it("keeps ink ≥4.5:1 against the composited cell at every 0.05 intensity step", () => {
+  it("keeps parchment ≥4.5:1 and a strictly rising mix at every 0.05 intensity step", () => {
     // Token hex from tokens.css (layer 0) — mirrored here so the test does not
     // depend on a CSSOM that happy-dom will not resolve from var().
     const QUALITY_POOR: Rgb = [232, 136, 160]; // --quality-poor #e888a0
     const PLATE_TOP: Rgb = [29, 20, 12]; // --plate-top #1d140c
-    const INKS: Record<string, Rgb> = {
-      "var(--ink-soft)": [216, 195, 154], // #d8c39a
-      "var(--ink-parchment)": [242, 227, 196], // #f2e3c4
-      "var(--ink-dark-on-gold)": [42, 26, 8], // #2a1a08
-    };
+    const INK_PARCHMENT: Rgb = [242, 227, 196]; // --ink-parchment #f2e3c4
 
     for (let step = 0; step <= 20; step++) {
       const intensity = step / 20;
       const pct = heatmapMixPercent(intensity);
+      if (step < 20) {
+        const next = heatmapMixPercent(intensity + 0.05);
+        expect(
+          next,
+          `mix must rise: heatmapMixPercent(${intensity.toFixed(2)})=${pct} → (${(intensity + 0.05).toFixed(2)})=${next}`,
+        ).toBeGreaterThan(pct);
+      }
       const bg = mixSrgb(QUALITY_POOR, PLATE_TOP, pct);
-      const inkVar = heatmapCellInk(intensity);
-      const ink = INKS[inkVar];
-      expect(ink, `unknown ink token at intensity ${intensity}`).toBeDefined();
-      const ratio = contrastRatio(ink!, bg);
+      const ratio = contrastRatio(INK_PARCHMENT, bg);
       expect(
         ratio,
-        `intensity ${intensity.toFixed(2)} mix ${pct}% ${inkVar} on rgb(${bg}) = ${ratio.toFixed(2)}:1`,
+        `intensity ${intensity.toFixed(2)} mix ${pct}% parchment on rgb(${bg}) = ${ratio.toFixed(2)}:1`,
       ).toBeGreaterThanOrEqual(4.5);
     }
   });

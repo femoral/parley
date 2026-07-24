@@ -2328,11 +2328,12 @@ button.pc-roster__meta--copy:focus-visible {
   border: 1px solid var(--plate-well-border);
   box-sizing: border-box;
 }
+/* Legend endpoints match the monotonic 18%→56% parchment-safe ramp. */
 .pc-eval-heat__swatch--low {
-  background: color-mix(in srgb, var(--quality-poor) 22%, var(--plate-top));
+  background: color-mix(in srgb, var(--quality-poor) 18%, var(--plate-top));
 }
 .pc-eval-heat__swatch--high {
-  background: color-mix(in srgb, var(--quality-poor) 92%, var(--plate-top));
+  background: color-mix(in srgb, var(--quality-poor) 56%, var(--plate-top));
 }
 .pc-eval-heat__swatch--empty {
   background: rgba(0, 0, 0, 0.28);
@@ -2413,7 +2414,8 @@ button.pc-roster__meta--copy:focus-visible {
   font-family: var(--font-mono);
   font-size: var(--text-mono);
   font-weight: 500;
-  color: var(--ink-soft);
+  /* Sampled cells set --ink-parchment via cellStyle; default matches the ramp. */
+  color: var(--ink-parchment);
   transition: border-color var(--ease);
 }
 .pc-eval-heat__cell--empty {
