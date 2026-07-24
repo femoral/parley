@@ -199,6 +199,42 @@ describe("useSnapshot connection / stream-lost signal", () => {
     expect(result.current.totalTasks).toBe(0);
   });
 
+  it("bootstrap with a non-empty fleet latches ready and tasks in the same render", async () => {
+    // Guards the O1 coalesce path: setReady(true) must never commit without the
+    // bootstrap task list, or scene/roster paint "quiet cove" for one frame
+    // while the fleet is already known. SSE bursts stay coalesced; bootstrap is
+    // immediate so ready + tasks batch together.
+    (globalThis as { EventSource?: unknown }).EventSource = FakeEventSource;
+
+    const snapshot: TasksResponse = {
+      seq: 1,
+      tasks: [
+        envelope({
+          task_id: "t1",
+          state: "running",
+          name: "chart-the-bay",
+          orchestrator_session_id: "sess-1",
+        }),
+      ],
+    };
+    const client = new ParleyClient({ baseUrl: "", fetch: fakeDaemon(snapshot) });
+
+    const commits: Array<{ ready: boolean; taskCount: number }> = [];
+    const { result } = renderHook(() => {
+      const snap = useSnapshot(client);
+      commits.push({ ready: snap.ready, taskCount: snap.tasks.length });
+      return snap;
+    });
+
+    await waitFor(() => expect(result.current.ready).toBe(true));
+    expect(result.current.tasks.length).toBe(1);
+    expect(result.current.totalTasks).toBe(1);
+
+    // No committed intermediate: ready latched true while tasks still empty.
+    const falseEmpty = commits.filter((c) => c.ready && c.taskCount === 0);
+    expect(falseEmpty).toEqual([]);
+  });
+
   it("starts disconnected with streamLostSince set, then connects on bootstrap", async () => {
     (globalThis as { EventSource?: unknown }).EventSource = FakeEventSource;
 

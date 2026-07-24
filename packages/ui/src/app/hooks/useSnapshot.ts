@@ -205,13 +205,26 @@ export function useSnapshot(client: ParleyClient): SnapshotView {
     };
 
     /**
-     * Funnel every mutation passes through: evict so the map never grows past
-     * the terminal cap between flushes, then schedule a trailing React update.
+     * Funnel every mutation passes through: always evict first so the map never
+     * grows past the terminal cap between publishes.
+     *
+     * - Default (SSE burst path): schedule a trailing rAF/setTimeout flush so a
+     *   burst of transitions costs one projection pass, not one per event.
+     * - `{ immediate: true }` (bootstrap): publish in this tick so `setReady`
+     *   and the first non-empty task list land in the same React render — no
+     *   one-frame "quiet cove" flash while tasks are already known. Cancels any
+     *   already-scheduled tick so the map is not published twice.
+     *
      * Events are never dropped or reordered — only the emission is coalesced.
      */
-    const emit = (): void => {
+    const emit = (opts?: { immediate?: boolean }): void => {
       evictTerminalOverflow(taskMap);
-      scheduleFlush();
+      if (opts?.immediate) {
+        cancelScheduledFlush();
+        flush();
+      } else {
+        scheduleFlush();
+      }
     };
 
     /** Mark the stream live (bootstrap success or post-error event after reconnect). */
@@ -237,6 +250,7 @@ export function useSnapshot(client: ParleyClient): SnapshotView {
             markConnected();
             const merged = mergeEnvelope(taskMap.get(event.task.task_id), event);
             taskMap.set(event.task.task_id, merged);
+            // Coalesced — SSE bursts are the win path.
             emit();
           },
           onError: () => {
@@ -257,7 +271,9 @@ export function useSnapshot(client: ParleyClient): SnapshotView {
         stream = live;
         markConnected();
         if (!cancelled) setReady(true);
-        emit();
+        // Immediate: batch with setReady/markConnected so ready never latches
+        // true over an empty task list when the snapshot already has work.
+        emit({ immediate: true });
       } catch {
         markDisconnected();
         if (!cancelled) retry = setTimeout(() => void connect(), RETRY_MS);
