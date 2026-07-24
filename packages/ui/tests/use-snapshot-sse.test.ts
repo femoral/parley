@@ -14,6 +14,23 @@ function fakeDaemon(snapshot: TasksResponse): typeof fetch {
   }) as typeof fetch;
 }
 
+/**
+ * Flush the coalesced `emit()` rAF/setTimeout tick so assertions see the
+ * projected roster after a burst of SSE mutations (map updates are immediate;
+ * React state is trailing-frame).
+ */
+async function flushEmitTick(): Promise<void> {
+  await act(async () => {
+    await new Promise<void>((resolve) => {
+      if (typeof requestAnimationFrame === "function") {
+        requestAnimationFrame(() => resolve());
+      } else {
+        setTimeout(resolve, 0);
+      }
+    });
+  });
+}
+
 const originalEventSource = (globalThis as { EventSource?: unknown }).EventSource;
 
 afterEach(() => {
@@ -77,6 +94,7 @@ describe("useSnapshot regroups live on SSE transitions (#66 / #208)", () => {
         }),
       );
     });
+    await flushEmitTick();
     await waitFor(() => expect(result.current.groups.map((g) => g.state)).toEqual(["awaiting_answer"]));
     expect(result.current.groups[0]!.tasks[0]!.name).toBe("chart-the-bay");
     expect(result.current.sessions).toEqual([
@@ -107,6 +125,7 @@ describe("useSnapshot regroups live on SSE transitions (#66 / #208)", () => {
         }),
       );
     });
+    await flushEmitTick();
     await waitFor(() => expect(result.current.groups.map((g) => g.state)).toEqual(["completed"]));
     // Session chip stays (history keeps its grouping); durable count drops.
     expect(result.current.sessions).toEqual([
@@ -149,6 +168,7 @@ describe("useSnapshot regroups live on SSE transitions (#66 / #208)", () => {
         }),
       );
     });
+    await flushEmitTick();
     await waitFor(() => expect(result.current.totalTasks).toBe(1));
     await waitFor(() =>
       expect(result.current.sessions).toEqual([
@@ -177,6 +197,61 @@ describe("useSnapshot connection / stream-lost signal", () => {
     await waitFor(() => expect(result.current.ready).toBe(true));
     expect(result.current.connected).toBe(true);
     expect(result.current.totalTasks).toBe(0);
+  });
+
+  it("bootstrap with a non-empty fleet latches ready and tasks before any rAF flush", async () => {
+    // Guards the O1 coalesce path: setReady(true) must never publish without the
+    // bootstrap task list (scene/roster would paint "quiet cove" for a frame
+    // while the fleet is already known). Assert the scheduling contract directly:
+    // hold requestAnimationFrame (record callbacks, never invoke them). With
+    // emit({ immediate: true }) on bootstrap, ready + non-empty tasks are already
+    // visible before any rAF runs. A pure-coalesced emit() leaves tasks empty
+    // forever under this stub — so this fails against pre-immediate sources.
+    (globalThis as { EventSource?: unknown }).EventSource = FakeEventSource;
+
+    let nextRafId = 1;
+    const pendingRaf = new Map<number, FrameRequestCallback>();
+    const originalRaf = globalThis.requestAnimationFrame;
+    const originalCancel = globalThis.cancelAnimationFrame;
+    globalThis.requestAnimationFrame = ((cb: FrameRequestCallback) => {
+      const id = nextRafId++;
+      pendingRaf.set(id, cb);
+      return id;
+    }) as typeof requestAnimationFrame;
+    globalThis.cancelAnimationFrame = ((id: number) => {
+      pendingRaf.delete(id);
+    }) as typeof cancelAnimationFrame;
+
+    try {
+      const snapshot: TasksResponse = {
+        seq: 1,
+        tasks: [
+          envelope({
+            task_id: "t1",
+            state: "running",
+            name: "chart-the-bay",
+            orchestrator_session_id: "sess-1",
+          }),
+        ],
+      };
+      const client = new ParleyClient({ baseUrl: "", fetch: fakeDaemon(snapshot) });
+      const { result } = renderHook(() => useSnapshot(client));
+
+      // Bootstrap completes and setReady runs. We deliberately never invoke
+      // pending rAF callbacks — so any task list that appears must have been
+      // published immediately, not via the coalesced scheduleFlush path.
+      await waitFor(() => expect(result.current.ready).toBe(true));
+
+      expect(result.current.tasks.length).toBe(1);
+      expect(result.current.totalTasks).toBe(1);
+      expect(result.current.tasks[0]!.name).toBe("chart-the-bay");
+      // Optional hardness: bootstrap immediate path should not leave a pending
+      // frame (it cancelScheduledFlush + flush). Coalesced-only would schedule one.
+      expect(pendingRaf.size).toBe(0);
+    } finally {
+      globalThis.requestAnimationFrame = originalRaf;
+      globalThis.cancelAnimationFrame = originalCancel;
+    }
   });
 
   it("starts disconnected with streamLostSince set, then connects on bootstrap", async () => {
@@ -253,6 +328,7 @@ describe("useSnapshot connection / stream-lost signal", () => {
         }),
       );
     });
+    await flushEmitTick();
     await waitFor(() => expect(result.current.connected).toBe(true));
     expect(result.current.streamLostSince).toBeNull();
   });

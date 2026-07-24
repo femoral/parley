@@ -165,15 +165,66 @@ export function useSnapshot(client: ParleyClient): SnapshotView {
     let cancelled = false;
     let stream: { close(): void } | null = null;
     let retry: ReturnType<typeof setTimeout> | undefined;
+    // Coalesced emission: mutations update `taskMap` immediately; React state is
+    // flushed once per frame so a burst of SSE transitions costs one projection
+    // pass, not one per event. rAF preferred; setTimeout(0) when no browser rAF.
+    let emitRafId: number | null = null;
+    let emitTimeoutId: ReturnType<typeof setTimeout> | null = null;
     const taskMap = new Map<string, RosterTaskInput>();
-    // A `Map`'s `.values()` iterator is single-use — materialize it once so
-    // both projections (each a full pass) see every task. Eviction runs here —
-    // the one funnel every mutation passes through — so the map can never
-    // grow past the cap between emits.
-    const emit = (): void => {
+
+    /** Publish the current map to React. Never runs after unmount. */
+    const flush = (): void => {
       if (cancelled) return;
-      evictTerminalOverflow(taskMap);
       setTasks([...taskMap.values()]);
+    };
+
+    const cancelScheduledFlush = (): void => {
+      if (emitRafId !== null) {
+        cancelAnimationFrame(emitRafId);
+        emitRafId = null;
+      }
+      if (emitTimeoutId !== null) {
+        clearTimeout(emitTimeoutId);
+        emitTimeoutId = null;
+      }
+    };
+
+    const scheduleFlush = (): void => {
+      if (cancelled || emitRafId !== null || emitTimeoutId !== null) return;
+      if (typeof requestAnimationFrame === "function") {
+        emitRafId = requestAnimationFrame(() => {
+          emitRafId = null;
+          flush();
+        });
+      } else {
+        emitTimeoutId = setTimeout(() => {
+          emitTimeoutId = null;
+          flush();
+        }, 0);
+      }
+    };
+
+    /**
+     * Funnel every mutation passes through: always evict first so the map never
+     * grows past the terminal cap between publishes.
+     *
+     * - Default (SSE burst path): schedule a trailing rAF/setTimeout flush so a
+     *   burst of transitions costs one projection pass, not one per event.
+     * - `{ immediate: true }` (bootstrap): publish in this tick so `setReady`
+     *   and the first non-empty task list land in the same React render — no
+     *   one-frame "quiet cove" flash while tasks are already known. Cancels any
+     *   already-scheduled tick so the map is not published twice.
+     *
+     * Events are never dropped or reordered — only the emission is coalesced.
+     */
+    const emit = (opts?: { immediate?: boolean }): void => {
+      evictTerminalOverflow(taskMap);
+      if (opts?.immediate) {
+        cancelScheduledFlush();
+        flush();
+      } else {
+        scheduleFlush();
+      }
     };
 
     /** Mark the stream live (bootstrap success or post-error event after reconnect). */
@@ -199,6 +250,7 @@ export function useSnapshot(client: ParleyClient): SnapshotView {
             markConnected();
             const merged = mergeEnvelope(taskMap.get(event.task.task_id), event);
             taskMap.set(event.task.task_id, merged);
+            // Coalesced — SSE bursts are the win path.
             emit();
           },
           onError: () => {
@@ -219,7 +271,9 @@ export function useSnapshot(client: ParleyClient): SnapshotView {
         stream = live;
         markConnected();
         if (!cancelled) setReady(true);
-        emit();
+        // Immediate: batch with setReady/markConnected so ready never latches
+        // true over an empty task list when the snapshot already has work.
+        emit({ immediate: true });
       } catch {
         markDisconnected();
         if (!cancelled) retry = setTimeout(() => void connect(), RETRY_MS);
@@ -229,6 +283,7 @@ export function useSnapshot(client: ParleyClient): SnapshotView {
     void connect();
     return () => {
       cancelled = true;
+      cancelScheduledFlush();
       if (retry) clearTimeout(retry);
       stream?.close();
     };
