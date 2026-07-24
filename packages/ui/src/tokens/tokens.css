@@ -176,8 +176,9 @@
   --terminal-border: #1c2c24;
   --scroll-thumb: #6b4a2c;
   --scroll-thumb-hover: #8a613a;
-  --scroll-track: rgba(0, 0, 0, 0.25);
-  --badge-bg: rgba(0, 0, 0, 0.3);
+  /* Scroll track / badge wash — aliases onto the §2.10 black wash scale. */
+  --scroll-track: var(--wash-black-25);
+  --badge-bg: var(--wash-black-30);
 
   /* §2.8 — raw log-line colours by kind (inspector Logs tab).
      Timestamp stays quieter than body kinds; ≥4.5:1 on terminal well. */
@@ -255,6 +256,11 @@
   --region-roster: 300px;
   --region-right: 344px;
 
+  /* Hairline radii sit below --radius-tight for chip knobs, scrollbar thumbs,
+     speech-bubble tails, and calc() inset corners. Not "tight but smaller" —
+     a deliberate sub-step for chrome that would look swollen at 4px. */
+  --radius-hairline: 2px;
+  --radius-micro: 3px;
   --radius-tight: 4px;
   --radius-panel: 11px;
   --radius-cartouche: 13px;
@@ -265,6 +271,36 @@
   --radius-emblem: 7px;
   --radius-pill: 999px;
 
+  /*
+   * §2.10 — black / white washes (shadows, scrims, inset rims, scroll tracks).
+   * Ordered alpha scale, not semantic roles: the same wash reappears on
+   * popovers, text-shadows, wells, and scene drop-shadows, so inventing
+   * per-surface names would invent false distinctions. Each alpha is a
+   * distinct rendered appearance — do not snap between steps.
+   */
+  --wash-black-18: rgba(0, 0, 0, 0.18);
+  --wash-black-22: rgba(0, 0, 0, 0.22);
+  --wash-black-25: rgba(0, 0, 0, 0.25);
+  --wash-black-28: rgba(0, 0, 0, 0.28);
+  --wash-black-30: rgba(0, 0, 0, 0.3);
+  --wash-black-32: rgba(0, 0, 0, 0.32);
+  --wash-black-35: rgba(0, 0, 0, 0.35);
+  --wash-black-38: rgba(0, 0, 0, 0.38);
+  --wash-black-40: rgba(0, 0, 0, 0.4);
+  --wash-black-45: rgba(0, 0, 0, 0.45);
+  --wash-black-50: rgba(0, 0, 0, 0.5);
+  --wash-black-55: rgba(0, 0, 0, 0.55);
+  --wash-black-60: rgba(0, 0, 0, 0.6);
+  /* Opaque black for mask feathers (mask stops / scene feather — not ink). */
+  --wash-black: #000;
+  --wash-white-20: rgba(255, 255, 255, 0.2);
+  --wash-white-28: rgba(255, 255, 255, 0.28);
+  --wash-white-30: rgba(255, 255, 255, 0.3);
+  --wash-white-32: rgba(255, 255, 255, 0.32);
+  --wash-white-35: rgba(255, 255, 255, 0.35);
+  --wash-white-40: rgba(255, 255, 255, 0.4);
+  --wash-white-50: rgba(255, 255, 255, 0.5);
+
   /* §2.10 — z scale. The cockpit is flat (atmosphere 0 / regions 1 inline);
      the only floating layer is the roster's search popover. */
   --z-popover: 20;
@@ -272,15 +308,15 @@
   /* §2.10 — the signature plate chrome recipe (double inset ring) */
   --plate-fill: linear-gradient(180deg, var(--plate-top), var(--plate-bottom));
   --plate-shadow: inset 0 0 0 3px #13100a, inset 0 0 0 4px var(--brass-inner),
-    0 8px 22px rgba(0, 0, 0, 0.5);
+    0 8px 22px var(--wash-black-50);
   --plate-shadow-premium: inset 0 0 0 3px #120d07, inset 0 0 0 5px var(--brass-frame),
-    0 8px 22px rgba(0, 0, 0, 0.5);
+    0 8px 22px var(--wash-black-50);
   --plate-shadow-ember: inset 0 0 0 3px #13100a, inset 0 0 0 4px var(--ember-inner),
-    0 8px 22px rgba(0, 0, 0, 0.5);
+    0 8px 22px var(--wash-black-50);
   --plate-shadow-report: inset 0 0 0 3px #0a1611, inset 0 0 0 4px var(--report-inner),
-    0 8px 22px rgba(0, 0, 0, 0.5);
+    0 8px 22px var(--wash-black-50);
   --cartouche-shadow: inset 0 0 0 3px #120d07, inset 0 0 0 5px var(--brass-frame),
-    inset 0 0 30px rgba(0, 0, 0, 0.6), 0 10px 30px rgba(0, 0, 0, 0.6);
+    inset 0 0 30px var(--wash-black-60), 0 10px 30px var(--wash-black-60);
   /* State-dot inset (wood core under the state rim) */
   --state-dot-fill: radial-gradient(
     circle at 50% 40%,
@@ -290,9 +326,9 @@
 
   /* §2.10 — gold 3D button drop edge */
   --btn-gold-fill: linear-gradient(180deg, var(--brass-link), var(--brass-deep));
-  --btn-3d: 0 3px 0 var(--brass-shadow), inset 0 1px 1px rgba(255, 255, 255, 0.4);
+  --btn-3d: 0 3px 0 var(--brass-shadow), inset 0 1px 1px var(--wash-white-40);
   /* Pressed: hard edge compresses with the :active translateY(1px). */
-  --btn-3d-pressed: 0 1px 0 var(--brass-shadow), inset 0 1px 1px rgba(255, 255, 255, 0.35);
+  --btn-3d-pressed: 0 1px 0 var(--brass-shadow), inset 0 1px 1px var(--wash-white-35);
 
   /* §2.10 — divider rule */
   --divider-h: linear-gradient(
