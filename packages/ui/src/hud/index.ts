@@ -39,12 +39,12 @@ export type { EvalComparisonProps } from "./EvalComparison.js";
 export {
   EvalHeatmap,
   HEATMAP_GROUP_BY,
-  HEATMAP_DARK_INK_AT,
   HEATMAP_LOW_SAMPLE_THRESHOLD,
-  HEATMAP_PARCHMENT_INK_AT,
+  HEATMAP_MIX_CEILING,
+  HEATMAP_MIX_FLOOR,
   cellStyle,
   formatHeatmapRateDisplay,
-  heatmapCellInk,
+  heatmapMixPercent,
   isLowSampleCell,
   isSuspectHeatmapRate,
 } from "./EvalHeatmap.js";

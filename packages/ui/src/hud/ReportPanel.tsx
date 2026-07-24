@@ -88,7 +88,14 @@ export function ReportPanel({
                   ✕
                 </button>
               </div>
-              <p className="pc-report__orders-body">{report.summary}</p>
+              <p
+                className="pc-report__orders-body"
+                role="region"
+                aria-label="Full report"
+                tabIndex={0}
+              >
+                {report.summary}
+              </p>
             </div>
           </>
         )}
