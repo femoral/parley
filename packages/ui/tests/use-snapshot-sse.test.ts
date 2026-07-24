@@ -199,40 +199,59 @@ describe("useSnapshot connection / stream-lost signal", () => {
     expect(result.current.totalTasks).toBe(0);
   });
 
-  it("bootstrap with a non-empty fleet latches ready and tasks in the same render", async () => {
-    // Guards the O1 coalesce path: setReady(true) must never commit without the
-    // bootstrap task list, or scene/roster paint "quiet cove" for one frame
-    // while the fleet is already known. SSE bursts stay coalesced; bootstrap is
-    // immediate so ready + tasks batch together.
+  it("bootstrap with a non-empty fleet latches ready and tasks before any rAF flush", async () => {
+    // Guards the O1 coalesce path: setReady(true) must never publish without the
+    // bootstrap task list (scene/roster would paint "quiet cove" for a frame
+    // while the fleet is already known). Assert the scheduling contract directly:
+    // hold requestAnimationFrame (record callbacks, never invoke them). With
+    // emit({ immediate: true }) on bootstrap, ready + non-empty tasks are already
+    // visible before any rAF runs. A pure-coalesced emit() leaves tasks empty
+    // forever under this stub — so this fails against pre-immediate sources.
     (globalThis as { EventSource?: unknown }).EventSource = FakeEventSource;
 
-    const snapshot: TasksResponse = {
-      seq: 1,
-      tasks: [
-        envelope({
-          task_id: "t1",
-          state: "running",
-          name: "chart-the-bay",
-          orchestrator_session_id: "sess-1",
-        }),
-      ],
-    };
-    const client = new ParleyClient({ baseUrl: "", fetch: fakeDaemon(snapshot) });
+    let nextRafId = 1;
+    const pendingRaf = new Map<number, FrameRequestCallback>();
+    const originalRaf = globalThis.requestAnimationFrame;
+    const originalCancel = globalThis.cancelAnimationFrame;
+    globalThis.requestAnimationFrame = ((cb: FrameRequestCallback) => {
+      const id = nextRafId++;
+      pendingRaf.set(id, cb);
+      return id;
+    }) as typeof requestAnimationFrame;
+    globalThis.cancelAnimationFrame = ((id: number) => {
+      pendingRaf.delete(id);
+    }) as typeof cancelAnimationFrame;
 
-    const commits: Array<{ ready: boolean; taskCount: number }> = [];
-    const { result } = renderHook(() => {
-      const snap = useSnapshot(client);
-      commits.push({ ready: snap.ready, taskCount: snap.tasks.length });
-      return snap;
-    });
+    try {
+      const snapshot: TasksResponse = {
+        seq: 1,
+        tasks: [
+          envelope({
+            task_id: "t1",
+            state: "running",
+            name: "chart-the-bay",
+            orchestrator_session_id: "sess-1",
+          }),
+        ],
+      };
+      const client = new ParleyClient({ baseUrl: "", fetch: fakeDaemon(snapshot) });
+      const { result } = renderHook(() => useSnapshot(client));
 
-    await waitFor(() => expect(result.current.ready).toBe(true));
-    expect(result.current.tasks.length).toBe(1);
-    expect(result.current.totalTasks).toBe(1);
+      // Bootstrap completes and setReady runs. We deliberately never invoke
+      // pending rAF callbacks — so any task list that appears must have been
+      // published immediately, not via the coalesced scheduleFlush path.
+      await waitFor(() => expect(result.current.ready).toBe(true));
 
-    // No committed intermediate: ready latched true while tasks still empty.
-    const falseEmpty = commits.filter((c) => c.ready && c.taskCount === 0);
-    expect(falseEmpty).toEqual([]);
+      expect(result.current.tasks.length).toBe(1);
+      expect(result.current.totalTasks).toBe(1);
+      expect(result.current.tasks[0]!.name).toBe("chart-the-bay");
+      // Optional hardness: bootstrap immediate path should not leave a pending
+      // frame (it cancelScheduledFlush + flush). Coalesced-only would schedule one.
+      expect(pendingRaf.size).toBe(0);
+    } finally {
+      globalThis.requestAnimationFrame = originalRaf;
+      globalThis.cancelAnimationFrame = originalCancel;
+    }
   });
 
   it("starts disconnected with streamLostSince set, then connects on bootstrap", async () => {
