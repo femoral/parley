@@ -316,6 +316,25 @@ function hitKey(hit: RosterSearchHit): string {
   return hit.kind === "task" ? `task:${hit.taskId}` : `session:${hit.id}`;
 }
 
+/**
+ * Operational live-region copy for settled Find results (Flavor-Font Rule:
+ * counts stay plain). Loading is never announced — the search debounce already
+ * settles status; announcing "loading" on each keystroke would chatter.
+ */
+function formatSearchResultAnnouncement(taskCount: number, sessionCount: number): string {
+  if (taskCount === 0 && sessionCount === 0) {
+    return "No tasks or sessions match.";
+  }
+  const parts: string[] = [];
+  if (taskCount > 0) {
+    parts.push(taskCount === 1 ? "1 task" : `${taskCount} tasks`);
+  }
+  if (sessionCount > 0) {
+    parts.push(sessionCount === 1 ? "1 session" : `${sessionCount} sessions`);
+  }
+  return parts.join(", ");
+}
+
 function SessionSearch({
   searchSessions,
   onSelectSession,
@@ -333,6 +352,11 @@ function SessionSearch({
   const [status, setStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
   /** Combobox active option index into `hits`; -1 = none. */
   const [activeIndex, setActiveIndex] = useState(-1);
+  /**
+   * Settled Find announcement for the polite live region. Updated only when
+   * status is not "loading" so intermediate keystroke renders stay silent.
+   */
+  const [liveAnnouncement, setLiveAnnouncement] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -431,6 +455,32 @@ function SessionSearch({
       clearTimeout(timer);
     };
   }, [query, open, searchSessions]);
+
+  // Polite live region: announce settled Find states only (not loading).
+  // Search is already debounced (SEARCH_DEBOUNCE_MS); skipping "loading" means
+  // fast typing never streams intermediate announcements. Also skip the
+  // transitional idle+non-empty frame before the loading effect commits.
+  useEffect(() => {
+    if (!open) {
+      setLiveAnnouncement("");
+      return;
+    }
+    if (status === "loading") return;
+    if (status === "error") {
+      setLiveAnnouncement("Could not reach the daemon.");
+      return;
+    }
+    if (status === "ready") {
+      const taskCount = hits.filter((h) => h.kind === "task").length;
+      const sessionCount = hits.filter((h) => h.kind === "session").length;
+      setLiveAnnouncement(formatSearchResultAnnouncement(taskCount, sessionCount));
+      return;
+    }
+    // status === "idle" — only the empty-query tip is settled.
+    if (query.trim() === "") {
+      setLiveAnnouncement("Type a task name, branch, or session id.");
+    }
+  }, [open, status, hits, query]);
 
   const pickHit = useCallback(
     (hit: RosterSearchHit) => {
@@ -533,24 +583,18 @@ function SessionSearch({
             aria-label="Matching tasks and sessions"
           >
             {status === "loading" && (
-              <p className="pc-roster__search-status" role="presentation">
-                Scouring the charts…
-              </p>
+              <p className="pc-roster__search-status">Scouring the charts…</p>
             )}
             {status === "error" && (
-              <p className="pc-roster__search-status" role="presentation">
-                Could not reach the daemon.
-              </p>
+              <p className="pc-roster__search-status">Could not reach the daemon.</p>
             )}
             {status === "idle" && query.trim() === "" && (
-              <p className="pc-roster__search-status" role="presentation">
+              <p className="pc-roster__search-status">
                 Type a task name, branch, or session id.
               </p>
             )}
             {status === "ready" && hits.length === 0 && (
-              <p className="pc-roster__search-status" role="presentation">
-                No tasks or sessions match.
-              </p>
+              <p className="pc-roster__search-status">No tasks or sessions match.</p>
             )}
             {taskHits.length > 0 && (
               <div className="pc-roster__search-group" role="presentation">
@@ -622,6 +666,10 @@ function SessionSearch({
                 })}
               </div>
             )}
+          </div>
+          {/* Live region outside the listbox — listboxes must not host live children. */}
+          <div className="pc-visually-hidden" aria-live="polite" aria-atomic="true">
+            {liveAnnouncement}
           </div>
         </div>
       )}

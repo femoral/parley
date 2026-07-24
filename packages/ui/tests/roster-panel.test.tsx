@@ -8,8 +8,15 @@ import type { RosterGroup, RosterSessionOption } from "../src/hud/index.js";
 
 afterEach(cleanup);
 
-// process.cwd() is packages/ui under vitest; import.meta.url is not file: in happy-dom.
-const HUD_CSS = readFileSync(resolve(process.cwd(), "src/hud/hud.css"), "utf8");
+// Vitest workspace cwd is the monorepo root; package-local runs use packages/ui.
+// import.meta.url is not file: in happy-dom, so resolve from cwd.
+const HUD_CSS = readFileSync(
+  resolve(
+    process.cwd(),
+    process.cwd().endsWith("packages/ui") ? "src/hud/hud.css" : "packages/ui/src/hud/hud.css",
+  ),
+  "utf8",
+);
 
 const GROUPS: RosterGroup[] = [
   {
@@ -394,6 +401,90 @@ describe("RosterPanel session selector (#66)", () => {
     expect(results.querySelectorAll("[role='option']").length).toBeGreaterThan(0);
     expect(input.getAttribute("aria-controls")).toBe(results.getAttribute("id"));
     expect(input.getAttribute("aria-activedescendant")).toBeTruthy();
+  });
+
+  it("announces no-results and result counts from a polite live region outside the listbox", async () => {
+    const searchSessions = vi
+      .fn()
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        {
+          kind: "task" as const,
+          taskId: "t1",
+          sessionId: "sess-1",
+          name: "chart-alpha",
+          branch: "feat/a",
+        },
+        {
+          kind: "task" as const,
+          taskId: "t2",
+          sessionId: "sess-1",
+          name: "chart-beta",
+          branch: "feat/b",
+        },
+        {
+          kind: "task" as const,
+          taskId: "t3",
+          sessionId: "sess-1",
+          name: "chart-gamma",
+          branch: "feat/c",
+        },
+        {
+          kind: "session" as const,
+          id: "sess-1",
+          handle: "chart-fleet",
+          shortRef: "sess-1",
+          label: "chart-fleet · 3 tasks",
+          taskCount: 3,
+          lastActivityAt: "2020-01-01T00:00:00.000Z",
+        },
+      ]);
+    render(<RosterPanel {...baseProps()} searchSessions={searchSessions} />);
+    fireEvent.click(screen.getByRole("button", { name: "Search fleet" }));
+    const input = screen.getByLabelText("Find tasks or sessions");
+    const listbox = screen.getByRole("listbox", { name: "Matching tasks and sessions" });
+    const live = document.querySelector(".pc-roster__search-pop [aria-live='polite']");
+    expect(live).toBeTruthy();
+    expect(live?.getAttribute("aria-atomic")).toBe("true");
+    expect(live?.classList.contains("pc-visually-hidden")).toBe(true);
+    // Live region must be a sibling of the listbox, not a child.
+    expect(listbox.contains(live)).toBe(false);
+    expect(live?.parentElement?.contains(listbox)).toBe(true);
+
+    fireEvent.change(input, { target: { value: "zzz-no-match" } });
+    await waitFor(() => {
+      expect(live?.textContent).toBe("No tasks or sessions match.");
+    });
+    // Visible status mirrors the announcement (live region is a second copy).
+    expect(document.querySelector(".pc-roster__search-status")?.textContent).toBe(
+      "No tasks or sessions match.",
+    );
+    // Loading copy is visible only, never the live-region message.
+    expect(live?.textContent).not.toMatch(/Scouring/);
+
+    fireEvent.change(input, { target: { value: "chart" } });
+    await waitFor(() => {
+      expect(live?.textContent).toBe("3 tasks, 1 session");
+    });
+    expect(await screen.findByRole("option", { name: /chart-alpha/ })).toBeTruthy();
+  });
+
+  it("does not announce loading status into the live region while a Find request is in flight", async () => {
+    const searchSessions = vi.fn(() => new Promise<never>(() => {}));
+    render(<RosterPanel {...baseProps()} searchSessions={searchSessions} />);
+    fireEvent.click(screen.getByRole("button", { name: "Search fleet" }));
+    const live = document.querySelector(".pc-roster__search-pop [aria-live='polite']");
+    // Idle tip settles into the live region on open.
+    await waitFor(() => {
+      expect(live?.textContent).toBe("Type a task name, branch, or session id.");
+    });
+    fireEvent.change(screen.getByLabelText("Find tasks or sessions"), {
+      target: { value: "charted" },
+    });
+    expect(await screen.findByText("Scouring the charts…")).toBeTruthy();
+    // Live region holds the previous settled message — not loading flavour.
+    expect(live?.textContent).toBe("Type a task name, branch, or session id.");
+    expect(live?.textContent).not.toMatch(/Scouring/);
   });
 });
 
