@@ -51,10 +51,11 @@
 }
 /* Room-scoped edge darkening — explicit radial geometry (tokens) so the
    sailing canvas can mirror it pixel-for-pixel. Replaces inset box-shadow
-   whose blur falloff could not be reproduced in canvas math (#189). */
+   whose blur falloff could not be reproduced in canvas math (#189).
+   rx/ry are radii on both sides (see tokens.css) — multiply by 100, not 200. */
 .pc-atmos--vignette {
   background: radial-gradient(
-    ellipse calc(var(--sea-vignette-rx) * 200 * 1%) calc(var(--sea-vignette-ry) * 200 * 1%) at
+    ellipse calc(var(--sea-vignette-rx) * 100 * 1%) calc(var(--sea-vignette-ry) * 100 * 1%) at
       calc(var(--sea-vignette-cx) * 100 * 1%) calc(var(--sea-vignette-cy) * 100 * 1%),
     transparent 0%,
     transparent calc(var(--sea-vignette-inner) * 100 * 1%),
@@ -252,33 +253,6 @@
     gap: 10px;
   }
 }
-/* Subtitle + tabs need ~760px side-by-side before the absolute nav underlaps
-   "DELEGATED FLEET COCKPIT". Below that, dock the nav on its own full-width
-   plate sliver under the cartouche (tabs right-aligned) so it never floats
-   on bare sea or steals horizontal space from the brand mark. */
-@container title-stack (max-width: 760px) {
-  .pc-view-nav--cartouche {
-    position: static;
-    /* Own row under the cartouche — do not sit beside and crush the title. */
-    flex: 0 0 100%;
-    display: flex;
-    justify-content: flex-end;
-    box-sizing: border-box;
-    width: 100%;
-    margin: 0;
-    padding: 3px 6px;
-    right: auto;
-    bottom: auto;
-    /* Crafted chrome — same wood fill + brass frame as other plates. */
-    background: var(--plate-fill);
-    border: 1px solid var(--brass-border);
-    border-radius: var(--radius-control);
-    box-shadow: var(--plate-shadow);
-  }
-  .pc-cartouche__subtitle {
-    max-width: 100%;
-  }
-}
 /* Health + Inbox keep their content height; only the Inspector flexes and
    scrolls with the rail (overflow-y: auto above). Without this, a populated
    .pc-inspector (flex: 1 1 380px; min-height: 380px) crushes siblings and
@@ -286,31 +260,39 @@
 .pc-region--right > :not(.pc-inspector) {
   flex: 0 0 auto;
 }
-/* When the LOGBOOK is open (inspector has a selected task — not the empty
-   placeholder), clamp the inbox card list so the inspector always claims
-   majority rail height. Scope caption lives above the list (InboxPanel) so
-   it never paints across a mid-card cut. Cards stay reachable via internal
-   scroll + keyboard; empty / unselected rail still lets the list grow.
+/* The inbox card list always scrolls inside its own clamp. A long agent
+   question can run 300px on its own, so an unclamped list pushed the LOGBOOK
+   past the rail's clip — on a 1440x900 laptop the resting cockpit sliced the
+   plate mid-shortcut, with no bottom brass frame (Framed-Not-Floating). The
+   clamp belongs on the list, not the rail: a plate is never half-drawn.
+   Scope caption lives above the list (InboxPanel) so it never paints across a
+   mid-card cut. Cards stay reachable via internal scroll + keyboard.
    scroll-snap biases the clamp toward whole-card boundaries when cheap. */
-.pc-region--right:has(.pc-inspector:not(.pc-inspector--empty)) .pc-inbox__list {
-  max-height: min(28vh, 220px);
+.pc-region--right .pc-inbox__list {
+  max-height: min(42vh, 340px);
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-width: thin;
   scrollbar-color: var(--scroll-thumb) var(--scroll-track);
   scroll-snap-type: y proximity;
 }
-.pc-region--right:has(.pc-inspector:not(.pc-inspector--empty)) .pc-inbox__list .pc-inbox-card {
+/* When the LOGBOOK is open (inspector has a selected task — not the empty
+   placeholder), tighten the clamp so the inspector claims majority rail
+   height: reading the selected task outranks scanning the queue. */
+.pc-region--right:has(.pc-inspector:not(.pc-inspector--empty)) .pc-inbox__list {
+  max-height: min(28vh, 220px);
+}
+.pc-region--right .pc-inbox__list .pc-inbox-card {
   scroll-snap-align: start;
 }
-.pc-region--right:has(.pc-inspector:not(.pc-inspector--empty)) .pc-inbox__list::-webkit-scrollbar {
+.pc-region--right .pc-inbox__list::-webkit-scrollbar {
   width: 6px;
 }
-.pc-region--right:has(.pc-inspector:not(.pc-inspector--empty)) .pc-inbox__list::-webkit-scrollbar-thumb {
+.pc-region--right .pc-inbox__list::-webkit-scrollbar-thumb {
   background: var(--scroll-thumb);
   border-radius: var(--radius-micro);
 }
-.pc-region--right:has(.pc-inspector:not(.pc-inspector--empty)) .pc-inbox__list::-webkit-scrollbar-track {
+.pc-region--right .pc-inbox__list::-webkit-scrollbar-track {
   background: var(--scroll-track);
 }
 /* The scene mounts here (#69/#75): a positioned, clipped viewport the living

@@ -146,21 +146,23 @@ typography:
     letterSpacing: "normal"
 rounded:
   cartouche: "13px"
-  tight: "4px"
-  micro: "3px"
-  hairline: "2px"
   panel: "11px"
   card: "10px"
   inbox: "9px"
   well: "8px"
   control: "7px"
   emblem: "7px"
+  tight: "4px"
+  micro: "3px"
+  hairline: "2px"
   pill: "999px"
 spacing:
   gutter: "12px"
   board-inset: "14px"
   header: "11px 15px 8px"
   body: "12px 14px"
+  region-roster: "300px"
+  region-right: "344px"
 components:
   button-primary:
     backgroundColor: "{colors.brass}"
@@ -213,7 +215,7 @@ components:
 
 # Design System: Parley Cove
 
-## 1. Overview
+## Overview
 
 **Creative North Star: "The Weathered Chart-Room"**
 
@@ -230,7 +232,7 @@ This system explicitly rejects three things. It is **not a generic SaaS dashboar
 - Ambient, atmospheric motion that fully stills under `prefers-reduced-motion`.
 - Read-only calm: the resting state is quiet; loudness is reserved for change.
 
-## 2. Colors
+## Colors
 
 A warm-on-cold palette: cool teal seas underneath, warm brass and parchment on top, with a single vivid faction hue allowed per element and a set of luminous state colors reserved for status.
 
@@ -239,6 +241,8 @@ A warm-on-cold palette: cool teal seas underneath, warm brass and parchment on t
 
 ### Secondary
 - **Deep Teal Sea** — a four-stop depth ramp from **Sea Shallow** (`#1b5064`) at the top to **Sea Abyss** (`#06171f`) at the bottom. Rendered as the room's radial-gradient backdrop, not a panel fill. This is the only cool family and it stays behind everything.
+
+  **One continuous sea.** The DOM backdrop and the sailing canvas draw the *same* ellipse from the same `--sea-grad-*` / `--sea-vignette-*` fractions, both scoped to the cockpit box, so the living chart has no visible edge against the surrounding water. Those fractions are **radii**, and CSS `radial-gradient(<rx> <ry> at …)` takes radii too — so both sides multiply by 100, never 200. Doubling one side draws that sea at half depth and puts a hard rectangle around the centre stage.
 
 ### Tertiary
 - **Faction Coats** — one loud hue per harness, worn only on that harness's emblem, sail, and hull. Flagship examples are **Codex Green** (`#18A886`), **Grok Slate** (`#59616F`), **Claude Terracotta** (`#D1784C`), **Gemini Blue** (`#4D8CE8`), **Pi Purple** (`#7567D8`), and **Unaligned Brass** (`#8A6A34`, the neutral privateer for unknown harnesses); the full list lives in `src/tokens/factions.ts`. Faction color is the only run-time color in the system; everything else is a fixed token.
@@ -267,7 +271,7 @@ Black and white **alpha ramps** for shadows, scrims, inset rims, scroll tracks, 
 
 **The State-Color Reservation.** The luminous state palette is spent on status alone. Do not reuse Running Green or Failed Coral as decorative accents; their meaning depends on their rarity. Metric quality — scores, deltas, success rate, below-baseline, heatmap fail intensity — uses the separate **quality verdict** group (`--quality-good` / `--quality-poor` / `--quality-neutral`). State colors answer *what a task IS*; quality colors answer *how good work WAS*.
 
-## 3. Typography
+## Typography
 
 **Display Font:** Cinzel (with 'Times New Roman', serif) — engraved Roman capitals.
 **Body Font:** Outfit (with system-ui, sans-serif) — a clean geometric-humanist sans.
@@ -291,7 +295,36 @@ All steps are rem so browser font-size preferences scale the whole HUD (the old 
 
 **The Engraved-Chrome Rule.** Cinzel is for chrome only — titles, headers, tabs, buttons. It never sets a paragraph. If body copy is in Cinzel, it's wrong.
 
-## 4. Elevation
+## Layout
+
+The cockpit is a **room, not a page**. The shell is `position: fixed; inset: 0` with `overflow: hidden` and a `14px` board inset (`--board-inset`), so the chart-room fills the viewport exactly once and never scrolls as a whole. Scrolling belongs to individual regions, never to the room.
+
+**The three-region board.** Under a full-width footer strip, the main row is a fixed / fluid / fixed triptych separated by a `12px` gutter (`--gutter`):
+
+- **Roster** — fixed `300px` (`--region-roster`). The fleet list; scrolls internally.
+- **Centre stage** — fluid (`flex: 1; min-width: 0`). Holds the cartouche + day chip head, then either the living Cove scene or the Soundings board. This is the only region that grows with the window; the flanks are fixed so the chart gets every spare pixel.
+- **Status stack** — fixed `344px` (`--region-right`). Health, Inbox, and Inspector plates stacked vertically; the rail scrolls, and only the Inspector flexes within it so a populated logbook can never crush the Health plate.
+
+The footer is a 3-up grid (`1fr auto 1fr`) so the Cove/Soundings toggle stays optically centred regardless of how wide the chart-key and settings groups grow.
+
+**Padding rhythm.** Two paddings do nearly all the work: plate headers at `11px 15px 8px` (`{spacing.header}`) and plate bodies at `12px 14px` (`{spacing.body}`). Wells inset a step tighter at `8px 10px`.
+
+**Responsive behavior.** One width breakpoint, two height breakpoints, plus container queries where the viewport is the wrong question:
+
+- **≤1080px** — the triptych collapses to a single scrolling column, reordered so the chart still leads: centre stage first, status stack second, roster last. The stacked roster is capped at `40vh` and its scrollport is feathered with a bottom mask so a half-visible row reads as "more below" rather than a hard cut. The scene is floored at `clamp(320px, 50vh, 560px)` so the living chart never collapses to nothing.
+- **≤720px tall** — the Inspector's flavor line and the logbook digest are both dropped, and the resting state centres itself. The digest is removed outright rather than flexed toward zero: below this the plate cannot seat one tally row plus a report line, and a shrunk digest only rendered a row cut in half. Removing it also keeps a zero-height "Fleet digest" region out of the accessibility tree.
+- **Container queries on the title stack** — the cartouche's brand mark sizes to *its own plate* (`cqi`), not the viewport, at 40rem / 32rem / 26rem steps. Laptop centre columns are far narrower than a `vw`-based clamp implies; this is what stops the title shearing at ~1080–1200px. The Cove/Soundings nav is *not* engraved on this plate — it lives in the footer strip — so the cartouche reserves no horizontal space for it.
+
+**Depth ordering is flat.** Atmosphere sits at `z-index: 0`, regions at `1`, and there is exactly one floating layer: `--z-popover: 20` for the chart key and the roster's search popover. There is no z-index ladder to reason about.
+
+### Named Rules
+**The Fixed-Flanks Rule.** The roster and status stack hold their widths; the centre stage absorbs every extra pixel. The chart is the point of the cockpit, so window space goes to the chart — never to padding out the rails.
+
+**The Room-Doesn't-Scroll Rule.** The shell is fixed and clipped. If content overflows, a *region* scrolls, and that scrollport gets a real keyboard tab stop and an accessible name. Never let the whole board scroll.
+
+**The Whole-Plate Rule.** A plate is drawn complete or not at all — its inset brass frame is the system's signature, and a plate sliced by a rail's clip has no bottom frame at all. When a plate's content can grow without bound (the inbox's question cards, the logbook's digest), clamp *inside* that plate and give the clamp a feather or a "more below" cue; never let it push a sibling plate past the fold. A half-drawn plate reads as a rendering bug, not as scrollable content.
+
+## Elevation & Depth
 
 The system conveys depth through **a single signature inset recipe**, not a soft-shadow ladder. Panels ("plates") are dark warm surfaces pressed into the sea by a double inner ring — a dark inset stroke, then a brass frame stroke — with one broad ambient drop shadow beneath. The effect is a metal-framed plaque resting on water, not a floating Material card. Surfaces are flat by default; there is no hover-lift ladder of `sm`/`md`/`lg` shadows.
 
@@ -300,13 +333,30 @@ The system conveys depth through **a single signature inset recipe**, not a soft
 - **Premium / Cartouche frame** (`inset 0 0 0 3px #120d07, inset 0 0 0 5px var(--brass-frame)` [+ inner vignette on the cartouche via `--wash-black-60`]): a heavier frame for the title cartouche and premium plates.
 - **Gold button 3D edge** (`0 3px 0 var(--brass-shadow), inset 0 1px 1px var(--wash-white-40)`): the one tactile press affordance — a hard drop edge on the primary button, not a blur.
 
-### Corner radii
-Documented steps, large to small: **cartouche** 13px → **panel** 11px → **card** 10px → **inbox** 9px → **well** 8px → **control / emblem** 7px → **tight** 4px → **micro** 3px → **hairline** 2px, plus **pill** 999px. Hairline and micro sit below the old 4px floor for chip knobs, scrollbar thumbs, speech-bubble tails, and `calc()` inset corners that would look swollen at tight.
-
 ### Named Rules
 **The Framed-Not-Floating Rule.** Depth comes from the inset brass frame, not from drop-shadow blur. Panels sit *in* the scene, pressed onto the sea. Never add a soft Material elevation shadow to a plate to make it "pop."
 
-## 5. Components
+## Shapes
+
+The form language is **rounded rectangles and pills, nothing else** — no bevels, no cut corners, no organic blobs. The only curve that isn't a rectangle corner is the emblem's rounded square and the fully-round pill. Every shape is drawn with a `1px` brass border plus the inset frame recipe, so silhouettes read as *framed metal plaques* rather than floating cards.
+
+### Corner radii
+Documented steps, large to small: **cartouche** 13px → **panel** 11px → **card** 10px → **inbox** 9px → **well** 8px → **control / emblem** 7px → **tight** 4px → **micro** 3px → **hairline** 2px, plus **pill** 999px. Hairline and micro sit below the old 4px floor for chip knobs, scrollbar thumbs, speech-bubble tails, and `calc()` inset corners that would look swollen at tight.
+
+The scale is **hierarchical, not decorative**: radius tracks the element's rank in the room. The cartouche (the one title plate) is roundest; ordinary plates step down; controls and wells sit tighter; and anything nested inside a rounded parent uses `calc(parent − hairline)` so concentric corners stay optically parallel instead of drifting.
+
+### Pills and chips
+`--radius-pill` (999px) is reserved for things that read as *tokens rather than surfaces*: badges, state chips, the settings toggles, the roster session chips, the footer view nav, and the edge-of-frame attention chips. A pill signals "this is a small piece of status or a compact control," never "this is a panel."
+
+### Clipping and masks
+Plates clip their content (`overflow: hidden`) so the inset frame is never crossed. Two deliberate masks exist and both are functional, not ornamental: the stacked roster's bottom fade at ≤1080px (signalling more content), and the sloop sprite's silhouette / sail / pennant masks, which let a single raster wear any faction coat. Masks read the **alpha channel only** — the sprite PNGs are greyscale+alpha for exactly this reason.
+
+### Named Rules
+**The Concentric-Corner Rule.** A rounded thing inside another rounded thing subtracts, never guesses: `calc(var(--radius-parent) - var(--radius-hairline))`. Two independently-chosen radii on nested corners always look wrong at the tangent.
+
+**The Pill-Means-Token Rule.** Full-round (999px) marks a chip, badge, or compact control. If it holds a header, a body, or more than one line of content, it is a plate and takes a plate radius.
+
+## Components
 
 ### Buttons
 - **Shape:** gently rounded (7px, `--radius-control`); Cinzel 700 caps at 11–13px, tracking 1–2px.
@@ -315,6 +365,7 @@ Documented steps, large to small: **cartouche** 13px → **panel** 11px → **ca
 - **Tertiary:** transparent with faint ink; a quiet text button that warms to brass on hover.
 - **Success:** deep green fill (`#123a2a`) with mint text (`#aef0c8`) — the review/approve CTA in the report tab.
 - **Focus:** 2px Bright Brass outline, 2px offset, on `:focus-visible` for every button and interactive element.
+- **Target size:** every control clears 24×24px (WCAG 2.2 AA 2.5.8). Where the type is small, hold the floor with `min-height: 24px` and centred content rather than inflating padding — density is part of the HUD's character.
 
 ### Badges
 - **Style:** pill (999px), 1px border in the badge's own color over a 30%-black wash; Outfit 600 at 9.5px, tracking 0.6px. The border and text share one variable so a badge is tinted by a single color.
@@ -323,7 +374,7 @@ Documented steps, large to small: **cartouche** 13px → **panel** 11px → **ca
 ### Cards / Containers (Plates)
 - **Corner Style:** 11px panel / 13px cartouche / 10px card.
 - **Background:** dark wood gradient (`#1d140c → #150e07`); the ember (inbox) and report (structured result) plates swap in warm-orange and sea-green fills respectively.
-- **Shadow Strategy:** the double-inset brass frame from Elevation — never a soft Material shadow.
+- **Shadow Strategy:** the double-inset brass frame from Elevation & Depth — never a soft Material shadow.
 - **Border:** 1px brass border; `--premium`/`--cartouche` variants use the heavier brass-mid frame.
 - **Internal Padding:** header `11px 15px 8px`, body `12px 14px`.
 
@@ -334,13 +385,17 @@ Documented steps, large to small: **cartouche** 13px → **panel** 11px → **ca
 ### Navigation / Tabs
 - **Style:** Cinzel 700 tracked caps; inactive tabs sit in faint ink, the active tab warms to brass with a brass underline/frame. Selection and hover use alpha tints of brass (`rgba(240,194,90,0.06–0.12)`), never a fill swap.
 
+### Scrollports
+- **Style:** thin brass-brown thumb (`--scroll-thumb`) on a `--wash-black-25` track; `scrollbar-width: thin` plus matching `::-webkit-scrollbar` rules so both engines agree.
+- **Behavior:** any clipped, scrollable region carries `tabIndex={0}` and an accessible name (`role="region"` + `aria-label`, or an existing `role="log"` / `tabpanel`). A scrollport with no focusable children is otherwise unreachable by keyboard.
+
 ### Emblem (signature — faction chip)
 - A 23px rounded-square chip filled with the vendor's **coat** color, wearing an original emblem mark (unicode glyph or authored SVG path — never a fetched brand logo). A bright rim (`var(--wash-white-32)`) keeps near-black coats (Grok) legible on the dark sea. This is the atom of the vendor-as-faction system: adding a vendor is one data record, zero new component code.
 
 ### Plate Header (signature)
 - A brass radial-gradient icon tile, an engraved Cinzel title, and an optional italic subtitle, with an aside slot pushed right. The consistent "nameplate" that labels every plate in the cove.
 
-## 6. Do's and Don'ts
+## Do's and Don'ts
 
 ### Do:
 - **Do** keep the deep-teal sea gradient as the room's only backdrop; panels rest on it, never replace it.
@@ -350,6 +405,11 @@ Documented steps, large to small: **cartouche** 13px → **panel** 11px → **ca
 - **Do** make the highest-attention state the loudest thing on screen — `awaiting_answer` > `stalled` > `running` > terminal.
 - **Do** back every state color with a second cue (icon, glyph, label, or position) so status survives color-blind vision and reduced motion.
 - **Do** ship every animation with a `prefers-reduced-motion` still frame that stays legible.
+- **Do** give every scrollable region a keyboard tab stop and an accessible name (The Room-Doesn't-Scroll Rule).
+- **Do** keep data ramps monotonic — a heatmap or intensity scale must never render two different values identically.
+- **Do** order ordinal buckets along their own scale (size `XS→XL`, difficulty `trivial→extreme`), never alphabetically (The Scale-Order Rule).
+- **Do** print scores and deltas to a fixed one decimal so they align down a mono column; `8` beside `8.9` mis-scans as the smaller number.
+- **Do** clamp a growing list inside a plate rather than letting it push a sibling plate past the rail's clip (The Whole-Plate Rule).
 
 ### Don't:
 - **Don't** build a **generic SaaS dashboard** — no flat slate-gray surfaces, no single blurple accent, no identical card grids, no hero-metric tiles.
@@ -359,3 +419,5 @@ Documented steps, large to small: **cartouche** 13px → **panel** 11px → **ca
 - **Don't** set operational prose in IM Fell English — the flavor serif is for atmosphere only (The Flavor-Font Rule).
 - **Don't** reuse a state color (Running Green, Failed Coral, …) as a decorative accent; its meaning depends on its rarity.
 - **Don't** add soft Material elevation shadows to plates to make them "pop"; depth is the inset frame, not blur.
+- **Don't** hard-code an `rgba()` wash or an off-scale radius above layer 0 — compose from `--wash-*` and the radius scale.
+- **Don't** use `opacity` to quiet text; it silently voids the token layer's contrast guarantees. Pick a dimmer ink instead.

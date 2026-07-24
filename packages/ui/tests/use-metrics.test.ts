@@ -270,6 +270,56 @@ describe("projectSoundings / metricsRefreshKey", () => {
     expect(view.comparison[0]!.belowBaselineRate).toBe("100%");
   });
 
+  it("orders size and difficulty buckets along their scale, not alphabetically", () => {
+    const fixture = metricsFixture();
+    const stats = (avg: number) => ({
+      count: 2,
+      avg,
+      avg_baseline: 6,
+      avg_delta: avg - 6,
+      below_baseline_rate: 0,
+      criterion_failures: {},
+      first_attempt: { count: 2, avg, avg_baseline: 6, avg_delta: 0, below_baseline_rate: 0 },
+      fix: { count: 0, avg: null, avg_baseline: null, avg_delta: null, below_baseline_rate: null },
+    });
+    // Insertion order is deliberately scrambled — projection must not preserve
+    // it, and must not fall back to alphabetical (L, M, S, XL, XS).
+    fixture.groups[0]!.evals_by_size = {
+      L: stats(6.1),
+      XS: stats(8.1),
+      M: stats(6.9),
+      XL: stats(5.2),
+      S: stats(7.4),
+    };
+    fixture.groups[0]!.evals_by_difficulty = {
+      hard: stats(5.9),
+      trivial: stats(9),
+      extreme: stats(4.4),
+      easy: stats(8.2),
+      medium: stats(7),
+      // Outside the canonical scale — kept, sorted after it.
+      bewildering: stats(1),
+    };
+    const g = projectSoundings(fixture, "ready", null, "vendor", "s").groups[0]!;
+    expect(g.evalsBySize.map((b) => b.key)).toEqual(["XS", "S", "M", "L", "XL"]);
+    expect(g.evalsByDifficulty.map((b) => b.key)).toEqual([
+      "trivial",
+      "easy",
+      "medium",
+      "hard",
+      "extreme",
+      "bewildering",
+    ]);
+    // The ramp only reads as a trend when the scale order is preserved.
+    expect(g.evalsBySize.map((b) => b.avg)).toEqual([
+      "8.1 · n=2",
+      "7.4 · n=2",
+      "6.9 · n=2",
+      "6.1 · n=2",
+      "5.2 · n=2",
+    ]);
+  });
+
   it("renders absent token telemetry as unknown after completed work", () => {
     const fixture = metricsFixture();
     fixture.groups[0]!.tokens = { input: 0, output: 0, cached: 0, tasks_reporting: 0 };
@@ -304,6 +354,8 @@ describe("format helpers used by metrics projection", () => {
     expect(formatSuccessRate(null)).toBe("—");
     expect(formatEvalAvg(4.25, 3)).toBe("4.3 · n=3");
     expect(formatEvalAvg(null, 0)).toBe("—");
+    // One decimal always: bare integers mis-scan beside decimals in mono columns.
+    expect(formatEvalAvg(7, 9)).toBe("7.0 · n=9");
     expect(formatDurationMs(125_000)).toBe("2m 05s");
     expect(formatDurationMs(null)).toBe("—");
     expect(formatTokenCount(1_500_000)).toBe("1.5M");

@@ -9,6 +9,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import {
   ChartKey,
   EvalHeatmap,
+  InboxPanel,
   Inspector,
   LogStream,
   ReportPanel,
@@ -266,6 +267,36 @@ describe("scrollport keyboard focus (H3)", () => {
     expectFocusable(digestEl, ".pc-inspector__digest");
     expect(digestEl?.getAttribute("role")).toBe("region");
     expect(digestEl?.getAttribute("aria-label")).toBe("Fleet digest");
+  });
+
+  it("InboxPanel card list is a named focusable region", () => {
+    // The list is clamped and scrolls, so cards below the fold must be
+    // reachable without tabbing through every card above them.
+    const { container } = render(
+      <InboxPanel
+        tasks={[
+          {
+            id: "t1",
+            name: "rubric-version-backfill",
+            state: "awaiting_answer",
+            coat: "#10a37f",
+            emblem: { kind: "svg", viewBox: "0 0 24 24", path: "M12 2 L20 7 V17 L12 22 L4 17 V7 Z" },
+            faction: "Codex",
+            meta: "parley/t1 · t1",
+            question: "Which backfill strategy?",
+            updatedAt: "2026-07-23T12:00:00.000Z",
+            sessionId: null,
+            sessionHandle: null,
+            sessionShortRef: null,
+          },
+        ]}
+        onSelectTask={() => {}}
+      />,
+    );
+    const list = container.querySelector(".pc-inbox__list");
+    expectFocusable(list, ".pc-inbox__list");
+    expect(list?.getAttribute("role")).toBe("region");
+    expect(list?.getAttribute("aria-label")).toBe("Tasks needing an answer");
   });
 
   it("EvalHeatmap scroll container is a named focusable region", () => {

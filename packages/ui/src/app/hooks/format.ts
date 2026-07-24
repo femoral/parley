@@ -50,11 +50,14 @@ export function formatSuccessRate(rate: number | null | undefined): string {
 
 /**
  * Eval average with sample count (`4.2 · n=12`), or em-dash when unscored.
+ *
+ * Always one decimal: these read in mono columns beside each other, and a bare
+ * `8` next to `8.9` mis-scans as the smaller magnitude because the digit column
+ * is shorter. `8.0 · n=11` keeps the decimal point aligned down the column.
  */
 export function formatEvalAvg(avg: number | null | undefined, count: number): string {
   if (count === 0 || avg === null || avg === undefined || !Number.isFinite(avg)) return "—";
-  const rounded = Number.isInteger(avg) ? String(avg) : (Math.round(avg * 10) / 10).toString();
-  return `${rounded} · n=${count}`;
+  return `${avg.toFixed(1)} · n=${count}`;
 }
 
 /**
@@ -67,17 +70,18 @@ export function formatDurationMs(ms: number | null | undefined): string {
 }
 
 /**
- * Signed eval delta (`+0.5`, `−1.2`, `0`) for score − baseline, or em-dash.
+ * Signed eval delta (`+0.5`, `−1.2`, `0.0`) for score − baseline, or em-dash.
  * Uses a proper minus sign for negatives (design-manifest mono readouts).
+ * One decimal always, so deltas line up when read down a comparison grid.
  */
 export function formatEvalDelta(delta: number | null | undefined): string {
   if (delta === null || delta === undefined || !Number.isFinite(delta)) return "—";
-  if (delta === 0) return "0";
   const rounded = Math.round(delta * 10) / 10;
-  const body = Number.isInteger(rounded) ? String(rounded) : rounded.toString();
-  if (rounded > 0) return `+${body}`;
-  // Replace ASCII hyphen with minus for display.
-  return `−${body.replace(/^-/, "")}`;
+  // -0.04 rounds to -0 — normalise so it never renders as "−0.0".
+  if (rounded === 0) return "0.0";
+  const body = Math.abs(rounded).toFixed(1);
+  // Proper minus sign for negatives, not an ASCII hyphen.
+  return rounded > 0 ? `+${body}` : `−${body}`;
 }
 
 /**
@@ -88,11 +92,12 @@ export function formatRate(rate: number | null | undefined): string {
 }
 
 /**
- * Compact 0–10 score for distribution axes (`4.5` or `—`).
+ * Compact 0–10 score for distribution axes (`4.5`, `7.0`, or `—`).
+ * One decimal always — same column-scan reason as {@link formatEvalAvg}.
  */
 export function formatScore(score: number | null | undefined): string {
   if (score === null || score === undefined || !Number.isFinite(score)) return "—";
-  return Number.isInteger(score) ? String(score) : (Math.round(score * 10) / 10).toString();
+  return score.toFixed(1);
 }
 
 /**

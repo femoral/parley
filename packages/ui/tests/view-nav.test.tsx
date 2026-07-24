@@ -110,20 +110,18 @@ function baseView(overrides: Partial<CockpitView> = {}): CockpitView {
   };
 }
 
-describe("Cockpit view nav framed by Plate (#126)", () => {
-  it("engraves the Cove/Soundings toggle onto the cartouche plate", () => {
+describe("Cockpit view nav (#126)", () => {
+  it("centres the Cove/Soundings toggle in the footer strip", () => {
     cockpitState.view = baseView();
     const { container } = render(<Cockpit />);
     const nav = screen.getByRole("navigation", { name: "Cockpit views" });
-    expect(nav.classList.contains("pc-view-nav")).toBe(true);
-    expect(nav.classList.contains("pc-view-nav--cartouche")).toBe(true);
-    // No standalone plate of its own — it overlays the cartouche's plate via
-    // the title stack (the nav is positioned on the title plate's bottom edge).
-    const stack = nav.closest(".pc-center__title-stack");
-    expect(stack).toBeTruthy();
-    expect(stack?.querySelector(".pc-plate--cartouche")).toBeTruthy();
-    // Sits in the centre head with the Cartouche + DayChip.
-    expect(container.querySelector(".pc-center__head")?.contains(nav)).toBe(true);
+    expect(nav.classList.contains("pc-footer-nav")).toBe(true);
+    // The footer is a 1fr auto 1fr grid so the toggle stays optically centred
+    // however wide the chart-key and settings groups grow — it is not engraved
+    // on the cartouche, so the centre head must not contain it.
+    const footer = container.querySelector(".pc-settings-row");
+    expect(footer?.contains(nav)).toBe(true);
+    expect(container.querySelector(".pc-center__head")?.contains(nav)).toBe(false);
   });
 
   it("keeps active state and click handling on the toggle buttons", () => {
@@ -131,9 +129,9 @@ describe("Cockpit view nav framed by Plate (#126)", () => {
     render(<Cockpit />);
     const cove = screen.getByRole("button", { name: "Cove" });
     const soundings = screen.getByRole("button", { name: "Soundings" });
-    expect(cove.classList.contains("pc-view-nav__tab--active")).toBe(true);
+    expect(cove.classList.contains("pc-footer-nav__tab--active")).toBe(true);
     expect(cove.getAttribute("aria-pressed")).toBe("true");
-    expect(soundings.classList.contains("pc-view-nav__tab--active")).toBe(false);
+    expect(soundings.classList.contains("pc-footer-nav__tab--active")).toBe(false);
     expect(soundings.getAttribute("aria-pressed")).toBe("false");
 
     fireEvent.click(soundings);
