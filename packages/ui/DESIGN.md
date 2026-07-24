@@ -13,6 +13,7 @@ colors:
   brass-deep: "#b87825"
   brass-frame: "#8a6a34"
   ink-parchment: "#f2e3c4"
+  ink-soft: "#d8c39a"
   ink-muted: "#c9b184"
   ink-label: "#967c54"
   ink-on-sea: "#e0cfa4"
@@ -47,10 +48,41 @@ colors:
   faction-kimi: "#39A06F"
   faction-unaligned: "#8A6A34"
   ember-border: "#d97e3a"
+  # Ember / attention / report plate gradient stops (composed into fill tokens in layer 0)
+  ember-fill-top: "#241206"
+  ember-fill-bottom: "#180d05"
+  attn-awaiting-fill-top: "#3a1a0c"
+  attn-awaiting-fill-bottom: "#25130a"
+  attn-stalled-fill-top: "#12222c"
+  attn-stalled-fill-bottom: "#0e1a22"
+  report-fill-top: "#122019"
+  report-fill-bottom: "#0e1a13"
   report-border: "#3f8f68"
   alert-red-top: "#c22b1f"
   alert-red-bottom: "#9c1c14"
   alert-cream: "#ffe6a8"
+  # Depth washes — black/white alpha ramps for shadows, scrims, inset rims, masks
+  wash-black: "#000000"
+  wash-black-18: "rgba(0, 0, 0, 0.18)"
+  wash-black-22: "rgba(0, 0, 0, 0.22)"
+  wash-black-25: "rgba(0, 0, 0, 0.25)"
+  wash-black-28: "rgba(0, 0, 0, 0.28)"
+  wash-black-30: "rgba(0, 0, 0, 0.3)"
+  wash-black-32: "rgba(0, 0, 0, 0.32)"
+  wash-black-35: "rgba(0, 0, 0, 0.35)"
+  wash-black-38: "rgba(0, 0, 0, 0.38)"
+  wash-black-40: "rgba(0, 0, 0, 0.4)"
+  wash-black-45: "rgba(0, 0, 0, 0.45)"
+  wash-black-50: "rgba(0, 0, 0, 0.5)"
+  wash-black-55: "rgba(0, 0, 0, 0.55)"
+  wash-black-60: "rgba(0, 0, 0, 0.6)"
+  wash-white-20: "rgba(255, 255, 255, 0.2)"
+  wash-white-28: "rgba(255, 255, 255, 0.28)"
+  wash-white-30: "rgba(255, 255, 255, 0.3)"
+  wash-white-32: "rgba(255, 255, 255, 0.32)"
+  wash-white-35: "rgba(255, 255, 255, 0.35)"
+  wash-white-40: "rgba(255, 255, 255, 0.4)"
+  wash-white-50: "rgba(255, 255, 255, 0.5)"
 typography:
   display:
     fontFamily: "Cinzel, 'Times New Roman', serif"
@@ -115,6 +147,8 @@ typography:
 rounded:
   cartouche: "13px"
   tight: "4px"
+  micro: "3px"
+  hairline: "2px"
   panel: "11px"
   card: "10px"
   inbox: "9px"
@@ -158,7 +192,7 @@ components:
     rounded: "{rounded.panel}"
     padding: "{spacing.body}"
   badge:
-    backgroundColor: "#0000004d"
+    backgroundColor: "{colors.wash-black-30}"
     textColor: "{colors.ink-label}"
     rounded: "{rounded.pill}"
     padding: "2px 8px"
@@ -213,11 +247,15 @@ A warm-on-cold palette: cool teal seas underneath, warm brass and parchment on t
 
 ### Neutral
 - **Parchment Ink** (`#f2e3c4`): default body text on dark panels — warm, high-contrast, never gray.
+- **Soft Ink** (`#d8c39a`): one step quieter than parchment for soft-quiet roster names and similar.
 - **Muted Ink** (`#c9b184`) / **Label Ink** (`#967c54`): secondary text and ALL-CAPS micro-labels. Warm tans, not neutral grays. Label is the quietest functional tier (≥4.5:1 on plate wood).
 - **Ink on Sea** (`#e0cfa4`): body text that sits on the teal sea backdrop (empty-state copy) — plate inks fail AA there.
 - **Plate Wood** — panel chrome ramp from **Plate Top** (`#1d140c`) to **Plate Bottom** (`#150e07`); dark warm browns that read as aged wood, lit by the brass frame.
 - **Parchment Tag** (`#efe0bd` on `#5b3a24` text): the one light chip in the whole UI — a genuine paper label against the dark room.
 - **Palm Green** (`#5e7a4a`): scene foliage only — earthy olive kept outside the state family so Running Green stays rare.
+
+### Depth washes
+Black and white **alpha ramps** for shadows, scrims, inset rims, scroll tracks, and mask feathers — not brand color. Named as an ordered scale (`--wash-black-18` … `--wash-black-60`, `--wash-white-20` … `--wash-white-50`, plus opaque `--wash-black` for mask stops) because the same wash reappears on popovers, text-shadows, wells, and scene drop-shadows; inventing per-surface names would invent false distinctions. Each alpha is a distinct rendered appearance — do not snap between steps. Plate chrome recipes (`--plate-shadow` and friends) compose these washes rather than hard-coding `rgba(0,0,0,…)`.
 
 ### State Colors (reserved — status only)
 - **Running Green** (`#5fd08a`), **Awaiting Gold** (`#ffcf4d`), **Stalled Slate** (`#7fa8bf`), **Completed Sky** (`#7fd0ff`), **Failed Coral** (`#ff7a6b`), **Pending Tan** (`#c9a87a`), **Cancelled Ash** (`#9a8a72`). These luminous hues are spent *only* on task state, so a color in this family always means "this is a state."
@@ -258,9 +296,12 @@ All steps are rem so browser font-size preferences scale the whole HUD (the old 
 The system conveys depth through **a single signature inset recipe**, not a soft-shadow ladder. Panels ("plates") are dark warm surfaces pressed into the sea by a double inner ring — a dark inset stroke, then a brass frame stroke — with one broad ambient drop shadow beneath. The effect is a metal-framed plaque resting on water, not a floating Material card. Surfaces are flat by default; there is no hover-lift ladder of `sm`/`md`/`lg` shadows.
 
 ### Shadow Vocabulary
-- **Plate frame** (`inset 0 0 0 3px #13100a, inset 0 0 0 4px var(--brass-inner), 0 8px 22px rgba(0,0,0,0.5)`): the standard plate's double-inset ring + ambient drop.
-- **Premium / Cartouche frame** (`inset 0 0 0 3px #120d07, inset 0 0 0 5px var(--brass-frame)` [+ inner vignette on the cartouche]): a heavier frame for the title cartouche and premium plates.
-- **Gold button 3D edge** (`0 3px 0 var(--brass-shadow), inset 0 1px 1px rgba(255,255,255,0.4)`): the one tactile press affordance — a hard drop edge on the primary button, not a blur.
+- **Plate frame** (`inset 0 0 0 3px #13100a, inset 0 0 0 4px var(--brass-inner), 0 8px 22px var(--wash-black-50)`): the standard plate's double-inset ring + ambient drop.
+- **Premium / Cartouche frame** (`inset 0 0 0 3px #120d07, inset 0 0 0 5px var(--brass-frame)` [+ inner vignette on the cartouche via `--wash-black-60`]): a heavier frame for the title cartouche and premium plates.
+- **Gold button 3D edge** (`0 3px 0 var(--brass-shadow), inset 0 1px 1px var(--wash-white-40)`): the one tactile press affordance — a hard drop edge on the primary button, not a blur.
+
+### Corner radii
+Documented steps, large to small: **cartouche** 13px → **panel** 11px → **card** 10px → **inbox** 9px → **well** 8px → **control / emblem** 7px → **tight** 4px → **micro** 3px → **hairline** 2px, plus **pill** 999px. Hairline and micro sit below the old 4px floor for chip knobs, scrollbar thumbs, speech-bubble tails, and `calc()` inset corners that would look swollen at tight.
 
 ### Named Rules
 **The Framed-Not-Floating Rule.** Depth comes from the inset brass frame, not from drop-shadow blur. Panels sit *in* the scene, pressed onto the sea. Never add a soft Material elevation shadow to a plate to make it "pop."
@@ -294,7 +335,7 @@ The system conveys depth through **a single signature inset recipe**, not a soft
 - **Style:** Cinzel 700 tracked caps; inactive tabs sit in faint ink, the active tab warms to brass with a brass underline/frame. Selection and hover use alpha tints of brass (`rgba(240,194,90,0.06–0.12)`), never a fill swap.
 
 ### Emblem (signature — faction chip)
-- A 23px rounded-square chip filled with the vendor's **coat** color, wearing an original emblem mark (unicode glyph or authored SVG path — never a fetched brand logo). A bright rim (`rgba(255,255,255,0.32)`) keeps near-black coats (Grok) legible on the dark sea. This is the atom of the vendor-as-faction system: adding a vendor is one data record, zero new component code.
+- A 23px rounded-square chip filled with the vendor's **coat** color, wearing an original emblem mark (unicode glyph or authored SVG path — never a fetched brand logo). A bright rim (`var(--wash-white-32)`) keeps near-black coats (Grok) legible on the dark sea. This is the atom of the vendor-as-faction system: adding a vendor is one data record, zero new component code.
 
 ### Plate Header (signature)
 - A brass radial-gradient icon tile, an engraved Cinzel title, and an optional italic subtitle, with an aside slot pushed right. The consistent "nameplate" that labels every plate in the cove.
