@@ -1,0 +1,106 @@
+{
+  "$schema": "../../workflow-1.schema.json",
+  "id": "research",
+  "version": 1,
+  "description": "Scope the question into named queries, search each in parallel, funnel to a shortlist, validate each source, then adversarially review coverage — broadening the scope if it is thin.",
+
+  "inputs": {
+    "brief": { "type": "text" }
+  },
+
+  "types": {
+    "source": { "schema": "types/source.schema.json" },
+    "validation": { "schema": "types/validation.schema.json" },
+    "coverage": { "enum": ["sufficient", "insufficient"] }
+  },
+
+  "nodes": [
+    {
+      "id": "scope",
+      "kind": "step",
+      "task_type": "research",
+      "profile": "deep",
+      "prompt": "prompts/research/scope.md",
+      "in": {
+        "brief": { "type": "text", "from": "run.brief" },
+        "gaps": { "type": "text" }
+      },
+      "out": {
+        "queries": { "type": "dict<string, text>" }
+      }
+    },
+
+    {
+      "id": "search",
+      "kind": "step",
+      "task_type": "research",
+      "profile": "fast",
+      "worktree": "own",
+      "prompt": "prompts/research/search.md",
+      "in": {
+        "query": { "type": "text", "from": "scope.queries" },
+        "brief": { "type": "text", "from": "run.brief" }
+      },
+      "out": {
+        "sources": { "type": "source[]" }
+      }
+    },
+
+    {
+      "id": "funnel",
+      "kind": "step",
+      "task_type": "research",
+      "profile": "deep",
+      "prompt": "prompts/research/funnel.md",
+      "in": {
+        "harvest": { "type": "dict<string, source[]>", "from": "search.sources" },
+        "brief": { "type": "text", "from": "run.brief" }
+      },
+      "out": {
+        "shortlist": { "type": "source[]" }
+      }
+    },
+
+    {
+      "id": "validate",
+      "kind": "step",
+      "task_type": "research",
+      "profile": "fast",
+      "worktree": "own",
+      "prompt": "prompts/research/validate.md",
+      "in": {
+        "source": { "type": "source", "from": "funnel.shortlist" }
+      },
+      "out": {
+        "verdict": { "type": "validation" }
+      }
+    },
+
+    {
+      "id": "adversarial-review",
+      "kind": "step",
+      "task_type": "review",
+      "profile": "deep",
+      "prompt": "prompts/research/adversarial-review.md",
+      "in": {
+        "brief": { "type": "text", "from": "run.brief" },
+        "queries": { "type": "dict<string, text>", "from": "scope.queries" },
+        "shortlist": { "type": "source[]", "from": "funnel.shortlist" },
+        "validations": { "type": "validation[]", "from": "validate.verdict" }
+      },
+      "out": {
+        "coverage": { "type": "coverage" },
+        "gaps": { "type": "text" },
+        "report": { "type": "text" }
+      },
+      "loop": {
+        "to": "scope",
+        "while": { "port": "coverage", "is": "insufficient" },
+        "max": 2,
+        "with": {
+          "gaps": "adversarial-review.gaps"
+        }
+      }
+    }
+  ]
+}

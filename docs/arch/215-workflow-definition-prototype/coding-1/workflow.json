@@ -1,0 +1,111 @@
+{
+  "$schema": "../../workflow-1.schema.json",
+  "id": "coding-1",
+  "version": 1,
+  "description": "Plan, gate the plan, implement, review from n authored angles in parallel, rework until the reviewers agree.",
+
+  "inputs": {
+    "brief": { "type": "text" }
+  },
+
+  "types": {
+    "verdict": { "enum": ["approve", "changes_requested"] }
+  },
+
+  "nodes": [
+    {
+      "id": "plan",
+      "kind": "step",
+      "task_type": "planning",
+      "profile": "deep",
+      "prompt": "prompts/coding-1/plan.md",
+      "in": {
+        "brief": { "type": "text", "from": "run.brief" }
+      },
+      "out": {
+        "plan": { "type": "text" }
+      }
+    },
+
+    {
+      "id": "approve-plan",
+      "kind": "gate",
+      "question": "Approve this plan before any code is written?",
+      "shows": {
+        "plan": { "from": "plan.plan" }
+      }
+    },
+
+    {
+      "id": "implement",
+      "kind": "step",
+      "task_type": "coding",
+      "profile": "deep",
+      "prompt": "prompts/coding-1/implement.md",
+      "in": {
+        "brief": { "type": "text", "from": "run.brief" },
+        "plan": { "type": "text", "from": "plan.plan" },
+        "rework": { "type": "text" }
+      },
+      "out": {
+        "branch": { "type": "text" },
+        "summary": { "type": "text" }
+      }
+    },
+
+    {
+      "id": "review",
+      "kind": "step",
+      "task_type": "review",
+      "worktree": "own",
+      "profile": "fast",
+      "prompt": "prompts/coding-1/review.md",
+      "slots": {
+        "correctness": {
+          "profile": "deep",
+          "prompt_append": "prompts/coding-1/review/correctness.md"
+        },
+        "tests": {
+          "prompt_append": "prompts/coding-1/review/tests.md"
+        },
+        "docs": {
+          "prompt_append": "prompts/coding-1/review/docs.md"
+        }
+      },
+      "in": {
+        "branch": { "type": "text", "from": "implement.branch" },
+        "plan": { "type": "text", "from": "plan.plan" },
+        "brief": { "type": "text", "from": "run.brief" }
+      },
+      "out": {
+        "verdict": { "type": "verdict" },
+        "notes": { "type": "text" }
+      }
+    },
+
+    {
+      "id": "triage",
+      "kind": "step",
+      "task_type": "review",
+      "profile": "deep",
+      "prompt": "prompts/coding-1/triage.md",
+      "in": {
+        "verdicts": { "type": "dict<string, verdict>", "from": "review.verdict" },
+        "notes": { "type": "dict<string, text>", "from": "review.notes" },
+        "plan": { "type": "text", "from": "plan.plan" }
+      },
+      "out": {
+        "verdict": { "type": "verdict" },
+        "rework_brief": { "type": "text" }
+      },
+      "loop": {
+        "to": "implement",
+        "while": { "port": "verdict", "is": "changes_requested" },
+        "max": 2,
+        "with": {
+          "rework": "triage.rework_brief"
+        }
+      }
+    }
+  ]
+}

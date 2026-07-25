@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "validation",
+  "type": "object",
+  "required": ["url", "status", "reason"],
+  "additionalProperties": false,
+  "properties": {
+    "url": { "type": "string", "format": "uri" },
+    "status": { "enum": ["supports", "contradicts", "unreachable", "off-topic"] },
+    "reason": { "type": "string", "minLength": 1 },
+    "quote": {
+      "type": "string",
+      "description": "Verbatim passage backing the status; absent when unreachable."
+    }
+  }
+}
