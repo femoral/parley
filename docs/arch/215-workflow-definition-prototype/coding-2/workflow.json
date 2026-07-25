@@ -1,0 +1,100 @@
+{
+  "$schema": "../../workflow-1.schema.json",
+  "id": "coding-2",
+  "version": 1,
+  "description": "Implement straight from the brief, review in parallel across three vendors, and let the orchestrator decide each rework round.",
+
+  "inputs": {
+    "brief": { "type": "text" }
+  },
+
+  "types": {
+    "verdict": { "enum": ["approve", "changes_requested"] }
+  },
+
+  "nodes": [
+    {
+      "id": "implement",
+      "kind": "step",
+      "task_type": "coding",
+      "profile": "deep",
+      "prompt": "prompts/coding-2/implement.md",
+      "in": {
+        "brief": { "type": "text", "from": "run.brief" },
+        "rework": { "type": "text" }
+      },
+      "out": {
+        "branch": { "type": "text" },
+        "summary": { "type": "text" }
+      }
+    },
+
+    {
+      "id": "review",
+      "kind": "step",
+      "task_type": "review",
+      "worktree": "own",
+      "prompt": "prompts/coding-2/review.md",
+      "slots": {
+        "adversarial": {
+          "vendor": "codex",
+          "model": "gpt-5.1-codex",
+          "effort": "high",
+          "prompt_append": "prompts/coding-2/review/adversarial.md"
+        },
+        "fast-sweep": {
+          "vendor": "grok",
+          "model": "grok-code-fast-1",
+          "prompt_append": "prompts/coding-2/review/sweep.md"
+        },
+        "house-style": {
+          "profile": "fast",
+          "prompt_append": "prompts/coding-2/review/house-style.md"
+        }
+      },
+      "in": {
+        "branch": { "type": "text", "from": "implement.branch" },
+        "brief": { "type": "text", "from": "run.brief" }
+      },
+      "out": {
+        "verdict": { "type": "verdict" },
+        "notes": { "type": "text" }
+      }
+    },
+
+    {
+      "id": "triage",
+      "kind": "step",
+      "task_type": "review",
+      "profile": "deep",
+      "prompt": "prompts/coding-2/triage.md",
+      "in": {
+        "verdicts": { "type": "dict<string, verdict>", "from": "review.verdict" },
+        "notes": { "type": "dict<string, text>", "from": "review.notes" },
+        "brief": { "type": "text", "from": "run.brief" }
+      },
+      "out": {
+        "verdict": { "type": "verdict" },
+        "rework_brief": { "type": "text" }
+      }
+    },
+
+    {
+      "id": "rework-or-finish",
+      "kind": "gate",
+      "question": "Reviewers asked for changes. Send it back to implementation, or finish the run here?",
+      "shows": {
+        "verdict": { "from": "triage.verdict" },
+        "rework_brief": { "from": "triage.rework_brief" },
+        "notes": { "from": "review.notes" }
+      },
+      "loop": {
+        "to": "implement",
+        "max": 2,
+        "with": {
+          "rework": "triage.rework_brief"
+        }
+      }
+    }
+  ]
+}
