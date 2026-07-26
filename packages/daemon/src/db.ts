@@ -6,6 +6,7 @@ import {
   TERMINAL_STATES,
   type HomePaths,
   type TaskState,
+  type WorkspaceMode,
 } from "@useparley/core";
 import type { SandboxMode } from "./adapters/types.js";
 
@@ -188,6 +189,26 @@ export interface TaskRow {
    * queued or after leaving the queue for a spawn. Orders FIFO restarts.
    */
   queued_at: string | null;
+  /**
+   * Owning run id when this task is run-owned (ADR-0018 / #233). Null for
+   * ordinary `--cwd` / worktree tasks outside a workflow run.
+   */
+  run_id: string | null;
+  /**
+   * Run address: node id within the workflow. Null when not run-owned.
+   * With {@link iteration} and {@link slot}, forms the task's structural address.
+   */
+  node: string | null;
+  /**
+   * Run address: 1-based iteration (0 marks a node inherited by a fork).
+   * Null when not run-owned.
+   */
+  iteration: number | null;
+  /**
+   * Run address: authored slot name or data-fan-out key. Null when the node
+   * has a single task (no fan-out) or the task is not run-owned.
+   */
+  slot: string | null;
 }
 
 /** Fields the daemon writes when creating a task. */
@@ -268,6 +289,157 @@ export interface NewTask {
    * session so `buildSpec` can resume immediately). Null/omitted otherwise.
    */
   session_id?: string | null;
+  /**
+   * Owning run + structural address when the task is run-owned (ADR-0018 /
+   * #233). Omitted/null for ordinary delegate tasks. A run-owned task is
+   * shaped like `--cwd`: `worktree`/`branch` null, `cwd` set to the run workspace.
+   */
+  run_id?: string | null;
+  node?: string | null;
+  iteration?: number | null;
+  slot?: string | null;
+}
+
+// ---------------------------------------------------------------------------
+// Runs, deliverables, and run-owned task address (#233 / ADR-0016, 0017, 0018)
+// ---------------------------------------------------------------------------
+
+/**
+ * Run lifecycle states (ADR-0017). Exact vocabulary:
+ * - `blocked` = the daemon cannot advance it (gate, loop budget, spawn error)
+ * - `failed` = nobody can (workspace gone, definition unparseable)
+ * A run never auto-fails into `failed` from the engine; retention uses
+ * {@link RunRow.purged_at} rather than inventing a sixth runtime state.
+ */
+export const RUN_STATES = [
+  "running",
+  "blocked",
+  "completed",
+  "failed",
+  "cancelled",
+] as const;
+
+/** One of parley's run lifecycle states. */
+export type RunState = (typeof RUN_STATES)[number];
+
+/** Terminal run states — the run will not advance again. */
+export const RUN_TERMINAL_STATES = ["completed", "failed", "cancelled"] as const;
+
+/** Deliverable storage kind (ADR-0016): inline JSON, or a path reference. */
+export const DELIVERABLE_KINDS = ["inline", "file", "dir"] as const;
+
+/** One of the three deliverable kinds. */
+export type DeliverableKind = (typeof DELIVERABLE_KINDS)[number];
+
+/** A run row as stored in SQLite (#233 / ADR-0016, 0017). */
+export interface RunRow {
+  id: string;
+  /** Workflow definition id (not a path). */
+  workflow: string;
+  /** Author-declared workflow `version` at run start. */
+  version: number;
+  /** Workflow `type` (rubric selector), copied from the definition. */
+  type: string;
+  /** Workspace mode from the definition — not overridable at run start. */
+  workspace: WorkspaceMode;
+  /**
+   * Repo the run is bound to. Null for `scratch` even when started inside a
+   * repo (ADR-0018); also null until a `repo`-mode run is bound.
+   */
+  repo: string | null;
+  state: RunState;
+  /** Current node id; null when the run has left the node sequence (e.g. completed). */
+  current_node: string | null;
+  /**
+   * Current iteration of the run cursor (ADR-0017). 1-based for live work;
+   * iteration 0 on a forked node's *tasks/deliverables* marks inheritance.
+   */
+  iteration: number;
+  /** Parent run when this row is a fork (ADR-0017); null for first attempts. */
+  parent_run_id: string | null;
+  /**
+   * 1-based run-level attempt in a fork chain (ADR-0017). Reserved word —
+   * never a fan-out slot or loop pass (CONTEXT.md).
+   */
+  attempt: number;
+  /** Orchestrator session that started the run; mirrors task grouping. */
+  orchestrator_session_id: string | null;
+  created_at: string;
+  updated_at: string;
+  started_at: string | null;
+  completed_at: string | null;
+  /** Failure / block detail for operators; null when none recorded. */
+  error: string | null;
+  /**
+   * When retention purged scaffolding for this run (#244). Null while live.
+   * Representable now so the query surface can render decay without a sweep.
+   */
+  purged_at: string | null;
+}
+
+/** Fields the daemon writes when creating a run. */
+export interface NewRun {
+  /** Pre-allocated short id (`r1`, … via {@link nextRunId}). */
+  id: string;
+  workflow: string;
+  version: number;
+  type: string;
+  workspace: WorkspaceMode;
+  /** Null for `scratch` (even inside a repo). */
+  repo: string | null;
+  /** Initial state; defaults to `running`. */
+  state?: RunState;
+  current_node: string | null;
+  /** Defaults to 1 when omitted. */
+  iteration?: number;
+  parent_run_id?: string | null;
+  /** Defaults to 1 when omitted. */
+  attempt?: number;
+  orchestrator_session_id?: string | null;
+  started_at?: string | null;
+  error?: string | null;
+}
+
+/**
+ * A deliverable row: opaque id + structural address node/port/iteration/slot
+ * (ADR-0016 / #233). Shares its producing task's retention clock; `purged_at`
+ * makes the purged state renderable (sweep is #244).
+ */
+export interface DeliverableRow {
+  id: string;
+  run_id: string;
+  node: string;
+  port: string;
+  iteration: number;
+  /** Null when the producing node has no fan-out. */
+  slot: string | null;
+  /** Producing task id. */
+  task_id: string;
+  kind: DeliverableKind;
+  /**
+   * Inline JSON text when `kind === "inline"`; a path when `kind` is `file`
+   * or `dir`. Null when purged (address survives the value).
+   */
+  value: string | null;
+  created_at: string;
+  /** ISO-8601 when purged; null while the value is retained. */
+  purged_at: string | null;
+}
+
+/** Fields the daemon writes when recording a deliverable. */
+export interface NewDeliverable {
+  /** Pre-allocated short id (`d1`, … via {@link nextDeliverableId}). */
+  id: string;
+  run_id: string;
+  node: string;
+  port: string;
+  iteration: number;
+  slot?: string | null;
+  task_id: string;
+  kind: DeliverableKind;
+  /** Inline JSON text or path; null only if inserting already-purged (rare). */
+  value: string | null;
+  purged_at?: string | null;
 }
 
 /**
@@ -454,6 +626,61 @@ const MIGRATIONS: string[] = [
    DROP TABLE sessions;
    ALTER TABLE sessions_new RENAME TO sessions;
    CREATE INDEX sessions_workspace ON sessions(workspace_root);`,
+  // #233: runs, deliverables, and run-owned task address (ADR-0016 / 0017 / 0018).
+  // A step stores nothing — its state is a projection over its tasks; no steps
+  // table. Deliverable address is node/port/iteration/slot; `purged_at` makes
+  // retention decay renderable (the sweep itself is #244).
+  `CREATE TABLE runs (
+     id                       TEXT PRIMARY KEY,
+     workflow                 TEXT NOT NULL,
+     version                  INTEGER NOT NULL,
+     type                     TEXT NOT NULL,
+     workspace                TEXT NOT NULL,
+     repo                     TEXT,
+     state                    TEXT NOT NULL DEFAULT 'running',
+     current_node             TEXT,
+     iteration                INTEGER NOT NULL DEFAULT 1,
+     parent_run_id            TEXT,
+     attempt                  INTEGER NOT NULL DEFAULT 1,
+     orchestrator_session_id  TEXT,
+     created_at               TEXT NOT NULL,
+     updated_at               TEXT NOT NULL,
+     started_at               TEXT,
+     completed_at             TEXT,
+     error                    TEXT,
+     purged_at                TEXT,
+     FOREIGN KEY (parent_run_id) REFERENCES runs(id)
+   );
+   CREATE INDEX runs_session ON runs(orchestrator_session_id);
+   CREATE INDEX runs_parent ON runs(parent_run_id);
+   CREATE INDEX runs_state ON runs(state);
+
+   CREATE TABLE deliverables (
+     id          TEXT PRIMARY KEY,
+     run_id      TEXT NOT NULL,
+     node        TEXT NOT NULL,
+     port        TEXT NOT NULL,
+     iteration   INTEGER NOT NULL,
+     slot        TEXT,
+     task_id     TEXT NOT NULL,
+     kind        TEXT NOT NULL,
+     value       TEXT,
+     created_at  TEXT NOT NULL,
+     purged_at   TEXT,
+     FOREIGN KEY (run_id) REFERENCES runs(id),
+     FOREIGN KEY (task_id) REFERENCES tasks(id)
+   );
+   CREATE UNIQUE INDEX deliverables_address
+     ON deliverables(run_id, node, port, iteration, ifnull(slot, ''));
+   CREATE INDEX deliverables_run ON deliverables(run_id);
+   CREATE INDEX deliverables_task ON deliverables(task_id);
+
+   ALTER TABLE tasks ADD COLUMN run_id TEXT;
+   ALTER TABLE tasks ADD COLUMN node TEXT;
+   ALTER TABLE tasks ADD COLUMN iteration INTEGER;
+   ALTER TABLE tasks ADD COLUMN slot TEXT;
+   CREATE INDEX tasks_run ON tasks(run_id);
+   CREATE INDEX tasks_run_address ON tasks(run_id, node, iteration, ifnull(slot, ''));`,
 ];
 
 /** How many schema migrations have been applied — equals `PRAGMA user_version` after open. */
@@ -536,7 +763,15 @@ const TASK_COLUMNS = `id, name, vendor, model, effort, profile, runner, repo, st
    size, difficulty, type, parent_task_id, attempt, resumed, cached_input_tokens,
    launch_command, model_source, effort_source,
    orch_harness, orch_model, orch_effort,
-   eval_session_id, eval_harness, eval_model, eval_effort, queued_at`;
+   eval_session_id, eval_harness, eval_model, eval_effort, queued_at,
+   run_id, node, iteration, slot`;
+
+const RUN_COLUMNS = `id, workflow, version, type, workspace, repo, state, current_node, iteration,
+   parent_run_id, attempt, orchestrator_session_id, created_at, updated_at,
+   started_at, completed_at, error, purged_at`;
+
+const DELIVERABLE_COLUMNS = `id, run_id, node, port, iteration, slot, task_id, kind, value,
+   created_at, purged_at`;
 
 /** Cast a node:sqlite row result to a domain shape (driver types are untyped maps). */
 function asRow<T>(row: unknown): T {
@@ -799,8 +1034,9 @@ export function insertTask(db: DatabaseHandle, task: NewTask): TaskRow {
         cwd, prompt, session_id, orchestrator_session_id, worktree, branch, base_sha, sandbox,
         network, answer_timeout_ms, report_schema, size, difficulty, type,
         parent_task_id, attempt, resumed, model_source, effort_source,
-        orch_harness, orch_model, orch_effort)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        orch_harness, orch_model, orch_effort,
+        run_id, node, iteration, slot)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     task.id,
     task.name,
@@ -834,6 +1070,10 @@ export function insertTask(db: DatabaseHandle, task: NewTask): TaskRow {
     task.orch_harness ?? null,
     task.orch_model ?? null,
     task.orch_effort ?? null,
+    task.run_id ?? null,
+    task.node ?? null,
+    task.iteration ?? null,
+    task.slot ?? null,
   );
   return getTask(db, task.id)!;
 }
@@ -1072,13 +1312,16 @@ export function setMeta(db: DatabaseHandle, key: string, value: string): void {
 
 /**
  * Permanently delete a task row and its dependent rows (`qa_turns`,
- * `event_acks`). Does not touch the filesystem (logs/worktrees) — callers
- * remove those before or after. Used by retention gc (#153).
+ * `event_acks`, `deliverables`). Does not touch the filesystem
+ * (logs/worktrees) — callers remove those before or after. Used by retention
+ * gc (#153). Deliverable deletion is for hard row removal; normal retention
+ * decays values to `purged` instead (#244).
  */
 export function deleteTask(db: DatabaseHandle, taskId: string): void {
   withTransaction(db, () => {
     db.prepare(`DELETE FROM qa_turns WHERE task_id = ?`).run(taskId);
     db.prepare(`DELETE FROM event_acks WHERE task_id = ?`).run(taskId);
+    db.prepare(`DELETE FROM deliverables WHERE task_id = ?`).run(taskId);
     db.prepare(`DELETE FROM tasks WHERE id = ?`).run(taskId);
   });
 }
@@ -1253,4 +1496,330 @@ export function listExpiredSessions(db: DatabaseHandle, cutoffIso: string): Sess
 /** Permanently delete a registered session row. */
 export function deleteSession(db: DatabaseHandle, id: string): void {
   db.prepare(`DELETE FROM sessions WHERE id = ?`).run(id);
+}
+
+// ---------------------------------------------------------------------------
+// Runs + deliverables (#233 / ADR-0016, 0017, 0018)
+// ---------------------------------------------------------------------------
+
+/** Allocate the next short run id (`r1`, `r2`, …). */
+export function nextRunId(db: DatabaseHandle): string {
+  return `r${nextCounter(db, "run_id")}`;
+}
+
+/** Allocate the next short deliverable id (`d1`, `d2`, …). */
+export function nextDeliverableId(db: DatabaseHandle): string {
+  return `d${nextCounter(db, "deliverable_id")}`;
+}
+
+/** Fetch one run by exact id. */
+export function getRun(db: DatabaseHandle, id: string): RunRow | undefined {
+  const row = db.prepare(`SELECT ${RUN_COLUMNS} FROM runs WHERE id = ?`).get(id);
+  return row === undefined ? undefined : asRow<RunRow>(row);
+}
+
+/**
+ * Resolve a run reference — exact id only for now (runs have no `--name` label).
+ * Kept as a seam so the query surface can later accept aliases without
+ * changing callers.
+ */
+export function resolveRun(db: DatabaseHandle, ref: string): RunRow | undefined {
+  return getRun(db, ref);
+}
+
+/** List all runs, newest first. */
+export function listRuns(db: DatabaseHandle): RunRow[] {
+  return db
+    .prepare(`SELECT ${RUN_COLUMNS} FROM runs ORDER BY created_at DESC, id DESC`)
+    .all()
+    .map((row) => asRow<RunRow>(row));
+}
+
+/**
+ * Runs for one orchestrator session, newest first. Empty/null session ids are
+ * never matched (same discipline as {@link listSessions}).
+ */
+export function listRunsForSession(db: DatabaseHandle, sessionId: string): RunRow[] {
+  if (sessionId === "") return [];
+  return db
+    .prepare(
+      `SELECT ${RUN_COLUMNS} FROM runs
+       WHERE orchestrator_session_id = ?
+       ORDER BY created_at DESC, id DESC`,
+    )
+    .all(sessionId)
+    .map((row) => asRow<RunRow>(row));
+}
+
+/** Fork children of a parent run, ordered by attempt then id. */
+export function listChildRuns(db: DatabaseHandle, parentRunId: string): RunRow[] {
+  return db
+    .prepare(
+      `SELECT ${RUN_COLUMNS} FROM runs
+       WHERE parent_run_id = ?
+       ORDER BY attempt ASC, id ASC`,
+    )
+    .all(parentRunId)
+    .map((row) => asRow<RunRow>(row));
+}
+
+/**
+ * Insert a new run and return its row. The id is allocated by the caller (via
+ * {@link nextRunId}) because workspace layout names paths/branches with the id
+ * before the row exists (ADR-0018).
+ */
+export function insertRun(db: DatabaseHandle, run: NewRun): RunRow {
+  const now = new Date().toISOString();
+  const state: RunState = run.state ?? "running";
+  const iteration = run.iteration ?? 1;
+  const attempt = run.attempt ?? 1;
+  db.prepare(
+    `INSERT INTO runs
+       (id, workflow, version, type, workspace, repo, state, current_node, iteration,
+        parent_run_id, attempt, orchestrator_session_id, created_at, updated_at,
+        started_at, completed_at, error, purged_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, NULL)`,
+  ).run(
+    run.id,
+    run.workflow,
+    run.version,
+    run.type,
+    run.workspace,
+    run.repo,
+    state,
+    run.current_node,
+    iteration,
+    run.parent_run_id ?? null,
+    attempt,
+    run.orchestrator_session_id ?? null,
+    now,
+    now,
+    run.started_at ?? now,
+    run.error ?? null,
+  );
+  return getRun(db, run.id)!;
+}
+
+/** Mutable run fields the engine / retention may patch. */
+export type RunDataPatch = Partial<
+  Pick<
+    RunRow,
+    | "state"
+    | "current_node"
+    | "iteration"
+    | "repo"
+    | "error"
+    | "started_at"
+    | "completed_at"
+    | "purged_at"
+    | "orchestrator_session_id"
+  >
+>;
+
+/** Patch mutable run fields; bumps `updated_at`. */
+export function updateRun(db: DatabaseHandle, id: string, patch: RunDataPatch): void {
+  const fields = Object.keys(patch) as (keyof RunDataPatch)[];
+  if (fields.length === 0) return;
+  const assignments = fields.map((f) => `${f} = ?`).join(", ");
+  const values = fields.map((f) => patch[f] ?? null);
+  db.prepare(`UPDATE runs SET ${assignments}, updated_at = ? WHERE id = ?`).run(
+    ...values,
+    new Date().toISOString(),
+    id,
+  );
+}
+
+/**
+ * Permanently delete a run and its deliverable rows. Tasks owned by the run are
+ * *not* deleted — callers must settle and/or delete them first (retention #244
+ * owns the full sweep). Fails if deliverable FKs would be left dangling only
+ * when tasks still reference the run; SQLite does not enforce `tasks.run_id`.
+ */
+export function deleteRun(db: DatabaseHandle, runId: string): void {
+  withTransaction(db, () => {
+    db.prepare(`DELETE FROM deliverables WHERE run_id = ?`).run(runId);
+    db.prepare(`DELETE FROM runs WHERE id = ?`).run(runId);
+  });
+}
+
+/** Tasks owned by a run, oldest first (spawn order). */
+export function listTasksForRun(db: DatabaseHandle, runId: string): TaskRow[] {
+  return db
+    .prepare(
+      `SELECT ${TASK_COLUMNS} FROM tasks
+       WHERE run_id = ?
+       ORDER BY created_at ASC, id ASC`,
+    )
+    .all(runId)
+    .map((row) => asRow<TaskRow>(row));
+}
+
+/**
+ * Tasks for one (run, node, iteration), optional slot filter. Ordered by
+ * created_at so retries/fan-out siblings are stable. Used by node projections
+ * (step state is derived — never stored).
+ */
+export function listTasksForRunNode(
+  db: DatabaseHandle,
+  runId: string,
+  node: string,
+  iteration: number,
+  slot?: string | null,
+): TaskRow[] {
+  if (slot === undefined) {
+    return db
+      .prepare(
+        `SELECT ${TASK_COLUMNS} FROM tasks
+         WHERE run_id = ? AND node = ? AND iteration = ?
+         ORDER BY created_at ASC, id ASC`,
+      )
+      .all(runId, node, iteration)
+      .map((row) => asRow<TaskRow>(row));
+  }
+  if (slot === null) {
+    return db
+      .prepare(
+        `SELECT ${TASK_COLUMNS} FROM tasks
+         WHERE run_id = ? AND node = ? AND iteration = ? AND slot IS NULL
+         ORDER BY created_at ASC, id ASC`,
+      )
+      .all(runId, node, iteration)
+      .map((row) => asRow<TaskRow>(row));
+  }
+  return db
+    .prepare(
+      `SELECT ${TASK_COLUMNS} FROM tasks
+       WHERE run_id = ? AND node = ? AND iteration = ? AND slot = ?
+       ORDER BY created_at ASC, id ASC`,
+    )
+    .all(runId, node, iteration, slot)
+    .map((row) => asRow<TaskRow>(row));
+}
+
+/** Fetch one deliverable by exact id. */
+export function getDeliverable(
+  db: DatabaseHandle,
+  id: string,
+): DeliverableRow | undefined {
+  const row = db
+    .prepare(`SELECT ${DELIVERABLE_COLUMNS} FROM deliverables WHERE id = ?`)
+    .get(id);
+  return row === undefined ? undefined : asRow<DeliverableRow>(row);
+}
+
+/**
+ * Look up a deliverable by structural address (ADR-0016). `slot` null matches
+ * the no-fan-out row (slot IS NULL).
+ */
+export function getDeliverableByAddress(
+  db: DatabaseHandle,
+  runId: string,
+  node: string,
+  port: string,
+  iteration: number,
+  slot: string | null = null,
+): DeliverableRow | undefined {
+  const row =
+    slot === null
+      ? db
+          .prepare(
+            `SELECT ${DELIVERABLE_COLUMNS} FROM deliverables
+             WHERE run_id = ? AND node = ? AND port = ? AND iteration = ?
+               AND slot IS NULL`,
+          )
+          .get(runId, node, port, iteration)
+      : db
+          .prepare(
+            `SELECT ${DELIVERABLE_COLUMNS} FROM deliverables
+             WHERE run_id = ? AND node = ? AND port = ? AND iteration = ?
+               AND slot = ?`,
+          )
+          .get(runId, node, port, iteration, slot);
+  return row === undefined ? undefined : asRow<DeliverableRow>(row);
+}
+
+/** All deliverables for a run, address order. */
+export function listDeliverablesForRun(
+  db: DatabaseHandle,
+  runId: string,
+): DeliverableRow[] {
+  return db
+    .prepare(
+      `SELECT ${DELIVERABLE_COLUMNS} FROM deliverables
+       WHERE run_id = ?
+       ORDER BY node ASC, iteration ASC, ifnull(slot, '') ASC, port ASC, id ASC`,
+    )
+    .all(runId)
+    .map((row) => asRow<DeliverableRow>(row));
+}
+
+/** Deliverables produced by one task. */
+export function listDeliverablesForTask(
+  db: DatabaseHandle,
+  taskId: string,
+): DeliverableRow[] {
+  return db
+    .prepare(
+      `SELECT ${DELIVERABLE_COLUMNS} FROM deliverables
+       WHERE task_id = ?
+       ORDER BY port ASC, id ASC`,
+    )
+    .all(taskId)
+    .map((row) => asRow<DeliverableRow>(row));
+}
+
+/**
+ * Insert a deliverable row. The id is allocated by the caller. Address uniqueness
+ * is enforced by the `deliverables_address` unique index (slot null coalesces to '').
+ */
+export function insertDeliverable(
+  db: DatabaseHandle,
+  deliverable: NewDeliverable,
+): DeliverableRow {
+  const now = new Date().toISOString();
+  db.prepare(
+    `INSERT INTO deliverables
+       (id, run_id, node, port, iteration, slot, task_id, kind, value, created_at, purged_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    deliverable.id,
+    deliverable.run_id,
+    deliverable.node,
+    deliverable.port,
+    deliverable.iteration,
+    deliverable.slot ?? null,
+    deliverable.task_id,
+    deliverable.kind,
+    deliverable.value,
+    now,
+    deliverable.purged_at ?? null,
+  );
+  return getDeliverable(db, deliverable.id)!;
+}
+
+/**
+ * Mark a deliverable purged: clear the value, stamp `purged_at`. The address
+ * row remains so the query surface can say what is gone (ADR-0016 / #244).
+ * No-op when the id is missing.
+ */
+export function purgeDeliverable(
+  db: DatabaseHandle,
+  id: string,
+  purgedAt: string = new Date().toISOString(),
+): void {
+  db.prepare(
+    `UPDATE deliverables SET value = NULL, purged_at = ? WHERE id = ?`,
+  ).run(purgedAt, id);
+}
+
+/**
+ * Mark a run purged (retention decay, #244). Does not delete the row or its
+ * tasks — only stamps `purged_at` so surfaces can render the decayed state.
+ */
+export function purgeRun(
+  db: DatabaseHandle,
+  id: string,
+  purgedAt: string = new Date().toISOString(),
+): void {
+  updateRun(db, id, { purged_at: purgedAt });
 }

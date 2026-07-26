@@ -134,6 +134,10 @@ export function row(
     attempt: 1,
     resumed: 0,
     cached_input_tokens: null,
+    run_id: null,
+    node: null,
+    iteration: null,
+    slot: null,
     ...overrides,
   };
 }
