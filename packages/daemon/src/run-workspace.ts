@@ -1,24 +1,32 @@
 /**
- * Run workspaces — `workspace: repo` half of ADR-0018 / #234.
+ * Run workspaces — ADR-0018 / #234 (repo) + #235 (scratch).
  *
- * **The run owns every checkout and every branch in it.** Per-task auto-remove
- * and per-task naming do not apply. Callable units only — the run engine
- * (#237/#238) decides *when* to invoke them.
+ * **The run owns every workspace in it.** Per-task auto-remove and per-task
+ * naming do not apply. Callable units only — the run engine (#237/#238)
+ * decides *when* to invoke them.
  *
  * Layout:
  * ```
- * ~/.parley/worktrees/<repo>/
+ * ~/.parley/worktrees/<repo>/                   workspace: repo
  *   <runId>              run checkout   branch parley/<runId>-<workflow>
  *   <runId>--<taskId>    isolated sibling, branch parley/<runId>/<address>
- * <checkout>/.parley/tmp/<address>/{in,out}
+ *
+ * ~/.parley/runs/<runId>/                      workspace: scratch
+ *   .parley/tmp/<address>/{in,out}
+ *   <address>/                                 isolated sibling (nested)
+ *     .parley/tmp/<address>/{in,out}
  * ```
  *
- * Branch names carry the address; checkout paths carry the id. The mandatory
- * `-<workflow>` suffix on the run branch avoids the git trap that a ref cannot
- * also be a directory (`parley/<runId>` vs `parley/<runId>/<node>…`).
+ * In `repo`, branch names carry the address and checkout paths carry the id.
+ * In `scratch` there is no branch, so sibling directories are named by address.
+ * The tmp path stays addressed in both modes (deliberate redundancy inside a
+ * per-sibling dir) so layout and child prompt sentences match.
  *
- * Scratch mode (#235) reuses address formatting + tmp handoff from
- * `@useparley/core` and the shared-hub rules here; only the checkout noun changes.
+ * Mode-independent: address formatting (`@useparley/core`), tmp handoff,
+ * step context materialization, shared-hub rules. Isolation is read off the
+ * sandbox in both modes — only the noun changes (checkout vs directory).
+ * Checkpoints and "untouched" terminal retention are **repo-only**; scratch
+ * has neither (gc owns deletion — #244).
  */
 
 import { execFileSync } from "node:child_process";
@@ -819,3 +827,355 @@ export function pruneEmptyRunBranches(opts: CleanRunOptions): CleanRunResult {
 
   return { removed: [], prunedBranches, keptBranches };
 }
+
+// ===========================================================================
+// Scratch mode — parley-owned plain directory, no git (ADR-0018 / #235)
+// ===========================================================================
+//
+// A scratch run drops **git**, not the workspace. Nesting is available because
+// there are no worktrees to collide; a run's whole footprint is one deletable
+// subtree under `~/.parley/runs/<runId>/`.
+//
+// No checkpoints. No auto-removal at task settle or run terminal — gc owns
+// deletion (#244). `cleanRunScratch` is the on-demand escape hatch
+// (`parley clean <run>`).
+
+// ---------------------------------------------------------------------------
+// Naming — paths carry the address (there is no branch)
+// ---------------------------------------------------------------------------
+
+/**
+ * Run workspace path: `runs/<runId>/`.
+ * Root of the run's whole scratch footprint.
+ */
+export function runScratchPath(runsDir: string, runId: string): string {
+  if (runId === "" || runId.includes("/") || runId.includes("..") || runId.includes("\\")) {
+    throw new Error(`invalid runId for scratch path: ${JSON.stringify(runId)}`);
+  }
+  return path.join(runsDir, runId);
+}
+
+/**
+ * Isolated sibling path: `runs/<runId>/<address>/`.
+ * Named by **address**, not task id — with no branch the path is the only
+ * place the address can live (ADR-0018).
+ */
+export function siblingScratchPath(
+  runsDir: string,
+  runId: string,
+  address: string,
+): string {
+  if (runId === "" || runId.includes("/") || runId.includes("..") || runId.includes("\\")) {
+    throw new Error(`invalid runId for sibling scratch path: ${JSON.stringify(runId)}`);
+  }
+  if (
+    address === "" ||
+    address.includes("/") ||
+    address.includes("..") ||
+    address.includes("\\")
+  ) {
+    throw new Error(`invalid address for sibling scratch path: ${JSON.stringify(address)}`);
+  }
+  return path.join(runsDir, runId, address);
+}
+
+// ---------------------------------------------------------------------------
+// Run-start preflight
+// ---------------------------------------------------------------------------
+
+/**
+ * Thrown when a `workspace: scratch` run is started with `--base` / `baseRef`.
+ * Scratch has no branch and no base commit (ADR-0018).
+ */
+export class ScratchBaseRefNotAllowedError extends Error {
+  readonly baseRef: string;
+
+  constructor(baseRef: string) {
+    super(
+      `workspace: scratch refuses --base (got ${JSON.stringify(baseRef)}): ` +
+        `a scratch run has no git branch and no base commit`,
+    );
+    this.name = "ScratchBaseRefNotAllowedError";
+    this.baseRef = baseRef;
+  }
+}
+
+/**
+ * Thrown when a `workspace: repo` run is started outside a git repository.
+ * Symmetric preflight seam for the engine (ADR-0018).
+ */
+export class RepoModeRequiresRepoError extends Error {
+  constructor() {
+    super(
+      `workspace: repo requires a git repository: start the run from inside a ` +
+        `repo, or use a workflow with workspace: scratch`,
+    );
+    this.name = "RepoModeRequiresRepoError";
+  }
+}
+
+/**
+ * Run-start preflight for `workspace: scratch` (ADR-0018):
+ * - Ignores any ambient git repo (caller records `repo: null`).
+ * - Refuses `--base` / `baseRef`.
+ *
+ * Does not create directories. Call before {@link createRunScratchWorkspace}.
+ */
+export function preflightScratchRun(opts: { baseRef?: string | null }): void {
+  if (opts.baseRef != null && opts.baseRef !== "") {
+    throw new ScratchBaseRefNotAllowedError(opts.baseRef);
+  }
+}
+
+/**
+ * Run-start preflight for `workspace: repo` (ADR-0018): fails when no repo
+ * root is available. The engine maps this to a blocked/failed run start.
+ */
+export function preflightRepoRun(opts: { repoRoot: string | null | undefined }): void {
+  if (opts.repoRoot == null || opts.repoRoot === "") {
+    throw new RepoModeRequiresRepoError();
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Create run workspace
+// ---------------------------------------------------------------------------
+
+/** What parley records about a scratch run's primary workspace. */
+export interface RunScratchInfo {
+  /** Absolute path: `runs/<runId>/`. */
+  path: string;
+  runId: string;
+  /**
+   * Always null — scratch ignores any ambient repo and records `repo` null
+   * even when started inside one (ADR-0018).
+   */
+  repo: null;
+}
+
+export interface CreateRunScratchOptions {
+  /** Absolute `~/.parley/runs` (or test override). */
+  runsDir: string;
+  runId: string;
+  /**
+   * Forbidden on scratch. Presence fails preflight — scratch has no base
+   * commit and no branch (ADR-0018).
+   */
+  baseRef?: string | null;
+}
+
+/**
+ * Create the run-owned scratch workspace: an empty directory at
+ * `runs/<runId>/`. No git. The run owns this tree for its whole life;
+ * per-task auto-remove must never touch it.
+ *
+ * Always records `repo: null` regardless of whether the orchestrator was
+ * sitting inside a git repo when the run started.
+ */
+export function createRunScratchWorkspace(
+  opts: CreateRunScratchOptions,
+): RunScratchInfo {
+  preflightScratchRun({ baseRef: opts.baseRef });
+  const wsPath = runScratchPath(opts.runsDir, opts.runId);
+  if (fs.existsSync(wsPath)) {
+    throw new Error(
+      `scratch run workspace already exists: ${wsPath}`,
+    );
+  }
+  fs.mkdirSync(wsPath, { recursive: true });
+  return {
+    path: wsPath,
+    runId: opts.runId,
+    repo: null,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Isolation — same rule as repo, noun is directory
+// ---------------------------------------------------------------------------
+
+/** Resolved workspace for one step task in scratch mode. */
+export interface ScratchStepWorkspace {
+  /** Absolute working directory the child runs in. */
+  path: string;
+  /**
+   * Always null — scratch has no git. Present so call sites can share a
+   * shape with {@link StepWorkspace} without inventing a mode flag on every
+   * field.
+   */
+  branch: null;
+  /**
+   * True when this task shares the run workspace with concurrent siblings.
+   * Shared workspaces get no `child.json` (ADR-0018).
+   */
+  shared: boolean;
+  /** Address string used for sibling path / tmp: `<node>.<iter>[.<slot>][-r<n>]`. */
+  address: string;
+}
+
+export interface ResolveScratchStepWorkspaceOptions {
+  runsDir: string;
+  runId: string;
+  /** Absolute path of the run workspace (from {@link createRunScratchWorkspace}). */
+  runWorkspacePath: string;
+  address: StepAddress | string;
+  /**
+   * Sandbox posture. Isolation is read off this, not opted into (ADR-0018):
+   * a `read-only` **fan-out** sibling shares the run workspace; a writable
+   * fan-out sibling gets its own empty directory named by address.
+   * Linear (non-fan-out) steps always use the run workspace.
+   */
+  sandbox: SandboxMode;
+  /**
+   * True when this task is a fan-out sibling (authored slot or data fan-out).
+   * Defaults to false — linear steps share the run workspace even when
+   * writable.
+   */
+  fanOut?: boolean;
+}
+
+/**
+ * Resolve (and create when needed) the working directory for a scratch step.
+ *
+ * - Linear step → run workspace (`shared: false`; only one task at a time).
+ * - Fan-out + `read-only` → run workspace (`shared: true`; no child.json).
+ * - Fan-out + writable → isolated empty sibling at `runs/<runId>/<address>/`.
+ *
+ * Reuses {@link needsIsolatedCheckout} — only the noun changes from repo mode.
+ */
+export function resolveScratchStepWorkspace(
+  opts: ResolveScratchStepWorkspaceOptions,
+): ScratchStepWorkspace {
+  const address =
+    typeof opts.address === "string" ? opts.address : formatStepAddress(opts.address);
+  const fanOut = opts.fanOut === true;
+
+  if (fanOut && needsIsolatedCheckout(opts.sandbox)) {
+    return createSiblingScratchDir({
+      runsDir: opts.runsDir,
+      runId: opts.runId,
+      address,
+    });
+  }
+
+  return {
+    path: opts.runWorkspacePath,
+    branch: null,
+    // Concurrent RO siblings only — walk-up cannot disambiguate them.
+    shared: fanOut && opts.sandbox === "read-only",
+    address,
+  };
+}
+
+export interface CreateSiblingScratchOptions {
+  runsDir: string;
+  runId: string;
+  address: string;
+}
+
+/**
+ * Create an isolated sibling directory: `runs/<runId>/<address>/`, starting
+ * empty. Nested under the run workspace so the whole footprint is one
+ * deletable subtree. Retries append `-r<n>` on the address and thus the path.
+ *
+ * No git. No copy from the parent. Tmp handoff under this dir still uses the
+ * addressed layout (`.parley/tmp/<address>/{in,out}`) so the child's prompt
+ * sentence matches repo mode.
+ */
+export function createSiblingScratchDir(
+  opts: CreateSiblingScratchOptions,
+): ScratchStepWorkspace {
+  const sibPath = siblingScratchPath(opts.runsDir, opts.runId, opts.address);
+  if (fs.existsSync(sibPath)) {
+    // Idempotent re-resolve of an existing sibling is fine; a colliding
+    // non-directory or a half-built path from another address would be a bug.
+    if (!fs.statSync(sibPath).isDirectory()) {
+      throw new Error(`sibling scratch path exists and is not a directory: ${sibPath}`);
+    }
+  } else {
+    fs.mkdirSync(sibPath, { recursive: true });
+  }
+  return {
+    path: sibPath,
+    branch: null,
+    shared: false,
+    address: opts.address,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Discovery + clean (on-demand only — no terminal auto-removal)
+// ---------------------------------------------------------------------------
+
+/**
+ * Absolute path of the scratch run workspace if it exists, else null.
+ * Nested siblings live under this single root.
+ */
+export function listRunScratchPath(
+  runsDir: string,
+  runId: string,
+): string | null {
+  const p = runScratchPath(runsDir, runId);
+  try {
+    if (fs.statSync(p).isDirectory()) return p;
+  } catch {
+    /* absent */
+  }
+  return null;
+}
+
+/**
+ * List nested isolated sibling directories under the run workspace (direct
+ * children that look like addresses). Does not recurse; does not include the
+ * run root itself. Useful for bookkeeping; clean removes the whole subtree.
+ */
+export function listScratchSiblingPaths(
+  runsDir: string,
+  runId: string,
+): string[] {
+  const root = runScratchPath(runsDir, runId);
+  let entries: string[];
+  try {
+    entries = fs.readdirSync(root);
+  } catch {
+    return [];
+  }
+  const out: string[] = [];
+  for (const name of entries) {
+    // Skip parley plumbing; siblings are address-named (node.iter…).
+    if (name === ".parley" || name.startsWith(".")) continue;
+    const full = path.join(root, name);
+    try {
+      if (fs.statSync(full).isDirectory()) out.push(full);
+    } catch {
+      /* race */
+    }
+  }
+  return out.sort();
+}
+
+export interface CleanRunScratchResult {
+  /** Paths successfully removed (the run root when present). */
+  removed: string[];
+}
+
+/**
+ * `parley clean <run>` for scratch: remove the entire `runs/<runId>/` subtree
+ * (run workspace + every nested sibling). On-demand escape hatch only.
+ *
+ * There is **no** terminal auto-removal for scratch — no "untouched"
+ * predicate without git, and inventing a second one was rejected (ADR-0018).
+ * gc is the only scheduled owner of deletion (#244).
+ */
+export function cleanRunScratch(opts: {
+  runsDir: string;
+  runId: string;
+}): CleanRunScratchResult {
+  const root = runScratchPath(opts.runsDir, opts.runId);
+  if (!fs.existsSync(root)) {
+    return { removed: [] };
+  }
+  fs.rmSync(root, { recursive: true, force: true });
+  return { removed: [root] };
+}
+
