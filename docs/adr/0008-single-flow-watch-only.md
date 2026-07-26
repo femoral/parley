@@ -1,6 +1,12 @@
 # ADR-0008: one flow — `delegate` is always async, `watch` is the only wait
 
-**Status**: accepted · **Date**: 2026-07-14
+**Status**: accepted; **exit-0 clause amended by ADR-0019** · **Date**: 2026-07-14
+
+> **Amended by ADR-0019**: `watch` remains the only blocking primitive and the
+> single exit-code vocabulary stands, but **0 now means the session is finished**
+> (every subject terminal — runs as well as tasks — and every event acked) rather
+> than all-done over watched tasks. Runs add no new wait primitive and no new exit
+> code.
 
 ## Context
 

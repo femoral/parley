@@ -1,8 +1,9 @@
 # parley — domain glossary
 
-Parley delegates coding tasks to child agent CLIs (codex, grok), each in an
-isolated git worktree, coordinated by one global daemon. The human/agent
-driving parley is the **orchestrator**.
+Parley delegates work to child agent CLIs (codex, grok) — one brief to one
+**task**, or one brief to a **run** of a multi-step **workflow** — each isolated
+in a parley-owned workspace and coordinated by one global daemon. The
+human/agent driving parley is the **orchestrator**.
 
 ## Terms
 
@@ -69,9 +70,77 @@ driving parley is the **orchestrator**.
   Distinct from a parley vendor **adapter** (ADR-0009), which is daemon-side
   spawn/parse plumbing.
 
+## Workflow terms
+
+- **Workflow** — the *definition*: a directory `.parley/workflows/<id>/`
+  (with `prompts/` and `types/`) declaring `inputs`, `outputs`, named `types`,
+  and an ordered list of nodes. Resolved in two layers — `~/.parley/workflows/`
+  and a local layer based at `repoRoot(cwd) ?? cwd` — nearest wins by `id`.
+  Never a single execution of one; that is a *run* (ADR-0016).
+- **Run** — one execution of a workflow. Holds **nodes**, stores a small status
+  (`current_node`, `iteration`) and, unlike a step, a state of its own.
+- **Run state** — exact vocabulary: `running`, `blocked`, `completed`,
+  `failed`, `cancelled`. **`blocked` = the daemon cannot advance it** (a gate,
+  loop-budget exhaustion, a spawn error); **`failed` = nobody can** (workspace
+  gone, definition unparseable). A run never auto-fails (ADR-0017).
+- **Node** — one declaration in a workflow, alive for the run's whole life.
+  Either a **step** or a **gate**; nothing else.
+- **Step** — a node owning 1..n **tasks**. Stores no status — a step's state is
+  a projection over its tasks, settled on `isSettledState` (so `stalled`
+  counts), never over `terminal` alone.
+- **Gate** — a node that spawns nothing and waits for the orchestrator. Its
+  *position in the sequence is its meaning*, which is why it is a node and not
+  a flag. Carries a mandatory author-declared `on_reject` and four verbs:
+  **approve / reject / redirect / finish**. Never acked — only actioned.
+- **Port** — a node's typed input or output. Six atoms (`text`, `url`, `file`,
+  `dir`, a named enum, a named schema) under `T[]` and `dict<string,V>`.
+  Compared structurally over containers, nominally over atoms.
+- **Deliverable** — the value filling an **output** port, stored as a row: an
+  opaque id plus its address, its producing task, and either an inline JSON
+  value or a path. Kinds: `inline` (the default), `file`, `dir` — the latter
+  two are references parley never copies on submit.
+- **Address** — the structural coordinates of a deliverable
+  (**node/port/iteration/slot**) and, as `<node>.<iteration>[.<slot>][-r<n>]`,
+  of a run's branches, scratch directories and tmp dirs. One string, read
+  alike everywhere (ADR-0018).
+- **Iteration** — one pass of a node. Backwards data reach resolves to a node's
+  **most recent completed** iteration; iteration 0 additionally marks a node
+  *inherited* by a fork.
+- **Slot** — a named authored fan-out sibling, each able to override
+  vendor/model/profile/sandbox and append a prompt fragment. Distinct from a
+  **data** fan-out, whose width and keys come only from the data and which must
+  declare itself with `over`.
+- **Run outputs** — the run's declared product, a top-level block naming
+  earlier node ports. What `parley run eval` judges and what gc retains; a
+  run's product is not always on its last node.
+- **Accumulator port** — an input port declared `accumulate`, filled from *all*
+  completed iterations instead of the most recent. A fill rule that never
+  changes a type, so containers only; colliding dict keys resolve to the later
+  iteration.
+- **Workspace mode** — `repo` (run checkout + branch + checkpoints) or
+  `scratch` (a parley-owned plain directory, no git). Declared on the
+  definition, not overridable at run start.
+- **Checkpoint commit** — `parley: <node>.<iteration>`, authored by parley on a
+  step settling (complete *or* failed) in `repo` mode. Parley authors commits;
+  it still never merges.
+- **Panicked** — a session state the daemon *enforces* (effective concurrency
+  cap 0, sticky across restarts, cleared only by a human) when the delivery
+  breaker trips: the same inbox event delivered n times without ack-or-action
+  (ADR-0019).
+
 ## Avoided synonyms
 
 - "queue" for the inbox (it is derived, not stored; no strict FIFO overall)
 - "question" as a state name (the state is `awaiting_answer`)
 - "done"/"finished" for individual states (say the exact state; *all-done* is
   only the inbox exit condition)
+- "attempt" for a fan-out sibling or a loop pass (the words are *slot* and
+  *iteration*; `attempt` is reserved for `parley fix` chains, and reusing it
+  would make `metrics.ts` count parallel searches as fix retries)
+- "workflow" for a single execution (that is a *run*), and "run" for the file
+- "task_type" as a step's role selector (a step selects vendor/model/profile
+  through the ordinary config chain; `type` selects a *rubric*)
+- "DAG" for a workflow (execution is a line plus fan-out and bounded loops;
+  only *data flow* between ports is a graph)
+- "none" or "cwd" for a workspace mode (a `scratch` run has a workspace, and
+  `cwd` already means something else for a single task)

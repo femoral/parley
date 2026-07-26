@@ -1,6 +1,19 @@
 # ADR-0007: `watch` is an acked attention inbox, not a transition watcher
 
-**Status**: accepted · **Date**: 2026-07-14 · **Decided**: [#91](https://github.com/femoral/parley/issues/91) (subsumes [#89](https://github.com/femoral/parley/issues/89))
+**Status**: accepted; **two clauses superseded by ADR-0019** · **Date**: 2026-07-14 · **Decided**: [#91](https://github.com/femoral/parley/issues/91) (subsumes [#89](https://github.com/femoral/parley/issues/89))
+
+> **Superseded by ADR-0019** (workflow runs in the inbox), which widens the inbox
+> subject from `{ task }` to `{ task } | { gate }`:
+>
+> - **Exit codes.** The code no longer picks the verb — it reports the tier, and
+>   the orchestrator reads the payload to learn whether the subject is a task or a
+>   run. No exit code is added.
+> - **All-done.** Exit 0 becomes "the **session** is finished" — every subject
+>   terminal, runs included. The task-only definition below reports all-done
+>   between two nodes of a live pipeline, which is #89 in run clothing.
+>
+> Everything else in this ADR — level-triggered delivery, the four tiers, the ack
+> loop, supersession, consumption scope — stands unchanged.
 
 ## Context
 

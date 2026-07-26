@@ -2,10 +2,18 @@
   "$schema": "../../workflow-1.schema.json",
   "id": "coding-1",
   "version": 1,
+  "type": "coding",
+  "workspace": "repo",
   "description": "Plan, gate the plan, implement, review from n authored angles in parallel, rework until the reviewers agree.",
 
   "inputs": {
     "brief": { "type": "text" }
+  },
+
+  "outputs": {
+    "branch": { "type": "text", "from": "implement.branch" },
+    "summary": { "type": "text", "from": "implement.summary" },
+    "verdict": { "type": "verdict", "from": "triage.verdict" }
   },
 
   "types": {
@@ -23,7 +31,7 @@
         "brief": { "type": "text", "from": "run.brief" }
       },
       "out": {
-        "plan": { "type": "text" }
+        "plan": { "type": "text", "max_length": 8000 }
       }
     },
 
@@ -33,7 +41,8 @@
       "question": "Approve this plan before any code is written?",
       "shows": {
         "plan": { "from": "plan.plan" }
-      }
+      },
+      "on_reject": "finish"
     },
 
     {
@@ -42,14 +51,15 @@
       "task_type": "coding",
       "profile": "deep",
       "prompt": "prompts/coding-1/implement.md",
+      "retries": 1,
       "in": {
         "brief": { "type": "text", "from": "run.brief" },
         "plan": { "type": "text", "from": "plan.plan" },
         "rework": { "type": "text" }
       },
       "out": {
-        "branch": { "type": "text" },
-        "summary": { "type": "text" }
+        "branch": { "type": "text", "max_length": 200 },
+        "summary": { "type": "text", "max_length": 4000 }
       }
     },
 
@@ -57,8 +67,8 @@
       "id": "review",
       "kind": "step",
       "task_type": "review",
-      "worktree": "own",
       "profile": "fast",
+      "sandbox": "read-only",
       "prompt": "prompts/coding-1/review.md",
       "slots": {
         "correctness": {
@@ -79,7 +89,7 @@
       },
       "out": {
         "verdict": { "type": "verdict" },
-        "notes": { "type": "text" }
+        "notes": { "type": "text", "max_length": 6000 }
       }
     },
 
@@ -96,7 +106,7 @@
       },
       "out": {
         "verdict": { "type": "verdict" },
-        "rework_brief": { "type": "text" }
+        "rework_brief": { "type": "text", "max_length": 4000 }
       },
       "loop": {
         "to": "implement",

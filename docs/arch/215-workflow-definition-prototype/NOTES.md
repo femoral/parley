@@ -1,8 +1,16 @@
 # Prototype: the workflow definition file
 
-Throwaway artifact for [#215](https://github.com/femoral/parley/issues/215) on the
-[workflows map](https://github.com/femoral/parley/issues/213). Not production, not read
-by any code. Absorb into the ADR, then delete.
+Drafted for [#215](https://github.com/femoral/parley/issues/215) on the
+[workflows map](https://github.com/femoral/parley/issues/213), and **refreshed at the end
+of the map** against everything settled after them. Still not read by any code — but no
+longer throwaway: [#230](https://github.com/femoral/parley/issues/230) ruled that parley
+ships **no** shipped-workflow resolution layer, so these three become the seed examples
+`parley init` copies into a project, which the user then owns and edits.
+
+The design they informed is now ADR-0016 (definition, ports, deliverables), ADR-0017 (the
+run engine), ADR-0018 (workspaces), ADR-0019 (inbox), ADR-0020 (eval), ADR-0021 (reading a
+run). Where this file and an ADR disagree, **the ADR wins** — the record below of what
+drafting exposed is kept as history, not as the spec.
 
 **Question:** what does a workflow definition file actually declare?
 
@@ -20,14 +28,44 @@ types under [`research/types/`](research/types/) are real.
 
 ---
 
+## What the refresh changed
+
+Each line is a later ticket landing on the drafts. Nothing here was a drafting mistake —
+these are decisions made after the drafts were written.
+
+| change | why |
+|---|---|
+| `worktree: "own"` **deleted** from every fanned-out step; `sandbox: "read-only"` declared instead | [#220](https://github.com/femoral/parley/issues/220) reads isolation off the sandbox, and [#223](https://github.com/femoral/parley/issues/223) made `sandbox` slot-overridable, so a second switch would contradict it — F9's "it wants to be the default" was right, and the default is now derived |
+| top-level `type` | [#225](https://github.com/femoral/parley/issues/225): the run inherits it and it resolves the rubric through the existing `taskTypes` map |
+| top-level `workspace` | [#230](https://github.com/femoral/parley/issues/230): research declares `scratch` and needs no repo at all |
+| top-level `outputs` | [#226](https://github.com/femoral/parley/issues/226): a run's product is not always on its last node, and eval may not bind to one |
+| `over` on `search` and `validate` | [#228](https://github.com/femoral/parley/issues/228): a data fan-out declares itself, which makes **F5's silent 40-way fan-out a plain type error** |
+| `max_items` on `scope.queries` and `funnel.shortlist`; `max_length` on the big `text` ports | [#229](https://github.com/femoral/parley/issues/229) and #223: bounds live on the **producing** port, so lint can finally print the worst case F9 and F5 both wanted |
+| `accumulate: true` on `funnel.harvest` | #226: without it the loop's broadening pass **replaced** the evidence instead of adding to it, and the report rested on pass 2 alone |
+| `success: { min: 3 }` on `search` | [#218](https://github.com/femoral/parley/issues/218)'s data default is `{min: 1}`, which would build a shortlist from an eighth of the harvest |
+| `on_reject` on both gates | [#217](https://github.com/femoral/parley/issues/217): a gate is a decision, so its "no" branch is mandatory and author-declared |
+| `retries: 1` on both `implement` steps | #218: opt-in per step, default 0, and a fresh task rather than a fix attempt |
+| research `validate` splits `verdict` (enum) out of the `validation` schema | [#222](https://github.com/femoral/parley/issues/222) tallies **top-level enum ports only**, so the run's most informative count was invisible inside a named type |
+
+Two things the drafts asked for that were answered elsewhere and need no file change: F2's
+"can a step do both?" is a lint **error** (#228), and F1's loop-payload rule survived
+verbatim — though #226 had to exempt a `from`-less port from #217's ports-filled gate,
+without which `scope.gaps` deadlocks the run at node 1.
+
+---
+
 ## The schema the drafts imply
 
+Superseded by ADR-0016; kept because the rules below explain *why* each field exists.
+
 ```
-workflow  := { id, version, description, inputs, types, nodes[], reentry? }
+workflow  := { id, version, type, workspace, description,
+               inputs, outputs, types, nodes[], reentry? }
 node      := step | gate
 step      := { id, kind:"step", task_type?, profile?|vendor?+model?+effort?,
-               worktree?, prompt, slots?, in{}, out{}, loop? }
-gate      := { id, kind:"gate", question, shows{}, loop? }
+               sandbox?, prompt, slots?, over?, success?, retries?,
+               in{}, out{}, loop? }
+gate      := { id, kind:"gate", question, shows{}, on_reject, loop? }
 slot      := { profile?|vendor?+model?+effort?, prompt_append? }
 in-port   := { type, from?:"<node>.<port>" | "run.<input>" }
 out-port  := { type }

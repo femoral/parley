@@ -2,10 +2,18 @@
   "$schema": "../../workflow-1.schema.json",
   "id": "coding-2",
   "version": 1,
+  "type": "coding",
+  "workspace": "repo",
   "description": "Implement straight from the brief, review in parallel across three vendors, and let the orchestrator decide each rework round.",
 
   "inputs": {
     "brief": { "type": "text" }
+  },
+
+  "outputs": {
+    "branch": { "type": "text", "from": "implement.branch" },
+    "summary": { "type": "text", "from": "implement.summary" },
+    "verdict": { "type": "verdict", "from": "triage.verdict" }
   },
 
   "types": {
@@ -19,13 +27,14 @@
       "task_type": "coding",
       "profile": "deep",
       "prompt": "prompts/coding-2/implement.md",
+      "retries": 1,
       "in": {
         "brief": { "type": "text", "from": "run.brief" },
         "rework": { "type": "text" }
       },
       "out": {
-        "branch": { "type": "text" },
-        "summary": { "type": "text" }
+        "branch": { "type": "text", "max_length": 200 },
+        "summary": { "type": "text", "max_length": 4000 }
       }
     },
 
@@ -33,7 +42,7 @@
       "id": "review",
       "kind": "step",
       "task_type": "review",
-      "worktree": "own",
+      "sandbox": "read-only",
       "prompt": "prompts/coding-2/review.md",
       "slots": {
         "adversarial": {
@@ -58,7 +67,7 @@
       },
       "out": {
         "verdict": { "type": "verdict" },
-        "notes": { "type": "text" }
+        "notes": { "type": "text", "max_length": 6000 }
       }
     },
 
@@ -75,7 +84,7 @@
       },
       "out": {
         "verdict": { "type": "verdict" },
-        "rework_brief": { "type": "text" }
+        "rework_brief": { "type": "text", "max_length": 4000 }
       }
     },
 
@@ -88,6 +97,7 @@
         "rework_brief": { "from": "triage.rework_brief" },
         "notes": { "from": "review.notes" }
       },
+      "on_reject": "finish",
       "loop": {
         "to": "implement",
         "max": 2,

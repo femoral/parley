@@ -2,15 +2,23 @@
   "$schema": "../../workflow-1.schema.json",
   "id": "research",
   "version": 1,
+  "type": "research",
+  "workspace": "scratch",
   "description": "Scope the question into named queries, search each in parallel, funnel to a shortlist, validate each source, then adversarially review coverage — broadening the scope if it is thin.",
 
   "inputs": {
     "brief": { "type": "text" }
   },
 
+  "outputs": {
+    "report": { "type": "text", "from": "adversarial-review.report" },
+    "coverage": { "type": "coverage", "from": "adversarial-review.coverage" }
+  },
+
   "types": {
     "source": { "schema": "types/source.schema.json" },
     "validation": { "schema": "types/validation.schema.json" },
+    "verdict": { "enum": ["supports", "contradicts", "unreachable", "off-topic"] },
     "coverage": { "enum": ["sufficient", "insufficient"] }
   },
 
@@ -26,7 +34,7 @@
         "gaps": { "type": "text" }
       },
       "out": {
-        "queries": { "type": "dict<string, text>" }
+        "queries": { "type": "dict<string, text>", "max_items": 8, "max_length": 300 }
       }
     },
 
@@ -35,14 +43,16 @@
       "kind": "step",
       "task_type": "research",
       "profile": "fast",
-      "worktree": "own",
+      "sandbox": "read-only",
       "prompt": "prompts/research/search.md",
+      "over": "query",
+      "success": { "min": 3 },
       "in": {
         "query": { "type": "text", "from": "scope.queries" },
         "brief": { "type": "text", "from": "run.brief" }
       },
       "out": {
-        "sources": { "type": "source[]" }
+        "sources": { "type": "source[]", "max_items": 10 }
       }
     },
 
@@ -53,11 +63,15 @@
       "profile": "deep",
       "prompt": "prompts/research/funnel.md",
       "in": {
-        "harvest": { "type": "dict<string, source[]>", "from": "search.sources" },
+        "harvest": {
+          "type": "dict<string, source[]>",
+          "from": "search.sources",
+          "accumulate": true
+        },
         "brief": { "type": "text", "from": "run.brief" }
       },
       "out": {
-        "shortlist": { "type": "source[]" }
+        "shortlist": { "type": "source[]", "max_items": 12 }
       }
     },
 
@@ -66,13 +80,15 @@
       "kind": "step",
       "task_type": "research",
       "profile": "fast",
-      "worktree": "own",
+      "sandbox": "read-only",
       "prompt": "prompts/research/validate.md",
+      "over": "source",
       "in": {
         "source": { "type": "source", "from": "funnel.shortlist" }
       },
       "out": {
-        "verdict": { "type": "validation" }
+        "verdict": { "type": "verdict" },
+        "detail": { "type": "validation" }
       }
     },
 
@@ -86,12 +102,13 @@
         "brief": { "type": "text", "from": "run.brief" },
         "queries": { "type": "dict<string, text>", "from": "scope.queries" },
         "shortlist": { "type": "source[]", "from": "funnel.shortlist" },
-        "validations": { "type": "validation[]", "from": "validate.verdict" }
+        "verdicts": { "type": "verdict[]", "from": "validate.verdict" },
+        "details": { "type": "validation[]", "from": "validate.detail" }
       },
       "out": {
         "coverage": { "type": "coverage" },
-        "gaps": { "type": "text" },
-        "report": { "type": "text" }
+        "gaps": { "type": "text", "max_length": 2000 },
+        "report": { "type": "text", "max_length": 20000 }
       },
       "loop": {
         "to": "scope",
