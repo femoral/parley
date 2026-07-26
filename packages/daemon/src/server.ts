@@ -46,7 +46,7 @@ import {
   parseDeliverableAddress,
   projectNodeDetail,
   projectRunDetail,
-  projectRunEnvelope,
+  projectRunSummary,
   resolveDeliverableValue,
   taskRowToQuery,
 } from "./run-query.js";
@@ -797,15 +797,23 @@ function envelopeFor(
   row: import("./db.js").TaskRow,
 ): TaskEnvelope {
   const enriched = engine.withQueueInfo(row);
-  return buildEnvelope(enriched, engine.logDir(row.id), {
+  const env = buildEnvelope(enriched, engine.logDir(row.id), {
     position: enriched.queue_position,
     blockingCap: enriched.blocking_cap,
   });
+  // ADR-0019 / #240: run address on every task.* (and list) envelope.
+  env.run_id = row.run_id;
+  env.node = row.node;
+  env.iteration = row.iteration;
+  env.slot = row.slot;
+  return env;
 }
 
 /**
- * Resolve `ids` query param to canonical task ids. Empty is allowed (vacuous
- * all-done / empty firehose). A bad ref is 404 → CLI exit 2.
+ * Resolve `ids` query param to canonical task/run ids. Empty is allowed
+ * (vacuous all-done / empty firehose, or session-only expansion). A bad ref
+ * is 404 → CLI exit 2. Explicit task refs stay task ids; bare run ids pass
+ * through so the inbox can watch a run without tasks.
  */
 function resolveWatchIds(
   engine: TaskEngine,
@@ -818,19 +826,27 @@ function resolveWatchIds(
   const resolved: string[] = [];
   for (const ref of ids) {
     const task = engine.resolve(ref);
-    if (!task) {
-      return { error: `no such task: ${ref}`, status: 404 };
+    if (task) {
+      resolved.push(task.id);
+      continue;
     }
-    resolved.push(task.id);
+    // Accept run ids so gate-first workflows (no tasks yet) are watchable.
+    // resolveWatchSet looks up both tables; a miss on both is a hard 404.
+    const probe = engine.resolveWatchSet([ref]);
+    if (probe.runIds.includes(ref)) {
+      resolved.push(ref);
+      continue;
+    }
+    return { error: `no such task: ${ref}`, status: 404 };
   }
   return [...new Set(resolved)];
 }
 
 /**
- * `GET /tasks/inbox?ids=…&ack=<seq>&wait=true` — the acked attention inbox
- * (ADR-0007 / #91). Optionally acks a prior event id, then returns the next
- * pending event (level-triggered: immediate if already pending), `{ all_done:
- * true }` when every watched task is terminal and every event is acked, or
+ * `GET /tasks/inbox?ids=…&session=…&ack=<seq>&wait=true` — the acked attention
+ * inbox (ADR-0007 / ADR-0019 / #91 / #240). Dual-subject: tasks and runs.
+ * Optionally acks a prior event id, then returns the next pending event
+ * (level-triggered), `{ all_done: true }` when the session is finished, or
  * `{ event: null, all_done: false }` when the poll window elapses with live
  * work still outstanding.
  */
@@ -845,6 +861,11 @@ async function handleInbox(
     return;
   }
 
+  const sessionParam = params.get("session");
+  const session =
+    sessionParam !== null && sessionParam !== "" ? sessionParam : null;
+  const watch = engine.resolveWatchSet(resolved, session);
+
   const ackRaw = params.get("ack");
   if (ackRaw !== null && ackRaw !== "") {
     const ackSeq = Number(ackRaw);
@@ -857,11 +878,11 @@ async function handleInbox(
 
   const wait = params.get("wait") === "true";
   const result = wait
-    ? await engine.waitForInbox(resolved, longPollWindowMs())
+    ? await engine.waitForInbox(watch, longPollWindowMs())
     : (() => {
-        const pending = engine.peekInbox(resolved);
-        if (pending) return { task: pending } as const;
-        if (engine.isInboxAllDone(resolved)) return { allDone: true } as const;
+        const pending = engine.peekInboxDelivering(watch);
+        if (pending) return { event: pending } as const;
+        if (engine.isInboxAllDone(watch)) return { allDone: true } as const;
         return null;
       })();
 
@@ -869,7 +890,9 @@ async function handleInbox(
     sendJson(res, 200, {
       event: null,
       seq: engine.currentSeq(),
+      subject: null,
       task: null,
+      run: null,
       all_done: false,
     });
     return;
@@ -878,27 +901,73 @@ async function handleInbox(
     sendJson(res, 200, {
       event: null,
       seq: engine.currentSeq(),
+      subject: null,
       task: null,
+      run: null,
       all_done: true,
     });
     return;
   }
-  const row = result.task;
-  const task = envelopeFor(engine, row);
+  const ev = result.event;
+  if (ev.kind === "task") {
+    const row = engine.get(ev.id);
+    if (!row) {
+      sendJson(res, 200, {
+        event: null,
+        seq: engine.currentSeq(),
+        subject: null,
+        task: null,
+        run: null,
+        all_done: false,
+      });
+      return;
+    }
+    sendJson(res, 200, {
+      event: eventNameForState(ev.state),
+      seq: ev.seq,
+      subject: "task",
+      task: envelopeFor(engine, row),
+      run: null,
+      all_done: false,
+    });
+    return;
+  }
+  // Run subject — exit tier folds gate→awaiting_answer, blocked→stalled.
   sendJson(res, 200, {
-    event: eventNameForState(row.state),
-    seq: row.seq,
-    task,
+    event: runEventName(ev.state),
+    seq: ev.seq,
+    subject: "run",
+    task: null,
+    run: {
+      run_id: ev.id,
+      workflow: ev.run?.workflow ?? "",
+      state: ev.run?.state ?? ev.state,
+      tier: ev.state,
+      current_node: ev.run?.current_node ?? null,
+      iteration: ev.run?.iteration ?? 0,
+      error: ev.run?.error ?? null,
+      orchestrator_session_id: ev.run?.orchestrator_session_id ?? null,
+      seq: ev.seq,
+    },
     all_done: false,
   });
 }
 
+/** Wire event name for a run inbox tier key (ADR-0019). */
+function runEventName(tier: string): string {
+  if (tier === "gate") return "run.gate";
+  if (tier === "blocked") return "run.blocked";
+  if (tier === "failed") return "run.failed";
+  if (tier === "completed") return "run.completed";
+  return `run.${tier}`;
+}
+
 /**
- * `GET /tasks/events?ids=…&since=<seq>&wait=true` — the multi-task transition
- * firehose (#34). Used by `watch --follow` (no ack). Returns the earliest
- * transition of any watched task after `since` (replaying immediately if one
- * already happened, else blocking until the next), or `{ event: null }` when
- * the poll window elapses. Omitting `since` means "start from now".
+ * `GET /tasks/events?ids=…&session=…&since=<seq>&wait=true` — the multi-subject
+ * transition firehose (#34 / #240). Used by `watch --follow` (no ack). Returns
+ * the earliest transition of any watched task or run after `since`, or
+ * `{ event: null }` when the poll window elapses. Omitting `since` means
+ * "start from now".
  */
 async function handleWatchEvents(
   engine: TaskEngine,
@@ -910,7 +979,12 @@ async function handleWatchEvents(
     sendJson(res, resolved.status, { error: resolved.error });
     return;
   }
-  if (resolved.length === 0) {
+  const sessionParam = params.get("session");
+  const session =
+    sessionParam !== null && sessionParam !== "" ? sessionParam : null;
+  const watch = engine.resolveWatchSet(resolved, session);
+  const followIds = [...watch.taskIds, ...watch.runIds];
+  if (followIds.length === 0) {
     sendJson(res, 400, { error: "ids is required" });
     return;
   }
@@ -922,15 +996,57 @@ async function handleWatchEvents(
   }
   const wait = params.get("wait") === "true";
   const transition = wait
-    ? await engine.waitForEvents(resolved, since, longPollWindowMs())
-    : engine.peekEvent(resolved, since);
+    ? await engine.waitForEvents(followIds, since, longPollWindowMs())
+    : engine.peekEvent(followIds, since);
   if (!transition) {
-    sendJson(res, 200, { event: null, seq: since, task: null });
+    sendJson(res, 200, {
+      event: null,
+      seq: since,
+      subject: null,
+      task: null,
+      run: null,
+    });
     return;
   }
-  const row = engine.get(transition.task_id);
+  if (transition.kind === "run") {
+    sendJson(res, 200, {
+      event: transition.event ?? `run.${transition.state}`,
+      seq: transition.seq,
+      subject: "run",
+      task: null,
+      run: {
+        run_id: transition.run_id ?? "",
+        workflow: "",
+        state: transition.state,
+        current_node: transition.node ?? null,
+        iteration: transition.iteration ?? 0,
+        error: null,
+        orchestrator_session_id: null,
+        seq: transition.seq,
+      },
+    });
+    return;
+  }
+  const taskId = transition.task_id;
+  if (taskId === undefined) {
+    sendJson(res, 200, {
+      event: null,
+      seq: transition.seq,
+      subject: null,
+      task: null,
+      run: null,
+    });
+    return;
+  }
+  const row = engine.get(taskId);
   if (!row) {
-    sendJson(res, 200, { event: null, seq: transition.seq, task: null });
+    sendJson(res, 200, {
+      event: null,
+      seq: transition.seq,
+      subject: null,
+      task: null,
+      run: null,
+    });
     return;
   }
   // The envelope carries the current row for detail, but its `state`/`seq` are
@@ -940,10 +1056,17 @@ async function handleWatchEvents(
   const task = envelopeFor(engine, row);
   task.state = transition.state;
   task.seq = transition.seq;
+  // Prefer transition-pinned address when present (should match the row).
+  if (transition.run_id !== undefined) task.run_id = transition.run_id;
+  if (transition.node !== undefined) task.node = transition.node;
+  if (transition.iteration !== undefined) task.iteration = transition.iteration;
+  if (transition.slot !== undefined) task.slot = transition.slot;
   sendJson(res, 200, {
     event: eventNameForState(transition.state),
     seq: transition.seq,
+    subject: "task",
     task,
+    run: null,
   });
 }
 
@@ -955,12 +1078,42 @@ async function handleWatchEvents(
  * transition still reports the state/seq it fired at. Returns null when the
  * transition's row has vanished (never expected in practice).
  */
-function sseMessageFor(engine: TaskEngine, transition: { seq: number; task_id: string; state: string }): string | null {
-  const row = engine.get(transition.task_id);
+function sseMessageFor(
+  engine: TaskEngine,
+  transition: {
+    seq: number;
+    task_id?: string;
+    state: string;
+    kind?: "task" | "run";
+    event?: string;
+    run_id?: string | null;
+    node?: string | null;
+    iteration?: number | null;
+    slot?: string | null;
+  },
+): string | null {
+  if (transition.kind === "run") {
+    const data = JSON.stringify({
+      run_id: transition.run_id,
+      state: transition.state,
+      current_node: transition.node ?? null,
+      iteration: transition.iteration ?? 0,
+      seq: transition.seq,
+    });
+    const event = transition.event ?? `run.${transition.state}`;
+    return `id: ${transition.seq}\nevent: ${event}\ndata: ${data}\n\n`;
+  }
+  const taskId = transition.task_id;
+  if (taskId === undefined) return null;
+  const row = engine.get(taskId);
   if (!row) return null;
   const task = envelopeFor(engine, row);
   task.state = transition.state;
   task.seq = transition.seq;
+  if (transition.run_id !== undefined) task.run_id = transition.run_id;
+  if (transition.node !== undefined) task.node = transition.node;
+  if (transition.iteration !== undefined) task.iteration = transition.iteration;
+  if (transition.slot !== undefined) task.slot = transition.slot;
   const data = JSON.stringify(task);
   return `id: ${transition.seq}\nevent: ${eventNameForState(transition.state)}\ndata: ${data}\n\n`;
 }
@@ -1303,6 +1456,7 @@ function handleRegisterSession(
     return;
   }
   const createIfMissing = body.create_if_missing === true;
+  const clearPanic = body.clear_panic === true;
   try {
     const session = engine.registerSession({
       harness,
@@ -1312,6 +1466,7 @@ function handleRegisterSession(
       anchor,
       sessionId: optionalString(body.session_id),
       createIfMissing,
+      clearPanic,
     });
     sendJson(res, 201, {
       session_id: session.id,
@@ -1321,6 +1476,7 @@ function handleRegisterSession(
       workspace_root: session.workspace_root,
       created_at: session.created_at,
       updated_at: session.updated_at,
+      panicked: session.panicked === 1,
     });
   } catch (err) {
     if (err instanceof DelegateError) {
@@ -1837,7 +1993,7 @@ function handleRunsList(
     const tasks = listTasksForRun(db, run.id).map(taskRowToQuery);
     const definition = loadDefinitionForRun(paths, run);
     const ws = workspaceForRun(paths, run);
-    return projectRunEnvelope({
+    return projectRunSummary({
       run,
       tasks,
       definition,

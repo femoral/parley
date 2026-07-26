@@ -41,7 +41,7 @@ export interface RunUsage {
  * One run on the list and as the header of a detail view (ADR-0021).
  * Mirrors TaskEnvelope discipline: decoded values, no storage shapes.
  */
-export interface RunEnvelope {
+export interface RunSummary {
   run_id: string;
   workflow: string;
   workflow_version: number;
@@ -201,13 +201,13 @@ export interface NodeTaskRow {
 
 /** `GET /runs` body. */
 export interface RunsResponse {
-  runs: RunEnvelope[];
+  runs: RunSummary[];
   seq: number;
 }
 
 /** `GET /runs/:ref` body. */
 export interface RunDetailResponse {
-  run: RunEnvelope;
+  run: RunSummary;
   nodes: NodeProjection[];
   block: RunBlock | null;
 }

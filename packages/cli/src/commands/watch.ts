@@ -19,14 +19,14 @@ import type { Discovery } from "@useparley/daemon/discovery.js";
 const LONG_POLL_TIMEOUT_MS = 60_000;
 
 /**
- * Inbox exit codes (ADR-0007 / ADR-0008): one code per actionable state so the
+ * Inbox exit codes (ADR-0007 / ADR-0008 / ADR-0019): one code per tier so the
  * orchestrator branches on `$?` without parsing. Exit 0 is reserved for
- * all-done; `completed` is 6 and `failed` is 5. This is the only state-typed
- * exit vocabulary — `delegate` and `answer` exit only 0 or 2.
+ * session-finished; the payload picks the verb (task question vs run gate).
+ * Exit codes 3/4/5/6 keep their tier meanings — no fifth tier, no new code.
  */
 function exitFor(state: string): number {
-  if (state === "awaiting_answer") return 3;
-  if (state === "stalled") return 4;
+  if (state === "awaiting_answer" || state === "gate") return 3;
+  if (state === "stalled" || state === "blocked") return 4;
   if (state === "failed") return 5;
   if (state === "completed") return 6;
   return 0;
@@ -61,14 +61,12 @@ function resolveSessionFilter(
 
 /**
  * `parley watch [task…] [--ack <event-id>] [--session <id>] [--follow] [--json]`
- * (ADR-0007 / #91) — deliver the next pending event from the orchestrator-session
- * attention inbox, or stream every transition as JSONL with `--follow`.
+ * (ADR-0007 / ADR-0019 / #91 / #240) — deliver the next pending event from the
+ * orchestrator-session attention inbox (tasks *and* runs), or stream every
+ * transition as JSONL with `--follow`.
  *
- * Default mode is level-triggered and acked: each task contributes at most its
- * current actionable state (`awaiting_answer` / `stalled` / `failed` /
- * `completed`) until acked. `--ack` records handling of a prior event, then the
- * next pending one is returned (blocking if none). Exit 0 only when all watched
- * tasks are terminal and all events are acked.
+ * Default mode is level-triggered and acked. Exit 0 only when the session is
+ * finished — every subject terminal (runs included) and every event acked.
  */
 export async function runWatch(ctx: CliContext, args: string[]): Promise<number> {
   const { positionals, flags } = parseArgs(args, {
@@ -101,7 +99,7 @@ export async function runWatch(ctx: CliContext, args: string[]): Promise<number>
   const { tasks, seq: nowSeq } = await daemonGet<TasksResponse>(discovery, "/tasks");
 
   if (follow) {
-    return runFollow(ctx, discovery, tasks, positionals, nowSeq);
+    return runFollow(ctx, discovery, tasks, positionals, sessionFlag, ctx.env, nowSeq);
   }
 
   // Inbox scope: session filter (like status), then optional task-ref filter
@@ -126,6 +124,8 @@ export async function runWatch(ctx: CliContext, args: string[]): Promise<number>
   const query = (): string => {
     const params = new URLSearchParams();
     if (ids.length > 0) params.set("ids", ids.join(","));
+    // Session lets the daemon expand runs (gate-first workflows with no tasks).
+    if (session !== undefined) params.set("session", session);
     params.set("wait", "true");
     if (ack !== null) params.set("ack", String(ack));
     return `/tasks/inbox?${params.toString()}`;
@@ -139,28 +139,40 @@ export async function runWatch(ctx: CliContext, args: string[]): Promise<number>
     if (ev.all_done) {
       return 0;
     }
-    if (ev.event === null || ev.task === null) {
+    if (ev.event === null) {
       // Poll window elapsed with live work still outstanding — re-poll.
-      continue;
+      // (task and run both null, or only one set — either way no delivery.)
+      if (ev.task === null && (ev.run === null || ev.run === undefined)) {
+        continue;
+      }
     }
 
     report(ctx, ev, json);
-    return exitFor(ev.task.state);
+    if (ev.subject === "run" && ev.run) {
+      return exitFor(ev.run.tier ?? ev.run.state);
+    }
+    if (ev.task) {
+      return exitFor(ev.task.state);
+    }
+    // Defensive: event present but no subject payload — re-poll.
+    continue;
   }
 }
 
 /**
  * `--follow`: stream every transition of the watched set as JSONL (one line per
- * event), no ack, no priority — the firehose for UIs and debugging (ADR-0007).
- * Watches explicit refs, or every currently non-terminal task; runs until all
- * watched tasks are terminal or the process is killed. Starts from "now" (no
- * `--since`).
+ * event), no ack, no priority — the firehose for UIs and debugging (ADR-0007 /
+ * ADR-0019). Includes `run.*` (node_entered, blocked, …) so gates are visible.
+ * Watches explicit refs, or every currently non-terminal task (+ session runs);
+ * runs until all watched subjects are terminal or the process is killed.
  */
 async function runFollow(
   ctx: CliContext,
   discovery: Discovery,
   tasks: TaskEnvelope[],
   positionals: string[],
+  sessionFlag: string | undefined,
+  env: NodeJS.ProcessEnv,
   baseline: number,
 ): Promise<number> {
   let watched: TaskEnvelope[];
@@ -175,32 +187,101 @@ async function runFollow(
   }
 
   const ids = [...new Set(watched.map((t) => t.task_id))];
-  if (ids.length === 0) return 0;
+  const session = resolveSessionFilter(sessionFlag, env, tasks);
+  // Only treat follow as run-awaiting when the user explicitly scoped a session
+  // (or has no tasks yet — gate-first). Env PARLEY_SESSION_ID alone must not
+  // change the classic task-terminal exit (watch.test.ts --follow).
+  const awaitRuns =
+    sessionFlag !== undefined || (ids.length === 0 && session !== undefined);
+  // Empty ids is OK when a session still has runs (gate-first).
+  if (ids.length === 0 && session === undefined) return 0;
 
-  const remaining = new Set(
+  const remainingTasks = new Set(
     watched.filter((t) => !isTerminalState(t.state)).map((t) => t.task_id),
   );
-  if (remaining.size === 0) return 0;
+  // Track live runs loosely: any run.* that isn't a terminal state keeps us open.
+  const remainingRuns = new Set<string>();
+  let sawRun = false;
 
   let cursor = baseline;
   for (;;) {
-    const q = `/tasks/events?ids=${encodeURIComponent(ids.join(","))}&since=${cursor}&wait=true`;
+    const params = new URLSearchParams();
+    if (ids.length > 0) params.set("ids", ids.join(","));
+    // Always pass session when known so run.* edges for this orch appear; exit
+    // logic still uses awaitRuns so task-only loops stay unchanged.
+    if (session !== undefined) params.set("session", session);
+    params.set("since", String(cursor));
+    params.set("wait", "true");
+    const q = `/tasks/events?${params.toString()}`;
     const ev = await daemonGet<FollowEventResponse>(discovery, q, LONG_POLL_TIMEOUT_MS);
-    if (ev.event === null || ev.task === null) {
+    if (ev.event === null) {
       cursor = ev.seq;
+      if (remainingTasks.size === 0) {
+        if (!awaitRuns) return 0;
+        if (sawRun && remainingRuns.size === 0) return 0;
+      }
       continue;
     }
     cursor = ev.seq;
-    printJson(ctx, { event: ev.event, seq: ev.seq, task: ev.task });
-    if (isTerminalState(ev.task.state)) remaining.delete(ev.task.task_id);
-    if (remaining.size === 0) return 0;
+    printJson(ctx, {
+      event: ev.event,
+      seq: ev.seq,
+      subject: ev.subject ?? (ev.run ? "run" : "task"),
+      task: ev.task,
+      run: ev.run ?? null,
+    });
+    if (ev.subject === "run" && ev.run) {
+      sawRun = true;
+      const rid = ev.run.run_id;
+      if (
+        ev.run.state === "completed" ||
+        ev.run.state === "failed" ||
+        ev.run.state === "cancelled"
+      ) {
+        remainingRuns.delete(rid);
+      } else {
+        remainingRuns.add(rid);
+      }
+    } else if (ev.task) {
+      if (isTerminalState(ev.task.state)) remainingTasks.delete(ev.task.task_id);
+    }
+    if (remainingTasks.size === 0) {
+      if (!awaitRuns) return 0;
+      if (sawRun && remainingRuns.size === 0) return 0;
+    }
   }
 }
 
 /** Print a single inbox event: JSON when asked, else a concise human line. */
 function report(ctx: CliContext, ev: InboxEventResponse, json: boolean): void {
   if (json) {
-    printJson(ctx, { event: ev.event, seq: ev.seq, task: ev.task });
+    printJson(ctx, {
+      event: ev.event,
+      seq: ev.seq,
+      subject: ev.subject ?? (ev.run ? "run" : "task"),
+      task: ev.task,
+      run: ev.run ?? null,
+    });
+    return;
+  }
+  if (ev.subject === "run" && ev.run) {
+    const r = ev.run;
+    const tier = r.tier ?? r.state;
+    ctx.stdout(
+      `${ev.event} ${r.run_id} [${tier}] node=${r.current_node ?? "-"} iter=${r.iteration} seq=${ev.seq}\n`,
+    );
+    if (tier === "gate") {
+      ctx.stderr(
+        `run ${r.run_id} waiting on gate; action with: parley run approve|reject|redirect|finish ${r.run_id}\n`,
+      );
+    } else if (tier === "blocked") {
+      ctx.stderr(
+        `run ${r.run_id} blocked; action with: parley run approve|redirect|finish ${r.run_id}\n`,
+      );
+      if (r.error) ctx.stderr(`error: ${r.error}\n`);
+    } else if (tier === "failed" && r.error) {
+      ctx.stderr(`error: ${r.error}\n`);
+    }
     return;
   }
   const t = ev.task!;

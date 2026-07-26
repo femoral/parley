@@ -27,7 +27,7 @@ import {
   type RunBlockReason,
   type RunBlockVerb,
   type RunDetailResponse,
-  type RunEnvelope,
+  type RunSummary,
   type RunUsage,
   type WorkflowDefinition,
   type WorkflowGateNode,
@@ -743,8 +743,8 @@ export interface ProjectRunOptions {
   childRunIds?: string[];
 }
 
-/** Build a RunEnvelope from a run row + its tasks. */
-export function projectRunEnvelope(opts: ProjectRunOptions): RunEnvelope {
+/** Build a RunSummary from a run row + its tasks. */
+export function projectRunSummary(opts: ProjectRunOptions): RunSummary {
   const { run, tasks } = opts;
   const settled = tasks.filter((t) => isSettledState(t.state)).length;
   const block = buildRunBlock(run, opts.definition);
@@ -795,7 +795,7 @@ export function projectRunEnvelope(opts: ProjectRunOptions): RunEnvelope {
 
 /** List STATE cell including block parenthetical / fork adornment. */
 export function formatRunListState(
-  envelope: RunEnvelope,
+  envelope: RunSummary,
   childRunIds: string[] = [],
 ): string {
   if (envelope.state === "purged") return "purged";
@@ -1226,7 +1226,7 @@ export function projectRunDetail(opts: {
   seq?: number;
   nowMs?: number;
 }): RunDetailResponse {
-  const runEnv = projectRunEnvelope({
+  const runEnv = projectRunSummary({
     run: opts.run,
     tasks: opts.tasks,
     definition: opts.definition,
@@ -1292,7 +1292,7 @@ function shortSession(id: string | null): string {
 
 /** Render the run list table (01-run-list.txt). */
 export function renderRunList(
-  runs: readonly RunEnvelope[],
+  runs: readonly RunSummary[],
   childMap: ReadonlyMap<string, string[]> = new Map(),
 ): string {
   if (runs.length === 0) return "No runs.\n";

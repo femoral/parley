@@ -66,6 +66,8 @@ export async function runSession(ctx: CliContext, args: string[]): Promise<numbe
 
   const { positionals, flags } = parseArgs(args, {
     "--session": { aliases: ["-s"], value: true },
+    /** Human clear of ADR-0019 `panicked` (delivery breaker). */
+    "--clear-panic": {},
     "--json": {},
   });
 
@@ -116,6 +118,7 @@ export async function runSession(ctx: CliContext, args: string[]): Promise<numbe
     stateSessionId: matched?.harness_session_id ?? null,
   });
   const createIfMissing = fromEnv || fromState;
+  const clearPanic = flags["--clear-panic"] === true;
 
   const workspaceRoot = resolveWorkspaceRoot(process.cwd());
   const discovery = await ensureDaemon(ctx.paths, ctx.env);
@@ -129,6 +132,7 @@ export async function runSession(ctx: CliContext, args: string[]): Promise<numbe
       anchor,
       ...(sessionId !== null ? { session_id: sessionId } : {}),
       ...(createIfMissing ? { create_if_missing: true } : {}),
+      ...(clearPanic ? { clear_panic: true } : {}),
     });
   } catch (err) {
     if (err instanceof DaemonRequestError && err.status === 400) {

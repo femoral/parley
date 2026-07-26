@@ -1,6 +1,7 @@
 /**
- * Task-state transition module (#206): one write path that owns state write +
- * notify pairing (seq bump, transition log, waiter wake, concurrency drain).
+ * Task-state transition module (#206 / #240): one write path that owns state
+ * write + notify pairing (seq bump, transition log, waiter wake, concurrency
+ * drain). Extended for the `run.*` firehose family (ADR-0019).
  *
  * Deliberately a dumb recorder — domain guards (legal from→to, report-wins,
  * cancel races) stay in the engine. This module only commits a decided state.
@@ -10,6 +11,7 @@ import {
   type TaskState,
 } from "@useparley/core";
 import {
+  bumpRunSeq,
   bumpTaskSeq,
   getTask,
   writeTaskState,
@@ -18,13 +20,36 @@ import {
 } from "./db.js";
 
 /**
- * One recorded task-state transition (#34): the global `seq` it was assigned,
- * the task that changed, and the state it moved to.
+ * One recorded transition (#34 / #240): the global `seq` it was assigned and
+ * either a task state change or a run.* firehose event.
+ *
+ * Task transitions always carry `task_id` + `state`. When the task is
+ * run-owned, `run_id` / `node` / `iteration` / `slot` are filled from the row
+ * so `watch --follow` can attribute events without a second lookup.
+ *
+ * Run transitions set `kind: "run"` and an explicit `event` name (`run.blocked`,
+ * `run.node_entered`, …). A gate is otherwise invisible on the stream except
+ * via these run.* events (it spawns no tasks).
  */
 export interface Transition {
   seq: number;
-  task_id: string;
+  /** `"task"` (default) or `"run"` (ADR-0019 firehose family). */
+  kind?: "task" | "run";
+  /** Present on task transitions. */
+  task_id?: string;
+  /** Task lifecycle state, or run lifecycle state for run.* events. */
   state: string;
+  /**
+   * Explicit wire event name. Task transitions leave this unset and the wire
+   * layer maps `state` via `eventNameForState`. Run transitions set it
+   * (`run.node_entered`, `run.blocked`, …).
+   */
+  event?: string;
+  /** Owning / subject run id when known. */
+  run_id?: string | null;
+  node?: string | null;
+  iteration?: number | null;
+  slot?: string | null;
 }
 
 /**
@@ -44,6 +69,8 @@ export type TransitionCause =
   | "answer_timeout"
   | "bootstrap_sweep"
   | "dry_run_purge"
+  | "run_advance"
+  | "run_gate"
   | (string & {});
 
 /** Co-fields frequently written with a state change (data patch, no state). */
@@ -93,6 +120,32 @@ export interface TaskTransitions {
 }
 
 /**
+ * Run firehose recorder (ADR-0019). Allocates seq via {@link bumpRunSeq},
+ * appends a `run.*` transition, and wakes waiters. Does not mutate run state
+ * rows — the run-engine owns those via updateRun.
+ */
+export interface RunTransitions {
+  /**
+   * Record a run.* event. Bumps the run's event-id seq. Returns the transition
+   * (always — run events are edge-logged even when the row did not change
+   * between two identical observations, because the caller only invokes this
+   * on real edges).
+   */
+  record(
+    runId: string,
+    opts: {
+      /** Wire event name, e.g. `run.node_entered`, `run.blocked`. */
+      event: string;
+      /** Run lifecycle state at the edge (`running` / `blocked` / …). */
+      state: string;
+      node?: string | null;
+      iteration?: number | null;
+      cause?: TransitionCause;
+    },
+  ): Transition;
+}
+
+/**
  * Documented observed edges; used by tests / development asserts only.
  * Not a production hard-fail table (#206 Q1).
  */
@@ -133,7 +186,18 @@ export function createTaskTransitions(
       }
       writeTaskState(db, taskId, to, fields);
       const seq = bumpTaskSeq(db, taskId);
-      const transition: Transition = { seq, task_id: taskId, state: to };
+      // Re-read so run address fields reflect any co-written patch.
+      const after = getTask(db, taskId) ?? row;
+      const transition: Transition = {
+        seq,
+        kind: "task",
+        task_id: taskId,
+        state: to,
+        run_id: after.run_id,
+        node: after.node,
+        iteration: after.iteration,
+        slot: after.slot,
+      };
       hooks.append(transition);
       hooks.wake();
       if (isTerminalState(to) || to === "stalled") {
@@ -148,10 +212,61 @@ export function createTaskTransitions(
       const row = getTask(db, taskId);
       if (!row) return null;
       const seq = bumpTaskSeq(db, taskId);
-      const transition: Transition = { seq, task_id: taskId, state };
+      const transition: Transition = {
+        seq,
+        kind: "task",
+        task_id: taskId,
+        state,
+        run_id: row.run_id,
+        node: row.node,
+        iteration: row.iteration,
+        slot: row.slot,
+      };
       hooks.append(transition);
       // No wake on bootstrap — matches today's sweep (db.ts).
       return transition;
     },
   };
+}
+
+/**
+ * Create a run transition recorder. Shares the same append/wake hooks as task
+ * transitions so one firehose carries both families.
+ */
+export function createRunTransitions(
+  db: DatabaseHandle,
+  hooks: Pick<TransitionHooks, "append" | "wake">,
+): RunTransitions {
+  return {
+    record(runId, opts) {
+      const seq = bumpRunSeq(db, runId);
+      const transition: Transition = {
+        seq,
+        kind: "run",
+        state: opts.state,
+        event: opts.event,
+        run_id: runId,
+        node: opts.node ?? null,
+        iteration: opts.iteration ?? null,
+        slot: null,
+      };
+      hooks.append(transition);
+      hooks.wake();
+      return transition;
+    },
+  };
+}
+
+/**
+ * Wire event name for a transition (ADR-0019): run transitions use their
+ * explicit `event`; task transitions map via the caller-supplied mapper
+ * (usually `eventNameForState` from core).
+ */
+export function transitionEventName(
+  transition: Transition,
+  taskEventName: (state: string) => string,
+): string {
+  if (transition.kind === "run" && transition.event) return transition.event;
+  if (transition.event) return transition.event;
+  return taskEventName(transition.state);
 }

@@ -717,6 +717,43 @@ const MIGRATIONS: string[] = [
      ON deliverables(run_id, node, port, iteration, ifnull(slot, ''));
    CREATE INDEX deliverables_run ON deliverables(run_id);
    CREATE INDEX deliverables_task ON deliverables(task_id);`,
+  // #240 / ADR-0019: runs in the attention inbox, delivery breaker, panicked.
+  // - sessions.panicked: sticky enforcing cap (effective concurrency 0).
+  // - event_acks generalized to subject_kind+subject_id so runs can be acked
+  //   (gates are never acked — only actioned; see inbox.ts).
+  // - run_seqs: side table for run event ids + block_reason (ADR-0019 inbox
+  //   tier: only `gate` is unackable tier 1; written where the workflow
+  //   definition is known — never substring-guessed in the inbox).
+  // - event_deliveries: redelivery counter for the delivery breaker (default 10).
+  `ALTER TABLE sessions ADD COLUMN panicked INTEGER NOT NULL DEFAULT 0;
+
+   CREATE TABLE event_acks_v2 (
+     subject_kind TEXT NOT NULL,
+     subject_id   TEXT NOT NULL,
+     state        TEXT NOT NULL,
+     acked_seq    INTEGER NOT NULL,
+     PRIMARY KEY (subject_kind, subject_id, state)
+   );
+   INSERT INTO event_acks_v2 (subject_kind, subject_id, state, acked_seq)
+     SELECT 'task', task_id, state, acked_seq FROM event_acks;
+   DROP TABLE event_acks;
+   ALTER TABLE event_acks_v2 RENAME TO event_acks;
+
+   CREATE TABLE run_seqs (
+     run_id       TEXT PRIMARY KEY,
+     seq          INTEGER NOT NULL,
+     block_reason TEXT,
+     FOREIGN KEY (run_id) REFERENCES runs(id)
+   );
+   CREATE INDEX run_seqs_seq ON run_seqs(seq);
+
+   CREATE TABLE event_deliveries (
+     event_id          INTEGER PRIMARY KEY,
+     delivery_count    INTEGER NOT NULL,
+     subject_kind      TEXT NOT NULL,
+     subject_id        TEXT NOT NULL,
+     last_delivered_at TEXT NOT NULL
+   );`,
 ];
 
 /** How many schema migrations have been applied — equals `PRAGMA user_version` after open. */
@@ -1013,36 +1050,45 @@ export function getTaskBySeq(db: DatabaseHandle, eventId: number): TaskRow | und
   return row === undefined ? undefined : asRow<TaskRow>(row);
 }
 
+/** Subject kind stored in `event_acks` / `event_deliveries` (ADR-0019). */
+export type InboxSubjectKind = "task" | "run";
+
 /**
- * Record that the orchestrator handled a task's current actionable state
- * (ADR-0007). Upserts per `(task_id, state)` so a later re-entry into the same
- * state with a new seq is un-acked again. Caller validates that the event is
- * still current and the state is actionable; this is pure persistence.
+ * Record that the orchestrator handled a subject's current actionable state
+ * (ADR-0007 / ADR-0019). Upserts per `(kind, id, state)` so a later re-entry
+ * into the same state with a new seq is un-acked again. Caller validates that
+ * the event is still current and ackedable (gates are never acked).
  */
 export function upsertEventAck(
   db: DatabaseHandle,
-  taskId: string,
+  subjectId: string,
   state: string,
   ackedSeq: number,
+  subjectKind: InboxSubjectKind = "task",
 ): void {
   db.prepare(
-    `INSERT INTO event_acks (task_id, state, acked_seq) VALUES (?, ?, ?)
-     ON CONFLICT(task_id, state) DO UPDATE SET acked_seq = excluded.acked_seq`,
-  ).run(taskId, state, ackedSeq);
+    `INSERT INTO event_acks (subject_kind, subject_id, state, acked_seq)
+     VALUES (?, ?, ?, ?)
+     ON CONFLICT(subject_kind, subject_id, state)
+     DO UPDATE SET acked_seq = excluded.acked_seq`,
+  ).run(subjectKind, subjectId, state, ackedSeq);
 }
 
 /**
- * The seq last acked for `(task_id, state)`, or null when never acked. Used to
- * decide whether a task's current actionable state is still pending.
+ * The seq last acked for `(kind, id, state)`, or null when never acked.
  */
 export function getEventAck(
   db: DatabaseHandle,
-  taskId: string,
+  subjectId: string,
   state: string,
+  subjectKind: InboxSubjectKind = "task",
 ): number | null {
   const row = db
-    .prepare(`SELECT acked_seq FROM event_acks WHERE task_id = ? AND state = ?`)
-    .get(taskId, state);
+    .prepare(
+      `SELECT acked_seq FROM event_acks
+       WHERE subject_kind = ? AND subject_id = ? AND state = ?`,
+    )
+    .get(subjectKind, subjectId, state);
   return row === undefined ? null : asRow<{ acked_seq: number }>(row).acked_seq;
 }
 
@@ -1051,8 +1097,187 @@ export function getEventAck(
  * this actionable state no longer contributes a pending inbox event.
  */
 export function isEventAcked(db: DatabaseHandle, task: TaskRow): boolean {
-  const acked = getEventAck(db, task.id, task.state);
+  const acked = getEventAck(db, task.id, task.state, "task");
   return acked !== null && acked === task.seq;
+}
+
+/**
+ * True when a run's current inbox state has been acked at its current seq.
+ * Gates are never acked — callers must not treat gate events as ackedable.
+ */
+export function isRunEventAcked(
+  db: DatabaseHandle,
+  runId: string,
+  state: string,
+  seq: number,
+): boolean {
+  const acked = getEventAck(db, runId, state, "run");
+  return acked !== null && acked === seq;
+}
+
+/**
+ * Look up the run id whose *current* transition seq is `eventId` (ADR-0019).
+ * Returns undefined when no run currently holds that seq.
+ */
+export function getRunIdBySeq(
+  db: DatabaseHandle,
+  eventId: number,
+): string | undefined {
+  const row = db
+    .prepare(`SELECT run_id FROM run_seqs WHERE seq = ?`)
+    .get(eventId);
+  return row === undefined ? undefined : asRow<{ run_id: string }>(row).run_id;
+}
+
+/** Current event-id seq for a run, or 0 when never transitioned for the inbox. */
+export function getRunSeq(db: DatabaseHandle, runId: string): number {
+  const row = db
+    .prepare(`SELECT seq FROM run_seqs WHERE run_id = ?`)
+    .get(runId);
+  return row === undefined ? 0 : asRow<{ seq: number }>(row).seq;
+}
+
+/**
+ * Stored block reason for a run (`BlockReason` from run-gates), or null when
+ * unknown / not blocked. Inbox uses **only** this for gate vs non-gate tier —
+ * never the free-text `runs.error` (ADR-0019 / #240 fix).
+ */
+export function getRunBlockReason(
+  db: DatabaseHandle,
+  runId: string,
+): string | null {
+  const row = db
+    .prepare(`SELECT block_reason FROM run_seqs WHERE run_id = ?`)
+    .get(runId);
+  if (row === undefined) return null;
+  const reason = asRow<{ block_reason: string | null }>(row).block_reason;
+  return reason === null || reason === "" ? null : reason;
+}
+
+/**
+ * Persist (or clear) the block reason on the run's side-table row without
+ * bumping seq. Creates a zero-seq row when none exists yet so a block that
+ * has not been firehose-logged is still classified correctly by the inbox.
+ */
+export function setRunBlockReason(
+  db: DatabaseHandle,
+  runId: string,
+  reason: string | null,
+): void {
+  db.prepare(
+    `INSERT INTO run_seqs (run_id, seq, block_reason) VALUES (?, 0, ?)
+     ON CONFLICT(run_id) DO UPDATE SET block_reason = excluded.block_reason`,
+  ).run(runId, reason);
+}
+
+/**
+ * Allocate the next global transition seq and pin it on the run (ADR-0019 event
+ * id). Side table so {@link updateRun} stays untouched. When `blockReason` is
+ * passed, it is written together with the seq; otherwise any existing
+ * `block_reason` is preserved.
+ */
+export function bumpRunSeq(
+  db: DatabaseHandle,
+  runId: string,
+  opts?: { blockReason?: string | null },
+): number {
+  const seq = nextCounter(db, "transition_seq");
+  if (opts !== undefined && "blockReason" in opts) {
+    db.prepare(
+      `INSERT INTO run_seqs (run_id, seq, block_reason) VALUES (?, ?, ?)
+       ON CONFLICT(run_id) DO UPDATE SET
+         seq = excluded.seq,
+         block_reason = excluded.block_reason`,
+    ).run(runId, seq, opts.blockReason ?? null);
+  } else {
+    db.prepare(
+      `INSERT INTO run_seqs (run_id, seq, block_reason) VALUES (?, ?, NULL)
+       ON CONFLICT(run_id) DO UPDATE SET seq = excluded.seq`,
+    ).run(runId, seq);
+  }
+  return seq;
+}
+
+/**
+ * Default delivery-breaker threshold (ADR-0019): same event id delivered this
+ * many times without ack-or-action trips `panicked`.
+ */
+export const DEFAULT_DELIVERY_BREAKER = 10;
+
+/**
+ * Record one delivery of an inbox event. Returns the new delivery count for
+ * that event id. Caller trips `panicked` when the count reaches the breaker.
+ */
+export function recordEventDelivery(
+  db: DatabaseHandle,
+  eventId: number,
+  subjectKind: InboxSubjectKind,
+  subjectId: string,
+): number {
+  const now = new Date().toISOString();
+  db.prepare(
+    `INSERT INTO event_deliveries
+       (event_id, delivery_count, subject_kind, subject_id, last_delivered_at)
+     VALUES (?, 1, ?, ?, ?)
+     ON CONFLICT(event_id) DO UPDATE SET
+       delivery_count = delivery_count + 1,
+       last_delivered_at = excluded.last_delivered_at,
+       subject_kind = excluded.subject_kind,
+       subject_id = excluded.subject_id`,
+  ).run(eventId, subjectKind, subjectId, now);
+  const row = db
+    .prepare(`SELECT delivery_count FROM event_deliveries WHERE event_id = ?`)
+    .get(eventId);
+  return row === undefined
+    ? 1
+    : asRow<{ delivery_count: number }>(row).delivery_count;
+}
+
+/** Clear delivery tracking for an event id (after ack or action supersedes it). */
+export function clearEventDelivery(db: DatabaseHandle, eventId: number): void {
+  db.prepare(`DELETE FROM event_deliveries WHERE event_id = ?`).run(eventId);
+}
+
+/** Delivery count for an event id, or 0 when never delivered. */
+export function getEventDeliveryCount(
+  db: DatabaseHandle,
+  eventId: number,
+): number {
+  const row = db
+    .prepare(`SELECT delivery_count FROM event_deliveries WHERE event_id = ?`)
+    .get(eventId);
+  return row === undefined
+    ? 0
+    : asRow<{ delivery_count: number }>(row).delivery_count;
+}
+
+/** True when the session is in the enforcing `panicked` state (ADR-0019). */
+export function isSessionPanicked(db: DatabaseHandle, sessionId: string): boolean {
+  const row = getSession(db, sessionId);
+  return row !== undefined && row.panicked === 1;
+}
+
+/**
+ * Trip `panicked` on a registered session (sticky, persisted). No-op when the
+ * session row does not exist (free-form session ids without registration).
+ */
+export function setSessionPanicked(db: DatabaseHandle, sessionId: string): void {
+  db.prepare(
+    `UPDATE sessions SET panicked = 1, updated_at = ? WHERE id = ?`,
+  ).run(new Date().toISOString(), sessionId);
+}
+
+/**
+ * Human-only clear of `panicked` (ADR-0019). Returns false when the session is
+ * unknown; true when the row was updated (whether or not it was already clear).
+ */
+export function clearSessionPanic(db: DatabaseHandle, sessionId: string): boolean {
+  const existing = getSession(db, sessionId);
+  if (existing === undefined) return false;
+  db.prepare(
+    `UPDATE sessions SET panicked = 0, updated_at = ? WHERE id = ?`,
+  ).run(new Date().toISOString(), sessionId);
+  return true;
 }
 
 /**
@@ -1363,8 +1588,12 @@ export function deleteTask(db: DatabaseHandle, taskId: string): void {
   withTransaction(db, () => {
     const task = getTask(db, taskId);
     db.prepare(`DELETE FROM qa_turns WHERE task_id = ?`).run(taskId);
-    db.prepare(`DELETE FROM event_acks WHERE task_id = ?`).run(taskId);
-    // Standalone only — run-owned deliverables ride ON DELETE SET NULL.
+    // event_acks is subject-scoped since #240; a task's acks are subject_kind
+    // 'task'. Run acks are keyed by run id and outlive the task.
+    db.prepare(
+      `DELETE FROM event_acks WHERE subject_kind = 'task' AND subject_id = ?`,
+    ).run(taskId);
+    // Standalone only — run-owned deliverables ride ON DELETE SET NULL (#244).
     if (task === undefined || task.run_id === null) {
       db.prepare(`DELETE FROM deliverables WHERE task_id = ?`).run(taskId);
     }
@@ -1421,10 +1650,16 @@ export interface SessionRow {
   anchor_start: string;
   created_at: string;
   updated_at: string;
+  /**
+   * ADR-0019 delivery-breaker trip: 1 when the session is *panicked*
+   * (enforcing effective concurrency cap of 0). Sticky across restarts;
+   * cleared only by a human ({@link clearSessionPanic}).
+   */
+  panicked: number;
 }
 
 const SESSION_COLUMNS = `id, harness, model, effort, workspace_root,
-   anchor_machine, anchor_pid, anchor_start, created_at, updated_at`;
+   anchor_machine, anchor_pid, anchor_start, created_at, updated_at, panicked`;
 
 /** Fetch one registered session by id. */
 export function getSession(db: DatabaseHandle, id: string): SessionRow | undefined {
