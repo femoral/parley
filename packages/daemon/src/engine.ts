@@ -273,6 +273,34 @@ function errorMessage(err: unknown): string {
 }
 
 /**
+ * Last-resort port map when the workflow definition cannot be resolved.
+ * Every reported key becomes a text atom (inline deliverable). Used only
+ * after {@link TaskEngine.resolveStepOutputPorts} fails — see #238 fix.
+ */
+function fallbackTextOutputPorts(
+  report: Readonly<Record<string, unknown>>,
+  reportSchemaJson: string | null,
+): Record<string, OutputPortSpec> {
+  const ports: Record<string, OutputPortSpec> = {};
+  const schema = parseJsonColumn<{
+    properties?: Record<string, unknown>;
+  }>(reportSchemaJson);
+  if (schema?.properties !== undefined) {
+    for (const name of Object.keys(schema.properties)) {
+      ports[name] = { type: { kind: "text" } };
+    }
+    return ports;
+  }
+  for (const name of Object.keys(report)) {
+    if (name === "summary" || name === "outcome" || name === "files_changed") {
+      continue;
+    }
+    ports[name] = { type: { kind: "text" } };
+  }
+  return ports;
+}
+
+/**
  * Minimal adapter for free-form launch-template vendors outside the registry
  * (#195 / ADR-0015). Argv comes from the template, not prepare/resume. Teaches
  * the HTTP child channel so ask/report work without MCP harness wiring.
@@ -1892,8 +1920,10 @@ export class TaskEngine {
 
   /**
    * Insert deliverable rows for a completed run-owned task from its report
-   * payload. Port types come from the stored report_schema properties when
-   * available; otherwise every top-level key is recorded as inline JSON.
+   * payload. Port types (and therefore deliverable kind: inline / file / dir)
+   * come from the step's declared `out` ports on the workflow definition
+   * (ADR-0016). Falling back to every key as text is the exception path when
+   * the definition cannot be resolved — logged, never silent.
    */
   private recordRunDeliverables(
     task: TaskRow,
@@ -1903,25 +1933,13 @@ export class TaskEngine {
       return;
     }
     try {
-      const schema = parseJsonColumn<{
-        properties?: Record<string, unknown>;
-      }>(task.report_schema);
-      const ports: Record<string, OutputPortSpec> = {};
-      if (schema?.properties !== undefined) {
-        for (const name of Object.keys(schema.properties)) {
-          // Kind defaults to inline; file/dir leaves are still path strings
-          // in the payload and deliverablesFromReport reads the port type.
-          // Without the definition we cannot recover atom kinds — store as
-          // inline JSON (the common case for enum/text reports).
-          ports[name] = { type: { kind: "text" } };
-        }
-      } else {
-        for (const name of Object.keys(report)) {
-          if (name === "summary" || name === "outcome" || name === "files_changed") {
-            continue;
-          }
-          ports[name] = { type: { kind: "text" } };
-        }
+      let ports = this.resolveStepOutputPorts(task);
+      if (ports === null) {
+        console.error(
+          `[parley] recordRunDeliverables: could not resolve output ports for ` +
+            `run=${task.run_id} node=${task.node}; falling back to inline text kinds`,
+        );
+        ports = fallbackTextOutputPorts(report, task.report_schema);
       }
       if (Object.keys(ports).length === 0) return;
       const rows = deliverablesFromReport(report, ports, {
@@ -1935,9 +1953,54 @@ export class TaskEngine {
       for (const row of rows) {
         insertDeliverable(this.db, row);
       }
-    } catch {
+    } catch (err) {
       // Best-effort: completion already committed.
+      const message = err instanceof Error ? err.message : String(err);
+      console.error(`[parley] recordRunDeliverables failed: ${message}`);
     }
+  }
+
+  /**
+   * Look up the run's workflow definition and return the current step's
+   * declared output ports with real {@link PortType}s. Null when the run,
+   * definition, or step cannot be resolved.
+   */
+  private resolveStepOutputPorts(
+    task: TaskRow,
+  ): Record<string, OutputPortSpec> | null {
+    if (task.run_id === null || task.node === null) return null;
+    const run = getRun(this.db, task.run_id);
+    if (run === undefined) return null;
+
+    let definition: WorkflowDefinition | null;
+    try {
+      // Prefer the run's bound repo as cwd so the local workflow layer wins
+      // (same posture as buildRunDrainHost).
+      const cwd =
+        run.repo !== null && run.repo !== "" ? run.repo : process.cwd();
+      const resolved = resolveWorkflow(run.workflow, {
+        cwd,
+        home: this.paths.home,
+      });
+      definition = resolved?.definition ?? null;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error(
+        `[parley] resolveStepOutputPorts: failed to load workflow ` +
+          `"${run.workflow}": ${message}`,
+      );
+      return null;
+    }
+    if (definition === null) return null;
+
+    const node = definition.nodes.find((n) => n.id === task.node);
+    if (node === undefined || node.kind !== "step") return null;
+
+    const ports: Record<string, OutputPortSpec> = {};
+    for (const [name, port] of Object.entries(node.out)) {
+      ports[name] = { type: port.type, bounds: port.bounds };
+    }
+    return ports;
   }
 
   /** Arm the post-report fallback so a hung child cannot leave the task running forever. */
