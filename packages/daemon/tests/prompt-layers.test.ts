@@ -11,8 +11,13 @@ import {
   collectOperatorLayerBodies,
   composeOperatorInstructions,
   composeOrchestratorInstructions,
+  composeStepBody,
+  formatOrchestratorNote,
   joinPromptBodies,
+  PromptPathError,
   readPromptFile,
+  readWorkflowPrompt,
+  readWorkflowRelativePrompt,
 } from "../src/prompt-layers.js";
 
 let home: string;
@@ -217,5 +222,149 @@ describe("assembleChildPrompt / assemblePromptPreview", () => {
     const preview = assemblePromptPreview("PREAMBLE", op);
     const spawn = assembleChildPrompt("PREAMBLE", op, "do the thing");
     expect(spawn).toBe(`${preview}\n\n---\n\ndo the thing`);
+  });
+});
+
+describe("composeStepBody — ADR-0016 / #239", () => {
+  let wfDir: string;
+
+  beforeEach(() => {
+    wfDir = fs.mkdtempSync(path.join(os.tmpdir(), "parley-pl-wf-"));
+    scratch.push(wfDir);
+  });
+
+  function writeWf(rel: string, body: string): void {
+    write(wfDir, rel, body);
+  }
+
+  it("orders workflow → node → slot → orchestrator note → inputs", () => {
+    writeWf("PROMPT.md", "WORKFLOW-PROMPT");
+    writeWf("prompts/node.md", "NODE-PROMPT");
+    writeWf("prompts/slot.md", "SLOT-APPEND");
+
+    const body = composeStepBody({
+      workflowDir: wfDir,
+      nodePromptPath: "prompts/node.md",
+      slotAppendPath: "prompts/slot.md",
+      orchestratorNote: "please re-check auth",
+      inputsSection: "## Inputs\n\n- `brief` (text): do the thing",
+    });
+
+    expect(body).toBe(
+      [
+        "WORKFLOW-PROMPT",
+        "",
+        "NODE-PROMPT",
+        "",
+        "SLOT-APPEND",
+        "",
+        "## Orchestrator note",
+        "",
+        "please re-check auth",
+        "",
+        "## Inputs",
+        "",
+        "- `brief` (text): do the thing",
+      ].join("\n"),
+    );
+  });
+
+  it("omits opt-in workflow prompt when PROMPT.md is missing", () => {
+    writeWf("prompts/node.md", "NODE-ONLY");
+    const body = composeStepBody({
+      workflowDir: wfDir,
+      nodePromptPath: "prompts/node.md",
+    });
+    expect(body).toBe("NODE-ONLY");
+    expect(body).not.toContain("## Orchestrator note");
+    expect(body).not.toContain("## Inputs");
+    expect(body).not.toContain("## Deliverables");
+    expect(body).not.toMatch(/node \d+ of \d+/i);
+  });
+
+  it("omits slot append, note, and empty inputs", () => {
+    writeWf("prompts/node.md", "NODE");
+    expect(
+      composeStepBody({
+        workflowDir: wfDir,
+        nodePromptPath: "prompts/node.md",
+        slotAppendPath: null,
+        orchestratorNote: "  \n",
+        inputsSection: "",
+      }),
+    ).toBe("NODE");
+  });
+
+  it("never invents a Deliverables section or node-position banner", () => {
+    writeWf("prompts/node.md", "do work");
+    const body = composeStepBody({
+      workflowDir: wfDir,
+      nodePromptPath: "prompts/node.md",
+      orchestratorNote: "note",
+      inputsSection: "## Inputs\n\n- `x` (text): y",
+    });
+    expect(body).not.toContain("## Deliverables");
+    expect(body).not.toContain("you are node");
+    expect(body).not.toMatch(/node \d+ of \d+/);
+  });
+
+  it("throws when a declared node prompt path is missing", () => {
+    expect(() =>
+      composeStepBody({
+        workflowDir: wfDir,
+        nodePromptPath: "prompts/missing.md",
+      }),
+    ).toThrow(PromptPathError);
+  });
+
+  it("throws when a declared slot append path is missing", () => {
+    writeWf("prompts/node.md", "NODE");
+    expect(() =>
+      composeStepBody({
+        workflowDir: wfDir,
+        nodePromptPath: "prompts/node.md",
+        slotAppendPath: "prompts/no-slot.md",
+      }),
+    ).toThrow(/slot prompt not found/);
+  });
+
+  it("workflowPrompt override null forces omit even when PROMPT.md exists", () => {
+    writeWf("PROMPT.md", "SHOULD-SKIP");
+    writeWf("prompts/node.md", "NODE");
+    expect(
+      composeStepBody({
+        workflowDir: wfDir,
+        nodePromptPath: "prompts/node.md",
+        workflowPrompt: null,
+      }),
+    ).toBe("NODE");
+  });
+
+  it("readWorkflowPrompt / relative path helpers", () => {
+    expect(readWorkflowPrompt(wfDir)).toBeNull();
+    writeWf("PROMPT.md", "  W\n");
+    expect(readWorkflowPrompt(wfDir)).toBe("W");
+    writeWf("prompts/n.md", "N");
+    expect(readWorkflowRelativePrompt(wfDir, "prompts/n.md")).toBe("N");
+    expect(readWorkflowRelativePrompt(wfDir, "../escape.md")).toBeNull();
+    expect(readWorkflowRelativePrompt(wfDir, "/abs.md")).toBeNull();
+  });
+
+  it("formatOrchestratorNote trims and nulls empty", () => {
+    expect(formatOrchestratorNote(null)).toBeNull();
+    expect(formatOrchestratorNote("  ")).toBeNull();
+    expect(formatOrchestratorNote(" go ")).toBe(
+      "## Orchestrator note\n\ngo",
+    );
+  });
+
+  it("assembleChildPrompt still wraps the composed body", () => {
+    writeWf("prompts/node.md", "BODY");
+    const body = composeStepBody({
+      workflowDir: wfDir,
+      nodePromptPath: "prompts/node.md",
+    });
+    const full = assembleChildPrompt("PREAMBLE", null, body);
+    expect(full).toBe("PREAMBLE\n\n---\n\nBODY");
   });
 });

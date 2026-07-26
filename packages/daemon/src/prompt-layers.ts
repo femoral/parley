@@ -1,5 +1,6 @@
 /**
- * Compounding PROMPT.md layers (#159 / #141).
+ * Compounding PROMPT.md layers (#159 / #141) and run-step body composition
+ * (ADR-0016 / #239).
  *
  * Mirrored trees under the daemon home (`~/.parley/`) and the project
  * (`.parley/`):
@@ -12,7 +13,19 @@
  * project vendor → home profile → project profile). The orchestrator tree
  * compounds separately (home → project) and never reaches children.
  *
- * Missing files skip silently; no per-layer headers. Read hot at call time.
+ * For a **run step**, the task *body* (after preamble + operator layers) is:
+ *
+ *   workflow prompt (opt-in `PROMPT.md` in the workflow dir)
+ *   → node prompt
+ *   → slot append
+ *   → `## Orchestrator note`
+ *   → `## Inputs`
+ *
+ * Deliberately absent: generated "you are node N of M", and a second
+ * `## Deliverables` (the report-schema summary is the contract).
+ *
+ * Missing operator files skip silently; no per-layer headers. Read hot at
+ * call time. Node/slot prompt paths are required when declared.
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -185,4 +198,172 @@ export function assemblePromptPreview(
 ): string {
   if (operatorInstructions === null) return preamble;
   return [preamble, "", "---", "", operatorInstructions].join("\n");
+}
+
+// ---------------------------------------------------------------------------
+// Run-step body composition (ADR-0016 / #239)
+// ---------------------------------------------------------------------------
+
+/**
+ * Opt-in workflow-level prompt file, relative to the workflow directory.
+ * Missing ⇒ the layer is omitted entirely.
+ */
+export const WORKFLOW_PROMPT_FILE = "PROMPT.md";
+
+/** Absolute path of the opt-in workflow `PROMPT.md`. */
+export function workflowPromptPath(workflowDir: string): string {
+  return path.join(workflowDir, WORKFLOW_PROMPT_FILE);
+}
+
+/**
+ * Read the opt-in workflow prompt (`PROMPT.md` under the workflow dir), or
+ * `null` when missing/empty.
+ */
+export function readWorkflowPrompt(workflowDir: string): string | null {
+  return readPromptFile(workflowPromptPath(workflowDir));
+}
+
+/**
+ * Read a path relative to a workflow directory (node `prompt` or slot
+ * `prompt_append`). Returns trimmed non-empty body, or `null` when missing
+ * or empty after trim.
+ */
+export function readWorkflowRelativePrompt(
+  workflowDir: string,
+  relativePath: string,
+): string | null {
+  if (relativePath === "") return null;
+  // Reject absolute paths and `..` escape — prompts stay inside the workflow.
+  if (path.isAbsolute(relativePath)) return null;
+  const resolved = path.resolve(workflowDir, relativePath);
+  const root = path.resolve(workflowDir);
+  if (resolved !== root && !resolved.startsWith(root + path.sep)) {
+    return null;
+  }
+  return readPromptFile(resolved);
+}
+
+/**
+ * Format the optional `## Orchestrator note` section (redirect / fork steer).
+ * Returns `null` when the note is empty so the caller omits the layer.
+ */
+export function formatOrchestratorNote(note: string | null | undefined): string | null {
+  if (note === null || note === undefined) return null;
+  const trimmed = note.trim();
+  if (trimmed === "") return null;
+  return `## Orchestrator note\n\n${trimmed}`;
+}
+
+export interface ComposeStepBodyOptions {
+  /** Absolute path of the workflow directory (for resolving prompt paths). */
+  workflowDir: string;
+  /**
+   * Node prompt path relative to {@link workflowDir} (`step.prompt`). Required
+   * for a step; missing/empty file throws so a bad definition fails loud.
+   */
+  nodePromptPath: string;
+  /**
+   * Slot `prompt_append` path relative to {@link workflowDir}, when the
+   * sibling declares one. Missing file throws when a path is given.
+   */
+  slotAppendPath?: string | null;
+  /**
+   * Optional orchestrator note (redirect / fork). Untyped free text; omitted
+   * entirely when null/empty.
+   */
+  orchestratorNote?: string | null;
+  /**
+   * Pre-rendered `## Inputs` section from {@link renderInputsSection}
+   * (`deliverables.ts`). Pass `""` / null / undefined to omit.
+   */
+  inputsSection?: string | null;
+  /**
+   * Override the workflow-level prompt body. When `undefined`, reads opt-in
+   * `PROMPT.md` from {@link workflowDir}. Pass `null` to force omit.
+   */
+  workflowPrompt?: string | null;
+}
+
+/**
+ * Error when a declared node/slot prompt path cannot be read.
+ */
+export class PromptPathError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "PromptPathError";
+  }
+}
+
+function requireWorkflowRelativePrompt(
+  workflowDir: string,
+  relativePath: string,
+  label: string,
+): string {
+  const body = readWorkflowRelativePrompt(workflowDir, relativePath);
+  if (body === null) {
+    throw new PromptPathError(
+      `${label} prompt not found or empty: ${relativePath} (under ${workflowDir})`,
+    );
+  }
+  return body;
+}
+
+/**
+ * Compose the task **body** for a run step (ADR-0016):
+ *
+ *   workflow prompt (opt-in) → node prompt → slot append
+ *   → `## Orchestrator note` → `## Inputs`
+ *
+ * Does **not** include the protocol preamble or Operator instructions — those
+ * stay on {@link assembleChildPrompt}. Does **not** invent a node-position
+ * banner or a `## Deliverables` section.
+ *
+ * @throws {PromptPathError} when a declared node/slot prompt path is missing
+ */
+export function composeStepBody(options: ComposeStepBodyOptions): string {
+  const {
+    workflowDir,
+    nodePromptPath,
+    slotAppendPath,
+    orchestratorNote,
+    inputsSection,
+  } = options;
+
+  const workflowBody =
+    options.workflowPrompt !== undefined
+      ? options.workflowPrompt === null || options.workflowPrompt === ""
+        ? null
+        : options.workflowPrompt.trim() === ""
+          ? null
+          : options.workflowPrompt.trim()
+      : readWorkflowPrompt(workflowDir);
+
+  const nodeBody = requireWorkflowRelativePrompt(
+    workflowDir,
+    nodePromptPath,
+    "node",
+  );
+
+  let slotBody: string | null = null;
+  if (slotAppendPath !== null && slotAppendPath !== undefined && slotAppendPath !== "") {
+    slotBody = requireWorkflowRelativePrompt(workflowDir, slotAppendPath, "slot");
+  }
+
+  const noteSection = formatOrchestratorNote(orchestratorNote);
+  const inputs =
+    inputsSection !== null &&
+    inputsSection !== undefined &&
+    inputsSection.trim() !== ""
+      ? inputsSection.trim()
+      : null;
+
+  // Preserve order; blank-line separate non-empty layers. No invented headers
+  // on free-form prompt files (they carry their own structure).
+  const parts: string[] = [];
+  if (workflowBody !== null) parts.push(workflowBody);
+  parts.push(nodeBody);
+  if (slotBody !== null) parts.push(slotBody);
+  if (noteSection !== null) parts.push(noteSection);
+  if (inputs !== null) parts.push(inputs);
+  return parts.join("\n\n");
 }
