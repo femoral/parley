@@ -124,6 +124,7 @@ import {
   type ProvenanceSnapshot,
 } from "./session-binding.js";
 import { taskLogDir } from "./discovery.js";
+import { drainRuns, type RunDrainHost } from "./run-engine.js";
 import { resolveRubricForTask } from "./rubrics.js";
 import {
   assertValidSchema,
@@ -579,6 +580,11 @@ export class TaskEngine {
   /** Re-entrancy guard for {@link drainConcurrencyQueue}. */
   private drainingQueue = false;
   /**
+   * Re-entrancy guard for {@link drainRuns} (#237). Same shape as
+   * {@link drainingQueue}: a state change may unlock more work.
+   */
+  private drainingRuns = false;
+  /**
    * Long-poll waiters parked on `POST /runner/lease` until a matching pending
    * task appears or the poll window elapses.
    */
@@ -607,6 +613,8 @@ export class TaskEngine {
       },
       onSlotFreed: () => {
         this.drainConcurrencyQueue();
+        // #237: a settled run-owned task may unlock the run cursor (advance).
+        this.drainRuns();
       },
       onTerminal: (taskId) => {
         // Dry-run (#161): after waiters observe the terminal event, purge the
@@ -634,6 +642,8 @@ export class TaskEngine {
     // #171: re-drain durable queued tasks in original FIFO order after restart.
     // Synchronous: only admits (async spawn is fire-and-forget via admitAndStart).
     this.drainConcurrencyQueue();
+    // #237: resume advance for any run left mid-flight across a restart.
+    this.drainRuns();
   }
 
   setHubPort(port: number): void {
@@ -3154,6 +3164,33 @@ export class TaskEngine {
       }
     } finally {
       this.drainingQueue = false;
+    }
+  }
+
+  /**
+   * Run-engine drain (#237 / ADR-0017): re-evaluate every `running` run after
+   * a task settles (or on restart). Advance is pure in `run-engine.ts`.
+   *
+   * Engine edit surface (keep small — later issues touch this file):
+   * - `onSlotFreed` → `drainConcurrencyQueue()` then `drainRuns()`
+   * - constructor → `drainRuns()` after the concurrency re-drain (restart)
+   * - this method: re-entrancy guard + host stub
+   *
+   * `loadDefinition` / `onEnter` are stubs until discovery + spawn land with
+   * #239/#238; a null definition is a no-op (does not fail runs).
+   */
+  private drainRuns(): void {
+    if (this.drainingRuns || this.shuttingDown) return;
+    this.drainingRuns = true;
+    try {
+      const host: RunDrainHost = {
+        loadDefinition: () => null,
+      };
+      drainRuns(this.db, host);
+    } catch {
+      // Must not break onSlotFreed after concurrency drain already ran.
+    } finally {
+      this.drainingRuns = false;
     }
   }
 
