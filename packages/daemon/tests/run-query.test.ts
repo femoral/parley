@@ -11,6 +11,7 @@ import {
   assembleGist,
   collectNodeIterations,
   countPluralPorts,
+  EXIT_DELIVERABLE_PURGED,
   looksLikeDeliverableId,
   parseDeliverableAddress,
   projectRunDetail,
@@ -19,6 +20,7 @@ import {
   renderRunSummary,
   resolveDeliverableValue,
   tallyEnumPorts,
+  toDeliverableRef,
   type QueryDeliverable,
   type QueryPort,
   type QueryTask,
@@ -428,6 +430,84 @@ describe("polymorphic STATE", () => {
     expect(gate?.kind).toBe("gate");
     expect(gate?.state).toBe("waiting");
   });
+
+  it("historical gate without a decision log is actioned, never a fabricated verb", () => {
+    const definition = parseWorkflowDefinition(
+      {
+        id: "g",
+        version: 1,
+        type: "other",
+        workspace: "scratch",
+        inputs: { brief: { type: "text" } },
+        outputs: { out: { type: "text", from: "end.report" } },
+        nodes: [
+          {
+            id: "plan",
+            kind: "step",
+            prompt: "p.md",
+            in: { brief: { type: "text", from: "run.brief" } },
+            out: { plan: { type: "text" } },
+          },
+          {
+            id: "approve-plan",
+            kind: "gate",
+            question: "Ship the plan?",
+            shows: {},
+            on_reject: "finish",
+          },
+          {
+            id: "end",
+            kind: "step",
+            prompt: "e.md",
+            in: { plan: { type: "text", from: "plan.plan" } },
+            out: { report: { type: "text" } },
+          },
+        ],
+      },
+      { dir: "/tmp/g2", expectedId: "g", typeCheck: true },
+    ).definition;
+
+    // Run has moved past the gate (completed). Force the gate into the
+    // (node, iteration) key set via a synthetic address row so the historical
+    // path runs — there is still no decision log to read a verb from.
+    const detail = projectRunDetail({
+      run: baseRun({
+        id: "r9",
+        workflow: "g",
+        state: "completed",
+        current_node: null,
+        iteration: 1,
+        error: null,
+        completed_at: "2026-07-25T10:00:00Z",
+      }),
+      tasks: [
+        task({ id: "t1", node: "plan", iteration: 1, state: "completed" }),
+        task({ id: "t2", node: "end", iteration: 1, state: "completed" }),
+      ],
+      deliverables: [
+        // Anchor the gate into collectNodeIterations without inventing a verb.
+        del({
+          id: "d-gate-anchor",
+          node: "approve-plan",
+          port: "_visited",
+          iteration: 1,
+          value: null,
+          purged_at: null,
+        }),
+      ],
+      definition,
+    });
+
+    const gate = detail.nodes.find((n) => n.node === "approve-plan");
+    expect(gate?.kind).toBe("gate");
+    expect(gate?.state).toBe("actioned");
+    // Must not claim any of the four real verbs.
+    for (const verb of ["approved", "rejected", "redirected", "finished"] as const) {
+      expect(gate?.state).not.toBe(verb);
+    }
+    expect(gate?.state).not.toBe("waiting");
+    expect(gate?.state).not.toBe("skipped");
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -495,9 +575,47 @@ describe("purged and missing-path deliverable rendering", () => {
     expect(v.note).toMatch(/search/);
 
     const bare = renderDeliverableBare(v);
+    expect(bare.exitCode).toBe(EXIT_DELIVERABLE_PURGED);
     expect(bare.exitCode).toBe(9);
     expect(bare.stderr).toMatch(/was purged/);
     expect(bare.stderr).toMatch(/d004/);
+  });
+
+  it("pins exit code 9 as the purged-deliverable contract", () => {
+    expect(EXIT_DELIVERABLE_PURGED).toBe(9);
+    const bare = renderDeliverableBare(
+      resolveDeliverableValue({
+        deliverable: del({
+          id: "d9",
+          node: "search",
+          port: "sources",
+          iteration: 1,
+          value: null,
+          purged_at: "2026-07-01T00:00:00Z",
+        }),
+      }),
+    );
+    expect(bare.exitCode).toBe(EXIT_DELIVERABLE_PURGED);
+    expect(bare.stdout).toBe("");
+    expect(bare.stderr).toMatch(/was purged/);
+  });
+
+  it("null task_id (retention deleted producer) still renders", () => {
+    const d = del({
+      id: "d-null-task",
+      node: "search",
+      port: "sources",
+      iteration: 1,
+      task_id: null,
+      value: JSON.stringify(["a"]),
+    });
+    const ref = toDeliverableRef(d);
+    expect(ref.task_id).toBeNull();
+    const v = resolveDeliverableValue({ deliverable: d });
+    expect(v.task_id).toBeNull();
+    expect(v.value).toEqual(["a"]);
+    const bare = renderDeliverableBare(v);
+    expect(bare.exitCode).toBe(0);
   });
 
   it("missing file path prints path + note, not a crash", () => {

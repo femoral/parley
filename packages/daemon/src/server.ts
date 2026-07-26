@@ -1921,7 +1921,8 @@ function handleRunNodeDetail(
     } else if (iteration === 0) {
       gateState = "skipped";
     } else {
-      gateState = "approved";
+      // No decision log yet — honest unknown, not a fabricated verb.
+      gateState = "actioned";
     }
   }
 

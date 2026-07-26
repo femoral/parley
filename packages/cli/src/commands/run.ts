@@ -21,12 +21,20 @@ import { DaemonRequestError, daemonGet, daemonPost, ensureDaemon } from "../clie
 import { type CliContext, printJson } from "../context.js";
 import { UsageError } from "../errors.js";
 import {
+  EXIT_DELIVERABLE_PURGED,
   formatRunListState,
   renderDeliverableBare,
   renderNodeDetail,
   renderRunList,
   renderRunSummary,
 } from "@useparley/daemon/run-query.js";
+
+/**
+ * `parley run get` exit when the address resolves but retention purged the
+ * value. Re-export for CLI callers/tests; defined next to the render contract.
+ * @see EXIT_DELIVERABLE_PURGED in `@useparley/daemon/run-query`
+ */
+export { EXIT_DELIVERABLE_PURGED };
 
 const GATE_VERBS = ["approve", "reject", "redirect", "finish"] as const;
 type GateVerb = (typeof GATE_VERBS)[number];

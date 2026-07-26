@@ -73,7 +73,11 @@ export interface QueryDeliverable {
   port: string;
   iteration: number;
   slot: string | null;
-  task_id: string;
+  /**
+   * Producing task id. Null after retention purges the task while the
+   * address row survives (#244 — ON DELETE SET NULL).
+   */
+  task_id: string | null;
   kind: DeliverableKind;
   value: string | null;
   created_at: string;
@@ -566,7 +570,8 @@ function projectGateNode(
   tasks: QueryTask[],
   deliverables: QueryDeliverable[],
 ): NodeProjection {
-  // Gates spawn nothing — TASKS/USAGE are empty; STATE is the actioned verb.
+  // Gates spawn nothing — TASKS/USAGE are empty. STATE is a real verb when
+  // known, else `waiting` / `skipped` / `actioned` (honest unknown).
   const state = opts.gateState ?? "waiting";
   const question = gate?.question ?? null;
   const onReject =
@@ -578,8 +583,11 @@ function projectGateNode(
       question.length > 48 ? `"${question.slice(0, 47)}…"` : `"${question}"`;
     if (state === "waiting") {
       gist = q;
-    } else if (state === "redirected" && opts.gateState) {
+    } else if (state === "redirected") {
       gist = `${q} -> redirect`;
+    } else if (state === "actioned") {
+      // No verb known — do not invent one in the gist either.
+      gist = q;
     } else {
       gist = `${q} -> ${state}`;
     }
@@ -618,7 +626,11 @@ function projectGateNode(
     gist,
     question,
     on_reject: onReject,
-    answer: state === "waiting" ? null : state,
+    // Real verbs only when known; actioned/waiting carry no verb answer.
+    answer:
+      state === "waiting" || state === "actioned" || state === "skipped"
+        ? null
+        : state,
     note: null,
     shows,
   };
@@ -681,8 +693,10 @@ export function projectRunNodes(opts: {
       } else if (key.iteration === 0) {
         gateState = "skipped";
       } else {
-        // Historical gate without a decision log — mark actioned generically.
-        gateState = "approved";
+        // Historical gate without a decision log: we know it was left, not
+        // which verb. Never invent approved/rejected/redirected/finished —
+        // a fabricated verb would state a false human decision (ADR-0021).
+        gateState = "actioned";
       }
     }
     // Inherited steps at iteration 0 (fork marker).
@@ -1455,6 +1469,14 @@ function formatSizeCell(d: DeliverableRef): string {
 }
 
 /**
+ * `parley run get` exit when the address resolves but retention purged the
+ * value (`value = NULL`, `purged_at` set). Distinct from 2 usage, 3–6 watch
+ * tiers, and 7–8 fix errors — scripts can branch on decay without treating
+ * it as a missing id (404 → usage) or a generic failure.
+ */
+export const EXIT_DELIVERABLE_PURGED = 9;
+
+/**
  * Bare-mode stdout for `parley run get` (no envelope).
  * Purged / missing file → legible decayed message on stderr path via note.
  */
@@ -1467,7 +1489,7 @@ export function renderDeliverableBare(v: DeliverableValue): {
     return {
       stdout: "",
       stderr: `error: deliverable ${v.deliverable_id} was purged${v.purged_at ? ` on ${v.purged_at.slice(0, 10)}` : ""} (run ${v.run_id}, ${v.node}.${v.iteration}${v.slot ? `[${v.slot}]` : ""}/${v.port})\n`,
-      exitCode: 9,
+      exitCode: EXIT_DELIVERABLE_PURGED,
     };
   }
   if (v.kind === "file" || v.kind === "dir") {
@@ -1518,7 +1540,8 @@ export function deliverableRowToQuery(d: DeliverableRow): QueryDeliverable {
     port: d.port,
     iteration: d.iteration,
     slot: d.slot,
-    task_id: d.task_id,
+    // #244 may leave task_id null after the producing task is gc'd.
+    task_id: d.task_id ?? null,
     kind: d.kind,
     value: d.value,
     created_at: d.created_at,

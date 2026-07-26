@@ -71,7 +71,9 @@ Usage:
   parley run status <run> --node <id> [--iteration <n>] [--slot <name>]
                             Zoom to one node's tasks / deliverables
   parley run get <id|address> [--json] [--run <id>] [--iteration <n>] [--slot <name>]
-                            Fetch one deliverable (or a collected fan-out)
+                            Fetch one deliverable (or a collected fan-out).
+                            Exit: 0 printed · 2 usage · 9 purged (address
+                            resolves but retention cleared the value)
   parley run approve <run>      Action a blocked run past its gate / block
   parley run reject <run>       Follow the gate's author-declared on_reject
   parley run redirect <run> --to <node> [--note <text>]
@@ -177,8 +179,9 @@ Global flags:
 
 Exit codes: delegate/answer 0 accepted · 2 usage. fix: 0 accepted · 2 usage ·
 7 retry_limit_exceeded · 8 reattempt_window_expired. watch: 0 all-done · 2 usage ·
-3 awaiting_answer · 4 stalled · 5 failed · 6 completed. child report: 0
-accepted · 5 rejected · 2 usage. child ask: 0 answered · 4 stalled · 2 usage.
+3 awaiting_answer · 4 stalled · 5 failed · 6 completed. run get: 0 printed ·
+2 usage · 9 purged. child report: 0 accepted · 5 rejected · 2 usage. child ask:
+0 answered · 4 stalled · 2 usage.
 `;
 
 /**

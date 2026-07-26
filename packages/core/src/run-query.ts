@@ -108,9 +108,12 @@ export interface NodeProjection {
   kind: "step" | "gate";
   iteration: number;
   /**
-   * Polymorphic STATE: task projection for a step; actioned verb
-   * (`waiting` | `approved` | `rejected` | `redirected` | `finished`) or
-   * fork markers (`inherited` | `skipped`) for a gate.
+   * Polymorphic STATE: task projection for a step; for a gate one of:
+   * - real verb when known: `approved` | `rejected` | `redirected` | `finished`
+   * - `waiting` while held
+   * - `skipped` (fork re-entry past the gate)
+   * - `actioned` when left but the verb is unknown (no decision log yet)
+   * - step fork marker: `inherited`
    */
   state: string;
   tasks_settled: number;
@@ -144,7 +147,11 @@ export interface DeliverableRef {
   port: string;
   iteration: number;
   slot: string | null;
-  task_id: string;
+  /**
+   * Producing task id, or null after retention deleted the task while the
+   * address row survived (#244).
+   */
+  task_id: string | null;
   kind: "inline" | "file" | "dir";
   type: string | null;
   size: DeliverableSize | null;
