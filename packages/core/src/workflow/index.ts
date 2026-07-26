@@ -1,6 +1,7 @@
 /**
- * Workflow definition surface (ADR-0016 / #231): port type grammar, JSON Schema
- * compilation, parse/type-check, and two-layer discovery.
+ * Workflow definition surface (ADR-0016 / #231 + #232): port type grammar,
+ * JSON Schema compilation, parse/type-check, two-layer discovery, and lint
+ * (rules, inferred plan, static worst case).
  *
  * No engine, no runs — a definition is a validated in-memory object.
  */
@@ -48,6 +49,27 @@ export {
   type DiscoverWorkflowsResult,
   type WorkflowRef,
 } from "./discovery.js";
+
+export {
+  buildInferredPlan,
+  buildStaticWorstCase,
+  formatInferredPlan,
+  formatStaticWorstCase,
+  lintWorkflow,
+  lintWorkflowDefinition,
+  loopMaxCovering,
+  parseFromRef,
+  resolveContainerWidth,
+  WORKFLOW_JSON_BASENAME,
+  type InferredFanOut,
+  type InferredJoin,
+  type InferredLoop,
+  type InferredPlan,
+  type StaticWorstCase,
+  type StaticWorstCaseStep,
+  type WorkflowLintOptions,
+  type WorkflowLintResult,
+} from "./lint.js";
 
 export {
   applyFanOutCollection,
