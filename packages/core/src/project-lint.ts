@@ -1,5 +1,5 @@
 /**
- * Shared project `.parley` surface validation (#161). Used by standalone
+ * Shared project `.parley` surface validation (#161, #232). Used by standalone
  * `parley lint` and by the daemon's hot-read paths (via the same parse helpers)
  * so lint-clean ⇒ delegate-safe.
  *
@@ -7,6 +7,7 @@
  * - `.parley/config.json` (eval/resume/retry/taskTypes)
  * - `.parley/classification.json` (sizes/difficulties with guidance)
  * - `.parley/rubrics/*.json` (schema + task-type resolution + version-bump reminder)
+ * - `.parley/workflows/<id>/workflow.json` (definition rules, plan, worst case)
  */
 import {
   parseClassification,
@@ -14,6 +15,7 @@ import {
   resolveTaskTypes,
   type TaskTypesMap,
 } from "./classification.js";
+import type { VendorConfig } from "./config.js";
 import {
   getShippedRubric,
   parseRubric,
@@ -22,6 +24,13 @@ import {
   type Rubric,
 } from "./rubric.js";
 import { parseDuration } from "./util/time.js";
+import {
+  lintWorkflow,
+  type InferredPlan,
+  type StaticWorstCase,
+  type WorkflowLintResult,
+} from "./workflow/lint.js";
+import { WORKFLOWS_DIR_REL } from "./workflow/discovery.js";
 
 /** Lint finding severity. Errors fail CI (exit 1); warnings do not. */
 export type LintSeverity = "error" | "warning";
@@ -282,6 +291,22 @@ export function lintTaskTypeRubricResolution(
 }
 
 /**
+ * One workflow directory presented to pure project lint (I/O stays in the caller).
+ */
+export interface ProjectWorkflowLintInput {
+  /** Absolute path of the workflow directory (for types/ prompt resolution). */
+  dir: string;
+  /** Directory basename — expected workflow id. */
+  id: string;
+  /** Relative path for findings, e.g. `.parley/workflows/foo/workflow.json`. */
+  file: string;
+  /** Parsed workflow.json, or omit when JSON failed. */
+  raw?: unknown;
+  /** JSON parse / read error when `raw` is absent. */
+  jsonError?: string;
+}
+
+/**
  * Inputs for pure project lint (filesystem I/O stays in the CLI/daemon caller).
  * `undefined` means the file is absent; a present-but-empty string means bad
  * JSON was already reported by the caller.
@@ -302,14 +327,41 @@ export interface ProjectLintInput {
   rubrics?: Record<string, unknown>;
   /** id → JSON parse error message for unreadable rubric files. */
   rubricJsonErrors?: Record<string, string>;
+  /**
+   * Workflow definitions under `.parley/workflows/<id>/` (#232).
+   * Omit entirely when the directory is absent.
+   */
+  workflows?: ProjectWorkflowLintInput[];
+  /**
+   * Vendor allowlist map for slot vendor/model checks (ADR-0014).
+   * Typically the merged home `parley.json` vendors. When omitted, those
+   * checks are skipped.
+   */
+  vendors?: Record<string, VendorConfig> | null;
+  /** Path shown in allowlist error messages. */
+  configPath?: string;
+}
+
+/** Per-workflow plan + worst case returned alongside findings. */
+export interface WorkflowLintReport {
+  id: string;
+  file: string;
+  result: WorkflowLintResult;
+}
+
+/** Aggregate lint result including workflow plan/worst-case reports. */
+export interface ProjectLintResult extends LintResult {
+  /** One entry per successfully-parsed (or partially-checked) workflow. */
+  workflows: WorkflowLintReport[];
 }
 
 /**
- * Lint all three project surfaces from already-parsed (or absent) inputs.
+ * Lint all project surfaces from already-parsed (or absent) inputs.
  * Pure: no filesystem. Callers read files and map I/O errors into the input.
  */
-export function lintProjectSurfaces(input: ProjectLintInput): LintResult {
+export function lintProjectSurfaces(input: ProjectLintInput): ProjectLintResult {
   const findings: LintFinding[] = [];
+  const workflowReports: WorkflowLintReport[] = [];
 
   if (input.configJsonError !== undefined) {
     findings.push(
@@ -355,11 +407,55 @@ export function lintProjectSurfaces(input: ProjectLintInput): LintResult {
     lintTaskTypeRubricResolution(taskTypes, projectRubricIds, findings);
   }
 
+  // Workflows (#232)
+  for (const wf of input.workflows ?? []) {
+    if (wf.jsonError !== undefined) {
+      findings.push(
+        finding("error", wf.file, "", `invalid JSON: ${wf.jsonError}`),
+      );
+      workflowReports.push({
+        id: wf.id,
+        file: wf.file,
+        result: {
+          ok: false,
+          findings: [
+            finding("error", wf.file, "", `invalid JSON: ${wf.jsonError}`),
+          ],
+          plan: null,
+          worstCase: null,
+          definition: null,
+        },
+      });
+      continue;
+    }
+    if (wf.raw === undefined) {
+      findings.push(
+        finding("error", wf.file, "", "workflow.json is missing"),
+      );
+      continue;
+    }
+    const result = lintWorkflow(wf.raw, {
+      dir: wf.dir,
+      file: wf.file,
+      expectedId: wf.id,
+      vendors: input.vendors,
+      configPath: input.configPath,
+    });
+    findings.push(...result.findings);
+    workflowReports.push({ id: wf.id, file: wf.file, result });
+  }
+
   return {
     ok: findings.every((f) => f.severity !== "error"),
     findings,
+    workflows: workflowReports,
   };
 }
+
+/** Re-export for callers that build relative workflow paths. */
+export { WORKFLOWS_DIR_REL };
+
+export type { InferredPlan, StaticWorstCase, WorkflowLintResult };
 
 /**
  * Format a finding for human CLI output: `file: field: message` (field omitted
