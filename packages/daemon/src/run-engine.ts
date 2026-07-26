@@ -1,12 +1,12 @@
 /**
- * Run engine advance (ADR-0017 / #237): pure decision + port fill rules.
+ * Run engine advance (ADR-0017 / #237 + #238): pure decision + port fill
+ * rules + success policy / retries / gate-verb application.
  *
  * Advance order: *settled? → ports filled? → loop? → next node.*
  *
  * Drained off the existing `onSlotFreed` hook (terminal-or-stalled). Does not
- * touch `transition.ts` / ADR-0004. Gates verbs, failure routing, retries and
- * escalation are #238 — this module *reaches* a gate (or loop-budget block)
- * and stops cleanly.
+ * touch `transition.ts` / ADR-0004. A run never auto-fails from ordinary
+ * advance — work that goes wrong lands on `blocked`.
  */
 
 import {
@@ -31,13 +31,31 @@ import {
   type RunState,
   type TaskRow,
 } from "./db.js";
+import {
+  actionGateVerb,
+  type GateVerb,
+  type GateVerbDecision,
+  type GateVerbRequest,
+} from "./run-gates.js";
+import {
+  evaluateSuccessPolicy,
+  planRetries,
+  type PolicyTask,
+  type RetryPlan,
+  type SuccessPolicyResult,
+} from "./run-success.js";
 
 // ---------------------------------------------------------------------------
 // Advance decision (pure)
 // ---------------------------------------------------------------------------
 
 /** Why the run cannot advance further without the orchestrator. */
-export type AdvanceBlockReason = "gate" | "loop_budget";
+export type AdvanceBlockReason =
+  | "gate"
+  | "loop_budget"
+  | "success_policy"
+  | "spawn"
+  | "unfilled_inputs";
 
 /**
  * Pure outcome of one advance evaluation for a run at its current cursor.
@@ -53,8 +71,8 @@ export type AdvanceDecision =
   | { kind: "noop"; reason: string }
   /**
    * Settled step left required output holes (failed/stalled/cancelled siblings).
-   * Failure policy / success quorum is #238 — advance stops here without
-   * auto-failing the run.
+   * Impure drain routes this through success policy / retries
+   * ({@link resolveUnfilledOutputs}) — pure advance only detects the hole.
    */
   | { kind: "unfilled_outputs"; node: string; iteration: number; missing: string[] }
   /**
@@ -660,15 +678,18 @@ export interface ApplyAdvanceResult {
 
 /**
  * Persist the run-row effects of a decision. Does **not** spawn tasks —
- * returns `enter` so the host can. Gate / loop-budget → `blocked`; complete →
- * `completed`; enter → cursor move to that node/iteration while still
- * `running` (host spawns); wait/noop/unfilled → no mutation (unfilled is
- * #238's cue to block under success policy).
+ * returns `enter` so the host can. Gate / loop-budget / success_policy /
+ * spawn → `blocked`; complete → `completed`; enter → cursor move while
+ * still `running` (host spawns); wait/noop → no mutation.
+ *
+ * `unfilled_outputs` / `unfilled_inputs` are resolved by {@link advanceRun}
+ * before this is called (policy → block or continue).
  */
 export function applyAdvanceDecision(
   db: DatabaseHandle,
   run: RunRow,
   decision: AdvanceDecision,
+  opts?: { error?: string | null },
 ): ApplyAdvanceResult {
   switch (decision.kind) {
     case "block": {
@@ -676,7 +697,7 @@ export function applyAdvanceDecision(
         state: "blocked",
         current_node: decision.node,
         iteration: decision.iteration,
-        error: blockErrorMessage(decision),
+        error: opts?.error ?? blockErrorMessage(decision),
       });
       return { decision, run: getRun(db, run.id) ?? run, changed: true };
     }
@@ -698,6 +719,26 @@ export function applyAdvanceDecision(
       });
       return { decision, run: getRun(db, run.id) ?? run, changed: true };
     }
+    case "unfilled_inputs": {
+      updateRun(db, run.id, {
+        state: "blocked",
+        current_node: decision.node,
+        iteration: decision.iteration,
+        error:
+          opts?.error ??
+          `blocked (unfilled inputs on ${decision.node}: ${decision.missing.join(", ")})`,
+      });
+      return {
+        decision: {
+          kind: "block",
+          reason: "unfilled_inputs",
+          node: decision.node,
+          iteration: decision.iteration,
+        },
+        run: getRun(db, run.id) ?? run,
+        changed: true,
+      };
+    }
     default:
       return { decision, run, changed: false };
   }
@@ -709,22 +750,42 @@ function blockErrorMessage(
   if (decision.reason === "gate") {
     return `blocked (gate ${decision.node})`;
   }
+  if (decision.reason === "success_policy") {
+    return `blocked (success policy on ${decision.node})`;
+  }
+  if (decision.reason === "spawn") {
+    return `blocked (spawn ${decision.node})`;
+  }
+  if (decision.reason === "unfilled_inputs") {
+    return `blocked (unfilled inputs on ${decision.node})`;
+  }
   const max = decision.loopMax ?? decision.iteration;
   return `blocked (loop ${decision.iteration}/${max})`;
 }
 
 /**
- * Host callbacks for drain. Spawn is deliberately not implemented here —
- * #238/#239 own delegate/preflight. Tests inject fakes.
+ * Host callbacks for drain. Spawn / retries are the host's job (engine.ts
+ * wires preflight + workspace + delegate). Tests inject fakes.
  */
 export interface RunDrainHost {
   /** Resolve a workflow definition by id (and optional version). */
   loadDefinition(workflowId: string, version: number): WorkflowDefinition | null;
+  /**
+   * Called when the definition cannot be parsed (structural failure).
+   * Ordinary "not found" returns null from loadDefinition without this.
+   */
+  onDefinitionUnparseable?(run: RunRow, error: string): void;
   /** Run-level inputs for `run.<name>` refs. */
   runInputs?(run: RunRow): Readonly<Record<string, unknown>>;
   /**
+   * Report `outcome` for a completed task (`success` | `partial` | `blocked`),
+   * or null when absent / port-schema report. Used by success policy.
+   */
+  taskOutcome?(taskId: string): string | null;
+  /**
    * Called after the cursor moves to a step that needs tasks. Optional —
    * without it, drain still updates the run row (tests / early wiring).
+   * Throw / return error message → run blocks with reason `spawn`.
    */
   onEnter?(args: {
     run: RunRow;
@@ -733,13 +794,98 @@ export interface RunDrainHost {
     iteration: number;
     inputs: Record<string, unknown>;
     loopFills: Record<string, unknown>;
-  }): void;
+    /** Orchestrator note (redirect); null on ordinary advance. */
+    note?: string | null;
+  }): void | { error: string };
+  /**
+   * Spawn fresh tasks for slots that still have retry budget after a
+   * task-state `failed` sibling. Return error → block (spawn).
+   */
+  onRetry?(args: {
+    run: RunRow;
+    definition: WorkflowDefinition;
+    step: WorkflowStepNode;
+    iteration: number;
+    plans: readonly RetryPlan[];
+    inputs: Record<string, unknown>;
+  }): void | { error: string };
+}
+
+/**
+ * Resolve `unfilled_outputs` through retries then success policy (ADR-0017).
+ *
+ * - Retries remaining for a `failed` slot → `{ kind: "retry", plans }`
+ * - Policy met → continue as if ports filled (`continue` decision)
+ * - Policy not met → block with `success_policy`
+ */
+export function resolveUnfilledOutputs(
+  step: WorkflowStepNode,
+  ctx: AdvanceContext,
+  tasks: readonly PolicyTask[],
+):
+  | { kind: "retry"; plans: RetryPlan[] }
+  | { kind: "continue"; decision: AdvanceDecision }
+  | { kind: "block"; decision: Extract<AdvanceDecision, { kind: "block" }>; policy: SuccessPolicyResult } {
+  const plans = planRetries(step, tasks);
+  if (plans.length > 0) {
+    return { kind: "retry", plans };
+  }
+
+  const policy = evaluateSuccessPolicy(step, tasks);
+  if (policy.met) {
+    // Ports-filled gate is satisfied under the policy — evaluate loop / next.
+    return { kind: "continue", decision: advanceAfterPortsFilled(step, ctx) };
+  }
+
+  return {
+    kind: "block",
+    decision: {
+      kind: "block",
+      reason: "success_policy",
+      node: step.id,
+      iteration: ctx.run.iteration,
+    },
+    policy,
+  };
+}
+
+/**
+ * After a settled step whose outputs are accepted (all filled, or success
+ * policy met): evaluate loop, else next node. Extracted from {@link advance}.
+ */
+export function advanceAfterPortsFilled(
+  node: WorkflowStepNode,
+  ctx: AdvanceContext,
+): AdvanceDecision {
+  if (node.loop !== undefined) {
+    const loopDecision = evaluateLoop(node, node.loop, ctx);
+    if (loopDecision !== null) return loopDecision;
+  }
+  return advanceToNext(ctx, node.id, ctx.run.iteration, {});
+}
+
+/**
+ * Build {@link PolicyTask} rows from advance tasks + optional outcome lookup.
+ */
+export function toPolicyTasks(
+  tasks: readonly AdvanceTask[],
+  outcomeOf?: (taskId: string) => string | null,
+): PolicyTask[] {
+  return tasks.map((t) => ({
+    id: t.id,
+    state: t.state,
+    slot: t.slot,
+    outcome: outcomeOf?.(t.id) ?? null,
+  }));
 }
 
 /**
  * Evaluate + apply advance for one run. Re-reads the run after apply so a
  * multi-step pure chain can be driven by the host (enter → spawn → settle →
  * drain again).
+ *
+ * Routes `unfilled_outputs` through retries / success policy before applying.
+ * Never auto-fails: spawn / policy failures → `blocked`.
  */
 export function advanceRun(
   db: DatabaseHandle,
@@ -756,12 +902,22 @@ export function advanceRun(
     };
   }
 
-  const definition = host.loadDefinition(run.workflow, run.version);
+  let definition: WorkflowDefinition | null;
+  try {
+    definition = host.loadDefinition(run.workflow, run.version);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    host.onDefinitionUnparseable?.(run, message);
+    markRunFailed(db, run.id, `definition unparseable: ${message}`);
+    return {
+      decision: { kind: "noop", reason: "definition unparseable" },
+      run: getRun(db, run.id) ?? run,
+      changed: true,
+    };
+  }
   if (definition === null) {
-    // Host could not supply a definition (loader not wired, or id unknown).
-    // Do **not** auto-fail here: a null loader is the engine's temporary host
-    // until #239 wires discovery; structural `failed` is for a definition that
-    // was present and then became unparseable (callers use markRunFailed).
+    // Not found — do not auto-fail (cwd may lack the workflow until the
+    // orchestrator fixes discovery). Stay put.
     return {
       decision: { kind: "noop", reason: "definition not loaded" },
       run,
@@ -775,16 +931,65 @@ export function advanceRun(
     db,
     runInputs: host.runInputs?.(run) ?? {},
   });
-  const decision = advance(ctx);
-  const applied = applyAdvanceDecision(db, run, decision);
+  let decision = advance(ctx);
+  let policyError: string | null = null;
+
+  // --- unfilled_outputs → retries / success policy -------------------------
+  if (decision.kind === "unfilled_outputs") {
+    const step = findNode(definition, decision.node);
+    if (step !== undefined && step.kind === "step") {
+      const policyTasks = toPolicyTasks(ctx.currentTasks, host.taskOutcome);
+      const resolved = resolveUnfilledOutputs(step, ctx, policyTasks);
+      if (resolved.kind === "retry") {
+        const inputs = fillStepInputs(step, ctx, {});
+        const err = host.onRetry?.({
+          run,
+          definition,
+          step,
+          iteration: ctx.run.iteration,
+          plans: resolved.plans,
+          inputs,
+        });
+        if (err !== undefined && typeof err === "object" && "error" in err) {
+          decision = {
+            kind: "block",
+            reason: "spawn",
+            node: step.id,
+            iteration: ctx.run.iteration,
+          };
+          policyError = `blocked (spawn retry ${step.id}): ${err.error}`;
+        } else {
+          // Fresh tasks pending — stay running, wait for settle.
+          return {
+            decision: { kind: "wait" },
+            run,
+            changed: false,
+          };
+        }
+      } else if (resolved.kind === "continue") {
+        decision = resolved.decision;
+      } else {
+        decision = resolved.decision;
+        policyError = `blocked (${resolved.policy.summary})`;
+      }
+    }
+  }
+
+  // Entering a target with unfilled from-wired inputs → block (fixable).
+  if (decision.kind === "unfilled_inputs") {
+    const applied = applyAdvanceDecision(db, run, decision);
+    return applied;
+  }
+
+  const applied = applyAdvanceDecision(db, run, decision, {
+    error: policyError,
+  });
 
   if (decision.kind === "enter" && host.onEnter !== undefined) {
     const step = findNode(definition, decision.node);
     if (step !== undefined && step.kind === "step") {
-      // Rebuild context against the updated cursor so fills see the same
-      // deliverables; loopFills override from-less ports.
       const inputs = fillStepInputs(step, ctx, decision.loopFills);
-      host.onEnter({
+      const err = host.onEnter({
         run: applied.run,
         definition,
         step,
@@ -792,11 +997,161 @@ export function advanceRun(
         inputs,
         loopFills: decision.loopFills,
       });
+      if (err !== undefined && typeof err === "object" && "error" in err) {
+        // Spawn failed after cursor move — park the run for the orchestrator.
+        updateRun(db, run.id, {
+          state: "blocked",
+          error: `blocked (spawn ${step.id}): ${err.error}`,
+        });
+        return {
+          decision: {
+            kind: "block",
+            reason: "spawn",
+            node: step.id,
+            iteration: decision.iteration,
+          },
+          run: getRun(db, run.id) ?? applied.run,
+          changed: true,
+        };
+      }
     }
   }
 
   return applied;
 }
+
+/**
+ * Apply a gate verb to a blocked run and spawn if the decision is enter.
+ * Returns an error decision without mutating when the verb is illegal.
+ */
+export function actionRunVerb(
+  db: DatabaseHandle,
+  runId: string,
+  host: RunDrainHost,
+  request: GateVerbRequest,
+): { decision: GateVerbDecision; run: RunRow; changed: boolean } | null {
+  const run = getRun(db, runId);
+  if (run === undefined) return null;
+
+  let definition: WorkflowDefinition | null;
+  try {
+    definition = host.loadDefinition(run.workflow, run.version);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return {
+      decision: { kind: "error", message: `definition unparseable: ${message}` },
+      run,
+      changed: false,
+    };
+  }
+  if (definition === null) {
+    return {
+      decision: { kind: "error", message: `workflow "${run.workflow}" not found` },
+      run,
+      changed: false,
+    };
+  }
+
+  const ctx = buildAdvanceContext({
+    run: { ...run, state: "running" }, // context builder only needs cursor
+    definition,
+    db,
+    runInputs: host.runInputs?.(run) ?? {},
+  });
+  // Restore blocked state for the pure verb check.
+  ctx.run.state = run.state;
+
+  const decision = actionGateVerb(run, definition, request, ctx);
+  if (decision.kind === "error") {
+    return { decision, run, changed: false };
+  }
+
+  if (decision.kind === "complete") {
+    updateRun(db, run.id, {
+      state: "completed",
+      current_node: null,
+      completed_at: new Date().toISOString(),
+      error: null,
+    });
+    return { decision, run: getRun(db, run.id) ?? run, changed: true };
+  }
+
+  // enter
+  const target = findNode(definition, decision.node);
+  if (target === undefined) {
+    return {
+      decision: {
+        kind: "error",
+        message: `unknown target node "${decision.node}"`,
+      },
+      run,
+      changed: false,
+    };
+  }
+
+  if (target.kind === "gate") {
+    updateRun(db, run.id, {
+      state: "blocked",
+      current_node: target.id,
+      iteration: decision.iteration,
+      error: `blocked (gate ${target.id})`,
+    });
+    return { decision, run: getRun(db, run.id) ?? run, changed: true };
+  }
+
+  // Check inputs for the destination step (from-less exempt; loopFills count).
+  const missing = missingInputPorts(target, ctx, decision.iteration, decision.loopFills);
+  if (missing.length > 0 && decision.via !== "redirect") {
+    // Redirect may intentionally land on a node whose from-wired inputs are
+    // not yet filled — still block so the orchestrator sees the hole.
+    // (Redirect with a note is the repair path; #242 owns deeper re-entry.)
+  }
+  if (missing.length > 0) {
+    updateRun(db, run.id, {
+      state: "blocked",
+      current_node: target.id,
+      iteration: decision.iteration,
+      error: `blocked (unfilled inputs on ${target.id}: ${missing.join(", ")})`,
+    });
+    return { decision, run: getRun(db, run.id) ?? run, changed: true };
+  }
+
+  updateRun(db, run.id, {
+    state: "running",
+    current_node: target.id,
+    iteration: decision.iteration,
+    error: null,
+  });
+  const updated = getRun(db, run.id) ?? run;
+
+  if (host.onEnter !== undefined) {
+    const inputs = fillStepInputs(target, ctx, decision.loopFills);
+    const err = host.onEnter({
+      run: updated,
+      definition,
+      step: target,
+      iteration: decision.iteration,
+      inputs,
+      loopFills: decision.loopFills,
+      note: decision.note,
+    });
+    if (err !== undefined && typeof err === "object" && "error" in err) {
+      updateRun(db, run.id, {
+        state: "blocked",
+        error: `blocked (spawn ${target.id}): ${err.error}`,
+      });
+      return {
+        decision,
+        run: getRun(db, run.id) ?? updated,
+        changed: true,
+      };
+    }
+  }
+
+  return { decision, run: getRun(db, run.id) ?? updated, changed: true };
+}
+
+export type { GateVerb, GateVerbDecision, GateVerbRequest, RetryPlan, SuccessPolicyResult };
 
 /**
  * Drain every `running` run once. Re-entrancy safe. Mirrors

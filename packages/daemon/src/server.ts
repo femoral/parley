@@ -1135,6 +1135,52 @@ function handleCancel(engine: TaskEngine, res: http.ServerResponse, ref: string)
   }
 }
 
+const RUN_VERBS = new Set(["approve", "reject", "redirect", "finish"]);
+
+/**
+ * `POST /runs/:id/{approve|reject|redirect|finish}` — action a blocked run
+ * (ADR-0017 / #238). Body: `{ to?: string, note?: string }` (`to` required
+ * for redirect).
+ */
+function handleRunVerb(
+  engine: TaskEngine,
+  res: http.ServerResponse,
+  runId: string,
+  verb: string,
+  body: unknown,
+): void {
+  if (!RUN_VERBS.has(verb)) {
+    sendJson(res, 404, { error: `unknown run verb: ${verb}` });
+    return;
+  }
+  const record = isRecord(body) ? body : {};
+  const to = typeof record.to === "string" ? record.to : null;
+  const note = typeof record.note === "string" ? record.note : null;
+  try {
+    const { run, decision } = engine.actionRun(runId, {
+      verb: verb as "approve" | "reject" | "redirect" | "finish",
+      to,
+      note,
+    });
+    sendJson(res, 200, {
+      run_id: run.id,
+      state: run.state,
+      current_node: run.current_node,
+      iteration: run.iteration,
+      decision,
+      error: run.error,
+    });
+  } catch (err) {
+    if (err instanceof DelegateError) {
+      // Unknown run → 404; illegal verb / state → 400.
+      const status = err.message.startsWith("no such run:") ? 404 : 400;
+      sendJson(res, status, { error: err.message });
+      return;
+    }
+    throw err;
+  }
+}
+
 /**
  * `POST /tasks/:ref/fix` — create a linked attempt that inherits the parent's
  * classification/workspace and optionally resumes its vendor session
@@ -1564,6 +1610,14 @@ function createHandler(
 
       if (method === "POST" && url.pathname === "/gc") {
         handleGc(engine, res, await readBody(req));
+        return;
+      }
+
+      // `POST /runs/:id/{approve|reject|redirect|finish}` (#238)
+      if (segments[0] === "runs" && method === "POST" && segments.length === 3) {
+        const runId = decodeURIComponent(segments[1] ?? "");
+        const verb = decodeURIComponent(segments[2] ?? "");
+        handleRunVerb(engine, res, runId, verb, await readBody(req));
         return;
       }
 

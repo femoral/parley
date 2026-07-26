@@ -23,9 +23,11 @@ import {
   profileHasLaunchTemplate,
   readConfig,
   resolveAllowedCombo,
+  resolveWorkflow,
   retentionDays,
   scoreRubric,
   expandLaunchTemplate,
+  formatStepAddress,
   TASK_HEADER,
   validateAnswers,
   type ChildChannel,
@@ -33,6 +35,8 @@ import {
   type ParleyConfig,
   type ProfileConfig,
   type RunnerLeaseSpec,
+  type WorkflowDefinition,
+  type WorkflowStepNode,
 } from "@useparley/core";
 
 /** Compat re-exports for deep imports (`@useparley/daemon/engine.js`) during #209 migration. */
@@ -52,8 +56,10 @@ import {
   currentSeq,
   deleteSession,
   deleteTask,
+  getRun,
   getSession,
   getTask,
+  insertDeliverable,
   insertQaTurn,
   insertSession,
   insertTask,
@@ -64,6 +70,7 @@ import {
   listSessions,
   listQueuedTasks,
   listTasks,
+  nextDeliverableId,
   nextQuestionId,
   nextTaskId,
   resolveTask,
@@ -75,6 +82,7 @@ import {
   type DatabaseHandle,
   type ProcessAnchor,
   type QaTurnRow,
+  type RunRow,
   type SessionRow,
   type SessionSummary,
   type TaskDataPatch,
@@ -124,8 +132,34 @@ import {
   type ProvenanceSnapshot,
 } from "./session-binding.js";
 import { taskLogDir } from "./discovery.js";
-import { drainRuns, type RunDrainHost } from "./run-engine.js";
+import {
+  actionRunVerb,
+  drainRuns,
+  type GateVerbRequest,
+  type RunDrainHost,
+} from "./run-engine.js";
 import { resolveRubricForTask } from "./rubrics.js";
+import {
+  deliverablesFromReport,
+  generateReportSchema,
+  materializeInputs,
+  renderInputsSection,
+  type InputPortValue,
+  type OutputPortSpec,
+  type RenderInputEntry,
+} from "./deliverables.js";
+import { composeStepBody } from "./prompt-layers.js";
+import {
+  resolveStepExecution,
+  StepConfigError,
+} from "./run-preflight.js";
+import {
+  runCheckoutPath,
+  runScratchPath,
+  resolveScratchStepWorkspace,
+  resolveStepWorkspace,
+  runBranchName,
+} from "./run-workspace.js";
 import {
   assertValidSchema,
   DEFAULT_REPORT_SCHEMA,
@@ -1792,6 +1826,10 @@ export class TaskEngine {
    * Commit `completed` + `completed_at` + final usage in one update and notify
    * waiters (#72). No-op when the task is already terminal, has no accepted
    * report, or the daemon is shutting down.
+   *
+   * ADR-0017 / #238: `outcome: blocked` routes as a **failed** task (gave up /
+   * unusable work); `partial` is a success. Port-schema reports (no outcome)
+   * complete as usual and materialize deliverables when run-owned.
    */
   private completeAcceptedReport(
     taskId: string,
@@ -1804,6 +1842,29 @@ export class TaskEngine {
     const task = getTask(this.db, taskId);
     if (!task || isTerminalState(task.state)) return;
     if (task.report === null) return;
+
+    const report = parseJsonColumn<Record<string, unknown>>(task.report);
+    const outcome =
+      report !== null && typeof report.outcome === "string" ? report.outcome : null;
+
+    // `outcome: blocked` → failed task (ADR-0017). Still record the report.
+    if (outcome === "blocked") {
+      const fields: TaskDataPatch = {
+        completed_at: new Date().toISOString(),
+        question_id: null,
+        question: null,
+        queued_at: null,
+        error: "report outcome: blocked",
+      };
+      if (usage !== undefined) {
+        Object.assign(fields, this.usagePatch(usage));
+      }
+      this.taskTransitions.apply(taskId, "failed", {
+        cause: "fail",
+        fields,
+      });
+      return;
+    }
 
     const fields: TaskDataPatch = {
       completed_at: new Date().toISOString(),
@@ -1820,6 +1881,63 @@ export class TaskEngine {
       cause: "complete",
       fields,
     });
+
+    // Run-owned: materialize deliverable rows from the accepted report so
+    // advance can read ports. Best-effort — a bad payload must not undo
+    // completion (validation already ran at submit_report).
+    if (task.run_id !== null && task.node !== null && report !== null) {
+      this.recordRunDeliverables(task, report);
+    }
+  }
+
+  /**
+   * Insert deliverable rows for a completed run-owned task from its report
+   * payload. Port types come from the stored report_schema properties when
+   * available; otherwise every top-level key is recorded as inline JSON.
+   */
+  private recordRunDeliverables(
+    task: TaskRow,
+    report: Readonly<Record<string, unknown>>,
+  ): void {
+    if (task.run_id === null || task.node === null || task.iteration === null) {
+      return;
+    }
+    try {
+      const schema = parseJsonColumn<{
+        properties?: Record<string, unknown>;
+      }>(task.report_schema);
+      const ports: Record<string, OutputPortSpec> = {};
+      if (schema?.properties !== undefined) {
+        for (const name of Object.keys(schema.properties)) {
+          // Kind defaults to inline; file/dir leaves are still path strings
+          // in the payload and deliverablesFromReport reads the port type.
+          // Without the definition we cannot recover atom kinds — store as
+          // inline JSON (the common case for enum/text reports).
+          ports[name] = { type: { kind: "text" } };
+        }
+      } else {
+        for (const name of Object.keys(report)) {
+          if (name === "summary" || name === "outcome" || name === "files_changed") {
+            continue;
+          }
+          ports[name] = { type: { kind: "text" } };
+        }
+      }
+      if (Object.keys(ports).length === 0) return;
+      const rows = deliverablesFromReport(report, ports, {
+        runId: task.run_id,
+        node: task.node,
+        iteration: task.iteration,
+        slot: task.slot,
+        taskId: task.id,
+        nextId: () => nextDeliverableId(this.db),
+      });
+      for (const row of rows) {
+        insertDeliverable(this.db, row);
+      }
+    } catch {
+      // Best-effort: completion already committed.
+    }
   }
 
   /** Arm the post-report fallback so a hung child cannot leave the task running forever. */
@@ -3168,30 +3286,393 @@ export class TaskEngine {
   }
 
   /**
-   * Run-engine drain (#237 / ADR-0017): re-evaluate every `running` run after
-   * a task settles (or on restart). Advance is pure in `run-engine.ts`.
+   * Run-engine drain (#237 / #238 / ADR-0017): re-evaluate every `running`
+   * run after a task settles (or on restart). Advance is pure in
+   * `run-engine.ts`; this method is the host.
    *
    * Engine edit surface (keep small — later issues touch this file):
    * - `onSlotFreed` → `drainConcurrencyQueue()` then `drainRuns()`
    * - constructor → `drainRuns()` after the concurrency re-drain (restart)
-   * - this method: re-entrancy guard + host stub
+   * - this method: re-entrancy guard + real host (loadDefinition / onEnter /
+   *   onRetry / taskOutcome) + error logging
+   * - `actionRun(verb)` public API for gate verbs
+   * - `completeAcceptedReport`: outcome blocked → failed; run deliverables
    *
-   * `loadDefinition` / `onEnter` are stubs until discovery + spawn land with
-   * #239/#238; a null definition is a no-op (does not fail runs).
+   * Spawn-time errors block the run (never auto-fail). Definition parse
+   * failures mark the run `failed` (nobody can advance it).
    */
   private drainRuns(): void {
     if (this.drainingRuns || this.shuttingDown) return;
     this.drainingRuns = true;
     try {
-      const host: RunDrainHost = {
-        loadDefinition: () => null,
-      };
-      drainRuns(this.db, host);
-    } catch {
-      // Must not break onSlotFreed after concurrency drain already ran.
+      drainRuns(this.db, this.buildRunDrainHost());
+    } catch (err) {
+      // Must not break onSlotFreed after concurrency drain already ran —
+      // but a silent swallow made advance bugs invisible for a day (#238).
+      const message = err instanceof Error ? err.message : String(err);
+      console.error(`[parley] drainRuns failed: ${message}`);
+      if (err instanceof Error && err.stack) {
+        console.error(err.stack);
+      }
     } finally {
       this.drainingRuns = false;
     }
+  }
+
+  /**
+   * Host for {@link drainRuns} / {@link actionRunVerb}: resolve definitions
+   * via two-layer discovery, spawn step tasks, report outcomes for policy.
+   */
+  private buildRunDrainHost(): RunDrainHost {
+    return {
+      loadDefinition: (workflowId, _version) => {
+        // Prefer the run's repo (local layer), fall back to daemon home.
+        // Version is recorded at start; we load the nearest definition and
+        // trust the id. A parse throw becomes markRunFailed in advanceRun.
+        const cwd = process.cwd();
+        const resolved = resolveWorkflow(workflowId, {
+          cwd,
+          home: this.paths.home,
+        });
+        return resolved?.definition ?? null;
+      },
+      taskOutcome: (taskId) => {
+        const task = getTask(this.db, taskId);
+        if (!task || task.report === null) return null;
+        const report = parseJsonColumn<Record<string, unknown>>(task.report);
+        if (report === null) return null;
+        return typeof report.outcome === "string" ? report.outcome : null;
+      },
+      onEnter: (args) => this.spawnStepTasks(args),
+      onRetry: (args) =>
+        this.spawnStepTasks({
+          run: args.run,
+          definition: args.definition,
+          step: args.step,
+          iteration: args.iteration,
+          inputs: args.inputs,
+          loopFills: {},
+          retryPlans: args.plans,
+        }),
+    };
+  }
+
+  /**
+   * Gate / block verbs (ADR-0017 / #238): approve, reject, redirect, finish.
+   * Only legal on a `blocked` run. Returns the updated run or throws
+   * {@link DelegateError} on unknown id / illegal verb.
+   */
+  actionRun(
+    runId: string,
+    request: GateVerbRequest,
+  ): { run: RunRow; decision: unknown } {
+    const existing = getRun(this.db, runId);
+    if (existing === undefined) {
+      throw new DelegateError(`no such run: ${runId}`);
+    }
+    const result = actionRunVerb(this.db, runId, this.buildRunDrainHost(), request);
+    if (result === null) {
+      throw new DelegateError(`no such run: ${runId}`);
+    }
+    if (result.decision.kind === "error") {
+      throw new DelegateError(result.decision.message);
+    }
+    return { run: result.run, decision: result.decision };
+  }
+
+  /**
+   * Spawn one or more tasks for a step enter / retry. Returns `{ error }` on
+   * fixable failure so the run parks on `blocked` (never auto-fails).
+   */
+  private spawnStepTasks(args: {
+    run: RunRow;
+    definition: WorkflowDefinition;
+    step: WorkflowStepNode;
+    iteration: number;
+    inputs: Record<string, unknown>;
+    loopFills: Record<string, unknown>;
+    note?: string | null;
+    retryPlans?: readonly { slot: string | null; failedAttempts: number; retries: number }[];
+  }): void | { error: string } {
+    try {
+      this.spawnStepTasksOrThrow(args);
+      return;
+    } catch (err) {
+      const message =
+        err instanceof StepConfigError || err instanceof DelegateError
+          ? err.message
+          : errorMessage(err);
+      return { error: message };
+    }
+  }
+
+  private spawnStepTasksOrThrow(args: {
+    run: RunRow;
+    definition: WorkflowDefinition;
+    step: WorkflowStepNode;
+    iteration: number;
+    inputs: Record<string, unknown>;
+    loopFills: Record<string, unknown>;
+    note?: string | null;
+    retryPlans?: readonly { slot: string | null; failedAttempts: number; retries: number }[];
+  }): void {
+    const { run, definition, step, iteration, inputs, note } = args;
+    let config: ParleyConfig;
+    try {
+      config = readConfig(this.paths.config);
+    } catch (err) {
+      throw new DelegateError(`invalid config: ${errorMessage(err)}`);
+    }
+
+    // Which (slot) siblings to spawn.
+    type Sibling = { slotId: string | null; retryIndex: number };
+    const siblings: Sibling[] = [];
+
+    if (args.retryPlans !== undefined && args.retryPlans.length > 0) {
+      for (const plan of args.retryPlans) {
+        siblings.push({
+          slotId: plan.slot,
+          retryIndex: plan.failedAttempts, // -rN for the next attempt
+        });
+      }
+    } else if (step.slots !== undefined && Object.keys(step.slots).length > 0) {
+      for (const slotId of Object.keys(step.slots)) {
+        siblings.push({ slotId, retryIndex: 0 });
+      }
+    } else if (step.over !== undefined) {
+      // Data fan-out: keys from the filled `over` input.
+      const overValue = inputs[step.over];
+      if (overValue === undefined) {
+        throw new DelegateError(
+          `data fan-out port "${step.over}" has no filled value on step ${step.id}`,
+        );
+      }
+      if (Array.isArray(overValue)) {
+        for (let i = 0; i < overValue.length; i++) {
+          siblings.push({ slotId: String(i), retryIndex: 0 });
+        }
+      } else if (overValue !== null && typeof overValue === "object") {
+        for (const key of Object.keys(overValue as Record<string, unknown>)) {
+          siblings.push({ slotId: key, retryIndex: 0 });
+        }
+      } else {
+        throw new DelegateError(
+          `data fan-out port "${step.over}" is not a container on step ${step.id}`,
+        );
+      }
+    } else {
+      siblings.push({ slotId: null, retryIndex: 0 });
+    }
+
+    if (siblings.length === 0) {
+      throw new DelegateError(`step ${step.id} resolved zero tasks to spawn`);
+    }
+
+    // Workspace root for the run (must already exist from run start).
+    const workspaceRoot = this.resolveRunWorkspaceRoot(run);
+    if (workspaceRoot === null) {
+      throw new DelegateError(
+        `run ${run.id} has no workspace on disk (start the run first, or workspace was removed)`,
+      );
+    }
+
+    const isFanOut = siblings.length > 1 || step.over !== undefined || step.slots !== undefined;
+
+    for (const sib of siblings) {
+      const slot =
+        sib.slotId !== null && step.slots !== undefined
+          ? step.slots[sib.slotId]
+          : null;
+      const resolved = resolveStepExecution({
+        step,
+        slot: slot ?? null,
+        slotId: sib.slotId,
+        config,
+        configPath: this.paths.config,
+      });
+
+      // Per-sibling input: data fan-out peels one element.
+      const siblingInputs = { ...inputs };
+      if (step.over !== undefined && sib.slotId !== null) {
+        const container = inputs[step.over];
+        if (Array.isArray(container)) {
+          const idx = Number(sib.slotId);
+          if (Number.isInteger(idx)) siblingInputs[step.over] = container[idx];
+        } else if (container !== null && typeof container === "object") {
+          siblingInputs[step.over] = (container as Record<string, unknown>)[sib.slotId];
+        }
+      }
+
+      const address = formatStepAddress({
+        node: step.id,
+        iteration,
+        slot: sib.slotId,
+        retry: sib.retryIndex > 0 ? sib.retryIndex : null,
+      });
+
+      // Materialize inputs + compose body.
+      const portSpecs: InputPortValue[] = [];
+      for (const [name, port] of Object.entries(step.in)) {
+        if (!(name in siblingInputs)) continue;
+        portSpecs.push({
+          name,
+          type: port.type,
+          value: siblingInputs[name],
+        });
+      }
+      const materialized = materializeInputs({
+        workspaceRoot,
+        address,
+        inputs: portSpecs,
+      });
+      const renderEntries: RenderInputEntry[] = materialized.ports.map((p) => ({
+        name: p.port,
+        type: p.type,
+        value: siblingInputs[p.port],
+        materializationPath: p.missingReferent ? undefined : p.relativePath,
+        missingReferent: p.missingReferent,
+      }));
+      // Also render scalars that were not file-materialized as paths.
+      for (const [name, port] of Object.entries(step.in)) {
+        if (!(name in siblingInputs)) continue;
+        if (renderEntries.some((e) => e.name === name)) continue;
+        renderEntries.push({
+          name,
+          type: port.type,
+          value: siblingInputs[name],
+        });
+      }
+      const inputsSection = renderInputsSection(renderEntries);
+      const body = composeStepBody({
+        workflowDir: definition.dir,
+        nodePromptPath: step.prompt,
+        slotAppendPath: resolved.promptAppend,
+        orchestratorNote: note ?? null,
+        inputsSection,
+      });
+
+      const outPorts: Record<string, OutputPortSpec> = {};
+      for (const [name, port] of Object.entries(step.out)) {
+        outPorts[name] = { type: port.type, bounds: port.bounds };
+      }
+      const reportSchema = generateReportSchema(outPorts);
+
+      // Resolve per-task cwd (shared run workspace or isolated sibling).
+      let cwd = workspaceRoot;
+      let worktree: string | null = null;
+      let branch: string | null = null;
+      let baseSha: string | null = null;
+      if (run.workspace === "repo" && run.repo !== null) {
+        try {
+          const stepWs = resolveStepWorkspace({
+            repoRoot: run.repo,
+            worktreesDir: this.paths.worktrees,
+            runId: run.id,
+            runCheckoutPath: workspaceRoot,
+            runBranch: runBranchName(run.id, run.workflow),
+            taskId: "pending", // overwritten after id alloc — path uses task id
+            address,
+            sandbox: resolved.sandbox,
+            fanOut: isFanOut,
+          });
+          // For isolated siblings the path embeds taskId; allocate id first.
+          cwd = stepWs.path;
+          worktree = stepWs.shared || stepWs.branch === null ? null : stepWs.path;
+          branch = stepWs.branch;
+          baseSha = stepWs.baseSha;
+        } catch {
+          cwd = workspaceRoot;
+        }
+      } else if (run.workspace === "scratch") {
+        try {
+          const stepWs = resolveScratchStepWorkspace({
+            runsDir: this.paths.runs,
+            runId: run.id,
+            runWorkspacePath: workspaceRoot,
+            address,
+            sandbox: resolved.sandbox,
+            fanOut: isFanOut,
+          });
+          cwd = stepWs.path;
+        } catch {
+          cwd = workspaceRoot;
+        }
+      }
+
+      const id = nextTaskId(this.db);
+      // Re-resolve isolated checkout with the real task id when fan-out writable.
+      if (
+        run.workspace === "repo" &&
+        run.repo !== null &&
+        isFanOut &&
+        resolved.sandbox !== "read-only"
+      ) {
+        try {
+          const stepWs = resolveStepWorkspace({
+            repoRoot: run.repo,
+            worktreesDir: this.paths.worktrees,
+            runId: run.id,
+            runCheckoutPath: workspaceRoot,
+            runBranch: runBranchName(run.id, run.workflow),
+            taskId: id,
+            address,
+            sandbox: resolved.sandbox,
+            fanOut: true,
+          });
+          cwd = stepWs.path;
+          worktree = null; // run-owned shape: worktree column null (ADR-0018)
+          branch = null;
+          baseSha = stepWs.baseSha;
+        } catch (err) {
+          throw new DelegateError(
+            `failed to create sibling workspace for ${address}: ${errorMessage(err)}`,
+          );
+        }
+      }
+
+      const row = insertTask(this.db, {
+        id,
+        name: null,
+        vendor: resolved.vendor,
+        model: resolved.model,
+        effort: resolved.effort,
+        profile: resolved.profile,
+        repo: run.repo,
+        cwd,
+        prompt: body,
+        orchestrator_session_id: run.orchestrator_session_id,
+        worktree,
+        branch,
+        base_sha: baseSha,
+        sandbox: resolved.sandbox,
+        network: resolved.network,
+        answer_timeout_ms: null,
+        report_schema: JSON.stringify(reportSchema),
+        size: null,
+        difficulty: null,
+        type: step.task_type ?? definition.type ?? "other",
+        run_id: run.id,
+        node: step.id,
+        iteration,
+        slot: sib.slotId,
+      });
+
+      this.scheduleLocalStart(row);
+    }
+  }
+
+  /**
+   * Absolute path of the run's primary workspace, or null when missing.
+   * `repo` mode: worktrees/<repo>/<runId>; `scratch`: runs/<runId>.
+   */
+  private resolveRunWorkspaceRoot(run: RunRow): string | null {
+    if (run.workspace === "scratch") {
+      const p = runScratchPath(this.paths.runs, run.id);
+      return fs.existsSync(p) ? p : null;
+    }
+    if (run.repo === null || run.repo === "") return null;
+    const p = runCheckoutPath(this.paths.worktrees, run.repo, run.id);
+    return fs.existsSync(p) ? p : null;
   }
 
     /** Fresh run: spawn the vendor child via `prepare` (or template) and pump until exit. */

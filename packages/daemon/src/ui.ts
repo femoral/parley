@@ -14,6 +14,7 @@ import { readConfig, type HomePaths } from "@useparley/core";
 /** API path prefixes the UI's SPA fallback must never shadow (spec list). */
 const RESERVED_PREFIXES = new Set([
   "tasks",
+  "runs",
   "events",
   "health",
   "clean",

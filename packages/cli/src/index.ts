@@ -23,6 +23,7 @@ import { runPrompt } from "./commands/prompt.js";
 import { runInfo } from "./commands/info.js";
 import { runLint } from "./commands/lint.js";
 import { runSession } from "./commands/session.js";
+import { runRun } from "./commands/run.js";
 import { VERSION_LINE } from "./version.js";
 
 const HELP = `parley — delegate tasks to agent CLIs
@@ -62,6 +63,11 @@ Usage:
                             answers per criterion); daemon computes score +
                             baseline. A later call overwrites the last.
   parley cancel <task>          Terminate a task's child; end it cancelled
+  parley run approve <run>      Action a blocked run past its gate / block
+  parley run reject <run>       Follow the gate's author-declared on_reject
+  parley run redirect <run> --to <node> [--note <text>]
+                            Move a live blocked run to <node> (new iteration)
+  parley run finish <run>       Complete a blocked run at its current node
   parley watch [task…] [--ack <event-id>] [--session <id>|latest]
               [--follow] [--json]
                             The only wait primitive (ADR-0008). Deliver the
@@ -195,6 +201,8 @@ export async function run(argv: string[], ctx: CliContext): Promise<number> {
       return runEval(ctx, rest);
     case "cancel":
       return runCancel(ctx, rest);
+    case "run":
+      return runRun(ctx, rest);
     case "watch":
       return runWatch(ctx, rest);
     case "list":

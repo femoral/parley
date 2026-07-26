@@ -95,7 +95,11 @@ export interface WorkflowStepNode {
   slots?: Record<string, WorkflowSlot>;
   /** Data fan-out: name of the input port that drives width/keys. */
   over?: string;
-  success?: { min?: number };
+  /**
+   * Fan-out success policy (ADR-0017): `all` | `{min}` | `{required:[slots]}`.
+   * Defaults at engine time: `all` for authored slots, `{min: 1}` for data.
+   */
+  success?: { min?: number; required?: string[] };
   retries?: number;
   in: Record<string, NodeInputPort>;
   out: Record<string, NodeOutputPort>;
@@ -608,7 +612,7 @@ function parseStep(
   }
   if (raw.success !== undefined) {
     if (!isRecord(raw.success)) fail(`${field}.success`, "must be an object");
-    const success: { min?: number } = {};
+    const success: { min?: number; required?: string[] } = {};
     if (raw.success.min !== undefined) {
       if (
         typeof raw.success.min !== "number" ||
@@ -618,6 +622,23 @@ function parseStep(
         fail(`${field}.success.min`, "must be a non-negative integer");
       }
       success.min = raw.success.min;
+    }
+    if (raw.success.required !== undefined) {
+      if (!Array.isArray(raw.success.required)) {
+        fail(`${field}.success.required`, "must be an array of slot names");
+      }
+      const required: string[] = [];
+      for (let i = 0; i < raw.success.required.length; i++) {
+        const slot = raw.success.required[i];
+        if (typeof slot !== "string" || slot === "") {
+          fail(`${field}.success.required[${i}]`, "must be a non-empty string");
+        }
+        required.push(slot as string);
+      }
+      success.required = required;
+    }
+    if (success.min !== undefined && success.required !== undefined) {
+      fail(`${field}.success`, "cannot set both min and required");
     }
     step.success = success;
   }
