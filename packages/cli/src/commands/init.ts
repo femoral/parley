@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { styleText } from "node:util";
 import * as p from "@clack/prompts";
 import {
@@ -24,6 +25,68 @@ import {
 } from "./skills/install.js";
 import { formatInstallSummary, isGitRepo, repoRoot } from "./skills/copy.js";
 import { PromptCancelled } from "./skills/prompts.js";
+
+/** Workflow ids seeded by `parley init` (ADR-0016: no shipped resolution layer). */
+export const EXAMPLE_WORKFLOW_IDS = ["coding-1", "coding-2", "research"] as const;
+
+export type ExampleWorkflowId = (typeof EXAMPLE_WORKFLOW_IDS)[number];
+
+export type WorkflowSeedStatus = "created" | "skipped";
+
+export interface WorkflowSeedRecord {
+  id: ExampleWorkflowId;
+  dest: string;
+  status: WorkflowSeedStatus;
+}
+
+/**
+ * Absolute path to the bundled example workflow seeds. Resolves from this
+ * module so it works from a git clone (tsx runs `src/`) and from a published
+ * package alike. `PARLEY_WORKFLOW_SEEDS_SOURCE` overrides for tests.
+ */
+export function workflowSeedsSourceDir(): string {
+  const override = process.env.PARLEY_WORKFLOW_SEEDS_SOURCE;
+  if (override) return path.resolve(override);
+  // workflows/ lives at the package root; this file is under src/commands/.
+  return fileURLToPath(new URL("../../workflows", import.meta.url));
+}
+
+/**
+ * Copy each example workflow into `destWorkflowsDir/<id>/` when missing.
+ * Never overwrites an existing `.parley/workflows/<id>/` directory (or file).
+ */
+export function seedExampleWorkflows(
+  destWorkflowsDir: string,
+  sourceDir: string = workflowSeedsSourceDir(),
+): WorkflowSeedRecord[] {
+  const records: WorkflowSeedRecord[] = [];
+  for (const id of EXAMPLE_WORKFLOW_IDS) {
+    const src = path.join(sourceDir, id);
+    const dest = path.join(destWorkflowsDir, id);
+    if (!fs.existsSync(src)) {
+      throw new UsageError(`init: bundled workflow seed not found: ${id} (looked in ${src})`);
+    }
+    if (fs.existsSync(dest)) {
+      records.push({ id, dest, status: "skipped" });
+      continue;
+    }
+    fs.mkdirSync(destWorkflowsDir, { recursive: true });
+    fs.cpSync(src, dest, { recursive: true });
+    records.push({ id, dest, status: "created" });
+  }
+  return records;
+}
+
+/** Format seed results for human init output. */
+export function formatWorkflowSeedSummary(records: readonly WorkflowSeedRecord[]): string {
+  if (records.length === 0) return "  (none)\n";
+  const lines: string[] = [];
+  for (const r of records) {
+    const note = r.status === "created" ? "created" : "exists, skipped";
+    lines.push(`  ${r.id}: ${r.dest} (${note})`);
+  }
+  return `${lines.join("\n")}\n`;
+}
 
 /**
  * Built-in vendor ids and default CLI binary names (adapter DEFAULT_*_BIN).
@@ -418,10 +481,10 @@ function printModelFallbackGuidance(
 }
 
 /**
- * `parley init` — one-shot setup: skills, config files, harness detection,
- * model catalog refresh. Interactive on a TTY unless `--yes` or `--json` is
- * passed; non-interactive runs use sane defaults (layout=agents, scope=project
- * if git else global).
+ * `parley init` — one-shot setup: skills, config files, example workflows,
+ * harness detection, model catalog refresh. Interactive on a TTY unless
+ * `--yes` or `--json` is passed; non-interactive runs use sane defaults
+ * (layout=agents, scope=project if git else global).
  */
 export async function runInit(ctx: CliContext, args: string[]): Promise<number> {
   const parsed = parseSkillInstallArgs(args, "init");
@@ -450,6 +513,16 @@ export async function runInit(ctx: CliContext, args: string[]): Promise<number> 
     cwd,
     scope: configScope,
   });
+
+  // --- Example workflows (project scope only; user-owned after copy) ---
+  // ADR-0016: no shipped-workflow resolution layer — seeds land under the
+  // project's `.parley/workflows/<id>/` and are edited from that moment.
+  let workflowSeeds: WorkflowSeedRecord[] = [];
+  if (configScope === "project") {
+    const root = repoRoot(cwd);
+    const destDir = path.join(root, ".parley", "workflows");
+    workflowSeeds = seedExampleWorkflows(destDir);
+  }
 
   // Load home config for vendor.bin overrides (created empty above if missing).
   let config: ParleyConfig = {};
@@ -519,6 +592,13 @@ export async function runInit(ctx: CliContext, args: string[]): Promise<number> 
         home: configResult.homeConfig,
         project: configResult.projectConfig ?? null,
       },
+      workflows: {
+        seeds: workflowSeeds.map((r) => ({
+          id: r.id,
+          dest: r.dest,
+          status: r.status,
+        })),
+      },
       harnesses,
       models: {
         file: modelsFile,
@@ -547,6 +627,17 @@ export async function runInit(ctx: CliContext, args: string[]): Promise<number> 
   ctx.stdout(`  scope: ${configResult.scope}\n`);
   if (populated.configuredVendors.length > 0) {
     ctx.stdout(`  delegation defaults: ${populated.configuredVendors.join(", ")}\n`);
+  }
+
+  ctx.stdout("\n## Workflows\n");
+  if (configScope !== "project") {
+    ctx.stdout("  Skipped (scope=global; example workflows seed into the project layer).\n");
+    ctx.stdout("  Re-run with `--scope project` inside a git repo to copy coding-1, coding-2, research.\n");
+  } else {
+    ctx.stdout(formatWorkflowSeedSummary(workflowSeeds));
+    ctx.stdout(
+      "  These are copies you own — edit freely under .parley/workflows/. Parley has no separate shipped-workflow layer.\n",
+    );
   }
 
   ctx.stdout("\n## Harnesses\n");

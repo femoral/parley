@@ -1,0 +1,122 @@
+{
+  "id": "research",
+  "version": 1,
+  "type": "research",
+  "workspace": "scratch",
+  "description": "Scope the question into named queries, search each in parallel, funnel to a shortlist, validate each source, then adversarially review coverage — broadening the scope if it is thin.",
+
+  "inputs": {
+    "brief": { "type": "text" }
+  },
+
+  "outputs": {
+    "report": { "type": "text", "from": "adversarial-review.report" },
+    "coverage": { "type": "coverage", "from": "adversarial-review.coverage" }
+  },
+
+  "types": {
+    "source": { "schema": "types/source.schema.json" },
+    "validation": { "schema": "types/validation.schema.json" },
+    "verdict": { "enum": ["supports", "contradicts", "unreachable", "off-topic"] },
+    "coverage": { "enum": ["sufficient", "insufficient"] }
+  },
+
+  "nodes": [
+    {
+      "id": "scope",
+      "kind": "step",
+      "task_type": "research",
+      "profile": "deep",
+      "prompt": "prompts/scope.md",
+      "in": {
+        "brief": { "type": "text", "from": "run.brief" },
+        "gaps": { "type": "text" }
+      },
+      "out": {
+        "queries": { "type": "dict<string, text>", "max_items": 8, "max_length": 300 }
+      }
+    },
+
+    {
+      "id": "search",
+      "kind": "step",
+      "task_type": "research",
+      "profile": "fast",
+      "sandbox": "read-only",
+      "prompt": "prompts/search.md",
+      "over": "query",
+      "success": { "min": 3 },
+      "in": {
+        "query": { "type": "text", "from": "scope.queries" },
+        "brief": { "type": "text", "from": "run.brief" }
+      },
+      "out": {
+        "sources": { "type": "source[]", "max_items": 10 }
+      }
+    },
+
+    {
+      "id": "funnel",
+      "kind": "step",
+      "task_type": "research",
+      "profile": "deep",
+      "prompt": "prompts/funnel.md",
+      "in": {
+        "harvest": {
+          "type": "dict<string, source[]>",
+          "from": "search.sources",
+          "accumulate": true
+        },
+        "brief": { "type": "text", "from": "run.brief" }
+      },
+      "out": {
+        "shortlist": { "type": "source[]", "max_items": 12 }
+      }
+    },
+
+    {
+      "id": "validate",
+      "kind": "step",
+      "task_type": "research",
+      "profile": "fast",
+      "sandbox": "read-only",
+      "prompt": "prompts/validate.md",
+      "over": "source",
+      "in": {
+        "source": { "type": "source", "from": "funnel.shortlist" }
+      },
+      "out": {
+        "verdict": { "type": "verdict" },
+        "detail": { "type": "validation" }
+      }
+    },
+
+    {
+      "id": "adversarial-review",
+      "kind": "step",
+      "task_type": "review",
+      "profile": "deep",
+      "prompt": "prompts/adversarial-review.md",
+      "in": {
+        "brief": { "type": "text", "from": "run.brief" },
+        "queries": { "type": "dict<string, text>", "from": "scope.queries" },
+        "shortlist": { "type": "source[]", "from": "funnel.shortlist" },
+        "verdicts": { "type": "verdict[]", "from": "validate.verdict" },
+        "details": { "type": "validation[]", "from": "validate.detail" }
+      },
+      "out": {
+        "coverage": { "type": "coverage" },
+        "gaps": { "type": "text", "max_length": 2000 },
+        "report": { "type": "text", "max_length": 20000 }
+      },
+      "loop": {
+        "to": "scope",
+        "while": { "port": "coverage", "is": "insufficient" },
+        "max": 2,
+        "with": {
+          "gaps": "adversarial-review.gaps"
+        }
+      }
+    }
+  ]
+}

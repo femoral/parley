@@ -125,12 +125,14 @@ Usage:
                             PARLEY_* env > session-state file > null. Session
                             id: PARLEY_SESSION_ID > -s > state file > fresh.
                             Known id re-anchors after restart.
-  parley init                   One-shot setup: skills, config, harnesses, models
+  parley init                   One-shot setup: skills, config, example workflows, harnesses, models
     --layout claude|agents|<path>
                               Vendor skill layout, or a custom directory path
                               (default: agents)
     --scope global|project    Where to install skills + which config layer
                               (default: project in a git repo, else global)
+                              Project scope also seeds .parley/workflows/
+                              {coding-1,coding-2,research} without overwriting
     --skill <name>            Skill to install (repeatable; default: all)
     --yes                     Accept defaults; disable interactive prompts
     --json                    Machine-readable result

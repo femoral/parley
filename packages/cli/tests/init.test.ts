@@ -4,11 +4,15 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import * as p from "@clack/prompts";
+import { loadWorkflowDefinition } from "@useparley/core";
 import {
+  EXAMPLE_WORKFLOW_IDS,
   isInteractiveInit,
   populateInitConfig,
   promptVendorModels,
+  seedExampleWorkflows,
   seedVendorModels,
+  workflowSeedsSourceDir,
 } from "../src/commands/init.js";
 import { PromptCancelled } from "../src/commands/skills/prompts.js";
 import { listBundledPlugins } from "../src/commands/plugins/list.js";
@@ -449,6 +453,9 @@ describe("parley init", () => {
         home: { path: string; created: boolean };
         project: { path: string; created: boolean } | null;
       };
+      workflows: {
+        seeds: { id: string; dest: string; status: string }[];
+      };
       harnesses: string[];
       models: { file: string; vendors: { vendor: string; modelCount: number }[] };
     };
@@ -485,6 +492,24 @@ describe("parley init", () => {
       JSON.parse(fs.readFileSync(path.join(repo, ".parley", "config.json"), "utf8")),
     ).toEqual({});
 
+    // Example workflows seeded under the project layer.
+    expect(out.workflows.seeds.map((s) => s.id).sort()).toEqual([...EXAMPLE_WORKFLOW_IDS].sort());
+    for (const seed of out.workflows.seeds) {
+      expect(seed.status).toBe("created");
+      expect(fs.existsSync(path.join(seed.dest, "workflow.json"))).toBe(true);
+    }
+    expect(fs.existsSync(path.join(repo, ".parley", "workflows", "coding-1", "workflow.json"))).toBe(
+      true,
+    );
+    expect(fs.existsSync(path.join(repo, ".parley", "workflows", "research", "types", "source.schema.json"))).toBe(
+      true,
+    );
+    // Prompt bodies ship with the seeds (not stubs).
+    expect(
+      fs.readFileSync(path.join(repo, ".parley", "workflows", "coding-1", "prompts", "plan.md"), "utf8")
+        .length,
+    ).toBeGreaterThan(100);
+
     // Fake harness detected; models catalog written.
     expect(out.harnesses).toEqual(["fake"]);
     expect(fs.existsSync(out.models.file)).toBe(true);
@@ -495,6 +520,60 @@ describe("parley init", () => {
     >;
     expect(catalog.fake).toBeDefined();
     expect(catalog.fake!.models.length).toBeGreaterThan(0);
+  });
+
+  it("does not overwrite an existing .parley/workflows/<id>/", async () => {
+    const repo = makeRepo();
+    const custom = path.join(repo, ".parley", "workflows", "coding-1");
+    fs.mkdirSync(custom, { recursive: true });
+    fs.writeFileSync(path.join(custom, "workflow.json"), '{"id":"coding-1","user":"owned"}\n');
+    fs.writeFileSync(path.join(custom, "KEEP.md"), "do not clobber\n");
+
+    const res = await runCli(["init", "--json", "--yes"], home, {
+      cwd: repo,
+      extraEnv: {
+        HOME: mkTemp("parley-init-ow-"),
+        PATH: pathWithGitOnly(),
+        PARLEY_FAKE_VENDOR_BIN: "",
+      },
+    });
+    expect(res.code).toBe(0);
+    const out = JSON.parse(res.stdout) as {
+      workflows: { seeds: { id: string; status: string }[] };
+    };
+    const byId = Object.fromEntries(out.workflows.seeds.map((s) => [s.id, s.status]));
+    expect(byId["coding-1"]).toBe("skipped");
+    expect(byId["coding-2"]).toBe("created");
+    expect(byId["research"]).toBe("created");
+
+    expect(fs.readFileSync(path.join(custom, "KEEP.md"), "utf8")).toBe("do not clobber\n");
+    expect(fs.readFileSync(path.join(custom, "workflow.json"), "utf8")).toContain("user");
+    // Sibling seeds still land.
+    expect(fs.existsSync(path.join(repo, ".parley", "workflows", "coding-2", "workflow.json"))).toBe(
+      true,
+    );
+  });
+
+  it("skips workflow seeds when scope is global", async () => {
+    const repo = makeRepo();
+    const res = await runCli(
+      ["init", "--scope", "global", "--layout", "agents", "--json"],
+      home,
+      {
+        cwd: repo,
+        extraEnv: {
+          HOME: mkTemp("parley-init-wf-global-"),
+          PATH: pathWithGitOnly(),
+          PARLEY_FAKE_VENDOR_BIN: "",
+        },
+      },
+    );
+    expect(res.code).toBe(0);
+    const out = JSON.parse(res.stdout) as {
+      workflows: { seeds: unknown[] };
+    };
+    expect(out.workflows.seeds).toEqual([]);
+    expect(fs.existsSync(path.join(repo, ".parley", "workflows"))).toBe(false);
   });
 
   it("no-harness fallback messaging lists vendors and points to wizard", async () => {
@@ -541,6 +620,53 @@ describe("parley init", () => {
     expect(out.configuration.scope).toBe("global");
     expect(out.configuration.project).toBeNull();
     expect(fs.existsSync(path.join(repo, ".parley", "config.json"))).toBe(false);
+  });
+
+  describe("example workflow seeds", () => {
+    it("ships three complete seeds that parse and type-check with no warnings", () => {
+      const root = workflowSeedsSourceDir();
+      for (const id of EXAMPLE_WORKFLOW_IDS) {
+        const dir = path.join(root, id);
+        const { definition, warnings } = loadWorkflowDefinition(dir);
+        expect(warnings, `${id} should have no parse warnings`).toEqual([]);
+        expect(definition.id).toBe(id);
+        expect(definition.dir).toBe(path.resolve(dir));
+        // Every step prompt path resolves on disk (prompt bodies are the product).
+        for (const node of definition.nodes) {
+          if (node.kind !== "step") continue;
+          const promptPath = path.join(dir, node.prompt);
+          expect(fs.existsSync(promptPath), `${id}: missing ${node.prompt}`).toBe(true);
+          expect(fs.readFileSync(promptPath, "utf8").trim().length).toBeGreaterThan(40);
+          if (node.slots) {
+            for (const [slotName, slot] of Object.entries(node.slots)) {
+              if (!slot.prompt_append) continue;
+              const appendPath = path.join(dir, slot.prompt_append);
+              expect(
+                fs.existsSync(appendPath),
+                `${id} slot ${slotName}: missing ${slot.prompt_append}`,
+              ).toBe(true);
+            }
+          }
+        }
+      }
+    });
+
+    it("seedExampleWorkflows copies missing ids and skips existing ones", () => {
+      const dest = mkTemp("parley-wf-seed-");
+      const first = seedExampleWorkflows(dest);
+      expect(first.map((r) => r.status)).toEqual(["created", "created", "created"]);
+      expect(fs.existsSync(path.join(dest, "research", "types", "validation.schema.json"))).toBe(
+        true,
+      );
+
+      // Mutate one seed destination so a second pass would clobber if buggy.
+      const marker = path.join(dest, "coding-2", "USER.md");
+      fs.writeFileSync(marker, "mine\n");
+
+      const second = seedExampleWorkflows(dest);
+      expect(second.every((r) => r.status === "skipped")).toBe(true);
+      expect(fs.readFileSync(marker, "utf8")).toBe("mine\n");
+    });
   });
 });
 

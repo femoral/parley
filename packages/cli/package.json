@@ -12,7 +12,8 @@
   "files": [
     "dist",
     "bin",
-    "skills"
+    "skills",
+    "workflows"
   ],
   "exports": {
     ".": {
