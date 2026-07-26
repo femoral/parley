@@ -269,6 +269,26 @@ export interface TaskRow {
    * Computed at response time.
    */
   blocking_cap?: string | null;
+  /**
+   * Owning run id when this task is run-owned (ADR-0018 / #233). Null for
+   * ordinary tasks. Optional on the wire so older fixtures remain assignable.
+   */
+  run_id?: string | null;
+  /**
+   * Run address node id (#233). Null when not run-owned. Optional for older
+   * clients.
+   */
+  node?: string | null;
+  /**
+   * Run address iteration (#233). Null when not run-owned. Optional for older
+   * clients.
+   */
+  iteration?: number | null;
+  /**
+   * Run address slot (#233). Null when no fan-out / not run-owned. Optional
+   * for older clients.
+   */
+  slot?: string | null;
 }
 
 /** `GET /health` — daemon liveness plus its package version (spec stability §). */

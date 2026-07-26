@@ -61,6 +61,10 @@ function storageRow(partial: Partial<TaskRow> & { id: string }): TaskRow {
     eval_model: null,
     eval_effort: null,
     queued_at: null,
+    run_id: null,
+    node: null,
+    iteration: null,
+    slot: null,
     ...partial,
   };
 }
