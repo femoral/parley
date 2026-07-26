@@ -1,0 +1,752 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>#224 — Parley Cove's view of a running workflow</title>
+    <link rel="stylesheet" href="../../../packages/ui/src/tokens/tokens.css" />
+    <link rel="stylesheet" href="cove.css" />
+  </head>
+  <body>
+    <!-- ================================================================ -->
+    <!-- BOARD 1 — the chart: a run drawn on paper                        -->
+    <!-- ================================================================ -->
+    <section class="board" id="board-1">
+      <div class="board__caption">1 · The chart — a run is a route drawn on paper</div>
+      <div class="row">
+        <div class="chart-sheet">
+          <svg class="chart-sheet__svg" viewBox="0 0 1332 640" preserveAspectRatio="none">
+            <defs>
+              <marker id="tip" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                <path d="M0,1 L9,5 L0,9 z" fill="var(--ink-chart-soft)" />
+              </marker>
+            </defs>
+
+            <!-- faint rhumb lines radiating from the compass rose -->
+            <g stroke="var(--ink-chart-ghost)" stroke-width="0.7" opacity="0.35">
+              <path d="M1176,128 L880,26" /><path d="M1176,128 L1332,30" />
+              <path d="M1176,128 L860,340" /><path d="M1176,128 L1332,352" />
+              <path d="M1176,128 L1040,640" /><path d="M1176,128 L916,196" />
+            </g>
+
+            <!-- SAILED — one trail, wandering the way a hand draws it -->
+            <g fill="none" stroke-linecap="round" stroke-dasharray="1.5 9" stroke-width="4.5"
+               stroke="var(--ink-chart)">
+              <path d="M240,462 C300,446 336,424 366,404" />
+              <path d="M444,392 C498,378 528,364 558,352" />
+              <path d="M642,338 C704,318 744,304 768,300" />
+            </g>
+            <!-- UNDER WAY — the leg being sailed right now -->
+            <path d="M856,306 C912,318 946,338 972,356" fill="none" stroke-linecap="round"
+              stroke-dasharray="1.5 9" stroke-width="4" stroke="var(--ink-live)" opacity="0.8" />
+            <!-- AHEAD — ghost ink -->
+            <path d="M1050,368 C1096,352 1124,330 1148,312" fill="none" stroke-linecap="round"
+              stroke-dasharray="1.5 9" stroke-width="3.5" stroke="var(--ink-chart-ghost)" />
+            <!-- the loop-back: a longer dash arcing back over the route -->
+            <path d="M1000,330 C980,168 664,158 590,314" fill="none"
+              stroke="var(--ink-chart-soft)" stroke-width="2.5" stroke-dasharray="12 9"
+              marker-end="url(#tip)" opacity="0.8" />
+
+            <!-- compass rose, drawn not spun -->
+            <g transform="translate(1176,128)" stroke="var(--ink-chart)" fill="none">
+              <circle r="46" stroke-width="1.4" opacity="0.75" />
+              <circle r="33" stroke-width="0.8" opacity="0.5" />
+              <path d="M0,-46 L9,-9 L46,0 L9,9 L0,46 L-9,9 L-46,0 L-9,-9 Z"
+                fill="var(--ink-chart)" opacity="0.82" stroke="none" />
+              <path d="M0,-33 L4,-4 L33,0 L4,4 L0,33 L-4,4 L-33,0 L-4,-4 Z"
+                fill="var(--parchment-bg)" opacity="0.5" stroke="none" />
+            </g>
+
+            <!-- a sea serpent in the empty quarter, because paper allows it -->
+            <g transform="translate(196,168)" stroke="var(--ink-chart-soft)" fill="none"
+               stroke-width="2" opacity="0.45" stroke-linecap="round">
+              <path d="M0,40 q22,-26 44,0 t44,0 t44,0" />
+              <path d="M132,40 q14,-18 26,-6 q-10,4 -12,12" />
+              <circle cx="150" cy="30" r="1.8" fill="var(--ink-chart-soft)" />
+            </g>
+          </svg>
+
+          <div class="chart-sheet__legend">
+            <div class="chart-sheet__title">Coding&nbsp;1 · run 7f3a</div>
+            <div class="chart-sheet__flavor">
+              charted this morning · pass 2 of 3 · one seal still unbroken
+            </div>
+          </div>
+
+          <!-- plan -->
+          <div class="mark i-done" style="left: 200px; top: 470px">
+            <div class="mark__ring">✓</div>
+            <div class="mark__name">plan</div>
+            <div class="mark__meta">completed · 1 task</div>
+          </div>
+
+          <!-- the gate that has been answered: its seal is broken -->
+          <div class="seal seal--broken" style="left: 404px; top: 396px">
+            <div class="seal__wax">⚑<span class="seal__crack"></span></div>
+            <div class="seal__name">approve-plan</div>
+            <div class="seal__meta">approved 14m ago</div>
+          </div>
+
+          <!-- implement -->
+          <div class="mark i-done" style="left: 600px; top: 346px">
+            <div class="mark__ring">✓</div>
+            <div class="mark__name">implement</div>
+            <div class="mark__meta">pass 2 · completed</div>
+          </div>
+
+          <!-- review: one mark, width written beside it -->
+          <div class="mark i-live" style="left: 812px; top: 300px">
+            <div class="mark__ring">✦</div>
+            <div class="mark__name">review</div>
+            <div class="mark__meta">1 of 3 still out</div>
+            <div class="tally">×3 slots · ✓✓·</div>
+          </div>
+
+          <!-- triage, not yet reached -->
+          <div class="mark mark--ghost i-ghost" style="left: 1010px; top: 372px">
+            <div class="mark__ring">?</div>
+            <div class="mark__name" style="color: var(--ink-chart-soft)">triage</div>
+            <div class="mark__meta">not yet entered</div>
+          </div>
+
+          <div class="spot" style="left: 1182px; top: 300px">
+            <div class="spot__x">✕</div>
+            <div class="spot__label">the run ends here</div>
+          </div>
+
+          <div class="marginalia marginalia--tilt" style="left: 796px; top: 176px">
+            &ldquo;if the reviewers dissent, sail it back&rdquo;
+          </div>
+          <div class="chart-note" style="left: 742px; top: 462px">fan-out — three authored slots, one mark</div>
+          <div class="marginalia" style="left: 268px; top: 252px">here be regressions</div>
+
+          <div class="chart-key">
+            <div class="chart-key__row i-done"><span class="chart-key__swatch"></span>✓ sailed</div>
+            <div class="chart-key__row i-live"><span class="chart-key__swatch"></span>✦ under way</div>
+            <div class="chart-key__row i-ghost"><span class="chart-key__swatch"></span>? ahead</div>
+            <div class="chart-key__row i-fail"><span class="chart-key__swatch"></span>✕ blotted</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================================================================ -->
+    <!-- BOARD 1b — the same paper: a held seal, and forty hands on one mark -->
+    <!-- ================================================================ -->
+    <section class="board" id="board-1b">
+      <div class="board__caption">1b · The same paper — a seal still held, and forty hands on one mark</div>
+      <div class="row">
+        <div class="chart-sheet" style="height: 470px">
+          <svg class="chart-sheet__svg" viewBox="0 0 1332 470" preserveAspectRatio="none">
+            <g fill="none" stroke-linecap="round" stroke-dasharray="1.5 9" stroke-width="4.5"
+               stroke="var(--ink-chart)">
+              <path d="M190,314 C252,272 306,228 354,208" />
+            </g>
+            <g fill="none" stroke-linecap="round" stroke-dasharray="1.5 9" stroke-width="4.5"
+               stroke="var(--ink-chart)">
+              <path d="M446,196 C520,186 578,182 616,180" />
+              <path d="M706,184 C782,190 822,198 856,208" />
+            </g>
+            <path d="M946,228 C1016,250 1074,266 1118,278" fill="none" stroke-linecap="round"
+              stroke-dasharray="1.5 9" stroke-width="3.5" stroke="var(--ink-chart-ghost)" />
+
+            <g transform="translate(1180,96)" stroke="var(--ink-chart)" fill="none" opacity="0.8">
+              <circle r="36" stroke-width="1.2" opacity="0.7" />
+              <path d="M0,-36 L7,-7 L36,0 L7,7 L0,36 L-7,7 L-36,0 L-7,-7 Z"
+                fill="var(--ink-chart)" opacity="0.78" stroke="none" />
+            </g>
+          </svg>
+
+          <div class="chart-sheet__legend">
+            <div class="chart-sheet__title">Research · run c04e</div>
+            <div class="chart-sheet__flavor">
+              forty hands sent out on one mark — the paper never grows with them
+            </div>
+          </div>
+
+          <div class="mark i-done" style="left: 150px; top: 330px">
+            <div class="mark__ring">✓</div>
+            <div class="mark__name">scope</div>
+            <div class="mark__meta">12 queries</div>
+          </div>
+
+          <div class="mark i-live" style="left: 400px; top: 196px">
+            <div class="mark__ring">✦</div>
+            <div class="mark__name">search</div>
+            <div class="mark__meta">9 done · 5 out · 26 queued</div>
+            <div class="tally">×40 hands</div>
+          </div>
+
+          <div class="mark i-done" style="left: 660px; top: 180px">
+            <div class="mark__ring">✓</div>
+            <div class="mark__name">funnel</div>
+            <div class="mark__meta">84 → 21 sources</div>
+          </div>
+
+          <!-- the gate nobody has answered: the seal is whole, and it glows -->
+          <div class="seal seal--held" style="left: 900px; top: 212px">
+            <div class="seal__wax">🗝</div>
+            <div class="seal__name">accept-sources</div>
+            <div class="seal__meta">held 21m · the orchestrator decides</div>
+          </div>
+
+          <div class="mark mark--ghost i-ghost" style="left: 1160px; top: 282px">
+            <div class="mark__ring">?</div>
+            <div class="mark__name" style="color: var(--ink-chart-soft)">adversarial</div>
+            <div class="mark__meta">not yet entered</div>
+          </div>
+
+          <div class="chart-note" style="left: 400px; top: 310px">width is written, never drawn</div>
+          <div class="marginalia marginalia--tilt" style="left: 912px; top: 108px">
+            &ldquo;the seal holds the whole voyage&rdquo;
+          </div>
+          <div class="marginalia" style="left: 214px; top: 150px">soundings taken at dawn</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================================================================ -->
+    <!-- BOARD 2 — coexistence: roster + the inbox with a gate            -->
+    <!-- ================================================================ -->
+    <section class="board" id="board-2">
+      <div class="board__caption">2 · Roster &amp; inbox — runs and plain tasks in one list</div>
+      <div class="row">
+        <!-- roster -->
+        <div class="plate roster">
+          <div class="plate__head">
+            <div class="plate__icon">⚓</div>
+            <div>
+              <div class="plate__title">Fleet</div>
+              <div class="plate__sub">2 voyages · 9 hands</div>
+            </div>
+          </div>
+          <div class="rule"></div>
+
+          <div class="rgroup">
+            <span class="s-awaiting"><span class="beacon"></span></span>
+            <span class="rgroup__label s-awaiting">Awaiting</span>
+            <span class="rgroup__count">2</span>
+          </div>
+
+          <!-- a gate: a run subject sitting in the roster's loudest group -->
+          <div class="runrow runrow--held">
+            <div class="runrow__head">
+              <span class="s-awaiting"><span class="beacon"></span></span>
+              <span class="runrow__name">coding-2 · run a19c</span>
+              <span class="badge s-awaiting" style="margin-left: auto">Gate</span>
+            </div>
+            <div class="sub" style="margin-top: 4px">rework-or-finish — 3 reviewers reported</div>
+            <div class="runrow__track">
+              <span class="pip pip--done"></span><span class="pip pip--done"></span>
+              <span class="pip pip--done"></span><span class="pip pip--gate"></span>
+            </div>
+            <div class="meta" style="margin-top: 5px">blocked 6m · implement · review ×3 · triage · ▲gate</div>
+          </div>
+
+          <div class="rrow">
+            <span class="s-awaiting"><span class="beacon"></span></span>
+            <span class="emblem" style="--coat: var(--faction-claude, #d1784c)">✳</span>
+            <span class="rrow__text">
+              <span class="rrow__name">migrate the seed script</span>
+              <span class="rrow__meta">parley/t41 · 1f0c</span>
+            </span>
+          </div>
+
+          <div class="rgroup">
+            <span class="s-running"><span class="dot"></span></span>
+            <span class="rgroup__label s-running">Running</span>
+            <span class="rgroup__count">3</span>
+          </div>
+
+          <div class="runrow">
+            <div class="runrow__head">
+              <span class="s-running"><span class="dot"></span></span>
+              <span class="runrow__name">coding-1 · run 7f3a</span>
+              <span class="badge s-running" style="margin-left: auto">Run</span>
+            </div>
+            <div class="sub" style="margin-top: 4px">review — 1 of 3 still out</div>
+            <div class="runrow__track">
+              <span class="pip pip--done"></span><span class="pip pip--done"></span>
+              <span class="pip pip--done"></span><span class="pip pip--live"></span>
+              <span class="pip"></span>
+            </div>
+            <div class="meta" style="margin-top: 5px">pass 2 of 3 · 6 tasks · 11m</div>
+          </div>
+
+          <div class="rrow">
+            <span class="s-running"><span class="dot"></span></span>
+            <span class="emblem" style="--coat: var(--faction-grok, #59616f)">✦</span>
+            <span class="rrow__text">
+              <span class="rrow__name">review the branch</span>
+              <span class="rrow__meta">
+                <span class="runchip">7f3a · review.2.tests</span>
+              </span>
+            </span>
+          </div>
+
+          <div class="rrow">
+            <span class="s-running"><span class="dot"></span></span>
+            <span class="emblem" style="--coat: var(--faction-codex, #18a886)">◈</span>
+            <span class="rrow__text">
+              <span class="rrow__name">bump deps</span>
+              <span class="rrow__meta">parley/t44 · 8b21</span>
+            </span>
+          </div>
+
+          <div class="rgroup">
+            <span class="s-completed"><span class="dot"></span></span>
+            <span class="rgroup__label s-completed">Completed</span>
+            <span class="rgroup__count">5</span>
+          </div>
+          <div class="rrow rrow--quiet">
+            <span class="s-completed"><span class="dot"></span></span>
+            <span class="emblem" style="--coat: var(--faction-codex, #18a886)">◈</span>
+            <span class="rrow__text">
+              <span class="rrow__name">write the plan</span>
+              <span class="rrow__meta"><span class="runchip">7f3a · plan.1</span></span>
+            </span>
+          </div>
+          <div class="rrow rrow--quiet">
+            <span class="s-completed"><span class="dot"></span></span>
+            <span class="emblem" style="--coat: var(--faction-claude, #d1784c)">✳</span>
+            <span class="rrow__text">
+              <span class="rrow__name">implement the plan</span>
+              <span class="rrow__meta"><span class="runchip">7f3a · implement.2</span></span>
+            </span>
+          </div>
+        </div>
+
+        <!-- centre: what a gate looks like when you click it -->
+        <div style="flex: 1; display: flex; flex-direction: column; gap: var(--gutter)">
+          <div class="plate">
+            <div class="plate__head">
+              <div class="plate__icon">🗝</div>
+              <div>
+                <div class="plate__title">Gate · rework-or-finish</div>
+                <div class="plate__sub">coding-2 · run a19c · node 4 of 4</div>
+              </div>
+              <div class="plate__aside">blocked 6m 12s</div>
+            </div>
+            <div class="rule"></div>
+            <div class="plate__body">
+              <div class="card" style="margin-bottom: 11px">
+                <div class="card__head">
+                  <span class="s-awaiting"><span class="beacon"></span></span>
+                  <span class="label s-awaiting">Held — awaiting the orchestrator</span>
+                </div>
+                <div class="card__q">
+                  Reviewers asked for changes. Send it back to implementation, or finish
+                  the run here?
+                </div>
+                <div class="helm">
+                  <span class="helm__mark">⎈</span>
+                  <span class="helm__text">
+                    <b>The orchestrator holds this helm.</b> Cove shows the gate and what it
+                    is waiting on; the four verbs — approve, reject, redirect, finish —
+                    belong to the agent driving the session. A second hand on the wheel
+                    would race a loop already in flight.
+                  </span>
+                </div>
+                <div class="card__foot">
+                  <span class="meta">awaiting a verb · no ack clears it</span>
+                  <button class="btn btn--secondary" style="margin-left: auto">Copy run id</button>
+                </div>
+              </div>
+
+              <div class="label" style="margin-bottom: 6px">What the gate shows</div>
+              <div class="well" style="margin-bottom: 8px">
+                <div class="label">verdict</div>
+                <div class="sub" style="color: var(--ink-parchment)">changes_requested</div>
+              </div>
+              <div class="well" style="margin-bottom: 8px">
+                <div class="label">rework_brief · 1.2 kB</div>
+                <div class="sub">
+                  Three reviewers agree the retry path double-counts attempts. Rework
+                  should hoist the guard into <span class="meta">transition.ts</span> and
+                  add the missing sibling-failure case…
+                </div>
+              </div>
+              <div class="well">
+                <div class="label">notes · dict&lt;string, text&gt; · 3 items</div>
+                <div class="sub">
+                  <span class="runchip">adversarial</span>
+                  <span class="runchip">fast-sweep</span>
+                  <span class="runchip">house-style</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- right rail: the inbox, now carrying two kinds of subject -->
+        <div class="rail">
+          <div class="plate plate--ember">
+            <div class="plate__head">
+              <div class="plate__icon">🔔</div>
+              <div>
+                <div class="plate__title">Inbox</div>
+                <div class="plate__sub">two hands asking, one helm held</div>
+              </div>
+              <div class="plate__aside">2</div>
+            </div>
+            <div class="rule"></div>
+            <div class="plate__body" style="display: flex; flex-direction: column; gap: 10px">
+              <div class="card">
+                <div class="card__head">
+                  <span class="s-awaiting"><span class="beacon"></span></span>
+                  <span class="label s-awaiting">Gate</span>
+                  <span class="runchip" style="margin-left: auto">a19c · rework-or-finish</span>
+                </div>
+                <div class="card__q">
+                  Reviewers asked for changes. Send it back to implementation, or finish
+                  the run here?
+                </div>
+                <div class="card__foot">
+                  <span class="meta">blocked 6m</span>
+                  <button class="btn btn--secondary" style="margin-left: auto">Open</button>
+                </div>
+              </div>
+
+              <div class="card">
+                <div class="card__head">
+                  <span class="s-awaiting"><span class="beacon"></span></span>
+                  <span class="emblem" style="--coat: var(--faction-claude, #d1784c)">✳</span>
+                  <span class="label s-awaiting">Question</span>
+                  <span class="meta" style="margin-left: auto">t41</span>
+                </div>
+                <div class="card__q">
+                  The seed script has two entry points. Should I migrate both, or only the
+                  one the docs mention?
+                </div>
+                <div class="card__foot">
+                  <span class="meta">asked 2m ago</span>
+                  <button class="btn btn--secondary" style="margin-left: auto">Open</button>
+                </div>
+              </div>
+
+              <div class="card card--stalled">
+                <div class="card__head">
+                  <span class="s-stalled"><span class="dot"></span></span>
+                  <span class="label s-stalled">Stalled</span>
+                  <span class="runchip" style="margin-left: auto">7f3a · review.2.docs</span>
+                </div>
+                <div class="card__q">
+                  Question went unanswered for 30m. The run is still sailing — two siblings
+                  are still out.
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="plate">
+            <div class="plate__head">
+              <div class="plate__icon">⚕</div>
+              <div>
+                <div class="plate__title">Health</div>
+                <div class="plate__sub">the cove at a glance</div>
+              </div>
+            </div>
+            <div class="rule"></div>
+            <div class="plate__body" style="display: flex; gap: 18px">
+              <div>
+                <div style="font-family: var(--font-mono); font-size: var(--text-stat); color: var(--ink-cream)">2</div>
+                <div class="label">Runs afloat</div>
+              </div>
+              <div>
+                <div style="font-family: var(--font-mono); font-size: var(--text-stat); color: var(--state-awaiting)">1</div>
+                <div class="label">Gates held</div>
+              </div>
+              <div>
+                <div style="font-family: var(--font-mono); font-size: var(--text-stat); color: var(--ink-cream)">9</div>
+                <div class="label">Hands</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================================================================ -->
+    <!-- BOARD 3 — the inspector's run view: one line per (node, iteration)-->
+    <!-- ================================================================ -->
+    <section class="board" id="board-3">
+      <div class="board__caption">3 · Inspector — the run at one line per (node, iteration)</div>
+      <div class="row">
+        <div class="plate" style="flex: 1">
+          <div class="plate__head">
+            <div class="plate__icon">🧭</div>
+            <div>
+              <div class="plate__title">Research · run c04e</div>
+              <div class="plate__sub">32 tasks, ten lines — the summary never grows with fan-out width</div>
+            </div>
+            <div class="plate__aside">blocked · node 5 · 21m</div>
+          </div>
+          <div class="rule"></div>
+          <div class="plate__body">
+            <table class="seq">
+              <thead>
+                <tr>
+                  <th class="rail-cell"></th>
+                  <th style="width: 168px">Node</th>
+                  <th style="width: 120px">State</th>
+                  <th style="width: 78px">Tasks</th>
+                  <th>Gist</th>
+                  <th style="width: 62px">Age</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="rail-cell"><span class="spine s-completed"><span class="spine__knot"></span></span></td>
+                  <td class="node">scope</td>
+                  <td><span class="st s-completed"><span class="dot"></span>completed</span></td>
+                  <td class="meta">1</td>
+                  <td class="gist">12 queries</td>
+                  <td class="meta">18m</td>
+                </tr>
+                <tr>
+                  <td class="rail-cell"><span class="spine spine--fan s-completed"><span class="spine__knot"></span></span></td>
+                  <td class="node">search <span class="meta">×12</span></td>
+                  <td><span class="st s-completed"><span class="dot"></span>completed</span></td>
+                  <td class="meta">12</td>
+                  <td class="gist">sources 84 · coverage=9 broad, 3 thin</td>
+                  <td class="meta">14m</td>
+                </tr>
+                <tr>
+                  <td class="rail-cell"><span class="spine s-completed"><span class="spine__knot"></span></span></td>
+                  <td class="node">funnel</td>
+                  <td><span class="st s-completed"><span class="dot"></span>completed</span></td>
+                  <td class="meta">1</td>
+                  <td class="gist">84 → 21 sources, deduped by domain</td>
+                  <td class="meta">9m</td>
+                </tr>
+                <tr>
+                  <td class="rail-cell"><span class="spine spine--fan s-failed"><span class="spine__knot"></span></span></td>
+                  <td class="node">validate <span class="meta">×6</span></td>
+                  <td><span class="st s-completed"><span class="dot"></span>5 of 6</span></td>
+                  <td class="meta">6</td>
+                  <td class="gist">
+                    valid=17, dead=4 · <span class="s-failed" style="color: var(--state-failed)">1 sibling failed</span> ·
+                    policy {min: 1} → node passed
+                  </td>
+                  <td class="meta">5m</td>
+                </tr>
+                <tr class="live">
+                  <td class="rail-cell"><span class="spine s-awaiting"><span class="spine__knot"></span></span></td>
+                  <td class="node">accept-sources</td>
+                  <td><span class="st s-awaiting"><span class="beacon"></span>gate · held</span></td>
+                  <td class="meta">—</td>
+                  <td class="gist">
+                    17 sources validated, 4 dead. Proceed to adversarial review?
+                    <span class="badge s-awaiting" style="margin-left: 6px">on_reject → funnel</span>
+                  </td>
+                  <td class="meta">21m</td>
+                </tr>
+                <tr>
+                  <td class="rail-cell"><span class="spine s-pending"><span class="spine__knot"></span></span></td>
+                  <td class="node">adversarial</td>
+                  <td><span class="st s-pending"><span class="dot"></span>not entered</span></td>
+                  <td class="meta">—</td>
+                  <td class="gist">—</td>
+                  <td class="meta">—</td>
+                </tr>
+                <tr>
+                  <td class="rail-cell"><span class="spine s-pending"><span class="spine__knot"></span></span></td>
+                  <td class="node">report</td>
+                  <td><span class="st s-pending"><span class="dot"></span>not entered</span></td>
+                  <td class="meta">—</td>
+                  <td class="gist">—</td>
+                  <td class="meta">—</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- deliverable inspector -->
+        <div class="rail">
+          <div class="plate plate--report">
+            <div class="plate__head">
+              <div class="plate__icon">📜</div>
+              <div>
+                <div class="plate__title">Deliverable</div>
+                <div class="plate__sub">funnel · out.shortlist</div>
+              </div>
+            </div>
+            <div class="rule"></div>
+            <div class="plate__body">
+              <div class="meta" style="margin-bottom: 8px">dlv_8c21f0 · inline · dict&lt;string, source[]&gt;</div>
+              <div class="well" style="margin-bottom: 9px; max-height: 150px; overflow: hidden">
+                <pre class="meta" style="margin: 0; color: var(--report-text); white-space: pre-wrap">{
+  "rate-limits": [
+    { "url": "…/docs/limits", "tier": "primary" },
+    { "url": "…/rfc9110#status", "tier": "spec" }
+  ],
+  "backoff": [ … 6 more ]
+}</pre>
+              </div>
+              <div style="display: flex; gap: 6px">
+                <button class="btn btn--secondary">Copy id</button>
+                <button class="btn btn--tertiary">Producing task →</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="plate">
+            <div class="plate__head">
+              <div class="plate__icon">🗂</div>
+              <div>
+                <div class="plate__title">Other kinds</div>
+                <div class="plate__sub">what a non-inline deliverable can honestly show</div>
+              </div>
+            </div>
+            <div class="rule"></div>
+            <div class="plate__body" style="display: flex; flex-direction: column; gap: 8px">
+              <div class="well">
+                <div class="label">file · implement.2 · out.patch</div>
+                <div class="meta" style="color: var(--ink-muted)">.parley/tmp/implement.2/out/patch.diff · 14 kB</div>
+                <div class="flavor">reference only — parley never copied these bytes</div>
+              </div>
+              <div class="well">
+                <div class="label">dir · search.1.q3 · out.captures</div>
+                <div class="meta" style="color: var(--ink-muted)">…/out/captures/ · 11 files</div>
+              </div>
+              <div class="well" style="border-color: var(--state-cancelled)">
+                <div class="label s-cancelled" style="color: var(--state-cancelled)">purged</div>
+                <div class="sub">
+                  Run c04e decayed past its 30-day clock. The row is gone; the address is
+                  all that survives.
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================================================================ -->
+    <!-- BOARD 4 — a fork: inherited, skipped, superseded                 -->
+    <!-- ================================================================ -->
+    <section class="board" id="board-4">
+      <div class="board__caption">4 · A fork — what a dead run's second attempt looks like</div>
+      <div class="row">
+        <div class="plate" style="flex: 1">
+          <div class="plate__head">
+            <div class="plate__icon">⚓</div>
+            <div>
+              <div class="plate__title">Coding 1 · run 4d90 <span class="badge" style="color: var(--brass); margin-left: 8px">attempt 2</span></div>
+              <div class="plate__sub">forked from run 7f3a at <span class="meta">implement</span> — the parent stays dead</div>
+            </div>
+            <div class="plate__aside">running · node 3</div>
+          </div>
+          <div class="rule"></div>
+          <div class="plate__body">
+            <table class="seq">
+              <thead>
+                <tr>
+                  <th class="rail-cell"></th>
+                  <th style="width: 168px">Node</th>
+                  <th style="width: 138px">State</th>
+                  <th style="width: 78px">Tasks</th>
+                  <th>Gist</th>
+                  <th style="width: 62px">Age</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr class="super">
+                  <td class="rail-cell"><span class="spine s-cancelled"><span class="spine__knot"></span></span></td>
+                  <td class="node">plan <span class="meta">.0</span></td>
+                  <td><span class="st" style="color: var(--brass-soft)"><span class="dot"></span>inherited</span></td>
+                  <td class="meta">—</td>
+                  <td class="gist">copied from 7f3a · plan.1 — value frozen, not re-run</td>
+                  <td class="meta">—</td>
+                </tr>
+                <tr class="super">
+                  <td class="rail-cell"><span class="spine s-cancelled"><span class="spine__knot"></span></span></td>
+                  <td class="node">approve-plan</td>
+                  <td><span class="st" style="color: var(--state-failed)"><span class="dot"></span>skipped</span></td>
+                  <td class="meta">—</td>
+                  <td class="gist">
+                    gate has no ports to inherit —
+                    <span style="color: var(--state-failed)">a human approval was discarded by this fork</span>
+                  </td>
+                  <td class="meta">—</td>
+                </tr>
+                <tr class="live">
+                  <td class="rail-cell"><span class="spine s-running"><span class="spine__knot"></span></span></td>
+                  <td class="node">implement <span class="meta">.1</span></td>
+                  <td><span class="st s-running"><span class="dot"></span>running</span></td>
+                  <td class="meta">1</td>
+                  <td class="gist">re-entry point · carries an orchestrator note</td>
+                  <td class="meta">3m</td>
+                </tr>
+                <tr>
+                  <td class="rail-cell"><span class="spine s-pending"><span class="spine__knot"></span></span></td>
+                  <td class="node">review <span class="meta">×3</span></td>
+                  <td><span class="st s-pending"><span class="dot"></span>not entered</span></td>
+                  <td class="meta">—</td>
+                  <td class="gist">—</td>
+                  <td class="meta">—</td>
+                </tr>
+                <tr>
+                  <td class="rail-cell"><span class="spine s-pending"><span class="spine__knot"></span></span></td>
+                  <td class="node">triage</td>
+                  <td><span class="st s-pending"><span class="dot"></span>not entered</span></td>
+                  <td class="meta">—</td>
+                  <td class="gist">—</td>
+                  <td class="meta">—</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="rail">
+          <div class="plate">
+            <div class="plate__head">
+              <div class="plate__icon">⛓</div>
+              <div>
+                <div class="plate__title">Lineage</div>
+                <div class="plate__sub">at the run level — never per task</div>
+              </div>
+            </div>
+            <div class="rule"></div>
+            <div class="plate__body" style="display: flex; flex-direction: column; gap: 8px">
+              <div class="well" style="border-color: var(--state-failed)">
+                <div class="label s-failed" style="color: var(--state-failed)">attempt 1 · run 7f3a · failed</div>
+                <div class="sub">workspace removed under it — nobody can advance this one.</div>
+              </div>
+              <div class="well" style="border-color: var(--brass)">
+                <div class="label" style="color: var(--brass)">attempt 2 · run 4d90 · running</div>
+                <div class="sub">entered at <span class="meta">implement</span>, inputs frozen.</div>
+              </div>
+              <div class="flavor">
+                A dead run is repaired by sailing a new one, never by reviving the wreck.
+              </div>
+            </div>
+          </div>
+
+          <div class="plate">
+            <div class="plate__head">
+              <div class="plate__icon">✎</div>
+              <div>
+                <div class="plate__title">Orchestrator note</div>
+                <div class="plate__sub">a prompt layer, not a port</div>
+              </div>
+            </div>
+            <div class="rule"></div>
+            <div class="plate__body">
+              <div class="well">
+                <div class="sub" style="color: var(--ink-parchment)">
+                  The plan is fine — the previous attempt lost its worktree mid-review.
+                  Re-implement from the frozen plan and don't re-litigate the approach.
+                </div>
+              </div>
+              <div class="flavor" style="margin-top: 7px">
+                untyped · aimed at one task · validated by nothing
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </body>
+</html>

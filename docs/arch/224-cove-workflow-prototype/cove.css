@@ -1,0 +1,1032 @@
+/*
+ * Throwaway mock styles for #224. Composes the real layer-0 tokens
+ * (`packages/ui/src/tokens/tokens.css`) — no hex literal above layer 0, per the
+ * component-system spec's contract 1. Not production; delete with the folder.
+ */
+
+/* --- fonts (self-hosted, same faces as the cockpit) --------------------- */
+@font-face {
+  font-family: Cinzel;
+  font-weight: 700;
+  src: url("../../../packages/ui/node_modules/@fontsource/cinzel/files/cinzel-latin-700-normal.woff2")
+    format("woff2");
+}
+@font-face {
+  font-family: Cinzel;
+  font-weight: 900;
+  src: url("../../../packages/ui/node_modules/@fontsource/cinzel/files/cinzel-latin-900-normal.woff2")
+    format("woff2");
+}
+@font-face {
+  font-family: Outfit;
+  font-weight: 500;
+  src: url("../../../packages/ui/node_modules/@fontsource/outfit/files/outfit-latin-500-normal.woff2")
+    format("woff2");
+}
+@font-face {
+  font-family: Outfit;
+  font-weight: 600;
+  src: url("../../../packages/ui/node_modules/@fontsource/outfit/files/outfit-latin-600-normal.woff2")
+    format("woff2");
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  font-weight: 500;
+  src: url("../../../packages/ui/node_modules/@fontsource/jetbrains-mono/files/jetbrains-mono-latin-500-normal.woff2")
+    format("woff2");
+}
+@font-face {
+  font-family: "IM Fell English";
+  font-style: italic;
+  font-weight: 400;
+  src: url("../../../packages/ui/node_modules/@fontsource/im-fell-english/files/im-fell-english-latin-400-italic.woff2")
+    format("woff2");
+}
+
+/* --- board scaffolding -------------------------------------------------- */
+body {
+  margin: 0;
+  background: var(--sea-abyss);
+  font-family: var(--font-body);
+  color: var(--ink-parchment);
+}
+
+.board {
+  width: 1360px;
+  padding: var(--board-inset);
+  background: var(--sea-gradient), var(--sea-abyss);
+  box-sizing: border-box;
+}
+
+.board__caption {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--text-chrome);
+  letter-spacing: var(--track-caps);
+  text-transform: uppercase;
+  color: var(--ink-label);
+  padding: 6px 2px 10px;
+}
+
+.row {
+  display: flex;
+  gap: var(--gutter);
+  align-items: flex-start;
+}
+
+/* --- plate (the signature framed plaque) -------------------------------- */
+.plate {
+  background: var(--plate-fill);
+  border: 1px solid var(--brass-border);
+  border-radius: var(--radius-panel);
+  box-shadow: var(--plate-shadow);
+  overflow: hidden;
+}
+.plate--ember {
+  background: var(--ember-fill);
+  border-color: var(--ember-border);
+  box-shadow: var(--plate-shadow-ember);
+}
+.plate--report {
+  background: var(--report-fill);
+  border-color: var(--report-border);
+  box-shadow: var(--plate-shadow-report);
+}
+
+.plate__head {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 11px 15px 8px;
+}
+.plate__icon {
+  width: 23px;
+  height: 23px;
+  border-radius: var(--radius-emblem);
+  background: radial-gradient(circle at 34% 28%, var(--brass-bright), var(--brass-deep));
+  color: var(--plate-header-icon-dark);
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+  flex: none;
+}
+.plate__title {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--text-title);
+  letter-spacing: var(--track-caps);
+  text-transform: uppercase;
+  color: var(--brass);
+}
+.plate__sub {
+  font-family: var(--font-flavor);
+  font-style: italic;
+  font-size: var(--text-flavor);
+  color: var(--ink-label);
+}
+.plate__aside {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: var(--text-meta);
+  color: var(--ink-faint);
+}
+.plate__body {
+  padding: 12px 14px;
+}
+.rule {
+  height: 1px;
+  background: var(--divider-h);
+  margin: 0;
+}
+
+/* --- generic atoms ------------------------------------------------------ */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border-radius: var(--radius-pill);
+  border: 1px solid currentColor;
+  background: var(--badge-bg);
+  padding: 2px 8px;
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: var(--ink-label);
+  white-space: nowrap;
+}
+.label {
+  font-size: var(--text-label);
+  font-weight: 600;
+  letter-spacing: var(--track-micro);
+  text-transform: uppercase;
+  color: var(--ink-label);
+}
+.meta {
+  font-family: var(--font-mono);
+  font-size: var(--text-meta);
+  color: var(--ink-faint);
+}
+.sub {
+  font-size: var(--text-sub);
+  color: var(--ink-muted);
+}
+.flavor {
+  font-family: var(--font-flavor);
+  font-style: italic;
+  font-size: var(--text-flavor);
+  color: var(--ink-label);
+}
+.btn {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--text-chrome-sm);
+  letter-spacing: var(--track-micro);
+  text-transform: uppercase;
+  border-radius: var(--radius-control);
+  padding: 7px 14px;
+  min-height: 24px;
+  cursor: pointer;
+}
+.btn--primary {
+  background: var(--btn-gold-fill);
+  color: var(--ink-dark-on-gold);
+  border: 1px solid var(--brass-deep);
+  box-shadow: var(--btn-3d);
+}
+.btn--secondary {
+  background: var(--btn-secondary-bg);
+  color: var(--brass-soft);
+  border: 1px solid var(--btn-secondary-border);
+}
+.btn--tertiary {
+  background: transparent;
+  color: var(--ink-faint);
+  border: 1px solid var(--btn-tertiary-border);
+}
+.emblem {
+  width: 23px;
+  height: 23px;
+  border-radius: var(--radius-emblem);
+  background: var(--coat, var(--brass-frame));
+  box-shadow: inset 0 0 0 1px var(--wash-white-32);
+  display: grid;
+  place-items: center;
+  font-size: 11px;
+  color: var(--ink-on-coat);
+  flex: none;
+}
+
+/* state dots — colour is never the only cue; a glyph rides alongside */
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-pill);
+  background: currentColor;
+  flex: none;
+}
+.s-running {
+  color: var(--state-running);
+}
+.s-awaiting {
+  color: var(--state-awaiting);
+}
+.s-stalled {
+  color: var(--state-stalled);
+}
+.s-completed {
+  color: var(--state-completed);
+}
+.s-failed {
+  color: var(--state-failed);
+}
+.s-pending {
+  color: var(--state-pending);
+}
+.s-queued {
+  color: var(--state-queued);
+}
+.s-cancelled {
+  color: var(--state-cancelled);
+}
+
+/* --- the chart: a run drawn as a charted course ------------------------- */
+.chart {
+  position: relative;
+  height: 560px;
+  border-radius: var(--radius-panel);
+  overflow: hidden;
+  flex: 1;
+}
+.chart__svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.chart__cartouche {
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  text-align: center;
+  padding: 8px 26px;
+  border-radius: var(--radius-cartouche);
+  background: var(--plate-fill);
+  border: 1px solid var(--brass-mid);
+  box-shadow: var(--plate-shadow-premium);
+}
+.chart__title {
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: 1.05rem;
+  letter-spacing: var(--track-subtitle);
+  text-transform: uppercase;
+  color: var(--brass);
+}
+
+/* an island = one node at one iteration */
+.isle {
+  position: absolute;
+  width: 156px;
+  transform: translate(-50%, -50%);
+  text-align: center;
+}
+.isle__body {
+  height: 46px;
+  margin: 0 14px;
+  border-radius: 46px 46px 40% 40%;
+  background: linear-gradient(180deg, var(--palm-green), #3d5230);
+  box-shadow: 0 6px 14px var(--wash-black-45), inset 0 1px 0 var(--wash-white-20);
+  position: relative;
+}
+.isle__mark {
+  position: absolute;
+  top: -13px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 17px;
+  filter: drop-shadow(0 1px 2px var(--wash-black-50));
+}
+.isle__plank {
+  margin-top: 5px;
+  background: var(--plate-fill);
+  border: 1px solid var(--brass-border);
+  border-radius: var(--radius-tight);
+  padding: 3px 6px 4px;
+  box-shadow: 0 3px 8px var(--wash-black-45);
+}
+.isle__name {
+  font-size: var(--text-sub);
+  font-weight: 600;
+  color: var(--ink-parchment);
+  line-height: 1.15;
+}
+.isle__meta {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  color: var(--ink-faint);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+.isle--quiet .isle__body {
+  filter: saturate(0.5);
+}
+.isle--quiet .isle__name {
+  color: var(--ink-muted);
+}
+
+/* a gate = a lighthouse standing on the course, not an island */
+.gate {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  width: 116px;
+  text-align: center;
+}
+.gate__tower {
+  width: 26px;
+  height: 52px;
+  margin: 0 auto;
+  border-radius: 13px 13px var(--radius-micro) var(--radius-micro);
+  background: linear-gradient(180deg, var(--parchment-bg) 0 34%, var(--alert-red-top) 34% 50%, var(--parchment-bg) 50% 72%, var(--alert-red-top) 72% 100%);
+  box-shadow: 0 6px 14px var(--wash-black-50);
+  position: relative;
+}
+.gate__lamp {
+  position: absolute;
+  top: -9px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 14px;
+  height: 14px;
+  border-radius: var(--radius-pill);
+  background: var(--state-awaiting);
+  box-shadow: 0 0 14px 5px var(--beacon-glow);
+}
+.gate--passed .gate__lamp {
+  background: var(--state-completed);
+  box-shadow: 0 0 8px 2px var(--wash-black-30);
+}
+.gate--passed .gate__tower {
+  filter: saturate(0.55) brightness(0.8);
+}
+.gate__plank {
+  margin-top: 5px;
+  background: var(--plate-fill);
+  border: 1px solid var(--state-awaiting);
+  border-radius: var(--radius-tight);
+  padding: 3px 6px 4px;
+  box-shadow: 0 3px 8px var(--wash-black-45);
+}
+.gate--passed .gate__plank {
+  border-color: var(--brass-border);
+}
+.gate__name {
+  font-size: var(--text-sub);
+  font-weight: 600;
+  color: var(--ink-parchment);
+}
+
+/* course annotations sitting on the water */
+.note {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  font-family: var(--font-flavor);
+  font-style: italic;
+  font-size: var(--text-flavor);
+  color: var(--ink-on-sea);
+  white-space: nowrap;
+  text-shadow: 0 1px 3px var(--wash-black-60);
+}
+.note--caps {
+  font-family: var(--font-body);
+  font-style: normal;
+  font-weight: 600;
+  font-size: var(--text-label);
+  letter-spacing: var(--track-micro);
+  text-transform: uppercase;
+}
+
+/* --- roster ------------------------------------------------------------- */
+.roster {
+  width: var(--region-roster);
+  flex: none;
+}
+.rgroup {
+  padding: 9px 12px 2px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.rgroup__label {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--text-chrome-sm);
+  letter-spacing: var(--track-micro);
+  text-transform: uppercase;
+}
+.rgroup__count {
+  font-family: var(--font-mono);
+  font-size: var(--text-meta);
+  color: var(--ink-faint);
+  margin-left: auto;
+}
+.rrow {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 7px 12px;
+  border-left: 3px solid transparent;
+}
+.rrow--sel {
+  background: var(--brass-tint-08);
+  border-left-color: var(--brass);
+}
+.rrow__text {
+  min-width: 0;
+  flex: 1;
+}
+.rrow__name {
+  font-size: var(--text-body);
+  font-weight: 500;
+  color: var(--ink-parchment);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rrow__meta {
+  font-family: var(--font-mono);
+  font-size: var(--text-meta);
+  color: var(--ink-faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rrow--quiet .rrow__name {
+  color: var(--ink-soft);
+}
+.beacon {
+  width: 7px;
+  height: 7px;
+  border-radius: var(--radius-pill);
+  background: currentColor;
+  box-shadow: 0 0 8px 2px var(--beacon-glow);
+  flex: none;
+}
+
+/* the run chip: a run-owned task's address, worn on its roster row */
+.runchip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--brass-frame);
+  background: var(--wash-black-30);
+  padding: 1px 6px;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  color: var(--ink-tan);
+  white-space: nowrap;
+}
+
+/* A run row in the roster — a rolled-up voyage, not a task. Distinguished the
+   way the shipped roster distinguishes a row (hud.css `.pc-roster__row`):
+   a full 1px border plus a brass tint, never a left accent bar. */
+.runrow {
+  margin: 2px 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--brass-border);
+  border-radius: var(--radius-well);
+  background: var(--brass-tint-06);
+}
+.runrow__head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.runrow__name {
+  font-size: var(--text-body);
+  font-weight: 600;
+  color: var(--ink-parchment);
+}
+.runrow__track {
+  display: flex;
+  gap: 3px;
+  margin-top: 6px;
+}
+.pip {
+  height: 5px;
+  flex: 1;
+  border-radius: var(--radius-hairline);
+  background: var(--progress-track);
+}
+.pip--done {
+  background: var(--state-completed);
+}
+.pip--live {
+  background: var(--state-running);
+}
+.pip--gate {
+  background: var(--state-awaiting);
+}
+.pip--fail {
+  background: var(--state-failed);
+}
+
+/* --- right rail --------------------------------------------------------- */
+.rail {
+  width: var(--region-right);
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--gutter);
+}
+.card {
+  border-radius: var(--radius-inbox);
+  padding: 10px 11px;
+  background: var(--attn-awaiting-fill);
+  border: 1px solid var(--attn-awaiting-border);
+  box-shadow: 0 0 12px var(--attn-awaiting-glow);
+}
+.card--stalled {
+  background: var(--attn-stalled-fill);
+  border-color: var(--attn-stalled-border);
+  box-shadow: none;
+}
+.card__head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+.card__q {
+  font-size: var(--text-body);
+  color: var(--ink-parchment);
+  line-height: 1.45;
+}
+.card__foot {
+  display: flex;
+  gap: 6px;
+  margin-top: 9px;
+  align-items: center;
+}
+.well {
+  background: var(--plate-well);
+  border: 1px solid var(--plate-well-border);
+  border-radius: var(--radius-well);
+  padding: 8px 10px;
+}
+
+/* --- node sequence table (the inspector's run view) --------------------- */
+.seq {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sub);
+}
+.seq th {
+  text-align: left;
+  font-family: var(--font-body);
+  font-size: var(--text-label);
+  font-weight: 600;
+  letter-spacing: var(--track-micro);
+  text-transform: uppercase;
+  color: var(--ink-label);
+  padding: 0 8px 6px;
+  border-bottom: 1px solid var(--line-faint);
+}
+.seq td {
+  padding: 7px 8px;
+  border-bottom: 1px solid var(--line-faint);
+  vertical-align: top;
+  color: var(--ink-muted);
+}
+.seq tr:last-child td {
+  border-bottom: none;
+}
+.seq .node {
+  font-family: var(--font-mono);
+  font-size: var(--text-mono);
+  color: var(--ink-parchment);
+  white-space: nowrap;
+}
+.seq .gist {
+  color: var(--ink-muted);
+}
+.seq tr.live td {
+  background: var(--brass-tint-06);
+}
+.seq tr.super td {
+  color: var(--ink-label);
+}
+.seq tr.super .node {
+  color: var(--ink-label);
+  text-decoration: line-through;
+}
+.seq .st {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  font-family: var(--font-body);
+  font-size: var(--text-label);
+  font-weight: 600;
+  letter-spacing: var(--track-micro);
+  text-transform: uppercase;
+}
+.rail-cell {
+  width: 22px;
+  padding: 0 !important;
+  position: relative;
+}
+.spine {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+}
+.spine::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--brass-frame);
+}
+.spine__knot {
+  width: 9px;
+  height: 9px;
+  border-radius: var(--radius-pill);
+  background: currentColor;
+  box-shadow: 0 0 0 3px var(--plate-top);
+  position: relative;
+}
+.spine--fan::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 22%;
+  bottom: 22%;
+  width: 12px;
+  border: 2px solid var(--brass-frame);
+  border-left: none;
+  border-radius: 0 8px 8px 0;
+}
+
+/* --- fan-out collapsed onto one island: the siblings orbit it ----------- */
+.orbit {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  width: 300px;
+  height: 200px;
+  pointer-events: none;
+}
+.orbit__ring {
+  position: absolute;
+  inset: 0;
+  border: 1px dashed var(--brass-frame);
+  border-radius: 50%;
+  opacity: 0.55;
+}
+.sloop {
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  margin: -9px 0 0 -9px;
+  border-radius: var(--radius-pill);
+  background: var(--coat, var(--brass-frame));
+  box-shadow: inset 0 0 0 1px var(--wash-white-32), 0 2px 5px var(--wash-black-50);
+  display: grid;
+  place-items: center;
+  font-size: 10px;
+  color: var(--ink-on-coat);
+}
+.sloop--done {
+  filter: saturate(0.35) brightness(0.72);
+}
+.sloop__more {
+  width: auto;
+  padding: 0 6px;
+  border-radius: var(--radius-pill);
+  background: var(--wash-black-55);
+  box-shadow: inset 0 0 0 1px var(--brass-frame);
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  color: var(--ink-tan);
+  height: 16px;
+  margin-top: -8px;
+}
+
+/* A run whose gate is held: the loudest row in the list, drawn the way the
+   shipped roster draws selection — gold tint + gold-alpha border. */
+.runrow--held {
+  background: var(--brass-tint-12);
+  border-color: var(--brass-border-selected);
+  box-shadow: 0 0 10px var(--attn-awaiting-glow);
+}
+
+/* ======================================================================== */
+/* THE CHART — a run drawn on paper, pinned to the sea                      */
+/* ======================================================================== */
+
+/*
+ * PROPOSED TOKENS. Layer 0's state family (--state-running and friends) is
+ * luminous by design: tuned to glow on plate wood (#1d140c). None of it clears
+ * WCAG AA on parchment (#efe0bd). A paper surface therefore needs a SECOND
+ * state ramp in the same warm-on-cold system — dark inks rather than lights —
+ * and every one of these is a glyph's companion, never the only cue.
+ */
+:root {
+  --ink-chart: #5b3a24; /* the pen the whole map is drawn in */
+  --ink-chart-soft: #7d5636; /* older ink, faded legs */
+  --ink-chart-ghost: #b39a76; /* not yet sailed */
+  --ink-live: #a8331f; /* fresh vermilion — "you are here" */
+  --ink-done: #4a5f38; /* dried olive — done and dry */
+  --ink-fail: #8f1d12; /* blot */
+  --paper-stain: rgba(140, 96, 46, 0.16);
+  --paper-edge: rgba(90, 58, 30, 0.42);
+}
+
+.chart-sheet {
+  position: relative;
+  flex: 1;
+  height: 640px;
+  color: var(--ink-chart);
+  background:
+    radial-gradient(58% 40% at 18% 22%, var(--paper-stain), transparent 70%),
+    radial-gradient(40% 30% at 82% 78%, var(--paper-stain), transparent 70%),
+    radial-gradient(22% 18% at 66% 14%, var(--paper-stain), transparent 70%),
+    repeating-linear-gradient(
+      92deg,
+      rgba(120, 84, 40, 0.05) 0 2px,
+      transparent 2px 5px
+    ),
+    linear-gradient(168deg, #f4e7c8, var(--parchment-bg) 46%, #e2cfa4);
+  /* deckled edge: irregular corners, aged fringe, and the sea's shadow under it */
+  border-radius: 22px 8px 26px 10px / 10px 24px 8px 22px;
+  box-shadow:
+    inset 0 0 60px 12px var(--paper-edge),
+    inset 0 0 0 1px rgba(90, 58, 30, 0.3),
+    0 14px 34px var(--wash-black-55);
+  overflow: hidden;
+}
+.chart-sheet__svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+/* the map's own title, lettered on the paper */
+.chart-sheet__legend {
+  position: absolute;
+  top: 20px;
+  left: 26px;
+  max-width: 320px;
+}
+.chart-sheet__title {
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: 1.15rem;
+  letter-spacing: 4px;
+  text-transform: uppercase;
+  color: var(--ink-chart);
+}
+.chart-sheet__flavor {
+  font-family: var(--font-flavor);
+  font-style: italic;
+  font-size: var(--text-flavor);
+  color: var(--ink-chart-soft);
+}
+
+/* one node = one mark on the paper */
+.mark {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  width: 168px;
+  text-align: center;
+}
+.mark__ring {
+  width: 40px;
+  height: 40px;
+  margin: 0 auto 4px;
+  border-radius: var(--radius-pill);
+  border: 2px solid currentColor;
+  box-shadow: 0 0 0 3px var(--parchment-bg), 0 0 0 4.5px currentColor;
+  display: grid;
+  place-items: center;
+  font-size: 16px;
+  line-height: 1;
+  background: rgba(244, 231, 200, 0.72);
+}
+.mark--ghost .mark__ring {
+  border-style: dashed;
+  box-shadow: none;
+}
+.mark__name {
+  font-size: var(--text-body);
+  font-weight: 600;
+  color: var(--ink-chart);
+  line-height: 1.2;
+}
+.mark__meta {
+  font-family: var(--font-mono);
+  font-size: var(--text-meta);
+  color: var(--ink-chart-soft);
+}
+.i-live {
+  color: var(--ink-live);
+}
+.i-done {
+  color: var(--ink-done);
+}
+.i-ghost {
+  color: var(--ink-chart-ghost);
+}
+.i-fail {
+  color: var(--ink-fail);
+}
+.i-ink {
+  color: var(--ink-chart);
+}
+
+/* a fan-out's width is written beside its mark, never drawn as n marks */
+.tally {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 3px;
+  padding: 1px 7px;
+  border: 1px solid currentColor;
+  border-radius: var(--radius-pill);
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+}
+
+/* a gate is a wax seal pressed onto the trail */
+.seal {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  width: 168px;
+  text-align: center;
+}
+.seal__wax {
+  width: 46px;
+  height: 46px;
+  margin: 0 auto 5px;
+  border-radius: 46% 54% 50% 50% / 52% 48% 54% 46%;
+  background: radial-gradient(circle at 36% 30%, #d8412c, var(--alert-red-bottom) 70%);
+  box-shadow: 0 3px 7px rgba(60, 20, 10, 0.5), inset 0 -3px 6px rgba(60, 12, 6, 0.55),
+    inset 0 2px 4px rgba(255, 200, 180, 0.35);
+  display: grid;
+  place-items: center;
+  font-size: 17px;
+  color: var(--alert-cream);
+}
+.seal--held .seal__wax {
+  box-shadow: 0 3px 7px rgba(60, 20, 10, 0.5), inset 0 -3px 6px rgba(60, 12, 6, 0.55),
+    inset 0 2px 4px rgba(255, 200, 180, 0.35), 0 0 0 6px rgba(216, 65, 44, 0.22),
+    0 0 22px 6px rgba(216, 65, 44, 0.34);
+}
+/* a broken seal = a gate already answered */
+.seal--broken .seal__wax {
+  background: radial-gradient(circle at 36% 30%, #b0705e, #7d4436 70%);
+  clip-path: polygon(0 0, 44% 0, 52% 46%, 46% 100%, 0 100%, 0 0);
+  box-shadow: none;
+}
+.seal--broken .seal__wax::after {
+  content: "";
+  position: absolute;
+}
+.seal__name {
+  font-size: var(--text-body);
+  font-weight: 600;
+  color: var(--ink-chart);
+}
+.seal__meta {
+  font-family: var(--font-mono);
+  font-size: var(--text-meta);
+  color: var(--ink-chart-soft);
+}
+
+/* the destination */
+.spot {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  text-align: center;
+  width: 140px;
+  color: var(--ink-fail);
+}
+.spot__x {
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: 2.6rem;
+  line-height: 1;
+}
+.spot__label {
+  font-family: var(--font-flavor);
+  font-style: italic;
+  font-size: var(--text-flavor);
+  color: var(--ink-chart-soft);
+}
+
+/* marginalia — decorative only, per the Flavor-Font Rule */
+.marginalia {
+  position: absolute;
+  font-family: var(--font-flavor);
+  font-style: italic;
+  font-size: var(--text-flavor);
+  color: var(--ink-chart-soft);
+  transform: translate(-50%, -50%);
+  white-space: nowrap;
+}
+.marginalia--tilt {
+  transform: translate(-50%, -50%) rotate(-6deg);
+}
+
+/* operational annotation on the paper — Outfit, not the flavour serif */
+.chart-note {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  font-size: var(--text-label);
+  font-weight: 600;
+  letter-spacing: var(--track-micro);
+  text-transform: uppercase;
+  color: var(--ink-chart-soft);
+  white-space: nowrap;
+}
+
+/* paper key, bottom-right, so the tones are never the only cue */
+.chart-key {
+  position: absolute;
+  right: 22px;
+  bottom: 18px;
+  border: 1px solid var(--paper-edge);
+  border-radius: var(--radius-tight);
+  padding: 8px 11px;
+  background: rgba(244, 231, 200, 0.66);
+  display: grid;
+  gap: 3px;
+}
+.chart-key__row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: var(--text-label);
+  font-weight: 600;
+  letter-spacing: var(--track-micro);
+  text-transform: uppercase;
+  color: var(--ink-chart);
+}
+.chart-key__swatch {
+  width: 11px;
+  height: 11px;
+  border-radius: var(--radius-pill);
+  border: 2px solid currentColor;
+  flex: none;
+}
+
+/* a broken seal keeps its full round shape and wears the crack */
+.seal--broken .seal__wax {
+  clip-path: none;
+  position: relative;
+  color: rgba(255, 232, 220, 0.72);
+}
+.seal__crack {
+  position: absolute;
+  inset: -2px;
+  background: var(--parchment-bg);
+  clip-path: polygon(
+    46% 0%, 54% 0%, 44% 30%, 60% 34%, 42% 66%, 56% 70%, 48% 100%, 40% 100%,
+    50% 68%, 36% 64%, 52% 32%, 38% 28%
+  );
+  opacity: 0.85;
+}
+
+/* the helm notice: why a decision the cockpit can see is not one it can take */
+.helm {
+  display: flex;
+  gap: 9px;
+  align-items: flex-start;
+  margin-top: 10px;
+  padding: 9px 11px;
+  border-radius: var(--radius-well);
+  border: 1px solid var(--brass-frame);
+  background: var(--wash-black-30);
+}
+.helm__mark {
+  font-size: 15px;
+  line-height: 1.2;
+  color: var(--brass);
+  flex: none;
+}
+.helm__text {
+  font-size: var(--text-sub);
+  line-height: 1.45;
+  color: var(--ink-muted);
+}
+.helm__text b {
+  color: var(--ink-parchment);
+  font-weight: 600;
+}
