@@ -6,6 +6,7 @@ import type {
   TaskEnvelope,
   TaskRow as WireTaskRow,
 } from "@useparley/core";
+import { isSyntacticUrl } from "@useparley/core";
 import type { QaTurnRow, TaskRow } from "./db.js";
 import { readEvalExpected } from "./context.js";
 
@@ -17,6 +18,11 @@ export type JsonSchema = CoreJsonSchema;
  * must satisfy when the caller supplies no `--report-schema`.
  *
  *   { summary: markdown, outcome: success|partial|blocked, files_changed: [str] }
+ *
+ * Workflow step tasks use a different schema: the daemon generates it from the
+ * node's output ports via `compileOutputPorts` (ADR-0016 / #236) and stores it
+ * on the same `report_schema` column — still one `submit_report` call, no new
+ * child verb.
  */
 export const DEFAULT_REPORT_SCHEMA: JsonSchema = {
   type: "object",
@@ -36,16 +42,27 @@ export type Report = CoreReport;
 // share a schema) reuse one compiled function.
 const validatorCache = new Map<string, ValidateFunction>();
 
-function compile(schema: JsonSchema): ValidateFunction {
-  const key = JSON.stringify(schema);
-  const cached = validatorCache.get(key);
-  if (cached) return cached;
+function makeAjv(): Ajv {
   // A fresh Ajv per distinct schema: two different caller schemas that happen
   // to declare the same `$id` each get their own registry, so neither trips
   // ajv's cross-schema "id already exists" guard. `strict: false` tolerates
   // unknown keywords in caller schemas; `allErrors` surfaces every violation to
   // the child at once (fewer retry round-trips).
-  const validate = new Ajv({ allErrors: true, strict: false }).compile(schema);
+  const ajv = new Ajv({ allErrors: true, strict: false, validateFormats: true });
+  // `url` ports compile to format:"uri" (ADR-0016). Ajv ships no formats by
+  // default — register a syntactic check only; parley never dereferences.
+  ajv.addFormat("uri", {
+    type: "string",
+    validate: (s: string) => isSyntacticUrl(s),
+  });
+  return ajv;
+}
+
+function compile(schema: JsonSchema): ValidateFunction {
+  const key = JSON.stringify(schema);
+  const cached = validatorCache.get(key);
+  if (cached) return cached;
+  const validate = makeAjv().compile(schema);
   validatorCache.set(key, validate);
   return validate;
 }
@@ -63,17 +80,28 @@ export function assertValidSchema(schema: unknown): void {
   }
 }
 
+/**
+ * Render one ajv error as a `path: message` line the child can act on.
+ * Exported so deliverable reference-stat failures share the same bounce shape
+ * (ADR-0016 / #236).
+ */
+export function formatReportError(path: string, message: string): string {
+  const where = path === "" || path === "/" ? "report" : path;
+  return `${where}: ${message}`;
+}
+
 /** Render one ajv error as a `path: message` line the child can act on. */
 function formatError(error: { instancePath: string; message?: string }): string {
   const where = error.instancePath === "" ? "report" : error.instancePath;
-  return `${where}: ${error.message ?? "is invalid"}`;
+  return formatReportError(where, error.message ?? "is invalid");
 }
 
 /**
  * Validate a `submit_report` payload against a report schema (the task's own,
  * or the default). Returns the list of violations — empty means valid.
  * Violations bounce back to the child as MCP tool errors so it can retry
- * (ADR-0003).
+ * (ADR-0003). Shape check only — file/dir reference stats live in
+ * {@link validatePortReferences} (`deliverables.ts`).
  */
 export function validateReport(
   payload: unknown,
@@ -94,25 +122,64 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-/** Describe one schema property for the preamble (`type`, `enum`, or array item type). */
-function describeField(raw: unknown): string {
+/**
+ * Describe one schema property for the preamble — type, enum, containers, and
+ * bounds/descriptions so a child is told every cap it is held to (ADR-0016).
+ */
+export function describeField(raw: unknown): string {
   if (!isRecord(raw)) return "any";
+
+  const parts: string[] = [];
+
+  if (typeof raw.description === "string" && raw.description.trim() !== "") {
+    parts.push(raw.description.trim());
+  }
+
   if (Array.isArray(raw.enum) && raw.enum.length > 0) {
-    return `one of ${raw.enum.map((v) => JSON.stringify(v)).join(", ")}`;
+    parts.push(`one of ${raw.enum.map((v) => JSON.stringify(v)).join(", ")}`);
+  } else {
+    const type = raw.type;
+    if (type === "array") {
+      const items = isRecord(raw.items) ? raw.items : undefined;
+      const itemType =
+        items && typeof items.type === "string"
+          ? items.type
+          : items && Array.isArray(items.enum)
+            ? "enum"
+            : undefined;
+      parts.push(itemType !== undefined ? `array of ${itemType}` : "array");
+    } else if (type === "object" && isRecord(raw.additionalProperties)) {
+      const valueDesc = describeField(raw.additionalProperties);
+      parts.push(`dict of ${valueDesc}`);
+    } else if (typeof type === "string") {
+      let base = type;
+      if (raw.format === "uri") base = "url";
+      parts.push(base);
+    } else if (parts.length === 0) {
+      parts.push("any");
+    }
   }
-  const type = raw.type;
-  if (type === "array") {
-    const items = isRecord(raw.items) ? raw.items.type : undefined;
-    return typeof items === "string" ? `array of ${items}` : "array";
+
+  const constraints: string[] = [];
+  if (typeof raw.maxLength === "number") constraints.push(`maxLength ${raw.maxLength}`);
+  if (typeof raw.minLength === "number" && raw.minLength > 0) {
+    constraints.push(`minLength ${raw.minLength}`);
   }
-  return typeof type === "string" ? type : "any";
+  if (typeof raw.maxItems === "number") constraints.push(`maxItems ${raw.maxItems}`);
+  if (typeof raw.maxProperties === "number") {
+    constraints.push(`maxProperties ${raw.maxProperties}`);
+  }
+  if (constraints.length > 0) parts.push(constraints.join(", "));
+
+  return parts.join("; ");
 }
 
 /**
  * A compact, human summary of the report schema a child must satisfy — the
  * "report-schema summary" the protocol preamble teaches (spec §7). Handles the
- * default schema and caller-supplied object schemas; degrades gracefully for
- * boolean or property-less schemas.
+ * default schema, caller-supplied object schemas, and schemas generated from
+ * workflow output ports (ADR-0016). Degrades gracefully for boolean or
+ * property-less schemas.
  */
 export function summarizeReportSchema(schema: JsonSchema): string {
   if (typeof schema === "boolean") {

@@ -79,7 +79,12 @@ export interface TaskEnvelope {
   duration_ms: number | null;
   state: string;
   report: Report | null;
-  /** The report schema actually applied (parley's default when omitted). */
+  /**
+   * The report schema actually applied (parley's default when omitted).
+   * For a workflow step task this is generated from the node's output ports
+   * via `compileOutputPorts` (ADR-0016 / #236) and stored on the same per-task
+   * seam — the child still calls `submit_report` once; no new verb.
+   */
   report_schema: JsonSchema;
   error: string | null;
   /** Directory holding the task's captured vendor output — the diagnostics reference. */
@@ -174,7 +179,11 @@ export interface TaskRow {
   /** Network access, stored as SQLite 0/1. */
   network: number;
   answer_timeout_ms: number | null;
-  /** JSON string of the caller-supplied report schema; null means the default. */
+  /**
+   * JSON string of the report schema; null means parley's default.
+   * Workflow steps store the schema generated from output ports here
+   * (ADR-0016 / #236).
+   */
   report_schema: string | null;
   seq: number;
   eval_score: number | null;
