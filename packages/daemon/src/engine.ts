@@ -95,6 +95,13 @@ import {
   type Inbox,
 } from "./inbox.js";
 import {
+  decayTaskDeliverables,
+  resolveDeclaredOutputKeysForRun,
+  runOwnedExpiryGate,
+  sweepRunRetention,
+  type GcRunEntry,
+} from "./run-retention.js";
+import {
   createTaskTransitions,
   type TaskTransitions,
   type Transition,
@@ -364,16 +371,21 @@ export interface GcTaskEntry {
   worktree: string | null;
 }
 
-/** Result of `parley gc` / the scheduled daemon sweep (#153). */
+/** Result of `parley gc` / the scheduled daemon sweep (#153 / #244). */
 export interface GcResult {
   dry_run: boolean;
   /** Tasks purged (or listed when dry-run). */
   removed: number;
-  /** Sum of estimated on-disk bytes for removed (or listed) tasks. */
+  /** Sum of estimated on-disk bytes for removed (or listed) tasks + runs. */
   freed_bytes: number;
   tasks: GcTaskEntry[];
-  /** Per-task worktree (or other) failures that did not block the rest. */
-  failed: { task_id: string; error: string }[];
+  /**
+   * Runs decayed (or listed when dry-run): `purged_at` stamp + scratch
+   * subtree removal (#244). Empty when no terminal run is past the cutoff.
+   */
+  runs: GcRunEntry[];
+  /** Per-task / per-run failures that did not block the rest. */
+  failed: { task_id?: string; run_id?: string; error: string }[];
 }
 
 export interface DelegateRequest {
@@ -1594,14 +1606,14 @@ export class TaskEngine {
   }
 
   /**
-   * Retention sweep (#153): purge terminal tasks older than `retention.days`
-   * (daemon config, default 30). Removes the task row (evals/qa/acks), logs,
-   * report envelope, and leftover worktree — never git branches, never
-   * non-terminal tasks. Worktree failures are reported and leave the task so
-   * a later sweep can retry; other tasks continue.
+   * Retention sweep (#153 / #244): purge terminal tasks older than
+   * `retention.days` (daemon config, default 30), decay run deliverables and
+   * stamp run rows purged, and delete scratch subtrees. Never git branches,
+   * never non-terminal tasks/runs. Effect-first: worktree/scratch failures
+   * leave the row so a later sweep can retry; other items continue.
    *
-   * When `dryRun` is true, lists expired tasks and estimated bytes without
-   * deleting anything.
+   * When `dryRun` is true, lists expired tasks/runs and estimated bytes
+   * without deleting anything.
    */
   gc(opts: { dryRun?: boolean } = {}): GcResult {
     const dryRun = opts.dryRun === true;
@@ -1616,10 +1628,15 @@ export class TaskEngine {
     const expired = listExpiredTasks(this.db, cutoffIso);
 
     const tasks: GcTaskEntry[] = [];
-    const failed: { task_id: string; error: string }[] = [];
+    const failed: { task_id?: string; run_id?: string; error: string }[] = [];
     let freed = 0;
 
     for (const task of expired) {
+      // Run-owned tasks under a live/blocked run wait — a gate may hold the
+      // run open past the window; purging under it would be data loss (#244).
+      const gate = runOwnedExpiryGate(this.db, task);
+      if (gate.skip) continue;
+
       const logDir = taskLogDir(this.paths, task.id);
       const logBytes = directoryBytes(logDir);
       const wtBytes = task.worktree !== null ? directoryBytes(task.worktree) : 0;
@@ -1636,6 +1653,16 @@ export class TaskEngine {
         tasks.push(entry);
         freed += bytes;
         continue;
+      }
+
+      // Deliverable decay on the producing task's clock: retain declared
+      // run outputs; purge every other payload (#244 / ADR-0016).
+      if (task.run_id !== null && gate.run !== undefined) {
+        const declared = resolveDeclaredOutputKeysForRun(
+          gate.run,
+          this.paths.home,
+        );
+        decayTaskDeliverables(this.db, task.id, declared);
       }
 
       // Worktree first: if removal fails, keep the row so the next sweep retries
@@ -1672,11 +1699,26 @@ export class TaskEngine {
       }
     }
 
+    // Run row decay + scratch subtree deletion (#244). Same cutoff; never
+    // branches. Effect first on scratch so a failed rm leaves the row.
+    const runSweep = sweepRunRetention({
+      db: this.db,
+      cutoffIso,
+      dryRun,
+      runsDir: this.paths.runs,
+      directoryBytes,
+    });
+    for (const f of runSweep.failed) {
+      failed.push({ run_id: f.run_id, error: f.error });
+    }
+    freed += runSweep.freed_bytes;
+
     return {
       dry_run: dryRun,
       removed: tasks.length,
       freed_bytes: freed,
       tasks,
+      runs: runSweep.runs,
       failed,
     };
   }

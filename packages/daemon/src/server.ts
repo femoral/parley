@@ -97,7 +97,8 @@ function scheduleRetentionGc(
           (result.failed.length > 0 ? `, ${result.failed.length} failure(s)` : ""),
       );
       for (const f of result.failed) {
-        appendDaemonDiag(paths, `gc: ${f.task_id} failed: ${f.error}`);
+        const who = f.task_id ?? f.run_id ?? "?";
+        appendDaemonDiag(paths, `gc: ${who} failed: ${f.error}`);
       }
     } catch (err) {
       appendDaemonDiag(paths, `gc: sweep error: ${String(err)}`);

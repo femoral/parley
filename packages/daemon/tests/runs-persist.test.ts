@@ -87,7 +87,9 @@ describe("migration (#233)", () => {
     home = fs.mkdtempSync(path.join(os.tmpdir(), "parley-runs-mig-"));
 
     // Pre-#233 schema: every migration before the runs/deliverables entry.
-    const prev = openDatabaseUpTo(homePaths(home), SCHEMA_VERSION - 1);
+    // #244 appends one more migration after #233, so the pre-runs snapshot is
+    // SCHEMA_VERSION - 2 (not -1).
+    const prev = openDatabaseUpTo(homePaths(home), SCHEMA_VERSION - 2);
     const tablesBefore = prev
       .prepare(`SELECT name FROM sqlite_master WHERE type = 'table'`)
       .all()
@@ -564,7 +566,7 @@ describe("deliverables", () => {
     ]);
   });
 
-  it("deleteTask removes deliverables for that task; deleteRun removes the rest", () => {
+  it("deleteTask keeps run-owned deliverables (ON DELETE SET NULL); deleteRun removes the rest", () => {
     const { runId, taskId } = seedRunAndTask();
     const dId = nextDeliverableId(db);
     insertDeliverable(db, {
@@ -578,12 +580,57 @@ describe("deliverables", () => {
       value: "[]",
     });
     deleteTask(db, taskId);
-    expect(getDeliverable(db, dId)).toBeUndefined();
+    // #244: run-owned deliverable rows survive task expiry; task_id nulls out.
+    const kept = getDeliverable(db, dId)!;
+    expect(kept).toBeDefined();
+    expect(kept.task_id).toBeNull();
+    expect(kept.value).toBe("[]");
     expect(getTask(db, taskId)).toBeUndefined();
     expect(getRun(db, runId)).toBeDefined();
 
     deleteRun(db, runId);
     expect(getRun(db, runId)).toBeUndefined();
     expect(listDeliverablesForRun(db, runId)).toHaveLength(0);
+  });
+
+  it("deleteTask still hard-deletes deliverables for standalone (non-run) tasks", () => {
+    // Deliverables always carry a run_id FK; the standalone branch is keyed
+    // off task.run_id === null at delete time. Detach the task from its run
+    // first so deleteTask takes the hard-delete path.
+    const run = insertRun(db, {
+      id: nextRunId(db),
+      workflow: "x",
+      version: 1,
+      type: "other",
+      workspace: "scratch",
+      repo: null,
+      current_node: null,
+      state: "completed",
+    });
+    const taskId = nextTaskId(db);
+    insertTask(
+      db,
+      baseTask({
+        id: taskId,
+        run_id: run.id,
+        node: "n",
+        iteration: 1,
+      }),
+    );
+    db.prepare(`UPDATE tasks SET run_id = NULL WHERE id = ?`).run(taskId);
+    const dId = nextDeliverableId(db);
+    insertDeliverable(db, {
+      id: dId,
+      run_id: run.id,
+      node: "n",
+      port: "out",
+      iteration: 1,
+      task_id: taskId,
+      kind: "inline",
+      value: "\"x\"",
+    });
+    deleteTask(db, taskId);
+    expect(getDeliverable(db, dId)).toBeUndefined();
+    expect(getTask(db, taskId)).toBeUndefined();
   });
 });

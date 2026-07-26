@@ -325,6 +325,11 @@ export type RunState = (typeof RUN_STATES)[number];
 /** Terminal run states — the run will not advance again. */
 export const RUN_TERMINAL_STATES = ["completed", "failed", "cancelled"] as const;
 
+/** True when a run will not advance again (completed / failed / cancelled). */
+export function isRunTerminalState(state: string): boolean {
+  return (RUN_TERMINAL_STATES as readonly string[]).includes(state);
+}
+
 /** Deliverable storage kind (ADR-0016): inline JSON, or a path reference. */
 export const DELIVERABLE_KINDS = ["inline", "file", "dir"] as const;
 
@@ -413,8 +418,11 @@ export interface DeliverableRow {
   iteration: number;
   /** Null when the producing node has no fan-out. */
   slot: string | null;
-  /** Producing task id. */
-  task_id: string;
+  /**
+   * Producing task id. Null after the producing task is gc'd (#244):
+   * `ON DELETE SET NULL` — the address survives; the task is provenance only.
+   */
+  task_id: string | null;
   kind: DeliverableKind;
   /**
    * Inline JSON text when `kind === "inline"`; a path when `kind` is `file`
@@ -681,6 +689,34 @@ const MIGRATIONS: string[] = [
    ALTER TABLE tasks ADD COLUMN slot TEXT;
    CREATE INDEX tasks_run ON tasks(run_id);
    CREATE INDEX tasks_run_address ON tasks(run_id, node, iteration, ifnull(slot, ''));`,
+  // #244: deliverables.task_id nullable + ON DELETE SET NULL so run retention
+  // can keep address rows (and declared-output values) after the producing
+  // task expires. SQLite cannot ALTER a FK — rebuild (sessions_new pattern).
+  `CREATE TABLE deliverables_new (
+     id          TEXT PRIMARY KEY,
+     run_id      TEXT NOT NULL,
+     node        TEXT NOT NULL,
+     port        TEXT NOT NULL,
+     iteration   INTEGER NOT NULL,
+     slot        TEXT,
+     task_id     TEXT,
+     kind        TEXT NOT NULL,
+     value       TEXT,
+     created_at  TEXT NOT NULL,
+     purged_at   TEXT,
+     FOREIGN KEY (run_id) REFERENCES runs(id),
+     FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE SET NULL
+   );
+   INSERT INTO deliverables_new
+     (id, run_id, node, port, iteration, slot, task_id, kind, value, created_at, purged_at)
+   SELECT id, run_id, node, port, iteration, slot, task_id, kind, value, created_at, purged_at
+   FROM deliverables;
+   DROP TABLE deliverables;
+   ALTER TABLE deliverables_new RENAME TO deliverables;
+   CREATE UNIQUE INDEX deliverables_address
+     ON deliverables(run_id, node, port, iteration, ifnull(slot, ''));
+   CREATE INDEX deliverables_run ON deliverables(run_id);
+   CREATE INDEX deliverables_task ON deliverables(task_id);`,
 ];
 
 /** How many schema migrations have been applied — equals `PRAGMA user_version` after open. */
@@ -1312,16 +1348,26 @@ export function setMeta(db: DatabaseHandle, key: string, value: string): void {
 
 /**
  * Permanently delete a task row and its dependent rows (`qa_turns`,
- * `event_acks`, `deliverables`). Does not touch the filesystem
- * (logs/worktrees) — callers remove those before or after. Used by retention
- * gc (#153). Deliverable deletion is for hard row removal; normal retention
- * decays values to `purged` instead (#244).
+ * `event_acks`). Does not touch the filesystem (logs/worktrees) — callers
+ * remove those before or after. Used by retention gc (#153 / #244).
+ *
+ * Deliverables:
+ * - **Standalone** (no `run_id`): hard-deleted with the task (today's #153
+ *   behaviour — no run product to retain).
+ * - **Run-owned**: left in place. FK is `ON DELETE SET NULL` so `task_id`
+ *   becomes null; the address (and declared-output values) survive so the
+ *   run can decay rather than expire (#244). Callers decay non-declared
+ *   deliverable values *before* calling this.
  */
 export function deleteTask(db: DatabaseHandle, taskId: string): void {
   withTransaction(db, () => {
+    const task = getTask(db, taskId);
     db.prepare(`DELETE FROM qa_turns WHERE task_id = ?`).run(taskId);
     db.prepare(`DELETE FROM event_acks WHERE task_id = ?`).run(taskId);
-    db.prepare(`DELETE FROM deliverables WHERE task_id = ?`).run(taskId);
+    // Standalone only — run-owned deliverables ride ON DELETE SET NULL.
+    if (task === undefined || task.run_id === null) {
+      db.prepare(`DELETE FROM deliverables WHERE task_id = ?`).run(taskId);
+    }
     db.prepare(`DELETE FROM tasks WHERE id = ?`).run(taskId);
   });
 }
@@ -1822,4 +1868,24 @@ export function purgeRun(
   purgedAt: string = new Date().toISOString(),
 ): void {
   updateRun(db, id, { purged_at: purgedAt });
+}
+
+/**
+ * Terminal runs past the retention cutoff that have not yet been stamped
+ * purged (#244). Same clock as {@link listExpiredTasks}:
+ * `COALESCE(completed_at, updated_at) <= cutoffIso`. Live / blocked runs are
+ * never returned — a gate may hold a run open past the window.
+ */
+export function listExpiredRuns(db: DatabaseHandle, cutoffIso: string): RunRow[] {
+  const placeholders = [...RUN_TERMINAL_STATES].map(() => "?").join(", ");
+  return db
+    .prepare(
+      `SELECT ${RUN_COLUMNS} FROM runs
+       WHERE state IN (${placeholders})
+         AND purged_at IS NULL
+         AND COALESCE(completed_at, updated_at) <= ?
+       ORDER BY COALESCE(completed_at, updated_at) ASC, id ASC`,
+    )
+    .all(...RUN_TERMINAL_STATES, cutoffIso)
+    .map((row) => asRow<RunRow>(row));
 }
