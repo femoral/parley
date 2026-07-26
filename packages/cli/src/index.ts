@@ -63,6 +63,15 @@ Usage:
                             answers per criterion); daemon computes score +
                             baseline. A later call overwrites the last.
   parley cancel <task>          Terminate a task's child; end it cancelled
+  parley run status [--session <id>|latest] [--all] [--workflow <id>]
+              [--state <s>] [--blocked] [--json]
+                            List runs (session-scoped like parley status)
+  parley run status <run> [--json]
+                            One run's node table — one line per (node, iteration)
+  parley run status <run> --node <id> [--iteration <n>] [--slot <name>]
+                            Zoom to one node's tasks / deliverables
+  parley run get <id|address> [--json] [--run <id>] [--iteration <n>] [--slot <name>]
+                            Fetch one deliverable (or a collected fan-out)
   parley run approve <run>      Action a blocked run past its gate / block
   parley run reject <run>       Follow the gate's author-declared on_reject
   parley run redirect <run> --to <node> [--note <text>]

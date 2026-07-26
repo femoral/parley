@@ -23,3 +23,4 @@ export * from "./template-expand.js";
 export * from "./usage.js";
 export * from "./util/time.js";
 export * from "./workflow/index.js";
+export * from "./run-query.js";

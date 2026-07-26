@@ -1823,3 +1823,165 @@ export function purgeRun(
 ): void {
   updateRun(db, id, { purged_at: purgedAt });
 }
+
+// ── #241 run query surface ──────────────────────────────────────────────────
+// Append-only SELECTs for the query surface. Do not edit above this block.
+// Column lists are copied intentionally so this block never touches existing
+// constants (sibling ownership on earlier regions of this file).
+
+const RUN_QUERY_RUN_COLUMNS = `id, workflow, version, type, workspace, repo, state, current_node, iteration,
+   parent_run_id, attempt, orchestrator_session_id, created_at, updated_at,
+   started_at, completed_at, error, purged_at`;
+
+const RUN_QUERY_TASK_COLUMNS = `id, name, vendor, model, effort, profile, runner, repo, state, created_at, updated_at,
+   cwd, prompt, session_id, usage, report, error, started_at, completed_at,
+   question_id, question, worktree, branch, base_sha, sandbox, network,
+   answer_timeout_ms, report_schema, seq, orchestrator_session_id, eval_score, eval_feedback,
+   eval_answers, eval_rubric, eval_rubric_version, eval_baseline,
+   size, difficulty, type, parent_task_id, attempt, resumed, cached_input_tokens,
+   launch_command, model_source, effort_source,
+   orch_harness, orch_model, orch_effort,
+   eval_session_id, eval_harness, eval_model, eval_effort, queued_at,
+   run_id, node, iteration, slot`;
+
+const RUN_QUERY_DELIVERABLE_COLUMNS = `id, run_id, node, port, iteration, slot, task_id, kind, value,
+   created_at, purged_at`;
+
+/** Filters for the run list query surface (#241). */
+export interface RunListFilters {
+  /** Orchestrator session id; omit for every session. */
+  session?: string | null;
+  /** Workflow definition id. */
+  workflow?: string | null;
+  /** Exact run state (`running`|`blocked`|…). */
+  state?: string | null;
+}
+
+/**
+ * List runs with optional session / workflow / state filters, newest first.
+ * Used by `GET /runs` and `parley run status`.
+ */
+export function listRunsFiltered(
+  db: DatabaseHandle,
+  filters: RunListFilters = {},
+): RunRow[] {
+  const where: string[] = [];
+  const params: (string | number | null)[] = [];
+  if (filters.session !== undefined && filters.session !== null && filters.session !== "") {
+    where.push("orchestrator_session_id = ?");
+    params.push(filters.session);
+  }
+  if (filters.workflow !== undefined && filters.workflow !== null && filters.workflow !== "") {
+    where.push("workflow = ?");
+    params.push(filters.workflow);
+  }
+  if (filters.state !== undefined && filters.state !== null && filters.state !== "") {
+    where.push("state = ?");
+    params.push(filters.state);
+  }
+  const clause = where.length > 0 ? `WHERE ${where.join(" AND ")}` : "";
+  return db
+    .prepare(
+      `SELECT ${RUN_QUERY_RUN_COLUMNS} FROM runs
+       ${clause}
+       ORDER BY created_at DESC, id DESC`,
+    )
+    .all(...params)
+    .map((row) => asRow<RunRow>(row));
+}
+
+/**
+ * Deliverables for one (run, node, iteration), optional port/slot filter.
+ * Address order.
+ */
+export function listDeliverablesForRunNode(
+  db: DatabaseHandle,
+  runId: string,
+  node: string,
+  iteration: number,
+  port?: string | null,
+  slot?: string | null,
+): DeliverableRow[] {
+  const where = ["run_id = ?", "node = ?", "iteration = ?"];
+  const params: (string | number | null)[] = [runId, node, iteration];
+  if (port !== undefined && port !== null) {
+    where.push("port = ?");
+    params.push(port);
+  }
+  if (slot === null) {
+    where.push("slot IS NULL");
+  } else if (slot !== undefined) {
+    where.push("slot = ?");
+    params.push(slot);
+  }
+  return db
+    .prepare(
+      `SELECT ${RUN_QUERY_DELIVERABLE_COLUMNS} FROM deliverables
+       WHERE ${where.join(" AND ")}
+       ORDER BY ifnull(slot, '') ASC, port ASC, id ASC`,
+    )
+    .all(...params)
+    .map((row) => asRow<DeliverableRow>(row));
+}
+
+/**
+ * Latest iteration that has tasks or deliverables for a node in a run.
+ * Null when the node has never been visited.
+ */
+export function latestNodeIteration(
+  db: DatabaseHandle,
+  runId: string,
+  node: string,
+): number | null {
+  const fromTasks = db
+    .prepare(
+      `SELECT MAX(iteration) AS m FROM tasks
+       WHERE run_id = ? AND node = ? AND iteration IS NOT NULL`,
+    )
+    .get(runId, node);
+  const fromDels = db
+    .prepare(
+      `SELECT MAX(iteration) AS m FROM deliverables
+       WHERE run_id = ? AND node = ?`,
+    )
+    .get(runId, node);
+  const t = asRow<{ m: number | null }>(fromTasks).m;
+  const d = asRow<{ m: number | null }>(fromDels).m;
+  if (t === null && d === null) return null;
+  return Math.max(t ?? 0, d ?? 0);
+}
+
+/**
+ * All tasks for a run that belong to a given node (any iteration), oldest first.
+ * Optional iteration / slot filters for node-detail zoom.
+ */
+export function listTasksForRunNodeAny(
+  db: DatabaseHandle,
+  runId: string,
+  node: string,
+  iteration?: number | null,
+  slot?: string | null,
+): TaskRow[] {
+  const where = ["run_id = ?", "node = ?"];
+  const params: (string | number | null)[] = [runId, node];
+  if (iteration !== undefined && iteration !== null) {
+    where.push("iteration = ?");
+    params.push(iteration);
+  }
+  if (slot === null) {
+    where.push("slot IS NULL");
+  } else if (slot !== undefined) {
+    where.push("slot = ?");
+    params.push(slot);
+  }
+  return db
+    .prepare(
+      `SELECT ${RUN_QUERY_TASK_COLUMNS} FROM tasks
+       WHERE ${where.join(" AND ")}
+       ORDER BY created_at ASC, id ASC`,
+    )
+    .all(...params)
+    .map((row) => asRow<TaskRow>(row));
+}
+
+// ── end #241 ──
