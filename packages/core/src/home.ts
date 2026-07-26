@@ -26,8 +26,13 @@ export interface HomePaths {
   config: string;
   /** Per-task raw vendor event logs live here (future tickets). */
   tasks: string;
-  /** Parley-created git worktrees live here (future tickets). */
+  /** Parley-created git worktrees live here (ADR-0005 / ADR-0018). */
   worktrees: string;
+  /**
+   * Scratch-mode run workspaces (`workspace: scratch`) live here
+   * (`~/.parley/runs/<runId>/` — ADR-0018 / #235).
+   */
+  runs: string;
 }
 
 /** Resolve the parley home directory, honouring the `PARLEY_HOME` override. */
@@ -50,6 +55,7 @@ export function homePaths(home: string): HomePaths {
     config: path.join(home, "parley.json"),
     tasks: path.join(home, "tasks"),
     worktrees: path.join(home, "worktrees"),
+    runs: path.join(home, "runs"),
   };
 }
 

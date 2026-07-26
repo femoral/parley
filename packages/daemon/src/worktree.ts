@@ -203,9 +203,13 @@ export function worktreePathFor(
 /**
  * After `git worktree add`: translate config, exclude parley plumbing, return
  * HEAD. Shared by create (new branch) and attach (existing branch) so fix
- * recreation does not duplicate git plumbing (#180).
+ * recreation does not duplicate git plumbing (#180). Also used by run
+ * checkouts (ADR-0018 / #234).
+ *
+ * Exclusion is a worktree-private `parley-exclude` via `core.excludesFile
+ * --worktree` — never `.git/info/exclude` (ADR-0005 correction / ADR-0018).
  */
-function finalizeWorktree(repoRootPath: string, wtPath: string): string {
+export function finalizeWorktree(repoRootPath: string, wtPath: string): string {
   const baseSha = git(["-C", wtPath, "rev-parse", "HEAD"]);
   const generated = translateConfig(repoRootPath, wtPath);
   // Parley always materializes task context under `.parley/` here (spec §7);

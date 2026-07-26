@@ -1,6 +1,9 @@
 import fs from "node:fs";
-import path from "node:path";
 import { TASK_HEADER } from "@useparley/core";
+import {
+  findChildHubOnDisk,
+  SharedWorkspaceChildHubError,
+} from "@useparley/daemon/run-workspace.js";
 import { parseArgs } from "../args.js";
 import { type CliContext, printJson } from "../context.js";
 import { HelpRequested, UsageError } from "../errors.js";
@@ -13,6 +16,10 @@ interface ChildHub {
 /**
  * Resolve hub base URL + task id: env first (`PARLEY_HUB_URL` +
  * `PARLEY_TASK_ID`), else `.parley/child.json` walking up from cwd.
+ *
+ * A shared run checkout writes no `child.json` (concurrent read-only siblings
+ * cannot be disambiguated by walk-up — ADR-0018 / #234). That case fails
+ * loudly with {@link SharedWorkspaceChildHubError} rather than guessing.
  */
 function resolveChildHub(env: NodeJS.ProcessEnv, cwd: string): ChildHub {
   const envUrl = env.PARLEY_HUB_URL;
@@ -21,20 +28,19 @@ function resolveChildHub(env: NodeJS.ProcessEnv, cwd: string): ChildHub {
     return { url: envUrl.replace(/\/$/, ""), taskId: envTask };
   }
 
-  for (let dir = path.resolve(cwd); ; ) {
-    const candidate = path.join(dir, ".parley", "child.json");
-    try {
-      const raw = fs.readFileSync(candidate, "utf8");
-      const parsed = JSON.parse(raw) as { url?: unknown; task_id?: unknown };
-      if (typeof parsed.url === "string" && parsed.url !== "" && typeof parsed.task_id === "string" && parsed.task_id !== "") {
-        return { url: parsed.url.replace(/\/$/, ""), taskId: parsed.task_id };
-      }
-    } catch {
-      /* missing or unreadable — keep walking */
+  try {
+    const found = findChildHubOnDisk(cwd);
+    if (found !== null) return found;
+  } catch (err) {
+    // Name check (not instanceof) so a second module load of the daemon
+    // package still maps the shared-workspace failure to a usage error.
+    if (
+      err instanceof SharedWorkspaceChildHubError ||
+      (err instanceof Error && err.name === "SharedWorkspaceChildHubError")
+    ) {
+      throw new UsageError(`child: ${err.message}`);
     }
-    const parent = path.dirname(dir);
-    if (parent === dir) break;
-    dir = parent;
+    throw err;
   }
 
   throw new UsageError(

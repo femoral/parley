@@ -1,10 +1,19 @@
 /**
  * Workflow definition surface (ADR-0016 / #231 + #232): port type grammar,
  * JSON Schema compilation, parse/type-check, two-layer discovery, and lint
- * (rules, inferred plan, static worst case).
+ * (rules, inferred plan, static worst case). Address formatting for run
+ * workspaces (ADR-0018 / #234) is mode-independent and lives here too.
  *
  * No engine, no runs — a definition is a validated in-memory object.
  */
+
+export {
+  formatStepAddress,
+  formatTmpDirRel,
+  tmpHandoffPaths,
+  type StepAddress,
+  type TmpHandoffPaths,
+} from "./address.js";
 
 export {
   compileOutputPorts,
