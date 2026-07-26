@@ -9,6 +9,7 @@ import {
   isTerminalState,
   METRICS_GROUP_BY,
   parseTaskMetricsFilters,
+  resolveWorkflow,
   setConfigPath,
   unsetConfigPath,
   validateConfig,
@@ -17,17 +18,39 @@ import {
   type ParleyConfig,
   readConfig,
   type TaskEnvelope,
+  type WorkflowDefinition,
 } from "@useparley/core";
 import { createAdapterRegistry } from "./adapters/index.js";
 import {
   countUnsettledTasks,
+  getDeliverable,
   getMeta,
+  getRun,
+  latestNodeIteration,
+  listDeliverablesForRun,
+  listDeliverablesForRunNode,
+  listRunsFiltered,
+  listTasksForRun,
   META_LAST_GC_AT,
   openDatabase,
+  resolveRun,
   setMeta,
   sweepInterruptedTasks,
   type DatabaseHandle,
+  type RunRow,
 } from "./db.js";
+import {
+  collectFanOutDeliverable,
+  deliverableRowToQuery,
+  looksLikeDeliverableId,
+  parseDeliverableAddress,
+  projectNodeDetail,
+  projectRunDetail,
+  projectRunEnvelope,
+  resolveDeliverableValue,
+  taskRowToQuery,
+} from "./run-query.js";
+import { runBranchName, runCheckoutPath, runScratchPath } from "./run-workspace.js";
 import type { DaemonIdentity } from "./identity.js";
 import { isSandboxMode, type SandboxMode } from "./adapters/types.js";
 import { readGlobalConfigLayer, type ContextFile } from "./context.js";
@@ -1321,6 +1344,7 @@ function createHandler(
   uiBundleDir: string | null,
   paths: HomePaths,
   identity?: DaemonIdentity,
+  db?: DatabaseHandle,
 ): http.RequestListener {
   return (req, res) => {
     void (async () => {
@@ -1695,6 +1719,45 @@ function createHandler(
         }
       }
 
+      // ── #241 run query surface ──────────────────────────────────────────
+      // New GET routes only. POST /runs/:id/{verb} stays above unchanged.
+      if (db !== undefined && method === "GET") {
+        // GET /runs
+        if (segments[0] === "runs" && segments.length === 1) {
+          handleRunsList(engine, db, paths, res, url.searchParams);
+          return;
+        }
+        // GET /runs/:ref
+        if (segments[0] === "runs" && segments.length === 2) {
+          const ref = decodeURIComponent(segments[1] ?? "");
+          handleRunDetail(engine, db, paths, res, ref);
+          return;
+        }
+        // GET /runs/:ref/nodes/:node
+        if (
+          segments[0] === "runs" &&
+          segments.length === 4 &&
+          segments[2] === "nodes"
+        ) {
+          const ref = decodeURIComponent(segments[1] ?? "");
+          const node = decodeURIComponent(segments[3] ?? "");
+          handleRunNodeDetail(engine, db, paths, res, ref, node, url.searchParams);
+          return;
+        }
+        // GET /deliverables/:id  (opaque id)
+        // GET /deliverables?run=&address=  (collected fan-out / address form)
+        if (segments[0] === "deliverables" && segments.length === 1) {
+          handleDeliverableByQuery(db, paths, res, url.searchParams);
+          return;
+        }
+        if (segments[0] === "deliverables" && segments.length === 2) {
+          const idOrAddr = decodeURIComponent(segments[1] ?? "");
+          handleDeliverableGet(db, paths, res, idOrAddr, url.searchParams);
+          return;
+        }
+      }
+      // ── end #241 ──
+
       // UI fallback (spec §"Routes"): only for GET requests outside the
       // reserved API prefixes, and only when a bundle was discovered at
       // startup — otherwise the daemon behaves exactly as it does today.
@@ -1715,6 +1778,355 @@ function createHandler(
     });
   };
 }
+
+// ── #241 run query handlers ─────────────────────────────────────────────────
+
+function loadDefinitionForRun(
+  paths: HomePaths,
+  run: RunRow,
+): WorkflowDefinition | null {
+  try {
+    const cwd = run.repo ?? process.cwd();
+    const resolved = resolveWorkflow(run.workflow, {
+      cwd,
+      home: paths.home,
+    });
+    return resolved?.definition ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function workspaceForRun(paths: HomePaths, run: RunRow): {
+  worktree: string | null;
+  branch: string | null;
+} {
+  if (run.workspace === "scratch") {
+    return {
+      worktree: runScratchPath(paths.runs, run.id),
+      branch: null,
+    };
+  }
+  if (run.repo) {
+    return {
+      worktree: runCheckoutPath(paths.worktrees, run.repo, run.id),
+      branch: runBranchName(run.id, run.workflow),
+    };
+  }
+  return { worktree: null, branch: null };
+}
+
+function handleRunsList(
+  engine: TaskEngine,
+  db: DatabaseHandle,
+  paths: HomePaths,
+  res: http.ServerResponse,
+  params: URLSearchParams,
+): void {
+  const session = params.get("session");
+  const workflow = params.get("workflow");
+  const state = params.get("state");
+  const blocked = params.get("blocked");
+  const filters = {
+    session: session && session !== "all" ? session : null,
+    workflow: workflow || null,
+    state: blocked === "true" || blocked === "1" ? "blocked" : state || null,
+  };
+  const rows = listRunsFiltered(db, filters);
+  const runs = rows.map((run) => {
+    const tasks = listTasksForRun(db, run.id).map(taskRowToQuery);
+    const definition = loadDefinitionForRun(paths, run);
+    const ws = workspaceForRun(paths, run);
+    return projectRunEnvelope({
+      run,
+      tasks,
+      definition,
+      branch: ws.branch,
+      worktree: ws.worktree,
+      seq: engine.currentSeq(),
+    });
+  });
+  sendJson(res, 200, { runs, seq: engine.currentSeq() });
+}
+
+function handleRunDetail(
+  engine: TaskEngine,
+  db: DatabaseHandle,
+  paths: HomePaths,
+  res: http.ServerResponse,
+  ref: string,
+): void {
+  const run = resolveRun(db, ref);
+  if (!run) {
+    sendJson(res, 404, { error: `no such run: ${ref}` });
+    return;
+  }
+  const tasks = listTasksForRun(db, run.id).map(taskRowToQuery);
+  const deliverables = listDeliverablesForRun(db, run.id).map(deliverableRowToQuery);
+  const definition = loadDefinitionForRun(paths, run);
+  const ws = workspaceForRun(paths, run);
+  const detail = projectRunDetail({
+    run,
+    tasks,
+    deliverables,
+    definition,
+    branch: ws.branch,
+    worktree: ws.worktree,
+    seq: engine.currentSeq(),
+  });
+  sendJson(res, 200, detail);
+}
+
+function handleRunNodeDetail(
+  engine: TaskEngine,
+  db: DatabaseHandle,
+  paths: HomePaths,
+  res: http.ServerResponse,
+  ref: string,
+  node: string,
+  params: URLSearchParams,
+): void {
+  const run = resolveRun(db, ref);
+  if (!run) {
+    sendJson(res, 404, { error: `no such run: ${ref}` });
+    return;
+  }
+  const definition = loadDefinitionForRun(paths, run);
+  const iterRaw = params.get("iteration");
+  let iteration: number;
+  if (iterRaw !== null && iterRaw !== "") {
+    iteration = Number(iterRaw);
+    if (!Number.isInteger(iteration) || iteration < 0) {
+      sendJson(res, 400, { error: "iteration must be a non-negative integer" });
+      return;
+    }
+  } else {
+    const latest = latestNodeIteration(db, run.id, node);
+    iteration =
+      latest ??
+      (run.current_node === node ? run.iteration : 1);
+  }
+  const slot = params.get("slot");
+  const tasks = listTasksForRun(db, run.id).map(taskRowToQuery);
+  const deliverables = listDeliverablesForRun(db, run.id).map(deliverableRowToQuery);
+
+  let gateState: string | null = null;
+  const defNode = definition?.nodes.find((n) => n.id === node);
+  if (defNode?.kind === "gate") {
+    if (
+      run.state === "blocked" &&
+      run.current_node === node &&
+      run.iteration === iteration
+    ) {
+      gateState = "waiting";
+    } else if (iteration === 0) {
+      gateState = "skipped";
+    } else {
+      // No decision log yet — honest unknown, not a fabricated verb.
+      gateState = "actioned";
+    }
+  }
+
+  const detail = projectNodeDetail({
+    runId: run.id,
+    nodeId: node,
+    iteration,
+    tasks,
+    deliverables,
+    definition,
+    gateState,
+    slotFilter: slot,
+  });
+  // Silence unused engine warning — reserved for seq if needed later.
+  void engine;
+  sendJson(res, 200, detail);
+}
+
+function handleDeliverableGet(
+  db: DatabaseHandle,
+  paths: HomePaths,
+  res: http.ServerResponse,
+  idOrAddr: string,
+  params: URLSearchParams,
+): void {
+  if (looksLikeDeliverableId(idOrAddr)) {
+    const row = getDeliverable(db, idOrAddr);
+    if (!row) {
+      sendJson(res, 404, { error: `no such deliverable: ${idOrAddr}` });
+      return;
+    }
+    const run = getRun(db, row.run_id);
+    const definition = run ? loadDefinitionForRun(paths, run) : null;
+    const portType = lookupPortType(definition, row.node, row.port);
+    const ws = run ? workspaceForRun(paths, run) : { worktree: null, branch: null };
+    const value = resolveDeliverableValue({
+      deliverable: deliverableRowToQuery(row),
+      portType,
+      workspaceRoot: ws.worktree,
+    });
+    sendJson(res, 200, value);
+    return;
+  }
+
+  // Address form: /deliverables/<runId>%2F<node>%2F<port>… or plain address
+  // Prefer query params when provided.
+  const runParam = params.get("run");
+  const parsed = parseDeliverableAddress(idOrAddr);
+  if (!parsed) {
+    sendJson(res, 400, {
+      error: `unrecognised deliverable ref: ${idOrAddr} (expected dN id or node/port/iteration[/slot])`,
+    });
+    return;
+  }
+  const runId = runParam ?? parsed.runId;
+  if (!runId) {
+    sendJson(res, 400, {
+      error: "address form requires a run id (prefix runId/… or ?run=)",
+    });
+    return;
+  }
+  respondDeliverableAddress(db, paths, res, runId, parsed.node, parsed.port, {
+    iteration: parsed.iteration ?? (params.get("iteration") ? Number(params.get("iteration")) : null),
+    slot: parsed.slot ?? params.get("slot"),
+  });
+}
+
+function handleDeliverableByQuery(
+  db: DatabaseHandle,
+  paths: HomePaths,
+  res: http.ServerResponse,
+  params: URLSearchParams,
+): void {
+  const runId = params.get("run");
+  const address = params.get("address");
+  if (!runId || !address) {
+    sendJson(res, 400, {
+      error: "GET /deliverables requires ?run=&address= or /deliverables/:id",
+    });
+    return;
+  }
+  const parsed = parseDeliverableAddress(address);
+  if (!parsed) {
+    sendJson(res, 400, { error: `unrecognised address: ${address}` });
+    return;
+  }
+  respondDeliverableAddress(db, paths, res, runId, parsed.node, parsed.port, {
+    iteration:
+      parsed.iteration ??
+      (params.get("iteration") ? Number(params.get("iteration")) : null),
+    slot: parsed.slot ?? params.get("slot"),
+  });
+}
+
+function respondDeliverableAddress(
+  db: DatabaseHandle,
+  paths: HomePaths,
+  res: http.ServerResponse,
+  runId: string,
+  node: string,
+  port: string,
+  opts: { iteration: number | null; slot: string | null },
+): void {
+  const run = getRun(db, runId);
+  if (!run) {
+    sendJson(res, 404, { error: `no such run: ${runId}` });
+    return;
+  }
+  let iteration = opts.iteration;
+  if (iteration === null || !Number.isFinite(iteration)) {
+    iteration = latestNodeIteration(db, runId, node) ?? run.iteration;
+  }
+  const definition = loadDefinitionForRun(paths, run);
+  const portType = lookupPortType(definition, node, port);
+  const step = definition?.nodes.find((n) => n.id === node);
+  const isFanOut =
+    step?.kind === "step" &&
+    (step.over !== undefined ||
+      (step.slots !== undefined && Object.keys(step.slots).length > 0));
+
+  // Slot specified → one sibling row.
+  if (opts.slot !== null && opts.slot !== undefined && opts.slot !== "") {
+    const rows = listDeliverablesForRunNode(db, runId, node, iteration, port, opts.slot);
+    const row = rows[0];
+    if (!row) {
+      sendJson(res, 404, {
+        error: `no deliverable at ${runId}/${node}/${port}/${iteration}/${opts.slot}`,
+      });
+      return;
+    }
+    const ws = workspaceForRun(paths, run);
+    sendJson(
+      res,
+      200,
+      resolveDeliverableValue({
+        deliverable: deliverableRowToQuery(row),
+        portType,
+        workspaceRoot: ws.worktree,
+      }),
+    );
+    return;
+  }
+
+  // No slot: single-task port → the one row; fan-out → collected view.
+  const siblings = listDeliverablesForRunNode(db, runId, node, iteration, port);
+  if (siblings.length === 0) {
+    sendJson(res, 404, {
+      error: `no deliverable at ${runId}/${node}/${port}/${iteration}`,
+    });
+    return;
+  }
+  if (!isFanOut && siblings.length === 1) {
+    const ws = workspaceForRun(paths, run);
+    sendJson(
+      res,
+      200,
+      resolveDeliverableValue({
+        deliverable: deliverableRowToQuery(siblings[0]!),
+        portType,
+        workspaceRoot: ws.worktree,
+      }),
+    );
+    return;
+  }
+
+  // Collected fan-out — only an address can name this (no single deliverable row).
+  const fanOutKind: "array" | "dict" =
+    step?.kind === "step" && step.over !== undefined
+      ? // Data fan-out: collection form follows the over port's container; we
+        // default to dict when slots are named, array otherwise. Without the
+        // upstream value, prefer dict when any sibling has a slot key.
+        siblings.some((s) => s.slot !== null)
+        ? "dict"
+        : "array"
+      : "dict";
+  const baseType = portType ?? { kind: "text" as const };
+  sendJson(
+    res,
+    200,
+    collectFanOutDeliverable({
+      runId,
+      node,
+      port,
+      iteration,
+      siblings: siblings.map(deliverableRowToQuery),
+      portType: baseType,
+      fanOut: fanOutKind,
+    }),
+  );
+}
+
+function lookupPortType(
+  definition: WorkflowDefinition | null,
+  nodeId: string,
+  port: string,
+): import("@useparley/core").PortType | null {
+  if (!definition) return null;
+  const node = definition.nodes.find((n) => n.id === nodeId);
+  if (!node || node.kind !== "step") return null;
+  return node.out[port]?.type ?? null;
+}
+
+// ── end #241 handlers ──
 
 /**
  * Start the daemon HTTP server bound to `127.0.0.1:0` (ephemeral port), open
@@ -1772,7 +2184,9 @@ export async function startServer(
   } catch (err) {
     process.stderr.write(`parley daemon: UI discovery failed, serving no UI: ${String(err)}\n`);
   }
-  const server = http.createServer(createHandler(engine, uiBundleDir, paths, options.identity));
+  const server = http.createServer(
+    createHandler(engine, uiBundleDir, paths, options.identity, db),
+  );
   // Children must never outlive the daemon (no orphans): whatever path the
   // process exits through — graceful close below, crash, signal handler —
   // hard-stop any still-running vendor children on the way out.
