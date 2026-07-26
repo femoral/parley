@@ -685,7 +685,9 @@ const MIGRATIONS: string[] = [
   // - sessions.panicked: sticky enforcing cap (effective concurrency 0).
   // - event_acks generalized to subject_kind+subject_id so runs can be acked
   //   (gates are never acked — only actioned; see inbox.ts).
-  // - run_seqs: side table for run event ids so we do not touch updateRun.
+  // - run_seqs: side table for run event ids + block_reason (ADR-0019 inbox
+  //   tier: only `gate` is unackable tier 1; written where the workflow
+  //   definition is known — never substring-guessed in the inbox).
   // - event_deliveries: redelivery counter for the delivery breaker (default 10).
   `ALTER TABLE sessions ADD COLUMN panicked INTEGER NOT NULL DEFAULT 0;
 
@@ -702,8 +704,9 @@ const MIGRATIONS: string[] = [
    ALTER TABLE event_acks_v2 RENAME TO event_acks;
 
    CREATE TABLE run_seqs (
-     run_id TEXT PRIMARY KEY,
-     seq    INTEGER NOT NULL,
+     run_id       TEXT PRIMARY KEY,
+     seq          INTEGER NOT NULL,
+     block_reason TEXT,
      FOREIGN KEY (run_id) REFERENCES runs(id)
    );
    CREATE INDEX run_seqs_seq ON run_seqs(seq);
@@ -1099,15 +1102,63 @@ export function getRunSeq(db: DatabaseHandle, runId: string): number {
 }
 
 /**
- * Allocate the next global transition seq and pin it on the run (ADR-0019 event
- * id). Side table so {@link updateRun} stays untouched (sibling lane).
+ * Stored block reason for a run (`BlockReason` from run-gates), or null when
+ * unknown / not blocked. Inbox uses **only** this for gate vs non-gate tier —
+ * never the free-text `runs.error` (ADR-0019 / #240 fix).
  */
-export function bumpRunSeq(db: DatabaseHandle, runId: string): number {
-  const seq = nextCounter(db, "transition_seq");
+export function getRunBlockReason(
+  db: DatabaseHandle,
+  runId: string,
+): string | null {
+  const row = db
+    .prepare(`SELECT block_reason FROM run_seqs WHERE run_id = ?`)
+    .get(runId);
+  if (row === undefined) return null;
+  const reason = asRow<{ block_reason: string | null }>(row).block_reason;
+  return reason === null || reason === "" ? null : reason;
+}
+
+/**
+ * Persist (or clear) the block reason on the run's side-table row without
+ * bumping seq. Creates a zero-seq row when none exists yet so a block that
+ * has not been firehose-logged is still classified correctly by the inbox.
+ */
+export function setRunBlockReason(
+  db: DatabaseHandle,
+  runId: string,
+  reason: string | null,
+): void {
   db.prepare(
-    `INSERT INTO run_seqs (run_id, seq) VALUES (?, ?)
-     ON CONFLICT(run_id) DO UPDATE SET seq = excluded.seq`,
-  ).run(runId, seq);
+    `INSERT INTO run_seqs (run_id, seq, block_reason) VALUES (?, 0, ?)
+     ON CONFLICT(run_id) DO UPDATE SET block_reason = excluded.block_reason`,
+  ).run(runId, reason);
+}
+
+/**
+ * Allocate the next global transition seq and pin it on the run (ADR-0019 event
+ * id). Side table so {@link updateRun} stays untouched. When `blockReason` is
+ * passed, it is written together with the seq; otherwise any existing
+ * `block_reason` is preserved.
+ */
+export function bumpRunSeq(
+  db: DatabaseHandle,
+  runId: string,
+  opts?: { blockReason?: string | null },
+): number {
+  const seq = nextCounter(db, "transition_seq");
+  if (opts !== undefined && "blockReason" in opts) {
+    db.prepare(
+      `INSERT INTO run_seqs (run_id, seq, block_reason) VALUES (?, ?, ?)
+       ON CONFLICT(run_id) DO UPDATE SET
+         seq = excluded.seq,
+         block_reason = excluded.block_reason`,
+    ).run(runId, seq, opts.blockReason ?? null);
+  } else {
+    db.prepare(
+      `INSERT INTO run_seqs (run_id, seq, block_reason) VALUES (?, ?, NULL)
+       ON CONFLICT(run_id) DO UPDATE SET seq = excluded.seq`,
+    ).run(runId, seq);
+  }
   return seq;
 }
 

@@ -12,7 +12,9 @@ import {
   type WorkflowDefinition,
 } from "@useparley/core";
 import {
+  bumpRunSeq,
   getRun,
+  getRunBlockReason,
   insertDeliverable,
   insertRun,
   insertTask,
@@ -24,6 +26,13 @@ import {
   type NewTask,
   type RunRow,
 } from "../src/db.js";
+import {
+  createInbox,
+  runInboxTierState,
+  sqliteAckStore,
+  sqliteRunSnapshot,
+  sqliteTaskSnapshot,
+} from "../src/inbox.js";
 import {
   accumulatePort,
   advance,
@@ -742,6 +751,73 @@ describe("applyAdvanceDecision + advanceRun", () => {
     expect(applied.run.state).toBe("blocked");
     expect(applied.run.error).toBe("blocked (loop 2/2)");
     expect(applied.run.current_node).toBe("review");
+    // ADR-0019: reason is persisted for the inbox (not re-derived from error).
+    expect(getRunBlockReason(db, run.id)).toBe("loop_budget");
+  });
+
+  it("persists gate vs spawn block_reason so poison error text cannot forge a gate", () => {
+    const gateRun = seedRun({ current_node: "review", iteration: 1 });
+    applyAdvanceDecision(db, gateRun, {
+      kind: "block",
+      reason: "gate",
+      node: "review",
+      iteration: 1,
+    });
+    expect(getRunBlockReason(db, gateRun.id)).toBe("gate");
+    expect(
+      runInboxTierState({
+        state: "blocked",
+        block_reason: getRunBlockReason(db, gateRun.id),
+      }),
+    ).toBe("gate");
+
+    // Spawn error whose free-text contains "gate" substrings (DelegateError,
+    // investigate, propagate) must still be stored as spawn — and the inbox
+    // must treat it as ackable tier 2.
+    const spawnRun = seedRun({ current_node: "search", iteration: 1 });
+    applyAdvanceDecision(
+      db,
+      spawnRun,
+      {
+        kind: "block",
+        reason: "spawn",
+        node: "search",
+        iteration: 1,
+      },
+      {
+        error:
+          "blocked (spawn investigate): DelegateError: cannot propagate",
+      },
+    );
+    expect(getRunBlockReason(db, spawnRun.id)).toBe("spawn");
+    expect(
+      runInboxTierState({
+        state: "blocked",
+        block_reason: getRunBlockReason(db, spawnRun.id),
+      }),
+    ).toBe("blocked");
+
+    // Wire through sqlite inbox adapters: gate unackable, spawn ackable.
+    const gateSeq = bumpRunSeq(db, gateRun.id);
+    const spawnSeq = bumpRunSeq(db, spawnRun.id);
+    const box = createInbox(
+      sqliteTaskSnapshot(db),
+      sqliteAckStore(db),
+      sqliteRunSnapshot(db),
+    );
+    const w = { taskIds: [] as string[], runIds: [gateRun.id, spawnRun.id] };
+    // Gate is tier 1 → delivered first.
+    expect(box.peek(w)?.id).toBe(gateRun.id);
+    expect(box.peek(w)?.state).toBe("gate");
+    box.ack(gateSeq);
+    // Ack of gate is a no-op — still first.
+    expect(box.peek(w)?.id).toBe(gateRun.id);
+
+    // Isolate spawn: ackable tier 2.
+    const spawnOnly = { taskIds: [] as string[], runIds: [spawnRun.id] };
+    expect(box.peek(spawnOnly)?.state).toBe("blocked");
+    box.ack(spawnSeq);
+    expect(box.peek(spawnOnly)).toBeNull();
   });
 
   it("advanceRun: settled scope → enter search (cursor moves)", () => {

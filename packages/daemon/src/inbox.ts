@@ -15,6 +15,7 @@ import {
 } from "@useparley/core";
 import {
   getRun,
+  getRunBlockReason,
   getRunIdBySeq,
   getRunSeq,
   getTask,
@@ -50,6 +51,12 @@ export interface InboxRun {
   workflow: string;
   error: string | null;
   orchestrator_session_id: string | null;
+  /**
+   * Authoritative block reason from `run_seqs.block_reason` (`BlockReason`).
+   * Only `"gate"` is unackable tier 1. Null / missing ⇒ not a gate (tier 2).
+   * Never derived from free-text `error` in the inbox.
+   */
+  block_reason: string | null;
 }
 
 /**
@@ -141,30 +148,28 @@ export function isRunOwnedTaskActionable(state: string): boolean {
 }
 
 /**
- * Map a run row to its inbox tier key, or null when the run contributes no
- * pending event (`running` / `cancelled`).
+ * Map a run to its inbox tier key, or null when the run contributes no pending
+ * event (`running` / `cancelled`).
  *
- * - gate (blocked with gate reason) → tier 1 (`gate`)
- * - other blocked → tier 2 (`blocked`)
+ * - blocked + `block_reason === "gate"` → tier 1 (`gate`, never acked)
+ * - any other blocked (incl. missing reason) → tier 2 (`blocked`, ackable)
  * - failed → tier 3
  * - completed → tier 4
+ *
+ * Gate-ness comes **only** from the stored {@link InboxRun.block_reason}
+ * (written where the workflow definition was known). A missing reason is
+ * deliberately *not* a gate: a false gate blackholes the session; a missed
+ * gate surfaces as an ordinary block the orchestrator can still act on.
  */
 export function runInboxTierState(run: {
   state: string;
-  error: string | null;
+  block_reason?: string | null;
 }): string | null {
   if (run.state === "failed" || run.state === "completed") return run.state;
   if (run.state === "blocked") {
-    return isGateBlock(run) ? "gate" : "blocked";
+    return run.block_reason === "gate" ? "gate" : "blocked";
   }
   return null;
-}
-
-/** Best-effort: gate blocks store `blocked (gate …)` in error (run-engine). */
-export function isGateBlock(run: { state: string; error: string | null }): boolean {
-  if (run.state !== "blocked") return false;
-  const err = run.error ?? "";
-  return err.includes("gate");
 }
 
 /**
@@ -325,7 +330,7 @@ export function sqliteTaskSnapshot(db: DatabaseHandle): TaskSnapshot<TaskRow> {
   };
 }
 
-/** Sqlite-backed run snapshot — run_seqs side table for event ids. */
+/** Sqlite-backed run snapshot — run_seqs side table for event ids + block reason. */
 export function sqliteRunSnapshot(db: DatabaseHandle): RunSnapshot<InboxRun> {
   function toInboxRun(row: RunRow): InboxRun {
     return {
@@ -337,6 +342,7 @@ export function sqliteRunSnapshot(db: DatabaseHandle): RunSnapshot<InboxRun> {
       workflow: row.workflow,
       error: row.error,
       orchestrator_session_id: row.orchestrator_session_id,
+      block_reason: getRunBlockReason(db, row.id),
     };
   }
   return {

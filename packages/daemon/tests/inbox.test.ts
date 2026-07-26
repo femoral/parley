@@ -8,11 +8,17 @@ import { describe, expect, it, vi } from "vitest";
 import {
   createInbox,
   memoryInboxDeps,
+  runInboxTierState,
   type InboxRun,
   type InboxTask,
   type WakeSource,
   type WatchSet,
 } from "../src/inbox.js";
+import {
+  inferBlockReason,
+  type BlockReason,
+} from "../src/run-gates.js";
+import { parseWorkflowDefinition } from "@useparley/core";
 
 function task(
   id: string,
@@ -38,6 +44,7 @@ function run(
     workflow: extra.workflow ?? "wf",
     error: extra.error ?? null,
     orchestrator_session_id: extra.orchestrator_session_id ?? "sess",
+    block_reason: extra.block_reason ?? null,
     ...extra,
   };
 }
@@ -380,10 +387,12 @@ describe("ADR-0019 — runs as inbox subjects", () => {
         run("rg", "blocked", 5, {
           error: "blocked (gate review)",
           current_node: "review",
+          block_reason: "gate",
         }),
         run("rb", "blocked", 6, {
           error: "blocked (spawn research)",
           current_node: "research",
+          block_reason: "spawn",
         }),
         run("rf", "failed", 7, { error: "gone" }),
         run("rc", "completed", 8),
@@ -401,6 +410,7 @@ describe("ADR-0019 — runs as inbox subjects", () => {
       [
         run("rb", "blocked", 10, {
           error: "blocked (spawn x)",
+          block_reason: "spawn",
         }),
       ],
     );
@@ -410,7 +420,12 @@ describe("ADR-0019 — runs as inbox subjects", () => {
     // Flip seqs — stalled wins.
     const { box: box2 } = inbox(
       [task("s", "stalled", 5)],
-      [run("rb", "blocked", 15, { error: "blocked (spawn x)" })],
+      [
+        run("rb", "blocked", 15, {
+          error: "blocked (spawn x)",
+          block_reason: "spawn",
+        }),
+      ],
     );
     expect(box2.peek(watch(["s"], ["rb"]))?.id).toBe("s");
   });
@@ -422,6 +437,7 @@ describe("ADR-0019 — runs as inbox subjects", () => {
         run("rg", "blocked", 3, {
           error: "blocked (gate review)",
           current_node: "review",
+          block_reason: "gate",
         }),
       ],
     );
@@ -433,9 +449,54 @@ describe("ADR-0019 — runs as inbox subjects", () => {
   it("non-gate run blocked can be acked", () => {
     const { box } = inbox(
       [],
-      [run("rb", "blocked", 4, { error: "blocked (spawn x)" })],
+      [
+        run("rb", "blocked", 4, {
+          error: "blocked (spawn x)",
+          block_reason: "spawn",
+        }),
+      ],
     );
     box.ack(4);
+    expect(box.peek(watch([], ["rb"]))).toBeNull();
+  });
+
+  it("spawn error containing 'gate' substring is tier 2 blocked, not a gate", () => {
+    // Regression: substring classifiers misfired on "DelegateError" /
+    // "investigate" / "propagate" because those strings contain "gate".
+    const poison =
+      "blocked (spawn investigate): DelegateError: cannot propagate";
+    const { box } = inbox(
+      [],
+      [
+        run("rb", "blocked", 9, {
+          error: poison,
+          current_node: "investigate",
+          block_reason: "spawn",
+        }),
+      ],
+    );
+    const ev = box.peek(watch([], ["rb"]));
+    expect(ev?.state).toBe("blocked");
+    expect(ev?.id).toBe("rb");
+    // Ackable — a false gate would blackhole the session until panic.
+    box.ack(9);
+    expect(box.peek(watch([], ["rb"]))).toBeNull();
+  });
+
+  it("missing block_reason on a blocked run is tier 2 (not a gate)", () => {
+    // Legacy / unfilled reason: failure mode is a visible ackable block, not
+    // a dead unackable gate.
+    const { box } = inbox(
+      [],
+      [
+        run("rb", "blocked", 2, {
+          error: "blocked (gate review)",
+          block_reason: null,
+        }),
+      ],
+    );
+    expect(box.peek(watch([], ["rb"]))?.state).toBe("blocked");
+    box.ack(2);
     expect(box.peek(watch([], ["rb"]))).toBeNull();
   });
 
@@ -465,9 +526,106 @@ describe("ADR-0019 — runs as inbox subjects", () => {
       [
         run("rg", "blocked", 99, {
           error: "blocked (gate g)",
+          block_reason: "gate",
         }),
       ],
     );
     expect(box.peek(watch(["s"], ["rg"]))?.state).toBe("gate");
+  });
+
+  it("inbox tier agrees with inferBlockReason for every BlockReason", () => {
+    // Minimal definition: one gate node + one step so node-kind and spawn
+    // paths are both exercisable.
+    const definition = parseWorkflowDefinition(
+      {
+        id: "wf",
+        version: 1,
+        type: "other",
+        workspace: "scratch",
+        inputs: { brief: { type: "text" } },
+        outputs: { out: { type: "text", from: "investigate.report" } },
+        nodes: [
+          {
+            id: "approve-plan",
+            kind: "gate",
+            question: "ok?",
+            shows: {},
+            on_reject: "finish",
+          },
+          {
+            id: "investigate",
+            kind: "step",
+            prompt: "go.md",
+            in: { brief: { type: "text", from: "run.brief" } },
+            out: { report: { type: "text" } },
+          },
+        ],
+      },
+      { dir: "/tmp/wf", expectedId: "wf", typeCheck: true },
+    ).definition;
+
+    const cases: Array<{
+      reason: BlockReason;
+      error: string;
+      current_node: string;
+      wantTier: string;
+    }> = [
+      {
+        reason: "gate",
+        error: "blocked (gate approve-plan)",
+        current_node: "approve-plan",
+        wantTier: "gate",
+      },
+      {
+        reason: "spawn",
+        error: "blocked (spawn investigate): DelegateError: cannot propagate",
+        current_node: "investigate",
+        wantTier: "blocked",
+      },
+      {
+        reason: "loop_budget",
+        error: "blocked (loop 2/2)",
+        current_node: "investigate",
+        wantTier: "blocked",
+      },
+      {
+        reason: "success_policy",
+        error: "blocked (success policy on investigate)",
+        current_node: "investigate",
+        wantTier: "blocked",
+      },
+      {
+        reason: "unfilled_inputs",
+        error: "blocked (unfilled inputs on investigate: brief)",
+        current_node: "investigate",
+        wantTier: "blocked",
+      },
+      {
+        reason: "unknown",
+        error: "blocked for some other reason",
+        current_node: "investigate",
+        wantTier: "blocked",
+      },
+    ];
+
+    for (const c of cases) {
+      const inferred = inferBlockReason(
+        {
+          state: "blocked",
+          error: c.error,
+          current_node: c.current_node,
+        },
+        definition,
+      );
+      // For cases where error text matches the reason family, inferBlockReason
+      // should match; then the inbox tier must use the *stored* reason.
+      expect(inferred).toBe(c.reason);
+      expect(
+        runInboxTierState({
+          state: "blocked",
+          block_reason: inferred,
+        }),
+      ).toBe(c.wantTier);
+    }
   });
 });

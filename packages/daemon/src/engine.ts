@@ -58,9 +58,11 @@ import {
   deleteTask,
   bumpRunSeq,
   getRun,
+  getRunBlockReason,
   getRunSeq,
   getSession,
   getTask,
+  setRunBlockReason,
   insertDeliverable,
   insertQaTurn,
   insertSession,
@@ -154,6 +156,7 @@ import {
   type GateVerbRequest,
   type RunDrainHost,
 } from "./run-engine.js";
+import { inferBlockReason } from "./run-gates.js";
 import { resolveRubricForTask } from "./rubrics.js";
 import {
   deliverablesFromReport,
@@ -733,13 +736,22 @@ export class TaskEngine {
     // Seed run snapshots so the first post-start drain only emits real edges.
     // Ensure every already-actionable run has an event-id seq (restart safety:
     // a gate that predates this daemon must still surface in the inbox).
+    // Backfill missing block_reason via inferBlockReason when definition loads
+    // — never substring-guess from error text in the inbox.
     for (const run of listRuns(this.db)) {
       this.runSnapshots.set(run.id, {
         state: run.state,
         current_node: run.current_node,
         iteration: run.iteration,
       });
-      if (runInboxTierState(run) !== null && getRunSeq(this.db, run.id) === 0) {
+      if (run.state === "blocked") {
+        this.ensureRunBlockReason(run);
+      }
+      const tier = runInboxTierState({
+        state: run.state,
+        block_reason: getRunBlockReason(this.db, run.id),
+      });
+      if (tier !== null && getRunSeq(this.db, run.id) === 0) {
         bumpRunSeq(this.db, run.id);
       }
     }
@@ -3561,6 +3573,19 @@ export class TaskEngine {
   private syncRunTransitions(): void {
     let any = false;
     for (const run of listRuns(this.db)) {
+      if (run.state === "blocked") {
+        this.ensureRunBlockReason(run);
+      } else if (
+        run.state === "running" ||
+        run.state === "completed" ||
+        run.state === "failed" ||
+        run.state === "cancelled"
+      ) {
+        // Clear stale gate/block reason when the run has left blocked.
+        if (getRunBlockReason(this.db, run.id) !== null) {
+          setRunBlockReason(this.db, run.id, null);
+        }
+      }
       const prev = this.runSnapshots.get(run.id);
       const next = {
         state: run.state,
@@ -3642,6 +3667,29 @@ export class TaskEngine {
     }
     // Wake even when only snapshots updated without edges? record() already wakes.
     void any;
+  }
+
+  /**
+   * Ensure a blocked run has a stored `block_reason` for the inbox.
+   * Prefer the reason already written by run-engine at block time; if missing
+   * (legacy / restart), backfill with {@link inferBlockReason} when the
+   * definition loads. Never invent a gate from free-text error alone.
+   */
+  private ensureRunBlockReason(run: RunRow): void {
+    if (getRunBlockReason(this.db, run.id) !== null) return;
+    try {
+      const def = this.buildRunDrainHost().loadDefinition(
+        run.workflow,
+        run.version,
+      );
+      if (def === null) return;
+      const reason = inferBlockReason(run, def);
+      // Store even "unknown" so we do not re-infer every peek; inbox treats
+      // only exact "gate" as unackable tier 1.
+      setRunBlockReason(this.db, run.id, reason);
+    } catch {
+      // Definition unparseable — leave null ⇒ inbox treats as non-gate.
+    }
   }
 
   /**

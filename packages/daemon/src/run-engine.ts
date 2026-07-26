@@ -24,6 +24,7 @@ import {
   listDeliverablesForRun,
   listRuns,
   listTasksForRunNode,
+  setRunBlockReason,
   updateRun,
   type DatabaseHandle,
   type DeliverableRow,
@@ -33,6 +34,7 @@ import {
 } from "./db.js";
 import {
   actionGateVerb,
+  type BlockReason,
   type GateVerb,
   type GateVerbDecision,
   type GateVerbRequest,
@@ -699,6 +701,8 @@ export function applyAdvanceDecision(
         iteration: decision.iteration,
         error: opts?.error ?? blockErrorMessage(decision),
       });
+      // Authoritative reason for the inbox (ADR-0019) — not re-derived from error text.
+      setRunBlockReason(db, run.id, decision.reason as BlockReason);
       return { decision, run: getRun(db, run.id) ?? run, changed: true };
     }
     case "complete": {
@@ -708,6 +712,7 @@ export function applyAdvanceDecision(
         completed_at: new Date().toISOString(),
         error: null,
       });
+      setRunBlockReason(db, run.id, null);
       return { decision, run: getRun(db, run.id) ?? run, changed: true };
     }
     case "enter": {
@@ -717,6 +722,7 @@ export function applyAdvanceDecision(
         iteration: decision.iteration,
         error: null,
       });
+      setRunBlockReason(db, run.id, null);
       return { decision, run: getRun(db, run.id) ?? run, changed: true };
     }
     case "unfilled_inputs": {
@@ -728,6 +734,7 @@ export function applyAdvanceDecision(
           opts?.error ??
           `blocked (unfilled inputs on ${decision.node}: ${decision.missing.join(", ")})`,
       });
+      setRunBlockReason(db, run.id, "unfilled_inputs");
       return {
         decision: {
           kind: "block",
@@ -1003,6 +1010,7 @@ export function advanceRun(
           state: "blocked",
           error: `blocked (spawn ${step.id}): ${err.error}`,
         });
+        setRunBlockReason(db, run.id, "spawn");
         return {
           decision: {
             kind: "block",
@@ -1073,6 +1081,7 @@ export function actionRunVerb(
       completed_at: new Date().toISOString(),
       error: null,
     });
+    setRunBlockReason(db, run.id, null);
     return { decision, run: getRun(db, run.id) ?? run, changed: true };
   }
 
@@ -1096,6 +1105,7 @@ export function actionRunVerb(
       iteration: decision.iteration,
       error: `blocked (gate ${target.id})`,
     });
+    setRunBlockReason(db, run.id, "gate");
     return { decision, run: getRun(db, run.id) ?? run, changed: true };
   }
 
@@ -1113,6 +1123,7 @@ export function actionRunVerb(
       iteration: decision.iteration,
       error: `blocked (unfilled inputs on ${target.id}: ${missing.join(", ")})`,
     });
+    setRunBlockReason(db, run.id, "unfilled_inputs");
     return { decision, run: getRun(db, run.id) ?? run, changed: true };
   }
 
@@ -1122,6 +1133,7 @@ export function actionRunVerb(
     iteration: decision.iteration,
     error: null,
   });
+  setRunBlockReason(db, run.id, null);
   const updated = getRun(db, run.id) ?? run;
 
   if (host.onEnter !== undefined) {
@@ -1140,6 +1152,7 @@ export function actionRunVerb(
         state: "blocked",
         error: `blocked (spawn ${target.id}): ${err.error}`,
       });
+      setRunBlockReason(db, run.id, "spawn");
       return {
         decision,
         run: getRun(db, run.id) ?? updated,
@@ -1226,6 +1239,7 @@ export function markRunFailed(
     error,
     completed_at: new Date().toISOString(),
   });
+  setRunBlockReason(db, runId, null);
   return getRun(db, runId);
 }
 
