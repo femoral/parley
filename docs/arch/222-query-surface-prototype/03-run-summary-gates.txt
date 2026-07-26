@@ -1,0 +1,82 @@
+# Run summary, second case: gates, a live fan-out, and authored slots
+#
+# Coding-2 is the workflow whose loop hangs off a gate (#215's F7), so it is
+# where the node table has to render something that is not a step.
+
+$ parley run status r6
+
+RUN r6  coding-2@1  running  iteration 2  4m12s  98.4k in/12.0k out
+branch  parley/r6-coding-2
+brief   Port the xai proxy off the deprecated streaming endpoint. Keep the retry semantics.
+
+NODE              ITER  STATE       TASKS  USAGE        DURATION  GIST
+implement         1     completed   1      41.2k/6.1k   6m18s     Ported to /v2/responses; retry wrapper unchanged
+review            1     completed   3      88.1k/9.4k   4m52s     verdict=2 approve, 1 changes_requested
+triage            1     completed   1      22.0k/1.8k   1m31s     verdict=changes_requested · Streaming backpressure unhandled
+rework-or-finish  1     redirected  -      -            0m00s     "Send it back, or finish here?" -> redirect --to implement
+implement         2     completed   1      33.4k/4.2k   5m02s     Added backpressure handling; 2 tests
+review            2     running     1/3    24.9k/2.9k   1m44s...  1 of 3 settled
+
+waiting  review[adversarial] running 1m44s · review[fast-sweep] running 1m40s
+zoom     parley run status r6 --node review --iteration 2
+
+# GATE ROWS. A gate spawns nothing (#214), so TASKS, USAGE and DURATION are all
+# `-`, and its STATE is the verb the orchestrator used, not a task projection:
+#
+#   waiting | approved | rejected | redirected | finished
+#
+# So the node table's STATE column is polymorphic - a projection over tasks for
+# a step, a verb for a gate. That is not a wart: it is #214's "a node is either
+# a step or a gate" surfacing exactly once, in the one column where the two
+# kinds differ.
+#
+# The gate's GIST is its declared `question`, truncated, plus the verb and its
+# argument. A rejected gate reads `-> reject (on_reject: implement)`; a
+# redirect names the node the orchestrator chose. The `--note` from #221 is
+# NOT shown here - it went into the entry task's prompt, and the summary is
+# not where you read prompts.
+#
+# A gate still waiting reads:
+#
+#   rework-or-finish  2     waiting     -      -            2m10s...  "Send it back, or finish here?"
+#
+# and DURATION becomes the only non-`-` column, because how long a gate has
+# been sitting on the orchestrator is the single most actionable number in the
+# whole view.
+
+---
+
+# A fork (#221), where coding-1 declares `reentry: "implement"` so `plan` never
+# runs again:
+
+$ parley run status r8
+
+RUN r8  coding-1@1  running  iteration 1  0m52s  8.1k in/0.9k out
+branch  parley/r8-coding-1  (from parley/r3-coding-1)
+forked  from r3, attempt 2, entered at `implement`
+note    Reviewers kept passing this but the retry semantics did change. Preserve them exactly.
+brief   Port the xai proxy off the deprecated streaming endpoint. Keep the retry semantics.
+
+NODE              ITER  STATE       TASKS  USAGE        DURATION  GIST
+plan              0     inherited   -      -            -         from r3 plan.1 · d271 plan
+approve-plan      0     skipped     -      -            -         never asked (re-entry past this gate)
+implement         1     running     1      8.1k/0.9k    0m52s...  -
+
+# INHERITED NODES render at ITER 0, which is #221's marker for a copied
+# deliverable, surfacing unchanged in the view. The GIST names the source
+# address rather than a gist - no child ran here in this run, so there is no
+# child-authored summary to show.
+#
+# A fork produces TWO node states nothing else can:
+#
+#   inherited   a step whose deliverables were copied from the parent run
+#   skipped     a gate the re-entry jumped past, so it was never asked
+#
+# Drafting caught the second one. #221 only ever discussed inheriting
+# deliverables, and a gate has no ports - so `approve-plan` has nothing to
+# inherit and needs its own word. It also has a consequence worth stating in
+# the ADR: re-entering past a gate silently discards a human approval the
+# author declared as mandatory. The view should at least name it.
+#
+# `forked`/`note` are header lines, not columns: they are per-run facts and the
+# note is the one piece of prose the run header carries.

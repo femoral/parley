@@ -1,0 +1,152 @@
+# Run summary — the default view, and the one that has to be cheap
+#
+# `parley run status <run>`, mirroring `parley status <task>`: a ref promotes
+# the list into a detail view. This is what an orchestrating agent reads on
+# every loop iteration, so it is the view with a token budget.
+#
+# Example: the Research workflow, 32 tasks over two loop passes, blocked on
+# loop-budget exhaustion (#217).
+
+$ parley run status r7
+
+RUN r7  research@1  blocked (loop 2/2)  iteration 2  22m41s  412.8k in/38.1k out
+branch  parley/r7-research
+brief   Which vector DBs support hybrid search with metadata filters at 100M+ scale?
+
+NODE                ITER  STATE      TASKS  USAGE        DURATION  GIST
+scope               1     completed  1      8.1k/1.2k    0m42s     6 queries · Split the brief into six angles; scale evidence looks thin
+search              1     completed  6      94.2k/9.8k   3m10s     6/6 ok · 41 sources
+funnel              1     completed  1      61.0k/3.1k   2m22s     12 sources · Shortlisted 12 of 41; dropped 9 dupes and 20 blogspam
+validate            1     completed  12     88.4k/7.7k   4m01s     12/12 ok · 12 validations
+adversarial-review  1     completed  1      33.0k/4.4k   1m58s     coverage=insufficient · No benchmarks past 10M vectors
+scope               2     completed  1      9.4k/1.4k    0m39s     3 queries · Targeting published scale benchmarks
+search              2     completed  3      47.1k/5.2k   2m14s     2/3 ok · 14 sources
+funnel              2     completed  1      38.9k/2.6k   1m40s     5 sources · 5 new past the dedupe; 17 shortlisted overall
+validate            2     completed  5      31.2k/2.4k   1m50s     5/5 ok · 5 validations
+adversarial-review  2     completed  1      1.5k/0.3k    2m05s     coverage=insufficient · Vendor self-published benchmarks only
+
+blocked  loop budget exhausted at `adversarial-review` (max 2); `coverage` is still `insufficient`
+verbs    parley run approve r7 · redirect r7 --to <node> · finish r7
+zoom     parley run status r7 --node search --iteration 2
+
+# -----------------------------------------------------------------------------
+# THE POINT: one line per (node, iteration).
+#
+# 32 tasks - including a 6-wide and a 12-wide fan-out - render as 10 lines.
+# The summary grows with the *shape* of the workflow times its loop passes, and
+# is completely independent of fan-out width and of deliverable size. A Research
+# run whose `scope` emits forty queries prints the same 10 lines.
+#
+# That bound is `nodes x max(loop.max)`, and both numbers are static in
+# `workflow.json` - so `parley lint` can print the worst-case summary size
+# before the run ever starts.
+#
+# Measured: this view is ~350 tokens.
+#
+# -----------------------------------------------------------------------------
+# THE GIST COLUMN - structural rollup, zero inference.
+#
+# The map forbids daemon-side summarization, so a gist is composed from three
+# deterministic parts, in order, joined by ` · `:
+#
+#   1. Enum out-ports, tallied.        `coverage=insufficient`
+#                                      `verdict=2 approve, 1 changes_requested`
+#   2. Plural out-ports, counted.      `41 sources`, `12 validations`
+#   3. The child's own `summary`,      only when the node has exactly ONE task.
+#      verbatim, truncated to the line.
+#
+# Plus `n/m ok` on any fan-out where n < m, so a lost sibling is never silent.
+#
+# Rule 3 is why `search` and `validate` show no prose: a 12-wide fan-out has
+# twelve child-authored summaries and picking one, or merging them, is exactly
+# the inference the map rules out. You zoom to read them (03-node-detail.txt).
+#
+# -----------------------------------------------------------------------------
+# THE AUSTERITY THIS EXPOSES - see NOTES.md, N2.
+#
+# `validate` reads `12/12 ok · 12 validations`, which is nearly useless. What
+# the orchestrator wants is `10 supports, 1 contradicts, 1 unreachable` - and
+# the daemon *could* produce it, because `validation.status` is declared as an
+# enum inside types/validation.schema.json.
+#
+# The draft deliberately refuses. The daemon tallies TOP-LEVEL enum ports only
+# and never reaches inside a named schema type. Reaching in means the rollup's
+# quality depends on how deeply someone nested a field, and there is no rule
+# for which of five enum fields to tally.
+#
+# The consequence is a real authoring pressure: a step that wants a legible
+# summary line must declare a top-level enum out-port. `adversarial-review`
+# already does (`coverage`), which is why its line reads well and `validate`'s
+# does not.
+
+---
+
+$ parley run status r7 --json
+
+{
+  "run": { "...": "RunEnvelope, exactly as 01-run-list.txt" },
+  "nodes": [
+    {
+      "node": "scope",
+      "kind": "step",
+      "iteration": 1,
+      "state": "completed",
+      "tasks_settled": 1,
+      "tasks_total": 1,
+      "usage": { "input_tokens": 8100, "output_tokens": 1200 },
+      "duration_ms": 42000,
+      "fanout": null,
+      "tallies": {},
+      "counts": { "queries": 6 },
+      "summary": "Split the brief into six angles; scale evidence looks thin",
+      "deliverables": ["d101"]
+    },
+    {
+      "node": "search",
+      "kind": "step",
+      "iteration": 1,
+      "state": "completed",
+      "tasks_settled": 6,
+      "tasks_total": 6,
+      "usage": { "input_tokens": 94200, "output_tokens": 9800 },
+      "duration_ms": 190000,
+      "fanout": { "kind": "data", "over": "scope.queries", "width": 6, "failed": [] },
+      "tallies": {},
+      "counts": { "sources": 41 },
+      "summary": null,
+      "deliverables": ["d102", "d103", "d104", "d105", "d106", "d107"]
+    },
+    {
+      "node": "adversarial-review",
+      "kind": "step",
+      "iteration": 2,
+      "state": "completed",
+      "tasks_settled": 1,
+      "tasks_total": 1,
+      "usage": { "input_tokens": 1500, "output_tokens": 300 },
+      "duration_ms": 125000,
+      "fanout": null,
+      "tallies": { "coverage": { "insufficient": 1 } },
+      "counts": {},
+      "summary": "Vendor self-published benchmarks only",
+      "deliverables": ["d130", "d131", "d132"]
+    }
+  ],
+  "block": {
+    "reason": "loop_exhausted",
+    "node": "adversarial-review",
+    "iteration": 2,
+    "max": 2,
+    "detail": "`coverage` is still `insufficient`",
+    "verbs": ["approve", "redirect", "finish"]
+  }
+}
+
+# `deliverables` ships IDs, never values - the whole point of the resolution
+# split. `summary` is null on any multi-task node (gist rule 3). `tallies` and
+# `counts` are the machine-readable form of the GIST column, so a UI or an
+# agent recomposes the line rather than parsing it.
+#
+# `block.verbs` is on the wire because #218 made the verb set vary by reason
+# (no `reject` outside a declared gate), and an agent should not be deriving
+# that table itself.

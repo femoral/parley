@@ -1,0 +1,100 @@
+# Node detail — one node, one iteration
+#
+# `parley run status <run> --node <id> [--iteration <n>] [--slot <name>]`.
+# A flag on the same command, not a new subcommand: `--node` is a zoom on the
+# summary, the way `parley status <task>` is a zoom on `parley status`.
+# `--iteration` defaults to the latest.
+#
+# This is where child-authored prose lives for a fan-out - the summary refuses
+# to merge twelve gists, so this view lists them.
+
+$ parley run status r7 --node search --iteration 1
+
+NODE search  (step)  run r7  iteration 1  completed  6 tasks  94.2k in/9.8k out  3m10s
+fan-out  data, 6 wide, over `scope.queries` (success: min 1)
+sandbox  read-only -> shared checkout (#220)
+
+SLOT                 TASK   STATE      USAGE       DURATION  GIST
+hybrid-search        t8801  completed  16.2k/1.9k  0m48s     7 sources; 2 vendor docs, 5 papers
+metadata-filters     t8802  completed  14.9k/1.5k  0m41s     6 sources, all post-2024
+scale-100m           t8803  completed  18.1k/2.2k  0m55s     9 sources but only 1 with published numbers
+recall-tradeoffs     t8804  completed  15.0k/1.6k  0m44s     6 sources; heavy overlap with hybrid-search
+open-source-options  t8805  completed  16.4k/1.4k  0m39s     8 sources
+managed-services     t8806  completed  13.6k/1.2k  0m33s     5 sources; two behind paywalls
+
+DELIVERABLE  PORT     SLOT                 KIND    TYPE      SIZE
+d102         sources  hybrid-search        inline  source[]  7 el
+d103         sources  metadata-filters     inline  source[]  6 el
+d104         sources  scale-100m           inline  source[]  9 el
+d105         sources  recall-tradeoffs     inline  source[]  6 el
+d106         sources  open-source-options  inline  source[]  8 el
+d107         sources  managed-services     inline  source[]  5 el
+
+read   parley run get d104
+tasks  parley status t8803
+
+# The SLOT column is the fan-out container (#215's rule 4): authored slot names
+# for `review`, upstream dict keys for `search`. One column serves both, which
+# is what makes the two fan-out mechanisms invisible here - as they should be.
+#
+# GIST is the child's own `summary` verbatim. At this resolution there is one
+# task per row, so gist rule 3 applies to every line and no inference is needed.
+#
+# `parley status t8803` is the escape hatch down to the existing task view -
+# logs, provenance, eval, the whole `renderDetailSections` block. The run
+# surface deliberately does NOT restate any of it.
+
+---
+
+# A fan-out that lost a sibling - the case #218's `success` policy exists for,
+# and the one #218 explicitly said this view has to render.
+
+$ parley run status r7 --node search --iteration 2
+
+NODE search  (step)  run r7  iteration 2  completed  3 tasks  47.1k in/5.2k out  2m14s
+fan-out  data, 3 wide, over `scope.queries` (success: min 1) - MET, 2 of 3
+sandbox  read-only -> shared checkout (#220)
+
+SLOT                  TASK   STATE      USAGE       DURATION  GIST
+scale-benchmarks      t8830  completed  21.4k/2.6k  1m10s     8 sources, 3 with published numbers
+vendor-claims         t8831  completed  25.7k/2.6k  1m04s     6 sources
+independent-bench     t8832  failed     0.0k/0.0k   0m12s     - (vendor 429; no retry configured)
+
+DELIVERABLE  PORT     SLOT              KIND    TYPE      SIZE
+d120         sources  scale-benchmarks  inline  source[]  8 el
+d121         sources  vendor-claims     inline  source[]  6 el
+
+# The failed sibling keeps its SLOT row so the absence is visible, and produces
+# no deliverable row - which is #218's "a lost sibling is an absent key, not a
+# null" surfacing as a shorter table.
+#
+# The header states the policy AND the verdict against it (`MET, 2 of 3`),
+# because approving past a thin fan-out is a judgement call that needs the
+# counts in front of the orchestrator - #218's exact hand-off to this ticket.
+
+---
+
+# A gate, zoomed.
+
+$ parley run status r6 --node rework-or-finish --iteration 1
+
+NODE rework-or-finish  (gate)  run r6  iteration 1  redirected  0m41s waiting
+question  Reviewers asked for changes. Send it back to implementation, or finish the run here?
+on_reject implement (max 2)
+answered  redirect --to implement  by a91c2d4e at 2026-07-25T09:22:11Z
+note      Backpressure is the real bug; ignore the docs nits.
+
+SHOWS         FROM                  KIND    TYPE                 SIZE
+verdict       triage.verdict        inline  verdict              changes_requested
+rework_brief  triage.rework_brief   inline  text                 1.2 kB
+notes         review.notes          inline  dict<string, text>   3 keys
+
+read  parley run get d310
+
+# `shows` is #215's read-only projection, and it is the gate's whole payload.
+# Enum-typed entries print their VALUE in the SIZE column, because a one-word
+# enum is smaller than the word "12 B" and it is the thing being decided on.
+# Everything else is a size plus an id to fetch.
+#
+# `0m41s waiting` is how long the gate held the run - the number that says
+# whether the orchestrator is the bottleneck.

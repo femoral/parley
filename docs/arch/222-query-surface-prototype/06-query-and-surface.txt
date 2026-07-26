@@ -1,0 +1,113 @@
+# What "queryable" means concretely — and the command / channel / type surface
+
+# ─── THE WHOLE COMMAND SURFACE ────────────────────────────────────────────────
+#
+# Four resolutions, three commands. `parley run` is already the verb namespace
+# (#217 approve/reject/redirect/finish, #218 cancel, #221 fork), so the query
+# surface joins it rather than inventing `parley workflow …`.
+
+parley run status                             # 01 - many runs, one line each
+parley run status <run>                       # 02 - the summary (default zoom)
+parley run status <run> --node <id>           # 04 - one node, one iteration
+parley run get <deliverable-id>               # 05 - one deliverable
+
+# The list/detail split on one command is `parley status`'s exact shape: a ref
+# promotes the table into a detail view. An orchestrator that already knows
+# `parley status` knows this.
+
+# ─── FILTERS ──────────────────────────────────────────────────────────────────
+
+# On the list (server-side where the task list already filters, local for
+# session scoping - same division as runStatus today):
+--session <id>|latest     # default: PARLEY_SESSION_ID, else newest session
+--all                     # every run, no session scope
+--workflow <id>           # research | coding-1 | …
+--state <s>               # running|blocked|completed|failed|cancelled
+--blocked                 # sugar for --state blocked; the actionable listing
+
+# On the summary (all narrow the node table, all composable):
+--node <id>               # one node
+--iteration <n>           # one pass; default latest
+--slot <name>             # one sibling; implies its node
+--failed                  # only nodes with a failed or missing sibling
+
+# On everything:
+--json
+
+# EXPLICITLY NOT OFFERED
+#
+# 1. Full-text search inside deliverables. See 05-deliverable.txt - children get
+#    their inputs materialized on disk, orchestrators pipe `run get`.
+# 2. Predicate queries over deliverable VALUES (`--where 'verdict=approve'`).
+#    The tallies in the summary already answer the only version of this anyone
+#    asked for, without an expression language to specify, parse, and version.
+# 3. Cross-run joins ("every run where triage rejected twice"). That is a
+#    metrics question, and metrics is #225's surface with its own filter
+#    vocabulary already in METRICS_FILTER_FLAGS.
+#
+# The line: this surface answers "what is happening in THIS run", at four
+# resolutions. Anything aggregate is metrics; anything textual is grep.
+
+# ─── WHICH CHANNELS ───────────────────────────────────────────────────────────
+#
+#   CLI                      yes
+#   daemon HTTP              yes - Parley Cove needs it (#224)
+#   child MCP / HTTP (ADR-0003, ADR-0011)   NO
+#
+# The child channel is the interesting one, and the answer is no.
+#
+# A child already receives everything it is entitled to: #216 materializes its
+# declared input ports into `.parley/tmp/<node>.<iteration>/in/` before spawn.
+# That is the designed path for "how does a child see upstream work", and it is
+# scoped by the workflow author to exactly the ports they wired.
+#
+# A run query verb would blow that scope open. Coding-2 fans out to three
+# reviewers precisely so it gets three INDEPENDENT verdicts; a `run_status`
+# tool would let the fast-sweep reviewer read the adversarial reviewer's
+# verdict mid-flight and agree with it. Three reviewers who can read each other
+# are one reviewer with extra steps, and the whole node stops meaning what the
+# author wrote it to mean.
+#
+# So: the run surface is for the orchestrator. Children see their ports.
+
+# ─── WIRE TYPES (packages/core/src/contract.ts) ───────────────────────────────
+
+RunEnvelope        run_id, workflow, workflow_version, orchestrator_session_id,
+                   state, block, current_node, iteration, parent_run_id,
+                   attempt, tasks_settled, tasks_total, usage, duration_ms,
+                   branch, worktree, created_at, updated_at, completed_at, seq
+
+NodeProjection     node, kind ("step"|"gate"), iteration, state, tasks_settled,
+                   tasks_total, usage, duration_ms, fanout, tallies, counts,
+                   summary, deliverables[]  (ids only)
+                   + gate-only: question, on_reject, answer, note, shows[]
+
+DeliverableRef     deliverable_id, node, port, iteration, slot, task_id, kind,
+                   type, size            (never a value)
+
+DeliverableValue   DeliverableRef + value | path + exists
+
+RunBlock           reason, node, iteration, detail, verbs[]
+                   reason: gate | loop_exhausted | success_policy | spawn_error
+
+RunsResponse       { runs: RunEnvelope[], seq }
+RunDetailResponse  { run: RunEnvelope, nodes: NodeProjection[], block: RunBlock|null }
+
+# Endpoints, matching the existing /tasks shape:
+#
+#   GET /runs
+#   GET /runs/:ref
+#   GET /runs/:ref/nodes/:node?iteration=&slot=
+#   GET /deliverables/:id
+#
+# TWO DISCIPLINES INHERITED FROM TaskEnvelope, both load-bearing:
+#
+# 1. NO STORAGE SHAPES. TaskEnvelope's doc comment is explicit that JSON columns
+#    arrive as objects and booleans as booleans, and `TaskRow` survives only as
+#    a deprecated `row` field mid-migration (#208). The run surface is new, so
+#    it starts on the right side of that line and never ships a `row`.
+#
+# 2. NODE PROJECTIONS ARE COMPUTED, NOT STORED. #214 fixed that a step stores no
+#    status and #217 kept it, so NodeProjection is derived per request from the
+#    node's tasks. Nothing here can drift from the task rows, because nothing
+#    here is written down twice.

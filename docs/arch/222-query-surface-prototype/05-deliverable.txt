@@ -1,0 +1,95 @@
+# Deliverable fetch — the only view allowed to be large
+#
+# `parley run get <deliverable-id>`. One deliverable, by opaque id (#216).
+# Prints the raw value to stdout and nothing else, so it pipes.
+
+$ parley run get d104
+
+[
+  {
+    "url": "https://example.org/ann-benchmarks-2026",
+    "title": "ANN-Benchmarks 2026: billion-scale hybrid retrieval",
+    "claim": "Reports recall@10 for four engines at 100M vectors with metadata filters.",
+    "retrieved_at": "2026-07-19T00:00:00Z"
+  },
+  { "...": "8 more" }
+]
+
+# No envelope, no header, no pretty-printing decisions imposed on the caller.
+# `parley run get d104 | jq '.[].url'` is the intended shape of use.
+
+---
+
+$ parley run get d104 --json
+
+{
+  "deliverable_id": "d104",
+  "run_id": "r7",
+  "node": "search",
+  "port": "sources",
+  "iteration": 1,
+  "slot": "scale-100m",
+  "task_id": "t8803",
+  "kind": "inline",
+  "type": "source[]",
+  "size": { "elements": 9, "bytes": 4318 },
+  "created_at": "2026-07-25T09:18:41Z",
+  "value": [ "...": "as above" ]
+}
+
+# --json adds the address (#216: an opaque id PLUS the structural address) and
+# the provenance, then nests the same value under `value`. Bare mode is for
+# piping, --json is for a consumer that needs to know what it fetched.
+
+---
+
+# FILE and DIR kinds. #216 made these references parley never copies, so the
+# only honest thing to print is where they are - and whether they still exist.
+
+$ parley run get d512
+
+/home/…/worktrees/r9/.parley/tmp/bundle.1/out/report.pdf
+
+$ parley run get d512 --json
+
+{
+  "deliverable_id": "d512",
+  "kind": "file",
+  "type": "file",
+  "path": ".parley/tmp/bundle.1/out/report.pdf",
+  "absolute_path": "/home/…/worktrees/r9/.parley/tmp/bundle.1/out/report.pdf",
+  "exists": false,
+  "size": null,
+  "note": "worktree removed; file deliverables do not outlive their workspace (#216)"
+}
+
+# `exists` is stat'd at read time, not stored. A file deliverable whose bytes
+# are gone is the normal end state of a completed run (#220 auto-removes the
+# worktree), so the view must say so plainly rather than 404.
+
+---
+
+# PURGED. #216 ties deliverable rows to their producing task's 30-day gc clock,
+# so runs decay rather than expire, and `purged` is a state this surface renders.
+
+$ parley run get d004
+error: deliverable d004 was purged on 2026-06-24 (run r1, search.1[hybrid-search])
+exit 9
+
+# The address survives the value, which is what makes the error useful: it says
+# what is gone, not just that something is. Same shape in the summary view -
+# a purged run's node rows read `purged` in STATE and keep their gists, because
+# gists live on the task row, not the deliverable.
+
+---
+
+# WHAT IS NOT OFFERED, deliberately:
+#
+#   parley run get d104 --search "recall"      NO
+#   parley run status r7 --grep "backpressure" NO
+#
+# Deliverables are already materialized as files in the run's `.parley/tmp/in/`
+# before each spawn (#216), so a CHILD greps them with the tools it already has.
+# And an ORCHESTRATOR pipes `parley run get` into whatever it likes. Parley
+# storing an index to answer text queries would be a search engine bolted onto
+# a task daemon, earning its keep on one workflow out of three.
