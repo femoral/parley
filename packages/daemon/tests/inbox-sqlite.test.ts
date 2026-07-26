@@ -69,6 +69,10 @@ function box() {
   return createInbox(sqliteTaskSnapshot(db), sqliteAckStore(db));
 }
 
+function w(taskIds: string[], runIds: string[] = []) {
+  return { taskIds, runIds };
+}
+
 describe("sqlite inbox adapters", () => {
   it("peek / ack / allDone against real event_acks + getBySeq", () => {
     seedTask("a", "awaiting_answer");
@@ -77,22 +81,22 @@ describe("sqlite inbox adapters", () => {
     const seqB = bumpTaskSeq(db, "b");
     const inbox = box();
 
-    expect(inbox.peek(["a", "b"])?.id).toBe("a"); // priority
+    expect(inbox.peek(w(["a", "b"]))?.id).toBe("a"); // priority
     inbox.ack(seqA);
-    expect(inbox.peek(["a", "b"])?.id).toBe("b");
+    expect(inbox.peek(w(["a", "b"]))?.id).toBe("b");
     inbox.ack(seqB);
-    expect(inbox.peek(["a", "b"])).toBeNull();
+    expect(inbox.peek(w(["a", "b"]))).toBeNull();
     // still non-terminal (awaiting_answer) → not all-done
-    expect(inbox.allDone(["a", "b"])).toBe(false);
+    expect(inbox.allDone(w(["a", "b"]))).toBe(false);
 
     writeTaskState(db, "a", "completed");
     const seqA2 = bumpTaskSeq(db, "a");
     writeTaskState(db, "b", "cancelled");
     bumpTaskSeq(db, "b");
     // completed surfaces; cancelled does not
-    expect(inbox.peek(["a", "b"])?.seq).toBe(seqA2);
+    expect(inbox.peek(w(["a", "b"]))?.seq).toBe(seqA2);
     inbox.ack(seqA2);
-    expect(inbox.allDone(["a", "b"])).toBe(true);
+    expect(inbox.allDone(w(["a", "b"]))).toBe(true);
   });
 
   it("re-entry into same state with new seq is un-acked", () => {
@@ -100,13 +104,13 @@ describe("sqlite inbox adapters", () => {
     const seq1 = bumpTaskSeq(db, "a");
     const inbox = box();
     inbox.ack(seq1);
-    expect(inbox.peek(["a"])).toBeNull();
+    expect(inbox.peek(w(["a"]))).toBeNull();
 
     writeTaskState(db, "a", "running");
     bumpTaskSeq(db, "a");
     writeTaskState(db, "a", "awaiting_answer");
     const seq2 = bumpTaskSeq(db, "a");
-    expect(inbox.peek(["a"])?.seq).toBe(seq2);
+    expect(inbox.peek(w(["a"]))?.seq).toBe(seq2);
   });
 
   it("ack of superseded seq is a no-op", () => {
@@ -117,6 +121,6 @@ describe("sqlite inbox adapters", () => {
     const inbox = box();
 
     inbox.ack(oldSeq);
-    expect(inbox.peek(["a"])?.seq).toBe(newSeq);
+    expect(inbox.peek(w(["a"]))?.seq).toBe(newSeq);
   });
 });

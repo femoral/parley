@@ -132,6 +132,17 @@ export interface TaskEnvelope {
    * `profile:deep` (or both joined with `+`) (#171). Null when not `queued`.
    */
   blocking_cap?: string | null;
+  /**
+   * Owning run id when this task is run-owned (ADR-0018 / ADR-0019 / #233).
+   * Null for ordinary tasks. On every `task.*` firehose event.
+   */
+  run_id?: string | null;
+  /** Run address node id (#233 / #240). */
+  node?: string | null;
+  /** Run address iteration (#233 / #240). */
+  iteration?: number | null;
+  /** Run address slot (#233 / #240). */
+  slot?: string | null;
 }
 
 /**
@@ -328,24 +339,54 @@ export interface TasksResponse {
  * `GET /tasks/inbox` — one acked attention-inbox long-poll response
  * (ADR-0007 / #91 / #208).
  */
+/**
+ * Run face on an inbox / follow event (ADR-0019 / #240). Present when the
+ * subject is a run (gate / blocked / failed / completed). The exit code still
+ * reports only the tier; this payload picks the verb.
+ */
+export interface RunEnvelope {
+  run_id: string;
+  workflow: string;
+  state: string;
+  /** Inbox tier key: gate | blocked | failed | completed (or lifecycle state on follow). */
+  tier?: string;
+  current_node: string | null;
+  iteration: number;
+  error: string | null;
+  orchestrator_session_id: string | null;
+  seq: number;
+}
+
 export interface InboxEventResponse {
   /** Watch event name, or null when the poll window elapsed / all-done. */
   event: string | null;
   /** Event id (transition seq) when an event is present; else current global seq. */
   seq: number;
+  /**
+   * Subject kind (ADR-0019). Absent/`task` on older daemons. Distinguishes
+   * "question on task X" from "gate on run R" without a new exit code.
+   */
+  subject?: "task" | "run";
   task: TaskEnvelope | null;
-  /** True when every watched task is terminal and every event is acked. */
+  /** Present when `subject` is `run`. */
+  run?: RunEnvelope | null;
+  /**
+   * True when the session is finished: every watched subject terminal (runs
+   * included) and every event acked (ADR-0019).
+   */
   all_done: boolean;
 }
 
 /**
  * `GET /tasks/events` — one multi-task transition firehose long-poll response
- * (`watch --follow`, #208).
+ * (`watch --follow`, #208 / #240).
  */
 export interface FollowEventResponse {
   event: string | null;
   seq: number;
+  subject?: "task" | "run";
   task: TaskEnvelope | null;
+  run?: RunEnvelope | null;
 }
 
 /**

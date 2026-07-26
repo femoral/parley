@@ -56,7 +56,9 @@ import {
   currentSeq,
   deleteSession,
   deleteTask,
+  bumpRunSeq,
   getRun,
+  getRunSeq,
   getSession,
   getTask,
   insertDeliverable,
@@ -67,6 +69,8 @@ import {
   listExpiredSessions,
   listExpiredTasks,
   listQaTurns,
+  listRuns,
+  listRunsForSession,
   listSessions,
   listQueuedTasks,
   listTasks,
@@ -91,11 +95,23 @@ import {
 import {
   createInbox,
   sqliteAckStore,
+  sqliteRunSnapshot,
   sqliteTaskSnapshot,
   type Inbox,
+  runInboxTierState,
+  type InboxEvent,
+  type WatchSet,
 } from "./inbox.js";
 import {
+  noteEventResolved,
+  noteInboxDelivery,
+  isPanickedSession,
+  clearSessionPanic,
+} from "./session-panic.js";
+import {
+  createRunTransitions,
   createTaskTransitions,
+  type RunTransitions,
   type TaskTransitions,
   type Transition,
 } from "./transition.js";
@@ -533,6 +549,11 @@ export interface RegisterSessionRequest {
   workspaceRoot: string;
   /** The registering process's own anchor (not the full chain). */
   anchor: ProcessAnchor;
+  /**
+   * Human clear of the enforcing `panicked` state (ADR-0019 / #240). Only
+   * applies when re-anchoring a known session; ignored on fresh insert.
+   */
+  clearPanic?: boolean;
 }
 
 /** Inputs shared by delegate/fix/eval for session binding (#162). */
@@ -598,10 +619,24 @@ export class TaskEngine {
    */
   private readonly taskTransitions: TaskTransitions;
   /**
-   * ADR-0007 inbox (peek / ack / waitFor / allDone) — level-triggered view over
-   * task rows + acks (#207). Wake bus stays on {@link eventWaiters}.
+   * ADR-0007 / ADR-0019 inbox (peek / ack / waitFor / allDone) — level-triggered
+   * view over task rows + run rows + acks (#207 / #240). Wake bus stays on
+   * {@link eventWaiters}.
    */
-  private readonly inbox: Inbox<TaskRow>;
+  private readonly inbox: Inbox;
+  /**
+   * Run firehose recorder (ADR-0019). Shares the transition log / wake bus with
+   * task transitions so `watch --follow` sees `run.*` events.
+   */
+  private readonly runTransitions: RunTransitions;
+  /**
+   * Last observed (state, node, iteration) per run id — used to emit edge
+   * transitions after drainRuns / actionRun without modifying updateRun.
+   */
+  private readonly runSnapshots = new Map<
+    string,
+    { state: string; current_node: string | null; iteration: number }
+  >();
   /** Long-poll waiters (inbox / firehose / SSE) parked until the next transition. */
   private readonly eventWaiters = new Set<() => void>();
   /**
@@ -666,8 +701,8 @@ export class TaskEngine {
     private readonly paths: HomePaths,
     private readonly adapters: Map<string, VendorAdapter>,
   ) {
-    this.taskTransitions = createTaskTransitions(db, {
-      append: (t) => {
+    const transitionHooks = {
+      append: (t: Transition) => {
         this.transitions.push(t);
       },
       wake: () => {
@@ -678,7 +713,7 @@ export class TaskEngine {
         // #237: a settled run-owned task may unlock the run cursor (advance).
         this.drainRuns();
       },
-      onTerminal: (taskId) => {
+      onTerminal: (taskId: string) => {
         // Dry-run (#161): after waiters observe the terminal event, purge the
         // row so list/status leave no record. A short delay lets an already-
         // parked (or just-started) watch read the terminal state first.
@@ -687,8 +722,27 @@ export class TaskEngine {
           timer.unref();
         }
       },
-    });
-    this.inbox = createInbox(sqliteTaskSnapshot(db), sqliteAckStore(db));
+    };
+    this.taskTransitions = createTaskTransitions(db, transitionHooks);
+    this.runTransitions = createRunTransitions(db, transitionHooks);
+    this.inbox = createInbox(
+      sqliteTaskSnapshot(db),
+      sqliteAckStore(db),
+      sqliteRunSnapshot(db),
+    );
+    // Seed run snapshots so the first post-start drain only emits real edges.
+    // Ensure every already-actionable run has an event-id seq (restart safety:
+    // a gate that predates this daemon must still surface in the inbox).
+    for (const run of listRuns(this.db)) {
+      this.runSnapshots.set(run.id, {
+        state: run.state,
+        current_node: run.current_node,
+        iteration: run.iteration,
+      });
+      if (runInboxTierState(run) !== null && getRunSeq(this.db, run.id) === 0) {
+        bumpRunSeq(this.db, run.id);
+      }
+    }
     // Re-arm heartbeats for runner tasks that survived a daemon restart
     // (excluded from the process-group crash sweep).
     for (const task of listTasks(this.db)) {
@@ -764,6 +818,9 @@ export class TaskEngine {
     if (existingId !== null) {
       const existing = getSession(this.db, existingId);
       if (existing) {
+        if (request.clearPanic === true) {
+          clearSessionPanic(this.db, existingId);
+        }
         return updateSession(this.db, existingId, {
           harness,
           model,
@@ -2382,14 +2439,30 @@ export class TaskEngine {
   }
 
   /**
-   * The earliest recorded transition of a watched task with `seq > since`, or
-   * null if none has happened yet. The non-blocking core of the multi-task
-   * long-poll; `waitForEvents` blocks on top of it.
+   * The earliest recorded transition of a watched task or run with `seq >
+   * since`, or null if none has happened yet. The non-blocking core of the
+   * multi-task long-poll; `waitForEvents` blocks on top of it.
+   *
+   * `ids` may mix task ids and run ids. A task transition matches when its
+   * `task_id` is watched **or** its `run_id` is watched. A run transition
+   * matches when its `run_id` is watched.
    */
   peekEvent(ids: readonly string[], since: number): Transition | null {
     const watched = new Set(ids);
     // The log is append-only in seq order, so the first match is the earliest.
-    return this.transitions.find((t) => t.seq > since && watched.has(t.task_id)) ?? null;
+    return (
+      this.transitions.find((t) => {
+        if (t.seq <= since) return false;
+        if (t.kind === "run") {
+          return t.run_id != null && watched.has(t.run_id);
+        }
+        if (t.task_id !== undefined && watched.has(t.task_id)) return true;
+        if (t.run_id != null && t.run_id !== "" && watched.has(t.run_id)) {
+          return true;
+        }
+        return false;
+      }) ?? null
+    );
   }
 
   /**
@@ -2447,45 +2520,136 @@ export class TaskEngine {
 
   /**
    * Ack an inbox event by its id (the transition seq that produced the state).
-   * No-op when the event is superseded (no task currently holds that seq, or
-   * the task left the actionable state). ADR-0007: at-least-once delivery;
-   * un-acked events redeliver on the next `watch`.
+   * No-op when the event is superseded, or when the subject is a gate (gates
+   * are never acked — only actioned; ADR-0019). Un-acked events redeliver.
    */
   ackEvent(eventId: number): void {
     this.inbox.ack(eventId);
+    // Successful ack (or no-op supersession) drops the delivery counter for
+    // that event id so a later re-entry starts fresh.
+    noteEventResolved(this.db, eventId);
   }
 
   /**
-   * The highest-priority pending inbox event among `ids`, or null when none
-   * (ADR-0007). Level-triggered: derived from each task's *current* actionable
-   * state + acks, not from transition edges. Priority: awaiting_answer >
-   * stalled > failed > completed; FIFO by seq within a tier.
+   * Expand task ids (+ optional session) into a dual-subject {@link WatchSet}
+   * (ADR-0019). Runs are pulled from: explicit run ids in `ids`, runs owned by
+   * watched tasks, and runs sharing the session of any watched task / the
+   * explicit session filter.
    */
-  peekInbox(ids: readonly string[]): TaskRow | null {
-    return this.inbox.peek(ids);
+  resolveWatchSet(
+    taskOrRunIds: readonly string[],
+    sessionId?: string | null,
+  ): WatchSet {
+    const taskIds = new Set<string>();
+    const runIds = new Set<string>();
+    const sessions = new Set<string>();
+    if (sessionId) sessions.add(sessionId);
+
+    for (const id of taskOrRunIds) {
+      const task = getTask(this.db, id);
+      if (task) {
+        taskIds.add(task.id);
+        if (task.run_id) runIds.add(task.run_id);
+        if (task.orchestrator_session_id) {
+          sessions.add(task.orchestrator_session_id);
+        }
+        continue;
+      }
+      const run = getRun(this.db, id);
+      if (run) {
+        runIds.add(run.id);
+        if (run.orchestrator_session_id) {
+          sessions.add(run.orchestrator_session_id);
+        }
+      }
+    }
+
+    for (const sid of sessions) {
+      for (const run of listRunsForSession(this.db, sid)) {
+        runIds.add(run.id);
+      }
+      // Session-scoped task expansion when the caller passed session without
+      // enumerating every task id (gate-first workflows with zero tasks yet).
+      if (taskOrRunIds.length === 0 && sessionId) {
+        for (const task of listTasks(this.db)) {
+          if (task.orchestrator_session_id === sid) taskIds.add(task.id);
+        }
+      }
+    }
+
+    return { taskIds: [...taskIds], runIds: [...runIds] };
   }
 
   /**
-   * True when every watched task is terminal *and* no pending inbox events
-   * remain (ADR-0007 all-done). Empty set is vacuously all-done.
+   * The highest-priority pending inbox event among the watch set, or null
+   * (ADR-0007 / ADR-0019). Level-triggered. Priority: gate/awaiting_answer >
+   * blocked/stalled > failed > completed; FIFO by seq within a tier.
    */
-  isInboxAllDone(ids: readonly string[]): boolean {
-    return this.inbox.allDone(ids);
+  peekInbox(watch: WatchSet): InboxEvent | null {
+    return this.inbox.peek(watch);
   }
 
   /**
-   * Inbox long-poll (ADR-0007): resolve with the next pending event (immediate
-   * when already pending — level-triggered), `{ allDone: true }` when every
-   * watched task is terminal and all events are acked, or null when the poll
-   * window elapses with live work still outstanding (caller re-polls).
+   * True when every watched subject is terminal *and* no pending inbox events
+   * remain (ADR-0019 session-finished). Empty set is vacuously all-done.
+   * Task-only watch sets match ADR-0007 observationally.
+   */
+  isInboxAllDone(watch: WatchSet): boolean {
+    return this.inbox.allDone(watch);
+  }
+
+  /**
+   * Inbox long-poll (ADR-0007 / ADR-0019): next pending event, session-finished,
+   * or null when the poll window elapses with live work still outstanding.
+   * Records a delivery for the breaker when an event is returned.
    */
   async waitForInbox(
-    ids: readonly string[],
+    watch: WatchSet,
     timeoutMs: number,
-  ): Promise<{ task: TaskRow } | { allDone: true } | null> {
-    return this.inbox.waitFor(ids, timeoutMs, {
+  ): Promise<{ event: InboxEvent } | { allDone: true } | null> {
+    const result = await this.inbox.waitFor(watch, timeoutMs, {
       park: (ms) => this.parkEventWaiter(ms),
     });
+    if (result !== null && "event" in result) {
+      this.recordInboxDelivery(result.event);
+    }
+    return result;
+  }
+
+  /**
+   * Non-blocking inbox peek with delivery accounting (for `wait=false` tests).
+   */
+  peekInboxDelivering(watch: WatchSet): InboxEvent | null {
+    const event = this.inbox.peek(watch);
+    if (event) this.recordInboxDelivery(event);
+    return event;
+  }
+
+  /** Record one delivery; trip `panicked` when the breaker threshold is hit. */
+  private recordInboxDelivery(event: InboxEvent): void {
+    const sessionId =
+      event.kind === "task"
+        ? (event.task?.orchestrator_session_id ?? null)
+        : (event.run?.orchestrator_session_id ?? null);
+    noteInboxDelivery(this.db, {
+      eventId: event.seq,
+      subjectKind: event.kind,
+      subjectId: event.id,
+      sessionId,
+    });
+  }
+
+  /**
+   * Human clear of the enforcing `panicked` session state (ADR-0019).
+   * Surface: `parley session --clear-panic`.
+   */
+  clearPanic(sessionId: string): boolean {
+    return clearSessionPanic(this.db, sessionId);
+  }
+
+  /** True when the session is panicked (effective concurrency cap of 0). */
+  isPanicked(sessionId: string | null | undefined): boolean {
+    return isPanickedSession(this.db, sessionId);
   }
 
   /**
@@ -3114,6 +3278,10 @@ export class TaskEngine {
    * Counts DB slot-holders plus in-flight {@link admitted} prepares.
    */
   private canAdmit(task: TaskRow): boolean {
+    // ADR-0019: panicked session ⇒ effective concurrency cap of 0.
+    if (isPanickedSession(this.db, task.orchestrator_session_id)) {
+      return false;
+    }
     const caps = this.capsFor(task);
     if (caps.vendorMax === null && caps.profileMax === null) return true;
 
@@ -3379,7 +3547,101 @@ export class TaskEngine {
       }
     } finally {
       this.drainingRuns = false;
+      // ADR-0019: emit run.* firehose edges + bump run event-id seqs so the
+      // inbox can surface gates/blocks without touching updateRun.
+      this.syncRunTransitions();
     }
+  }
+
+  /**
+   * Diff run rows against {@link runSnapshots} and emit `run.*` transitions
+   * (ADR-0019). Called after drainRuns / actionRun. Gates spawn nothing — they
+   * become visible only through these edges (`node_entered` + `blocked`).
+   */
+  private syncRunTransitions(): void {
+    let any = false;
+    for (const run of listRuns(this.db)) {
+      const prev = this.runSnapshots.get(run.id);
+      const next = {
+        state: run.state,
+        current_node: run.current_node,
+        iteration: run.iteration,
+      };
+      if (prev === undefined) {
+        // Brand-new run observed for the first time this process.
+        if (run.current_node) {
+          this.runTransitions.record(run.id, {
+            event: "run.node_entered",
+            state: run.state,
+            node: run.current_node,
+            iteration: run.iteration,
+            cause: "run_advance",
+          });
+          any = true;
+        }
+        if (run.state !== "running") {
+          this.runTransitions.record(run.id, {
+            event: `run.${run.state}`,
+            state: run.state,
+            node: run.current_node,
+            iteration: run.iteration,
+            cause: "run_advance",
+          });
+          any = true;
+        } else if (!run.current_node) {
+          // Running with no node yet — still allocate a seq baseline via started.
+          this.runTransitions.record(run.id, {
+            event: "run.started",
+            state: run.state,
+            node: null,
+            iteration: run.iteration,
+            cause: "run_advance",
+          });
+          any = true;
+        }
+      } else {
+        const nodeChanged =
+          prev.current_node !== next.current_node ||
+          prev.iteration !== next.iteration;
+        if (nodeChanged && next.current_node) {
+          this.runTransitions.record(run.id, {
+            event: "run.node_entered",
+            state: run.state,
+            node: next.current_node,
+            iteration: next.iteration,
+            cause: "run_advance",
+          });
+          any = true;
+        }
+        if (prev.state !== next.state) {
+          this.runTransitions.record(run.id, {
+            event: `run.${next.state}`,
+            state: next.state,
+            node: next.current_node,
+            iteration: next.iteration,
+            cause: next.state === "blocked" ? "run_gate" : "run_advance",
+          });
+          any = true;
+        } else if (
+          // Re-block on the same node (e.g. re-enter gate after redirect) still
+          // needs a fresh event-id seq so the inbox redelivers.
+          next.state === "blocked" &&
+          nodeChanged
+        ) {
+          this.runTransitions.record(run.id, {
+            event: "run.blocked",
+            state: "blocked",
+            node: next.current_node,
+            iteration: next.iteration,
+            cause: "run_gate",
+          });
+          any = true;
+        }
+      }
+      this.runSnapshots.set(run.id, next);
+    }
+    // Wake even when only snapshots updated without edges? record() already wakes.
+    void any;
   }
 
   /**
@@ -3440,6 +3702,9 @@ export class TaskEngine {
     if (result.decision.kind === "error") {
       throw new DelegateError(result.decision.message);
     }
+    // Gate actioned → emit run.* edges + new event-id seq (supersedes the gate
+    // inbox event without an ack — ADR-0019).
+    this.syncRunTransitions();
     return { run: result.run, decision: result.decision };
   }
 

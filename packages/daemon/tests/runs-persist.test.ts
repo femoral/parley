@@ -87,7 +87,9 @@ describe("migration (#233)", () => {
     home = fs.mkdtempSync(path.join(os.tmpdir(), "parley-runs-mig-"));
 
     // Pre-#233 schema: every migration before the runs/deliverables entry.
-    const prev = openDatabaseUpTo(homePaths(home), SCHEMA_VERSION - 1);
+    // #240 added a later migration; #233 is now SCHEMA_VERSION - 1 (applied
+    // when user_version reaches SCHEMA_VERSION - 1). Pre-#233 is -2.
+    const prev = openDatabaseUpTo(homePaths(home), SCHEMA_VERSION - 2);
     const tablesBefore = prev
       .prepare(`SELECT name FROM sqlite_master WHERE type = 'table'`)
       .all()
