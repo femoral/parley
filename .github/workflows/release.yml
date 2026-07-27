@@ -82,6 +82,13 @@ jobs:
             echo "::error::bump=explicit requires the 'version' input (e.g. 0.5.0)" >&2
             exit 1
           fi
+          # Every other bump kind computes the version, so a filled-in 'version'
+          # would be silently ignored — and the run would go on to publish
+          # something the maintainer did not ask for. Say so instead.
+          if [ "$INPUT_BUMP" != "explicit" ] && [ -n "$INPUT_VERSION" ]; then
+            echo "::error::version='${INPUT_VERSION}' is only used when bump=explicit, but bump=${INPUT_BUMP} computes the version. Either set bump=explicit to publish ${INPUT_VERSION} exactly, or clear the version field and let bump=${INPUT_BUMP} pick." >&2
+            exit 1
+          fi
           # npm rejects dist-tags that parse as semver, and this one doubles as
           # a prerelease id, so hold it to a bare lowercase identifier.
           if ! [[ "$INPUT_DIST_TAG" =~ ^[a-z][a-z0-9-]*$ ]]; then
@@ -90,6 +97,14 @@ jobs:
           fi
           if [ "$INPUT_BUMP" = "prerelease" ] && [ "$INPUT_DIST_TAG" = "latest" ]; then
             echo "::error::bump=prerelease needs a prerelease channel; set dist_tag to something like 'dev' or 'next'" >&2
+            exit 1
+          fi
+          # patch/minor always compute a stable version, so pairing either with
+          # a prerelease channel can only fail the agree-check further down.
+          # Catching it here costs seconds instead of a whole install+bump.
+          if { [ "$INPUT_BUMP" = "patch" ] || [ "$INPUT_BUMP" = "minor" ]; } \
+            && [ "$INPUT_DIST_TAG" != "latest" ]; then
+            echo "::error::bump=${INPUT_BUMP} computes a stable version, which belongs on 'latest'. To publish to '${INPUT_DIST_TAG}', use bump=prerelease (counter picked automatically) or bump=explicit with a prerelease version like 0.0.5-${INPUT_DIST_TAG}.1." >&2
             exit 1
           fi
 
