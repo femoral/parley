@@ -199,7 +199,7 @@ export function suggestNearestCombo(
   let bestDist = editDistance(targetModel, best.model);
   for (let i = 1; i < combos.length; i++) {
     const c = combos[i]!;
-    let d = editDistance(targetModel, c.model);
+    const d = editDistance(targetModel, c.model);
     // Catalog adjacency: if both models appear in the same vendor catalog
     // slice, slightly prefer earlier/closer index (weak tie-break).
     if (catalog && model) {
@@ -239,8 +239,8 @@ export function resolveAllowedCombo(options: {
   catalog?: ModelCatalog | null;
 }): ResolvedAllowedCombo {
   const { vendor, vendorCfg, configPath, catalog } = options;
-  let model = options.model === "" ? null : options.model;
-  let effort = options.effort === "" ? null : options.effort;
+  const model = options.model === "" ? null : options.model;
+  const effort = options.effort === "" ? null : options.effort;
 
   if (!hasModelAllowlist(vendorCfg)) {
     throw new ModelAllowlistError("no_allowlist", noAllowlistMessage(vendor, configPath));

@@ -21,7 +21,6 @@ import {
   updateTask, writeTaskState,
   type DatabaseHandle,
 } from "../src/db.js";
-import { CODE_REATTEMPT_WINDOW_EXPIRED } from "../src/retry.js";
 import { TaskEngine } from "../src/engine.js";
 import { withFakeAllowlist } from "./helpers.js";
 

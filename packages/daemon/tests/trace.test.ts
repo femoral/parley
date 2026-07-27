@@ -8,7 +8,6 @@ import path from "node:path";
 import { homePaths } from "@useparley/core";
 import { createAdapterRegistrySync } from "../src/adapters/index.js";
 import {
-  getTask,
   openDatabase,
   openDatabaseUpTo,
   SCHEMA_VERSION,
