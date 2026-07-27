@@ -113,12 +113,13 @@
   /*
    * §2.5a — chart ink palette (dark ramp for parchment).
    * Layer-0's luminous state family (§2.6) is tuned to glow on plate wood
-   * (#1d140c); none of it clears WCAG AA on parchment (#efe0bd). Paper needs
-   * a separate dark ink ramp — not a state sub-namespace, because three of
+   * (#1d140c); none of it clears WCAG AA on parchment. Paper needs a
+   * separate dark ink ramp — not a state sub-namespace, because three of
    * the six carry no state at all (pen weights). Ratified against the #224
-   * prototype; values are fixed.
+   * prototype; values are fixed. Full prose + Textured-sheet AA Rule in
+   * packages/ui/DESIGN.md.
    *
-   * Contrast vs --parchment-bg #efe0bd (WCAG 2.x relative luminance):
+   * Contrast vs flat --parchment-bg #efe0bd (WCAG 2.x relative luminance):
    *   --ink-chart       #5b3a24 ≈ 7.74:1  (≥4.5:1 AA)
    *   --ink-chart-soft  #7d5636 ≈ 4.93:1  (≥4.5:1 AA)
    *   --ink-chart-ghost #b39a76 ≈ 2.06:1  decorative-only — never text that
@@ -126,8 +127,19 @@
    *   --ink-live        #a8331f ≈ 5.09:1  (≥4.5:1 AA)
    *   --ink-done        #4a5f38 ≈ 5.38:1  (≥4.5:1 AA)
    *   --ink-fail        #8f1d12 ≈ 6.83:1  (≥4.5:1 AA)
-   * State inks on paper are reserved status colours (State-Color Reservation)
-   * and are always glyph-paired: ✓ sailed, ✦ under way, ? ahead, ✕ blotted.
+   *
+   * Ratified #224 sheet is not flat — gradient darkest stop #e2cfa4:
+   *   --ink-chart ≈ 6.60:1  AA  |  --ink-chart-soft ≈ 4.21:1  FAIL
+   *   --ink-live  ≈ 4.34:1  FAIL|  --ink-done       ≈ 4.59:1  AA
+   *   --ink-fail  ≈ 5.82:1  AA  |  --ink-chart-ghost ≈ 1.76:1 decorative
+   * Soft/live text that must be read only on surface ≤ flat #efe0bd; over
+   * darker parchment step that text up to --ink-chart (holds at #e2cfa4).
+   *
+   * Pen weights (not state): --ink-chart, --ink-chart-soft, --ink-chart-ghost.
+   * Ghost "ahead" may colour a decorative mark; its ? glyph must be inked in
+   * --ink-chart or --ink-chart-soft, never --ink-chart-ghost.
+   * State inks on paper (reserved status; always glyph-paired):
+   *   --ink-done ✓ sailed · --ink-live ✦ under way · --ink-fail ✕ blotted.
    */
   --ink-chart: #5b3a24; /* the pen the whole map is drawn in */
   --ink-chart-soft: #7d5636; /* older ink — answered gates, marginalia */
