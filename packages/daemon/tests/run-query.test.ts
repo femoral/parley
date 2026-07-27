@@ -166,6 +166,9 @@ function baseRun(over: Partial<RunRow> = {}): RunRow {
     eval_harness: null,
     eval_model: null,
     eval_effort: null,
+    // #249 frozen base at start
+    base_ref: null,
+    base_commit: null,
     ...over,
   };
 }

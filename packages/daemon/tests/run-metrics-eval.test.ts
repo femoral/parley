@@ -143,7 +143,9 @@ describe("migration #243", () => {
     db.close();
     fs.rmSync(home, { recursive: true, force: true });
     home = fs.mkdtempSync(path.join(os.tmpdir(), "parley-run-eval-mig-"));
-    const prev = openDatabaseUpTo(homePaths(home), SCHEMA_VERSION - 1);
+    // Pre-#243 schema: one migration follows (#249 base_ref/base_commit) after
+    // #243, so the snapshot is SCHEMA_VERSION - 2.
+    const prev = openDatabaseUpTo(homePaths(home), SCHEMA_VERSION - 2);
     const colsBefore = prev
       .prepare("PRAGMA table_info(runs)")
       .all()
@@ -164,6 +166,8 @@ describe("migration #243", () => {
     expect(colsAfter).toContain("difficulty");
     expect(colsAfter).toContain("orch_harness");
     expect(colsAfter).toContain("eval_harness");
+    expect(colsAfter).toContain("base_ref");
+    expect(colsAfter).toContain("base_commit");
     expect(
       (db.prepare("PRAGMA user_version").get() as { user_version: number }).user_version,
     ).toBe(SCHEMA_VERSION);

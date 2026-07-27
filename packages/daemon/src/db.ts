@@ -402,6 +402,18 @@ export interface RunRow {
   eval_harness: string | null;
   eval_model: string | null;
   eval_effort: string | null;
+  // ── #249 / ADR-0022: frozen base at run start ────────────────────────────
+  /**
+   * Base ref as asked for at start (`--base-ref`, default `HEAD`). Null for
+   * `scratch` (which refuses a base ref) and for runs created before #249.
+   */
+  base_ref: string | null;
+  /**
+   * Concrete commit `--base-ref` resolved to at start. A fork weeks later can
+   * rebuild from this even if the branch has moved (extends ADR-0018). Null
+   * for `scratch` and pre-#249 rows.
+   */
+  base_commit: string | null;
 }
 
 /** Fields the daemon writes when creating a run. */
@@ -425,6 +437,10 @@ export interface NewRun {
   orchestrator_session_id?: string | null;
   started_at?: string | null;
   error?: string | null;
+  /** Base ref as asked for; null for scratch / omitted. */
+  base_ref?: string | null;
+  /** Resolved commit of base_ref at start; null for scratch / omitted. */
+  base_commit?: string | null;
 }
 
 /**
@@ -800,6 +816,12 @@ const MIGRATIONS: string[] = [
    ALTER TABLE runs ADD COLUMN eval_harness TEXT;
    ALTER TABLE runs ADD COLUMN eval_model TEXT;
    ALTER TABLE runs ADD COLUMN eval_effort TEXT;`,
+  // #249 / ADR-0022: frozen base ref + resolved commit at run start.
+  // Both null for scratch (refuses --base-ref) and for pre-migration rows.
+  // Extends ADR-0018: a later fork can rebuild from the recorded commit even
+  // when the named branch has moved.
+  `ALTER TABLE runs ADD COLUMN base_ref TEXT;
+   ALTER TABLE runs ADD COLUMN base_commit TEXT;`,
 ];
 
 /** How many schema migrations have been applied — equals `PRAGMA user_version` after open. */
@@ -890,7 +912,8 @@ const RUN_COLUMNS = `id, workflow, version, type, workspace, repo, state, curren
    started_at, completed_at, error, purged_at,
    size, difficulty, orch_harness, orch_model, orch_effort,
    eval_score, eval_feedback, eval_answers, eval_rubric, eval_rubric_version,
-   eval_baseline, eval_session_id, eval_harness, eval_model, eval_effort`;
+   eval_baseline, eval_session_id, eval_harness, eval_model, eval_effort,
+   base_ref, base_commit`;
 
 const DELIVERABLE_COLUMNS = `id, run_id, node, port, iteration, slot, task_id, kind, value,
    created_at, purged_at`;
@@ -1907,8 +1930,8 @@ export function insertRun(db: DatabaseHandle, run: NewRun): RunRow {
     `INSERT INTO runs
        (id, workflow, version, type, workspace, repo, state, current_node, iteration,
         parent_run_id, attempt, orchestrator_session_id, created_at, updated_at,
-        started_at, completed_at, error, purged_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, NULL)`,
+        started_at, completed_at, error, purged_at, base_ref, base_commit)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, NULL, ?, ?)`,
   ).run(
     run.id,
     run.workflow,
@@ -1926,6 +1949,8 @@ export function insertRun(db: DatabaseHandle, run: NewRun): RunRow {
     now,
     run.started_at ?? now,
     run.error ?? null,
+    run.base_ref ?? null,
+    run.base_commit ?? null,
   );
   return getRun(db, run.id)!;
 }
@@ -2198,7 +2223,8 @@ const RUN_QUERY_RUN_COLUMNS = `id, workflow, version, type, workspace, repo, sta
    started_at, completed_at, error, purged_at,
    size, difficulty, orch_harness, orch_model, orch_effort,
    eval_score, eval_feedback, eval_answers, eval_rubric, eval_rubric_version,
-   eval_baseline, eval_session_id, eval_harness, eval_model, eval_effort`;
+   eval_baseline, eval_session_id, eval_harness, eval_model, eval_effort,
+   base_ref, base_commit`;
 
 const RUN_QUERY_TASK_COLUMNS = `id, name, vendor, model, effort, profile, runner, repo, state, created_at, updated_at,
    cwd, prompt, session_id, usage, report, error, started_at, completed_at,
