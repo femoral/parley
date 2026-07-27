@@ -299,3 +299,224 @@ describe("loadWorkflowDefinition — missing files", () => {
     }
   });
 });
+
+/**
+ * Soft-structural mode (#248): recoverable structural failures accumulate;
+ * fatal ones still throw. Default (hard) mode is unchanged.
+ */
+describe("parseWorkflowDefinition — softStructural", () => {
+  const base = {
+    id: "soft",
+    version: 1,
+    type: "coding",
+    inputs: { brief: { type: "text" } },
+    outputs: {},
+    types: {},
+  };
+
+  it("default mode still throws on recoverable structural failures", () => {
+    // Hard throw is the run-engine / load path contract — soft is opt-in only.
+    expect(() =>
+      parseWorkflowDefinition(
+        {
+          ...base,
+          nodes: [
+            {
+              id: "a",
+              kind: "step",
+              prompt: "p.md",
+              in: { b: { type: "text", from: "run.brief" } },
+              out: { x: { type: "text" } },
+            },
+            {
+              id: "a",
+              kind: "step",
+              prompt: "p.md",
+              in: { b: { type: "text", from: "run.brief" } },
+              out: { y: { type: "text" } },
+            },
+          ],
+        },
+        { dir: "/tmp/soft" },
+      ),
+    ).toThrow(/duplicate node id/);
+
+    expect(() =>
+      parseWorkflowDefinition(
+        {
+          ...base,
+          nodes: [
+            {
+              id: "a",
+              kind: "step",
+              prompt: "p.md",
+              in: { b: { type: "text", from: "run.brief" } },
+              out: { x: { type: "text" } },
+              loop: { to: "a", max: 0 },
+            },
+          ],
+        },
+        { dir: "/tmp/soft" },
+      ),
+    ).toThrow(/positive integer/);
+
+    expect(() =>
+      parseWorkflowDefinition(
+        {
+          ...base,
+          nodes: [
+            {
+              id: "g",
+              kind: "gate",
+              question: "ok?",
+              shows: {},
+              // on_reject missing
+            },
+          ],
+        },
+        { dir: "/tmp/soft" },
+      ),
+    ).toThrow(/on_reject/);
+
+    expect(() =>
+      parseWorkflowDefinition(
+        {
+          ...base,
+          nodes: [
+            {
+              id: "a",
+              kind: "step",
+              prompt: "p.md",
+              in: {},
+              out: { n: { type: "number" } },
+            },
+          ],
+        },
+        { dir: "/tmp/soft" },
+      ),
+    ).toThrow(/not an atom/);
+  });
+
+  it("loadWorkflowDefinition (engine load path) rejects structural failures", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "parley-wf-soft-"));
+    try {
+      fs.writeFileSync(
+        path.join(dir, "workflow.json"),
+        JSON.stringify({
+          id: path.basename(dir),
+          version: 1,
+          type: "coding",
+          nodes: [
+            {
+              id: "a",
+              kind: "step",
+              prompt: "p.md",
+              in: {},
+              out: {},
+            },
+            {
+              id: "a",
+              kind: "step",
+              prompt: "p.md",
+              in: {},
+              out: {},
+            },
+          ],
+        }),
+      );
+      expect(() => loadWorkflowDefinition(dir)).toThrow(/duplicate node id/);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("collects recoverable structural errors and returns a degraded definition", () => {
+    const { definition, structuralErrors } = parseWorkflowDefinition(
+      {
+        ...base,
+        nodes: [
+          {
+            id: "a",
+            kind: "step",
+            prompt: "p.md",
+            in: { b: { type: "text", from: "run.brief" } },
+            out: { x: { type: "text" } },
+          },
+          {
+            id: "a",
+            kind: "step",
+            prompt: "p.md",
+            in: { b: { type: "text", from: "run.brief" } },
+            out: { y: { type: "text" } },
+          },
+          {
+            id: "g",
+            kind: "gate",
+            question: "ok?",
+            shows: {},
+            // missing on_reject
+          },
+          {
+            id: "looped",
+            kind: "step",
+            prompt: "p.md",
+            in: { b: { type: "text", from: "run.brief" } },
+            out: { z: { type: "text" } },
+            loop: { to: "a", max: 0 },
+          },
+          {
+            id: "badtype",
+            kind: "step",
+            prompt: "p.md",
+            in: {},
+            out: { n: { type: "number" } },
+          },
+        ],
+      },
+      { dir: "/tmp/soft", softStructural: true, typeCheck: false },
+    );
+
+    expect(structuralErrors.length).toBeGreaterThanOrEqual(4);
+    expect(structuralErrors.some((e) => /duplicate node id/.test(e.message))).toBe(true);
+    expect(structuralErrors.some((e) => e.field.includes("on_reject"))).toBe(true);
+    expect(structuralErrors.some((e) => e.field.includes("loop.max"))).toBe(true);
+    expect(
+      structuralErrors.some(
+        (e) => e.field.endsWith(".type") && /not an atom|unknown/.test(e.message),
+      ),
+    ).toBe(true);
+
+    // First "a" kept; duplicate dropped
+    expect(definition.nodes.filter((n) => n.id === "a")).toHaveLength(1);
+    // Gate present with degraded on_reject
+    const gate = definition.nodes.find((n) => n.id === "g");
+    expect(gate?.kind).toBe("gate");
+    // Looped node still present
+    expect(definition.nodes.some((n) => n.id === "looped")).toBe(true);
+    // Bad-type node still present (port recovered)
+    expect(definition.nodes.some((n) => n.id === "badtype")).toBe(true);
+  });
+
+  it("still throws on fatal structural failures even with softStructural", () => {
+    expect(() =>
+      parseWorkflowDefinition("not-an-object", {
+        dir: "/tmp/soft",
+        softStructural: true,
+      }),
+    ).toThrow(/JSON object/);
+
+    expect(() =>
+      parseWorkflowDefinition(
+        { ...base, nodes: "nope" },
+        { dir: "/tmp/soft", softStructural: true },
+      ),
+    ).toThrow(/nodes/);
+
+    expect(() =>
+      parseWorkflowDefinition(
+        { ...base, nodes: [] },
+        { dir: "/tmp/soft", softStructural: true },
+      ),
+    ).toThrow(/nodes/);
+  });
+});

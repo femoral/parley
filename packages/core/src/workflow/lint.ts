@@ -1,12 +1,17 @@
 /**
- * Workflow definition lint (ADR-0016 / #232).
+ * Workflow definition lint (ADR-0016 / #232 / #248).
  *
- * Collects every semantic problem as a {@link LintFinding} rather than throwing
- * on the first — a lint run must report *all* problems. Structural parse
- * failures (invalid JSON shape the #231 parser rejects before producing a
- * definition) still surface as a single finding; once a definition exists,
- * type-check and graph rules that the parser used to throw on are re-run here
- * as multi-finding checks.
+ * Collects every problem as a {@link LintFinding} rather than throwing on the
+ * first — a lint run must report *all* problems. Soft-parses with
+ * `typeCheck: false` and `softStructural: true` so recoverable structural
+ * failures (duplicate node id, bad loop.max, missing on_reject, unresolvable
+ * types, per-field invalid shapes) accumulate alongside semantic findings.
+ * Only **fatal** structural failures (root not an object, `nodes` not a
+ * non-empty array, …) still collapse to a single finding.
+ *
+ * Ordering contract: structural findings precede semantic ones (the cause of
+ * a cascade is never printed below it). Cascade findings are **not**
+ * suppressed — deliberate (#248).
  *
  * Also builds the **inferred plan** (fan-out / join / loop) and the **static
  * worst case** (task count and inline context) that the definition file does
@@ -174,8 +179,10 @@ export function parseFromRef(
 }
 
 /**
- * Lint a raw `workflow.json` value. Soft-parses with type-check off so a single
- * bad edge does not hide the rest, then runs every semantic rule as findings.
+ * Lint a raw `workflow.json` value. Soft-parses with type-check off and
+ * soft-structural on so a single bad field or edge does not hide the rest,
+ * then runs every semantic rule as findings. Structural findings are pushed
+ * before the semantic pass (ordering contract).
  */
 export function lintWorkflow(
   raw: unknown,
@@ -201,10 +208,16 @@ export function lintWorkflow(
       dir,
       expectedId,
       typeCheck: false,
+      softStructural: true,
     });
     definition = parsed.definition;
     parseWarnings = parsed.warnings;
+    // Structural findings first — before warnings and the semantic pass.
+    for (const e of parsed.structuralErrors) {
+      findings.push(finding("error", file, e.field, e.message));
+    }
   } catch (err) {
+    // Fatal structural failure only: nothing left to walk.
     const msg = err instanceof Error ? err.message : String(err);
     // Parser messages are often `field: message` — split when possible.
     const colon = msg.indexOf(": ");
