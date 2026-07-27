@@ -380,6 +380,28 @@ export interface RunRow {
    * Representable now so the query surface can render decay without a sweep.
    */
   purged_at: string | null;
+  // ── #243 / ADR-0020: run metrics + whole-run eval ────────────────────────
+  /** Optional size classification (XS|S|M|L|XL); null when unset at run start. */
+  size: string | null;
+  /** Optional difficulty; null when unset at run start. */
+  difficulty: string | null;
+  /** Spawn-time orchestrator harness snapshot; null when unbound. */
+  orch_harness: string | null;
+  orch_model: string | null;
+  orch_effort: string | null;
+  /** Daemon-computed quality score (0–10) via `parley run eval`. */
+  eval_score: number | null;
+  eval_feedback: string | null;
+  /** JSON object of per-criterion boolean answers. */
+  eval_answers: string | null;
+  eval_rubric: string | null;
+  eval_rubric_version: number | null;
+  eval_baseline: number | null;
+  /** Judging session id at eval time; independent of spawn-time session. */
+  eval_session_id: string | null;
+  eval_harness: string | null;
+  eval_model: string | null;
+  eval_effort: string | null;
 }
 
 /** Fields the daemon writes when creating a run. */
@@ -754,6 +776,25 @@ const MIGRATIONS: string[] = [
      subject_id        TEXT NOT NULL,
      last_delivered_at TEXT NOT NULL
    );`,
+  // #243 / ADR-0020: run metrics dimensions + whole-run eval storage.
+  // Mirrors the task eval columns so the same scoreRubric formula applies.
+  // size/difficulty/orch_* are filters and group dimensions (no vendor/model/
+  // profile — a run has none). Eval columns are null until `parley run eval`.
+  `ALTER TABLE runs ADD COLUMN size TEXT;
+   ALTER TABLE runs ADD COLUMN difficulty TEXT;
+   ALTER TABLE runs ADD COLUMN orch_harness TEXT;
+   ALTER TABLE runs ADD COLUMN orch_model TEXT;
+   ALTER TABLE runs ADD COLUMN orch_effort TEXT;
+   ALTER TABLE runs ADD COLUMN eval_score INTEGER;
+   ALTER TABLE runs ADD COLUMN eval_feedback TEXT;
+   ALTER TABLE runs ADD COLUMN eval_answers TEXT;
+   ALTER TABLE runs ADD COLUMN eval_rubric TEXT;
+   ALTER TABLE runs ADD COLUMN eval_rubric_version INTEGER;
+   ALTER TABLE runs ADD COLUMN eval_baseline INTEGER;
+   ALTER TABLE runs ADD COLUMN eval_session_id TEXT;
+   ALTER TABLE runs ADD COLUMN eval_harness TEXT;
+   ALTER TABLE runs ADD COLUMN eval_model TEXT;
+   ALTER TABLE runs ADD COLUMN eval_effort TEXT;`,
 ];
 
 /** How many schema migrations have been applied — equals `PRAGMA user_version` after open. */
@@ -841,7 +882,10 @@ const TASK_COLUMNS = `id, name, vendor, model, effort, profile, runner, repo, st
 
 const RUN_COLUMNS = `id, workflow, version, type, workspace, repo, state, current_node, iteration,
    parent_run_id, attempt, orchestrator_session_id, created_at, updated_at,
-   started_at, completed_at, error, purged_at`;
+   started_at, completed_at, error, purged_at,
+   size, difficulty, orch_harness, orch_model, orch_effort,
+   eval_score, eval_feedback, eval_answers, eval_rubric, eval_rubric_version,
+   eval_baseline, eval_session_id, eval_harness, eval_model, eval_effort`;
 
 const DELIVERABLE_COLUMNS = `id, run_id, node, port, iteration, slot, task_id, kind, value,
    created_at, purged_at`;
@@ -1881,7 +1925,7 @@ export function insertRun(db: DatabaseHandle, run: NewRun): RunRow {
   return getRun(db, run.id)!;
 }
 
-/** Mutable run fields the engine / retention may patch. */
+/** Mutable run fields the engine / retention / eval may patch. */
 export type RunDataPatch = Partial<
   Pick<
     RunRow,
@@ -1894,6 +1938,21 @@ export type RunDataPatch = Partial<
     | "completed_at"
     | "purged_at"
     | "orchestrator_session_id"
+    | "size"
+    | "difficulty"
+    | "orch_harness"
+    | "orch_model"
+    | "orch_effort"
+    | "eval_score"
+    | "eval_feedback"
+    | "eval_answers"
+    | "eval_rubric"
+    | "eval_rubric_version"
+    | "eval_baseline"
+    | "eval_session_id"
+    | "eval_harness"
+    | "eval_model"
+    | "eval_effort"
   >
 >;
 
@@ -2131,7 +2190,10 @@ export function listExpiredRuns(db: DatabaseHandle, cutoffIso: string): RunRow[]
 
 const RUN_QUERY_RUN_COLUMNS = `id, workflow, version, type, workspace, repo, state, current_node, iteration,
    parent_run_id, attempt, orchestrator_session_id, created_at, updated_at,
-   started_at, completed_at, error, purged_at`;
+   started_at, completed_at, error, purged_at,
+   size, difficulty, orch_harness, orch_model, orch_effort,
+   eval_score, eval_feedback, eval_answers, eval_rubric, eval_rubric_version,
+   eval_baseline, eval_session_id, eval_harness, eval_model, eval_effort`;
 
 const RUN_QUERY_TASK_COLUMNS = `id, name, vendor, model, effort, profile, runner, repo, state, created_at, updated_at,
    cwd, prompt, session_id, usage, report, error, started_at, completed_at,
@@ -2285,3 +2347,35 @@ export function listTasksForRunNodeAny(
 }
 
 // ── end #241 ──
+
+// ── #243 run metrics + whole-run eval ───────────────────────────────────────
+// Append-only helpers. Do not edit the runs section above — sibling #242 owns
+// fork/redirect plumbing there. Column lists above already include #243 fields
+// so getRun/listRuns return them; helpers below are for eval-specific writes
+// and metrics aggregation.
+
+/**
+ * Patch only the structured-eval fields on a run (#243). Separated so eval
+ * never has to share a write path with engine state transitions.
+ */
+export function updateRunEval(
+  db: DatabaseHandle,
+  id: string,
+  patch: Pick<
+    RunDataPatch,
+    | "eval_score"
+    | "eval_feedback"
+    | "eval_answers"
+    | "eval_rubric"
+    | "eval_rubric_version"
+    | "eval_baseline"
+    | "eval_session_id"
+    | "eval_harness"
+    | "eval_model"
+    | "eval_effort"
+  >,
+): void {
+  updateRun(db, id, patch);
+}
+
+// ── end #243 ──

@@ -10,6 +10,7 @@ import {
   formatValidSizes,
   formatValidTaskTypes,
   isMetricsGroupBy,
+  isRunMetricsGroupBy,
   isValidDifficulty,
   isValidSize,
   isValidTaskType,
@@ -18,6 +19,7 @@ import {
   parseTaskTypesSection,
   resolveClassification,
   resolveTaskTypes,
+  RUN_METRICS_GROUP_BY,
   SHIPPED_TASK_TYPES,
   TASK_DIFFICULTIES,
   TASK_SIZES,
@@ -88,6 +90,19 @@ describe("task types (#151)", () => {
     expect(isMetricsGroupBy("orch_harness")).toBe(true);
     expect(isMetricsGroupBy("rubric")).toBe(true);
     expect(isMetricsGroupBy("nope")).toBe(false);
+  });
+
+  it("run metrics group-by has no vendor/model/profile (#243)", () => {
+    expect(RUN_METRICS_GROUP_BY).toContain("workflow");
+    expect(RUN_METRICS_GROUP_BY).toContain("type");
+    expect(RUN_METRICS_GROUP_BY).toContain("rubric");
+    expect(RUN_METRICS_GROUP_BY).toContain("size");
+    expect(RUN_METRICS_GROUP_BY).toContain("difficulty");
+    expect(RUN_METRICS_GROUP_BY).not.toContain("vendor");
+    expect(RUN_METRICS_GROUP_BY).not.toContain("model");
+    expect(RUN_METRICS_GROUP_BY).not.toContain("profile");
+    expect(isRunMetricsGroupBy("workflow")).toBe(true);
+    expect(isRunMetricsGroupBy("vendor")).toBe(false);
   });
 });
 

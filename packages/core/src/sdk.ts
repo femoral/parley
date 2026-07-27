@@ -10,6 +10,8 @@ import type {
   CleanResponse,
   HealthResponse,
   MetricsResponse,
+  RunMetricsFilters,
+  RunMetricsResponse,
   SessionsResponse,
   StreamEvent,
   TaskAck,
@@ -19,7 +21,7 @@ import type {
   TaskMetricsFilters,
   TasksResponse,
 } from "./contract.js";
-import type { MetricsGroupBy } from "./classification.js";
+import type { MetricsGroupBy, RunMetricsGroupBy } from "./classification.js";
 import { TASK_EVENT_NAMES } from "./states.js";
 
 /** How the client reaches the daemon. */
@@ -126,6 +128,20 @@ export class ParleyClient {
     if (options?.groupBy !== undefined) params.set("group_by", options.groupBy);
     const qs = params.toString();
     return this.request<MetricsResponse>(qs === "" ? "/metrics" : `/metrics?${qs}`);
+  }
+
+  /**
+   * `GET /run-metrics` — per-group run aggregates (#243 / ADR-0020).
+   * Separate population from {@link metrics}; never joined. Defaults:
+   * session=`all`, groupBy=`workflow`.
+   */
+  runMetrics(
+    options?: RunMetricsFilters & { groupBy?: RunMetricsGroupBy },
+  ): Promise<RunMetricsResponse> {
+    const params = runFiltersToSearchParams(options);
+    if (options?.groupBy !== undefined) params.set("group_by", options.groupBy);
+    const qs = params.toString();
+    return this.request<RunMetricsResponse>(qs === "" ? "/run-metrics" : `/run-metrics?${qs}`);
   }
 
   /** `GET /tasks/:ref` — envelope plus decoded detail companions (and deprecated row). */
@@ -335,6 +351,80 @@ export function parseTaskMetricsFilters(params: URLSearchParams): TaskMetricsFil
     else if (v === "false" || v === "0") out[key] = false;
   };
   bool("first_attempt");
+  bool("below_baseline");
+  return out;
+}
+
+/** Serialize {@link RunMetricsFilters} into query params for run-metrics. */
+export function runFiltersToSearchParams(
+  filters?: RunMetricsFilters | null,
+): URLSearchParams {
+  const params = new URLSearchParams();
+  if (!filters) return params;
+  const set = (key: string, value: string | number | boolean | undefined): void => {
+    if (value === undefined) return;
+    if (typeof value === "boolean") {
+      params.set(key, value ? "true" : "false");
+      return;
+    }
+    params.set(key, String(value));
+  };
+  set("session", filters.session);
+  set("type", filters.type);
+  set("size", filters.size);
+  set("difficulty", filters.difficulty);
+  set("orch_harness", filters.orch_harness);
+  set("orch_model", filters.orch_model);
+  set("orch_effort", filters.orch_effort);
+  set("eval_harness", filters.eval_harness);
+  set("eval_model", filters.eval_model);
+  set("eval_effort", filters.eval_effort);
+  set("rubric", filters.rubric);
+  set("rubric_version", filters.rubric_version);
+  set("workflow", filters.workflow);
+  set("workflow_version", filters.workflow_version);
+  set("first_run", filters.first_run);
+  set("below_baseline", filters.below_baseline);
+  return params;
+}
+
+/**
+ * Parse run-metrics filter query params from a URLSearchParams (#243).
+ * Unknown / empty values are ignored; boolean flags accept `true`/`1`.
+ */
+export function parseRunMetricsFilters(params: URLSearchParams): RunMetricsFilters {
+  const out: RunMetricsFilters = {};
+  const str = (key: keyof RunMetricsFilters): void => {
+    const v = params.get(key as string);
+    if (v !== null && v !== "") (out as Record<string, unknown>)[key] = v;
+  };
+  str("session");
+  str("type");
+  str("size");
+  str("difficulty");
+  str("orch_harness");
+  str("orch_model");
+  str("orch_effort");
+  str("eval_harness");
+  str("eval_model");
+  str("eval_effort");
+  str("rubric");
+  str("workflow");
+  const int = (key: "rubric_version" | "workflow_version"): void => {
+    const v = params.get(key);
+    if (v !== null && v !== "") {
+      const n = Number(v);
+      if (Number.isInteger(n) && n >= 1) out[key] = n;
+    }
+  };
+  int("rubric_version");
+  int("workflow_version");
+  const bool = (key: "first_run" | "below_baseline"): void => {
+    const v = params.get(key);
+    if (v === "true" || v === "1") out[key] = true;
+    else if (v === "false" || v === "0") out[key] = false;
+  };
+  bool("first_run");
   bool("below_baseline");
   return out;
 }

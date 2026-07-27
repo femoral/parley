@@ -95,6 +95,28 @@ export const METRICS_GROUP_BY = [
 ] as const;
 export type MetricsGroupBy = (typeof METRICS_GROUP_BY)[number];
 
+/**
+ * Run-metrics group dimensions (#243 / ADR-0020).
+ * A run has no vendor, model, or profile — those stay task-only. Group on the
+ * composite `workflow` = `id@version`, plus type/rubric/size/difficulty and the
+ * six orch_ and eval_ provenance dimensions.
+ */
+export const RUN_METRICS_GROUP_BY = [
+  /** Workflow id+version composite (`coding-1@3`). Mirrors rubricGroupKey. */
+  "workflow",
+  "type",
+  "rubric",
+  "size",
+  "difficulty",
+  "orch_harness",
+  "orch_model",
+  "orch_effort",
+  "eval_harness",
+  "eval_model",
+  "eval_effort",
+] as const;
+export type RunMetricsGroupBy = (typeof RUN_METRICS_GROUP_BY)[number];
+
 /** Shipped default guidance for each size id (how-to-classify lines). */
 export const DEFAULT_SIZE_GUIDANCE: Readonly<Record<TaskSize, string>> = {
   XS: "One file, \u2264 ~30 changed lines, no new dependencies, no schema/API change.",
@@ -125,6 +147,10 @@ export function isTaskDifficulty(value: string): value is TaskDifficulty {
 
 export function isMetricsGroupBy(value: string): value is MetricsGroupBy {
   return (METRICS_GROUP_BY as readonly string[]).includes(value);
+}
+
+export function isRunMetricsGroupBy(value: string): value is RunMetricsGroupBy {
+  return (RUN_METRICS_GROUP_BY as readonly string[]).includes(value);
 }
 
 /** Shipped default `taskTypes` map (each type resolves to a same-named rubric). */

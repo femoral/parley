@@ -62,6 +62,7 @@ import {
   getRunSeq,
   getSession,
   getTask,
+  isRunTerminalState,
   setRunBlockReason,
   insertDeliverable,
   insertQaTurn,
@@ -79,7 +80,9 @@ import {
   nextDeliverableId,
   nextQuestionId,
   nextTaskId,
+  resolveRun,
   resolveTask,
+  updateRunEval,
   updateSession,
   updateTask,
   countSlotHoldingForProfile,
@@ -164,7 +167,7 @@ import {
   type RunDrainHost,
 } from "./run-engine.js";
 import { inferBlockReason } from "./run-gates.js";
-import { resolveRubricForTask } from "./rubrics.js";
+import { resolveRubricForRun, resolveRubricForTask } from "./rubrics.js";
 import {
   deliverablesFromReport,
   generateReportSchema,
@@ -2338,6 +2341,11 @@ export class TaskEngine {
    * feedback. Separately snapshots the *judging* session's provenance at eval
    * time (dual snapshot — never rewrites spawn-time orch_* columns). A later
    * call overwrites the previous eval (including judge snapshot).
+   *
+   * Ownership guard (#243 / ADR-0020): rejects a task whose `run_id` is
+   * non-null, pointing at `parley run eval`. Three separately scored reviewer
+   * tasks *are* per-node scoring through the side door; per-node eval is
+   * deliberately deferred, and this guard is what keeps that deferral honest.
    */
   evalTask(
     ref: string,
@@ -2351,6 +2359,13 @@ export class TaskEngine {
   ): TaskRow {
     const task = resolveTask(this.db, ref);
     if (!task) throw new DelegateError(`no such task: ${ref}`);
+
+    // ADR-0020: a run-owned task is not evaluable at all.
+    if (task.run_id !== null && task.run_id !== "") {
+      throw new DelegateError(
+        `task ${task.id} is owned by run ${task.run_id}; use \`parley run eval ${task.run_id}\` instead`,
+      );
+    }
 
     let rubric;
     try {
@@ -2389,6 +2404,89 @@ export class TaskEngine {
       eval_effort: snapshot?.effort ?? null,
     });
     return getTask(this.db, task.id)!;
+  }
+
+  /**
+   * Record a structured whole-run rubric evaluation (#243 / ADR-0020).
+   *
+   * Terminal runs only (`completed` / `failed` / `cancelled`) — the same
+   * precondition as `parley run fork`. `blocked` is excluded: scoring it would
+   * measure inbox latency rather than work.
+   *
+   * Rubric resolves through existing machinery: the definition's `type` on the
+   * run (or `--type` override) → project `taskTypes` → rubric. No new rubric
+   * documents. The judge is expected to read only run-level artifacts (inputs,
+   * outputs, structural summary, final branch when workspace is `repo`); no
+   * node appears in this call path.
+   */
+  evalRun(
+    ref: string,
+    answers: Record<string, boolean>,
+    feedback: string,
+    opts?: {
+      /** Override the run's stored type for rubric resolution (`--type`). */
+      type?: string | null;
+      explicitSessionId?: string | null;
+      ancestryChain?: ProcessAnchor[];
+      workspaceRoot?: string | null;
+    },
+  ): RunRow {
+    const run = resolveRun(this.db, ref);
+    if (!run) throw new DelegateError(`no such run: ${ref}`);
+
+    if (!isRunTerminalState(run.state)) {
+      throw new DelegateError(
+        `run ${run.id} is ${run.state}; only terminal runs (completed|failed|cancelled) can be evaluated`,
+      );
+    }
+
+    const runType =
+      opts?.type !== undefined && opts.type !== null && opts.type !== ""
+        ? opts.type
+        : run.type;
+
+    let rubric;
+    try {
+      rubric = resolveRubricForRun(run.repo, runType);
+    } catch (err) {
+      throw new DelegateError(err instanceof Error ? err.message : String(err));
+    }
+
+    try {
+      validateAnswers(rubric, answers);
+    } catch (err) {
+      throw new DelegateError(err instanceof Error ? err.message : String(err));
+    }
+
+    // Judge binding: independent of the run's spawn-time session.
+    const workspaceRoot =
+      opts?.workspaceRoot ?? run.repo ?? "";
+    const { snapshot, freeformId } = this.bindOrchestrator({
+      explicitSessionId: opts?.explicitSessionId ?? null,
+      ancestryChain: opts?.ancestryChain ?? [],
+      workspaceRoot,
+      evalProjectRoot: run.repo,
+    });
+
+    const result = scoreRubric(rubric, answers);
+    updateRunEval(this.db, run.id, {
+      eval_score: result.score,
+      eval_baseline: result.baseline,
+      eval_feedback: feedback,
+      eval_answers: JSON.stringify(answers),
+      eval_rubric: rubric.id,
+      eval_rubric_version: rubric.version,
+      eval_session_id: snapshot?.session_id ?? freeformId,
+      eval_harness: snapshot?.harness ?? null,
+      eval_model: snapshot?.model ?? null,
+      eval_effort: snapshot?.effort ?? null,
+    });
+    return getRun(this.db, run.id)!;
+  }
+
+  /** All runs, newest first — for `GET /run-metrics` (#243). */
+  listAllRuns(): RunRow[] {
+    return listRuns(this.db);
   }
 
   /**

@@ -718,3 +718,119 @@ export interface TaskMetricsFilters {
   /** When true, only rubric evals with score < baseline. */
   below_baseline?: boolean;
 }
+
+// ---------------------------------------------------------------------------
+// Run metrics (#243 / ADR-0020) — a separate report from task metrics.
+// Never joined: a run has no vendor/model/profile, and comparability is an
+// explicit non-goal (shared 0–10 scale, never a shared row).
+// ---------------------------------------------------------------------------
+
+/** Run-count breakdown inside a run-metrics group (#243). */
+export interface RunMetricsCounts {
+  total: number;
+  completed: number;
+  failed: number;
+  cancelled: number;
+  running: number;
+  /** Live, waiting on the orchestrator — pipeline health, not work quality. */
+  blocked: number;
+  other: number;
+}
+
+/**
+ * First-run vs fork split of rubric eval scores (#243 / ADR-0020).
+ * Named `first_run` / `fork`, never `first_attempt` / `fix` — a fork is not
+ * a fix (ADR-0017 category error at run level).
+ */
+export interface MetricsRunLineageEvalSplit {
+  count: number;
+  avg: number | null;
+  avg_baseline: number | null;
+  avg_delta: number | null;
+  below_baseline_rate: number | null;
+}
+
+/**
+ * Rubric-eval aggregate for a *run* metrics group (#243).
+ * Same formula and fields as task {@link MetricsEvalStats}, but the lineage
+ * split is `first_run` / `fork` instead of `first_attempt` / `fix`.
+ */
+export interface RunMetricsEvalStats {
+  count: number;
+  avg: number | null;
+  avg_baseline: number | null;
+  avg_delta: number | null;
+  below_baseline_rate: number | null;
+  criterion_failures: Record<string, MetricsCriterionFailureStats>;
+  /** Rubric evals on first runs (`parent_run_id` null). */
+  first_run: MetricsRunLineageEvalSplit;
+  /** Rubric evals on forked runs (`parent_run_id` non-null). */
+  fork: MetricsRunLineageEvalSplit;
+}
+
+/**
+ * One group in `GET /run-metrics` (#243 / ADR-0020) — keyed by the active
+ * run group_by dimension (default `workflow`).
+ */
+export interface RunMetricsGroup {
+  key: string | null;
+  runs: RunMetricsCounts;
+  /** completed / (completed + failed); null when neither. */
+  success_rate: number | null;
+  evals: RunMetricsEvalStats;
+  evals_by_size: Record<string, RunMetricsEvalStats>;
+  evals_by_difficulty: Record<string, RunMetricsEvalStats>;
+  /** Token rollup over the run's child tasks (not a lineage rollup). */
+  tokens: MetricsTokenTotals;
+  duration_ms: MetricsDurationStats;
+  /**
+   * Cost per completed run: (input + output tokens) / completed runs.
+   * A lineage rollup would double-count the parent; a workflow bucket already
+   * holds parent and fork exactly once, so this is the honest tuning number.
+   * Null when completed is 0.
+   */
+  cost_per_completed_run: number | null;
+}
+
+/**
+ * `GET /run-metrics?session=&group_by=&…` — per-group run aggregates.
+ * Separate population from {@link MetricsResponse}; never joined.
+ */
+export interface RunMetricsResponse {
+  groups: RunMetricsGroup[];
+  /** ISO-8601 timestamp when the response was generated. */
+  generated_at: string;
+}
+
+/**
+ * Shared filter params for `GET /run-metrics` (#243).
+ * No vendor/model/profile. `workflow` and `workflow_version` are separate
+ * filters (mirroring rubric/rubric_version); group-by uses the composite.
+ */
+export interface RunMetricsFilters {
+  /** Orchestrator session id; `"all"` / omit for every session. */
+  session?: string;
+  type?: string;
+  size?: string;
+  difficulty?: string;
+  orch_harness?: string;
+  orch_model?: string;
+  orch_effort?: string;
+  eval_harness?: string;
+  eval_model?: string;
+  eval_effort?: string;
+  /** Rubric id used for the structured eval. */
+  rubric?: string;
+  /** Rubric version integer. */
+  rubric_version?: number;
+  /** Workflow definition id (not the composite). */
+  workflow?: string;
+  /** Author-declared workflow version. */
+  workflow_version?: number;
+  /**
+   * When true, only first runs (`parent_run_id` null); when false, only forks.
+   */
+  first_run?: boolean;
+  /** When true, only rubric evals with score < baseline. */
+  below_baseline?: boolean;
+}

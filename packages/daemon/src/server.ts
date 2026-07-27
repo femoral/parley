@@ -6,10 +6,13 @@ import {
   eventNameForState,
   getConfigPath,
   isMetricsGroupBy,
+  isRunMetricsGroupBy,
   isTerminalState,
   METRICS_GROUP_BY,
+  parseRunMetricsFilters,
   parseTaskMetricsFilters,
   resolveWorkflow,
+  RUN_METRICS_GROUP_BY,
   setConfigPath,
   unsetConfigPath,
   validateConfig,
@@ -57,7 +60,12 @@ import { readGlobalConfigLayer, type ContextFile } from "./context.js";
 import { DelegateError, TaskEngine } from "./engine.js";
 import { readLogTail } from "./logtail.js";
 import { handleChildAsk, handleChildReport, handleChildTask } from "./child.js";
-import { aggregateMetrics, taskMatchesFilters } from "./metrics.js";
+import {
+  aggregateMetrics,
+  aggregateRunMetrics,
+  indexTasksByRunId,
+  taskMatchesFilters,
+} from "./metrics.js";
 import { handleMcpRequest } from "./mcp.js";
 import { buildEnvelope } from "./report.js";
 import {
@@ -709,6 +717,130 @@ function handleMetrics(
   // Default session=all when the query omits it; parse leaves it undefined.
   if (filters.session === undefined) filters.session = session;
   sendJson(res, 200, aggregateMetrics(engine.list(), { ...filters, groupBy: groupByRaw }));
+}
+
+/**
+ * `GET /run-metrics?session=<id|all>&group_by=<…>&…filters`
+ * — per-group run aggregates (#243 / ADR-0020). Separate population from
+ * {@link handleMetrics}; never joined. Defaults: session=all, group_by=workflow.
+ */
+function handleRunMetrics(
+  engine: TaskEngine,
+  res: http.ServerResponse,
+  params: URLSearchParams,
+): void {
+  const session = params.get("session") ?? "all";
+  if (session === "") {
+    sendJson(res, 400, { error: "session must be a non-empty id or 'all'" });
+    return;
+  }
+  const groupByRaw = params.get("group_by") ?? "workflow";
+  if (!isRunMetricsGroupBy(groupByRaw)) {
+    sendJson(res, 400, {
+      error: `invalid group_by: ${groupByRaw} (expected ${RUN_METRICS_GROUP_BY.join("|")})`,
+    });
+    return;
+  }
+  for (const key of ["rubric_version", "workflow_version"] as const) {
+    const raw = params.get(key);
+    if (raw !== null && raw !== "") {
+      const n = Number(raw);
+      if (!Number.isInteger(n) || n < 1) {
+        sendJson(res, 400, { error: `${key} must be a positive integer` });
+        return;
+      }
+    }
+  }
+  const filters = parseRunMetricsFilters(params);
+  if (filters.session === undefined) filters.session = session;
+  const tasksByRun = indexTasksByRunId(engine.list());
+  sendJson(
+    res,
+    200,
+    aggregateRunMetrics(engine.listAllRuns(), tasksByRun, {
+      ...filters,
+      groupBy: groupByRaw,
+    }),
+  );
+}
+
+/**
+ * `POST /runs/:ref/eval` — structured whole-run rubric evaluation (#243).
+ * Body: `{ answers, feedback, type?, orchestrator_session_id?, ancestry_chain?,
+ * workspace_root? }`. Terminal runs only.
+ */
+function handleRunEval(
+  engine: TaskEngine,
+  res: http.ServerResponse,
+  ref: string,
+  body: unknown,
+): void {
+  if (!isRecord(body)) {
+    sendJson(res, 400, { error: "request body must be a JSON object" });
+    return;
+  }
+  const answers = body.answers;
+  if (typeof answers !== "object" || answers === null || Array.isArray(answers)) {
+    sendJson(res, 400, {
+      error: "answers is required (object mapping criterion ids to booleans)",
+    });
+    return;
+  }
+  for (const [id, value] of Object.entries(answers as Record<string, unknown>)) {
+    if (typeof value !== "boolean") {
+      sendJson(res, 400, {
+        error: `answers.${id} must be a boolean, got: ${typeof value}`,
+      });
+      return;
+    }
+  }
+  const feedback = body.feedback;
+  if (typeof feedback !== "string" || feedback === "") {
+    sendJson(res, 400, { error: "feedback is required" });
+    return;
+  }
+  const typeOverride =
+    typeof body.type === "string" && body.type !== "" ? body.type : null;
+  const ancestryChain = parseAncestryChain(body.ancestry_chain);
+  if (ancestryChain === undefined) {
+    sendJson(res, 400, {
+      error: "ancestry_chain must be an array of { machine_id, pid, start_time }",
+    });
+    return;
+  }
+  try {
+    const row = engine.evalRun(ref, answers as Record<string, boolean>, feedback, {
+      type: typeOverride,
+      explicitSessionId: optionalString(body.orchestrator_session_id),
+      ancestryChain,
+      workspaceRoot: optionalString(body.workspace_root),
+    });
+    sendJson(res, 200, {
+      run_id: row.id,
+      state: row.state,
+      workflow: row.workflow,
+      version: row.version,
+      type: row.type,
+      eval_score: row.eval_score,
+      eval_baseline: row.eval_baseline,
+      eval_rubric: row.eval_rubric,
+      eval_rubric_version: row.eval_rubric_version,
+      eval_session_id: row.eval_session_id,
+      eval_harness: row.eval_harness,
+      eval_model: row.eval_model,
+      eval_effort: row.eval_effort,
+    });
+  } catch (err) {
+    if (err instanceof DelegateError) {
+      const status = err.message.startsWith("no such run:") ? 404 : 400;
+      sendJson(res, status, {
+        error: err.message,
+        ...(err.code !== undefined ? { code: err.code } : {}),
+      });
+      return;
+    }
+    throw err;
+  }
 }
 
 /**
@@ -1794,11 +1926,19 @@ function createHandler(
         return;
       }
 
-      // `POST /runs/:id/{approve|reject|redirect|finish}` (#238)
+      // `POST /runs/:id/{approve|reject|redirect|finish}` (#238).
+      // `eval` is owned by #243 — handled here so the request body is consumed
+      // once (stream can't be re-read in a later block). Sibling #242 owns the
+      // gate-verb region; this only branches on the `eval` verb string.
       if (segments[0] === "runs" && method === "POST" && segments.length === 3) {
         const runId = decodeURIComponent(segments[1] ?? "");
         const verb = decodeURIComponent(segments[2] ?? "");
-        handleRunVerb(engine, res, runId, verb, await readBody(req));
+        const body = await readBody(req);
+        if (verb === "eval") {
+          handleRunEval(engine, res, runId, body);
+          return;
+        }
+        handleRunVerb(engine, res, runId, verb, body);
         return;
       }
 
@@ -1913,6 +2053,16 @@ function createHandler(
         }
       }
       // ── end #241 ──
+
+      // ── #243 run metrics (ADR-0020) ─────────────────────────────────────
+      // Separate population from GET /metrics; never joined.
+      // POST /runs/:id/eval is routed with the other run POST verbs above
+      // (body stream can only be read once) but uses handleRunEval here.
+      if (method === "GET" && url.pathname === "/run-metrics") {
+        handleRunMetrics(engine, res, url.searchParams);
+        return;
+      }
+      // ── end #243 ──
 
       // UI fallback (spec §"Routes"): only for GET requests outside the
       // reserved API prefixes, and only when a bundle was discovered at
