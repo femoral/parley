@@ -271,19 +271,21 @@ Black and white **alpha ramps** for shadows, scrims, inset rims, scroll tracks, 
 - **Running Green** (`#5fd08a`), **Awaiting Gold** (`#ffcf4d`), **Stalled Slate** (`#7fa8bf`), **Completed Sky** (`#7fd0ff`), **Failed Coral** (`#ff7a6b`), **Pending Tan** (`#c9a87a`), **Cancelled Ash** (`#9a8a72`). These luminous hues are spent *only* on task state, so a color in this family always means "this is a state." Tuned to glow on plate wood; they do not clear WCAG AA on parchment.
 
 ### Chart Ink Palette (dark ramp for parchment)
-The luminous state family is built for dark wood. On parchment (`#efe0bd`) those lights smear — Running Green on paper fails AA as a pale wash. A paper surface (the run chart pinned to the sea) needs a **second, dark ink ramp** in the same warm-on-cold system. This is its own ink palette, not a sub-family of the state tokens: three of the six are pen weights that carry no state at all, so filing them under a state namespace would invent a false distinction. The luminous layer-0 state ramp is unchanged; this adds a parallel ramp and does not rename, modify, or deprecate the first.
+The luminous state family is built for dark wood. On parchment those lights smear — Running Green on paper fails AA as a pale wash. A paper surface (the run chart pinned to the sea) needs a **second, dark ink ramp** in the same warm-on-cold system. This is its own ink palette, not a sub-family of the state tokens: three of the six are pen weights that carry no state at all, so filing them under a state namespace would invent a false distinction. The luminous layer-0 state ramp is unchanged; this adds a parallel ramp and does not rename, modify, or deprecate the first.
+
+Contrast figures below are measured against **flat** `--parchment-bg` (`#efe0bd`) unless a second stop is named. The parchment the palette was ratified against is not flat — the #224 sheet is `linear-gradient(168deg, #f4e7c8, var(--parchment-bg) 46%, #e2cfa4)` plus stain layers, darkest at `#e2cfa4`. See the **Textured-sheet AA rule** under Named Rules.
 
 **Pen weights** (route, marginalia, not-yet-sailed marks — not status):
-- **Chart Ink** (`--ink-chart` `#5b3a24`): the pen the whole map is drawn in. ≈7.74:1 on parchment (≥4.5:1 AA).
-- **Chart Soft** (`--ink-chart-soft` `#7d5636`): older ink — answered gates, faded legs, marginalia. ≈4.93:1 on parchment (≥4.5:1 AA).
-- **Chart Ghost** (`--ink-chart-ghost` `#b39a76`): not yet sailed. ≈2.06:1 on parchment — **decorative-only**. Never used for text that must be read; pair any "ahead" meaning with the `?` glyph so the cue survives without relying on this colour for legibility.
+- **Chart Ink** (`--ink-chart` `#5b3a24`): the pen the whole map is drawn in. ≈7.74:1 on flat `#efe0bd` (≥4.5:1 AA); ≈6.60:1 on `#e2cfa4`.
+- **Chart Soft** (`--ink-chart-soft` `#7d5636`): older ink — answered gates, faded legs, marginalia. ≈4.93:1 on flat `#efe0bd` (≥4.5:1 AA); ≈4.21:1 on `#e2cfa4` (fails AA — see textured-sheet rule).
+- **Chart Ghost** (`--ink-chart-ghost` `#b39a76`): not yet sailed. ≈2.06:1 on flat `#efe0bd` (≈1.76:1 on `#e2cfa4`) — **decorative-only**. Never used for text that must be read. Pair any "ahead" meaning with the `?` glyph so the cue survives without relying on this colour for legibility; that glyph must itself be inked in `--ink-chart` or `--ink-chart-soft`, never in `--ink-chart-ghost`.
 
 **State inks on paper** (status alone, always glyph-paired):
-- **Live Vermilion** (`--ink-live` `#a8331f`): under way. Glyph: **✦**. ≈5.09:1 on parchment (≥4.5:1 AA).
-- **Done Olive** (`--ink-done` `#4a5f38`): sailed. Glyph: **✓**. ≈5.38:1 on parchment (≥4.5:1 AA).
-- **Fail Blot** (`--ink-fail` `#8f1d12`): blotted. Glyph: **✕**. ≈6.83:1 on parchment (≥4.5:1 AA).
+- **Live Vermilion** (`--ink-live` `#a8331f`): under way. Glyph: **✦**. ≈5.09:1 on flat `#efe0bd` (≥4.5:1 AA); ≈4.34:1 on `#e2cfa4` (fails AA — see textured-sheet rule).
+- **Done Olive** (`--ink-done` `#4a5f38`): sailed. Glyph: **✓**. ≈5.38:1 on flat `#efe0bd` (≥4.5:1 AA); ≈4.59:1 on `#e2cfa4` (clears AA).
+- **Fail Blot** (`--ink-fail` `#8f1d12`): blotted. Glyph: **✕**. ≈6.83:1 on flat `#efe0bd` (≥4.5:1 AA); ≈5.82:1 on `#e2cfa4`.
 
-The second-cue requirement holds without colour alone: each chart state is ink tone + glyph (`✓` sailed, `✦` under way, `?` ahead, `✕` blotted), and the on-paper key repeats the pairings.
+The second-cue requirement holds without colour alone. Each **state** on the chart is ink tone + glyph: `✓` sailed (`--ink-done`), `✦` under way (`--ink-live`), `✕` blotted (`--ink-fail`). The pen-weight "ahead" mark may use ghost for the decorative mark; its `?` glyph is not a state cue and must be inked in chart or chart-soft (see ghost bullet). The on-paper key repeats the pairings.
 
 ### Named Rules
 **The One Loud Hue Rule.** Each element gets at most one saturated color, and it is the faction coat or the state color — never both, never a decorative third. The room is warm neutrals; the loud hue is information.
@@ -293,6 +295,8 @@ The second-cue requirement holds without colour alone: each chart state is ink t
 **The State-Color Reservation.** The luminous state palette is spent on status alone. Do not reuse Running Green or Failed Coral as decorative accents; their meaning depends on their rarity. Metric quality — scores, deltas, success rate, below-baseline, heatmap fail intensity — uses the separate **quality verdict** group (`--quality-good` / `--quality-poor` / `--quality-neutral`). State colors answer *what a task IS*; quality colors answer *how good work WAS*.
 
 On parchment, the same reservation covers the chart state inks: **`--ink-live`**, **`--ink-done`**, and **`--ink-fail`** are state colours on paper exactly as the luminous family is on wood — spent on status alone, never decorative. Pen weights (`--ink-chart`, `--ink-chart-soft`, `--ink-chart-ghost`) are not state colours; ghost remains decorative-only and must not carry readable text.
+
+**The Textured-sheet AA Rule.** Chart-ink AA claims against flat `--parchment-bg` (`#efe0bd`) do not automatically hold on a textured or gradient sheet. The ratified #224 sheet darkens to `#e2cfa4`, where `--ink-chart-soft` (≈4.21:1) and `--ink-live` (≈4.34:1) fail normal-text AA while `--ink-chart` still holds ≈6.60:1. **Constraint:** text that must be read — including state glyphs and the "ahead" `?` — may use `--ink-chart-soft` or `--ink-live` only where the surface under that text is no darker than flat `#efe0bd`. Over any darker parchment region (including `#e2cfa4` stops, stains, or edge washes), step that text up to `--ink-chart`. `--ink-done` and `--ink-fail` still clear AA at `#e2cfa4`; `--ink-chart-ghost` never carries readable text.
 
 ## Typography
 
