@@ -216,9 +216,9 @@ describe("inbox.ack — supersession and collapse", () => {
 });
 
 describe("inbox.allDone", () => {
-  it("empty watch set is vacuously all-done", () => {
+  it("empty watch set is never all-done (#256)", () => {
     const { box } = inbox([]);
-    expect(box.allDone(watch([]))).toBe(true);
+    expect(box.allDone(watch([]))).toBe(false);
   });
 
   it("true when every watched task is terminal and no pending events", () => {
@@ -321,13 +321,11 @@ describe("inbox.waitFor", () => {
     await expect(pending).resolves.toEqual({ allDone: true });
   });
 
-  it("empty watch set waitFor resolves allDone without parking", async () => {
+  it("empty watch set waitFor parks then times out (never all-done) (#256)", async () => {
     const { box } = inbox([]);
     const park = vi.fn(async () => false);
-    await expect(box.waitFor(watch([]), 100, { park })).resolves.toEqual({
-      allDone: true,
-    });
-    expect(park).not.toHaveBeenCalled();
+    await expect(box.waitFor(watch([]), 100, { park })).resolves.toBeNull();
+    expect(park).toHaveBeenCalledOnce();
   });
 });
 

@@ -63,6 +63,7 @@ import {
   getSession,
   getTask,
   isRunTerminalState,
+  sessionHasTasks,
   setRunBlockReason,
   insertDeliverable,
   insertQaTurn,
@@ -2765,11 +2766,24 @@ export class TaskEngine {
 
   /**
    * True when every watched subject is terminal *and* no pending inbox events
-   * remain (ADR-0019 session-finished). Empty set is vacuously all-done.
+   * remain (ADR-0019 session-finished). Empty set is never all-done (#256).
    * Task-only watch sets match ADR-0007 observationally.
    */
   isInboxAllDone(watch: WatchSet): boolean {
     return this.inbox.allDone(watch);
+  }
+
+  /**
+   * Whether a session id is known to the daemon (#256): a registered session
+   * row, or any task/run row carrying that orchestrator_session_id. Free-form
+   * bound ids (no sessions row) count as known so they remain watchable.
+   */
+  isKnownSession(sessionId: string): boolean {
+    if (sessionId === "") return false;
+    if (getSession(this.db, sessionId) !== undefined) return true;
+    if (sessionHasTasks(this.db, sessionId)) return true;
+    if (listRunsForSession(this.db, sessionId).length > 0) return true;
+    return false;
   }
 
   /**

@@ -124,7 +124,8 @@ export interface Inbox {
   peek(watch: WatchSet): InboxEvent | null;
   /**
    * Session finished (ADR-0019): every watched subject terminal and no pending
-   * events. Empty set → true. Task-only sets match ADR-0007 observationally.
+   * events. An empty watch set is never all-done (#256) — "nothing to watch" is
+   * not "everything finished". Task-only sets match ADR-0007 observationally.
    */
   allDone(watch: WatchSet): boolean;
   /**
@@ -250,6 +251,9 @@ export function createInbox(
   }
 
   function allDone(watch: WatchSet): boolean {
+    // Empty set is never finished (#256): vacuous truth abandoned live work
+    // when a session filter matched nothing (typo, stale id, or env/flag split).
+    if (watch.taskIds.length === 0 && watch.runIds.length === 0) return false;
     if (peek(watch) !== null) return false;
     for (const id of watch.taskIds) {
       const task = tasks.get(id);

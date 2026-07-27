@@ -7,7 +7,7 @@ import {
   type TasksResponse,
 } from "@useparley/core";
 import { parseArgs } from "../args.js";
-import { daemonGet, ensureDaemon } from "../client.js";
+import { DaemonRequestError, daemonGet, ensureDaemon } from "../client.js";
 import { type CliContext, printJson } from "../context.js";
 import { UsageError } from "../errors.js";
 import type { Discovery } from "@useparley/daemon/discovery.js";
@@ -131,8 +131,21 @@ export async function runWatch(ctx: CliContext, args: string[]): Promise<number>
     return `/tasks/inbox?${params.toString()}`;
   };
 
+  // One-shot note when a known-but-idle session long-polls empty (#256).
+  let notedIdleSession = false;
+
   for (;;) {
-    const ev = await daemonGet<InboxEventResponse>(discovery, query(), LONG_POLL_TIMEOUT_MS);
+    let ev: InboxEventResponse;
+    try {
+      ev = await daemonGet<InboxEventResponse>(discovery, query(), LONG_POLL_TIMEOUT_MS);
+    } catch (err) {
+      // Unknown session (and other 400s) → usage (exit 2), never tier codes
+      // or vacuous success (#256).
+      if (err instanceof DaemonRequestError && err.status === 400) {
+        throw new UsageError(`watch: ${err.message}`);
+      }
+      throw err;
+    }
     // Ack is one-shot: only the first request carries it.
     ack = null;
 
@@ -143,6 +156,18 @@ export async function runWatch(ctx: CliContext, args: string[]): Promise<number>
       // Poll window elapsed with live work still outstanding — re-poll.
       // (task and run both null, or only one set — either way no delivery.)
       if (ev.task === null && (ev.run === null || ev.run === undefined)) {
+        // Known-but-idle session (registered, zero subjects): diagnose rather
+        // than mute so an accidental wait is visible (#256).
+        if (
+          !notedIdleSession &&
+          session !== undefined &&
+          ids.length === 0
+        ) {
+          notedIdleSession = true;
+          ctx.stderr(
+            `note: session ${session} has no tasks or runs yet; waiting\n`,
+          );
+        }
         continue;
       }
     }

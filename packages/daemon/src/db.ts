@@ -1739,6 +1739,20 @@ export function getSession(db: DatabaseHandle, id: string): SessionRow | undefin
   return row === undefined ? undefined : asRow<SessionRow>(row);
 }
 
+/**
+ * True when any task is stamped with this orchestrator session id (#256).
+ * Free-form bindings (no sessions row) still count as known for watch.
+ */
+export function sessionHasTasks(db: DatabaseHandle, sessionId: string): boolean {
+  if (sessionId === "") return false;
+  const row = db
+    .prepare(
+      `SELECT 1 AS ok FROM tasks WHERE orchestrator_session_id = ? LIMIT 1`,
+    )
+    .get(sessionId);
+  return row !== undefined;
+}
+
 /** All registered sessions for a workspace root (live set for fallback). */
 export function listSessionsForWorkspace(
   db: DatabaseHandle,

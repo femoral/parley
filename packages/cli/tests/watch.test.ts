@@ -315,3 +315,86 @@ describe("parley watch attention inbox (ADR-0007 / #91)", () => {
     expect(res.stderr).toMatch(/invalid --ack/);
   });
 });
+
+describe("watch session empty-set / unknown-session (#256)", () => {
+  it("watch --session unknown exits 2 naming the id while tasks run under another session", async () => {
+    // Exact reproduction from the issue body: task running under A, watch B.
+    await delegate(taskDir(slow(5000)), "live");
+    await waitForState(home, "t1", "running");
+
+    const res = await runCli(["watch", "--json", "--session", "unknown-sess-B"], home, {
+      // Avoid env session matching the delegated task's session.
+      extraEnv: { PARLEY_SESSION_ID: undefined },
+    });
+    expect(res.code).toBe(2);
+    expect(res.stderr).toMatch(/unknown_session/);
+    expect(res.stderr).toMatch(/unknown-sess-B/);
+    // Must not report all-done / exit 0.
+    expect(res.code).not.toBe(0);
+  });
+
+  it("watch --session A delivers the event when tasks are bound to A", async () => {
+    const cwd = taskDir(quick());
+    await runCli(["delegate", "-v", "fake", "--cwd", cwd, "-n", "under-a", "run"], home, {
+      extraEnv: { PARLEY_SESSION_ID: "sess-A" },
+    });
+    await waitForState(home, "t1", "completed");
+
+    const res = await runCli(["watch", "--json", "--session", "sess-A"], home, {
+      extraEnv: { PARLEY_SESSION_ID: undefined },
+    });
+    expect(res.code).toBe(6);
+    const ev = JSON.parse(res.stdout) as { event: string; task: { task_id: string } };
+    expect(ev.event).toBe("task.completed");
+    expect(ev.task.task_id).toBe("t1");
+  });
+
+  it("free-form session (tasks only, no sessions row) remains watchable (#256 addendum)", async () => {
+    // 71514a1a-style free-form stamp: tasks bound, no registered session row.
+    const free = "71514a1a-freeform-watch";
+    const cwd = taskDir(quick());
+    await runCli(["delegate", "-v", "fake", "--cwd", cwd, "run"], home, {
+      extraEnv: { PARLEY_SESSION_ID: free },
+    });
+    await waitForState(home, "t1", "completed");
+
+    const res = await runCli(["watch", "--json", "--session", free], home, {
+      extraEnv: { PARLEY_SESSION_ID: undefined },
+    });
+    expect(res.code).toBe(6);
+    const ev = JSON.parse(res.stdout) as { task: { task_id: string } };
+    expect(ev.task.task_id).toBe("t1");
+  });
+
+  it("registered idle session long-polls (not exit 0) and notes on stderr", async () => {
+    // Register a session with zero tasks/runs; shrink daemon poll window so the
+    // first empty poll (and the CLI idle note) arrive quickly.
+    const chain = JSON.stringify([{ machine_id: "mac", pid: 1, start_time: "t" }]);
+    const reg = await runCli(["session", "--json"], home, {
+      extraEnv: {
+        PARLEY_ANCESTRY_CHAIN: chain,
+        PARLEY_SESSION_ID: "idle-sess",
+        PARLEY_HARNESS: "h",
+        PARLEY_MODEL: "m",
+        PARLEY_EFFORT: "e",
+        PARLEY_LONG_POLL_MS: "200",
+      },
+    });
+    expect(reg.code, reg.stderr).toBe(0);
+    const sessionId = (JSON.parse(reg.stdout) as { session_id: string }).session_id;
+
+    const { child, result } = startCli(
+      ["watch", "--json", "--session", sessionId],
+      home,
+      { extraEnv: { PARLEY_SESSION_ID: undefined } },
+    );
+    // First empty poll ≈ 200ms; allow a few re-polls for the note to land.
+    await new Promise((r) => setTimeout(r, 1500));
+    child.kill("SIGTERM");
+    const res = await result;
+    // Must not claim session-finished (exit 0).
+    expect(res.code).not.toBe(0);
+    expect(res.stderr).toMatch(/no tasks or runs yet/);
+    expect(res.stderr).toMatch(sessionId);
+  });
+});

@@ -14,6 +14,8 @@ interface DelegateAck {
   task_id: string;
   name: string | null;
   state: string;
+  /** Orchestrator session the task actually bound to (#256). */
+  orchestrator_session_id: string | null;
 }
 
 /**
