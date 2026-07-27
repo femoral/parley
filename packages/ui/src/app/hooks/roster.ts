@@ -14,8 +14,14 @@
  * core's `ATTENTION_ORDER` — only the live roster list uses this window.
  */
 import { attentionRank, isTerminalState } from "@useparley/core";
-import type { RosterGroup, RosterSessionOption, RosterTask } from "../../hud/types.js";
+import type {
+  RosterGroup,
+  RosterRun,
+  RosterSessionOption,
+  RosterTask,
+} from "../../hud/types.js";
 import { toDisplayTask } from "./displayTask.js";
+import { formatRunChip } from "./runs.js";
 
 /**
  * How many most-recently-active session chips the roster shows before the
@@ -63,6 +69,17 @@ export interface RosterTaskInput {
    * do not re-flare as "fresh" after a hard reload.
    */
   completedAt?: string | null;
+  /**
+   * Owning run id when this task is run-owned (#254 / ADR-0019). Null for
+   * plain tasks — drives the roster run chip.
+   */
+  runId?: string | null;
+  /** Run address node id. */
+  node?: string | null;
+  /** Run address iteration. */
+  iteration?: number | null;
+  /** Run address slot. */
+  slot?: string | null;
 }
 
 /**
@@ -333,18 +350,30 @@ function toRosterTask(
     // Only meaningful for failed rows; the panel treats undefined as archive
     // defaults from STATE_META.
     freshFailure: task.state === "failed" ? freshFailure : undefined,
+    // Run chip for run-owned tasks; plain tasks leave it null (#254).
+    runChip: formatRunChip({
+      runId: task.runId,
+      node: task.node,
+      iteration: task.iteration,
+      slot: task.slot,
+    }),
   };
 }
 
 /**
- * Project a flat task list into state groups (attention order, empty groups
- * dropped) and the distinct orchestrator sessions among them. The only
- * *core* ordering authority is `@useparley/core`'s `attentionRank`; the optional
- * {@link FailedFreshness} window may lift fresh failures just under stalled
- * (display-layer only — legend / core order stay put).
+ * Project a flat task list (and optional run peers) into state groups
+ * (attention order, empty groups dropped) and the distinct orchestrator
+ * sessions among them. The only *core* ordering authority is
+ * `@useparley/core`'s `attentionRank`; the optional {@link FailedFreshness}
+ * window may lift fresh failures just under stalled (display-layer only —
+ * legend / core order stay put).
+ *
+ * Runs are **peer rows** in the attention group matching each run's own
+ * state — never nested under their tasks (#254). A run's tasks stay in their
+ * own groups with a run chip.
  *
  * When `selectedSessionId` is set, groups/totals include only that session's
- * tasks (tasks with no session id appear only under "All hands" / null).
+ * tasks and runs (session-less items appear only under "All hands" / null).
  * Session chips always reflect the full unfiltered fleet so the selector and
  * the future scene camera cue stay in sync with every known session (#76) —
  * but only the {@link RECENT_SESSION_CHIP_CAP} most-recently-active ones are
@@ -356,8 +385,10 @@ export function projectRoster(
   tasks: Iterable<RosterTaskInput>,
   selectedSessionId: string | null = null,
   freshness: FailedFreshness | null = null,
+  runs: Iterable<RosterRun> = [],
 ): RosterProjection {
   const all = [...tasks];
+  const allRuns = [...runs];
   const sessionCounts = new Map<string, number>();
   const sessionLastActivity = new Map<string, string>();
   const durableSessions = new Set<string>();
@@ -373,28 +404,53 @@ export function projectRoster(
       if (!isTerminalState(task.state)) durableSessions.add(task.orchestratorSession);
     }
   }
+  // Runs also keep a session durable while non-terminal.
+  for (const run of allRuns) {
+    if (run.orchestratorSession) {
+      const at = run.updatedAt ?? "";
+      const prev = sessionLastActivity.get(run.orchestratorSession) ?? "";
+      if (at > prev) sessionLastActivity.set(run.orchestratorSession, at);
+      if (
+        run.runState === "running" ||
+        run.runState === "blocked"
+      ) {
+        durableSessions.add(run.orchestratorSession);
+      }
+    }
+  }
 
   const visible =
     selectedSessionId === null
       ? all
       : all.filter((task) => task.orchestratorSession === selectedSessionId);
 
-  const byState = new Map<string, RosterTask[]>();
+  const visibleRuns =
+    selectedSessionId === null
+      ? allRuns
+      : allRuns.filter((run) => run.orchestratorSession === selectedSessionId);
+
+  const byState = new Map<string, { tasks: RosterTask[]; runs: RosterRun[] }>();
   let totalTasks = 0;
   let activeTasks = 0;
 
   for (const task of visible) {
     totalTasks += 1;
-    if (!byState.has(task.state)) byState.set(task.state, []);
-    byState.get(task.state)!.push(toRosterTask(task, freshness));
+    if (!byState.has(task.state)) byState.set(task.state, { tasks: [], runs: [] });
+    byState.get(task.state)!.tasks.push(toRosterTask(task, freshness));
     if (!isTerminalState(task.state)) activeTasks += 1;
+  }
+
+  for (const run of visibleRuns) {
+    const state = run.attentionState;
+    if (!byState.has(state)) byState.set(state, { tasks: [], runs: [] });
+    byState.get(state)!.runs.push(run);
   }
 
   // Within a failed group, fresh wrecks float above archived ones so the eye
   // hits the loud row first when both share a header.
-  for (const [state, rosterTasks] of byState) {
+  for (const [state, bucket] of byState) {
     if (state !== "failed") continue;
-    rosterTasks.sort((a, b) => {
+    bucket.tasks.sort((a, b) => {
       const aFresh = a.freshFailure ? 1 : 0;
       const bFresh = b.freshFailure ? 1 : 0;
       if (aFresh !== bFresh) return bFresh - aFresh;
@@ -403,7 +459,11 @@ export function projectRoster(
   }
 
   const groups: RosterGroup[] = [...byState.entries()]
-    .map(([state, rosterTasks]) => ({ state, tasks: rosterTasks }))
+    .map(([state, bucket]) => ({
+      state,
+      tasks: bucket.tasks,
+      runs: bucket.runs,
+    }))
     .sort((a, b) => {
       const aFresh = a.state === "failed" && a.tasks.some((t) => t.freshFailure);
       const bFresh = b.state === "failed" && b.tasks.some((t) => t.freshFailure);

@@ -3742,3 +3742,367 @@ button.pc-roster__meta--copy:focus-visible {
     padding-top: 0;
   }
 }
+
+/* -------------------------------------------------------------------------
+ * Run roster rows + inspector run view (#254 / ADR-0021)
+ * Peer rows beside tasks; pip track is nodes × loop.max (fan-out free).
+ * ------------------------------------------------------------------------- */
+
+/* Run chip on a run-owned task's meta line (`7f3a · review.2.tests`). */
+.pc-roster__runchip {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--brass-frame);
+  background: var(--wash-black-30);
+  padding: 1px 6px;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  font-weight: 500;
+  color: var(--ink-tan);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Run peer row — full border + brass tint, never a left accent bar. */
+.pc-roster__row--run {
+  align-items: flex-start;
+  padding: 8px 10px;
+  border: 1px solid var(--brass-border);
+  background: var(--brass-tint-06);
+  margin-bottom: 2px;
+}
+.pc-roster__row--run:hover {
+  background: var(--brass-tint-12);
+}
+.pc-roster__row--run.pc-roster__row--selected {
+  background: var(--brass-tint-12);
+  border-color: var(--brass-border-selected);
+}
+.pc-roster__row--held {
+  border-color: var(--state-awaiting_answer);
+}
+.pc-roster__run-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 23px;
+  height: 23px;
+  margin-top: 1px;
+  color: var(--brass);
+}
+.pc-roster__run-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  width: 100%;
+}
+.pc-roster__run-head .pc-roster__name {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.pc-roster__run-id {
+  flex: 0 0 auto;
+  font-family: var(--font-mono);
+  font-size: var(--text-meta);
+  font-weight: 500;
+  color: var(--ink-muted);
+  white-space: nowrap;
+}
+.pc-roster__run-badge {
+  margin-left: auto;
+  flex: 0 0 auto;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--brass-frame);
+  padding: 1px 7px;
+  font-family: var(--font-body);
+  font-size: var(--text-label);
+  font-weight: 600;
+  letter-spacing: var(--track-micro);
+  text-transform: uppercase;
+  color: var(--state-running);
+}
+.pc-roster__run-badge--gate {
+  color: var(--state-awaiting_answer);
+  border-color: color-mix(in srgb, var(--state-awaiting_answer) 45%, transparent);
+}
+.pc-roster__run-sub {
+  display: block;
+  margin-top: 3px;
+  font-family: var(--font-body);
+  font-size: var(--text-sub);
+  font-weight: 500;
+  color: var(--ink-soft);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pc-roster__run-meta {
+  display: block;
+  margin-top: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Static pip track — flex children share width; length never follows fan-out. */
+.pc-roster__pips {
+  display: flex;
+  gap: 3px;
+  margin-top: 6px;
+  width: 100%;
+}
+.pc-roster__pip {
+  height: 5px;
+  flex: 1 1 0;
+  min-width: 4px;
+  border-radius: var(--radius-hairline);
+  background: var(--progress-track);
+}
+.pc-roster__pip--done {
+  background: var(--state-completed);
+}
+.pc-roster__pip--live {
+  background: var(--state-running);
+}
+.pc-roster__pip--gate {
+  background: var(--state-awaiting_answer);
+}
+.pc-roster__pip--fail {
+  background: var(--state-failed);
+}
+.pc-roster__pip--empty {
+  background: var(--progress-track);
+}
+
+/* Inspector run view — CLI node table + spine. */
+.pc-inspector--run .pc-inspector__body {
+  padding: 10px 12px 14px;
+}
+.pc-runview__head {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.pc-runview__titles {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.pc-runview__title {
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: var(--text-body);
+  font-weight: 600;
+  color: var(--ink-parchment);
+  line-height: 1.3;
+}
+.pc-runview__run-id {
+  font-family: var(--font-mono);
+  font-size: var(--text-meta);
+  font-weight: 500;
+  color: var(--ink-muted);
+}
+.pc-runview__sub {
+  margin: 3px 0 0;
+  font-family: var(--font-body);
+  font-size: var(--text-sub);
+  color: var(--ink-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pc-runview__branch {
+  font-family: var(--font-mono);
+  font-size: var(--text-meta);
+}
+.pc-runview__aside {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  flex: 0 0 auto;
+}
+.pc-runview__state {
+  font-family: var(--font-body);
+  font-size: var(--text-label);
+  font-weight: 600;
+  letter-spacing: var(--track-micro);
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+.pc-runview__dur {
+  font-family: var(--font-mono);
+  font-size: var(--text-meta);
+  color: var(--ink-meta);
+}
+.pc-runview__helm {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  margin: 0 0 10px;
+  padding: 8px 10px;
+  border-radius: var(--radius-well);
+  border: 1px solid var(--attn-awaiting-border);
+  background: var(--attn-awaiting-fill);
+}
+.pc-runview__helm-mark {
+  flex: 0 0 auto;
+  color: var(--state-awaiting_answer);
+  font-size: 14px;
+  line-height: 1.3;
+}
+.pc-runview__helm-text {
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: var(--text-sub);
+  color: var(--ink-soft);
+  line-height: 1.45;
+}
+.pc-runview__helm-text strong {
+  color: var(--ink-parchment);
+  font-weight: 600;
+}
+.pc-runview__block {
+  margin: 0 0 10px;
+  font-family: var(--font-body);
+  font-size: var(--text-sub);
+  color: var(--ink-muted);
+  line-height: 1.4;
+}
+.pc-runview__empty {
+  margin: 12px 0;
+  font-family: var(--font-body);
+  font-size: var(--text-sub);
+  color: var(--ink-muted);
+}
+.pc-runview__table-wrap {
+  overflow-x: auto;
+  margin: 0 -4px;
+}
+.pc-runview__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sub);
+}
+.pc-runview__table th {
+  text-align: left;
+  font-family: var(--font-body);
+  font-size: var(--text-label);
+  font-weight: 600;
+  letter-spacing: var(--track-micro);
+  text-transform: uppercase;
+  color: var(--ink-label);
+  padding: 0 6px 6px;
+  border-bottom: 1px solid var(--line-faint);
+  white-space: nowrap;
+}
+.pc-runview__table td {
+  padding: 7px 6px;
+  border-bottom: 1px solid var(--line-faint);
+  vertical-align: top;
+  color: var(--ink-muted);
+}
+.pc-runview__table tr:last-child td {
+  border-bottom: none;
+}
+.pc-runview__row--live td {
+  background: var(--brass-tint-06);
+}
+.pc-runview__rail {
+  width: 18px;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+  position: relative;
+}
+.pc-runview__spine {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--spine-color, var(--brass-frame));
+}
+.pc-runview__spine::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--brass-frame);
+}
+.pc-runview__spine-knot {
+  width: 9px;
+  height: 9px;
+  border-radius: var(--radius-pill);
+  background: currentColor;
+  box-shadow: 0 0 0 3px var(--plate-top);
+  position: relative;
+  z-index: 1;
+}
+.pc-runview__spine--fan::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 22%;
+  bottom: 22%;
+  width: 10px;
+  border: 2px solid var(--brass-frame);
+  border-left: none;
+  border-radius: 0 8px 8px 0;
+}
+.pc-runview__spine--live .pc-runview__spine-knot {
+  box-shadow:
+    0 0 0 3px var(--plate-top),
+    0 0 6px currentColor;
+}
+.pc-runview__node {
+  font-family: var(--font-mono);
+  font-size: var(--text-meta);
+  color: var(--ink-parchment);
+  white-space: nowrap;
+}
+.pc-runview__fan,
+.pc-runview__iter {
+  color: var(--ink-label);
+  font-weight: 500;
+}
+.pc-runview__st {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+  font-family: var(--font-body);
+  font-size: var(--text-label);
+  font-weight: 600;
+  letter-spacing: var(--track-micro);
+  text-transform: uppercase;
+  color: var(--st-color, var(--ink-muted));
+}
+.pc-runview__st-mark {
+  display: inline-flex;
+  flex: 0 0 auto;
+}
+.pc-runview__tasks,
+.pc-runview__age {
+  font-family: var(--font-mono);
+  font-size: var(--text-meta);
+  white-space: nowrap;
+}
+.pc-runview__gist {
+  color: var(--ink-muted);
+  line-height: 1.4;
+  max-width: 28ch;
+}
+.pc-runview__reject {
+  display: inline-block;
+  margin-left: 4px;
+  font-family: var(--font-body);
+  font-size: var(--text-label);
+  font-weight: 600;
+  letter-spacing: var(--track-micro);
+  text-transform: uppercase;
+  color: var(--state-awaiting_answer);
+}

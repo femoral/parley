@@ -38,6 +38,7 @@ export function Cockpit() {
     daemonUptimeDays,
     freshFailureTaskIds,
     inspector,
+    inspectorRun,
     settings,
     chartStale,
     mode,
@@ -99,6 +100,8 @@ export function Cockpit() {
               searchSessions={roster.searchSessions}
               selectedTaskId={roster.selectedTaskId}
               onSelectTask={roster.selectTask}
+              selectedRunId={roster.selectedRunId}
+              onSelectRun={roster.selectRun}
               totalTasks={snapshot.totalTasks}
               activeTasks={snapshot.activeTasks}
               connecting={!snapshot.ready}
@@ -159,6 +162,28 @@ export function Cockpit() {
             />
             <Inspector
               task={inspector}
+              run={
+                inspectorRun ??
+                // Selection is ahead of the detail poll for one tick — keep the
+                // plate out of the empty digest while the node table arrives.
+                (roster.selectedRunId
+                  ? {
+                      id: roster.selectedRunId,
+                      workflow: "…",
+                      workflowVersion: 0,
+                      runState: "running",
+                      stateLabel: "loading",
+                      branch: null,
+                      currentNode: null,
+                      iteration: 0,
+                      duration: null,
+                      tasksTotal: 0,
+                      nodes: [],
+                      block: null,
+                      heldGate: false,
+                    }
+                  : null)
+              }
               initialTab={roster.inspectorIntent.tab}
               openSeq={roster.inspectorIntent.seq}
               digest={logbookDigest}

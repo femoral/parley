@@ -46,6 +46,50 @@ export interface RosterTask {
    * STATE_META applies (dim, no beacon, quiet rank).
    */
   freshFailure?: boolean;
+  /**
+   * Run chip for run-owned tasks (`7f3a · review.2.tests`). Null/absent for
+   * plain tasks (#254).
+   */
+  runChip?: string | null;
+}
+
+/**
+ * One pip on a run row's static track (`nodes × loop.max`). Kind carries
+ * state without depending on fan-out width (#254).
+ */
+export type RosterPipKind = "done" | "live" | "gate" | "fail" | "empty";
+
+export interface RosterPip {
+  kind: RosterPipKind;
+}
+
+/**
+ * One run as the roster renders it — a **peer row** beside tasks, never a
+ * collapsible group over them (ADR-0021 / #254).
+ */
+export interface RosterRun {
+  id: string;
+  /** Workflow id (primary name). */
+  name: string;
+  /**
+   * Attention group this run sits in (task StateKey vocabulary). `blocked`
+   * maps to `awaiting_answer` so a held gate rides the awaiting tier.
+   */
+  attentionState: string;
+  /** Wire run lifecycle state (`running` | `blocked` | …). */
+  runState: string;
+  /** Quiet subline under the name (current node / held gate). */
+  subtitle: string;
+  /** Meta rollup (`pass 2 · 6 tasks · 11m`). */
+  meta: string;
+  /** True when the run is blocked on a held gate. */
+  heldGate: boolean;
+  /** Static-length pip track (`nodes × loop.max`). */
+  pips: RosterPip[];
+  /** ISO-8601 last activity. */
+  updatedAt?: string | null;
+  /** Orchestrator session for chip filtering; null when unbound. */
+  orchestratorSession: string | null;
 }
 
 /** A roster state group — already ordered by attention rank in the hooks layer. */
@@ -53,6 +97,11 @@ export interface RosterGroup {
   /** Task state string (matches a `StateKey`). */
   state: string;
   tasks: RosterTask[];
+  /**
+   * Run peers in this attention group. Flat list — never nested under
+   * tasks (#254). Absent or empty when the group has no runs.
+   */
+  runs?: RosterRun[];
 }
 
 /** One entry in the roster's session selector — an orchestrator session and
@@ -275,6 +324,65 @@ export interface InspectorTask {
   qa: QaTurn[];
   /** Full attempt chain root → latest (#166); always at least the current task. */
   attempts: AttemptLineageItem[];
+}
+
+/**
+ * One (node, iteration) row in the inspector's run view — same columns as
+ * `parley run status <run>`, plus a state-carrying spine (#254 / ADR-0021).
+ */
+export interface InspectorRunNode {
+  /** Stable key: `node\\0iteration`. */
+  key: string;
+  node: string;
+  kind: "step" | "gate";
+  iteration: number;
+  /** Wire STATE (task projection for a step; actioned verb / waiting for a gate). */
+  state: string;
+  /** Rendered STATE cell label. */
+  stateLabel: string;
+  /** TASKS column (`1`, `12`, or `—` for gates with no tasks). */
+  tasksLabel: string;
+  /** Three-part gist from the query surface (already assembled). */
+  gist: string;
+  /** Compact age (`18m`), or null when unknown. */
+  age: string | null;
+  /** Fan-out width chip beside the node name; null when single-task. */
+  fanoutWidth: number | null;
+  /** Spine knot colour key (task StateKey or gate-mapped). */
+  spineState: string;
+  /** Highlight the live / held row. */
+  live: boolean;
+  /** Gate branch badge (`on_reject → funnel`); null on steps. */
+  onReject: string | null;
+}
+
+/**
+ * Inspector payload when a run is selected (#254). Mirrors the CLI node
+ * table; deliverable browsing and fork vocabulary are out of scope here.
+ */
+export interface InspectorRun {
+  id: string;
+  workflow: string;
+  workflowVersion: number;
+  /** Wire run state. */
+  runState: string;
+  /** Header state label (includes block parenthetical when blocked). */
+  stateLabel: string;
+  branch: string | null;
+  currentNode: string | null;
+  iteration: number;
+  /** Pre-formatted duration, or null. */
+  duration: string | null;
+  tasksTotal: number;
+  nodes: InspectorRunNode[];
+  /** Block detail when the run is blocked; null otherwise. */
+  block: {
+    reason: string;
+    detail: string | null;
+    node: string | null;
+  } | null;
+  /** True when blocked on a held gate (surfaces the helm note; no verbs). */
+  heldGate: boolean;
 }
 
 /**

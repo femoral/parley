@@ -1,0 +1,190 @@
+/**
+ * Inspector run view — one line per (node, iteration), matching
+ * `parley run status <run>` plus a state-carrying spine (#254 / ADR-0021).
+ *
+ * Deliberately close to docs/arch/222-query-surface-prototype/02-run-summary.txt;
+ * that closeness is a feature. No gate verbs — Cove surfaces a held gate, it
+ * never actions one.
+ */
+import type { CSSProperties } from "react";
+import { Mark } from "../../primitives/index.js";
+import { stateMetaFor } from "../../tokens/state-meta.js";
+import { useCopyScaffold } from "../useCopyScaffold.js";
+import type { InspectorRun, InspectorRunNode } from "../types.js";
+
+function shortRef(id: string): string {
+  return id.length > 8 ? id.slice(0, 8) : id;
+}
+
+function RunIdCopy({ runId }: { runId: string }) {
+  const { copied, canCopy, scaffoldRef, copy } = useCopyScaffold(runId);
+  if (!canCopy) return null;
+  return (
+    <>
+      <span ref={scaffoldRef} className="pc-inspector__id-scaffold" aria-hidden="true">
+        {runId}
+      </span>
+      <button
+        type="button"
+        className="pc-inspector__id-copy"
+        title={copied ? "Copied run id" : `Copy run id ${runId}`}
+        aria-label={copied ? "Copied run id" : "Copy run id"}
+        onClick={() => void copy()}
+      >
+        {copied ? "copied ✓" : "copy"}
+      </button>
+    </>
+  );
+}
+
+function SpineCell({ node }: { node: InspectorRunNode }) {
+  const meta = stateMetaFor(node.spineState);
+  const style = {
+    "--spine-color": meta.colorVar,
+  } as CSSProperties;
+  const fan = node.fanoutWidth != null && node.fanoutWidth > 1;
+  return (
+    <td className="pc-runview__rail">
+      <span
+        className={`pc-runview__spine${fan ? " pc-runview__spine--fan" : ""}${
+          node.live ? " pc-runview__spine--live" : ""
+        }`}
+        style={style}
+        aria-hidden="true"
+      >
+        <span className="pc-runview__spine-knot" />
+      </span>
+    </td>
+  );
+}
+
+function StateCell({ node }: { node: InspectorRunNode }) {
+  const meta = stateMetaFor(node.spineState);
+  const style = { "--st-color": meta.colorVar } as CSSProperties;
+  return (
+    <td>
+      <span className="pc-runview__st" style={style}>
+        <span className="pc-runview__st-mark" aria-hidden="true">
+          <Mark mark={meta.mark} size={10} />
+        </span>
+        {node.stateLabel}
+      </span>
+    </td>
+  );
+}
+
+function NodeRow({ node }: { node: InspectorRunNode }) {
+  return (
+    <tr className={node.live ? "pc-runview__row--live" : undefined}>
+      <SpineCell node={node} />
+      <td className="pc-runview__node">
+        {node.node}
+        {node.fanoutWidth != null && node.fanoutWidth > 1 && (
+          <span className="pc-runview__fan"> ×{node.fanoutWidth}</span>
+        )}
+        {node.iteration > 1 && (
+          <span className="pc-runview__iter"> .{node.iteration}</span>
+        )}
+      </td>
+      <StateCell node={node} />
+      <td className="pc-runview__tasks">{node.tasksLabel}</td>
+      <td className="pc-runview__gist">
+        {node.gist}
+        {node.onReject && (
+          <span className="pc-runview__reject"> on_reject → {node.onReject}</span>
+        )}
+      </td>
+      <td className="pc-runview__age">{node.age ?? "—"}</td>
+    </tr>
+  );
+}
+
+export function RunView({ run }: { run: InspectorRun }) {
+  const short = shortRef(run.id);
+
+  return (
+    <div className="pc-runview">
+      <header className="pc-runview__head">
+        <div className="pc-runview__titles">
+          <h2 className="pc-runview__title">
+            {run.workflow}
+            <span className="pc-runview__run-id"> · run {short}</span>
+          </h2>
+          <p className="pc-runview__sub">
+            {run.tasksTotal === 1 ? "1 task" : `${run.tasksTotal} tasks`}
+            {run.nodes.length > 0 && (
+              <>
+                {" · "}
+                {run.nodes.length === 1
+                  ? "1 line"
+                  : `${run.nodes.length} lines`}
+              </>
+            )}
+            {run.branch && (
+              <>
+                {" · "}
+                <span className="pc-runview__branch" title={run.branch}>
+                  {run.branch}
+                </span>
+              </>
+            )}
+          </p>
+        </div>
+        <div className="pc-runview__aside">
+          <span className="pc-runview__state">{run.stateLabel}</span>
+          {run.duration && <span className="pc-runview__dur">{run.duration}</span>}
+          <RunIdCopy runId={run.id} />
+        </div>
+      </header>
+
+      {run.heldGate && (
+        <div className="pc-runview__helm" role="status">
+          <span className="pc-runview__helm-mark" aria-hidden="true">
+            ⎈
+          </span>
+          <p className="pc-runview__helm-text">
+            <strong>Held — awaiting the orchestrator.</strong> Cove shows the
+            gate; approve, reject, redirect, and finish belong to the agent
+            driving the session.
+          </p>
+        </div>
+      )}
+
+      {run.block && !run.heldGate && run.block.detail && (
+        <p className="pc-runview__block" role="status">
+          {run.block.detail}
+        </p>
+      )}
+
+      {run.nodes.length === 0 ? (
+        <p className="pc-runview__empty">
+          {run.stateLabel === "loading"
+            ? "Hailing the run…"
+            : "No nodes entered yet."}
+        </p>
+      ) : (
+        <div className="pc-runview__table-wrap">
+          <table className="pc-runview__table">
+            <thead>
+              <tr>
+                <th className="pc-runview__rail" scope="col">
+                  <span className="pc-visually-hidden">Sequence</span>
+                </th>
+                <th scope="col">Node</th>
+                <th scope="col">State</th>
+                <th scope="col">Tasks</th>
+                <th scope="col">Gist</th>
+                <th scope="col">Age</th>
+              </tr>
+            </thead>
+            <tbody>
+              {run.nodes.map((node) => (
+                <NodeRow key={node.key} node={node} />
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}

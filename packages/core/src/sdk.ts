@@ -22,6 +22,7 @@ import type {
   TasksResponse,
 } from "./contract.js";
 import type { MetricsGroupBy, RunMetricsGroupBy } from "./classification.js";
+import type { RunDetailResponse, RunsResponse } from "./run-query.js";
 import { TASK_EVENT_NAMES } from "./states.js";
 
 /** How the client reaches the daemon. */
@@ -142,6 +143,33 @@ export class ParleyClient {
     if (options?.groupBy !== undefined) params.set("group_by", options.groupBy);
     const qs = params.toString();
     return this.request<RunMetricsResponse>(qs === "" ? "/run-metrics" : `/run-metrics?${qs}`);
+  }
+
+  /**
+   * `GET /runs` — run list projection (ADR-0021 / #241). Optional filters
+   * match the daemon query surface (`session`, `workflow`, `state`, `blocked`).
+   */
+  listRuns(filters?: {
+    session?: string;
+    workflow?: string;
+    state?: string;
+    blocked?: boolean;
+  }): Promise<RunsResponse> {
+    const params = new URLSearchParams();
+    if (filters?.session) params.set("session", filters.session);
+    if (filters?.workflow) params.set("workflow", filters.workflow);
+    if (filters?.state) params.set("state", filters.state);
+    if (filters?.blocked === true) params.set("blocked", "true");
+    const qs = params.toString();
+    return this.request<RunsResponse>(qs === "" ? "/runs" : `/runs?${qs}`);
+  }
+
+  /**
+   * `GET /runs/:ref` — one run's node table (one line per (node, iteration)).
+   * Same projection as `parley run status <run>` (ADR-0021 / #241).
+   */
+  getRun(ref: string): Promise<RunDetailResponse> {
+    return this.request<RunDetailResponse>(`/runs/${encodeURIComponent(ref)}`);
   }
 
   /** `GET /tasks/:ref` — envelope plus decoded detail companions (and deprecated row). */

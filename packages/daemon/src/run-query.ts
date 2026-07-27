@@ -743,6 +743,24 @@ export interface ProjectRunOptions {
   childRunIds?: string[];
 }
 
+/**
+ * Static pip / summary bound: `nodes × max(loop.max)` (ADR-0021).
+ * Defaults loop to 1 when no node declares a loop.
+ */
+export function computeTrackBound(
+  definition: WorkflowDefinition | null | undefined,
+): number | null {
+  if (!definition || definition.nodes.length === 0) return null;
+  let loopMax = 1;
+  for (const n of definition.nodes) {
+    const max = n.loop?.max;
+    if (typeof max === "number" && Number.isFinite(max) && max > loopMax) {
+      loopMax = max;
+    }
+  }
+  return definition.nodes.length * loopMax;
+}
+
 /** Build a RunSummary from a run row + its tasks. */
 export function projectRunSummary(opts: ProjectRunOptions): RunSummary {
   const { run, tasks } = opts;
@@ -790,6 +808,7 @@ export function projectRunSummary(opts: ProjectRunOptions): RunSummary {
     type: run.type,
     repo: run.repo,
     error: run.error,
+    track_bound: computeTrackBound(opts.definition),
   };
 }
 
