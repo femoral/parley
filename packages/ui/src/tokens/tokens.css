@@ -110,6 +110,32 @@
   --parchment-border: #b8935a;
   --parchment-text: #5b3a24;
 
+  /*
+   * §2.5a — chart ink palette (dark ramp for parchment).
+   * Layer-0's luminous state family (§2.6) is tuned to glow on plate wood
+   * (#1d140c); none of it clears WCAG AA on parchment (#efe0bd). Paper needs
+   * a separate dark ink ramp — not a state sub-namespace, because three of
+   * the six carry no state at all (pen weights). Ratified against the #224
+   * prototype; values are fixed.
+   *
+   * Contrast vs --parchment-bg #efe0bd (WCAG 2.x relative luminance):
+   *   --ink-chart       #5b3a24 ≈ 7.74:1  (≥4.5:1 AA)
+   *   --ink-chart-soft  #7d5636 ≈ 4.93:1  (≥4.5:1 AA)
+   *   --ink-chart-ghost #b39a76 ≈ 2.06:1  decorative-only — never text that
+   *                                       must be read
+   *   --ink-live        #a8331f ≈ 5.09:1  (≥4.5:1 AA)
+   *   --ink-done        #4a5f38 ≈ 5.38:1  (≥4.5:1 AA)
+   *   --ink-fail        #8f1d12 ≈ 6.83:1  (≥4.5:1 AA)
+   * State inks on paper are reserved status colours (State-Color Reservation)
+   * and are always glyph-paired: ✓ sailed, ✦ under way, ? ahead, ✕ blotted.
+   */
+  --ink-chart: #5b3a24; /* the pen the whole map is drawn in */
+  --ink-chart-soft: #7d5636; /* older ink — answered gates, marginalia */
+  --ink-chart-ghost: #b39a76; /* not yet sailed; decorative-only on parchment */
+  --ink-live: #a8331f; /* fresh vermilion — under way */
+  --ink-done: #4a5f38; /* dried olive — sailed */
+  --ink-fail: #8f1d12; /* a blot */
+
   /* Scene foliage only — earthy olive kept OUTSIDE the state family so
      running green stays rare (State-Color Reservation). Lower chroma/luma
      than --state-running #5fd08a; still legible on the teal sea. */

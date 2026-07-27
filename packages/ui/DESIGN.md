@@ -29,6 +29,12 @@ colors:
   state-completed: "#7fd0ff"
   state-failed: "#ff7a6b"
   state-cancelled: "#9a8a72"
+  ink-chart: "#5b3a24"
+  ink-chart-soft: "#7d5636"
+  ink-chart-ghost: "#b39a76"
+  ink-live: "#a8331f"
+  ink-done: "#4a5f38"
+  ink-fail: "#8f1d12"
   quality-good: "#3ec8c0"
   quality-poor: "#e888a0"
   quality-neutral: "#b8a078"
@@ -262,7 +268,22 @@ A warm-on-cold palette: cool teal seas underneath, warm brass and parchment on t
 Black and white **alpha ramps** for shadows, scrims, inset rims, scroll tracks, and mask feathers — not brand color. Named as an ordered scale (`--wash-black-18` … `--wash-black-60`, `--wash-white-20` … `--wash-white-50`, plus opaque `--wash-black` for mask stops) because the same wash reappears on popovers, text-shadows, wells, and scene drop-shadows; inventing per-surface names would invent false distinctions. Each alpha is a distinct rendered appearance — do not snap between steps. Plate chrome recipes (`--plate-shadow` and friends) compose these washes rather than hard-coding `rgba(0,0,0,…)`.
 
 ### State Colors (reserved — status only)
-- **Running Green** (`#5fd08a`), **Awaiting Gold** (`#ffcf4d`), **Stalled Slate** (`#7fa8bf`), **Completed Sky** (`#7fd0ff`), **Failed Coral** (`#ff7a6b`), **Pending Tan** (`#c9a87a`), **Cancelled Ash** (`#9a8a72`). These luminous hues are spent *only* on task state, so a color in this family always means "this is a state."
+- **Running Green** (`#5fd08a`), **Awaiting Gold** (`#ffcf4d`), **Stalled Slate** (`#7fa8bf`), **Completed Sky** (`#7fd0ff`), **Failed Coral** (`#ff7a6b`), **Pending Tan** (`#c9a87a`), **Cancelled Ash** (`#9a8a72`). These luminous hues are spent *only* on task state, so a color in this family always means "this is a state." Tuned to glow on plate wood; they do not clear WCAG AA on parchment.
+
+### Chart Ink Palette (dark ramp for parchment)
+The luminous state family is built for dark wood. On parchment (`#efe0bd`) those lights smear — Running Green on paper fails AA as a pale wash. A paper surface (the run chart pinned to the sea) needs a **second, dark ink ramp** in the same warm-on-cold system. This is its own ink palette, not a sub-family of the state tokens: three of the six are pen weights that carry no state at all, so filing them under a state namespace would invent a false distinction. The luminous layer-0 state ramp is unchanged; this adds a parallel ramp and does not rename, modify, or deprecate the first.
+
+**Pen weights** (route, marginalia, not-yet-sailed marks — not status):
+- **Chart Ink** (`--ink-chart` `#5b3a24`): the pen the whole map is drawn in. ≈7.74:1 on parchment (≥4.5:1 AA).
+- **Chart Soft** (`--ink-chart-soft` `#7d5636`): older ink — answered gates, faded legs, marginalia. ≈4.93:1 on parchment (≥4.5:1 AA).
+- **Chart Ghost** (`--ink-chart-ghost` `#b39a76`): not yet sailed. ≈2.06:1 on parchment — **decorative-only**. Never used for text that must be read; pair any "ahead" meaning with the `?` glyph so the cue survives without relying on this colour for legibility.
+
+**State inks on paper** (status alone, always glyph-paired):
+- **Live Vermilion** (`--ink-live` `#a8331f`): under way. Glyph: **✦**. ≈5.09:1 on parchment (≥4.5:1 AA).
+- **Done Olive** (`--ink-done` `#4a5f38`): sailed. Glyph: **✓**. ≈5.38:1 on parchment (≥4.5:1 AA).
+- **Fail Blot** (`--ink-fail` `#8f1d12`): blotted. Glyph: **✕**. ≈6.83:1 on parchment (≥4.5:1 AA).
+
+The second-cue requirement holds without colour alone: each chart state is ink tone + glyph (`✓` sailed, `✦` under way, `?` ahead, `✕` blotted), and the on-paper key repeats the pairings.
 
 ### Named Rules
 **The One Loud Hue Rule.** Each element gets at most one saturated color, and it is the faction coat or the state color — never both, never a decorative third. The room is warm neutrals; the loud hue is information.
@@ -270,6 +291,8 @@ Black and white **alpha ramps** for shadows, scrims, inset rims, scroll tracks, 
 **The Warm-Ink Rule.** Text is never neutral gray. Every ink tone carries the parchment/brass hue. Gray body text on the wood panels is forbidden — it reads washed-out and off-brand. When contrast is close, move toward Parchment Ink, never toward gray.
 
 **The State-Color Reservation.** The luminous state palette is spent on status alone. Do not reuse Running Green or Failed Coral as decorative accents; their meaning depends on their rarity. Metric quality — scores, deltas, success rate, below-baseline, heatmap fail intensity — uses the separate **quality verdict** group (`--quality-good` / `--quality-poor` / `--quality-neutral`). State colors answer *what a task IS*; quality colors answer *how good work WAS*.
+
+On parchment, the same reservation covers the chart state inks: **`--ink-live`**, **`--ink-done`**, and **`--ink-fail`** are state colours on paper exactly as the luminous family is on wood — spent on status alone, never decorative. Pen weights (`--ink-chart`, `--ink-chart-soft`, `--ink-chart-ghost`) are not state colours; ghost remains decorative-only and must not carry readable text.
 
 ## Typography
 
