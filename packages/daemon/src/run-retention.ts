@@ -1,5 +1,5 @@
 /**
- * Run retention (#244 / ADR-0016, ADR-0018).
+ * Run retention (#244 / #250 / ADR-0016, ADR-0018).
  *
  * Extends the existing task retention sweep: runs *decay* (rows stay, values
  * purge) rather than expire. Pure planning helpers live here so unit tests do
@@ -9,6 +9,8 @@
  * - Same `retention.days` clock as tasks — no new knob.
  * - Deliverable decay rides the producing task's expiry; declared run
  *   `outputs` are retained (all iterations/slots for each `node.port`).
+ * - Task-less deliverables (fork-inherited copies at iteration 0, #242 / #250)
+ *   ride the *run* purge clock instead — same planner and retention predicate.
  * - Run row `purged_at` + scratch-subtree deletion ride terminal + past cutoff.
  * - gc never deletes branches (repo-mode).
  * - Declared `file`/`dir` outputs keep path strings (`purged_at` null); bytes
@@ -25,6 +27,7 @@ import {
 import {
   getRun,
   isRunTerminalState,
+  listDeliverablesForRun,
   listDeliverablesForTask,
   listExpiredRuns,
   purgeDeliverable,
@@ -34,6 +37,7 @@ import {
   type RunRow,
   type TaskRow,
 } from "./db.js";
+import { SKIPPED_GATE_PORT } from "./run-engine.js";
 import { cleanRunScratch, listRunScratchPath } from "./run-workspace.js";
 
 // ---------------------------------------------------------------------------
@@ -225,6 +229,11 @@ export interface GcRunEntry {
   scratch: string | null;
   /** Estimated on-disk bytes reclaimed from the scratch subtree. */
   bytes: number;
+  /**
+   * Task-less deliverables decayed (or that would decay on dry-run) for this
+   * run (#250). Declared outputs and skipped-gate anchors are not counted.
+   */
+  decayed_deliverables: number;
 }
 
 export interface SweepRunRetentionResult {
@@ -241,23 +250,75 @@ export interface SweepRunRetentionOptions {
   dryRun: boolean;
   /** `~/.parley/runs` — scratch trees live here. */
   runsDir: string;
+  /**
+   * Parley home (global workflow layer) for resolving declared outputs when
+   * decaying task-less deliverables on run purge (#250).
+   */
+  home: string;
   /** Optional clock override for `purged_at` stamps (tests). */
   purgedAt?: string;
   /** Injected for tests; defaults to recursive directory size. */
   directoryBytes?: (root: string) => number;
+  /**
+   * Injected for tests that need a failing scratch removal. Defaults to
+   * {@link cleanRunScratch}.
+   */
+  removeScratch?: (args: { runsDir: string; runId: string }) => void;
 }
 
 /**
- * Purge terminal runs past the retention cutoff: stamp `purged_at`, and for
- * `scratch` mode delete the run subtree (gc is its only scheduled deleter).
- * Never touches branches. Effect first (scratch), then stamp — a failed
- * removal leaves the row so the next sweep retries.
+ * Task-less candidates for run-clock decay: fork-inherited copies and any
+ * other row with no producing task. Skipped-gate anchors are excluded — they
+ * carry a null value and must stay unstamped so a purged fork still renders
+ * its skipped gates (#242 / #250).
+ */
+export function tasklessDeliverablesForRunDecay(
+  deliverables: readonly DeliverableRow[],
+): DeliverableRow[] {
+  return deliverables.filter(
+    (d) => d.task_id === null && d.port !== SKIPPED_GATE_PORT,
+  );
+}
+
+/**
+ * Plan (and optionally apply) decay for a purged run's task-less deliverables.
+ * Reuses {@link planDeliverableDecay} and {@link resolveDeclaredOutputKeysForRun}
+ * unchanged. Does not touch rows with a producing task.
+ */
+export function decayTasklessRunDeliverables(
+  db: DatabaseHandle,
+  run: Pick<RunRow, "id" | "workflow" | "repo">,
+  home: string,
+  opts: { dryRun: boolean; purgedAt: string },
+): DeliverableDecayPlan {
+  const candidates = tasklessDeliverablesForRunDecay(
+    listDeliverablesForRun(db, run.id),
+  );
+  const declared = resolveDeclaredOutputKeysForRun(run, home);
+  const plan = planDeliverableDecay(candidates, declared);
+  if (!opts.dryRun) {
+    for (const id of plan.toPurge) {
+      purgeDeliverable(db, id, opts.purgedAt);
+    }
+  }
+  return plan;
+}
+
+/**
+ * Purge terminal runs past the retention cutoff: stamp `purged_at`, decay
+ * task-less deliverables (#250), and for `scratch` mode delete the run
+ * subtree (gc is its only scheduled deleter). Never touches branches.
+ *
+ * Ordering: effect first (scratch), then decay + stamp — a failed removal
+ * leaves the row *and* its deliverables so the next sweep retries. Invariant:
+ * task-less rows are decayed if and only if their run is purged.
  */
 export function sweepRunRetention(
   opts: SweepRunRetentionOptions,
 ): SweepRunRetentionResult {
   const dryRun = opts.dryRun;
   const directoryBytes = opts.directoryBytes ?? defaultDirectoryBytes;
+  const removeScratch = opts.removeScratch ?? cleanRunScratch;
   const purgedAt = opts.purgedAt ?? new Date().toISOString();
   const expired = listExpiredRuns(opts.db, opts.cutoffIso);
 
@@ -271,6 +332,14 @@ export function sweepRunRetention(
         ? listRunScratchPath(opts.runsDir, run.id)
         : null;
     const bytes = scratch !== null ? directoryBytes(scratch) : 0;
+
+    // Plan once (pure): dry-run reports the count; application waits until
+    // after successful scratch removal so a failed rm leaves deliverables.
+    const decayPlan = decayTasklessRunDeliverables(opts.db, run, opts.home, {
+      dryRun: true,
+      purgedAt,
+    });
+
     const entry: GcRunEntry = {
       run_id: run.id,
       state: run.state,
@@ -278,6 +347,7 @@ export function sweepRunRetention(
       workspace: run.workspace,
       scratch,
       bytes,
+      decayed_deliverables: decayPlan.toPurge.length,
     };
 
     if (dryRun) {
@@ -286,10 +356,11 @@ export function sweepRunRetention(
       continue;
     }
 
-    // Scratch first: if removal fails, keep the row un-purged for retry.
+    // Scratch first: if removal fails, keep the row un-purged and leave
+    // task-less deliverables intact for the next sweep (#250 invariant).
     if (run.workspace === "scratch") {
       try {
-        cleanRunScratch({ runsDir: opts.runsDir, runId: run.id });
+        removeScratch({ runsDir: opts.runsDir, runId: run.id });
       } catch (err) {
         failed.push({
           run_id: run.id,
@@ -299,8 +370,13 @@ export function sweepRunRetention(
       }
     }
 
+    // Apply the planned decay with the purge stamp (same plan dry-run reported).
+    for (const id of decayPlan.toPurge) {
+      purgeDeliverable(opts.db, id, purgedAt);
+    }
+
     // Repo mode: checkouts may already be gone at run-terminal; gc never
-    // deletes branches. Just stamp the decayed state.
+    // deletes branches. Stamp the decayed state after successful effects.
     purgeRun(opts.db, run.id, purgedAt);
     runs.push(entry);
     freed += bytes;

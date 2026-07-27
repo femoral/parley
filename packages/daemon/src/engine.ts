@@ -1786,13 +1786,15 @@ export class TaskEngine {
       }
     }
 
-    // Run row decay + scratch subtree deletion (#244). Same cutoff; never
-    // branches. Effect first on scratch so a failed rm leaves the row.
+    // Run row decay + scratch subtree deletion + task-less deliverable decay
+    // (#244 / #250). Same cutoff; never branches. Effect first on scratch so
+    // a failed rm leaves the row and its task-less deliverables.
     const runSweep = sweepRunRetention({
       db: this.db,
       cutoffIso,
       dryRun,
       runsDir: this.paths.runs,
+      home: this.paths.home,
       directoryBytes,
     });
     for (const f of runSweep.failed) {
