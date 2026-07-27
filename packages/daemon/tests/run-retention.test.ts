@@ -1,9 +1,12 @@
 /**
- * #244 — run retention: pure planning + effectful decay against SQLite.
+ * #244 / #250 — run retention: pure planning + effectful decay against SQLite.
  *
- * Covers the issue edge cases by name: declared outputs retained, scaffolding
- * purged, scratch deleted, branches never touched, file/dir path strings kept,
- * live/blocked runs skipped, definition-missing over-retains.
+ * #244: declared outputs retained, scaffolding purged, scratch deleted,
+ * branches never touched, file/dir path strings kept, live/blocked runs
+ * skipped, definition-missing over-retains.
+ *
+ * #250: forked (task-less) deliverables decay on run purge — closes the gap
+ * neither #242's nor #244's original suites covered.
  */
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { execFileSync } from "node:child_process";
@@ -431,11 +434,13 @@ describe("sweepRunRetention", () => {
       cutoffIso: CUTOFF,
       dryRun: false,
       runsDir: paths.runs,
+      home,
       purgedAt: "2026-07-01T00:00:00.000Z",
     });
 
     expect(result.runs.map((r) => r.run_id)).toEqual([runId]);
     expect(result.failed).toEqual([]);
+    expect(result.runs[0]!.decayed_deliverables).toBe(0);
     expect(fs.existsSync(scratch)).toBe(false);
     expect(getRun(db, runId)!.purged_at).toBe("2026-07-01T00:00:00.000Z");
     // Run row survives (decay, not expire).
@@ -467,6 +472,7 @@ describe("sweepRunRetention", () => {
         cutoffIso: CUTOFF,
         dryRun: false,
         runsDir: paths.runs,
+        home,
         purgedAt: "2026-07-01T00:00:00.000Z",
       });
 
@@ -497,11 +503,13 @@ describe("sweepRunRetention", () => {
       cutoffIso: CUTOFF,
       dryRun: true,
       runsDir: paths.runs,
+      home,
     });
 
     expect(result.dry_run).toBe(true);
     expect(result.runs).toHaveLength(1);
     expect(result.runs[0]!.run_id).toBe(runId);
+    expect(result.runs[0]!.decayed_deliverables).toBe(0);
     expect(fs.existsSync(scratch)).toBe(true);
     expect(getRun(db, runId)!.purged_at).toBeNull();
   });
@@ -528,6 +536,7 @@ describe("sweepRunRetention", () => {
       cutoffIso: CUTOFF,
       dryRun: false,
       runsDir: paths.runs,
+      home,
     });
     expect(result.runs).toEqual([]);
     expect(getRun(db, blockedId)!.purged_at).toBeNull();
@@ -599,6 +608,421 @@ describe("resolveDeclaredOutputKeys", () => {
     expect(
       resolveDeclaredOutputKeys("no-such-workflow", { home, cwd: home }),
     ).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// #250 — task-less (fork-inherited) deliverable decay on run purge
+// ---------------------------------------------------------------------------
+
+/**
+ * Seed a terminal forked run past the retention cutoff with the deliverable
+ * shape #242 produces: inherited copies at iteration 0 with task_id null, plus
+ * a skipped-gate anchor. Optionally a task-produced row (task_id set) that the
+ * run sweep must not touch.
+ */
+function seedForkedRunPastCutoff(opts: {
+  workflow?: string;
+  /** Declared-output scaffolding vs product ports on the fork. */
+  withInherited?: boolean;
+  withSkippedGate?: boolean;
+  withTaskProduced?: boolean;
+  workspace?: "repo" | "scratch";
+}): {
+  runId: string;
+  parentId: string;
+  inheritedScaffoldId: string | null;
+  inheritedProductId: string | null;
+  skippedId: string | null;
+  taskProducedId: string | null;
+  taskId: string | null;
+} {
+  const workflow = opts.workflow ?? "research";
+  const workspace = opts.workspace ?? "scratch";
+
+  // Parent already purged: only the fork is under test (its own retention clock).
+  const parentId = nextRunId(db);
+  insertRun(db, {
+    id: parentId,
+    workflow,
+    version: 1,
+    type: "research",
+    workspace,
+    repo: null,
+    current_node: null,
+    state: "completed",
+  });
+  db.prepare(
+    `UPDATE runs SET completed_at = ?, updated_at = ?, state = 'completed', purged_at = ? WHERE id = ?`,
+  ).run(OLD, OLD, OLD, parentId);
+
+  const runId = nextRunId(db);
+  insertRun(db, {
+    id: runId,
+    workflow,
+    version: 1,
+    type: "research",
+    workspace,
+    repo: null,
+    current_node: null,
+    state: "completed",
+    parent_run_id: parentId,
+    attempt: 2,
+  });
+  db.prepare(
+    `UPDATE runs SET completed_at = ?, updated_at = ?, state = 'completed' WHERE id = ?`,
+  ).run(OLD, OLD, runId);
+
+  let inheritedScaffoldId: string | null = null;
+  let inheritedProductId: string | null = null;
+  let skippedId: string | null = null;
+  let taskProducedId: string | null = null;
+  let taskId: string | null = null;
+
+  if (opts.withInherited !== false) {
+    // Scaffolding: search.sources — not a declared run output.
+    const scaffold = insertDeliverable(db, {
+      id: nextDeliverableId(db),
+      run_id: runId,
+      node: "search",
+      port: "sources",
+      iteration: 0,
+      task_id: null,
+      kind: "inline",
+      value: JSON.stringify(["a", "b"]),
+    });
+    inheritedScaffoldId = scaffold.id;
+
+    // Product: write.report — declared output of the fork's workflow.
+    const product = insertDeliverable(db, {
+      id: nextDeliverableId(db),
+      run_id: runId,
+      node: "write",
+      port: "report",
+      iteration: 0,
+      task_id: null,
+      kind: "inline",
+      value: JSON.stringify("the product"),
+    });
+    inheritedProductId = product.id;
+  }
+
+  if (opts.withSkippedGate !== false) {
+    const skip = insertDeliverable(db, {
+      id: nextDeliverableId(db),
+      run_id: runId,
+      node: "approve",
+      port: "_skipped",
+      iteration: 0,
+      task_id: null,
+      kind: "inline",
+      value: null,
+    });
+    skippedId = skip.id;
+  }
+
+  if (opts.withTaskProduced === true) {
+    taskId = nextTaskId(db);
+    insertTask(
+      db,
+      baseTask({
+        id: taskId,
+        run_id: runId,
+        node: "polish",
+        iteration: 1,
+        cwd: "/tmp/scratch",
+      }),
+    );
+    db.prepare(
+      `UPDATE tasks SET state = 'completed', completed_at = ?, updated_at = ? WHERE id = ?`,
+    ).run(OLD, OLD, taskId);
+
+    const produced = insertDeliverable(db, {
+      id: nextDeliverableId(db),
+      run_id: runId,
+      node: "polish",
+      port: "notes",
+      iteration: 1,
+      task_id: taskId,
+      kind: "inline",
+      value: JSON.stringify("task-owned scaffolding"),
+    });
+    taskProducedId = produced.id;
+  }
+
+  return {
+    runId,
+    parentId,
+    inheritedScaffoldId,
+    inheritedProductId,
+    skippedId,
+    taskProducedId,
+    taskId,
+  };
+}
+
+function writeResearchWorkflow(homeDir: string): void {
+  // Minimal valid definition: only the declared-output keys matter for decay.
+  // Inherited scaffolding (search.sources) and skipped-gate anchors live only
+  // as deliverable rows — they need not appear as live nodes here.
+  writeWorkflow(path.join(homeDir, "workflows", "research"), {
+    id: "research",
+    version: 1,
+    type: "research",
+    workspace: "scratch",
+    inputs: { brief: { type: "text" } },
+    outputs: {
+      report: { type: "text", from: "write.report" },
+    },
+    nodes: [
+      {
+        id: "write",
+        kind: "step",
+        prompt: "prompts/write.md",
+        in: { brief: { type: "text", from: "run.brief" } },
+        out: { report: { type: "text" } },
+      },
+    ],
+  });
+  const prompts = path.join(homeDir, "workflows", "research", "prompts");
+  fs.mkdirSync(prompts, { recursive: true });
+  fs.writeFileSync(path.join(prompts, "write.md"), "write\n");
+}
+
+describe("sweepRunRetention — task-less deliverable decay (#250)", () => {
+  it("forked run past cutoff: decays inherited scaffolding, keeps product, removes scratch", () => {
+    // Closes the gap neither #242 nor #244 covers: a forked run reaches its
+    // own retention cutoff. Inherited copies have task_id null, so task-driven
+    // decay never names them.
+    const paths = homePaths(home);
+    writeResearchWorkflow(home);
+    const seeded = seedForkedRunPastCutoff({});
+    createRunScratchWorkspace({ runsDir: paths.runs, runId: seeded.runId });
+    const scratch = runScratchPath(paths.runs, seeded.runId);
+    fs.writeFileSync(path.join(scratch, "notes.md"), "scratch bytes\n");
+
+    const at = "2026-07-15T00:00:00.000Z";
+    const result = sweepRunRetention({
+      db,
+      cutoffIso: CUTOFF,
+      dryRun: false,
+      runsDir: paths.runs,
+      home,
+      purgedAt: at,
+    });
+
+    expect(result.failed).toEqual([]);
+    expect(result.runs).toHaveLength(1);
+    expect(result.runs[0]!.run_id).toBe(seeded.runId);
+    expect(result.runs[0]!.decayed_deliverables).toBe(1);
+    expect(fs.existsSync(scratch)).toBe(false);
+    expect(getRun(db, seeded.runId)!.purged_at).toBe(at);
+
+    const scaffold = getDeliverable(db, seeded.inheritedScaffoldId!)!;
+    expect(scaffold.value).toBeNull();
+    expect(scaffold.purged_at).toBe(at);
+    expect(scaffold.task_id).toBeNull();
+    expect(scaffold.iteration).toBe(0);
+
+    const product = getDeliverable(db, seeded.inheritedProductId!)!;
+    expect(product.value).toBe(JSON.stringify("the product"));
+    expect(product.purged_at).toBeNull();
+
+    const skip = getDeliverable(db, seeded.skippedId!)!;
+    expect(skip.value).toBeNull();
+    expect(skip.purged_at).toBeNull();
+    expect(skip.port).toBe("_skipped");
+  });
+
+  it("does not touch deliverables that still have a producing task", () => {
+    const paths = homePaths(home);
+    writeResearchWorkflow(home);
+    const seeded = seedForkedRunPastCutoff({ withTaskProduced: true });
+
+    const at = "2026-07-15T00:00:00.000Z";
+    sweepRunRetention({
+      db,
+      cutoffIso: CUTOFF,
+      dryRun: false,
+      runsDir: paths.runs,
+      home,
+      purgedAt: at,
+    });
+
+    const taskOwned = getDeliverable(db, seeded.taskProducedId!)!;
+    expect(taskOwned.value).toBe(JSON.stringify("task-owned scaffolding"));
+    expect(taskOwned.purged_at).toBeNull();
+    expect(taskOwned.task_id).toBe(seeded.taskId);
+
+    // Inherited scaffolding still decays.
+    expect(getDeliverable(db, seeded.inheritedScaffoldId!)!.purged_at).toBe(at);
+  });
+
+  it("over-retains task-less rows when the workflow definition is unavailable", () => {
+    const paths = homePaths(home);
+    // No workflow files under home — resolveDeclaredOutputKeys returns null.
+    const seeded = seedForkedRunPastCutoff({ workflow: "missing-wf" });
+    // Point the run at a workflow that does not exist.
+    db.prepare(`UPDATE runs SET workflow = ? WHERE id = ?`).run(
+      "missing-wf",
+      seeded.runId,
+    );
+
+    const at = "2026-07-15T00:00:00.000Z";
+    const result = sweepRunRetention({
+      db,
+      cutoffIso: CUTOFF,
+      dryRun: false,
+      runsDir: paths.runs,
+      home,
+      purgedAt: at,
+    });
+
+    expect(result.runs[0]!.decayed_deliverables).toBe(0);
+    expect(getRun(db, seeded.runId)!.purged_at).toBe(at);
+    // Scaffolding survives when definition is gone (safe over-retain).
+    const scaffold = getDeliverable(db, seeded.inheritedScaffoldId!)!;
+    expect(scaffold.value).toBe(JSON.stringify(["a", "b"]));
+    expect(scaffold.purged_at).toBeNull();
+    const product = getDeliverable(db, seeded.inheritedProductId!)!;
+    expect(product.value).toBe(JSON.stringify("the product"));
+    expect(product.purged_at).toBeNull();
+  });
+
+  it("dry-run reports the decay count and mutates nothing", () => {
+    const paths = homePaths(home);
+    writeResearchWorkflow(home);
+    const seeded = seedForkedRunPastCutoff({});
+    createRunScratchWorkspace({ runsDir: paths.runs, runId: seeded.runId });
+    const scratch = runScratchPath(paths.runs, seeded.runId);
+
+    const result = sweepRunRetention({
+      db,
+      cutoffIso: CUTOFF,
+      dryRun: true,
+      runsDir: paths.runs,
+      home,
+    });
+
+    expect(result.dry_run).toBe(true);
+    expect(result.runs).toHaveLength(1);
+    expect(result.runs[0]!.decayed_deliverables).toBe(1);
+    expect(fs.existsSync(scratch)).toBe(true);
+    expect(getRun(db, seeded.runId)!.purged_at).toBeNull();
+    expect(getDeliverable(db, seeded.inheritedScaffoldId!)!.value).toBe(
+      JSON.stringify(["a", "b"]),
+    );
+    expect(getDeliverable(db, seeded.inheritedScaffoldId!)!.purged_at).toBeNull();
+    expect(getDeliverable(db, seeded.inheritedProductId!)!.purged_at).toBeNull();
+    expect(getDeliverable(db, seeded.skippedId!)!.purged_at).toBeNull();
+  });
+
+  it("failed scratch removal leaves the run and its deliverables untouched", () => {
+    const paths = homePaths(home);
+    writeResearchWorkflow(home);
+    const seeded = seedForkedRunPastCutoff({});
+    createRunScratchWorkspace({ runsDir: paths.runs, runId: seeded.runId });
+    const scratch = runScratchPath(paths.runs, seeded.runId);
+
+    const result = sweepRunRetention({
+      db,
+      cutoffIso: CUTOFF,
+      dryRun: false,
+      runsDir: paths.runs,
+      home,
+      purgedAt: "2026-07-15T00:00:00.000Z",
+      removeScratch: () => {
+        throw new Error("simulated scratch removal failure");
+      },
+    });
+
+    expect(result.failed).toEqual([
+      { run_id: seeded.runId, error: "simulated scratch removal failure" },
+    ]);
+    expect(result.runs).toEqual([]);
+    expect(getRun(db, seeded.runId)!.purged_at).toBeNull();
+    expect(fs.existsSync(scratch)).toBe(true);
+    expect(getDeliverable(db, seeded.inheritedScaffoldId!)!.value).toBe(
+      JSON.stringify(["a", "b"]),
+    );
+    expect(getDeliverable(db, seeded.inheritedScaffoldId!)!.purged_at).toBeNull();
+    expect(getDeliverable(db, seeded.inheritedProductId!)!.purged_at).toBeNull();
+    expect(getDeliverable(db, seeded.skippedId!)!.purged_at).toBeNull();
+  });
+
+  it("sweeping the same run twice is a no-op the second time", () => {
+    const paths = homePaths(home);
+    writeResearchWorkflow(home);
+    const seeded = seedForkedRunPastCutoff({});
+    const at = "2026-07-15T00:00:00.000Z";
+
+    const first = sweepRunRetention({
+      db,
+      cutoffIso: CUTOFF,
+      dryRun: false,
+      runsDir: paths.runs,
+      home,
+      purgedAt: at,
+    });
+    expect(first.runs).toHaveLength(1);
+    expect(first.runs[0]!.decayed_deliverables).toBe(1);
+    expect(getDeliverable(db, seeded.inheritedScaffoldId!)!.purged_at).toBe(at);
+
+    const second = sweepRunRetention({
+      db,
+      cutoffIso: CUTOFF,
+      dryRun: false,
+      runsDir: paths.runs,
+      home,
+      purgedAt: "2026-07-16T00:00:00.000Z",
+    });
+    expect(second.runs).toEqual([]);
+    expect(second.failed).toEqual([]);
+    // First stamp preserved; product and skip still unstamped.
+    expect(getRun(db, seeded.runId)!.purged_at).toBe(at);
+    expect(getDeliverable(db, seeded.inheritedScaffoldId!)!.purged_at).toBe(at);
+    expect(getDeliverable(db, seeded.inheritedProductId!)!.purged_at).toBeNull();
+    expect(getDeliverable(db, seeded.skippedId!)!.purged_at).toBeNull();
+  });
+
+  it("after a failed scratch removal, the next sweep completes both stamp and decay", () => {
+    const paths = homePaths(home);
+    writeResearchWorkflow(home);
+    const seeded = seedForkedRunPastCutoff({});
+    createRunScratchWorkspace({ runsDir: paths.runs, runId: seeded.runId });
+
+    const first = sweepRunRetention({
+      db,
+      cutoffIso: CUTOFF,
+      dryRun: false,
+      runsDir: paths.runs,
+      home,
+      purgedAt: "2026-07-14T00:00:00.000Z",
+      removeScratch: () => {
+        throw new Error("simulated scratch removal failure");
+      },
+    });
+    expect(first.failed).toHaveLength(1);
+    expect(getRun(db, seeded.runId)!.purged_at).toBeNull();
+    expect(getDeliverable(db, seeded.inheritedScaffoldId!)!.purged_at).toBeNull();
+
+    const at = "2026-07-15T00:00:00.000Z";
+    const second = sweepRunRetention({
+      db,
+      cutoffIso: CUTOFF,
+      dryRun: false,
+      runsDir: paths.runs,
+      home,
+      purgedAt: at,
+    });
+    expect(second.failed).toEqual([]);
+    expect(second.runs).toHaveLength(1);
+    expect(second.runs[0]!.decayed_deliverables).toBe(1);
+    expect(getRun(db, seeded.runId)!.purged_at).toBe(at);
+    expect(getDeliverable(db, seeded.inheritedScaffoldId!)!.value).toBeNull();
+    expect(getDeliverable(db, seeded.inheritedScaffoldId!)!.purged_at).toBe(at);
+    expect(getDeliverable(db, seeded.inheritedProductId!)!.purged_at).toBeNull();
+    expect(getDeliverable(db, seeded.skippedId!)!.purged_at).toBeNull();
   });
 });
 

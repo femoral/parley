@@ -18,6 +18,8 @@ interface GcRunEntry {
   workspace: string;
   scratch: string | null;
   bytes: number;
+  /** Task-less deliverables decayed (or that would decay); present from #250. */
+  decayed_deliverables?: number;
 }
 
 interface GcResult {
@@ -95,8 +97,12 @@ export async function runGc(ctx: CliContext, args: string[]): Promise<number> {
                 ? `  scratch ${r.scratch}`
                 : "  scratch (absent)"
               : "  (repo: branches kept)";
+          const decayNote =
+            typeof r.decayed_deliverables === "number" && r.decayed_deliverables > 0
+              ? `  ${r.decayed_deliverables} deliverable(s)`
+              : "";
           ctx.stdout(
-            `  ${r.run_id}  ${r.state}  ${r.workspace}  ${r.completed_at ?? "?"}  ~${formatBytes(r.bytes)}${scratchNote}\n`,
+            `  ${r.run_id}  ${r.state}  ${r.workspace}  ${r.completed_at ?? "?"}  ~${formatBytes(r.bytes)}${scratchNote}${decayNote}\n`,
           );
         }
       }
