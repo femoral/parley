@@ -75,8 +75,12 @@ human/agent driving parley is the **orchestrator**.
 - **Workflow** — the *definition*: a directory `.parley/workflows/<id>/`
   (with `prompts/` and `types/`) declaring `inputs`, `outputs`, named `types`,
   and an ordered list of nodes. Resolved in two layers — `~/.parley/workflows/`
-  and a local layer based at `repoRoot(cwd) ?? cwd` — nearest wins by `id`.
-  Never a single execution of one; that is a *run* (ADR-0016).
+  and a local layer based at `repoRoot(cwd) ?? cwd` — nearest wins by `id`,
+  deduped when both resolve to the same directory. `parley lint` stays
+  project-scoped: it lints the local layer and warns when a local id shadows a
+  global one; to lint the global layer, run from the parley home's parent so
+  layers dedupe (e.g. `cd ~ && parley lint` when home is `~/.parley`). Never a
+  single execution of one; that is a *run* (ADR-0016).
 - **Run** — one execution of a workflow. Holds **nodes**, stores a small status
   (`current_node`, `iteration`) and, unlike a step, a state of its own.
 - **Run state** — exact vocabulary: `running`, `blocked`, `completed`,

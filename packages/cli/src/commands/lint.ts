@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import {
+  discoverWorkflows,
   formatInferredPlan,
   formatLintFinding,
   formatStaticWorstCase,
@@ -96,6 +97,31 @@ export function loadProjectWorkflows(
 }
 
 /**
+ * List workflow ids under a global-layer directory. Mirrors discovery's
+ * requirement that `workflow.json` exists. Missing or unreadable dir → [].
+ * Does not throw — a broken global layer is "no global ids", not a lint error.
+ */
+export function listGlobalWorkflowIds(globalDir: string): string[] {
+  let entries: fs.Dirent[];
+  try {
+    entries = fs.readdirSync(globalDir, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+  const ids: string[] = [];
+  for (const ent of entries) {
+    if (!ent.isDirectory()) continue;
+    const wf = path.join(globalDir, ent.name, "workflow.json");
+    try {
+      if (fs.existsSync(wf)) ids.push(ent.name);
+    } catch {
+      // skip unreadable entries
+    }
+  }
+  return ids.sort();
+}
+
+/**
  * Load project surfaces from disk into the pure lint input shape. Shared with
  * the daemon only through `@useparley/core` parse/validate helpers — this I/O
  * layer is CLI-only.
@@ -105,6 +131,11 @@ export function loadProjectLintInput(
   options: {
     /** Absolute path of the home config (for vendor allowlists). */
     homeConfigPath?: string;
+    /**
+     * Parley home for the global workflow layer. Defaults to `resolveHome()`
+     * inside discovery when omitted.
+     */
+    home?: string;
   } = {},
 ): ProjectLintInput {
   const input: ProjectLintInput = {};
@@ -152,6 +183,19 @@ export function loadProjectLintInput(
   const workflows = loadProjectWorkflows(projectRoot);
   if (workflows.length > 0) input.workflows = workflows;
 
+  // Global workflow ids + dedupe for shadowing warnings (#251). Discovery
+  // collapses local over global in byId, so shadowed globals are absent there —
+  // list the global directory directly. Missing/unreadable global dir ⇒ no ids.
+  const discovered = discoverWorkflows({
+    cwd: projectRoot,
+    home: options.home,
+  });
+  input.layersDeduped = discovered.deduped;
+  if (!discovered.deduped) {
+    const globalIds = listGlobalWorkflowIds(discovered.globalDir);
+    if (globalIds.length > 0) input.globalWorkflowIds = globalIds;
+  }
+
   // Vendor allowlist for slot checks (home parley.json). Best-effort: a missing
   // or corrupt home config just skips the allowlist surface.
   if (options.homeConfigPath !== undefined) {
@@ -173,9 +217,14 @@ export function loadProjectLintInput(
  * `parley lint [dir]` — validate project `.parley` surfaces (config,
  * classification, rubrics, workflows). CI-friendly: exit 1 on any error, exit 0
  * when clean (warnings still print). Uses the same validation as the daemon's
- * hot-read (#161 / #232).
+ * hot-read (#161 / #232). Project-scoped: does not lint the global workflow
+ * layer; warns when a project workflow shadows a global id (#251).
  *
  * For each workflow, also prints the **inferred plan** and **static worst case**.
+ *
+ * To lint global workflows, run from the parent of the parley home so the
+ * local layer resolves onto `{home}/workflows` (layers dedupe; no self-shadow
+ * warnings). Example: `cd ~ && parley lint` when home is `~/.parley`.
  */
 export async function runLint(ctx: CliContext, args: string[]): Promise<number> {
   const { positionals, flags } = parseArgs(args, {
@@ -199,6 +248,7 @@ export async function runLint(ctx: CliContext, args: string[]): Promise<number> 
 
   const input = loadProjectLintInput(projectRoot, {
     homeConfigPath: ctx.paths.config,
+    home: ctx.paths.home,
   });
   // The pure core function is the single validation implementation.
   const result = lintProjectSurfaces(input);

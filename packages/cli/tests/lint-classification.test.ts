@@ -227,6 +227,117 @@ describe("parley lint (#161)", () => {
   });
 });
 
+/** Minimal workflow.json body for CLI lint tests (#251). */
+function writeMiniWorkflow(workflowsRoot: string, id: string): void {
+  const dir = path.join(workflowsRoot, id);
+  fs.mkdirSync(dir, { recursive: true });
+  writeJson(path.join(dir, "workflow.json"), {
+    id,
+    version: 1,
+    type: "coding",
+    inputs: {},
+    outputs: {},
+    types: {},
+    nodes: [
+      {
+        id: "only",
+        kind: "step",
+        prompt: "p.md",
+        in: {},
+        out: {},
+      },
+    ],
+  });
+  // Prompt file so path resolution is quiet if lint walks it.
+  fs.writeFileSync(path.join(dir, "p.md"), "do the thing\n");
+}
+
+describe("parley lint — global workflow shadowing (#251)", () => {
+  it("warns when a project workflow shadows a global id; exit 0", async () => {
+    const dir = taskDir();
+    // Force a repo root at dir so local layer is dir/.parley/workflows, not
+    // an ancestor, and so it cannot dedupe with the test home.
+    fs.mkdirSync(path.join(dir, ".git"));
+    writeMiniWorkflow(path.join(home, "workflows"), "shared");
+    writeMiniWorkflow(path.join(home, "workflows"), "global-only");
+    writeMiniWorkflow(path.join(dir, ".parley", "workflows"), "shared");
+    writeMiniWorkflow(path.join(dir, ".parley", "workflows"), "local-only");
+
+    const res = await runCli(["lint", dir, "--json"], home);
+    expect(res.code).toBe(0);
+    const body = JSON.parse(res.stdout) as {
+      ok: boolean;
+      findings: { severity: string; file: string; message: string }[];
+    };
+    expect(body.ok).toBe(true);
+    const shadows = body.findings.filter((f) =>
+      f.message.toLowerCase().includes("shadow"),
+    );
+    expect(shadows).toHaveLength(1);
+    expect(shadows[0]!.severity).toBe("warning");
+    expect(shadows[0]!.file).toBe(".parley/workflows/shared/workflow.json");
+    // Global-only is not linted and not reported as a finding of its own.
+    expect(
+      body.findings.some((f) => f.file.includes("global-only")),
+    ).toBe(false);
+  });
+
+  it("emits no shadow warning when the id is local-only", async () => {
+    const dir = taskDir();
+    fs.mkdirSync(path.join(dir, ".git"));
+    writeMiniWorkflow(path.join(home, "workflows"), "other");
+    writeMiniWorkflow(path.join(dir, ".parley", "workflows"), "local-only");
+
+    const res = await runCli(["lint", dir, "--json"], home);
+    expect(res.code).toBe(0);
+    const body = JSON.parse(res.stdout) as {
+      findings: { message: string }[];
+    };
+    expect(body.findings.some((f) => f.message.toLowerCase().includes("shadow"))).toBe(
+      false,
+    );
+  });
+
+  it("emits no shadow warnings when layers are deduped (home parent path)", async () => {
+    // Supported global-lint route: localDir === globalDir.
+    // localBase = parent (repo root), home = parent/.parley ⇒ both resolve to
+    // parent/.parley/workflows. Without a .git marker here, findRepoRoot can
+    // walk past the temp dir and layers would not dedupe.
+    const parent = taskDir();
+    fs.mkdirSync(path.join(parent, ".git"));
+    const nestedHome = path.join(parent, ".parley");
+    fs.mkdirSync(nestedHome, { recursive: true });
+    writeMiniWorkflow(path.join(nestedHome, "workflows"), "once");
+
+    const res = await runCli(["lint", parent, "--json"], nestedHome);
+    expect(res.code).toBe(0);
+    const body = JSON.parse(res.stdout) as {
+      ok: boolean;
+      findings: { message: string }[];
+      workflows: { id: string }[];
+    };
+    expect(body.ok).toBe(true);
+    // The workflow is linted as the project (local) layer.
+    expect(body.workflows.some((w) => w.id === "once")).toBe(true);
+    expect(body.findings.some((f) => f.message.toLowerCase().includes("shadow"))).toBe(
+      false,
+    );
+  });
+
+  it("treats a missing global workflows directory as no global ids", async () => {
+    const dir = taskDir();
+    fs.mkdirSync(path.join(dir, ".git"));
+    writeMiniWorkflow(path.join(dir, ".parley", "workflows"), "local-only");
+    // home has no workflows/ at all
+    const res = await runCli(["lint", dir, "--json"], home);
+    expect(res.code).toBe(0);
+    const body = JSON.parse(res.stdout) as { findings: { message: string }[] };
+    expect(body.findings.some((f) => f.message.toLowerCase().includes("shadow"))).toBe(
+      false,
+    );
+  });
+});
+
 describe("delegate --dry-run (#161)", () => {
   it("runs the task but leaves no task row behind", async () => {
     const dir = taskDir();
