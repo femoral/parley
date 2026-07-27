@@ -819,17 +819,43 @@ describe("orchestrator session identity (#42)", () => {
     expect(row.orchestrator_session_id).toBe("orch-from-env");
   });
 
-  it("PARLEY_SESSION_ID wins over --session when both are set (#190)", async () => {
+  it("env/flag session conflict exits 2 naming both ids (#256)", async () => {
     const cwd = taskDir(happyActions());
-    await runCli(
+    const res = await runCli(
       ["delegate", "-v", "fake", "--session", "orch-from-flag", "--cwd", cwd, "x"],
       home,
       { extraEnv: { PARLEY_SESSION_ID: "orch-from-env" } },
     );
-    await waitForState(home, "t1", "completed");
+    expect(res.code).toBe(2);
+    expect(res.stderr).toMatch(/session id conflict/);
+    expect(res.stderr).toMatch(/orch-from-flag/);
+    expect(res.stderr).toMatch(/orch-from-env/);
+  });
 
-    const row = JSON.parse((await runCli(["status", "t1", "--json"], home)).stdout);
-    expect(row.orchestrator_session_id).toBe("orch-from-env");
+  it("identical env and --session bind successfully (#256)", async () => {
+    const cwd = taskDir(happyActions());
+    const res = await runCli(
+      ["delegate", "-v", "fake", "--session", "same-id", "--cwd", cwd, "x"],
+      home,
+      { extraEnv: { PARLEY_SESSION_ID: "same-id" } },
+    );
+    expect(res.code, res.stderr).toBe(0);
+    const ack = JSON.parse(res.stdout) as { orchestrator_session_id: string };
+    expect(ack.orchestrator_session_id).toBe("same-id");
+    await waitForState(home, "t1", "completed");
+  });
+
+  it("delegate ack reports bound orchestrator_session_id (#256)", async () => {
+    const cwd = taskDir(happyActions());
+    const res = await runCli(["delegate", "-v", "fake", "--cwd", cwd, "x"], home, {
+      extraEnv: { PARLEY_SESSION_ID: "ack-session" },
+    });
+    expect(res.code, res.stderr).toBe(0);
+    const ack = JSON.parse(res.stdout) as {
+      task_id: string;
+      orchestrator_session_id: string | null;
+    };
+    expect(ack.orchestrator_session_id).toBe("ack-session");
   });
 
   it("allows a missing session when evals are off (#162; free-form still works)", async () => {

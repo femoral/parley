@@ -8,11 +8,14 @@ import path from "node:path";
 import { sessionStatePath, writeSessionState, type SessionState } from "@useparley/core";
 import {
   matchSessionState,
+  resolveExplicitSessionId,
   resolveOrchestratorSessionId,
   resolveProvenanceField,
   resolveProvenanceFromEnvAndState,
+  sessionIdConflictMessage,
 } from "../src/session-state-match.js";
 import type { ProcessAnchor } from "../src/ancestry.js";
+import { UsageError } from "../src/errors.js";
 
 const dirs: string[] = [];
 
@@ -189,5 +192,87 @@ describe("resolveOrchestratorSessionId / provenance", () => {
       effort: "file-e",
     });
     expect(resolveProvenanceField(undefined, null)).toBeNull();
+  });
+});
+
+describe("resolveExplicitSessionId conflict (#256)", () => {
+  const home = () => {
+    // No filesystem scan needed when env/flag resolve.
+    return "unused-home";
+  };
+
+  it("throws UsageError when env and flag are non-empty and differ", () => {
+    expect(() =>
+      resolveExplicitSessionId({
+        env: { PARLEY_SESSION_ID: "from-env" },
+        flagSessionId: "from-flag",
+        parleyHome: home(),
+        ancestryChain: [],
+      }),
+    ).toThrow(UsageError);
+    try {
+      resolveExplicitSessionId({
+        env: { PARLEY_SESSION_ID: "from-env" },
+        flagSessionId: "from-flag",
+        parleyHome: home(),
+        ancestryChain: [],
+      });
+    } catch (err) {
+      expect(err).toBeInstanceOf(UsageError);
+      const msg = (err as UsageError).message;
+      expect(msg).toBe(sessionIdConflictMessage("from-env", "from-flag"));
+      expect(msg).toMatch(/from-env/);
+      expect(msg).toMatch(/from-flag/);
+    }
+  });
+
+  it("succeeds when env and flag are identical", () => {
+    expect(
+      resolveExplicitSessionId({
+        env: { PARLEY_SESSION_ID: "same" },
+        flagSessionId: "same",
+        parleyHome: home(),
+        ancestryChain: [],
+      }),
+    ).toBe("same");
+  });
+
+  it("env-only and flag-only keep current behaviour", () => {
+    expect(
+      resolveExplicitSessionId({
+        env: { PARLEY_SESSION_ID: "from-env" },
+        flagSessionId: null,
+        parleyHome: home(),
+        ancestryChain: [],
+      }),
+    ).toBe("from-env");
+    expect(
+      resolveExplicitSessionId({
+        env: {},
+        flagSessionId: "from-flag",
+        parleyHome: home(),
+        ancestryChain: [],
+      }),
+    ).toBe("from-flag");
+  });
+
+  it("fires regardless of registration (registered flag vs free-form env)", () => {
+    // Values alone matter — no registration lookup at this layer.
+    expect(() =>
+      resolveExplicitSessionId({
+        env: { PARLEY_SESSION_ID: "71514a1a-freeform" },
+        flagSessionId: "sms2qa2pejtpupx",
+        parleyHome: home(),
+        ancestryChain: [],
+      }),
+    ).toThrow(UsageError);
+    expect(() =>
+      resolveExplicitSessionId({
+        env: { PARLEY_SESSION_ID: "sms2qa2pejtpupx" },
+        flagSessionId: "71514a1a-freeform",
+        parleyHome: home(),
+        ancestryChain: [],
+      }),
+    ).toThrow(UsageError);
   });
 });

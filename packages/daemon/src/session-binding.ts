@@ -10,6 +10,20 @@ import type { ProcessAnchor, SessionRow } from "./db.js";
 /** Stable daemon/CLI error code when evals are on and no session resolves. */
 export const CODE_SESSION_REQUIRED = "session_required";
 
+/**
+ * Stable code when the inbox is asked for a session id the daemon does not
+ * know (#256): no registered row and no task/run carrying the id.
+ */
+export const CODE_UNKNOWN_SESSION = "unknown_session";
+
+/** Teaching message for {@link CODE_UNKNOWN_SESSION}. */
+export function unknownSessionMessage(sessionId: string): string {
+  return (
+    `unknown_session: no registered session, task, or run for ${sessionId}; ` +
+    "check --session / PARLEY_SESSION_ID for a typo or purged id"
+  );
+}
+
 /** Teaching message for {@link CODE_SESSION_REQUIRED}. */
 export function sessionRequiredMessage(): string {
   return (

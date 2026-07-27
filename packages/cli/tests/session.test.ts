@@ -494,7 +494,7 @@ describe("ancestry binding at CLI seam (#162)", () => {
     void s2;
   });
 
-  it("PARLEY_SESSION_ID wins over --session on delegate (#190)", async () => {
+  it("env/flag session conflict on delegate exits 2 (#256)", async () => {
     const cwd = taskDir([{ submit_report: REPORT }]);
     const s1 = await registerSession({
       harness: "h1",
@@ -519,11 +519,42 @@ describe("ancestry binding at CLI seam (#162)", () => {
         },
       },
     );
-    expect(del.code, del.stderr).toBe(0);
-    const taskId = JSON.parse(del.stdout).task_id as string;
-    const row = JSON.parse((await runCli(["status", taskId, "--json"], home)).stdout);
-    expect(row.orchestrator_session_id).toBe(s2.session_id);
-    expect(row.orch_harness).toBe("h2");
+    expect(del.code).toBe(2);
+    expect(del.stderr).toMatch(/session id conflict/);
+    expect(del.stderr).toMatch(s1.session_id);
+    expect(del.stderr).toMatch(s2.session_id);
+  });
+
+  it("conflict fires for registered flag vs free-form env and reverse (#256 addendum)", async () => {
+    const cwd = taskDir([{ submit_report: REPORT }]);
+    const registered = await registerSession({
+      harness: "h",
+      model: "m",
+      effort: "e",
+      anchor: { machine_id: "mac", pid: 333, start_time: "t3" },
+      cwd,
+    });
+    // Flag registered, env free-form (the reported incident orientation).
+    const a = await runCli(
+      ["delegate", "-v", "fake", "--cwd", cwd, "--session", registered.session_id, "x"],
+      home,
+      { extraEnv: { PARLEY_SESSION_ID: "71514a1a-freeform-env" } },
+    );
+    expect(a.code).toBe(2);
+    expect(a.stderr).toMatch(/session id conflict/);
+    expect(a.stderr).toMatch(registered.session_id);
+    expect(a.stderr).toMatch(/71514a1a-freeform-env/);
+
+    // Reverse: env registered, flag free-form.
+    const b = await runCli(
+      ["delegate", "-v", "fake", "--cwd", cwd, "--session", "freeform-flag", "x"],
+      home,
+      { extraEnv: { PARLEY_SESSION_ID: registered.session_id } },
+    );
+    expect(b.code).toBe(2);
+    expect(b.stderr).toMatch(/session id conflict/);
+    expect(b.stderr).toMatch(registered.session_id);
+    expect(b.stderr).toMatch(/freeform-flag/);
   });
 
   it("falls back to the single live session for the workspace", async () => {

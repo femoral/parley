@@ -14,6 +14,7 @@ import {
   type SessionStateNote,
 } from "@useparley/core";
 import type { ProcessAnchor } from "./ancestry.js";
+import { UsageError } from "./errors.js";
 
 /** Liveness probe (defaults to `process.kill(pid, 0)`). Injectable for tests. */
 export type PidAliveFn = (pid: number) => boolean;
@@ -150,26 +151,50 @@ export function resolveProvenanceField(
 }
 
 /**
+ * Usage-error message when binding commands receive both a non-empty
+ * `--session` and a non-empty `PARLEY_SESSION_ID` that differ (#256).
+ *
+ * ADR-0013's env-first precedence is unchanged — the conflict is loud, not
+ * silent-the-other-way. Fires on id *values* differing regardless of whether
+ * either id is a registered session row.
+ */
+export function sessionIdConflictMessage(
+  envSessionId: string,
+  flagSessionId: string,
+): string {
+  return (
+    `session id conflict: --session ${flagSessionId} differs from ` +
+    `PARLEY_SESSION_ID=${envSessionId}; env wins — unset PARLEY_SESSION_ID ` +
+    `or pass --session ${envSessionId}`
+  );
+}
+
+/** Trim a non-empty session id string, or null when absent/blank. */
+function nonEmptySessionId(value: string | null | undefined): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed !== "" ? trimmed : null;
+}
+
+/**
  * Session id resolution: `PARLEY_SESSION_ID` > `--session` > state-file
  * `harness_session_id` > null (caller falls through to ancestry / fresh id).
+ *
+ * Does **not** raise on env/flag conflict — that check lives on the binding
+ * path only ({@link resolveExplicitSessionId}); `parley session` legitimately
+ * names a session other than the ambient one.
  */
 export function resolveOrchestratorSessionId(opts: {
   envSessionId: string | undefined;
   flagSessionId: string | null;
   stateSessionId: string | null | undefined;
 }): string | null {
-  if (typeof opts.envSessionId === "string") {
-    const trimmed = opts.envSessionId.trim();
-    if (trimmed !== "") return trimmed;
-  }
+  const fromEnv = nonEmptySessionId(opts.envSessionId);
+  if (fromEnv !== null) return fromEnv;
   if (opts.flagSessionId !== null && opts.flagSessionId !== "") {
     return opts.flagSessionId;
   }
-  if (typeof opts.stateSessionId === "string") {
-    const trimmed = opts.stateSessionId.trim();
-    if (trimmed !== "") return trimmed;
-  }
-  return null;
+  return nonEmptySessionId(opts.stateSessionId);
 }
 
 /**
@@ -213,9 +238,14 @@ export function resolveMatchedSessionState(opts: {
 }
 
 /**
- * Explicit orchestrator session id for delegate/fix/eval (#190 / #196):
+ * Explicit orchestrator session id for delegate/fix/eval/run start
+ * (#190 / #196 / #256):
  * `PARLEY_SESSION_ID` > `--session` > ancestry-matched state-file id > null.
  * Skips the filesystem scan when env or flag already resolves (cheap path).
+ *
+ * When both env and flag are non-empty and differ, throws {@link UsageError}
+ * (exit 2). Identical values, env-only, and flag-only keep current env-first
+ * behaviour. Conflict is on id *values*, not registration status.
  */
 export function resolveExplicitSessionId(opts: {
   env: NodeJS.ProcessEnv;
@@ -225,6 +255,15 @@ export function resolveExplicitSessionId(opts: {
   note?: SessionStateNote;
   isAlive?: PidAliveFn;
 }): string | null {
+  const fromEnv = nonEmptySessionId(opts.env.PARLEY_SESSION_ID);
+  const fromFlag =
+    opts.flagSessionId !== null && opts.flagSessionId !== ""
+      ? opts.flagSessionId
+      : null;
+  if (fromEnv !== null && fromFlag !== null && fromEnv !== fromFlag) {
+    throw new UsageError(sessionIdConflictMessage(fromEnv, fromFlag));
+  }
+
   const fromEnvFlag = resolveOrchestratorSessionId({
     envSessionId: opts.env.PARLEY_SESSION_ID,
     flagSessionId: opts.flagSessionId,

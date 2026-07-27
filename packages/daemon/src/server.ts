@@ -58,6 +58,10 @@ import type { DaemonIdentity } from "./identity.js";
 import { isSandboxMode, type SandboxMode } from "./adapters/types.js";
 import { readGlobalConfigLayer, type ContextFile } from "./context.js";
 import { DelegateError, TaskEngine } from "./engine.js";
+import {
+  CODE_UNKNOWN_SESSION,
+  unknownSessionMessage,
+} from "./session-binding.js";
 import { readLogTail } from "./logtail.js";
 import { handleChildAsk, handleChildReport, handleChildTask } from "./child.js";
 import {
@@ -392,7 +396,14 @@ function handleDelegate(engine: TaskEngine, res: http.ServerResponse, body: unkn
       type,
       dryRun,
     });
-    sendJson(res, 201, { task_id: task.id, name: task.name, state: task.state, seq: task.seq });
+    sendJson(res, 201, {
+      task_id: task.id,
+      name: task.name,
+      state: task.state,
+      seq: task.seq,
+      // Bound session is observable from the ack alone (#256).
+      orchestrator_session_id: task.orchestrator_session_id,
+    });
   } catch (err) {
     if (err instanceof DelegateError) {
       sendJson(res, 400, {
@@ -996,6 +1007,21 @@ async function handleInbox(
   const sessionParam = params.get("session");
   const session =
     sessionParam !== null && sessionParam !== "" ? sessionParam : null;
+  // Unknown session is a usage error, not vacuous all-done (#256) — but only
+  // when the session is the scope (no explicit task/run ids). Ambient env
+  // session noise must not 400 a positional `watch t1` against a known task.
+  // Known means a sessions row *or* any task/run stamped with the id.
+  if (
+    session !== null &&
+    resolved.length === 0 &&
+    !engine.isKnownSession(session)
+  ) {
+    sendJson(res, 400, {
+      error: unknownSessionMessage(session),
+      code: CODE_UNKNOWN_SESSION,
+    });
+    return;
+  }
   const watch = engine.resolveWatchSet(resolved, session);
 
   const ackRaw = params.get("ack");
