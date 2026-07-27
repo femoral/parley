@@ -9,6 +9,7 @@ import {
   type ParleyConfig,
 } from "@useparley/core";
 import {
+  grokSandboxHostWarnings,
   materializeInfoRubrics,
   renderInfoProse,
   type InfoConfig,
@@ -18,7 +19,7 @@ import { parseArgs } from "../args.js";
 import { DaemonRequestError, daemonGet, ensureDaemon } from "../client.js";
 import { type CliContext, printJson } from "../context.js";
 import { UsageError } from "../errors.js";
-import { detectHarnesses } from "./init.js";
+import { detectHarnesses, isExecutableOnPath } from "./init.js";
 
 interface InfoBody {
   prose: string;
@@ -210,6 +211,15 @@ export async function runInfo(ctx: CliContext, args: string[]): Promise<number> 
   layered.detected_vendors = detectHarnesses(globalConfig, ctx.env)
     .filter((id) => !configuredVendorIds.has(id))
     .sort((a, b) => a.localeCompare(b));
+  // Host advisories (#247): ride the same vendor detection path; never fail info.
+  const grokPresent =
+    configuredVendorIds.has("grok") || layered.detected_vendors.includes("grok");
+  const hostWarnings = grokSandboxHostWarnings({
+    platform: process.platform,
+    hasBubblewrap: isExecutableOnPath("bwrap", ctx.env),
+    grokPresent,
+  });
+  if (hostWarnings.length > 0) layered.warnings = hostWarnings;
   const config = materializeInfoRubrics(project, layered);
   const prose = renderInfoProse(config);
 

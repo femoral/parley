@@ -12,6 +12,7 @@ import {
   buildInfo,
   buildInfoConfig,
   formatRubricMarkdown,
+  grokSandboxHostWarnings,
   materializeInfoRubrics,
   renderInfoProse,
   writeRubricMarkdownFiles,
@@ -359,5 +360,60 @@ describe("rubric markdown materialization (#176)", () => {
     const next = materializeInfoRubrics(project, config);
     expect(next).toBe(config);
     expect(fs.existsSync(path.join(project, ".parley", "rubrics-md"))).toBe(false);
+  });
+});
+
+describe("grokSandboxHostWarnings (#247)", () => {
+  it("warns only on Linux when grok is present and bubblewrap is absent", () => {
+    const warnings = grokSandboxHostWarnings({
+      platform: "linux",
+      hasBubblewrap: false,
+      grokPresent: true,
+    });
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toMatch(/bubblewrap/i);
+    expect(warnings[0]).toContain('sandbox: "full"');
+    expect(warnings[0]).not.toMatch(/apt install/);
+  });
+
+  it("is silent when bubblewrap is present, host is not Linux, or grok is absent", () => {
+    expect(
+      grokSandboxHostWarnings({
+        platform: "linux",
+        hasBubblewrap: true,
+        grokPresent: true,
+      }),
+    ).toEqual([]);
+    expect(
+      grokSandboxHostWarnings({
+        platform: "darwin",
+        hasBubblewrap: false,
+        grokPresent: true,
+      }),
+    ).toEqual([]);
+    expect(
+      grokSandboxHostWarnings({
+        platform: "linux",
+        hasBubblewrap: false,
+        grokPresent: false,
+      }),
+    ).toEqual([]);
+  });
+
+  it("renderInfoProse surfaces warnings under ## Warnings", () => {
+    const paths = homePathsFromEnv({ PARLEY_HOME: home });
+    const adapters = createAdapterRegistrySync();
+    const config = buildInfoConfig({ projectDir: project, paths, adapters });
+    config.warnings = grokSandboxHostWarnings({
+      platform: "linux",
+      hasBubblewrap: false,
+      grokPresent: true,
+    });
+    const prose = renderInfoProse(config);
+    expect(prose).toContain("## Warnings");
+    expect(prose).toMatch(/bubblewrap/i);
+    // Without warnings the section is omitted.
+    delete config.warnings;
+    expect(renderInfoProse(config)).not.toContain("## Warnings");
   });
 });

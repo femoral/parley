@@ -298,6 +298,12 @@ export interface InfoConfig {
   vendors: InfoVendor[];
   /** Built-in vendor CLIs found on PATH but absent from effective configuration. */
   detected_vendors: string[];
+  /**
+   * Host/capability advisories (not gates). Populated by the CLI after layered
+   * merge when host checks apply (e.g. missing bubblewrap for grok, #247).
+   * Empty when nothing to warn about; omitted from JSON only when undefined.
+   */
+  warnings?: string[];
   profiles: InfoProfile[];
   /** Fallback when delegate omits -v/--profile (#175). */
   defaults: InfoDefaults;
@@ -309,6 +315,28 @@ export interface InfoConfig {
   fix: InfoFix;
   /** Where each layered setting was decided (#178). */
   provenance: InfoProvenance;
+}
+
+/**
+ * Advisory warning when sandboxed grok postures cannot run on this host (#247).
+ * Pure: inject platform / PATH presence so tests never depend on the machine.
+ *
+ * "Grok present" means configured in effective config **or** detected on PATH
+ * (same detection path `parley info` already uses for `detected_vendors`).
+ */
+export function grokSandboxHostWarnings(opts: {
+  platform: NodeJS.Platform;
+  hasBubblewrap: boolean;
+  grokPresent: boolean;
+}): string[] {
+  if (opts.platform !== "linux") return [];
+  if (!opts.grokPresent) return [];
+  if (opts.hasBubblewrap) return [];
+  return [
+    "Sandboxed grok postures (workspace, read-only) will fail on this host: " +
+      "bubblewrap (`bwrap`) is not on PATH. Install bubblewrap for your " +
+      'distribution, or use a profile with sandbox: "full".',
+  ];
 }
 
 /** Daemon response body for `GET /info`. */
@@ -599,6 +627,16 @@ export function renderInfoProse(config: InfoConfig): string {
   const lines: string[] = [];
 
   lines.push("# Parley project info", "");
+
+  // --- Host warnings (advisory only; never fail the command) ---
+  const warnings = config.warnings ?? [];
+  if (warnings.length > 0) {
+    lines.push("## Warnings", "");
+    for (const w of warnings) {
+      lines.push(`- ${w}`);
+    }
+    lines.push("");
+  }
 
   // --- Instructions ---
   lines.push("## Instructions", "");

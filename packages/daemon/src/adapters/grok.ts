@@ -3,6 +3,7 @@ import type {
   MaterializedFile,
   ModelEntry,
   ProbedModels,
+  SandboxMode,
   SpawnPlan,
   TaskSpec,
   VendorAdapter,
@@ -71,10 +72,21 @@ const CLAUDE_PERMISSION_IMPORT_OVERRIDE = "_GROK_CLAUDE_MARKER_OVERRIDE";
 
 /**
  * Upper bound on the preflight `grok inspect --json` permission probe (#186).
- * The probe is fail-open: a timeout, missing binary, or unparseable output
- * becomes a diagnostic line, never a spawn failure. Observed latency ~50ms.
+ * Most failure modes are still fail-open (tagged diagnostics). Sandboxed
+ * postures that cannot start the child are fail-closed in prepare (#247).
+ * Observed latency ~50ms.
  */
 const INSPECT_PROBE_TIMEOUT_MS = 5000;
+
+/**
+ * Grok's sandbox-refusal signature on Linux when bubblewrap is missing or
+ * unusable (verified against grok 0.2.112). Matched case-insensitively against
+ * the probe's combined error text. Matching sharpens the preflight message;
+ * under a sandboxed posture any non-unavailable probe failure still fails
+ * prepare even when this does not match (signature-drift fallback, #247).
+ */
+const SANDBOX_REFUSAL_SIGNATURE =
+  /bubblewrap|bwrap|mount-namespace|could not enforce its|refusing to start with denied paths/i;
 
 /**
  * Grok honours Claude's `MCP_TIMEOUT` (ms) env **before** its own
@@ -96,11 +108,16 @@ const NO_NETWORK_PROFILE = "parley-restricted";
  * network-on. For the other modes, `network:false` is enforced with a custom
  * profile (materialized as `.grok/sandbox.toml`) that extends the base built-in
  * and sets `restrict_network` — the only lever grok exposes for network
- * isolation. A custom profile is fail-closed: on a host whose kernel can't apply
- * the sandbox (e.g. no bwrap on Linux) grok refuses to start rather than run
- * unsandboxed, which is the correct posture when isolation was explicitly asked
- * for. Built-in profiles fail open (warn and continue), so the default
- * workspace+network path keeps working everywhere.
+ * isolation.
+ *
+ * As of grok 0.2.112 (verified 2026-07-27), **both** built-in profiles
+ * (`workspace`, `read-only`) and custom profiles are fail-closed on a host
+ * whose kernel can't apply the mount-namespace deny set (e.g. no bubblewrap on
+ * Linux): grok refuses to start rather than run unsandboxed. The default
+ * workspace+network path therefore requires a usable bubblewrap on Linux; the
+ * deliberate escape hatch is `sandbox: "full"` (`GROK_SANDBOX=off`). Parley
+ * gates this in the preflight probe so the failure is an actionable prepare
+ * error rather than an opaque child exit (#247).
  */
 function sandboxEnv(task: TaskSpec): {
   env: Record<string, string>;
@@ -170,6 +187,161 @@ function sandboxToml(base: string): string {
 
 /** The probe command recorded as the catalog entry's `source` on refresh. */
 const MODELS_SOURCE = "grok models";
+
+/** True when the posture asks grok for OS isolation (built-in or custom profile). */
+export function isSandboxedGrokPosture(sandbox: SandboxMode): boolean {
+  return sandbox === "workspace" || sandbox === "read-only";
+}
+
+/** True when `message` matches grok's sandbox-refusal signature (0.2.112). */
+export function isGrokSandboxRefusalSignature(message: string): boolean {
+  return SANDBOX_REFUSAL_SIGNATURE.test(message);
+}
+
+/**
+ * Classified outcome of the preflight `grok inspect --json` probe.
+ *
+ * - `ok` — exit 0 with a recognized permissions shape
+ * - `shape_drift` — exit 0 but unrecognized/unparseable output (permission
+ *   tripwire only; always fail-open)
+ * - `unavailable` — probe never ran (missing binary, timeout); always fail-open
+ * - `failed` — probe ran and refused (non-zero exit / other exec error); fatal
+ *   under sandboxed postures, fail-open under `full`
+ */
+export type GrokProbeOutcome =
+  | { kind: "ok"; loaded: number; sources: string }
+  | { kind: "shape_drift"; message: string }
+  | { kind: "unavailable"; reason: "missing_binary" | "timeout"; message: string }
+  | { kind: "failed"; message: string };
+
+/** Decision produced by {@link decideGrokPermissionProbe}. */
+export type GrokProbeDecision =
+  | { action: "quiet" }
+  | { action: "diagnostic"; text: string }
+  | { action: "fatal"; error: string };
+
+/**
+ * Distro-neutral install hint for bubblewrap. Deliberately does not hard-code
+ * `apt` (or any other package manager) — the host that reported #247 is NixOS.
+ */
+const BUBBLEWRAP_INSTALL_HINT =
+  "Install bubblewrap (the `bwrap` binary) for your distribution";
+
+/**
+ * Actionable prepare-failure message when a sandboxed grok posture cannot be
+ * enforced on this host (#247). When `signatureMatched` is true the wording
+ * names bubblewrap; otherwise it degrades to the raw probe error (drift
+ * fallback).
+ */
+export function formatGrokSandboxUnenforceableError(
+  sandbox: SandboxMode,
+  opts: { signatureMatched: boolean; probeMessage: string },
+): string {
+  const escape =
+    'Use a profile with sandbox: "full" to run without OS isolation.';
+  if (opts.signatureMatched) {
+    return (
+      `grok sandbox posture "${sandbox}" cannot be enforced on this host ` +
+      `(bubblewrap missing or unusable). ${BUBBLEWRAP_INSTALL_HINT}, or ` +
+      escape
+    );
+  }
+  return (
+    `grok sandbox posture "${sandbox}" cannot be enforced on this host. ` +
+    `Preflight probe failed: ${opts.probeMessage}. ${escape}`
+  );
+}
+
+/**
+ * Classify an error thrown by `runProbe` / `execFile` into a
+ * {@link GrokProbeOutcome}. Pure: safe to unit-test without a real binary.
+ *
+ * Includes `stderr` in the message when present so sandbox-refusal signatures
+ * on the probe's error stream are still matched if Node omits them from
+ * `Error.message`.
+ */
+export function classifyGrokProbeError(err: unknown): GrokProbeOutcome {
+  let message = err instanceof Error ? err.message : String(err);
+  if (err !== null && typeof err === "object" && "stderr" in err) {
+    const stderr = (err as { stderr?: unknown }).stderr;
+    if (
+      typeof stderr === "string" &&
+      stderr.length > 0 &&
+      !message.includes(stderr.trim())
+    ) {
+      message = `${message}\n${stderr}`;
+    }
+  }
+  const code =
+    err !== null && typeof err === "object" && "code" in err
+      ? (err as { code?: unknown }).code
+      : undefined;
+  if (code === "ENOENT") {
+    return { kind: "unavailable", reason: "missing_binary", message };
+  }
+  const killed =
+    err !== null && typeof err === "object" && "killed" in err
+      ? Boolean((err as { killed?: unknown }).killed)
+      : false;
+  if (killed || /ETIMEDOUT|timed?\s*out|TIMEOUT/i.test(message)) {
+    return { kind: "unavailable", reason: "timeout", message };
+  }
+  return { kind: "failed", message };
+}
+
+/**
+ * Pure decision for the preflight permission probe (#186 / #247).
+ *
+ * Fail-open (tagged diagnostic) for: permission-rule hits, shape drift, missing
+ * binary, timeout, and any failure under `sandbox: full`.
+ *
+ * Fail-closed (fatal prepare error) for: any non-unavailable probe failure under
+ * a sandboxed posture (`workspace` / `read-only`). Signature match sharpens the
+ * message; lack of match still fails with the raw probe error (drift fallback).
+ */
+export function decideGrokPermissionProbe(
+  outcome: GrokProbeOutcome,
+  sandbox: SandboxMode,
+): GrokProbeDecision {
+  switch (outcome.kind) {
+    case "ok": {
+      if (outcome.loaded === 0) return { action: "quiet" };
+      return {
+        action: "diagnostic",
+        text:
+          `${VENDOR_DIAG_PREFIX} claude_permission_import loaded=${outcome.loaded} ` +
+          `sources=[${outcome.sources}] — imported permission rules reached the child ` +
+          `despite the #179 gate; edits may be denied`,
+      };
+    }
+    case "shape_drift":
+      return {
+        action: "diagnostic",
+        text: `${VENDOR_DIAG_PREFIX} permission_probe failed: ${outcome.message}`,
+      };
+    case "unavailable":
+      return {
+        action: "diagnostic",
+        text: `${VENDOR_DIAG_PREFIX} permission_probe failed: ${outcome.message}`,
+      };
+    case "failed": {
+      if (!isSandboxedGrokPosture(sandbox)) {
+        return {
+          action: "diagnostic",
+          text: `${VENDOR_DIAG_PREFIX} permission_probe failed: ${outcome.message}`,
+        };
+      }
+      const signatureMatched = isGrokSandboxRefusalSignature(outcome.message);
+      return {
+        action: "fatal",
+        error: formatGrokSandboxUnenforceableError(sandbox, {
+          signatureMatched,
+          probeMessage: outcome.message,
+        }),
+      };
+    }
+  }
+}
 
 /**
  * Parse `grok models` plain-text output into normalized model entries (#29,
@@ -276,47 +448,66 @@ export function createGrokAdapter(env: NodeJS.ProcessEnv = process.env): VendorA
   }
 
   /**
-   * Preflight permission probe (#186): run `grok inspect --json` with the
-   * child's exact cwd and env posture and report any Claude-settings permission
-   * rules that would load. With the `_GROK_CLAUDE_MARKER_OVERRIDE` gate (#179)
-   * the expected count is 0, so a hit means either the gate stopped working
-   * (grok version drift) or another rule source reached the child — the #179
-   * failure class (deny-all-edits) that is otherwise invisible: grok's
-   * streaming JSON has no structured tool/denial events, denials only appear
-   * as words inside streamed thought tokens.
+   * Preflight permission probe (#186 / #247): run `grok inspect --json` with
+   * the child's exact cwd and env posture.
    *
-   * Fail-open: every failure mode (missing binary, non-zero exit, timeout,
-   * unrecognized JSON shape) becomes a tagged diagnostic, never a spawn error.
+   * Two jobs:
+   * 1. Permission tripwire (#186): report Claude-settings permission rules that
+   *    would load despite the `#179` gate. Fail-open on shape drift / missing
+   *    binary / timeout.
+   * 2. Sandbox capability gate (#247): when the resolved posture is sandboxed
+   *    (`workspace` / `read-only`) and the probe fails for a reason other than
+   *    "couldn't run the probe at all", reject prepare with an actionable
+   *    error. Grok's inspect path *is* the child's startup path for the
+   *    sandbox, so a refuse-to-start here would otherwise become an opaque
+   *    child exit with empty stdout.
    */
   async function permissionProbe(task: TaskSpec, childEnv: Record<string, string>): Promise<string[]> {
+    let stdout: string;
     try {
-      const stdout = await runProbe(bin, ["inspect", "--json"], {
+      stdout = await runProbe(bin, ["inspect", "--json"], {
         cwd: task.cwd,
         // Mirror the engine's spawn env exactly ({...process.env, ...plan.env})
         // so the probe sees the child's posture, not the daemon's.
         env: { ...process.env, ...childEnv },
         timeoutMs: INSPECT_PROBE_TIMEOUT_MS,
       });
+    } catch (err) {
+      const decision = decideGrokPermissionProbe(classifyGrokProbeError(err), task.sandbox);
+      if (decision.action === "fatal") throw new Error(decision.error);
+      if (decision.action === "diagnostic") return [decision.text];
+      return [];
+    }
+
+    // Probe exited 0 — permission tripwire only (always fail-open on shape drift).
+    try {
       const parsed = JSON.parse(stdout) as {
         permissions?: { loaded?: unknown; sources?: unknown };
       };
       const loaded = parsed.permissions?.loaded;
       if (typeof loaded !== "number") {
-        // Shape drift would silently disarm the tripwire — surface it instead.
-        throw new Error("unrecognized `grok inspect --json` permissions shape");
+        const decision = decideGrokPermissionProbe(
+          {
+            kind: "shape_drift",
+            message: "unrecognized `grok inspect --json` permissions shape",
+          },
+          task.sandbox,
+        );
+        return decision.action === "diagnostic" ? [decision.text] : [];
       }
-      if (loaded === 0) return [];
       const sources = Array.isArray(parsed.permissions?.sources)
         ? parsed.permissions.sources.filter((s): s is string => typeof s === "string").join(", ")
         : "?";
-      return [
-        `${VENDOR_DIAG_PREFIX} claude_permission_import loaded=${loaded} ` +
-          `sources=[${sources}] — imported permission rules reached the child ` +
-          `despite the #179 gate; edits may be denied`,
-      ];
+      const decision = decideGrokPermissionProbe(
+        { kind: "ok", loaded, sources },
+        task.sandbox,
+      );
+      if (decision.action === "diagnostic") return [decision.text];
+      return [];
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      return [`${VENDOR_DIAG_PREFIX} permission_probe failed: ${message}`];
+      const decision = decideGrokPermissionProbe({ kind: "shape_drift", message }, task.sandbox);
+      return decision.action === "diagnostic" ? [decision.text] : [];
     }
   }
 

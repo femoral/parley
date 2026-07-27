@@ -1,10 +1,31 @@
 /**
  * extraArgs splicing in codex/grok spawn plans (#112).
  */
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { createCodexAdapter } from "../src/adapters/codex.js";
 import { createGrokAdapter } from "../src/adapters/grok.js";
 import type { HubInfo, TaskSpec } from "../src/adapters/types.js";
+
+const scratch: string[] = [];
+afterEach(() => {
+  for (const dir of scratch.splice(0)) fs.rmSync(dir, { recursive: true, force: true });
+});
+
+/** Happy inspect probe so prepare does not require bubblewrap (#247). */
+function happyGrokBin(): string {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "parley-grok-extra-"));
+  scratch.push(dir);
+  const file = path.join(dir, "grok");
+  fs.writeFileSync(
+    file,
+    `#!/bin/sh\nif [ "$1" = "inspect" ]; then echo '{"permissions":{"loaded":0,"sources":[]}}'; fi\n`,
+    { mode: 0o755 },
+  );
+  return file;
+}
 
 const HUB: HubInfo = {
   url: "http://127.0.0.1:5555/mcp",
@@ -71,7 +92,7 @@ describe("codex extraArgs splicing", () => {
 
 describe("grok extraArgs splicing", () => {
   it("appends extraArgs into commonArgv (flags region)", async () => {
-    const plan = await createGrokAdapter({}).prepare(
+    const plan = await createGrokAdapter({ PARLEY_GROK_BIN: happyGrokBin() }).prepare(
       grokSpec({ extraArgs: ["--verbose", "--trace"] }),
       HUB,
     );

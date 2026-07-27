@@ -4,7 +4,14 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { createGrokAdapter } from "../src/adapters/grok.js";
+import {
+  classifyGrokProbeError,
+  createGrokAdapter,
+  decideGrokPermissionProbe,
+  formatGrokSandboxUnenforceableError,
+  isGrokSandboxRefusalSignature,
+  isSandboxedGrokPosture,
+} from "../src/adapters/grok.js";
 import type { HubInfo, SandboxMode, TaskSpec } from "../src/adapters/types.js";
 import { createWorktree, excludeMaterializedFiles } from "../src/worktree.js";
 import { makeGitRepo } from "./helpers.js";
@@ -47,12 +54,35 @@ afterEach(() => {
   for (const dir of scratch.splice(0)) fs.rmSync(dir, { recursive: true, force: true });
 });
 
+/**
+ * A fake `grok` whose `inspect --json` succeeds (permission probe happy path).
+ * Golden prepare/resume tests must not depend on a real grok or bubblewrap
+ * (#247: sandboxed probe failures reject prepare on this host).
+ */
+function happyGrokBin(): string {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "parley-grok-happy-"));
+  scratch.push(dir);
+  const file = path.join(dir, "grok");
+  fs.writeFileSync(
+    file,
+    `#!/bin/sh\nif [ "$1" = "inspect" ]; then echo '{"permissions":{"loaded":0,"sources":[]}}'; fi\n`,
+    { mode: 0o755 },
+  );
+  return file;
+}
+
+/** Adapter with a successful inspect probe unless the caller overrides the bin. */
+function adapter(env: NodeJS.ProcessEnv = {}) {
+  if (env.PARLEY_GROK_BIN !== undefined) return createGrokAdapter(env);
+  return createGrokAdapter({ ...env, PARLEY_GROK_BIN: happyGrokBin() });
+}
+
 describe("grok adapter — prepare argv (golden)", () => {
   it("builds the pinned headless streaming-json invocation", async () => {
-    const adapter = createGrokAdapter({});
-    const plan = await adapter.prepare(spec(), HUB);
+    const bin = happyGrokBin();
+    const plan = await createGrokAdapter({ PARLEY_GROK_BIN: bin }).prepare(spec(), HUB);
     expect(plan.argv).toEqual([
-      "grok",
+      bin,
       "-p",
       "do the thing",
       "--output-format",
@@ -66,17 +96,19 @@ describe("grok adapter — prepare argv (golden)", () => {
   });
 
   it("passes the model through with -m when set, omits it otherwise", async () => {
-    const adapter = createGrokAdapter({});
-    expect((await adapter.prepare(spec({ model: "grok-4.5" }), HUB)).argv).toContain("-m");
-    expect((await adapter.prepare(spec({ model: "grok-4.5" }), HUB)).argv).toContain("grok-4.5");
-    expect((await adapter.prepare(spec({ model: null }), HUB)).argv).not.toContain("-m");
+    expect((await adapter().prepare(spec({ model: "grok-4.5" }), HUB)).argv).toContain("-m");
+    expect((await adapter().prepare(spec({ model: "grok-4.5" }), HUB)).argv).toContain("grok-4.5");
+    expect((await adapter().prepare(spec({ model: null }), HUB)).argv).not.toContain("-m");
   });
 
   it("passes reasoning effort through with --reasoning-effort when set, omits it otherwise", async () => {
-    const adapter = createGrokAdapter({});
-    const withEffort = await adapter.prepare(spec({ effort: "high" }), HUB);
+    const bin = happyGrokBin();
+    const withEffort = await createGrokAdapter({ PARLEY_GROK_BIN: bin }).prepare(
+      spec({ effort: "high" }),
+      HUB,
+    );
     expect(withEffort.argv).toEqual([
-      "grok",
+      bin,
       "-p",
       "do the thing",
       "--output-format",
@@ -88,13 +120,12 @@ describe("grok adapter — prepare argv (golden)", () => {
       "--reasoning-effort",
       "high",
     ]);
-    const withoutEffort = await adapter.prepare(spec({ effort: null }), HUB);
+    const withoutEffort = await adapter().prepare(spec({ effort: null }), HUB);
     expect(withoutEffort.argv).not.toContain("--reasoning-effort");
   });
 
   it("carries reasoning effort through resume identically to prepare", async () => {
-    const adapter = createGrokAdapter({});
-    const plan = await adapter.resume(
+    const plan = await adapter().resume(
       spec({ prompt: "the answer", sessionId: "sess-1", effort: "low" }),
       HUB,
     );
@@ -103,17 +134,21 @@ describe("grok adapter — prepare argv (golden)", () => {
   });
 
   it("honours PARLEY_GROK_BIN override", async () => {
-    const adapter = createGrokAdapter({ PARLEY_GROK_BIN: "/opt/grok/grok" });
-    expect((await adapter.prepare(spec(), HUB)).argv[0]).toBe("/opt/grok/grok");
+    // Probe is fail-open on missing binary, so argv is still produced.
+    const a = createGrokAdapter({ PARLEY_GROK_BIN: "/opt/grok/grok" });
+    expect((await a.prepare(spec({ sandbox: "full" }), HUB)).argv[0]).toBe("/opt/grok/grok");
   });
 });
 
 describe("grok adapter — resume argv (golden)", () => {
   it("resumes the persisted session with -r and the answer prompt", async () => {
-    const adapter = createGrokAdapter({});
-    const plan = await adapter.resume(spec({ prompt: "the answer", sessionId: "sess-abc" }), HUB);
+    const bin = happyGrokBin();
+    const plan = await createGrokAdapter({ PARLEY_GROK_BIN: bin }).resume(
+      spec({ prompt: "the answer", sessionId: "sess-abc" }),
+      HUB,
+    );
     expect(plan.argv).toEqual([
-      "grok",
+      bin,
       "-p",
       "the answer",
       "-r",
@@ -128,14 +163,12 @@ describe("grok adapter — resume argv (golden)", () => {
   });
 
   it("re-materializes the MCP config on resume", async () => {
-    const adapter = createGrokAdapter({});
-    const plan = await adapter.resume(spec({ sessionId: "sess-abc" }), HUB);
+    const plan = await adapter().resume(spec({ sessionId: "sess-abc" }), HUB);
     expect(plan.files.map((f) => f.path)).toContain(".grok/config.toml");
   });
 
   it("rejects a resume without a session id (would silently start a fresh session)", async () => {
-    const adapter = createGrokAdapter({});
-    await expect(adapter.resume(spec(), HUB)).rejects.toThrow(/no session id/);
+    await expect(adapter().resume(spec(), HUB)).rejects.toThrow(/no session id/);
   });
 });
 
@@ -182,8 +215,7 @@ describe("grok adapter — env across the sandbox-posture matrix (golden)", () =
 
   for (const c of cases) {
     it(`${c.sandbox} + network:${c.network} → GROK_SANDBOX=${c.expectSandbox}`, async () => {
-      const adapter = createGrokAdapter({});
-      const plan = await adapter.prepare(spec({ sandbox: c.sandbox, network: c.network }), HUB);
+      const plan = await adapter().prepare(spec({ sandbox: c.sandbox, network: c.network }), HUB);
       expect(plan.env.GROK_SANDBOX).toBe(c.expectSandbox);
       for (const [k, v] of Object.entries(c.extra)) expect(plan.env[k]).toBe(v);
       // Claude scanners always disabled.
@@ -195,10 +227,10 @@ describe("grok adapter — env across the sandbox-posture matrix (golden)", () =
   }
 
   it("resume carries the identical posture env as prepare", async () => {
-    const adapter = createGrokAdapter({});
+    const a = adapter();
     const s = spec({ sandbox: "read-only", network: false, sessionId: "sess-1" });
-    const prepared = await adapter.prepare(s, HUB);
-    const resumed = await adapter.resume(s, HUB);
+    const prepared = await a.prepare(s, HUB);
+    const resumed = await a.resume(s, HUB);
     expect(resumed.env.GROK_SANDBOX).toBe(prepared.env.GROK_SANDBOX);
     expect(resumed.env.GROK_WRITE_FILE).toBe(prepared.env.GROK_WRITE_FILE);
   });
@@ -206,38 +238,40 @@ describe("grok adapter — env across the sandbox-posture matrix (golden)", () =
 
 describe("grok adapter — env passthrough & leak control", () => {
   it("passes XAI_API_KEY through only when the parent set it", async () => {
-    expect((await createGrokAdapter({ XAI_API_KEY: "xai-secret" }).prepare(spec(), HUB)).env
-      .XAI_API_KEY).toBe("xai-secret");
-    expect("XAI_API_KEY" in (await createGrokAdapter({}).prepare(spec(), HUB)).env).toBe(false);
+    expect((await adapter({ XAI_API_KEY: "xai-secret" }).prepare(spec(), HUB)).env.XAI_API_KEY).toBe(
+      "xai-secret",
+    );
+    expect("XAI_API_KEY" in (await adapter().prepare(spec(), HUB)).env).toBe(false);
   });
 
   it("gates the Claude-settings permission import on prepare and resume (#179)", async () => {
     // The scanner vars don't cover grok's permission-rule import from
     // ~/.claude/settings.json; a user-scope NotebookEdit deny otherwise maps to
     // deny-all-edits in the child. Verified against grok 0.2.106.
-    const adapter = createGrokAdapter({});
-    const prepared = await adapter.prepare(spec(), HUB);
+    const a = adapter();
+    const prepared = await a.prepare(spec(), HUB);
     expect(prepared.env._GROK_CLAUDE_MARKER_OVERRIDE).toBe("1");
-    const resumed = await adapter.resume(spec({ sessionId: "sess-1" }), HUB);
+    const resumed = await a.resume(spec({ sessionId: "sess-1" }), HUB);
     expect(resumed.env._GROK_CLAUDE_MARKER_OVERRIDE).toBe("1");
   });
 
   it("pins MCP_TIMEOUT so a parent (Claude) value cannot leak into the child", async () => {
     // Even when the parent env exports its own MCP_TIMEOUT, the plan overrides it
     // (the engine spreads SpawnPlan.env over process.env, so ours wins).
-    const adapter = createGrokAdapter({ MCP_TIMEOUT: "600000" });
-    expect((await adapter.prepare(spec(), HUB)).env.MCP_TIMEOUT).toBe("30000");
+    expect((await adapter({ MCP_TIMEOUT: "600000" }).prepare(spec(), HUB)).env.MCP_TIMEOUT).toBe(
+      "30000",
+    );
   });
 
   it("sets GROK_XAI_API_BASE_URL to the daemon proxy path when parent did not override (#95)", async () => {
-    const plan = await createGrokAdapter({}).prepare(spec({ id: "t7" }), HUB);
+    const plan = await adapter().prepare(spec({ id: "t7" }), HUB);
     expect(plan.env.GROK_XAI_API_BASE_URL).toBe("http://127.0.0.1:54321/xai/t7/v1");
   });
 
   it("omits GROK_XAI_API_BASE_URL from plan.env when the parent already set it", async () => {
     // Parent override must not be clobbered: engine spawn is
     // `{...process.env, ...plan.env}`, so omitting the key keeps the parent value.
-    const plan = await createGrokAdapter({
+    const plan = await adapter({
       GROK_XAI_API_BASE_URL: "https://custom.example/v1",
     }).prepare(spec(), HUB);
     expect("GROK_XAI_API_BASE_URL" in plan.env).toBe(false);
@@ -248,18 +282,14 @@ describe("grok adapter — env passthrough & leak control", () => {
       url: "http://127.0.0.1:9999/mcp",
       headers: { "x-parley-task": "task-r" },
     };
-    const plan = await createGrokAdapter({}).resume(
-      spec({ id: "task-r", sessionId: "sess-1" }),
-      hub,
-    );
+    const plan = await adapter().resume(spec({ id: "task-r", sessionId: "sess-1" }), hub);
     expect(plan.env.GROK_XAI_API_BASE_URL).toBe("http://127.0.0.1:9999/xai/task-r/v1");
   });
 });
 
 describe("grok adapter — materialized .grok/config.toml", () => {
   it("carries the MCP endpoint, correlation header, worktree-never, and approval posture", async () => {
-    const adapter = createGrokAdapter({});
-    const plan = await adapter.prepare(spec(), HUB);
+    const plan = await adapter().prepare(spec(), HUB);
     const config = plan.files.find((f) => f.path === ".grok/config.toml");
     expect(config).toBeDefined();
     const toml = config!.contents;
@@ -273,12 +303,11 @@ describe("grok adapter — materialized .grok/config.toml", () => {
   });
 
   it("escapes quotes, backslashes, and control characters in TOML values", async () => {
-    const adapter = createGrokAdapter({});
     const hub: HubInfo = {
       url: 'http://127.0.0.1:1/mcp?q="x"\\y',
       headers: { "x-parley-task": "t1\nInjected = true" },
     };
-    const plan = await adapter.prepare(spec(), hub);
+    const plan = await adapter().prepare(spec(), hub);
     const toml = plan.files.find((f) => f.path === ".grok/config.toml")!.contents;
     expect(toml).toContain('url = "http://127.0.0.1:1/mcp?q=\\"x\\"\\\\y"');
     // The newline is escaped, so no injected config line appears.
@@ -287,8 +316,7 @@ describe("grok adapter — materialized .grok/config.toml", () => {
   });
 
   it("the no-network sandbox.toml extends the base built-in with restrict_network", async () => {
-    const adapter = createGrokAdapter({});
-    const plan = await adapter.prepare(spec({ sandbox: "workspace", network: false }), HUB);
+    const plan = await adapter().prepare(spec({ sandbox: "workspace", network: false }), HUB);
     const sb = plan.files.find((f) => f.path === ".grok/sandbox.toml");
     expect(sb).toBeDefined();
     expect(sb!.contents).toContain("[profiles.parley-restricted]");
@@ -336,7 +364,117 @@ describe("grok adapter — parseEvent (tolerant)", () => {
   });
 });
 
-describe("grok adapter — preflight permission probe (#186)", () => {
+describe("grok adapter — probe classifier pure functions (#247)", () => {
+  const BWRAP_MSG =
+    "error: this sandbox could not enforce its mount-namespace deny set on Linux " +
+    "(bubblewrap missing/unusable). Refusing to start with denied paths unprotected. " +
+    "(bwrap exec failed: No such file or directory (os error 2))";
+
+  it("treats workspace and read-only as sandboxed, full as not", () => {
+    expect(isSandboxedGrokPosture("workspace")).toBe(true);
+    expect(isSandboxedGrokPosture("read-only")).toBe(true);
+    expect(isSandboxedGrokPosture("full")).toBe(false);
+  });
+
+  it("matches grok's sandbox-refusal signature and ignores unrelated text", () => {
+    expect(isGrokSandboxRefusalSignature(BWRAP_MSG)).toBe(true);
+    expect(isGrokSandboxRefusalSignature("Command failed: grok inspect --json")).toBe(false);
+    expect(isGrokSandboxRefusalSignature("some other error")).toBe(false);
+  });
+
+  it("classifies ENOENT and timeout as unavailable, other errors as failed", () => {
+    const enoent = Object.assign(new Error("spawn grok ENOENT"), { code: "ENOENT" });
+    expect(classifyGrokProbeError(enoent)).toEqual({
+      kind: "unavailable",
+      reason: "missing_binary",
+      message: "spawn grok ENOENT",
+    });
+    const timeout = Object.assign(new Error("Command timed out"), { killed: true });
+    expect(classifyGrokProbeError(timeout)).toEqual({
+      kind: "unavailable",
+      reason: "timeout",
+      message: "Command timed out",
+    });
+    expect(classifyGrokProbeError(new Error("Command failed: exit 3"))).toEqual({
+      kind: "failed",
+      message: "Command failed: exit 3",
+    });
+  });
+
+  it("fail-open: permission hit, shape drift, missing binary, timeout, full+failure", () => {
+    expect(decideGrokPermissionProbe({ kind: "ok", loaded: 0, sources: "" }, "workspace")).toEqual({
+      action: "quiet",
+    });
+    const hit = decideGrokPermissionProbe(
+      { kind: "ok", loaded: 2, sources: "a" },
+      "workspace",
+    );
+    expect(hit.action).toBe("diagnostic");
+    if (hit.action === "diagnostic") {
+      expect(hit.text).toMatch(/^PARLEY-DIAG claude_permission_import loaded=2/);
+    }
+
+    const shape = decideGrokPermissionProbe(
+      { kind: "shape_drift", message: "unrecognized shape" },
+      "workspace",
+    );
+    expect(shape).toEqual({
+      action: "diagnostic",
+      text: "PARLEY-DIAG permission_probe failed: unrecognized shape",
+    });
+
+    const missing = decideGrokPermissionProbe(
+      { kind: "unavailable", reason: "missing_binary", message: "ENOENT" },
+      "workspace",
+    );
+    expect(missing.action).toBe("diagnostic");
+
+    const timedOut = decideGrokPermissionProbe(
+      { kind: "unavailable", reason: "timeout", message: "timeout" },
+      "read-only",
+    );
+    expect(timedOut.action).toBe("diagnostic");
+
+    const fullFail = decideGrokPermissionProbe(
+      { kind: "failed", message: BWRAP_MSG },
+      "full",
+    );
+    expect(fullFail.action).toBe("diagnostic");
+  });
+
+  it("fatal path: sandboxed + sandbox-refusal signature → sharp actionable error", () => {
+    for (const sandbox of ["workspace", "read-only"] as const) {
+      const decision = decideGrokPermissionProbe({ kind: "failed", message: BWRAP_MSG }, sandbox);
+      expect(decision.action).toBe("fatal");
+      if (decision.action === "fatal") {
+        expect(decision.error).toContain(`sandbox posture "${sandbox}"`);
+        expect(decision.error).toMatch(/bubblewrap missing or unusable/i);
+        expect(decision.error).toContain('sandbox: "full"');
+        expect(decision.error).not.toMatch(/apt install/);
+        expect(decision.error).toBe(
+          formatGrokSandboxUnenforceableError(sandbox, {
+            signatureMatched: true,
+            probeMessage: BWRAP_MSG,
+          }),
+        );
+      }
+    }
+  });
+
+  it("drift fallback: sandboxed + failed without signature still fails prepare", () => {
+    const raw = "Command failed: grok inspect --json\nsome new refusal wording";
+    const decision = decideGrokPermissionProbe({ kind: "failed", message: raw }, "workspace");
+    expect(decision.action).toBe("fatal");
+    if (decision.action === "fatal") {
+      expect(decision.error).toContain('sandbox posture "workspace"');
+      expect(decision.error).toContain(raw);
+      expect(decision.error).toContain('sandbox: "full"');
+      expect(decision.error).not.toMatch(/apt install/);
+    }
+  });
+});
+
+describe("grok adapter — preflight permission probe (#186 / #247)", () => {
   /** A fake `grok` binary whose `inspect --json` prints the given JSON. */
   function stubBin(script: string): string {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "parley-grok-stub-"));
@@ -348,6 +486,13 @@ describe("grok adapter — preflight permission probe (#186)", () => {
 
   function inspectStub(json: string): string {
     return stubBin(`if [ "$1" = "inspect" ]; then echo '${json}'; fi`);
+  }
+
+  /** Stub that fails inspect with the given stderr (exit 1). */
+  function inspectFailStub(stderr: string): string {
+    // Escape for single-quoted shell string.
+    const escaped = stderr.replace(/'/g, `'\\''`);
+    return stubBin(`if [ "$1" = "inspect" ]; then echo '${escaped}' >&2; exit 1; fi`);
   }
 
   it("emits a tagged diagnostic when Claude permission rules would load", async () => {
@@ -381,21 +526,80 @@ describe("grok adapter — preflight permission probe (#186)", () => {
     expect(plan.diagnostics![0]).toMatch(/^PARLEY-DIAG claude_permission_import loaded=2/);
   });
 
-  it("is fail-open: missing binary, non-zero exit, and shape drift become diagnostics", async () => {
+  it("is fail-open: missing binary and shape drift become diagnostics under workspace", async () => {
     const cases = [
       path.join(os.tmpdir(), "parley-no-such-grok"), // ENOENT
-      stubBin("exit 3"), // non-zero exit
       inspectStub('{"unexpected":true}'), // shape drift must not disarm the tripwire
     ];
     for (const bin of cases) {
       const plan = await createGrokAdapter({ PARLEY_GROK_BIN: bin }).prepare(
-        spec({ cwd: os.tmpdir() }),
+        spec({ cwd: os.tmpdir(), sandbox: "workspace" }),
         HUB,
       );
       expect(plan.argv[0]).toBe(bin); // spawn plan intact
       expect(plan.diagnostics).toHaveLength(1);
       expect(plan.diagnostics![0]).toMatch(/^PARLEY-DIAG permission_probe failed: /);
     }
+  });
+
+  it("is fail-open: non-zero exit under sandbox:full stays a diagnostic", async () => {
+    const bin = stubBin("exit 3");
+    const plan = await createGrokAdapter({ PARLEY_GROK_BIN: bin }).prepare(
+      spec({ cwd: os.tmpdir(), sandbox: "full" }),
+      HUB,
+    );
+    expect(plan.argv[0]).toBe(bin);
+    expect(plan.diagnostics).toHaveLength(1);
+    expect(plan.diagnostics![0]).toMatch(/^PARLEY-DIAG permission_probe failed: /);
+  });
+
+  it("fatal: sandbox-refusal under workspace rejects prepare with actionable error", async () => {
+    const bin = inspectFailStub(
+      "error: this sandbox could not enforce its mount-namespace deny set on Linux " +
+        "(bubblewrap missing/unusable). Refusing to start with denied paths unprotected. " +
+        "(bwrap exec failed: No such file or directory (os error 2))",
+    );
+    await expect(
+      createGrokAdapter({ PARLEY_GROK_BIN: bin }).prepare(
+        spec({ cwd: os.tmpdir(), sandbox: "workspace" }),
+        HUB,
+      ),
+    ).rejects.toThrow(/sandbox posture "workspace".*sandbox: "full"/);
+  });
+
+  it("fatal: sandbox-refusal under read-only rejects prepare", async () => {
+    const bin = inspectFailStub(
+      "error: this sandbox could not enforce its mount-namespace deny set on Linux " +
+        "(bubblewrap missing/unusable). (bwrap exec failed)",
+    );
+    await expect(
+      createGrokAdapter({ PARLEY_GROK_BIN: bin }).prepare(
+        spec({ cwd: os.tmpdir(), sandbox: "read-only" }),
+        HUB,
+      ),
+    ).rejects.toThrow(/sandbox posture "read-only"/);
+  });
+
+  it("drift fallback: non-zero exit under workspace without signature still rejects", async () => {
+    const bin = stubBin("echo 'vendor refused for a new reason' >&2; exit 3");
+    await expect(
+      createGrokAdapter({ PARLEY_GROK_BIN: bin }).prepare(
+        spec({ cwd: os.tmpdir(), sandbox: "workspace" }),
+        HUB,
+      ),
+    ).rejects.toThrow(/sandbox posture "workspace".*Preflight probe failed/);
+  });
+
+  it("fatal path on resume uses the same gate", async () => {
+    const bin = inspectFailStub(
+      "bubblewrap missing/unusable — refusing to start with denied paths unprotected",
+    );
+    await expect(
+      createGrokAdapter({ PARLEY_GROK_BIN: bin }).resume(
+        spec({ cwd: os.tmpdir(), sandbox: "workspace", sessionId: "sess-1" }),
+        HUB,
+      ),
+    ).rejects.toThrow(/sandbox posture "workspace"/);
   });
 });
 
