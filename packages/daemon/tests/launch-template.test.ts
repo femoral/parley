@@ -17,7 +17,7 @@ import {
   updateTask, writeTaskState,
   type DatabaseHandle,
 } from "../src/db.js";
-import { DelegateError, TaskEngine } from "../src/engine.js";
+import { TaskEngine } from "../src/engine.js";
 import { aggregateMetrics } from "../src/metrics.js";
 import { buildInfoConfig, renderInfoProse } from "../src/info.js";
 import { startServer, type DaemonServer } from "../src/server.js";

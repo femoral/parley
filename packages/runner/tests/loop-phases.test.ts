@@ -240,21 +240,24 @@ describe("RunnerLoop failure branches (fake transport)", () => {
 
   it("fails a claimed lease when shutting down before execute", async () => {
     const lease = sampleLease();
-    let loop!: RunnerLoop;
+    // The transport closes over the loop it stops, so the loop can only be
+    // constructed after it — hand the callback a box to read through.
+    const running: { loop: RunnerLoop | null } = { loop: null };
     const transport = createFakeLeaseTransport({
       leases: [
         () => {
-          loop.stop();
+          running.loop!.stop();
           return lease;
         },
       ],
     });
-    loop = new RunnerLoop({
+    const loop = new RunnerLoop({
       config: baseConfig(),
       transport,
       adapters: new Map([["fake", stubAdapter()]]),
       log: () => {},
     });
+    running.loop = loop;
     await loop.run();
     expect(
       failCalls(transport).some((e) => /runner shutting down before execute/.test(e)),

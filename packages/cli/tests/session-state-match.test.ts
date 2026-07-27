@@ -48,7 +48,7 @@ function write(
 }
 
 const chain = (pids: number[]): ProcessAnchor[] =>
-  pids.map((pid, i) => ({
+  pids.map((pid) => ({
     machine_id: "m",
     pid,
     start_time: `st-${pid}`,

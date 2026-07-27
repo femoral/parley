@@ -9,7 +9,7 @@ const PARLEY_ENV = [
   "PARLEY_EFFORT",
 ] as const;
 
-type Handler = (...args: any[]) => void;
+type Handler = (...args: unknown[]) => void;
 
 function extensionHarness(thinkingLevel = "high") {
   const handlers = new Map<string, Handler>();

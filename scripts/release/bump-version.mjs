@@ -1,54 +1,100 @@
-// Lockstep version bump for the release workflow (docs/spec/release-process.md).
+// Lockstep version bump for the release workflow (.github/workflows/release.yml).
 //
-// All @useparley/* packages under packages/* share one version. This script
+// All @useparley/* packages under packages/** share one version. This script
 // verifies they're currently in lockstep, computes the next version from a
-// bump kind ("patch" | "minor" | an explicit "x.y.z"), and rewrites every
-// package.json in place.
+// bump kind ("patch" | "minor" | "prerelease" | an explicit "x.y.z[-pre]"),
+// and rewrites every package.json in place.
 //
 // Usage (from repo root):
 //   node scripts/release/bump-version.mjs patch
 //   node scripts/release/bump-version.mjs minor
+//   node scripts/release/bump-version.mjs prerelease --preid dev
+//   node scripts/release/bump-version.mjs prerelease --preid dev --from 0.5.0-dev.3
 //   node scripts/release/bump-version.mjs 0.5.0
+//   node scripts/release/bump-version.mjs 0.5.0-rc.1
 //   node scripts/release/bump-version.mjs patch --dry-run
 //
 // Exits non-zero with a descriptive message on any validation failure, so it
 // is safe to run as a gating step in CI.
 
-import { readFileSync, writeFileSync, readdirSync, statSync } from "node:fs";
+import { readFileSync, writeFileSync, readdirSync, existsSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const SEMVER_RE = /^(\d+)\.(\d+)\.(\d+)$/;
+// major.minor.patch with an optional semver prerelease tail. Build metadata
+// ("+sha") is deliberately unsupported: npm ignores it when resolving, so it
+// would let two different releases claim the same version.
+const SEMVER_RE =
+  /^(\d+)\.(\d+)\.(\d+)(?:-((?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*))*))?$/;
 
-/** Parse a strict `x.y.z` semver string (no prerelease/build metadata). */
+// Prerelease ids are interpolated into a regex below, so keep them to a
+// character set that carries no regex meaning. Leading digits are excluded so
+// "<preid>.<counter>" can never be mistaken for a plain numeric tail.
+const PREID_RE = /^[A-Za-z-][0-9A-Za-z-]*$/;
+
+const DEFAULT_PREID = "dev";
+
+/** Parse an `x.y.z` or `x.y.z-prerelease` semver string. */
 export function parseVersion(version) {
   const match = SEMVER_RE.exec(version);
   if (!match) {
     throw new Error(
-      `invalid version "${version}": expected strict "major.minor.patch" (e.g. "0.5.2")`,
+      `invalid version "${version}": expected "major.minor.patch" with an optional ` +
+        `prerelease tail (e.g. "0.5.2" or "0.5.2-dev.0")`,
     );
   }
-  const [, major, minor, patch] = match;
-  return { major: Number(major), minor: Number(minor), patch: Number(patch) };
+  const [, major, minor, patch, prerelease] = match;
+  return {
+    major: Number(major),
+    minor: Number(minor),
+    patch: Number(patch),
+    prerelease: prerelease ?? null,
+  };
 }
 
-export function formatVersion({ major, minor, patch }) {
-  return `${major}.${minor}.${patch}`;
+export function formatVersion({ major, minor, patch, prerelease = null }) {
+  const base = `${major}.${minor}.${patch}`;
+  return prerelease === null ? base : `${base}-${prerelease}`;
+}
+
+/** True when `version` carries a prerelease tail (i.e. must not be `latest`). */
+export function isPrerelease(version) {
+  return parseVersion(version).prerelease !== null;
 }
 
 /**
  * Compute the next version from the current one and a bump input.
- * `bump` is "patch", "minor", or an explicit "x.y.z" string.
- * Explicit versions must be strictly greater than the current version.
+ * `bump` is "patch", "minor", "prerelease", or an explicit "x.y.z[-pre]".
+ * `preid` names the prerelease channel and only applies to "prerelease".
  */
-export function computeNextVersion(currentVersion, bump) {
+export function computeNextVersion(currentVersion, bump, { preid } = {}) {
   const current = parseVersion(currentVersion);
 
   if (bump === "patch") {
-    return formatVersion({ ...current, patch: current.patch + 1 });
+    // A prerelease is already on its way to the base version, so promoting
+    // 0.5.0-dev.2 with a patch bump lands on 0.5.0 rather than 0.5.1.
+    if (current.prerelease !== null) {
+      return formatVersion({ ...current, prerelease: null });
+    }
+    return formatVersion({ ...current, patch: current.patch + 1, prerelease: null });
   }
+
   if (bump === "minor") {
-    return formatVersion({ ...current, minor: current.minor + 1, patch: 0 });
+    // Same promotion rule: 0.5.0-dev.2 minor-bumps to 0.5.0, but 0.5.3-dev.2
+    // has already left 0.5.0 behind and goes on to 0.6.0.
+    if (current.prerelease !== null && current.patch === 0) {
+      return formatVersion({ ...current, prerelease: null });
+    }
+    return formatVersion({
+      major: current.major,
+      minor: current.minor + 1,
+      patch: 0,
+      prerelease: null,
+    });
+  }
+
+  if (bump === "prerelease") {
+    return formatVersion(nextPrerelease(current, preid ?? DEFAULT_PREID));
   }
 
   // Explicit version.
@@ -62,27 +108,100 @@ export function computeNextVersion(currentVersion, bump) {
   return nextStr;
 }
 
+/**
+ * Advance the prerelease counter for `preid`, or open a new prerelease series.
+ * Mirrors `npm version prerelease --preid <id>`: a release bumps its patch and
+ * starts at `.0`, an existing series increments, and switching channels
+ * restarts the counter on the same base version.
+ */
+function nextPrerelease(current, preid) {
+  if (!PREID_RE.test(preid)) {
+    throw new Error(
+      `invalid prerelease id "${preid}": expected letters, digits and hyphens ` +
+        `starting with a letter (e.g. "dev", "next", "rc")`,
+    );
+  }
+
+  if (current.prerelease !== null) {
+    const counter = new RegExp(`^${preid}\\.(\\d+)$`).exec(current.prerelease);
+    if (counter) {
+      return { ...current, prerelease: `${preid}.${Number(counter[1]) + 1}` };
+    }
+    return { ...current, prerelease: `${preid}.0` };
+  }
+
+  return { ...current, patch: current.patch + 1, prerelease: `${preid}.0` };
+}
+
 function compareVersions(a, b) {
   if (a.major !== b.major) return a.major - b.major;
   if (a.minor !== b.minor) return a.minor - b.minor;
-  return a.patch - b.patch;
+  if (a.patch !== b.patch) return a.patch - b.patch;
+  return comparePrerelease(a.prerelease, b.prerelease);
 }
 
-/** List every packages/*\/package.json manifest (path + parsed contents). */
+/** Semver §11 precedence: a release outranks any prerelease of the same base. */
+function comparePrerelease(a, b) {
+  if (a === b) return 0;
+  if (a === null) return 1;
+  if (b === null) return -1;
+
+  const left = a.split(".");
+  const right = b.split(".");
+  for (let i = 0; i < Math.max(left.length, right.length); i++) {
+    // A shorter set of identifiers sorts lower when the shared prefix is equal.
+    if (i >= left.length) return -1;
+    if (i >= right.length) return 1;
+    const cmp = compareIdentifiers(left[i], right[i]);
+    if (cmp !== 0) return cmp;
+  }
+  return 0;
+}
+
+function compareIdentifiers(a, b) {
+  const aNum = /^\d+$/.test(a);
+  const bNum = /^\d+$/.test(b);
+  if (aNum && bNum) return Number(a) - Number(b);
+  // Numeric identifiers always have lower precedence than alphanumeric ones.
+  if (aNum) return -1;
+  if (bNum) return 1;
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
+/** The higher-precedence of two versions. */
+export function maxVersion(a, b) {
+  return compareVersions(parseVersion(a), parseVersion(b)) >= 0 ? a : b;
+}
+
+/**
+ * List every publishable manifest under `packagesDir` (path + parsed
+ * contents), covering both the `packages/*` and `packages/plugins/*` globs in
+ * pnpm-workspace.yaml. A directory holding its own package.json is a package
+ * and is never descended into, so nested build output or fixtures can't be
+ * mistaken for workspace members.
+ */
 export function listPackageManifests(packagesDir) {
-  const entries = readdirSync(packagesDir).filter((name) =>
-    statSync(join(packagesDir, name)).isDirectory(),
-  );
-  return entries
-    .map((name) => join(packagesDir, name, "package.json"))
-    .filter((path) => {
-      try {
-        statSync(path);
-        return true;
-      } catch {
-        return false;
-      }
-    })
+  const paths = [];
+
+  for (const entry of readdirSync(packagesDir, { withFileTypes: true })) {
+    if (!entry.isDirectory() || entry.name === "node_modules") continue;
+
+    const dir = join(packagesDir, entry.name);
+    const manifest = join(dir, "package.json");
+    if (existsSync(manifest)) {
+      paths.push(manifest);
+      continue;
+    }
+
+    // A grouping directory such as packages/plugins — look one level deeper.
+    for (const nested of readdirSync(dir, { withFileTypes: true })) {
+      if (!nested.isDirectory() || nested.name === "node_modules") continue;
+      const nestedManifest = join(dir, nested.name, "package.json");
+      if (existsSync(nestedManifest)) paths.push(nestedManifest);
+    }
+  }
+
+  return paths
     .map((path) => {
       const manifest = JSON.parse(readFileSync(path, "utf8"));
       if (typeof manifest.name !== "string" || typeof manifest.version !== "string") {
@@ -132,27 +251,79 @@ export function applyVersion(manifests, nextVersion, { dryRun = false } = {}) {
 /**
  * Orchestrate a full lockstep bump: read manifests, verify lockstep, compute
  * the next version, and (unless dryRun) write it back to every package.json.
+ *
+ * `from` seeds the computation with a version that exists outside the tree —
+ * the release currently on the npm dist-tag being published to. Prerelease
+ * counters live only on the registry (a dev build is never committed), so
+ * without it every dev publish would recompute the same `-dev.0` and collide.
+ * The higher of the two wins, so a stale seed can never walk the tree
+ * backwards.
  */
-export function bumpRelease({ packagesDir, bump, dryRun = false }) {
+export function bumpRelease({ packagesDir, bump, preid, from = null, dryRun = false }) {
   const manifests = listPackageManifests(packagesDir);
   const previousVersion = readLockstepVersion(manifests);
-  const nextVersion = computeNextVersion(previousVersion, bump);
+  const baseVersion = from ? maxVersion(previousVersion, from) : previousVersion;
+  const nextVersion = computeNextVersion(baseVersion, bump, { preid });
   const updatedFiles = applyVersion(manifests, nextVersion, { dryRun });
   return {
     previousVersion,
+    baseVersion,
     nextVersion,
+    prerelease: isPrerelease(nextVersion),
     updatedFiles,
     packageNames: manifests.map((m) => m.manifest.name),
   };
 }
 
-function main() {
-  const args = process.argv.slice(2);
-  const dryRun = args.includes("--dry-run");
-  const bump = args.find((a) => !a.startsWith("--"));
+/** Split argv into the bump kind and its flags. */
+export function parseArgs(argv) {
+  const positional = [];
+  let dryRun = false;
+  let preid = null;
+  let from = null;
 
-  if (!bump) {
-    console.error("usage: bump-version.mjs <patch|minor|x.y.z> [--dry-run]");
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i];
+    if (arg === "--dry-run") {
+      dryRun = true;
+    } else if (arg === "--preid") {
+      preid = argv[++i] ?? null;
+    } else if (arg.startsWith("--preid=")) {
+      preid = arg.slice("--preid=".length);
+    } else if (arg === "--from") {
+      from = argv[++i] ?? null;
+    } else if (arg.startsWith("--from=")) {
+      from = arg.slice("--from=".length);
+    } else if (arg.startsWith("--")) {
+      throw new Error(`unknown flag "${arg}"`);
+    } else {
+      positional.push(arg);
+    }
+  }
+
+  if (positional.length > 1) {
+    throw new Error(`expected a single bump argument, got: ${positional.join(", ")}`);
+  }
+
+  // An absent --from is normal (no such dist-tag yet); an empty one is the
+  // caller passing through an empty registry lookup, which means the same.
+  return { bump: positional[0] ?? null, preid, from: from || null, dryRun };
+}
+
+function main() {
+  let parsed;
+  try {
+    parsed = parseArgs(process.argv.slice(2));
+  } catch (err) {
+    console.error(`release version bump failed: ${err.message}`);
+    process.exit(1);
+  }
+
+  if (!parsed.bump) {
+    console.error(
+      "usage: bump-version.mjs <patch|minor|prerelease|x.y.z> " +
+        "[--preid <id>] [--from <version>] [--dry-run]",
+    );
     process.exit(1);
   }
 
@@ -160,15 +331,19 @@ function main() {
   const packagesDir = join(here, "..", "..", "packages");
 
   try {
-    const result = bumpRelease({ packagesDir, bump, dryRun });
+    const result = bumpRelease({ packagesDir, ...parsed });
     console.log(
-      `${dryRun ? "[dry run] " : ""}bumped ${result.packageNames.length} package(s) ` +
+      `${parsed.dryRun ? "[dry run] " : ""}bumped ${result.packageNames.length} package(s) ` +
         `${result.previousVersion} -> ${result.nextVersion}`,
     );
+    if (result.baseVersion !== result.previousVersion) {
+      console.log(`  (continued from ${result.baseVersion}, already on the registry)`);
+    }
     for (const name of result.packageNames) {
       console.log(`  - ${name}`);
     }
     console.log(`RELEASE_VERSION=${result.nextVersion}`);
+    console.log(`RELEASE_PRERELEASE=${result.prerelease}`);
   } catch (err) {
     console.error(`release version bump failed: ${err.message}`);
     process.exit(1);

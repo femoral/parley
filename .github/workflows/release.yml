@@ -1,6 +1,6 @@
 name: Release
 
-# Manually dispatched, lockstep publish workflow. See docs/spec/release-process.md.
+# Manually dispatched, lockstep publish workflow.
 #
 # A maintainer picks the bump, the workflow versions every @useparley/*
 # package in lockstep, runs the gate (build/unit-test/typecheck/lint —
@@ -10,6 +10,18 @@ name: Release
 # @useparley/ui publishes alongside core/daemon/cli as of ticket #70 — it has
 # no `private: true` left to skip it, so `pnpm -r publish` includes it like
 # every other workspace package.
+#
+# Dist-tags: npm stamps `latest` on whatever it publishes unless told
+# otherwise, prerelease version or not. The invariant here is that `latest`
+# carries exactly the stable releases and every other tag carries prereleases,
+# so `dist_tag` and the computed version have to agree — the validation below
+# refuses the mismatch in both directions.
+#
+# A prerelease publish (dist_tag != latest) is deliberately not committed,
+# tagged, or released on GitHub: it is a throwaway build off the current tree,
+# and committing it would leave the repo on a version that `latest` consumers
+# never see. Its counter lives on the registry instead — the workflow reads
+# the version currently on the target dist-tag and continues from there.
 on:
   workflow_dispatch:
     inputs:
@@ -19,13 +31,19 @@ on:
         options:
           - patch
           - minor
+          - prerelease
           - explicit
         default: patch
         required: true
       version:
-        description: 'Explicit version (only used when bump = "explicit"), e.g. "0.5.0"'
+        description: 'Explicit version (only used when bump = "explicit"), e.g. "0.5.0" or "0.5.0-rc.1"'
         type: string
         required: false
+      dist_tag:
+        description: 'npm dist-tag. "latest" is the stable channel; anything else (dev, next, rc) is a prerelease channel and also names the prerelease id'
+        type: string
+        default: latest
+        required: true
       dry_run:
         description: "Dry run: version + gate + pnpm publish --dry-run, no npm publish, no push, no GitHub release"
         type: boolean
@@ -56,11 +74,37 @@ jobs:
       # instead of interpolating ${{ }} into run: bodies (shell injection).
       INPUT_BUMP: ${{ inputs.bump }}
       INPUT_VERSION: ${{ inputs.version }}
+      INPUT_DIST_TAG: ${{ inputs.dist_tag }}
     steps:
       - name: Validate inputs
         run: |
           if [ "$INPUT_BUMP" = "explicit" ] && [ -z "$INPUT_VERSION" ]; then
             echo "::error::bump=explicit requires the 'version' input (e.g. 0.5.0)" >&2
+            exit 1
+          fi
+          # Every other bump kind computes the version, so a filled-in 'version'
+          # would be silently ignored — and the run would go on to publish
+          # something the maintainer did not ask for. Say so instead.
+          if [ "$INPUT_BUMP" != "explicit" ] && [ -n "$INPUT_VERSION" ]; then
+            echo "::error::version='${INPUT_VERSION}' is only used when bump=explicit, but bump=${INPUT_BUMP} computes the version. Either set bump=explicit to publish ${INPUT_VERSION} exactly, or clear the version field and let bump=${INPUT_BUMP} pick." >&2
+            exit 1
+          fi
+          # npm rejects dist-tags that parse as semver, and this one doubles as
+          # a prerelease id, so hold it to a bare lowercase identifier.
+          if ! [[ "$INPUT_DIST_TAG" =~ ^[a-z][a-z0-9-]*$ ]]; then
+            echo "::error::dist_tag must be a lowercase identifier starting with a letter (got '${INPUT_DIST_TAG}')" >&2
+            exit 1
+          fi
+          if [ "$INPUT_BUMP" = "prerelease" ] && [ "$INPUT_DIST_TAG" = "latest" ]; then
+            echo "::error::bump=prerelease needs a prerelease channel; set dist_tag to something like 'dev' or 'next'" >&2
+            exit 1
+          fi
+          # patch/minor always compute a stable version, so pairing either with
+          # a prerelease channel can only fail the agree-check further down.
+          # Catching it here costs seconds instead of a whole install+bump.
+          if { [ "$INPUT_BUMP" = "patch" ] || [ "$INPUT_BUMP" = "minor" ]; } \
+            && [ "$INPUT_DIST_TAG" != "latest" ]; then
+            echo "::error::bump=${INPUT_BUMP} computes a stable version, which belongs on 'latest'. To publish to '${INPUT_DIST_TAG}', use bump=prerelease (counter picked automatically) or bump=explicit with a prerelease version like 0.0.5-${INPUT_DIST_TAG}.1." >&2
             exit 1
           fi
 
@@ -84,21 +128,59 @@ jobs:
         if: ${{ !inputs.dry_run }}
         run: npm install -g npm@latest
 
+      # Prerelease counters are never committed, so the only record of the last
+      # dev build is the dist-tag itself. Every package is in lockstep, so one
+      # of them speaks for all. A missing tag (first build on this channel) is
+      # normal and leaves the seed empty.
+      - name: Read the version currently on the target dist-tag
+        id: seed
+        if: ${{ inputs.bump == 'prerelease' }}
+        run: |
+          published="$(npm view "@useparley/cli@${INPUT_DIST_TAG}" version 2>/dev/null | tail -n 1 || true)"
+          if [ -n "$published" ]; then
+            echo "Continuing the ${INPUT_DIST_TAG} channel from ${published}"
+          else
+            echo "No ${INPUT_DIST_TAG} dist-tag yet; starting a new channel"
+          fi
+          echo "FROM=$published" >>"$GITHUB_OUTPUT"
+
       - name: Bump package versions (lockstep)
         id: version
+        env:
+          SEED_FROM: ${{ steps.seed.outputs.FROM }}
         run: |
           if [ "$INPUT_BUMP" = "explicit" ]; then
             bump_arg="$INPUT_VERSION"
           else
             bump_arg="$INPUT_BUMP"
           fi
-          node scripts/release/bump-version.mjs "$bump_arg" | tee /tmp/bump-version.log
+          # The dist-tag doubles as the prerelease id, so `dev` publishes
+          # 0.5.0-dev.N under the `dev` tag.
+          node scripts/release/bump-version.mjs "$bump_arg" \
+            --preid "$INPUT_DIST_TAG" \
+            --from "$SEED_FROM" | tee /tmp/bump-version.log
           version="$(grep '^RELEASE_VERSION=' /tmp/bump-version.log | cut -d= -f2)"
+          prerelease="$(grep '^RELEASE_PRERELEASE=' /tmp/bump-version.log | cut -d= -f2)"
           if [ -z "$version" ]; then
             echo "::error::bump script did not produce a RELEASE_VERSION" >&2
             exit 1
           fi
           echo "RELEASE_VERSION=$version" >>"$GITHUB_OUTPUT"
+          echo "RELEASE_PRERELEASE=$prerelease" >>"$GITHUB_OUTPUT"
+
+      - name: Check the version and the dist-tag agree
+        env:
+          RELEASE_VERSION: ${{ steps.version.outputs.RELEASE_VERSION }}
+          RELEASE_PRERELEASE: ${{ steps.version.outputs.RELEASE_PRERELEASE }}
+        run: |
+          if [ "$RELEASE_PRERELEASE" = "true" ] && [ "$INPUT_DIST_TAG" = "latest" ]; then
+            echo "::error::${RELEASE_VERSION} is a prerelease and would become the 'latest' install for everyone; set dist_tag to a prerelease channel" >&2
+            exit 1
+          fi
+          if [ "$RELEASE_PRERELEASE" = "false" ] && [ "$INPUT_DIST_TAG" != "latest" ]; then
+            echo "::error::${RELEASE_VERSION} is a stable release but would publish under '${INPUT_DIST_TAG}', leaving 'latest' behind; use dist_tag=latest" >&2
+            exit 1
+          fi
 
       - name: Build
         run: pnpm build
@@ -117,28 +199,30 @@ jobs:
 
       - name: Publish (dry run)
         if: ${{ inputs.dry_run }}
-        run: pnpm -r publish --access public --provenance --no-git-checks --dry-run
+        run: pnpm -r publish --access public --provenance --no-git-checks --tag "$INPUT_DIST_TAG" --dry-run
 
       - name: Publish
         if: ${{ !inputs.dry_run }}
         # No NPM_TOKEN anywhere: publishing authenticates via OIDC trusted
         # publishing (id-token: write above) and attaches provenance.
-        run: pnpm -r publish --access public --provenance --no-git-checks
+        run: pnpm -r publish --access public --provenance --no-git-checks --tag "$INPUT_DIST_TAG"
 
       - name: Commit version bump and tag
-        if: ${{ !inputs.dry_run }}
+        if: ${{ !inputs.dry_run && inputs.dist_tag == 'latest' }}
         env:
           RELEASE_VERSION: ${{ steps.version.outputs.RELEASE_VERSION }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add 'packages/*/package.json'
+          # Both globs are needed: packages/* for the top-level packages and
+          # packages/*/* for the ones grouped under packages/plugins.
+          git add -- 'packages/*/package.json' 'packages/*/*/package.json'
           git commit -m "chore(release): v${RELEASE_VERSION}"
           git tag "v${RELEASE_VERSION}"
           git push origin "HEAD:${GITHUB_REF_NAME}" "v${RELEASE_VERSION}"
 
       - name: Create GitHub release
-        if: ${{ !inputs.dry_run }}
+        if: ${{ !inputs.dry_run && inputs.dist_tag == 'latest' }}
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_VERSION: ${{ steps.version.outputs.RELEASE_VERSION }}
@@ -147,9 +231,23 @@ jobs:
             --title "v${RELEASE_VERSION}" \
             --generate-notes
 
-      - name: Dry run summary
-        if: ${{ inputs.dry_run }}
+      - name: Summary
         env:
           RELEASE_VERSION: ${{ steps.version.outputs.RELEASE_VERSION }}
+          DRY_RUN: ${{ inputs.dry_run }}
         run: |
-          echo "Dry run complete: would have published v${RELEASE_VERSION}, committed the bump, tagged, and created the GitHub release." >>"$GITHUB_STEP_SUMMARY"
+          {
+            if [ "$DRY_RUN" = "true" ]; then
+              echo "Dry run complete: would have published **${RELEASE_VERSION}** under the \`${INPUT_DIST_TAG}\` tag."
+            else
+              echo "Published **${RELEASE_VERSION}** under the \`${INPUT_DIST_TAG}\` tag."
+            fi
+            echo
+            if [ "$INPUT_DIST_TAG" = "latest" ]; then
+              echo "The version bump was committed and tagged \`v${RELEASE_VERSION}\`, with a GitHub release."
+              echo "Installs of \`@useparley/cli\` now resolve to this version."
+            else
+              echo "Prerelease channel: no commit, no git tag, no GitHub release — the bump exists only in this run."
+              echo "\`latest\` is untouched. Install it with \`pnpm add @useparley/cli@${INPUT_DIST_TAG}\`."
+            fi
+          } >>"$GITHUB_STEP_SUMMARY"
