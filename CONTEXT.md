@@ -110,6 +110,12 @@ human/agent driving parley is the **orchestrator**.
   vendor/model/profile/sandbox and append a prompt fragment. Distinct from a
   **data** fan-out, whose width and keys come only from the data and which must
   declare itself with `over`.
+- **Run inputs** — the values filling the workflow's declared **input** ports,
+  bound once at run start and **frozen** for the run's life (written to
+  `.parley/inputs.json` in the workspace; a fork inherits the parent's set).
+  Read by `run.<name>` refs. Bound from a JSON file and/or repeated flags, the
+  flags carrying scalar atoms only; validated against the compiled port schema
+  *before* the run exists, so a binding error leaves nothing behind.
 - **Run outputs** — the run's declared product, a top-level block naming
   earlier node ports. What `parley run eval` judges and what gc retains; a
   run's product is not always on its last node.
@@ -120,6 +126,11 @@ human/agent driving parley is the **orchestrator**.
 - **Workspace mode** — `repo` (run checkout + branch + checkpoints) or
   `scratch` (a parley-owned plain directory, no git). Declared on the
   definition, not overridable at run start.
+- **Base ref** — what a `repo` run branches from, given as `--base-ref` and
+  defaulting to `HEAD`. Recorded twice: the **ref as asked for** and the
+  **commit it resolved to** at start. The resolved commit is what a fork
+  rebuilds from, so a run reproduces even after the branch has moved. A
+  `scratch` run refuses a base ref outright.
 - **Checkpoint commit** — `parley: <node>.<iteration>`, authored by parley on a
   step settling (complete *or* failed) in `repo` mode. Parley authors commits;
   it still never merges.
@@ -144,3 +155,5 @@ human/agent driving parley is the **orchestrator**.
   only *data flow* between ports is a graph)
 - "none" or "cwd" for a workspace mode (a `scratch` run has a workspace, and
   `cwd` already means something else for a single task)
+- "`--base`" for the base ref (the flag is `--base-ref` everywhere, matching
+  `delegate`; the short form appears only in prose that predates the surface)
