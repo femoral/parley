@@ -159,11 +159,17 @@ import {
 import { taskLogDir } from "./discovery.js";
 import {
   actionRunVerb,
+  cancelRunRow,
   drainRuns,
+  forkRun,
+  listCancellableRunTasks,
+  type ForkApplyResult,
+  type ForkRunRequest,
   type GateVerbRequest,
   type RunDrainHost,
 } from "./run-engine.js";
 import { inferBlockReason } from "./run-gates.js";
+import { readRunInputs } from "./run-workspace.js";
 import { resolveRubricForTask } from "./rubrics.js";
 import {
   deliverablesFromReport,
@@ -1405,6 +1411,15 @@ export class TaskEngine {
     if (!isTerminalState(parent.state)) {
       throw new DelegateError(
         `task ${parent.id} is ${parent.state}; fix requires a terminal attempt (completed|failed|cancelled)`,
+      );
+    }
+    // ADR-0017 / #242: lineage stays at the run level. A task-level fix chain
+    // inside a run would half-apply fan-out siblings across runs — refuse.
+    // Repair a failed/dead run with `parley run fork`, not `parley fix`.
+    if (parent.run_id !== null && parent.run_id !== "") {
+      throw new DelegateError(
+        `task ${parent.id} belongs to run ${parent.run_id}; parley fix inside a ` +
+          `run is refused. Fork the run with parley run fork instead.`,
       );
     }
     if (typeof request.prompt !== "string" || request.prompt.trim() === "") {
@@ -3751,6 +3766,10 @@ export class TaskEngine {
         });
         return resolved?.definition ?? null;
       },
+      runInputs: (run) => {
+        const root = this.resolveRunWorkspaceRoot(run);
+        return readRunInputs(root);
+      },
       taskOutcome: (taskId) => {
         const task = getTask(this.db, taskId);
         if (!task || task.report === null) return null;
@@ -3796,6 +3815,56 @@ export class TaskEngine {
     // inbox event without an ack — ADR-0019).
     this.syncRunTransitions();
     return { run: result.run, decision: result.decision };
+  }
+
+  /**
+   * `parley run fork` (ADR-0017 / #242): new run from a **terminal** parent.
+   * Never overlaps with redirect (live-only). Inputs frozen; steer is `note`.
+   */
+  forkRun(request: ForkRunRequest): ForkApplyResult {
+    const host = {
+      ...this.buildRunDrainHost(),
+      worktreesDir: this.paths.worktrees,
+      runsDir: this.paths.runs,
+      resolveWorkspaceRoot: (run: RunRow) => this.resolveRunWorkspaceRoot(run),
+    };
+    const result = forkRun(this.db, host, request);
+    if (result.kind === "error") {
+      throw new DelegateError(result.message);
+    }
+    this.syncRunTransitions();
+    // Entry may have spawned tasks — drain so any immediate settle advances.
+    this.drainRuns();
+    return {
+      ...result.result,
+      run: getRun(this.db, result.result.run.id) ?? result.result.run,
+    };
+  }
+
+  /**
+   * `parley run cancel` (ADR-0017 / #242): abandon a live run so it can be
+   * forked. Cancels every non-terminal child task (kills vendor children),
+   * then marks the run `cancelled`. Terminal runs are refused.
+   */
+  cancelRun(runId: string): RunRow {
+    const existing = getRun(this.db, runId);
+    if (existing === undefined) {
+      throw new DelegateError(`no such run: ${runId}`);
+    }
+    // Cancel tasks first so vendor children die before the run goes terminal.
+    for (const task of listCancellableRunTasks(this.db, runId)) {
+      try {
+        this.cancel(task.id);
+      } catch {
+        // Already terminal / race — keep cancelling siblings.
+      }
+    }
+    const result = cancelRunRow(this.db, runId);
+    if (result.kind === "error") {
+      throw new DelegateError(result.message);
+    }
+    this.syncRunTransitions();
+    return result.run;
   }
 
   /**

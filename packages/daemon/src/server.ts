@@ -1312,12 +1312,14 @@ function handleCancel(engine: TaskEngine, res: http.ServerResponse, ref: string)
   }
 }
 
-const RUN_VERBS = new Set(["approve", "reject", "redirect", "finish"]);
+const RUN_GATE_VERBS = new Set(["approve", "reject", "redirect", "finish"]);
+const RUN_REENTRY_VERBS = new Set(["fork", "cancel"]);
 
 /**
- * `POST /runs/:id/{approve|reject|redirect|finish}` — action a blocked run
- * (ADR-0017 / #238). Body: `{ to?: string, note?: string }` (`to` required
- * for redirect).
+ * `POST /runs/:id/{approve|reject|redirect|finish|fork|cancel}` — gate verbs
+ * on a blocked run (#238), or re-entry verbs (#242): fork a terminal run /
+ * cancel a live one. Body: `{ to?: string, note?: string }` (`to` required
+ * for redirect; optional for fork with definition `reentry` default).
  */
 function handleRunVerb(
   engine: TaskEngine,
@@ -1326,7 +1328,11 @@ function handleRunVerb(
   verb: string,
   body: unknown,
 ): void {
-  if (!RUN_VERBS.has(verb)) {
+  if (RUN_REENTRY_VERBS.has(verb)) {
+    handleRunReentryVerb(engine, res, runId, verb, body);
+    return;
+  }
+  if (!RUN_GATE_VERBS.has(verb)) {
     sendJson(res, 404, { error: `unknown run verb: ${verb}` });
     return;
   }
@@ -1350,6 +1356,72 @@ function handleRunVerb(
   } catch (err) {
     if (err instanceof DelegateError) {
       // Unknown run → 404; illegal verb / state → 400.
+      const status = err.message.startsWith("no such run:") ? 404 : 400;
+      sendJson(res, status, { error: err.message });
+      return;
+    }
+    throw err;
+  }
+}
+
+/**
+ * `POST /runs/:id/fork` and `POST /runs/:id/cancel` (ADR-0017 / #242).
+ * Fork never accepts input overrides — only `to` / `note`.
+ */
+function handleRunReentryVerb(
+  engine: TaskEngine,
+  res: http.ServerResponse,
+  runId: string,
+  verb: string,
+  body: unknown,
+): void {
+  try {
+    if (verb === "cancel") {
+      const run = engine.cancelRun(runId);
+      sendJson(res, 200, {
+        run_id: run.id,
+        state: run.state,
+        current_node: run.current_node,
+        iteration: run.iteration,
+        decision: { kind: "cancelled" },
+        error: run.error,
+      });
+      return;
+    }
+    // fork
+    const record = isRecord(body) ? body : {};
+    const to = typeof record.to === "string" ? record.to : null;
+    const note = typeof record.note === "string" ? record.note : null;
+    // Inputs are frozen — reject any attempt to pass them on the wire.
+    if (record.inputs !== undefined || record.input !== undefined) {
+      sendJson(res, 400, {
+        error:
+          "fork does not accept input overrides; inputs are frozen from the parent run",
+      });
+      return;
+    }
+    const { run, plan } = engine.forkRun({
+      parentRunId: runId,
+      to,
+      note,
+    });
+    sendJson(res, 200, {
+      run_id: run.id,
+      parent_run_id: run.parent_run_id,
+      attempt: run.attempt,
+      state: run.state,
+      current_node: run.current_node,
+      iteration: run.iteration,
+      decision: {
+        kind: "fork",
+        entry: plan.entryNode,
+        attempt: plan.attempt,
+        note: plan.note,
+      },
+      error: run.error,
+    });
+  } catch (err) {
+    if (err instanceof DelegateError) {
       const status = err.message.startsWith("no such run:") ? 404 : 400;
       sendJson(res, status, { error: err.message });
       return;
@@ -1794,7 +1866,7 @@ function createHandler(
         return;
       }
 
-      // `POST /runs/:id/{approve|reject|redirect|finish}` (#238)
+      // `POST /runs/:id/{approve|reject|redirect|finish|fork|cancel}` (#238 / #242)
       if (segments[0] === "runs" && method === "POST" && segments.length === 3) {
         const runId = decodeURIComponent(segments[1] ?? "");
         const verb = decodeURIComponent(segments[2] ?? "");

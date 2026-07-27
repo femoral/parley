@@ -210,6 +210,121 @@ export function createRunCheckout(opts: CreateRunCheckoutOptions): RunCheckoutIn
   }
 }
 
+/**
+ * Resolve a fork's repo-mode base ref: the parent's run-branch tip.
+ * Branches are never deleted by retention (ADR-0018), so the ref should
+ * outlive the parent's worktree.
+ */
+export function parentRunBranchTip(
+  repoRoot: string,
+  parentRunId: string,
+  workflow: string,
+): string {
+  const branch = runBranchName(parentRunId, workflow);
+  // Verify the ref exists; throw a plain message the fork path can rewrap.
+  git(["-C", repoRoot, "rev-parse", "--verify", branch]);
+  return branch;
+}
+
+// ---------------------------------------------------------------------------
+// Frozen run inputs (fork inherits by copy — ADR-0017 / #242)
+// ---------------------------------------------------------------------------
+
+/**
+ * Path of the frozen run-inputs file under a run workspace root.
+ * Written at run start (when it lands) and copied on fork; never edited by
+ * `parley run fork` itself.
+ */
+export function runInputsFilePath(workspaceRoot: string): string {
+  return path.join(workspaceRoot, PARLEY_DIR, "inputs.json");
+}
+
+/** Read frozen run-level inputs (`run.<name>`), or `{}` when missing/corrupt. */
+export function readRunInputs(
+  workspaceRoot: string | null | undefined,
+): Record<string, unknown> {
+  if (workspaceRoot == null || workspaceRoot === "") return {};
+  const file = runInputsFilePath(workspaceRoot);
+  if (!fs.existsSync(file)) return {};
+  try {
+    const raw = fs.readFileSync(file, "utf8");
+    const parsed: unknown = JSON.parse(raw);
+    if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return {};
+    }
+    return parsed as Record<string, unknown>;
+  } catch {
+    return {};
+  }
+}
+
+/** Write frozen run-level inputs (atomic-enough for local FS). */
+export function writeRunInputs(
+  workspaceRoot: string,
+  inputs: Readonly<Record<string, unknown>>,
+): void {
+  const file = runInputsFilePath(workspaceRoot);
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, `${JSON.stringify(inputs, null, 2)}\n`);
+}
+
+/**
+ * Copy a `file` or `dir` deliverable into a fork's scratch workspace.
+ * Returns the new workspace-relative (or absolute under the child) path.
+ * Same copy posture as {@link materializeInputs} for `in/` handoff.
+ */
+export function copyInheritedPathDeliverable(opts: {
+  kind: "file" | "dir";
+  /** Path recorded on the parent deliverable row. */
+  sourcePath: string;
+  /** Parent run workspace root (for resolving relative paths). */
+  parentWorkspaceRoot: string | null;
+  /** Child run workspace root. */
+  childWorkspaceRoot: string;
+  /** Address-ish relative destination under `.parley/inherited/`. */
+  destRel: string;
+}): string {
+  const source = resolveExistingReferent(opts.sourcePath, opts.parentWorkspaceRoot);
+  if (source === null) {
+    throw new Error(
+      `inherited ${opts.kind} referent missing on parent: ${opts.sourcePath}`,
+    );
+  }
+  const destAbs = path.join(opts.childWorkspaceRoot, opts.destRel);
+  fs.mkdirSync(path.dirname(destAbs), { recursive: true });
+  if (opts.kind === "file") {
+    if (!fs.statSync(source).isFile()) {
+      throw new Error(`inherited file referent is not a file: ${source}`);
+    }
+    fs.copyFileSync(source, destAbs);
+  } else {
+    if (!fs.statSync(source).isDirectory()) {
+      throw new Error(`inherited dir referent is not a directory: ${source}`);
+    }
+    fs.cpSync(source, destAbs, { recursive: true });
+  }
+  // Store a workspace-relative path when possible (materializeInputs accepts both).
+  return opts.destRel;
+}
+
+function resolveExistingReferent(
+  rawPath: string,
+  root: string | null,
+): string | null {
+  if (rawPath === "" || rawPath.includes("\0")) return null;
+  const resolved = path.isAbsolute(rawPath)
+    ? path.resolve(rawPath)
+    : root
+      ? path.resolve(root, rawPath)
+      : path.resolve(rawPath);
+  try {
+    if (!fs.existsSync(resolved)) return null;
+  } catch {
+    return null;
+  }
+  return resolved;
+}
+
 // ---------------------------------------------------------------------------
 // Isolation — read off the sandbox
 // ---------------------------------------------------------------------------

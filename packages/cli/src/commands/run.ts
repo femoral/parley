@@ -1,7 +1,11 @@
 /**
- * `parley run <verb> …` — gate verbs (#238) + query surface (ADR-0021 / #241).
+ * `parley run <verb> …` — gate verbs (#238) + re-entry (#242) + query surface
+ * (ADR-0021 / #241).
  *
- * Gate verbs (unchanged): approve | reject | redirect | finish
+ * Gate verbs (blocked run): approve | reject | redirect | finish
+ * Re-entry verbs:
+ *   cancel <run>               abandon a live run (makes fork legal)
+ *   fork <run> [--to] [--note] new run from a terminal parent
  * Query verbs:
  *   status                     every run
  *   status <run>               one run's node table
@@ -39,6 +43,10 @@ export { EXIT_DELIVERABLE_PURGED };
 const GATE_VERBS = ["approve", "reject", "redirect", "finish"] as const;
 type GateVerb = (typeof GATE_VERBS)[number];
 
+/** Live redirect stays a gate verb; fork/cancel are re-entry (ADR-0017). */
+const REENTRY_VERBS = ["fork", "cancel"] as const;
+type ReentryVerb = (typeof REENTRY_VERBS)[number];
+
 const QUERY_VERBS = ["status", "get"] as const;
 type QueryVerb = (typeof QUERY_VERBS)[number];
 
@@ -46,9 +54,16 @@ function isGateVerb(value: string): value is GateVerb {
   return (GATE_VERBS as readonly string[]).includes(value);
 }
 
+function isReentryVerb(value: string): value is ReentryVerb {
+  return (REENTRY_VERBS as readonly string[]).includes(value);
+}
+
 function isQueryVerb(value: string): value is QueryVerb {
   return (QUERY_VERBS as readonly string[]).includes(value);
 }
+
+const VERB_HELP =
+  "status | get | approve | reject | redirect | finish | fork | cancel";
 
 interface RunVerbAck {
   run_id: string;
@@ -57,10 +72,12 @@ interface RunVerbAck {
   iteration: number;
   decision: unknown;
   error: string | null;
+  parent_run_id?: string | null;
+  attempt?: number;
 }
 
 /**
- * `parley run approve|reject|redirect|finish|status|get …`
+ * `parley run approve|reject|redirect|finish|fork|cancel|status|get …`
  */
 export async function runRun(ctx: CliContext, args: string[]): Promise<number> {
   const { positionals, flags } = parseArgs(args, {
@@ -81,9 +98,7 @@ export async function runRun(ctx: CliContext, args: string[]): Promise<number> {
 
   const verbRaw = positionals[0];
   if (verbRaw === undefined) {
-    throw new UsageError(
-      "run: a verb is required (status | get | approve | reject | redirect | finish)",
-    );
+    throw new UsageError(`run: a verb is required (${VERB_HELP})`);
   }
 
   if (isQueryVerb(verbRaw)) {
@@ -93,12 +108,10 @@ export async function runRun(ctx: CliContext, args: string[]): Promise<number> {
     return runGet(ctx, positionals.slice(1), flags);
   }
 
-  if (!isGateVerb(verbRaw)) {
-    throw new UsageError(
-      `run: unknown verb "${verbRaw}" (expected status | get | approve | reject | redirect | finish)`,
-    );
+  if (!isGateVerb(verbRaw) && !isReentryVerb(verbRaw)) {
+    throw new UsageError(`run: unknown verb "${verbRaw}" (expected ${VERB_HELP})`);
   }
-  const verb: GateVerb = verbRaw;
+  const verb = verbRaw as GateVerb | ReentryVerb;
 
   const runId = positionals[1];
   if (runId === undefined) {
@@ -114,20 +127,31 @@ export async function runRun(ctx: CliContext, args: string[]): Promise<number> {
   if (verb === "redirect" && (to === null || to === "")) {
     throw new UsageError("run redirect: --to <node> is required");
   }
-  if (verb !== "redirect" && to !== null) {
-    throw new UsageError(`run ${verb}: --to is only valid with redirect`);
+  // fork accepts optional --to (defaults to definition reentry); cancel never.
+  if (verb !== "redirect" && verb !== "fork" && to !== null) {
+    throw new UsageError(`run ${verb}: --to is only valid with redirect or fork`);
+  }
+  if (verb === "cancel" && note !== null) {
+    throw new UsageError("run cancel: --note is not valid");
+  }
+  if (verb !== "redirect" && verb !== "fork" && note !== null) {
+    throw new UsageError(`run ${verb}: --note is only valid with redirect or fork`);
   }
 
   const discovery = await ensureDaemon(ctx.paths, ctx.env);
   let ack: RunVerbAck;
   try {
+    const body =
+      verb === "cancel"
+        ? {}
+        : {
+            to,
+            note,
+          };
     ack = await daemonPost<RunVerbAck>(
       discovery,
       `/runs/${encodeURIComponent(runId)}/${verb}`,
-      {
-        to,
-        note,
-      },
+      body,
     );
   } catch (err) {
     if (err instanceof DaemonRequestError && (err.status === 400 || err.status === 404)) {
@@ -138,6 +162,13 @@ export async function runRun(ctx: CliContext, args: string[]): Promise<number> {
 
   if (flags["--json"] === true) {
     printJson(ctx, ack);
+  } else if (verb === "fork") {
+    const node = ack.current_node ?? "—";
+    const parent = ack.parent_run_id ?? runId;
+    const attempt = ack.attempt ?? "?";
+    ctx.stdout(
+      `Run ${ack.run_id} forked from ${parent} (attempt ${attempt}) → ${ack.state}  node=${node}  iteration=${ack.iteration}\n`,
+    );
   } else {
     const node = ack.current_node ?? "—";
     ctx.stdout(

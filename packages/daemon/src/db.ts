@@ -443,7 +443,12 @@ export interface NewDeliverable {
   port: string;
   iteration: number;
   slot?: string | null;
-  task_id: string;
+  /**
+   * Producing task id. Null for fork-inherited copies at iteration 0 (no
+   * task ran on this run for that node — ADR-0017 / #242) and after the
+   * producing task is gc'd (`ON DELETE SET NULL`, #244).
+   */
+  task_id: string | null;
   kind: DeliverableKind;
   /** Inline JSON text or path; null only if inserting already-purged (rare). */
   value: string | null;

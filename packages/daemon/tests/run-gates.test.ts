@@ -231,6 +231,54 @@ describe("actionGateVerb", () => {
     });
   });
 
+  it("redirect is exempt from the loop budget (iteration+1 always, no max check)", () => {
+    // Sitting on a gate at iteration == loop.max — redirect still opens
+    // iteration+1 rather than being refused as a loop-budget path.
+    const d = def();
+    const r = actionGateVerb(
+      {
+        state: "blocked",
+        current_node: "rework-or-finish",
+        iteration: 2,
+        error: "blocked (gate rework-or-finish)",
+      },
+      d,
+      { verb: "redirect", to: "implement", note: "one more pass" },
+      emptyCtx(),
+    );
+    expect(r).toMatchObject({
+      kind: "enter",
+      node: "implement",
+      iteration: 3,
+      note: "one more pass",
+      via: "redirect",
+      loopFills: {},
+    });
+  });
+
+  it("redirect rewinds nothing — does not clear prior deliverables (pure decision only)", () => {
+    // The pure verb only names the entry; apply never deletes rows. Guard
+    // that the decision carries no rewind/clear payload.
+    const d = def();
+    const r = actionGateVerb(
+      {
+        state: "blocked",
+        current_node: "approve-plan",
+        iteration: 1,
+        error: "blocked (gate approve-plan)",
+      },
+      d,
+      { verb: "redirect", to: "plan" },
+      emptyCtx(),
+    );
+    expect(r.kind).toBe("enter");
+    if (r.kind === "enter") {
+      expect(r.loopFills).toEqual({});
+      expect(Object.keys(r)).not.toContain("clear");
+      expect(Object.keys(r)).not.toContain("rewind");
+    }
+  });
+
   it("approve on a gated loop takes the loop under budget", () => {
     const d = def();
     const r = actionGateVerb(

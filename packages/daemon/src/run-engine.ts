@@ -9,6 +9,7 @@
  * advance — work that goes wrong lands on `blocked`.
  */
 
+import path from "node:path";
 import {
   isSettledState,
   parseFromRef,
@@ -21,9 +22,16 @@ import {
 } from "@useparley/core";
 import {
   getRun,
+  insertDeliverable,
+  insertRun,
+  isRunTerminalState,
+  listChildRuns,
   listDeliverablesForRun,
   listRuns,
+  listTasksForRun,
   listTasksForRunNode,
+  nextDeliverableId,
+  nextRunId,
   setRunBlockReason,
   updateRun,
   type DatabaseHandle,
@@ -46,6 +54,14 @@ import {
   type RetryPlan,
   type SuccessPolicyResult,
 } from "./run-success.js";
+import {
+  copyInheritedPathDeliverable,
+  createRunCheckout,
+  createRunScratchWorkspace,
+  parentRunBranchTip,
+  readRunInputs,
+  writeRunInputs,
+} from "./run-workspace.js";
 
 // ---------------------------------------------------------------------------
 // Advance decision (pure)
@@ -1162,6 +1178,480 @@ export function actionRunVerb(
   }
 
   return { decision, run: getRun(db, run.id) ?? updated, changed: true };
+}
+
+// ---------------------------------------------------------------------------
+// Fork (dead run) + cancel (live run) — ADR-0017 / #242
+// ---------------------------------------------------------------------------
+
+/**
+ * Synthetic deliverable port that anchors a **skipped** gate at iteration 0
+ * so the query surface can distinguish it from **inherited** steps (which
+ * carry real ports). Value is null — never participates in port fill.
+ * @see collectNodeIterations / projectRunNodes in run-query.ts
+ */
+export const SKIPPED_GATE_PORT = "_skipped";
+
+/** Request to fork a terminal run into a new attempt (ADR-0017 / #242). */
+export interface ForkRunRequest {
+  /** Parent run id (must be terminal). */
+  parentRunId: string;
+  /**
+   * Entry node (`--to`). Null/omit ⇒ definition `reentry`, else first node.
+   * Never edits inputs — the orchestrator's steer is {@link note} only.
+   */
+  to?: string | null;
+  /** Free-text `## Orchestrator note` for the entry task. Not a port. */
+  note?: string | null;
+  /**
+   * Session for the child run. Null/omit ⇒ inherit the parent's session id.
+   */
+  orchestratorSessionId?: string | null;
+}
+
+/** Pure plan for a fork — no I/O. Host applies workspace + spawn. */
+export interface ForkPlan {
+  parent: RunRow;
+  definition: WorkflowDefinition;
+  /** Node the child enters at. */
+  entryNode: string;
+  /** 1-based run-level attempt for the child. */
+  attempt: number;
+  /** Nodes strictly before `entryNode` in definition order. */
+  nodesBefore: readonly WorkflowNode[];
+  /**
+   * Parent deliverable rows to copy at iteration 0 (most recent completed
+   * contribution per address, nodes before entry only).
+   */
+  inherit: readonly DeliverableRow[];
+  /** Gate ids before entry that need a skipped marker (no ports to inherit). */
+  skippedGates: readonly string[];
+  note: string | null;
+}
+
+export type ForkPlanResult =
+  | { kind: "ok"; plan: ForkPlan }
+  | { kind: "error"; message: string };
+
+/**
+ * Host callbacks for applying a fork. Workspace creation + file/dir copy are
+ * the host's job so tests can inject fakes; pure planning stays in
+ * {@link planFork}.
+ */
+export interface ForkHost extends RunDrainHost {
+  /** Absolute `~/.parley/worktrees`. */
+  worktreesDir: string;
+  /** Absolute `~/.parley/runs`. */
+  runsDir: string;
+  /**
+   * Absolute workspace root for a run when still on disk, else null.
+   * Used to freeze inputs and (scratch) copy file/dir bytes.
+   */
+  resolveWorkspaceRoot(run: RunRow): string | null;
+}
+
+export interface ForkApplyResult {
+  run: RunRow;
+  plan: ForkPlan;
+  /** True when the entry step was spawned (or gate blocked). */
+  entered: boolean;
+}
+
+/**
+ * Pure fork plan (ADR-0017 / #242). Terminal-only — same spirit as
+ * `parley fix`'s terminal guard. Never overlaps with redirect (live-only).
+ */
+export function planFork(
+  db: DatabaseHandle,
+  definition: WorkflowDefinition,
+  request: ForkRunRequest,
+): ForkPlanResult {
+  const parent = getRun(db, request.parentRunId);
+  if (parent === undefined) {
+    return { kind: "error", message: `no such run: ${request.parentRunId}` };
+  }
+  if (!isRunTerminalState(parent.state)) {
+    return {
+      kind: "error",
+      message:
+        `run ${parent.id} is ${parent.state}; fork requires a terminal run ` +
+        `(completed|failed|cancelled). Cancel a live run first with ` +
+        `parley run cancel.`,
+    };
+  }
+  if (parent.workflow !== definition.id) {
+    // Soft: definition id is the load key; version may drift. Still require id match.
+  }
+  if (parent.purged_at !== null) {
+    return {
+      kind: "error",
+      message: `run ${parent.id} has been purged; cannot fork a decayed run`,
+    };
+  }
+
+  const toRaw = request.to?.trim() ?? "";
+  let entryNode: string;
+  if (toRaw !== "") {
+    entryNode = toRaw;
+  } else if (definition.reentry !== undefined && definition.reentry !== "") {
+    entryNode = definition.reentry;
+  } else if (definition.nodes[0] !== undefined) {
+    entryNode = definition.nodes[0].id;
+  } else {
+    return { kind: "error", message: "workflow has no nodes to enter" };
+  }
+
+  const entry = findNode(definition, entryNode);
+  if (entry === undefined) {
+    return { kind: "error", message: `unknown fork entry node "${entryNode}"` };
+  }
+
+  const entryIdx = definition.nodes.findIndex((n) => n.id === entryNode);
+  const nodesBefore = definition.nodes.slice(0, entryIdx);
+  const beforeIds = new Set(nodesBefore.map((n) => n.id));
+
+  const parentDeliverables = listDeliverablesForRun(db, parent.id);
+  const inherit = selectInheritedDeliverables(parentDeliverables, beforeIds);
+
+  // Repo mode: forking past a file/dir output is a hard error — those bytes
+  // died with the parent's worktree (ADR-0018 / #242).
+  if (parent.workspace === "repo") {
+    const pathKinds = inherit.filter((d) => d.kind === "file" || d.kind === "dir");
+    if (pathKinds.length > 0) {
+      const sample = pathKinds[0]!;
+      return {
+        kind: "error",
+        message:
+          `cannot fork past ${sample.kind} output ` +
+          `${sample.node}.${sample.port} in repo mode: those bytes died with ` +
+          `the parent's worktree. Use a scratch-mode workflow, or re-enter ` +
+          `before the ${sample.kind} output.`,
+      };
+    }
+  }
+
+  const skippedGates = nodesBefore
+    .filter((n) => n.kind === "gate")
+    .map((n) => n.id);
+
+  const children = listChildRuns(db, parent.id);
+  const attempt =
+    children.length > 0
+      ? Math.max(...children.map((c) => c.attempt)) + 1
+      : parent.attempt + 1;
+
+  const note =
+    request.note === null || request.note === undefined || request.note.trim() === ""
+      ? null
+      : request.note.trim();
+
+  return {
+    kind: "ok",
+    plan: {
+      parent,
+      definition,
+      entryNode,
+      attempt,
+      nodesBefore,
+      inherit,
+      skippedGates,
+      note,
+    },
+  };
+}
+
+/**
+ * Pick the most recent non-purged deliverable per (node, port, slot) among
+ * nodes before the fork entry. Those rows are copied at iteration 0.
+ */
+export function selectInheritedDeliverables(
+  rows: readonly DeliverableRow[],
+  nodeIds: ReadonlySet<string>,
+): DeliverableRow[] {
+  const best = new Map<string, DeliverableRow>();
+  for (const r of rows) {
+    if (!nodeIds.has(r.node)) continue;
+    if (r.purged_at !== null || r.value === null) continue;
+    // Never inherit synthetic skip markers from an earlier fork.
+    if (r.port === SKIPPED_GATE_PORT) continue;
+    const key = `${r.node}\0${r.port}\0${r.slot ?? ""}`;
+    const prev = best.get(key);
+    if (prev === undefined || r.iteration > prev.iteration) {
+      best.set(key, r);
+    }
+  }
+  return [...best.values()];
+}
+
+/**
+ * Apply a fork plan: new run row, copy deliverables at iteration 0, create
+ * workspace, enter the entry node. Never resumes a vendor session.
+ */
+export function applyFork(
+  db: DatabaseHandle,
+  host: ForkHost,
+  plan: ForkPlan,
+  request: ForkRunRequest,
+): ForkApplyResult {
+  const { parent, definition } = plan;
+  const childId = nextRunId(db);
+
+  // Workspace first so a failed create never leaves a half-inserted run.
+  const parentWorkspace = host.resolveWorkspaceRoot(parent);
+  const frozenInputs = readRunInputs(parentWorkspace);
+
+  let childWorkspace: string;
+  if (parent.workspace === "scratch") {
+    const info = createRunScratchWorkspace({
+      runsDir: host.runsDir,
+      runId: childId,
+    });
+    childWorkspace = info.path;
+  } else {
+    if (parent.repo === null || parent.repo === "") {
+      throw new Error(
+        `repo-mode run ${parent.id} has no bound repo; cannot fork checkout`,
+      );
+    }
+    let baseRef: string;
+    try {
+      baseRef = parentRunBranchTip(parent.repo, parent.id, parent.workflow);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      throw new Error(
+        `cannot fork run ${parent.id}: parent branch tip is missing (${msg})`,
+      );
+    }
+    const info = createRunCheckout({
+      repoRoot: parent.repo,
+      worktreesDir: host.worktreesDir,
+      runId: childId,
+      workflow: parent.workflow,
+      baseRef,
+    });
+    childWorkspace = info.path;
+  }
+
+  writeRunInputs(childWorkspace, frozenInputs);
+
+  const sessionId =
+    request.orchestratorSessionId !== undefined
+      ? request.orchestratorSessionId
+      : parent.orchestrator_session_id;
+
+  const child = insertRun(db, {
+    id: childId,
+    workflow: parent.workflow,
+    version: parent.version,
+    type: parent.type,
+    workspace: parent.workspace,
+    repo: parent.workspace === "scratch" ? null : parent.repo,
+    state: "running",
+    current_node: plan.entryNode,
+    iteration: 1,
+    parent_run_id: parent.id,
+    attempt: plan.attempt,
+    orchestrator_session_id: sessionId,
+  });
+
+  // Copy inherited deliverables at iteration 0 (by value, not by reference).
+  for (const src of plan.inherit) {
+    let value = src.value;
+    if (
+      parent.workspace === "scratch" &&
+      (src.kind === "file" || src.kind === "dir") &&
+      value !== null
+    ) {
+      const destRel = path.join(
+        ".parley",
+        "inherited",
+        src.node,
+        src.port,
+        src.slot ?? "_",
+        src.kind === "dir" ? "dir" : path.basename(value) || "file",
+      );
+      value = copyInheritedPathDeliverable({
+        kind: src.kind,
+        sourcePath: value,
+        parentWorkspaceRoot: parentWorkspace,
+        childWorkspaceRoot: childWorkspace,
+        destRel,
+      });
+    }
+    insertDeliverable(db, {
+      id: nextDeliverableId(db),
+      run_id: child.id,
+      node: src.node,
+      port: src.port,
+      iteration: 0,
+      slot: src.slot,
+      task_id: null,
+      kind: src.kind,
+      value,
+    });
+  }
+
+  // Skipped gates: anchor at iteration 0 so query surface can render `skipped`
+  // (distinct from inherited steps that carry real ports).
+  for (const gateId of plan.skippedGates) {
+    insertDeliverable(db, {
+      id: nextDeliverableId(db),
+      run_id: child.id,
+      node: gateId,
+      port: SKIPPED_GATE_PORT,
+      iteration: 0,
+      slot: null,
+      task_id: null,
+      kind: "inline",
+      value: null,
+    });
+  }
+
+  // Enter the entry node — same machinery as gate verbs / advance.
+  const entry = findNode(definition, plan.entryNode)!;
+  if (entry.kind === "gate") {
+    updateRun(db, child.id, {
+      state: "blocked",
+      current_node: entry.id,
+      iteration: 1,
+      error: `blocked (gate ${entry.id})`,
+    });
+    setRunBlockReason(db, child.id, "gate");
+    return {
+      run: getRun(db, child.id) ?? child,
+      plan,
+      entered: true,
+    };
+  }
+
+  // Step: fill inputs from inherited deliverables + frozen run inputs, spawn.
+  const ctx = buildAdvanceContext({
+    run: getRun(db, child.id) ?? child,
+    definition,
+    db,
+    runInputs: frozenInputs,
+  });
+  const missing = missingInputPorts(entry, ctx, 1, {});
+  if (missing.length > 0) {
+    updateRun(db, child.id, {
+      state: "blocked",
+      current_node: entry.id,
+      iteration: 1,
+      error: `blocked (unfilled inputs on ${entry.id}: ${missing.join(", ")})`,
+    });
+    setRunBlockReason(db, child.id, "unfilled_inputs");
+    return {
+      run: getRun(db, child.id) ?? child,
+      plan,
+      entered: true,
+    };
+  }
+
+  const inputs = fillStepInputs(entry, ctx, {});
+  if (host.onEnter !== undefined) {
+    const err = host.onEnter({
+      run: getRun(db, child.id) ?? child,
+      definition,
+      step: entry,
+      iteration: 1,
+      inputs,
+      loopFills: {},
+      note: plan.note,
+    });
+    if (err !== undefined && typeof err === "object" && "error" in err) {
+      updateRun(db, child.id, {
+        state: "blocked",
+        error: `blocked (spawn ${entry.id}): ${err.error}`,
+      });
+      setRunBlockReason(db, child.id, "spawn");
+    }
+  }
+
+  return {
+    run: getRun(db, child.id) ?? child,
+    plan,
+    entered: true,
+  };
+}
+
+/**
+ * Plan + apply a fork. Returns an error result without mutating when the plan
+ * is illegal. Throws only on unexpected workspace I/O after the plan succeeded.
+ */
+export function forkRun(
+  db: DatabaseHandle,
+  host: ForkHost,
+  request: ForkRunRequest,
+): { kind: "ok"; result: ForkApplyResult } | { kind: "error"; message: string } {
+  let definition: WorkflowDefinition | null;
+  try {
+    const parent = getRun(db, request.parentRunId);
+    if (parent === undefined) {
+      return { kind: "error", message: `no such run: ${request.parentRunId}` };
+    }
+    definition = host.loadDefinition(parent.workflow, parent.version);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { kind: "error", message: `definition unparseable: ${message}` };
+  }
+  if (definition === null) {
+    const parent = getRun(db, request.parentRunId);
+    return {
+      kind: "error",
+      message: `workflow "${parent?.workflow ?? request.parentRunId}" not found`,
+    };
+  }
+
+  const planned = planFork(db, definition, request);
+  if (planned.kind === "error") return planned;
+
+  try {
+    const result = applyFork(db, host, planned.plan, request);
+    return { kind: "ok", result };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { kind: "error", message };
+  }
+}
+
+/**
+ * Mark a live run `cancelled`. Does **not** cancel child tasks — the host
+ * (engine) must cancel live tasks first so vendor children are killed.
+ * Terminal runs are refused (same spirit as task cancel).
+ */
+export function cancelRunRow(
+  db: DatabaseHandle,
+  runId: string,
+): { kind: "ok"; run: RunRow } | { kind: "error"; message: string } {
+  const run = getRun(db, runId);
+  if (run === undefined) {
+    return { kind: "error", message: `no such run: ${runId}` };
+  }
+  if (isRunTerminalState(run.state)) {
+    return {
+      kind: "error",
+      message: `run ${run.id} is already ${run.state}`,
+    };
+  }
+  updateRun(db, runId, {
+    state: "cancelled",
+    completed_at: new Date().toISOString(),
+    error: "cancelled by parley run cancel",
+  });
+  setRunBlockReason(db, runId, null);
+  return { kind: "ok", run: getRun(db, runId) ?? run };
+}
+
+/** Non-terminal tasks owned by a run (for host cancel before {@link cancelRunRow}). */
+export function listCancellableRunTasks(
+  db: DatabaseHandle,
+  runId: string,
+): TaskRow[] {
+  return listTasksForRun(db, runId).filter((t) => {
+    // Mirror task cancel: refuse already-terminal. Settled-but-non-terminal
+    // (`stalled`) is still cancelled so the run can die cleanly.
+    return t.state !== "completed" && t.state !== "failed" && t.state !== "cancelled";
+  });
 }
 
 export type { GateVerb, GateVerbDecision, GateVerbRequest, RetryPlan, SuccessPolicyResult };

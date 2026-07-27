@@ -79,6 +79,9 @@ Usage:
   parley run redirect <run> --to <node> [--note <text>]
                             Move a live blocked run to <node> (new iteration)
   parley run finish <run>       Complete a blocked run at its current node
+  parley run cancel <run>       Abandon a live run (terminal; enables fork)
+  parley run fork <run> [--to <node>] [--note <text>]
+                            New run from a terminal parent (reentry default)
   parley watch [task…] [--ack <event-id>] [--session <id>|latest]
               [--follow] [--json]
                             The only wait primitive (ADR-0008). Deliver the
