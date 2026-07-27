@@ -51,8 +51,10 @@ function baseView(overrides: Partial<CockpitView> = {}): CockpitView {
     roster: {
       selectedSessionId: null,
       selectedTaskId: null,
+      selectedRunId: null,
       selectSession: () => {},
       selectTask: () => {},
+      selectRun: () => {},
       selectInboxTask: () => {},
       clearTask: () => {},
       searchSessions: async () => [],
@@ -64,6 +66,7 @@ function baseView(overrides: Partial<CockpitView> = {}): CockpitView {
     daemonUptimeDays: 1,
     freshFailureTaskIds: [],
     inspector: null,
+    inspectorRun: null,
     settings: {
       showKit: false,
       followLogs: true,

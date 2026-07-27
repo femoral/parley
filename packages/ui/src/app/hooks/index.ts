@@ -91,6 +91,18 @@ export type {
   FailedFreshness,
   SessionIdentity,
 } from "./roster.js";
+export {
+  projectRosterRun,
+  projectInspectorRun,
+  formatRunChip,
+  runAttentionState,
+  buildPipTrack,
+  buildListPipTrack,
+  formatNodeStateLabel,
+  isHeldGate,
+} from "./runs.js";
+export { useRuns, useInspectorRun } from "./useRuns.js";
+export type { RunsView } from "./useRuns.js";
 export { useTaskDetail } from "./useTaskDetail.js";
 export {
   formatUptime,

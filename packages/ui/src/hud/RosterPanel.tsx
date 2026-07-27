@@ -23,8 +23,11 @@ import {
 } from "./handRolledPopover.js";
 import type {
   RosterGroup,
+  RosterPip,
+  RosterRun,
   RosterSearchHit,
   RosterSessionOption,
+  RosterTask,
 } from "./types.js";
 import { useCopyScaffold } from "./useCopyScaffold.js";
 import { formatTaskCount } from "../app/hooks/roster.js";
@@ -62,9 +65,16 @@ export interface RosterPanelProps {
    * {@link onSelectTask}, a session calls {@link onSelectSession}.
    */
   searchSessions: (query: string) => Promise<RosterSearchHit[]>;
-  /** The selected task (feeds the inspector/scene, built in later tickets). */
+  /** The selected task (feeds the inspector/scene). Mutually exclusive with
+   * {@link selectedRunId}. */
   selectedTaskId: string | null;
   onSelectTask: (id: string) => void;
+  /**
+   * The selected run (feeds the inspector run view; centre-stage chart is
+   * #253). Mutually exclusive with {@link selectedTaskId}.
+   */
+  selectedRunId?: string | null;
+  onSelectRun?: (id: string) => void;
   totalTasks: number;
   activeTasks: number;
   /**
@@ -77,6 +87,30 @@ export interface RosterPanelProps {
    * Optional so existing call sites and tests stay prop-only.
    */
   searchRef?: Ref<RosterSearchHandle | null>;
+}
+
+/** Flat listbox entry — runs and tasks are peers (#254). */
+type RosterEntry =
+  | { kind: "run"; id: string; state: string }
+  | { kind: "task"; id: string; state: string };
+
+function entryKey(entry: RosterEntry): string {
+  return `${entry.kind}:${entry.id}`;
+}
+
+function flattenEntries(groups: RosterGroup[]): RosterEntry[] {
+  const out: RosterEntry[] = [];
+  for (const group of groups) {
+    // Runs first within a group (prototype board 2), then tasks — peers,
+    // never nested.
+    for (const run of group.runs ?? []) {
+      out.push({ kind: "run", id: run.id, state: group.state });
+    }
+    for (const task of group.tasks) {
+      out.push({ kind: "task", id: task.id, state: group.state });
+    }
+  }
+  return out;
 }
 
 /**
@@ -167,137 +201,292 @@ function showAttentionAge(
   return false;
 }
 
+function PipTrack({ pips }: { pips: RosterPip[] }) {
+  return (
+    <div className="pc-roster__pips" aria-hidden="true">
+      {pips.map((pip, i) => (
+        <span
+          key={i}
+          className={`pc-roster__pip pc-roster__pip--${pip.kind}`}
+        />
+      ))}
+    </div>
+  );
+}
+
+function TaskRow({
+  task,
+  groupState,
+  selected,
+  focused,
+  onSelect,
+  onFocus,
+  rowRef,
+  nowMs,
+}: {
+  task: RosterTask;
+  groupState: string;
+  selected: boolean;
+  focused: boolean;
+  onSelect: () => void;
+  onFocus: () => void;
+  rowRef: (el: HTMLDivElement | null) => void;
+  nowMs: number;
+}) {
+  const meta = stateMetaFor(groupState);
+  const freshFailure = Boolean(task.freshFailure);
+  const quiet = freshFailure ? undefined : meta.quiet;
+  const quietClass =
+    quiet === "soft"
+      ? " pc-roster__row--quiet-soft"
+      : quiet === "archive"
+        ? " pc-roster__row--quiet-archive"
+        : "";
+  const showBeacon = Boolean(meta.beacon) || freshFailure;
+  const beaconStyle = freshFailure
+    ? ({
+        "--beacon-color": "var(--state-failed)",
+        "--beacon-glow-color": "var(--beacon-glow-failed)",
+      } as CSSProperties)
+    : undefined;
+  const age =
+    showAttentionAge(groupState, task.freshFailure) && task.updatedAt
+      ? formatRelativeAge(task.updatedAt, nowMs)
+      : null;
+  const accessibleName = age
+    ? `${task.name} — ${meta.label}, ${age}`
+    : `${task.name} — ${meta.label}`;
+  const { branch, idRef } = metaBranchAndId(task.meta, task.id);
+  const splitId = task.meta.includes(" · ");
+  const runChip = task.runChip ?? null;
+
+  return (
+    <div
+      role="option"
+      className={`pc-roster__row${selected ? " pc-roster__row--selected" : ""}${quietClass}`}
+      id={`roster-option-task-${task.id}`}
+      aria-label={accessibleName}
+      aria-selected={selected}
+      tabIndex={focused ? 0 : -1}
+      ref={rowRef}
+      onClick={onSelect}
+      onFocus={onFocus}
+    >
+      <Emblem coat={task.coat} mark={task.emblem} size={23} label={task.faction} />
+      <span className="pc-roster__row-body">
+        <span className="pc-roster__name">{task.name}</span>
+        <span className="pc-roster__meta" title={task.id}>
+          {runChip ? (
+            <span className="pc-roster__runchip" aria-hidden="true">
+              {runChip}
+            </span>
+          ) : splitId ? (
+            <span className="pc-roster__meta-parts" aria-hidden="true">
+              <span className="pc-roster__meta-branch">{branch}</span>
+              <span className="pc-roster__meta-sep"> · </span>
+              <span className="pc-roster__meta-id">{idRef}</span>
+            </span>
+          ) : (
+            <span aria-hidden="true">{task.meta}</span>
+          )}
+          <span className="pc-visually-hidden">task id {task.id}</span>
+        </span>
+      </span>
+      {age && (
+        <span className="pc-roster__age" title={task.updatedAt ?? undefined} aria-hidden="true">
+          {age}
+        </span>
+      )}
+      {showBeacon && (
+        <span
+          className="pc-roster__beacon pc-dot--beacon"
+          style={beaconStyle}
+          aria-hidden="true"
+        >
+          <Mark mark={meta.mark} size={12} />
+        </span>
+      )}
+    </div>
+  );
+}
+
+function RunRow({
+  run,
+  groupState,
+  selected,
+  focused,
+  onSelect,
+  onFocus,
+  rowRef,
+  nowMs,
+}: {
+  run: RosterRun;
+  groupState: string;
+  selected: boolean;
+  focused: boolean;
+  onSelect: () => void;
+  onFocus: () => void;
+  rowRef: (el: HTMLDivElement | null) => void;
+  nowMs: number;
+}) {
+  const meta = stateMetaFor(groupState);
+  const quiet = meta.quiet;
+  const quietClass =
+    quiet === "soft"
+      ? " pc-roster__row--quiet-soft"
+      : quiet === "archive"
+        ? " pc-roster__row--quiet-archive"
+        : "";
+  const showBeacon = Boolean(meta.beacon) || run.heldGate;
+  const age =
+    showAttentionAge(groupState, undefined) && run.updatedAt
+      ? formatRelativeAge(run.updatedAt, nowMs)
+      : null;
+  const short = shortRef(run.id);
+  const accessibleName = age
+    ? `run ${run.name} ${short} — ${meta.label}, ${age}`
+    : `run ${run.name} ${short} — ${meta.label}`;
+
+  return (
+    <div
+      role="option"
+      className={`pc-roster__row pc-roster__row--run${
+        selected ? " pc-roster__row--selected" : ""
+      }${run.heldGate ? " pc-roster__row--held" : ""}${quietClass}`}
+      id={`roster-option-run-${run.id}`}
+      aria-label={accessibleName}
+      aria-selected={selected}
+      tabIndex={focused ? 0 : -1}
+      ref={rowRef}
+      onClick={onSelect}
+      onFocus={onFocus}
+    >
+      <span className="pc-roster__run-mark" aria-hidden="true">
+        <Mark mark={MARK_ANCHOR} size={14} />
+      </span>
+      <span className="pc-roster__row-body">
+        <span className="pc-roster__run-head">
+          <span className="pc-roster__name" title={`${run.name} · run ${run.id}`}>
+            {run.name}
+          </span>
+          <span className="pc-roster__run-id" title={run.id}>
+            run {short}
+          </span>
+          <span
+            className={`pc-roster__run-badge${
+              run.heldGate ? " pc-roster__run-badge--gate" : ""
+            }`}
+          >
+            {run.heldGate ? "Gate" : "Run"}
+          </span>
+        </span>
+        {run.subtitle && (
+          <span className="pc-roster__run-sub">{run.subtitle}</span>
+        )}
+        <PipTrack pips={run.pips} />
+        {run.meta && (
+          <span className="pc-roster__meta pc-roster__run-meta">{run.meta}</span>
+        )}
+      </span>
+      {age && (
+        <span className="pc-roster__age" title={run.updatedAt ?? undefined} aria-hidden="true">
+          {age}
+        </span>
+      )}
+      {showBeacon && (
+        <span className="pc-roster__beacon pc-dot--beacon" aria-hidden="true">
+          <Mark mark={meta.mark} size={12} />
+        </span>
+      )}
+    </div>
+  );
+}
+
 function Group({
   group,
   selectedTaskId,
-  focusedTaskId,
+  selectedRunId,
+  focusedKey,
   onSelectTask,
-  onFocusTask,
+  onSelectRun,
+  onFocusEntry,
   rowRefs,
   nowMs,
 }: {
   group: RosterGroup;
   selectedTaskId: string | null;
-  /** The single tab-stop row in the listbox (roving tabindex). */
-  focusedTaskId: string | null;
+  selectedRunId: string | null;
+  /** Roving tabindex key (`task:id` / `run:id`). */
+  focusedKey: string | null;
   onSelectTask: (id: string) => void;
-  onFocusTask: (id: string) => void;
+  onSelectRun: (id: string) => void;
+  onFocusEntry: (key: string) => void;
   rowRefs: MutableRefObject<Map<string, HTMLDivElement | null>>;
   nowMs: number;
 }) {
   const meta = stateMetaFor(group.state);
   const dotStyle = { "--dot-color": meta.colorVar } as CSSProperties;
   const labelStyle = { "--group-color": meta.colorVar } as CSSProperties;
+  const runs = group.runs ?? [];
+  const count = runs.length + group.tasks.length;
 
   return (
     /* role=group: a listbox may only own option/group children — the bare div
        broke the accessible owns-tree. The label carries what the (aria-hidden)
        visual head shows, so AT hears one group name, not the head twice. */
-    <div role="group" aria-label={`${meta.label} (${group.tasks.length})`}>
+    <div role="group" aria-label={`${meta.label} (${count})`}>
       {/* Group headers stay non-focusable; state lives on each option's name. */}
       <div className="pc-roster__group-head" aria-hidden="true">
-        {/* Decorative: the group label next to the dot carries the state for
-            AT; title still gives mouse users a hover hint without duplicating
-            the label in the accessibility tree. */}
         <span className="pc-state-dot" style={dotStyle} aria-hidden="true" title={meta.label}>
           <Mark mark={meta.mark} size={10} />
         </span>
         <span className="pc-roster__group-label" style={labelStyle}>
           {meta.label}
         </span>
-        <span className="pc-roster__count">{group.tasks.length}</span>
+        <span className="pc-roster__count">{count}</span>
       </div>
-      {group.tasks.map((task) => {
-        const selected = task.id === selectedTaskId;
-        const focused = task.id === focusedTaskId;
-        // Fresh failures arrive loud with a coral beacon; archive failures
-        // (and other quiet terminals) take STATE_META.quiet token ink steps —
-        // not opacity. Per-row, not group-wide — a mixed failed group can
-        // hold both treatments.
-        const freshFailure = Boolean(task.freshFailure);
-        const quiet = freshFailure ? undefined : meta.quiet;
-        const quietClass =
-          quiet === "soft"
-            ? " pc-roster__row--quiet-soft"
-            : quiet === "archive"
-              ? " pc-roster__row--quiet-archive"
-              : "";
-        const showBeacon = Boolean(meta.beacon) || freshFailure;
-        const beaconStyle = freshFailure
-          ? ({
-              "--beacon-color": "var(--state-failed)",
-              "--beacon-glow-color": "var(--beacon-glow-failed)",
-            } as CSSProperties)
-          : undefined;
-        // Group headers are skipped by Tab-through; put the state in each
-        // row's accessible name so a screen-reader user hears which task is
-        // failed / awaiting / … without leaving the row list.
-        const age =
-          showAttentionAge(group.state, task.freshFailure) && task.updatedAt
-            ? formatRelativeAge(task.updatedAt, nowMs)
-            : null;
-        const accessibleName = age
-          ? `${task.name} — ${meta.label}, ${age}`
-          : `${task.name} — ${meta.label}`;
-        const { branch, idRef } = metaBranchAndId(task.meta, task.id);
-        // When meta is "branch · id", protect the short id from ellipsis; when
-        // the branch already embeds the id, show meta as a single ellipsized line.
-        const splitId = task.meta.includes(" · ");
+      {runs.map((run) => {
+        const key = entryKey({ kind: "run", id: run.id, state: group.state });
         return (
-          <div
-            role="option"
-            className={`pc-roster__row${selected ? " pc-roster__row--selected" : ""}${quietClass}`}
-            key={task.id}
-            id={`roster-option-${task.id}`}
-            aria-label={accessibleName}
-            aria-selected={selected}
-            tabIndex={focused ? 0 : -1}
-            ref={(el) => {
-              if (el) rowRefs.current.set(task.id, el);
-              else rowRefs.current.delete(task.id);
+          <RunRow
+            key={key}
+            run={run}
+            groupState={group.state}
+            selected={run.id === selectedRunId}
+            focused={key === focusedKey}
+            onSelect={() => {
+              onFocusEntry(key);
+              onSelectRun(run.id);
             }}
-            onClick={() => {
-              onFocusTask(task.id);
+            onFocus={() => onFocusEntry(key)}
+            rowRef={(el) => {
+              if (el) rowRefs.current.set(key, el);
+              else rowRefs.current.delete(key);
+            }}
+            nowMs={nowMs}
+          />
+        );
+      })}
+      {group.tasks.map((task) => {
+        const key = entryKey({ kind: "task", id: task.id, state: group.state });
+        return (
+          <TaskRow
+            key={key}
+            task={task}
+            groupState={group.state}
+            selected={task.id === selectedTaskId}
+            focused={key === focusedKey}
+            onSelect={() => {
+              onFocusEntry(key);
               onSelectTask(task.id);
             }}
-            onFocus={() => onFocusTask(task.id)}
-          >
-            <Emblem coat={task.coat} mark={task.emblem} size={23} label={task.faction} />
-            <span className="pc-roster__row-body">
-              <span className="pc-roster__name">{task.name}</span>
-              {/* title is mouse-only — the visually-hidden span exposes the
-                  full task id to keyboard/AT (InboxCard shortRef pattern).
-                  Visible meta: branch may ellipsize; 8-char short ref is
-                  flex-shrink:0 so rows stay identifiable at rest. Copy lives
-                  on the Inspector head — ARIA options must not nest buttons. */}
-              <span className="pc-roster__meta" title={task.id}>
-                {splitId ? (
-                  <span className="pc-roster__meta-parts" aria-hidden="true">
-                    <span className="pc-roster__meta-branch">{branch}</span>
-                    <span className="pc-roster__meta-sep"> · </span>
-                    <span className="pc-roster__meta-id">{idRef}</span>
-                  </span>
-                ) : (
-                  <span aria-hidden="true">{task.meta}</span>
-                )}
-                <span className="pc-visually-hidden">task id {task.id}</span>
-              </span>
-            </span>
-            {age && (
-              <span className="pc-roster__age" title={task.updatedAt ?? undefined} aria-hidden="true">
-                {age}
-              </span>
-            )}
-            {showBeacon && (
-              <span
-                className="pc-roster__beacon pc-dot--beacon"
-                style={beaconStyle}
-                aria-hidden="true"
-              >
-                <Mark mark={meta.mark} size={12} />
-              </span>
-            )}
-          </div>
+            onFocus={() => onFocusEntry(key)}
+            rowRef={(el) => {
+              if (el) rowRefs.current.set(key, el);
+              else rowRefs.current.delete(key);
+            }}
+            nowMs={nowMs}
+          />
         );
       })}
     </div>
@@ -736,15 +925,15 @@ function SessionSelector({
 }
 
 /**
- * Layer 2 — the fleet roster (design-manifest §4.5/§4.6). Tasks grouped by state
- * in attention order, with a session selector that both filters the groups
- * below (#76) and marks the future scene's camera-focus target, plus row
- * selection (feeds the inspector/scene). Recent chips are capped; older
- * sessions are reached via the Find search (#88). Plain props throughout: the
- * hooks layer does the grouping/ordering/filtering via `@useparley/core`'s
- * attention constants and owns the selection state. Memoized — the cockpit
- * shell re-renders every second for its clock, and all roster props are
- * identity-stable between snapshot updates.
+ * Layer 2 — the fleet roster (design-manifest §4.5/§4.6). Tasks and runs
+ * grouped by attention state as **peer rows** (#254), with a session selector
+ * that both filters the groups below (#76) and marks the future scene's
+ * camera-focus target, plus row selection (feeds the inspector/scene). Recent
+ * chips are capped; older sessions are reached via the Find search (#88).
+ * Plain props throughout: the hooks layer does the grouping/ordering/filtering
+ * via `@useparley/core`'s attention constants and owns the selection state.
+ * Memoized — the cockpit shell re-renders every second for its clock, and all
+ * roster props are identity-stable between snapshot updates.
  */
 export const RosterPanel = memo(function RosterPanel({
   groups,
@@ -754,6 +943,8 @@ export const RosterPanel = memo(function RosterPanel({
   searchSessions,
   selectedTaskId,
   onSelectTask,
+  selectedRunId = null,
+  onSelectRun,
   totalTasks,
   activeTasks,
   connecting = false,
@@ -761,12 +952,11 @@ export const RosterPanel = memo(function RosterPanel({
 }: RosterPanelProps) {
   const sessionSearchRef = useRef<SessionSearchHandle | null>(null);
   const rowRefs = useRef<Map<string, HTMLDivElement | null>>(new Map());
+  const selectRun = onSelectRun ?? (() => undefined);
 
-  // Flat task order across groups — the listbox's single navigation axis.
-  const taskIds = useMemo(
-    () => groups.flatMap((g) => g.tasks.map((t) => t.id)),
-    [groups],
-  );
+  // Flat peer order across groups — the listbox's single navigation axis.
+  const entries = useMemo(() => flattenEntries(groups), [groups]);
+  const entryKeys = useMemo(() => entries.map(entryKey), [entries]);
 
   // Coarse clock only while attention rows (awaiting / stalled / fresh-failed)
   // are present — keeps relative ages honest without a 1s re-render.
@@ -775,7 +965,8 @@ export const RosterPanel = memo(function RosterPanel({
       groups.some(
         (g) =>
           ((g.state === "awaiting_answer" || g.state === "stalled") &&
-            g.tasks.some((t) => t.updatedAt)) ||
+            (g.tasks.some((t) => t.updatedAt) ||
+              (g.runs ?? []).some((r) => r.updatedAt))) ||
           (g.state === "failed" &&
             g.tasks.some((t) => t.freshFailure && t.updatedAt)),
       ),
@@ -783,46 +974,49 @@ export const RosterPanel = memo(function RosterPanel({
   );
   const nowMs = useCoarseNow(needsAgeClock);
 
-  // Roving tabindex: one tab stop among options (APG listbox / Inspector house style).
-  // Prefer the selected task when present; else the first row.
-  const [focusedTaskId, setFocusedTaskId] = useState<string | null>(null);
-  const resolvedFocusId = useMemo(() => {
-    if (taskIds.length === 0) return null;
-    if (focusedTaskId && taskIds.includes(focusedTaskId)) return focusedTaskId;
-    if (selectedTaskId && taskIds.includes(selectedTaskId)) return selectedTaskId;
-    return taskIds[0] ?? null;
-  }, [taskIds, focusedTaskId, selectedTaskId]);
+  // Roving tabindex: one tab stop among options (APG listbox).
+  // Prefer the selected run/task when present; else the first row.
+  const [focusedKey, setFocusedKey] = useState<string | null>(null);
+  const selectedKey = selectedRunId
+    ? entryKey({ kind: "run", id: selectedRunId, state: "" })
+    : selectedTaskId
+      ? entryKey({ kind: "task", id: selectedTaskId, state: "" })
+      : null;
+  const resolvedFocusKey = useMemo(() => {
+    if (entryKeys.length === 0) return null;
+    if (focusedKey && entryKeys.includes(focusedKey)) return focusedKey;
+    if (selectedKey && entryKeys.includes(selectedKey)) return selectedKey;
+    return entryKeys[0] ?? null;
+  }, [entryKeys, focusedKey, selectedKey]);
 
-  // Keep focus index coherent when the fleet reshuffles under us.
   useEffect(() => {
-    if (resolvedFocusId && resolvedFocusId !== focusedTaskId) {
-      setFocusedTaskId(resolvedFocusId);
+    if (resolvedFocusKey && resolvedFocusKey !== focusedKey) {
+      setFocusedKey(resolvedFocusKey);
     }
-    if (taskIds.length === 0 && focusedTaskId !== null) {
-      setFocusedTaskId(null);
+    if (entryKeys.length === 0 && focusedKey !== null) {
+      setFocusedKey(null);
     }
-  }, [resolvedFocusId, focusedTaskId, taskIds.length]);
+  }, [resolvedFocusKey, focusedKey, entryKeys.length]);
 
-  const focusTaskAt = useCallback(
+  const focusEntryAt = useCallback(
     (index: number) => {
-      const id = taskIds[index];
-      if (!id) return;
-      setFocusedTaskId(id);
-      // Defer so the tabIndex update lands before focus.
+      const key = entryKeys[index];
+      if (!key) return;
+      setFocusedKey(key);
       requestAnimationFrame(() => {
-        rowRefs.current.get(id)?.focus();
+        rowRefs.current.get(key)?.focus();
       });
     },
-    [taskIds],
+    [entryKeys],
   );
 
   // Manual-activation listbox (WAI-ARIA APG): arrows/Home/End only move focus;
   // Enter/Space select. Matches the Inspector tab bar's house style.
   const onListKeyDown = useCallback(
     (event: ReactKeyboardEvent<HTMLDivElement>) => {
-      if (taskIds.length === 0) return;
-      const current = resolvedFocusId ? taskIds.indexOf(resolvedFocusId) : 0;
-      const last = taskIds.length - 1;
+      if (entryKeys.length === 0) return;
+      const current = resolvedFocusKey ? entryKeys.indexOf(resolvedFocusKey) : 0;
+      const last = entryKeys.length - 1;
       let next: number | null = null;
       switch (event.key) {
         case "ArrowDown":
@@ -840,17 +1034,21 @@ export const RosterPanel = memo(function RosterPanel({
         case "Enter":
         case " ": {
           event.preventDefault();
-          const id = resolvedFocusId ?? taskIds[0];
-          if (id) onSelectTask(id);
+          const key = resolvedFocusKey ?? entryKeys[0];
+          if (!key) return;
+          const entry = entries.find((e) => entryKey(e) === key);
+          if (!entry) return;
+          if (entry.kind === "run") selectRun(entry.id);
+          else onSelectTask(entry.id);
           return;
         }
         default:
           return;
       }
       event.preventDefault();
-      focusTaskAt(next);
+      focusEntryAt(next);
     },
-    [taskIds, resolvedFocusId, onSelectTask, focusTaskAt],
+    [entryKeys, entries, resolvedFocusKey, onSelectTask, selectRun, focusEntryAt],
   );
 
   useImperativeHandle(
@@ -861,6 +1059,8 @@ export const RosterPanel = memo(function RosterPanel({
     }),
     [],
   );
+
+  const hasRows = entryKeys.length > 0;
 
   return (
     <Plate padded={false} className="pc-roster">
@@ -881,11 +1081,11 @@ export const RosterPanel = memo(function RosterPanel({
       />
       <div
         className="pc-roster__scroll"
-        role={groups.length > 0 ? "listbox" : undefined}
-        aria-label={groups.length > 0 ? "Fleet tasks" : undefined}
-        onKeyDown={groups.length > 0 ? onListKeyDown : undefined}
+        role={hasRows ? "listbox" : undefined}
+        aria-label={hasRows ? "Fleet tasks" : undefined}
+        onKeyDown={hasRows ? onListKeyDown : undefined}
       >
-        {groups.length === 0 ? (
+        {!hasRows ? (
           connecting ? (
             <div className="pc-roster__empty" role="status">
               <p className="pc-roster__empty-title">Hailing the fleet…</p>
@@ -900,9 +1100,11 @@ export const RosterPanel = memo(function RosterPanel({
               key={group.state}
               group={group}
               selectedTaskId={selectedTaskId}
-              focusedTaskId={resolvedFocusId}
+              selectedRunId={selectedRunId}
+              focusedKey={resolvedFocusKey}
               onSelectTask={onSelectTask}
-              onFocusTask={setFocusedTaskId}
+              onSelectRun={selectRun}
+              onFocusEntry={setFocusedKey}
               rowRefs={rowRefs}
               nowMs={nowMs}
             />

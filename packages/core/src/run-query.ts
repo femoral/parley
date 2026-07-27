@@ -75,6 +75,12 @@ export interface RunSummary {
   type: string;
   repo: string | null;
   error: string | null;
+  /**
+   * Static roster/chart bound: `definition.nodes.length × max(loop.max, 1)`.
+   * Null when the definition is unavailable. Independent of fan-out width
+   * (ADR-0021 / #254).
+   */
+  track_bound?: number | null;
 }
 
 /** Fan-out description on a node projection (null when single-task). */

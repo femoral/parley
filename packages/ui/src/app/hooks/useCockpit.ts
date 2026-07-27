@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { isMetricsGroupBy, ParleyClient, type MetricsGroupBy } from "@useparley/core";
 import type {
   HealthView,
+  InspectorRun,
   InspectorTask,
   RosterSearchHit,
   SoundingsFiltersView,
@@ -24,6 +25,7 @@ import {
 import { useEvalFilters } from "./useEvalFilters.js";
 import { useLogTail } from "./useLogTail.js";
 import { useMetrics } from "./useMetrics.js";
+import { useInspectorRun, useRuns } from "./useRuns.js";
 import { useSettings, type SettingsView } from "./useSettings.js";
 import { useSnapshot, type SnapshotView } from "./useSnapshot.js";
 import { useTaskDetail } from "./useTaskDetail.js";
@@ -163,23 +165,28 @@ export interface SceneFrameIntent {
   seq: number;
 }
 
-/** The roster's selection state — which orchestrator session and task are
- * active (#66). Lives in the app layer: hud rows/selectors take the current
- * selection and an `onSelect*` callback as plain props and never own it.
- * Plain setter semantics — re-selecting the active session is a no-op; the
- * "All hands" chip (passing `null`) is the one deselect affordance. Task
- * rows only select; {@link clearTask} (Escape accelerator) deselects. */
+/** The roster's selection state — which orchestrator session, task, and/or
+ * run are active (#66 / #254). Lives in the app layer: hud rows/selectors take
+ * the current selection and an `onSelect*` callback as plain props and never
+ * own it. Plain setter semantics — re-selecting the active session is a no-op;
+ * the "All hands" chip (passing `null`) is the one deselect affordance. Task
+ * and run rows only select; {@link clearTask} (Escape accelerator) deselects
+ * both. A run and a task are mutually exclusive selections. */
 export interface RosterSelection {
   selectedSessionId: string | null;
   selectedTaskId: string | null;
+  /** Selected run id, or null when a task (or nothing) is selected (#254). */
+  selectedRunId: string | null;
   selectSession: (id: string | null) => void;
   selectTask: (id: string, options?: SelectTaskOptions) => void;
+  /** Select a run peer row; clears any task selection (#254). */
+  selectRun: (id: string) => void;
   /**
    * Select a task from the inbox and land the inspector on Q&A. Identity-stable
    * so memoized `InboxPanel` does not re-render every clock tick.
    */
   selectInboxTask: (id: string) => void;
-  /** Clear the selected task (Escape accelerator; inspector shows empty state). */
+  /** Clear the selected task and run (Escape; inspector shows empty state). */
   clearTask: () => void;
   /**
    * Find across the live fleet (task name / branch) and historical sessions
@@ -221,8 +228,13 @@ export interface CockpitView {
   daemonUptimeDays: number;
   /** Fleet-wide failures carrying the roster's fresh coral treatment. */
   freshFailureTaskIds: string[];
-  /** The selected task's inspector payload (#68), or `null` with no selection. */
+  /** The selected task's inspector payload (#68), or `null` with no task selection. */
   inspector: InspectorTask | null;
+  /**
+   * The selected run's inspector payload (#254), or `null` when no run is
+   * selected. Mutually exclusive with {@link inspector} at the plate.
+   */
+  inspectorRun: InspectorRun | null;
   /** Persisted cockpit preferences (#70): kit band, log follow. */
   settings: SettingsView;
   /**
@@ -271,6 +283,7 @@ export function useCockpit(): CockpitView {
   // roster filter (#76 / scene-focus-steer).
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const [inspectorIntent, setInspectorIntent] = useState<{
     tab: InspectorTabKey;
     seq: number;
@@ -332,6 +345,7 @@ export function useCockpit(): CockpitView {
 
   const selectTask = useCallback((id: string, options?: SelectTaskOptions) => {
     setSelectedTaskId(id);
+    setSelectedRunId(null);
     setInspectorIntent((prev) => ({
       tab: options?.tab ?? "brief",
       seq: prev.seq + 1,
@@ -356,6 +370,16 @@ export function useCockpit(): CockpitView {
       });
     }
   }, []);
+  const selectRun = useCallback((id: string) => {
+    setSelectedRunId(id);
+    setSelectedTaskId(null);
+    // Centre-stage chart swap is #253 — selection still lands here so the
+    // inspector run view and a future chart share one source of truth.
+    setInspectorIntent((prev) => ({
+      tab: "brief",
+      seq: prev.seq + 1,
+    }));
+  }, []);
   const selectInboxTask = useCallback(
     (id: string) => {
       selectTask(id, { tab: "qa" });
@@ -364,11 +388,14 @@ export function useCockpit(): CockpitView {
   );
   const clearTask = useCallback(() => {
     setSelectedTaskId(null);
+    setSelectedRunId(null);
   }, []);
   // Re-selecting the active session is a no-op; only "All hands" (null) deselects.
   const selectSession = useCallback((id: string | null) => {
     setSelectedSessionId((prev) => (prev === id ? prev : id));
   }, []);
+
+  const liveRuns = useRuns(client, { selectedRunId });
 
   // If the selected session has no tasks left in the live fleet at all, fall
   // back to "All hands". A session outside the recent chip cap (search pick)
@@ -424,12 +451,17 @@ export function useCockpit(): CockpitView {
   const freshnessNow = now - (now % FRESHNESS_TICK_MS);
   const filteredRoster = useMemo(
     () =>
-      projectRoster(live.tasks, selectedSessionId, {
-        observedAt: failedObservedAt,
-        acknowledged: acknowledgedFailed,
-        selectedTaskId: selectedTaskId,
-        now: freshnessNow,
-      }),
+      projectRoster(
+        live.tasks,
+        selectedSessionId,
+        {
+          observedAt: failedObservedAt,
+          acknowledged: acknowledgedFailed,
+          selectedTaskId: selectedTaskId,
+          now: freshnessNow,
+        },
+        liveRuns.runs,
+      ),
     [
       live.tasks,
       selectedSessionId,
@@ -437,17 +469,23 @@ export function useCockpit(): CockpitView {
       acknowledgedFailed,
       selectedTaskId,
       freshnessNow,
+      liveRuns.runs,
     ],
   );
 
   const fleetFreshFailureTaskIds = useMemo(
     () =>
-      projectRoster(live.tasks, null, {
-        observedAt: failedObservedAt,
-        acknowledged: acknowledgedFailed,
-        selectedTaskId,
-        now: freshnessNow,
-      }).groups.flatMap((group) =>
+      projectRoster(
+        live.tasks,
+        null,
+        {
+          observedAt: failedObservedAt,
+          acknowledged: acknowledgedFailed,
+          selectedTaskId,
+          now: freshnessNow,
+        },
+        liveRuns.runs,
+      ).groups.flatMap((group) =>
         group.tasks.filter((task) => task.freshFailure).map((task) => task.id),
       ),
     [
@@ -456,8 +494,16 @@ export function useCockpit(): CockpitView {
       acknowledgedFailed,
       selectedTaskId,
       freshnessNow,
+      liveRuns.runs,
     ],
   );
+
+  // Drop a selected run that left the fleet entirely.
+  useEffect(() => {
+    if (selectedRunId === null) return;
+    const stillPresent = liveRuns.runs.some((r) => r.id === selectedRunId);
+    if (!stillPresent) setSelectedRunId(null);
+  }, [selectedRunId, liveRuns.runs]);
 
   const snapshot: SnapshotView = useMemo(
     () => ({
@@ -551,8 +597,10 @@ export function useCockpit(): CockpitView {
   const roster: RosterSelection = {
     selectedSessionId,
     selectedTaskId,
+    selectedRunId,
     selectSession,
     selectTask,
+    selectRun,
     selectInboxTask,
     clearTask,
     searchSessions,
@@ -572,6 +620,13 @@ export function useCockpit(): CockpitView {
         ? projectInspector(detail, logs)
         : null,
     [detail, logs, selectedTaskId],
+  );
+  // Coarse clock for run node ages — inspector re-projects at 30s, not 1s.
+  const inspectorRunNow = now - (now % FRESHNESS_TICK_MS);
+  const inspectorRun: InspectorRun | null = useInspectorRun(
+    liveRuns.details,
+    selectedRunId,
+    inspectorRunNow,
   );
 
   // Soundings (#119 / #165): session scope follows the roster chip; filters
@@ -625,6 +680,7 @@ export function useCockpit(): CockpitView {
     daemonUptimeDays,
     freshFailureTaskIds: fleetFreshFailureTaskIds,
     inspector,
+    inspectorRun,
     settings,
     chartStale,
     mode,

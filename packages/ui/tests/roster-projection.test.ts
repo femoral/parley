@@ -69,7 +69,7 @@ describe("projectRoster groups by state in attention order (#66)", () => {
 
   it("drops groups with no tasks", () => {
     const { groups } = projectRoster([task({ id: "r", state: "running" })]);
-    expect(groups).toEqual([{ state: "running", tasks: expect.any(Array) }]);
+    expect(groups).toEqual([{ state: "running", tasks: expect.any(Array), runs: [] }]);
   });
 
   it("re-sorts as a task's state changes (the SSE re-sort case)", () => {

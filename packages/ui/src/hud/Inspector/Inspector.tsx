@@ -17,7 +17,13 @@ import { BriefTab } from "./BriefTab.js";
 import { LogsTab } from "./LogsTab.js";
 import { ReportTab } from "./ReportTab.js";
 import { QaTab } from "./QaTab.js";
-import type { LogbookDigest, LogbookDigestItem, InspectorTask } from "../types.js";
+import { RunView } from "./RunView.js";
+import type {
+  InspectorRun,
+  InspectorTask,
+  LogbookDigest,
+  LogbookDigestItem,
+} from "../types.js";
 
 const TABS = [
   { key: "brief", label: "BRIEF" },
@@ -69,8 +75,13 @@ export type InspectorTabKey = (typeof TABS)[number]["key"];
 
 export interface InspectorProps {
   /** The selected task's full inspector payload, or `null` when the roster
-   * has no selection — renders a quiet placeholder rather than empty tabs. */
+   * has no task selection — renders a quiet placeholder rather than empty tabs. */
   task: InspectorTask | null;
+  /**
+   * Selected run payload (#254). When set, the plate shows the CLI node table
+   * instead of task tabs. Mutually exclusive with {@link task} at the shell.
+   */
+  run?: InspectorRun | null;
   /**
    * Explicit tab intent for a selection. `"qa"` is re-applied whenever
    * {@link openSeq} advances; the ordinary `"brief"` default leaves a user's
@@ -84,7 +95,7 @@ export interface InspectorProps {
   openSeq?: number;
   /**
    * Quiet fleet digest for the resting (no-selection) plate. Projected from
-   * the roster snapshot in the cockpit shell; ignored while a task is open.
+   * the roster snapshot in the cockpit shell; ignored while a task or run is open.
    * Omit or pass a no-fleet digest for the hint-centric empty state.
    */
   digest?: LogbookDigest | null;
@@ -164,6 +175,7 @@ function DigestRow({
  */
 export const Inspector = memo(function Inspector({
   task,
+  run = null,
   initialTab = "brief",
   openSeq = 0,
   digest = null,
@@ -203,10 +215,12 @@ export const Inspector = memo(function Inspector({
   // identity churn, which would yank focus out of the roster while arrowing.
   // Also never steal focus from a text field the user is typing in, or from
   // an unselected roster option (browse without activate).
-  // `hasTask` (not the task object) keeps the effect free of projection churn.
+  // `hasSelection` (not the task object) keeps the effect free of projection churn.
   const hasTask = task !== null;
+  const hasRun = run !== null;
+  const hasSelection = hasTask || hasRun;
   useEffect(() => {
-    if (!hasTask) return;
+    if (!hasSelection) return;
     const el = scrollAnchorRef.current;
     if (!el) return;
     const reduceMotion =
@@ -242,7 +256,7 @@ export const Inspector = memo(function Inspector({
     requestAnimationFrame(() => {
       headingRef.current?.focus({ preventScroll: true });
     });
-  }, [openSeq, hasTask]);
+  }, [openSeq, hasSelection]);
 
   const focusTabAt = (index: number): void => {
     tabRefs.current[index]?.focus();
@@ -273,6 +287,23 @@ export const Inspector = memo(function Inspector({
     event.preventDefault();
     focusTabAt(next);
   };
+
+  // Run view takes the plate when a run is selected (#254). No task tabs.
+  if (run) {
+    return (
+      <Plate variant="premium" padded={false} className="pc-inspector pc-inspector--run">
+        <div ref={scrollAnchorRef} className="pc-inspector__scroll-anchor" aria-hidden="true" />
+        <PlateHeader
+          icon={<Mark mark={MARK_ANCHOR} size={14} />}
+          title="LOGBOOK"
+          divider
+        />
+        <div className="pc-inspector__body">
+          <RunView run={run} />
+        </div>
+      </Plate>
+    );
+  }
 
   if (!task) {
     const showDigest = Boolean(digest?.hasFleet);

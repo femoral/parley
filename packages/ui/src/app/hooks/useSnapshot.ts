@@ -60,7 +60,7 @@ const EMPTY_PROJECTION = {
   durableSessions: 0,
 };
 
-/** Project a wire envelope into the roster input DTO (#208). */
+/** Project a wire envelope into the roster input DTO (#208 / #254). */
 function fromEnvelope(task: TaskEnvelope): RosterTaskInput {
   return {
     id: task.task_id,
@@ -75,6 +75,11 @@ function fromEnvelope(task: TaskEnvelope): RosterTaskInput {
     updatedAt: task.updated_at,
     // Terminal clock seeds failed-freshness on cold load (see roster.ts).
     completedAt: task.completed_at,
+    // Run address for the roster run chip (#254).
+    runId: task.run_id ?? null,
+    node: task.node ?? null,
+    iteration: task.iteration ?? null,
+    slot: task.slot ?? null,
   };
 }
 
@@ -94,6 +99,11 @@ function mergeEnvelope(prev: RosterTaskInput | undefined, event: StreamEvent): R
     updatedAt: next.updatedAt || prev?.updatedAt || new Date().toISOString(),
     // Keep a prior terminal clock if this event omits it (older partial envelopes).
     completedAt: next.completedAt ?? prev?.completedAt ?? null,
+    // Keep prior run address when a partial envelope omits it.
+    runId: next.runId ?? prev?.runId ?? null,
+    node: next.node ?? prev?.node ?? null,
+    iteration: next.iteration ?? prev?.iteration ?? null,
+    slot: next.slot ?? prev?.slot ?? null,
   };
 }
 
