@@ -38,6 +38,7 @@ export {
   type WorkflowInputPort,
   type WorkflowLoop,
   type WorkflowNode,
+  type WorkflowParseError,
   type WorkflowParseWarning,
   type WorkflowRunOutput,
   type WorkflowSlot,

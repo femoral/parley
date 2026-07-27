@@ -188,7 +188,7 @@ describe("lintWorkflow — errors", () => {
       ]),
       { dir: "/tmp/mini", expectedId: "mini" },
     );
-    // max < 1 fails in the parser (structural) — one finding, no definition
+    // max < 1 is a recoverable structural error (#248) — still reported
     expect(badMax.ok).toBe(false);
     expect(badMax.findings.some((f) => /positive integer|max/.test(f.message))).toBe(
       true,
@@ -490,6 +490,189 @@ describe("lintWorkflow — errors", () => {
     expect(result.findings.filter((f) => f.severity === "error").length).toBeGreaterThanOrEqual(
       2,
     );
+  });
+});
+
+/**
+ * #248 — soft-structural parse: collect every recoverable structural failure
+ * and still run the semantic pass. Ordering and cascade policy are part of
+ * the contract.
+ */
+describe("lintWorkflow — soft structural (#248)", () => {
+  it("reports duplicate node id and unrelated bad edges in one run", () => {
+    const result = lintWorkflow(
+      mini([
+        step("a", {
+          in: { b: { type: "text", from: "run.brief" } },
+          out: { x: { type: "text" } },
+        }),
+        step("a", {
+          in: { b: { type: "text", from: "run.brief" } },
+          out: { y: { type: "text" } },
+        }),
+        step("b", {
+          in: {
+            t: { type: "text", from: "missing.port" },
+            u: { type: "url", from: "a.x" },
+          },
+          out: { z: { type: "text" } },
+        }),
+      ]),
+      { dir: "/tmp/mini", expectedId: "mini" },
+    );
+    expect(result.ok).toBe(false);
+    const msgs = result.findings.map((f) => f.message).join("\n");
+    expect(msgs).toMatch(/duplicate node id/);
+    expect(msgs).toMatch(/unknown node "missing"/);
+    // type-incompatible edge (url ← text) is semantic
+    expect(msgs).toMatch(/incompatible types/);
+    // definition was produced (degraded) so semantic pass ran
+    expect(result.definition).not.toBeNull();
+  });
+
+  it("reports each named recoverable structural condition without stopping", () => {
+    const result = lintWorkflow(
+      mini([
+        step("a", {
+          in: { b: { type: "text", from: "run.brief" } },
+          out: { x: { type: "text" } },
+          loop: { to: "a", max: 0 },
+        }),
+        {
+          id: "g",
+          kind: "gate",
+          question: "ok?",
+          shows: { plan: { from: "a.x" } },
+          // on_reject missing
+        },
+        step("badtype", {
+          in: {},
+          out: { n: { type: "number" } },
+        }),
+        step("a", {
+          in: { b: { type: "text", from: "run.brief" } },
+          out: { z: { type: "text" } },
+        }),
+      ]),
+      { dir: "/tmp/mini", expectedId: "mini" },
+    );
+    expect(result.ok).toBe(false);
+    expect(result.definition).not.toBeNull();
+    expect(
+      result.findings.some(
+        (f) => f.severity === "error" && f.field.includes("loop.max"),
+      ),
+    ).toBe(true);
+    expect(
+      result.findings.some(
+        (f) =>
+          f.severity === "error" &&
+          (f.field.includes("on_reject") || /on_reject/.test(f.message)),
+      ),
+    ).toBe(true);
+    expect(
+      result.findings.some(
+        (f) =>
+          f.severity === "error" &&
+          (f.field.endsWith(".type") || /not an atom|unknown named type/.test(f.message)),
+      ),
+    ).toBe(true);
+    expect(
+      result.findings.some(
+        (f) => f.severity === "error" && /duplicate node id/.test(f.message),
+      ),
+    ).toBe(true);
+  });
+
+  it("orders structural findings before semantic findings", () => {
+    const result = lintWorkflow(
+      mini([
+        step("a", {
+          in: { b: { type: "text", from: "run.brief" } },
+          out: { x: { type: "text" } },
+        }),
+        step("a", {
+          in: { b: { type: "text", from: "run.brief" } },
+          out: { y: { type: "text" } },
+        }),
+        step("b", {
+          in: { t: { type: "text", from: "nope.port" } },
+          out: { z: { type: "text" } },
+        }),
+      ]),
+      { dir: "/tmp/mini", expectedId: "mini" },
+    );
+    const errors = result.findings.filter((f) => f.severity === "error");
+    const dupIdx = errors.findIndex((f) => /duplicate node id/.test(f.message));
+    const unknownIdx = errors.findIndex((f) => /unknown node "nope"/.test(f.message));
+    expect(dupIdx).toBeGreaterThanOrEqual(0);
+    expect(unknownIdx).toBeGreaterThanOrEqual(0);
+    expect(dupIdx).toBeLessThan(unknownIdx);
+  });
+
+  it("fatal structural failure yields a single finding and no semantic pass", () => {
+    const result = lintWorkflow(
+      { id: "mini", version: 1, type: "coding", nodes: "not-an-array" },
+      { dir: "/tmp/mini", expectedId: "mini" },
+    );
+    expect(result.ok).toBe(false);
+    expect(result.definition).toBeNull();
+    expect(result.plan).toBeNull();
+    expect(result.worstCase).toBeNull();
+    // Only the fatal parse finding (no semantic edge findings)
+    expect(result.findings.filter((f) => f.severity === "error")).toHaveLength(1);
+    expect(result.findings[0]!.message).toMatch(/nodes|array/i);
+  });
+
+  it("ok is false when any structural error was collected", () => {
+    const result = lintWorkflow(
+      mini([
+        step("a", {
+          in: { b: { type: "text", from: "run.brief" } },
+          out: { x: { type: "text" } },
+        }),
+        step("a", {
+          in: { b: { type: "text", from: "run.brief" } },
+          out: { y: { type: "text" } },
+        }),
+      ]),
+      { dir: "/tmp/mini", expectedId: "mini" },
+    );
+    // Duplicate is the only problem; still ok === false
+    expect(result.findings.some((f) => /duplicate/.test(f.message))).toBe(true);
+    expect(result.ok).toBe(false);
+  });
+
+  it("does not suppress cascade findings from structural recovery", () => {
+    // Deliberate policy (#248): cascade findings are reported, not suppressed.
+    // A malformed node is dropped under soft-structural recovery; a later
+    // edge that named it still surfaces as an unknown-ref semantic finding.
+    // Chosen, not overlooked — suppression is out of scope.
+    const result = lintWorkflow(
+      mini([
+        step("a", {
+          in: { b: { type: "text", from: "run.brief" } },
+          out: { x: { type: "text" } },
+        }),
+        // not an object — recoverable drop
+        "bogus-node" as unknown,
+        step("c", {
+          in: {
+            // would have been mid.x if the dropped node had id mid;
+            // unknown ref is the cascade of the structural recovery
+            t: { type: "text", from: "ghost.port" },
+          },
+          out: { z: { type: "text" } },
+        }),
+      ]),
+      { dir: "/tmp/mini", expectedId: "mini" },
+    );
+    expect(result.ok).toBe(false);
+    const msgs = result.findings.map((f) => f.message).join("\n");
+    // structural: bad node shape
+    expect(msgs).toMatch(/must be an object|expected/i);
+    // semantic cascade: unknown ref still present
+    expect(msgs).toMatch(/unknown node "ghost"/);
   });
 });
 
