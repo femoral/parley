@@ -139,7 +139,13 @@ Usage:
                             prints the structured config the prose was rendered
                             from (same daemon response; never drifts).
   parley lint [dir]             Validate project .parley surfaces (config,
-                            classification, rubrics). Exit 1 on error (CI).
+                            classification, rubrics, workflows). Project-
+                            scoped: warns when a local workflow shadows a
+                            global id; does not lint ~/.parley/workflows.
+                            To lint the global layer, run from the parent of
+                            the parley home (e.g. cd ~ && parley lint when
+                            home is ~/.parley) so layers dedupe onto that dir.
+                            Exit 1 on error (CI); warnings keep exit 0.
   parley session [-s <id>] [--json]
                             Register the orchestrating session. Provenance:
                             PARLEY_* env > session-state file > null. Session

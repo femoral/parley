@@ -62,9 +62,17 @@ touching no repo at all.
   its last node, and pointing a reader at a node would reintroduce node-level
   scope the map ruled out (ADR-0020).
 - **Definitions resolve in two layers** — `~/.parley/workflows/` and a local
-  layer based at `repoRoot(cwd) ?? cwd` — nearest wins by `id`, deduped when cwd
-  *is* home. There is **no shipped layer**: built-ins are examples `parley init`
-  copies into a project, owned and edited from the moment they exist.
+  layer based at `repoRoot(cwd) ?? cwd` — nearest wins by `id`, deduped when the
+  two directories are the same path (cwd *is* home, or cwd is the parley home's
+  parent so local `…/.parley/workflows` equals global). There is **no shipped
+  layer**: built-ins are examples `parley init` copies into a project, owned and
+  edited from the moment they exist.
+- **`parley lint` is project-scoped.** It validates the local layer only and
+  emits a **warning** (never an error) when a project workflow id also exists
+  globally. It does not lint `~/.parley/workflows` from inside a project. To
+  lint the global layer, run lint from the parley home's parent so the layers
+  dedupe onto that directory — e.g. `cd ~ && parley lint` when home is
+  `~/.parley` (or the parent of `$PARLEY_HOME` when that override is set).
 - **A step's execution config is one more optional layer** on the chain
   `delegate` already has (explicit → profile → `defaults.profile` →
   `defaults.vendor` → allowlist default) — never a role indirection, never

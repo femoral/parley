@@ -130,3 +130,153 @@ describe("lintProjectSurfaces (#161)", () => {
     );
   });
 });
+
+/** Minimal workflow raw that parses far enough for project lint to attach findings. */
+function miniWorkflow(id: string): Record<string, unknown> {
+  return {
+    id,
+    version: 1,
+    type: "coding",
+    inputs: {},
+    outputs: {},
+    types: {},
+    nodes: [
+      {
+        id: "only",
+        kind: "step",
+        prompt: "p.md",
+        in: {},
+        out: {},
+      },
+    ],
+  };
+}
+
+describe("lintProjectSurfaces — global workflow shadowing (#251)", () => {
+  it("warns when a project workflow id exists in the global layer", () => {
+    const file = ".parley/workflows/shared/workflow.json";
+    const result = lintProjectSurfaces({
+      workflows: [
+        {
+          id: "shared",
+          dir: "/tmp/proj/.parley/workflows/shared",
+          file,
+          raw: miniWorkflow("shared"),
+        },
+      ],
+      globalWorkflowIds: ["shared", "global-only"],
+      layersDeduped: false,
+    });
+    expect(result.ok).toBe(true);
+    const shadow = result.findings.filter((f) =>
+      f.message.toLowerCase().includes("shadow"),
+    );
+    expect(shadow).toHaveLength(1);
+    expect(shadow[0]).toMatchObject({
+      severity: "warning",
+      file,
+      field: "",
+    });
+    expect(shadow[0]!.message).toMatch(/global/i);
+  });
+
+  it("does not warn when the project workflow id is absent from the global layer", () => {
+    const result = lintProjectSurfaces({
+      workflows: [
+        {
+          id: "local-only",
+          dir: "/tmp/proj/.parley/workflows/local-only",
+          file: ".parley/workflows/local-only/workflow.json",
+          raw: miniWorkflow("local-only"),
+        },
+      ],
+      globalWorkflowIds: ["other"],
+      layersDeduped: false,
+    });
+    expect(result.findings.some((f) => f.message.toLowerCase().includes("shadow"))).toBe(
+      false,
+    );
+  });
+
+  it("does not report a finding for a global-only id with no local counterpart", () => {
+    const result = lintProjectSurfaces({
+      workflows: [],
+      globalWorkflowIds: ["global-only"],
+      layersDeduped: false,
+    });
+    expect(result.findings).toEqual([]);
+    expect(result.workflows).toEqual([]);
+  });
+
+  it("shadowing alone leaves ok true (warning, not error)", () => {
+    const result = lintProjectSurfaces({
+      workflows: [
+        {
+          id: "shared",
+          dir: "/tmp/proj/.parley/workflows/shared",
+          file: ".parley/workflows/shared/workflow.json",
+          raw: miniWorkflow("shared"),
+        },
+      ],
+      globalWorkflowIds: new Set(["shared"]),
+      layersDeduped: false,
+    });
+    expect(result.ok).toBe(true);
+    expect(result.findings.every((f) => f.severity === "warning")).toBe(true);
+  });
+
+  it("emits no shadowing warnings when layers are deduped", () => {
+    const result = lintProjectSurfaces({
+      workflows: [
+        {
+          id: "once",
+          dir: "/tmp/home/workflows/once",
+          file: ".parley/workflows/once/workflow.json",
+          raw: miniWorkflow("once"),
+        },
+      ],
+      globalWorkflowIds: ["once"],
+      layersDeduped: true,
+    });
+    expect(result.findings.some((f) => f.message.toLowerCase().includes("shadow"))).toBe(
+      false,
+    );
+  });
+
+  it("treats missing globalWorkflowIds as no global ids", () => {
+    const result = lintProjectSurfaces({
+      workflows: [
+        {
+          id: "local",
+          dir: "/tmp/proj/.parley/workflows/local",
+          file: ".parley/workflows/local/workflow.json",
+          raw: miniWorkflow("local"),
+        },
+      ],
+    });
+    expect(result.findings.some((f) => f.message.toLowerCase().includes("shadow"))).toBe(
+      false,
+    );
+  });
+
+  it("still warns on a project workflow that fails JSON parse", () => {
+    const file = ".parley/workflows/shared/workflow.json";
+    const result = lintProjectSurfaces({
+      workflows: [
+        {
+          id: "shared",
+          dir: "/tmp/proj/.parley/workflows/shared",
+          file,
+          jsonError: "Unexpected token",
+        },
+      ],
+      globalWorkflowIds: ["shared"],
+      layersDeduped: false,
+    });
+    expect(result.ok).toBe(false);
+    const shadow = result.findings.find((f) =>
+      f.message.toLowerCase().includes("shadow"),
+    );
+    expect(shadow).toMatchObject({ severity: "warning", file });
+  });
+});

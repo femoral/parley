@@ -8,6 +8,7 @@
  * - `.parley/classification.json` (sizes/difficulties with guidance)
  * - `.parley/rubrics/*.json` (schema + task-type resolution + version-bump reminder)
  * - `.parley/workflows/<id>/workflow.json` (definition rules, plan, worst case)
+ * - shadowing warnings when a project workflow id also exists globally (#251)
  */
 import {
   parseClassification,
@@ -340,6 +341,19 @@ export interface ProjectLintInput {
   vendors?: Record<string, VendorConfig> | null;
   /** Path shown in allowlist error messages. */
   configPath?: string;
+  /**
+   * Ids present in the global workflow layer (`{home}/workflows/`). The CLI
+   * lists that directory and passes ids in — the pure linter never touches
+   * the filesystem. When a project workflow shares an id, a shadowing warning
+   * is emitted unless {@link layersDeduped} is true.
+   */
+  globalWorkflowIds?: ReadonlySet<string> | readonly string[];
+  /**
+   * True when global and local discovery layers resolve to the same directory
+   * (cwd-is-home / home-parent lint path). Suppresses all shadowing warnings
+   * so a workflow does not appear to shadow itself.
+   */
+  layersDeduped?: boolean;
 }
 
 /** Per-workflow plan + worst case returned alongside findings. */
@@ -353,6 +367,31 @@ export interface WorkflowLintReport {
 export interface ProjectLintResult extends LintResult {
   /** One entry per successfully-parsed (or partially-checked) workflow. */
   workflows: WorkflowLintReport[];
+}
+
+/** Normalize caller-supplied global workflow ids into a Set. */
+function globalIdSet(
+  ids: ReadonlySet<string> | readonly string[] | undefined,
+): ReadonlySet<string> {
+  if (ids === undefined) return EMPTY_ID_SET;
+  if (ids instanceof Set) return ids;
+  return new Set(ids);
+}
+
+const EMPTY_ID_SET: ReadonlySet<string> = new Set();
+
+/**
+ * Warning when a project workflow covers a global workflow of the same id.
+ * Attaches to the project workflow path; severity is always warning so
+ * shadowing never fails the run (#251).
+ */
+function shadowingFinding(wf: ProjectWorkflowLintInput): LintFinding {
+  return finding(
+    "warning",
+    wf.file,
+    "",
+    "shadows a global workflow of the same id; the global copy is not linted here",
+  );
 }
 
 /**
@@ -407,12 +446,17 @@ export function lintProjectSurfaces(input: ProjectLintInput): ProjectLintResult 
     lintTaskTypeRubricResolution(taskTypes, projectRubricIds, findings);
   }
 
+  // Global-id set for shadowing warnings (#251). Deduped layers never warn.
+  const globalIds = input.layersDeduped ? EMPTY_ID_SET : globalIdSet(input.globalWorkflowIds);
+
   // Workflows (#232)
   for (const wf of input.workflows ?? []) {
+    const shadows = globalIds.has(wf.id);
     if (wf.jsonError !== undefined) {
       findings.push(
         finding("error", wf.file, "", `invalid JSON: ${wf.jsonError}`),
       );
+      if (shadows) findings.push(shadowingFinding(wf));
       workflowReports.push({
         id: wf.id,
         file: wf.file,
@@ -420,6 +464,7 @@ export function lintProjectSurfaces(input: ProjectLintInput): ProjectLintResult 
           ok: false,
           findings: [
             finding("error", wf.file, "", `invalid JSON: ${wf.jsonError}`),
+            ...(shadows ? [shadowingFinding(wf)] : []),
           ],
           plan: null,
           worstCase: null,
@@ -432,6 +477,7 @@ export function lintProjectSurfaces(input: ProjectLintInput): ProjectLintResult 
       findings.push(
         finding("error", wf.file, "", "workflow.json is missing"),
       );
+      if (shadows) findings.push(shadowingFinding(wf));
       continue;
     }
     const result = lintWorkflow(wf.raw, {
@@ -442,7 +488,20 @@ export function lintProjectSurfaces(input: ProjectLintInput): ProjectLintResult 
       configPath: input.configPath,
     });
     findings.push(...result.findings);
-    workflowReports.push({ id: wf.id, file: wf.file, result });
+    if (shadows) {
+      const shadow = shadowingFinding(wf);
+      findings.push(shadow);
+      workflowReports.push({
+        id: wf.id,
+        file: wf.file,
+        result: {
+          ...result,
+          findings: [...result.findings, shadow],
+        },
+      });
+    } else {
+      workflowReports.push({ id: wf.id, file: wf.file, result });
+    }
   }
 
   return {
