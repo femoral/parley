@@ -1,6 +1,11 @@
 /**
- * Task metrics aggregation (#118 / #164) — pure functions over task rows for
- * `GET /metrics` and unit tests. Rubric eval stats exclude legacy free scores.
+ * Task metrics aggregation (#118 / #164) and run metrics (#243 / ADR-0020) —
+ * pure functions over task/run rows for `GET /metrics`, `GET /run-metrics`, and
+ * unit tests. Rubric eval stats exclude legacy free scores.
+ *
+ * **Run metrics and task metrics are two reports that are never joined.** A run
+ * has no vendor, model, or profile; comparability is an explicit non-goal
+ * (shared 0–10 scale, never a shared row).
  */
 import type {
   MetricsAttemptEvalSplit,
@@ -10,12 +15,19 @@ import type {
   MetricsGroup,
   MetricsGroupBy,
   MetricsResponse,
+  MetricsRunLineageEvalSplit,
   MetricsTaskCounts,
   MetricsTokenTotals,
+  RunMetricsCounts,
+  RunMetricsEvalStats,
+  RunMetricsFilters,
+  RunMetricsGroup,
+  RunMetricsGroupBy,
+  RunMetricsResponse,
   TaskMetricsFilters,
 } from "@useparley/core";
 import { normalizeUsage, UNIVERSAL_NEGATIVES } from "@useparley/core";
-import type { TaskRow } from "./db.js";
+import type { RunRow, TaskRow } from "./db.js";
 import { parseJsonColumn } from "./report.js";
 
 /**
@@ -482,3 +494,437 @@ export function aggregateMetrics(
 
 // Keep empty helpers exported for tests that want zeroed shapes.
 export { emptyTaskCounts, emptyTokens, emptyDuration, emptyEvals };
+
+// ---------------------------------------------------------------------------
+// Run metrics (#243 / ADR-0020) — separate population, never joined with tasks
+// ---------------------------------------------------------------------------
+
+/**
+ * Workflow composite key `id@version` for group-by=workflow; mirrors
+ * {@link rubricGroupKey}. Version is author-declared (not a content hash).
+ */
+export function workflowGroupKey(run: RunRow): string {
+  return `${run.workflow}@${run.version}`;
+}
+
+/** True when the run has a structured rubric eval. */
+export function isRunRubricEval(run: RunRow): boolean {
+  return (
+    run.eval_score !== null &&
+    Number.isFinite(run.eval_score) &&
+    run.eval_rubric !== null &&
+    run.eval_rubric !== "" &&
+    run.eval_baseline !== null &&
+    Number.isFinite(run.eval_baseline)
+  );
+}
+
+/** Rubric composite key on a run row; null when unset. */
+export function runRubricGroupKey(run: RunRow): string | null {
+  if (run.eval_rubric === null || run.eval_rubric === "") return null;
+  if (run.eval_rubric_version === null || run.eval_rubric_version === undefined) {
+    return run.eval_rubric;
+  }
+  return `${run.eval_rubric}@${run.eval_rubric_version}`;
+}
+
+/**
+ * Whether a run matches run-metrics filters (#243). Session `"all"` / omit /
+ * null includes every session. `first_run: true` keeps parent_run_id-null rows;
+ * `first_run: false` keeps forks only.
+ */
+export function runMatchesFilters(
+  run: RunRow,
+  filters: RunMetricsFilters = {},
+): boolean {
+  const session = filters.session;
+  if (session !== undefined && session !== null && session !== "" && session !== "all") {
+    if (run.orchestrator_session_id !== session) return false;
+  }
+
+  const eq = (want: string | undefined, got: string | null | undefined): boolean => {
+    if (want === undefined) return true;
+    return (got ?? "") === want;
+  };
+
+  if (!eq(filters.type, run.type)) return false;
+  if (!eq(filters.size, run.size)) return false;
+  if (!eq(filters.difficulty, run.difficulty)) return false;
+  if (!eq(filters.orch_harness, run.orch_harness)) return false;
+  if (!eq(filters.orch_model, run.orch_model)) return false;
+  if (!eq(filters.orch_effort, run.orch_effort)) return false;
+  if (!eq(filters.eval_harness, run.eval_harness)) return false;
+  if (!eq(filters.eval_model, run.eval_model)) return false;
+  if (!eq(filters.eval_effort, run.eval_effort)) return false;
+  if (!eq(filters.rubric, run.eval_rubric)) return false;
+  if (!eq(filters.workflow, run.workflow)) return false;
+
+  if (filters.rubric_version !== undefined) {
+    if (run.eval_rubric_version !== filters.rubric_version) return false;
+  }
+  if (filters.workflow_version !== undefined) {
+    if (run.version !== filters.workflow_version) return false;
+  }
+
+  if (filters.first_run === true) {
+    if (run.parent_run_id !== null) return false;
+  } else if (filters.first_run === false) {
+    if (run.parent_run_id === null) return false;
+  }
+
+  if (filters.below_baseline === true) {
+    if (!isRunRubricEval(run)) return false;
+    if (!(run.eval_score! < run.eval_baseline!)) return false;
+  } else if (filters.below_baseline === false) {
+    if (!isRunRubricEval(run)) return false;
+    if (run.eval_score! < run.eval_baseline!) return false;
+  }
+
+  return true;
+}
+
+function emptyRunCounts(): RunMetricsCounts {
+  return {
+    total: 0,
+    completed: 0,
+    failed: 0,
+    cancelled: 0,
+    running: 0,
+    blocked: 0,
+    other: 0,
+  };
+}
+
+function emptyRunLineageSplit(): MetricsRunLineageEvalSplit {
+  return {
+    count: 0,
+    avg: null,
+    avg_baseline: null,
+    avg_delta: null,
+    below_baseline_rate: null,
+  };
+}
+
+function emptyRunEvals(): RunMetricsEvalStats {
+  return {
+    count: 0,
+    avg: null,
+    avg_baseline: null,
+    avg_delta: null,
+    below_baseline_rate: null,
+    criterion_failures: {},
+    first_run: emptyRunLineageSplit(),
+    fork: emptyRunLineageSplit(),
+  };
+}
+
+/** Mutable accumulator for run-level rubric eval stats. */
+interface RunEvalAcc {
+  scoreSum: number;
+  baselineSum: number;
+  deltaSum: number;
+  count: number;
+  belowBaseline: number;
+  criterion: Record<string, { failures: number; count: number }>;
+  first: { scoreSum: number; baselineSum: number; deltaSum: number; count: number; below: number };
+  fork: { scoreSum: number; baselineSum: number; deltaSum: number; count: number; below: number };
+}
+
+function emptyRunEvalAcc(): RunEvalAcc {
+  return {
+    scoreSum: 0,
+    baselineSum: 0,
+    deltaSum: 0,
+    count: 0,
+    belowBaseline: 0,
+    criterion: {},
+    first: { scoreSum: 0, baselineSum: 0, deltaSum: 0, count: 0, below: 0 },
+    fork: { scoreSum: 0, baselineSum: 0, deltaSum: 0, count: 0, below: 0 },
+  };
+}
+
+function accumulateRunRubricEval(acc: RunEvalAcc, run: RunRow): void {
+  const score = run.eval_score!;
+  const baseline = run.eval_baseline!;
+  const delta = score - baseline;
+  const below = score < baseline;
+
+  acc.scoreSum += score;
+  acc.baselineSum += baseline;
+  acc.deltaSum += delta;
+  acc.count += 1;
+  if (below) acc.belowBaseline += 1;
+
+  // first_run / fork — never first_attempt / fix (ADR-0020 / ADR-0017).
+  const split = run.parent_run_id === null ? acc.first : acc.fork;
+  split.scoreSum += score;
+  split.baselineSum += baseline;
+  split.deltaSum += delta;
+  split.count += 1;
+  if (below) split.below += 1;
+
+  const answers = parseJsonColumn<Record<string, boolean>>(run.eval_answers ?? null);
+  if (answers !== null && typeof answers === "object" && !Array.isArray(answers)) {
+    for (const [id, answer] of Object.entries(answers)) {
+      if (typeof answer !== "boolean") continue;
+      const cur = acc.criterion[id] ?? { failures: 0, count: 0 };
+      cur.count += 1;
+      if (criterionAnswerFailed(id, answer)) cur.failures += 1;
+      acc.criterion[id] = cur;
+    }
+  }
+}
+
+function finalizeRunLineageSplit(s: RunEvalAcc["first"]): MetricsRunLineageEvalSplit {
+  if (s.count === 0) return emptyRunLineageSplit();
+  return {
+    count: s.count,
+    avg: s.scoreSum / s.count,
+    avg_baseline: s.baselineSum / s.count,
+    avg_delta: s.deltaSum / s.count,
+    below_baseline_rate: s.below / s.count,
+  };
+}
+
+function finalizeRunEvalAcc(acc: RunEvalAcc): RunMetricsEvalStats {
+  if (acc.count === 0) return emptyRunEvals();
+  const criterion_failures: Record<string, MetricsCriterionFailureStats> = {};
+  for (const [id, { failures, count }] of Object.entries(acc.criterion)) {
+    criterion_failures[id] = {
+      failures,
+      count,
+      rate: count === 0 ? null : failures / count,
+    };
+  }
+  return {
+    count: acc.count,
+    avg: acc.scoreSum / acc.count,
+    avg_baseline: acc.baselineSum / acc.count,
+    avg_delta: acc.deltaSum / acc.count,
+    below_baseline_rate: acc.belowBaseline / acc.count,
+    criterion_failures,
+    first_run: finalizeRunLineageSplit(acc.first),
+    fork: finalizeRunLineageSplit(acc.fork),
+  };
+}
+
+interface RunGroupAcc {
+  runs: RunMetricsCounts;
+  evals: RunEvalAcc;
+  evalsBySize: Record<string, RunEvalAcc>;
+  evalsByDifficulty: Record<string, RunEvalAcc>;
+  tokens: MetricsTokenTotals;
+  durations: number[];
+}
+
+function emptyRunAcc(): RunGroupAcc {
+  return {
+    runs: emptyRunCounts(),
+    evals: emptyRunEvalAcc(),
+    evalsBySize: {},
+    evalsByDifficulty: {},
+    tokens: emptyTokens(),
+    durations: [],
+  };
+}
+
+const RUN_PROVENANCE_GROUP_BY = new Set<RunMetricsGroupBy>([
+  "orch_harness",
+  "orch_model",
+  "orch_effort",
+  "eval_harness",
+  "eval_model",
+  "eval_effort",
+]);
+
+function runGroupKeyFor(run: RunRow, groupBy: RunMetricsGroupBy): string | null {
+  if (groupBy === "workflow") return workflowGroupKey(run);
+  if (groupBy === "rubric") return runRubricGroupKey(run);
+  if (groupBy === "type") {
+    return run.type === "" ? null : run.type;
+  }
+  if (groupBy === "size") {
+    return run.size === null || run.size === "" ? null : run.size;
+  }
+  if (groupBy === "difficulty") {
+    return run.difficulty === null || run.difficulty === "" ? null : run.difficulty;
+  }
+  // Provenance dimensions.
+  const value =
+    groupBy === "orch_harness"
+      ? run.orch_harness
+      : groupBy === "orch_model"
+        ? run.orch_model
+        : groupBy === "orch_effort"
+          ? run.orch_effort
+          : groupBy === "eval_harness"
+            ? run.eval_harness
+            : groupBy === "eval_model"
+              ? run.eval_model
+              : run.eval_effort;
+  if (value === null || value === undefined || value === "") {
+    return RUN_PROVENANCE_GROUP_BY.has(groupBy) ? "unknown" : null;
+  }
+  return String(value);
+}
+
+function accumulateRunTokens(acc: RunGroupAcc, tasks: readonly TaskRow[]): void {
+  for (const task of tasks) {
+    const raw = parseJsonColumn<Record<string, number>>(task.usage);
+    if (raw === null || typeof raw !== "object" || Array.isArray(raw)) continue;
+    const n = normalizeUsage(raw);
+    if (n.input !== null || n.output !== null || n.cached !== null) {
+      acc.tokens.tasks_reporting += 1;
+      if (n.input !== null) acc.tokens.input += n.input;
+      if (n.output !== null) acc.tokens.output += n.output;
+      if (n.cached !== null) acc.tokens.cached += n.cached;
+    }
+  }
+}
+
+function accumulateRun(acc: RunGroupAcc, run: RunRow, tasks: readonly TaskRow[]): void {
+  acc.runs.total += 1;
+  switch (run.state) {
+    case "completed":
+      acc.runs.completed += 1;
+      break;
+    case "failed":
+      acc.runs.failed += 1;
+      break;
+    case "cancelled":
+      acc.runs.cancelled += 1;
+      break;
+    case "running":
+      acc.runs.running += 1;
+      break;
+    case "blocked":
+      acc.runs.blocked += 1;
+      break;
+    default:
+      acc.runs.other += 1;
+      break;
+  }
+
+  if (isRunRubricEval(run)) {
+    accumulateRunRubricEval(acc.evals, run);
+    if (run.size !== null && run.size !== "") {
+      let sizeAcc = acc.evalsBySize[run.size];
+      if (sizeAcc === undefined) {
+        sizeAcc = emptyRunEvalAcc();
+        acc.evalsBySize[run.size] = sizeAcc;
+      }
+      accumulateRunRubricEval(sizeAcc, run);
+    }
+    if (run.difficulty !== null && run.difficulty !== "") {
+      let diffAcc = acc.evalsByDifficulty[run.difficulty];
+      if (diffAcc === undefined) {
+        diffAcc = emptyRunEvalAcc();
+        acc.evalsByDifficulty[run.difficulty] = diffAcc;
+      }
+      accumulateRunRubricEval(diffAcc, run);
+    }
+  }
+
+  accumulateRunTokens(acc, tasks);
+
+  if (run.completed_at !== null) {
+    const start = Date.parse(run.started_at ?? run.created_at);
+    const end = Date.parse(run.completed_at);
+    if (Number.isFinite(start) && Number.isFinite(end) && end >= start) {
+      acc.durations.push(end - start);
+    }
+  }
+}
+
+function finalizeRunEvalMap(map: Record<string, RunEvalAcc>): Record<string, RunMetricsEvalStats> {
+  const out: Record<string, RunMetricsEvalStats> = {};
+  for (const [key, acc] of Object.entries(map)) {
+    out[key] = finalizeRunEvalAcc(acc);
+  }
+  return out;
+}
+
+function finalizeRunGroup(key: string | null, acc: RunGroupAcc): RunMetricsGroup {
+  const decided = acc.runs.completed + acc.runs.failed;
+  const success_rate = decided === 0 ? null : acc.runs.completed / decided;
+  const durations = [...acc.durations].sort((a, b) => a - b);
+  const durationTotal = durations.reduce((s, d) => s + d, 0);
+  // Cost per completed run: bucket total tokens ÷ completed (not a lineage
+  // rollup — parent and fork each appear once in the workflow bucket).
+  const tokenCost = acc.tokens.input + acc.tokens.output;
+  const cost_per_completed_run =
+    acc.runs.completed === 0 ? null : tokenCost / acc.runs.completed;
+  return {
+    key,
+    runs: acc.runs,
+    success_rate,
+    evals: finalizeRunEvalAcc(acc.evals),
+    evals_by_size: finalizeRunEvalMap(acc.evalsBySize),
+    evals_by_difficulty: finalizeRunEvalMap(acc.evalsByDifficulty),
+    tokens: acc.tokens,
+    duration_ms: {
+      total: durationTotal,
+      avg: durations.length === 0 ? null : durationTotal / durations.length,
+      p50: percentile(durations, 50),
+      p95: percentile(durations, 95),
+      tasks_reporting: durations.length,
+    },
+    cost_per_completed_run,
+  };
+}
+
+/**
+ * Aggregate run rows into metrics groups (#243 / ADR-0020).
+ *
+ * `tasksByRunId` supplies child-task usage for the token rollup. Tasks are
+ * never mixed into group keys — only used for cost. Filters apply before
+ * bucketing. Groups ordered by key (null last).
+ */
+export function aggregateRunMetrics(
+  runs: readonly RunRow[],
+  tasksByRunId: ReadonlyMap<string, readonly TaskRow[]>,
+  options: RunMetricsFilters & { groupBy?: RunMetricsGroupBy } = {},
+): RunMetricsResponse {
+  const groupBy: RunMetricsGroupBy = options.groupBy ?? "workflow";
+  const filters: RunMetricsFilters = options;
+
+  const filtered = runs.filter((r) => runMatchesFilters(r, filters));
+
+  const buckets = new Map<string | null, RunGroupAcc>();
+  for (const run of filtered) {
+    const key = runGroupKeyFor(run, groupBy);
+    let acc = buckets.get(key);
+    if (acc === undefined) {
+      acc = emptyRunAcc();
+      buckets.set(key, acc);
+    }
+    accumulateRun(acc, run, tasksByRunId.get(run.id) ?? []);
+  }
+
+  const keys = [...buckets.keys()].sort((a, b) => {
+    if (a === null && b === null) return 0;
+    if (a === null) return 1;
+    if (b === null) return -1;
+    return a.localeCompare(b);
+  });
+
+  const groups = keys.map((key) => finalizeRunGroup(key, buckets.get(key)!));
+  return { groups, generated_at: new Date().toISOString() };
+}
+
+/** Index tasks by run_id for {@link aggregateRunMetrics}. */
+export function indexTasksByRunId(tasks: readonly TaskRow[]): Map<string, TaskRow[]> {
+  const map = new Map<string, TaskRow[]>();
+  for (const task of tasks) {
+    if (task.run_id === null || task.run_id === "") continue;
+    let list = map.get(task.run_id);
+    if (list === undefined) {
+      list = [];
+      map.set(task.run_id, list);
+    }
+    list.push(task);
+  }
+  return map;
+}
+
+export { emptyRunCounts, emptyRunEvals };

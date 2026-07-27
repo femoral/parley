@@ -67,3 +67,19 @@ export function resolveRubricForTask(
   const rubricId = resolveRubricIdForType(taskType, types);
   return loadRubric(repo, rubricId);
 }
+
+/**
+ * Resolve the effective rubric for a run (#243 / ADR-0020).
+ *
+ * Same machinery as {@link resolveRubricForTask}: the definition declares
+ * `type`, the run inherits it, and type → rubric via the project `taskTypes`
+ * map. No new rubric documents. `--type` on `parley run eval` overrides the
+ * run's stored type before calling this.
+ */
+export function resolveRubricForRun(
+  repo: string | null,
+  runType: string,
+  taskTypes?: TaskTypesMap,
+): Rubric {
+  return resolveRubricForTask(repo, runType, taskTypes);
+}

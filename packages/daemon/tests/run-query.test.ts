@@ -150,6 +150,22 @@ function baseRun(over: Partial<RunRow> = {}): RunRow {
     completed_at: null,
     error: "blocked (loop 2/2)",
     purged_at: null,
+    // #243 run metrics / eval columns
+    size: null,
+    difficulty: null,
+    orch_harness: null,
+    orch_model: null,
+    orch_effort: null,
+    eval_score: null,
+    eval_feedback: null,
+    eval_answers: null,
+    eval_rubric: null,
+    eval_rubric_version: null,
+    eval_baseline: null,
+    eval_session_id: null,
+    eval_harness: null,
+    eval_model: null,
+    eval_effort: null,
     ...over,
   };
 }
