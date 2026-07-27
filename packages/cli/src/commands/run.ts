@@ -1,7 +1,9 @@
 /**
- * `parley run <verb> …` — gate verbs (#238) + re-entry (#242) + query surface
- * (ADR-0021 / #241) + whole-run eval / run metrics (#243 / ADR-0020).
+ * `parley run <verb> …` — start (#249) + gate verbs (#238) + re-entry (#242) +
+ * query surface (ADR-0021 / #241) + whole-run eval / run metrics (#243 / ADR-0020).
  *
+ * Start:
+ *   start <workflow> [--inputs file] [--input name=value]… [--base-ref]
  * Gate verbs (blocked run): approve | reject | redirect | finish
  * Re-entry verbs:
  *   cancel <run>               abandon a live run (makes fork legal)
@@ -17,6 +19,8 @@
  *
  * Joins the existing `parley run` namespace — not a new `parley workflow`.
  */
+import fs from "node:fs";
+import path from "node:path";
 import type {
   DeliverableValue,
   NodeDetailResponse,
@@ -68,6 +72,9 @@ type QueryVerb = (typeof QUERY_VERBS)[number];
 const EVAL_METRICS_VERBS = ["eval", "metrics"] as const;
 type EvalMetricsVerb = (typeof EVAL_METRICS_VERBS)[number];
 
+/** #249 create a run — bind inputs, preflight, workspace, enter node 1. */
+const START_VERB = "start" as const;
+
 function isGateVerb(value: string): value is GateVerb {
   return (GATE_VERBS as readonly string[]).includes(value);
 }
@@ -84,8 +91,12 @@ function isEvalMetricsVerb(value: string): value is EvalMetricsVerb {
   return (EVAL_METRICS_VERBS as readonly string[]).includes(value);
 }
 
+function isStartVerb(value: string): value is typeof START_VERB {
+  return value === START_VERB;
+}
+
 const VERB_HELP =
-  "status | get | eval | metrics | approve | reject | redirect | finish | fork | cancel";
+  "start | status | get | eval | metrics | approve | reject | redirect | finish | fork | cancel";
 
 interface RunVerbAck {
   run_id: string;
@@ -99,7 +110,7 @@ interface RunVerbAck {
 }
 
 /**
- * `parley run approve|reject|redirect|finish|fork|cancel|status|get|eval|metrics …`
+ * `parley run start|approve|reject|redirect|finish|fork|cancel|status|get|eval|metrics …`
  */
 export async function runRun(ctx: CliContext, args: string[]): Promise<number> {
   const { positionals, flags } = parseArgs(args, {
@@ -116,6 +127,10 @@ export async function runRun(ctx: CliContext, args: string[]): Promise<number> {
     "--blocked": {},
     "--run": { value: true },
     "--failed": {},
+    // #249 run start
+    "--inputs": { value: true },
+    "--input": { value: true, multi: true },
+    "--base-ref": { value: true },
     // #243 run eval
     "--answers": { value: true },
     "--score": { value: true },
@@ -143,6 +158,10 @@ export async function runRun(ctx: CliContext, args: string[]): Promise<number> {
     throw new UsageError(`run: a verb is required (${VERB_HELP})`);
   }
 
+  if (isStartVerb(verbRaw)) {
+    return runStart(ctx, positionals.slice(1), flags);
+  }
+
   if (isQueryVerb(verbRaw)) {
     if (verbRaw === "status") {
       return runStatus(ctx, positionals.slice(1), flags);
@@ -162,6 +181,14 @@ export async function runRun(ctx: CliContext, args: string[]): Promise<number> {
     throw new UsageError(`run: unknown verb "${verbRaw}" (expected ${VERB_HELP})`);
   }
   const verb = verbRaw as GateVerb | ReentryVerb;
+
+  // Start-only flags must not leak onto other verbs.
+  if (flags["--inputs"] !== undefined || flags["--input"] !== undefined) {
+    throw new UsageError(`run ${verb}: --input / --inputs are only valid with start`);
+  }
+  if (flags["--base-ref"] !== undefined) {
+    throw new UsageError(`run ${verb}: --base-ref is only valid with start`);
+  }
 
   const runId = positionals[1];
   if (runId === undefined) {
@@ -223,6 +250,152 @@ export async function runRun(ctx: CliContext, args: string[]): Promise<number> {
     const node = ack.current_node ?? "—";
     ctx.stdout(
       `Run ${ack.run_id} ${verb} → ${ack.state}  node=${node}  iteration=${ack.iteration}\n`,
+    );
+  }
+  return 0;
+}
+
+// ---------------------------------------------------------------------------
+// start (#249 / ADR-0022)
+// ---------------------------------------------------------------------------
+
+interface RunStartAck {
+  run_id: string;
+  state: string;
+  current_node: string | null;
+  iteration: number;
+  workflow: string;
+  workspace: string;
+  base_ref: string | null;
+  base_commit: string | null;
+  error: string | null;
+}
+
+/**
+ * `parley run start <workflow> [--inputs file] [--input name=value]… [--base-ref]`
+ * Returns as soon as the run is created and node 1 is entered (ADR-0008).
+ * Observation is `parley watch` / `parley run status` — no `--wait`.
+ */
+async function runStart(
+  ctx: CliContext,
+  positionals: string[],
+  flags: Record<string, string | boolean | string[]>,
+): Promise<number> {
+  const workflow = positionals[0];
+  if (workflow === undefined || workflow === "") {
+    throw new UsageError("run start: a workflow id is required");
+  }
+  if (positionals.length > 1) {
+    throw new UsageError(`run start: unexpected argument: ${positionals[1]}`);
+  }
+
+  // Redirect/fork-only flags.
+  if (flags["--to"] !== undefined) {
+    throw new UsageError("run start: --to is only valid with redirect or fork");
+  }
+  if (flags["--note"] !== undefined) {
+    throw new UsageError("run start: --note is only valid with redirect or fork");
+  }
+
+  let fileInputs: Record<string, unknown> | null = null;
+  const inputsPath = flags["--inputs"];
+  if (typeof inputsPath === "string") {
+    if (inputsPath === "") {
+      throw new UsageError("run start: --inputs requires a file path");
+    }
+    const abs = path.resolve(inputsPath);
+    let raw: string;
+    try {
+      raw = fs.readFileSync(abs, "utf8");
+    } catch (err) {
+      throw new UsageError(
+        `run start: cannot read --inputs ${JSON.stringify(inputsPath)}: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+    }
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(raw);
+    } catch (err) {
+      throw new UsageError(
+        `run start: --inputs must be valid JSON: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+    }
+    if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+      throw new UsageError("run start: --inputs must be a JSON object keyed by port name");
+    }
+    fileInputs = parsed as Record<string, unknown>;
+  }
+
+  const flagInputs: { name: string; value: string }[] = [];
+  const inputFlags = flags["--input"];
+  const inputList = Array.isArray(inputFlags)
+    ? inputFlags
+    : typeof inputFlags === "string"
+      ? [inputFlags]
+      : [];
+  for (const raw of inputList) {
+    const eq = raw.indexOf("=");
+    if (eq <= 0) {
+      throw new UsageError(
+        `run start: --input requires name=value (got ${JSON.stringify(raw)})`,
+      );
+    }
+    const name = raw.slice(0, eq);
+    const value = raw.slice(eq + 1);
+    if (name === "") {
+      throw new UsageError(
+        `run start: --input requires a non-empty port name (got ${JSON.stringify(raw)})`,
+      );
+    }
+    flagInputs.push({ name, value });
+  }
+
+  const baseRef =
+    typeof flags["--base-ref"] === "string" ? flags["--base-ref"] : null;
+
+  const sessionFlag =
+    typeof flags["--session"] === "string" ? flags["--session"] : null;
+  const ancestryChain = readLiveAncestryChain(ctx.env);
+  const orchestratorSessionId = resolveExplicitSessionId({
+    env: ctx.env,
+    flagSessionId: sessionFlag,
+    parleyHome: ctx.paths.home,
+    ancestryChain,
+    note: (msg) => ctx.stderr(`note: ${msg}\n`),
+  });
+
+  const cwd = process.cwd();
+  const discovery = await ensureDaemon(ctx.paths, ctx.env);
+  let ack: RunStartAck;
+  try {
+    const body: Record<string, unknown> = {
+      workflow,
+      cwd,
+      inputs: fileInputs,
+      input_flags: flagInputs,
+      base_ref: baseRef,
+    };
+    if (orchestratorSessionId !== null) {
+      body.orchestrator_session_id = orchestratorSessionId;
+    }
+    ack = await daemonPost<RunStartAck>(discovery, "/runs", body);
+  } catch (err) {
+    if (err instanceof DaemonRequestError && (err.status === 400 || err.status === 404)) {
+      throw new UsageError(`run start: ${err.message}`);
+    }
+    throw err;
+  }
+
+  if (flags["--json"] === true) {
+    printJson(ctx, ack);
+  } else {
+    const node = ack.current_node ?? "—";
+    ctx.stdout(
+      `Run ${ack.run_id} started → ${ack.state}  node=${node}  iteration=${ack.iteration}\n`,
     );
   }
   return 0;

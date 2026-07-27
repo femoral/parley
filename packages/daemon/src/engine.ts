@@ -172,6 +172,11 @@ import {
   type RunDrainHost,
 } from "./run-engine.js";
 import { inferBlockReason } from "./run-gates.js";
+import {
+  startRun as startRunImpl,
+  type InputFlag,
+  type StartRunResult,
+} from "./run-start.js";
 import { readRunInputs } from "./run-workspace.js";
 import { resolveRubricForRun, resolveRubricForTask } from "./rubrics.js";
 import {
@@ -3913,6 +3918,56 @@ export class TaskEngine {
     // inbox event without an ack — ADR-0019).
     this.syncRunTransitions();
     return { run: result.run, decision: result.decision };
+  }
+
+  /**
+   * `parley run start` (ADR-0022 / #249): bind inputs, preflight, create
+   * workspace, insert run, enter node 1. Returns as soon as phase 2 commits
+   * (ADR-0008); observation is `parley watch` / `parley run status`.
+   */
+  startRun(request: {
+    workflow: string;
+    fileInputs?: Record<string, unknown> | null;
+    flagInputs?: InputFlag[];
+    baseRef?: string | null;
+    cwd: string;
+    orchestratorSessionId?: string | null;
+  }): StartRunResult {
+    let config: ParleyConfig;
+    try {
+      config = readConfig(this.paths.config);
+    } catch (err) {
+      throw new DelegateError(
+        `config unreadable: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+    const host = {
+      ...this.buildRunDrainHost(),
+      worktreesDir: this.paths.worktrees,
+      runsDir: this.paths.runs,
+      config,
+      configPath: this.paths.config,
+    };
+    const result = startRunImpl(this.db, host, {
+      workflow: request.workflow,
+      fileInputs: request.fileInputs,
+      flagInputs: request.flagInputs,
+      baseRef: request.baseRef,
+      cwd: request.cwd,
+      home: this.paths.home,
+      orchestratorSessionId: request.orchestratorSessionId,
+    });
+    if (result.kind === "ok" || (result.kind === "error" && result.run !== undefined)) {
+      this.syncRunTransitions();
+      this.drainRuns();
+    }
+    if (result.kind === "ok") {
+      return {
+        ...result,
+        run: getRun(this.db, result.run.id) ?? result.run,
+      };
+    }
+    return result;
   }
 
   /**

@@ -1497,6 +1497,117 @@ function handleRunVerb(
 }
 
 /**
+ * `POST /runs` — create and enter a run (ADR-0022 / #249).
+ * Body: `{ workflow, inputs?, input_flags?, base_ref?, cwd, orchestrator_session_id? }`.
+ * `inputs` is the `--inputs <file>` object; `input_flags` is the repeatable
+ * `--input name=value` list. Flag wins on name collision (daemon merges).
+ */
+function handleRunStart(
+  engine: TaskEngine,
+  res: http.ServerResponse,
+  body: unknown,
+): void {
+  if (!isRecord(body)) {
+    sendJson(res, 400, { error: "request body must be a JSON object" });
+    return;
+  }
+  const workflow = body.workflow;
+  if (typeof workflow !== "string" || workflow.trim() === "") {
+    sendJson(res, 400, { error: "workflow is required" });
+    return;
+  }
+  const cwd = body.cwd;
+  if (typeof cwd !== "string" || cwd.trim() === "") {
+    sendJson(res, 400, { error: "cwd is required" });
+    return;
+  }
+
+  let fileInputs: Record<string, unknown> | null = null;
+  if (body.inputs !== undefined && body.inputs !== null) {
+    if (typeof body.inputs !== "object" || Array.isArray(body.inputs)) {
+      sendJson(res, 400, { error: "inputs must be a JSON object keyed by port name" });
+      return;
+    }
+    fileInputs = body.inputs as Record<string, unknown>;
+  }
+
+  const flagInputs: { name: string; value: string }[] = [];
+  if (body.input_flags !== undefined && body.input_flags !== null) {
+    if (!Array.isArray(body.input_flags)) {
+      sendJson(res, 400, { error: "input_flags must be an array of { name, value }" });
+      return;
+    }
+    for (const entry of body.input_flags) {
+      if (
+        !isRecord(entry) ||
+        typeof entry.name !== "string" ||
+        typeof entry.value !== "string"
+      ) {
+        sendJson(res, 400, { error: "each input_flags entry must be { name, value }" });
+        return;
+      }
+      flagInputs.push({ name: entry.name, value: entry.value });
+    }
+  }
+
+  const baseRef = optionalString(body.base_ref);
+  const orchSession = optionalString(body.orchestrator_session_id);
+
+  try {
+    const result = engine.startRun({
+      workflow: workflow.trim(),
+      fileInputs,
+      flagInputs,
+      baseRef,
+      cwd,
+      orchestratorSessionId: orchSession,
+    });
+    if (result.kind === "usage") {
+      sendJson(res, 400, { error: result.message });
+      return;
+    }
+    if (result.kind === "error") {
+      // Phase-2 failure: still 500-ish? Prefer 400 with the failed run id so
+      // the CLI can surface it. A failed run row is useful; treat as 200 with
+      // state=failed so the client sees the id (return posture is "committed").
+      if (result.run !== undefined) {
+        sendJson(res, 201, {
+          run_id: result.run.id,
+          state: result.run.state,
+          current_node: result.run.current_node,
+          iteration: result.run.iteration,
+          workflow: result.run.workflow,
+          workspace: result.run.workspace,
+          base_ref: result.run.base_ref,
+          base_commit: result.run.base_commit,
+          error: result.run.error ?? result.message,
+        });
+        return;
+      }
+      sendJson(res, 500, { error: result.message });
+      return;
+    }
+    sendJson(res, 201, {
+      run_id: result.run.id,
+      state: result.run.state,
+      current_node: result.run.current_node,
+      iteration: result.run.iteration,
+      workflow: result.run.workflow,
+      workspace: result.run.workspace,
+      base_ref: result.run.base_ref,
+      base_commit: result.run.base_commit,
+      error: result.run.error,
+    });
+  } catch (err) {
+    if (err instanceof DelegateError) {
+      sendJson(res, 400, { error: err.message });
+      return;
+    }
+    throw err;
+  }
+}
+
+/**
  * `POST /runs/:id/fork` and `POST /runs/:id/cancel` (ADR-0017 / #242).
  * Fork never accepts input overrides — only `to` / `note`.
  */
@@ -1995,6 +2106,12 @@ function createHandler(
 
       if (method === "POST" && url.pathname === "/gc") {
         handleGc(engine, res, await readBody(req));
+        return;
+      }
+
+      // `POST /runs` — create a run (#249 / ADR-0022).
+      if (segments[0] === "runs" && method === "POST" && segments.length === 1) {
+        handleRunStart(engine, res, await readBody(req));
         return;
       }
 
