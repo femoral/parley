@@ -5,10 +5,11 @@
  * Tokens only. Sheet texture composes --parchment-bg + --ink-chart alpha
  * via color-mix (no new tokens, no hardcoded hex). Readable text on the
  * textured sheet uses --ink-chart (Textured-sheet AA Rule: soft/live fail
- * normal-text AA at the darkest documented stop #e2cfa4).
+ * normal-text AA on the darkest composited paper #d1c1a5).
  *
- * Darkest gradient stop is held near the documented #e2cfa4 (N6) — not the
- * earlier over-dark mix that pushed L down to ~0.36.
+ * Gradient end is a light parchment mix; the true darkest paper pixel under
+ * the inset-shadow fringe is #d1c1a5 (L ≈ 0.544). --ink-chart still holds
+ * ≥5.7:1 there.
  */
 
 .pc-chart {
@@ -34,9 +35,13 @@
 }
 
 /*
- * Aged parchment. Gradient darkest stop ≈ documented #e2cfa4 (light parchment
- * + a little chart ink). Stains stay low-alpha so readable text keeps AA.
+ * Aged parchment. Gradient end is a light parchment mix; the composited
+ * darkest paper (inset-shadow fringe) is #d1c1a5 — see DESIGN.md.
+ * Stains stay low-alpha so readable text keeps AA.
  * B3: fill the centre stage — min-height 100% of the scrollport; no 50vh cap.
+ *
+ * container-type: label widths use cqw against this sheet (not the zero-width
+ * absolutely positioned mark anchors).
  */
 .pc-chart__sheet {
   position: relative;
@@ -45,6 +50,8 @@
   min-width: 100%;
   width: 100%;
   box-sizing: border-box;
+  container-type: inline-size;
+  container-name: chart-sheet;
   color: var(--ink-chart);
   background:
     radial-gradient(
@@ -71,7 +78,7 @@
       168deg,
       color-mix(in srgb, var(--parchment-bg) 92%, var(--wash-white-50)),
       var(--parchment-bg) 46%,
-      /* Darkest stop ≈ #e2cfa4 family — keep AA math honest (N6). */
+      /* Light gradient end; true darkest paper is the inset fringe (#d1c1a5). */
       color-mix(in srgb, var(--parchment-bg) 94%, var(--ink-chart))
     );
   /* Deckled edge — irregular corners, aged fringe, sea shadow under it. */
@@ -172,7 +179,12 @@
  * One (node, iteration) = one mark.
  * Ring centre at (left, top). Labels sit below the ring; route legs end at
  * the ring edge so text never composites over the stroke (B1).
- * Width comes from --pc-chart-label-w (pitch-derived), never a fixed 148px.
+ *
+ * Anchor is width/height 0 (centre pin). Label width MUST NOT use % — that
+ * would resolve against this 0-width containing block and collapse every
+ * name into a column of single letters (BL-1). Width is viewBox units on
+ * --pc-chart-label-vb, mapped through cqw against .pc-chart__sheet
+ * (CHART_VB_W = 1000 → 1 vb unit = 0.1cqw).
  */
 .pc-chart-mark {
   position: absolute;
@@ -208,7 +220,8 @@
   left: 0;
   top: 28px;
   transform: translateX(-50%);
-  width: var(--pc-chart-label-w, 12%);
+  /* cqw → sheet width, not the 0-wide mark parent (BL-1). */
+  width: calc(var(--pc-chart-label-vb, 100) * 0.1cqw);
   max-width: 160px;
   display: flex;
   flex-direction: column;
@@ -231,8 +244,9 @@
   font-weight: 600;
   color: var(--ink-chart);
   line-height: 1.2;
-  overflow-wrap: anywhere;
-  word-break: break-word;
+  /* Prefer whole-word wrap; only break long tokens when the box is tight. */
+  overflow-wrap: break-word;
+  word-break: normal;
 }
 .pc-chart-mark__meta {
   /* Match inspector run table: state strings in body, not mono (N4). */
@@ -240,8 +254,8 @@
   font-size: var(--text-meta);
   color: var(--ink-chart);
   line-height: 1.3;
-  overflow-wrap: anywhere;
-  word-break: break-word;
+  overflow-wrap: break-word;
+  word-break: normal;
 }
 .pc-chart-mark--done {
   color: var(--ink-done);
@@ -350,7 +364,8 @@
   left: 0;
   top: 30px;
   transform: translateX(-50%);
-  width: var(--pc-chart-label-w, 12%);
+  /* Same cqw contract as mark labels (BL-1). */
+  width: calc(var(--pc-chart-label-vb, 100) * 0.1cqw);
   max-width: 160px;
   display: flex;
   flex-direction: column;
@@ -364,16 +379,16 @@
   font-weight: 600;
   color: var(--ink-chart);
   line-height: 1.2;
-  overflow-wrap: anywhere;
-  word-break: break-word;
+  overflow-wrap: break-word;
+  word-break: normal;
 }
 .pc-chart-seal__meta {
   font-family: var(--font-body);
   font-size: var(--text-meta);
   color: var(--ink-chart);
   line-height: 1.3;
-  overflow-wrap: anywhere;
-  word-break: break-word;
+  overflow-wrap: break-word;
+  word-break: normal;
 }
 
 /* Destination X — pen weight, not fail blot (N3 / State-Colour Reservation). */
@@ -417,14 +432,18 @@
 }
 
 /*
- * On-paper key — second cue for state inks.
- * B2: top-right under the compass so the held-gate helm (bottom) never buries it.
+ * On-paper key — second cue for state inks (BL-2).
+ * Bottom-left: the serpentine trail and destination live mid/right; the
+ * projector reserves EDGE_BOTTOM so labels never enter this band. Not
+ * top-right under the compass — that sat inside row-0 and marks painted over
+ * the legend. z-index alone must not "fix" overprint (would bury a mark).
  */
 .pc-chart-key {
   position: absolute;
-  right: 18px;
-  top: 112px;
-  bottom: auto;
+  left: 18px;
+  right: auto;
+  top: auto;
+  bottom: 14px;
   border: 1px solid color-mix(in srgb, var(--ink-chart) 28%, transparent);
   border-radius: var(--radius-tight);
   padding: 8px 11px;
@@ -434,8 +453,12 @@
   z-index: 2;
   pointer-events: none;
 }
+/* Held helm owns the bottom band — park the key just above it. */
+.pc-chart__sheet--held .pc-chart-key {
+  bottom: 100px;
+}
 .pc-chart__sheet--sparse .pc-chart-key {
-  top: auto;
+  left: 18px;
   bottom: 14px;
 }
 .pc-chart-key__row {

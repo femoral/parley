@@ -50,6 +50,7 @@ const readyRun: InspectorRun = {
   duration: null,
   tasksTotal: 2,
   heldGate: false,
+  deliverables: { status: "not_fetched" },
   block: null,
   nodes: [
     {

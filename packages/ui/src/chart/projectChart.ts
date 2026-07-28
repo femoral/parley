@@ -129,8 +129,12 @@ const EDGE_X = 80;
 const DEST_RESERVE = 100;
 /** Top band: title + compass clearance. */
 const EDGE_TOP = 100;
-/** Bottom band: key / helm + below-labels clearance. */
-const EDGE_BOTTOM = 130;
+/**
+ * Bottom band: on-paper key (BL-2) + below-labels clearance.
+ * Space under the lowest label band ≈ EDGE_BOTTOM − MARK_CLEAR_R − LABEL_RING_GAP;
+ * must fit KEY_ZONE_H with air. Held-gate helm is extra CSS padding, not here.
+ */
+const EDGE_BOTTOM = 170;
 /** Minimum centre-to-centre pitch on a row (must hold label width + gap). */
 const MIN_PITCH = 130;
 /** Target pitch when the sheet has room (board-1 air). */
@@ -149,6 +153,14 @@ const LABEL_X_GAP = 10;
 const LABEL_W_MIN = 64;
 /** Maximum label box width. */
 const LABEL_W_MAX = 140;
+
+/**
+ * Bottom-left key zone (viewBox). Marks, seals, destination and their labels
+ * must not enter this rect — the colour-blind second cue lives here (BL-2).
+ */
+export const KEY_ZONE_W = 170;
+export const KEY_ZONE_H = 110;
+export const KEY_ZONE_PAD = 8;
 
 function shortRef(id: string): string {
   return id.length > 8 ? id.slice(0, 8) : id;
@@ -344,6 +356,57 @@ export function markLabelRects(marks: ChartMark[]): ChartTextRect[] {
   });
 }
 
+/** Ring (or wax seal) hit boxes used for key-overprint checks. */
+export function markRingRects(marks: ChartMark[]): ChartTextRect[] {
+  return marks.map((m) => {
+    const r = m.seal ? 26 : MARK_CLEAR_R;
+    return {
+      key: `${m.key}:ring`,
+      x: m.x - r,
+      y: m.y - r,
+      w: r * 2,
+      h: r * 2,
+    };
+  });
+}
+
+/** Destination ✕ + label box (approximate). */
+export function destinationRect(
+  dest: { x: number; y: number },
+): ChartTextRect {
+  return {
+    key: "destination",
+    x: dest.x - 60,
+    y: dest.y - 28,
+    w: 120,
+    h: 72,
+  };
+}
+
+/**
+ * On-paper key reserved rect in viewBox space (BL-2).
+ * Mirrors CSS: bottom-left; raised when a held-gate helm is present.
+ */
+export function keyZoneRect(vbH: number, heldGate: boolean): ChartTextRect {
+  // Held helm ~88px CSS ≈ 100 viewBox units at typical aspect; key sits above.
+  const bottomLift = heldGate ? 100 : 14;
+  return {
+    key: "chart-key",
+    x: KEY_ZONE_PAD,
+    y: vbH - bottomLift - KEY_ZONE_H,
+    w: KEY_ZONE_W,
+    h: KEY_ZONE_H,
+  };
+}
+
+/** True when any of `rects` intersects the key zone (BL-2 invariant). */
+export function anyKeyOverprint(
+  key: ChartTextRect,
+  rects: ChartTextRect[],
+): boolean {
+  return rects.some((r) => rectsOverlap(key, r, 0));
+}
+
 function rectsOverlap(a: ChartTextRect, b: ChartTextRect, pad = 2): boolean {
   return !(
     a.x + a.w + pad <= b.x ||
@@ -447,7 +510,10 @@ export function assertLabelClearance(
 
 function projectReady(run: InspectorRunReady): ChartReadyModel {
   const nodes = run.nodes;
-  const { positions, vbH } = placeMarks(nodes.length);
+  const { positions, vbH: baseVbH } = placeMarks(nodes.length);
+  // Held helm parks the key above the bottom band (BL-2). Grow the sheet so
+  // the last label row stays clear of that raised key zone.
+  const vbH = baseVbH + (run.heldGate ? 100 : 0);
 
   const marks: ChartMark[] = nodes.map((node, i) => {
     const style = inkForNode(node);

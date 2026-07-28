@@ -5,9 +5,13 @@
  */
 import { describe, expect, it } from "vitest";
 import {
+  anyKeyOverprint,
   assertLabelClearance,
+  destinationRect,
+  keyZoneRect,
   loopArc,
   markLabelRects,
+  markRingRects,
   placeMarks,
   projectChart,
   MARK_CLEAR_R,
@@ -48,6 +52,7 @@ function readyRun(nodes: InspectorRunNode[]): InspectorRunReady {
     duration: "12m 0s",
     tasksTotal: nodes.length,
     heldGate: false,
+    deliverables: { status: "not_fetched" },
     block: null,
     nodes,
   };
@@ -293,4 +298,43 @@ describe("N4 flavor / meta split", () => {
       expect(model.flavor).not.toMatch(/pass \d/);
     }
   });
+});
+
+describe("BL-2 key zone clearance (geometry)", () => {
+  it.each(
+    VIEWPORTS.flatMap((w) =>
+      COUNTS.flatMap((n) =>
+        ([false, true] as const).map((held) => [w, n, held] as const),
+      ),
+    ),
+  )(
+    "viewport %i × n=%i held=%s: key zone clear of marks, seals, destination",
+    (_sheetWidthPx, n, held) => {
+      const run = readyRun(nodesForCount(n));
+      run.heldGate = held;
+      if (held && n > 0) {
+        // Ensure a held gate exists so the model carries heldGate truthfully.
+        const last = run.nodes[run.nodes.length - 1]!;
+        last.kind = "gate";
+        last.state = "waiting";
+        last.stateLabel = "gate · held";
+        last.spineState = "awaiting_answer";
+        last.live = true;
+      }
+      const model = projectChart(run);
+      expect(model.status).toBe("ready");
+      if (model.status !== "ready") return;
+
+      const key = keyZoneRect(model.vbH, model.heldGate);
+      const obstacles = [
+        ...markRingRects(model.marks),
+        ...markLabelRects(model.marks),
+        destinationRect(model.destination),
+      ];
+      expect(
+        anyKeyOverprint(key, obstacles),
+        `key overprint n=${n} held=${held} key@[${key.x},${key.y} ${key.w}×${key.h}]`,
+      ).toBe(false);
+    },
+  );
 });

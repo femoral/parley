@@ -47,21 +47,19 @@ function CopyRunId({ runId }: { runId: string }) {
 function MarkNode({ mark, vbH }: { mark: ChartMark; vbH: number }) {
   const left = `${(mark.x / CHART_VB_W) * 100}%`;
   const top = `${(mark.y / vbH) * 100}%`;
-  // Label width as % of sheet (viewBox units → percentage of width).
-  const labelW = `${(mark.labelWidth / CHART_VB_W) * 100}%`;
+  // ViewBox units → CSS cqw on the sheet (not % of the 0-wide mark pin).
+  const labelStyle = {
+    left,
+    top,
+    ["--pc-chart-label-vb"]: String(mark.labelWidth),
+  } as CSSProperties;
   const sideClass = "pc-chart-mark--below";
 
   if (mark.seal) {
     return (
       <div
         className={`pc-chart-seal pc-chart-seal--${mark.seal} ${sideClass}`}
-        style={
-          {
-            left,
-            top,
-            ["--pc-chart-label-w"]: labelW,
-          } as CSSProperties
-        }
+        style={labelStyle}
         data-chart-mark={mark.key}
         data-node={mark.node}
         data-kind="gate"
@@ -84,13 +82,7 @@ function MarkNode({ mark, vbH }: { mark: ChartMark; vbH: number }) {
   return (
     <div
       className={`pc-chart-mark ${mark.className} ${sideClass}`}
-      style={
-        {
-          left,
-          top,
-          ["--pc-chart-label-w"]: labelW,
-        } as CSSProperties
-      }
+      style={labelStyle}
       data-chart-mark={mark.key}
       data-node={mark.node}
       data-kind="step"

@@ -51,6 +51,7 @@ function readyRun(
     duration: "12m 0s",
     tasksTotal: 41,
     heldGate: false,
+    deliverables: { status: "not_fetched" },
     block: null,
     nodes: overrides.nodes ?? [],
     ...overrides,
