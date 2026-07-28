@@ -150,6 +150,7 @@ describe("RosterPanel run rows (#254)", () => {
 
 describe("Inspector run view (#254)", () => {
   const run: InspectorRun = {
+    status: "ready",
     id: "r-c04e0001",
     workflow: "research",
     workflowVersion: 1,
@@ -231,5 +232,14 @@ describe("Inspector run view (#254)", () => {
     expect(screen.queryByRole("button", { name: /reject/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /redirect/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /finish/i })).toBeNull();
+  });
+
+  it("pending run shows hailing copy without inventing 0 tasks", () => {
+    render(
+      <Inspector task={null} run={{ status: "pending", id: "r-pending1" }} />,
+    );
+    expect(screen.getByText("Hailing the run…")).toBeTruthy();
+    expect(screen.queryByText("0 tasks")).toBeNull();
+    expect(screen.queryByText("No nodes entered yet.")).toBeNull();
   });
 });

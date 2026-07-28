@@ -376,6 +376,7 @@ function RunRow({
             className={`pc-roster__run-badge${
               run.heldGate ? " pc-roster__run-badge--gate" : ""
             }`}
+            style={{ color: meta.colorVar }}
           >
             {run.heldGate ? "Gate" : "Run"}
           </span>

@@ -133,6 +133,41 @@ describe("pip track is fan-out free (#254)", () => {
     );
     expect(pips).toHaveLength(12);
   });
+
+  it("failed run keeps a fail pip when tasks_settled >= pips.length (fan-out)", () => {
+    // Fan-out: more settled tasks than the static track bound. The fail mark
+    // sits on the last pip and must not be overwritten by the done loop.
+    const pips = buildListPipTrack(
+      summary({
+        run_id: "r-fail",
+        state: "failed",
+        track_bound: 4,
+        tasks_settled: 12,
+        tasks_total: 12,
+      }),
+    );
+    expect(pips).toHaveLength(4);
+    expect(pips.filter((p) => p.kind === "fail")).toHaveLength(1);
+    expect(pips[3]!.kind).toBe("fail");
+    expect(pips.slice(0, 3).every((p) => p.kind === "done")).toBe(true);
+  });
+
+  it("failed run marks fail at tasks_settled when within the track", () => {
+    const pips = buildListPipTrack(
+      summary({
+        run_id: "r-fail-mid",
+        state: "failed",
+        track_bound: 6,
+        tasks_settled: 2,
+        tasks_total: 6,
+      }),
+    );
+    expect(pips).toHaveLength(6);
+    expect(pips[2]!.kind).toBe("fail");
+    expect(pips[0]!.kind).toBe("done");
+    expect(pips[1]!.kind).toBe("done");
+    expect(pips.slice(3).every((p) => p.kind === "empty")).toBe(true);
+  });
 });
 
 describe("projectRoster merges run peers (#254)", () => {
@@ -214,6 +249,8 @@ describe("projectInspectorRun (#254)", () => {
       ],
     };
     const view = projectInspectorRun(detail);
+    expect(view.status).toBe("ready");
+    if (view.status !== "ready") throw new Error("expected ready");
     expect(view.nodes).toHaveLength(3);
     expect(view.nodes.map((n) => n.node)).toEqual(["scope", "search", "accept"]);
     expect(view.nodes[1]!.fanoutWidth).toBe(6);

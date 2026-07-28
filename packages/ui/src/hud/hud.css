@@ -3794,6 +3794,11 @@ button.pc-roster__meta--copy:focus-visible {
   margin-top: 1px;
   color: var(--brass);
 }
+/* Run body takes remaining row width so the name is not starved by age/beacon. */
+.pc-roster__row--run .pc-roster__row-body {
+  flex: 1 1 0;
+  min-width: 0;
+}
 .pc-roster__run-head {
   display: flex;
   align-items: center;
@@ -3801,12 +3806,18 @@ button.pc-roster__meta--copy:focus-visible {
   min-width: 0;
   width: 100%;
 }
+/* Workflow name wins the flex fight (same pattern as search-hit name priority):
+ * keep ≥8ch before ellipsis; run id shrinks first. */
 .pc-roster__run-head .pc-roster__name {
   flex: 1 1 auto;
-  min-width: 0;
+  min-width: 8ch;
 }
 .pc-roster__run-id {
-  flex: 0 0 auto;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 12ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
   font-family: var(--font-mono);
   font-size: var(--text-meta);
   font-weight: 500;
@@ -3824,10 +3835,11 @@ button.pc-roster__meta--copy:focus-visible {
   font-weight: 600;
   letter-spacing: var(--track-micro);
   text-transform: uppercase;
+  /* Colour bound to the row's attention state via inline style (meta.colorVar);
+   * gate border override below. No hardcoded running-green. */
   color: var(--state-running);
 }
 .pc-roster__run-badge--gate {
-  color: var(--state-awaiting_answer);
   border-color: color-mix(in srgb, var(--state-awaiting_answer) 45%, transparent);
 }
 .pc-roster__run-sub {
@@ -3983,8 +3995,11 @@ button.pc-roster__meta--copy:focus-visible {
   overflow-x: auto;
   margin: 0 -4px;
 }
+/* Fixed layout so the 344px rail owns column widths (auto table was ~563px
+ * with TASKS/GIST/AGE off-screen). Spine column width is a real box, not a hint. */
 .pc-runview__table {
   width: 100%;
+  table-layout: fixed;
   border-collapse: collapse;
   font-size: var(--text-sub);
 }
@@ -3996,12 +4011,14 @@ button.pc-roster__meta--copy:focus-visible {
   letter-spacing: var(--track-micro);
   text-transform: uppercase;
   color: var(--ink-label);
-  padding: 0 6px 6px;
+  padding: 0 4px 6px;
   border-bottom: 1px solid var(--line-faint);
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .pc-runview__table td {
-  padding: 7px 6px;
+  padding: 7px 4px;
   border-bottom: 1px solid var(--line-faint);
   vertical-align: top;
   color: var(--ink-muted);
@@ -4012,11 +4029,43 @@ button.pc-roster__meta--copy:focus-visible {
 .pc-runview__row--live td {
   background: var(--brass-tint-06);
 }
+/* Spine column: absolute spine has no in-flow size; min/max-width hold the
+ * 18px box so the knot does not overlay node text (`scope` → `cope`). */
 .pc-runview__rail {
   width: 18px;
+  min-width: 18px;
+  max-width: 18px;
   padding-left: 0 !important;
   padding-right: 0 !important;
   position: relative;
+  box-sizing: border-box;
+}
+.pc-runview__table th.pc-runview__rail,
+.pc-runview__table td.pc-runview__rail {
+  width: 18px;
+  min-width: 18px;
+  max-width: 18px;
+  overflow: hidden;
+}
+/* Column shares tuned for ~320px content width inside the 344px right rail. */
+.pc-runview__table th:nth-child(2),
+.pc-runview__table td.pc-runview__node {
+  width: 22%;
+}
+.pc-runview__table th:nth-child(3) {
+  width: 20%;
+}
+.pc-runview__table th:nth-child(4),
+.pc-runview__table td.pc-runview__tasks {
+  width: 12%;
+}
+.pc-runview__table th:nth-child(5),
+.pc-runview__table td.pc-runview__gist {
+  width: auto;
+}
+.pc-runview__table th:nth-child(6),
+.pc-runview__table td.pc-runview__age {
+  width: 12%;
 }
 .pc-runview__spine {
   position: absolute;
@@ -4063,10 +4112,15 @@ button.pc-roster__meta--copy:focus-visible {
   font-size: var(--text-meta);
   color: var(--ink-parchment);
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
+/* Fan-out width + iteration are load-bearing ("written, not drawn").
+ * --ink-label was 4.11:1 on a --live row (brass-tint-06 over plate-top);
+ * --ink-muted clears AA (≥4.5:1) on that stop. */
 .pc-runview__fan,
 .pc-runview__iter {
-  color: var(--ink-label);
+  color: var(--ink-muted);
   font-weight: 500;
 }
 .pc-runview__st {
@@ -4080,6 +4134,9 @@ button.pc-roster__meta--copy:focus-visible {
   letter-spacing: var(--track-micro);
   text-transform: uppercase;
   color: var(--st-color, var(--ink-muted));
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .pc-runview__st-mark {
   display: inline-flex;
@@ -4090,11 +4147,14 @@ button.pc-roster__meta--copy:focus-visible {
   font-family: var(--font-mono);
   font-size: var(--text-meta);
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .pc-runview__gist {
   color: var(--ink-muted);
   line-height: 1.4;
-  max-width: 28ch;
+  overflow: hidden;
+  word-break: break-word;
 }
 .pc-runview__reject {
   display: inline-block;

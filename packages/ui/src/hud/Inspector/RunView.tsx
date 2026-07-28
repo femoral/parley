@@ -10,7 +10,7 @@ import type { CSSProperties } from "react";
 import { Mark } from "../../primitives/index.js";
 import { stateMetaFor } from "../../tokens/state-meta.js";
 import { useCopyScaffold } from "../useCopyScaffold.js";
-import type { InspectorRun, InspectorRunNode } from "../types.js";
+import type { InspectorRun, InspectorRunNode, InspectorRunReady } from "../types.js";
 
 function shortRef(id: string): string {
   return id.length > 8 ? id.slice(0, 8) : id;
@@ -99,7 +99,7 @@ function NodeRow({ node }: { node: InspectorRunNode }) {
   );
 }
 
-export function RunView({ run }: { run: InspectorRun }) {
+function ReadyRunView({ run }: { run: InspectorRunReady }) {
   const short = shortRef(run.id);
 
   return (
@@ -157,13 +157,14 @@ export function RunView({ run }: { run: InspectorRun }) {
       )}
 
       {run.nodes.length === 0 ? (
-        <p className="pc-runview__empty">
-          {run.stateLabel === "loading"
-            ? "Hailing the run…"
-            : "No nodes entered yet."}
-        </p>
+        <p className="pc-runview__empty">No nodes entered yet.</p>
       ) : (
-        <div className="pc-runview__table-wrap">
+        <div
+          className="pc-runview__table-wrap"
+          role="region"
+          aria-label="Run node table"
+          tabIndex={0}
+        >
           <table className="pc-runview__table">
             <thead>
               <tr>
@@ -187,4 +188,27 @@ export function RunView({ run }: { run: InspectorRun }) {
       )}
     </div>
   );
+}
+
+export function RunView({ run }: { run: InspectorRun }) {
+  if (run.status === "pending") {
+    const short = shortRef(run.id);
+    return (
+      <div className="pc-runview">
+        <header className="pc-runview__head">
+          <div className="pc-runview__titles">
+            <h2 className="pc-runview__title">
+              <span className="pc-runview__run-id">run {short}</span>
+            </h2>
+          </div>
+          <div className="pc-runview__aside">
+            <RunIdCopy runId={run.id} />
+          </div>
+        </header>
+        <p className="pc-runview__empty">Hailing the run…</p>
+      </div>
+    );
+  }
+
+  return <ReadyRunView run={run} />;
 }

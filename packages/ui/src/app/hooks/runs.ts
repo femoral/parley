@@ -139,12 +139,17 @@ export function buildListPipTrack(summary: RunSummary): RosterPip[] {
     return pips.map(() => ({ kind: "done" as const }));
   }
   if (summary.state === "failed" || summary.state === "cancelled") {
-    pips[Math.min(pips.length - 1, Math.max(0, summary.tasks_settled))] = {
+    // Fail/cancel mark sits at min(len-1, tasks_settled). Paint *prior* slots
+    // done — never the mark index itself. When tasks_settled >= pips.length
+    // (fan-out wider than the track bound) the old `i < tasks_settled` loop
+    // overwrote the fail pip and the track read as complete.
+    const markIdx = Math.min(pips.length - 1, Math.max(0, summary.tasks_settled));
+    for (let i = 0; i < markIdx; i++) {
+      pips[i] = { kind: "done" };
+    }
+    pips[markIdx] = {
       kind: summary.state === "failed" ? "fail" : "done",
     };
-    for (let i = 0; i < pips.length; i++) {
-      if (i < summary.tasks_settled) pips[i] = { kind: "done" };
-    }
     return pips;
   }
   if (summary.state === "blocked" && isHeldGate(summary.block)) {
@@ -350,6 +355,7 @@ export function projectInspectorRun(
   });
 
   return {
+    status: "ready",
     id: run.run_id,
     workflow: run.workflow,
     workflowVersion: run.workflow_version,
