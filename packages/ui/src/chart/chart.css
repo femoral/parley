@@ -1,0 +1,622 @@
+/*
+ * Run chart surface (#253 / ADR-0021) — parchment sheet pinned to the sea.
+ * Dedicated file (not hud.css): sibling task #255 owns that surface.
+ *
+ * Tokens only. Sheet texture composes --parchment-bg + --ink-chart alpha
+ * via color-mix (no new tokens, no hardcoded hex). Readable text on the
+ * textured sheet uses --ink-chart (Textured-sheet AA Rule: soft/live fail
+ * normal-text AA on the darkest composited paper #d1c1a5).
+ *
+ * Gradient end is a light parchment mix; the true darkest paper pixel under
+ * the inset-shadow fringe is #d1c1a5 (L ≈ 0.544). --ink-chart still holds
+ * ≥5.7:1 there.
+ */
+
+.pc-chart {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Outer scrollport — keyboard reachable (Room-Doesn't-Scroll Rule). */
+.pc-chart__scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  border-radius: var(--radius-panel);
+  outline: none;
+}
+.pc-chart__scroll:focus-visible {
+  outline: 2px solid var(--brass-bright);
+  outline-offset: 2px;
+}
+
+/*
+ * Aged parchment. Gradient end is a light parchment mix; the composited
+ * darkest paper (inset-shadow fringe) is #d1c1a5 — see DESIGN.md.
+ * Stains stay low-alpha so readable text keeps AA.
+ * B3: fill the centre stage — min-height 100% of the scrollport; no 50vh cap.
+ *
+ * container-type: label widths use cqw against this sheet (not the zero-width
+ * absolutely positioned mark anchors).
+ */
+.pc-chart__sheet {
+  position: relative;
+  /* Fill the stage; grow when serpentine rows need more air. */
+  min-height: 100%;
+  min-width: 100%;
+  width: 100%;
+  box-sizing: border-box;
+  container-type: inline-size;
+  container-name: chart-sheet;
+  color: var(--ink-chart);
+  background:
+    radial-gradient(
+      58% 40% at 18% 22%,
+      color-mix(in srgb, var(--ink-chart) 8%, transparent),
+      transparent 70%
+    ),
+    radial-gradient(
+      40% 30% at 82% 78%,
+      color-mix(in srgb, var(--ink-chart) 7%, transparent),
+      transparent 70%
+    ),
+    radial-gradient(
+      22% 18% at 66% 14%,
+      color-mix(in srgb, var(--ink-chart) 6%, transparent),
+      transparent 70%
+    ),
+    repeating-linear-gradient(
+      92deg,
+      color-mix(in srgb, var(--ink-chart) 4%, transparent) 0 2px,
+      transparent 2px 5px
+    ),
+    linear-gradient(
+      168deg,
+      color-mix(in srgb, var(--parchment-bg) 92%, var(--wash-white-50)),
+      var(--parchment-bg) 46%,
+      /* Light gradient end; true darkest paper is the inset fringe (#d1c1a5). */
+      color-mix(in srgb, var(--parchment-bg) 94%, var(--ink-chart))
+    );
+  /* Deckled edge — irregular corners, aged fringe, sea shadow under it. */
+  border-radius: 22px 8px 26px 10px / 10px 24px 8px 22px;
+  box-shadow:
+    inset 0 0 48px 8px color-mix(in srgb, var(--ink-chart) 14%, transparent),
+    inset 0 0 0 1px color-mix(in srgb, var(--ink-chart) 22%, transparent),
+    0 14px 34px var(--wash-black-55);
+  overflow: hidden;
+  /* Extra bottom pad when the held-gate helm is present so route air stays free. */
+  padding-bottom: 0;
+}
+.pc-chart__sheet--held {
+  padding-bottom: 88px;
+}
+
+.pc-chart__svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+.pc-chart__svg--route {
+  z-index: 1;
+}
+.pc-chart__svg--decor {
+  z-index: 0;
+}
+
+/* Compass — fixed square box; never sheared by sheet aspect (N2). */
+.pc-chart-compass {
+  position: absolute;
+  top: 18px;
+  right: 22px;
+  width: 88px;
+  height: 88px;
+  z-index: 1;
+  pointer-events: none;
+  opacity: 0.85;
+}
+.pc-chart-compass--sparse {
+  width: 64px;
+  height: 64px;
+  top: 14px;
+  right: 16px;
+}
+.pc-chart-compass svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* Map title lettered on the paper — Cinzel chrome, not body prose. */
+.pc-chart__legend {
+  position: absolute;
+  top: 18px;
+  left: 22px;
+  max-width: min(320px, 42%);
+  z-index: 2;
+}
+.pc-chart__title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: 1.05rem;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: var(--ink-chart);
+  line-height: 1.2;
+}
+.pc-chart__run-id {
+  font-family: var(--font-mono);
+  font-weight: 500;
+  font-size: var(--text-meta);
+  letter-spacing: normal;
+  text-transform: none;
+}
+/* Operational data (duration, pass) — Outfit, Flavor-Font Rule (N4). */
+.pc-chart__meta-line {
+  margin: 4px 0 0;
+  font-family: var(--font-body);
+  font-size: var(--text-sub);
+  font-weight: 500;
+  color: var(--ink-chart);
+  line-height: 1.35;
+}
+.pc-chart__flavor {
+  margin: 4px 0 0;
+  font-family: var(--font-flavor);
+  font-style: italic;
+  font-size: var(--text-flavor);
+  color: var(--ink-chart);
+  opacity: 1;
+}
+
+/*
+ * One (node, iteration) = one mark.
+ * Ring centre at (left, top). Labels sit below the ring; route legs end at
+ * the ring edge so text never composites over the stroke (B1).
+ *
+ * Anchor is width/height 0 (centre pin). Label width MUST NOT use % — that
+ * would resolve against this 0-width containing block and collapse every
+ * name into a column of single letters (BL-1). Width is viewBox units on
+ * --pc-chart-label-vb, mapped through cqw against .pc-chart__sheet
+ * (CHART_VB_W = 1000 → 1 vb unit = 0.1cqw).
+ */
+.pc-chart-mark {
+  position: absolute;
+  transform: translate(0, 0);
+  width: 0;
+  height: 0;
+  z-index: 3;
+  pointer-events: none;
+}
+.pc-chart-mark__ring {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform: translate(-50%, -50%);
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-pill);
+  border: 2px solid currentColor;
+  box-shadow:
+    0 0 0 3px var(--parchment-bg),
+    0 0 0 4.5px currentColor;
+  display: grid;
+  place-items: center;
+  font-size: 16px;
+  line-height: 1;
+  /* Light underlay so state glyphs clear AA even over dark sheet stops. */
+  background: color-mix(in srgb, var(--parchment-bg) 72%, var(--wash-white-50));
+  color: inherit;
+  z-index: 1;
+}
+.pc-chart-mark__labels {
+  position: absolute;
+  left: 0;
+  top: 28px;
+  transform: translateX(-50%);
+  /* cqw → sheet width, not the 0-wide mark parent (BL-1). */
+  width: calc(var(--pc-chart-label-vb, 100) * 0.1cqw);
+  max-width: 160px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  text-align: center;
+}
+.pc-chart-mark--ghost .pc-chart-mark__ring {
+  border-style: dashed;
+  box-shadow: none;
+  color: var(--ink-chart-ghost);
+}
+/* Ahead ? glyph must be pen-weight, never ghost (tokens.css / DESIGN.md). */
+.pc-chart-mark--ghost .pc-chart-mark__glyph {
+  color: var(--ink-chart);
+}
+.pc-chart-mark__name {
+  font-family: var(--font-body);
+  font-size: var(--text-body);
+  font-weight: 600;
+  color: var(--ink-chart);
+  line-height: 1.2;
+  /* Prefer whole-word wrap; only break long tokens when the box is tight. */
+  overflow-wrap: break-word;
+  word-break: normal;
+}
+.pc-chart-mark__meta {
+  /* Match inspector run table: state strings in body, not mono (N4). */
+  font-family: var(--font-body);
+  font-size: var(--text-meta);
+  color: var(--ink-chart);
+  line-height: 1.3;
+  overflow-wrap: break-word;
+  word-break: normal;
+}
+.pc-chart-mark--done {
+  color: var(--ink-done);
+}
+.pc-chart-mark--live {
+  color: var(--ink-live);
+}
+.pc-chart-mark--fail {
+  color: var(--ink-fail);
+}
+.pc-chart-mark--ghost {
+  color: var(--ink-chart-ghost);
+}
+.pc-chart-mark--live .pc-chart-mark__ring {
+  color: var(--ink-live);
+}
+
+/* Fan-out width is WRITTEN, never drawn as n marks. */
+.pc-chart-tally {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 3px;
+  padding: 1px 7px;
+  border: 1px solid var(--ink-chart);
+  border-radius: var(--radius-pill);
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  color: var(--ink-chart);
+  background: color-mix(in srgb, var(--parchment-bg) 80%, var(--wash-white-50));
+  line-height: 1.3;
+}
+
+/* Gate = wax seal pressed onto the trail. Labels below, same as step marks. */
+.pc-chart-seal {
+  position: absolute;
+  transform: translate(0, 0);
+  width: 0;
+  height: 0;
+  z-index: 3;
+  pointer-events: none;
+}
+.pc-chart-seal__wax {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform: translate(-50%, -50%);
+  width: 46px;
+  height: 46px;
+  border-radius: 46% 54% 50% 50% / 52% 48% 54% 46%;
+  background: radial-gradient(
+    circle at 36% 30%,
+    var(--alert-red-top),
+    var(--alert-red-bottom) 70%
+  );
+  box-shadow:
+    0 3px 7px var(--wash-black-50),
+    inset 0 -3px 6px var(--wash-black-55),
+    inset 0 2px 4px var(--wash-white-35);
+  display: grid;
+  place-items: center;
+  font-size: 17px;
+  color: var(--alert-cream);
+  line-height: 1;
+  z-index: 1;
+}
+.pc-chart-seal--held .pc-chart-seal__wax {
+  box-shadow:
+    0 3px 7px var(--wash-black-50),
+    inset 0 -3px 6px var(--wash-black-55),
+    inset 0 2px 4px var(--wash-white-35),
+    0 0 0 6px color-mix(in srgb, var(--alert-red-top) 22%, transparent),
+    0 0 22px 6px color-mix(in srgb, var(--alert-red-top) 34%, transparent);
+}
+.pc-chart-seal--broken .pc-chart-seal__wax {
+  background: radial-gradient(
+    circle at 36% 30%,
+    color-mix(in srgb, var(--alert-red-top) 55%, var(--ink-chart-soft)),
+    color-mix(in srgb, var(--alert-red-bottom) 70%, var(--ink-chart)) 70%
+  );
+  color: color-mix(in srgb, var(--alert-cream) 72%, transparent);
+}
+.pc-chart-seal__crack {
+  position: absolute;
+  inset: -2px;
+  background: var(--parchment-bg);
+  clip-path: polygon(
+    46% 0%,
+    54% 0%,
+    44% 30%,
+    60% 34%,
+    42% 66%,
+    56% 70%,
+    48% 100%,
+    40% 100%,
+    50% 68%,
+    36% 64%,
+    52% 32%,
+    38% 28%
+  );
+  opacity: 0.85;
+  pointer-events: none;
+}
+.pc-chart-seal__labels {
+  position: absolute;
+  left: 0;
+  top: 30px;
+  transform: translateX(-50%);
+  /* Same cqw contract as mark labels (BL-1). */
+  width: calc(var(--pc-chart-label-vb, 100) * 0.1cqw);
+  max-width: 160px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  text-align: center;
+}
+.pc-chart-seal__name {
+  font-family: var(--font-body);
+  font-size: var(--text-body);
+  font-weight: 600;
+  color: var(--ink-chart);
+  line-height: 1.2;
+  overflow-wrap: break-word;
+  word-break: normal;
+}
+.pc-chart-seal__meta {
+  font-family: var(--font-body);
+  font-size: var(--text-meta);
+  color: var(--ink-chart);
+  line-height: 1.3;
+  overflow-wrap: break-word;
+  word-break: normal;
+}
+
+/* Destination X — pen weight, not fail blot (N3 / State-Colour Reservation). */
+.pc-chart-spot {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  text-align: center;
+  width: 120px;
+  z-index: 2;
+  pointer-events: none;
+}
+.pc-chart-spot__x {
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: 2.2rem;
+  line-height: 1;
+  color: var(--ink-chart);
+}
+.pc-chart-spot__label {
+  font-family: var(--font-flavor);
+  font-style: italic;
+  font-size: var(--text-flavor);
+  color: var(--ink-chart);
+}
+
+/* Flavor marginalia — IM Fell only when the user need not read it. */
+.pc-chart-marginalia {
+  position: absolute;
+  font-family: var(--font-flavor);
+  font-style: italic;
+  font-size: var(--text-flavor);
+  color: var(--ink-chart);
+  transform: translate(-50%, -50%);
+  white-space: nowrap;
+  z-index: 1;
+  pointer-events: none;
+  opacity: 0.72;
+}
+.pc-chart-marginalia--tilt {
+  transform: translate(-50%, -50%) rotate(-6deg);
+}
+
+/*
+ * On-paper key — second cue for state inks (BL-2).
+ * Bottom-left: the serpentine trail and destination live mid/right; the
+ * projector reserves EDGE_BOTTOM so labels never enter this band. Not
+ * top-right under the compass — that sat inside row-0 and marks painted over
+ * the legend. z-index alone must not "fix" overprint (would bury a mark).
+ */
+.pc-chart-key {
+  position: absolute;
+  left: 18px;
+  right: auto;
+  top: auto;
+  bottom: 14px;
+  border: 1px solid color-mix(in srgb, var(--ink-chart) 28%, transparent);
+  border-radius: var(--radius-tight);
+  padding: 8px 11px;
+  background: color-mix(in srgb, var(--parchment-bg) 66%, var(--wash-white-50));
+  display: grid;
+  gap: 3px;
+  z-index: 2;
+  pointer-events: none;
+}
+/* Held helm owns the bottom band — park the key just above it. */
+.pc-chart__sheet--held .pc-chart-key {
+  bottom: 100px;
+}
+.pc-chart__sheet--sparse .pc-chart-key {
+  left: 18px;
+  bottom: 14px;
+}
+.pc-chart-key__row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-family: var(--font-body);
+  font-size: var(--text-label);
+  font-weight: 600;
+  letter-spacing: var(--track-micro);
+  text-transform: uppercase;
+  color: var(--ink-chart);
+}
+.pc-chart-key__swatch {
+  width: 11px;
+  height: 11px;
+  border-radius: var(--radius-pill);
+  border: 2px solid currentColor;
+  flex: none;
+}
+.pc-chart-key__row--done {
+  color: var(--ink-done);
+}
+.pc-chart-key__row--done .pc-chart-key__label {
+  color: var(--ink-chart);
+}
+.pc-chart-key__row--live {
+  color: var(--ink-live);
+}
+.pc-chart-key__row--live .pc-chart-key__label {
+  color: var(--ink-chart);
+}
+.pc-chart-key__row--ghost {
+  color: var(--ink-chart);
+}
+.pc-chart-key__row--ghost .pc-chart-key__swatch {
+  color: var(--ink-chart-ghost);
+  border-style: dashed;
+}
+.pc-chart-key__row--fail {
+  color: var(--ink-fail);
+}
+.pc-chart-key__row--fail .pc-chart-key__label {
+  color: var(--ink-chart);
+}
+.pc-chart-key__label {
+  color: var(--ink-chart);
+}
+
+/* Held-gate helm — bottom band; only control is Copy run id. */
+.pc-chart-helm {
+  position: absolute;
+  left: 18px;
+  right: 18px;
+  bottom: 14px;
+  z-index: 4;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 10px 12px;
+  border-radius: var(--radius-well);
+  border: 1px solid color-mix(in srgb, var(--ink-chart) 28%, transparent);
+  background: color-mix(in srgb, var(--parchment-bg) 88%, var(--wash-white-50));
+  box-shadow: 0 4px 14px var(--wash-black-30);
+  pointer-events: auto;
+}
+.pc-chart-helm__mark {
+  font-size: 15px;
+  line-height: 1.2;
+  color: var(--ink-chart);
+  flex: none;
+}
+.pc-chart-helm__body {
+  flex: 1 1 12rem;
+  min-width: 0;
+}
+.pc-chart-helm__label {
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: var(--text-sub);
+  font-weight: 600;
+  color: var(--ink-chart);
+  line-height: 1.4;
+}
+.pc-chart-helm__note {
+  margin: 3px 0 0;
+  font-family: var(--font-body);
+  font-size: var(--text-sub);
+  color: var(--ink-chart);
+  line-height: 1.4;
+}
+.pc-chart-helm__actions {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+.pc-chart-helm__id-scaffold {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Pending / empty honesty states. */
+.pc-chart__empty {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  place-content: center;
+  padding: 24px;
+  z-index: 2;
+  text-align: center;
+}
+/* Inline empty (ready, zero nodes): sits under the single legend title (N7). */
+.pc-chart__empty--inline {
+  position: relative;
+  inset: auto;
+  min-height: 200px;
+  padding-top: 72px;
+}
+.pc-chart__empty-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--text-title);
+  letter-spacing: var(--track-caps);
+  text-transform: uppercase;
+  color: var(--ink-chart);
+}
+.pc-chart__empty-copy {
+  margin: 8px 0 0;
+  font-family: var(--font-body);
+  font-size: var(--text-body);
+  color: var(--ink-chart);
+  max-width: 36ch;
+  line-height: 1.45;
+}
+.pc-chart__empty-actions {
+  margin-top: 14px;
+}
+
+/* Sparse route: hide empty-quarter ornament that would sit on the trail. */
+.pc-chart__sheet--sparse .pc-chart-marginalia,
+.pc-chart__sheet--sparse .pc-chart__decor-serpent {
+  display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pc-chart-seal--held .pc-chart-seal__wax {
+    animation: none;
+  }
+}

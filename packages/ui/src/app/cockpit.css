@@ -314,6 +314,21 @@
   flex: 1;
   min-height: 0;
 }
+/* Run chart on parchment fills the centre stage under the head (#253).
+   Shares the scene/soundings flex contract so the swap does not reflow the
+   flanks. Layout lives in packages/ui/src/chart/ — not the island scatter. */
+.pc-chart-stage {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  overflow: hidden;
+}
+.pc-chart-stage > * {
+  flex: 1;
+  min-height: 0;
+}
 
 /* ── Stale-chart honesty ─────────────────────────────────────────────────
    When the snapshot stream is lost or health is unreachable (debounced in

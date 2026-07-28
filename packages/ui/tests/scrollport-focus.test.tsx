@@ -23,6 +23,7 @@ import type {
   RosterTask,
   SoundingsView,
 } from "../src/hud/index.js";
+import { RunChart } from "../src/chart/index.js";
 import { projectHeatmap } from "../src/app/hooks/metrics.js";
 import type { MetricsGroup } from "@useparley/core";
 import { notifyHandRolledPopoverClosed } from "../src/hud/handRolledPopover.js";
@@ -394,5 +395,49 @@ describe("scrollport keyboard focus (H3)", () => {
     expectFocusable(dlvWell, ".pc-dlv__well--report");
     expect(dlvWell?.getAttribute("role")).toBe("region");
     expect(dlvWell?.getAttribute("aria-label")).toMatch(/Inline value for funnel\.1\/shortlist/);
+  });
+
+  it("Run chart scrollport is a named focusable region (#253)", () => {
+    const { container } = render(
+      <RunChart
+        run={{
+          status: "ready",
+          id: "r-chart-scroll",
+          workflow: "research",
+          workflowVersion: 1,
+          runState: "running",
+          stateLabel: "running",
+          branch: null,
+          currentNode: "search",
+          iteration: 1,
+          duration: null,
+          tasksTotal: 2,
+          heldGate: false,
+          deliverables: { status: "not_fetched" },
+          block: null,
+          nodes: [
+            {
+              key: "scope\u00001",
+              node: "scope",
+              kind: "step",
+              iteration: 1,
+              state: "completed",
+              stateLabel: "completed",
+              tasksLabel: "1",
+              gist: "ok",
+              age: "2m",
+              fanoutWidth: null,
+              spineState: "completed",
+              live: false,
+              onReject: null,
+            },
+          ],
+        }}
+      />,
+    );
+    const scroll = container.querySelector(".pc-chart__scroll");
+    expectFocusable(scroll, ".pc-chart__scroll");
+    expect(scroll?.getAttribute("role")).toBe("region");
+    expect(scroll?.getAttribute("aria-label")).toBe("Run chart");
   });
 });
