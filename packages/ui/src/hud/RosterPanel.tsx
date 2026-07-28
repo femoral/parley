@@ -201,18 +201,64 @@ function showAttentionAge(
   return false;
 }
 
-/** Kind labels for the pip track's accessible summary (#260). */
+/**
+ * Kind labels for the accessible summary (#260). Labels name the *pip kind*,
+ * not a wire state: `live` folds running/queued/pending/stalled, and `empty`
+ * folds unstarted plus cancelled/skipped fallthrough — so "under way" and
+ * "not started" would overclaim (PRODUCT.md honesty).
+ */
 const PIP_KIND_LABEL: Record<RosterPip["kind"], string> = {
   done: "done",
-  live: "under way",
-  gate: "gated",
+  live: "live",
+  gate: "gate",
   fail: "failed",
-  empty: "not started",
+  empty: "empty",
 };
 
 /**
- * Text equivalent of a run's static pip track — counts per kind against the
- * bound. Exposed to AT via the track's accessible name (#260).
+ * Max pips rendered at `min-width: 4px` + 3px gap without overflowing the
+ * roster track. Measured at `--region-roster: 300px` with an age stamp
+ * (track ≈194px): floor((194+3)/7) = 28. Cap at 24 for scrollbar / chrome
+ * headroom so ink never collapses to 0px (#260 / #269 keep the 4px floor).
+ */
+export const ROSTER_PIP_VISIBLE_CAP = 24;
+
+const PIP_SEVERITY: Record<RosterPip["kind"], number> = {
+  fail: 4,
+  gate: 3,
+  live: 2,
+  done: 1,
+  empty: 0,
+};
+
+/**
+ * Cap the visible track when `pips.length` exceeds the measured floor.
+ * Each visible slot is the highest-severity kind in its source bucket so
+ * fail/gate/live cannot vanish under aggregation; full bound stays in the
+ * accessible summary via {@link describePipTrack}.
+ */
+export function visiblePipTrack(
+  pips: RosterPip[],
+  cap: number = ROSTER_PIP_VISIBLE_CAP,
+): RosterPip[] {
+  if (pips.length <= cap) return pips;
+  const out: RosterPip[] = [];
+  for (let i = 0; i < cap; i++) {
+    const start = Math.floor((i * pips.length) / cap);
+    const end = Math.floor(((i + 1) * pips.length) / cap);
+    let worst: RosterPip["kind"] = "empty";
+    for (let j = start; j < end; j++) {
+      const kind = pips[j]!.kind;
+      if (PIP_SEVERITY[kind] > PIP_SEVERITY[worst]) worst = kind;
+    }
+    out.push({ kind: worst });
+  }
+  return out;
+}
+
+/**
+ * Text equivalent of a run's static pip track — full-bound kind counts.
+ * Single AT carrier is the option's `aria-describedby` (#260 finding 4).
  */
 export function describePipTrack(pips: RosterPip[]): string {
   const counts: Record<RosterPip["kind"], number> = {
@@ -229,22 +275,32 @@ export function describePipTrack(pips: RosterPip[]): string {
     if (n > 0) parts.push(`${n} ${PIP_KIND_LABEL[kind]}`);
   }
   const bound = pips.length;
-  if (parts.length === 0) return `Progress: 0 of ${bound}`;
-  return `Progress: ${parts.join(", ")} of ${bound}`;
+  const body = parts.length === 0 ? "none" : parts.join(", ");
+  // "Progress of N: …" — bound leads so "of N" is not glued to the last kind.
+  if (bound > ROSTER_PIP_VISIBLE_CAP) {
+    return `Progress of ${bound}: ${body}; showing ${ROSTER_PIP_VISIBLE_CAP} segments`;
+  }
+  return `Progress of ${bound}: ${body}`;
 }
 
-function PipTrack({ pips }: { pips: RosterPip[] }) {
+function PipTrack({ pips, progressId }: { pips: RosterPip[]; progressId: string }) {
   const label = describePipTrack(pips);
+  const visible = visiblePipTrack(pips);
   return (
-    <div className="pc-roster__pips" role="img" aria-label={label}>
-      {pips.map((pip, i) => (
-        <span
-          key={i}
-          className={`pc-roster__pip pc-roster__pip--${pip.kind}`}
-          aria-hidden="true"
-        />
-      ))}
-    </div>
+    <>
+      {/* One AT carrier only — description, not also the option name (#260). */}
+      <span id={progressId} className="pc-visually-hidden">
+        {label}
+      </span>
+      <div className="pc-roster__pips" aria-hidden="true">
+        {visible.map((pip, i) => (
+          <span
+            key={i}
+            className={`pc-roster__pip pc-roster__pip--${pip.kind}`}
+          />
+        ))}
+      </div>
+    </>
   );
 }
 
@@ -377,10 +433,11 @@ function RunRow({
       ? formatRelativeAge(run.updatedAt, nowMs)
       : null;
   const short = shortRef(run.id);
-  const progress = describePipTrack(run.pips);
+  // Option name stays short; progress rides aria-describedby only (#260 F4).
   const accessibleName = age
-    ? `run ${run.name} ${short} — ${meta.label}, ${age}. ${progress}`
-    : `run ${run.name} ${short} — ${meta.label}. ${progress}`;
+    ? `run ${run.name} ${short} — ${meta.label}, ${age}`
+    : `run ${run.name} ${short} — ${meta.label}`;
+  const progressId = `roster-run-progress-${run.id}`;
 
   return (
     <div
@@ -390,6 +447,7 @@ function RunRow({
       }${run.heldGate ? " pc-roster__row--held" : ""}${quietClass}`}
       id={`roster-option-run-${run.id}`}
       aria-label={accessibleName}
+      aria-describedby={progressId}
       aria-selected={selected}
       tabIndex={focused ? 0 : -1}
       ref={rowRef}
@@ -427,7 +485,7 @@ function RunRow({
         {run.subtitle && (
           <span className="pc-roster__run-sub">{run.subtitle}</span>
         )}
-        <PipTrack pips={run.pips} />
+        <PipTrack pips={run.pips} progressId={progressId} />
         {run.meta && (
           <span className="pc-roster__meta pc-roster__run-meta">{run.meta}</span>
         )}

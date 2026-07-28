@@ -443,10 +443,10 @@
   outline: 2px solid var(--brass-bright);
   outline-offset: 1px;
 }
-/* Selected row (#260): brass-tint-18 (above hover's 0.12) + solid brass
- * border — never the old alpha border that dimmed on select. */
+/* Selected row (#260): wash stays at rest (no third tint) so text contrast
+ * never drops vs the unselected row; solid brass border carries selection. */
 .pc-roster__row--selected {
-  background: var(--brass-tint-18);
+  background: none;
   border-color: var(--brass-border-selected);
 }
 .pc-roster__beacon {
@@ -3778,10 +3778,11 @@ button.pc-roster__meta--copy:focus-visible {
 .pc-roster__row--run:hover {
   background: var(--brass-tint-12);
 }
-/* Selected sits above hover (tint-18) and brightens the border to solid brass
- * so selection never reduces contrast vs the unselected brass-border (#260). */
+/* Selected keeps rest's tint-06 wash (AC3: no text-contrast drop vs unselected)
+ * and brightens the border to solid brass (#260). Differentiated from hover
+ * by both wash and border. */
 .pc-roster__row--run.pc-roster__row--selected {
-  background: var(--brass-tint-18);
+  background: var(--brass-tint-06);
   border-color: var(--brass-border-selected);
 }
 .pc-roster__row--held {
@@ -3871,9 +3872,9 @@ button.pc-roster__meta--copy:focus-visible {
 }
 
 /* Static pip track — flex children share width; length never follows fan-out.
- * Overflow (#260): condense. Prefer preferred min-width 4px, but allow pips
- * to shrink (`min-width: 0`) under a large track_bound so the row geometry is
- * never broken. overflow:hidden clips any residual min-content overflow. */
+ * Overflow (#260): JS caps rendered pips at ROSTER_PIP_VISIBLE_CAP (measured
+ * for min-width 4px + 3px gap at the 300px roster track). Do not drop
+ * min-width below 4px — #269 needs that floor for fail-pip height. */
 .pc-roster__pips {
   display: flex;
   flex-wrap: nowrap;
@@ -3886,10 +3887,10 @@ button.pc-roster__meta--copy:focus-visible {
 .pc-roster__pip {
   height: 5px;
   flex: 1 1 0;
-  min-width: 0;
+  min-width: 4px;
   border-radius: var(--radius-hairline);
   /* Empty / default: --ink-label clears 3:1 non-text contrast against rest
-   * (tint-06), hover (tint-12), and selected (tint-18) row washes (#260).
+   * (tint-06), hover (tint-12), and selected (tint-12) row washes (#260).
    * Prior --progress-track measured ~1.2:1 and made the bound invisible. */
   background: var(--ink-label);
 }

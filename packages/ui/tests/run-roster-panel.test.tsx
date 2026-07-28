@@ -3,7 +3,12 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { RosterPanel, describePipTrack } from "../src/hud/index.js";
+import {
+  RosterPanel,
+  describePipTrack,
+  visiblePipTrack,
+  ROSTER_PIP_VISIBLE_CAP,
+} from "../src/hud/index.js";
 import type { RosterGroup, RosterPip, RosterSessionOption } from "../src/hud/index.js";
 import { Inspector } from "../src/hud/Inspector/index.js";
 import type { InspectorRun } from "../src/hud/types.js";
@@ -207,30 +212,27 @@ describe("RosterPanel run rows (#254)", () => {
     expect(tracks[1]!.querySelectorAll(".pc-roster__pip").length).toBe(5);
   });
 
-  it("exposes pip progress via accessible name, not class (#260)", () => {
-    // coding-1: 3 done, 1 under way, 1 not started of 5
+  it("exposes pip progress via accessible description once, not class (#260)", () => {
+    // coding-1: 3 done, 1 live, 1 empty — description only (not the option name).
     render(<RosterPanel {...baseProps()} />);
-    const track = screen.getByRole("img", {
-      name: /Progress: 3 done, 1 under way, 1 not started of 5/i,
-    });
-    expect(track).toBeTruthy();
+    const option = screen.getByRole("option", { name: /coding-1/i });
+    // Name stays short — progress is not in the accessible name.
+    expect(option.getAttribute("aria-label") ?? "").not.toMatch(/Progress/i);
+    const descId = option.getAttribute("aria-describedby");
+    expect(descId).toBeTruthy();
+    const desc = document.getElementById(descId!);
+    expect(desc?.textContent).toBe("Progress of 5: 3 done, 1 live, 1 empty");
     // Reachable without querying by class.
-    expect(track.className).toMatch(/pc-roster__pips/);
-    // Option name also carries the summary (option aria-label overrides children).
-    expect(
-      screen.getByRole("option", {
-        name: /coding-1.*Progress: 3 done, 1 under way, 1 not started of 5/i,
-      }),
-    ).toBeTruthy();
-    // Held gate track.
-    expect(
-      screen.getByRole("img", {
-        name: /Progress: 3 done, 1 gated of 4/i,
-      }),
-    ).toBeTruthy();
+    expect(desc?.className).toMatch(/pc-visually-hidden/);
+    // Held gate track — single carrier.
+    const held = screen.getByRole("option", { name: /coding-2/i });
+    const heldDesc = document.getElementById(held.getAttribute("aria-describedby")!);
+    expect(heldDesc?.textContent).toBe("Progress of 4: 3 done, 1 gate");
+    // No role=img progress node (would double the sentence in the AX tree).
+    expect(screen.queryByRole("img", { name: /Progress/i })).toBeNull();
   });
 
-  it("describePipTrack summarises kinds against the bound", () => {
+  it("describePipTrack uses honest kind labels and leading bound", () => {
     const pips: RosterPip[] = [
       { kind: "done" },
       { kind: "done" },
@@ -238,8 +240,23 @@ describe("RosterPanel run rows (#254)", () => {
       { kind: "empty" },
       { kind: "empty" },
     ];
-    expect(describePipTrack(pips)).toBe(
-      "Progress: 2 done, 1 under way, 2 not started of 5",
+    // Kind names only — live/empty fold more than one wire state.
+    expect(describePipTrack(pips)).toBe("Progress of 5: 2 done, 1 live, 2 empty");
+  });
+
+  it("visiblePipTrack caps at ROSTER_PIP_VISIBLE_CAP and keeps severity", () => {
+    const pips: RosterPip[] = Array.from({ length: 70 }, (_, i) => {
+      if (i === 50) return { kind: "fail" as const };
+      if (i < 40) return { kind: "done" as const };
+      return { kind: "empty" as const };
+    });
+    const visible = visiblePipTrack(pips);
+    expect(visible).toHaveLength(ROSTER_PIP_VISIBLE_CAP);
+    expect(visible.some((p) => p.kind === "fail")).toBe(true);
+    expect(describePipTrack(pips)).toMatch(
+      new RegExp(
+        `Progress of 70: 40 done, 1 failed, 29 empty; showing ${ROSTER_PIP_VISIBLE_CAP} segments`,
+      ),
     );
   });
 
@@ -305,66 +322,74 @@ describe("Roster pip track a11y + contrast contracts (#260)", () => {
     expect(empty).not.toMatch(/--progress-track/);
   });
 
-  it("CSS: track condenses under pressure (min-width 0 + overflow hidden)", () => {
+  it("CSS: pip min-width stays 4px; overflow handled by JS cap (#260/#269)", () => {
     const track = blockFor(HUD_CSS, ".pc-roster__pips");
     const pip = blockFor(HUD_CSS, ".pc-roster__pip");
     expect(track).toMatch(/overflow:\s*hidden/);
-    expect(track).toMatch(/min-width:\s*0/);
     expect(track).toMatch(/flex-wrap:\s*nowrap/);
-    // Preferred floor was 4px; under large track_bound pips must be free to
-    // shrink so the row never overflows.
-    expect(pip).toMatch(/min-width:\s*0/);
-    expect(pip).not.toMatch(/min-width:\s*4px/);
+    // #269 requires the 4px floor; do not shrink pips to 0.
+    expect(pip).toMatch(/min-width:\s*4px/);
   });
 
-  it("CSS: selected row uses tint-18 and solid brass border (above hover)", () => {
-    const selected = blockFor(HUD_CSS, ".pc-roster__row--selected");
+  it("CSS: selection is border-channel; wash stays at rest (no tint-18)", () => {
+    // Avoid substring match: `.pc-roster__row--selected` also appears inside
+    // `.pc-roster__row--run.pc-roster__row--selected`.
+    const taskSelectedBlocks = [
+      ...HUD_CSS.matchAll(
+        /(?<![\w-])\.pc-roster__row--selected\s*\{([^}]+)\}/g,
+      ),
+    ];
+    expect(taskSelectedBlocks.length).toBeGreaterThan(0);
+    const selected = taskSelectedBlocks[taskSelectedBlocks.length - 1]![1]!;
     const runSelected = blockFor(
       HUD_CSS,
       ".pc-roster__row--run.pc-roster__row--selected",
     );
+    const runRestBlocks = [
+      ...HUD_CSS.matchAll(/(?<![\w-])\.pc-roster__row--run\s*\{([^}]+)\}/g),
+    ];
+    expect(runRestBlocks.length).toBeGreaterThan(0);
+    const runRest = runRestBlocks[runRestBlocks.length - 1]![1]!;
     const runHover = blockFor(HUD_CSS, ".pc-roster__row--run:hover");
-    expect(selected).toMatch(/background:\s*var\(--brass-tint-18\)/);
-    expect(runSelected).toMatch(/background:\s*var\(--brass-tint-18\)/);
+    // Task selected: no wash (matches rest).
+    expect(selected).toMatch(/background:\s*none/);
+    // Run selected: same tint-06 as rest, not hover's 0.12, not 0.18.
+    expect(runSelected).toMatch(/background:\s*var\(--brass-tint-06\)/);
+    expect(runRest).toMatch(/background:\s*var\(--brass-tint-06\)/);
     expect(runHover).toMatch(/background:\s*var\(--brass-tint-12\)/);
-    // Selected and hover must not share the same tint stop.
     expect(runSelected).not.toMatch(/--brass-tint-12/);
     expect(selected).toMatch(/border-color:\s*var\(--brass-border-selected\)/);
+    expect(runSelected).toMatch(/border-color:\s*var\(--brass-border-selected\)/);
     // Token resolves to solid brass, not the old #f0c25a88 alpha.
     const borderSelected = tokenValue("--brass-border-selected");
     expect(borderSelected.toLowerCase()).toBe("#f0c25a");
-    expect(TOKENS_CSS).toMatch(/--brass-tint-18:\s*rgba\(240,\s*194,\s*90,\s*0\.18\)/);
+    expect(TOKENS_CSS).not.toMatch(/--brass-tint-18/);
   });
 
   it("empty pip contrast ≥ 3:1 against rest / hover / selected row washes", () => {
-    // Composite brass tints over plate-top (lighter plate → tighter ratio for
-    // a light empty pip). Values from tokens.css; ratios computed here.
+    // Run selected wash === rest (tint-06); hover is tint-12.
     const plateTop = tokenValue("--plate-top"); // #1d140c
     const brass = tokenValue("--brass"); // #f0c25a
     const emptyPip = tokenValue("--ink-label"); // #967c54
     const restA = parseRgbaAlpha(tokenValue("--brass-tint-06"));
     const hoverA = parseRgbaAlpha(tokenValue("--brass-tint-12"));
-    const selA = parseRgbaAlpha(tokenValue("--brass-tint-18"));
     expect(restA).toBeCloseTo(0.06, 5);
     expect(hoverA).toBeCloseTo(0.12, 5);
-    expect(selA).toBeCloseTo(0.18, 5);
 
     const restBg = compositeOver(brass, plateTop, restA);
     const hoverBg = compositeOver(brass, plateTop, hoverA);
-    const selBg = compositeOver(brass, plateTop, selA);
+    const selBg = restBg; // selected wash === rest
 
     const restR = contrastRatio(emptyPip, restBg);
     const hoverR = contrastRatio(emptyPip, hoverBg);
     const selR = contrastRatio(emptyPip, selBg);
 
-    // Measured ratios (assert both floor and documented values).
     expect(restR).toBeGreaterThanOrEqual(3);
     expect(hoverR).toBeGreaterThanOrEqual(3);
     expect(selR).toBeGreaterThanOrEqual(3);
-    // Pin the measured numbers so a token drift fails loudly.
     expect(restR).toBeCloseTo(4.11, 1);
     expect(hoverR).toBeCloseTo(3.57, 1);
-    expect(selR).toBeCloseTo(3.07, 1);
+    expect(selR).toBeCloseTo(4.11, 1);
   });
 
   it("selection border contrast does not drop vs unselected brass-border", () => {
@@ -373,16 +398,72 @@ describe("Roster pip track a11y + contrast contracts (#260)", () => {
     const unselectedBorder = tokenValue("--brass-border"); // #b98f3f
     const selectedBorder = tokenValue("--brass-border-selected"); // #f0c25a
     const restA = parseRgbaAlpha(tokenValue("--brass-tint-06"));
-    const selA = parseRgbaAlpha(tokenValue("--brass-tint-18"));
     const restBg = compositeOver(brass, plateTop, restA);
-    const selBg = compositeOver(brass, plateTop, selA);
-
+    // Selected wash === rest, so border contrast is vs the same composite.
     const before = contrastRatio(unselectedBorder, restBg);
-    const after = contrastRatio(selectedBorder, selBg);
-    // Selection must not reduce border contrast (the old alpha border did).
+    const after = contrastRatio(selectedBorder, restBg);
     expect(after).toBeGreaterThanOrEqual(before);
     expect(before).toBeCloseTo(5.47, 1);
-    expect(after).toBeCloseTo(7.28, 1);
+    expect(after).toBeCloseTo(9.73, 1);
+  });
+
+  it("selected-row text contrast equals rest (no drop on selection)", () => {
+    // AC3: selection wash matches rest, so every ink ratio is unchanged.
+    const plateTop = tokenValue("--plate-top");
+    const brass = tokenValue("--brass");
+    const restBg = compositeOver(brass, plateTop, 0.06);
+    const selBg = restBg;
+    for (const token of [
+      "--ink-meta",
+      "--ink-faint",
+      "--ink-label",
+      "--ink-parchment",
+      "--ink-muted",
+    ]) {
+      const ink = tokenValue(token);
+      expect(contrastRatio(ink, selBg)).toBeCloseTo(contrastRatio(ink, restBg), 5);
+    }
+  });
+
+  it("DOM: track_bound above the cap renders only ROSTER_PIP_VISIBLE_CAP pips", () => {
+    const many: RosterPip[] = Array.from({ length: 100 }, (_, i) =>
+      i < 10 ? { kind: "done" as const } : { kind: "empty" as const },
+    );
+    const groups: RosterGroup[] = [
+      {
+        state: "running",
+        runs: [
+          {
+            id: "r-cap-test",
+            name: "wide-bound",
+            attentionState: "running",
+            runState: "running",
+            subtitle: "x",
+            meta: "",
+            heldGate: false,
+            pips: many,
+            orchestratorSession: null,
+          },
+        ],
+        tasks: [],
+      },
+    ];
+    const { container } = render(
+      <RosterPanel
+        {...baseProps()}
+        groups={groups}
+        totalTasks={0}
+        activeTasks={0}
+      />,
+    );
+    const track = container.querySelector(".pc-roster__pips");
+    expect(track?.querySelectorAll(".pc-roster__pip").length).toBe(
+      ROSTER_PIP_VISIBLE_CAP,
+    );
+    const option = screen.getByRole("option", { name: /wide-bound/i });
+    const desc = document.getElementById(option.getAttribute("aria-describedby")!);
+    expect(desc?.textContent).toContain("Progress of 100:");
+    expect(desc?.textContent).toContain(`showing ${ROSTER_PIP_VISIBLE_CAP} segments`);
   });
 });
 

@@ -394,13 +394,11 @@
   );
 
   /* §4.6 — roster row selection/hover tints (alpha variants of --brass) and
-     the beacon flag's glow (alpha of --brass-bright). Three states need three
-     stops: rest 0.06, hover 0.12, selected 0.18 (#260). 0.25 remains for
-     stronger chrome (focus rings, pressed chips). */
+     the beacon flag's glow (alpha of --brass-bright). Rest 0.06 / hover 0.12;
+     selection is carried on the border channel (#260), not a third tint. */
   --brass-tint-06: rgba(240, 194, 90, 0.06);
   --brass-tint-08: rgba(240, 194, 90, 0.08);
   --brass-tint-12: rgba(240, 194, 90, 0.12);
-  --brass-tint-18: rgba(240, 194, 90, 0.18);
   --brass-tint-25: rgba(240, 194, 90, 0.25);
   /* Selected border: full brass (not alpha) so selection never dims the edge
      relative to the unselected `--brass-border` (#260). */
