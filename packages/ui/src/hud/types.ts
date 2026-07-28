@@ -357,6 +357,63 @@ export interface InspectorRunNode {
 }
 
 /**
+ * Wire deliverable kind. `purged` is a *state* (treatment), not a fourth kind
+ * (#255 / ADR-0021).
+ */
+export type InspectorDeliverableKind = "inline" | "file" | "dir";
+
+/**
+ * One deliverable as the inspector renders it (#255). Discriminated by
+ * `treatment` so inline JSON, reference-only paths, and decayed rows cannot
+ * be confused — three kinds, three treatments; purged is a rendered state.
+ */
+export type InspectorDeliverable =
+  | {
+      treatment: "inline";
+      id: string;
+      /** Human address (`node.iteration[slot]/port`). */
+      address: string;
+      /** Port type label when known (`dict<string, source[]>`). */
+      typeLabel: string | null;
+      /** Pretty-printed JSON for the report-tinted well. */
+      json: string;
+    }
+  | {
+      treatment: "reference";
+      id: string;
+      address: string;
+      kind: "file" | "dir";
+      /** Stored path; empty string when the wire had none. */
+      path: string;
+      /** Pre-formatted size (`14 kB`, `11 files`), or null when unknown. */
+      sizeLabel: string | null;
+    }
+  | {
+      treatment: "purged";
+      id: string;
+      address: string;
+      kind: InspectorDeliverableKind;
+      /**
+       * Decay note when the wire provided one (date / run). Never an error
+       * string — purged is expected retention, not a fetch failure.
+       */
+      note: string | null;
+    };
+
+/**
+ * Honest deliverable list status on a run view (#255).
+ *
+ * Three distinguishable things — never three readings of the same empty array:
+ * - `not_fetched` — detail exists but deliverable rows were not loaded
+ * - `none` — loaded; the run produced no deliverables
+ * - `ready` — loaded; `items` may be all-purged and still render (addresses survive)
+ */
+export type InspectorDeliverables =
+  | { status: "not_fetched" }
+  | { status: "none" }
+  | { status: "ready"; items: InspectorDeliverable[] };
+
+/**
  * Run selected in the roster but detail not yet fetched. Suppresses the
  * resting digest without inventing counts, states, or an empty node table
  * that would read as "none entered" (#254 QC #6). Issues #253 / #255 build
@@ -368,9 +425,10 @@ export interface InspectorRunPending {
 }
 
 /**
- * Full inspector payload when a run is selected (#254). Mirrors the CLI node
- * table; deliverable browsing and fork vocabulary are out of scope here.
- * `nodes: []` means the run has been fetched and no nodes have been entered.
+ * Full inspector payload when a run is selected (#254 / #255). Mirrors the CLI
+ * node table; deliverables are a first-class, honest status (not an empty
+ * array standing in for "not loaded"). `nodes: []` means the run has been
+ * fetched and no nodes have been entered.
  */
 export interface InspectorRunReady {
   status: "ready";
@@ -388,6 +446,11 @@ export interface InspectorRunReady {
   duration: string | null;
   tasksTotal: number;
   nodes: InspectorRunNode[];
+  /**
+   * Deliverable projection (#255). Default from run detail alone is
+   * `not_fetched` — node tables only carry deliverable *ids*, never values.
+   */
+  deliverables: InspectorDeliverables;
   /** Block detail when the run is blocked; null otherwise. */
   block: {
     reason: string;

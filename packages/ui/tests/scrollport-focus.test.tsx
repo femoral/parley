@@ -333,6 +333,7 @@ describe("scrollport keyboard focus (H3)", () => {
           duration: null,
           tasksTotal: 3,
           heldGate: false,
+          deliverables: { status: "not_fetched" },
           block: null,
           nodes: [
             {

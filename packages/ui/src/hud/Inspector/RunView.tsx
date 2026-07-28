@@ -2,6 +2,9 @@
  * Inspector run view — one line per (node, iteration), matching
  * `parley run status <run>` plus a state-carrying spine (#254 / ADR-0021).
  *
+ * #255 adds fork STATE vocabulary (inherited quiet / skipped loud) and the
+ * kind-aware deliverable stack under the table.
+ *
  * Deliberately close to docs/arch/222-query-surface-prototype/02-run-summary.txt;
  * that closeness is a feature. No gate verbs — Cove surfaces a held gate, it
  * never actions one.
@@ -15,9 +18,10 @@ import {
   type UIEvent,
 } from "react";
 import { Mark } from "../../primitives/index.js";
-import { stateMetaFor } from "../../tokens/state-meta.js";
+import { STATE_META, stateMetaFor } from "../../tokens/state-meta.js";
 import { useCopyScaffold } from "../useCopyScaffold.js";
 import type { InspectorRun, InspectorRunNode, InspectorRunReady } from "../types.js";
+import { DeliverableView } from "./DeliverableView.js";
 
 function shortRef(id: string): string {
   return id.length > 8 ? id.slice(0, 8) : id;
@@ -65,7 +69,49 @@ function SpineCell({ node }: { node: InspectorRunNode }) {
   );
 }
 
+/**
+ * STATE column — fork vocabulary is asymmetric (#255 / F7):
+ * - `inherited` quiet: strike-through + archive ink + cancelled mark
+ * - `skipped` loud: coral + failed mark + "!" cue (non-colour carrier)
+ * Colour is never the only difference between the two.
+ */
 function StateCell({ node }: { node: InspectorRunNode }) {
+  if (node.state === "inherited") {
+    return (
+      <td>
+        <span
+          className="pc-runview__st pc-runview__st--inherited"
+          data-fork="inherited"
+          title="inherited — value copied at iteration 0"
+        >
+          <span className="pc-runview__st-mark" aria-hidden="true">
+            <Mark mark={STATE_META.cancelled.mark} size={10} />
+          </span>
+          <span className="pc-runview__st-label">{node.stateLabel}</span>
+        </span>
+      </td>
+    );
+  }
+  if (node.state === "skipped") {
+    return (
+      <td>
+        <span
+          className="pc-runview__st pc-runview__st--skipped"
+          data-fork="skipped"
+          title="skipped — a human approval was discarded by this fork"
+        >
+          <span className="pc-runview__st-mark" aria-hidden="true">
+            <Mark mark={STATE_META.failed.mark} size={10} />
+          </span>
+          <span className="pc-runview__st-label">{node.stateLabel}</span>
+          <span className="pc-runview__st-cue" aria-hidden="true">
+            !
+          </span>
+        </span>
+      </td>
+    );
+  }
+
   const meta = stateMetaFor(node.spineState);
   const style = { "--st-color": meta.colorVar } as CSSProperties;
   return (
@@ -81,8 +127,16 @@ function StateCell({ node }: { node: InspectorRunNode }) {
 }
 
 function NodeRow({ node }: { node: InspectorRunNode }) {
+  const rowClass = [
+    node.live ? "pc-runview__row--live" : "",
+    node.state === "inherited" ? "pc-runview__row--inherited" : "",
+    node.state === "skipped" ? "pc-runview__row--skipped" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
   return (
-    <tr className={node.live ? "pc-runview__row--live" : undefined}>
+    <tr className={rowClass || undefined}>
       <SpineCell node={node} />
       <td className="pc-runview__node">
         {node.node}
@@ -99,6 +153,12 @@ function NodeRow({ node }: { node: InspectorRunNode }) {
         {node.gist}
         {node.onReject && (
           <span className="pc-runview__reject"> on_reject → {node.onReject}</span>
+        )}
+        {node.state === "skipped" && node.kind === "gate" && (
+          <span className="pc-runview__skip-note">
+            {" "}
+            a human approval was discarded by this fork
+          </span>
         )}
       </td>
       <td className="pc-runview__age">{node.age ?? "—"}</td>
@@ -237,6 +297,8 @@ function ReadyRunView({ run }: { run: InspectorRunReady }) {
           />
         </div>
       )}
+
+      <DeliverableView deliverables={run.deliverables} />
     </div>
   );
 }

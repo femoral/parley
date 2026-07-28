@@ -94,6 +94,10 @@ export type {
 export {
   projectRosterRun,
   projectInspectorRun,
+  projectDeliverable,
+  projectDeliverables,
+  formatDeliverableAddress,
+  formatDeliverableSize,
   formatRunChip,
   runAttentionState,
   buildPipTrack,
