@@ -6,7 +6,14 @@
  * that closeness is a feature. No gate verbs — Cove surfaces a held gate, it
  * never actions one.
  */
-import type { CSSProperties } from "react";
+import {
+  useCallback,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type UIEvent,
+} from "react";
 import { Mark } from "../../primitives/index.js";
 import { stateMetaFor } from "../../tokens/state-meta.js";
 import { useCopyScaffold } from "../useCopyScaffold.js";
@@ -99,8 +106,43 @@ function NodeRow({ node }: { node: InspectorRunNode }) {
   );
 }
 
+function tableCanScrollMore(el: HTMLElement): boolean {
+  // Integer scroll metrics can land 1px short of max; treat near-end as end.
+  return el.scrollLeft < el.scrollWidth - el.clientWidth - 1;
+}
+
 function ReadyRunView({ run }: { run: InspectorRunReady }) {
   const short = shortRef(run.id);
+  const tableWrapRef = useRef<HTMLDivElement>(null);
+  const [fadeVisible, setFadeVisible] = useState(false);
+
+  const syncFade = useCallback(() => {
+    const el = tableWrapRef.current;
+    if (!el) {
+      setFadeVisible(false);
+      return;
+    }
+    setFadeVisible(tableCanScrollMore(el));
+  }, []);
+
+  useLayoutEffect(() => {
+    syncFade();
+  }, [syncFade, run.nodes]);
+
+  useLayoutEffect(() => {
+    const el = tableWrapRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(() => syncFade());
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [syncFade, run.nodes.length]);
+
+  const onTableScroll = useCallback(
+    (_event: UIEvent<HTMLDivElement>) => {
+      syncFade();
+    },
+    [syncFade],
+  );
 
   return (
     <div className="pc-runview">
@@ -161,10 +203,12 @@ function ReadyRunView({ run }: { run: InspectorRunReady }) {
       ) : (
         <div className="pc-runview__table-scroller">
           <div
+            ref={tableWrapRef}
             className="pc-runview__table-wrap"
             role="region"
             aria-label="Run node table"
             tabIndex={0}
+            onScroll={onTableScroll}
           >
             <table className="pc-runview__table">
               <thead>
@@ -186,7 +230,11 @@ function ReadyRunView({ run }: { run: InspectorRunReady }) {
               </tbody>
             </table>
           </div>
-          <div className="pc-runview__table-fade" aria-hidden="true" />
+          <div
+            className="pc-runview__table-fade"
+            aria-hidden="true"
+            hidden={!fadeVisible}
+          />
         </div>
       )}
     </div>

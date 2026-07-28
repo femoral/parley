@@ -370,7 +370,7 @@ function RunRow({
             {run.name}
           </span>
           <span className="pc-roster__run-id" title={run.id}>
-            run {short}
+            {short}
           </span>
           <span
             className={`pc-roster__run-badge${

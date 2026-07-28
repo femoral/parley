@@ -3806,12 +3806,13 @@ button.pc-roster__meta--copy:focus-visible {
   min-width: 0;
   width: 100%;
 }
-/* Name may ellipsize after ≥8ch; short-id never shrinks (correlation key + copy
- * target). Badge is flex:0 0 auto. At the narrowest width the name yields first,
- * not the id and not the first ~8 characters of the name. */
+/* Name is the only shrinkable child (flex-shrink:1 + min-width floor). Short-id
+ * is flex:0 0 auto so all 8 id characters stay; badge is fixed. Roster drops the
+ * non-informative "run " prefix so id + badge + ≥5ch name fit at 300px with age
+ * and beacon present — the head must not overflow onto those siblings. */
 .pc-roster__run-head .pc-roster__name {
   flex: 1 1 auto;
-  min-width: 8ch;
+  min-width: 5ch;
 }
 .pc-roster__run-id {
   flex: 0 0 auto;
@@ -4007,8 +4008,9 @@ button.pc-roster__meta--copy:focus-visible {
   margin: 0 -4px;
   padding: 0 4px;
 }
-/* Right-edge feather: table min-width always exceeds the 344px rail content
- * box, so the cue is always meaningful (not an inert tab stop). */
+/* Right-edge feather: only while more content lies to the right. Gated in
+ * RunView via [hidden] when scrollLeft reaches max (avoids veiling the age
+ * column the user scrolled to read). */
 .pc-runview__table-fade {
   pointer-events: none;
   position: absolute;
@@ -4024,12 +4026,15 @@ button.pc-roster__meta--copy:focus-visible {
     var(--plate-top) 100%
   );
 }
-/* Honest scroll: auto layout + min-width so columns size to content, not to
- * percentage shares that destroy load-bearing text. min-width keeps the
- * scrollport genuinely scrollable inside --region-right 344px. */
+.pc-runview__table-fade[hidden] {
+  display: none;
+}
+/* Honest scroll: auto layout + per-column minima so columns size to content.
+ * No table min-width floor — column mins alone already exceed the 344px rail
+ * (≈502px narrowest), so the scrollport is genuinely scrollable without a
+ * redundant 36rem floor that bloated short-name tables at rest. */
 .pc-runview__table {
   width: max-content;
-  min-width: 36rem;
   border-collapse: collapse;
   font-size: var(--text-sub);
 }
