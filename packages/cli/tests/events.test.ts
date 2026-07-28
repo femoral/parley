@@ -7,6 +7,7 @@ import {
   type StreamEvent,
   type TaskEnvelope,
 } from "@useparley/core";
+import { DAEMON_VERSION } from "@useparley/daemon/version.js";
 import {
   cleanupHome,
   makeHome,
@@ -267,8 +268,8 @@ describe("health version + core SDK (#62)", () => {
     const health = await client.health();
     expect(health.status).toBe("ok");
     expect(typeof health.pid).toBe("number");
-    // Matches the daemon package version (the workspace ships 0.0.0 pre-release).
-    expect(health.version).toBe("0.0.0");
+    // Same source the daemon serves on /health (packages/daemon/src/version.ts).
+    expect(health.version).toBe(DAEMON_VERSION);
   });
 
   it("the core SSE helper bootstraps from the snapshot seq and decodes events", async () => {
