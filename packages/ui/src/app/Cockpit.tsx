@@ -15,6 +15,7 @@ import {
 import { Mark } from "../primitives/index.js";
 import { STATE_META } from "../tokens/state-meta.js";
 import { Scene } from "../scene/index.js";
+import { RunChart } from "../chart/index.js";
 import { useCockpit, useCockpitKeys } from "./hooks/index.js";
 import { CompassRose } from "./CompassRose.js";
 import "./cockpit.css";
@@ -26,7 +27,8 @@ const DevKitBand = import.meta.env.DEV
 /**
  * Layer 4 — the cockpit shell. Pure presentation: it reads one hook
  * ({@link useCockpit}) and lays the regions out; it never imports the core SDK.
- * Centre column switches Cove (living scene) ↔ Soundings (metrics, #119).
+ * Centre column: Soundings (#119) ↔ run chart on paper (#253) ↔ living Cove
+ * scene. Selection is the roster's one verb — no third footer view.
  */
 export function Cockpit() {
   const {
@@ -69,6 +71,21 @@ export function Cockpit() {
     [snapshot.groups, clock],
   );
 
+  // Centre-stage host (#253): Soundings wins the footer toggle; otherwise a
+  // selected run mounts the parchment chart and everything else keeps the scene.
+  // Nothing selected → scene (unchanged). Task selected → scene.
+  const showRunChart =
+    mode === "cove" && roster.selectedRunId != null;
+  const centerLabel =
+    mode === "soundings" ? "Soundings" : showRunChart ? "Run chart" : "The cove";
+
+  // Pending carries only the id — no invented counts or states (#254 QC #6).
+  const chartRun =
+    inspectorRun ??
+    (roster.selectedRunId
+      ? { status: "pending" as const, id: roster.selectedRunId }
+      : null);
+
   return (
     <div className={`pc-cockpit${chartStale ? " pc-cockpit--stale" : ""}`} data-stale={chartStale ? "true" : undefined}>
       {/* Keyboard users land here first; the cockpit has no nav to skip past
@@ -109,7 +126,7 @@ export function Cockpit() {
             />
           </section>
 
-          <section className="pc-region--center" aria-label={mode === "soundings" ? "Soundings" : "The cove"}>
+          <section className="pc-region--center" aria-label={centerLabel}>
 
             <div className="pc-center__head">
               <div className="pc-center__title-stack">
@@ -127,6 +144,10 @@ export function Cockpit() {
                   onFiltersClear={clearSoundingsFilters}
                   onViewTab={setSoundingsViewTab}
                 />
+              </div>
+            ) : showRunChart && chartRun ? (
+              <div className="pc-chart-stage">
+                <RunChart run={chartRun} />
               </div>
             ) : (
               <div className="pc-scene">
@@ -162,15 +183,7 @@ export function Cockpit() {
             />
             <Inspector
               task={inspector}
-              run={
-                inspectorRun ??
-                // Selection is ahead of the detail poll for one tick — keep the
-                // plate out of the empty digest while the node table arrives.
-                // Pending carries only the id: no invented counts or states.
-                (roster.selectedRunId
-                  ? { status: "pending" as const, id: roster.selectedRunId }
-                  : null)
-              }
+              run={chartRun}
               initialTab={roster.inspectorIntent.tab}
               openSeq={roster.inspectorIntent.seq}
               digest={logbookDigest}

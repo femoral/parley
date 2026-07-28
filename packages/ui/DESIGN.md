@@ -298,6 +298,8 @@ On parchment, the same reservation covers the chart state inks: **`--ink-live`**
 
 **The Textured-sheet AA Rule.** Chart-ink AA claims against flat `--parchment-bg` (`#efe0bd`) do not automatically hold on a textured or gradient sheet. The ratified #224 sheet darkens to `#e2cfa4`, where `--ink-chart-soft` (≈4.21:1) and `--ink-live` (≈4.34:1) fail normal-text AA while `--ink-chart` still holds ≈6.60:1. **Constraint:** text that must be read — including state glyphs and the "ahead" `?` — may use `--ink-chart-soft` or `--ink-live` only where the surface under that text is no darker than flat `#efe0bd`. Over any darker parchment region (including `#e2cfa4` stops, stains, or edge washes), step that text up to `--ink-chart`. `--ink-done` and `--ink-fail` still clear AA at `#e2cfa4`; `--ink-chart-ghost` never carries readable text.
 
+**The Stroke-State Rule.** A route *leg* — the stroke between two chart marks — may not carry state. A leg cannot wear a glyph, so colour would be the only cue; measured separation between the candidate inks under protanopia is ΔE **0.9** (`--ink-chart-soft` vs `--ink-done`), i.e. indistinguishable. Every route leg is therefore drawn in a *pen weight* only — `--ink-chart` or `--ink-chart-soft` — chosen for structural legibility (strong pen for the trail already sailed, soft pen for structure not yet reached), never to encode run state. State lives **only** on marks, seals and tally chips, where the second cue (glyph) is available: `✓` sailed, `✦` under way, `?` ahead, `✕` blotted. This keeps the dash vocabulary free for route *structure*: dashed = the treasure-trail route, longer-dashed = a loop-back arc. (#259)
+
 ## Typography
 
 **Display Font:** Cinzel (with 'Times New Roman', serif) — engraved Roman capitals.
