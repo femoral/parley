@@ -334,6 +334,21 @@ describe("scrollport keyboard focus (H3)", () => {
           duration: null,
           tasksTotal: 3,
           heldGate: false,
+          deliverables: {
+            status: "ready",
+            items: [
+              {
+                treatment: "inline",
+                id: "d-scroll-well",
+                address: "funnel.1/shortlist",
+                typeLabel: null,
+                json:
+                  "{\n  " +
+                  Array.from({ length: 20 }, (_, i) => `"k${i}": ${i}`).join(",\n  ") +
+                  "\n}",
+              },
+            ],
+          },
           block: null,
           nodes: [
             {
@@ -374,6 +389,12 @@ describe("scrollport keyboard focus (H3)", () => {
     expectFocusable(wrap, ".pc-runview__table-wrap");
     expect(wrap?.getAttribute("role")).toBe("region");
     expect(wrap?.getAttribute("aria-label")).toBe("Run node table");
+
+    // #255 F5 — inline deliverable report well is a named focusable scrollport.
+    const dlvWell = container.querySelector(".pc-dlv__well--report");
+    expectFocusable(dlvWell, ".pc-dlv__well--report");
+    expect(dlvWell?.getAttribute("role")).toBe("region");
+    expect(dlvWell?.getAttribute("aria-label")).toMatch(/Inline value for funnel\.1\/shortlist/);
   });
 
   it("Run chart scrollport is a named focusable region (#253)", () => {
