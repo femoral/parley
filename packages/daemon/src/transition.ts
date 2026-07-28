@@ -82,8 +82,11 @@ export interface TransitionHooks {
   /** Wake inbox / firehose / SSE waiters. */
   wake(): void;
   /**
-   * Called when the new state frees a concurrency slot.
-   * Today: terminal or stalled → drainConcurrencyQueue.
+   * Called when the new state frees a concurrency slot (terminal or stalled).
+   * Invoked synchronously inside {@link TaskTransitions.apply}, so callers
+   * that drain runs from this hook must have already made durable anything
+   * advance needs to observe for that task — in particular, run deliverables
+   * for a completing run-owned task (#264 / ADR-0017).
    */
   onSlotFreed?(taskId: string, state: TaskState): void;
   /** Dry-run terminal purge scheduling. */

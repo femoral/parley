@@ -1994,7 +1994,9 @@ export class TaskEngine {
    *
    * ADR-0017 / #238: `outcome: blocked` routes as a **failed** task (gave up /
    * unusable work); `partial` is a success. Port-schema reports (no outcome)
-   * complete as usual and materialize deliverables when run-owned.
+   * complete as usual and materialize deliverables when run-owned — and those
+   * rows are written *before* the completed transition so drain never sees a
+   * settled task without its ports (#264).
    */
   private completeAcceptedReport(
     taskId: string,
@@ -2042,23 +2044,30 @@ export class TaskEngine {
     if (usage !== undefined) {
       Object.assign(fields, this.usagePatch(usage));
     }
+
+    // Run-owned: materialize deliverable rows from the accepted report
+    // *before* the completed transition. onSlotFreed drains runs
+    // synchronously inside apply(), so advance must never observe a
+    // completed task whose deliverables are still absent (#264 / ADR-0017).
+    // Best-effort — a bad payload must not undo completion (validation
+    // already ran at submit_report); the try/catch lives inside the
+    // recorder so a throw still leaves the task completed below.
+    if (task.run_id !== null && task.node !== null && report !== null) {
+      this.recordRunDeliverables(task, report);
+    }
+
     this.taskTransitions.apply(taskId, "completed", {
       cause: "complete",
       fields,
     });
-
-    // Run-owned: materialize deliverable rows from the accepted report so
-    // advance can read ports. Best-effort — a bad payload must not undo
-    // completion (validation already ran at submit_report).
-    if (task.run_id !== null && task.node !== null && report !== null) {
-      this.recordRunDeliverables(task, report);
-    }
   }
 
   /**
-   * Insert deliverable rows for a completed run-owned task from its report
-   * payload. Port types (and therefore deliverable kind: inline / file / dir)
-   * come from the step's declared `out` ports on the workflow definition
+   * Insert deliverable rows for a run-owned task from its accepted report
+   * payload. Called **before** the completed transition so drain/advance can
+   * never observe a settled task without its deliverables (#264 / ADR-0017).
+   * Port types (and therefore deliverable kind: inline / file / dir) come
+   * from the step's declared `out` ports on the workflow definition
    * (ADR-0016). Falling back to every key as text is the exception path when
    * the definition cannot be resolved — logged, never silent.
    */
@@ -3716,6 +3725,7 @@ export class TaskEngine {
    *   onRetry / taskOutcome) + error logging
    * - `actionRun(verb)` public API for gate verbs
    * - `completeAcceptedReport`: outcome blocked → failed; run deliverables
+   *   recorded *before* the completed transition (#264)
    *
    * Spawn-time errors block the run (never auto-fail). Definition parse
    * failures mark the run `failed` (nobody can advance it).

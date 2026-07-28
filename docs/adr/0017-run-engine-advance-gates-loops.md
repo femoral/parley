@@ -25,7 +25,10 @@ lineage `parley fix` already owns.
   loop payload.
 - **Advance is a pure function**, drained off the existing `onSlotFreed` hook,
   which already fires on terminal-or-stalled. `transition.ts` and ADR-0004 are
-  untouched.
+  untouched. **Invariant:** a run must never observe a completed task whose
+  deliverables have not been recorded — `onSlotFreed` is synchronous inside
+  the transition, so run-owned deliverables are materialized from the accepted
+  report *before* the task is marked `completed` (#264).
 - **A gate is a node**, not a flag on a step — a flag cannot say whether it means
   "before" or "after", and a gate's position in the sequence is its meaning. It
   spawns nothing and waits for the orchestrator. Its author declares a mandatory
