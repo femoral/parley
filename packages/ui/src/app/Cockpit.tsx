@@ -166,22 +166,9 @@ export function Cockpit() {
                 inspectorRun ??
                 // Selection is ahead of the detail poll for one tick — keep the
                 // plate out of the empty digest while the node table arrives.
+                // Pending carries only the id: no invented counts or states.
                 (roster.selectedRunId
-                  ? {
-                      id: roster.selectedRunId,
-                      workflow: "…",
-                      workflowVersion: 0,
-                      runState: "running",
-                      stateLabel: "loading",
-                      branch: null,
-                      currentNode: null,
-                      iteration: 0,
-                      duration: null,
-                      tasksTotal: 0,
-                      nodes: [],
-                      block: null,
-                      heldGate: false,
-                    }
+                  ? { status: "pending" as const, id: roster.selectedRunId }
                   : null)
               }
               initialTab={roster.inspectorIntent.tab}

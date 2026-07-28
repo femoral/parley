@@ -315,4 +315,63 @@ describe("scrollport keyboard focus (H3)", () => {
     expect(scroll?.getAttribute("role")).toBe("region");
     expect(scroll?.getAttribute("aria-label")).toBe("Heatmap grid");
   });
+
+  it("Inspector run view table wrap is a named focusable region", () => {
+    const { container } = render(
+      <Inspector
+        task={null}
+        run={{
+          status: "ready",
+          id: "r-scroll01",
+          workflow: "research",
+          workflowVersion: 1,
+          runState: "running",
+          stateLabel: "running",
+          branch: null,
+          currentNode: "search",
+          iteration: 1,
+          duration: null,
+          tasksTotal: 3,
+          heldGate: false,
+          block: null,
+          nodes: [
+            {
+              key: "scope\u00001",
+              node: "scope",
+              kind: "step",
+              iteration: 1,
+              state: "completed",
+              stateLabel: "completed",
+              tasksLabel: "1",
+              gist: "ok",
+              age: "2m",
+              fanoutWidth: null,
+              spineState: "completed",
+              live: false,
+              onReject: null,
+            },
+            {
+              key: "search\u00001",
+              node: "search",
+              kind: "step",
+              iteration: 1,
+              state: "running",
+              stateLabel: "running",
+              tasksLabel: "2",
+              gist: "still out",
+              age: "1m",
+              fanoutWidth: 2,
+              spineState: "running",
+              live: true,
+              onReject: null,
+            },
+          ],
+        }}
+      />,
+    );
+    const wrap = container.querySelector(".pc-runview__table-wrap");
+    expectFocusable(wrap, ".pc-runview__table-wrap");
+    expect(wrap?.getAttribute("role")).toBe("region");
+    expect(wrap?.getAttribute("aria-label")).toBe("Run node table");
+  });
 });

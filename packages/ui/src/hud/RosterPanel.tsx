@@ -370,12 +370,21 @@ function RunRow({
             {run.name}
           </span>
           <span className="pc-roster__run-id" title={run.id}>
-            run {short}
+            {short}
           </span>
           <span
             className={`pc-roster__run-badge${
-              run.heldGate ? " pc-roster__run-badge--gate" : ""
+              run.heldGate
+                ? " pc-roster__run-badge--gate"
+                : groupState === "cancelled"
+                  ? " pc-roster__run-badge--cancelled"
+                  : ""
             }`}
+            style={
+              run.heldGate || groupState === "cancelled"
+                ? undefined
+                : ({ ["--run-badge-color"]: meta.colorVar } as CSSProperties)
+            }
           >
             {run.heldGate ? "Gate" : "Run"}
           </span>

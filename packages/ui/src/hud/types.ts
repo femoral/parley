@@ -357,10 +357,23 @@ export interface InspectorRunNode {
 }
 
 /**
- * Inspector payload when a run is selected (#254). Mirrors the CLI node
- * table; deliverable browsing and fork vocabulary are out of scope here.
+ * Run selected in the roster but detail not yet fetched. Suppresses the
+ * resting digest without inventing counts, states, or an empty node table
+ * that would read as "none entered" (#254 QC #6). Issues #253 / #255 build
+ * on this discriminant — never put placeholder values on a ready payload.
  */
-export interface InspectorRun {
+export interface InspectorRunPending {
+  status: "pending";
+  id: string;
+}
+
+/**
+ * Full inspector payload when a run is selected (#254). Mirrors the CLI node
+ * table; deliverable browsing and fork vocabulary are out of scope here.
+ * `nodes: []` means the run has been fetched and no nodes have been entered.
+ */
+export interface InspectorRunReady {
+  status: "ready";
   id: string;
   workflow: string;
   workflowVersion: number;
@@ -384,6 +397,9 @@ export interface InspectorRun {
   /** True when blocked on a held gate (surfaces the helm note; no verbs). */
   heldGate: boolean;
 }
+
+/** Inspector run view model — pending (not fetched) or ready (from GET /runs/:ref). */
+export type InspectorRun = InspectorRunPending | InspectorRunReady;
 
 /**
  * One quiet row on the resting LOGBOOK fleet digest (no task selected).

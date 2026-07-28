@@ -1,4 +1,6 @@
 /** @vitest-environment happy-dom */
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { RosterPanel } from "../src/hud/index.js";
@@ -7,6 +9,14 @@ import { Inspector } from "../src/hud/Inspector/index.js";
 import type { InspectorRun } from "../src/hud/types.js";
 
 afterEach(cleanup);
+
+const HUD_CSS = readFileSync(
+  resolve(
+    process.cwd(),
+    process.cwd().endsWith("packages/ui") ? "src/hud/hud.css" : "packages/ui/src/hud/hud.css",
+  ),
+  "utf8",
+);
 
 const SESSIONS: RosterSessionOption[] = [];
 
@@ -146,10 +156,49 @@ describe("RosterPanel run rows (#254)", () => {
     const row = screen.getByRole("option", { name: /coding-1/i });
     expect(row.getAttribute("aria-selected")).toBe("true");
   });
+
+  it("renders the full 8-char short id on an attention (held) run row", () => {
+    // DOM presence of all 8 id characters (roster omits the redundant "run "
+    // prefix; accessible name still says "run"). CSS non-shrink is the real
+    // layout contract — see the CSS-source assertions below.
+    render(<RosterPanel {...baseProps()} />);
+    const held = screen.getByRole("option", { name: /coding-2/i });
+    const idEl = held.querySelector(".pc-roster__run-id");
+    expect(idEl).toBeTruthy();
+    // shortRef("r-a19c0001") → "r-a19c00" (8 chars).
+    expect(idEl!.textContent).toBe("r-a19c00");
+    expect(idEl!.textContent!.replace(/^r-/, "")).toHaveLength(6);
+  });
+
+  it("CSS: run-head has a shrinkable name; short-id never shrinks", () => {
+    // Protects: at 300px roster with age+beacon, the head must not overflow
+    // (badge overprinting age/beacon). Name is the only flex-shrink child;
+    // id stays flex:0 0 auto so all 8 short-id characters render.
+    const idBlocks = [
+      ...HUD_CSS.matchAll(/\.pc-roster__run-id\s*\{([^}]+)\}/g),
+    ];
+    const nameBlocks = [
+      ...HUD_CSS.matchAll(
+        /\.pc-roster__run-head\s+\.pc-roster__name\s*\{([^}]+)\}/g,
+      ),
+    ];
+    expect(idBlocks.length).toBeGreaterThanOrEqual(1);
+    expect(nameBlocks.length).toBe(1);
+    const idCss = idBlocks[idBlocks.length - 1]![1];
+    const nameCss = nameBlocks[0]![1];
+    // Id is non-shrinkable (correlation key + copy target).
+    expect(idCss).toMatch(/flex:\s*0\s+0\s+auto/);
+    expect(idCss).not.toMatch(/min-width:\s*0/);
+    // Name shrinks (flex-shrink ≥ 1) but keeps a legible floor — not back to
+    // the ~2-character collapse of original defect 5.
+    expect(nameCss).toMatch(/flex:\s*1\s+1\s+auto/);
+    expect(nameCss).toMatch(/min-width:\s*5ch/);
+  });
 });
 
 describe("Inspector run view (#254)", () => {
   const run: InspectorRun = {
+    status: "ready",
     id: "r-c04e0001",
     workflow: "research",
     workflowVersion: 1,
@@ -231,5 +280,98 @@ describe("Inspector run view (#254)", () => {
     expect(screen.queryByRole("button", { name: /reject/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /redirect/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /finish/i })).toBeNull();
+  });
+
+  it("fan-out tally ×N is present in the node cell accessible text", () => {
+    render(<Inspector task={null} run={run} />);
+    const nodes = Array.from(document.querySelectorAll(".pc-runview__node"));
+    const search = nodes.find((n) => n.textContent?.includes("search"));
+    expect(search).toBeTruthy();
+    // Load-bearing: width is written beside the node name, not drawn.
+    expect(search!.textContent).toMatch(/search/);
+    expect(search!.textContent).toMatch(/×12/);
+    expect(search!.querySelector(".pc-runview__fan")?.textContent?.trim()).toBe("×12");
+  });
+
+  it("iteration suffix .N is present when iteration > 1", () => {
+    const multi: InspectorRun = {
+      ...run,
+      nodes: [
+        {
+          key: "review\u00002",
+          node: "review",
+          kind: "step",
+          iteration: 2,
+          state: "running",
+          stateLabel: "running",
+          tasksLabel: "3",
+          gist: "1 of 3 still out",
+          age: "4m",
+          fanoutWidth: 3,
+          spineState: "running",
+          live: true,
+          onReject: null,
+        },
+      ],
+    };
+    render(<Inspector task={null} run={multi} />);
+    const cell = document.querySelector(".pc-runview__node");
+    expect(cell?.textContent).toMatch(/review/);
+    expect(cell?.textContent).toMatch(/×3/);
+    expect(cell?.textContent).toMatch(/\.2/);
+  });
+
+  it("pending run shows hailing copy without inventing 0 tasks", () => {
+    render(
+      <Inspector task={null} run={{ status: "pending", id: "r-pending1" }} />,
+    );
+    expect(screen.getByText("Hailing the run…")).toBeTruthy();
+    expect(screen.queryByText("0 tasks")).toBeNull();
+    expect(screen.queryByText("No nodes entered yet.")).toBeNull();
+  });
+
+  it("right-edge table fade is present and uses the hidden gate", () => {
+    // Protects: fade must not paint at scroll end (AA on the age column).
+    // happy-dom has no layout engine, so with zero overflow the fade starts
+    // hidden — the behavioural contract is the [hidden] attribute + CSS rule.
+    render(<Inspector task={null} run={run} />);
+    const fade = document.querySelector(".pc-runview__table-fade");
+    expect(fade).toBeTruthy();
+    expect(fade!.hasAttribute("hidden")).toBe(true);
+    expect(HUD_CSS).toMatch(
+      /\.pc-runview__table-fade\[hidden\]\s*\{[^}]*display:\s*none/s,
+    );
+  });
+
+  it("CSS: table scrolls honestly — content minima, no fixed percentage clip", () => {
+    // Protects: ×N / .N / STATE stay fully written (never hard-clipped by a
+    // table-layout:fixed percentage plan). Scrollport is the affordance.
+    const tableBlocks = [
+      ...HUD_CSS.matchAll(/\.pc-runview__table\s*\{([^}]+)\}/g),
+    ];
+    expect(tableBlocks.length).toBeGreaterThanOrEqual(1);
+    const tableCss = tableBlocks[tableBlocks.length - 1]![1];
+    // No percentage-clip plan; no redundant floor that bloated short tables.
+    expect(tableCss).not.toMatch(/table-layout:\s*fixed/);
+    expect(tableCss).not.toMatch(/min-width:\s*36rem/);
+    expect(tableCss).toMatch(/width:\s*max-content/);
+    // Per-column minima keep the port scrollable without a table-wide floor.
+    expect(HUD_CSS).toMatch(
+      /\.pc-runview__table\s+td\.pc-runview__node\s*\{[^}]*min-width:/s,
+    );
+    expect(HUD_CSS).toMatch(
+      /\.pc-runview__table\s+th:nth-child\(3\)\s*\{[^}]*min-width:/s,
+    );
+    // Node cells must not hard-clip (would delete ×N / .N).
+    const nodeBlocks = [
+      ...HUD_CSS.matchAll(/\.pc-runview__node\s*\{([^}]+)\}/g),
+    ];
+    const nodeCss = nodeBlocks[nodeBlocks.length - 1]![1];
+    expect(nodeCss).not.toMatch(/overflow:\s*hidden/);
+    expect(nodeCss).not.toMatch(/text-overflow:\s*ellipsis/);
+    // Spine rail holds 18px so the knot never overlays node text.
+    expect(HUD_CSS).toMatch(
+      /\.pc-runview__rail\s*\{[^}]*min-width:\s*18px/s,
+    );
   });
 });

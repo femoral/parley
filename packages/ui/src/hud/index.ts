@@ -68,6 +68,8 @@ export type {
   ReportView,
   InspectorRun,
   InspectorRunNode,
+  InspectorRunPending,
+  InspectorRunReady,
   RosterGroup,
   RosterPip,
   RosterPipKind,

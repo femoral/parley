@@ -3794,6 +3794,11 @@ button.pc-roster__meta--copy:focus-visible {
   margin-top: 1px;
   color: var(--brass);
 }
+/* Run body takes remaining row width so the name is not starved by age/beacon. */
+.pc-roster__row--run .pc-roster__row-body {
+  flex: 1 1 0;
+  min-width: 0;
+}
 .pc-roster__run-head {
   display: flex;
   align-items: center;
@@ -3801,9 +3806,13 @@ button.pc-roster__meta--copy:focus-visible {
   min-width: 0;
   width: 100%;
 }
+/* Name is the only shrinkable child (flex-shrink:1 + min-width floor). Short-id
+ * is flex:0 0 auto so all 8 id characters stay; badge is fixed. Roster drops the
+ * non-informative "run " prefix so id + badge + ≥5ch name fit at 300px with age
+ * and beacon present — the head must not overflow onto those siblings. */
 .pc-roster__run-head .pc-roster__name {
   flex: 1 1 auto;
-  min-width: 0;
+  min-width: 5ch;
 }
 .pc-roster__run-id {
   flex: 0 0 auto;
@@ -3813,6 +3822,9 @@ button.pc-roster__meta--copy:focus-visible {
   color: var(--ink-muted);
   white-space: nowrap;
 }
+/* Badge colour: --run-badge-color set from the row's attention state. Gate and
+ * cancelled own their colour in CSS so the sheet tells the truth without the
+ * inline style (cancelled steps to --ink-muted for AA on brass-tint-12). */
 .pc-roster__run-badge {
   margin-left: auto;
   flex: 0 0 auto;
@@ -3824,11 +3836,18 @@ button.pc-roster__meta--copy:focus-visible {
   font-weight: 600;
   letter-spacing: var(--track-micro);
   text-transform: uppercase;
-  color: var(--state-running);
+  color: var(--run-badge-color, var(--ink-muted));
 }
 .pc-roster__run-badge--gate {
+  --run-badge-color: var(--state-awaiting_answer);
   color: var(--state-awaiting_answer);
   border-color: color-mix(in srgb, var(--state-awaiting_answer) 45%, transparent);
+}
+/* --state-cancelled #9a8a72 on tint-12 composite ≈#362915 is 4.21:1 (fails AA
+ * at 10px). --ink-muted clears; still archive-quiet. */
+.pc-roster__run-badge--cancelled {
+  --run-badge-color: var(--ink-muted);
+  color: var(--ink-muted);
 }
 .pc-roster__run-sub {
   display: block;
@@ -3979,12 +3998,43 @@ button.pc-roster__meta--copy:focus-visible {
   font-size: var(--text-sub);
   color: var(--ink-muted);
 }
+/* Horizontal scrollport: table keeps real content minima so ×N / .N / STATE
+ * never hard-clip. The wrap is the keyboard-reachable affordance (H3). */
+.pc-runview__table-scroller {
+  position: relative;
+}
 .pc-runview__table-wrap {
   overflow-x: auto;
   margin: 0 -4px;
+  padding: 0 4px;
 }
+/* Right-edge feather: only while more content lies to the right. Gated in
+ * RunView via [hidden] when scrollLeft reaches max (avoids veiling the age
+ * column the user scrolled to read). */
+.pc-runview__table-fade {
+  pointer-events: none;
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 28px;
+  z-index: 1;
+  background: linear-gradient(
+    to right,
+    transparent 0%,
+    color-mix(in srgb, var(--plate-top) 70%, transparent) 55%,
+    var(--plate-top) 100%
+  );
+}
+.pc-runview__table-fade[hidden] {
+  display: none;
+}
+/* Honest scroll: auto layout + per-column minima so columns size to content.
+ * No table min-width floor — column mins alone already exceed the 344px rail
+ * (≈502px narrowest), so the scrollport is genuinely scrollable without a
+ * redundant 36rem floor that bloated short-name tables at rest. */
 .pc-runview__table {
-  width: 100%;
+  width: max-content;
   border-collapse: collapse;
   font-size: var(--text-sub);
 }
@@ -4012,11 +4062,39 @@ button.pc-roster__meta--copy:focus-visible {
 .pc-runview__row--live td {
   background: var(--brass-tint-06);
 }
+/* Spine column: absolute spine has no in-flow size; min/max-width hold the
+ * 18px box so the knot does not overlay node text (`scope` → `cope`). */
 .pc-runview__rail {
   width: 18px;
+  min-width: 18px;
+  max-width: 18px;
   padding-left: 0 !important;
   padding-right: 0 !important;
   position: relative;
+  box-sizing: border-box;
+}
+.pc-runview__table th.pc-runview__rail,
+.pc-runview__table td.pc-runview__rail {
+  width: 18px;
+  min-width: 18px;
+  max-width: 18px;
+}
+/* Content minima from measured labels (awaiting_answer ≈127px, fan-out node
+ * strings ≈240px). No overflow:hidden — clipping would delete ×N / .N. */
+.pc-runview__table th:nth-child(2),
+.pc-runview__table td.pc-runview__node {
+  min-width: 10rem;
+}
+.pc-runview__table th:nth-child(3) {
+  min-width: 8.5rem;
+}
+.pc-runview__table th:nth-child(4),
+.pc-runview__table td.pc-runview__tasks {
+  min-width: 3.25rem;
+}
+.pc-runview__table th:nth-child(6),
+.pc-runview__table td.pc-runview__age {
+  min-width: 2.75rem;
 }
 .pc-runview__spine {
   position: absolute;
@@ -4064,9 +4142,12 @@ button.pc-roster__meta--copy:focus-visible {
   color: var(--ink-parchment);
   white-space: nowrap;
 }
+/* Fan-out width + iteration are load-bearing ("written, not drawn").
+ * --ink-label was 4.11:1 on a --live row (brass-tint-06 over plate-top);
+ * --ink-muted clears AA (≥4.5:1) on that stop. */
 .pc-runview__fan,
 .pc-runview__iter {
-  color: var(--ink-label);
+  color: var(--ink-muted);
   font-weight: 500;
 }
 .pc-runview__st {
@@ -4091,10 +4172,13 @@ button.pc-roster__meta--copy:focus-visible {
   font-size: var(--text-meta);
   white-space: nowrap;
 }
+/* Cap gist measure so long CLI gists do not balloon vertical height; horizontal
+ * overflow stays on the scrollport. */
 .pc-runview__gist {
   color: var(--ink-muted);
   line-height: 1.4;
   max-width: 28ch;
+  overflow-wrap: break-word;
 }
 .pc-runview__reject {
   display: inline-block;

@@ -6,11 +6,18 @@
  * that closeness is a feature. No gate verbs — Cove surfaces a held gate, it
  * never actions one.
  */
-import type { CSSProperties } from "react";
+import {
+  useCallback,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type UIEvent,
+} from "react";
 import { Mark } from "../../primitives/index.js";
 import { stateMetaFor } from "../../tokens/state-meta.js";
 import { useCopyScaffold } from "../useCopyScaffold.js";
-import type { InspectorRun, InspectorRunNode } from "../types.js";
+import type { InspectorRun, InspectorRunNode, InspectorRunReady } from "../types.js";
 
 function shortRef(id: string): string {
   return id.length > 8 ? id.slice(0, 8) : id;
@@ -63,7 +70,7 @@ function StateCell({ node }: { node: InspectorRunNode }) {
   const style = { "--st-color": meta.colorVar } as CSSProperties;
   return (
     <td>
-      <span className="pc-runview__st" style={style}>
+      <span className="pc-runview__st" style={style} title={node.stateLabel}>
         <span className="pc-runview__st-mark" aria-hidden="true">
           <Mark mark={meta.mark} size={10} />
         </span>
@@ -99,8 +106,43 @@ function NodeRow({ node }: { node: InspectorRunNode }) {
   );
 }
 
-export function RunView({ run }: { run: InspectorRun }) {
+function tableCanScrollMore(el: HTMLElement): boolean {
+  // Integer scroll metrics can land 1px short of max; treat near-end as end.
+  return el.scrollLeft < el.scrollWidth - el.clientWidth - 1;
+}
+
+function ReadyRunView({ run }: { run: InspectorRunReady }) {
   const short = shortRef(run.id);
+  const tableWrapRef = useRef<HTMLDivElement>(null);
+  const [fadeVisible, setFadeVisible] = useState(false);
+
+  const syncFade = useCallback(() => {
+    const el = tableWrapRef.current;
+    if (!el) {
+      setFadeVisible(false);
+      return;
+    }
+    setFadeVisible(tableCanScrollMore(el));
+  }, []);
+
+  useLayoutEffect(() => {
+    syncFade();
+  }, [syncFade, run.nodes]);
+
+  useLayoutEffect(() => {
+    const el = tableWrapRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(() => syncFade());
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [syncFade, run.nodes.length]);
+
+  const onTableScroll = useCallback(
+    (_event: UIEvent<HTMLDivElement>) => {
+      syncFade();
+    },
+    [syncFade],
+  );
 
   return (
     <div className="pc-runview">
@@ -157,34 +199,67 @@ export function RunView({ run }: { run: InspectorRun }) {
       )}
 
       {run.nodes.length === 0 ? (
-        <p className="pc-runview__empty">
-          {run.stateLabel === "loading"
-            ? "Hailing the run…"
-            : "No nodes entered yet."}
-        </p>
+        <p className="pc-runview__empty">No nodes entered yet.</p>
       ) : (
-        <div className="pc-runview__table-wrap">
-          <table className="pc-runview__table">
-            <thead>
-              <tr>
-                <th className="pc-runview__rail" scope="col">
-                  <span className="pc-visually-hidden">Sequence</span>
-                </th>
-                <th scope="col">Node</th>
-                <th scope="col">State</th>
-                <th scope="col">Tasks</th>
-                <th scope="col">Gist</th>
-                <th scope="col">Age</th>
-              </tr>
-            </thead>
-            <tbody>
-              {run.nodes.map((node) => (
-                <NodeRow key={node.key} node={node} />
-              ))}
-            </tbody>
-          </table>
+        <div className="pc-runview__table-scroller">
+          <div
+            ref={tableWrapRef}
+            className="pc-runview__table-wrap"
+            role="region"
+            aria-label="Run node table"
+            tabIndex={0}
+            onScroll={onTableScroll}
+          >
+            <table className="pc-runview__table">
+              <thead>
+                <tr>
+                  <th className="pc-runview__rail" scope="col">
+                    <span className="pc-visually-hidden">Sequence</span>
+                  </th>
+                  <th scope="col">Node</th>
+                  <th scope="col">State</th>
+                  <th scope="col">Tasks</th>
+                  <th scope="col">Gist</th>
+                  <th scope="col">Age</th>
+                </tr>
+              </thead>
+              <tbody>
+                {run.nodes.map((node) => (
+                  <NodeRow key={node.key} node={node} />
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div
+            className="pc-runview__table-fade"
+            aria-hidden="true"
+            hidden={!fadeVisible}
+          />
         </div>
       )}
     </div>
   );
+}
+
+export function RunView({ run }: { run: InspectorRun }) {
+  if (run.status === "pending") {
+    const short = shortRef(run.id);
+    return (
+      <div className="pc-runview">
+        <header className="pc-runview__head">
+          <div className="pc-runview__titles">
+            <h2 className="pc-runview__title">
+              <span className="pc-runview__run-id">run {short}</span>
+            </h2>
+          </div>
+          <div className="pc-runview__aside">
+            <RunIdCopy runId={run.id} />
+          </div>
+        </header>
+        <p className="pc-runview__empty">Hailing the run…</p>
+      </div>
+    );
+  }
+
+  return <ReadyRunView run={run} />;
 }
