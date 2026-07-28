@@ -1994,7 +1994,9 @@ export class TaskEngine {
    *
    * ADR-0017 / #238: `outcome: blocked` routes as a **failed** task (gave up /
    * unusable work); `partial` is a success. Port-schema reports (no outcome)
-   * complete as usual and materialize deliverables when run-owned.
+   * complete as usual and materialize deliverables when run-owned — and those
+   * rows are written *before* the completed transition so drain never sees a
+   * settled task without its ports (#264).
    */
   private completeAcceptedReport(
     taskId: string,
@@ -2042,23 +2044,30 @@ export class TaskEngine {
     if (usage !== undefined) {
       Object.assign(fields, this.usagePatch(usage));
     }
+
+    // Run-owned: materialize deliverable rows from the accepted report
+    // *before* the completed transition. onSlotFreed drains runs
+    // synchronously inside apply(), so advance must never observe a
+    // completed task whose deliverables are still absent (#264 / ADR-0017).
+    // Best-effort — a bad payload must not undo completion (validation
+    // already ran at submit_report); the try/catch lives inside the
+    // recorder so a throw still leaves the task completed below.
+    if (task.run_id !== null && task.node !== null && report !== null) {
+      this.recordRunDeliverables(task, report);
+    }
+
     this.taskTransitions.apply(taskId, "completed", {
       cause: "complete",
       fields,
     });
-
-    // Run-owned: materialize deliverable rows from the accepted report so
-    // advance can read ports. Best-effort — a bad payload must not undo
-    // completion (validation already ran at submit_report).
-    if (task.run_id !== null && task.node !== null && report !== null) {
-      this.recordRunDeliverables(task, report);
-    }
   }
 
   /**
-   * Insert deliverable rows for a completed run-owned task from its report
-   * payload. Port types (and therefore deliverable kind: inline / file / dir)
-   * come from the step's declared `out` ports on the workflow definition
+   * Insert deliverable rows for a run-owned task from its accepted report
+   * payload. Called **before** the completed transition so drain/advance can
+   * never observe a settled task without its deliverables (#264 / ADR-0017).
+   * Port types (and therefore deliverable kind: inline / file / dir) come
+   * from the step's declared `out` ports on the workflow definition
    * (ADR-0016). Falling back to every key as text is the exception path when
    * the definition cannot be resolved — logged, never silent.
    */
@@ -3716,6 +3725,7 @@ export class TaskEngine {
    *   onRetry / taskOutcome) + error logging
    * - `actionRun(verb)` public API for gate verbs
    * - `completeAcceptedReport`: outcome blocked → failed; run deliverables
+   *   recorded *before* the completed transition (#264)
    *
    * Spawn-time errors block the run (never auto-fail). Definition parse
    * failures mark the run `failed` (nobody can advance it).
@@ -4213,10 +4223,19 @@ export class TaskEngine {
       }
       const reportSchema = generateReportSchema(outPorts);
 
+      // Allocate the task id before resolving the workspace. Isolated sibling
+      // paths embed the task id, and for writable fan-out resolve is not pure
+      // — it creates a worktree and cuts a branch named from the *address*.
+      // Resolving once under a provisional id (`"pending"`) then again under
+      // the real id collides on that branch (#265).
+      const id = nextTaskId(this.db);
+
       // Resolve per-task cwd (shared run workspace or isolated sibling).
+      // Run-owned tasks always record worktree/branch null (ADR-0018): the
+      // run owns the checkout, so per-task auto-remove must not fire.
       let cwd = workspaceRoot;
-      let worktree: string | null = null;
-      let branch: string | null = null;
+      const worktree: string | null = null;
+      const branch: string | null = null;
       let baseSha: string | null = null;
       if (run.workspace === "repo" && run.repo !== null) {
         try {
@@ -4226,17 +4245,21 @@ export class TaskEngine {
             runId: run.id,
             runCheckoutPath: workspaceRoot,
             runBranch: runBranchName(run.id, run.workflow),
-            taskId: "pending", // overwritten after id alloc — path uses task id
+            taskId: id,
             address,
             sandbox: resolved.sandbox,
             fanOut: isFanOut,
           });
-          // For isolated siblings the path embeds taskId; allocate id first.
           cwd = stepWs.path;
-          worktree = stepWs.shared || stepWs.branch === null ? null : stepWs.path;
-          branch = stepWs.branch;
           baseSha = stepWs.baseSha;
-        } catch {
+        } catch (err) {
+          // Writable fan-out creation is required; surface the git error.
+          // Linear / read-only paths only read the run checkout — fall back.
+          if (isFanOut && resolved.sandbox !== "read-only") {
+            throw new DelegateError(
+              `failed to create sibling workspace for ${address}: ${errorMessage(err)}`,
+            );
+          }
           cwd = workspaceRoot;
         }
       } else if (run.workspace === "scratch") {
@@ -4252,37 +4275,6 @@ export class TaskEngine {
           cwd = stepWs.path;
         } catch {
           cwd = workspaceRoot;
-        }
-      }
-
-      const id = nextTaskId(this.db);
-      // Re-resolve isolated checkout with the real task id when fan-out writable.
-      if (
-        run.workspace === "repo" &&
-        run.repo !== null &&
-        isFanOut &&
-        resolved.sandbox !== "read-only"
-      ) {
-        try {
-          const stepWs = resolveStepWorkspace({
-            repoRoot: run.repo,
-            worktreesDir: this.paths.worktrees,
-            runId: run.id,
-            runCheckoutPath: workspaceRoot,
-            runBranch: runBranchName(run.id, run.workflow),
-            taskId: id,
-            address,
-            sandbox: resolved.sandbox,
-            fanOut: true,
-          });
-          cwd = stepWs.path;
-          worktree = null; // run-owned shape: worktree column null (ADR-0018)
-          branch = null;
-          baseSha = stepWs.baseSha;
-        } catch (err) {
-          throw new DelegateError(
-            `failed to create sibling workspace for ${address}: ${errorMessage(err)}`,
-          );
         }
       }
 

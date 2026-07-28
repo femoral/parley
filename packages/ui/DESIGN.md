@@ -397,7 +397,8 @@ Plates clip their content (`overflow: hidden`) so the inset frame is never cross
 - **Target size:** every control clears 24×24px (WCAG 2.2 AA 2.5.8). Where the type is small, hold the floor with `min-height: 24px` and centred content rather than inflating padding — density is part of the HUD's character.
 
 ### Badges
-- **Style:** pill (999px), 1px border in the badge's own color over a 30%-black wash; Outfit 600 at 9.5px, tracking 0.6px. The border and text share one variable so a badge is tinted by a single color.
+- **Style:** pill (999px), 1px border over a 30%-black wash; Outfit 600 at 9.5px, tracking 0.6px.
+- **Tint:** When the badge's own colour is its meaning, border and text share one variable so the pill is single-tinted. When the badge is operational — sitting inside a row or plate that already carries state signals of its own (beacon, state mark, pip track, and the like) — the text may take the state colour while the frame stays neutral (`--brass-frame`), so state reads without adding a competing ring colour to a surface whose visual budget is already spent. A soft state-tinted frame (the state colour at 45%) is allowed as a quiet echo, never a full-strength ring; the gate badge is the existing case.
 - **State:** used for compact status/meta chips; the color carries the meaning.
 
 ### Cards / Containers (Plates)
