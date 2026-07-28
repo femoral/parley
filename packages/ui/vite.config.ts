@@ -53,7 +53,18 @@ function daemonProxy(): Record<string, ProxyOptions> | undefined {
     return undefined;
   }
   console.info(`[parley-cove] proxying API to daemon at ${target}`);
-  const routes = ["/tasks", "/events", "/metrics", "/sessions", "/health"];
+  // /runs and /deliverables power the run roster, inspector run view, chart
+  // surface, and deliverable rendering (#266). Without them the whole run
+  // surface is silent against a local daemon.
+  const routes = [
+    "/tasks",
+    "/events",
+    "/metrics",
+    "/sessions",
+    "/health",
+    "/runs",
+    "/deliverables",
+  ];
   return Object.fromEntries(routes.map((route) => [route, { target }]));
 }
 

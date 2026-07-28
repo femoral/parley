@@ -26,6 +26,9 @@ export interface ChartInkStyle {
  * Gate `waiting` is handled as a seal (not a ring mark) by the projector;
  * this still returns live-ish ink for any non-gate consumer of the same
  * vocabulary.
+ *
+ * `pending` and `queued` are **not yet sailed** → ghost + `?` (DESIGN.md
+ * chart-ghost meaning). Only states that are actively under way use live + ✦.
  */
 export function inkForNode(node: InspectorRunNode): ChartInkStyle {
   if (node.kind === "gate") {
@@ -45,18 +48,19 @@ export function inkForNode(node: InspectorRunNode): ChartInkStyle {
     case "inherited":
       return { ink: "done", glyph: "✓", className: "pc-chart-mark--done" };
     case "failed":
-      return { ink: "fail", glyph: "✕", className: "pc-chart-mark--fail" };
     case "cancelled":
     case "purged":
       return { ink: "fail", glyph: "✕", className: "pc-chart-mark--fail" };
     case "running":
     case "awaiting_answer":
     case "stalled":
+      // Actively under way (or stalled mid-route) — live vermilion + ✦.
+      return { ink: "live", glyph: "✦", className: "pc-chart-mark--live" };
     case "queued":
     case "pending":
-      return { ink: "live", glyph: "✦", className: "pc-chart-mark--live" };
+      // Not yet sailed — ghost mark, ? glyph in pen weight (AA).
+      return { ink: "ghost", glyph: "?", className: "pc-chart-mark--ghost" };
     default:
-      // Not-yet / unknown: decorative ghost mark; ? glyph is pen-weight for AA.
       return { ink: "ghost", glyph: "?", className: "pc-chart-mark--ghost" };
   }
 }

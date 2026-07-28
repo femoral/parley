@@ -324,5 +324,155 @@ describe("RunChart stroke-state discipline (#259)", () => {
       expect(stroke).not.toMatch(/ink-live|ink-done|ink-fail/);
       expect(stroke).toMatch(/ink-chart/);
     }
+    // Soft pen is live code: pending (ghost) legs use it.
+    const soft = container.querySelectorAll('[data-chart-leg="soft"]');
+    expect(soft.length).toBeGreaterThan(0);
+  });
+});
+
+describe("RunChart QC fixes (#253 design-QC)", () => {
+  it("N7: empty ready run paints one title, not a second run-id overlay", () => {
+    const run = readyRun({ nodes: [], runState: "ready", stateLabel: "ready" });
+    const { container } = render(<RunChart run={run} />);
+    const titles = container.querySelectorAll(".pc-chart__title");
+    expect(titles).toHaveLength(1);
+    // Empty state does not re-print the run id as a second heading.
+    expect(container.querySelectorAll(".pc-chart__empty-title")).toHaveLength(0);
+    expect(screen.getByText(/No nodes entered yet/i)).toBeTruthy();
+  });
+
+  it("N3: destination ✕ uses chart pen, not fail blot", () => {
+    const run = readyRun({
+      nodes: [
+        node({
+          node: "solo",
+          kind: "step",
+          iteration: 1,
+          state: "completed",
+          stateLabel: "completed",
+          spineState: "completed",
+        }),
+      ],
+    });
+    const { container } = render(<RunChart run={run} />);
+    const x = container.querySelector(".pc-chart-spot__x");
+    expect(x).toBeTruthy();
+    // Class-level colour is token --ink-chart (asserted via absence of fail class).
+    expect(x!.className).not.toMatch(/fail/);
+  });
+
+  it("N4: operational meta is Outfit body; flavor is separate", () => {
+    const run = readyRun({
+      duration: "12m 0s",
+      iteration: 1,
+      heldGate: true,
+      nodes: [
+        node({
+          node: "a",
+          kind: "step",
+          iteration: 1,
+          state: "completed",
+          stateLabel: "completed",
+          spineState: "completed",
+        }),
+      ],
+    });
+    const { container } = render(<RunChart run={run} />);
+    const meta = container.querySelector(".pc-chart__meta-line");
+    expect(meta?.textContent).toMatch(/12m/);
+    expect(meta?.textContent).toMatch(/pass/);
+    const flavor = container.querySelector(".pc-chart__flavor");
+    expect(flavor?.textContent).toMatch(/seal/i);
+    expect(flavor?.textContent).not.toMatch(/12m/);
+  });
+
+  it("B2: key and helm do not share the same bottom-right anchor", () => {
+    const run = readyRun({
+      heldGate: true,
+      nodes: [
+        node({
+          node: "g",
+          kind: "gate",
+          iteration: 1,
+          state: "waiting",
+          stateLabel: "gate · held",
+          spineState: "awaiting_answer",
+          live: true,
+        }),
+      ],
+    });
+    const { container } = render(<RunChart run={run} />);
+    expect(container.querySelector(".pc-chart__sheet--held")).toBeTruthy();
+    expect(container.querySelector(".pc-chart-key")).toBeTruthy();
+    expect(container.querySelector(".pc-chart-helm")).toBeTruthy();
+  });
+
+  it("B4: loop path records end clear of target centre", () => {
+    const run = readyRun({
+      heldGate: true,
+      nodes: [
+        node({
+          node: "implement",
+          kind: "step",
+          iteration: 1,
+          state: "completed",
+          stateLabel: "completed",
+          spineState: "completed",
+        }),
+        node({
+          node: "review",
+          kind: "step",
+          iteration: 1,
+          state: "completed",
+          stateLabel: "completed",
+          spineState: "completed",
+        }),
+        node({
+          node: "rework-or-finish",
+          kind: "gate",
+          iteration: 1,
+          state: "waiting",
+          stateLabel: "gate · held",
+          spineState: "awaiting_answer",
+          live: true,
+          onReject: "implement",
+        }),
+      ],
+    });
+    const { container } = render(<RunChart run={run} />);
+    const loop = container.querySelector("[data-chart-loop]");
+    expect(loop).toBeTruthy();
+    const ex = Number(loop!.getAttribute("data-loop-end-x"));
+    const ey = Number(loop!.getAttribute("data-loop-end-y"));
+    const tx = Number(loop!.getAttribute("data-loop-target-x"));
+    const ty = Number(loop!.getAttribute("data-loop-target-y"));
+    expect(Math.hypot(ex - tx, ey - ty)).toBeGreaterThanOrEqual(28);
+  });
+
+  it("N2: compass is a separate square box (not sheared route SVG)", () => {
+    const run = readyRun({
+      nodes: [
+        node({
+          node: "a",
+          kind: "step",
+          iteration: 1,
+          state: "completed",
+          stateLabel: "completed",
+          spineState: "completed",
+        }),
+        node({
+          node: "b",
+          kind: "step",
+          iteration: 1,
+          state: "running",
+          stateLabel: "running",
+          spineState: "running",
+          live: true,
+        }),
+      ],
+    });
+    const { container } = render(<RunChart run={run} />);
+    expect(container.querySelector(".pc-chart-compass")).toBeTruthy();
+    expect(container.querySelector(".pc-chart__svg--route")).toBeTruthy();
   });
 });

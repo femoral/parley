@@ -5,7 +5,10 @@
  * Tokens only. Sheet texture composes --parchment-bg + --ink-chart alpha
  * via color-mix (no new tokens, no hardcoded hex). Readable text on the
  * textured sheet uses --ink-chart (Textured-sheet AA Rule: soft/live fail
- * normal-text AA at the darkest stop).
+ * normal-text AA at the darkest documented stop #e2cfa4).
+ *
+ * Darkest gradient stop is held near the documented #e2cfa4 (N6) — not the
+ * earlier over-dark mix that pushed L down to ~0.36.
  */
 
 .pc-chart {
@@ -31,51 +34,58 @@
 }
 
 /*
- * Aged parchment. Gradient darkest stop is approximated by color-mix of
- * parchment-bg with chart ink — same warm family as the #224 sheet
- * (documented darkest stop #e2cfa4). Stains use ink-chart at low mix.
+ * Aged parchment. Gradient darkest stop ≈ documented #e2cfa4 (light parchment
+ * + a little chart ink). Stains stay low-alpha so readable text keeps AA.
+ * B3: fill the centre stage — min-height 100% of the scrollport; no 50vh cap.
  */
 .pc-chart__sheet {
   position: relative;
+  /* Fill the stage; grow when serpentine rows need more air. */
   min-height: 100%;
   min-width: 100%;
-  /* Floor so a narrow centre column still reads as a map, not a strip. */
-  min-height: clamp(320px, 50vh, 640px);
+  width: 100%;
+  box-sizing: border-box;
   color: var(--ink-chart);
   background:
     radial-gradient(
       58% 40% at 18% 22%,
-      color-mix(in srgb, var(--ink-chart) 14%, transparent),
+      color-mix(in srgb, var(--ink-chart) 8%, transparent),
       transparent 70%
     ),
     radial-gradient(
       40% 30% at 82% 78%,
-      color-mix(in srgb, var(--ink-chart) 12%, transparent),
+      color-mix(in srgb, var(--ink-chart) 7%, transparent),
       transparent 70%
     ),
     radial-gradient(
       22% 18% at 66% 14%,
-      color-mix(in srgb, var(--ink-chart) 10%, transparent),
+      color-mix(in srgb, var(--ink-chart) 6%, transparent),
       transparent 70%
     ),
     repeating-linear-gradient(
       92deg,
-      color-mix(in srgb, var(--ink-chart) 5%, transparent) 0 2px,
+      color-mix(in srgb, var(--ink-chart) 4%, transparent) 0 2px,
       transparent 2px 5px
     ),
     linear-gradient(
       168deg,
-      color-mix(in srgb, var(--parchment-bg) 88%, var(--wash-white-50)),
+      color-mix(in srgb, var(--parchment-bg) 92%, var(--wash-white-50)),
       var(--parchment-bg) 46%,
-      color-mix(in srgb, var(--parchment-bg) 82%, var(--ink-chart))
+      /* Darkest stop ≈ #e2cfa4 family — keep AA math honest (N6). */
+      color-mix(in srgb, var(--parchment-bg) 94%, var(--ink-chart))
     );
   /* Deckled edge — irregular corners, aged fringe, sea shadow under it. */
   border-radius: 22px 8px 26px 10px / 10px 24px 8px 22px;
   box-shadow:
-    inset 0 0 60px 12px color-mix(in srgb, var(--ink-chart) 28%, transparent),
-    inset 0 0 0 1px color-mix(in srgb, var(--ink-chart) 30%, transparent),
+    inset 0 0 48px 8px color-mix(in srgb, var(--ink-chart) 14%, transparent),
+    inset 0 0 0 1px color-mix(in srgb, var(--ink-chart) 22%, transparent),
     0 14px 34px var(--wash-black-55);
   overflow: hidden;
+  /* Extra bottom pad when the held-gate helm is present so route air stays free. */
+  padding-bottom: 0;
+}
+.pc-chart__sheet--held {
+  padding-bottom: 88px;
 }
 
 .pc-chart__svg {
@@ -84,6 +94,35 @@
   width: 100%;
   height: 100%;
   pointer-events: none;
+}
+.pc-chart__svg--route {
+  z-index: 1;
+}
+.pc-chart__svg--decor {
+  z-index: 0;
+}
+
+/* Compass — fixed square box; never sheared by sheet aspect (N2). */
+.pc-chart-compass {
+  position: absolute;
+  top: 18px;
+  right: 22px;
+  width: 88px;
+  height: 88px;
+  z-index: 1;
+  pointer-events: none;
+  opacity: 0.85;
+}
+.pc-chart-compass--sparse {
+  width: 64px;
+  height: 64px;
+  top: 14px;
+  right: 16px;
+}
+.pc-chart-compass svg {
+  width: 100%;
+  height: 100%;
+  display: block;
 }
 
 /* Map title lettered on the paper — Cinzel chrome, not body prose. */
@@ -111,29 +150,45 @@
   letter-spacing: normal;
   text-transform: none;
 }
+/* Operational data (duration, pass) — Outfit, Flavor-Font Rule (N4). */
+.pc-chart__meta-line {
+  margin: 4px 0 0;
+  font-family: var(--font-body);
+  font-size: var(--text-sub);
+  font-weight: 500;
+  color: var(--ink-chart);
+  line-height: 1.35;
+}
 .pc-chart__flavor {
   margin: 4px 0 0;
   font-family: var(--font-flavor);
   font-style: italic;
   font-size: var(--text-flavor);
-  /* Soft fails AA at the darkest sheet stop — step up to chart ink. */
   color: var(--ink-chart);
   opacity: 1;
 }
 
-/* One (node, iteration) = one mark. */
+/*
+ * One (node, iteration) = one mark.
+ * Ring centre at (left, top). Labels sit below the ring; route legs end at
+ * the ring edge so text never composites over the stroke (B1).
+ * Width comes from --pc-chart-label-w (pitch-derived), never a fixed 148px.
+ */
 .pc-chart-mark {
   position: absolute;
-  transform: translate(-50%, -50%);
-  width: 148px;
-  text-align: center;
+  transform: translate(0, 0);
+  width: 0;
+  height: 0;
   z-index: 3;
   pointer-events: none;
 }
 .pc-chart-mark__ring {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform: translate(-50%, -50%);
   width: 40px;
   height: 40px;
-  margin: 0 auto 4px;
   border-radius: var(--radius-pill);
   border: 2px solid currentColor;
   box-shadow:
@@ -146,6 +201,20 @@
   /* Light underlay so state glyphs clear AA even over dark sheet stops. */
   background: color-mix(in srgb, var(--parchment-bg) 72%, var(--wash-white-50));
   color: inherit;
+  z-index: 1;
+}
+.pc-chart-mark__labels {
+  position: absolute;
+  left: 0;
+  top: 28px;
+  transform: translateX(-50%);
+  width: var(--pc-chart-label-w, 12%);
+  max-width: 160px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  text-align: center;
 }
 .pc-chart-mark--ghost .pc-chart-mark__ring {
   border-style: dashed;
@@ -162,13 +231,17 @@
   font-weight: 600;
   color: var(--ink-chart);
   line-height: 1.2;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 .pc-chart-mark__meta {
-  font-family: var(--font-mono);
+  /* Match inspector run table: state strings in body, not mono (N4). */
+  font-family: var(--font-body);
   font-size: var(--text-meta);
-  /* Soft fails AA on darkest stop — chart ink holds ≈6.60:1. */
   color: var(--ink-chart);
   line-height: 1.3;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 .pc-chart-mark--done {
   color: var(--ink-done);
@@ -183,7 +256,6 @@
   color: var(--ink-chart-ghost);
 }
 .pc-chart-mark--live .pc-chart-mark__ring {
-  /* Live ring sits on light underlay; glyph uses live vermilion. */
   color: var(--ink-live);
 }
 
@@ -203,20 +275,22 @@
   line-height: 1.3;
 }
 
-/* Gate = wax seal pressed onto the trail. */
+/* Gate = wax seal pressed onto the trail. Labels below, same as step marks. */
 .pc-chart-seal {
   position: absolute;
-  transform: translate(-50%, -50%);
-  width: 148px;
-  text-align: center;
+  transform: translate(0, 0);
+  width: 0;
+  height: 0;
   z-index: 3;
   pointer-events: none;
 }
 .pc-chart-seal__wax {
-  position: relative;
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform: translate(-50%, -50%);
   width: 46px;
   height: 46px;
-  margin: 0 auto 5px;
   border-radius: 46% 54% 50% 50% / 52% 48% 54% 46%;
   background: radial-gradient(
     circle at 36% 30%,
@@ -232,6 +306,7 @@
   font-size: 17px;
   color: var(--alert-cream);
   line-height: 1;
+  z-index: 1;
 }
 .pc-chart-seal--held .pc-chart-seal__wax {
   box-shadow:
@@ -270,21 +345,38 @@
   opacity: 0.85;
   pointer-events: none;
 }
+.pc-chart-seal__labels {
+  position: absolute;
+  left: 0;
+  top: 30px;
+  transform: translateX(-50%);
+  width: var(--pc-chart-label-w, 12%);
+  max-width: 160px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  text-align: center;
+}
 .pc-chart-seal__name {
   font-family: var(--font-body);
   font-size: var(--text-body);
   font-weight: 600;
   color: var(--ink-chart);
   line-height: 1.2;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 .pc-chart-seal__meta {
-  font-family: var(--font-mono);
+  font-family: var(--font-body);
   font-size: var(--text-meta);
   color: var(--ink-chart);
   line-height: 1.3;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
-/* Destination X */
+/* Destination X — pen weight, not fail blot (N3 / State-Colour Reservation). */
 .pc-chart-spot {
   position: absolute;
   transform: translate(-50%, -50%);
@@ -298,7 +390,7 @@
   font-weight: 900;
   font-size: 2.2rem;
   line-height: 1;
-  color: var(--ink-fail);
+  color: var(--ink-chart);
 }
 .pc-chart-spot__label {
   font-family: var(--font-flavor);
@@ -324,11 +416,15 @@
   transform: translate(-50%, -50%) rotate(-6deg);
 }
 
-/* On-paper key — second cue for state inks. */
+/*
+ * On-paper key — second cue for state inks.
+ * B2: top-right under the compass so the held-gate helm (bottom) never buries it.
+ */
 .pc-chart-key {
   position: absolute;
   right: 18px;
-  bottom: 14px;
+  top: 112px;
+  bottom: auto;
   border: 1px solid color-mix(in srgb, var(--ink-chart) 28%, transparent);
   border-radius: var(--radius-tight);
   padding: 8px 11px;
@@ -337,6 +433,10 @@
   gap: 3px;
   z-index: 2;
   pointer-events: none;
+}
+.pc-chart__sheet--sparse .pc-chart-key {
+  top: auto;
+  bottom: 14px;
 }
 .pc-chart-key__row {
   display: flex;
@@ -385,7 +485,7 @@
   color: var(--ink-chart);
 }
 
-/* Held-gate helm — surfaces the jam; only control is Copy run id. */
+/* Held-gate helm — bottom band; only control is Copy run id. */
 .pc-chart-helm {
   position: absolute;
   left: 18px;
@@ -453,9 +553,17 @@
   inset: 0;
   display: grid;
   place-items: center;
+  place-content: center;
   padding: 24px;
   z-index: 2;
   text-align: center;
+}
+/* Inline empty (ready, zero nodes): sits under the single legend title (N7). */
+.pc-chart__empty--inline {
+  position: relative;
+  inset: auto;
+  min-height: 200px;
+  padding-top: 72px;
 }
 .pc-chart__empty-title {
   margin: 0;
@@ -486,7 +594,6 @@
 
 @media (prefers-reduced-motion: reduce) {
   .pc-chart-seal--held .pc-chart-seal__wax {
-    /* Still legible glow, no pulse (none authored; belt-and-braces). */
     animation: none;
   }
 }
