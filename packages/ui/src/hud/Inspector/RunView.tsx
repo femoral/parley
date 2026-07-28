@@ -253,7 +253,9 @@ function ReadyRunView({ run }: { run: InspectorRunReady }) {
         </div>
       )}
 
-      {run.block && !run.heldGate && run.block.detail && (
+      {/* Held gates keep their block detail too (#261) — the helm notice is
+          extra context, not a substitute for the reason string. */}
+      {run.block?.detail && (
         <p className="pc-runview__block" role="status">
           {run.block.detail}
         </p>
@@ -272,6 +274,7 @@ function ReadyRunView({ run }: { run: InspectorRunReady }) {
             onScroll={onTableScroll}
           >
             <table className="pc-runview__table">
+              <caption className="pc-visually-hidden">Run nodes</caption>
               <thead>
                 <tr>
                   <th className="pc-runview__rail" scope="col">
@@ -281,7 +284,7 @@ function ReadyRunView({ run }: { run: InspectorRunReady }) {
                   <th scope="col">State</th>
                   <th scope="col">Tasks</th>
                   <th scope="col">Gist</th>
-                  <th scope="col">Age</th>
+                  <th scope="col">Duration</th>
                 </tr>
               </thead>
               <tbody>

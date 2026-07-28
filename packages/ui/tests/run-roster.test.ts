@@ -7,13 +7,16 @@ import type { NodeProjection, RunDetailResponse, RunSummary } from "@useparley/c
 import {
   buildListPipTrack,
   buildPipTrack,
+  formatNodeDuration,
   formatNodeStateLabel,
   formatRunChip,
+  formatRunStateLabel,
   projectInspectorRun,
   projectRosterRun,
   runAttentionState,
 } from "../src/app/hooks/runs.js";
 import { projectRoster, type RosterTaskInput } from "../src/app/hooks/roster.js";
+import { stateMetaFor } from "../src/tokens/state-meta.js";
 
 function summary(partial: Partial<RunSummary> & Pick<RunSummary, "run_id" | "state">): RunSummary {
   return {
@@ -87,6 +90,17 @@ describe("runAttentionState (#254)", () => {
     expect(runAttentionState("failed")).toBe("failed");
     expect(runAttentionState("cancelled")).toBe("cancelled");
     expect(runAttentionState("purged")).toBe("cancelled");
+  });
+
+  it("passes unknown wire states through for unknown treatment (#261)", () => {
+    // Invented daemon-side state must not silently paint as running.
+    expect(runAttentionState("mutinied")).toBe("mutinied");
+    expect(runAttentionState("mutinied")).not.toBe("running");
+    // state-meta's unknown path: uppercased label + neutral colour.
+    const meta = stateMetaFor(runAttentionState("mutinied"));
+    expect(meta.label).toBe("MUTINIED");
+    expect(meta.colorVar).toBe("var(--ink-tan)");
+    expect(meta.label).not.toBe(stateMetaFor("running").label);
   });
 });
 
@@ -259,21 +273,94 @@ describe("projectInspectorRun (#254)", () => {
     expect(view.nodes[2]!.stateLabel).toBe("gate · held");
     expect(view.nodes[2]!.onReject).toBe("funnel");
     expect(view.heldGate).toBe(false); // loop_exhausted, not gate
+    // Blocked reason goes through state-meta, not raw wire enum (#261).
+    expect(view.stateLabel).toBe("BLOCKED · LOOP_EXHAUSTED");
   });
 
   it("STATE is polymorphic: step task projection vs gate verb", () => {
     expect(formatNodeStateLabel(node({ node: "x", iteration: 1, state: "completed" }))).toBe(
-      "completed",
+      "COMPLETED",
     );
     expect(
       formatNodeStateLabel(
         node({ node: "g", iteration: 1, state: "approved", kind: "gate", tasks_total: 0 }),
       ),
-    ).toBe("approved");
+    ).toBe("APPROVED");
     expect(
       formatNodeStateLabel(
         node({ node: "g", iteration: 1, state: "waiting", kind: "gate", tasks_total: 0 }),
       ),
     ).toBe("gate · held");
+  });
+
+  it("awaiting_answer uses the same state-meta label as the roster (#261)", () => {
+    const label = formatNodeStateLabel(
+      node({ node: "review", iteration: 1, state: "awaiting_answer" }),
+    );
+    expect(label).toBe(stateMetaFor("awaiting_answer").label);
+    expect(label).toBe("AWAITING");
+    // Never the raw wire enum (which CSS would render as AWAITING_ANSWER).
+    expect(label).not.toBe("awaiting_answer");
+    expect(label).not.toMatch(/awaiting_answer/i);
+  });
+
+  it("run state labels come from state-meta, including blocked reasons (#261)", () => {
+    expect(formatRunStateLabel("running", null)).toBe("RUNNING");
+    expect(
+      formatRunStateLabel("blocked", {
+        reason: "loop_exhausted",
+        node: "review",
+        iteration: 2,
+        detail: "coverage still insufficient",
+        verbs: ["approve", "redirect", "finish"],
+      }),
+    ).toBe("BLOCKED · LOOP_EXHAUSTED");
+    expect(
+      formatRunStateLabel("blocked", {
+        reason: "gate",
+        node: "accept",
+        iteration: 1,
+        detail: "held",
+        verbs: ["approve", "reject", "redirect", "finish"],
+      }),
+    ).toBe("BLOCKED · GATE");
+  });
+
+  it("duration column is duration-only on every path (#261)", () => {
+    expect(formatNodeDuration(42_000)).toBe("<1m");
+    expect(formatNodeDuration(18 * 60_000)).toBe("18m");
+    expect(formatNodeDuration(90 * 60_000)).toBe("1h");
+    expect(formatNodeDuration(null)).toBeNull();
+    // Projection fills age from duration_ms only — no elapsed-since branch.
+    const view = projectInspectorRun({
+      run: summary({ run_id: "r-dur", state: "running" }),
+      block: null,
+      nodes: [
+        node({ node: "scope", iteration: 1, state: "completed", duration_ms: 18 * 60_000 }),
+        node({ node: "search", iteration: 1, state: "running", duration_ms: null }),
+      ],
+    });
+    expect(view.status).toBe("ready");
+    if (view.status !== "ready") throw new Error("expected ready");
+    expect(view.nodes[0]!.age).toBe("18m");
+    expect(view.nodes[1]!.age).toBeNull();
+  });
+
+  it("unknown run state projects with unknown treatment, not running (#261)", () => {
+    const view = projectRosterRun(summary({ run_id: "r-x", state: "mutinied" }));
+    expect(view.attentionState).toBe("mutinied");
+    expect(view.attentionState).not.toBe("running");
+    expect(stateMetaFor(view.attentionState).label).toBe("MUTINIED");
+    expect(stateMetaFor(view.attentionState).colorVar).toBe("var(--ink-tan)");
+
+    const detail = projectInspectorRun({
+      run: summary({ run_id: "r-x", state: "mutinied" }),
+      block: null,
+      nodes: [],
+    });
+    expect(detail.status).toBe("ready");
+    if (detail.status !== "ready") throw new Error("expected ready");
+    expect(detail.stateLabel).toBe("MUTINIED");
+    expect(detail.stateLabel).not.toBe("RUNNING");
   });
 });

@@ -283,6 +283,34 @@ describe("Inspector run view (#254)", () => {
     expect(screen.queryByRole("button", { name: /finish/i })).toBeNull();
   });
 
+  it("duration column header matches CLI naming (#261)", () => {
+    render(<Inspector task={null} run={run} />);
+    const table = screen.getByRole("table", { name: "Run nodes" });
+    const headers = Array.from(table.querySelectorAll("th")).map((th) =>
+      (th.textContent ?? "").trim(),
+    );
+    expect(headers).toContain("Duration");
+    expect(headers).not.toContain("Age");
+  });
+
+  it("node table has its own accessible name via caption (#261)", () => {
+    render(<Inspector task={null} run={run} />);
+    // Query by accessible name — not by class — so the caption is load-bearing.
+    const table = screen.getByRole("table", { name: "Run nodes" });
+    expect(table).toBeTruthy();
+    expect(table.querySelector("caption")?.textContent).toBe("Run nodes");
+    // Region label is independent of the table's name.
+    expect(screen.getByRole("region", { name: "Run node table" })).toBeTruthy();
+  });
+
+  it("held gate shows helm notice and block detail together (#261)", () => {
+    render(<Inspector task={null} run={run} />);
+    expect(screen.getByText(/Held — awaiting the orchestrator/i)).toBeTruthy();
+    // Same block.detail the non-gate path already showed — no longer suppressed.
+    const block = document.querySelector(".pc-runview__block");
+    expect(block?.textContent).toBe("held");
+  });
+
   it("fan-out tally ×N is present in the node cell accessible text", () => {
     render(<Inspector task={null} run={run} />);
     const nodes = Array.from(document.querySelectorAll(".pc-runview__node"));
