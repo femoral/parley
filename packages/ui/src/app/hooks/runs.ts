@@ -437,13 +437,22 @@ export function projectDeliverable(v: DeliverableValue): InspectorDeliverable {
 /**
  * Project a list of wire deliverables into the honest list status.
  * - `undefined` → not fetched (caller has not loaded deliverable rows)
- * - empty array → none (loaded; run produced no deliverables)
- * - non-empty → ready (including all-purged lists)
+ * - empty array, no failures → none (loaded; run produced no deliverables)
+ * - non-empty, no failures → ready (including all-purged lists)
+ * - any failures → error (with partial `items` when some ids succeeded)
  */
 export function projectDeliverables(
   values: readonly DeliverableValue[] | undefined,
+  failedCount: number = 0,
 ): InspectorDeliverables {
   if (values === undefined) return { status: "not_fetched" };
+  if (failedCount > 0) {
+    return {
+      status: "error",
+      items: values.map(projectDeliverable),
+      failedCount,
+    };
+  }
   if (values.length === 0) return { status: "none" };
   return { status: "ready", items: values.map(projectDeliverable) };
 }
@@ -455,11 +464,14 @@ export function projectDeliverables(
  * Deliverable values are optional: the run detail envelope only carries
  * deliverable *ids* on each node. Pass the resolved `DeliverableValue[]`
  * from `GET /deliverables/:id` (or leave undefined for `not_fetched`).
+ * Pass `failedCount` when any id in the batch failed so a blip cannot
+ * read as genuine absence.
  */
 export function projectInspectorRun(
   detail: RunDetailResponse,
   nowMs: number = Date.now(),
   deliverableValues?: readonly DeliverableValue[],
+  failedCount: number = 0,
 ): InspectorRun {
   const { run, nodes, block } = detail;
   const heldGate = run.state === "blocked" && isHeldGate(block);
@@ -497,7 +509,7 @@ export function projectInspectorRun(
       : formatDurationMs(run.duration_ms),
     tasksTotal: run.tasks_total,
     nodes: projected,
-    deliverables: projectDeliverables(deliverableValues),
+    deliverables: projectDeliverables(deliverableValues, failedCount),
     block: block
       ? {
           reason: block.reason,

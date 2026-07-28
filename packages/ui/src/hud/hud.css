@@ -4270,6 +4270,14 @@ button.pc-roster__meta--copy:focus-visible {
   font-size: var(--text-sub);
   color: var(--ink-muted);
 }
+/* Failed fetch — honest, not absence. Plate surface; not a task-state colour. */
+.pc-dlv-stack__error {
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: var(--text-sub);
+  color: var(--ink-soft);
+  line-height: 1.4;
+}
 .pc-dlv-stack__list {
   display: flex;
   flex-direction: column;

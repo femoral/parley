@@ -413,15 +413,24 @@ export type InspectorDeliverable =
 /**
  * Honest deliverable list status on a run view (#255).
  *
- * Three distinguishable things — never three readings of the same empty array:
+ * Four distinguishable things — never three readings of the same empty array:
  * - `not_fetched` — detail exists but deliverable rows were not loaded
  * - `none` — loaded; the run produced no deliverables
  * - `ready` — loaded; `items` may be all-purged and still render (addresses survive)
+ * - `error` — one or more GET /deliverables/:id calls failed. `items` holds any
+ *   that did load (partial success); never collapse a failure into `none`.
  */
 export type InspectorDeliverables =
   | { status: "not_fetched" }
   | { status: "none" }
-  | { status: "ready"; items: InspectorDeliverable[] };
+  | { status: "ready"; items: InspectorDeliverable[] }
+  | {
+      status: "error";
+      /** Successfully loaded rows (empty when the whole batch failed). */
+      items: InspectorDeliverable[];
+      /** How many ids failed; non-zero by construction. */
+      failedCount: number;
+    };
 
 /**
  * Run selected in the roster but detail not yet fetched. Suppresses the

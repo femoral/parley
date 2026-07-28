@@ -141,9 +141,17 @@ function DeliverableCard({ item }: { item: InspectorDeliverable }) {
   }
 }
 
+function loadErrorCopy(failedCount: number): string {
+  if (failedCount === 1) {
+    return "Couldn't load 1 deliverable for this run.";
+  }
+  return `Couldn't load ${failedCount} deliverables for this run.`;
+}
+
 /**
  * Deliverable stack under the run node table. Omits itself when deliverables
  * were never fetched — an empty section would falsely read as "none".
+ * A failed fetch is its own status (`error`), never collapsed into `none`.
  */
 export function DeliverableView({
   deliverables,
@@ -157,6 +165,25 @@ export function DeliverableView({
       <section className="pc-dlv-stack" aria-label="Deliverables">
         <h3 className="pc-dlv-stack__title">Deliverables</h3>
         <p className="pc-dlv-stack__empty">No deliverables on this run.</p>
+      </section>
+    );
+  }
+
+  if (deliverables.status === "error") {
+    return (
+      <section className="pc-dlv-stack" aria-label="Deliverables">
+        <h3 className="pc-dlv-stack__title">Deliverables</h3>
+        {/* One live region for the stack (F6); load failure is the announcement. */}
+        <p className="pc-dlv-stack__error" role="status">
+          {loadErrorCopy(deliverables.failedCount)}
+        </p>
+        {deliverables.items.length > 0 && (
+          <div className="pc-dlv-stack__list">
+            {deliverables.items.map((item) => (
+              <DeliverableCard key={item.id} item={item} />
+            ))}
+          </div>
+        )}
       </section>
     );
   }

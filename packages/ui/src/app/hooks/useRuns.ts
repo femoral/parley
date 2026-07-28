@@ -39,16 +39,19 @@ type SelectedDlvCache = {
   /** Sorted unique id key for the fetch we last started. */
   idKey: string;
   /**
-   * `undefined` — not yet resolved for this run/idKey.
-   * array — resolved (empty = none).
+   * `undefined` — not yet resolved for this run/idKey (includes in-flight).
+   * array — batch settled (empty = genuine none *only* when failedIds is empty).
    */
   values: DeliverableValue[] | undefined;
+  /** Ids whose GET failed; non-empty means the surface must not claim absence. */
+  failedIds: string[];
 };
 
 let selectedDlv: SelectedDlvCache = {
   runId: null,
   idKey: "",
   values: undefined,
+  failedIds: [],
 };
 const selectedDlvListeners = new Set<() => void>();
 
@@ -70,7 +73,7 @@ function setSelectedDlv(next: SelectedDlvCache): void {
 
 /** Test helper — reset the selected-deliverable cache between suites. */
 export function __resetSelectedDeliverableCacheForTests(): void {
-  selectedDlv = { runId: null, idKey: "", values: undefined };
+  selectedDlv = { runId: null, idKey: "", values: undefined, failedIds: [] };
 }
 
 function deliverableIdKey(detail: RunDetailResponse): string {
@@ -162,20 +165,38 @@ export function useRuns(
   }, [client, enabled, pollMs, selectedRunId]);
 
   // ── Selected-run deliverables only (#255 F1 / #262) ─────────────────────
-  // Depend on a stable id key so a detail re-poll with the same ids does not
-  // re-fire GET /deliverables/:id for every live tick.
+  // Depend on a stable id key + a boolean "detail ready" flag — not the
+  // detail object identity. A poll tick that replaces `details` with a fresh
+  // object of the *same* id set must not cancel an in-flight batch (livelock
+  // when the batch is slower than pollMs).
   const selectedDetail = selectedRunId ? details.get(selectedRunId) : undefined;
-  const selectedIdKey =
-    selectedRunId && selectedDetail ? deliverableIdKey(selectedDetail) : "";
+  const selectedDetailReady = Boolean(
+    selectedRunId &&
+      selectedDetail &&
+      selectedDetail.run.run_id === selectedRunId,
+  );
+  const selectedIdKey = selectedDetailReady
+    ? deliverableIdKey(selectedDetail!)
+    : "";
 
   useEffect(() => {
     if (!enabled || !selectedRunId) {
-      setSelectedDlv({ runId: null, idKey: "", values: undefined });
+      setSelectedDlv({
+        runId: null,
+        idKey: "",
+        values: undefined,
+        failedIds: [],
+      });
       return;
     }
-    if (!selectedDetail || selectedDetail.run.run_id !== selectedRunId) {
+    if (!selectedDetailReady) {
       // Detail not yet warm — stay not_fetched for this selection.
-      setSelectedDlv({ runId: selectedRunId, idKey: "", values: undefined });
+      setSelectedDlv({
+        runId: selectedRunId,
+        idKey: "",
+        values: undefined,
+        failedIds: [],
+      });
       return;
     }
 
@@ -183,6 +204,9 @@ export function useRuns(
     const ids = idKey === "" ? [] : idKey.split("\0").filter(Boolean);
 
     // Already resolved for this run + id set — do not re-fetch.
+    // In-flight batches are protected by depending on `selectedIdKey` and
+    // `selectedDetailReady` (not detail object identity), so a poll tick with
+    // the same ids does not re-enter this effect and cancel the batch.
     if (
       selectedDlv.runId === selectedRunId &&
       selectedDlv.idKey === idKey &&
@@ -192,10 +216,20 @@ export function useRuns(
     }
 
     // Mark in-flight so the inspector does not flash a stale prior run's cards.
-    setSelectedDlv({ runId: selectedRunId, idKey, values: undefined });
+    setSelectedDlv({
+      runId: selectedRunId,
+      idKey,
+      values: undefined,
+      failedIds: [],
+    });
 
     if (ids.length === 0) {
-      setSelectedDlv({ runId: selectedRunId, idKey, values: [] });
+      setSelectedDlv({
+        runId: selectedRunId,
+        idKey,
+        values: [],
+        failedIds: [],
+      });
       return;
     }
 
@@ -204,21 +238,28 @@ export function useRuns(
       const settled = await Promise.all(
         ids.map(async (id) => {
           try {
-            return await client.getDeliverable(id);
+            const value = await client.getDeliverable(id);
+            return { id, value };
           } catch {
-            return null;
+            return { id, value: null as DeliverableValue | null };
           }
         }),
       );
       if (cancelled) return;
-      const values = settled.filter((v): v is DeliverableValue => v != null);
-      setSelectedDlv({ runId: selectedRunId, idKey, values });
+      const values: DeliverableValue[] = [];
+      const failedIds: string[] = [];
+      for (const row of settled) {
+        if (row.value != null) values.push(row.value);
+        else failedIds.push(row.id);
+      }
+      // Never collapse failures into []. A full-batch failure is error, not none.
+      setSelectedDlv({ runId: selectedRunId, idKey, values, failedIds });
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [client, enabled, selectedRunId, selectedIdKey, selectedDetail]);
+  }, [client, enabled, selectedRunId, selectedIdKey, selectedDetailReady]);
 
   const runs: RosterRun[] = useMemo(
     () =>
@@ -268,10 +309,10 @@ export function useInspectorRun(
     const detail = details.get(selectedRunId);
     if (!detail || detail.run.run_id !== selectedRunId) return null;
     // Only pass values when the cache is for this selection and resolved.
-    const deliverableValues =
-      dlv.runId === selectedRunId && dlv.values !== undefined
-        ? dlv.values
-        : undefined;
-    return projectInspectorRun(detail, nowMs, deliverableValues);
+    const resolved =
+      dlv.runId === selectedRunId && dlv.values !== undefined;
+    const deliverableValues = resolved ? dlv.values : undefined;
+    const failedCount = resolved ? dlv.failedIds.length : 0;
+    return projectInspectorRun(detail, nowMs, deliverableValues, failedCount);
   }, [details, selectedRunId, nowMs, dlv]);
 }

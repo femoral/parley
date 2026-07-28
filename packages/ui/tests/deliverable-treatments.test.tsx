@@ -270,7 +270,7 @@ describe("projectDeliverable treatments (#255)", () => {
     expect(item.note).toMatch(/purged on 2026-06-24/);
   });
 
-  it("distinguishes not_fetched, none, and ready", () => {
+  it("distinguishes not_fetched, none, ready, and error", () => {
     expect(projectDeliverables(undefined).status).toBe("not_fetched");
     expect(projectDeliverables([]).status).toBe("none");
     const ready = projectDeliverables([
@@ -285,6 +285,31 @@ describe("projectDeliverable treatments (#255)", () => {
     expect(ready.status).toBe("ready");
     if (ready.status !== "ready") throw new Error("expected ready");
     expect(ready.items).toHaveLength(1);
+
+    // Full-batch failure must not read as none (empty values + failedCount).
+    const fullFail = projectDeliverables([], 1);
+    expect(fullFail.status).toBe("error");
+    if (fullFail.status !== "error") throw new Error("expected error");
+    expect(fullFail.items).toHaveLength(0);
+    expect(fullFail.failedCount).toBe(1);
+
+    // Partial failure keeps the loaded cards and reports the miss.
+    const partial = projectDeliverables(
+      [
+        wireValue({
+          deliverable_id: "d1",
+          kind: "inline",
+          node: "a",
+          port: "out",
+          value: 1,
+        }),
+      ],
+      2,
+    );
+    expect(partial.status).toBe("error");
+    if (partial.status !== "error") throw new Error("expected error");
+    expect(partial.items).toHaveLength(1);
+    expect(partial.failedCount).toBe(2);
   });
 
   it("formatDeliverableSize has MB step and omits dir bytes", () => {
@@ -826,6 +851,300 @@ describe("useRuns → useInspectorRun deliverable wire (#255 F1)", () => {
     );
     expect(hits.some((h) => h.includes(`/deliverables/${encodeURIComponent(dlvId)}`))).toBe(
       true,
+    );
+  });
+
+  it("failed GET /deliverables/:id does not claim absence", async () => {
+    const runId = "r-wire-fail";
+    const dlvId = "d-missing";
+    const detail: RunDetailResponse = {
+      run: {
+        run_id: runId,
+        workflow: "research",
+        workflow_version: 1,
+        orchestrator_session_id: "sess-1",
+        state: "completed",
+        block: null,
+        current_node: "funnel",
+        iteration: 1,
+        parent_run_id: null,
+        attempt: 1,
+        tasks_settled: 1,
+        tasks_total: 1,
+        usage: { input_tokens: 0, output_tokens: 0 },
+        duration_ms: 1_000,
+        branch: null,
+        worktree: null,
+        created_at: "2026-07-01T00:00:00.000Z",
+        updated_at: "2026-07-01T00:01:00.000Z",
+        completed_at: "2026-07-01T00:01:00.000Z",
+        purged_at: null,
+        workspace: "repo",
+        type: "research",
+        repo: null,
+        error: null,
+        track_bound: 1,
+      },
+      block: null,
+      nodes: [
+        {
+          node: "funnel",
+          kind: "step",
+          iteration: 1,
+          state: "completed",
+          tasks_settled: 1,
+          tasks_total: 1,
+          usage: null,
+          duration_ms: 1_000,
+          fanout: null,
+          tallies: {},
+          counts: {},
+          summary: null,
+          deliverables: [dlvId],
+          gist: "shortlist ready",
+        },
+      ],
+    };
+    const listBody: RunsResponse = { seq: 1, runs: [detail.run] };
+
+    const fetchFn = (async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/runs") || url.includes("/runs?")) {
+        return jsonResponse(listBody);
+      }
+      if (url.includes(`/runs/${encodeURIComponent(runId)}`)) {
+        return jsonResponse(detail);
+      }
+      if (url.includes(`/deliverables/${encodeURIComponent(dlvId)}`)) {
+        return jsonResponse({ error: "internal" }, 500);
+      }
+      return jsonResponse({ error: "not found" }, 404);
+    }) as typeof fetch;
+
+    const client = new ParleyClient({ baseUrl: "", fetch: fetchFn });
+
+    const { result } = renderHook(() => {
+      const runs = useRuns(client, { selectedRunId: runId, pollMs: 60_000 });
+      return useInspectorRun(runs.details, runId, Date.now());
+    });
+
+    await waitFor(() => {
+      const view = result.current;
+      expect(view).not.toBeNull();
+      expect(view?.status).toBe("ready");
+      if (view?.status !== "ready") throw new Error("expected ready");
+      // Must settle as error — never "none" while node.deliverables is non-empty.
+      expect(view.deliverables.status).toBe("error");
+    });
+
+    const view = result.current!;
+    if (view.status !== "ready") throw new Error("expected ready");
+    if (view.deliverables.status !== "error") throw new Error("expected error");
+    expect(view.deliverables.failedCount).toBe(1);
+    expect(view.deliverables.items).toHaveLength(0);
+    // Node structure still legible.
+    expect(view.nodes).toHaveLength(1);
+    expect(view.nodes[0]?.node).toBe("funnel");
+
+    render(<Inspector task={null} run={view} />);
+    const stack = document.querySelector('.pc-dlv-stack');
+    expect(stack?.textContent).toMatch(/Couldn't load 1 deliverable/i);
+    expect(stack?.textContent).not.toMatch(/No deliverables on this run/i);
+  });
+
+  it("partial deliverable failure keeps loaded cards and reports the miss", async () => {
+    const runId = "r-wire-partial";
+    const okId = "d-ok";
+    const badId = "d-bad";
+    const detail: RunDetailResponse = {
+      run: {
+        run_id: runId,
+        workflow: "research",
+        workflow_version: 1,
+        orchestrator_session_id: "sess-1",
+        state: "completed",
+        block: null,
+        current_node: "funnel",
+        iteration: 1,
+        parent_run_id: null,
+        attempt: 1,
+        tasks_settled: 1,
+        tasks_total: 1,
+        usage: { input_tokens: 0, output_tokens: 0 },
+        duration_ms: 1_000,
+        branch: null,
+        worktree: null,
+        created_at: "2026-07-01T00:00:00.000Z",
+        updated_at: "2026-07-01T00:01:00.000Z",
+        completed_at: "2026-07-01T00:01:00.000Z",
+        purged_at: null,
+        workspace: "repo",
+        type: "research",
+        repo: null,
+        error: null,
+        track_bound: 1,
+      },
+      block: null,
+      nodes: [
+        {
+          node: "funnel",
+          kind: "step",
+          iteration: 1,
+          state: "completed",
+          tasks_settled: 1,
+          tasks_total: 1,
+          usage: null,
+          duration_ms: 1_000,
+          fanout: null,
+          tallies: {},
+          counts: {},
+          summary: null,
+          deliverables: [okId, badId],
+          gist: "mixed",
+        },
+      ],
+    };
+    const listBody: RunsResponse = { seq: 1, runs: [detail.run] };
+    const okBody = wireValue({
+      deliverable_id: okId,
+      run_id: runId,
+      kind: "inline",
+      node: "funnel",
+      port: "shortlist",
+      value: { kept: true },
+    });
+
+    const fetchFn = (async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/runs") || url.includes("/runs?")) {
+        return jsonResponse(listBody);
+      }
+      if (url.includes(`/runs/${encodeURIComponent(runId)}`)) {
+        return jsonResponse(detail);
+      }
+      if (url.includes(`/deliverables/${encodeURIComponent(okId)}`)) {
+        return jsonResponse(okBody);
+      }
+      if (url.includes(`/deliverables/${encodeURIComponent(badId)}`)) {
+        return jsonResponse({ error: "internal" }, 500);
+      }
+      return jsonResponse({ error: "not found" }, 404);
+    }) as typeof fetch;
+
+    const client = new ParleyClient({ baseUrl: "", fetch: fetchFn });
+
+    const { result } = renderHook(() => {
+      const runs = useRuns(client, { selectedRunId: runId, pollMs: 60_000 });
+      return useInspectorRun(runs.details, runId, Date.now());
+    });
+
+    await waitFor(() => {
+      const view = result.current;
+      expect(view?.status).toBe("ready");
+      if (view?.status !== "ready") throw new Error("expected ready");
+      expect(view.deliverables.status).toBe("error");
+    });
+
+    const view = result.current!;
+    if (view.status !== "ready") throw new Error("expected ready");
+    if (view.deliverables.status !== "error") throw new Error("expected error");
+    expect(view.deliverables.failedCount).toBe(1);
+    expect(view.deliverables.items).toHaveLength(1);
+    expect(view.deliverables.items[0]?.treatment).toBe("inline");
+
+    render(<Inspector task={null} run={view} />);
+    expect(document.querySelector('[data-treatment="inline"]')?.textContent).toMatch(/kept/);
+    expect(document.querySelector(".pc-dlv-stack")?.textContent).toMatch(
+      /Couldn't load 1 deliverable/i,
+    );
+    expect(document.querySelector(".pc-dlv-stack")?.textContent).not.toMatch(
+      /No deliverables on this run/i,
+    );
+  });
+
+  it("genuine absence still reads as none (empty id set, no failures)", async () => {
+    const runId = "r-wire-none";
+    const detail: RunDetailResponse = {
+      run: {
+        run_id: runId,
+        workflow: "research",
+        workflow_version: 1,
+        orchestrator_session_id: "sess-1",
+        state: "completed",
+        block: null,
+        current_node: "funnel",
+        iteration: 1,
+        parent_run_id: null,
+        attempt: 1,
+        tasks_settled: 1,
+        tasks_total: 1,
+        usage: { input_tokens: 0, output_tokens: 0 },
+        duration_ms: 1_000,
+        branch: null,
+        worktree: null,
+        created_at: "2026-07-01T00:00:00.000Z",
+        updated_at: "2026-07-01T00:01:00.000Z",
+        completed_at: "2026-07-01T00:01:00.000Z",
+        purged_at: null,
+        workspace: "repo",
+        type: "research",
+        repo: null,
+        error: null,
+        track_bound: 1,
+      },
+      block: null,
+      nodes: [
+        {
+          node: "funnel",
+          kind: "step",
+          iteration: 1,
+          state: "completed",
+          tasks_settled: 1,
+          tasks_total: 1,
+          usage: null,
+          duration_ms: 1_000,
+          fanout: null,
+          tallies: {},
+          counts: {},
+          summary: null,
+          deliverables: [],
+          gist: "no outputs",
+        },
+      ],
+    };
+    const listBody: RunsResponse = { seq: 1, runs: [detail.run] };
+
+    const fetchFn = (async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/runs") || url.includes("/runs?")) {
+        return jsonResponse(listBody);
+      }
+      if (url.includes(`/runs/${encodeURIComponent(runId)}`)) {
+        return jsonResponse(detail);
+      }
+      return jsonResponse({ error: "not found" }, 404);
+    }) as typeof fetch;
+
+    const client = new ParleyClient({ baseUrl: "", fetch: fetchFn });
+
+    const { result } = renderHook(() => {
+      const runs = useRuns(client, { selectedRunId: runId, pollMs: 60_000 });
+      return useInspectorRun(runs.details, runId, Date.now());
+    });
+
+    await waitFor(() => {
+      const view = result.current;
+      expect(view?.status).toBe("ready");
+      if (view?.status !== "ready") throw new Error("expected ready");
+      expect(view.deliverables.status).toBe("none");
+    });
+
+    render(<Inspector task={null} run={result.current!} />);
+    expect(document.querySelector(".pc-dlv-stack")?.textContent).toMatch(
+      /No deliverables on this run/i,
+    );
+    expect(document.querySelector(".pc-dlv-stack")?.textContent).not.toMatch(
+      /Couldn't load/i,
     );
   });
 });
