@@ -3,20 +3,84 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { RosterPanel } from "../src/hud/index.js";
-import type { RosterGroup, RosterSessionOption } from "../src/hud/index.js";
+import { RosterPanel, describePipTrack } from "../src/hud/index.js";
+import type { RosterGroup, RosterPip, RosterSessionOption } from "../src/hud/index.js";
 import { Inspector } from "../src/hud/Inspector/index.js";
 import type { InspectorRun } from "../src/hud/types.js";
 
 afterEach(cleanup);
 
-const HUD_CSS = readFileSync(
-  resolve(
-    process.cwd(),
-    process.cwd().endsWith("packages/ui") ? "src/hud/hud.css" : "packages/ui/src/hud/hud.css",
-  ),
-  "utf8",
-);
+const uiRoot = process.cwd().endsWith("packages/ui")
+  ? process.cwd()
+  : resolve(process.cwd(), "packages/ui");
+
+const HUD_CSS = readFileSync(resolve(uiRoot, "src/hud/hud.css"), "utf8");
+const TOKENS_CSS = readFileSync(resolve(uiRoot, "src/tokens/tokens.css"), "utf8");
+
+/** Last matching rule block for a selector (cascade order). */
+function blockFor(css: string, selector: string): string {
+  const re = new RegExp(
+    selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\s*\\{([^}]+)\\}",
+    "g",
+  );
+  const matches = [...css.matchAll(re)];
+  expect(matches.length, `expected a rule for ${selector}`).toBeGreaterThan(0);
+  return matches[matches.length - 1]![1]!;
+}
+
+/** Resolve a simple `var(--token)` token value from tokens.css :root. */
+function tokenValue(name: string): string {
+  const re = new RegExp(`${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*:\\s*([^;]+);`);
+  const m = TOKENS_CSS.match(re);
+  expect(m, `token ${name}`).toBeTruthy();
+  let v = m![1]!.trim();
+  // Follow one level of var(--other).
+  const ref = v.match(/^var\((--[a-z0-9-]+)\)$/i);
+  if (ref) {
+    const m2 = TOKENS_CSS.match(
+      new RegExp(`${ref[1]!.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*:\\s*([^;]+);`),
+    );
+    expect(m2, `token ref ${ref[1]}`).toBeTruthy();
+    v = m2![1]!.trim();
+  }
+  return v;
+}
+
+function parseHex(hex: string): [number, number, number] {
+  const h = hex.replace("#", "");
+  return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
+}
+
+function relLum(hex: string): number {
+  const [r, g, b] = parseHex(hex).map((c) => {
+    const s = c / 255;
+    return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * r! + 0.7152 * g! + 0.0722 * b!;
+}
+
+function contrastRatio(a: string, b: string): number {
+  const L1 = relLum(a);
+  const L2 = relLum(b);
+  const hi = Math.max(L1, L2);
+  const lo = Math.min(L1, L2);
+  return (hi + 0.05) / (lo + 0.05);
+}
+
+function compositeOver(fgHex: string, bgHex: string, alpha: number): string {
+  const [fr, fg, fb] = parseHex(fgHex);
+  const [br, bg, bb] = parseHex(bgHex);
+  const r = Math.round((1 - alpha) * br! + alpha * fr!);
+  const g = Math.round((1 - alpha) * bg! + alpha * fg!);
+  const b = Math.round((1 - alpha) * bb! + alpha * fb!);
+  return `#${[r, g, b].map((x) => x.toString(16).padStart(2, "0")).join("")}`;
+}
+
+function parseRgbaAlpha(value: string): number {
+  const m = value.match(/rgba?\(\s*[\d.]+\s*,\s*[\d.]+\s*,\s*[\d.]+\s*,\s*([\d.]+)\s*\)/i);
+  expect(m, `rgba alpha in ${value}`).toBeTruthy();
+  return Number(m![1]);
+}
 
 const SESSIONS: RosterSessionOption[] = [];
 
@@ -143,6 +207,42 @@ describe("RosterPanel run rows (#254)", () => {
     expect(tracks[1]!.querySelectorAll(".pc-roster__pip").length).toBe(5);
   });
 
+  it("exposes pip progress via accessible name, not class (#260)", () => {
+    // coding-1: 3 done, 1 under way, 1 not started of 5
+    render(<RosterPanel {...baseProps()} />);
+    const track = screen.getByRole("img", {
+      name: /Progress: 3 done, 1 under way, 1 not started of 5/i,
+    });
+    expect(track).toBeTruthy();
+    // Reachable without querying by class.
+    expect(track.className).toMatch(/pc-roster__pips/);
+    // Option name also carries the summary (option aria-label overrides children).
+    expect(
+      screen.getByRole("option", {
+        name: /coding-1.*Progress: 3 done, 1 under way, 1 not started of 5/i,
+      }),
+    ).toBeTruthy();
+    // Held gate track.
+    expect(
+      screen.getByRole("img", {
+        name: /Progress: 3 done, 1 gated of 4/i,
+      }),
+    ).toBeTruthy();
+  });
+
+  it("describePipTrack summarises kinds against the bound", () => {
+    const pips: RosterPip[] = [
+      { kind: "done" },
+      { kind: "done" },
+      { kind: "live" },
+      { kind: "empty" },
+      { kind: "empty" },
+    ];
+    expect(describePipTrack(pips)).toBe(
+      "Progress: 2 done, 1 under way, 2 not started of 5",
+    );
+  });
+
   it("selecting a run calls onSelectRun, not onSelectTask", () => {
     const props = baseProps();
     render(<RosterPanel {...props} />);
@@ -193,6 +293,96 @@ describe("RosterPanel run rows (#254)", () => {
     // the ~2-character collapse of original defect 5.
     expect(nameCss).toMatch(/flex:\s*1\s+1\s+auto/);
     expect(nameCss).toMatch(/min-width:\s*5ch/);
+  });
+});
+
+describe("Roster pip track a11y + contrast contracts (#260)", () => {
+  it("CSS: empty pip uses --ink-label (not invisible --progress-track)", () => {
+    const empty = blockFor(HUD_CSS, ".pc-roster__pip--empty");
+    const base = blockFor(HUD_CSS, ".pc-roster__pip");
+    expect(empty).toMatch(/background:\s*var\(--ink-label\)/);
+    expect(base).toMatch(/background:\s*var\(--ink-label\)/);
+    expect(empty).not.toMatch(/--progress-track/);
+  });
+
+  it("CSS: track condenses under pressure (min-width 0 + overflow hidden)", () => {
+    const track = blockFor(HUD_CSS, ".pc-roster__pips");
+    const pip = blockFor(HUD_CSS, ".pc-roster__pip");
+    expect(track).toMatch(/overflow:\s*hidden/);
+    expect(track).toMatch(/min-width:\s*0/);
+    expect(track).toMatch(/flex-wrap:\s*nowrap/);
+    // Preferred floor was 4px; under large track_bound pips must be free to
+    // shrink so the row never overflows.
+    expect(pip).toMatch(/min-width:\s*0/);
+    expect(pip).not.toMatch(/min-width:\s*4px/);
+  });
+
+  it("CSS: selected row uses tint-18 and solid brass border (above hover)", () => {
+    const selected = blockFor(HUD_CSS, ".pc-roster__row--selected");
+    const runSelected = blockFor(
+      HUD_CSS,
+      ".pc-roster__row--run.pc-roster__row--selected",
+    );
+    const runHover = blockFor(HUD_CSS, ".pc-roster__row--run:hover");
+    expect(selected).toMatch(/background:\s*var\(--brass-tint-18\)/);
+    expect(runSelected).toMatch(/background:\s*var\(--brass-tint-18\)/);
+    expect(runHover).toMatch(/background:\s*var\(--brass-tint-12\)/);
+    // Selected and hover must not share the same tint stop.
+    expect(runSelected).not.toMatch(/--brass-tint-12/);
+    expect(selected).toMatch(/border-color:\s*var\(--brass-border-selected\)/);
+    // Token resolves to solid brass, not the old #f0c25a88 alpha.
+    const borderSelected = tokenValue("--brass-border-selected");
+    expect(borderSelected.toLowerCase()).toBe("#f0c25a");
+    expect(TOKENS_CSS).toMatch(/--brass-tint-18:\s*rgba\(240,\s*194,\s*90,\s*0\.18\)/);
+  });
+
+  it("empty pip contrast ≥ 3:1 against rest / hover / selected row washes", () => {
+    // Composite brass tints over plate-top (lighter plate → tighter ratio for
+    // a light empty pip). Values from tokens.css; ratios computed here.
+    const plateTop = tokenValue("--plate-top"); // #1d140c
+    const brass = tokenValue("--brass"); // #f0c25a
+    const emptyPip = tokenValue("--ink-label"); // #967c54
+    const restA = parseRgbaAlpha(tokenValue("--brass-tint-06"));
+    const hoverA = parseRgbaAlpha(tokenValue("--brass-tint-12"));
+    const selA = parseRgbaAlpha(tokenValue("--brass-tint-18"));
+    expect(restA).toBeCloseTo(0.06, 5);
+    expect(hoverA).toBeCloseTo(0.12, 5);
+    expect(selA).toBeCloseTo(0.18, 5);
+
+    const restBg = compositeOver(brass, plateTop, restA);
+    const hoverBg = compositeOver(brass, plateTop, hoverA);
+    const selBg = compositeOver(brass, plateTop, selA);
+
+    const restR = contrastRatio(emptyPip, restBg);
+    const hoverR = contrastRatio(emptyPip, hoverBg);
+    const selR = contrastRatio(emptyPip, selBg);
+
+    // Measured ratios (assert both floor and documented values).
+    expect(restR).toBeGreaterThanOrEqual(3);
+    expect(hoverR).toBeGreaterThanOrEqual(3);
+    expect(selR).toBeGreaterThanOrEqual(3);
+    // Pin the measured numbers so a token drift fails loudly.
+    expect(restR).toBeCloseTo(4.11, 1);
+    expect(hoverR).toBeCloseTo(3.57, 1);
+    expect(selR).toBeCloseTo(3.07, 1);
+  });
+
+  it("selection border contrast does not drop vs unselected brass-border", () => {
+    const plateTop = tokenValue("--plate-top");
+    const brass = tokenValue("--brass");
+    const unselectedBorder = tokenValue("--brass-border"); // #b98f3f
+    const selectedBorder = tokenValue("--brass-border-selected"); // #f0c25a
+    const restA = parseRgbaAlpha(tokenValue("--brass-tint-06"));
+    const selA = parseRgbaAlpha(tokenValue("--brass-tint-18"));
+    const restBg = compositeOver(brass, plateTop, restA);
+    const selBg = compositeOver(brass, plateTop, selA);
+
+    const before = contrastRatio(unselectedBorder, restBg);
+    const after = contrastRatio(selectedBorder, selBg);
+    // Selection must not reduce border contrast (the old alpha border did).
+    expect(after).toBeGreaterThanOrEqual(before);
+    expect(before).toBeCloseTo(5.47, 1);
+    expect(after).toBeCloseTo(7.28, 1);
   });
 });
 

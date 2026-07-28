@@ -201,13 +201,47 @@ function showAttentionAge(
   return false;
 }
 
+/** Kind labels for the pip track's accessible summary (#260). */
+const PIP_KIND_LABEL: Record<RosterPip["kind"], string> = {
+  done: "done",
+  live: "under way",
+  gate: "gated",
+  fail: "failed",
+  empty: "not started",
+};
+
+/**
+ * Text equivalent of a run's static pip track — counts per kind against the
+ * bound. Exposed to AT via the track's accessible name (#260).
+ */
+export function describePipTrack(pips: RosterPip[]): string {
+  const counts: Record<RosterPip["kind"], number> = {
+    done: 0,
+    live: 0,
+    gate: 0,
+    fail: 0,
+    empty: 0,
+  };
+  for (const pip of pips) counts[pip.kind] += 1;
+  const parts: string[] = [];
+  for (const kind of ["done", "live", "gate", "fail", "empty"] as const) {
+    const n = counts[kind];
+    if (n > 0) parts.push(`${n} ${PIP_KIND_LABEL[kind]}`);
+  }
+  const bound = pips.length;
+  if (parts.length === 0) return `Progress: 0 of ${bound}`;
+  return `Progress: ${parts.join(", ")} of ${bound}`;
+}
+
 function PipTrack({ pips }: { pips: RosterPip[] }) {
+  const label = describePipTrack(pips);
   return (
-    <div className="pc-roster__pips" aria-hidden="true">
+    <div className="pc-roster__pips" role="img" aria-label={label}>
       {pips.map((pip, i) => (
         <span
           key={i}
           className={`pc-roster__pip pc-roster__pip--${pip.kind}`}
+          aria-hidden="true"
         />
       ))}
     </div>
@@ -343,9 +377,10 @@ function RunRow({
       ? formatRelativeAge(run.updatedAt, nowMs)
       : null;
   const short = shortRef(run.id);
+  const progress = describePipTrack(run.pips);
   const accessibleName = age
-    ? `run ${run.name} ${short} — ${meta.label}, ${age}`
-    : `run ${run.name} ${short} — ${meta.label}`;
+    ? `run ${run.name} ${short} — ${meta.label}, ${age}. ${progress}`
+    : `run ${run.name} ${short} — ${meta.label}. ${progress}`;
 
   return (
     <div

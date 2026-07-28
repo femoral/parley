@@ -443,9 +443,10 @@
   outline: 2px solid var(--brass-bright);
   outline-offset: 1px;
 }
-/* Selected row (design-manifest §4.6): gold tint + gold-alpha border. */
+/* Selected row (#260): brass-tint-18 (above hover's 0.12) + solid brass
+ * border — never the old alpha border that dimmed on select. */
 .pc-roster__row--selected {
-  background: var(--brass-tint-12);
+  background: var(--brass-tint-18);
   border-color: var(--brass-border-selected);
 }
 .pc-roster__beacon {
@@ -3777,8 +3778,10 @@ button.pc-roster__meta--copy:focus-visible {
 .pc-roster__row--run:hover {
   background: var(--brass-tint-12);
 }
+/* Selected sits above hover (tint-18) and brightens the border to solid brass
+ * so selection never reduces contrast vs the unselected brass-border (#260). */
 .pc-roster__row--run.pc-roster__row--selected {
-  background: var(--brass-tint-12);
+  background: var(--brass-tint-18);
   border-color: var(--brass-border-selected);
 }
 .pc-roster__row--held {
@@ -3867,19 +3870,28 @@ button.pc-roster__meta--copy:focus-visible {
   text-overflow: ellipsis;
 }
 
-/* Static pip track — flex children share width; length never follows fan-out. */
+/* Static pip track — flex children share width; length never follows fan-out.
+ * Overflow (#260): condense. Prefer preferred min-width 4px, but allow pips
+ * to shrink (`min-width: 0`) under a large track_bound so the row geometry is
+ * never broken. overflow:hidden clips any residual min-content overflow. */
 .pc-roster__pips {
   display: flex;
+  flex-wrap: nowrap;
   gap: 3px;
   margin-top: 6px;
   width: 100%;
+  min-width: 0;
+  overflow: hidden;
 }
 .pc-roster__pip {
   height: 5px;
   flex: 1 1 0;
-  min-width: 4px;
+  min-width: 0;
   border-radius: var(--radius-hairline);
-  background: var(--progress-track);
+  /* Empty / default: --ink-label clears 3:1 non-text contrast against rest
+   * (tint-06), hover (tint-12), and selected (tint-18) row washes (#260).
+   * Prior --progress-track measured ~1.2:1 and made the bound invisible. */
+  background: var(--ink-label);
 }
 .pc-roster__pip--done {
   background: var(--state-completed);
@@ -3894,7 +3906,7 @@ button.pc-roster__meta--copy:focus-visible {
   background: var(--state-failed);
 }
 .pc-roster__pip--empty {
-  background: var(--progress-track);
+  background: var(--ink-label);
 }
 
 /* Inspector run view — CLI node table + spine. */
