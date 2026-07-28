@@ -3806,24 +3806,24 @@ button.pc-roster__meta--copy:focus-visible {
   min-width: 0;
   width: 100%;
 }
-/* Workflow name wins the flex fight (same pattern as search-hit name priority):
- * keep ≥8ch before ellipsis; run id shrinks first. */
+/* Name may ellipsize after ≥8ch; short-id never shrinks (correlation key + copy
+ * target). Badge is flex:0 0 auto. At the narrowest width the name yields first,
+ * not the id and not the first ~8 characters of the name. */
 .pc-roster__run-head .pc-roster__name {
   flex: 1 1 auto;
   min-width: 8ch;
 }
 .pc-roster__run-id {
-  flex: 0 1 auto;
-  min-width: 0;
-  max-width: 12ch;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  flex: 0 0 auto;
   font-family: var(--font-mono);
   font-size: var(--text-meta);
   font-weight: 500;
   color: var(--ink-muted);
   white-space: nowrap;
 }
+/* Badge colour: --run-badge-color set from the row's attention state. Gate and
+ * cancelled own their colour in CSS so the sheet tells the truth without the
+ * inline style (cancelled steps to --ink-muted for AA on brass-tint-12). */
 .pc-roster__run-badge {
   margin-left: auto;
   flex: 0 0 auto;
@@ -3835,12 +3835,18 @@ button.pc-roster__meta--copy:focus-visible {
   font-weight: 600;
   letter-spacing: var(--track-micro);
   text-transform: uppercase;
-  /* Colour bound to the row's attention state via inline style (meta.colorVar);
-   * gate border override below. No hardcoded running-green. */
-  color: var(--state-running);
+  color: var(--run-badge-color, var(--ink-muted));
 }
 .pc-roster__run-badge--gate {
+  --run-badge-color: var(--state-awaiting_answer);
+  color: var(--state-awaiting_answer);
   border-color: color-mix(in srgb, var(--state-awaiting_answer) 45%, transparent);
+}
+/* --state-cancelled #9a8a72 on tint-12 composite ≈#362915 is 4.21:1 (fails AA
+ * at 10px). --ink-muted clears; still archive-quiet. */
+.pc-roster__run-badge--cancelled {
+  --run-badge-color: var(--ink-muted);
+  color: var(--ink-muted);
 }
 .pc-roster__run-sub {
   display: block;
@@ -3991,15 +3997,39 @@ button.pc-roster__meta--copy:focus-visible {
   font-size: var(--text-sub);
   color: var(--ink-muted);
 }
+/* Horizontal scrollport: table keeps real content minima so ×N / .N / STATE
+ * never hard-clip. The wrap is the keyboard-reachable affordance (H3). */
+.pc-runview__table-scroller {
+  position: relative;
+}
 .pc-runview__table-wrap {
   overflow-x: auto;
   margin: 0 -4px;
+  padding: 0 4px;
 }
-/* Fixed layout so the 344px rail owns column widths (auto table was ~563px
- * with TASKS/GIST/AGE off-screen). Spine column width is a real box, not a hint. */
+/* Right-edge feather: table min-width always exceeds the 344px rail content
+ * box, so the cue is always meaningful (not an inert tab stop). */
+.pc-runview__table-fade {
+  pointer-events: none;
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 28px;
+  z-index: 1;
+  background: linear-gradient(
+    to right,
+    transparent 0%,
+    color-mix(in srgb, var(--plate-top) 70%, transparent) 55%,
+    var(--plate-top) 100%
+  );
+}
+/* Honest scroll: auto layout + min-width so columns size to content, not to
+ * percentage shares that destroy load-bearing text. min-width keeps the
+ * scrollport genuinely scrollable inside --region-right 344px. */
 .pc-runview__table {
-  width: 100%;
-  table-layout: fixed;
+  width: max-content;
+  min-width: 36rem;
   border-collapse: collapse;
   font-size: var(--text-sub);
 }
@@ -4011,14 +4041,12 @@ button.pc-roster__meta--copy:focus-visible {
   letter-spacing: var(--track-micro);
   text-transform: uppercase;
   color: var(--ink-label);
-  padding: 0 4px 6px;
+  padding: 0 6px 6px;
   border-bottom: 1px solid var(--line-faint);
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 .pc-runview__table td {
-  padding: 7px 4px;
+  padding: 7px 6px;
   border-bottom: 1px solid var(--line-faint);
   vertical-align: top;
   color: var(--ink-muted);
@@ -4045,27 +4073,23 @@ button.pc-roster__meta--copy:focus-visible {
   width: 18px;
   min-width: 18px;
   max-width: 18px;
-  overflow: hidden;
 }
-/* Column shares tuned for ~320px content width inside the 344px right rail. */
+/* Content minima from measured labels (awaiting_answer ≈127px, fan-out node
+ * strings ≈240px). No overflow:hidden — clipping would delete ×N / .N. */
 .pc-runview__table th:nth-child(2),
 .pc-runview__table td.pc-runview__node {
-  width: 22%;
+  min-width: 10rem;
 }
 .pc-runview__table th:nth-child(3) {
-  width: 20%;
+  min-width: 8.5rem;
 }
 .pc-runview__table th:nth-child(4),
 .pc-runview__table td.pc-runview__tasks {
-  width: 12%;
-}
-.pc-runview__table th:nth-child(5),
-.pc-runview__table td.pc-runview__gist {
-  width: auto;
+  min-width: 3.25rem;
 }
 .pc-runview__table th:nth-child(6),
 .pc-runview__table td.pc-runview__age {
-  width: 12%;
+  min-width: 2.75rem;
 }
 .pc-runview__spine {
   position: absolute;
@@ -4112,8 +4136,6 @@ button.pc-roster__meta--copy:focus-visible {
   font-size: var(--text-meta);
   color: var(--ink-parchment);
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 /* Fan-out width + iteration are load-bearing ("written, not drawn").
  * --ink-label was 4.11:1 on a --live row (brass-tint-06 over plate-top);
@@ -4134,9 +4156,6 @@ button.pc-roster__meta--copy:focus-visible {
   letter-spacing: var(--track-micro);
   text-transform: uppercase;
   color: var(--st-color, var(--ink-muted));
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 .pc-runview__st-mark {
   display: inline-flex;
@@ -4147,14 +4166,14 @@ button.pc-roster__meta--copy:focus-visible {
   font-family: var(--font-mono);
   font-size: var(--text-meta);
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
+/* Cap gist measure so long CLI gists do not balloon vertical height; horizontal
+ * overflow stays on the scrollport. */
 .pc-runview__gist {
   color: var(--ink-muted);
   line-height: 1.4;
-  overflow: hidden;
-  word-break: break-word;
+  max-width: 28ch;
+  overflow-wrap: break-word;
 }
 .pc-runview__reject {
   display: inline-block;

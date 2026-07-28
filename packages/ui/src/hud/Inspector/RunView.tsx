@@ -63,7 +63,7 @@ function StateCell({ node }: { node: InspectorRunNode }) {
   const style = { "--st-color": meta.colorVar } as CSSProperties;
   return (
     <td>
-      <span className="pc-runview__st" style={style}>
+      <span className="pc-runview__st" style={style} title={node.stateLabel}>
         <span className="pc-runview__st-mark" aria-hidden="true">
           <Mark mark={meta.mark} size={10} />
         </span>
@@ -159,31 +159,34 @@ function ReadyRunView({ run }: { run: InspectorRunReady }) {
       {run.nodes.length === 0 ? (
         <p className="pc-runview__empty">No nodes entered yet.</p>
       ) : (
-        <div
-          className="pc-runview__table-wrap"
-          role="region"
-          aria-label="Run node table"
-          tabIndex={0}
-        >
-          <table className="pc-runview__table">
-            <thead>
-              <tr>
-                <th className="pc-runview__rail" scope="col">
-                  <span className="pc-visually-hidden">Sequence</span>
-                </th>
-                <th scope="col">Node</th>
-                <th scope="col">State</th>
-                <th scope="col">Tasks</th>
-                <th scope="col">Gist</th>
-                <th scope="col">Age</th>
-              </tr>
-            </thead>
-            <tbody>
-              {run.nodes.map((node) => (
-                <NodeRow key={node.key} node={node} />
-              ))}
-            </tbody>
-          </table>
+        <div className="pc-runview__table-scroller">
+          <div
+            className="pc-runview__table-wrap"
+            role="region"
+            aria-label="Run node table"
+            tabIndex={0}
+          >
+            <table className="pc-runview__table">
+              <thead>
+                <tr>
+                  <th className="pc-runview__rail" scope="col">
+                    <span className="pc-visually-hidden">Sequence</span>
+                  </th>
+                  <th scope="col">Node</th>
+                  <th scope="col">State</th>
+                  <th scope="col">Tasks</th>
+                  <th scope="col">Gist</th>
+                  <th scope="col">Age</th>
+                </tr>
+              </thead>
+              <tbody>
+                {run.nodes.map((node) => (
+                  <NodeRow key={node.key} node={node} />
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="pc-runview__table-fade" aria-hidden="true" />
         </div>
       )}
     </div>
