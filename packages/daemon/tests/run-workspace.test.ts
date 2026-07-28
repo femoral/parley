@@ -255,6 +255,79 @@ describe("isolation is read off the sandbox", () => {
       [run.path, sib.path].sort(),
     );
   });
+
+  /**
+   * #265 regression seam: resolving is side-effecting for writable fan-out.
+   * Calling twice for the same address (as the old spawn path did — first
+   * under placeholder task id `"pending"`, then the real id) collides on the
+   * branch, which is derived from the address, not the task id.
+   */
+  it("double-resolve of the same address collides on the sibling branch (#265)", () => {
+    const repo = makeGitRepo({ "README.md": "hi\n" });
+    scratch.push(repo);
+    const { worktrees } = makeHome();
+    const run = createRunCheckout({
+      repoRoot: repo,
+      worktreesDir: worktrees,
+      runId: "r2",
+      workflow: "coding-2",
+    });
+    const address = { node: "plan", iteration: 1, slot: "structure" } as const;
+    const common = {
+      repoRoot: repo,
+      worktreesDir: worktrees,
+      runId: "r2",
+      runCheckoutPath: run.path,
+      runBranch: run.branch,
+      address,
+      sandbox: "workspace" as const,
+      fanOut: true,
+    };
+
+    const phase1 = resolveStepWorkspace({ ...common, taskId: "pending" });
+    expect(path.basename(phase1.path)).toBe("r2--pending");
+    expect(phase1.branch).toBe("parley/r2/plan.1.structure");
+
+    expect(() => resolveStepWorkspace({ ...common, taskId: "t1" })).toThrow(
+      /branch named ['"]parley\/r2\/plan\.1\.structure['"] already exists/i,
+    );
+  });
+
+  it("rolls back sibling worktree + branch when finalize fails mid-flight", () => {
+    const repo = makeGitRepo({ "README.md": "hi\n" });
+    scratch.push(repo);
+    const { worktrees } = makeHome();
+    const run = createRunCheckout({
+      repoRoot: repo,
+      worktreesDir: worktrees,
+      runId: "r-sib-fail",
+      workflow: "coding-1",
+    });
+    // Force failure: cut from a missing start-point so add never succeeds;
+    // nothing should remain under the run id.
+    expect(() =>
+      createSiblingCheckout({
+        repoRoot: repo,
+        worktreesDir: worktrees,
+        runId: "r-sib-fail",
+        runBranch: "parley/does-not-exist-ref",
+        taskId: "t9",
+        address: "review.1.sweep",
+      }),
+    ).toThrow();
+    expect(
+      listRunCheckoutPaths(worktrees, repo, "r-sib-fail").filter(
+        (p) => p !== run.path,
+      ),
+    ).toEqual([]);
+    // Sibling branches are `parley/<runId>/<address>`; the run branch
+    // `parley/<runId>-<workflow>` must remain (create never succeeded).
+    expect(
+      listRunBranches(repo, "r-sib-fail").filter((b) =>
+        b.startsWith("parley/r-sib-fail/"),
+      ),
+    ).toEqual([]);
+  });
 });
 
 describe("tmp handoff + step context under the address", () => {
