@@ -105,7 +105,11 @@ export {
   formatNodeStateLabel,
   isHeldGate,
 } from "./runs.js";
-export { useRuns, useInspectorRun } from "./useRuns.js";
+export {
+  useRuns,
+  useInspectorRun,
+  __resetSelectedDeliverableCacheForTests,
+} from "./useRuns.js";
 export type { RunsView } from "./useRuns.js";
 export { useTaskDetail } from "./useTaskDetail.js";
 export {

@@ -344,48 +344,67 @@ export function formatDeliverableAddress(d: {
   return `${d.node}.${d.iteration}${slot}/${d.port}`;
 }
 
-/** Compact size for the reference treatment (`14 kB`, `11 files`, `6 keys`). */
-export function formatDeliverableSize(size: DeliverableSize | null | undefined): string | null {
+/**
+ * Compact size for the reference treatment (`14 kB`, `1.2 MB`, `6 keys`).
+ * Directory inode bytes are not a useful size — omit unless `elements`/`keys`
+ * is set on the wire (the daemon overrides file/dir size with `{bytes}`).
+ */
+export function formatDeliverableSize(
+  size: DeliverableSize | null | undefined,
+  kind?: "inline" | "file" | "dir",
+): string | null {
   if (size == null) return null;
   if (size.elements !== undefined) {
-    return size.elements === 1 ? "1 file" : `${size.elements} files`;
+    return size.elements === 1 ? "1 item" : `${size.elements} items`;
   }
   if (size.keys !== undefined) {
     return size.keys === 1 ? "1 key" : `${size.keys} keys`;
   }
+  // Dir inode size is not meaningful to an operator (#255 QC).
+  if (kind === "dir") return null;
   if (size.bytes !== undefined && Number.isFinite(size.bytes)) {
-    if (size.bytes < 1024) return `${size.bytes} B`;
-    return `${(size.bytes / 1024).toFixed(size.bytes < 10_240 ? 1 : 0)} kB`;
+    const b = size.bytes;
+    if (b < 1024) return `${b} B`;
+    if (b < 1024 * 1024) {
+      const kb = b / 1024;
+      return `${kb < 10 ? kb.toFixed(1) : Math.round(kb)} kB`;
+    }
+    const mb = b / (1024 * 1024);
+    return `${mb < 10 ? mb.toFixed(1) : Math.round(mb)} MB`;
   }
   return null;
 }
 
 /**
  * Project one wire deliverable value into a kind-aware treatment (#255).
- * `purged_at` wins over kind — decay is a rendered state, not a missing value.
+ * Purged is gated on `purged_at` (or a non-null decay `note` from the daemon
+ * value-missing path) — never on bare `value === null`, which is legitimate
+ * JSON null on an optional port (#255 F2).
  */
 export function projectDeliverable(v: DeliverableValue): InspectorDeliverable {
   const address = formatDeliverableAddress(v);
-  if (v.purged_at != null) {
+
+  // Decay: stamp wins. Daemon value-missing path sets note without a stamp.
+  // JSON `null` on a live port has purged_at=null and note=null — that is data.
+  const isPurged =
+    v.purged_at != null ||
+    (v.kind === "inline" &&
+      v.value === null &&
+      !v.collected &&
+      v.note != null &&
+      v.note !== "");
+
+  if (isPurged) {
     return {
       treatment: "purged",
       id: v.deliverable_id,
       address,
       kind: v.kind,
       note: v.note,
+      purgedAt: v.purged_at,
     };
   }
-  // Inline with no value and no purge stamp still reads as decayed (daemon
-  // may clear the payload without a stamp in edge retention paths).
-  if (v.kind === "inline" && v.value === null && !v.collected) {
-    return {
-      treatment: "purged",
-      id: v.deliverable_id,
-      address,
-      kind: "inline",
-      note: v.note,
-    };
-  }
+
   if (v.kind === "file" || v.kind === "dir") {
     return {
       treatment: "reference",
@@ -393,10 +412,13 @@ export function projectDeliverable(v: DeliverableValue): InspectorDeliverable {
       address,
       kind: v.kind,
       path: v.path ?? v.absolute_path ?? "",
-      sizeLabel: formatDeliverableSize(v.size),
+      sizeLabel: formatDeliverableSize(v.size, v.kind),
+      exists: v.exists,
+      note: v.note,
     };
   }
-  // inline / collected — browsable JSON in the report well.
+
+  // inline / collected — browsable JSON in the report well (including `null`).
   let json: string;
   try {
     json = JSON.stringify(v.value, null, 2) ?? "null";

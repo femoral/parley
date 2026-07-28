@@ -4225,13 +4225,15 @@ button.pc-roster__meta--copy:focus-visible {
   color: inherit;
 }
 .pc-runview__row--inherited .pc-runview__node {
-  color: var(--ink-label);
+  color: var(--ink-muted);
   text-decoration: line-through;
   text-decoration-thickness: 1px;
 }
+/* F9: keep --ink-muted (AA on live-row stop); do not re-introduce --ink-label
+ * which measured 4.11:1 on brass-tint-06 over plate-top. */
 .pc-runview__row--inherited .pc-runview__fan,
 .pc-runview__row--inherited .pc-runview__iter {
-  color: var(--ink-label);
+  color: var(--ink-muted);
   text-decoration: line-through;
 }
 .pc-runview__skip-note {
@@ -4294,8 +4296,14 @@ button.pc-roster__meta--copy:focus-visible {
   text-transform: uppercase;
   color: var(--ink-soft);
 }
-.pc-dlv__kind--purged {
-  color: var(--state-cancelled);
+/* Purged is a *state* badge beside the kind, not a fourth kind label. */
+.pc-dlv__state {
+  font-family: var(--font-body);
+  font-size: var(--text-label);
+  font-weight: 600;
+  letter-spacing: var(--track-micro);
+  text-transform: uppercase;
+  color: var(--ink-label);
 }
 .pc-dlv__address {
   font-family: var(--font-mono);
@@ -4324,15 +4332,21 @@ button.pc-roster__meta--copy:focus-visible {
   overflow: auto;
   background: var(--report-well-bg);
   border-color: var(--report-well-border);
+  color: var(--report-text);
+}
+.pc-dlv__json {
+  margin: 0;
   font-family: var(--font-mono);
   font-size: var(--text-meta);
   line-height: 1.45;
-  color: var(--report-text);
+  color: inherit;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+/* F7: purged must not be the loudest card — keep default plate-well border. */
 .pc-dlv__well--purged {
-  border-color: var(--state-cancelled);
+  border-color: var(--plate-well-border);
+  opacity: 1;
 }
 .pc-dlv__path {
   margin: 0;
@@ -4351,6 +4365,13 @@ button.pc-roster__meta--copy:focus-visible {
   font-size: var(--text-sub);
   font-style: italic;
   color: var(--ink-label);
+  line-height: 1.4;
+}
+.pc-dlv__missing-note {
+  margin: 6px 0 0;
+  font-family: var(--font-body);
+  font-size: var(--text-sub);
+  color: var(--ink-muted);
   line-height: 1.4;
 }
 .pc-dlv__purged-lead {

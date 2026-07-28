@@ -22,7 +22,11 @@ import type {
   TasksResponse,
 } from "./contract.js";
 import type { MetricsGroupBy, RunMetricsGroupBy } from "./classification.js";
-import type { RunDetailResponse, RunsResponse } from "./run-query.js";
+import type {
+  DeliverableValue,
+  RunDetailResponse,
+  RunsResponse,
+} from "./run-query.js";
 import { TASK_EVENT_NAMES } from "./states.js";
 
 /** How the client reaches the daemon. */
@@ -170,6 +174,17 @@ export class ParleyClient {
    */
   getRun(ref: string): Promise<RunDetailResponse> {
     return this.request<RunDetailResponse>(`/runs/${encodeURIComponent(ref)}`);
+  }
+
+  /**
+   * `GET /deliverables/:id` — one deliverable value (ADR-0021 / #241 / #255).
+   * Inline JSON under `value`; file/dir path refs with live `exists`. Purged
+   * rows return `purged_at` set and a null value — not a 404.
+   */
+  getDeliverable(id: string): Promise<DeliverableValue> {
+    return this.request<DeliverableValue>(
+      `/deliverables/${encodeURIComponent(id)}`,
+    );
   }
 
   /** `GET /tasks/:ref` — envelope plus decoded detail companions (and deprecated row). */

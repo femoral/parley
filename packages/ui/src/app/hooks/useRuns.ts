@@ -1,10 +1,14 @@
 /**
  * Layer 4 (hooks) — poll the run query surface for the roster + inspector
- * (#254 / ADR-0021 / #241). Uses `ParleyClient.listRuns` / `getRun` only —
- * no parallel fetch shape.
+ * (#254 / #255 / ADR-0021 / #241). Uses `ParleyClient.listRuns` / `getRun` /
+ * `getDeliverable` only — no parallel fetch shape.
+ *
+ * Deliverables (#255 F1): fetched only for the *selected* run when its detail
+ * is available, not for every live run on every poll tick (#262).
  */
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type {
+  DeliverableValue,
   NodeProjection,
   ParleyClient,
   RunDetailResponse,
@@ -25,6 +29,59 @@ export interface RunsView {
 }
 
 const EMPTY_DETAILS: ReadonlyMap<string, RunDetailResponse> = new Map();
+
+// ── Selected-run deliverable cache (#255 F1) ────────────────────────────────
+// Shared between useRuns (writer) and useInspectorRun (reader) so Cockpit.tsx
+// need not change (sibling quarantine). Only the selected run's ids are fetched.
+
+type SelectedDlvCache = {
+  runId: string | null;
+  /** Sorted unique id key for the fetch we last started. */
+  idKey: string;
+  /**
+   * `undefined` — not yet resolved for this run/idKey.
+   * array — resolved (empty = none).
+   */
+  values: DeliverableValue[] | undefined;
+};
+
+let selectedDlv: SelectedDlvCache = {
+  runId: null,
+  idKey: "",
+  values: undefined,
+};
+const selectedDlvListeners = new Set<() => void>();
+
+function subscribeSelectedDlv(onStoreChange: () => void): () => void {
+  selectedDlvListeners.add(onStoreChange);
+  return () => {
+    selectedDlvListeners.delete(onStoreChange);
+  };
+}
+
+function getSelectedDlvSnapshot(): SelectedDlvCache {
+  return selectedDlv;
+}
+
+function setSelectedDlv(next: SelectedDlvCache): void {
+  selectedDlv = next;
+  for (const l of selectedDlvListeners) l();
+}
+
+/** Test helper — reset the selected-deliverable cache between suites. */
+export function __resetSelectedDeliverableCacheForTests(): void {
+  selectedDlv = { runId: null, idKey: "", values: undefined };
+}
+
+function deliverableIdKey(detail: RunDetailResponse): string {
+  const ids = new Set<string>();
+  for (const node of detail.nodes) {
+    for (const id of node.deliverables) {
+      if (id) ids.add(id);
+    }
+  }
+  return [...ids].sort().join("\0");
+}
 
 /**
  * Poll `GET /runs` and warm `GET /runs/:ref` for each live run so the roster
@@ -104,6 +161,65 @@ export function useRuns(
     };
   }, [client, enabled, pollMs, selectedRunId]);
 
+  // ── Selected-run deliverables only (#255 F1 / #262) ─────────────────────
+  // Depend on a stable id key so a detail re-poll with the same ids does not
+  // re-fire GET /deliverables/:id for every live tick.
+  const selectedDetail = selectedRunId ? details.get(selectedRunId) : undefined;
+  const selectedIdKey =
+    selectedRunId && selectedDetail ? deliverableIdKey(selectedDetail) : "";
+
+  useEffect(() => {
+    if (!enabled || !selectedRunId) {
+      setSelectedDlv({ runId: null, idKey: "", values: undefined });
+      return;
+    }
+    if (!selectedDetail || selectedDetail.run.run_id !== selectedRunId) {
+      // Detail not yet warm — stay not_fetched for this selection.
+      setSelectedDlv({ runId: selectedRunId, idKey: "", values: undefined });
+      return;
+    }
+
+    const idKey = selectedIdKey;
+    const ids = idKey === "" ? [] : idKey.split("\0").filter(Boolean);
+
+    // Already resolved for this run + id set — do not re-fetch.
+    if (
+      selectedDlv.runId === selectedRunId &&
+      selectedDlv.idKey === idKey &&
+      selectedDlv.values !== undefined
+    ) {
+      return;
+    }
+
+    // Mark in-flight so the inspector does not flash a stale prior run's cards.
+    setSelectedDlv({ runId: selectedRunId, idKey, values: undefined });
+
+    if (ids.length === 0) {
+      setSelectedDlv({ runId: selectedRunId, idKey, values: [] });
+      return;
+    }
+
+    let cancelled = false;
+    void (async () => {
+      const settled = await Promise.all(
+        ids.map(async (id) => {
+          try {
+            return await client.getDeliverable(id);
+          } catch {
+            return null;
+          }
+        }),
+      );
+      if (cancelled) return;
+      const values = settled.filter((v): v is DeliverableValue => v != null);
+      setSelectedDlv({ runId: selectedRunId, idKey, values });
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [client, enabled, selectedRunId, selectedIdKey, selectedDetail]);
+
   const runs: RosterRun[] = useMemo(
     () =>
       summaries.map((summary) => {
@@ -132,16 +248,30 @@ export function useRuns(
   );
 }
 
-/** Project the selected run's detail into the inspector payload. */
+/**
+ * Project the selected run's detail into the inspector payload, including
+ * deliverables fetched for that selection by {@link useRuns}.
+ */
 export function useInspectorRun(
   details: ReadonlyMap<string, RunDetailResponse>,
   selectedRunId: string | null,
   nowMs: number,
 ): InspectorRun | null {
+  const dlv = useSyncExternalStore(
+    subscribeSelectedDlv,
+    getSelectedDlvSnapshot,
+    getSelectedDlvSnapshot,
+  );
+
   return useMemo(() => {
     if (!selectedRunId) return null;
     const detail = details.get(selectedRunId);
     if (!detail || detail.run.run_id !== selectedRunId) return null;
-    return projectInspectorRun(detail, nowMs);
-  }, [details, selectedRunId, nowMs]);
+    // Only pass values when the cache is for this selection and resolved.
+    const deliverableValues =
+      dlv.runId === selectedRunId && dlv.values !== undefined
+        ? dlv.values
+        : undefined;
+    return projectInspectorRun(detail, nowMs, deliverableValues);
+  }, [details, selectedRunId, nowMs, dlv]);
 }

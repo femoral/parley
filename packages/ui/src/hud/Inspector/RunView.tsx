@@ -127,10 +127,11 @@ function StateCell({ node }: { node: InspectorRunNode }) {
 }
 
 function NodeRow({ node }: { node: InspectorRunNode }) {
+  // F8: only emit classes that have CSS. `skipped` is carried by the STATE
+  // cell (mark / ! / coral / weight) — no empty row class.
   const rowClass = [
     node.live ? "pc-runview__row--live" : "",
     node.state === "inherited" ? "pc-runview__row--inherited" : "",
-    node.state === "skipped" ? "pc-runview__row--skipped" : "",
   ]
     .filter(Boolean)
     .join(" ");

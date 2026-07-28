@@ -14,6 +14,12 @@ import type {
   InspectorDeliverables,
 } from "../types.js";
 
+function formatPurgedDate(iso: string | null): string | null {
+  if (iso == null || iso === "") return null;
+  // Prefer YYYY-MM-DD (daemon note style) without inventing a locale clock.
+  return iso.length >= 10 ? iso.slice(0, 10) : iso;
+}
+
 function InlineDeliverable({ item }: { item: Extract<InspectorDeliverable, { treatment: "inline" }> }) {
   return (
     <article className="pc-dlv pc-dlv--inline" data-treatment="inline" data-dlv-id={item.id}>
@@ -28,9 +34,15 @@ function InlineDeliverable({ item }: { item: Extract<InspectorDeliverable, { tre
           </span>
         )}
       </header>
-      <pre className="pc-dlv__well pc-dlv__well--report" tabIndex={0} aria-label={`Inline value for ${item.address}`}>
-        {item.json}
-      </pre>
+      {/* Scrollports rule: clipped region needs tabIndex + named region role. */}
+      <div
+        className="pc-dlv__well pc-dlv__well--report"
+        role="region"
+        tabIndex={0}
+        aria-label={`Inline value for ${item.address}`}
+      >
+        <pre className="pc-dlv__json">{item.json}</pre>
+      </div>
     </article>
   );
 }
@@ -40,16 +52,19 @@ function ReferenceDeliverable({
 }: {
   item: Extract<InspectorDeliverable, { treatment: "reference" }>;
 }) {
+  const missing = item.exists === false;
   return (
     <article
-      className="pc-dlv pc-dlv--reference"
+      className={`pc-dlv pc-dlv--reference${missing ? " pc-dlv--missing" : ""}`}
       data-treatment="reference"
       data-kind={item.kind}
+      data-exists={item.exists == null ? "unknown" : item.exists ? "true" : "false"}
       data-dlv-id={item.id}
     >
       <header className="pc-dlv__head">
-        <span className="pc-dlv__kind">
-          {item.kind} · {item.address}
+        <span className="pc-dlv__kind">{item.kind}</span>
+        <span className="pc-dlv__address" title={item.address}>
+          {item.address}
         </span>
       </header>
       <div className="pc-dlv__well">
@@ -72,6 +87,12 @@ function ReferenceDeliverable({
         <p className="pc-dlv__ref-note">
           reference only — parley never copied these bytes
         </p>
+        {missing && (
+          <p className="pc-dlv__missing-note" role="note">
+            {item.note ??
+              "Worktree removed; file deliverables do not outlive their workspace."}
+          </p>
+        )}
       </div>
     </article>
   );
@@ -82,6 +103,7 @@ function PurgedDeliverable({
 }: {
   item: Extract<InspectorDeliverable, { treatment: "purged" }>;
 }) {
+  const date = formatPurgedDate(item.purgedAt);
   return (
     <article
       className="pc-dlv pc-dlv--purged"
@@ -90,15 +112,17 @@ function PurgedDeliverable({
       data-dlv-id={item.id}
     >
       <header className="pc-dlv__head">
-        <span className="pc-dlv__kind pc-dlv__kind--purged">purged</span>
+        {/* Kind first — purged is a state of the kind, not a fourth kind. */}
+        <span className="pc-dlv__kind">{item.kind}</span>
+        <span className="pc-dlv__state">purged</span>
         <span className="pc-dlv__address" title={item.address}>
           {item.address}
         </span>
       </header>
-      <div className="pc-dlv__well pc-dlv__well--purged" role="status">
+      <div className="pc-dlv__well pc-dlv__well--purged">
         <p className="pc-dlv__purged-lead">
-          Decayed past the retention clock. The row is gone; the address is all
-          that survives.
+          Retention cleared this value
+          {date ? ` on ${date}` : ""}. The address is all that survives.
         </p>
         {item.note && <p className="pc-dlv__purged-note">{item.note}</p>}
       </div>
@@ -137,9 +161,17 @@ export function DeliverableView({
     );
   }
 
+  const anyPurged = deliverables.items.some((i) => i.treatment === "purged");
+
   return (
     <section className="pc-dlv-stack" aria-label="Deliverables">
       <h3 className="pc-dlv-stack__title">Deliverables</h3>
+      {/* One live region for the stack, not one per purged card (F6). */}
+      {anyPurged && (
+        <p className="pc-visually-hidden" role="status">
+          Some deliverables on this run have been purged by retention.
+        </p>
+      )}
       <div className="pc-dlv-stack__list">
         {deliverables.items.map((item) => (
           <DeliverableCard key={item.id} item={item} />

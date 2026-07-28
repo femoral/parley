@@ -385,19 +385,29 @@ export type InspectorDeliverable =
       kind: "file" | "dir";
       /** Stored path; empty string when the wire had none. */
       path: string;
-      /** Pre-formatted size (`14 kB`, `11 files`), or null when unknown. */
+      /** Pre-formatted size (`14 kB`, `1.2 MB`), or null when unknown / not useful. */
       sizeLabel: string | null;
+      /**
+       * Live stat from the daemon: `true` present, `false` worktree gone,
+       * `null` when the wire did not report existence.
+       */
+      exists: boolean | null;
+      /** Operator note for missing-path cases (never invent one). */
+      note: string | null;
     }
   | {
       treatment: "purged";
       id: string;
       address: string;
+      /** Kind survives purge — purged is a *state* of the kind, not a fourth kind. */
       kind: InspectorDeliverableKind;
       /**
        * Decay note when the wire provided one (date / run). Never an error
        * string — purged is expected retention, not a fetch failure.
        */
       note: string | null;
+      /** ISO stamp from the wire; used when `note` is absent. */
+      purgedAt: string | null;
     };
 
 /**
