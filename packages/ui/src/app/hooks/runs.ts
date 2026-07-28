@@ -1,11 +1,14 @@
 /**
- * Layer 4 (hooks) — run roster + inspector projection (#254 / ADR-0021).
+ * Layer 4 (hooks) — run roster + inspector projection (#254 / #255 / ADR-0021).
  *
  * Pure helpers over the query-surface shapes (`RunSummary`, `RunDetailResponse`,
- * `NodeProjection`) already served by #241. No parallel fetch shape: the wire
- * is `GET /runs` + `GET /runs/:ref`.
+ * `NodeProjection`, `DeliverableValue`) already served by #241. No parallel
+ * fetch shape: the wire is `GET /runs` + `GET /runs/:ref` (+ deliverable gets
+ * for the value/path fields the node table does not carry).
  */
 import type {
+  DeliverableSize,
+  DeliverableValue,
   NodeProjection,
   RunBlock,
   RunDetailResponse,
@@ -13,6 +16,8 @@ import type {
 } from "@useparley/core";
 import { formatStepAddress } from "@useparley/core";
 import type {
+  InspectorDeliverable,
+  InspectorDeliverables,
   InspectorRun,
   InspectorRunNode,
   RosterPip,
@@ -326,12 +331,147 @@ function projectInspectorNode(
 }
 
 /**
+ * Human deliverable address matching the daemon/CLI form:
+ * `node.iteration[slot]/port`.
+ */
+export function formatDeliverableAddress(d: {
+  node: string;
+  port: string;
+  iteration: number;
+  slot: string | null;
+}): string {
+  const slot = d.slot ? `[${d.slot}]` : "";
+  return `${d.node}.${d.iteration}${slot}/${d.port}`;
+}
+
+/**
+ * Compact size for the reference treatment (`14 kB`, `1.2 MB`, `6 keys`).
+ * Directory inode bytes are not a useful size — omit unless `elements`/`keys`
+ * is set on the wire (the daemon overrides file/dir size with `{bytes}`).
+ */
+export function formatDeliverableSize(
+  size: DeliverableSize | null | undefined,
+  kind?: "inline" | "file" | "dir",
+): string | null {
+  if (size == null) return null;
+  if (size.elements !== undefined) {
+    return size.elements === 1 ? "1 item" : `${size.elements} items`;
+  }
+  if (size.keys !== undefined) {
+    return size.keys === 1 ? "1 key" : `${size.keys} keys`;
+  }
+  // Dir inode size is not meaningful to an operator (#255 QC).
+  if (kind === "dir") return null;
+  if (size.bytes !== undefined && Number.isFinite(size.bytes)) {
+    const b = size.bytes;
+    if (b < 1024) return `${b} B`;
+    if (b < 1024 * 1024) {
+      const kb = b / 1024;
+      return `${kb < 10 ? kb.toFixed(1) : Math.round(kb)} kB`;
+    }
+    const mb = b / (1024 * 1024);
+    return `${mb < 10 ? mb.toFixed(1) : Math.round(mb)} MB`;
+  }
+  return null;
+}
+
+/**
+ * Project one wire deliverable value into a kind-aware treatment (#255).
+ * Purged is gated on `purged_at` (or a non-null decay `note` from the daemon
+ * value-missing path) — never on bare `value === null`, which is legitimate
+ * JSON null on an optional port (#255 F2).
+ */
+export function projectDeliverable(v: DeliverableValue): InspectorDeliverable {
+  const address = formatDeliverableAddress(v);
+
+  // Decay: stamp wins. Daemon value-missing path sets note without a stamp.
+  // JSON `null` on a live port has purged_at=null and note=null — that is data.
+  const isPurged =
+    v.purged_at != null ||
+    (v.kind === "inline" &&
+      v.value === null &&
+      !v.collected &&
+      v.note != null &&
+      v.note !== "");
+
+  if (isPurged) {
+    return {
+      treatment: "purged",
+      id: v.deliverable_id,
+      address,
+      kind: v.kind,
+      note: v.note,
+      purgedAt: v.purged_at,
+    };
+  }
+
+  if (v.kind === "file" || v.kind === "dir") {
+    return {
+      treatment: "reference",
+      id: v.deliverable_id,
+      address,
+      kind: v.kind,
+      path: v.path ?? v.absolute_path ?? "",
+      sizeLabel: formatDeliverableSize(v.size, v.kind),
+      exists: v.exists,
+      note: v.note,
+    };
+  }
+
+  // inline / collected — browsable JSON in the report well (including `null`).
+  let json: string;
+  try {
+    json = JSON.stringify(v.value, null, 2) ?? "null";
+  } catch {
+    json = String(v.value);
+  }
+  return {
+    treatment: "inline",
+    id: v.deliverable_id,
+    address,
+    typeLabel: v.type,
+    json,
+  };
+}
+
+/**
+ * Project a list of wire deliverables into the honest list status.
+ * - `undefined` → not fetched (caller has not loaded deliverable rows)
+ * - empty array, no failures → none (loaded; run produced no deliverables)
+ * - non-empty, no failures → ready (including all-purged lists)
+ * - any failures → error (with partial `items` when some ids succeeded)
+ */
+export function projectDeliverables(
+  values: readonly DeliverableValue[] | undefined,
+  failedCount: number = 0,
+): InspectorDeliverables {
+  if (values === undefined) return { status: "not_fetched" };
+  if (failedCount > 0) {
+    return {
+      status: "error",
+      items: values.map(projectDeliverable),
+      failedCount,
+    };
+  }
+  if (values.length === 0) return { status: "none" };
+  return { status: "ready", items: values.map(projectDeliverable) };
+}
+
+/**
  * Project `GET /runs/:ref` into the inspector run view. One row per
  * (node, iteration); STATE polymorphic; gist from the wire.
+ *
+ * Deliverable values are optional: the run detail envelope only carries
+ * deliverable *ids* on each node. Pass the resolved `DeliverableValue[]`
+ * from `GET /deliverables/:id` (or leave undefined for `not_fetched`).
+ * Pass `failedCount` when any id in the batch failed so a blip cannot
+ * read as genuine absence.
  */
 export function projectInspectorRun(
   detail: RunDetailResponse,
   nowMs: number = Date.now(),
+  deliverableValues?: readonly DeliverableValue[],
+  failedCount: number = 0,
 ): InspectorRun {
   const { run, nodes, block } = detail;
   const heldGate = run.state === "blocked" && isHeldGate(block);
@@ -369,6 +509,7 @@ export function projectInspectorRun(
       : formatDurationMs(run.duration_ms),
     tasksTotal: run.tasks_total,
     nodes: projected,
+    deliverables: projectDeliverables(deliverableValues, failedCount),
     block: block
       ? {
           reason: block.reason,

@@ -210,6 +210,7 @@ describe("Inspector run view (#254)", () => {
     duration: "21m 0s",
     tasksTotal: 32,
     heldGate: true,
+    deliverables: { status: "not_fetched" },
     block: {
       reason: "gate",
       detail: "held",

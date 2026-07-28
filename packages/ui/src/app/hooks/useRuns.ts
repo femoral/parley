@@ -1,10 +1,14 @@
 /**
  * Layer 4 (hooks) — poll the run query surface for the roster + inspector
- * (#254 / ADR-0021 / #241). Uses `ParleyClient.listRuns` / `getRun` only —
- * no parallel fetch shape.
+ * (#254 / #255 / ADR-0021 / #241). Uses `ParleyClient.listRuns` / `getRun` /
+ * `getDeliverable` only — no parallel fetch shape.
+ *
+ * Deliverables (#255 F1): fetched only for the *selected* run when its detail
+ * is available, not for every live run on every poll tick (#262).
  */
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type {
+  DeliverableValue,
   NodeProjection,
   ParleyClient,
   RunDetailResponse,
@@ -25,6 +29,62 @@ export interface RunsView {
 }
 
 const EMPTY_DETAILS: ReadonlyMap<string, RunDetailResponse> = new Map();
+
+// ── Selected-run deliverable cache (#255 F1) ────────────────────────────────
+// Shared between useRuns (writer) and useInspectorRun (reader) so Cockpit.tsx
+// need not change (sibling quarantine). Only the selected run's ids are fetched.
+
+type SelectedDlvCache = {
+  runId: string | null;
+  /** Sorted unique id key for the fetch we last started. */
+  idKey: string;
+  /**
+   * `undefined` — not yet resolved for this run/idKey (includes in-flight).
+   * array — batch settled (empty = genuine none *only* when failedIds is empty).
+   */
+  values: DeliverableValue[] | undefined;
+  /** Ids whose GET failed; non-empty means the surface must not claim absence. */
+  failedIds: string[];
+};
+
+let selectedDlv: SelectedDlvCache = {
+  runId: null,
+  idKey: "",
+  values: undefined,
+  failedIds: [],
+};
+const selectedDlvListeners = new Set<() => void>();
+
+function subscribeSelectedDlv(onStoreChange: () => void): () => void {
+  selectedDlvListeners.add(onStoreChange);
+  return () => {
+    selectedDlvListeners.delete(onStoreChange);
+  };
+}
+
+function getSelectedDlvSnapshot(): SelectedDlvCache {
+  return selectedDlv;
+}
+
+function setSelectedDlv(next: SelectedDlvCache): void {
+  selectedDlv = next;
+  for (const l of selectedDlvListeners) l();
+}
+
+/** Test helper — reset the selected-deliverable cache between suites. */
+export function __resetSelectedDeliverableCacheForTests(): void {
+  selectedDlv = { runId: null, idKey: "", values: undefined, failedIds: [] };
+}
+
+function deliverableIdKey(detail: RunDetailResponse): string {
+  const ids = new Set<string>();
+  for (const node of detail.nodes) {
+    for (const id of node.deliverables) {
+      if (id) ids.add(id);
+    }
+  }
+  return [...ids].sort().join("\0");
+}
 
 /**
  * Poll `GET /runs` and warm `GET /runs/:ref` for each live run so the roster
@@ -104,6 +164,103 @@ export function useRuns(
     };
   }, [client, enabled, pollMs, selectedRunId]);
 
+  // ── Selected-run deliverables only (#255 F1 / #262) ─────────────────────
+  // Depend on a stable id key + a boolean "detail ready" flag — not the
+  // detail object identity. A poll tick that replaces `details` with a fresh
+  // object of the *same* id set must not cancel an in-flight batch (livelock
+  // when the batch is slower than pollMs).
+  const selectedDetail = selectedRunId ? details.get(selectedRunId) : undefined;
+  const selectedDetailReady = Boolean(
+    selectedRunId &&
+      selectedDetail &&
+      selectedDetail.run.run_id === selectedRunId,
+  );
+  const selectedIdKey = selectedDetailReady
+    ? deliverableIdKey(selectedDetail!)
+    : "";
+
+  useEffect(() => {
+    if (!enabled || !selectedRunId) {
+      setSelectedDlv({
+        runId: null,
+        idKey: "",
+        values: undefined,
+        failedIds: [],
+      });
+      return;
+    }
+    if (!selectedDetailReady) {
+      // Detail not yet warm — stay not_fetched for this selection.
+      setSelectedDlv({
+        runId: selectedRunId,
+        idKey: "",
+        values: undefined,
+        failedIds: [],
+      });
+      return;
+    }
+
+    const idKey = selectedIdKey;
+    const ids = idKey === "" ? [] : idKey.split("\0").filter(Boolean);
+
+    // Already resolved for this run + id set — do not re-fetch.
+    // In-flight batches are protected by depending on `selectedIdKey` and
+    // `selectedDetailReady` (not detail object identity), so a poll tick with
+    // the same ids does not re-enter this effect and cancel the batch.
+    if (
+      selectedDlv.runId === selectedRunId &&
+      selectedDlv.idKey === idKey &&
+      selectedDlv.values !== undefined
+    ) {
+      return;
+    }
+
+    // Mark in-flight so the inspector does not flash a stale prior run's cards.
+    setSelectedDlv({
+      runId: selectedRunId,
+      idKey,
+      values: undefined,
+      failedIds: [],
+    });
+
+    if (ids.length === 0) {
+      setSelectedDlv({
+        runId: selectedRunId,
+        idKey,
+        values: [],
+        failedIds: [],
+      });
+      return;
+    }
+
+    let cancelled = false;
+    void (async () => {
+      const settled = await Promise.all(
+        ids.map(async (id) => {
+          try {
+            const value = await client.getDeliverable(id);
+            return { id, value };
+          } catch {
+            return { id, value: null as DeliverableValue | null };
+          }
+        }),
+      );
+      if (cancelled) return;
+      const values: DeliverableValue[] = [];
+      const failedIds: string[] = [];
+      for (const row of settled) {
+        if (row.value != null) values.push(row.value);
+        else failedIds.push(row.id);
+      }
+      // Never collapse failures into []. A full-batch failure is error, not none.
+      setSelectedDlv({ runId: selectedRunId, idKey, values, failedIds });
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [client, enabled, selectedRunId, selectedIdKey, selectedDetailReady]);
+
   const runs: RosterRun[] = useMemo(
     () =>
       summaries.map((summary) => {
@@ -132,16 +289,30 @@ export function useRuns(
   );
 }
 
-/** Project the selected run's detail into the inspector payload. */
+/**
+ * Project the selected run's detail into the inspector payload, including
+ * deliverables fetched for that selection by {@link useRuns}.
+ */
 export function useInspectorRun(
   details: ReadonlyMap<string, RunDetailResponse>,
   selectedRunId: string | null,
   nowMs: number,
 ): InspectorRun | null {
+  const dlv = useSyncExternalStore(
+    subscribeSelectedDlv,
+    getSelectedDlvSnapshot,
+    getSelectedDlvSnapshot,
+  );
+
   return useMemo(() => {
     if (!selectedRunId) return null;
     const detail = details.get(selectedRunId);
     if (!detail || detail.run.run_id !== selectedRunId) return null;
-    return projectInspectorRun(detail, nowMs);
-  }, [details, selectedRunId, nowMs]);
+    // Only pass values when the cache is for this selection and resolved.
+    const resolved =
+      dlv.runId === selectedRunId && dlv.values !== undefined;
+    const deliverableValues = resolved ? dlv.values : undefined;
+    const failedCount = resolved ? dlv.failedIds.length : 0;
+    return projectInspectorRun(detail, nowMs, deliverableValues, failedCount);
+  }, [details, selectedRunId, nowMs, dlv]);
 }

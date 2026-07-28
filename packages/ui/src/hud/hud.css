@@ -4190,3 +4190,210 @@ button.pc-roster__meta--copy:focus-visible {
   text-transform: uppercase;
   color: var(--state-awaiting_answer);
 }
+
+/* ── #255 fork vocabulary (STATE column) ─────────────────────────────────
+ * Asymmetry is the point (F7 / ADR-0021):
+ * - inherited = quiet archive: strike-through + cancelled ink + cancelled mark
+ * - skipped   = loud accusation: coral + failed mark + "!" cue
+ * Colour is never the only carrier — strike vs "!" + distinct marks remain
+ * when colour is removed.
+ */
+.pc-runview__st--inherited {
+  color: var(--state-cancelled);
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+}
+.pc-runview__st--inherited .pc-runview__st-label {
+  text-decoration: inherit;
+}
+.pc-runview__st--skipped {
+  color: var(--state-failed);
+  font-weight: 700;
+  text-decoration: none;
+}
+.pc-runview__st-cue {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 2px;
+  min-width: 0.75em;
+  font-family: var(--font-body);
+  font-weight: 700;
+  font-size: var(--text-label);
+  line-height: 1;
+  /* Non-colour carrier for skipped: a solid "!" mark, same ink as the label. */
+  color: inherit;
+}
+.pc-runview__row--inherited .pc-runview__node {
+  color: var(--ink-muted);
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+}
+/* F9: keep --ink-muted (AA on live-row stop); do not re-introduce --ink-label
+ * which measured 4.11:1 on brass-tint-06 over plate-top. */
+.pc-runview__row--inherited .pc-runview__fan,
+.pc-runview__row--inherited .pc-runview__iter {
+  color: var(--ink-muted);
+  text-decoration: line-through;
+}
+.pc-runview__skip-note {
+  display: inline;
+  font-family: var(--font-body);
+  font-size: var(--text-label);
+  font-weight: 600;
+  color: var(--state-failed);
+}
+
+/* ── #255 deliverable treatments ─────────────────────────────────────────
+ * Surfaces are the inspector's wood plate + report well — not parchment.
+ * Inline JSON reuses the report well tokens (same as Report / Q&A answers).
+ * Reference + purged use plate-well. No preview / download / open actions.
+ */
+.pc-dlv-stack {
+  margin-top: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.pc-dlv-stack__title {
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: var(--text-label);
+  font-weight: 600;
+  letter-spacing: var(--track-micro);
+  text-transform: uppercase;
+  color: var(--ink-label);
+}
+.pc-dlv-stack__empty {
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: var(--text-sub);
+  color: var(--ink-muted);
+}
+/* Failed fetch — honest, not absence. Plate surface; not a task-state colour. */
+.pc-dlv-stack__error {
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: var(--text-sub);
+  color: var(--ink-soft);
+  line-height: 1.4;
+}
+.pc-dlv-stack__list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.pc-dlv {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.pc-dlv__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 10px;
+  min-width: 0;
+}
+.pc-dlv__kind {
+  font-family: var(--font-body);
+  font-size: var(--text-label);
+  font-weight: 600;
+  letter-spacing: var(--track-micro);
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+/* Purged is a *state* badge beside the kind, not a fourth kind label. */
+.pc-dlv__state {
+  font-family: var(--font-body);
+  font-size: var(--text-label);
+  font-weight: 600;
+  letter-spacing: var(--track-micro);
+  text-transform: uppercase;
+  color: var(--ink-label);
+}
+.pc-dlv__address {
+  font-family: var(--font-mono);
+  font-size: var(--text-meta);
+  color: var(--ink-muted);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.pc-dlv__type {
+  font-family: var(--font-mono);
+  font-size: var(--text-meta);
+  color: var(--ink-label);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.pc-dlv__well {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: var(--radius-well);
+  background: var(--plate-well);
+  border: 1px solid var(--plate-well-border);
+  min-width: 0;
+}
+.pc-dlv__well--report {
+  max-height: 10rem;
+  overflow: auto;
+  background: var(--report-well-bg);
+  border-color: var(--report-well-border);
+  color: var(--report-text);
+}
+.pc-dlv__json {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--text-meta);
+  line-height: 1.45;
+  color: inherit;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+/* F7: purged must not be the loudest card — keep default plate-well border. */
+.pc-dlv__well--purged {
+  border-color: var(--plate-well-border);
+  opacity: 1;
+}
+.pc-dlv__path {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--text-meta);
+  color: var(--ink-muted);
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+.pc-dlv__size {
+  color: var(--ink-label);
+}
+.pc-dlv__ref-note {
+  margin: 6px 0 0;
+  font-family: var(--font-body);
+  font-size: var(--text-sub);
+  font-style: italic;
+  color: var(--ink-label);
+  line-height: 1.4;
+}
+.pc-dlv__missing-note {
+  margin: 6px 0 0;
+  font-family: var(--font-body);
+  font-size: var(--text-sub);
+  color: var(--ink-muted);
+  line-height: 1.4;
+}
+.pc-dlv__purged-lead {
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: var(--text-sub);
+  color: var(--ink-muted);
+  line-height: 1.45;
+}
+.pc-dlv__purged-note {
+  margin: 6px 0 0;
+  font-family: var(--font-mono);
+  font-size: var(--text-meta);
+  color: var(--ink-label);
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
