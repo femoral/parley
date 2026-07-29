@@ -451,7 +451,8 @@ function rectsOverlap(a: ChartTextRect, b: ChartTextRect, pad = 2): boolean {
 /**
  * Cockpit layout tokens that pin the centre-stage sheet width
  * (mirrors `tokens.css` / `cockpit.css`). Do not hand-copy a scale number —
- * derive it from these.
+ * derive it from these. Enforced by `cockpit-layout-tokens.test.ts` against
+ * the live stylesheets so a token edit either flows through or fails a test.
  */
 export const COCKPIT_LAYOUT = {
   /** Narrowest desktop width where the triptych still runs side-by-side. */
@@ -465,9 +466,20 @@ export const COCKPIT_LAYOUT = {
 } as const;
 
 /**
- * Minimum centre-stage content width at the narrowest desktop triptych.
- * `viewport − 2×inset − roster − right − 2×gutter`.
- * At 1081: 1081 − 28 − 300 − 344 − 24 = **385 px**.
+ * Centre-stage content width for a given viewport.
+ *
+ * - **Side-by-side** (above the stack breakpoint): rails keep their token
+ *   widths, so the centre is
+ *   `viewport − 2×inset − roster − right − 2×gutter`.
+ *   At 1081: 1081 − 28 − 300 − 344 − 24 = **385 px**.
+ * - **Stacked** (at and below the breakpoint): rails collapse full-width
+ *   under the centre, so the stage is `viewport − 2×inset`.
+ *   At 320: 320 − 28 = **292 px**.
+ *
+ * The previous clamp-up to `stackBreakpoint + 1` under-reported the real
+ * sheet below ~413px (and over-reported it through the rest of the stacked
+ * band). Mark-geometry assertions need the worst-case scale, so this must
+ * track the layout the CSS actually produces (#272).
  */
 export function minCentreSheetWidthPx(
   viewportWidthPx: number = COCKPIT_LAYOUT.desktopMinWidthPx,
@@ -479,11 +491,12 @@ export function minCentreSheetWidthPx(
     regionRightPx,
     stackBreakpointPx,
   } = COCKPIT_LAYOUT;
-  // Below the stack breakpoint rails reflow; the desktop floor is the
-  // side-by-side triptych just above that breakpoint.
-  const w = Math.max(viewportWidthPx, stackBreakpointPx + 1);
+  if (viewportWidthPx <= stackBreakpointPx) {
+    // Rails reflow to full width; centre stage is the board minus insets only.
+    return viewportWidthPx - 2 * boardInsetPx;
+  }
   return (
-    w -
+    viewportWidthPx -
     2 * boardInsetPx -
     regionRosterPx -
     regionRightPx -
@@ -494,14 +507,15 @@ export function minCentreSheetWidthPx(
 /**
  * Binding sheet scale: the plot is `aspect-ratio: 1000/vbH` with uniform
  * scale, so `scale = sheetWidth/1000`. Horizontal is binding; the floor is
- * the narrowest desktop centre width over CHART_VB_W.
+ * the narrowest centre width under consideration over CHART_VB_W.
  *
- * Today: 385/1000 = **0.385**.
+ * Default (narrowest desktop triptych): 385/1000 = **0.385**.
+ * At a 320px stacked viewport: 292/1000 = **0.292**.
  *
  * No longer an *ornament* floor — the flavour lines left the paper in #273.
  * What still needs it is the mark geometry: a ring or a label that clears the
- * plot's edge at 1.224 can overflow it at 0.385, and only the floor proves it
- * clears everywhere.
+ * plot's edge at 1.224 can overflow it at 0.385 (or 0.292), and only the
+ * floor proves it clears everywhere.
  */
 export function sheetScaleFloor(
   viewportWidthPx: number = COCKPIT_LAYOUT.desktopMinWidthPx,
