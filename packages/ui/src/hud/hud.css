@@ -3926,11 +3926,13 @@ button.pc-roster__meta--copy:focus-visible {
   background: var(--ink-label);
 }
 /* Quiet aggregation tick — sighted cue that the track is capped (AT already
- * says "showing N segments"). Three brass hairlines; not a badge. */
+ * says "showing N segments"). Two brass hairlines (2px ink / 1px gap cycle
+ * over 6px); not a badge. Height 3px so it sits with non-fail pips and leaves
+ * the 5px track-height channel to fail alone (#269 reconcile with #260). */
 .pc-roster__pips-cap {
   flex: 0 0 6px;
   width: 6px;
-  height: 5px;
+  height: 3px;
   margin: 0;
   border-radius: 0;
   background: repeating-linear-gradient(

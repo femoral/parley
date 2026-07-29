@@ -376,11 +376,14 @@ describe("Roster pip track a11y + contrast contracts (#260)", () => {
     const track = blockFor(HUD_CSS, ".pc-roster__pips");
     const pip = blockFor(HUD_CSS, ".pc-roster__pip");
     const fail = blockFor(HUD_CSS, ".pc-roster__pip--fail");
+    const cap = blockFor(HUD_CSS, ".pc-roster__pips-cap");
     expect(track).toMatch(/height:\s*5px/);
     expect(track).toMatch(/align-items:\s*center/);
     expect(pip).toMatch(/height:\s*3px/);
     expect(pip).toMatch(/min-width:\s*4px/);
     expect(fail).toMatch(/height:\s*5px/);
+    // Tick must not share the 5px settled-bad height channel (#269 / #260).
+    expect(cap).toMatch(/height:\s*3px/);
   });
 
   it("CSS: selection is border + inset rail; wash stays at rest (no tint-18)", () => {
@@ -558,6 +561,7 @@ describe("Roster pip track a11y + contrast contracts (#260)", () => {
   it("CSS: aggregation tick is a quiet fixed-width mark, not a badge", () => {
     const cap = blockFor(HUD_CSS, ".pc-roster__pips-cap");
     expect(cap).toMatch(/flex:\s*0\s+0\s+6px/);
+    expect(cap).toMatch(/height:\s*3px/);
     expect(cap).toMatch(/repeating-linear-gradient/);
     expect(cap).toMatch(/var\(--brass-border\)/);
     // Not a pill / badge chrome.
