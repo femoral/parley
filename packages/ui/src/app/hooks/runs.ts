@@ -331,7 +331,9 @@ export function formatBlockReasonLabel(block: RunBlock): string {
       return "inputs";
     case "unknown":
     default:
-      return "blocked";
+      // Ordinary English — not a second "blocked" (which reads as a failed
+      // variable fill under `·` apposition after CSS uppercase) (#261 QC).
+      return "unknown";
   }
 }
 

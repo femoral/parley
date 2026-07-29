@@ -18,6 +18,7 @@ import {
   runAttentionState,
 } from "../src/app/hooks/runs.js";
 import { projectRoster, type RosterTaskInput } from "../src/app/hooks/roster.js";
+import { projectChart } from "../src/chart/projectChart.js";
 import { stateMetaFor } from "../src/tokens/state-meta.js";
 
 function summary(partial: Partial<RunSummary> & Pick<RunSummary, "run_id" | "state">): RunSummary {
@@ -406,7 +407,7 @@ describe("projectInspectorRun (#254)", () => {
           detail: null,
           verbs: ["finish"],
         },
-        presented: "blocked",
+        presented: "unknown",
       },
     ];
     for (const { block, presented } of reasons) {
@@ -416,6 +417,21 @@ describe("projectInspectorRun (#254)", () => {
       // Wire enum must not appear verbatim in presented text.
       expect(label).not.toMatch(/loop_exhausted|success_policy|spawn_error|unfilled_inputs/i);
     }
+    // Unclassified block must not read BLOCKED · BLOCKED after CSS uppercase.
+    expect(formatRunStateLabel("blocked", {
+      reason: "unknown",
+      node: null,
+      iteration: null,
+      detail: null,
+      verbs: ["finish"],
+    })).toBe("blocked · unknown");
+    expect(formatRunStateLabel("blocked", {
+      reason: "unknown",
+      node: null,
+      iteration: null,
+      detail: null,
+      verbs: ["finish"],
+    })).not.toMatch(/blocked · blocked/i);
   });
 
   it("duration column is duration-only on every path (#261)", () => {
@@ -436,6 +452,63 @@ describe("projectInspectorRun (#254)", () => {
     if (view.status !== "ready") throw new Error("expected ready");
     expect(view.nodes[0]!.age).toBe("18m");
     expect(view.nodes[1]!.age).toBeNull();
+  });
+
+  it("chart mark captions stay calm when labels come from state-meta (#261 QC)", () => {
+    // End-to-end: inspector projection feeds pre-capped stateMetaFor labels
+    // into projectChart; chart must not shout COMPLETED/RUNNING/etc.
+    const view = projectInspectorRun({
+      run: summary({ run_id: "r-chart-calm", state: "running" }),
+      block: null,
+      nodes: [
+        node({
+          node: "scope",
+          iteration: 1,
+          state: "completed",
+          duration_ms: 18 * 60_000,
+        }),
+        node({
+          node: "search",
+          iteration: 1,
+          state: "running",
+          duration_ms: null,
+        }),
+        node({
+          node: "ask",
+          iteration: 1,
+          state: "awaiting_answer",
+          duration_ms: 5 * 60_000,
+        }),
+        node({
+          node: "fanout",
+          iteration: 1,
+          state: "completed",
+          tasks_total: 3,
+          tasks_settled: 2,
+          fanout: { kind: "data", over: "items", width: 3, failed: [] },
+          duration_ms: 3 * 60_000,
+        }),
+      ],
+    });
+    expect(view.status).toBe("ready");
+    if (view.status !== "ready") throw new Error("expected ready");
+    // Inspector source is pre-capped (CSS uppercases the STATE column).
+    expect(view.nodes[0]!.stateLabel).toBe("COMPLETED");
+    expect(view.nodes[2]!.stateLabel).toBe("AWAITING");
+    expect(view.nodes[3]!.stateLabel).toBe("2 of 3");
+
+    const chart = projectChart(view);
+    expect(chart.status).toBe("ready");
+    if (chart.status !== "ready") throw new Error("expected ready");
+    const byName = Object.fromEntries(chart.marks.map((m) => [m.node, m.meta]));
+    expect(byName.scope).toBe("completed · 18m");
+    expect(byName.search).toBe("running");
+    expect(byName.ask).toBe("awaiting · 5m");
+    expect(byName.fanout).toBe("2 of 3 · 3m");
+    for (const mark of chart.marks) {
+      expect(mark.meta).not.toMatch(/\b(COMPLETED|RUNNING|AWAITING)\b/);
+    }
+    expect(chart.stateLabel).toBe("running");
   });
 
   it("unknown run state projects with unknown treatment, not running (#261)", () => {
