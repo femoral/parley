@@ -173,8 +173,8 @@ const EDGE_TOP = 84;
  * No longer holds the on-paper key (#267) — but do not shrink it on that
  * account. The binding constraint is the *painted* label stack, which at the
  * 0.385 scale floor reaches 271 viewBox units below the mark centre against
- * the 222 (EDGE_BOTTOM + LABEL_H) budgeted here. Held-gate helm is extra CSS
- * padding, not here.
+ * the 222 (EDGE_BOTTOM + LABEL_H) budgeted here. The held-gate helm is not in
+ * this budget at all: it sits in flow below the plot (#267).
  */
 const EDGE_BOTTOM = 170;
 /** Minimum centre-to-centre pitch on a row (must hold label width + gap). */
@@ -649,9 +649,15 @@ export function compassBandRectForOrnament(
 }
 
 /**
- * Held-gate helm — opaque bottom plate (`z-index: 4`) with Copy run id.
+ * Held-gate helm — opaque plate (`z-index: 4`) with Copy run id.
  * CSS: left/right 18px, bottom 14px; height 58.6–117.4px depending on wrap.
  * Use the wrap ceiling so short sheets never bury ornament under the plate.
+ *
+ * Since #267 the helm sits in flow *below* the plot rather than floating over
+ * the paper's bottom, so this reserve is now conservative rather than load
+ * bearing: it costs the ornament pass a band of paper that nothing occupies.
+ * Kept as-is deliberately — reworking the ornament obstacle set belongs to
+ * #268, not here.
  */
 export function helmZoneRectForOrnament(
   vbH: number,

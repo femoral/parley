@@ -252,8 +252,12 @@ function ReadyChart({ model }: { model: ChartReadyModel }) {
               {model.workflow}
               <span className="pc-chart__run-id"> · run {model.shortId}</span>
             </h2>
-            {model.metaLine && <p className="pc-chart__meta-line">{model.metaLine}</p>}
-            {model.flavor && <p className="pc-chart__flavor">{model.flavor}</p>}
+            {(model.metaLine || model.flavor) && (
+              <div className="pc-chart__legend-sub">
+                {model.metaLine && <p className="pc-chart__meta-line">{model.metaLine}</p>}
+                {model.flavor && <p className="pc-chart__flavor">{model.flavor}</p>}
+              </div>
+            )}
           </div>
         </header>
         <div className="pc-chart__empty pc-chart__empty--inline">
@@ -285,8 +289,12 @@ function ReadyChart({ model }: { model: ChartReadyModel }) {
             {model.workflow}
             <span className="pc-chart__run-id"> · run {model.shortId}</span>
           </h2>
-          {model.metaLine && <p className="pc-chart__meta-line">{model.metaLine}</p>}
-          {model.flavor && <p className="pc-chart__flavor">{model.flavor}</p>}
+          {(model.metaLine || model.flavor) && (
+            <div className="pc-chart__legend-sub">
+              {model.metaLine && <p className="pc-chart__meta-line">{model.metaLine}</p>}
+              {model.flavor && <p className="pc-chart__flavor">{model.flavor}</p>}
+            </div>
+          )}
         </div>
         <ChartKey />
       </header>
