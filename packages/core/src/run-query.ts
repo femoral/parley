@@ -81,6 +81,28 @@ export interface RunSummary {
    * (ADR-0021 / #254).
    */
   track_bound?: number | null;
+  /**
+   * Bounded roster track slice for resting pip appearance without a detail
+   * fetch (#262). Present when the definition is loaded (same condition as
+   * `track_bound`); null/omitted when the definition cannot be resolved.
+   *
+   * One entry per entered (node, iteration) — never per task. Length is at
+   * most `track_bound` (ADR-0021: `nodes × max(loop.max, 1)`). Carries only
+   * the fields the roster pip mapper needs; not the full node table
+   * (no deliverables, gist, tallies, usage).
+   */
+  track?: RunTrackNode[] | null;
+}
+
+/**
+ * Slim (node, iteration) state for the list projection's roster track (#262).
+ * Subset of {@link NodeProjection} — enough for `pipKindForNode`, nothing more.
+ */
+export interface RunTrackNode {
+  kind: "step" | "gate";
+  state: string;
+  tasks_settled: number;
+  tasks_total: number;
 }
 
 /** Fan-out description on a node projection (null when single-task). */

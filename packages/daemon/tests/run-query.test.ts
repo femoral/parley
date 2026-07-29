@@ -14,7 +14,9 @@ import {
   EXIT_DELIVERABLE_PURGED,
   looksLikeDeliverableId,
   parseDeliverableAddress,
+  computeTrackBound,
   projectRunDetail,
+  projectRunSummary,
   projectStepState,
   renderDeliverableBare,
   renderRunSummary,
@@ -723,5 +725,110 @@ describe("inline vs file/dir kind rendering", () => {
     const bare = renderDeliverableBare(v);
     expect(bare.exitCode).toBe(0);
     expect(JSON.parse(bare.stdout)).toEqual([{ url: "https://example.org" }]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// #262 — list projection carries a bounded roster track slice
+// ---------------------------------------------------------------------------
+
+describe("list envelope track slice (#262)", () => {
+  it("projectRunSummary ships track + track_bound when definition is loaded", () => {
+    const definition = researchDef();
+    const bound = computeTrackBound(definition);
+    expect(bound).toBe(10); // 5 nodes × loop.max 2
+
+    const tasks: QueryTask[] = [
+      task({ id: "t1", node: "scope", iteration: 1, state: "completed" }),
+      task({
+        id: "t2",
+        node: "search",
+        iteration: 1,
+        state: "running",
+        slot: "a",
+      }),
+      task({
+        id: "t3",
+        node: "search",
+        iteration: 1,
+        state: "running",
+        slot: "b",
+      }),
+    ];
+    // 40-wide fan-out must not grow the track slice.
+    for (let i = 0; i < 38; i++) {
+      tasks.push(
+        task({
+          id: `tf${i}`,
+          node: "search",
+          iteration: 1,
+          state: "completed",
+          slot: `s${i}`,
+        }),
+      );
+    }
+
+    const summary = projectRunSummary({
+      run: baseRun({ state: "running", current_node: "search", iteration: 1, error: null }),
+      tasks,
+      definition,
+    });
+
+    expect(summary.track_bound).toBe(bound);
+    expect(summary.track).not.toBeNull();
+    expect(summary.track!.length).toBeLessThanOrEqual(bound!);
+    // One entry per (node, iteration), not per task — search is one row despite width 40.
+    expect(summary.track!.length).toBe(2);
+    expect(summary.track![0]).toEqual({
+      kind: "step",
+      state: "completed",
+      tasks_settled: 1,
+      tasks_total: 1,
+    });
+    expect(summary.track![1]!.tasks_total).toBe(40);
+    // Slim shape only — no node-table fields.
+    expect(summary.track![0]).not.toHaveProperty("deliverables");
+    expect(summary.track![0]).not.toHaveProperty("gist");
+    expect(summary.track![0]).not.toHaveProperty("tallies");
+  });
+
+  it("omits track when the definition is unavailable", () => {
+    const summary = projectRunSummary({
+      run: baseRun({ state: "running", current_node: "scope", iteration: 1, error: null }),
+      tasks: [task({ id: "t1", node: "scope", iteration: 1, state: "running" })],
+      definition: null,
+    });
+    expect(summary.track_bound).toBeNull();
+    expect(summary.track).toBeNull();
+  });
+
+  it("list track pip kinds match detail node table for the same tasks", () => {
+    const definition = researchDef();
+    const tasks = [
+      task({ id: "t1", node: "scope", iteration: 1, state: "completed" }),
+      task({ id: "t2", node: "search", iteration: 1, state: "failed" }),
+      task({ id: "t3", node: "funnel", iteration: 1, state: "running" }),
+    ];
+    const list = projectRunSummary({
+      run: baseRun({ state: "running", current_node: "funnel", iteration: 1, error: null }),
+      tasks,
+      definition,
+    });
+    const detail = projectRunDetail({
+      run: baseRun({ state: "running", current_node: "funnel", iteration: 1, error: null }),
+      tasks,
+      deliverables: [],
+      definition,
+    });
+    expect(list.track).toHaveLength(detail.nodes.length);
+    for (let i = 0; i < detail.nodes.length; i++) {
+      const n = detail.nodes[i]!;
+      expect(list.track![i]).toEqual({
+        kind: n.kind,
+        state: n.state,
+        tasks_settled: n.tasks_settled,
+        tasks_total: n.tasks_total,
+      });
+    }
   });
 });

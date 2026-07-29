@@ -28,6 +28,7 @@ import {
   type RunBlockVerb,
   type RunDetailResponse,
   type RunSummary,
+  type RunTrackNode,
   type RunUsage,
   type WorkflowDefinition,
   type WorkflowGateNode,
@@ -734,6 +735,11 @@ export interface ProjectRunOptions {
   run: RunRow;
   tasks: readonly QueryTask[];
   definition: WorkflowDefinition | null;
+  /**
+   * Optional deliverables for the roster track slice. List callers may omit
+   * (tasks alone name entered nodes); detail passes the full set.
+   */
+  deliverables?: readonly QueryDeliverable[];
   /** Optional workspace paths when known. */
   branch?: string | null;
   worktree?: string | null;
@@ -761,6 +767,43 @@ export function computeTrackBound(
   return definition.nodes.length * loopMax;
 }
 
+/**
+ * Slim track entries for the list envelope (#262). Same (node, iteration)
+ * set as the detail table, stripped to pip-relevant fields. Null when the
+ * definition is unavailable (no track_bound either).
+ */
+export function projectRunTrack(
+  opts: {
+    tasks: readonly QueryTask[];
+    deliverables?: readonly QueryDeliverable[];
+    definition: WorkflowDefinition | null;
+    run: Pick<RunRow, "state" | "current_node" | "iteration" | "error" | "purged_at">;
+    nowMs?: number;
+  },
+): RunTrackNode[] | null {
+  // Hard cap: never ship more than track_bound entries (definition-sized).
+  const bound = computeTrackBound(opts.definition);
+  if (bound == null) return null;
+  const nodes = projectRunNodes({
+    tasks: opts.tasks,
+    deliverables: opts.deliverables ?? [],
+    definition: opts.definition,
+    run: opts.run,
+    nowMs: opts.nowMs,
+  });
+  const slim: RunTrackNode[] = [];
+  for (const n of nodes) {
+    if (slim.length >= bound) break;
+    slim.push({
+      kind: n.kind,
+      state: n.state,
+      tasks_settled: n.tasks_settled,
+      tasks_total: n.tasks_total,
+    });
+  }
+  return slim;
+}
+
 /** Build a RunSummary from a run row + its tasks. */
 export function projectRunSummary(opts: ProjectRunOptions): RunSummary {
   const { run, tasks } = opts;
@@ -781,6 +824,14 @@ export function projectRunSummary(opts: ProjectRunOptions): RunSummary {
 
   // When the run itself is purged, surface that in state for list rendering.
   const state: string = run.purged_at ? "purged" : run.state;
+  const track_bound = computeTrackBound(opts.definition);
+  const track = projectRunTrack({
+    tasks,
+    deliverables: opts.deliverables,
+    definition: opts.definition,
+    run,
+    nowMs: opts.nowMs,
+  });
 
   return {
     run_id: run.id,
@@ -808,7 +859,8 @@ export function projectRunSummary(opts: ProjectRunOptions): RunSummary {
     type: run.type,
     repo: run.repo,
     error: run.error,
-    track_bound: computeTrackBound(opts.definition),
+    track_bound,
+    track,
   };
 }
 
@@ -1248,6 +1300,7 @@ export function projectRunDetail(opts: {
   const runEnv = projectRunSummary({
     run: opts.run,
     tasks: opts.tasks,
+    deliverables: opts.deliverables,
     definition: opts.definition,
     branch: opts.branch,
     worktree: opts.worktree,

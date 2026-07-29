@@ -1,15 +1,18 @@
 /**
  * Layer 4 (hooks) — poll the run query surface for the roster + inspector
- * (#254 / #255 / ADR-0021 / #241). Uses `ParleyClient.listRuns` / `getRun` /
- * `getDeliverable` only — no parallel fetch shape.
+ * (#254 / #255 / ADR-0021 / #241 / #262). Uses `ParleyClient.listRuns` /
+ * `getRun` / `getDeliverable` only — no parallel fetch shape.
  *
- * Deliverables (#255 F1): fetched only for the *selected* run when its detail
- * is available, not for every live run on every poll tick (#262).
+ * Roster pips come from the list projection's bounded `track` slice (#262) —
+ * no per-live-run detail fan-out. Detail is fetched only for the *selected*
+ * run (inspector + deliverables).
+ *
+ * Deliverables (#255 F1): fetched only for the selected run when its detail
+ * is available.
  */
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type {
   DeliverableValue,
-  NodeProjection,
   ParleyClient,
   RunDetailResponse,
   RunSummary,
@@ -24,7 +27,7 @@ export interface RunsView {
   runs: RosterRun[];
   /** Wire list, identity-stable between polls when content is unchanged. */
   summaries: RunSummary[];
-  /** Detail cache keyed by run id (for pip fidelity + inspector). */
+  /** Detail cache keyed by run id (selected run only — inspector source). */
   details: ReadonlyMap<string, RunDetailResponse>;
 }
 
@@ -87,8 +90,8 @@ function deliverableIdKey(detail: RunDetailResponse): string {
 }
 
 /**
- * Poll `GET /runs` and warm `GET /runs/:ref` for each live run so the roster
- * pip track and the inspector share one projection source.
+ * Poll `GET /runs` for the roster; fetch `GET /runs/:ref` only for the
+ * selected run (inspector). Live runs do not fan out detail fetches (#262).
  */
 export function useRuns(
   client: ParleyClient,
@@ -122,35 +125,23 @@ export function useRuns(
         if (cancelled) return;
         setSummaries(list.runs);
 
-        // Warm details for non-terminal runs + the current selection so the
-        // pip track is fan-out-accurate and the inspector has a node table.
-        const needDetail = new Set<string>();
-        for (const run of list.runs) {
-          if (
-            run.state === "running" ||
-            run.state === "blocked" ||
-            run.run_id === selectedRunId
-          ) {
-            needDetail.add(run.run_id);
-          }
-        }
-        if (selectedRunId) needDetail.add(selectedRunId);
-
-        const prior = detailsRef.current;
-        const nextDetails = new Map<string, RunDetailResponse>();
-
-        await Promise.all(
-          [...needDetail].map(async (id) => {
-            try {
-              const detail = await client.getRun(id);
-              if (!cancelled) nextDetails.set(id, detail);
-            } catch {
-              const kept = prior.get(id);
-              if (kept) nextDetails.set(id, kept);
+        // Detail only for the selected run — roster pips use list `track` (#262).
+        if (selectedRunId) {
+          const prior = detailsRef.current;
+          try {
+            const detail = await client.getRun(selectedRunId);
+            if (!cancelled) {
+              setDetails(new Map([[selectedRunId, detail]]));
             }
-          }),
-        );
-        if (!cancelled) setDetails(nextDetails);
+          } catch {
+            const kept = prior.get(selectedRunId);
+            if (!cancelled) {
+              setDetails(kept ? new Map([[selectedRunId, kept]]) : new Map());
+            }
+          }
+        } else if (!cancelled) {
+          setDetails(new Map());
+        }
       } catch {
         /* daemon blip — retry */
       }
@@ -261,22 +252,11 @@ export function useRuns(
     };
   }, [client, enabled, selectedRunId, selectedIdKey, selectedDetailReady]);
 
+  // Roster rows from the list envelope alone — `track` paints the pip track
+  // without waiting on (or issuing) a detail fetch (#262).
   const runs: RosterRun[] = useMemo(
-    () =>
-      summaries.map((summary) => {
-        const detail = details.get(summary.run_id);
-        const nodes: readonly NodeProjection[] | null = detail?.nodes ?? null;
-        // Prefer detail's envelope track_bound when present (same projection).
-        const enriched =
-          detail?.run != null
-            ? {
-                ...summary,
-                track_bound: detail.run.track_bound ?? summary.track_bound,
-              }
-            : summary;
-        return projectRosterRun(enriched, nodes);
-      }),
-    [summaries, details],
+    () => summaries.map((summary) => projectRosterRun(summary)),
+    [summaries],
   );
 
   return useMemo(
