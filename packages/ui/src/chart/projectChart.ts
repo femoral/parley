@@ -153,12 +153,28 @@ export interface ChartTextRect {
 const EDGE_X = 80;
 /** Right reserve for the destination X. */
 const DEST_RESERVE = 100;
-/** Top band: title + compass clearance. */
-const EDGE_TOP = 100;
 /**
- * Bottom band: on-paper key (BL-2) + below-labels clearance.
- * Space under the lowest label band ≈ EDGE_BOTTOM − MARK_CLEAR_R − LABEL_RING_GAP;
- * must fit KEY_ZONE_H with air. Held-gate helm is extra CSS padding, not here.
+ * Top band: compass clearance and air above row 0.
+ *
+ * Was 100 when the run title was painted over this band; the title moved into
+ * the sheet's title block (#267), so only the rose and the ring's own radius
+ * are left to clear.
+ *
+ * The floor is set by the *painted* ring, not the structural one, and row 0's
+ * centre rides up to 16 units above this band (`bow` 14 + `wander` 2):
+ * (84 − 16) × the 0.385 scale floor = 26.2px against a measured 23px ring
+ * half-height. The plot deliberately does not clip — a mark that overflowed
+ * its paper must be visible as a defect, not silently cropped.
+ */
+const EDGE_TOP = 84;
+/**
+ * Bottom band: below-labels clearance.
+ *
+ * No longer holds the on-paper key (#267) — but do not shrink it on that
+ * account. The binding constraint is the *painted* label stack, which at the
+ * 0.385 scale floor reaches 271 viewBox units below the mark centre against
+ * the 222 (EDGE_BOTTOM + LABEL_H) budgeted here. The held-gate helm is not in
+ * this budget at all: it sits in flow below the plot (#267).
  */
 const EDGE_BOTTOM = 170;
 /** Minimum centre-to-centre pitch on a row (must hold label width + gap). */
@@ -180,13 +196,18 @@ const LABEL_W_MIN = 64;
 /** Maximum label box width. */
 const LABEL_W_MAX = 140;
 
-/**
- * Bottom-left key zone (viewBox). Marks, seals, destination and their labels
- * must not enter this rect — the colour-blind second cue lives here (BL-2).
+/*
+ * There is deliberately no key zone here any more (#267).
+ *
+ * KEY_ZONE_W/H reserved 170×110 viewBox units at the sheet's bottom-left for
+ * a key that paints at a fixed 134×87 CSS px. That reserve is only correct at
+ * one sheet scale: measured across the acceptance matrix the scale spans
+ * 0.385–1.224 px per unit, so at the narrow end the key needed 348×226 units
+ * and buried marks (60,641 px² of ink over 22 of 160 cells), while at the wide
+ * end the sheet outgrew its scrollport and the key fell below the fold. The
+ * key now lives in the title block, outside the projected paper entirely, so
+ * no reserve — and no assumed scale — is involved.
  */
-export const KEY_ZONE_W = 170;
-export const KEY_ZONE_H = 110;
-export const KEY_ZONE_PAD = 8;
 
 function shortRef(id: string): string {
   return id.length > 8 ? id.slice(0, 8) : id;
@@ -420,30 +441,6 @@ export function destinationRect(
   };
 }
 
-/**
- * On-paper key reserved rect in viewBox space (BL-2).
- * Mirrors CSS: bottom-left; raised when a held-gate helm is present.
- */
-export function keyZoneRect(vbH: number, heldGate: boolean): ChartTextRect {
-  // Held helm ~88px CSS ≈ 100 viewBox units at typical aspect; key sits above.
-  const bottomLift = heldGate ? 100 : 14;
-  return {
-    key: "chart-key",
-    x: KEY_ZONE_PAD,
-    y: vbH - bottomLift - KEY_ZONE_H,
-    w: KEY_ZONE_W,
-    h: KEY_ZONE_H,
-  };
-}
-
-/** True when any of `rects` intersects the key zone (BL-2 invariant). */
-export function anyKeyOverprint(
-  key: ChartTextRect,
-  rects: ChartTextRect[],
-): boolean {
-  return rects.some((r) => rectsOverlap(key, r, 0));
-}
-
 function rectsOverlap(a: ChartTextRect, b: ChartTextRect, pad = 2): boolean {
   return !(
     a.x + a.w + pad <= b.x ||
@@ -563,7 +560,7 @@ function marginaliaCatalog(scale: number): ReadonlyArray<{
       w: dissent.w,
       h: dissent.h,
       tilt: true,
-      // Prefer upper-right empty quarter — away from key (BL) and legend (TL).
+      // Prefer upper-right empty quarter — clear of the compass rose.
       preferX: 620,
       preferYFrac: 0.18,
       inkPx: MARGINALIA_INK_PX.dissent,
@@ -574,7 +571,7 @@ function marginaliaCatalog(scale: number): ReadonlyArray<{
       w: regressions.w,
       h: regressions.h,
       tilt: false,
-      // Prefer mid-left paper, clear of the key plate and legend.
+      // Prefer mid-left paper.
       preferX: 280,
       preferYFrac: 0.42,
       inkPx: MARGINALIA_INK_PX.regressions,
@@ -584,18 +581,6 @@ function marginaliaCatalog(scale: number): ReadonlyArray<{
 
 function pxToVb(px: number, scale: number): number {
   return px / scale;
-}
-
-function unionRect(
-  a: ChartTextRect,
-  b: ChartTextRect,
-  key: string,
-): ChartTextRect {
-  const x = Math.min(a.x, b.x);
-  const y = Math.min(a.y, b.y);
-  const r = Math.max(a.x + a.w, b.x + b.w);
-  const bot = Math.max(a.y + a.h, b.y + b.h);
-  return { key, x, y, w: r - x, h: bot - y };
 }
 
 function clampRectToSheet(r: ChartTextRect, vbH: number): ChartTextRect {
@@ -625,26 +610,12 @@ function padRectPx(
   };
 }
 
-/** Legend band from CSS (top/left fixed px, max-width min(320px, 42%)). */
-export function legendBandRectForOrnament(
-  scale: number,
-  sheetWidthPx: number,
-  vbH: number,
-): ChartTextRect {
-  const top = pxToVb(18, scale);
-  const left = pxToVb(22, scale);
-  const maxWpx = Math.min(320, sheetWidthPx * 0.42);
-  // Title + meta + flavor stack — measured ~80px at short sheets; pad for wrap.
-  const hPx = 88;
-  const raw: ChartTextRect = {
-    key: "legend",
-    x: left,
-    y: top,
-    w: pxToVb(maxWpx, scale),
-    h: pxToVb(hPx, scale),
-  };
-  return clampRectToSheet(padRectPx(raw, CHROME_CLEAR_PX, scale), vbH);
-}
+/*
+ * The legend band is gone from this obstacle set (#267): the run title moved
+ * into the sheet's title block, above the plot, so it is no longer paper the
+ * ornament pass has to route around. Its reserve had the same defect the key's
+ * did — a fixed 88px stack converted at an assumed scale.
+ */
 
 /** Compass rose from CSS (88×88, top 18 / right 22). */
 export function compassBandRectForOrnament(
@@ -666,9 +637,15 @@ export function compassBandRectForOrnament(
 }
 
 /**
- * Held-gate helm — opaque bottom plate (`z-index: 4`) with Copy run id.
+ * Held-gate helm — opaque plate (`z-index: 4`) with Copy run id.
  * CSS: left/right 18px, bottom 14px; height 58.6–117.4px depending on wrap.
  * Use the wrap ceiling so short sheets never bury ornament under the plate.
+ *
+ * Since #267 the helm sits in flow *below* the plot rather than floating over
+ * the paper's bottom, so this reserve is now conservative rather than load
+ * bearing: it costs the ornament pass a band of paper that nothing occupies.
+ * Kept as-is deliberately — reworking the ornament obstacle set belongs to
+ * #268, not here.
  */
 export function helmZoneRectForOrnament(
   vbH: number,
@@ -738,32 +715,6 @@ export function markRingRectsForOrnament(
 }
 
 /**
- * Key band for ornament: union of projector key zone and painted CSS key
- * at the scale floor, plus chrome clearance.
- */
-export function keyZoneRectForOrnament(
-  vbH: number,
-  heldGate: boolean,
-  scale: number,
-): ChartTextRect {
-  const structural = keyZoneRect(vbH, heldGate);
-  // CSS: left 18px, bottom 14px (or 100px held), ~150×90 content + pad.
-  const cssW = pxToVb(170, scale);
-  const cssH = pxToVb(110, scale);
-  const cssBottom = pxToVb(heldGate ? 100 : 14, scale);
-  const cssX = pxToVb(18, scale);
-  const css: ChartTextRect = {
-    key: "chart-key-css",
-    x: cssX,
-    y: vbH - cssBottom - cssH,
-    w: cssW,
-    h: cssH,
-  };
-  const united = unionRect(structural, css, "chart-key-orn");
-  return clampRectToSheet(padRectPx(united, CHROME_CLEAR_PX, scale), vbH);
-}
-
-/**
  * Full obstacle set the placer uses — exported so tests assert against the
  * same rects (not a re-derived pure-viewBox subset that misses helm/chrome).
  */
@@ -782,8 +733,9 @@ export function ornamentObstacles(args: {
     ...markRingRectsForOrnament(args.marks, scale),
     ...markLabelRectsForOrnament(args.marks, scale),
     destinationRect(args.destination),
-    keyZoneRectForOrnament(args.vbH, args.heldGate, scale),
-    legendBandRectForOrnament(scale, sheetWidthPx, args.vbH),
+    // Key and legend are not obstacles any more — both sit in the title
+    // block, off the projected paper (#267). The compass and the held-gate
+    // helm still paint on it, so they stay.
     compassBandRectForOrnament(scale, sheetWidthPx, args.vbH),
   ];
   if (args.heldGate) {

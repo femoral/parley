@@ -535,3 +535,104 @@ describe("RunChart QC fixes (#253 design-QC)", () => {
     expect(container.querySelector(".pc-chart__svg--route")).toBeTruthy();
   });
 });
+
+/**
+ * #267 — the key and the run title live in the sheet's title block, above the
+ * plot, and the plot is the only box the projector addresses.
+ *
+ * This is a *structural* guarantee, so it is asserted structurally: nothing
+ * the projector places may be a descendant of the title block, and the key may
+ * not be a descendant of the plot. happy-dom performs no layout, so these
+ * assertions say nothing about pixels — the rendered proof (key box vs. mark
+ * ink at real sheet scales) is the browser sweep recorded on #267.
+ */
+describe("chart title block (#267)", () => {
+  function ready(n: number, held = false) {
+    const nodes = Array.from({ length: n }, (_, i) =>
+      node({
+        node: `n${i}`,
+        kind: held && i === n - 1 ? "gate" : "step",
+        iteration: 1,
+        state: held && i === n - 1 ? "waiting" : "completed",
+        stateLabel: held && i === n - 1 ? "gate · held" : "completed",
+        spineState: held && i === n - 1 ? "awaiting_answer" : "completed",
+        live: held && i === n - 1,
+      }),
+    );
+    return readyRun({ heldGate: held, nodes });
+  }
+
+  it.each([1, 2, 5, 12, 20])(
+    "n=%i: key and title sit in the title block, marks in the plot",
+    (n) => {
+      const { container } = render(<RunChart run={ready(n)} />);
+      const strip = container.querySelector(".pc-chart__strip");
+      const plot = container.querySelector(".pc-chart__plot");
+      expect(strip).toBeTruthy();
+      expect(plot).toBeTruthy();
+
+      // The key is in the header, not on the paper.
+      const key = container.querySelector(".pc-chart-key");
+      expect(key).toBeTruthy();
+      expect(strip!.contains(key!)).toBe(true);
+      expect(plot!.contains(key!)).toBe(false);
+
+      // So is the run title.
+      const legend = container.querySelector(".pc-chart__legend");
+      expect(strip!.contains(legend!)).toBe(true);
+
+      // Everything the projector places is in the plot, and nowhere else.
+      const placed = container.querySelectorAll(
+        "[data-chart-mark], [data-chart-destination], [data-chart-marginalia], .pc-chart__svg",
+      );
+      expect(placed.length).toBeGreaterThan(0);
+      for (const el of placed) {
+        expect(
+          plot!.contains(el),
+          `${el.className} must be inside the plot`,
+        ).toBe(true);
+        expect(
+          strip!.contains(el),
+          `${el.className} must not be in the title block`,
+        ).toBe(false);
+      }
+    },
+  );
+
+  it("title block precedes the plot, so the key opens in the scrollport", () => {
+    const { container } = render(<RunChart run={ready(12)} />);
+    const sheet = container.querySelector(".pc-chart__sheet")!;
+    const kids = [...sheet.children];
+    const stripAt = kids.findIndex((c) => c.classList.contains("pc-chart__strip"));
+    const plotAt = kids.findIndex((c) => c.classList.contains("pc-chart__plot"));
+    expect(stripAt).toBeGreaterThanOrEqual(0);
+    expect(stripAt).toBeLessThan(plotAt);
+  });
+
+  it("the aspect ratio is on the plot, not the sheet", () => {
+    const { container } = render(<RunChart run={ready(12)} />);
+    const sheet = container.querySelector(".pc-chart__sheet") as HTMLElement;
+    const plot = container.querySelector(".pc-chart__plot") as HTMLElement;
+    expect(plot.style.aspectRatio).toMatch(/^1000 \/ \d+$/);
+    expect(sheet.style.aspectRatio).toBe("");
+  });
+
+  it("key keeps its own glyph pairing and stays aria-hidden", () => {
+    const { container } = render(<RunChart run={ready(5)} />);
+    const key = container.querySelector(".pc-chart-key")!;
+    expect(key.getAttribute("aria-hidden")).toBe("true");
+    expect(key.textContent).toContain("✓ sailed");
+    expect(key.textContent).toContain("✦ under way");
+    expect(key.textContent).toContain("? ahead");
+    expect(key.textContent).toContain("✕ blotted");
+  });
+
+  it("held gate keeps the helm on the sheet, below the plot", () => {
+    const { container } = render(<RunChart run={ready(6, true)} />);
+    const helm = container.querySelector(".pc-chart-helm");
+    const plot = container.querySelector(".pc-chart__plot")!;
+    expect(helm).toBeTruthy();
+    expect(plot.contains(helm!)).toBe(false);
+    expect(container.querySelector(".pc-chart-key")).toBeTruthy();
+  });
+});

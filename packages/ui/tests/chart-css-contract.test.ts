@@ -66,12 +66,28 @@ describe("chart.css label width contract (BL-1)", () => {
     expect(labels).not.toMatch(/width:\s*[\d.]+%/);
   });
 
-  it("key sits bottom-left (not under row-0 / compass)", () => {
+  it("key is a title-block row, not a plate positioned on the paper (#267)", () => {
     const key = blockFor(".pc-chart-key");
-    expect(key).toMatch(/left:\s*18px/);
-    expect(key).toMatch(/bottom:\s*14px/);
-    // Must not reintroduce the top-right overprint position.
-    expect(key).not.toMatch(/top:\s*112px/);
+    // Any positioning scheme puts it back in the plot's space, where its
+    // fixed px size cannot be reserved for across the 0.385–1.224 scale range.
+    expect(key).not.toMatch(/position:\s*absolute/);
+    expect(key).not.toMatch(/position:\s*fixed/);
+    // It must still travel with the paper (AC: not pinned to the viewport).
+    expect(CHART_CSS).not.toMatch(/\.pc-chart-key\s*\{[^}]*position:\s*fixed/);
+  });
+
+  it("plot keeps the projector's aspect ratio exactly (#267)", () => {
+    const plot = blockFor(".pc-chart__plot");
+    // Stretching the plot to fill leftover sheet height would slide every
+    // mark off its viewBox y — the ratio must win over the flex free space.
+    expect(plot).toMatch(/flex:\s*0\s+0\s+auto/);
+    expect(plot).toMatch(/position:\s*relative/);
+  });
+
+  it("sheet stacks title block above plot in flow (#267)", () => {
+    const sheet = blockFor(".pc-chart__sheet");
+    expect(sheet).toMatch(/display:\s*flex/);
+    expect(sheet).toMatch(/flex-direction:\s*column/);
   });
 });
 
