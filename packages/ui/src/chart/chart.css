@@ -198,6 +198,15 @@
   text-transform: uppercase;
   color: var(--ink-chart);
   line-height: 1.2;
+  /*
+   * A single unbroken workflow-name token has no soft-wrap opportunity, so
+   * its glyphs run past the title block and the sheet's overflow:hidden cuts
+   * them mid-glyph with no ellipsis (#271). `anywhere` introduces a break
+   * opportunity per character for min-content as well as for overflow, so the
+   * flex strip can shrink the legend without the token dictating min width.
+   * Names that already fit stay on one line — same extents, same strip height.
+   */
+  overflow-wrap: anywhere;
 }
 .pc-chart__run-id {
   font-family: var(--font-mono);
