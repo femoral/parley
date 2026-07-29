@@ -5,26 +5,14 @@
  */
 import { describe, expect, it } from "vitest";
 import {
-  anyMarginaliaOverprint,
   assertLabelClearance,
-  chartRowCount,
-  helmZoneRectForOrnament,
   loopArc,
   markLabelRects,
   markRingRects,
-  marginaliaRect,
-  minCentreSheetWidthPx,
-  ornamentObstacles,
-  ornamentScaleFloor,
-  placeMarginalia,
+  sheetScaleFloor,
   placeMarks,
   projectChart,
-  COCKPIT_LAYOUT,
-  MARGINALIA_INK_PX,
-  MARGINALIA_MAX_ROWS,
   MARK_CLEAR_R,
-  type ChartMark,
-  type ChartReadyModel,
 } from "../src/chart/projectChart.js";
 import * as projectorModule from "../src/chart/projectChart.js";
 import { inkForNode } from "../src/chart/ink.js";
@@ -457,44 +445,9 @@ describe("BL-2 key is off the projected paper (#267)", () => {
     }
   });
 
-  it.each(
-    VIEWPORTS.flatMap((w) =>
-      COUNTS.flatMap((n) =>
-        ([false, true] as const).map((held) => [w, n, held] as const),
-      ),
-    ),
-  )(
-    "viewport %i × n=%i held=%s: no key/legend rect in the ornament obstacle set",
-    (sheetWidthPx, n, held) => {
-      const run = readyRun(nodesForCount(n));
-      run.heldGate = held;
-      if (held && n > 0) {
-        const last = run.nodes[run.nodes.length - 1]!;
-        last.kind = "gate";
-        last.state = "waiting";
-        last.stateLabel = "gate · held";
-        last.spineState = "awaiting_answer";
-        last.live = true;
-      }
-      const model = projectChart(run);
-      expect(model.status).toBe("ready");
-      if (model.status !== "ready") return;
-
-      const obstacles = ornamentObstacles({
-        marks: model.marks,
-        destination: model.destination,
-        vbH: model.vbH,
-        heldGate: model.heldGate,
-        scale: sheetWidthPx / 1000,
-        sheetWidthPx,
-      });
-      const chromeKeys = obstacles.map((o) => o.key);
-      expect(chromeKeys).not.toContain("chart-key-orn");
-      expect(chromeKeys).not.toContain("legend");
-      // The compass still paints on the paper, so it must still be routed around.
-      expect(chromeKeys).toContain("compass");
-    },
-  );
+  // The per-viewport sweep that inspected the ornament obstacle set is gone
+  // with the obstacle set itself (#273): nothing is reserved on the paper for
+  // chrome any more, so there is no set in which a key rect could hide.
 });
 
 /**
@@ -511,7 +464,7 @@ describe("top band after the title moved to the title block (#267)", () => {
       expect(model.status).toBe("ready");
       if (model.status !== "ready") return;
 
-      const scale = ornamentScaleFloor();
+      const scale = sheetScaleFloor();
       // Measured in Chrome at 1081 (the narrowest desktop triptych): the ring
       // paints 46px across regardless of sheet scale.
       const paintedRingHalfPx = 23;
@@ -533,330 +486,81 @@ describe("top band after the title moved to the title block (#267)", () => {
  * Assertions use the **same obstacle set the placer uses** (including helm,
  * legend, compass) so a missing obstacle cannot stay green.
  */
-describe("marginalia free-region placement (#268)", () => {
-  const NODE_SWEEP = Array.from({ length: 20 }, (_, i) => i + 1);
-  const scale = ornamentScaleFloor();
-  const sheetW = minCentreSheetWidthPx();
 
-  function modelFor(n: number, held: boolean): ChartReadyModel {
-    const run = readyRun(nodesForCount(n));
-    run.heldGate = held;
-    if (held && n > 0) {
-      const last = run.nodes[n - 1]!;
-      last.kind = "gate";
-      last.state = "waiting";
-      last.stateLabel = "gate · held";
-      last.spineState = "awaiting_answer";
-      last.live = true;
-    } else if (n >= 4) {
-      const gate = run.nodes[Math.min(3, n - 1)]!;
-      gate.kind = "gate";
-      gate.state = "completed";
-      gate.stateLabel = "passed";
-      gate.spineState = "completed";
-      gate.onReject = run.nodes[0]!.node;
+/**
+ * #273 — the flavour lines left the paper.
+ *
+ * They used to be placed on the sheet by a free-region search against every
+ * mark, label, plate and route stroke. That needed a reserve denominated in a
+ * sheet scale the projector cannot know, and to stay clear of the marks it
+ * omitted the ornament from most charts. They now render in a foot band below
+ * the plot, in flow, so there is no geometry left to get wrong.
+ *
+ * These tests are deliberately small — that shrinkage is the result. What
+ * geometry the chart still has is guarded by the rendered sweep in
+ * `packages/ui/lab`, not here: this file runs under happy-dom, which performs
+ * no layout and cannot see where ink lands.
+ */
+describe("flavour marginalia are chrome, not paper (#273)", () => {
+  it("the projector exposes no ornament placement machinery", () => {
+    const projector = projectorModule as Record<string, unknown>;
+    for (const gone of [
+      "placeMarginalia",
+      "marginaliaRect",
+      "marginaliaRects",
+      "anyMarginaliaOverprint",
+      "ornamentObstacles",
+      "markRingRectsForOrnament",
+      "markLabelRectsForOrnament",
+      "compassBandRectForOrnament",
+      "helmZoneRectForOrnament",
+      "ornamentScaleFloor",
+      "chartRowCount",
+      "MARGINALIA_INK_PX",
+      "MARGINALIA_MAX_ROWS",
+    ]) {
+      expect(
+        projector[gone],
+        `${gone} must not come back — the ornament is off the paper (#273)`,
+      ).toBeUndefined();
     }
-    const model = projectChart(run);
-    expect(model.status).toBe("ready");
-    if (model.status !== "ready") throw new Error("not ready");
-    return model;
-  }
-
-  it("scale floor is derived from cockpit layout tokens (385px / 1000)", () => {
-    // viewport 1081 − 2×14 − 300 − 344 − 2×12 = 385
-    expect(minCentreSheetWidthPx(1081)).toBe(385);
-    expect(ornamentScaleFloor(1081)).toBeCloseTo(0.385, 5);
-    expect(COCKPIT_LAYOUT.regionRosterPx).toBe(300);
-    expect(COCKPIT_LAYOUT.regionRightPx).toBe(344);
   });
 
-  it("catalog reserve is strictly larger than measured ink at the scale floor", () => {
-    // placeMarginalia builds boxes as (ink + 4px) / scale — assert margin.
-    const model = modelFor(5, false);
+  it("carries copy only — no coordinates that can be wrong", () => {
+    const model = projectChart(readyRun(nodesForCount(8)));
+    expect(model.status).toBe("ready");
+    if (model.status !== "ready") return;
     expect(model.marginalia.length).toBe(2);
     for (const line of model.marginalia) {
-      const ink =
-        line.key === "dissent"
-          ? MARGINALIA_INK_PX.dissent
-          : MARGINALIA_INK_PX.regressions;
-      const reserveW = line.w * scale;
-      const reserveH = line.h * scale;
-      expect(reserveW, `${line.key} width reserve`).toBeGreaterThan(ink.w);
-      expect(reserveH, `${line.key} height reserve`).toBeGreaterThan(ink.h);
+      expect(Object.keys(line).sort()).toEqual(["key", "text"]);
+      expect(line.text.length).toBeGreaterThan(0);
     }
   });
 
-  it.each(NODE_SWEEP.flatMap((n) => [false, true].map((h) => [n, h] as const)))(
-    "n=%i held=%s: placed lines clear placer obstacles (incl. helm)",
-    (n, held) => {
-      const model = modelFor(n, held);
+  it("is present at every non-sparse node count, 2 through 30", () => {
+    for (let n = 2; n <= 30; n++) {
+      const model = projectChart(readyRun(nodesForCount(n)));
+      expect(model.status).toBe("ready");
+      if (model.status !== "ready") continue;
+      expect(model.marginalia.length, `n=${n} lost its flavour lines`).toBe(2);
+    }
+  });
 
-      if (model.decorations === "sparse") {
-        expect(model.marginalia).toEqual([]);
-        return;
-      }
-      if (chartRowCount(n) > MARGINALIA_MAX_ROWS) {
-        expect(model.marginalia).toEqual([]);
-        return;
-      }
+  it("is whole-catalog or nothing", () => {
+    for (let n = 1; n <= 12; n++) {
+      const model = projectChart(readyRun(nodesForCount(n)));
+      expect(model.status).toBe("ready");
+      if (model.status !== "ready") continue;
+      const len = model.marginalia.length;
+      expect(len === 0 || len === 2, `n=${n} partial catalog len=${len}`).toBe(true);
+    }
+  });
 
-      // Whole-ornament: either the full catalog (2) or none.
-      expect([0, 2]).toContain(model.marginalia.length);
-
-      const obstacles = ornamentObstacles({
-        marks: model.marks,
-        destination: model.destination,
-        vbH: model.vbH,
-        heldGate: model.heldGate,
-        scale,
-        sheetWidthPx: sheetW,
-      });
-      const strokes = [...model.legs, ...model.loopBacks];
-
-      if (held) {
-        expect(
-          obstacles.some((o) => o.key === "helm"),
-          "held-gate helm must be in the placer obstacle set",
-        ).toBe(true);
-      }
-
-      for (const line of model.marginalia) {
-        const box = marginaliaRect(line);
-        expect(
-          anyMarginaliaOverprint(box, obstacles, strokes),
-          `marginalia ${line.key} overprint at n=${n} held=${held}`,
-        ).toBe(false);
-        if (held) {
-          const helm = helmZoneRectForOrnament(model.vbH, scale, sheetW);
-          expect(
-            anyMarginaliaOverprint(box, [helm], []),
-            `marginalia ${line.key} under helm at n=${n}`,
-          ).toBe(false);
-        }
-      }
-    },
-  );
-
-  it("sparse decoration omits marginalia (reconciled with sparse-route rule)", () => {
+  it("sparse decoration omits it — a one-node chart is too slight to dress", () => {
     const model = projectChart(readyRun(nodesForCount(1)));
     expect(model.status).toBe("ready");
     if (model.status !== "ready") return;
     expect(model.decorations).toBe("sparse");
     expect(model.marginalia).toEqual([]);
-  });
-
-  it("omits whole ornament when no free region fits every line", () => {
-    const marks: ChartMark[] = [];
-    let k = 0;
-    for (let y = 40; y <= 520; y += 36) {
-      for (let x = 40; x <= 960; x += 48) {
-        marks.push({
-          key: `tile-${k++}`,
-          node: `t${k}`,
-          kind: "step",
-          iteration: 1,
-          ink: "done",
-          glyph: "✓",
-          className: "pc-chart-mark--done",
-          name: "tile",
-          meta: "done",
-          fanoutWidth: null,
-          seal: null,
-          x,
-          y,
-          labelSide: "below",
-          labelWidth: 44,
-          live: false,
-          onReject: null,
-        });
-      }
-    }
-    const placed = placeMarginalia({
-      decorations: "full",
-      marks,
-      legs: [],
-      loopBacks: [],
-      destination: { x: 500, y: 280 },
-      vbH: 560,
-      heldGate: false,
-    });
-    expect(placed).toEqual([]);
-  });
-
-  it("omission is whole-ornament and monotonic across n=1–30", () => {
-    const counts: number[] = [];
-    for (let n = 1; n <= 30; n++) {
-      const model = modelFor(n, false);
-      const len = model.marginalia.length;
-      // Never a single stray line.
-      expect(len === 0 || len === 2, `n=${n} partial ornament len=${len}`).toBe(
-        true,
-      );
-      counts.push(len);
-    }
-    // Non-increasing once we leave sparse (n=1 → 0): later counts must not
-    // resurrect ornament after a full-decoration omit.
-    let sawFullOmit = false;
-    for (let i = 0; i < counts.length; i++) {
-      const n = i + 1;
-      const c = counts[i]!;
-      if (n === 1) {
-        expect(c).toBe(0); // sparse
-        continue;
-      }
-      if (c === 0 && chartRowCount(n) <= MARGINALIA_MAX_ROWS) {
-        // Free-region miss while still under the row ceiling — after this,
-        // higher n with more rows may still place if rows stay ≤ max, but
-        // once rows exceed max, stays 0. Track row-ceiling omits as terminal.
-      }
-      if (chartRowCount(n) > MARGINALIA_MAX_ROWS) {
-        expect(c).toBe(0);
-        sawFullOmit = true;
-      }
-      if (sawFullOmit) expect(c).toBe(0);
-    }
-    // Row count itself is non-decreasing → max-rows gate is monotonic.
-    let prevRows = 0;
-    for (let n = 1; n <= 30; n++) {
-      const rows = chartRowCount(n);
-      expect(rows).toBeGreaterThanOrEqual(prevRows);
-      prevRows = rows;
-    }
-  });
-
-  it("anchors are produced in layout units (not fixed CSS % of sheet height)", () => {
-    const a = modelFor(5, false);
-    expect(a.marginalia.length).toBe(2);
-    // Must not be the pre-#268 fixed percentages of sheet height.
-    for (const line of a.marginalia) {
-      const yFrac = line.y / a.vbH;
-      const xFrac = line.x / 1000;
-      const fixedOld =
-        (Math.abs(xFrac - 0.58) < 0.01 && Math.abs(yFrac - 0.14) < 0.01) ||
-        (Math.abs(xFrac - 0.18) < 0.01 && Math.abs(yFrac - 0.22) < 0.01);
-      expect(fixedOld).toBe(false);
-    }
-  });
-});
-
-/**
- * #268 QC — rendered-geometry bridge at the narrow desktop sheet.
- * Models painted CSS boxes (fixed px → viewBox at scale floor) and catalog
- * ink, then asserts zero intersection — catches helm burial and under-sized
- * reserves that pure viewBox structural tests miss.
- */
-describe("marginalia rendered bridge at 1081 desktop (#268)", () => {
-  const scale = ornamentScaleFloor(1081);
-  const sheetW = minCentreSheetWidthPx(1081);
-
-  function readyHeld(n: number): ChartReadyModel {
-    const run = readyRun(nodesForCount(n));
-    run.heldGate = true;
-    if (n > 0) {
-      const last = run.nodes[n - 1]!;
-      last.kind = "gate";
-      last.state = "waiting";
-      last.stateLabel = "held";
-      last.spineState = "awaiting_answer";
-      last.live = true;
-    }
-    const model = projectChart(run);
-    if (model.status !== "ready") throw new Error("not ready");
-    return model;
-  }
-
-  /** Axis-aligned ink box in viewBox from centre + measured px size. */
-  function inkBoxVb(
-    line: { x: number; y: number; key: string },
-    ink: { w: number; h: number },
-    s: number,
-  ) {
-    const w = ink.w / s;
-    const h = ink.h / s;
-    return {
-      key: `${line.key}:ink`,
-      x: line.x - w / 2,
-      y: line.y - h / 2,
-      w,
-      h,
-    };
-  }
-
-  it.each([1081, 1280] as const)(
-    "viewport %i held n=1–40: painted ink clears helm and placer obstacles",
-    (viewportW) => {
-      const s = ornamentScaleFloor(viewportW);
-      // Sheet width at this viewport (triptych still side-by-side above 1080).
-      const sw = minCentreSheetWidthPx(viewportW);
-      expect(s).toBeCloseTo(sw / 1000, 5);
-
-      for (let n = 1; n <= 40; n++) {
-        const model = readyHeld(n);
-        const obstacles = ornamentObstacles({
-          marks: model.marks,
-          destination: model.destination,
-          vbH: model.vbH,
-          heldGate: true,
-          scale: s,
-          sheetWidthPx: sw,
-        });
-        const helm = helmZoneRectForOrnament(model.vbH, s, sw);
-        expect(obstacles.some((o) => o.key === "helm")).toBe(true);
-
-        for (const line of model.marginalia) {
-          const ink =
-            line.key === "dissent"
-              ? MARGINALIA_INK_PX.dissent
-              : MARGINALIA_INK_PX.regressions;
-          const box = inkBoxVb(line, ink, s);
-          // Helm burial — the blocker that tall-viewport checks missed.
-          expect(
-            anyMarginaliaOverprint(box, [helm], []),
-            `ink∩helm n=${n} vw=${viewportW} ${line.key}`,
-          ).toBe(false);
-          expect(
-            anyMarginaliaOverprint(box, obstacles, [
-              ...model.legs,
-              ...model.loopBacks,
-            ]),
-            `ink∩obstacles n=${n} vw=${viewportW} ${line.key}`,
-          ).toBe(false);
-        }
-      }
-    },
-  );
-
-  it("compass reserve covers its painted CSS box at scale floor", () => {
-    // Painted at 1081 (viewBox): compass {714.3, 46.8, 228.6, 228.6} — from QC.
-    // The legend is no longer checked here: it moved off the paper into the
-    // title block (#267), so it is not something ornament can collide with.
-    const compassPaint = {
-      key: "compass-paint",
-      x: (sheetW - 22 - 88) / scale,
-      y: 18 / scale,
-      w: 88 / scale,
-      h: 88 / scale,
-    };
-    const model = readyHeld(8);
-    const obstacles = ornamentObstacles({
-      marks: model.marks,
-      destination: model.destination,
-      vbH: model.vbH,
-      heldGate: true,
-      scale,
-      sheetWidthPx: sheetW,
-    });
-    const compass = obstacles.find((o) => o.key === "compass")!;
-    expect(compass).toBeTruthy();
-    expect(obstacles.find((o) => o.key === "legend")).toBeUndefined();
-    // Reserve (with chrome pad) must fully cover the painted CSS box.
-    expect(compass.x).toBeLessThanOrEqual(compassPaint.x + 0.5);
-    expect(compass.y).toBeLessThanOrEqual(compassPaint.y + 0.5);
-    expect(compass.x + compass.w).toBeGreaterThanOrEqual(
-      compassPaint.x + compassPaint.w - 0.5,
-    );
-    expect(compass.y + compass.h).toBeGreaterThanOrEqual(
-      compassPaint.y + compassPaint.h - 0.5,
-    );
   });
 });

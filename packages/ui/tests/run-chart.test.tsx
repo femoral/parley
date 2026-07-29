@@ -284,7 +284,7 @@ describe("RunChart loop-back and sparse decoration (#253)", () => {
     expect(container.querySelectorAll(".pc-chart-marginalia")).toHaveLength(0);
   });
 
-  it("marginalia positions come from the projector (viewBox → %), not fixed sheet %", () => {
+  it("marginalia render in the foot band, below the plot, with no coordinates", () => {
     const run = readyRun({
       nodes: [
         node({
@@ -318,9 +318,13 @@ describe("RunChart loop-back and sparse decoration (#253)", () => {
     const model = projectChart(run);
     expect(model.status).toBe("ready");
     if (model.status !== "ready") return;
-    expect(model.marginalia.length).toBeGreaterThan(0);
+    expect(model.marginalia.length).toBe(2);
 
     const { container } = render(<RunChart run={run} />);
+    const band = container.querySelector(".pc-chart__footnote");
+    expect(band, "the foot band should render when there are flavour lines").toBeTruthy();
+    expect(band!.getAttribute("aria-hidden")).toBe("true");
+
     const nodes = container.querySelectorAll(".pc-chart-marginalia");
     expect(nodes.length).toBe(model.marginalia.length);
 
@@ -329,16 +333,31 @@ describe("RunChart loop-back and sparse decoration (#253)", () => {
         `[data-chart-marginalia="${line.key}"]`,
       ) as HTMLElement | null;
       expect(el).toBeTruthy();
-      expect(el!.style.left).toBe(`${(line.x / 1000) * 100}%`);
-      expect(el!.style.top).toBe(`${(line.y / model.vbH) * 100}%`);
-      // Must not regress to the pre-#268 fixed sheet percentages.
-      expect(el!.style.left).not.toBe("58%");
-      expect(el!.style.top).not.toBe("14%");
-      expect(el!.getAttribute("aria-hidden")).toBe("true");
-      if (line.tilt) {
-        expect(el!.className).toMatch(/pc-chart-marginalia--tilt/);
-      }
+      expect(el!.textContent).toBe(line.text);
+      // The whole point of #273: no inline geometry, and not on the paper.
+      expect(el!.style.left).toBe("");
+      expect(el!.style.top).toBe("");
+      expect(band!.contains(el)).toBe(true);
+      expect(el!.closest("[data-chart-plot]")).toBeNull();
     }
+  });
+
+  it("the foot band is absent entirely on a sparse chart", () => {
+    const run = readyRun({
+      nodes: [
+        node({
+          node: "only",
+          kind: "step",
+          iteration: 1,
+          state: "completed",
+          stateLabel: "completed",
+          spineState: "completed",
+        }),
+      ],
+    });
+    const { container } = render(<RunChart run={run} />);
+    expect(container.querySelector(".pc-chart__footnote")).toBeNull();
+    expect(container.querySelectorAll(".pc-chart-marginalia")).toHaveLength(0);
   });
 });
 
@@ -582,8 +601,10 @@ describe("chart title block (#267)", () => {
       expect(strip!.contains(legend!)).toBe(true);
 
       // Everything the projector places is in the plot, and nowhere else.
+      // Marginalia are deliberately absent from this list: they left the
+      // paper for the foot band in #273 and are no longer projector-placed.
       const placed = container.querySelectorAll(
-        "[data-chart-mark], [data-chart-destination], [data-chart-marginalia], .pc-chart__svg",
+        "[data-chart-mark], [data-chart-destination], .pc-chart__svg",
       );
       expect(placed.length).toBeGreaterThan(0);
       for (const el of placed) {

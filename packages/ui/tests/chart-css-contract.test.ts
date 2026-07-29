@@ -91,30 +91,35 @@ describe("chart.css label width contract (BL-1)", () => {
   });
 });
 
-describe("chart.css marginalia visual treatment (#268)", () => {
-  it("keeps flavor font, opacity, paint order below labels, non-interactive", () => {
+describe("chart.css flavour marginalia live in the foot band (#273)", () => {
+  it("the foot band is in flow below the plot, not positioned on the paper", () => {
+    const band = blockFor(".pc-chart__footnote");
+    // `flex: 0 0 auto` in the sheet's column: it pays for its own height
+    // rather than floating over paper the projector is using.
+    expect(band).toMatch(/flex:\s*0\s+0\s+auto/);
+    expect(band).toMatch(/border-top:/);
+    expect(band).not.toMatch(/position:\s*absolute/);
+  });
+
+  it("keeps the flavour face, quieter than the title block's clause", () => {
     const m = blockFor(".pc-chart-marginalia");
     expect(m).toMatch(/font-family:\s*var\(--font-flavor\)/);
-    expect(m).toMatch(/opacity:\s*0\.72/);
-    expect(m).toMatch(/z-index:\s*1/);
+    expect(m).toMatch(/font-style:\s*italic/);
     expect(m).toMatch(/pointer-events:\s*none/);
-    expect(m).toMatch(/transform:\s*translate\(-50%,\s*-50%\)/);
-    // No hardcoded sheet-height percentage anchors in the stylesheet.
-    expect(m).not.toMatch(/left:\s*58%/);
-    expect(m).not.toMatch(/top:\s*14%/);
-    expect(m).not.toMatch(/left:\s*18%/);
-    expect(m).not.toMatch(/top:\s*22%/);
+    expect(m).toMatch(/opacity:\s*0\.62/);
   });
 
-  it("tilt variant keeps centre anchor plus handwritten rotate", () => {
-    const tilt = blockFor(".pc-chart-marginalia--tilt");
-    expect(tilt).toMatch(/translate\(-50%,\s*-50%\)\s*rotate\(-6deg\)/);
-  });
-
-  it("labels paint above marginalia (z-index 3 > 1)", () => {
-    const mark = blockFor(".pc-chart-mark");
-    expect(mark).toMatch(/z-index:\s*3/);
+  it("carries no anchoring of any kind — that is the whole point of #273", () => {
     const m = blockFor(".pc-chart-marginalia");
-    expect(m).toMatch(/z-index:\s*1/);
+    expect(m).not.toMatch(/position:\s*absolute/);
+    expect(m).not.toMatch(/transform:\s*translate/);
+    expect(m).not.toMatch(/z-index/);
+    // And none of the pre-#268 hardcoded sheet percentages may come back.
+    expect(m).not.toMatch(/left:/);
+    expect(m).not.toMatch(/top:/);
+  });
+
+  it("the tilt variant is gone with the placement", () => {
+    expect(() => blockFor(".pc-chart-marginalia--tilt")).toThrow();
   });
 });
