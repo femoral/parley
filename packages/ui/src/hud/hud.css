@@ -3893,11 +3893,14 @@ button.pc-roster__meta--copy:focus-visible {
   margin-top: 6px;
   width: 100%;
   min-width: 0;
+  /* Fixed track box so 3px non-fail pips centre without shrinking the row (#269). */
+  height: 5px;
   overflow: hidden;
   align-items: center;
 }
 .pc-roster__pip {
-  height: 5px;
+  /* Non-fail kinds sit at 3px; fail breaks the line at full track height (#269). */
+  height: 3px;
   flex: 1 1 0;
   min-width: 4px;
   border-radius: var(--radius-hairline);
@@ -3916,6 +3919,7 @@ button.pc-roster__meta--copy:focus-visible {
   background: var(--state-awaiting_answer);
 }
 .pc-roster__pip--fail {
+  height: 5px; /* full track height — only kind that breaks the line (#269) */
   background: var(--state-failed);
 }
 .pc-roster__pip--empty {
