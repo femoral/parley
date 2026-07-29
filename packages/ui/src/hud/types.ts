@@ -344,7 +344,7 @@ export interface InspectorRunNode {
   tasksLabel: string;
   /** Three-part gist from the query surface (already assembled). */
   gist: string;
-  /** Compact age (`18m`), or null when unknown. */
+  /** Compact duration (`18m`), or null when unknown. Field name kept for wire stability. */
   age: string | null;
   /** Fan-out width chip beside the node name; null when single-task. */
   fanoutWidth: number | null;
@@ -456,7 +456,7 @@ export interface InspectorRunReady {
   workflowVersion: number;
   /** Wire run state. */
   runState: string;
-  /** Header state label (includes block parenthetical when blocked). */
+  /** Header state label from state-meta (includes presented block reason when blocked). */
   stateLabel: string;
   branch: string | null;
   currentNode: string | null;

@@ -24,6 +24,7 @@ import type {
   RosterPipKind,
   RosterRun,
 } from "../../hud/types.js";
+import { stateMetaFor } from "../../tokens/state-meta.js";
 import { formatDurationMs, formatTokenCount } from "./format.js";
 import { shortId } from "./roster.js";
 
@@ -31,6 +32,10 @@ import { shortId } from "./roster.js";
  * Map a wire run lifecycle state onto the roster's attention vocabulary.
  * `blocked` (gate or otherwise) sits with the awaiting tier per #254 —
  * the brief is the contract even though the inbox folds blocked with stalled.
+ *
+ * Unknown wire states pass through so `stateMetaFor` can give them the
+ * neutral/unknown treatment rather than silently painting them as running
+ * (#261).
  */
 export function runAttentionState(runState: string): string {
   switch (runState) {
@@ -46,7 +51,7 @@ export function runAttentionState(runState: string): string {
     case "purged":
       return "cancelled";
     default:
-      return "running";
+      return runState;
   }
 }
 
@@ -263,15 +268,17 @@ export function spineStateForNode(node: NodeProjection): string {
   return node.state;
 }
 
-/** STATE column label — polymorphic: task projection vs gate verb. */
+/**
+ * STATE column label — polymorphic: task projection vs gate verb.
+ * Known task states use the same `stateMetaFor` labels as the roster (#261)
+ * so `awaiting_answer` reads AWAITING in both places, never AWAITING_ANSWER.
+ */
 export function formatNodeStateLabel(node: NodeProjection): string {
   if (node.kind === "gate") {
     if (node.state === "waiting") return "gate · held";
-    return node.state;
+    return stateMetaFor(node.state).label;
   }
-  // Step: wire state is already the task projection (completed, running, …).
-  // When a fan-out is partially settled the daemon may still report completed
-  // with n/m in the gist — keep the wire state.
+  // Partial fan-out progress is a quantity, not a lifecycle word.
   if (
     node.tasks_total > 1 &&
     node.tasks_settled < node.tasks_total &&
@@ -279,16 +286,91 @@ export function formatNodeStateLabel(node: NodeProjection): string {
   ) {
     return `${node.tasks_settled} of ${node.tasks_total}`;
   }
-  return node.state;
+  return stateMetaFor(node.state).label;
 }
 
-function formatNodeAge(
-  durationMs: number | null,
-  nowMs: number,
-  startedHintMs: number | null,
-): string | null {
+/**
+ * Run-level lifecycle words for the inspector header. Kept separate from
+ * `stateMetaFor` (task vocabulary only) so blocked/purged never fall through
+ * to the unknown branch and pick up tan/unknown-mark metadata (#261 QC).
+ */
+const RUN_STATE_LABELS: Readonly<Record<string, string>> = {
+  running: "RUNNING",
+  completed: "COMPLETED",
+  failed: "FAILED",
+  cancelled: "CANCELLED",
+  purged: "PURGED",
+  blocked: "blocked",
+};
+
+/**
+ * CLI-matching block reason parenthetical — mirrors daemon
+ * `formatBlockParenthetical` (`packages/daemon/src/run-query.ts`).
+ * Returns presented words (`loop 2/2`, `inputs`, `spawn`), never wire enums
+ * (`loop_exhausted`, `unfilled_inputs`).
+ */
+export function formatBlockReasonLabel(block: RunBlock): string {
+  switch (block.reason) {
+    case "gate":
+      return "gate";
+    case "loop_exhausted": {
+      const cur = block.iteration ?? "?";
+      const max = block.max ?? cur;
+      return `loop ${cur}/${max}`;
+    }
+    case "success_policy": {
+      // Prefer embedded counts from detail when present: `2/3 slots`.
+      const detail = block.detail ?? "";
+      const m = detail.match(/(\d+)\s*\/\s*(\d+)\s*slots/i);
+      if (m) return `${m[1]}/${m[2]} slots`;
+      return "slots";
+    }
+    case "spawn_error":
+      return "spawn";
+    case "unfilled_inputs":
+      return "inputs";
+    case "unknown":
+    default:
+      // Ordinary English — not a second "blocked" (which reads as a failed
+      // variable fill under `·` apposition after CSS uppercase) (#261 QC).
+      return "unknown";
+  }
+}
+
+/**
+ * Header state label for a run. Blocked reasons use the CLI parenthetical
+ * vocabulary; run-level states use an explicit run-state map. Wire enums
+ * never reach the surface raw (#261).
+ *
+ * CSS (`.pc-runview__state { text-transform: uppercase }`) uppercases the
+ * blocked form for display (`blocked · loop 2/2` → `BLOCKED · LOOP 2/2`).
+ */
+export function formatRunStateLabel(
+  runState: string,
+  block: RunBlock | null | undefined,
+): string {
+  if (runState === "blocked") {
+    if (block) {
+      return `blocked · ${formatBlockReasonLabel(block)}`;
+    }
+    return "blocked";
+  }
+  if (Object.prototype.hasOwnProperty.call(RUN_STATE_LABELS, runState)) {
+    return RUN_STATE_LABELS[runState]!;
+  }
+  // Invented/unknown: words not identifiers (spaces, not underscores).
+  // Unknown treatment for colour/mark still comes from stateMetaFor on the
+  // attention key; this string is presentation only.
+  return runState.replace(/_/g, " ");
+}
+
+/**
+ * Compact duration for the node table's Duration column (`18m`, `<1m`).
+ * Duration only — no elapsed-since branch, so the header always names the
+ * quantity under it (#261). Null when the wire has no duration_ms.
+ */
+export function formatNodeDuration(durationMs: number | null): string | null {
   if (durationMs != null && Number.isFinite(durationMs)) {
-    // Compact relative-ish: minutes only for the AGE column.
     const mins = Math.max(0, Math.floor(durationMs / 60_000));
     if (mins < 1) return "<1m";
     if (mins < 60) return `${mins}m`;
@@ -296,18 +378,12 @@ function formatNodeAge(
     if (hours < 48) return `${hours}h`;
     return `${Math.floor(hours / 24)}d`;
   }
-  if (startedHintMs != null && Number.isFinite(startedHintMs)) {
-    const mins = Math.max(0, Math.floor((nowMs - startedHintMs) / 60_000));
-    if (mins < 1) return "<1m";
-    if (mins < 60) return `${mins}m`;
-    return `${Math.floor(mins / 60)}h`;
-  }
   return null;
 }
 
 function projectInspectorNode(
   node: NodeProjection,
-  opts: { live: boolean; nowMs: number },
+  opts: { live: boolean },
 ): InspectorRunNode {
   const tasksLabel =
     node.kind === "gate" && node.tasks_total === 0
@@ -322,7 +398,7 @@ function projectInspectorNode(
     stateLabel: formatNodeStateLabel(node),
     tasksLabel,
     gist: node.gist || "—",
-    age: formatNodeAge(node.duration_ms, opts.nowMs, null),
+    age: formatNodeDuration(node.duration_ms),
     fanoutWidth: node.fanout && node.fanout.width > 1 ? node.fanout.width : null,
     spineState: spineStateForNode(node),
     live: opts.live,
@@ -469,16 +545,13 @@ export function projectDeliverables(
  */
 export function projectInspectorRun(
   detail: RunDetailResponse,
-  nowMs: number = Date.now(),
+  _nowMs: number = Date.now(),
   deliverableValues?: readonly DeliverableValue[],
   failedCount: number = 0,
 ): InspectorRun {
   const { run, nodes, block } = detail;
   const heldGate = run.state === "blocked" && isHeldGate(block);
-  const stateLabel =
-    run.state === "blocked" && block
-      ? `blocked · ${block.reason}`
-      : run.state;
+  const stateLabel = formatRunStateLabel(run.state, block);
 
   const projected = nodes.map((node) => {
     const live =
@@ -491,7 +564,7 @@ export function projectInspectorRun(
       node.state === "waiting" ||
       node.state === "running" ||
       node.state === "awaiting_answer";
-    return projectInspectorNode(node, { live, nowMs });
+    return projectInspectorNode(node, { live });
   });
 
   return {

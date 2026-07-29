@@ -300,6 +300,126 @@ describe("N4 flavor / meta split", () => {
   });
 });
 
+describe("chart mark captions calm casing (#261 QC)", () => {
+  it("lowercases pre-capped inspector labels at the chart boundary", () => {
+    // Inspector STATE uses CSS text-transform:uppercase; chart meta does not.
+    // Labels may arrive pre-capped from stateMetaFor — chart must calm them.
+    const model = projectChart(
+      readyRun([
+        node({
+          node: "scope",
+          kind: "step",
+          iteration: 1,
+          state: "completed",
+          stateLabel: "COMPLETED",
+          spineState: "completed",
+          age: "18m",
+        }),
+        node({
+          node: "search",
+          kind: "step",
+          iteration: 1,
+          state: "running",
+          stateLabel: "RUNNING",
+          spineState: "running",
+          live: true,
+        }),
+        node({
+          node: "ask",
+          kind: "step",
+          iteration: 1,
+          state: "awaiting_answer",
+          stateLabel: "AWAITING",
+          spineState: "awaiting_answer",
+          age: "5m",
+          live: true,
+        }),
+        node({
+          node: "carry",
+          kind: "step",
+          iteration: 0,
+          state: "inherited",
+          stateLabel: "INHERITED",
+          spineState: "cancelled",
+        }),
+        node({
+          node: "approve",
+          kind: "gate",
+          iteration: 1,
+          state: "skipped",
+          stateLabel: "SKIPPED",
+          spineState: "cancelled",
+        }),
+        node({
+          node: "accept",
+          kind: "gate",
+          iteration: 1,
+          state: "waiting",
+          stateLabel: "gate · held",
+          spineState: "awaiting_answer",
+          age: "<1m",
+          live: true,
+        }),
+        node({
+          node: "settle",
+          kind: "step",
+          iteration: 2,
+          state: "purged",
+          stateLabel: "PURGED",
+          spineState: "cancelled",
+          age: "1h",
+        }),
+        node({
+          node: "fanout",
+          kind: "step",
+          iteration: 1,
+          state: "completed",
+          stateLabel: "2 of 3",
+          spineState: "running",
+          age: "3m",
+          fanoutWidth: 3,
+        }),
+      ]),
+    );
+    expect(model.status).toBe("ready");
+    if (model.status !== "ready") return;
+
+    const byName = Object.fromEntries(model.marks.map((m) => [m.node, m.meta]));
+    expect(byName.scope).toBe("completed · 18m");
+    expect(byName.search).toBe("running");
+    expect(byName.ask).toBe("awaiting · 5m");
+    expect(byName.carry).toBe("inherited");
+    expect(byName.approve).toBe("skipped");
+    expect(byName.accept).toBe("held <1m");
+    expect(byName.settle).toBe("pass 2 · purged · 1h");
+    expect(byName.fanout).toBe("2 of 3 · 3m");
+
+    // No all-caps lifecycle shout in any caption (legend chrome owns caps).
+    for (const mark of model.marks) {
+      expect(mark.meta).not.toMatch(
+        /\b(COMPLETED|RUNNING|AWAITING|INHERITED|SKIPPED|PURGED|PENDING)\b/,
+      );
+    }
+
+    // ChartModel.stateLabel normalised the same way (latent dead-field trap).
+    const mixedHeader = projectChart({
+      ...readyRun([]),
+      stateLabel: "RUNNING",
+    });
+    expect(mixedHeader.status).toBe("ready");
+    if (mixedHeader.status !== "ready") return;
+    expect(mixedHeader.stateLabel).toBe("running");
+
+    const blockedHeader = projectChart({
+      ...readyRun([]),
+      stateLabel: "blocked · loop 2/2",
+    });
+    expect(blockedHeader.status).toBe("ready");
+    if (blockedHeader.status !== "ready") return;
+    expect(blockedHeader.stateLabel).toBe("blocked · loop 2/2");
+  });
+});
+
 describe("BL-2 key zone clearance (geometry)", () => {
   it.each(
     VIEWPORTS.flatMap((w) =>

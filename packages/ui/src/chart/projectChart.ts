@@ -170,16 +170,27 @@ function sealForGate(node: InspectorRunNode): SealState {
   return node.state === "waiting" ? "held" : "broken";
 }
 
+/**
+ * Chart per-mark captions stay calm lowercase. Inspector STATE cells uppercase
+ * via CSS (`.pc-runview__st`); the chart deliberately does not
+ * (`.pc-chart-mark__meta` has no transform — legend chrome owns the caps).
+ * Lowercasing at this boundary so a shared label source cannot shout on the
+ * sheet as a plumbing side-effect (#261 QC).
+ */
+function chartPresentLabel(label: string): string {
+  return label.toLowerCase();
+}
+
 function markMeta(node: InspectorRunNode): string {
   if (node.kind === "gate") {
     if (node.state === "waiting") {
       return node.age ? `held ${node.age}` : "held";
     }
-    return node.stateLabel;
+    return chartPresentLabel(node.stateLabel);
   }
   const parts: string[] = [];
   if (node.iteration > 1) parts.push(`pass ${node.iteration}`);
-  parts.push(node.stateLabel);
+  parts.push(chartPresentLabel(node.stateLabel));
   if (node.age) parts.push(node.age);
   return parts.join(" · ");
 }
@@ -641,7 +652,9 @@ function projectReady(run: InspectorRunReady): ChartReadyModel {
     id: run.id,
     workflow: run.workflow,
     shortId: shortRef(run.id),
-    stateLabel: run.stateLabel,
+    // Same calm-case decision as mark captions — not dead-field drift if
+    // a consumer later reads this for chrome.
+    stateLabel: chartPresentLabel(run.stateLabel),
     heldGate: run.heldGate,
     marks,
     legs,
