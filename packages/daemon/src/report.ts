@@ -34,6 +34,19 @@ export const DEFAULT_REPORT_SCHEMA: JsonSchema = {
   required: ["summary", "outcome", "files_changed"],
 };
 
+/**
+ * Resolve the report schema a task validates / advertises against: the value
+ * stored on the task row (caller `--report-schema`, or a schema generated from
+ * output ports at step spawn), falling back to {@link DEFAULT_REPORT_SCHEMA}.
+ * Single fallback path shared by `submitReport`, the MCP tool definition, and
+ * envelope/preamble builders — do not reimplement the nullish chain elsewhere.
+ */
+export function resolveReportSchema(
+  reportSchemaColumn: string | null | undefined,
+): JsonSchema {
+  return parseJsonColumn<JsonSchema>(reportSchemaColumn ?? null) ?? DEFAULT_REPORT_SCHEMA;
+}
+
 /** The body of a report accepted against the default schema. */
 export type Report = CoreReport;
 

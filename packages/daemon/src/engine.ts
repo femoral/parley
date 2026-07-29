@@ -205,6 +205,7 @@ import {
   assertValidSchema,
   DEFAULT_REPORT_SCHEMA,
   parseJsonColumn,
+  resolveReportSchema,
   validateReport,
   type JsonSchema,
   type Report,
@@ -1959,8 +1960,7 @@ export class TaskEngine {
     if (task.report !== null) {
       return [`task ${taskId} already has an accepted report`];
     }
-    const schema =
-      parseJsonColumn<JsonSchema>(task.report_schema) ?? DEFAULT_REPORT_SCHEMA;
+    const schema = resolveReportSchema(task.report_schema);
     const errors = validateReport(payload, schema);
     if (errors.length > 0) return errors;
 
