@@ -147,8 +147,32 @@ export interface ChartTextRect {
 
 /** Horizontal inset so labels at the first/last mark stay on the sheet. */
 const EDGE_X = 80;
-/** Right reserve for the destination X. */
+/**
+ * Right reserve for the destination marker, and the preferred centre-to-centre
+ * offset past the final mark. Marks stop at `CHART_VB_W - DEST_RESERVE` so the
+ * reserved strip can hold the ✕; the same distance is the ideal leg length to
+ * it. One number — the old clamp used a hard-coded 70 and the offset a
+ * hard-coded 120; both ignored this reserve (#275).
+ *
+ * Marks stop at `CHART_VB_W - DEST_RESERVE`. The preferred destination offset
+ * is the same distance; when that seat is blocked (right-edge clamp, label
+ * band, neighbour), free-region search finds the nearest clear seat.
+ */
 const DEST_RESERVE = 100;
+/**
+ * Destination ✕ + caption box half-width / top-half / total height in viewBox
+ * units. {@link destinationRect} is the single source for this geometry; the
+ * placement search clamps and collides against the same box.
+ */
+const DEST_HALF_W = 60;
+const DEST_HALF_H = 28;
+const DEST_H = 72;
+/**
+ * Minimum upward lift (viewBox) when the horizontal seat cannot clear the
+ * fixed-px caption past the painted disc at the scale floor. Sized so the
+ * caption band sits fully above the disc: paintedLastR + DEST_HALF_H + air.
+ */
+const DEST_CAPTION_LIFT = 110;
 /**
  * Top band: compass clearance and air above row 0.
  *
@@ -430,10 +454,10 @@ export function destinationRect(
 ): ChartTextRect {
   return {
     key: "destination",
-    x: dest.x - 60,
-    y: dest.y - 28,
-    w: 120,
-    h: 72,
+    x: dest.x - DEST_HALF_W,
+    y: dest.y - DEST_HALF_H,
+    w: DEST_HALF_W * 2,
+    h: DEST_H,
   };
 }
 
@@ -444,6 +468,215 @@ function rectsOverlap(a: ChartTextRect, b: ChartTextRect, pad = 2): boolean {
     a.y + a.h + pad <= b.y ||
     b.y + b.h + pad <= a.y
   );
+}
+
+/**
+ * Place the destination marker after the final mark so it clears every mark
+ * ring, wax seal and label.
+ *
+ * Prefer the nearest centre to `(last.x + DEST_RESERVE, last.y)` that still
+ * reads as terminating the trail. When a neighbour sits to the right, sit in
+ * the free mid-gap instead of overrunning it. When the horizontal seat is
+ * short, a small upward lift keeps the caption off the disc (#275).
+ */
+export function placeDestination(
+  marks: ChartMark[],
+  vbH: number,
+): { x: number; y: number } {
+  if (marks.length === 0) {
+    return { x: CHART_VB_W * 0.72, y: vbH * 0.48 };
+  }
+
+  const last = marks[marks.length - 1]!;
+
+  // Keep destinationRect on the sheet (same numbers the export uses). Caption
+  // ink may still kiss the right edge at narrow sheets — that is a #271
+  // question, not a placement clamp.
+  //
+  // `vbH` may grow below to fit a below-the-label seat when the trail ends on
+  // the right edge of a lower row — otherwise the clamp forces the search
+  // backward onto free paper above earlier marks.
+  const minX = DEST_HALF_W + 4;
+  const maxX = CHART_VB_W - DEST_HALF_W - 4;
+  const minY = DEST_HALF_H + 4;
+  let maxY = vbH - (DEST_H - DEST_HALF_H) - 4;
+
+  const clampPt = (p: { x: number; y: number }) => ({
+    x: Math.min(maxX, Math.max(minX, p.x)),
+    y: Math.min(maxY, Math.max(minY, p.y)),
+  });
+
+  // Scale-floor paint sizes for fixed CSS px (rings 40–46px, caption ~100px).
+  const scale = sheetScaleFloor();
+  const paintedLastR = Math.max(
+    last.seal ? 26 : MARK_CLEAR_R,
+    (last.seal ? 23 : 20) / scale,
+  );
+  const captionHalfVb = Math.max(DEST_HALF_W, 50 / scale);
+  // Gap that clears the caption past the painted disc side-by-side.
+  const sideBySideGap = paintedLastR + captionHalfVb + 6;
+
+  // Ideal x: at least DEST_RESERVE past the final mark, or the full
+  // side-by-side gap when the sheet has room (single-node trails, left-end
+  // rows). Cap at the mid-gap to a same-row neighbour so we don't land on it.
+  const sameRow = marks.filter(
+    (m) => m.key !== last.key && Math.abs(m.y - last.y) < ROW_PITCH * 0.45,
+  );
+  const rightNeighbour = sameRow
+    .filter((m) => m.x > last.x)
+    .sort((a, b) => a.x - b.x)[0];
+  let preferX = last.x + Math.max(DEST_RESERVE, sideBySideGap);
+  if (rightNeighbour) {
+    preferX = Math.min(preferX, (last.x + rightNeighbour.x) / 2);
+  }
+  const prefer = { x: preferX, y: last.y };
+
+  // Obstacles: exported ring/label rects. Expand only the *final* mark's ring
+  // and label to painted fixed-px sizes at the scale floor — that is the
+  // disc/caption pair the defect is about. Other marks stay structural so a
+  // dense serpentine still has free paper near the trail end.
+  const labelTop = Math.min(MARK_CLEAR_R + LABEL_RING_GAP, 28 / scale);
+  const labelBot = Math.max(
+    MARK_CLEAR_R + LABEL_RING_GAP + LABEL_H,
+    28 / scale + 48 / scale,
+  );
+  const obstacles: ChartTextRect[] = [
+    ...markRingRects(marks).map((r) => {
+      if (r.key !== `${last.key}:ring`) return r;
+      return {
+        key: r.key,
+        x: last.x - paintedLastR,
+        y: last.y - paintedLastR,
+        w: paintedLastR * 2,
+        h: paintedLastR * 2,
+      };
+    }),
+    ...markLabelRects(marks).map((r) => {
+      if (r.key !== last.key) return r;
+      const w = Math.max(r.w, last.labelWidth);
+      return {
+        key: r.key,
+        x: last.x - w / 2,
+        y: last.y + labelTop,
+        w,
+        h: labelBot - labelTop,
+      };
+    }),
+  ];
+
+  // Centre clearance from the final mark (painted disc + ✕ glyph half).
+  // Caption width is handled by the side-by-side gap / vertical offset.
+  const minDist = paintedLastR + 22 / scale;
+
+  const clears = (p: { x: number; y: number }): boolean => {
+    if (Math.hypot(p.x - last.x, p.y - last.y) < minDist) return false;
+    // Structural destinationRect plus pad for the fixed-rem caption stack.
+    const base = destinationRect(p);
+    const box: ChartTextRect = {
+      key: base.key,
+      x: base.x - 8,
+      y: base.y - 4,
+      w: base.w + 16,
+      h: base.h + 8,
+    };
+    return !obstacles.some((o) => rectsOverlap(box, o, 4));
+  };
+
+  const clampedPrefer = clampPt(prefer);
+  const gapX = clampedPrefer.x - last.x;
+  // When the horizontal seat is short of side-by-side clearance, move off the
+  // row: prefer above the disc, or below the painted label band when the top
+  // edge clamps the lift (row-0 trails have almost no air above the mark).
+  const tight = gapX < sideBySideGap;
+  const liftNeeded = Math.max(
+    DEST_CAPTION_LIFT,
+    paintedLastR + DEST_HALF_H + 24,
+  );
+  // Below the painted label stack + the full destination stack. Both the
+  // label `top: 28px` offset and the destination ✕/caption are fixed CSS px,
+  // so size the drop at the scale floor (px → viewBox) rather than against
+  // the structural DEST_H alone — a structural-only drop still kisses meta
+  // at the narrowest desktop triptych.
+  const destStackHalfPx = 28; // ~half of the painted 50px ✕+caption stack
+  const dropNeeded =
+    labelBot + destStackHalfPx / scale + 16 / scale;
+  // Grow the searchable sheet so a below-label seat is not clamped short.
+  const belowY = last.y + dropNeeded;
+  const needMaxY = belowY + (DEST_H - DEST_HALF_H) + 4;
+  if (needMaxY > maxY) maxY = needMaxY;
+
+  let ideal = clampedPrefer;
+  if (tight) {
+    const above = clampPt({ x: clampedPrefer.x, y: last.y - liftNeeded });
+    const below = clampPt({ x: clampedPrefer.x, y: belowY });
+    // Prefer above when the top clamp leaves the lift intact and the seat is
+    // still near the trail (row 0 has almost no air above). Otherwise below —
+    // continuing past the final mark's labels, still "after" on x.
+    ideal =
+      last.y - above.y >= liftNeeded * 0.85
+        ? above
+        : below;
+  }
+
+  const seeds: Array<{ x: number; y: number }> = [];
+  seeds.push(ideal);
+  seeds.push(clampedPrefer);
+  seeds.push(clampPt({ x: clampedPrefer.x, y: last.y - liftNeeded }));
+  seeds.push(clampPt({ x: clampedPrefer.x, y: last.y + dropNeeded }));
+  for (const dy of [
+    -liftNeeded,
+    -liftNeeded * 0.5,
+    -20,
+    -80,
+    dropNeeded,
+    dropNeeded + 40,
+    20,
+    40,
+    80,
+    120,
+    160,
+    200,
+    240,
+  ]) {
+    seeds.push(clampPt({ x: clampedPrefer.x, y: last.y + dy }));
+    seeds.push(clampPt({ x: prefer.x, y: last.y + dy }));
+  }
+  for (const dist of [minDist, minDist + 16, minDist + 32, DEST_RESERVE]) {
+    for (let deg = -80; deg <= 80; deg += 8) {
+      const rad = (deg * Math.PI) / 180;
+      seeds.push(
+        clampPt({
+          x: last.x + Math.cos(rad) * dist,
+          y: last.y + Math.sin(rad) * dist,
+        }),
+      );
+    }
+  }
+
+  const step = 14;
+  for (let y = minY; y <= maxY; y += step) {
+    for (let x = minX; x <= maxX; x += step) {
+      seeds.push({ x, y });
+    }
+  }
+
+  // Prefer seats at or past the final mark, then nearest to the ideal seat.
+  seeds.sort((a, b) => {
+    const afterA = a.x + 1 >= last.x ? 0 : 1;
+    const afterB = b.x + 1 >= last.x ? 0 : 1;
+    if (afterA !== afterB) return afterA - afterB;
+    const da =
+      (a.x - ideal.x) * (a.x - ideal.x) + (a.y - ideal.y) * (a.y - ideal.y);
+    const db =
+      (b.x - ideal.x) * (b.x - ideal.x) + (b.y - ideal.y) * (b.y - ideal.y);
+    return da - db;
+  });
+
+  for (const c of seeds) {
+    if (clears(c)) return c;
+  }
+
+  return ideal;
 }
 
 // --- Sheet scale --------------------------------------------------------------
@@ -682,16 +915,13 @@ function projectReady(run: InspectorRunReady): ChartReadyModel {
   }
 
   // Destination X after the last mark (or alone when the table is empty).
-  const destination =
-    marks.length === 0
-      ? { x: CHART_VB_W * 0.72, y: vbH * 0.48 }
-      : (() => {
-          const last = marks[marks.length - 1]!;
-          return {
-            x: Math.min(CHART_VB_W - 70, last.x + 120),
-            y: last.y,
-          };
-        })();
+  // Free-region seat: clears rings/labels, prefers last + DEST_RESERVE (#275).
+  // May sit below the final label band; grow vbH so that seat stays on paper.
+  const destination = placeDestination(marks, vbH);
+  const vbHWithDest = Math.max(
+    vbH,
+    destination.y + (DEST_H - DEST_HALF_H) + 24,
+  );
 
   if (marks.length > 0) {
     const last = marks[marks.length - 1]!;
@@ -780,7 +1010,7 @@ function projectReady(run: InspectorRunReady): ChartReadyModel {
     legs,
     loopBacks,
     destination,
-    vbH,
+    vbH: vbHWithDest,
     decorations,
     marginalia,
     metaLine,
