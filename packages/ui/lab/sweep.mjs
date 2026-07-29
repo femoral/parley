@@ -56,6 +56,7 @@ function parseArgs(argv) {
     workflow: "research",
     json: null,
     shots: null,
+    extra: "",
   };
   for (let i = 0; i < argv.length; i += 1) {
     const flag = argv[i];
@@ -89,6 +90,14 @@ function parseArgs(argv) {
         args.shots = value;
         i += 1;
         break;
+      // Extra query params for the fixture, appended verbatim. Exists so a
+      // throwaway prototype can put its own knob behind a URL flag and be
+      // swept with the same grid as the shipped behavior, side by side —
+      // which is how #273's options were priced against each other.
+      case "--extra":
+        args.extra = value;
+        i += 1;
+        break;
       case "--help":
       case "-h":
         console.log(
@@ -102,6 +111,7 @@ function parseArgs(argv) {
             "  --workflow   <name>  run/workflow name to render",
             "  --json       <path>  write full per-cell results",
             "  --shots      <dir>   also save a PNG per cell (a number you can look at)",
+            "  --extra      <query> extra query params for the fixture, e.g. proto=both",
             "",
             "env: PARLEY_LAB_CHROMIUM=/path/to/chrome",
           ].join("\n"),
@@ -234,7 +244,8 @@ async function main() {
         for (const held of heldModes) {
           const url =
             `${base}lab/?n=${n}&held=${held ? 1 : 0}` +
-            `&workflow=${encodeURIComponent(args.workflow)}`;
+            `&workflow=${encodeURIComponent(args.workflow)}` +
+            (args.extra ? `&${args.extra}` : "");
           await page.goto(url, { waitUntil: "load" });
           // Fonts settle before any ink is measured — see the lab fixture.
           await page.waitForSelector("html[data-lab-ready]");

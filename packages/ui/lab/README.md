@@ -49,6 +49,19 @@ so parallel runs never collide. `--shots <dir>` saves a PNG per cell — worth
 doing whenever a number surprises you, because some of them are artifacts and a
 screenshot settles it in seconds.
 
+`--extra <query>` appends query params to the fixture URL. The point is
+prototypes: put a throwaway knob behind a URL flag in the code under test, then
+sweep the current behavior and each variant over the *same* grid and compare
+cell for cell.
+
+```sh
+node lab/sweep.mjs --probe geometry --extra "proto=both" --nodes 1,2,3,4,5,6,7,8
+```
+
+That is how #273's three options were priced. Two of them changed 2% each and
+looked like failures; together they changed 77%. Nothing in the argument
+predicted that, and no single render would have shown it either.
+
 To open the page by hand instead: `pnpm dev`, then `/lab/?n=8&held=0`. Query
 params are `n` (node count), `held` (`0`/`1`), `workflow` (the run's name).
 
