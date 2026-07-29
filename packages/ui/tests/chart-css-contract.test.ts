@@ -74,3 +74,31 @@ describe("chart.css label width contract (BL-1)", () => {
     expect(key).not.toMatch(/top:\s*112px/);
   });
 });
+
+describe("chart.css marginalia visual treatment (#268)", () => {
+  it("keeps flavor font, opacity, paint order below labels, non-interactive", () => {
+    const m = blockFor(".pc-chart-marginalia");
+    expect(m).toMatch(/font-family:\s*var\(--font-flavor\)/);
+    expect(m).toMatch(/opacity:\s*0\.72/);
+    expect(m).toMatch(/z-index:\s*1/);
+    expect(m).toMatch(/pointer-events:\s*none/);
+    expect(m).toMatch(/transform:\s*translate\(-50%,\s*-50%\)/);
+    // No hardcoded sheet-height percentage anchors in the stylesheet.
+    expect(m).not.toMatch(/left:\s*58%/);
+    expect(m).not.toMatch(/top:\s*14%/);
+    expect(m).not.toMatch(/left:\s*18%/);
+    expect(m).not.toMatch(/top:\s*22%/);
+  });
+
+  it("tilt variant keeps centre anchor plus handwritten rotate", () => {
+    const tilt = blockFor(".pc-chart-marginalia--tilt");
+    expect(tilt).toMatch(/translate\(-50%,\s*-50%\)\s*rotate\(-6deg\)/);
+  });
+
+  it("labels paint above marginalia (z-index 3 > 1)", () => {
+    const mark = blockFor(".pc-chart-mark");
+    expect(mark).toMatch(/z-index:\s*3/);
+    const m = blockFor(".pc-chart-marginalia");
+    expect(m).toMatch(/z-index:\s*1/);
+  });
+});

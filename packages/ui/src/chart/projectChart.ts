@@ -80,6 +80,27 @@ export interface ChartLoopBack {
   targetCentre: { x: number; y: number };
 }
 
+/**
+ * Decorative flavor line placed by the projector in viewBox units (#268).
+ * Centre-anchored (matches CSS `translate(-50%, -50%)`). Omitted entirely
+ * when no free region large enough exists, or when decorations are sparse.
+ */
+export interface ChartMarginalia {
+  key: string;
+  /** Atmospheric copy — never operational. */
+  text: string;
+  /** Centre x in viewBox units. */
+  x: number;
+  /** Centre y in viewBox units. */
+  y: number;
+  /** Axis-aligned hit box width (viewBox) used for clearance. */
+  w: number;
+  /** Axis-aligned hit box height (viewBox) used for clearance. */
+  h: number;
+  /** Slight handwritten tilt (CSS class). */
+  tilt: boolean;
+}
+
 export interface ChartReadyModel {
   status: "ready";
   id: string;
@@ -98,6 +119,11 @@ export interface ChartReadyModel {
    * empty-quarter ornament does not sit on the trail.
    */
   decorations: "full" | "sparse";
+  /**
+   * Flavor marginalia anchors in the same viewBox space as marks.
+   * Empty when decorations are sparse or no free region fits a line.
+   */
+  marginalia: ChartMarginalia[];
   /** Operational data — Outfit, never flavor serif (duration, pass). */
   metaLine: string | null;
   /** Atmospheric clause only — IM Fell. */
@@ -427,6 +453,514 @@ function rectsOverlap(a: ChartTextRect, b: ChartTextRect, pad = 2): boolean {
   );
 }
 
+// --- Marginalia placement (#268) --------------------------------------------
+
+/**
+ * Cockpit layout tokens that pin the centre-stage sheet width
+ * (mirrors `tokens.css` / `cockpit.css`). Do not hand-copy a scale number —
+ * derive it from these.
+ */
+export const COCKPIT_LAYOUT = {
+  /** Narrowest desktop width where the triptych still runs side-by-side. */
+  desktopMinWidthPx: 1081,
+  /** Stacking breakpoint — at and below, rails collapse (`max-width: 1080px`). */
+  stackBreakpointPx: 1080,
+  boardInsetPx: 14, // --board-inset
+  gutterPx: 12, // --gutter
+  regionRosterPx: 300, // --region-roster
+  regionRightPx: 344, // --region-right
+} as const;
+
+/**
+ * Minimum centre-stage content width at the narrowest desktop triptych.
+ * `viewport − 2×inset − roster − right − 2×gutter`.
+ * At 1081: 1081 − 28 − 300 − 344 − 24 = **385 px**.
+ */
+export function minCentreSheetWidthPx(
+  viewportWidthPx: number = COCKPIT_LAYOUT.desktopMinWidthPx,
+): number {
+  const {
+    boardInsetPx,
+    gutterPx,
+    regionRosterPx,
+    regionRightPx,
+    stackBreakpointPx,
+  } = COCKPIT_LAYOUT;
+  // Below the stack breakpoint rails reflow; the desktop floor is the
+  // side-by-side triptych just above that breakpoint.
+  const w = Math.max(viewportWidthPx, stackBreakpointPx + 1);
+  return (
+    w -
+    2 * boardInsetPx -
+    regionRosterPx -
+    regionRightPx -
+    2 * gutterPx
+  );
+}
+
+/**
+ * Binding ornament scale: sheet is `aspect-ratio: 1000/vbH` with uniform
+ * scale, so `scale = sheetWidth/1000`. Horizontal is binding; the floor is
+ * the narrowest desktop centre width over CHART_VB_W.
+ *
+ * Today: 385/1000 = **0.385**.
+ */
+export function ornamentScaleFloor(
+  viewportWidthPx: number = COCKPIT_LAYOUT.desktopMinWidthPx,
+): number {
+  return minCentreSheetWidthPx(viewportWidthPx) / CHART_VB_W;
+}
+
+/** Measured painted ink (px) for catalog lines — IM Fell 12px italic, Chrome. */
+export const MARGINALIA_INK_PX = {
+  /** Rotated AABB for the tilted dissent line. */
+  dissent: { w: 161.4, h: 31.7 },
+  /** Unrotated "here be regressions". */
+  regressions: { w: 75.1, h: 15.0 },
+} as const;
+
+/** Extra px margin so reserve always exceeds painted ink (fail-loud if not). */
+const MARGINALIA_INK_PAD_PX = 4;
+
+/** Min clearance from chrome plates so a line reads as paper, not a caption. */
+const CHROME_CLEAR_PX = 16;
+
+/**
+ * Catalog entries. Box sizes are derived at the scale floor from measured
+ * ink + pad — never a hand-copied viewBox guess that can under-cover.
+ */
+function marginaliaCatalog(scale: number): ReadonlyArray<{
+  key: string;
+  text: string;
+  w: number;
+  h: number;
+  tilt: boolean;
+  preferX: number;
+  preferYFrac: number;
+  inkPx: { w: number; h: number };
+}> {
+  const box = (ink: { w: number; h: number }) => ({
+    w: (ink.w + MARGINALIA_INK_PAD_PX) / scale,
+    h: (ink.h + MARGINALIA_INK_PAD_PX) / scale,
+  });
+  const dissent = box(MARGINALIA_INK_PX.dissent);
+  const regressions = box(MARGINALIA_INK_PX.regressions);
+  // Fail loud if reserve would be smaller than ink at this scale.
+  if (
+    dissent.w * scale < MARGINALIA_INK_PX.dissent.w ||
+    dissent.h * scale < MARGINALIA_INK_PX.dissent.h ||
+    regressions.w * scale < MARGINALIA_INK_PX.regressions.w ||
+    regressions.h * scale < MARGINALIA_INK_PX.regressions.h
+  ) {
+    throw new Error(
+      `marginalia reserve under-covers ink at scale ${scale} (pad=${MARGINALIA_INK_PAD_PX}px)`,
+    );
+  }
+  return [
+    {
+      key: "dissent",
+      text: "\u201cif the reviewers dissent, sail it back\u201d",
+      w: dissent.w,
+      h: dissent.h,
+      tilt: true,
+      // Prefer upper-right empty quarter — away from key (BL) and legend (TL).
+      preferX: 620,
+      preferYFrac: 0.18,
+      inkPx: MARGINALIA_INK_PX.dissent,
+    },
+    {
+      key: "regressions",
+      text: "here be regressions",
+      w: regressions.w,
+      h: regressions.h,
+      tilt: false,
+      // Prefer mid-left paper, clear of the key plate and legend.
+      preferX: 280,
+      preferYFrac: 0.42,
+      inkPx: MARGINALIA_INK_PX.regressions,
+    },
+  ];
+}
+
+function pxToVb(px: number, scale: number): number {
+  return px / scale;
+}
+
+function unionRect(
+  a: ChartTextRect,
+  b: ChartTextRect,
+  key: string,
+): ChartTextRect {
+  const x = Math.min(a.x, b.x);
+  const y = Math.min(a.y, b.y);
+  const r = Math.max(a.x + a.w, b.x + b.w);
+  const bot = Math.max(a.y + a.h, b.y + b.h);
+  return { key, x, y, w: r - x, h: bot - y };
+}
+
+function clampRectToSheet(r: ChartTextRect, vbH: number): ChartTextRect {
+  const x = Math.max(0, r.x);
+  const y = Math.max(0, r.y);
+  const rgt = Math.min(CHART_VB_W, r.x + r.w);
+  const bot = Math.min(vbH, r.y + r.h);
+  return { key: r.key, x, y, w: Math.max(0, rgt - x), h: Math.max(0, bot - y) };
+}
+
+/**
+ * Expand a viewBox rect by a CSS-pixel clearance at the given scale so
+ * placed ornament does not sit flush against chrome (reads as paper air).
+ */
+function padRectPx(
+  r: ChartTextRect,
+  padPx: number,
+  scale: number,
+): ChartTextRect {
+  const p = pxToVb(padPx, scale);
+  return {
+    key: r.key,
+    x: r.x - p,
+    y: r.y - p,
+    w: r.w + 2 * p,
+    h: r.h + 2 * p,
+  };
+}
+
+/** Legend band from CSS (top/left fixed px, max-width min(320px, 42%)). */
+export function legendBandRectForOrnament(
+  scale: number,
+  sheetWidthPx: number,
+  vbH: number,
+): ChartTextRect {
+  const top = pxToVb(18, scale);
+  const left = pxToVb(22, scale);
+  const maxWpx = Math.min(320, sheetWidthPx * 0.42);
+  // Title + meta + flavor stack — measured ~80px at short sheets; pad for wrap.
+  const hPx = 88;
+  const raw: ChartTextRect = {
+    key: "legend",
+    x: left,
+    y: top,
+    w: pxToVb(maxWpx, scale),
+    h: pxToVb(hPx, scale),
+  };
+  return clampRectToSheet(padRectPx(raw, CHROME_CLEAR_PX, scale), vbH);
+}
+
+/** Compass rose from CSS (88×88, top 18 / right 22). */
+export function compassBandRectForOrnament(
+  scale: number,
+  sheetWidthPx: number,
+  vbH: number,
+): ChartTextRect {
+  const size = 88;
+  const top = 18;
+  const right = 22;
+  const raw: ChartTextRect = {
+    key: "compass",
+    x: pxToVb(sheetWidthPx - right - size, scale),
+    y: pxToVb(top, scale),
+    w: pxToVb(size, scale),
+    h: pxToVb(size, scale),
+  };
+  return clampRectToSheet(padRectPx(raw, CHROME_CLEAR_PX, scale), vbH);
+}
+
+/**
+ * Held-gate helm — opaque bottom plate (`z-index: 4`) with Copy run id.
+ * CSS: left/right 18px, bottom 14px; height 58.6–117.4px depending on wrap.
+ * Use the wrap ceiling so short sheets never bury ornament under the plate.
+ */
+export function helmZoneRectForOrnament(
+  vbH: number,
+  scale: number,
+  sheetWidthPx: number,
+): ChartTextRect {
+  const left = 18;
+  const right = 18;
+  const bottom = 14;
+  const heightPx = 118; // wrap ceiling measured at short viewports
+  const raw: ChartTextRect = {
+    key: "helm",
+    x: pxToVb(left, scale),
+    y: vbH - pxToVb(bottom + heightPx, scale),
+    w: pxToVb(sheetWidthPx - left - right, scale),
+    h: pxToVb(heightPx, scale),
+  };
+  return clampRectToSheet(padRectPx(raw, CHROME_CLEAR_PX, scale), vbH);
+}
+
+/**
+ * Label obstacles for ornament: union of structural viewBox band and the
+ * fixed-px CSS `top: 28px` band at the scale floor (never max-only — that
+ * left a gap above the pure viewBox box).
+ */
+export function markLabelRectsForOrnament(
+  marks: ChartMark[],
+  scale: number,
+): ChartTextRect[] {
+  const structuralTop = MARK_CLEAR_R + LABEL_RING_GAP;
+  const structuralBot = structuralTop + LABEL_H;
+  const shortTop = pxToVb(28, scale);
+  // Name + meta + optional tally chip, rem stack at the scale floor.
+  const shortBot = shortTop + pxToVb(52, scale);
+  const topVb = Math.min(structuralTop, shortTop);
+  const botVb = Math.max(structuralBot, shortBot);
+  const hVb = botVb - topVb;
+  return marks.map((m) => {
+    // Width: structural labelWidth, expanded if rem text needs more at floor.
+    const w = Math.max(m.labelWidth, pxToVb(72, scale));
+    return {
+      key: `${m.key}:orn-label`,
+      x: m.x - w / 2,
+      y: m.y + topVb,
+      w,
+      h: hVb,
+    };
+  });
+}
+
+/** Ring obstacles: union of viewBox clear radius and fixed-px ring at floor. */
+export function markRingRectsForOrnament(
+  marks: ChartMark[],
+  scale: number,
+): ChartTextRect[] {
+  const minR = pxToVb(22, scale); // half of ~44 px painted ring
+  return marks.map((m) => {
+    const r = Math.max(m.seal ? 26 : MARK_CLEAR_R, minR);
+    return {
+      key: `${m.key}:orn-ring`,
+      x: m.x - r,
+      y: m.y - r,
+      w: r * 2,
+      h: r * 2,
+    };
+  });
+}
+
+/**
+ * Key band for ornament: union of projector key zone and painted CSS key
+ * at the scale floor, plus chrome clearance.
+ */
+export function keyZoneRectForOrnament(
+  vbH: number,
+  heldGate: boolean,
+  scale: number,
+): ChartTextRect {
+  const structural = keyZoneRect(vbH, heldGate);
+  // CSS: left 18px, bottom 14px (or 100px held), ~150×90 content + pad.
+  const cssW = pxToVb(170, scale);
+  const cssH = pxToVb(110, scale);
+  const cssBottom = pxToVb(heldGate ? 100 : 14, scale);
+  const cssX = pxToVb(18, scale);
+  const css: ChartTextRect = {
+    key: "chart-key-css",
+    x: cssX,
+    y: vbH - cssBottom - cssH,
+    w: cssW,
+    h: cssH,
+  };
+  const united = unionRect(structural, css, "chart-key-orn");
+  return clampRectToSheet(padRectPx(united, CHROME_CLEAR_PX, scale), vbH);
+}
+
+/**
+ * Full obstacle set the placer uses — exported so tests assert against the
+ * same rects (not a re-derived pure-viewBox subset that misses helm/chrome).
+ */
+export function ornamentObstacles(args: {
+  marks: ChartMark[];
+  destination: { x: number; y: number };
+  vbH: number;
+  heldGate: boolean;
+  scale?: number;
+  sheetWidthPx?: number;
+}): ChartTextRect[] {
+  const scale = args.scale ?? ornamentScaleFloor();
+  const sheetWidthPx =
+    args.sheetWidthPx ?? minCentreSheetWidthPx();
+  const list: ChartTextRect[] = [
+    ...markRingRectsForOrnament(args.marks, scale),
+    ...markLabelRectsForOrnament(args.marks, scale),
+    destinationRect(args.destination),
+    keyZoneRectForOrnament(args.vbH, args.heldGate, scale),
+    legendBandRectForOrnament(scale, sheetWidthPx, args.vbH),
+    compassBandRectForOrnament(scale, sheetWidthPx, args.vbH),
+  ];
+  if (args.heldGate) {
+    list.push(helmZoneRectForOrnament(args.vbH, scale, sheetWidthPx));
+  }
+  return list;
+}
+
+/** Axis-aligned box for a centre-anchored marginalia line. */
+export function marginaliaRect(m: ChartMarginalia): ChartTextRect {
+  return {
+    key: m.key,
+    x: m.x - m.w / 2,
+    y: m.y - m.h / 2,
+    w: m.w,
+    h: m.h,
+  };
+}
+
+export function marginaliaRects(items: ChartMarginalia[]): ChartTextRect[] {
+  return items.map(marginaliaRect);
+}
+
+/**
+ * True when any sampled route/loop stroke point falls inside `box`
+ * (stroke half-width ≈ pad viewBox units).
+ */
+export function anyStrokeInBox(
+  paths: Array<{ d: string }>,
+  box: ChartTextRect,
+  pad = 6,
+): boolean {
+  for (const path of paths) {
+    for (const p of sampleCubic(path.d)) {
+      if (pointInRect(p, box, pad)) return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * True when a marginalia box overlaps any obstacle or a route stroke.
+ */
+export function anyMarginaliaOverprint(
+  box: ChartTextRect,
+  obstacles: ChartTextRect[],
+  strokes: Array<{ d: string }>,
+  pad = 2,
+): boolean {
+  if (obstacles.some((o) => rectsOverlap(box, o, pad))) return true;
+  return anyStrokeInBox(strokes, box, 6);
+}
+
+/**
+ * Serpentine row count for `n` marks — non-decreasing in n (stable threshold).
+ */
+export function chartRowCount(markCount: number): number {
+  if (markCount <= 0) return 0;
+  const { positions } = placeMarks(markCount);
+  if (positions.length === 0) return 0;
+  return Math.max(...positions.map((p) => p.row)) + 1;
+}
+
+/**
+ * Whole-ornament row ceiling. Multi-row trails leave empty quarters that
+ * open and close non-monotonically with serpentine packing; once the route
+ * snakes, omit the entire ornament (monotonic in n — row count is
+ * non-decreasing). Sparse is a separate gate. Single-row charts (n ≤ ~5 at
+ * current pitch) still get the full pair when free paper clears chrome.
+ */
+export const MARGINALIA_MAX_ROWS = 1;
+
+/**
+ * Place flavor marginalia in free paper — **all catalog lines or none**.
+ * Same pass / coordinate space as marks. Omission is a whole-ornament
+ * decision (sparse-route precedent): sparse decoration, too many rows, or
+ * any single line failing to find a free region → `[]`.
+ */
+export function placeMarginalia(args: {
+  decorations: "full" | "sparse";
+  marks: ChartMark[];
+  legs: ChartLeg[];
+  loopBacks: ChartLoopBack[];
+  destination: { x: number; y: number };
+  vbH: number;
+  heldGate: boolean;
+  /** Override scale floor (tests). Default: derived cockpit floor. */
+  scale?: number;
+  sheetWidthPx?: number;
+}): ChartMarginalia[] {
+  if (args.decorations === "sparse") return [];
+
+  // Stable threshold: row count is non-decreasing in n for fixed usable width.
+  if (chartRowCount(args.marks.length) > MARGINALIA_MAX_ROWS) return [];
+
+  const scale = args.scale ?? ornamentScaleFloor();
+  const sheetWidthPx = args.sheetWidthPx ?? minCentreSheetWidthPx();
+  const catalog = marginaliaCatalog(scale);
+
+  const obstacles: ChartTextRect[] = ornamentObstacles({
+    marks: args.marks,
+    destination: args.destination,
+    vbH: args.vbH,
+    heldGate: args.heldGate,
+    scale,
+    sheetWidthPx,
+  });
+  const strokes: Array<{ d: string }> = [
+    ...args.legs,
+    ...args.loopBacks,
+  ];
+
+  const placed: ChartMarginalia[] = [];
+  const working = obstacles.slice();
+
+  for (const item of catalog) {
+    const preferY = item.preferYFrac * args.vbH;
+    const halfW = item.w / 2;
+    const halfH = item.h / 2;
+    const minX = halfW + 12;
+    const maxX = CHART_VB_W - halfW - 12;
+    const minY = halfH + 12;
+    const maxY = args.vbH - halfH - 12;
+    if (minX > maxX || minY > maxY) return []; // whole-ornament omit
+
+    const seeds: Array<{ x: number; y: number }> = [];
+    const clampX = (x: number) => Math.min(maxX, Math.max(minX, x));
+    const clampY = (y: number) => Math.min(maxY, Math.max(minY, y));
+    seeds.push({ x: clampX(item.preferX), y: clampY(preferY) });
+
+    const step = 16;
+    for (let y = minY; y <= maxY; y += step) {
+      for (let x = minX; x <= maxX; x += step) {
+        seeds.push({ x, y });
+      }
+    }
+    seeds.sort((a, b) => {
+      const da =
+        (a.x - item.preferX) * (a.x - item.preferX) +
+        (a.y - preferY) * (a.y - preferY);
+      const db =
+        (b.x - item.preferX) * (b.x - item.preferX) +
+        (b.y - preferY) * (b.y - preferY);
+      return da - db;
+    });
+
+    let found: ChartMarginalia | null = null;
+    for (const c of seeds) {
+      const box: ChartTextRect = {
+        key: item.key,
+        x: c.x - halfW,
+        y: c.y - halfH,
+        w: item.w,
+        h: item.h,
+      };
+      if (anyMarginaliaOverprint(box, working, strokes)) continue;
+      found = {
+        key: item.key,
+        text: item.text,
+        x: c.x,
+        y: c.y,
+        w: item.w,
+        h: item.h,
+        tilt: item.tilt,
+      };
+      break;
+    }
+
+    // Whole-ornament: any single miss drops the entire set.
+    if (!found) return [];
+    placed.push(found);
+    working.push(marginaliaRect(found));
+  }
+
+  return placed;
+}
+
 /** True when any two label rects intersect (B1 invariant). */
 export function anyLabelOverlap(rects: ChartTextRect[]): boolean {
   for (let i = 0; i < rects.length; i++) {
@@ -635,6 +1169,18 @@ function projectReady(run: InspectorRunReady): ChartReadyModel {
   const decorations: "full" | "sparse" =
     marks.length <= 1 && !hasGate ? "sparse" : "full";
 
+  // Flavor marginalia: same pass / viewBox space as marks (#268). Sparse
+  // routes and charts with no free region large enough both yield [].
+  const marginalia = placeMarginalia({
+    decorations,
+    marks,
+    legs,
+    loopBacks,
+    destination,
+    vbH,
+    heldGate: run.heldGate,
+  });
+
   // Split operational data (Outfit) from atmosphere (IM Fell).
   const dataParts: string[] = [];
   if (run.duration) dataParts.push(run.duration);
@@ -662,6 +1208,7 @@ function projectReady(run: InspectorRunReady): ChartReadyModel {
     destination,
     vbH,
     decorations,
+    marginalia,
     metaLine,
     flavor,
   };

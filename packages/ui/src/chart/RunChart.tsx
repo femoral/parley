@@ -322,19 +322,25 @@ function ReadyChart({ model }: { model: ChartReadyModel }) {
         <div className="pc-chart-spot__label">the run ends here</div>
       </div>
 
-      {model.decorations === "full" && (
-        <>
-          <div
-            className="pc-chart-marginalia pc-chart-marginalia--tilt"
-            style={{ left: "58%", top: "14%" }}
-          >
-            &ldquo;if the reviewers dissent, sail it back&rdquo;
-          </div>
-          <div className="pc-chart-marginalia" style={{ left: "18%", top: "22%" }}>
-            here be regressions
-          </div>
-        </>
-      )}
+      {/* Marginalia centres come from the projector in viewBox units (#268). */}
+      {model.marginalia.map((line) => (
+        <div
+          key={line.key}
+          className={
+            line.tilt
+              ? "pc-chart-marginalia pc-chart-marginalia--tilt"
+              : "pc-chart-marginalia"
+          }
+          style={{
+            left: `${(line.x / CHART_VB_W) * 100}%`,
+            top: `${(line.y / model.vbH) * 100}%`,
+          }}
+          data-chart-marginalia={line.key}
+          aria-hidden="true"
+        >
+          {line.text}
+        </div>
+      ))}
 
       <ChartKey />
 
