@@ -3,6 +3,11 @@
   "version": "0.0.4",
   "private": false,
   "description": "Claude Code plugin that records deterministic Parley session provenance.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/femoral/parley.git",
+    "directory": "packages/plugins/claude-code"
+  },
   "type": "module",
   "engines": {
     "node": ">=24"

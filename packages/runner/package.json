@@ -2,6 +2,11 @@
   "name": "@useparley/runner",
   "version": "0.0.4",
   "description": "Remote runner for parley: leases tasks from a daemon and executes them on this host (ADR-0012).",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/femoral/parley.git",
+    "directory": "packages/runner"
+  },
   "type": "module",
   "bin": {
     "parley-runner": "bin/parley-runner.mjs"

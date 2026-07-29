@@ -2,6 +2,11 @@
   "name": "@useparley/cli",
   "version": "0.0.4",
   "description": "The parley command-line interface: commands, arg parsing, spawn/wait UX, and the orchestrator skills it ships.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/femoral/parley.git",
+    "directory": "packages/cli"
+  },
   "type": "module",
   "bin": {
     "parley": "bin/parley.mjs"

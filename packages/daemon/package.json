@@ -2,6 +2,11 @@
   "name": "@useparley/daemon",
   "version": "0.0.4",
   "description": "The parley daemon: engine, vendor adapters, sqlite storage, HTTP server, and MCP channel.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/femoral/parley.git",
+    "directory": "packages/daemon"
+  },
   "type": "module",
   "engines": {
     "node": ">=24"

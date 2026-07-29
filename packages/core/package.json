@@ -2,6 +2,11 @@
   "name": "@useparley/core",
   "version": "0.0.4",
   "description": "Shared heart of parley: domain types, model catalog, home-dir resolution, and shared utilities.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/femoral/parley.git",
+    "directory": "packages/core"
+  },
   "type": "module",
   "engines": {
     "node": ">=24"

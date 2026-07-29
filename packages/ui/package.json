@@ -2,6 +2,11 @@
   "name": "@useparley/ui",
   "version": "0.0.4",
   "description": "Parley Cove — the parley web cockpit (React + Vite). An optional install: the daemon discovers and serves it (parley.ui marker) when it's present alongside @useparley/cli/@useparley/daemon.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/femoral/parley.git",
+    "directory": "packages/ui"
+  },
   "type": "module",
   "parley": {
     "ui": "www"
