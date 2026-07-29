@@ -212,6 +212,45 @@ describe("RosterPanel run rows (#254)", () => {
     expect(tracks[1]!.querySelectorAll(".pc-roster__pip").length).toBe(5);
   });
 
+  it("DOM: fail nodes produce .pc-roster__pip--fail (#269)", () => {
+    const groups: RosterGroup[] = [
+      {
+        state: "running",
+        runs: [
+          {
+            id: "r-fail-pip",
+            name: "fail-track",
+            attentionState: "running",
+            runState: "running",
+            subtitle: "has a failed step",
+            meta: "pass 1 · 4 tasks · 2m",
+            heldGate: false,
+            pips: [
+              { kind: "done" },
+              { kind: "live" },
+              { kind: "fail" },
+              { kind: "empty" },
+            ],
+            updatedAt: "2026-07-01T00:02:00.000Z",
+            orchestratorSession: null,
+          },
+        ],
+        tasks: [],
+      },
+    ];
+    const { container } = render(
+      <RosterPanel {...baseProps()} groups={groups} totalTasks={0} activeTasks={0} />,
+    );
+    const track = container.querySelector(".pc-roster__pips");
+    expect(track?.querySelectorAll(".pc-roster__pip").length).toBe(4);
+    expect(track?.querySelectorAll(".pc-roster__pip--fail").length).toBe(1);
+    expect(track?.querySelectorAll(".pc-roster__pip--done").length).toBe(1);
+    expect(track?.querySelectorAll(".pc-roster__pip--live").length).toBe(1);
+    expect(track?.querySelectorAll(".pc-roster__pip--empty").length).toBe(1);
+    // Track stays aria-hidden; AT summary is the option description (#260).
+    expect(track?.getAttribute("aria-hidden")).toBe("true");
+  });
+
   it("exposes pip progress via accessible description once, not class (#260)", () => {
     // coding-1: 3 done, 1 live, 1 empty — description only (not the option name).
     render(<RosterPanel {...baseProps()} />);
@@ -329,6 +368,22 @@ describe("Roster pip track a11y + contrast contracts (#260)", () => {
     expect(track).toMatch(/flex-wrap:\s*nowrap/);
     // #269 requires the 4px floor; do not shrink pips to 0.
     expect(pip).toMatch(/min-width:\s*4px/);
+  });
+
+  it("CSS: fail is tall; other pips sit shorter in a fixed 5px track (#269)", () => {
+    // Treatment E′ — colour + height second cue. happy-dom has no layout, so
+    // assert the source contract; geometry is measured headlessly at merge.
+    const track = blockFor(HUD_CSS, ".pc-roster__pips");
+    const pip = blockFor(HUD_CSS, ".pc-roster__pip");
+    const fail = blockFor(HUD_CSS, ".pc-roster__pip--fail");
+    const cap = blockFor(HUD_CSS, ".pc-roster__pips-cap");
+    expect(track).toMatch(/height:\s*5px/);
+    expect(track).toMatch(/align-items:\s*center/);
+    expect(pip).toMatch(/height:\s*3px/);
+    expect(pip).toMatch(/min-width:\s*4px/);
+    expect(fail).toMatch(/height:\s*5px/);
+    // Tick must not share the 5px settled-bad height channel (#269 / #260).
+    expect(cap).toMatch(/height:\s*3px/);
   });
 
   it("CSS: selection is border + inset rail; wash stays at rest (no tint-18)", () => {
@@ -506,6 +561,7 @@ describe("Roster pip track a11y + contrast contracts (#260)", () => {
   it("CSS: aggregation tick is a quiet fixed-width mark, not a badge", () => {
     const cap = blockFor(HUD_CSS, ".pc-roster__pips-cap");
     expect(cap).toMatch(/flex:\s*0\s+0\s+6px/);
+    expect(cap).toMatch(/height:\s*3px/);
     expect(cap).toMatch(/repeating-linear-gradient/);
     expect(cap).toMatch(/var\(--brass-border\)/);
     // Not a pill / badge chrome.

@@ -425,6 +425,23 @@ Plates clip their content (`overflow: hidden`) so the inset frame is never cross
 ### Plate Header (signature)
 - A brass radial-gradient icon tile, an engraved Cinzel title, and an optional italic subtitle, with an aside slot pushed right. The consistent "nameplate" that labels every plate in the cove.
 
+### Pip track (roster)
+The run roster's progress strip under each run option. Five kinds, each a short bar on the wood row (four luminous state inks plus empty):
+
+| kind | ink token | meaning |
+| --- | --- | --- |
+| `done` | `--state-completed` (`#7fd0ff`) | step finished |
+| `live` | `--state-running` (`#5fd08a`) | step under way (folds running / queued / pending / stalled / awaiting_answer wire states) |
+| `gate` | `--state-awaiting_answer` (`#ffcf4d`) | step blocked on a human answer |
+| `fail` | `--state-failed` (`#ff7a6b`) | step settled-bad |
+| `empty` | `--ink-label` | slot not yet started (also cancelled / skipped fallthrough) |
+
+**Colour + height.** Kind is carried as **colour and height**, never colour alone. Non-fail pips sit at **3px**; a `fail` pip is the only mark that occupies the full track height of **5px**. The track box itself is fixed at 5px with `align-items: center`, so the row's height does not grow when a fail appears. Size/silhouette is the second cue required by the Do's ("icon, shape, label, or position").
+
+**Why height, and why only `fail`.** Under a Viénot-1999 deuteranopia simulation the rendered `live` / `fail` pair separates by ΔE2000 **7.4** — below the ≈10 bar this system already treats as safe without colour (see The Stroke-State Rule). Every other pair clears that bar under both deuteranopia and protanopia; `live` / `gate` sits *at* the bar under protanopia (10.9) and is out of scope. The same second-cue principle as the chart's Stroke-State Rule (#259) — state that cannot rely on hue alone must carry a non-colour channel — applied here as height instead of a glyph, because a 3–5px-tall bar cannot host a readable mark.
+
+**Aggregation tick.** When a run's bound exceeds the visible cap (`ROSTER_PIP_VISIBLE_CAP`, 20), the track shows at most 20 severity-aggregated segments and appends a quiet **6×3px** mark of **two** brass hairlines (`.pc-roster__pips-cap` — `repeating-linear-gradient` ink at 0–1.5px and 3–4.5px of the 6px width). That tick means "the bound is larger than what is drawn"; it is not a kind, has no legend elsewhere in the UI, and is sighted-only — the full bound and kind counts live on the run option's `aria-describedby` summary. The track itself stays `aria-hidden`. **Height relationship:** the tick sits at **3px with the non-fail pips**, so full track height (5px) remains a channel that means settled-bad only — `fail` is strictly the tallest mark in the track, including when capped.
+
 ## Do's and Don'ts
 
 ### Do:

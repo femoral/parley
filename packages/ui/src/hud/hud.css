@@ -3893,11 +3893,14 @@ button.pc-roster__meta--copy:focus-visible {
   margin-top: 6px;
   width: 100%;
   min-width: 0;
+  /* Fixed track box so 3px non-fail pips centre without shrinking the row (#269). */
+  height: 5px;
   overflow: hidden;
   align-items: center;
 }
 .pc-roster__pip {
-  height: 5px;
+  /* Non-fail kinds sit at 3px; fail breaks the line at full track height (#269). */
+  height: 3px;
   flex: 1 1 0;
   min-width: 4px;
   border-radius: var(--radius-hairline);
@@ -3916,17 +3919,20 @@ button.pc-roster__meta--copy:focus-visible {
   background: var(--state-awaiting_answer);
 }
 .pc-roster__pip--fail {
+  height: 5px; /* full track height — only kind that breaks the line (#269) */
   background: var(--state-failed);
 }
 .pc-roster__pip--empty {
   background: var(--ink-label);
 }
 /* Quiet aggregation tick — sighted cue that the track is capped (AT already
- * says "showing N segments"). Three brass hairlines; not a badge. */
+ * says "showing N segments"). Two brass hairlines (2px ink / 1px gap cycle
+ * over 6px); not a badge. Height 3px so it sits with non-fail pips and leaves
+ * the 5px track-height channel to fail alone (#269 reconcile with #260). */
 .pc-roster__pips-cap {
   flex: 0 0 6px;
   width: 6px;
-  height: 5px;
+  height: 3px;
   margin: 0;
   border-radius: 0;
   background: repeating-linear-gradient(
