@@ -19,4 +19,13 @@ export default tseslint.config(
       ],
     },
   },
+  {
+    // The chart measurement lab's probes execute inside the browser (they are
+    // serialized across by Playwright), so they legitimately reference DOM
+    // globals from a file the driver runs under Node.
+    files: ["packages/ui/lab/**/*.mjs"],
+    languageOptions: {
+      globals: { ...globals.node, ...globals.browser },
+    },
+  },
 );
