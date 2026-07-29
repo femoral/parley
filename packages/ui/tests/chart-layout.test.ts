@@ -8,7 +8,6 @@ import {
   anyMarginaliaOverprint,
   assertLabelClearance,
   chartRowCount,
-  destinationRect,
   helmZoneRectForOrnament,
   loopArc,
   markLabelRects,

@@ -583,18 +583,6 @@ function pxToVb(px: number, scale: number): number {
   return px / scale;
 }
 
-function unionRect(
-  a: ChartTextRect,
-  b: ChartTextRect,
-  key: string,
-): ChartTextRect {
-  const x = Math.min(a.x, b.x);
-  const y = Math.min(a.y, b.y);
-  const r = Math.max(a.x + a.w, b.x + b.w);
-  const bot = Math.max(a.y + a.h, b.y + b.h);
-  return { key, x, y, w: r - x, h: bot - y };
-}
-
 function clampRectToSheet(r: ChartTextRect, vbH: number): ChartTextRect {
   const x = Math.max(0, r.x);
   const y = Math.max(0, r.y);
