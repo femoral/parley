@@ -104,6 +104,7 @@ export {
   buildListPipTrack,
   formatNodeStateLabel,
   formatRunStateLabel,
+  formatBlockReasonLabel,
   formatNodeDuration,
   isHeldGate,
 } from "./runs.js";

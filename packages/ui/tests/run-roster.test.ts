@@ -4,9 +4,11 @@
  */
 import { describe, expect, it } from "vitest";
 import type { NodeProjection, RunDetailResponse, RunSummary } from "@useparley/core";
+import type { RunBlock } from "@useparley/core";
 import {
   buildListPipTrack,
   buildPipTrack,
+  formatBlockReasonLabel,
   formatNodeDuration,
   formatNodeStateLabel,
   formatRunChip,
@@ -273,8 +275,9 @@ describe("projectInspectorRun (#254)", () => {
     expect(view.nodes[2]!.stateLabel).toBe("gate · held");
     expect(view.nodes[2]!.onReject).toBe("funnel");
     expect(view.heldGate).toBe(false); // loop_exhausted, not gate
-    // Blocked reason goes through state-meta, not raw wire enum (#261).
-    expect(view.stateLabel).toBe("BLOCKED · LOOP_EXHAUSTED");
+    // CLI parenthetical vocabulary — never the wire enum (#261 QC).
+    expect(view.stateLabel).toBe("blocked · loop 2/2");
+    expect(view.stateLabel).not.toMatch(/loop_exhausted/i);
   });
 
   it("STATE is polymorphic: step task projection vs gate verb", () => {
@@ -304,17 +307,24 @@ describe("projectInspectorRun (#254)", () => {
     expect(label).not.toMatch(/awaiting_answer/i);
   });
 
-  it("run state labels come from state-meta, including blocked reasons (#261)", () => {
+  it("run state labels present CLI vocabulary, never wire enums (#261)", () => {
     expect(formatRunStateLabel("running", null)).toBe("RUNNING");
-    expect(
-      formatRunStateLabel("blocked", {
-        reason: "loop_exhausted",
-        node: "review",
-        iteration: 2,
-        detail: "coverage still insufficient",
-        verbs: ["approve", "redirect", "finish"],
-      }),
-    ).toBe("BLOCKED · LOOP_EXHAUSTED");
+    expect(formatRunStateLabel("completed", null)).toBe("COMPLETED");
+    expect(formatRunStateLabel("failed", null)).toBe("FAILED");
+    expect(formatRunStateLabel("cancelled", null)).toBe("CANCELLED");
+    expect(formatRunStateLabel("purged", null)).toBe("PURGED");
+
+    const loopBlock: RunBlock = {
+      reason: "loop_exhausted",
+      node: "review",
+      iteration: 2,
+      max: 2,
+      detail: "coverage still insufficient",
+      verbs: ["approve", "redirect", "finish"],
+    };
+    expect(formatRunStateLabel("blocked", loopBlock)).toBe("blocked · loop 2/2");
+    expect(formatRunStateLabel("blocked", loopBlock)).not.toMatch(/loop_exhausted/i);
+
     expect(
       formatRunStateLabel("blocked", {
         reason: "gate",
@@ -323,7 +333,89 @@ describe("projectInspectorRun (#254)", () => {
         detail: "held",
         verbs: ["approve", "reject", "redirect", "finish"],
       }),
-    ).toBe("BLOCKED · GATE");
+    ).toBe("blocked · gate");
+
+    // Full reason matrix — presented words, not identifiers.
+    const reasons: Array<{ block: RunBlock; presented: string }> = [
+      {
+        block: {
+          reason: "gate",
+          node: "g",
+          iteration: 1,
+          detail: "held",
+          verbs: ["approve", "reject", "redirect", "finish"],
+        },
+        presented: "gate",
+      },
+      {
+        block: {
+          reason: "loop_exhausted",
+          node: "r",
+          iteration: 2,
+          max: 2,
+          detail: null,
+          verbs: ["approve", "redirect", "finish"],
+        },
+        presented: "loop 2/2",
+      },
+      {
+        block: {
+          reason: "success_policy",
+          node: "r",
+          iteration: 1,
+          detail: "blocked (2/3 slots)",
+          verbs: ["approve", "redirect", "finish"],
+        },
+        presented: "2/3 slots",
+      },
+      {
+        block: {
+          reason: "success_policy",
+          node: "r",
+          iteration: 1,
+          detail: "min not met",
+          verbs: ["approve", "redirect", "finish"],
+        },
+        presented: "slots",
+      },
+      {
+        block: {
+          reason: "spawn_error",
+          node: "r",
+          iteration: 1,
+          detail: "spawn failed",
+          verbs: ["redirect", "finish"],
+        },
+        presented: "spawn",
+      },
+      {
+        block: {
+          reason: "unfilled_inputs",
+          node: "r",
+          iteration: 1,
+          detail: "missing port",
+          verbs: ["redirect", "finish"],
+        },
+        presented: "inputs",
+      },
+      {
+        block: {
+          reason: "unknown",
+          node: null,
+          iteration: null,
+          detail: null,
+          verbs: ["finish"],
+        },
+        presented: "blocked",
+      },
+    ];
+    for (const { block, presented } of reasons) {
+      expect(formatBlockReasonLabel(block)).toBe(presented);
+      const label = formatRunStateLabel("blocked", block);
+      expect(label).toBe(`blocked · ${presented}`);
+      // Wire enum must not appear verbatim in presented text.
+      expect(label).not.toMatch(/loop_exhausted|success_policy|spawn_error|unfilled_inputs/i);
+    }
   });
 
   it("duration column is duration-only on every path (#261)", () => {
@@ -350,6 +442,7 @@ describe("projectInspectorRun (#254)", () => {
     const view = projectRosterRun(summary({ run_id: "r-x", state: "mutinied" }));
     expect(view.attentionState).toBe("mutinied");
     expect(view.attentionState).not.toBe("running");
+    // Roster colour/mark still via stateMetaFor on the attention key.
     expect(stateMetaFor(view.attentionState).label).toBe("MUTINIED");
     expect(stateMetaFor(view.attentionState).colorVar).toBe("var(--ink-tan)");
 
@@ -360,7 +453,10 @@ describe("projectInspectorRun (#254)", () => {
     });
     expect(detail.status).toBe("ready");
     if (detail.status !== "ready") throw new Error("expected ready");
-    expect(detail.stateLabel).toBe("MUTINIED");
+    // Header string is presentation words; CSS uppercases for display.
+    // Must not silently claim RUNNING.
+    expect(detail.stateLabel).toBe("mutinied");
     expect(detail.stateLabel).not.toBe("RUNNING");
+    expect(detail.stateLabel.toLowerCase()).not.toBe("running");
   });
 });

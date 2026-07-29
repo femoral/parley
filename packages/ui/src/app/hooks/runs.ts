@@ -290,18 +290,76 @@ export function formatNodeStateLabel(node: NodeProjection): string {
 }
 
 /**
- * Header state label for a run. Wire enums never reach the surface raw —
- * both the lifecycle word and a blocked reason go through `stateMetaFor`
- * (#261), matching how the rest of the cockpit names states.
+ * Run-level lifecycle words for the inspector header. Kept separate from
+ * `stateMetaFor` (task vocabulary only) so blocked/purged never fall through
+ * to the unknown branch and pick up tan/unknown-mark metadata (#261 QC).
+ */
+const RUN_STATE_LABELS: Readonly<Record<string, string>> = {
+  running: "RUNNING",
+  completed: "COMPLETED",
+  failed: "FAILED",
+  cancelled: "CANCELLED",
+  purged: "PURGED",
+  blocked: "blocked",
+};
+
+/**
+ * CLI-matching block reason parenthetical — mirrors daemon
+ * `formatBlockParenthetical` (`packages/daemon/src/run-query.ts`).
+ * Returns presented words (`loop 2/2`, `inputs`, `spawn`), never wire enums
+ * (`loop_exhausted`, `unfilled_inputs`).
+ */
+export function formatBlockReasonLabel(block: RunBlock): string {
+  switch (block.reason) {
+    case "gate":
+      return "gate";
+    case "loop_exhausted": {
+      const cur = block.iteration ?? "?";
+      const max = block.max ?? cur;
+      return `loop ${cur}/${max}`;
+    }
+    case "success_policy": {
+      // Prefer embedded counts from detail when present: `2/3 slots`.
+      const detail = block.detail ?? "";
+      const m = detail.match(/(\d+)\s*\/\s*(\d+)\s*slots/i);
+      if (m) return `${m[1]}/${m[2]} slots`;
+      return "slots";
+    }
+    case "spawn_error":
+      return "spawn";
+    case "unfilled_inputs":
+      return "inputs";
+    case "unknown":
+    default:
+      return "blocked";
+  }
+}
+
+/**
+ * Header state label for a run. Blocked reasons use the CLI parenthetical
+ * vocabulary; run-level states use an explicit run-state map. Wire enums
+ * never reach the surface raw (#261).
+ *
+ * CSS (`.pc-runview__state { text-transform: uppercase }`) uppercases the
+ * blocked form for display (`blocked · loop 2/2` → `BLOCKED · LOOP 2/2`).
  */
 export function formatRunStateLabel(
   runState: string,
   block: RunBlock | null | undefined,
 ): string {
-  if (runState === "blocked" && block) {
-    return `${stateMetaFor("blocked").label} · ${stateMetaFor(block.reason).label}`;
+  if (runState === "blocked") {
+    if (block) {
+      return `blocked · ${formatBlockReasonLabel(block)}`;
+    }
+    return "blocked";
   }
-  return stateMetaFor(runState).label;
+  if (Object.prototype.hasOwnProperty.call(RUN_STATE_LABELS, runState)) {
+    return RUN_STATE_LABELS[runState]!;
+  }
+  // Invented/unknown: words not identifiers (spaces, not underscores).
+  // Unknown treatment for colour/mark still comes from stateMetaFor on the
+  // attention key; this string is presentation only.
+  return runState.replace(/_/g, " ");
 }
 
 /**
