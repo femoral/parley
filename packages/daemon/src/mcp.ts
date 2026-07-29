@@ -55,10 +55,12 @@ const TOOL_ANNOTATIONS = {
 
 /**
  * Produce a `tools/list` inputSchema for the task's report schema.
- * MCP requires root `type: "object"`; when the stored schema is unusable
- * (boolean, non-object, missing type:object), fall back to the default so
- * registration never crashes. The engine still validates against the stored
- * value via {@link resolveReportSchema}.
+ * MCP requires root `type: "object"`. When the stored schema already has that
+ * root, serve it verbatim (deep-cloned). Otherwise advertise a permissive empty
+ * object `{ type: "object" }` — never the default report schema. Advertising a
+ * shape the engine does not enforce is worse than advertising no shape (weak
+ * children would be constrained to the wrong arguments). The engine still
+ * validates against the stored value via {@link resolveReportSchema}.
  */
 export function advertiseReportInputSchema(schema: JsonSchema): {
   type: "object";
@@ -76,10 +78,8 @@ export function advertiseReportInputSchema(schema: JsonSchema): {
       [key: string]: unknown;
     };
   }
-  return JSON.parse(JSON.stringify(DEFAULT_REPORT_SCHEMA)) as {
-    type: "object";
-    [key: string]: unknown;
-  };
+  // Permissive empty object: satisfies MCP, contradicts no engine rule.
+  return { type: "object" };
 }
 
 /**
@@ -175,6 +175,9 @@ export function buildMcpServer(engine: TaskEngine, taskId: string): McpServer {
   // Advertise real JSON Schemas in tools/list without converting them to Zod
   // (approach B / #270). registerTool above already installed CallTool with
   // loose validation; replacing only ListTools keeps the engine as sole enforcer.
+  // This handler replaces the SDK-generated listing wholesale, so any tool
+  // added via registerTool in future must also be added to this array or it
+  // will not be advertised.
   server.server.setRequestHandler(ListToolsRequestSchema, () => ({
     tools: [
       {

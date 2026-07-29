@@ -286,17 +286,83 @@ describe("MCP tools/list report schema advertisement (#270)", () => {
       const { tools } = await client.listTools();
       const names = tools.map((t) => t.name).sort();
       expect(names).toEqual(["ask_orchestrator", "submit_report"]);
-      // Falls back to a listable object schema rather than crashing.
+      // Falls back to a permissive empty object schema rather than crashing.
       const submit = toolByName(tools, "submit_report");
-      expect(submit.inputSchema.type).toBe("object");
+      expect(submit.inputSchema).toEqual({ type: "object" });
     } finally {
       await close();
     }
   });
 
-  it("advertiseReportInputSchema falls back for non-object roots", () => {
-    const out = advertiseReportInputSchema(false as unknown as JsonSchema);
-    expect(out.type).toBe("object");
-    expect(out.properties).toBeDefined();
+  it("rootless-type stored schema advertises empty object, not the default shape", async () => {
+    // Ajv accepts schemas that omit root type; they must not be replaced with
+    // DEFAULT_REPORT_SCHEMA in tools/list (that would constrain children wrong).
+    const stored = {
+      required: ["x"],
+      properties: { x: { type: "string" } },
+    };
+    const taskId = "t-rootless";
+    const engine = makeEngine(taskId, JSON.stringify(stored));
+    const { client, close } = await connectMcp(engine, taskId);
+    try {
+      const { tools } = await client.listTools();
+      const submit = toolByName(tools, "submit_report");
+      expect(submit.inputSchema).toEqual({ type: "object" });
+      expect(submit.inputSchema).not.toHaveProperty("properties");
+      expect(submit.inputSchema.properties).toBeUndefined();
+      // Must not look like the default report contract.
+      expect(JSON.stringify(submit.inputSchema)).not.toMatch(/summary|outcome|files_changed/);
+
+      const ok = await client.callTool({
+        name: "submit_report",
+        arguments: { x: "hello" },
+      });
+      expect(ok.isError).toBeFalsy();
+      expect((ok.content as { type: string; text: string }[])[0]?.text).toBe(
+        "report accepted",
+      );
+    } finally {
+      await close();
+    }
+  });
+
+  it("rootless-type schema still rejects violations as tool errors", async () => {
+    const stored = {
+      required: ["x"],
+      properties: { x: { type: "string" } },
+    };
+    const taskId = "t-rootless-bad";
+    const engine = makeEngine(taskId, JSON.stringify(stored));
+    const { client, close } = await connectMcp(engine, taskId);
+    try {
+      const bad = await client.callTool({
+        name: "submit_report",
+        arguments: { x: 42 },
+      });
+      expect(bad.isError).toBe(true);
+      const text = (bad.content as { type: string; text: string }[])[0]?.text ?? "";
+      expect(text).toMatch(/report rejected/);
+    } finally {
+      await close();
+    }
+  });
+
+  it("advertiseReportInputSchema falls back to empty object for non-object roots", () => {
+    expect(advertiseReportInputSchema(false as unknown as JsonSchema)).toEqual({
+      type: "object",
+    });
+    expect(advertiseReportInputSchema(null as unknown as JsonSchema)).toEqual({
+      type: "object",
+    });
+    expect(
+      advertiseReportInputSchema([{ type: "string" }] as unknown as JsonSchema),
+    ).toEqual({ type: "object" });
+    // Plain object missing type: "object" — no repair, no default shape.
+    expect(
+      advertiseReportInputSchema({
+        required: ["x"],
+        properties: { x: { type: "string" } },
+      } as JsonSchema),
+    ).toEqual({ type: "object" });
   });
 });
