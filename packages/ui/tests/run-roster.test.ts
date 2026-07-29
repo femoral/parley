@@ -4,16 +4,22 @@
  */
 import { describe, expect, it } from "vitest";
 import type { NodeProjection, RunDetailResponse, RunSummary } from "@useparley/core";
+import type { RunBlock } from "@useparley/core";
 import {
   buildListPipTrack,
   buildPipTrack,
+  formatBlockReasonLabel,
+  formatNodeDuration,
   formatNodeStateLabel,
   formatRunChip,
+  formatRunStateLabel,
   projectInspectorRun,
   projectRosterRun,
   runAttentionState,
 } from "../src/app/hooks/runs.js";
 import { projectRoster, type RosterTaskInput } from "../src/app/hooks/roster.js";
+import { projectChart } from "../src/chart/projectChart.js";
+import { stateMetaFor } from "../src/tokens/state-meta.js";
 
 function summary(partial: Partial<RunSummary> & Pick<RunSummary, "run_id" | "state">): RunSummary {
   return {
@@ -87,6 +93,17 @@ describe("runAttentionState (#254)", () => {
     expect(runAttentionState("failed")).toBe("failed");
     expect(runAttentionState("cancelled")).toBe("cancelled");
     expect(runAttentionState("purged")).toBe("cancelled");
+  });
+
+  it("passes unknown wire states through for unknown treatment (#261)", () => {
+    // Invented daemon-side state must not silently paint as running.
+    expect(runAttentionState("mutinied")).toBe("mutinied");
+    expect(runAttentionState("mutinied")).not.toBe("running");
+    // state-meta's unknown path: uppercased label + neutral colour.
+    const meta = stateMetaFor(runAttentionState("mutinied"));
+    expect(meta.label).toBe("MUTINIED");
+    expect(meta.colorVar).toBe("var(--ink-tan)");
+    expect(meta.label).not.toBe(stateMetaFor("running").label);
   });
 });
 
@@ -259,21 +276,260 @@ describe("projectInspectorRun (#254)", () => {
     expect(view.nodes[2]!.stateLabel).toBe("gate · held");
     expect(view.nodes[2]!.onReject).toBe("funnel");
     expect(view.heldGate).toBe(false); // loop_exhausted, not gate
+    // CLI parenthetical vocabulary — never the wire enum (#261 QC).
+    expect(view.stateLabel).toBe("blocked · loop 2/2");
+    expect(view.stateLabel).not.toMatch(/loop_exhausted/i);
   });
 
   it("STATE is polymorphic: step task projection vs gate verb", () => {
     expect(formatNodeStateLabel(node({ node: "x", iteration: 1, state: "completed" }))).toBe(
-      "completed",
+      "COMPLETED",
     );
     expect(
       formatNodeStateLabel(
         node({ node: "g", iteration: 1, state: "approved", kind: "gate", tasks_total: 0 }),
       ),
-    ).toBe("approved");
+    ).toBe("APPROVED");
     expect(
       formatNodeStateLabel(
         node({ node: "g", iteration: 1, state: "waiting", kind: "gate", tasks_total: 0 }),
       ),
     ).toBe("gate · held");
+  });
+
+  it("awaiting_answer uses the same state-meta label as the roster (#261)", () => {
+    const label = formatNodeStateLabel(
+      node({ node: "review", iteration: 1, state: "awaiting_answer" }),
+    );
+    expect(label).toBe(stateMetaFor("awaiting_answer").label);
+    expect(label).toBe("AWAITING");
+    // Never the raw wire enum (which CSS would render as AWAITING_ANSWER).
+    expect(label).not.toBe("awaiting_answer");
+    expect(label).not.toMatch(/awaiting_answer/i);
+  });
+
+  it("run state labels present CLI vocabulary, never wire enums (#261)", () => {
+    expect(formatRunStateLabel("running", null)).toBe("RUNNING");
+    expect(formatRunStateLabel("completed", null)).toBe("COMPLETED");
+    expect(formatRunStateLabel("failed", null)).toBe("FAILED");
+    expect(formatRunStateLabel("cancelled", null)).toBe("CANCELLED");
+    expect(formatRunStateLabel("purged", null)).toBe("PURGED");
+
+    const loopBlock: RunBlock = {
+      reason: "loop_exhausted",
+      node: "review",
+      iteration: 2,
+      max: 2,
+      detail: "coverage still insufficient",
+      verbs: ["approve", "redirect", "finish"],
+    };
+    expect(formatRunStateLabel("blocked", loopBlock)).toBe("blocked · loop 2/2");
+    expect(formatRunStateLabel("blocked", loopBlock)).not.toMatch(/loop_exhausted/i);
+
+    expect(
+      formatRunStateLabel("blocked", {
+        reason: "gate",
+        node: "accept",
+        iteration: 1,
+        detail: "held",
+        verbs: ["approve", "reject", "redirect", "finish"],
+      }),
+    ).toBe("blocked · gate");
+
+    // Full reason matrix — presented words, not identifiers.
+    const reasons: Array<{ block: RunBlock; presented: string }> = [
+      {
+        block: {
+          reason: "gate",
+          node: "g",
+          iteration: 1,
+          detail: "held",
+          verbs: ["approve", "reject", "redirect", "finish"],
+        },
+        presented: "gate",
+      },
+      {
+        block: {
+          reason: "loop_exhausted",
+          node: "r",
+          iteration: 2,
+          max: 2,
+          detail: null,
+          verbs: ["approve", "redirect", "finish"],
+        },
+        presented: "loop 2/2",
+      },
+      {
+        block: {
+          reason: "success_policy",
+          node: "r",
+          iteration: 1,
+          detail: "blocked (2/3 slots)",
+          verbs: ["approve", "redirect", "finish"],
+        },
+        presented: "2/3 slots",
+      },
+      {
+        block: {
+          reason: "success_policy",
+          node: "r",
+          iteration: 1,
+          detail: "min not met",
+          verbs: ["approve", "redirect", "finish"],
+        },
+        presented: "slots",
+      },
+      {
+        block: {
+          reason: "spawn_error",
+          node: "r",
+          iteration: 1,
+          detail: "spawn failed",
+          verbs: ["redirect", "finish"],
+        },
+        presented: "spawn",
+      },
+      {
+        block: {
+          reason: "unfilled_inputs",
+          node: "r",
+          iteration: 1,
+          detail: "missing port",
+          verbs: ["redirect", "finish"],
+        },
+        presented: "inputs",
+      },
+      {
+        block: {
+          reason: "unknown",
+          node: null,
+          iteration: null,
+          detail: null,
+          verbs: ["finish"],
+        },
+        presented: "unknown",
+      },
+    ];
+    for (const { block, presented } of reasons) {
+      expect(formatBlockReasonLabel(block)).toBe(presented);
+      const label = formatRunStateLabel("blocked", block);
+      expect(label).toBe(`blocked · ${presented}`);
+      // Wire enum must not appear verbatim in presented text.
+      expect(label).not.toMatch(/loop_exhausted|success_policy|spawn_error|unfilled_inputs/i);
+    }
+    // Unclassified block must not read BLOCKED · BLOCKED after CSS uppercase.
+    expect(formatRunStateLabel("blocked", {
+      reason: "unknown",
+      node: null,
+      iteration: null,
+      detail: null,
+      verbs: ["finish"],
+    })).toBe("blocked · unknown");
+    expect(formatRunStateLabel("blocked", {
+      reason: "unknown",
+      node: null,
+      iteration: null,
+      detail: null,
+      verbs: ["finish"],
+    })).not.toMatch(/blocked · blocked/i);
+  });
+
+  it("duration column is duration-only on every path (#261)", () => {
+    expect(formatNodeDuration(42_000)).toBe("<1m");
+    expect(formatNodeDuration(18 * 60_000)).toBe("18m");
+    expect(formatNodeDuration(90 * 60_000)).toBe("1h");
+    expect(formatNodeDuration(null)).toBeNull();
+    // Projection fills age from duration_ms only — no elapsed-since branch.
+    const view = projectInspectorRun({
+      run: summary({ run_id: "r-dur", state: "running" }),
+      block: null,
+      nodes: [
+        node({ node: "scope", iteration: 1, state: "completed", duration_ms: 18 * 60_000 }),
+        node({ node: "search", iteration: 1, state: "running", duration_ms: null }),
+      ],
+    });
+    expect(view.status).toBe("ready");
+    if (view.status !== "ready") throw new Error("expected ready");
+    expect(view.nodes[0]!.age).toBe("18m");
+    expect(view.nodes[1]!.age).toBeNull();
+  });
+
+  it("chart mark captions stay calm when labels come from state-meta (#261 QC)", () => {
+    // End-to-end: inspector projection feeds pre-capped stateMetaFor labels
+    // into projectChart; chart must not shout COMPLETED/RUNNING/etc.
+    const view = projectInspectorRun({
+      run: summary({ run_id: "r-chart-calm", state: "running" }),
+      block: null,
+      nodes: [
+        node({
+          node: "scope",
+          iteration: 1,
+          state: "completed",
+          duration_ms: 18 * 60_000,
+        }),
+        node({
+          node: "search",
+          iteration: 1,
+          state: "running",
+          duration_ms: null,
+        }),
+        node({
+          node: "ask",
+          iteration: 1,
+          state: "awaiting_answer",
+          duration_ms: 5 * 60_000,
+        }),
+        node({
+          node: "fanout",
+          iteration: 1,
+          state: "completed",
+          tasks_total: 3,
+          tasks_settled: 2,
+          fanout: { kind: "data", over: "items", width: 3, failed: [] },
+          duration_ms: 3 * 60_000,
+        }),
+      ],
+    });
+    expect(view.status).toBe("ready");
+    if (view.status !== "ready") throw new Error("expected ready");
+    // Inspector source is pre-capped (CSS uppercases the STATE column).
+    expect(view.nodes[0]!.stateLabel).toBe("COMPLETED");
+    expect(view.nodes[2]!.stateLabel).toBe("AWAITING");
+    expect(view.nodes[3]!.stateLabel).toBe("2 of 3");
+
+    const chart = projectChart(view);
+    expect(chart.status).toBe("ready");
+    if (chart.status !== "ready") throw new Error("expected ready");
+    const byName = Object.fromEntries(chart.marks.map((m) => [m.node, m.meta]));
+    expect(byName.scope).toBe("completed · 18m");
+    expect(byName.search).toBe("running");
+    expect(byName.ask).toBe("awaiting · 5m");
+    expect(byName.fanout).toBe("2 of 3 · 3m");
+    for (const mark of chart.marks) {
+      expect(mark.meta).not.toMatch(/\b(COMPLETED|RUNNING|AWAITING)\b/);
+    }
+    expect(chart.stateLabel).toBe("running");
+  });
+
+  it("unknown run state projects with unknown treatment, not running (#261)", () => {
+    const view = projectRosterRun(summary({ run_id: "r-x", state: "mutinied" }));
+    expect(view.attentionState).toBe("mutinied");
+    expect(view.attentionState).not.toBe("running");
+    // Roster colour/mark still via stateMetaFor on the attention key.
+    expect(stateMetaFor(view.attentionState).label).toBe("MUTINIED");
+    expect(stateMetaFor(view.attentionState).colorVar).toBe("var(--ink-tan)");
+
+    const detail = projectInspectorRun({
+      run: summary({ run_id: "r-x", state: "mutinied" }),
+      block: null,
+      nodes: [],
+    });
+    expect(detail.status).toBe("ready");
+    if (detail.status !== "ready") throw new Error("expected ready");
+    // Header string is presentation words; CSS uppercases for display.
+    // Must not silently claim RUNNING.
+    expect(detail.stateLabel).toBe("mutinied");
+    expect(detail.stateLabel).not.toBe("RUNNING");
+    expect(detail.stateLabel.toLowerCase()).not.toBe("running");
   });
 });

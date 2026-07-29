@@ -627,7 +627,7 @@ describe("fork STATE vocabulary (#255)", () => {
     expect(inhMark?.innerHTML).not.toBe(skMark?.innerHTML);
   });
 
-  it("formatNodeStateLabel keeps inherited / skipped wire words", () => {
+  it("formatNodeStateLabel presents inherited / skipped via state-meta (#261)", () => {
     expect(
       formatNodeStateLabel({
         node: "plan",
@@ -645,7 +645,7 @@ describe("fork STATE vocabulary (#255)", () => {
         deliverables: [],
         gist: "",
       }),
-    ).toBe("inherited");
+    ).toBe("INHERITED");
     expect(
       formatNodeStateLabel({
         node: "approve",
@@ -663,7 +663,7 @@ describe("fork STATE vocabulary (#255)", () => {
         deliverables: [],
         gist: "",
       }),
-    ).toBe("skipped");
+    ).toBe("SKIPPED");
   });
 });
 
