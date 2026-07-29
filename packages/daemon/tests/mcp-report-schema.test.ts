@@ -27,13 +27,23 @@ import type { JsonSchema } from "../src/report.js";
 
 let home: string;
 let db: DatabaseHandle;
+/**
+ * Engines built during a test. Accepting a report arms the post-report
+ * fallback timer; left armed, it fires after `db.close()` and throws
+ * "database is not open" from an unref'd timer, which kills the worker and
+ * takes the rest of its files' tests with it. `killChildren()` is the
+ * daemon's own teardown and disarms exactly those timers.
+ */
+let engines: TaskEngine[];
 
 beforeEach(() => {
   home = fs.mkdtempSync(path.join(os.tmpdir(), "parley-mcp-schema-"));
   db = openDatabase(homePaths(home));
+  engines = [];
 });
 
 afterEach(() => {
+  for (const engine of engines) engine.killChildren();
   try {
     db.close();
   } catch {
@@ -73,7 +83,9 @@ function baseTask(
 function makeEngine(taskId: string, reportSchema: string | null = null): TaskEngine {
   insertTask(db, baseTask(taskId, reportSchema));
   const adapters = new Map<string, VendorAdapter>();
-  return new TaskEngine(db, homePaths(home), adapters);
+  const engine = new TaskEngine(db, homePaths(home), adapters);
+  engines.push(engine);
+  return engine;
 }
 
 /** Connect an MCP client to the real per-task registration. */
