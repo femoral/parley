@@ -331,7 +331,7 @@ describe("Roster pip track a11y + contrast contracts (#260)", () => {
     expect(pip).toMatch(/min-width:\s*4px/);
   });
 
-  it("CSS: selection is border-channel; wash stays at rest (no tint-18)", () => {
+  it("CSS: selection is border + inset rail; wash stays at rest (no tint-18)", () => {
     // Avoid substring match: `.pc-roster__row--selected` also appears inside
     // `.pc-roster__row--run.pc-roster__row--selected`.
     const taskSelectedBlocks = [
@@ -351,6 +351,20 @@ describe("Roster pip track a11y + contrast contracts (#260)", () => {
     expect(runRestBlocks.length).toBeGreaterThan(0);
     const runRest = runRestBlocks[runRestBlocks.length - 1]![1]!;
     const runHover = blockFor(HUD_CSS, ".pc-roster__row--run:hover");
+    const runSelectedHover = blockFor(
+      HUD_CSS,
+      ".pc-roster__row--run.pc-roster__row--selected:hover",
+    );
+    // Lookbehind: bare `.pc-roster__row--selected:hover` must not match the
+    // run-prefixed selector that also ends in that suffix.
+    const taskSelectedHoverBlocks = [
+      ...HUD_CSS.matchAll(
+        /(?<![\w-])\.pc-roster__row--selected:hover\s*\{([^}]+)\}/g,
+      ),
+    ];
+    expect(taskSelectedHoverBlocks.length).toBeGreaterThan(0);
+    const taskSelectedHover =
+      taskSelectedHoverBlocks[taskSelectedHoverBlocks.length - 1]![1]!;
     // Task selected: no wash (matches rest).
     expect(selected).toMatch(/background:\s*none/);
     // Run selected: same tint-06 as rest, not hover's 0.12, not 0.18.
@@ -358,8 +372,19 @@ describe("Roster pip track a11y + contrast contracts (#260)", () => {
     expect(runRest).toMatch(/background:\s*var\(--brass-tint-06\)/);
     expect(runHover).toMatch(/background:\s*var\(--brass-tint-12\)/);
     expect(runSelected).not.toMatch(/--brass-tint-12/);
+    // Selected still responds to hover (was a QC blocker when selected
+    // outranked :hover with no selected:hover rule).
+    expect(runSelectedHover).toMatch(/background:\s*var\(--brass-tint-12\)/);
+    expect(taskSelectedHover).toMatch(/background:\s*var\(--brass-tint-06\)/);
     expect(selected).toMatch(/border-color:\s*var\(--brass-border-selected\)/);
     expect(runSelected).toMatch(/border-color:\s*var\(--brass-border-selected\)/);
+    // Exclusive non-wash channel: inset leading rail (edge weight).
+    expect(selected).toMatch(
+      /box-shadow:\s*inset\s+3px\s+0\s+0\s+0\s+var\(--brass\)/,
+    );
+    expect(runSelected).toMatch(
+      /box-shadow:\s*inset\s+3px\s+0\s+0\s+0\s+var\(--brass\)/,
+    );
     // Token resolves to solid brass, not the old #f0c25a88 alpha.
     const borderSelected = tokenValue("--brass-border-selected");
     expect(borderSelected.toLowerCase()).toBe("#f0c25a");
@@ -460,10 +485,47 @@ describe("Roster pip track a11y + contrast contracts (#260)", () => {
     expect(track?.querySelectorAll(".pc-roster__pip").length).toBe(
       ROSTER_PIP_VISIBLE_CAP,
     );
+    // Sighted cue that the track is aggregated (AT already says "showing N").
+    expect(track?.classList.contains("pc-roster__pips--capped")).toBe(true);
+    expect(track?.querySelector(".pc-roster__pips-cap")).toBeTruthy();
     const option = screen.getByRole("option", { name: /wide-bound/i });
     const desc = document.getElementById(option.getAttribute("aria-describedby")!);
     expect(desc?.textContent).toContain("Progress of 100:");
     expect(desc?.textContent).toContain(`showing ${ROSTER_PIP_VISIBLE_CAP} segments`);
+  });
+
+  it("DOM: track at or below the cap has no aggregation mark", () => {
+    const { container } = render(<RosterPanel {...baseProps()} />);
+    // coding-1 has 5 pips; coding-2 has 4 — both under the cap.
+    for (const track of container.querySelectorAll(".pc-roster__pips")) {
+      expect(track.classList.contains("pc-roster__pips--capped")).toBe(false);
+      expect(track.querySelector(".pc-roster__pips-cap")).toBeNull();
+    }
+  });
+
+  it("CSS: aggregation tick is a quiet fixed-width mark, not a badge", () => {
+    const cap = blockFor(HUD_CSS, ".pc-roster__pips-cap");
+    expect(cap).toMatch(/flex:\s*0\s+0\s+6px/);
+    expect(cap).toMatch(/repeating-linear-gradient/);
+    expect(cap).toMatch(/var\(--brass-border\)/);
+    // Not a pill / badge chrome.
+    expect(cap).not.toMatch(/border-radius:\s*var\(--radius-pill\)/);
+    expect(cap).not.toMatch(/padding:/);
+  });
+
+  it("cap fits worst-case track arithmetic (3-char age + beacon + scrollbar)", () => {
+    // QC-measured narrowest track ≈156.13px. Cap mark 6px + gap 3px leaves
+    // content for pips; min-content of N pips at 4px + 3px gaps must fit.
+    const trackW = 156.13;
+    const capMark = 6;
+    const gap = 3;
+    const pipMin = 4;
+    const n = ROSTER_PIP_VISIBLE_CAP;
+    const minContent = n * pipMin + (n - 1) * gap + gap + capMark;
+    expect(minContent).toBeLessThanOrEqual(trackW);
+    // Uncapped 24 at 4px floor overflows that track (QC blocker).
+    const legacy24 = 24 * pipMin + 23 * gap;
+    expect(legacy24).toBeGreaterThan(trackW);
   });
 });
 

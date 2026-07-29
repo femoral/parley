@@ -217,11 +217,14 @@ const PIP_KIND_LABEL: Record<RosterPip["kind"], string> = {
 
 /**
  * Max pips rendered at `min-width: 4px` + 3px gap without overflowing the
- * roster track. Measured at `--region-roster: 300px` with an age stamp
- * (track ≈194px): floor((194+3)/7) = 28. Cap at 24 for scrollbar / chrome
- * headroom so ink never collapses to 0px (#260 / #269 keep the 4px floor).
+ * roster track. Derived from the **narrowest** real row at
+ * `--region-roster: 300px`: 3-char age (`<1m`/`47h`/`59m`) + attention
+ * beacon + thin scrollbar → track ≈156px. With a 6px aggregation tick +
+ * gap when capped: floor((156 − 9 + 3) / 7) ≈ 21. Cap at 20 for headroom
+ * so the tail is never clipped by `overflow: hidden` (#260 / #269 keep the
+ * 4px floor).
  */
-export const ROSTER_PIP_VISIBLE_CAP = 24;
+export const ROSTER_PIP_VISIBLE_CAP = 20;
 
 const PIP_SEVERITY: Record<RosterPip["kind"], number> = {
   fail: 4,
@@ -286,19 +289,25 @@ export function describePipTrack(pips: RosterPip[]): string {
 function PipTrack({ pips, progressId }: { pips: RosterPip[]; progressId: string }) {
   const label = describePipTrack(pips);
   const visible = visiblePipTrack(pips);
+  const capped = pips.length > ROSTER_PIP_VISIBLE_CAP;
   return (
     <>
       {/* One AT carrier only — description, not also the option name (#260). */}
       <span id={progressId} className="pc-visually-hidden">
         {label}
       </span>
-      <div className="pc-roster__pips" aria-hidden="true">
+      <div
+        className={`pc-roster__pips${capped ? " pc-roster__pips--capped" : ""}`}
+        aria-hidden="true"
+      >
         {visible.map((pip, i) => (
           <span
             key={i}
             className={`pc-roster__pip pc-roster__pip--${pip.kind}`}
           />
         ))}
+        {/* Quiet sighted cue that the bound is aggregated (#260 finding 3). */}
+        {capped ? <span className="pc-roster__pips-cap" /> : null}
       </div>
     </>
   );

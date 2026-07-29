@@ -413,7 +413,7 @@ Plates clip their content (`overflow: hidden`) so the inset frame is never cross
 - **Focus:** 2px Bright Brass outline (the global focus-visible treatment), not a color-shift-only cue.
 
 ### Navigation / Tabs
-- **Style:** Cinzel 700 tracked caps; inactive tabs sit in faint ink, the active tab warms to brass with a brass underline/frame. Selection and hover use alpha tints of brass (`rgba(240,194,90,0.06–0.12)`), never a fill swap. Roster **selection is carried on a solid brass border** (not a third tint stop): the selected wash stays at the row's rest tint so text contrast never drops relative to unselected, while hover may still warm to `0.12` (#260).
+- **Style:** Cinzel 700 tracked caps; inactive tabs sit in faint ink, the active tab warms to brass with a brass underline/frame. Selection and hover use alpha tints of brass (`rgba(240,194,90,0.06–0.12)`), never a fill swap. Roster **selection is carried on a solid brass border plus an inset brass leading rail** (edge weight, not a third tint stop): the selected wash stays at the row's rest tint so text contrast never drops relative to unselected, while hover may still warm a selected row to `0.12` (#260).
 
 ### Scrollports
 - **Style:** thin brass-brown thumb (`--scroll-thumb`) on a `--wash-black-25` track; `scrollbar-width: thin` plus matching `::-webkit-scrollbar` rules so both engines agree.

@@ -395,7 +395,8 @@
 
   /* §4.6 — roster row selection/hover tints (alpha variants of --brass) and
      the beacon flag's glow (alpha of --brass-bright). Rest 0.06 / hover 0.12;
-     selection is carried on the border channel (#260), not a third tint. */
+     selection is carried on solid border + exclusive inset rail (#260), not a
+     third tint — so text contrast never drops vs unselected. */
   --brass-tint-06: rgba(240, 194, 90, 0.06);
   --brass-tint-08: rgba(240, 194, 90, 0.08);
   --brass-tint-12: rgba(240, 194, 90, 0.12);

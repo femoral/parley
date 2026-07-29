@@ -444,10 +444,16 @@
   outline-offset: 1px;
 }
 /* Selected row (#260): wash stays at rest (no third tint) so text contrast
- * never drops vs the unselected row; solid brass border carries selection. */
+ * never drops vs the unselected row. Solid brass border + exclusive inset
+ * leading rail (edge weight, not fill) carry selection so it is findable
+ * against both unselected and hover; hover still warms the wash. */
 .pc-roster__row--selected {
   background: none;
   border-color: var(--brass-border-selected);
+  box-shadow: inset 3px 0 0 0 var(--brass);
+}
+.pc-roster__row--selected:hover {
+  background: var(--brass-tint-06);
 }
 .pc-roster__beacon {
   display: inline-flex;
@@ -3778,12 +3784,16 @@ button.pc-roster__meta--copy:focus-visible {
 .pc-roster__row--run:hover {
   background: var(--brass-tint-12);
 }
-/* Selected keeps rest's tint-06 wash (AC3: no text-contrast drop vs unselected)
- * and brightens the border to solid brass (#260). Differentiated from hover
- * by both wash and border. */
+/* Selected keeps rest's tint-06 wash (AC3: no text-contrast drop vs unselected),
+ * brightens the border to solid brass, and adds the exclusive inset rail
+ * (#260). Hover on a selected run still warms to tint-12. */
 .pc-roster__row--run.pc-roster__row--selected {
   background: var(--brass-tint-06);
   border-color: var(--brass-border-selected);
+  box-shadow: inset 3px 0 0 0 var(--brass);
+}
+.pc-roster__row--run.pc-roster__row--selected:hover {
+  background: var(--brass-tint-12);
 }
 .pc-roster__row--held {
   border-color: var(--state-awaiting_answer);
@@ -3873,8 +3883,9 @@ button.pc-roster__meta--copy:focus-visible {
 
 /* Static pip track — flex children share width; length never follows fan-out.
  * Overflow (#260): JS caps rendered pips at ROSTER_PIP_VISIBLE_CAP (measured
- * for min-width 4px + 3px gap at the 300px roster track). Do not drop
- * min-width below 4px — #269 needs that floor for fail-pip height. */
+ * at the narrowest real row: 3-char age + beacon + thin scrollbar at
+ * --region-roster 300px). Do not drop min-width below 4px — #269 needs that
+ * floor for fail-pip height. */
 .pc-roster__pips {
   display: flex;
   flex-wrap: nowrap;
@@ -3883,6 +3894,7 @@ button.pc-roster__meta--copy:focus-visible {
   width: 100%;
   min-width: 0;
   overflow: hidden;
+  align-items: center;
 }
 .pc-roster__pip {
   height: 5px;
@@ -3890,7 +3902,7 @@ button.pc-roster__meta--copy:focus-visible {
   min-width: 4px;
   border-radius: var(--radius-hairline);
   /* Empty / default: --ink-label clears 3:1 non-text contrast against rest
-   * (tint-06), hover (tint-12), and selected (tint-12) row washes (#260).
+   * (tint-06), hover (tint-12), and selected (same wash as rest) (#260).
    * Prior --progress-track measured ~1.2:1 and made the bound invisible. */
   background: var(--ink-label);
 }
@@ -3908,6 +3920,21 @@ button.pc-roster__meta--copy:focus-visible {
 }
 .pc-roster__pip--empty {
   background: var(--ink-label);
+}
+/* Quiet aggregation tick — sighted cue that the track is capped (AT already
+ * says "showing N segments"). Three brass hairlines; not a badge. */
+.pc-roster__pips-cap {
+  flex: 0 0 6px;
+  width: 6px;
+  height: 5px;
+  margin: 0;
+  border-radius: 0;
+  background: repeating-linear-gradient(
+    90deg,
+    var(--brass-border) 0 1.5px,
+    transparent 1.5px 3px
+  );
+  opacity: 0.9;
 }
 
 /* Inspector run view — CLI node table + spine. */
