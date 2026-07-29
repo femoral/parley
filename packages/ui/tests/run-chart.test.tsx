@@ -276,11 +276,69 @@ describe("RunChart loop-back and sparse decoration (#253)", () => {
     if (model.status !== "ready") return;
     expect(model.decorations).toBe("sparse");
     expect(model.marks).toHaveLength(1);
+    expect(model.marginalia).toEqual([]);
 
     const { container } = render(<RunChart run={run} />);
     expect(container.querySelector(".pc-chart__sheet--sparse")).toBeTruthy();
     // Marginalia are omitted (or hidden) so they cannot overlap the route.
     expect(container.querySelectorAll(".pc-chart-marginalia")).toHaveLength(0);
+  });
+
+  it("marginalia positions come from the projector (viewBox → %), not fixed sheet %", () => {
+    const run = readyRun({
+      nodes: [
+        node({
+          node: "scope",
+          kind: "step",
+          iteration: 1,
+          state: "completed",
+          stateLabel: "completed",
+          spineState: "completed",
+        }),
+        node({
+          node: "search",
+          kind: "step",
+          iteration: 1,
+          state: "completed",
+          stateLabel: "completed",
+          spineState: "completed",
+        }),
+        node({
+          node: "gate",
+          kind: "gate",
+          iteration: 1,
+          state: "waiting",
+          stateLabel: "held",
+          spineState: "awaiting_answer",
+          live: true,
+          onReject: "scope",
+        }),
+      ],
+    });
+    const model = projectChart(run);
+    expect(model.status).toBe("ready");
+    if (model.status !== "ready") return;
+    expect(model.marginalia.length).toBeGreaterThan(0);
+
+    const { container } = render(<RunChart run={run} />);
+    const nodes = container.querySelectorAll(".pc-chart-marginalia");
+    expect(nodes.length).toBe(model.marginalia.length);
+
+    for (const line of model.marginalia) {
+      const el = container.querySelector(
+        `[data-chart-marginalia="${line.key}"]`,
+      ) as HTMLElement | null;
+      expect(el).toBeTruthy();
+      expect(el!.style.left).toBe(`${(line.x / 1000) * 100}%`);
+      expect(el!.style.top).toBe(`${(line.y / model.vbH) * 100}%`);
+      // Must not regress to the pre-#268 fixed sheet percentages.
+      expect(el!.style.left).not.toBe("58%");
+      expect(el!.style.top).not.toBe("14%");
+      expect(el!.getAttribute("aria-hidden")).toBe("true");
+      if (line.tilt) {
+        expect(el!.className).toMatch(/pc-chart-marginalia--tilt/);
+      }
+    }
   });
 });
 

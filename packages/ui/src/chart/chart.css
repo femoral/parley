@@ -414,7 +414,12 @@
   color: var(--ink-chart);
 }
 
-/* Flavor marginalia — IM Fell only when the user need not read it. */
+/*
+ * Flavor marginalia — IM Fell only when the user need not read it.
+ * Position is set inline from the projector (viewBox → % of sheet), never
+ * as fixed sheet-height percentages (#268). Paint below labels (z-index 3);
+ * non-interactive ornament.
+ */
 .pc-chart-marginalia {
   position: absolute;
   font-family: var(--font-flavor);

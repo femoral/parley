@@ -6,15 +6,19 @@
 import { describe, expect, it } from "vitest";
 import {
   anyKeyOverprint,
+  anyMarginaliaOverprint,
   assertLabelClearance,
   destinationRect,
   keyZoneRect,
   loopArc,
   markLabelRects,
   markRingRects,
+  marginaliaRect,
+  placeMarginalia,
   placeMarks,
   projectChart,
   MARK_CLEAR_R,
+  type ChartMark,
 } from "../src/chart/projectChart.js";
 import { inkForNode } from "../src/chart/ink.js";
 import type { InspectorRunNode, InspectorRunReady } from "../src/hud/types.js";
@@ -457,4 +461,143 @@ describe("BL-2 key zone clearance (geometry)", () => {
       ).toBe(false);
     },
   );
+});
+
+/**
+ * #268 — marginalia anchors come from the projector in viewBox units.
+ * Structural box-intersection (not a rendered sample): every placed line
+ * clears mark rings, label boxes, legs, seals, destination, and the key band.
+ */
+describe("marginalia free-region placement (#268)", () => {
+  const NODE_SWEEP = Array.from({ length: 20 }, (_, i) => i + 1);
+
+  it.each(NODE_SWEEP)(
+    "n=%i: every marginalia box clears marks, labels, legs, seals, key",
+    (n) => {
+      const run = readyRun(nodesForCount(n));
+      // Ensure at least one gate for mid counts so seals appear in the sweep.
+      if (n >= 4) {
+        const gate = run.nodes[Math.min(3, n - 1)]!;
+        gate.kind = "gate";
+        gate.state = "completed";
+        gate.stateLabel = "passed";
+        gate.spineState = "completed";
+        gate.onReject = run.nodes[0]!.node;
+      }
+      const model = projectChart(run);
+      expect(model.status).toBe("ready");
+      if (model.status !== "ready") return;
+
+      // Sparse route: projector omits marginalia (same rule as the serpent).
+      if (model.decorations === "sparse") {
+        expect(model.marginalia).toEqual([]);
+        return;
+      }
+
+      const key = keyZoneRect(model.vbH, model.heldGate);
+      const solidObstacles = [
+        ...markRingRects(model.marks),
+        ...markLabelRects(model.marks),
+        destinationRect(model.destination),
+        key,
+      ];
+      const strokes = [...model.legs, ...model.loopBacks];
+
+      for (const line of model.marginalia) {
+        // Anchors are viewBox centres, not CSS sheet-height percentages.
+        expect(line.x).toBeGreaterThan(0);
+        expect(line.x).toBeLessThan(1000);
+        expect(line.y).toBeGreaterThan(0);
+        expect(line.y).toBeLessThan(model.vbH);
+
+        const box = marginaliaRect(line);
+        expect(
+          anyMarginaliaOverprint(box, solidObstacles, strokes),
+          `marginalia ${line.key} overprint at n=${n}: centre=(${line.x.toFixed(1)},${line.y.toFixed(1)}) box=[${box.x.toFixed(0)},${box.y.toFixed(0)} ${box.w}×${box.h}]`,
+        ).toBe(false);
+
+        // Key band explicit (BL-2 / #268): zero intersection with reserved key.
+        expect(
+          anyKeyOverprint(key, [box]),
+          `marginalia ${line.key} enters key zone at n=${n}`,
+        ).toBe(false);
+      }
+
+      // Placed lines do not overlap each other.
+      const boxes = model.marginalia.map(marginaliaRect);
+      for (let i = 0; i < boxes.length; i++) {
+        for (let j = i + 1; j < boxes.length; j++) {
+          expect(
+            anyMarginaliaOverprint(boxes[i]!, [boxes[j]!], []),
+            `marginalia pair overlap n=${n}`,
+          ).toBe(false);
+        }
+      }
+    },
+  );
+
+  it("sparse decoration omits marginalia (reconciled with sparse-route rule)", () => {
+    const model = projectChart(readyRun(nodesForCount(1)));
+    expect(model.status).toBe("ready");
+    if (model.status !== "ready") return;
+    expect(model.decorations).toBe("sparse");
+    expect(model.marginalia).toEqual([]);
+  });
+
+  it("omits marginalia when no free region large enough exists", () => {
+    // Tile the sheet with mark rings + labels so no catalog box can land.
+    const marks: ChartMark[] = [];
+    let k = 0;
+    for (let y = 40; y <= 520; y += 36) {
+      for (let x = 40; x <= 960; x += 48) {
+        marks.push({
+          key: `tile-${k++}`,
+          node: `t${k}`,
+          kind: "step",
+          iteration: 1,
+          ink: "done",
+          glyph: "✓",
+          className: "pc-chart-mark--done",
+          name: "tile",
+          meta: "done",
+          fanoutWidth: null,
+          seal: null,
+          x,
+          y,
+          labelSide: "below",
+          labelWidth: 44,
+          live: false,
+          onReject: null,
+        });
+      }
+    }
+    const placed = placeMarginalia({
+      decorations: "full",
+      marks,
+      legs: [],
+      loopBacks: [],
+      destination: { x: 500, y: 280 },
+      vbH: 560,
+      heldGate: false,
+    });
+    expect(placed).toEqual([]);
+  });
+
+  it("anchors are produced in layout units (not fixed CSS % of sheet height)", () => {
+    const a = projectChart(readyRun(nodesForCount(5)));
+    const b = projectChart(readyRun(nodesForCount(16)));
+    expect(a.status).toBe("ready");
+    expect(b.status).toBe("ready");
+    if (a.status !== "ready" || b.status !== "ready") return;
+    expect(a.marginalia.length).toBeGreaterThan(0);
+    expect(b.marginalia.length).toBeGreaterThan(0);
+    // Different node counts → different free paper → centres move (not a
+    // fixed 14%/22% of sheet height for every chart).
+    const ay = a.marginalia.map((m) => m.y / a.vbH);
+    const by = b.marginalia.map((m) => m.y / b.vbH);
+    const sameFrac =
+      ay.length === by.length &&
+      ay.every((f, i) => Math.abs(f - by[i]!) < 0.005);
+    expect(sameFrac).toBe(false);
+  });
 });
