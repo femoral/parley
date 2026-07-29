@@ -5,13 +5,11 @@
  */
 import { describe, expect, it } from "vitest";
 import {
-  anyKeyOverprint,
   anyMarginaliaOverprint,
   assertLabelClearance,
   chartRowCount,
   destinationRect,
   helmZoneRectForOrnament,
-  keyZoneRect,
   loopArc,
   markLabelRects,
   markRingRects,
@@ -29,6 +27,7 @@ import {
   type ChartMark,
   type ChartReadyModel,
 } from "../src/chart/projectChart.js";
+import * as projectorModule from "../src/chart/projectChart.js";
 import { inkForNode } from "../src/chart/ink.js";
 import type { InspectorRunNode, InspectorRunReady } from "../src/hud/types.js";
 
@@ -433,7 +432,32 @@ describe("chart mark captions calm casing (#261 QC)", () => {
   });
 });
 
-describe("BL-2 key zone clearance (geometry)", () => {
+/**
+ * BL-2 second cue, after #267: the key is no longer a reserved band on the
+ * paper, so there is no reserve left to violate. What replaces the old
+ * clearance assertion is the reason it can never be violated again — the
+ * projector places nothing that the key could collide with, because the key
+ * is not in the projected space at all.
+ *
+ * The rendered counterpart (key box vs. mark ink, in CSS px at real sheet
+ * scales) is in `run-chart.test.tsx`; this file cannot see layout.
+ */
+describe("BL-2 key is off the projected paper (#267)", () => {
+  it("the projector exposes no key or legend reserve", () => {
+    const projector = projectorModule as Record<string, unknown>;
+    for (const gone of [
+      "keyZoneRect",
+      "keyZoneRectForOrnament",
+      "anyKeyOverprint",
+      "legendBandRectForOrnament",
+      "KEY_ZONE_W",
+      "KEY_ZONE_H",
+      "KEY_ZONE_PAD",
+    ]) {
+      expect(projector[gone], `${gone} must not come back — see #267`).toBeUndefined();
+    }
+  });
+
   it.each(
     VIEWPORTS.flatMap((w) =>
       COUNTS.flatMap((n) =>
@@ -441,12 +465,11 @@ describe("BL-2 key zone clearance (geometry)", () => {
       ),
     ),
   )(
-    "viewport %i × n=%i held=%s: key zone clear of marks, seals, destination",
-    (_sheetWidthPx, n, held) => {
+    "viewport %i × n=%i held=%s: no key/legend rect in the ornament obstacle set",
+    (sheetWidthPx, n, held) => {
       const run = readyRun(nodesForCount(n));
       run.heldGate = held;
       if (held && n > 0) {
-        // Ensure a held gate exists so the model carries heldGate truthfully.
         const last = run.nodes[run.nodes.length - 1]!;
         last.kind = "gate";
         last.state = "waiting";
@@ -458,16 +481,50 @@ describe("BL-2 key zone clearance (geometry)", () => {
       expect(model.status).toBe("ready");
       if (model.status !== "ready") return;
 
-      const key = keyZoneRect(model.vbH, model.heldGate);
-      const obstacles = [
-        ...markRingRects(model.marks),
-        ...markLabelRects(model.marks),
-        destinationRect(model.destination),
-      ];
+      const obstacles = ornamentObstacles({
+        marks: model.marks,
+        destination: model.destination,
+        vbH: model.vbH,
+        heldGate: model.heldGate,
+        scale: sheetWidthPx / 1000,
+        sheetWidthPx,
+      });
+      const chromeKeys = obstacles.map((o) => o.key);
+      expect(chromeKeys).not.toContain("chart-key-orn");
+      expect(chromeKeys).not.toContain("legend");
+      // The compass still paints on the paper, so it must still be routed around.
+      expect(chromeKeys).toContain("compass");
+    },
+  );
+});
+
+/**
+ * The top band no longer carries the run title (#267), so it is sized for the
+ * compass and the ring's own radius. Row 0 must still sit inside the paper at
+ * the narrowest sheet: 70 viewBox units × the 0.385 scale floor = 27px against
+ * a painted ring half-height measured at 23px.
+ */
+describe("top band after the title moved to the title block (#267)", () => {
+  it.each(COUNTS)(
+    "n=%i: the painted row-0 ring clears the plot's top edge at the scale floor",
+    (n) => {
+      const model = projectChart(readyRun(nodesForCount(n)));
+      expect(model.status).toBe("ready");
+      if (model.status !== "ready") return;
+
+      const scale = ornamentScaleFloor();
+      // Measured in Chrome at 1081 (the narrowest desktop triptych): the ring
+      // paints 46px across regardless of sheet scale.
+      const paintedRingHalfPx = 23;
+      for (const ring of markRingRects(model.marks)) {
+        expect(ring.y, `ring ${ring.key} above the plot edge`).toBeGreaterThanOrEqual(0);
+      }
+      // Row 0 rides above EDGE_TOP by the serpentine bow; use the placed y.
+      const topRow = Math.min(...model.marks.map((m) => m.y));
       expect(
-        anyKeyOverprint(key, obstacles),
-        `key overprint n=${n} held=${held} key@[${key.x},${key.y} ${key.w}×${key.h}]`,
-      ).toBe(false);
+        topRow * scale,
+        `row-0 centre only ${(topRow * scale).toFixed(1)}px below the plot edge`,
+      ).toBeGreaterThan(paintedRingHalfPx);
     },
   );
 });
@@ -556,7 +613,6 @@ describe("marginalia free-region placement (#268)", () => {
         sheetWidthPx: sheetW,
       });
       const strokes = [...model.legs, ...model.loopBacks];
-      const key = keyZoneRect(model.vbH, model.heldGate);
 
       if (held) {
         expect(
@@ -571,7 +627,6 @@ describe("marginalia free-region placement (#268)", () => {
           anyMarginaliaOverprint(box, obstacles, strokes),
           `marginalia ${line.key} overprint at n=${n} held=${held}`,
         ).toBe(false);
-        expect(anyKeyOverprint(key, [box])).toBe(false);
         if (held) {
           const helm = helmZoneRectForOrnament(model.vbH, scale, sheetW);
           expect(
@@ -772,16 +827,10 @@ describe("marginalia rendered bridge at 1081 desktop (#268)", () => {
     },
   );
 
-  it("legend and compass reserves cover painted CSS boxes at scale floor", () => {
-    // Painted at 1081 (viewBox): legend {57.1, 46.8, 420, 206.5},
-    // compass {714.3, 46.8, 228.6, 228.6} — from QC. Reserves must contain them.
-    const legendPaint = {
-      key: "legend-paint",
-      x: 22 / scale,
-      y: 18 / scale,
-      w: Math.min(320, sheetW * 0.42) / scale,
-      h: 80 / scale,
-    };
+  it("compass reserve covers its painted CSS box at scale floor", () => {
+    // Painted at 1081 (viewBox): compass {714.3, 46.8, 228.6, 228.6} — from QC.
+    // The legend is no longer checked here: it moved off the paper into the
+    // title block (#267), so it is not something ornament can collide with.
     const compassPaint = {
       key: "compass-paint",
       x: (sheetW - 22 - 88) / scale,
@@ -798,19 +847,10 @@ describe("marginalia rendered bridge at 1081 desktop (#268)", () => {
       scale,
       sheetWidthPx: sheetW,
     });
-    const legend = obstacles.find((o) => o.key === "legend")!;
     const compass = obstacles.find((o) => o.key === "compass")!;
-    expect(legend).toBeTruthy();
     expect(compass).toBeTruthy();
+    expect(obstacles.find((o) => o.key === "legend")).toBeUndefined();
     // Reserve (with chrome pad) must fully cover the painted CSS box.
-    expect(legend.x).toBeLessThanOrEqual(legendPaint.x + 0.5);
-    expect(legend.y).toBeLessThanOrEqual(legendPaint.y + 0.5);
-    expect(legend.x + legend.w).toBeGreaterThanOrEqual(
-      legendPaint.x + legendPaint.w - 0.5,
-    );
-    expect(legend.y + legend.h).toBeGreaterThanOrEqual(
-      legendPaint.y + legendPaint.h - 0.5,
-    );
     expect(compass.x).toBeLessThanOrEqual(compassPaint.x + 0.5);
     expect(compass.y).toBeLessThanOrEqual(compassPaint.y + 0.5);
     expect(compass.x + compass.w).toBeGreaterThanOrEqual(

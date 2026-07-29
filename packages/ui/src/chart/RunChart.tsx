@@ -107,6 +107,16 @@ function MarkNode({ mark, vbH }: { mark: ChartMark; vbH: number }) {
   );
 }
 
+/**
+ * The glyph↔ink pairing, as one row of the sheet's title block (#267).
+ *
+ * It lives in the title block — not on the paper the projector places marks
+ * on — so overprint is impossible by construction rather than by a reserved
+ * band, and the key is in the initial scrollport at every sheet scale. The
+ * band reserve it replaced could not hold: the key paints at a fixed 134×87px
+ * while the sheet's scale ranges 0.385–1.224 px per viewBox unit, so a
+ * viewBox-unit reserve is right at exactly one scale and wrong at the rest.
+ */
 function ChartKey() {
   return (
     <div className="pc-chart-key" aria-hidden="true">
@@ -235,13 +245,16 @@ function ReadyChart({ model }: { model: ChartReadyModel }) {
         data-mark-count="0"
         data-decorations="sparse"
       >
-        <header className="pc-chart__legend">
-          <h2 className="pc-chart__title">
-            {model.workflow}
-            <span className="pc-chart__run-id"> · run {model.shortId}</span>
-          </h2>
-          {model.metaLine && <p className="pc-chart__meta-line">{model.metaLine}</p>}
-          {model.flavor && <p className="pc-chart__flavor">{model.flavor}</p>}
+        {/* No marks to key — title block carries the run's name alone. */}
+        <header className="pc-chart__strip">
+          <div className="pc-chart__legend">
+            <h2 className="pc-chart__title">
+              {model.workflow}
+              <span className="pc-chart__run-id"> · run {model.shortId}</span>
+            </h2>
+            {model.metaLine && <p className="pc-chart__meta-line">{model.metaLine}</p>}
+            {model.flavor && <p className="pc-chart__flavor">{model.flavor}</p>}
+          </div>
         </header>
         <div className="pc-chart__empty pc-chart__empty--inline">
           <p className="pc-chart__empty-copy">No nodes entered yet.</p>
@@ -260,8 +273,35 @@ function ReadyChart({ model }: { model: ChartReadyModel }) {
       data-mark-count={markCount}
       data-decorations={model.decorations}
       data-held-gate={model.heldGate ? "true" : undefined}
-      style={{ aspectRatio: `${CHART_VB_W} / ${model.vbH}` }}
     >
+      {/*
+       * Title block — the sheet's engraved header. Everything in it paints in
+       * fixed CSS px and sits in flow *above* the plot, so it can neither
+       * overprint a mark nor be overprinted by one, at any sheet scale (#267).
+       */}
+      <header className="pc-chart__strip">
+        <div className="pc-chart__legend">
+          <h2 className="pc-chart__title">
+            {model.workflow}
+            <span className="pc-chart__run-id"> · run {model.shortId}</span>
+          </h2>
+          {model.metaLine && <p className="pc-chart__meta-line">{model.metaLine}</p>}
+          {model.flavor && <p className="pc-chart__flavor">{model.flavor}</p>}
+        </div>
+        <ChartKey />
+      </header>
+
+      {/*
+       * The plot — the only box the projector addresses. Every mark, leg,
+       * label, seal, destination and marginalia anchor is a percentage of
+       * this box's viewBox, so the aspect ratio lives here and not on the
+       * sheet (which now also carries the title block's fixed px).
+       */}
+      <div
+        className="pc-chart__plot"
+        style={{ aspectRatio: `${CHART_VB_W} / ${model.vbH}` }}
+        data-chart-plot=""
+      >
       <RouteSvg model={model} markerId={`pc-chart-tip-${markerId}`} />
       <CompassRose sparse={model.decorations === "sparse"} />
 
@@ -294,15 +334,6 @@ function ReadyChart({ model }: { model: ChartReadyModel }) {
           </g>
         </svg>
       )}
-
-      <header className="pc-chart__legend">
-        <h2 className="pc-chart__title">
-          {model.workflow}
-          <span className="pc-chart__run-id"> · run {model.shortId}</span>
-        </h2>
-        {model.metaLine && <p className="pc-chart__meta-line">{model.metaLine}</p>}
-        {model.flavor && <p className="pc-chart__flavor">{model.flavor}</p>}
-      </header>
 
       {model.marks.map((mark) => (
         <MarkNode key={mark.key} mark={mark} vbH={model.vbH} />
@@ -341,8 +372,7 @@ function ReadyChart({ model }: { model: ChartReadyModel }) {
           {line.text}
         </div>
       ))}
-
-      <ChartKey />
+      </div>
 
       {model.heldGate && (
         <div className="pc-chart-helm" role="status">

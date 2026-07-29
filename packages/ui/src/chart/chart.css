@@ -50,6 +50,9 @@
   min-width: 100%;
   width: 100%;
   box-sizing: border-box;
+  /* Title block then plot, in flow — the aspect ratio lives on the plot. */
+  display: flex;
+  flex-direction: column;
   container-type: inline-size;
   container-name: chart-sheet;
   color: var(--ink-chart);
@@ -95,6 +98,19 @@
   padding-bottom: 88px;
 }
 
+/*
+ * The plot — the projector's box, and the only one it addresses. Carries the
+ * `aspect-ratio: 1000/vbH` (set inline from the model) so mark percentages
+ * resolve against the same space the viewBox describes. `flex: 0 0 auto`
+ * keeps that ratio exact: the plot must never be stretched to fill leftover
+ * sheet height, or every mark's y drifts off its viewBox coordinate.
+ */
+.pc-chart__plot {
+  position: relative;
+  flex: 0 0 auto;
+  width: 100%;
+}
+
 .pc-chart__svg {
   position: absolute;
   inset: 0;
@@ -133,12 +149,30 @@
 }
 
 /* Map title lettered on the paper — Cinzel chrome, not body prose. */
-.pc-chart__legend {
-  position: absolute;
-  top: 18px;
-  left: 22px;
-  max-width: min(320px, 42%);
+/*
+ * Title block (#267) — the sheet's engraved header: run title on the left,
+ * the state key on the right, hairline rule, plot below.
+ *
+ * Everything here paints in fixed CSS px. It sits in flow above the plot
+ * rather than absolutely over it, which is the whole point: the projector
+ * addresses only the plot, so no reserve arithmetic can be wrong. The band it
+ * replaced was reserved in viewBox units against an assumed scale, and the
+ * sheet's real scale spans 0.385–1.224 px per unit.
+ */
+.pc-chart__strip {
+  position: relative;
   z-index: 2;
+  flex: 0 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 6px 18px;
+  padding: 14px 20px 11px;
+  border-bottom: 1px solid color-mix(in srgb, var(--ink-chart) 20%, transparent);
+}
+.pc-chart__legend {
+  min-width: 0;
 }
 .pc-chart__title {
   margin: 0;
@@ -437,34 +471,25 @@
 }
 
 /*
- * On-paper key — second cue for state inks (BL-2).
- * Bottom-left: the serpentine trail and destination live mid/right; the
- * projector reserves EDGE_BOTTOM so labels never enter this band. Not
- * top-right under the compass — that sat inside row-0 and marks painted over
- * the legend. z-index alone must not "fix" overprint (would bury a mark).
+ * On-paper key — second cue for state inks (BL-2), in the title block (#267).
+ *
+ * Not positioned on the paper at all: it is a row of the sheet's header, so
+ * no mark can paint over it and it cannot fall below the fold on a sheet
+ * taller than its scrollport. It still scrolls with the paper (never
+ * `position: fixed`) and stays `aria-hidden` — every mark carries its own
+ * glyph, so this is a reference, not the cue itself.
+ *
+ * Wraps to two rows when the centre column is narrow; that costs the title
+ * block height, never paper the projector was using.
  */
 .pc-chart-key {
-  position: absolute;
-  left: 18px;
-  right: auto;
-  top: auto;
-  bottom: 14px;
-  border: 1px solid color-mix(in srgb, var(--ink-chart) 28%, transparent);
-  border-radius: var(--radius-tight);
-  padding: 8px 11px;
-  background: color-mix(in srgb, var(--parchment-bg) 66%, var(--wash-white-50));
-  display: grid;
-  gap: 3px;
-  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px 14px;
+  padding-top: 2px;
   pointer-events: none;
-}
-/* Held helm owns the bottom band — park the key just above it. */
-.pc-chart__sheet--held .pc-chart-key {
-  bottom: 100px;
-}
-.pc-chart__sheet--sparse .pc-chart-key {
-  left: 18px;
-  bottom: 14px;
 }
 .pc-chart-key__row {
   display: flex;
