@@ -143,6 +143,83 @@ export interface ChartTextRect {
   h: number;
 }
 
+// --- Sheet scale --------------------------------------------------------------
+
+/**
+ * Cockpit layout tokens that pin the centre-stage sheet width
+ * (mirrors `tokens.css` / `cockpit.css`). Do not hand-copy a scale number —
+ * derive it from these. Enforced by `cockpit-layout-tokens.test.ts` against
+ * the live stylesheets so a token edit either flows through or fails a test.
+ */
+export const COCKPIT_LAYOUT = {
+  /** Narrowest desktop width where the triptych still runs side-by-side. */
+  desktopMinWidthPx: 1081,
+  /** Stacking breakpoint — at and below, rails collapse (`max-width: 1080px`). */
+  stackBreakpointPx: 1080,
+  boardInsetPx: 14, // --board-inset
+  gutterPx: 12, // --gutter
+  regionRosterPx: 300, // --region-roster
+  regionRightPx: 344, // --region-right
+} as const;
+
+/**
+ * Centre-stage content width for a given viewport.
+ *
+ * - **Side-by-side** (above the stack breakpoint): rails keep their token
+ *   widths, so the centre is
+ *   `viewport − 2×inset − roster − right − 2×gutter`.
+ *   At 1081: 1081 − 28 − 300 − 344 − 24 = **385 px**.
+ * - **Stacked** (at and below the breakpoint): rails collapse full-width
+ *   under the centre, so the stage is `viewport − 2×inset`.
+ *   At 320: 320 − 28 = **292 px**.
+ *
+ * The previous clamp-up to `stackBreakpoint + 1` under-reported the real
+ * sheet below ~413px (and over-reported it through the rest of the stacked
+ * band). Mark-geometry assertions need the worst-case scale, so this must
+ * track the layout the CSS actually produces (#272).
+ */
+export function minCentreSheetWidthPx(
+  viewportWidthPx: number = COCKPIT_LAYOUT.desktopMinWidthPx,
+): number {
+  const {
+    boardInsetPx,
+    gutterPx,
+    regionRosterPx,
+    regionRightPx,
+    stackBreakpointPx,
+  } = COCKPIT_LAYOUT;
+  if (viewportWidthPx <= stackBreakpointPx) {
+    // Rails reflow to full width; centre stage is the board minus insets only.
+    return viewportWidthPx - 2 * boardInsetPx;
+  }
+  return (
+    viewportWidthPx -
+    2 * boardInsetPx -
+    regionRosterPx -
+    regionRightPx -
+    2 * gutterPx
+  );
+}
+
+/**
+ * Binding sheet scale: the plot is `aspect-ratio: 1000/vbH` with uniform
+ * scale, so `scale = sheetWidth/1000`. Horizontal is binding; the floor is
+ * the narrowest centre width under consideration over CHART_VB_W.
+ *
+ * Default (narrowest desktop triptych): 385/1000 = **0.385**.
+ * At a 320px stacked viewport: 292/1000 = **0.292**.
+ *
+ * No longer an *ornament* floor — the flavour lines left the paper in #273.
+ * What still needs it is the mark geometry: a ring or a label that clears the
+ * plot's edge at 1.224 can overflow it at 0.385 (or 0.292), and only the
+ * floor proves it clears everywhere.
+ */
+export function sheetScaleFloor(
+  viewportWidthPx: number = COCKPIT_LAYOUT.desktopMinWidthPx,
+): number {
+  return minCentreSheetWidthPx(viewportWidthPx) / CHART_VB_W;
+}
+
 // --- Layout constants (viewBox units) ---------------------------------------
 
 /** Horizontal inset so labels at the first/last mark stay on the sheet. */
@@ -201,8 +278,40 @@ const EDGE_BOTTOM = 170;
 const MIN_PITCH = 130;
 /** Target pitch when the sheet has room (board-1 air). */
 const TARGET_PITCH = 180;
-/** Vertical distance between serpentine row baselines (clears label band). */
-const ROW_PITCH = 170;
+/**
+ * Painted (CSS px) size of the worst-case label stack below a mark centre,
+ * mirrored from `chart.css` (#276):
+ *
+ *   30px  label top offset (seal; step marks use 28)
+ * + 32px  name — two 13px × 1.2 lines (chart.css clamps names to 2 lines)
+ * + 1px   column gap
+ * + 15px  meta — one 11px × 1.3 line (meta clamps to 1 line below the
+ *         narrow-sheet container breakpoint, `chart.css` @container rule)
+ * + 20px  tally chip + its 3px margin, when the mark carries fan-out
+ * ≈ 98px — rounded up from the component sum; measured stacks at the scale
+ * floor run to 95px without a tally.
+ */
+const LABEL_STACK_TIGHT_PX = 98;
+/** Painted ring half-height: 40px ring / 2 + 4.5px halo shadow ring. */
+const RING_HALF_PAINTED_PX = 24.5;
+/** Air between a label stack's last ink and the next row's ring halo. */
+const ROW_AIR_PX = 4;
+/**
+ * Vertical distance between serpentine row baselines.
+ *
+ * Not a free constant: mark labels paint in fixed CSS px while this pitch is
+ * viewBox units, so any hand-picked number is right at exactly one sheet
+ * scale (#276 — the same px↔viewBox bridge class as #267/#268/#272/#275).
+ * Sized so the clamped label stack plus the next row's painted ring clears
+ * at the desktop scale floor. Above the meta-clamp breakpoint the meta may
+ * take a second line (+15px), which the pitch covers because pitch×scale
+ * grows faster than the stack: the extra line needs scale ≥ 0.44 and the
+ * breakpoint sits at 440px (scale 0.44).
+ */
+const ROW_PITCH = Math.ceil(
+  (LABEL_STACK_TIGHT_PX + RING_HALF_PAINTED_PX + ROW_AIR_PX) /
+    sheetScaleFloor(),
+);
 /** Ring + parchment halo radius — legs and arrowheads clear this. */
 export const MARK_CLEAR_R = 28;
 /** Estimated label block height (name + meta + optional tally). */
@@ -360,6 +469,24 @@ const LABEL_BAND_CLEAR =
   MARK_CLEAR_R + LABEL_RING_GAP + LABEL_H + 12;
 
 /**
+ * Distance along a ray from a mark centre to the outside of its label box.
+ *
+ * The band's *vertical* depth is LABEL_BAND_CLEAR; a fixed radial distance
+ * only clears it for near-vertical legs. A diagonal leg (steeper serpentine
+ * rows and below-label destination seats make these common, #276) exits
+ * whichever wall it crosses first: below the band, or sideways past the
+ * widest label box.
+ */
+function labelBandExitR(ux: number, uy: number): number {
+  const vertical = LABEL_BAND_CLEAR / Math.max(Math.abs(uy), 0.01);
+  const horizontal =
+    Math.abs(ux) > 0.01
+      ? (LABEL_W_MAX / 2 + 12) / Math.abs(ux)
+      : Number.POSITIVE_INFINITY;
+  return Math.max(MARK_CLEAR_R, Math.min(vertical, horizontal));
+}
+
+/**
  * Cubic leg between two marks. Terminates outside each ring — and outside
  * the below-label band when the path would otherwise run through it — so
  * the stroke never composites under mark text (B1).
@@ -376,8 +503,8 @@ function cubicLeg(
   const uy = dy / len;
   // If the path leaves a downward into its label band, start past the labels.
   // If it arrives at b from below, end past b's label band.
-  const r0 = uy > 0.2 ? LABEL_BAND_CLEAR : MARK_CLEAR_R;
-  const r1 = uy < -0.2 ? LABEL_BAND_CLEAR : MARK_CLEAR_R;
+  const r0 = uy > 0.2 ? labelBandExitR(ux, uy) : MARK_CLEAR_R;
+  const r1 = uy < -0.2 ? labelBandExitR(ux, uy) : MARK_CLEAR_R;
   const x0 = a.x + ux * r0;
   const y0 = a.y + uy * r0;
   const x1 = b.x - ux * r1;
@@ -531,34 +658,47 @@ export function placeDestination(
   }
   const prefer = { x: preferX, y: last.y };
 
-  // Obstacles: exported ring/label rects. Expand only the *final* mark's ring
-  // and label to painted fixed-px sizes at the scale floor — that is the
-  // disc/caption pair the defect is about. Other marks stay structural so a
-  // dense serpentine still has free paper near the trail end.
+  // Obstacles: exported ring/label rects, every one expanded to painted
+  // fixed-px size at the scale floor. This used to expand only the *final*
+  // mark's pair (#275) so a dense serpentine kept free paper near the trail
+  // end — but the caption then seated on a *neighbour's* painted meta or
+  // ring, which the structural rects under-report by 2–3× at the floor
+  // (#276). Label widths stay structural: the label box is cqw-sized, so its
+  // viewBox width is scale-true already.
+  const paintedR = new Map(
+    marks.map((m) => [
+      m.key,
+      Math.max(m.seal ? 26 : MARK_CLEAR_R, (m.seal ? 23 : 20) / scale),
+    ]),
+  );
   const labelTop = Math.min(MARK_CLEAR_R + LABEL_RING_GAP, 28 / scale);
   const labelBot = Math.max(
     MARK_CLEAR_R + LABEL_RING_GAP + LABEL_H,
     28 / scale + 48 / scale,
   );
+  const byKey = new Map(marks.map((m) => [m.key, m]));
   const obstacles: ChartTextRect[] = [
     ...markRingRects(marks).map((r) => {
-      if (r.key !== `${last.key}:ring`) return r;
+      const key = r.key.replace(/:ring$/, "");
+      const m = byKey.get(key);
+      const pr = m ? paintedR.get(key)! : null;
+      if (!m || pr === null) return r;
       return {
         key: r.key,
-        x: last.x - paintedLastR,
-        y: last.y - paintedLastR,
-        w: paintedLastR * 2,
-        h: paintedLastR * 2,
+        x: m.x - pr,
+        y: m.y - pr,
+        w: pr * 2,
+        h: pr * 2,
       };
     }),
     ...markLabelRects(marks).map((r) => {
-      if (r.key !== last.key) return r;
-      const w = Math.max(r.w, last.labelWidth);
+      const m = byKey.get(r.key);
+      if (!m) return r;
       return {
         key: r.key,
-        x: last.x - w / 2,
-        y: last.y + labelTop,
-        w,
+        x: m.x - r.w / 2,
+        y: m.y + labelTop,
+        w: r.w,
         h: labelBot - labelTop,
       };
     }),
@@ -568,16 +708,23 @@ export function placeDestination(
   // Caption width is handled by the side-by-side gap / vertical offset.
   const minDist = paintedLastR + 22 / scale;
 
+  // ~half of the painted 50px ✕+caption stack — fixed CSS px, like the label
+  // offsets, so every use converts through the scale floor.
+  const destStackHalfPx = 28;
+
   const clears = (p: { x: number; y: number }): boolean => {
     if (Math.hypot(p.x - last.x, p.y - last.y) < minDist) return false;
-    // Structural destinationRect plus pad for the fixed-rem caption stack.
-    const base = destinationRect(p);
+    // The ✕+caption stack paints in fixed px centred on p, so collide its
+    // *painted* box at the scale floor — the structural destinationRect is
+    // ~2.5× too narrow there, and seats it passed still brushed ring edges
+    // with caption ink (#276).
+    const halfH = destStackHalfPx / scale;
     const box: ChartTextRect = {
-      key: base.key,
-      x: base.x - 8,
-      y: base.y - 4,
-      w: base.w + 16,
-      h: base.h + 8,
+      key: "destination",
+      x: p.x - captionHalfVb - 8,
+      y: p.y - halfH - 4,
+      w: captionHalfVb * 2 + 16,
+      h: halfH * 2 + 8,
     };
     return !obstacles.some((o) => rectsOverlap(box, o, 4));
   };
@@ -597,7 +744,6 @@ export function placeDestination(
   // so size the drop at the scale floor (px → viewBox) rather than against
   // the structural DEST_H alone — a structural-only drop still kisses meta
   // at the narrowest desktop triptych.
-  const destStackHalfPx = 28; // ~half of the painted 50px ✕+caption stack
   const dropNeeded =
     labelBot + destStackHalfPx / scale + 16 / scale;
   // Grow the searchable sheet so a below-label seat is not clamped short.
@@ -677,83 +823,6 @@ export function placeDestination(
   }
 
   return ideal;
-}
-
-// --- Sheet scale --------------------------------------------------------------
-
-/**
- * Cockpit layout tokens that pin the centre-stage sheet width
- * (mirrors `tokens.css` / `cockpit.css`). Do not hand-copy a scale number —
- * derive it from these. Enforced by `cockpit-layout-tokens.test.ts` against
- * the live stylesheets so a token edit either flows through or fails a test.
- */
-export const COCKPIT_LAYOUT = {
-  /** Narrowest desktop width where the triptych still runs side-by-side. */
-  desktopMinWidthPx: 1081,
-  /** Stacking breakpoint — at and below, rails collapse (`max-width: 1080px`). */
-  stackBreakpointPx: 1080,
-  boardInsetPx: 14, // --board-inset
-  gutterPx: 12, // --gutter
-  regionRosterPx: 300, // --region-roster
-  regionRightPx: 344, // --region-right
-} as const;
-
-/**
- * Centre-stage content width for a given viewport.
- *
- * - **Side-by-side** (above the stack breakpoint): rails keep their token
- *   widths, so the centre is
- *   `viewport − 2×inset − roster − right − 2×gutter`.
- *   At 1081: 1081 − 28 − 300 − 344 − 24 = **385 px**.
- * - **Stacked** (at and below the breakpoint): rails collapse full-width
- *   under the centre, so the stage is `viewport − 2×inset`.
- *   At 320: 320 − 28 = **292 px**.
- *
- * The previous clamp-up to `stackBreakpoint + 1` under-reported the real
- * sheet below ~413px (and over-reported it through the rest of the stacked
- * band). Mark-geometry assertions need the worst-case scale, so this must
- * track the layout the CSS actually produces (#272).
- */
-export function minCentreSheetWidthPx(
-  viewportWidthPx: number = COCKPIT_LAYOUT.desktopMinWidthPx,
-): number {
-  const {
-    boardInsetPx,
-    gutterPx,
-    regionRosterPx,
-    regionRightPx,
-    stackBreakpointPx,
-  } = COCKPIT_LAYOUT;
-  if (viewportWidthPx <= stackBreakpointPx) {
-    // Rails reflow to full width; centre stage is the board minus insets only.
-    return viewportWidthPx - 2 * boardInsetPx;
-  }
-  return (
-    viewportWidthPx -
-    2 * boardInsetPx -
-    regionRosterPx -
-    regionRightPx -
-    2 * gutterPx
-  );
-}
-
-/**
- * Binding sheet scale: the plot is `aspect-ratio: 1000/vbH` with uniform
- * scale, so `scale = sheetWidth/1000`. Horizontal is binding; the floor is
- * the narrowest centre width under consideration over CHART_VB_W.
- *
- * Default (narrowest desktop triptych): 385/1000 = **0.385**.
- * At a 320px stacked viewport: 292/1000 = **0.292**.
- *
- * No longer an *ornament* floor — the flavour lines left the paper in #273.
- * What still needs it is the mark geometry: a ring or a label that clears the
- * plot's edge at 1.224 can overflow it at 0.385 (or 0.292), and only the
- * floor proves it clears everywhere.
- */
-export function sheetScaleFloor(
-  viewportWidthPx: number = COCKPIT_LAYOUT.desktopMinWidthPx,
-): number {
-  return minCentreSheetWidthPx(viewportWidthPx) / CHART_VB_W;
 }
 
 // --- Flavour marginalia (#273) ----------------------------------------------
