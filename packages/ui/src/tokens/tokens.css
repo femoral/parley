@@ -394,12 +394,16 @@
   );
 
   /* §4.6 — roster row selection/hover tints (alpha variants of --brass) and
-     the beacon flag's glow (alpha of --brass-bright) */
+     the beacon flag's glow (alpha of --brass-bright). Rest 0.06 / hover 0.12;
+     selection is carried on solid border + exclusive inset rail (#260), not a
+     third tint — so text contrast never drops vs unselected. */
   --brass-tint-06: rgba(240, 194, 90, 0.06);
   --brass-tint-08: rgba(240, 194, 90, 0.08);
   --brass-tint-12: rgba(240, 194, 90, 0.12);
   --brass-tint-25: rgba(240, 194, 90, 0.25);
-  --brass-border-selected: #f0c25a88;
+  /* Selected border: full brass (not alpha) so selection never dims the edge
+     relative to the unselected `--brass-border` (#260). */
+  --brass-border-selected: var(--brass);
   --beacon-glow: rgba(255, 207, 77, 0.6);
   /* Coral twin of --beacon-glow for fresh failed rows (--state-failed #ff7a6b). */
   --beacon-glow-failed: rgba(255, 122, 107, 0.6);

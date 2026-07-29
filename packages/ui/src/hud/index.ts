@@ -24,7 +24,13 @@ export { LogStream } from "./LogStream.js";
 export type { LogStreamProps } from "./LogStream.js";
 export { ReportPanel } from "./ReportPanel.js";
 export type { ReportPanelProps } from "./ReportPanel.js";
-export { RosterPanel, delegateScaffold } from "./RosterPanel.js";
+export {
+  RosterPanel,
+  delegateScaffold,
+  describePipTrack,
+  visiblePipTrack,
+  ROSTER_PIP_VISIBLE_CAP,
+} from "./RosterPanel.js";
 export type { RosterPanelProps, RosterSearchHandle } from "./RosterPanel.js";
 export { SettingsBar } from "./SettingsBar.js";
 export type { SettingsBarProps } from "./SettingsBar.js";
