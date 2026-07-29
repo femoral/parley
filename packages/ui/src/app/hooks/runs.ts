@@ -13,6 +13,7 @@ import type {
   RunBlock,
   RunDetailResponse,
   RunSummary,
+  RunTrackNode,
 } from "@useparley/core";
 import { formatStepAddress } from "@useparley/core";
 import type {
@@ -86,8 +87,14 @@ export function formatRunChip(opts: {
   }
 }
 
+/** Fields needed to map a node row onto a roster pip kind. */
+export type PipSourceNode = Pick<
+  NodeProjection,
+  "kind" | "state" | "tasks_settled" | "tasks_total"
+> | RunTrackNode;
+
 /** Map a node projection STATE onto a pip kind. */
-export function pipKindForNode(node: NodeProjection): RosterPipKind {
+export function pipKindForNode(node: PipSourceNode): RosterPipKind {
   if (node.kind === "gate") {
     if (node.state === "waiting") return "gate";
     if (node.state === "skipped") return "done";
@@ -117,7 +124,7 @@ export function pipKindForNode(node: NodeProjection): RosterPipKind {
  * when known; otherwise the entered node count. Never grows with fan-out width.
  */
 export function buildPipTrack(
-  nodes: readonly NodeProjection[],
+  nodes: readonly PipSourceNode[],
   trackBound: number | null | undefined,
 ): RosterPip[] {
   const bound =
@@ -221,18 +228,28 @@ function runMetaLine(summary: RunSummary): string {
 }
 
 /**
- * Project a list envelope (+ optional detail nodes) into a roster run row.
- * `pips` come from the detail node table when present so length stays fan-out free.
+ * Project a list envelope into a roster run row (#254 / #262).
+ *
+ * Pip source priority:
+ * 1. List `track` when present — resting appearance needs no detail fetch.
+ * 2. Optional detail nodes (selected-run path / tests) for identical mapping.
+ * 3. `buildListPipTrack` when the definition is unresolvable (no track_bound).
+ *
+ * An unresolvable bound never falls back to requiring a detail fetch (#262).
  */
 export function projectRosterRun(
   summary: RunSummary,
   detailNodes?: readonly NodeProjection[] | null,
 ): RosterRun {
   const heldGate = summary.state === "blocked" && isHeldGate(summary.block);
-  const pips =
-    detailNodes != null
-      ? buildPipTrack(detailNodes, summary.track_bound)
-      : buildListPipTrack(summary);
+  let pips: RosterPip[];
+  if (summary.track != null) {
+    pips = buildPipTrack(summary.track, summary.track_bound);
+  } else if (detailNodes != null) {
+    pips = buildPipTrack(detailNodes, summary.track_bound);
+  } else {
+    pips = buildListPipTrack(summary);
+  }
   return {
     id: summary.run_id,
     name: summary.workflow,

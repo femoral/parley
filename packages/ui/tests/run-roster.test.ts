@@ -533,3 +533,103 @@ describe("projectInspectorRun (#254)", () => {
     expect(detail.stateLabel.toLowerCase()).not.toBe("running");
   });
 });
+
+describe("roster track from list projection (#262)", () => {
+  it("list track yields the same pips as detail nodes (no detail required)", () => {
+    const nodes = [
+      node({ node: "scope", iteration: 1, state: "completed" }),
+      node({
+        node: "search",
+        iteration: 1,
+        state: "completed",
+        tasks_total: 12,
+        tasks_settled: 12,
+      }),
+      node({ node: "funnel", iteration: 1, state: "running" }),
+    ];
+    const track = nodes.map((n) => ({
+      kind: n.kind,
+      state: n.state,
+      tasks_settled: n.tasks_settled,
+      tasks_total: n.tasks_total,
+    }));
+    const fromList = projectRosterRun(
+      summary({
+        run_id: "r-list",
+        state: "running",
+        track_bound: 10,
+        track,
+        iteration: 1,
+        current_node: "funnel",
+      }),
+    );
+    const fromDetail = projectRosterRun(
+      summary({
+        run_id: "r-list",
+        state: "running",
+        track_bound: 10,
+        track: undefined,
+        iteration: 1,
+        current_node: "funnel",
+      }),
+      nodes,
+    );
+    expect(fromList.pips).toEqual(fromDetail.pips);
+    expect(fromList.pips).toHaveLength(10);
+    expect(fromList.pips[0]!.kind).toBe("done");
+    expect(fromList.pips[1]!.kind).toBe("done");
+    expect(fromList.pips[2]!.kind).toBe("live");
+    expect(fromList.pips.slice(3).every((p) => p.kind === "empty")).toBe(true);
+  });
+
+  it("unresolvable track_bound degrades to list fallback without detail nodes", () => {
+    // No track, no track_bound, no detail — same as today's list-only path.
+    const row = projectRosterRun(
+      summary({
+        run_id: "r-orphan",
+        state: "running",
+        track_bound: null,
+        track: null,
+        iteration: 1,
+        current_node: "scope",
+      }),
+    );
+    expect(row.pips).toEqual(
+      buildListPipTrack(
+        summary({
+          run_id: "r-orphan",
+          state: "running",
+          track_bound: null,
+          track: null,
+          iteration: 1,
+          current_node: "scope",
+        }),
+      ),
+    );
+    // Bound of 1 empty/live degrade — not a detail-derived multi-node track.
+    expect(row.pips).toHaveLength(1);
+  });
+
+  it("list track is preferred over detail nodes when both are present", () => {
+    const listTrack = [
+      { kind: "step" as const, state: "completed", tasks_settled: 1, tasks_total: 1 },
+      { kind: "step" as const, state: "running", tasks_settled: 0, tasks_total: 1 },
+    ];
+    const detailOnly = [
+      node({ node: "a", iteration: 1, state: "failed" }),
+    ];
+    const row = projectRosterRun(
+      summary({
+        run_id: "r-prefer",
+        state: "running",
+        track_bound: 4,
+        track: listTrack,
+      }),
+      detailOnly,
+    );
+    // List track wins — first pip done, second live, not fail-from-detail.
+    expect(row.pips[0]!.kind).toBe("done");
+    expect(row.pips[1]!.kind).toBe("live");
+    expect(row.pips.some((p) => p.kind === "fail")).toBe(false);
+  });
+});
