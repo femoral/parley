@@ -469,20 +469,34 @@
  * as fixed sheet-height percentages (#268). Paint below labels (z-index 3);
  * non-interactive ornament.
  */
+/*
+ * Foot band (#273) — the sheet's colophon: atmosphere at the bottom margin,
+ * mirroring the title block at the head.
+ *
+ * In flow, in fixed CSS px, below the plot. Nothing here is addressed by the
+ * projector, so no reserve, no assumed sheet scale, and no possibility of
+ * painting on a mark — the same reasoning that moved the run title and the
+ * state key off the paper in #267.
+ */
+.pc-chart__footnote {
+  position: relative;
+  z-index: 2;
+  flex: 0 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 18px;
+  padding: 7px 18px 8px;
+  border-top: 1px solid color-mix(in srgb, var(--ink-chart) 14%, transparent);
+}
 .pc-chart-marginalia {
-  position: absolute;
   font-family: var(--font-flavor);
   font-style: italic;
   font-size: var(--text-flavor);
   color: var(--ink-chart);
-  transform: translate(-50%, -50%);
-  white-space: nowrap;
-  z-index: 1;
+  /* Quieter than the title block's flavour clause — this is the room tone. */
+  opacity: 0.62;
   pointer-events: none;
-  opacity: 0.72;
-}
-.pc-chart-marginalia--tilt {
-  transform: translate(-50%, -50%) rotate(-6deg);
 }
 
 /*

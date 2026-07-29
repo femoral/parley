@@ -361,26 +361,29 @@ function ReadyChart({ model }: { model: ChartReadyModel }) {
         <div className="pc-chart-spot__label">the run ends here</div>
       </div>
 
-      {/* Marginalia centres come from the projector in viewBox units (#268). */}
-      {model.marginalia.map((line) => (
-        <div
-          key={line.key}
-          className={
-            line.tilt
-              ? "pc-chart-marginalia pc-chart-marginalia--tilt"
-              : "pc-chart-marginalia"
-          }
-          style={{
-            left: `${(line.x / CHART_VB_W) * 100}%`,
-            top: `${(line.y / model.vbH) * 100}%`,
-          }}
-          data-chart-marginalia={line.key}
-          aria-hidden="true"
-        >
-          {line.text}
-        </div>
-      ))}
       </div>
+
+      {/*
+       * Foot band — the sheet's colophon (#273). Flavour lines used to be
+       * placed on the paper by a free-region search; keeping them clear of
+       * marks cost a reserve denominated in a sheet scale the projector
+       * cannot know, and suppressed the ornament on most charts. Down here
+       * they are in flow, in fixed CSS px, with nothing to avoid. The paper
+       * above stays clear.
+       */}
+      {model.marginalia.length > 0 && (
+        <footer className="pc-chart__footnote" aria-hidden="true">
+          {model.marginalia.map((line) => (
+            <span
+              key={line.key}
+              className="pc-chart-marginalia"
+              data-chart-marginalia={line.key}
+            >
+              {line.text}
+            </span>
+          ))}
+        </footer>
+      )}
 
       {model.heldGate && (
         <div className="pc-chart-helm" role="status">
