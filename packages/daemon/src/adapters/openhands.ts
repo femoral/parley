@@ -1,5 +1,6 @@
 import path from "node:path";
 import type {
+  AdapterEnforcement,
   HubInfo,
   MaterializedFile,
   SpawnPlan,
@@ -7,7 +8,15 @@ import type {
   VendorAdapter,
   VendorEvent,
 } from "./types.js";
-import { VENDOR_DIAG_PREFIX } from "./types.js";
+import { VENDOR_DIAG_PREFIX, withPostureDiagnostics } from "./types.js";
+
+/** OpenHands CLI: soft worktree affinity only; no real sandbox/network (#279). */
+const OPENHANDS_ENFORCEMENT: AdapterEnforcement = {
+  "read-only": { level: "none", via: "no CLI sandbox matrix" },
+  workspace: { level: "approximate", via: "OPENHANDS_WORK_DIR soft worktree affinity" },
+  full: { level: "enforced", via: "host-local workspace; unrestricted as requested" },
+  "network:false": { level: "none", via: "no network-off lever" },
+};
 
 /**
  * The `openhands` vendor adapter — real delegation to OpenHands CLI (`openhands`
@@ -269,9 +278,10 @@ export function createOpenhandsAdapter(env: NodeJS.ProcessEnv = process.env): Ve
     };
   }
 
-  return {
+  return withPostureDiagnostics({
     id: "openhands",
     childChannel: "mcp",
+    enforcement: OPENHANDS_ENFORCEMENT,
 
     prepare(task, hub): Promise<SpawnPlan> {
       return Promise.resolve(planFor(task, hub, undefined));
@@ -401,7 +411,7 @@ export function createOpenhandsAdapter(env: NodeJS.ProcessEnv = process.env): Ve
 
     // listModels omitted: no CLI enumeration command (research §7); only a static
     // SDK VERIFIED_MODELS allowlist, not a live probe.
-  };
+  });
 }
 
 /** Exported for tests asserting the SDK MCP tool-timeout ceiling (#107). */

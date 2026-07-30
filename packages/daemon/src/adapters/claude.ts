@@ -1,4 +1,5 @@
 import type {
+  AdapterEnforcement,
   HubInfo,
   MaterializedFile,
   SandboxMode,
@@ -7,7 +8,7 @@ import type {
   VendorAdapter,
   VendorEvent,
 } from "./types.js";
-import { VENDOR_DIAG_PREFIX } from "./types.js";
+import { VENDOR_DIAG_PREFIX, withPostureDiagnostics } from "./types.js";
 
 /**
  * The `claude` vendor adapter — real delegation to Claude Code (`claude` binary,
@@ -255,6 +256,16 @@ function parseAssistantContent(content: unknown): VendorEvent[] {
   return events;
 }
 
+const CLAUDE_ENFORCEMENT: AdapterEnforcement = {
+  "read-only": { level: "approximate", via: "permission-mode dontAsk + tool allowlist" },
+  workspace: { level: "approximate", via: "permission-mode acceptEdits + tool allowlist" },
+  full: { level: "enforced", via: "bypassPermissions" },
+  "network:false": {
+    level: "approximate",
+    via: "Bash sandbox settings when not full; MCP path may bypass",
+  },
+};
+
 export function createClaudeAdapter(env: NodeJS.ProcessEnv = process.env): VendorAdapter {
   const bin = env.PARLEY_CLAUDE_BIN ?? DEFAULT_CLAUDE_BIN;
 
@@ -321,9 +332,10 @@ export function createClaudeAdapter(env: NodeJS.ProcessEnv = process.env): Vendo
     return argv;
   }
 
-  return {
+  return withPostureDiagnostics({
     id: "claude",
     childChannel: "mcp",
+    enforcement: CLAUDE_ENFORCEMENT,
 
     prepare(task, hub): Promise<SpawnPlan> {
       // Fresh single-turn run (research §2 / §9): `claude -p <prompt> …`.
@@ -461,5 +473,5 @@ export function createClaudeAdapter(env: NodeJS.ProcessEnv = process.env): Vendo
     // The informal `claude -p "/model" --output-format json` text probe is
     // unpinned and may drift; catalog stays hand-editable until a stable probe
     // exists.
-  };
+  });
 }

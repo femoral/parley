@@ -1,4 +1,5 @@
 import type {
+  AdapterEnforcement,
   HubInfo,
   ModelEntry,
   ProbedModels,
@@ -8,7 +9,7 @@ import type {
   VendorEvent,
   VendorModels,
 } from "./types.js";
-import { VENDOR_DIAG_PREFIX } from "./types.js";
+import { VENDOR_DIAG_PREFIX, withPostureDiagnostics } from "./types.js";
 import { runProbe } from "./probe.js";
 
 /**
@@ -318,12 +319,23 @@ export function parseKiloModels(text: string): ModelEntry[] {
   return entries;
 }
 
+const KILO_ENFORCEMENT: AdapterEnforcement = {
+  "read-only": { level: "approximate", via: "restrictive permissions + optional OS sandbox object" },
+  workspace: { level: "none", via: "sandbox disabled so git commits + hub MCP work" },
+  full: { level: "enforced", via: "sandbox disabled (unrestricted)" },
+  "network:false": {
+    level: "approximate",
+    via: "sandbox.network=deny (also blocks hub MCP)",
+  },
+};
+
 export function createKiloAdapter(env: NodeJS.ProcessEnv = process.env): VendorAdapter {
   const bin = env.PARLEY_KILO_BIN ?? DEFAULT_KILO_BIN;
 
-  return {
+  return withPostureDiagnostics({
     id: "kilo",
     childChannel: "mcp",
+    enforcement: KILO_ENFORCEMENT,
 
     prepare(task, hub): Promise<SpawnPlan> {
       // Fresh headless one-shot: `kilo run --format json --auto --dir <cwd> …`
@@ -474,5 +486,5 @@ export function createKiloAdapter(env: NodeJS.ProcessEnv = process.env): VendorA
       const stdout = await runProbe(bin, ["models"]);
       return { source: MODELS_SOURCE, models: parseKiloModels(stdout) };
     },
-  };
+  });
 }

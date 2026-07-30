@@ -10,8 +10,10 @@
 import type { ProbedModels, VendorModels } from "./models.js";
 
 /**
- * Filesystem sandbox posture (spec §8, ADR-0006). Normalized across vendors;
+ * Filesystem sandbox posture (ADR-0006 / #279). Normalized across vendors;
  * each adapter maps it to the vendor's own mechanism (codex flags, grok env).
+ * Enforcement fidelity is declared on {@link VendorAdapter.enforcement} — the
+ * flag surface is portable; real isolation is not.
  */
 export type SandboxMode = "read-only" | "workspace" | "full";
 
@@ -25,6 +27,56 @@ export const DEFAULT_NETWORK = true;
 /** True when `value` is one of the three normalized sandbox modes. */
 export function isSandboxMode(value: string): value is SandboxMode {
   return (SANDBOX_MODES as readonly string[]).includes(value);
+}
+
+/**
+ * How faithfully an adapter enforces one posture dimension (#279).
+ *
+ * - `enforced` — real OS/CLI mechanism (or intentional unrestricted `full`)
+ * - `approximate` — soft affinity / best-effort lever (say which in `via`)
+ * - `none` — flag accepted; nothing real happens
+ * - `refused` — prepare throws rather than under-isolate (e.g. #107, #247 host probe)
+ */
+export type EnforcementLevel = "enforced" | "approximate" | "none" | "refused";
+
+/** One cell of an adapter's posture-enforcement declaration. */
+export interface EnforcementCell {
+  level: EnforcementLevel;
+  /**
+   * Mechanism (`bubblewrap`, `--plan`, permission allowlist) or residual
+   * explanation when the level is not a hard OS guarantee.
+   */
+  via?: string;
+}
+
+/**
+ * Per-adapter declaration of what each posture request actually gets (#279).
+ * Required on every {@link VendorAdapter} so a future adapter cannot skip it.
+ * Dimensions: sandbox `read-only` / `workspace` / `full` and `network:false`.
+ */
+export interface AdapterEnforcement {
+  "read-only": EnforcementCell;
+  workspace: EnforcementCell;
+  full: EnforcementCell;
+  "network:false": EnforcementCell;
+}
+
+/** Dimensions of {@link AdapterEnforcement}, in matrix-column order. */
+export const ENFORCEMENT_DIMENSIONS = [
+  "read-only",
+  "workspace",
+  "full",
+  "network:false",
+] as const satisfies readonly (keyof AdapterEnforcement)[];
+
+/** True when a posture request is accepted but not fully enforced. */
+export function isWeakEnforcement(level: EnforcementLevel): boolean {
+  return level === "approximate" || level === "none";
+}
+
+/** Compact cell text for docs / `parley info` (e.g. `approximate (--plan)`). */
+export function formatEnforcementCell(cell: EnforcementCell): string {
+  return cell.via ? `${cell.level} (${cell.via})` : cell.level;
 }
 
 /**
@@ -45,8 +97,8 @@ export function isChildChannel(value: string): value is ChildChannel {
 
 /**
  * The child's sandbox posture — the caller's normalized answer to "what may
- * this child touch" (spec §8). Delivered to adapters via `TaskSpec`; vendor
- * mapping (ADR-0006 matrix) belongs to each adapter.
+ * this child touch" (ADR-0006 / #279). Delivered to adapters via `TaskSpec`;
+ * vendor mapping and enforcement fidelity belong to each adapter's declaration.
  */
 export interface Posture {
   sandbox: SandboxMode;
@@ -66,7 +118,7 @@ export interface TaskSpec {
   effort: string | null;
   /** Working directory the child runs in (worktrees arrive in a later ticket). */
   cwd: string;
-  /** Normalized sandbox posture (spec §8); adapters map it to vendor mechanisms. */
+  /** Normalized sandbox posture (ADR-0006); adapters map it to vendor mechanisms. */
   sandbox: SandboxMode;
   /** Whether the child may reach the network (ADR-0006 default: on). */
   network: boolean;
@@ -193,6 +245,12 @@ export interface VendorAdapter {
    */
   childChannel: ChildChannel;
   /**
+   * Declared posture enforcement fidelity (#279). Required so every adapter
+   * states honestly what `sandbox` / `network:false` requests actually get.
+   * Sourced by `parley info`, the README matrix, and prepare-time diagnostics.
+   */
+  enforcement: AdapterEnforcement;
+  /**
    * Adapter-known default model when neither the request nor a profile names
    * one (#154). Optional — most adapters leave this unset so model stays null
    * rather than fabricating a guess.
@@ -223,4 +281,76 @@ export interface VendorAdapter {
    * for discovery; spawn is gated by the vendor allowlist (#185 / ADR-0014).
    */
   listModels?(existing: VendorModels | undefined): Promise<ProbedModels>;
+}
+
+/**
+ * Prepare-time PARLEY-DIAG lines when the requested posture is only
+ * approximate/none for this adapter (#279). Does not cover `refused` — those
+ * hard-fail in prepare before spawn. Never throws; diagnostics never block.
+ *
+ * `sandbox: "full"` is structurally exempt from the sandbox-dimension
+ * diagnostic: full requests *no* isolation, so it cannot be under-enforced
+ * even if a declaration mis-labels the cell.
+ */
+export function formatPostureGapDiagnostics(
+  adapterId: string,
+  enforcement: AdapterEnforcement,
+  posture: { sandbox: SandboxMode; network: boolean },
+): string[] {
+  const out: string[] = [];
+  // full = unrestricted access requested; never warn on the sandbox axis.
+  if (posture.sandbox !== "full") {
+    const sand = enforcement[posture.sandbox];
+    if (isWeakEnforcement(sand.level)) {
+      const via = sand.via ? ` (${sand.via})` : "";
+      out.push(
+        `${VENDOR_DIAG_PREFIX} posture: ${adapterId} sandbox=${posture.sandbox} → ${sand.level}${via}; flag accepted but not fully enforced`,
+      );
+    }
+  }
+  if (!posture.network) {
+    const net = enforcement["network:false"];
+    if (isWeakEnforcement(net.level)) {
+      const via = net.via ? ` (${net.via})` : "";
+      out.push(
+        `${VENDOR_DIAG_PREFIX} posture: ${adapterId} network=false → ${net.level}${via}; flag accepted but not fully enforced`,
+      );
+    }
+  }
+  return out;
+}
+
+/**
+ * Merge posture-gap diagnostics into a {@link SpawnPlan} (prepare/resume).
+ * Fail-open: never blocks spawn.
+ */
+export function mergePostureDiagnostics(
+  adapterId: string,
+  enforcement: AdapterEnforcement,
+  task: { sandbox: SandboxMode; network: boolean },
+  plan: SpawnPlan,
+): SpawnPlan {
+  const gaps = formatPostureGapDiagnostics(adapterId, enforcement, task);
+  if (gaps.length === 0) return plan;
+  return { ...plan, diagnostics: [...(plan.diagnostics ?? []), ...gaps] };
+}
+
+/**
+ * Wrap prepare/resume so every spawn path emits posture-gap diagnostics (#279).
+ * Prefer this (or {@link mergePostureDiagnostics}) over engine-side injection.
+ */
+export function withPostureDiagnostics(adapter: VendorAdapter): VendorAdapter {
+  return {
+    ...adapter,
+    prepare(task, hub) {
+      return Promise.resolve(adapter.prepare(task, hub)).then((plan) =>
+        mergePostureDiagnostics(adapter.id, adapter.enforcement, task, plan),
+      );
+    },
+    resume(task, hub) {
+      return Promise.resolve(adapter.resume(task, hub)).then((plan) =>
+        mergePostureDiagnostics(adapter.id, adapter.enforcement, task, plan),
+      );
+    },
+  };
 }

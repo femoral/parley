@@ -1,5 +1,6 @@
 import path from "node:path";
 import type {
+  AdapterEnforcement,
   HubInfo,
   MaterializedFile,
   SandboxMode,
@@ -8,7 +9,7 @@ import type {
   VendorAdapter,
   VendorEvent,
 } from "./types.js";
-import { VENDOR_DIAG_PREFIX } from "./types.js";
+import { VENDOR_DIAG_PREFIX, withPostureDiagnostics } from "./types.js";
 
 /**
  * The `goose` vendor adapter — real delegation to Block/AAIF goose (`goose`
@@ -251,6 +252,13 @@ function effortEnv(effort: string | null): Record<string, string> {
   return { CLAUDE_THINKING_TYPE: effort };
 }
 
+const GOOSE_ENFORCEMENT: AdapterEnforcement = {
+  "read-only": { level: "approximate", via: "GOOSE_MODE=chat (no tools / file mods)" },
+  workspace: { level: "none", via: "GOOSE_MODE=auto; no OS sandbox" },
+  full: { level: "enforced", via: "GOOSE_MODE=auto (unrestricted as requested)" },
+  "network:false": { level: "none", via: "no native network toggle" },
+};
+
 export function createGooseAdapter(env: NodeJS.ProcessEnv = process.env): VendorAdapter {
   const bin = env.PARLEY_GOOSE_BIN ?? DEFAULT_GOOSE_BIN;
 
@@ -303,9 +311,10 @@ export function createGooseAdapter(env: NodeJS.ProcessEnv = process.env): Vendor
     return flags;
   }
 
-  return {
+  return withPostureDiagnostics({
     id: "goose",
     childChannel: "mcp",
+    enforcement: GOOSE_ENFORCEMENT,
 
     prepare(task, hub): Promise<SpawnPlan> {
       // Fresh headless one-shot: `goose run --output-format stream-json … -t`.
@@ -530,5 +539,5 @@ export function createGooseAdapter(env: NodeJS.ProcessEnv = process.env): Vendor
     },
 
     // listModels omitted — no stable cloud catalog command in v1.43.0 (§7).
-  };
+  });
 }

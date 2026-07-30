@@ -1,4 +1,5 @@
 import type {
+  AdapterEnforcement,
   HubInfo,
   MaterializedFile,
   SpawnPlan,
@@ -6,7 +7,7 @@ import type {
   VendorAdapter,
   VendorEvent,
 } from "./types.js";
-import { VENDOR_DIAG_PREFIX } from "./types.js";
+import { VENDOR_DIAG_PREFIX, withPostureDiagnostics } from "./types.js";
 
 /**
  * The `gemini` vendor adapter — real delegation to Google's Gemini CLI
@@ -198,6 +199,16 @@ function looksLikeParleyMcp(text: string): boolean {
   return /mcp_parley|submit_report|ask_orchestrator|\bparley\b/i.test(text);
 }
 
+const GEMINI_ENFORCEMENT: AdapterEnforcement = {
+  "read-only": { level: "approximate", via: "approval-mode=plan" },
+  workspace: { level: "none", via: "yolo; no process sandbox when network on" },
+  full: { level: "enforced", via: "yolo, sandbox off" },
+  "network:false": {
+    level: "refused",
+    via: "prepare refuses except macOS workspace seatbelt (#107)",
+  },
+};
+
 export function createGeminiAdapter(env: NodeJS.ProcessEnv = process.env): VendorAdapter {
   const bin = env.PARLEY_GEMINI_BIN ?? DEFAULT_GEMINI_BIN;
 
@@ -258,9 +269,10 @@ export function createGeminiAdapter(env: NodeJS.ProcessEnv = process.env): Vendo
     return argv;
   }
 
-  return {
+  return withPostureDiagnostics({
     id: "gemini",
     childChannel: "mcp",
+    enforcement: GEMINI_ENFORCEMENT,
 
     prepare(task, hub): Promise<SpawnPlan> {
       // Fresh headless one-shot (research §2 / §9):
@@ -404,5 +416,5 @@ export function createGeminiAdapter(env: NodeJS.ProcessEnv = process.env): Vendo
 
     // listModels omitted — no `gemini models` (or equivalent) enumeration
     // command on 0.50.0 (research §7). Catalog stays hand-maintained.
-  };
+  });
 }

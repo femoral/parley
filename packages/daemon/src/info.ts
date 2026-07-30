@@ -11,12 +11,15 @@
 import fs from "node:fs";
 import path from "node:path";
 import {
+  ENFORCEMENT_DIMENSIONS,
   FALLBACK_TASK_TYPE,
   formatDuration,
+  formatEnforcementCell,
   isChildChannel,
   parseDuration,
   readConfig,
   resolveRubricIdForType,
+  type AdapterEnforcement,
   type ChildChannel,
   type ClassificationConfig,
   type ConfigLayerSource,
@@ -190,6 +193,21 @@ export interface InfoVendor {
    * configured (deny-by-default — cannot delegate until set).
    */
   models: InfoVendorModel[];
+  /**
+   * Declared posture enforcement for this configured vendor (#279), when the
+   * adapter is loaded. Absent when the vendor key has no registered adapter.
+   */
+  enforcement?: AdapterEnforcement;
+}
+
+/**
+ * One row of the sandbox/network enforcement matrix (#279) — every registered
+ * adapter (not only configured vendors), sourced from
+ * {@link VendorAdapter.enforcement}.
+ */
+export interface InfoEnforcementRow {
+  id: string;
+  enforcement: AdapterEnforcement;
 }
 
 /** One named profile from the daemon's `parley.json`. */
@@ -304,6 +322,13 @@ export interface InfoConfig {
    * Empty when nothing to warn about; omitted from JSON only when undefined.
    */
   warnings?: string[];
+  /**
+   * Per-adapter posture enforcement matrix (#279). Built from every registered
+   * adapter's declaration (including unconfigured built-ins; excludes nothing
+   * the registry knows about). `approximate` / `none` cells mean the flag is
+   * accepted but not OS-enforced.
+   */
+  enforcement_matrix: InfoEnforcementRow[];
   profiles: InfoProfile[];
   /** Fallback when delegate omits -v/--profile (#175). */
   defaults: InfoDefaults;
@@ -478,14 +503,24 @@ export function buildInfoConfig(options: BuildInfoOptions): InfoConfig {
     const adapter = adapters.get(id);
     const vendorCfg = daemonConfig.vendors?.[id];
     const windowMs = vendorRetryWindowMs(vendorCfg);
-    return {
+    const entry: InfoVendor = {
       id,
       childChannel: effectiveChildChannel(adapter, vendorCfg),
       retryWindowMs: windowMs,
       retryWindow: windowMs !== null ? formatDuration(windowMs) : null,
       models: infoVendorModels(vendorCfg),
     };
+    if (adapter?.enforcement !== undefined) {
+      entry.enforcement = adapter.enforcement;
+    }
+    return entry;
   });
+
+  // #279: full registry matrix (all loaded adapters), stable id order.
+  const enforcement_matrix: InfoEnforcementRow[] = [...adapters.entries()]
+    .filter(([, adapter]) => adapter.enforcement !== undefined)
+    .map(([id, adapter]) => ({ id, enforcement: adapter.enforcement }))
+    .sort((a, b) => a.id.localeCompare(b.id));
 
   // Profiles already carry only configured models (no full models.json dump).
   const profiles: InfoProfile[] = Object.entries(daemonConfig.profiles ?? {})
@@ -611,6 +646,7 @@ export function buildInfoConfig(options: BuildInfoOptions): InfoConfig {
     instructions,
     vendors,
     detected_vendors: [],
+    enforcement_matrix,
     profiles,
     defaults,
     evaluation,
@@ -737,6 +773,42 @@ export function renderInfoProse(config: InfoConfig): string {
     }
     if (config.defaults.vendor !== null) {
       lines.push(`- vendor: \`${config.defaults.vendor}\``);
+    }
+  }
+  lines.push("");
+
+  // --- Sandbox enforcement matrix (#279) ---
+  lines.push("## Sandbox enforcement", "");
+  lines.push(
+    "Every adapter accepts the same posture flags (`--sandbox read-only|workspace|full`, `--no-network`), but **enforcement is not portable**. Cells below are adapter self-declarations:",
+  );
+  lines.push("");
+  lines.push(
+    "- `enforced` — vendor delivers what the posture asks (real OS/CLI isolation, or unrestricted `full`)",
+  );
+  lines.push("- `approximate` — soft lever only (see note in parentheses)");
+  lines.push("- `none` — flag accepted; nothing real happens");
+  lines.push(
+    "- `refused` — prepare fails rather than under-isolate (e.g. network-off gaps)",
+  );
+  lines.push("");
+  lines.push(
+    "`approximate` / `none` mean the flag is accepted but **not** OS-enforced. A prepare-time `PARLEY-DIAG` line is written to the task's `diag.log` when a weak `read-only` / `workspace` or `network:false` posture is requested. `full` is trivially enforced (no isolation requested) and never produces a sandbox diagnostic.",
+  );
+  lines.push("");
+  if (config.enforcement_matrix.length === 0) {
+    lines.push("(no adapters registered)");
+  } else {
+    const headers = ["Vendor", ...ENFORCEMENT_DIMENSIONS];
+    lines.push(`| ${headers.join(" | ")} |`);
+    lines.push(`| ${headers.map(() => "---").join(" | ")} |`);
+    for (const row of config.enforcement_matrix) {
+      // Hide the contract-test double from the orchestrator-facing matrix.
+      if (row.id === "fake") continue;
+      const cells = ENFORCEMENT_DIMENSIONS.map((dim) =>
+        formatEnforcementCell(row.enforcement[dim]),
+      );
+      lines.push(`| \`${row.id}\` | ${cells.join(" | ")} |`);
     }
   }
   lines.push("");

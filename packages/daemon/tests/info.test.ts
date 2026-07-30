@@ -222,6 +222,39 @@ describe("buildInfo / renderInfoProse (#163 / #169)", () => {
     expect(prose).toContain("`deep`");
     expect(prose).toContain("`codex`");
   });
+
+  it("includes enforcement matrix from adapter declarations (#279)", () => {
+    write(
+      home,
+      "parley.json",
+      JSON.stringify({
+        vendors: {
+          kimi: {
+            models: {
+              "kimi-for-coding": {
+                efforts: ["low"],
+                default: "low",
+              },
+            },
+          },
+        },
+      }),
+    );
+    const paths = homePathsFromEnv({ PARLEY_HOME: home });
+    const adapters = createAdapterRegistrySync({});
+    const config = buildInfoConfig({ projectDir: project, paths, adapters });
+    expect(config.enforcement_matrix.length).toBeGreaterThan(5);
+    const kimiRow = config.enforcement_matrix.find((r) => r.id === "kimi");
+    expect(kimiRow?.enforcement["network:false"].level).toBe("none");
+    expect(config.vendors.map((v) => v.id)).toContain("kimi");
+    const kimiVendor = config.vendors.find((v) => v.id === "kimi");
+    expect(kimiVendor?.enforcement?.workspace.level).toBe("none");
+    const prose = renderInfoProse(config);
+    expect(prose).toContain("## Sandbox enforcement");
+    expect(prose).toContain("`kimi`");
+    expect(prose).toContain("network:false");
+    expect(prose).not.toMatch(/\| `fake` \|/);
+  });
 });
 
 

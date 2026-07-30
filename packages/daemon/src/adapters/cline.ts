@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import type {
+  AdapterEnforcement,
   HubInfo,
   MaterializedFile,
   SpawnPlan,
@@ -8,7 +9,18 @@ import type {
   VendorAdapter,
   VendorEvent,
 } from "./types.js";
-import { VENDOR_DIAG_PREFIX } from "./types.js";
+import { VENDOR_DIAG_PREFIX, withPostureDiagnostics } from "./types.js";
+
+/** Cline: soft shell permissions only; no OS FS/network sandbox (#279). */
+const CLINE_ENFORCEMENT: AdapterEnforcement = {
+  "read-only": {
+    level: "approximate",
+    via: "CLINE_COMMAND_PERMISSIONS deny-all shell (edit tools may still write)",
+  },
+  workspace: { level: "none", via: "unconstrained tools + auto-approve" },
+  full: { level: "enforced", via: "unconstrained tools + auto-approve (unrestricted as requested)" },
+  "network:false": { level: "none", via: "no first-class network toggle" },
+};
 
 /**
  * The `cline` vendor adapter — real delegation to the Cline agent CLI
@@ -513,9 +525,10 @@ export function scrapeClineSessionId(dataDir: string): string | undefined {
 }
 
 export function createClineAdapter(env: NodeJS.ProcessEnv = process.env): VendorAdapter {
-  return {
+  return withPostureDiagnostics({
     id: "cline",
     childChannel: "mcp",
+    enforcement: CLINE_ENFORCEMENT,
 
     prepare(task, hub): Promise<SpawnPlan> {
       // Fresh headless one-shot (research §2 / §9) via session-scrape wrapper:
@@ -627,7 +640,7 @@ export function createClineAdapter(env: NodeJS.ProcessEnv = process.env): Vendor
     },
 
     // listModels omitted — no CLI enumeration command (research §7).
-  };
+  });
 }
 
 /** Exported for tests that assert the private data-dir relative path. */

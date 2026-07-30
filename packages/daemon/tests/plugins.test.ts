@@ -26,11 +26,19 @@ function writePlugin(source: string): { home: string; pluginPath: string } {
   return { home, pluginPath };
 }
 
+const GOOD_ENFORCEMENT = `{
+    "read-only": { level: "none" },
+    workspace: { level: "none" },
+    full: { level: "enforced" },
+    "network:false": { level: "none" },
+  }`;
+
 const GOOD_ADAPTER = `
 export function createAdapter(env) {
   return {
     id: "acme",
     childChannel: "mcp",
+    enforcement: ${GOOD_ENFORCEMENT},
     prepare: async () => ({ argv: ["acme"], env: {}, files: [], cwd: "/tmp" }),
     resume: async () => ({ argv: ["acme"], env: {}, files: [], cwd: "/tmp" }),
     parseEvent: () => [],
@@ -39,10 +47,21 @@ export function createAdapter(env) {
 }
 `;
 
+function validEnforcement(overrides: Record<string, unknown> = {}) {
+  return {
+    "read-only": { level: "none" },
+    workspace: { level: "none" },
+    full: { level: "enforced" },
+    "network:false": { level: "none" },
+    ...overrides,
+  };
+}
+
 function validAdapter(overrides: Record<string, unknown> = {}) {
   return {
     id: "acme",
     childChannel: "mcp",
+    enforcement: validEnforcement(),
     prepare: async () => ({ argv: [], env: {}, files: [], cwd: "/" }),
     resume: async () => ({ argv: [], env: {}, files: [], cwd: "/" }),
     parseEvent: () => [],
@@ -76,6 +95,7 @@ describe("assertVendorAdapter", () => {
       assertVendorAdapter("acme", {
         id: "acme",
         childChannel: "mcp",
+        enforcement: validEnforcement(),
         resume: () => {},
         parseEvent: () => {},
         sessionId: () => {},
@@ -88,6 +108,7 @@ describe("assertVendorAdapter", () => {
       assertVendorAdapter("acme", {
         id: "acme",
         childChannel: "mcp",
+        enforcement: validEnforcement(),
         prepare: () => {},
         parseEvent: () => {},
         sessionId: () => {},
@@ -100,6 +121,7 @@ describe("assertVendorAdapter", () => {
       assertVendorAdapter("acme", {
         id: "acme",
         childChannel: "mcp",
+        enforcement: validEnforcement(),
         prepare: () => {},
         resume: () => {},
         sessionId: () => {},
@@ -112,11 +134,46 @@ describe("assertVendorAdapter", () => {
       assertVendorAdapter("acme", {
         id: "acme",
         childChannel: "mcp",
+        enforcement: validEnforcement(),
         prepare: () => {},
         resume: () => {},
         parseEvent: () => {},
       }),
     ).toThrow(/sessionId must be a function/);
+  });
+
+  it("rejects missing enforcement (#279)", () => {
+    expect(() =>
+      assertVendorAdapter("acme", validAdapter({ enforcement: undefined })),
+    ).toThrow(/enforcement must be an object/);
+  });
+
+  it("rejects incomplete enforcement cells (#279)", () => {
+    expect(() =>
+      assertVendorAdapter(
+        "acme",
+        validAdapter({
+          enforcement: {
+            "read-only": { level: "none" },
+            workspace: { level: "none" },
+            full: { level: "enforced" },
+          },
+        }),
+      ),
+    ).toThrow(/enforcement\.network:false is required/);
+  });
+
+  it("rejects invalid enforcement level (#279)", () => {
+    expect(() =>
+      assertVendorAdapter(
+        "acme",
+        validAdapter({
+          enforcement: validEnforcement({
+            workspace: { level: "maybe" },
+          }),
+        }),
+      ),
+    ).toThrow(/enforcement\.workspace\.level must be one of/);
   });
 
   it("rejects non-object", () => {
@@ -154,6 +211,7 @@ describe("loadPluginAdapter — happy path", () => {
         return {
           id: "acme",
           childChannel: "cli",
+          enforcement: ${GOOD_ENFORCEMENT},
           prepare: async () => ({ argv: [], env: {}, files: [], cwd: "/" }),
           resume: async () => ({ argv: [], env: {}, files: [], cwd: "/" }),
           parseEvent: () => [],
@@ -198,6 +256,7 @@ describe("loadPluginAdapter — validation failures", () => {
         return {
           id: "wrong",
           childChannel: "mcp",
+          enforcement: ${GOOD_ENFORCEMENT},
           prepare: async () => ({ argv: [], env: {}, files: [], cwd: "/" }),
           resume: async () => ({ argv: [], env: {}, files: [], cwd: "/" }),
           parseEvent: () => [],
@@ -216,6 +275,7 @@ describe("loadPluginAdapter — validation failures", () => {
         return {
           id: "acme",
           childChannel: "mcp",
+          enforcement: ${GOOD_ENFORCEMENT},
           prepare: "nope",
           resume: async () => ({ argv: [], env: {}, files: [], cwd: "/" }),
           parseEvent: () => [],
@@ -259,6 +319,7 @@ describe("createAdapterRegistry — plugin wiring", () => {
         return {
           id: "fake",
           childChannel: "mcp",
+          enforcement: ${GOOD_ENFORCEMENT},
           prepare: async () => ({ argv: ["shadow"], env: {}, files: [], cwd: "/" }),
           resume: async () => ({ argv: ["shadow"], env: {}, files: [], cwd: "/" }),
           parseEvent: () => [],

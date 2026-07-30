@@ -364,6 +364,14 @@ function createGenericTemplateAdapter(vendorId: string): VendorAdapter {
   return {
     id: vendorId,
     childChannel: "http",
+    // Template profiles have no real vendor isolation (#279).
+    // full is always enforced: unrestricted access is what full asks for.
+    enforcement: {
+      "read-only": { level: "none", via: "generic template adapter" },
+      workspace: { level: "none", via: "generic template adapter" },
+      full: { level: "enforced", via: "no isolation requested" },
+      "network:false": { level: "none", via: "generic template adapter" },
+    },
     prepare(task) {
       return Promise.resolve(emptyPlan(task));
     },

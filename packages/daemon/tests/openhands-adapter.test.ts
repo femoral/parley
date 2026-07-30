@@ -39,6 +39,28 @@ function spec(overrides: Partial<TaskSpec> = {}): TaskSpec {
   };
 }
 
+describe("openhands adapter — enforcement (#279)", () => {
+  it("declares no real sandbox/network enforcement", () => {
+    const adapter = createOpenhandsAdapter({});
+    expect(adapter.enforcement["read-only"].level).toBe("none");
+    expect(adapter.enforcement.workspace.level).toBe("approximate");
+    expect(adapter.enforcement.full.level).toBe("enforced");
+    expect(adapter.enforcement["network:false"].level).toBe("none");
+  });
+
+  it("emits prepare-time PARLEY-DIAG for unenforced postures", async () => {
+    const plan = await createOpenhandsAdapter({}).prepare(
+      spec({ sandbox: "read-only", network: false }),
+      HUB,
+    );
+    const diags = plan.diagnostics ?? [];
+    expect(diags.some((d) => /PARLEY-DIAG posture: openhands sandbox=read-only/.test(d))).toBe(
+      true,
+    );
+    expect(diags.some((d) => /PARLEY-DIAG posture: openhands network=false/.test(d))).toBe(true);
+  });
+});
+
 describe("openhands adapter — prepare argv (golden)", () => {
   it("builds the hermetic headless --json --override-with-envs invocation", async () => {
     const adapter = createOpenhandsAdapter({});
