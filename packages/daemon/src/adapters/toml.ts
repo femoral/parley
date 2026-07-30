@@ -191,14 +191,16 @@ export function parseToml(text: string): TomlTable {
     if (line.startsWith("[") && line.endsWith("]") && !line.startsWith("[[")) {
       const header = line.slice(1, -1).trim();
       const segments = splitTableHeader(header);
-      if (segments === null) continue;
+      if (segments === null) {
+        // Rejected header (forbidden segment, empty `[]`, unterminated quote).
+        // Point `current` at a throwaway so following keys do not attach to the
+        // previous table or root — splitTableHeader already refused the path,
+        // so a second in-loop check is unreachable and must not be relied on.
+        current = emptyTable();
+        continue;
+      }
       let cursor: TomlTable = root;
-      let rejected = false;
       for (const seg of segments) {
-        if (isForbiddenKey(seg)) {
-          rejected = true;
-          break;
-        }
         const existing = cursor[seg];
         if (existing !== undefined && isTomlTable(existing)) {
           cursor = existing;
@@ -207,12 +209,6 @@ export function parseToml(text: string): TomlTable {
           cursor[seg] = next;
           cursor = next;
         }
-      }
-      if (rejected) {
-        // Point current at a throwaway table so subsequent keys under a
-        // hostile header do not land on root or Object.prototype.
-        current = emptyTable();
-        continue;
       }
       current = cursor;
       continue;

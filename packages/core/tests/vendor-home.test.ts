@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
+import os from "node:os";
 import path from "node:path";
 import {
+  displayVendorPath,
   isParleyIsolatedVendorHome,
+  operatorHomeDir,
   operatorVendorHomeIds,
   resolveOperatorVendorHome,
 } from "../src/vendor-home.js";
@@ -115,5 +118,28 @@ describe("resolveOperatorVendorHome", () => {
     expect(ids).toContain("kimi");
     expect(ids).toContain("openclaw");
     expect(ids).not.toContain("fake");
+  });
+});
+
+describe("displayVendorPath / operatorHomeDir", () => {
+  it("collapses paths under HOME to tilde form", () => {
+    expect(
+      displayVendorPath("/tmp/operator/.codex/models_cache.json", { HOME: "/tmp/operator" }),
+    ).toBe("~/.codex/models_cache.json");
+  });
+
+  it("uses os.homedir() when HOME is unset or empty so absolute paths do not leak", () => {
+    const realHome = os.homedir();
+    expect(operatorHomeDir({})).toBe(realHome);
+    expect(operatorHomeDir({ HOME: "" })).toBe(realHome);
+    const abs = path.join(realHome, ".codex", "models_cache.json");
+    expect(displayVendorPath(abs, {})).toBe("~/.codex/models_cache.json");
+    expect(displayVendorPath(abs, { HOME: "" })).toBe("~/.codex/models_cache.json");
+  });
+
+  it("leaves paths outside the operator home unchanged", () => {
+    expect(displayVendorPath("/opt/elsewhere/cache.json", { HOME: "/tmp/operator" })).toBe(
+      "/opt/elsewhere/cache.json",
+    );
   });
 });

@@ -3,11 +3,11 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { refreshCatalog } from "@useparley/core";
+import { displayVendorPath, refreshCatalog } from "@useparley/core";
 import {
+  CODEX_MODELS_CACHE_MAX_BYTES,
   codexModelsCacheSource,
   createCodexAdapter,
-  displayVendorPath,
   parseCodexModels,
   parseCodexModelsCache,
 } from "../src/adapters/codex.js";
@@ -27,9 +27,10 @@ function makeOperatorHome(): string {
 
 describe("parseCodexModelsCache", () => {
   it("maps well-formed cache entries and applies visibility/supported_in_api filters", () => {
-    const { models, cacheFetchedAt } = parseCodexModelsCache(
+    const { models, cacheFetchedAt, error } = parseCodexModelsCache(
       readFixture("models_cache.well-formed.json"),
     );
+    expect(error).toBeNull();
     expect(cacheFetchedAt).toBe("2026-07-15T10:00:00.000Z");
     expect(models).toEqual([
       {
@@ -49,30 +50,34 @@ describe("parseCodexModelsCache", () => {
   });
 
   it("returns empty models for an empty-but-valid cache (fresh home)", () => {
-    const { models, cacheFetchedAt } = parseCodexModelsCache(
+    const { models, cacheFetchedAt, error } = parseCodexModelsCache(
       readFixture("models_cache.empty.json"),
     );
+    expect(error).toBeNull();
     expect(models).toEqual([]);
     expect(cacheFetchedAt).toBe("2026-07-01T00:00:00.000Z");
   });
 
-  it("fails soft on malformed / truncated JSON", () => {
+  it("flags malformed / truncated JSON as present-but-unusable", () => {
     expect(parseCodexModelsCache(readFixture("models_cache.malformed.json"))).toEqual({
       models: [],
       cacheFetchedAt: null,
+      error: "malformed models_cache.json",
     });
     expect(parseCodexModelsCache("not json at all")).toEqual({
       models: [],
       cacheFetchedAt: null,
+      error: "malformed models_cache.json",
     });
   });
 
-  it("fails soft on valid JSON with unexpected shape", () => {
-    const { models, cacheFetchedAt } = parseCodexModelsCache(
+  it("flags valid JSON with unexpected shape as present-but-unusable", () => {
+    const { models, cacheFetchedAt, error } = parseCodexModelsCache(
       readFixture("models_cache.unexpected.json"),
     );
     expect(models).toEqual([]);
     expect(cacheFetchedAt).toBeNull();
+    expect(error).toBe("unexpected models_cache.json shape");
   });
 });
 
@@ -128,6 +133,14 @@ describe("codexModelsCacheSource / displayVendorPath", () => {
       displayVendorPath("/tmp/operator/.codex/models_cache.json", { HOME: "/tmp/operator" }),
     ).toBe("~/.codex/models_cache.json");
   });
+
+  it("tilde-collapses against os.homedir() when HOME is unset or empty", () => {
+    // Must not write /home/<user>/… into models.json when HOME is scrubbed.
+    const realHome = os.homedir();
+    const abs = path.join(realHome, ".codex", "models_cache.json");
+    expect(displayVendorPath(abs, {})).toBe("~/.codex/models_cache.json");
+    expect(displayVendorPath(abs, { HOME: "" })).toBe("~/.codex/models_cache.json");
+  });
 });
 
 describe("codex adapter readModels", () => {
@@ -175,13 +188,115 @@ describe("codex adapter readModels", () => {
     expect(result.models).toEqual([]);
   });
 
-  it("returns empty models on malformed cache without throwing", async () => {
+  it("rejects malformed cache so refresh can warn", async () => {
     home = makeOperatorHome();
     fs.writeFileSync(
       path.join(home, "models_cache.json"),
       readFixture("models_cache.malformed.json"),
     );
     const adapter = createCodexAdapter({ CODEX_HOME: home });
-    await expect(adapter.readModels!(undefined)).resolves.toMatchObject({ models: [] });
+    await expect(adapter.readModels!(undefined)).rejects.toThrow(/malformed models_cache/);
+  });
+
+  it("refuses CODEX_HOME pointing at a per-task isolated home (isolation guard)", async () => {
+    // Shared resolver refuses isolation-marker paths on every override env,
+    // including research-only CODEX_HOME. Decy cache under the marker must
+    // not be read; fall back to operator HOME/.codex (empty here).
+    home = makeOperatorHome();
+    const taskCwd = path.join(home, "worktree");
+    const isolated = path.join(taskCwd, ".parley-kimi");
+    fs.mkdirSync(isolated, { recursive: true });
+    fs.writeFileSync(
+      path.join(isolated, "models_cache.json"),
+      JSON.stringify({
+        fetched_at: "2026-07-01T00:00:00.000Z",
+        models: [
+          {
+            slug: "only-isolated",
+            visibility: "list",
+            supported_in_api: true,
+            supported_reasoning_levels: [{ effort: "low" }],
+            default_reasoning_level: "low",
+          },
+        ],
+      }),
+    );
+    const operatorCodex = path.join(home, ".codex");
+    fs.mkdirSync(operatorCodex, { recursive: true });
+
+    const adapter = createCodexAdapter({
+      HOME: home,
+      CODEX_HOME: isolated,
+    });
+    const result = await adapter.readModels!(undefined);
+    expect(result.models.map((m) => m.id)).not.toContain("only-isolated");
+    expect(result.models).toEqual([]);
+    expect(result.source).toContain(".codex");
+    expect(result.source).not.toContain(".parley-kimi");
+  });
+});
+
+describe("refreshCatalog end-to-end: degraded disk reads warn (finding 4 / round 2)", () => {
+  let home: string | undefined;
+  afterEach(() => {
+    if (home !== undefined) {
+      fs.rmSync(home, { recursive: true, force: true });
+      home = undefined;
+    }
+  });
+
+  const probeOk = {
+    listModels: () =>
+      Promise.resolve({
+        source: "codex debug models",
+        models: [{ id: "from-probe", efforts: [] as string[], default_effort: null }],
+      }),
+  };
+
+  it("warns on malformed cache even when the probe succeeds", async () => {
+    home = makeOperatorHome();
+    fs.writeFileSync(
+      path.join(home, "models_cache.json"),
+      readFixture("models_cache.malformed.json"),
+    );
+    const adapter = { ...createCodexAdapter({ CODEX_HOME: home }), ...probeOk };
+    const { catalog, warnings } = await refreshCatalog({}, ["codex"], new Map([["codex", adapter]]));
+    expect(catalog.codex!.models.map((m) => m.id)).toEqual(["from-probe"]);
+    expect(warnings.some((w) => /disk read failed.*malformed/i.test(w))).toBe(true);
+  });
+
+  it("warns on unexpected shape even when the probe succeeds", async () => {
+    home = makeOperatorHome();
+    fs.writeFileSync(
+      path.join(home, "models_cache.json"),
+      readFixture("models_cache.unexpected.json"),
+    );
+    const adapter = { ...createCodexAdapter({ CODEX_HOME: home }), ...probeOk };
+    const { warnings } = await refreshCatalog({}, ["codex"], new Map([["codex", adapter]]));
+    expect(warnings.some((w) => /disk read failed.*unexpected/i.test(w))).toBe(true);
+  });
+
+  it("stays quiet when the cache file is absent (fresh home)", async () => {
+    home = makeOperatorHome();
+    const adapter = { ...createCodexAdapter({ CODEX_HOME: home }), ...probeOk };
+    const { catalog, warnings } = await refreshCatalog({}, ["codex"], new Map([["codex", adapter]]));
+    expect(catalog.codex!.models.map((m) => m.id)).toEqual(["from-probe"]);
+    expect(warnings).toEqual([]);
+  });
+
+  it("warns when models_cache.json exceeds the size cap", async () => {
+    home = makeOperatorHome();
+    // Sparse file: size reported as over the cap without writing gigabytes.
+    const cachePath = path.join(home, "models_cache.json");
+    const fd = fs.openSync(cachePath, "w");
+    try {
+      fs.ftruncateSync(fd, CODEX_MODELS_CACHE_MAX_BYTES + 1);
+    } finally {
+      fs.closeSync(fd);
+    }
+    const adapter = { ...createCodexAdapter({ CODEX_HOME: home }), ...probeOk };
+    const { catalog, warnings } = await refreshCatalog({}, ["codex"], new Map([["codex", adapter]]));
+    expect(catalog.codex!.models.map((m) => m.id)).toEqual(["from-probe"]);
+    expect(warnings.some((w) => /disk read failed.*size cap/i.test(w))).toBe(true);
   });
 });

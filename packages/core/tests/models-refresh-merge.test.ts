@@ -284,15 +284,22 @@ describe("refreshCatalog with readModels + listModels", () => {
   });
 
   it("excludes codex non-API models from the merged catalog (finding 3)", async () => {
-    // Simulates disk (strict filter) + probe that previously only dropped hide:
-    // both channels now share the filter, so union must not re-admit
-    // internal-not-in-api / missing-api-flag.
+    // Divergent channel inputs (not a shared array reference): disk and probe
+    // each return a different *allowed* subset after the shared filter. Union
+    // must keep both good ids and must not invent excluded ones. A leaky
+    // channel that still emitted internal-not-in-api / missing-api-flag /
+    // codex-auto-review would re-admit them via union — those ids must only
+    // appear if a channel wrongly returns them (caught by not.toContain).
     const diskModels = [
       entry({ id: "gpt-5.6-sol", efforts: ["low"], default_effort: "medium" }),
+      // disk-only allowed id — probe does not list it
       entry({ id: "gpt-5.4-mini", efforts: ["low"], default_effort: "low" }),
     ];
-    // Probe path after the shared filter — same id set as disk.
-    const probeModels = [...diskModels];
+    const probeModels = [
+      entry({ id: "gpt-5.6-sol", efforts: ["low", "medium"], default_effort: "medium" }),
+      // probe-only allowed id — not present on disk
+      entry({ id: "gpt-5.4-codex", efforts: ["low"], default_effort: "low" }),
+    ];
     const adapters = new Map([
       [
         "codex",
@@ -305,10 +312,13 @@ describe("refreshCatalog with readModels + listModels", () => {
       ],
     ]);
     const { catalog } = await refreshCatalog({}, ["codex"], adapters, () => NOW);
-    const ids = catalog.codex!.models.map((m) => m.id);
-    expect(ids).toEqual(["gpt-5.6-sol", "gpt-5.4-mini"]);
+    const ids = catalog.codex!.models.map((m) => m.id).sort();
+    expect(ids).toEqual(["gpt-5.4-codex", "gpt-5.4-mini", "gpt-5.6-sol"]);
+    // Union of allowed subsets — never the filtered-out classes.
     expect(ids).not.toContain("internal-not-in-api");
     expect(ids).not.toContain("missing-api-flag");
     expect(ids).not.toContain("codex-auto-review");
+    // Shared id: both non-empty efforts → primary (disk) wins per field rules.
+    expect(catalog.codex!.models.find((m) => m.id === "gpt-5.6-sol")!.efforts).toEqual(["low"]);
   });
 });

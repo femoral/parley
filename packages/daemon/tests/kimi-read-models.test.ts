@@ -3,9 +3,11 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { displayVendorPath, refreshCatalog } from "@useparley/core";
 import {
   createKimiAdapter,
   KIMI_CODE_HOME_REL,
+  KIMI_CONFIG_MAX_BYTES,
   kimiModelsConfigSource,
   parseKimiModelsConfig,
 } from "../src/adapters/kimi.js";
@@ -25,7 +27,8 @@ function makeOperatorHome(): string {
 describe("parseKimiModelsConfig", () => {
   it("extracts [models.*] tables and default_model from a well-formed config", () => {
     const text = readFixture("config.well-formed.toml");
-    const { models, defaultModel } = parseKimiModelsConfig(text);
+    const { models, defaultModel, error } = parseKimiModelsConfig(text);
+    expect(error).toBeNull();
     expect(defaultModel).toBe("kimi-code/kimi-for-coding");
     expect(models).toEqual([
       {
@@ -61,21 +64,24 @@ describe("parseKimiModelsConfig", () => {
     expect(parseKimiModelsConfig(readFixture("config.empty.toml"))).toEqual({
       models: [],
       defaultModel: null,
+      error: null,
     });
   });
 
-  it("fails soft on malformed / truncated TOML", () => {
+  it("flags malformed / truncated TOML as present-but-unusable", () => {
     const result = parseKimiModelsConfig(readFixture("config.malformed.toml"));
-    expect(Array.isArray(result.models)).toBe(true);
+    expect(result.models).toEqual([]);
+    expect(result.error).toMatch(/malformed config\.toml/);
     expect(JSON.stringify(result)).not.toContain(HYGIENE_SENTINEL);
   });
 
-  it("returns empty models for valid TOML with unexpected shape", () => {
-    const { models, defaultModel } = parseKimiModelsConfig(
+  it("returns empty models for valid TOML with unexpected shape (not an error)", () => {
+    const { models, defaultModel, error } = parseKimiModelsConfig(
       readFixture("config.unexpected.toml"),
     );
     expect(models).toEqual([]);
     expect(defaultModel).toBeNull();
+    expect(error).toBeNull();
   });
 });
 
@@ -96,6 +102,15 @@ describe("parseToml table headers with quoted model ids", () => {
     expect(root.models).toBeDefined();
     const models = root.models as Record<string, unknown>;
     expect(models["kimi-code/k3"]).toMatchObject({ support_efforts: ["low"] });
+  });
+});
+
+describe("displayVendorPath (shared)", () => {
+  it("tilde-collapses against os.homedir() when HOME is unset or empty", () => {
+    const realHome = os.homedir();
+    const abs = path.join(realHome, ".kimi-code", "config.toml");
+    expect(displayVendorPath(abs, {})).toBe("~/.kimi-code/config.toml");
+    expect(displayVendorPath(abs, { HOME: "" })).toBe("~/.kimi-code/config.toml");
   });
 });
 
@@ -133,12 +148,11 @@ describe("kimi adapter readModels", () => {
     expect(result.models).toEqual([]);
   });
 
-  it("returns empty models on malformed config without throwing", async () => {
+  it("rejects malformed config so refresh can warn", async () => {
     home = makeOperatorHome();
     fs.writeFileSync(path.join(home, "config.toml"), readFixture("config.malformed.toml"));
     const adapter = createKimiAdapter({ KIMI_CODE_HOME: home });
-    const result = await adapter.readModels!(undefined);
-    expect(result.models).toEqual([]);
+    await expect(adapter.readModels!(undefined)).rejects.toThrow(/malformed config\.toml/);
   });
 
   it("refuses KIMI_CODE_HOME pointing at a per-task isolated home (finding 2/6)", async () => {
@@ -167,5 +181,71 @@ describe("kimi adapter readModels", () => {
     expect(result.source).toContain(".kimi-code");
     expect(result.source).not.toContain(".parley-kimi");
     expect(result.source).not.toContain("only-isolated");
+  });
+});
+
+describe("refreshCatalog end-to-end: degraded kimi disk reads warn", () => {
+  let home: string | undefined;
+  afterEach(() => {
+    if (home !== undefined) {
+      fs.rmSync(home, { recursive: true, force: true });
+      home = undefined;
+    }
+  });
+
+  it("warns on malformed config even when a probe would succeed", async () => {
+    home = makeOperatorHome();
+    fs.writeFileSync(path.join(home, "config.toml"), readFixture("config.malformed.toml"));
+    // kimi has no listModels; supply a stub so merge can still fill the catalog.
+    const base = createKimiAdapter({ KIMI_CODE_HOME: home });
+    const adapter = {
+      ...base,
+      listModels: () =>
+        Promise.resolve({
+          source: "kimi probe stub",
+          models: [{ id: "from-probe", efforts: [] as string[], default_effort: null }],
+        }),
+    };
+    const { catalog, warnings } = await refreshCatalog({}, ["kimi"], new Map([["kimi", adapter]]));
+    expect(catalog.kimi!.models.map((m) => m.id)).toEqual(["from-probe"]);
+    expect(warnings.some((w) => /disk read failed.*malformed/i.test(w))).toBe(true);
+  });
+
+  it("stays quiet when config.toml is absent", async () => {
+    home = makeOperatorHome();
+    const base = createKimiAdapter({ KIMI_CODE_HOME: home });
+    const adapter = {
+      ...base,
+      listModels: () =>
+        Promise.resolve({
+          source: "kimi probe stub",
+          models: [{ id: "from-probe", efforts: [] as string[], default_effort: null }],
+        }),
+    };
+    const { warnings } = await refreshCatalog({}, ["kimi"], new Map([["kimi", adapter]]));
+    expect(warnings).toEqual([]);
+  });
+
+  it("warns when config.toml exceeds the size cap", async () => {
+    home = makeOperatorHome();
+    const configPath = path.join(home, "config.toml");
+    const fd = fs.openSync(configPath, "w");
+    try {
+      fs.ftruncateSync(fd, KIMI_CONFIG_MAX_BYTES + 1);
+    } finally {
+      fs.closeSync(fd);
+    }
+    const base = createKimiAdapter({ KIMI_CODE_HOME: home });
+    const adapter = {
+      ...base,
+      listModels: () =>
+        Promise.resolve({
+          source: "kimi probe stub",
+          models: [{ id: "from-probe", efforts: [] as string[], default_effort: null }],
+        }),
+    };
+    const { catalog, warnings } = await refreshCatalog({}, ["kimi"], new Map([["kimi", adapter]]));
+    expect(catalog.kimi!.models.map((m) => m.id)).toEqual(["from-probe"]);
+    expect(warnings.some((w) => /disk read failed.*size cap/i.test(w))).toBe(true);
   });
 });

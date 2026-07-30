@@ -62,4 +62,45 @@ describe("parseToml prototype pollution guards (finding 1)", () => {
     const root = parseToml(`url = "https://example.com/path#frag"\n`);
     expect(root.url).toBe("https://example.com/path#frag");
   });
+
+  it("does not attach keys after a rejected [__proto__] header to the previous table", () => {
+    // Fix round 2: splitTableHeader returns null for __proto__, so the old
+    // `if (segments === null) continue` left `current` on the prior model and
+    // fabricated default_effort / notes onto a real entry.
+    const root = parseToml(
+      `[models."kimi-code/k3"]\nsupport_efforts = [ "low" ]\n[__proto__]\ndefault_effort = "PWNED"\nmax_context_size = 999\n`,
+    );
+    const models = root.models as Record<string, Record<string, unknown>>;
+    expect(models["kimi-code/k3"]).toEqual({ support_efforts: ["low"] });
+    expect(models["kimi-code/k3"]).not.toHaveProperty("default_effort");
+    expect(models["kimi-code/k3"]).not.toHaveProperty("max_context_size");
+    const { models: projected } = parseKimiModelsConfig(
+      `[models."kimi-code/k3"]\nsupport_efforts = [ "low" ]\n[__proto__]\ndefault_effort = "PWNED"\nmax_context_size = 999\n`,
+    );
+    expect(projected).toEqual([
+      { id: "kimi-code/k3", efforts: ["low"], default_effort: null },
+    ]);
+  });
+
+  it("does not attach keys after an empty [] header to the previous table", () => {
+    const root = parseToml(
+      `[models."real"]\nsupport_efforts = [ "low" ]\n[]\ndefault_effort = "PWNED"\n`,
+    );
+    const models = root.models as Record<string, Record<string, unknown>>;
+    expect(models.real).toEqual({ support_efforts: ["low"] });
+    expect(models.real).not.toHaveProperty("default_effort");
+  });
+
+  it("does not attach keys after an unterminated-quote header to the previous table", () => {
+    // Header line must still end with `]` to enter the table-header branch;
+    // unterminated *inner* quote makes splitTableHeader return null.
+    const root = parseToml(
+      `[models."real"]\nsupport_efforts = [ "low" ]\n[models."broken]\ndefault_effort = "PWNED"\n`,
+    );
+    const models = root.models as Record<string, Record<string, unknown>>;
+    expect(models.real).toEqual({ support_efforts: ["low"] });
+    expect(models.real).not.toHaveProperty("default_effort");
+    // Hostile keys must not land on root either.
+    expect(root).not.toHaveProperty("default_effort");
+  });
 });

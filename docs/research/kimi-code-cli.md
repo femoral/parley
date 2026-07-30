@@ -72,9 +72,13 @@ ship with confidence.
     Git for Windows; `KIMI_SHELL_PATH` env var for a custom Git Bash path)
   - npm: `npm install -g @moonshot-ai/kimi-code` (or `pnpm add -g …`)
   [Getting started](https://moonshotai.github.io/kimi-code/en/guides/getting-started.html).
-- Default model: `default_model = "kimi-for-coding"` (config-file default,
-  VERIFIED on the config-files page), backed by Moonshot's **Kimi K2.6**
-  (VERIFIED via the model's own product page). *UNVERIFIED:* the specific
+- Default model: the CLI catalog key (and `default_model` value) is the
+  **namespaced** form `kimi-code/kimi-for-coding`. Under
+  `[models."kimi-code/kimi-for-coding"]`, the inner provider-level field is
+  the bare name `model = "kimi-for-coding"`. Earlier notes that recorded only
+  the bare `kimi-for-coding` as `default_model` were out of date relative to
+  an authenticated kimi home. Backed by Moonshot's **Kimi K2.6** (VERIFIED
+  via the model's own product page). *UNVERIFIED:* the specific
   "~1T total / ~32B active parameters, released 2026-04-20" figures — the
   cited MarkTechPost article does **not** mention Kimi K2.6, `kimi-for-coding`,
   parameter counts, or a release date, so those numbers had no supporting

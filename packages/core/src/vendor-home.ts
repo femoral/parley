@@ -136,8 +136,37 @@ export function isParleyIsolatedVendorHome(resolved: string): boolean {
   return false;
 }
 
+/**
+ * Operator OS home: `HOME` when set and non-empty, else `os.homedir()`.
+ * Shared by {@link resolveOperatorVendorHome} and {@link displayVendorPath}
+ * so catalog `source` strings agree with resolution when `HOME` is unset
+ * (daemons / scrubbed env).
+ */
+export function operatorHomeDir(env: NodeJS.ProcessEnv = process.env): string {
+  return env.HOME && env.HOME.trim() !== "" ? path.resolve(env.HOME) : os.homedir();
+}
+
 function userHomeFromEnv(env: NodeJS.ProcessEnv): string {
-  return env.HOME && env.HOME.trim() !== "" ? env.HOME : os.homedir();
+  return operatorHomeDir(env);
+}
+
+/**
+ * Collapse an absolute path under the operator home to a `~/…` form for
+ * catalog `source` strings (avoids embedding `/home/<user>/…` in models.json
+ * and command output that gets pasted into issues). Uses the same home
+ * resolution as {@link resolveOperatorVendorHome} so an unset/empty `HOME`
+ * still tilde-collapses against `os.homedir()`.
+ */
+export function displayVendorPath(
+  absolutePath: string,
+  env: NodeJS.ProcessEnv = process.env,
+): string {
+  const home = operatorHomeDir(env);
+  const resolved = path.resolve(absolutePath);
+  if (resolved === home || resolved.startsWith(home + path.sep)) {
+    return `~${resolved.slice(home.length)}`;
+  }
+  return absolutePath;
 }
 
 function defaultHome(spec: HomeSpec, env: NodeJS.ProcessEnv): string {

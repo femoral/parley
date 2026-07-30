@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { resolveOperatorVendorHome } from "@useparley/core";
+import { displayVendorPath, resolveOperatorVendorHome } from "@useparley/core";
 import type {
   AdapterEnforcement,
   HubInfo,
@@ -218,25 +218,40 @@ export function parseCodexModels(json: string): ModelEntry[] {
 
 /**
  * Parse codex's on-disk `models_cache.json` (#281). Same feed as
- * `codex debug models`, without a subprocess. Fail-soft: returns `[]` on
- * missing/malformed/unexpected shape (undocumented internal cache — never
- * throw into the refresh path). Filter is load-bearing:
+ * `codex debug models`, without a subprocess. Fail-soft for callers: never
+ * throws. Distinguishes usable empty (`error: null`, e.g. `models: []` fresh
+ * cache) from present-but-unusable (`error` set — malformed JSON or unexpected
+ * shape) so `readModels` can warn without treating a never-authenticated home
+ * as a failure. Filter is load-bearing:
  * `visibility === "list" && supported_in_api` — skipping it turns "discovered"
  * into "wrong". Surfaces the file's own `fetched_at` in the source string so
  * a stale cache is visible (freshness ≠ truth).
  */
-export function parseCodexModelsCache(json: string): { models: ModelEntry[]; cacheFetchedAt: string | null } {
+export function parseCodexModelsCache(json: string): {
+  models: ModelEntry[];
+  cacheFetchedAt: string | null;
+  /** Non-null when the file content is present but unusable. */
+  error: string | null;
+} {
   let parsed: unknown;
   try {
     parsed = JSON.parse(json);
   } catch {
-    return { models: [], cacheFetchedAt: null };
+    return { models: [], cacheFetchedAt: null, error: "malformed models_cache.json" };
   }
   const root = asRecord(parsed);
-  if (!root) return { models: [], cacheFetchedAt: null };
+  if (!root) {
+    return { models: [], cacheFetchedAt: null, error: "unexpected models_cache.json shape" };
+  }
   const cacheFetchedAt = typeof root.fetched_at === "string" ? root.fetched_at : null;
   const models = root.models;
-  if (!Array.isArray(models)) return { models: [], cacheFetchedAt };
+  if (!Array.isArray(models)) {
+    return {
+      models: [],
+      cacheFetchedAt,
+      error: "unexpected models_cache.json shape",
+    };
+  }
   const entries: ModelEntry[] = [];
   for (const raw of models) {
     const m = asRecord(raw);
@@ -244,22 +259,11 @@ export function parseCodexModelsCache(json: string): { models: ModelEntry[]; cac
     const entry = modelEntryFromCodexRaw(m);
     if (entry) entries.push(entry);
   }
-  return { models: entries, cacheFetchedAt };
+  return { models: entries, cacheFetchedAt, error: null };
 }
 
-/**
- * Collapse an absolute path under the operator home to a `~/…` form for
- * catalog `source` strings (avoids embedding `/home/<user>/…` in models.json
- * and command output that gets pasted into issues).
- */
-export function displayVendorPath(absolutePath: string, env: NodeJS.ProcessEnv = process.env): string {
-  const home = env.HOME && env.HOME.trim() !== "" ? path.resolve(env.HOME) : undefined;
-  const resolved = path.resolve(absolutePath);
-  if (home && (resolved === home || resolved.startsWith(home + path.sep))) {
-    return `~${resolved.slice(home.length)}`;
-  }
-  return absolutePath;
-}
+/** Re-export for adapter tests that import display helpers from the codex module. */
+export { displayVendorPath };
 
 /**
  * Build the catalog `source` string for a cache read, including the file's
@@ -275,6 +279,18 @@ export function codexModelsCacheSource(cachePath: string, cacheFetchedAt: string
 
 /** Cap on models_cache.json size — real caches embed large prompt blobs. */
 const MODELS_CACHE_MAX_BYTES = 8 * 1024 * 1024;
+
+/** Exported for size-cap tests. */
+export const CODEX_MODELS_CACHE_MAX_BYTES = MODELS_CACHE_MAX_BYTES;
+
+function isEnoent(err: unknown): boolean {
+  return (
+    typeof err === "object" &&
+    err !== null &&
+    "code" in err &&
+    (err as { code?: string }).code === "ENOENT"
+  );
+}
 
 /** Normalize a single `item.completed` item to a thin VendorEvent (or `[]` opaque). */
 function parseItem(item: unknown): VendorEvent[] {
@@ -422,7 +438,9 @@ export function createCodexAdapter(env: NodeJS.ProcessEnv = process.env): Vendor
     async readModels(): Promise<ProbedModels> {
       // Operator home via resolveOperatorVendorHome (honours research-documented
       // CODEX_HOME override; codex adapter does not set CODEX_HOME on spawn —
-      // isolation is flags-only). Fail soft on every degraded input.
+      // isolation is flags-only). Absent file = quiet empty (fresh home);
+      // present-but-unusable (oversize / unreadable / malformed / unexpected)
+      // rejects so refreshCatalog can warn even when the probe fills the gap.
       const home = resolveOperatorVendorHome("codex", env);
       if (home === null) return { source: MODELS_CACHE_FILE, models: [] };
       const cachePath = path.join(home, MODELS_CACHE_FILE);
@@ -431,13 +449,21 @@ export function createCodexAdapter(env: NodeJS.ProcessEnv = process.env): Vendor
       try {
         const stat = fs.statSync(cachePath);
         if (stat.size > MODELS_CACHE_MAX_BYTES) {
-          return { source: codexModelsCacheSource(sourceBase, null), models: [] };
+          throw new Error(
+            `${MODELS_CACHE_FILE} exceeds size cap (${MODELS_CACHE_MAX_BYTES} bytes)`,
+          );
         }
         text = fs.readFileSync(cachePath, "utf8");
-      } catch {
-        return { source: codexModelsCacheSource(sourceBase, null), models: [] };
+      } catch (err) {
+        if (isEnoent(err)) {
+          return { source: codexModelsCacheSource(sourceBase, null), models: [] };
+        }
+        throw err instanceof Error ? err : new Error(String(err));
       }
-      const { models, cacheFetchedAt } = parseCodexModelsCache(text);
+      const { models, cacheFetchedAt, error } = parseCodexModelsCache(text);
+      if (error !== null) {
+        throw new Error(error);
+      }
       return {
         source: codexModelsCacheSource(sourceBase, cacheFetchedAt),
         models,

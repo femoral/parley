@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { resolveOperatorVendorHome } from "@useparley/core";
+import { displayVendorPath, resolveOperatorVendorHome } from "@useparley/core";
 import type {
   AdapterEnforcement,
   HubInfo,
@@ -168,21 +168,26 @@ function isTomlTable(value: TomlValue | undefined): value is TomlTable {
  * The file co-locates credentials under `[providers.*]` / auth tables — we
  * walk only the `models` table and the top-level `default_model` string, and
  * never return, log, or re-serialize anything else. Fail-soft on unexpected
- * shapes: skip bad entries rather than throw.
- */
-/**
- * Project model keys from already-parsed TOML. `parseToml` never throws on
- * content shape (null-prototype tables, fail-soft lines), so no try/catch here.
+ * shapes: skip bad entries rather than throw. Distinguishes usable empty
+ * (no `models` table / empty tables) from clearly broken structure so
+ * `readModels` can warn without treating a fresh home as a failure.
  */
 export function parseKimiModelsConfig(text: string): {
   models: ModelEntry[];
   defaultModel: string | null;
+  /** Non-null when the file content is present but unusable. */
+  error: string | null;
 } {
+  const structureError = detectBrokenKimiToml(text);
+  if (structureError !== null) {
+    return { models: [], defaultModel: null, error: structureError };
+  }
   const root = parseToml(text);
   const defaultModel = typeof root.default_model === "string" ? root.default_model : null;
   const modelsTable = root.models;
   if (!isTomlTable(modelsTable)) {
-    return { models: [], defaultModel };
+    // Valid TOML without a models table is a normal empty/fresh config — not an error.
+    return { models: [], defaultModel, error: null };
   }
   const entries: ModelEntry[] = [];
   for (const [id, raw] of Object.entries(modelsTable)) {
@@ -206,7 +211,68 @@ export function parseKimiModelsConfig(text: string): {
       ...(notes === undefined ? {} : { notes }),
     });
   }
-  return { models: entries, defaultModel };
+  return { models: entries, defaultModel, error: null };
+}
+
+/**
+ * Cheap structural scan for truncated / broken kimi config lines that
+ * `parseToml` would otherwise fail-soft past (unterminated table headers or
+ * arrays). Credentials must never appear in the returned error string.
+ */
+function detectBrokenKimiToml(text: string): string | null {
+  for (const lineRaw of text.split(/\r?\n/)) {
+    // Quote-aware enough for our fixtures: strip trailing `#…` only when
+    // outside quotes (reuse the same rule as parseToml via a light pass).
+    let inQuote: '"' | "'" | null = null;
+    let line = lineRaw;
+    for (let i = 0; i < lineRaw.length; i++) {
+      const ch = lineRaw[i]!;
+      if (inQuote) {
+        if (ch === "\\" && inQuote === '"') {
+          i++;
+          continue;
+        }
+        if (ch === inQuote) inQuote = null;
+        continue;
+      }
+      if (ch === '"' || ch === "'") {
+        inQuote = ch;
+        continue;
+      }
+      if (ch === "#") {
+        line = lineRaw.slice(0, i);
+        break;
+      }
+    }
+    line = line.trim();
+    if (line === "") continue;
+    if (line.startsWith("[") && !line.startsWith("[[") && !line.endsWith("]")) {
+      return "malformed config.toml (unterminated table header)";
+    }
+    const eq = line.indexOf("=");
+    if (eq > 0) {
+      const valueRaw = line.slice(eq + 1).trim();
+      if (valueRaw.startsWith("[") && !valueRaw.endsWith("]")) {
+        return "malformed config.toml (truncated array)";
+      }
+      // Unterminated basic string value.
+      if (valueRaw.startsWith('"') && valueRaw.length > 1 && !valueRaw.endsWith('"')) {
+        // Allow escaped trailing quote check: if odd number of unescaped quotes, broken.
+        let quotes = 0;
+        for (let i = 0; i < valueRaw.length; i++) {
+          if (valueRaw[i] === "\\" ) {
+            i++;
+            continue;
+          }
+          if (valueRaw[i] === '"') quotes++;
+        }
+        if (quotes % 2 !== 0) {
+          return "malformed config.toml (unterminated string)";
+        }
+      }
+    }
+  }
+  return null;
 }
 
 /** Catalog source string for a kimi config.toml read (no credential material). */
@@ -217,19 +283,16 @@ export function kimiModelsConfigSource(configPath: string, defaultModel: string 
   return configPath;
 }
 
-/** Cap on operator config.toml — small; auth co-located so we never slurping. */
-const KIMI_CONFIG_MAX_BYTES = 2 * 1024 * 1024;
+/** Cap on operator config.toml — small; auth co-located so we never slurp it whole into memory unbounded. */
+export const KIMI_CONFIG_MAX_BYTES = 2 * 1024 * 1024;
 
-/**
- * Collapse an absolute path under HOME to `~/…` for catalog source strings.
- */
-function displayVendorPath(absolutePath: string, env: NodeJS.ProcessEnv): string {
-  const home = env.HOME && env.HOME.trim() !== "" ? path.resolve(env.HOME) : undefined;
-  const resolved = path.resolve(absolutePath);
-  if (home && (resolved === home || resolved.startsWith(home + path.sep))) {
-    return `~${resolved.slice(home.length)}`;
-  }
-  return absolutePath;
+function isEnoent(err: unknown): boolean {
+  return (
+    typeof err === "object" &&
+    err !== null &&
+    "code" in err &&
+    (err as { code?: string }).code === "ENOENT"
+  );
 }
 
 /** Minimal TOML string escape (quotes, backslash, control chars). */
@@ -557,6 +620,8 @@ export function createKimiAdapter(env: NodeJS.ProcessEnv = process.env): VendorA
       // Operator home only — resolveOperatorVendorHome refuses the adapter's
       // own isolation marker (`.parley-kimi` on KIMI_CODE_HOME) so a child that
       // re-invokes `parley models --refresh` cannot inject task-controlled ids.
+      // Absent file = quiet empty; present-but-unusable rejects so refresh
+      // can warn even when another channel fills the catalog.
       const home = resolveOperatorVendorHome("kimi", env);
       if (home === null) return { source: OPERATOR_CONFIG_FILE, models: [] };
       const configPath = path.join(home, OPERATOR_CONFIG_FILE);
@@ -565,15 +630,24 @@ export function createKimiAdapter(env: NodeJS.ProcessEnv = process.env): VendorA
       try {
         const stat = fs.statSync(configPath);
         if (stat.size > KIMI_CONFIG_MAX_BYTES) {
-          return { source: kimiModelsConfigSource(sourceBase, null), models: [] };
+          throw new Error(
+            `${OPERATOR_CONFIG_FILE} exceeds size cap (${KIMI_CONFIG_MAX_BYTES} bytes)`,
+          );
         }
         text = fs.readFileSync(configPath, "utf8");
-      } catch {
-        return { source: kimiModelsConfigSource(sourceBase, null), models: [] };
+      } catch (err) {
+        if (isEnoent(err)) {
+          return { source: kimiModelsConfigSource(sourceBase, null), models: [] };
+        }
+        throw err instanceof Error ? err : new Error(String(err));
       }
       // Secret hygiene: parse → project model keys only. Never log `text`,
       // never re-serialize the full parse tree (credentials live alongside).
-      const { models, defaultModel } = parseKimiModelsConfig(text);
+      // Errors from the parser carry no file body / credential material.
+      const { models, defaultModel, error } = parseKimiModelsConfig(text);
+      if (error !== null) {
+        throw new Error(error);
+      }
       return {
         source: kimiModelsConfigSource(sourceBase, defaultModel),
         models,
