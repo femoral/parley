@@ -15,6 +15,8 @@ interface FixAck {
   parent_task_id: string | null;
   attempt: number;
   resumed: boolean;
+  /** Multi-live most-recent fallback (#280); printed on stderr, not stdout JSON. */
+  warning?: string;
 }
 
 /** CLI exit code for daemon `retry_limit_exceeded` (#158). */
@@ -111,6 +113,11 @@ export async function runFix(ctx: CliContext, args: string[]): Promise<number> {
   // --json is the default shape for delegate/fix acks; honor the flag for
   // symmetry with other commands that also always print JSON.
   void flags;
-  printJson(ctx, ack);
+  // Binding fallback warning (#280): stderr only — leave success stdout shape intact.
+  if (typeof ack.warning === "string" && ack.warning !== "") {
+    ctx.stderr(`warning: ${ack.warning}\n`);
+  }
+  const { warning: _warning, ...stdoutAck } = ack;
+  printJson(ctx, stdoutAck);
   return 0;
 }

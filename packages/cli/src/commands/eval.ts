@@ -14,6 +14,8 @@ interface EvalAck {
   eval_baseline?: number | null;
   eval_rubric?: string | null;
   eval_rubric_version?: number | null;
+  /** Multi-live most-recent fallback (#280); printed on stderr, not stdout JSON. */
+  warning?: string;
 }
 
 /**
@@ -122,6 +124,11 @@ export async function runEval(ctx: CliContext, args: string[]): Promise<number> 
     throw err;
   }
 
-  printJson(ctx, ack);
+  // Binding fallback warning (#280): stderr only — leave success stdout shape intact.
+  if (typeof ack.warning === "string" && ack.warning !== "") {
+    ctx.stderr(`warning: ${ack.warning}\n`);
+  }
+  const { warning: _warning, ...stdoutAck } = ack;
+  printJson(ctx, stdoutAck);
   return 0;
 }

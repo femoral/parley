@@ -396,6 +396,8 @@ function handleDelegate(engine: TaskEngine, res: http.ServerResponse, body: unkn
       type,
       dryRun,
     });
+    // Multi-live fallback warning (#280) — CLI prints to stderr, not stdout JSON.
+    const bindingWarning = engine.takeSessionBindingWarning();
     sendJson(res, 201, {
       task_id: task.id,
       name: task.name,
@@ -403,6 +405,7 @@ function handleDelegate(engine: TaskEngine, res: http.ServerResponse, body: unkn
       seq: task.seq,
       // Bound session is observable from the ack alone (#256).
       orchestrator_session_id: task.orchestrator_session_id,
+      ...(bindingWarning !== null ? { warning: bindingWarning } : {}),
     });
   } catch (err) {
     if (err instanceof DelegateError) {
@@ -826,6 +829,7 @@ function handleRunEval(
       ancestryChain,
       workspaceRoot: optionalString(body.workspace_root),
     });
+    const bindingWarning = engine.takeSessionBindingWarning();
     sendJson(res, 200, {
       run_id: row.id,
       state: row.state,
@@ -840,6 +844,7 @@ function handleRunEval(
       eval_harness: row.eval_harness,
       eval_model: row.eval_model,
       eval_effort: row.eval_effort,
+      ...(bindingWarning !== null ? { warning: bindingWarning } : {}),
     });
   } catch (err) {
     if (err instanceof DelegateError) {
@@ -1430,6 +1435,7 @@ function handleEval(
       ancestryChain,
       workspaceRoot: optionalString(body.workspace_root),
     });
+    const bindingWarning = engine.takeSessionBindingWarning();
     sendJson(res, 200, {
       task_id: row.id,
       name: row.name,
@@ -1443,6 +1449,7 @@ function handleEval(
       eval_harness: row.eval_harness,
       eval_model: row.eval_model,
       eval_effort: row.eval_effort,
+      ...(bindingWarning !== null ? { warning: bindingWarning } : {}),
     });
   } catch (err) {
     if (err instanceof DelegateError) {
@@ -1741,6 +1748,7 @@ function handleFix(
       ancestryChain,
       workspaceRoot,
     });
+    const bindingWarning = engine.takeSessionBindingWarning();
     sendJson(res, 201, {
       task_id: task.id,
       name: task.name,
@@ -1749,6 +1757,7 @@ function handleFix(
       parent_task_id: task.parent_task_id,
       attempt: task.attempt,
       resumed: task.resumed === 1,
+      ...(bindingWarning !== null ? { warning: bindingWarning } : {}),
     });
   } catch (err) {
     if (err instanceof DelegateError) {
@@ -2694,6 +2703,16 @@ export async function startServer(
     parleyHome: paths.home,
   });
   const engine = new TaskEngine(db, paths, adapters);
+  // Dead-orchestrator session reap on start (#280) — do not wait for the
+  // scheduled retention sweep (may be delayed by last_gc_at).
+  try {
+    const reaped = engine.reapDeadSessions();
+    if (reaped.length > 0) {
+      appendDaemonDiag(paths, `session-reap: startup removed ${reaped.length} dead session(s)`);
+    }
+  } catch (err) {
+    appendDaemonDiag(paths, `session-reap: startup error: ${String(err)}`);
+  }
   // UI discovery must never take the daemon down: it's spawned detached with
   // stdio ignored, so an exception here (e.g. a corrupt parley.json) would
   // brick every CLI command with no visible cause. Degrade to "no UI" and
