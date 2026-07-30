@@ -30,7 +30,8 @@
           "description": "Maximum reasoning with automatic task delegation"
         }
       ],
-      "visibility": "list"
+      "visibility": "list",
+      "supported_in_api": true
     },
     {
       "slug": "gpt-5.4-mini",
@@ -54,7 +55,8 @@
           "description": "Extra high reasoning depth for complex problems"
         }
       ],
-      "visibility": "list"
+      "visibility": "list",
+      "supported_in_api": true
     },
     {
       "slug": "codex-auto-review",
@@ -78,7 +80,27 @@
           "description": "Extra high reasoning depth for complex problems"
         }
       ],
-      "visibility": "hide"
+      "visibility": "hide",
+      "supported_in_api": true
+    },
+    {
+      "slug": "internal-not-in-api",
+      "display_name": "Internal Not In API",
+      "default_reasoning_level": "low",
+      "supported_reasoning_levels": [
+        { "effort": "low" }
+      ],
+      "visibility": "list",
+      "supported_in_api": false
+    },
+    {
+      "slug": "missing-api-flag",
+      "display_name": "Missing API Flag",
+      "default_reasoning_level": "low",
+      "supported_reasoning_levels": [
+        { "effort": "low" }
+      ],
+      "visibility": "list"
     }
   ]
 }

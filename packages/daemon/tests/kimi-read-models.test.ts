@@ -5,6 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   createKimiAdapter,
+  KIMI_CODE_HOME_REL,
   kimiModelsConfigSource,
   parseKimiModelsConfig,
 } from "../src/adapters/kimi.js";
@@ -48,7 +49,7 @@ describe("parseKimiModelsConfig", () => {
 
   it("never surfaces co-located credential values (secret hygiene)", () => {
     const text = readFixture("config.well-formed.toml");
-    expect(text).toContain(HYGIENE_SENTINEL); // fixture still has the sentinel
+    expect(text).toContain(HYGIENE_SENTINEL);
     const { models, defaultModel } = parseKimiModelsConfig(text);
     const serialized = JSON.stringify({ models, defaultModel });
     expect(serialized).not.toContain(HYGIENE_SENTINEL);
@@ -65,7 +66,6 @@ describe("parseKimiModelsConfig", () => {
 
   it("fails soft on malformed / truncated TOML", () => {
     const result = parseKimiModelsConfig(readFixture("config.malformed.toml"));
-    // May recover partial keys, but must not throw; never includes sentinel.
     expect(Array.isArray(result.models)).toBe(true);
     expect(JSON.stringify(result)).not.toContain(HYGIENE_SENTINEL);
   });
@@ -81,10 +81,12 @@ describe("parseKimiModelsConfig", () => {
 
 describe("kimiModelsConfigSource", () => {
   it("surfaces default_model when present (model id, not a secret)", () => {
-    expect(kimiModelsConfigSource("/tmp/x/config.toml", "kimi-code/k3")).toBe(
-      "/tmp/x/config.toml (default_model=kimi-code/k3)",
+    expect(kimiModelsConfigSource("~/.kimi-code/config.toml", "kimi-code/k3")).toBe(
+      "~/.kimi-code/config.toml (default_model=kimi-code/k3)",
     );
-    expect(kimiModelsConfigSource("/tmp/x/config.toml", null)).toBe("/tmp/x/config.toml");
+    expect(kimiModelsConfigSource("~/.kimi-code/config.toml", null)).toBe(
+      "~/.kimi-code/config.toml",
+    );
   });
 });
 
@@ -109,16 +111,18 @@ describe("kimi adapter readModels", () => {
   it("reads config.toml from the operator home (KIMI_CODE_HOME)", async () => {
     home = makeOperatorHome();
     fs.writeFileSync(path.join(home, "config.toml"), readFixture("config.well-formed.toml"));
-    const adapter = createKimiAdapter({ KIMI_CODE_HOME: home });
+    const adapter = createKimiAdapter({
+      KIMI_CODE_HOME: home,
+      HOME: "/tmp/operator",
+    });
     const result = await adapter.readModels!(undefined);
     expect(result.models.map((m) => m.id)).toEqual([
       "kimi-code/k3",
       "kimi-code/kimi-for-coding",
       "kimi-code/extra",
     ]);
-    expect(result.source).toContain(path.join(home, "config.toml"));
+    expect(result.source).toContain("config.toml");
     expect(result.source).toContain("default_model=kimi-code/kimi-for-coding");
-    // Hygiene: result must not carry the credential sentinel.
     expect(JSON.stringify(result)).not.toContain(HYGIENE_SENTINEL);
   });
 
@@ -133,25 +137,35 @@ describe("kimi adapter readModels", () => {
     home = makeOperatorHome();
     fs.writeFileSync(path.join(home, "config.toml"), readFixture("config.malformed.toml"));
     const adapter = createKimiAdapter({ KIMI_CODE_HOME: home });
-    await expect(adapter.readModels!(undefined)).resolves.toMatchObject({
-      models: expect.any(Array),
-    });
+    const result = await adapter.readModels!(undefined);
+    expect(result.models).toEqual([]);
   });
 
-  it("does not resolve the isolated per-task KIMI_CODE_HOME under task cwd", async () => {
+  it("refuses KIMI_CODE_HOME pointing at a per-task isolated home (finding 2/6)", async () => {
+    // Realistic child env: adapter set KIMI_CODE_HOME to <cwd>/.parley-kimi.
+    // The isolated tree holds a decoy model; discovery must fall back to
+    // operator HOME/.kimi-code (empty) and never surface the decoy.
     home = makeOperatorHome();
     const taskCwd = path.join(home, "worktree");
-    const isolated = path.join(taskCwd, ".parley-kimi");
+    const isolated = path.join(taskCwd, KIMI_CODE_HOME_REL);
     fs.mkdirSync(isolated, { recursive: true });
     fs.writeFileSync(
       path.join(isolated, "config.toml"),
       'default_model = "from-isolated"\n[models."only-isolated"]\nsupport_efforts = [ "low" ]\n',
     );
-    // Operator home is HOME/.kimi-code (empty) — not the isolated tree.
-    const adapter = createKimiAdapter({ HOME: home });
+    const operatorKimi = path.join(home, ".kimi-code");
+    fs.mkdirSync(operatorKimi, { recursive: true });
+    // Operator home has no models — empty catalog, not the decoy.
+
+    const adapter = createKimiAdapter({
+      HOME: home,
+      KIMI_CODE_HOME: isolated,
+    });
     const result = await adapter.readModels!(undefined);
     expect(result.models.map((m) => m.id)).not.toContain("only-isolated");
-    expect(result.source).toContain(path.join(home, ".kimi-code", "config.toml"));
+    expect(result.models).toEqual([]);
+    expect(result.source).toContain(".kimi-code");
     expect(result.source).not.toContain(".parley-kimi");
+    expect(result.source).not.toContain("only-isolated");
   });
 });

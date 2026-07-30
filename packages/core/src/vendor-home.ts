@@ -7,40 +7,154 @@ import path from "node:path";
  * Discovery reads the directory the *operator* uses when they run the vendor
  * CLI interactively — not the isolated per-task homes parley provisions for
  * spawned children (e.g. `<cwd>/.parley-kimi`, `<cwd>/.openclaw-state`). Those
- * isolated paths ride only on the child's `SpawnPlan.env`; this helper never
- * sees a task cwd and never invents one.
+ * isolated paths ride on the child's `SpawnPlan.env` (and are often visible in
+ * `process.env` when a delegated child re-invokes `parley models --refresh` /
+ * `parley init`). This helper must refuse those markers and fall back to the
+ * well-known operator default — otherwise a task-controlled worktree file is
+ * read into the operator's global catalog.
  *
- * Env overrides match the vars the adapters already honour when isolating
- * children (so an operator who relocates their CLI home via the same var is
- * still found). Defaults are the vendors' well-known home paths under the
- * OS user home.
+ * Env keys (provenance noted per entry):
+ *  - adapter-set on spawn for isolation (must refuse when pointing at a
+ *    parley-provisioned marker path): `KIMI_CODE_HOME`, `OPENCLAW_STATE_DIR`,
+ *    `HERMES_HOME`, `GOOSE_PATH_ROOT`, `OPENHANDS_PERSISTENCE_DIR`
+ *  - research-documented CLI override only (codex/grok adapters do not set
+ *    these today): `CODEX_HOME`, `GROK_HOME`
  */
 
-/** Env override + default path-under-homedir for each vendor we can resolve. */
-const OPERATOR_HOME_SPECS: Record<string, { envKey: string; defaultRel: string }> = {
-  codex: { envKey: "CODEX_HOME", defaultRel: ".codex" },
-  kimi: { envKey: "KIMI_CODE_HOME", defaultRel: ".kimi-code" },
-  openclaw: { envKey: "OPENCLAW_STATE_DIR", defaultRel: ".openclaw" },
-  hermes: { envKey: "HERMES_HOME", defaultRel: ".hermes" },
-  grok: { envKey: "GROK_HOME", defaultRel: ".grok" },
+/**
+ * Path-segment markers of parley-provisioned per-task homes.
+ * Matched as directory segments (or trailing path suffix) so a genuine
+ * operator override like `/opt/kimi-homes/prod` is still accepted, while
+ * `/work/tree/.parley-kimi` is refused.
+ */
+const PARLEY_ISOLATED_MARKERS: readonly string[] = [
+  ".parley-kimi", // kimi KIMI_CODE_HOME_REL
+  ".openclaw-state", // openclaw OPENCLAW_STATE_DIR_REL
+  path.join(".parley", "hermes-home"), // hermes HERMES_HOME_REL
+  ".parley-goose", // goose PATH_ROOT_DIR
+  ".parley-openhands", // openhands PERSIST_REL parent
+];
+
+type HomeSpec = {
+  envKey: string;
+  /** Path under the OS user home when the override is absent or refused. */
+  defaultRel: string;
   /**
-   * goose relocates its whole tree via `GOOSE_PATH_ROOT`; the operator default
-   * is XDG-style `~/.config/goose` (what the CLI uses without the override).
+   * How to interpret a non-refused override:
+   *  - `home` — the override *is* the vendor home (config files live inside)
+   *  - `goose-path-root` — override is GOOSE_PATH_ROOT; config dir is
+   *    `<root>/config` so it matches the default `~/.config/goose` level
    */
-  goose: { envKey: "GOOSE_PATH_ROOT", defaultRel: path.join(".config", "goose") },
-  openhands: { envKey: "OPENHANDS_PERSISTENCE_DIR", defaultRel: ".openhands" },
+  overrideKind: "home" | "goose-path-root";
+  /** Short note for docs / error strings (adapter-set vs research-only). */
+  provenance: "adapter-isolation" | "research-cli-override";
 };
+
+/** Env override + default path-under-homedir for each vendor we can resolve. */
+const OPERATOR_HOME_SPECS: Record<string, HomeSpec> = {
+  // research-documented CLI override (codex adapter does not set CODEX_HOME).
+  codex: {
+    envKey: "CODEX_HOME",
+    defaultRel: ".codex",
+    overrideKind: "home",
+    provenance: "research-cli-override",
+  },
+  // adapter-set on spawn to task.cwd/.parley-kimi
+  kimi: {
+    envKey: "KIMI_CODE_HOME",
+    defaultRel: ".kimi-code",
+    overrideKind: "home",
+    provenance: "adapter-isolation",
+  },
+  // adapter-set on spawn to task.cwd/.openclaw-state
+  openclaw: {
+    envKey: "OPENCLAW_STATE_DIR",
+    defaultRel: ".openclaw",
+    overrideKind: "home",
+    provenance: "adapter-isolation",
+  },
+  // adapter-set on spawn to task.cwd/.parley/hermes-home
+  hermes: {
+    envKey: "HERMES_HOME",
+    defaultRel: ".hermes",
+    overrideKind: "home",
+    provenance: "adapter-isolation",
+  },
+  // research-documented CLI override (grok adapter isolates via cwd files, not env).
+  grok: {
+    envKey: "GROK_HOME",
+    defaultRel: ".grok",
+    overrideKind: "home",
+    provenance: "research-cli-override",
+  },
+  /**
+   * goose: GOOSE_PATH_ROOT is a *tree root* (adapter sets it to
+   * `task.cwd/.parley-goose`); config lives at `<root>/config/config.yaml`.
+   * The operator default is the config dir itself (`~/.config/goose`, where
+   * `config.yaml` sits). Both branches of this resolver therefore return the
+   * **config directory** level so callers can join filenames uniformly.
+   */
+  goose: {
+    envKey: "GOOSE_PATH_ROOT",
+    defaultRel: path.join(".config", "goose"),
+    overrideKind: "goose-path-root",
+    provenance: "adapter-isolation",
+  },
+  // adapter-set on spawn to task.cwd/.parley-openhands/persist
+  openhands: {
+    envKey: "OPENHANDS_PERSISTENCE_DIR",
+    defaultRel: ".openhands",
+    overrideKind: "home",
+    provenance: "adapter-isolation",
+  },
+};
+
+/**
+ * True when `resolved` looks like a parley-provisioned per-task vendor home.
+ * Exported for tests that assert the refusal path.
+ */
+export function isParleyIsolatedVendorHome(resolved: string): boolean {
+  const normalized = path.resolve(resolved);
+  // Match path separators so we don't false-positive on a substring of a
+  // legitimate directory name.
+  const withSeps = normalized.endsWith(path.sep) ? normalized : `${normalized}${path.sep}`;
+  for (const marker of PARLEY_ISOLATED_MARKERS) {
+    const needle = `${path.sep}${marker}${path.sep}`;
+    if (withSeps.includes(needle)) return true;
+    // Also match when the resolved path *is* the marker leaf
+    // (e.g. `/work/tree/.parley-kimi`).
+    if (normalized.endsWith(`${path.sep}${marker}`) || normalized.endsWith(marker)) {
+      // Require a path separator before the marker (or whole path equals marker)
+      // so `not-parley-kimi` does not match.
+      const idx = normalized.lastIndexOf(marker);
+      if (idx === 0) return true;
+      if (idx > 0 && (normalized[idx - 1] === path.sep || normalized[idx - 1] === "/")) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+function userHomeFromEnv(env: NodeJS.ProcessEnv): string {
+  return env.HOME && env.HOME.trim() !== "" ? env.HOME : os.homedir();
+}
+
+function defaultHome(spec: HomeSpec, env: NodeJS.ProcessEnv): string {
+  return path.join(userHomeFromEnv(env), spec.defaultRel);
+}
 
 /**
  * Resolve the operator's on-disk home for `vendorId`.
  *
- * Honours the vendor's env override when set and non-empty; otherwise returns
- * the well-known path under `os.homedir()` (or `HOME` when tests inject it).
- * Returns `null` for vendors with no known home layout — callers treat that
- * as "no disk channel" and fall through to probe/shipped.
+ * Honours the vendor's env override when set, non-empty, and **not** a
+ * parley-provisioned isolated path. Otherwise returns the well-known path
+ * under the OS user home (or `HOME` when tests inject it). Returns `null` for
+ * vendors with no known home layout.
  *
- * Intentionally independent of any task cwd: never confusable with the
- * isolated homes `prepare()` writes into `SpawnPlan.env`.
+ * Operators who genuinely relocate their CLI home via the same env var still
+ * work — only paths that match the isolation markers adapters write into
+ * `SpawnPlan.env` are refused.
  */
 export function resolveOperatorVendorHome(
   vendorId: string,
@@ -50,10 +164,17 @@ export function resolveOperatorVendorHome(
   if (spec === undefined) return null;
   const override = env[spec.envKey];
   if (override !== undefined && override.trim() !== "") {
-    return path.resolve(override);
+    const resolved = path.resolve(override);
+    if (!isParleyIsolatedVendorHome(resolved)) {
+      if (spec.overrideKind === "goose-path-root") {
+        // Align with default (~/.config/goose): return the config directory.
+        return path.join(resolved, "config");
+      }
+      return resolved;
+    }
+    // Fall through to the operator default — do not read the task home.
   }
-  const userHome = env.HOME && env.HOME.trim() !== "" ? env.HOME : os.homedir();
-  return path.join(userHome, spec.defaultRel);
+  return defaultHome(spec, env);
 }
 
 /** Vendor ids for which {@link resolveOperatorVendorHome} has a known layout. */

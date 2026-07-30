@@ -169,11 +169,35 @@ const MODELS_SOURCE = "codex debug models";
 const MODELS_CACHE_FILE = "models_cache.json";
 
 /**
+ * Shared codex catalog filter (#281 / fix round finding 3).
+ * Both the CLI probe and the on-disk cache read the same feed — they must
+ * agree, or union re-admits ids the disk filter correctly dropped.
+ * Load-bearing: `visibility === "list" && supported_in_api === true`.
+ */
+function isCodexListedModel(m: Record<string, unknown>): boolean {
+  return m.visibility === "list" && m.supported_in_api === true;
+}
+
+function modelEntryFromCodexRaw(m: Record<string, unknown>): ModelEntry | null {
+  if (!isCodexListedModel(m)) return null;
+  const id = asString(m.slug);
+  if (id === "") return null;
+  const levels = Array.isArray(m.supported_reasoning_levels)
+    ? m.supported_reasoning_levels
+    : [];
+  const efforts = levels
+    .map((level) => asString(asRecord(level)?.effort))
+    .filter((effort) => effort !== "");
+  const defaultEffort =
+    typeof m.default_reasoning_level === "string" ? m.default_reasoning_level : null;
+  return { id, efforts, default_effort: defaultEffort };
+}
+
+/**
  * Parse the JSON catalog `codex debug models` emits into normalized model
- * entries (#29, research §2). Drops `visibility:"hide"` models (internal, e.g.
- * `codex-auto-review`) and the huge per-model `base_instructions` blob — we keep
- * only `slug`, `supported_reasoning_levels[].effort`, and
- * `default_reasoning_level`. Throws on non-JSON or a missing `models` array so
+ * entries (#29, research §2). Same filter as the on-disk cache reader
+ * (`visibility === "list" && supported_in_api`) so union merge cannot re-admit
+ * internal / non-API models. Throws on non-JSON or a missing `models` array so
  * the refresh path can keep the existing entry rather than clobber it.
  */
 export function parseCodexModels(json: string): ModelEntry[] {
@@ -186,18 +210,8 @@ export function parseCodexModels(json: string): ModelEntry[] {
   for (const raw of models) {
     const m = asRecord(raw);
     if (!m) continue;
-    if (m.visibility === "hide") continue; // internal model, not user-selectable
-    const id = asString(m.slug);
-    if (id === "") continue;
-    const levels = Array.isArray(m.supported_reasoning_levels)
-      ? m.supported_reasoning_levels
-      : [];
-    const efforts = levels
-      .map((level) => asString(asRecord(level)?.effort))
-      .filter((effort) => effort !== "");
-    const defaultEffort =
-      typeof m.default_reasoning_level === "string" ? m.default_reasoning_level : null;
-    entries.push({ id, efforts, default_effort: defaultEffort });
+    const entry = modelEntryFromCodexRaw(m);
+    if (entry) entries.push(entry);
   }
   return entries;
 }
@@ -227,27 +241,30 @@ export function parseCodexModelsCache(json: string): { models: ModelEntry[]; cac
   for (const raw of models) {
     const m = asRecord(raw);
     if (!m) continue;
-    // Strict filter: both flags required. Missing flags → not listed.
-    if (m.visibility !== "list") continue;
-    if (m.supported_in_api !== true) continue;
-    const id = asString(m.slug);
-    if (id === "") continue;
-    const levels = Array.isArray(m.supported_reasoning_levels)
-      ? m.supported_reasoning_levels
-      : [];
-    const efforts = levels
-      .map((level) => asString(asRecord(level)?.effort))
-      .filter((effort) => effort !== "");
-    const defaultEffort =
-      typeof m.default_reasoning_level === "string" ? m.default_reasoning_level : null;
-    entries.push({ id, efforts, default_effort: defaultEffort });
+    const entry = modelEntryFromCodexRaw(m);
+    if (entry) entries.push(entry);
   }
   return { models: entries, cacheFetchedAt };
 }
 
 /**
+ * Collapse an absolute path under the operator home to a `~/…` form for
+ * catalog `source` strings (avoids embedding `/home/<user>/…` in models.json
+ * and command output that gets pasted into issues).
+ */
+export function displayVendorPath(absolutePath: string, env: NodeJS.ProcessEnv = process.env): string {
+  const home = env.HOME && env.HOME.trim() !== "" ? path.resolve(env.HOME) : undefined;
+  const resolved = path.resolve(absolutePath);
+  if (home && (resolved === home || resolved.startsWith(home + path.sep))) {
+    return `~${resolved.slice(home.length)}`;
+  }
+  return absolutePath;
+}
+
+/**
  * Build the catalog `source` string for a cache read, including the file's
  * own freshness stamp when present (caches can be arbitrarily stale).
+ * `cachePath` should already be tilde-collapsed when written to models.json.
  */
 export function codexModelsCacheSource(cachePath: string, cacheFetchedAt: string | null): string {
   if (cacheFetchedAt !== null) {
@@ -255,6 +272,9 @@ export function codexModelsCacheSource(cachePath: string, cacheFetchedAt: string
   }
   return cachePath;
 }
+
+/** Cap on models_cache.json size — real caches embed large prompt blobs. */
+const MODELS_CACHE_MAX_BYTES = 8 * 1024 * 1024;
 
 /** Normalize a single `item.completed` item to a thin VendorEvent (or `[]` opaque). */
 function parseItem(item: unknown): VendorEvent[] {
@@ -400,21 +420,26 @@ export function createCodexAdapter(env: NodeJS.ProcessEnv = process.env): Vendor
     },
 
     async readModels(): Promise<ProbedModels> {
-      // Operator home only — never the isolated CODEX_HOME a child might get
-      // via spawn env. Fail soft on every degraded input (absent, unreadable,
-      // malformed, unexpected shape, empty fresh home).
+      // Operator home via resolveOperatorVendorHome (honours research-documented
+      // CODEX_HOME override; codex adapter does not set CODEX_HOME on spawn —
+      // isolation is flags-only). Fail soft on every degraded input.
       const home = resolveOperatorVendorHome("codex", env);
       if (home === null) return { source: MODELS_CACHE_FILE, models: [] };
       const cachePath = path.join(home, MODELS_CACHE_FILE);
+      const sourceBase = displayVendorPath(cachePath, env);
       let text: string;
       try {
+        const stat = fs.statSync(cachePath);
+        if (stat.size > MODELS_CACHE_MAX_BYTES) {
+          return { source: codexModelsCacheSource(sourceBase, null), models: [] };
+        }
         text = fs.readFileSync(cachePath, "utf8");
       } catch {
-        return { source: codexModelsCacheSource(cachePath, null), models: [] };
+        return { source: codexModelsCacheSource(sourceBase, null), models: [] };
       }
       const { models, cacheFetchedAt } = parseCodexModelsCache(text);
       return {
-        source: codexModelsCacheSource(cachePath, cacheFetchedAt),
+        source: codexModelsCacheSource(sourceBase, cacheFetchedAt),
         models,
       };
     },

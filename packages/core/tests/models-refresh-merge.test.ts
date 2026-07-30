@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import type { ModelEntry, ModelProber, ProbedModels, VendorModels } from "../src/models.js";
 import {
   mergeDiscoveredModels,
-  modelEntryRichness,
   pickRicherModelEntry,
   refreshCatalog,
 } from "../src/models.js";
@@ -25,33 +24,65 @@ function prober(hooks: {
   return hooks;
 }
 
-describe("modelEntryRichness / pickRicherModelEntry", () => {
-  it("scores non-empty efforts above empty", () => {
-    const withEfforts = entry({ id: "m", efforts: ["low"] });
-    const empty = entry({ id: "m" });
-    expect(modelEntryRichness(withEfforts)).toBeGreaterThan(modelEntryRichness(empty));
-    expect(pickRicherModelEntry(empty, withEfforts)).toEqual(withEfforts);
+describe("pickRicherModelEntry (field-by-field)", () => {
+  it("keeps non-empty efforts from primary when secondary only adds a label", () => {
+    // Finding 5: whole-entry scoring discarded the richer effort list.
+    const disk = entry({
+      id: "m",
+      efforts: ["low", "high", "xhigh"],
+      default_effort: "high",
+    });
+    const probe = entry({
+      id: "m",
+      efforts: ["low"],
+      default_effort: "low",
+      label: "GPT",
+    });
+    expect(pickRicherModelEntry(disk, probe)).toEqual({
+      id: "m",
+      efforts: ["low", "high", "xhigh"],
+      default_effort: "high",
+      label: "GPT",
+    });
   });
 
-  it("scores a known default_effort above null", () => {
-    const known = entry({ id: "m", default_effort: "high" });
-    const unknown = entry({ id: "m" });
-    expect(modelEntryRichness(known)).toBeGreaterThan(modelEntryRichness(unknown));
-    expect(pickRicherModelEntry(unknown, known)).toEqual(known);
+  it("preserves notes from disk when probe supplies efforts", () => {
+    // Finding 5 second case — kimi-shaped notes must not vanish.
+    const disk = entry({ id: "X", notes: "max_context_size=1048576" });
+    const probe = entry({
+      id: "X",
+      efforts: ["low", "high"],
+      default_effort: "high",
+    });
+    expect(pickRicherModelEntry(disk, probe)).toEqual({
+      id: "X",
+      efforts: ["low", "high"],
+      default_effort: "high",
+      notes: "max_context_size=1048576",
+    });
   });
 
-  it("scores present label/notes above absent", () => {
-    const labeled = entry({ id: "m", label: "Nice", notes: "hint" });
-    const bare = entry({ id: "m" });
-    expect(modelEntryRichness(labeled)).toBeGreaterThan(modelEntryRichness(bare));
-    expect(pickRicherModelEntry(bare, labeled)).toEqual(labeled);
+  it("takes secondary efforts when primary's are empty", () => {
+    const disk = entry({ id: "m" });
+    const probe = entry({ id: "m", efforts: ["high"] });
+    expect(pickRicherModelEntry(disk, probe).efforts).toEqual(["high"]);
   });
 
-  it("keeps primary on equal richness (disk beats probe on ties)", () => {
-    const disk = entry({ id: "m", efforts: ["low"], label: "from-disk" });
-    const probe = entry({ id: "m", efforts: ["high"], label: "from-probe" });
-    // Same score (efforts + label); primary wins.
-    expect(modelEntryRichness(disk)).toBe(modelEntryRichness(probe));
+  it("prefers primary default_effort / label / notes on ties", () => {
+    const disk = entry({
+      id: "m",
+      efforts: ["low"],
+      default_effort: "high",
+      label: "from-disk",
+      notes: "d",
+    });
+    const probe = entry({
+      id: "m",
+      efforts: ["high"],
+      default_effort: "low",
+      label: "from-probe",
+      notes: "p",
+    });
     expect(pickRicherModelEntry(disk, probe)).toEqual(disk);
   });
 });
@@ -76,7 +107,7 @@ describe("mergeDiscoveredModels (union / richest-wins)", () => {
     const merged = mergeDiscoveredModels(disk, probe)!;
     const ids = merged.models.map((m) => m.id).sort();
     expect(ids).toEqual(["only-disk", "only-probe", "shared"]);
-    // shared: probe has efforts, disk does not → probe wins richness
+    // shared: disk empty efforts, probe has efforts → field merge takes probe efforts
     expect(merged.models.find((m) => m.id === "shared")).toEqual(
       entry({ id: "shared", efforts: ["high"] }),
     );
@@ -149,7 +180,7 @@ describe("refreshCatalog with readModels + listModels", () => {
     expect(catalog.grok!.source).toBe("models_cache.json + grok models");
   });
 
-  it("falls through to probe when disk read fails soft (throws)", async () => {
+  it("warns when disk fails even if probe succeeds (finding 4)", async () => {
     const adapters = new Map([
       [
         "codex",
@@ -164,9 +195,9 @@ describe("refreshCatalog with readModels + listModels", () => {
       ],
     ]);
     const { catalog, warnings } = await refreshCatalog({}, ["codex"], adapters, () => NOW);
-    expect(warnings).toEqual([]);
     expect(catalog.codex!.models).toEqual([entry({ id: "gpt-5.6-sol", efforts: ["low"] })]);
     expect(catalog.codex!.source).toBe("codex debug models");
+    expect(warnings).toEqual(["codex: disk read failed (EACCES)"]);
   });
 
   it("falls through to probe when disk returns empty (fresh home)", async () => {
@@ -183,8 +214,10 @@ describe("refreshCatalog with readModels + listModels", () => {
         }),
       ],
     ]);
-    const { catalog } = await refreshCatalog({}, ["codex"], adapters, () => NOW);
+    const { catalog, warnings } = await refreshCatalog({}, ["codex"], adapters, () => NOW);
     expect(catalog.codex!.models).toEqual([entry({ id: "from-probe" })]);
+    // Empty disk is a normal non-error state — no warning.
+    expect(warnings).toEqual([]);
   });
 
   it("falls back to shipped when both channels empty and entry is empty", async () => {
@@ -248,5 +281,34 @@ describe("refreshCatalog with readModels + listModels", () => {
     const { catalog } = await refreshCatalog({}, ["grok"], adapters, () => NOW);
     expect(catalog.grok!.source).toBe("grok models");
     expect(catalog.grok!.models).toEqual([entry({ id: "grok-4.5" })]);
+  });
+
+  it("excludes codex non-API models from the merged catalog (finding 3)", async () => {
+    // Simulates disk (strict filter) + probe that previously only dropped hide:
+    // both channels now share the filter, so union must not re-admit
+    // internal-not-in-api / missing-api-flag.
+    const diskModels = [
+      entry({ id: "gpt-5.6-sol", efforts: ["low"], default_effort: "medium" }),
+      entry({ id: "gpt-5.4-mini", efforts: ["low"], default_effort: "low" }),
+    ];
+    // Probe path after the shared filter — same id set as disk.
+    const probeModels = [...diskModels];
+    const adapters = new Map([
+      [
+        "codex",
+        prober({
+          readModels: () =>
+            Promise.resolve({ source: "~/.codex/models_cache.json", models: diskModels }),
+          listModels: () =>
+            Promise.resolve({ source: "codex debug models", models: probeModels }),
+        }),
+      ],
+    ]);
+    const { catalog } = await refreshCatalog({}, ["codex"], adapters, () => NOW);
+    const ids = catalog.codex!.models.map((m) => m.id);
+    expect(ids).toEqual(["gpt-5.6-sol", "gpt-5.4-mini"]);
+    expect(ids).not.toContain("internal-not-in-api");
+    expect(ids).not.toContain("missing-api-flag");
+    expect(ids).not.toContain("codex-auto-review");
   });
 });

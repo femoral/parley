@@ -75,7 +75,10 @@ export const SHIPPED_MODEL_CATALOG: ModelCatalog = {
   kimi: {
     fetched_at: SHIPPED_CATALOG_RETRIEVED_AT,
     source: "docs/research/kimi-code-cli.md",
-    models: [entry("kimi-for-coding")],
+    // Namespaced form matches kimi config.toml `[models."kimi-code/…"]` and
+    // the readModels() channel (#281). Bare `kimi-for-coding` remains the
+    // CLI's config-file default alias written into isolated spawn homes only.
+    models: [entry("kimi-code/kimi-for-coding")],
   },
   openclaw: {
     fetched_at: SHIPPED_CATALOG_RETRIEVED_AT,

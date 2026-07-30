@@ -223,31 +223,49 @@ function applyRefreshFallback(
 }
 
 /**
- * Richness score for union merge (#281). Higher wins when two channels describe
- * the same model id. Explicit criteria (in priority order of weight):
- *  - non-empty `efforts` beats empty
- *  - a known `default_effort` beats null
- *  - a present `label` beats absent
- *  - a present `notes` beats absent
+ * Per-field richest-wins merge for the same model id (#281 / fix round).
  *
- * Ties fall to the primary channel (disk before probe) so a disk read never
- * loses to a equally-thin probe entry.
- */
-export function modelEntryRichness(entry: ModelEntry): number {
-  let score = 0;
-  if (entry.efforts.length > 0) score += 8;
-  if (entry.default_effort !== null) score += 4;
-  if (entry.label !== undefined && entry.label !== "") score += 2;
-  if (entry.notes !== undefined && entry.notes !== "") score += 1;
-  return score;
-}
-
-/**
- * Prefer the richer of two entries for the same model id. On equal richness,
- * keep `primary` (the higher-precedence channel — disk over probe).
+ * Whole-entry scoring discarded a richer efforts list when the other channel
+ * only carried a label. Field rules (primary = higher-precedence channel,
+ * usually disk; secondary = probe):
+ *  - `efforts`: non-empty beats empty; both non-empty → keep primary
+ *  - `default_effort`: non-null beats null; both set → keep primary
+ *  - `label` / `notes`: present beats absent; both set → keep primary
+ *
+ * Never fabricates fields: only copies values that already exist on one side.
  */
 export function pickRicherModelEntry(primary: ModelEntry, secondary: ModelEntry): ModelEntry {
-  return modelEntryRichness(secondary) > modelEntryRichness(primary) ? secondary : primary;
+  const efforts =
+    primary.efforts.length > 0
+      ? primary.efforts
+      : secondary.efforts.length > 0
+        ? secondary.efforts
+        : primary.efforts;
+  const default_effort =
+    primary.default_effort !== null
+      ? primary.default_effort
+      : secondary.default_effort !== null
+        ? secondary.default_effort
+        : null;
+  const label =
+    primary.label !== undefined && primary.label !== ""
+      ? primary.label
+      : secondary.label !== undefined && secondary.label !== ""
+        ? secondary.label
+        : primary.label ?? secondary.label;
+  const notes =
+    primary.notes !== undefined && primary.notes !== ""
+      ? primary.notes
+      : secondary.notes !== undefined && secondary.notes !== ""
+        ? secondary.notes
+        : primary.notes ?? secondary.notes;
+  return {
+    id: primary.id,
+    efforts: [...efforts],
+    default_effort,
+    ...(label === undefined ? {} : { label }),
+    ...(notes === undefined ? {} : { notes }),
+  };
 }
 
 /**
@@ -255,8 +273,8 @@ export function pickRicherModelEntry(primary: ModelEntry, secondary: ModelEntry)
  *
  * The result is always a **superset** of both id sets — a disk read must never
  * shrink what the probe alone produced (grok's cache can miss agent variants
- * that live only in config). Same-id collisions pick the richer entry; equal
- * richness keeps the primary (disk) side.
+ * that live only in config). Same-id collisions merge field-by-field
+ * ({@link pickRicherModelEntry}); primary (disk) wins per-field ties.
  *
  * Returns `null` when both sides are empty so the caller can fall through to
  * shipped. Source strings are joined with ` + ` when both contributed models.
@@ -270,9 +288,7 @@ export function mergeDiscoveredModels(
   if (primaryModels.length === 0 && secondaryModels.length === 0) return null;
 
   const byId = new Map<string, ModelEntry>();
-  // Secondary first, then primary overwrites on equal-or-better richness via
-  // pickRicher — iteration order: seed with secondary, fold primary on top so
-  // primary wins ties.
+  // Seed with secondary, fold primary on top so primary wins per-field ties.
   for (const entry of secondaryModels) {
     byId.set(entry.id, entry);
   }
@@ -329,6 +345,10 @@ async function safeDiscover(
  * returns a new object; the caller persists it. `now` is injected for
  * deterministic tests.
  *
+ * Fail-soft means "don't crash", not "don't tell anyone": a disk/probe failure
+ * still emits a warning even when the other channel succeeded and filled the
+ * catalog.
+ *
  * Discovery remains advisory (ADR-0014): nothing here gates, widens, or
  * bypasses the deny-by-default allowlist.
  */
@@ -353,6 +373,15 @@ export async function refreshCatalog<A extends ModelProber>(
     const merged = mergeDiscoveredModels(disk.result, probe.result);
 
     if (merged !== null && merged.models.length > 0) {
+      // Fail-soft ≠ silent: surface a channel failure even when the other
+      // channel filled the catalog (finding 4). Empty disk/probe (fresh home)
+      // stays quiet — that is a normal non-error state.
+      if (adapter.readModels && disk.error) {
+        warnings.push(`${id}: disk read failed (${disk.error})`);
+      }
+      if (adapter.listModels && probe.error) {
+        warnings.push(`${id}: probe failed (${probe.error})`);
+      }
       next[id] = { fetched_at: now(), source: merged.source, models: merged.models };
       continue;
     }

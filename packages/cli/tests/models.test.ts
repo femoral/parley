@@ -32,7 +32,7 @@ function fakeAdapter(
 describe("codex debug models parser (golden fixture)", () => {
   const json = fs.readFileSync(CODEX_FIXTURE, "utf8");
 
-  it("normalizes slug/efforts/default and drops visibility:hide models", () => {
+  it("normalizes slug/efforts/default and applies list+supported_in_api filters", () => {
     expect(parseCodexModels(json)).toEqual([
       {
         id: "gpt-5.6-sol",
@@ -44,8 +44,12 @@ describe("codex debug models parser (golden fixture)", () => {
         efforts: ["low", "medium", "high", "xhigh"],
         default_effort: "medium",
       },
-      // codex-auto-review (visibility:"hide") is intentionally absent.
+      // hide / supported_in_api:false / missing supported_in_api are absent.
     ]);
+    const ids = parseCodexModels(json).map((m) => m.id);
+    expect(ids).not.toContain("codex-auto-review");
+    expect(ids).not.toContain("internal-not-in-api");
+    expect(ids).not.toContain("missing-api-flag");
   });
 
   it("throws on non-JSON or a missing models array (refresh keeps existing entry)", () => {

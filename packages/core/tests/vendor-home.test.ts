@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import path from "node:path";
 import {
+  isParleyIsolatedVendorHome,
   operatorVendorHomeIds,
   resolveOperatorVendorHome,
 } from "../src/vendor-home.js";
@@ -19,7 +20,7 @@ describe("resolveOperatorVendorHome", () => {
     );
   });
 
-  it("honours CODEX_HOME / KIMI_CODE_HOME / OPENCLAW_STATE_DIR overrides", () => {
+  it("honours genuine CODEX_HOME / KIMI_CODE_HOME / OPENCLAW_STATE_DIR overrides", () => {
     expect(
       resolveOperatorVendorHome("codex", {
         HOME: "/tmp/operator",
@@ -50,16 +51,62 @@ describe("resolveOperatorVendorHome", () => {
     expect(resolveOperatorVendorHome("no-such-vendor", { HOME: "/tmp/operator" })).toBeNull();
   });
 
-  it("never resolves to a per-task isolated home (no task cwd in the contract)", () => {
-    // Isolated kimi homes look like `<task.cwd>/.parley-kimi`. The operator
-    // resolver has no task cwd argument and must not invent one — with only
-    // HOME set it always lands under the operator home.
+  it("refuses a parley-provisioned kimi task home on KIMI_CODE_HOME (finding 2)", () => {
+    // The shape a delegated child sees: adapter set KIMI_CODE_HOME to
+    // <task.cwd>/.parley-kimi. Discovery must fall back to the operator default,
+    // not read the task-controlled tree into the global catalog.
     const taskCwd = "/tmp/worktree/task-t382";
     const isolated = path.join(taskCwd, ".parley-kimi");
-    const resolved = resolveOperatorVendorHome("kimi", { HOME: "/tmp/operator" });
+    expect(isParleyIsolatedVendorHome(isolated)).toBe(true);
+    const resolved = resolveOperatorVendorHome("kimi", {
+      HOME: "/tmp/operator",
+      KIMI_CODE_HOME: isolated,
+    });
+    expect(resolved).toBe(path.join("/tmp/operator", ".kimi-code"));
     expect(resolved).not.toBe(isolated);
     expect(resolved).not.toContain(".parley-kimi");
-    expect(resolved).toBe(path.join("/tmp/operator", ".kimi-code"));
+  });
+
+  it("refuses other adapter isolation markers", () => {
+    const home = "/tmp/operator";
+    expect(
+      resolveOperatorVendorHome("openclaw", {
+        HOME: home,
+        OPENCLAW_STATE_DIR: "/tmp/wt/.openclaw-state",
+      }),
+    ).toBe(path.join(home, ".openclaw"));
+    expect(
+      resolveOperatorVendorHome("hermes", {
+        HOME: home,
+        HERMES_HOME: "/tmp/wt/.parley/hermes-home",
+      }),
+    ).toBe(path.join(home, ".hermes"));
+    expect(
+      resolveOperatorVendorHome("goose", {
+        HOME: home,
+        GOOSE_PATH_ROOT: "/tmp/wt/.parley-goose",
+      }),
+    ).toBe(path.join(home, ".config", "goose"));
+    expect(
+      resolveOperatorVendorHome("openhands", {
+        HOME: home,
+        OPENHANDS_PERSISTENCE_DIR: "/tmp/wt/.parley-openhands/persist",
+      }),
+    ).toBe(path.join(home, ".openhands"));
+  });
+
+  it("aligns goose override and default at the config-directory level (finding 9)", () => {
+    // GOOSE_PATH_ROOT is a tree root; config lives at <root>/config/.
+    // Default is already the config dir (~/.config/goose).
+    expect(
+      resolveOperatorVendorHome("goose", {
+        HOME: "/tmp/operator",
+        GOOSE_PATH_ROOT: "/opt/goose-root",
+      }),
+    ).toBe(path.join("/opt/goose-root", "config"));
+    expect(resolveOperatorVendorHome("goose", { HOME: "/tmp/operator" })).toBe(
+      path.join("/tmp/operator", ".config", "goose"),
+    );
   });
 
   it("lists only vendors with a known operator-home layout", () => {

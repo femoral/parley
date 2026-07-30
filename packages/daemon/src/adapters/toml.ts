@@ -30,15 +30,32 @@ export function tomlString(value: string): string {
  * Supported:
  *  - bare keys: `key = "string" | number | true | false | ["a", "b"]`
  *  - tables: `[name]`, `[name."dotted.id"]`, `[name.plain]`
- *  - comments (`#…`) and blank lines
+ *  - comments (`#…`) and blank lines (quote-aware — `#` inside strings is kept)
  *
  * Unsupported (ignored or skipped): inline tables, multiline strings, arrays of
  * tables, dotted bare keys outside table headers. Callers that need only
  * specific tables should filter by section name after parse.
+ *
+ * Prototype pollution is rejected: `__proto__` / `constructor` / `prototype`
+ * are never used as table segments or keys, and every table is
+ * `Object.create(null)` so a hostile header cannot walk onto
+ * `Object.prototype` (#281 fix round).
  */
 
 export type TomlValue = string | number | boolean | TomlValue[] | TomlTable;
+/** Null-prototype table — never inherits Object.prototype keys. */
 export type TomlTable = { [key: string]: TomlValue };
+
+/** Keys / path segments that must never be materialised as own properties. */
+const FORBIDDEN_KEYS = new Set(["__proto__", "constructor", "prototype"]);
+
+function isForbiddenKey(key: string): boolean {
+  return FORBIDDEN_KEYS.has(key);
+}
+
+function emptyTable(): TomlTable {
+  return Object.create(null) as TomlTable;
+}
 
 function unquoteBasicString(raw: string): string {
   // raw includes surrounding quotes.
@@ -129,20 +146,45 @@ function parseTomlValue(raw: string): TomlValue | undefined {
 }
 
 /**
- * Parse a TOML document into nested tables. Fail-soft on individual bad lines
- * (skip them); returns whatever tables/keys were readable. Never throws on
- * content shape — only on total emptiness of input is fine (returns `{}`).
+ * Strip a `#…` comment only when `#` is outside quotes (basic/literal).
+ * A `#` inside `"…"` or `'…'` is part of the value (URLs, paths, #282).
+ */
+function stripTomlComment(lineRaw: string): string {
+  let inQuote: '"' | "'" | null = null;
+  for (let i = 0; i < lineRaw.length; i++) {
+    const ch = lineRaw[i]!;
+    if (inQuote) {
+      if (ch === "\\" && inQuote === '"') {
+        i++; // skip escaped char inside basic string
+        continue;
+      }
+      if (ch === inQuote) inQuote = null;
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      inQuote = ch;
+      continue;
+    }
+    if (ch === "#") return lineRaw.slice(0, i);
+  }
+  return lineRaw;
+}
+
+/**
+ * Parse a TOML document into nested null-prototype tables. Fail-soft on
+ * individual bad lines (skip them); returns whatever tables/keys were
+ * readable. Never throws on content shape — empty input returns `{}`.
  *
  * Callers that co-locate secrets with model data must project only the keys
  * they need and never log, echo, or re-serialize the returned table wholesale.
  */
 export function parseToml(text: string): TomlTable {
-  const root: TomlTable = {};
+  const root = emptyTable();
   let current: TomlTable = root;
 
   const lines = text.split(/\r?\n/);
   for (const lineRaw of lines) {
-    const line = lineRaw.replace(/#.*$/, "").trim();
+    const line = stripTomlComment(lineRaw).trim();
     if (line === "") continue;
 
     // Table header: [foo], [foo.bar], [models."kimi-code/k3"]
@@ -151,15 +193,26 @@ export function parseToml(text: string): TomlTable {
       const segments = splitTableHeader(header);
       if (segments === null) continue;
       let cursor: TomlTable = root;
+      let rejected = false;
       for (const seg of segments) {
+        if (isForbiddenKey(seg)) {
+          rejected = true;
+          break;
+        }
         const existing = cursor[seg];
         if (existing !== undefined && isTomlTable(existing)) {
           cursor = existing;
         } else {
-          const next: TomlTable = {};
+          const next = emptyTable();
           cursor[seg] = next;
           cursor = next;
         }
+      }
+      if (rejected) {
+        // Point current at a throwaway table so subsequent keys under a
+        // hostile header do not land on root or Object.prototype.
+        current = emptyTable();
+        continue;
       }
       current = cursor;
       continue;
@@ -170,6 +223,7 @@ export function parseToml(text: string): TomlTable {
     const key = line.slice(0, eq).trim();
     const valueRaw = line.slice(eq + 1).trim();
     if (key === "" || !/^[A-Za-z0-9_-]+$/.test(key)) continue;
+    if (isForbiddenKey(key)) continue;
     const value = parseTomlValue(valueRaw);
     if (value === undefined) continue;
     current[key] = value;
@@ -184,6 +238,7 @@ function isTomlTable(value: TomlValue): value is TomlTable {
 /**
  * Split a table header into path segments, honouring quoted dotted ids
  * (`models."kimi-code/k3"` → `["models", "kimi-code/k3"]`).
+ * Returns null when any segment is a forbidden pollution key.
  */
 function splitTableHeader(header: string): string[] | null {
   const segments: string[] = [];
@@ -194,7 +249,9 @@ function splitTableHeader(header: string): string[] | null {
     if (header[i] === '"') {
       const end = header.indexOf('"', i + 1);
       if (end < 0) return null;
-      segments.push(header.slice(i + 1, end));
+      const seg = header.slice(i + 1, end);
+      if (isForbiddenKey(seg)) return null;
+      segments.push(seg);
       i = end + 1;
       if (header[i] === ".") i++;
       continue;
@@ -204,6 +261,7 @@ function splitTableHeader(header: string): string[] | null {
     while (j < header.length && header[j] !== ".") j++;
     const seg = header.slice(i, j).trim();
     if (seg === "") return null;
+    if (isForbiddenKey(seg)) return null;
     segments.push(seg);
     i = j + 1;
   }
