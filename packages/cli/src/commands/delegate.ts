@@ -16,6 +16,8 @@ interface DelegateAck {
   state: string;
   /** Orchestrator session the task actually bound to (#256). */
   orchestrator_session_id: string | null;
+  /** Multi-live most-recent fallback (#280); printed on stderr, not stdout JSON. */
+  warning?: string;
 }
 
 /**
@@ -256,6 +258,11 @@ export async function runDelegate(ctx: CliContext, args: string[]): Promise<numb
     throw err;
   }
 
-  printJson(ctx, ack);
+  // Binding fallback warning (#280): stderr only — leave success stdout shape intact.
+  if (typeof ack.warning === "string" && ack.warning !== "") {
+    ctx.stderr(`warning: ${ack.warning}\n`);
+  }
+  const { warning: _warning, ...stdoutAck } = ack;
+  printJson(ctx, stdoutAck);
   return 0;
 }

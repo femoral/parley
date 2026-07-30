@@ -630,6 +630,8 @@ interface RunEvalAck {
   eval_baseline?: number | null;
   eval_rubric?: string | null;
   eval_rubric_version?: number | null;
+  /** Multi-live most-recent fallback (#280); printed on stderr, not stdout JSON. */
+  warning?: string;
 }
 
 /**
@@ -737,14 +739,19 @@ async function runEvalRun(
     throw err;
   }
 
+  // Binding fallback warning (#280): stderr only — leave success stdout shape intact.
+  if (typeof ack.warning === "string" && ack.warning !== "") {
+    ctx.stderr(`warning: ${ack.warning}\n`);
+  }
+  const { warning: _warning, ...stdoutAck } = ack;
   if (flags["--json"] === true) {
-    printJson(ctx, ack);
+    printJson(ctx, stdoutAck);
   } else {
-    const score = ack.eval_score ?? "?";
-    const base = ack.eval_baseline ?? "?";
-    const rubric = ack.eval_rubric ?? "?";
+    const score = stdoutAck.eval_score ?? "?";
+    const base = stdoutAck.eval_baseline ?? "?";
+    const rubric = stdoutAck.eval_rubric ?? "?";
     ctx.stdout(
-      `Run ${ack.run_id} eval → score=${score} baseline=${base} rubric=${rubric}@${ack.eval_rubric_version ?? "?"}\n`,
+      `Run ${stdoutAck.run_id} eval → score=${score} baseline=${base} rubric=${rubric}@${stdoutAck.eval_rubric_version ?? "?"}\n`,
     );
   }
   return 0;

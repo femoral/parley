@@ -153,11 +153,17 @@ import {
 } from "./retry.js";
 import {
   CODE_SESSION_REQUIRED,
+  classifySessionLiveness,
+  isPidAlive,
+  isSessionCandidateLive,
   normalizeOptionalProvenance,
+  readMachineId,
+  readPidStartTime,
   resolveSessionBinding,
-  sessionAmbiguousMessage,
   sessionRequiredMessage,
   snapshotFromSession,
+  type PidAliveFn,
+  type PidStartTimeFn,
   type ProvenanceSnapshot,
 } from "./session-binding.js";
 import { taskLogDir } from "./discovery.js";
@@ -895,33 +901,52 @@ export class TaskEngine {
   }
 
   /**
-   * Resolve orchestrator binding for a call (#162). Returns a provenance
+   * Warning from the most recent {@link bindOrchestrator} call (multi-live
+   * most-recent fallback, #280). Cleared by {@link takeSessionBindingWarning}.
+   */
+  private lastSessionBindingWarning: string | null = null;
+
+  /**
+   * Consume the warning from the most recent bind (HTTP layer threads it to
+   * the CLI for stderr). Single-threaded request handlers call this before the
+   * next bind.
+   */
+  takeSessionBindingWarning(): string | null {
+    const w = this.lastSessionBindingWarning;
+    this.lastSessionBindingWarning = null;
+    return w;
+  }
+
+  /**
+   * Resolve orchestrator binding for a call (#162 / #280). Returns a provenance
    * snapshot when a registered session binds, a free-form id when the caller
    * overrode with an unregistered id, or null when unbound. Throws
-   * `session_required` when evals are on and nothing resolves; throws on
-   * ambiguity.
+   * `session_required` when evals are on and nothing resolves.
+   *
+   * Multi-live workspace fallback binds the most-recently-updated live session
+   * and records a warning (no hard ambiguous error).
    */
   private bindOrchestrator(
     input: SessionBindInput,
   ): { snapshot: ProvenanceSnapshot | null; freeformId: string | null } {
+    this.lastSessionBindingWarning = null;
     const workspaceRoot = input.workspaceRoot ?? "";
+    const machineId = readMachineId();
     const result = resolveSessionBinding({
       explicitSessionId: input.explicitSessionId,
       ancestryChain: input.ancestryChain,
       workspaceRoot,
       sessions: listAllSessions(this.db),
+      isSessionLive: (session) => isSessionCandidateLive(session, machineId),
     });
-
-    if (result.kind === "ambiguous") {
-      throw new DelegateError(
-        sessionAmbiguousMessage(workspaceRoot || "(unknown)", result.count),
-      );
-    }
 
     let snapshot: ProvenanceSnapshot | null = null;
     let freeformId: string | null = null;
     if (result.kind === "bound") {
       snapshot = snapshotFromSession(result.session);
+      if (result.warning !== undefined) {
+        this.lastSessionBindingWarning = result.warning;
+      }
     } else if (result.kind === "freeform") {
       freeformId = result.sessionId;
     }
@@ -934,6 +959,50 @@ export class TaskEngine {
     }
 
     return { snapshot, freeformId };
+  }
+
+  /**
+   * Delete sessions whose same-machine anchor pid is verifiably dead (#280).
+   * Foreign-machine anchors are never reaped. Logs one diag line per deletion.
+   * Injectable probes keep unit tests off the real process table.
+   *
+   * @returns ids of deleted sessions
+   */
+  reapDeadSessions(opts: {
+    machineId?: string;
+    isPidAlive?: PidAliveFn;
+    readPidStartTime?: PidStartTimeFn;
+  } = {}): string[] {
+    const machineId = opts.machineId ?? readMachineId();
+    const isAlive = opts.isPidAlive ?? isPidAlive;
+    const readStart = opts.readPidStartTime ?? readPidStartTime;
+    const removed: string[] = [];
+    for (const session of listAllSessions(this.db)) {
+      if (
+        classifySessionLiveness(session, machineId, isAlive, readStart) !== "dead"
+      ) {
+        continue;
+      }
+      deleteSession(this.db, session.id);
+      removed.push(session.id);
+      this.appendHomeDiag(
+        `session-reap: deleted dead session ${session.id} ` +
+          `(machine=${session.anchor_machine} pid=${session.anchor_pid})`,
+      );
+    }
+    return removed;
+  }
+
+  /** Best-effort append to the daemon-home `diag.log`. */
+  private appendHomeDiag(line: string): void {
+    try {
+      fs.appendFileSync(
+        path.join(this.paths.home, "diag.log"),
+        `${new Date().toISOString()} ${line}\n`,
+      );
+    } catch {
+      /* never let logging take down the daemon */
+    }
   }
 
   get(id: string): TaskRow | undefined {
@@ -1785,9 +1854,11 @@ export class TaskEngine {
       freed += bytes;
     }
 
-    // Sessions share the same retention window (#162): drop rows older than
-    // the cutoff. Dry-run still only reports tasks (session rows are tiny).
+    // Sessions: reap verifiably-dead anchors (#280), then drop rows older than
+    // the retention cutoff (#162). Dry-run still only reports tasks (session
+    // rows are tiny).
     if (!dryRun) {
+      this.reapDeadSessions();
       for (const session of listExpiredSessions(this.db, cutoffIso)) {
         deleteSession(this.db, session.id);
       }

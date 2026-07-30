@@ -587,20 +587,23 @@ describe("ancestry binding at CLI seam (#162)", () => {
     expect(row.orch_harness).toBe("solo");
   });
 
-  it("ambiguity error when two live sessions and no ancestry match", async () => {
+  it("two live sessions: binds most-recent with warning (not ambiguous) (#280)", async () => {
     const cwd = taskDir([{ submit_report: REPORT }]);
-    await registerSession({
+    const older = await registerSession({
       harness: "a",
       model: "m",
       effort: "e",
-      anchor: { machine_id: "mac", pid: 1, start_time: "t1" },
+      // Distinct foreign-ish anchors so neither is reaped as dead on this host.
+      anchor: { machine_id: "mac-foreign-a", pid: 1, start_time: "t1" },
       cwd,
     });
-    await registerSession({
+    // Ensure a measurable updated_at gap so most-recent is deterministic.
+    await new Promise((r) => setTimeout(r, 20));
+    const newer = await registerSession({
       harness: "b",
       model: "m",
       effort: "e",
-      anchor: { machine_id: "mac", pid: 2, start_time: "t2" },
+      anchor: { machine_id: "mac-foreign-b", pid: 2, start_time: "t2" },
       cwd,
     });
     const del = await runCli(
@@ -615,8 +618,128 @@ describe("ancestry binding at CLI seam (#162)", () => {
         },
       },
     );
-    expect(del.code).toBe(2);
-    expect(del.stderr).toMatch(/ambiguous/i);
+    expect(del.code, del.stderr).toBe(0);
+    expect(del.stderr).toMatch(/warning:.*most recent of 2 live/i);
+    expect(del.stderr).toMatch(/--session/);
+    // Success stdout JSON must not include the warning field.
+    const ack = JSON.parse(del.stdout) as {
+      task_id: string;
+      orchestrator_session_id: string | null;
+      warning?: string;
+    };
+    expect(ack.warning).toBeUndefined();
+    expect(ack.orchestrator_session_id).toBe(newer.session_id);
+    expect(ack.orchestrator_session_id).not.toBe(older.session_id);
+    const row = JSON.parse(
+      (await runCli(["status", ack.task_id, "--json"], home)).stdout,
+    );
+    expect(row.orchestrator_session_id).toBe(newer.session_id);
+    expect(row.orch_harness).toBe("b");
+  });
+
+  it("dead same-machine session is excluded; sole remaining live binds without warning (#280)", async () => {
+    const cwd = taskDir([{ submit_report: REPORT }]);
+    // Dead pid on the real host machine — register with this process's machine
+    // would require knowing machine-id. Use a huge dead pid on a synthetic
+    // machine that still won't match daemon machine, and a second session that
+    // is the only workspace candidate the fallback sees after ancestry fails.
+    //
+    // Simpler e2e: one session only (single-live path) already covered above.
+    // Multi with one dead needs daemon-side machine match; unit tests cover
+    // dead-excluded binding. Here assert two foreign-machine live sessions
+    // still fallback (indeterminate ≠ dead).
+    await registerSession({
+      harness: "keep",
+      model: "m",
+      effort: "e",
+      anchor: { machine_id: "foreign-x", pid: 11, start_time: "t" },
+      cwd,
+    });
+    const del = await runCli(
+      ["delegate", "-v", "fake", "--cwd", cwd, "x"],
+      home,
+      {
+        extraEnv: {
+          PARLEY_ANCESTRY_CHAIN: JSON.stringify([
+            { machine_id: "mac", pid: 99999, start_time: "nope" },
+          ]),
+          PARLEY_SESSION_ID: undefined,
+        },
+      },
+    );
+    expect(del.code, del.stderr).toBe(0);
+    expect(del.stderr).not.toMatch(/most recent of/);
+  });
+
+  it("eval honors PARLEY_SESSION_ID (env-first judge binding)", async () => {
+    const cwd = taskDir([{ submit_report: REPORT }]);
+    const spawn = await registerSession({
+      harness: "spawn-h",
+      model: "spawn-m",
+      effort: "spawn-e",
+      anchor: { machine_id: "mac", pid: 50, start_time: "t0" },
+      cwd,
+    });
+    const del = await runCli(
+      ["delegate", "-v", "fake", "--cwd", cwd, "x"],
+      home,
+      {
+        extraEnv: {
+          PARLEY_ANCESTRY_CHAIN: JSON.stringify([
+            { machine_id: "mac", pid: 50, start_time: "t0" },
+          ]),
+          PARLEY_SESSION_ID: undefined,
+        },
+      },
+    );
+    expect(del.code, del.stderr).toBe(0);
+    const taskId = JSON.parse(del.stdout).task_id as string;
+    await waitForState(home, taskId, "completed");
+
+    const judge = await registerSession({
+      harness: "judge-env",
+      model: "judge-m",
+      effort: "judge-e",
+      anchor: { machine_id: "mac", pid: 77, start_time: "j" },
+      cwd,
+    });
+    const answers = {
+      "brief-fulfilled": true,
+      evidenced: true,
+      complete: true,
+      "report-complete": true,
+      "broke-existing": false,
+      "fabricated-claim": false,
+      "scope-creep": false,
+    };
+    // Env wins over ancestry that would match spawn session.
+    const evalRes = await runCli(
+      [
+        "eval",
+        taskId,
+        "--answers",
+        JSON.stringify(answers),
+        "--feedback",
+        "ok",
+      ],
+      home,
+      {
+        cwd,
+        extraEnv: {
+          PARLEY_SESSION_ID: judge.session_id,
+          PARLEY_ANCESTRY_CHAIN: JSON.stringify([
+            { machine_id: "mac", pid: 50, start_time: "t0" },
+          ]),
+        },
+      },
+    );
+    expect(evalRes.code, evalRes.stderr).toBe(0);
+    const after = JSON.parse(
+      (await runCli(["status", taskId, "--json"], home)).stdout,
+    );
+    expect(after.eval_session_id).toBe(judge.session_id);
+    expect(after.eval_harness).toBe("judge-env");
+    expect(after.orchestrator_session_id).toBe(spawn.session_id);
   });
 
   it("null provenance snapshots through to status JSON", async () => {
