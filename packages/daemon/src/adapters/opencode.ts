@@ -16,7 +16,7 @@ import { runProbe } from "./probe.js";
 const OPENCODE_ENFORCEMENT: AdapterEnforcement = {
   "read-only": { level: "approximate", via: "permission deny write/edit/bash (no OS sandbox)" },
   workspace: { level: "approximate", via: "permission policy only (no OS sandbox)" },
-  full: { level: "approximate", via: "permission allow-all (no OS sandbox)" },
+  full: { level: "enforced", via: "permission allow-all (unrestricted as requested)" },
   "network:false": {
     level: "approximate",
     via: "webfetch/websearch deny only; bash can still egress",

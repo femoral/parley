@@ -287,6 +287,10 @@ export interface VendorAdapter {
  * Prepare-time PARLEY-DIAG lines when the requested posture is only
  * approximate/none for this adapter (#279). Does not cover `refused` — those
  * hard-fail in prepare before spawn. Never throws; diagnostics never block.
+ *
+ * `sandbox: "full"` is structurally exempt from the sandbox-dimension
+ * diagnostic: full requests *no* isolation, so it cannot be under-enforced
+ * even if a declaration mis-labels the cell.
  */
 export function formatPostureGapDiagnostics(
   adapterId: string,
@@ -294,12 +298,15 @@ export function formatPostureGapDiagnostics(
   posture: { sandbox: SandboxMode; network: boolean },
 ): string[] {
   const out: string[] = [];
-  const sand = enforcement[posture.sandbox];
-  if (isWeakEnforcement(sand.level)) {
-    const via = sand.via ? ` (${sand.via})` : "";
-    out.push(
-      `${VENDOR_DIAG_PREFIX} posture: ${adapterId} sandbox=${posture.sandbox} → ${sand.level}${via}; flag accepted but not fully enforced`,
-    );
+  // full = unrestricted access requested; never warn on the sandbox axis.
+  if (posture.sandbox !== "full") {
+    const sand = enforcement[posture.sandbox];
+    if (isWeakEnforcement(sand.level)) {
+      const via = sand.via ? ` (${sand.via})` : "";
+      out.push(
+        `${VENDOR_DIAG_PREFIX} posture: ${adapterId} sandbox=${posture.sandbox} → ${sand.level}${via}; flag accepted but not fully enforced`,
+      );
+    }
   }
   if (!posture.network) {
     const net = enforcement["network:false"];

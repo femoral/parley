@@ -18,7 +18,7 @@ import { runProbe } from "./probe.js";
 const PI_ENFORCEMENT: AdapterEnforcement = {
   "read-only": { level: "approximate", via: "--tools read-only allowlist" },
   workspace: { level: "none", via: "default tools; no write sandbox" },
-  full: { level: "none", via: "default tools; no write sandbox" },
+  full: { level: "enforced", via: "default tools; unrestricted as requested" },
   "network:false": { level: "refused", via: "prepare refuses (#107)" },
 };
 

@@ -784,7 +784,7 @@ export function renderInfoProse(config: InfoConfig): string {
   );
   lines.push("");
   lines.push(
-    "- `enforced` — real OS/CLI mechanism (or intentional unrestricted `full`)",
+    "- `enforced` — vendor delivers what the posture asks (real OS/CLI isolation, or unrestricted `full`)",
   );
   lines.push("- `approximate` — soft lever only (see note in parentheses)");
   lines.push("- `none` — flag accepted; nothing real happens");
@@ -793,7 +793,7 @@ export function renderInfoProse(config: InfoConfig): string {
   );
   lines.push("");
   lines.push(
-    "`approximate` / `none` mean the flag is accepted but **not** OS-enforced. A prepare-time `PARLEY-DIAG` line is written to the task's `diag.log` when a weak posture is requested.",
+    "`approximate` / `none` mean the flag is accepted but **not** OS-enforced. A prepare-time `PARLEY-DIAG` line is written to the task's `diag.log` when a weak `read-only` / `workspace` or `network:false` posture is requested. `full` is trivially enforced (no isolation requested) and never produces a sandbox diagnostic.",
   );
   lines.push("");
   if (config.enforcement_matrix.length === 0) {

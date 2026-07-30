@@ -18,7 +18,7 @@ const CLINE_ENFORCEMENT: AdapterEnforcement = {
     via: "CLINE_COMMAND_PERMISSIONS deny-all shell (edit tools may still write)",
   },
   workspace: { level: "none", via: "unconstrained tools + auto-approve" },
-  full: { level: "none", via: "unconstrained tools + auto-approve" },
+  full: { level: "enforced", via: "unconstrained tools + auto-approve (unrestricted as requested)" },
   "network:false": { level: "none", via: "no first-class network toggle" },
 };
 

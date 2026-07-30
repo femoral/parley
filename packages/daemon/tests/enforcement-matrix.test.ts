@@ -171,7 +171,7 @@ describe("prepare-time posture diagnostics (#279)", () => {
     const refused: AdapterEnforcement = {
       "read-only": { level: "approximate" },
       workspace: { level: "none" },
-      full: { level: "none" },
+      full: { level: "enforced" },
       "network:false": { level: "refused", via: "prepare refuses" },
     };
     expect(
@@ -187,5 +187,44 @@ describe("prepare-time posture diagnostics (#279)", () => {
         (d) => d.includes("network=false"),
       ),
     ).toBe(false);
+  });
+
+  it("structurally skips sandbox diagnostics for full even if the cell is weak", () => {
+    // full requests no isolation — never emit a sandbox under-enforcement line,
+    // even when a declaration mis-labels full as approximate/none.
+    const misdeclared: AdapterEnforcement = {
+      "read-only": { level: "none" },
+      workspace: { level: "none" },
+      full: { level: "none", via: "mis-declared" },
+      "network:false": { level: "none", via: "no network lever" },
+    };
+    expect(
+      formatPostureGapDiagnostics("kimi", misdeclared, { sandbox: "full", network: true }),
+    ).toEqual([]);
+    const withNet = formatPostureGapDiagnostics("kimi", misdeclared, {
+      sandbox: "full",
+      network: false,
+    });
+    expect(withNet).toHaveLength(1);
+    expect(withNet[0]).toMatch(/^PARLEY-DIAG posture: kimi network=false → none/);
+    expect(withNet.some((d) => d.includes("sandbox="))).toBe(false);
+  });
+
+  it("real adapter at sandbox=full network=true emits no posture PARLEY-DIAG", async () => {
+    const plan = await createKimiAdapter({}).prepare(
+      task({ vendor: "kimi", sandbox: "full", network: true }),
+      HUB,
+    );
+    const postureDiags = (plan.diagnostics ?? []).filter((d) =>
+      d.startsWith("PARLEY-DIAG posture:"),
+    );
+    expect(postureDiags).toEqual([]);
+  });
+
+  it("every built-in declares full as enforced", () => {
+    const registry = createAdapterRegistrySync({ PARLEY_FAKE_VENDOR_BIN: "fake" });
+    for (const [id, adapter] of registry) {
+      expect(adapter.enforcement.full.level, `${id}.full`).toBe("enforced");
+    }
   });
 });

@@ -14,7 +14,7 @@ import { VENDOR_DIAG_PREFIX, withPostureDiagnostics } from "./types.js";
 const OPENHANDS_ENFORCEMENT: AdapterEnforcement = {
   "read-only": { level: "none", via: "no CLI sandbox matrix" },
   workspace: { level: "approximate", via: "OPENHANDS_WORK_DIR soft worktree affinity" },
-  full: { level: "none", via: "no CLI sandbox matrix" },
+  full: { level: "enforced", via: "host-local workspace; unrestricted as requested" },
   "network:false": { level: "none", via: "no network-off lever" },
 };
 

@@ -255,7 +255,7 @@ function effortEnv(effort: string | null): Record<string, string> {
 const GOOSE_ENFORCEMENT: AdapterEnforcement = {
   "read-only": { level: "approximate", via: "GOOSE_MODE=chat (no tools / file mods)" },
   workspace: { level: "none", via: "GOOSE_MODE=auto; no OS sandbox" },
-  full: { level: "none", via: "GOOSE_MODE=auto; no OS sandbox" },
+  full: { level: "enforced", via: "GOOSE_MODE=auto (unrestricted as requested)" },
   "network:false": { level: "none", via: "no native network toggle" },
 };
 

@@ -44,7 +44,7 @@ describe("openhands adapter — enforcement (#279)", () => {
     const adapter = createOpenhandsAdapter({});
     expect(adapter.enforcement["read-only"].level).toBe("none");
     expect(adapter.enforcement.workspace.level).toBe("approximate");
-    expect(adapter.enforcement.full.level).toBe("none");
+    expect(adapter.enforcement.full.level).toBe("enforced");
     expect(adapter.enforcement["network:false"].level).toBe("none");
   });
 

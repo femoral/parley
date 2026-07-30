@@ -17,10 +17,11 @@ export function createAdapter(env: NodeJS.ProcessEnv): VendorAdapter {
     childChannel: "mcp", // mcp | cli | http — what the preamble teaches (#155)
     // Required (#279): what each posture request actually gets.
     // Levels: enforced | approximate | none | refused (refuse rather than under-isolate).
+    // `full` is almost always enforced — unrestricted access is what full asks for.
     enforcement: {
       "read-only": { level: "none", via: "document the gap" },
       workspace: { level: "none" },
-      full: { level: "enforced", via: "unrestricted by design" },
+      full: { level: "enforced", via: "unrestricted as requested" },
       "network:false": { level: "none" },
     },
     prepare(task: TaskSpec, hub: HubInfo): Promise<SpawnPlan> { /* ... */ },

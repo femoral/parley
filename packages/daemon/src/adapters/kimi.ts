@@ -14,7 +14,7 @@ import { VENDOR_DIAG_PREFIX, withPostureDiagnostics } from "./types.js";
 const KIMI_ENFORCEMENT: AdapterEnforcement = {
   "read-only": { level: "approximate", via: "--plan (soft exploration mode)" },
   workspace: { level: "none", via: "print-mode afk auto-approve only" },
-  full: { level: "none", via: "print-mode afk auto-approve only" },
+  full: { level: "enforced", via: "print-mode afk auto-approve (unrestricted as requested)" },
   "network:false": { level: "none", via: "cannot be enforced" },
 };
 

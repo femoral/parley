@@ -143,24 +143,26 @@ several vendors only approximate isolation (or accept the flag and do nothing).
 See the matrix below (sourced from each adapter's `enforcement` declaration;
 `parley info` prints the same table). Cells marked `approximate` or `none` mean
 the flag is accepted but **not** OS-enforced — prepare writes a one-line
-`PARLEY-DIAG` warning to the task's `diag.log`.
+`PARLEY-DIAG` warning to the task's `diag.log`. The `full` column is always
+`enforced` (unrestricted access is what full asks for) and never produces a
+sandbox-dimension diagnostic.
 
 <!-- enforcement-matrix:start -->
 | Vendor | read-only | workspace | full | network:false |
 | ------ | --------- | --------- | ---- | ------------- |
 | `claude` | approximate (permission-mode dontAsk + tool allowlist) | approximate (permission-mode acceptEdits + tool allowlist) | enforced (bypassPermissions) | approximate (Bash sandbox settings when not full; MCP path may bypass) |
-| `cline` | approximate (CLINE_COMMAND_PERMISSIONS deny-all shell (edit tools may still write)) | none (unconstrained tools + auto-approve) | none (unconstrained tools + auto-approve) | none (no first-class network toggle) |
+| `cline` | approximate (CLINE_COMMAND_PERMISSIONS deny-all shell (edit tools may still write)) | none (unconstrained tools + auto-approve) | enforced (unconstrained tools + auto-approve (unrestricted as requested)) | none (no first-class network toggle) |
 | `codex` | enforced (sandbox_mode=read-only) | enforced (sandbox_mode=workspace-write) | enforced (sandbox_mode=danger-full-access) | enforced (sandbox_workspace_write.network_access off under workspace; ignored for read-only/full) |
 | `gemini` | approximate (approval-mode=plan) | none (yolo; no process sandbox when network on) | enforced (yolo, sandbox off) | refused (prepare refuses except macOS workspace seatbelt (#107)) |
-| `goose` | approximate (GOOSE_MODE=chat (no tools / file mods)) | none (GOOSE_MODE=auto; no OS sandbox) | none (GOOSE_MODE=auto; no OS sandbox) | none (no native network toggle) |
+| `goose` | approximate (GOOSE_MODE=chat (no tools / file mods)) | none (GOOSE_MODE=auto; no OS sandbox) | enforced (GOOSE_MODE=auto (unrestricted as requested)) | none (no native network toggle) |
 | `grok` | enforced (bubblewrap OS sandbox; fail-closed without bwrap (#247)) | enforced (bubblewrap OS sandbox + worktree gitdir grants; fail-closed without bwrap (#247/#278)) | enforced (GROK_SANDBOX=off) | enforced (restrict_network in custom sandbox profile (sandboxed postures; ignored for full)) |
 | `hermes` | approximate (HERMES_WRITE_SAFE_ROOT limited to private home (terminal may still write)) | approximate (HERMES_WRITE_SAFE_ROOT=worktree+gitdirs) | enforced (unset HERMES_WRITE_SAFE_ROOT) | none (local backend has no egress filter) |
 | `kilo` | approximate (restrictive permissions + optional OS sandbox object) | none (sandbox disabled so git commits + hub MCP work) | enforced (sandbox disabled (unrestricted)) | approximate (sandbox.network=deny (also blocks hub MCP)) |
-| `kimi` | approximate (--plan (soft exploration mode)) | none (print-mode afk auto-approve only) | none (print-mode afk auto-approve only) | none (cannot be enforced) |
+| `kimi` | approximate (--plan (soft exploration mode)) | none (print-mode afk auto-approve only) | enforced (print-mode afk auto-approve (unrestricted as requested)) | none (cannot be enforced) |
 | `openclaw` | enforced (docker mode=all workspaceAccess=ro (fail-closed if image missing)) | approximate (mode=off when network on (host tools); mode=all docker when network off) | enforced (mode=off) | enforced (docker network=none under sandboxed postures) |
-| `opencode` | approximate (permission deny write/edit/bash (no OS sandbox)) | approximate (permission policy only (no OS sandbox)) | approximate (permission allow-all (no OS sandbox)) | approximate (webfetch/websearch deny only; bash can still egress) |
-| `openhands` | none (no CLI sandbox matrix) | approximate (OPENHANDS_WORK_DIR soft worktree affinity) | none (no CLI sandbox matrix) | none (no network-off lever) |
-| `pi` | approximate (--tools read-only allowlist) | none (default tools; no write sandbox) | none (default tools; no write sandbox) | refused (prepare refuses (#107)) |
+| `opencode` | approximate (permission deny write/edit/bash (no OS sandbox)) | approximate (permission policy only (no OS sandbox)) | enforced (permission allow-all (unrestricted as requested)) | approximate (webfetch/websearch deny only; bash can still egress) |
+| `openhands` | none (no CLI sandbox matrix) | approximate (OPENHANDS_WORK_DIR soft worktree affinity) | enforced (host-local workspace; unrestricted as requested) | none (no network-off lever) |
+| `pi` | approximate (--tools read-only allowlist) | none (default tools; no write sandbox) | enforced (default tools; unrestricted as requested) | refused (prepare refuses (#107)) |
 <!-- enforcement-matrix:end -->
 
 **Write your own**: adapters are a public contract in `@useparley/core`. Point
