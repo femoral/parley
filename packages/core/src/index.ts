@@ -14,6 +14,7 @@ export * from "./contract.js";
 export * from "./lease.js";
 export * from "./home.js";
 export * from "./models.js";
+export * from "./vendor-home.js";
 export * from "./project-lint.js";
 export * from "./rubric.js";
 export * from "./sdk.js";

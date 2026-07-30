@@ -1,0 +1,7 @@
+{
+  "fetched_at": 12345,
+  "not_models": "wrong shape",
+  "models": {
+    "slug": "should-be-array"
+  }
+}

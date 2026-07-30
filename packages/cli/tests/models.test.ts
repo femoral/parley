@@ -20,9 +20,13 @@ import { cleanupHome, makeHome, runCli } from "./helpers.js";
 const CODEX_FIXTURE = fileURLToPath(new URL("./fixtures/codex/debug-models.json", import.meta.url));
 const GROK_FIXTURE = fileURLToPath(new URL("./fixtures/grok/models.txt", import.meta.url));
 
-/** A minimal adapter exposing only `listModels`, cast for refresh tests. */
-function fakeAdapter(id: string, listModels?: VendorAdapter["listModels"]): VendorAdapter {
-  return { id, listModels } as unknown as VendorAdapter;
+/** A minimal adapter exposing discovery hooks, cast for refresh tests. */
+function fakeAdapter(
+  id: string,
+  listModels?: VendorAdapter["listModels"],
+  readModels?: VendorAdapter["readModels"],
+): VendorAdapter {
+  return { id, listModels, readModels } as unknown as VendorAdapter;
 }
 
 describe("codex debug models parser (golden fixture)", () => {

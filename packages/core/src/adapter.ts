@@ -270,6 +270,18 @@ export interface VendorAdapter {
   /** Extract the vendor session id from the events seen so far, if any. */
   sessionId(events: VendorEvent[]): string | undefined;
   /**
+   * Optional on-disk discovery (#281): read the vendor's own config/state files
+   * from the *operator* home (never a per-task isolated home). Same shape as
+   * {@link listModels}. Must fail soft — absent/malformed/unexpected files
+   * return empty models or reject; refresh never lets a bad file crash the
+   * catalog. Precedence: `readModels` → `listModels` → shipped fallback, with
+   * union / richest-wins merge across channels.
+   *
+   * Discovery stays advisory; spawn is gated by the vendor allowlist
+   * (#185 / ADR-0014).
+   */
+  readModels?(existing: VendorModels | undefined): Promise<ProbedModels>;
+  /**
    * Optional `parley models --refresh` probe: re-enumerate the vendor's models
    * by shelling out to its CLI. Receives the vendor's current catalog entry so a
    * text-only vendor (grok) can carry hand-patched efforts forward. Rejects (or

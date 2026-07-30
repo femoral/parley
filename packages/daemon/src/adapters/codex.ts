@@ -1,3 +1,6 @@
+import fs from "node:fs";
+import path from "node:path";
+import { resolveOperatorVendorHome } from "@useparley/core";
 import type {
   AdapterEnforcement,
   HubInfo,
@@ -162,6 +165,9 @@ function asString(value: unknown): string {
 /** The probe command recorded as the catalog entry's `source`. */
 const MODELS_SOURCE = "codex debug models";
 
+/** On-disk cache filename under the operator's codex home (#281). */
+const MODELS_CACHE_FILE = "models_cache.json";
+
 /**
  * Parse the JSON catalog `codex debug models` emits into normalized model
  * entries (#29, research §2). Drops `visibility:"hide"` models (internal, e.g.
@@ -194,6 +200,60 @@ export function parseCodexModels(json: string): ModelEntry[] {
     entries.push({ id, efforts, default_effort: defaultEffort });
   }
   return entries;
+}
+
+/**
+ * Parse codex's on-disk `models_cache.json` (#281). Same feed as
+ * `codex debug models`, without a subprocess. Fail-soft: returns `[]` on
+ * missing/malformed/unexpected shape (undocumented internal cache — never
+ * throw into the refresh path). Filter is load-bearing:
+ * `visibility === "list" && supported_in_api` — skipping it turns "discovered"
+ * into "wrong". Surfaces the file's own `fetched_at` in the source string so
+ * a stale cache is visible (freshness ≠ truth).
+ */
+export function parseCodexModelsCache(json: string): { models: ModelEntry[]; cacheFetchedAt: string | null } {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(json);
+  } catch {
+    return { models: [], cacheFetchedAt: null };
+  }
+  const root = asRecord(parsed);
+  if (!root) return { models: [], cacheFetchedAt: null };
+  const cacheFetchedAt = typeof root.fetched_at === "string" ? root.fetched_at : null;
+  const models = root.models;
+  if (!Array.isArray(models)) return { models: [], cacheFetchedAt };
+  const entries: ModelEntry[] = [];
+  for (const raw of models) {
+    const m = asRecord(raw);
+    if (!m) continue;
+    // Strict filter: both flags required. Missing flags → not listed.
+    if (m.visibility !== "list") continue;
+    if (m.supported_in_api !== true) continue;
+    const id = asString(m.slug);
+    if (id === "") continue;
+    const levels = Array.isArray(m.supported_reasoning_levels)
+      ? m.supported_reasoning_levels
+      : [];
+    const efforts = levels
+      .map((level) => asString(asRecord(level)?.effort))
+      .filter((effort) => effort !== "");
+    const defaultEffort =
+      typeof m.default_reasoning_level === "string" ? m.default_reasoning_level : null;
+    entries.push({ id, efforts, default_effort: defaultEffort });
+  }
+  return { models: entries, cacheFetchedAt };
+}
+
+/**
+ * Build the catalog `source` string for a cache read, including the file's
+ * own freshness stamp when present (caches can be arbitrarily stale).
+ */
+export function codexModelsCacheSource(cachePath: string, cacheFetchedAt: string | null): string {
+  if (cacheFetchedAt !== null) {
+    return `${cachePath} (cache fetched_at=${cacheFetchedAt})`;
+  }
+  return cachePath;
 }
 
 /** Normalize a single `item.completed` item to a thin VendorEvent (or `[]` opaque). */
@@ -337,6 +397,26 @@ export function createCodexAdapter(env: NodeJS.ProcessEnv = process.env): Vendor
       // catalog file remains hand-editable when this drifts.
       const stdout = await runProbe(CODEX_BIN, ["debug", "models"]);
       return { source: MODELS_SOURCE, models: parseCodexModels(stdout) };
+    },
+
+    async readModels(): Promise<ProbedModels> {
+      // Operator home only — never the isolated CODEX_HOME a child might get
+      // via spawn env. Fail soft on every degraded input (absent, unreadable,
+      // malformed, unexpected shape, empty fresh home).
+      const home = resolveOperatorVendorHome("codex", env);
+      if (home === null) return { source: MODELS_CACHE_FILE, models: [] };
+      const cachePath = path.join(home, MODELS_CACHE_FILE);
+      let text: string;
+      try {
+        text = fs.readFileSync(cachePath, "utf8");
+      } catch {
+        return { source: codexModelsCacheSource(cachePath, null), models: [] };
+      }
+      const { models, cacheFetchedAt } = parseCodexModelsCache(text);
+      return {
+        source: codexModelsCacheSource(cachePath, cacheFetchedAt),
+        models,
+      };
     },
   });
 }

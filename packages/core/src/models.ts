@@ -38,9 +38,12 @@ export interface VendorModels {
 /** The whole catalog: vendor id → its models. The file is the source of truth. */
 export type ModelCatalog = Record<string, VendorModels>;
 
-/** What an adapter's `--refresh` probe yields; the catalog stamps `fetched_at`. */
+/** What an adapter's discovery channel yields; the catalog stamps `fetched_at`. */
 export interface ProbedModels {
-  /** The probe command, recorded as the entry's `source` (e.g. `codex debug models`). */
+  /**
+   * Provenance string recorded as the entry's `source` (e.g. `codex debug models`,
+   * or `~/.codex/models_cache.json (cache fetched_at=…)` for a disk read).
+   */
   source: string;
   models: ModelEntry[];
 }
@@ -49,8 +52,20 @@ export interface ProbedModels {
  * The catalog-refresh capability `refreshCatalog` needs from a vendor adapter —
  * the structural slice of the daemon's `VendorAdapter`. Kept minimal so this
  * shared package stays a leaf (no dependency back into the daemon).
+ *
+ * Two optional discovery channels (#281):
+ *  - `readModels` — on-disk vendor config/state (no subprocess)
+ *  - `listModels` — CLI probe
+ * Precedence: disk → probe → shipped fallback; merge is union / richest-wins.
  */
 export interface ModelProber {
+  /**
+   * Optional on-disk discovery: read the vendor's own config/state files from
+   * the *operator* home (never a per-task isolated home). Must fail soft —
+   * absent/malformed files return empty models or reject; the refresh path
+   * never lets a bad file crash the catalog.
+   */
+  readModels?(existing: VendorModels | undefined): Promise<ProbedModels>;
   listModels?(existing: VendorModels | undefined): Promise<ProbedModels>;
 }
 
@@ -60,10 +75,10 @@ export interface ModelProber {
  * The file at `~/.parley/models.json` is the source of truth: `parley models`
  * reads it directly so a user can hand-edit it to add models or efforts with no
  * code change. `--refresh` re-probes vendors via each adapter's optional
- * `listModels()` hook and rewrites their entry — but a failed or empty probe
- * keeps the existing entry (never clobber a manual patch with nothing). The
- * catalog is advisory only for discovery; spawn is gated by the vendor
- * allowlist (`vendors.<id>.models`, #185 / ADR-0014).
+ * `listModels()` / `readModels()` hooks and rewrites their entry — but a failed
+ * or empty discovery keeps the existing entry (never clobber a manual patch
+ * with nothing). The catalog is advisory only for discovery; spawn is gated by
+ * the vendor allowlist (`vendors.<id>.models`, #185 / ADR-0014).
  */
 
 /**
@@ -208,13 +223,114 @@ function applyRefreshFallback(
 }
 
 /**
- * Re-probe `vendorIds` and rewrite their catalog entries from the live vendor
- * CLIs. A successful probe with models always wins. When a vendor has no probe
- * hook, its probe rejects, or it returns no models: keep any non-empty existing
- * entry (never clobber a manual patch); if the entry would be empty, fall back
- * to the shipped reference catalog when it has models, labeled as point-in-time
- * reference data. Pure w.r.t. the input catalog — returns a new object; the
- * caller persists it. `now` is injected for deterministic tests.
+ * Richness score for union merge (#281). Higher wins when two channels describe
+ * the same model id. Explicit criteria (in priority order of weight):
+ *  - non-empty `efforts` beats empty
+ *  - a known `default_effort` beats null
+ *  - a present `label` beats absent
+ *  - a present `notes` beats absent
+ *
+ * Ties fall to the primary channel (disk before probe) so a disk read never
+ * loses to a equally-thin probe entry.
+ */
+export function modelEntryRichness(entry: ModelEntry): number {
+  let score = 0;
+  if (entry.efforts.length > 0) score += 8;
+  if (entry.default_effort !== null) score += 4;
+  if (entry.label !== undefined && entry.label !== "") score += 2;
+  if (entry.notes !== undefined && entry.notes !== "") score += 1;
+  return score;
+}
+
+/**
+ * Prefer the richer of two entries for the same model id. On equal richness,
+ * keep `primary` (the higher-precedence channel — disk over probe).
+ */
+export function pickRicherModelEntry(primary: ModelEntry, secondary: ModelEntry): ModelEntry {
+  return modelEntryRichness(secondary) > modelEntryRichness(primary) ? secondary : primary;
+}
+
+/**
+ * Union / richest-wins merge of two discovery results (#281).
+ *
+ * The result is always a **superset** of both id sets — a disk read must never
+ * shrink what the probe alone produced (grok's cache can miss agent variants
+ * that live only in config). Same-id collisions pick the richer entry; equal
+ * richness keeps the primary (disk) side.
+ *
+ * Returns `null` when both sides are empty so the caller can fall through to
+ * shipped. Source strings are joined with ` + ` when both contributed models.
+ */
+export function mergeDiscoveredModels(
+  primary: ProbedModels | null,
+  secondary: ProbedModels | null,
+): ProbedModels | null {
+  const primaryModels = primary?.models ?? [];
+  const secondaryModels = secondary?.models ?? [];
+  if (primaryModels.length === 0 && secondaryModels.length === 0) return null;
+
+  const byId = new Map<string, ModelEntry>();
+  // Secondary first, then primary overwrites on equal-or-better richness via
+  // pickRicher — iteration order: seed with secondary, fold primary on top so
+  // primary wins ties.
+  for (const entry of secondaryModels) {
+    byId.set(entry.id, entry);
+  }
+  for (const entry of primaryModels) {
+    const existing = byId.get(entry.id);
+    byId.set(entry.id, existing === undefined ? entry : pickRicherModelEntry(entry, existing));
+  }
+
+  const sources: string[] = [];
+  if (primary !== null && primaryModels.length > 0) sources.push(primary.source);
+  if (secondary !== null && secondaryModels.length > 0) sources.push(secondary.source);
+
+  return {
+    source: sources.join(" + "),
+    models: [...byId.values()],
+  };
+}
+
+/**
+ * Invoke an optional discovery channel, swallowing throws so a bad file or
+ * missing binary never takes down refresh / `parley init`. Empty results and
+ * missing hooks both yield `null` (no contribution to the merge).
+ */
+async function safeDiscover(
+  hook: ((existing: VendorModels | undefined) => Promise<ProbedModels>) | undefined,
+  existing: VendorModels | undefined,
+): Promise<{ result: ProbedModels | null; error: string | null }> {
+  if (!hook) return { result: null, error: null };
+  try {
+    const probed = await hook(existing);
+    if (probed.models.length === 0) return { result: null, error: null };
+    return { result: probed, error: null };
+  } catch (err) {
+    return {
+      result: null,
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
+
+/**
+ * Re-discover models for `vendorIds` and rewrite their catalog entries.
+ *
+ * Per vendor, channels run in precedence order (#281):
+ *  1. `readModels` — operator-home config/state files
+ *  2. `listModels` — CLI probe
+ *  3. shipped fallback via {@link applyRefreshFallback}
+ *
+ * Disk and probe results are merged with union / richest-wins so the catalog
+ * is a superset of either channel alone. A successful discovery with models
+ * always wins over an empty existing entry. When both channels fail or return
+ * nothing: keep any non-empty existing entry; if the entry would be empty,
+ * fall back to the shipped reference catalog. Pure w.r.t. the input catalog —
+ * returns a new object; the caller persists it. `now` is injected for
+ * deterministic tests.
+ *
+ * Discovery remains advisory (ADR-0014): nothing here gates, widens, or
+ * bypasses the deny-by-default allowlist.
  */
 export async function refreshCatalog<A extends ModelProber>(
   catalog: ModelCatalog,
@@ -226,25 +342,35 @@ export async function refreshCatalog<A extends ModelProber>(
   const warnings: string[] = [];
   for (const id of vendorIds) {
     const adapter = adapters.get(id);
-    if (!adapter?.listModels) {
+    if (!adapter?.listModels && !adapter?.readModels) {
       applyRefreshFallback(next, id, "no refresh probe available", warnings);
       continue;
     }
-    try {
-      const probed = await adapter.listModels(next[id]);
-      if (probed.models.length === 0) {
-        applyRefreshFallback(next, id, "probe returned no models", warnings);
-        continue;
-      }
-      next[id] = { fetched_at: now(), source: probed.source, models: probed.models };
-    } catch (err) {
-      applyRefreshFallback(
-        next,
-        id,
-        `probe failed (${err instanceof Error ? err.message : String(err)})`,
-        warnings,
-      );
+
+    const existing = next[id];
+    const disk = await safeDiscover(adapter.readModels?.bind(adapter), existing);
+    const probe = await safeDiscover(adapter.listModels?.bind(adapter), existing);
+    const merged = mergeDiscoveredModels(disk.result, probe.result);
+
+    if (merged !== null && merged.models.length > 0) {
+      next[id] = { fetched_at: now(), source: merged.source, models: merged.models };
+      continue;
     }
+
+    // Both channels empty/failed — explain why, then fall back.
+    const reasons: string[] = [];
+    if (adapter.readModels) {
+      if (disk.error) reasons.push(`disk read failed (${disk.error})`);
+      else reasons.push("disk read returned no models");
+    }
+    if (adapter.listModels) {
+      if (probe.error) reasons.push(`probe failed (${probe.error})`);
+      else reasons.push("probe returned no models");
+    }
+    if (!adapter.readModels && !adapter.listModels) {
+      reasons.push("no refresh probe available");
+    }
+    applyRefreshFallback(next, id, reasons.join("; "), warnings);
   }
   return { catalog: next, warnings };
 }
