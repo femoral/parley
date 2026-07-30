@@ -1,7 +1,14 @@
 import { createRequire } from "node:module";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { isChildChannel, type VendorAdapter, type VendorConfig } from "@useparley/core";
+import {
+  isChildChannel,
+  type AdapterEnforcement,
+  type EnforcementCell,
+  type EnforcementLevel,
+  type VendorAdapter,
+  type VendorConfig,
+} from "@useparley/core";
 
 /**
  * Plugin adapter loader (ADR-0009 / #108).
@@ -27,6 +34,56 @@ import { isChildChannel, type VendorAdapter, type VendorConfig } from "@useparle
  * task; plugin *code* does not (complexity not worth it).
  */
 
+const ENFORCEMENT_LEVELS: readonly EnforcementLevel[] = [
+  "enforced",
+  "approximate",
+  "none",
+  "refused",
+];
+
+const ENFORCEMENT_KEYS = ["read-only", "workspace", "full", "network:false"] as const;
+
+function isEnforcementLevel(value: unknown): value is EnforcementLevel {
+  return typeof value === "string" && (ENFORCEMENT_LEVELS as readonly string[]).includes(value);
+}
+
+function assertEnforcementCell(id: string, key: string, value: unknown): EnforcementCell {
+  if (typeof value !== "object" || value === null) {
+    throw new Error(
+      `plugin adapter "${id}": enforcement.${key} must be { level, via? }`,
+    );
+  }
+  const cell = value as Record<string, unknown>;
+  if (!isEnforcementLevel(cell.level)) {
+    throw new Error(
+      `plugin adapter "${id}": enforcement.${key}.level must be one of ${ENFORCEMENT_LEVELS.join("|")}`,
+    );
+  }
+  if (cell.via !== undefined && typeof cell.via !== "string") {
+    throw new Error(`plugin adapter "${id}": enforcement.${key}.via must be a string when set`);
+  }
+  return cell.via === undefined
+    ? { level: cell.level }
+    : { level: cell.level, via: cell.via };
+}
+
+/** Validate {@link AdapterEnforcement}; throws a descriptive Error on failure. */
+export function assertAdapterEnforcement(
+  id: string,
+  value: unknown,
+): asserts value is AdapterEnforcement {
+  if (typeof value !== "object" || value === null) {
+    throw new Error(`plugin adapter "${id}": enforcement must be an object`);
+  }
+  const raw = value as Record<string, unknown>;
+  for (const key of ENFORCEMENT_KEYS) {
+    if (!(key in raw)) {
+      throw new Error(`plugin adapter "${id}": enforcement.${key} is required`);
+    }
+    assertEnforcementCell(id, key, raw[key]);
+  }
+}
+
 /** Validate a candidate adapter object; throws a descriptive Error on failure. */
 export function assertVendorAdapter(id: string, value: unknown): asserts value is VendorAdapter {
   if (typeof value !== "object" || value === null) {
@@ -43,6 +100,7 @@ export function assertVendorAdapter(id: string, value: unknown): asserts value i
       `plugin adapter "${id}": childChannel must be one of mcp|cli|http`,
     );
   }
+  assertAdapterEnforcement(id, adapter.enforcement);
   for (const method of ["prepare", "resume", "parseEvent", "sessionId"] as const) {
     if (typeof adapter[method] !== "function") {
       throw new Error(`plugin adapter "${id}": ${method} must be a function`);

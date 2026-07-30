@@ -1,4 +1,5 @@
 import type {
+  AdapterEnforcement,
   HubInfo,
   MaterializedFile,
   ModelEntry,
@@ -10,7 +11,7 @@ import type {
   VendorEvent,
   VendorModels,
 } from "./types.js";
-import { VENDOR_DIAG_PREFIX } from "./types.js";
+import { VENDOR_DIAG_PREFIX, withPostureDiagnostics } from "./types.js";
 import { runProbe } from "./probe.js";
 import { tomlString } from "./toml.js";
 
@@ -411,6 +412,19 @@ export function parseGrokModels(text: string, existing: VendorModels | undefined
   return entries;
 }
 
+const GROK_ENFORCEMENT: AdapterEnforcement = {
+  "read-only": { level: "enforced", via: "bubblewrap OS sandbox; fail-closed without bwrap (#247)" },
+  workspace: {
+    level: "enforced",
+    via: "bubblewrap OS sandbox + worktree gitdir grants; fail-closed without bwrap (#247/#278)",
+  },
+  full: { level: "enforced", via: "GROK_SANDBOX=off" },
+  "network:false": {
+    level: "enforced",
+    via: "restrict_network in custom sandbox profile (sandboxed postures; ignored for full)",
+  },
+};
+
 export function createGrokAdapter(env: NodeJS.ProcessEnv = process.env): VendorAdapter {
   const bin = env.PARLEY_GROK_BIN ?? DEFAULT_GROK_BIN;
 
@@ -565,9 +579,10 @@ export function createGrokAdapter(env: NodeJS.ProcessEnv = process.env): VendorA
     return argv;
   }
 
-  return {
+  return withPostureDiagnostics({
     id: "grok",
     childChannel: "mcp",
+    enforcement: GROK_ENFORCEMENT,
 
     async prepare(task, hub): Promise<SpawnPlan> {
       // Fresh single-turn run: `grok -p <prompt> …`. The session id is captured
@@ -675,5 +690,5 @@ export function createGrokAdapter(env: NodeJS.ProcessEnv = process.env): VendorA
       const stdout = await runProbe(bin, ["models"]);
       return { source: MODELS_SOURCE, models: parseGrokModels(stdout, existing) };
     },
-  };
+  });
 }

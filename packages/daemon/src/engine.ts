@@ -358,6 +358,13 @@ function createGenericTemplateAdapter(vendorId: string): VendorAdapter {
   return {
     id: vendorId,
     childChannel: "http",
+    // Template profiles have no real vendor isolation (#279).
+    enforcement: {
+      "read-only": { level: "none", via: "generic template adapter" },
+      workspace: { level: "none", via: "generic template adapter" },
+      full: { level: "none", via: "generic template adapter" },
+      "network:false": { level: "none", via: "generic template adapter" },
+    },
     prepare(task) {
       return Promise.resolve(emptyPlan(task));
     },

@@ -1,5 +1,6 @@
 import path from "node:path";
 import type {
+  AdapterEnforcement,
   HubInfo,
   MaterializedFile,
   ModelEntry,
@@ -11,8 +12,25 @@ import type {
   VendorEvent,
   VendorModels,
 } from "./types.js";
-import { VENDOR_DIAG_PREFIX } from "./types.js";
+import { VENDOR_DIAG_PREFIX, withPostureDiagnostics } from "./types.js";
 import { runProbe } from "./probe.js";
+
+/** OpenClaw: docker sandbox when mode=all; default workspace is host-local (#279). */
+const OPENCLAW_ENFORCEMENT: AdapterEnforcement = {
+  "read-only": {
+    level: "enforced",
+    via: "docker mode=all workspaceAccess=ro (fail-closed if image missing)",
+  },
+  workspace: {
+    level: "approximate",
+    via: "mode=off when network on (host tools); mode=all docker when network off",
+  },
+  full: { level: "enforced", via: "mode=off" },
+  "network:false": {
+    level: "enforced",
+    via: "docker network=none under sandboxed postures",
+  },
+};
 
 /**
  * The `openclaw` vendor adapter — real delegation to OpenClaw (`openclaw`
@@ -482,9 +500,10 @@ export function createOpenclawAdapter(env: NodeJS.ProcessEnv = process.env): Ven
     return [process.execPath, wrapAbs, bin, ...commonArgv(task), ...sessionArgs];
   }
 
-  return {
+  return withPostureDiagnostics({
     id: "openclaw",
     childChannel: "mcp",
+    enforcement: OPENCLAW_ENFORCEMENT,
 
     prepare(task, hub): Promise<SpawnPlan> {
       // Fresh headless one-shot (research §2, §9): embedded agent, stable
@@ -590,7 +609,7 @@ export function createOpenclawAdapter(env: NodeJS.ProcessEnv = process.env): Ven
       const stdout = await runProbe(bin, ["models", "list", "--all", "--json"]);
       return { source: MODELS_SOURCE, models: parseOpenclawModels(stdout, existing) };
     },
-  };
+  });
 }
 
 /** Exported for tests that assert the compact-stdout wrap path. */

@@ -15,6 +15,14 @@ export function createAdapter(env: NodeJS.ProcessEnv): VendorAdapter {
   return {
     id: "acme", // MUST equal the config key vendors.acme
     childChannel: "mcp", // mcp | cli | http — what the preamble teaches (#155)
+    // Required (#279): what each posture request actually gets.
+    // Levels: enforced | approximate | none | refused (refuse rather than under-isolate).
+    enforcement: {
+      "read-only": { level: "none", via: "document the gap" },
+      workspace: { level: "none" },
+      full: { level: "enforced", via: "unrestricted by design" },
+      "network:false": { level: "none" },
+    },
     prepare(task: TaskSpec, hub: HubInfo): Promise<SpawnPlan> { /* ... */ },
     resume(task: TaskSpec, hub: HubInfo): Promise<SpawnPlan> { /* ... */ },
     parseEvent(line: string): VendorEvent[] { /* ... */ },
@@ -32,7 +40,12 @@ The daemon validates:
 | --- | --- |
 | `id` equals config key | loud per-plugin error; plugin skipped |
 | `childChannel` is `mcp` \| `cli` \| `http` | same |
+| `enforcement` declares `read-only` / `workspace` / `full` / `network:false` with level `enforced`\|`approximate`\|`none`\|`refused` | same |
 | `prepare` / `resume` / `parseEvent` / `sessionId` are functions | same |
+
+Wrap prepare/resume with `withPostureDiagnostics` from `@useparley/core` (or
+call `mergePostureDiagnostics` yourself) so weak postures emit a greppable
+`PARLEY-DIAG` line into the task's `diag.log` without failing the spawn.
 
 A failed plugin does **not** crash the daemon. Delegating to that vendor then
 fails with the usual unknown-vendor error.
@@ -65,6 +78,12 @@ export function createAdapter(_env) {
   const adapter = {
     id: "acme",
     childChannel: "mcp",
+    enforcement: {
+      "read-only": { level: "none" },
+      workspace: { level: "none" },
+      full: { level: "enforced" },
+      "network:false": { level: "none" },
+    },
     async prepare(task, hub) {
       return {
         argv: [

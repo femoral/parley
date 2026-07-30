@@ -1,11 +1,20 @@
 import type {
+  AdapterEnforcement,
   HubInfo,
   SpawnPlan,
   TaskSpec,
   VendorAdapter,
   VendorEvent,
 } from "./types.js";
-import { VENDOR_DIAG_PREFIX } from "./types.js";
+import { VENDOR_DIAG_PREFIX, withPostureDiagnostics } from "./types.js";
+
+/** Test double: posture is echoed in env; treat as fully observed (#279). */
+const FAKE_ENFORCEMENT: AdapterEnforcement = {
+  "read-only": { level: "enforced", via: "FAKE_SANDBOX env echo" },
+  workspace: { level: "enforced", via: "FAKE_SANDBOX env echo" },
+  full: { level: "enforced", via: "FAKE_SANDBOX env echo" },
+  "network:false": { level: "enforced", via: "FAKE_NETWORK env echo" },
+};
 
 /**
  * The `fake` vendor adapter — the contract-test vendor (spec §10). It spawns a
@@ -47,9 +56,10 @@ export function createFakeAdapter(env: NodeJS.ProcessEnv = process.env): VendorA
     };
   }
 
-  return {
+  return withPostureDiagnostics({
     id: "fake",
     childChannel: "mcp",
+    enforcement: FAKE_ENFORCEMENT,
 
     prepare(task, hub) {
       return Promise.resolve(plan(task, hub));
@@ -135,5 +145,5 @@ export function createFakeAdapter(env: NodeJS.ProcessEnv = process.env): VendorA
       }
       return undefined;
     },
-  };
+  });
 }

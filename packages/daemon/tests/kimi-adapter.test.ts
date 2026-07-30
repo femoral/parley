@@ -57,6 +57,24 @@ describe("kimi adapter — registration", () => {
     expect(adapter!.defaultModel).toBe("kimi-for-coding");
   });
 
+  it("declares non-enforcing postures (#279)", () => {
+    const adapter = createKimiAdapter({});
+    expect(adapter.enforcement["read-only"].level).toBe("approximate");
+    expect(adapter.enforcement.workspace.level).toBe("none");
+    expect(adapter.enforcement.full.level).toBe("none");
+    expect(adapter.enforcement["network:false"].level).toBe("none");
+  });
+
+  it("emits prepare-time PARLEY-DIAG for weak postures (#279)", async () => {
+    const plan = await createKimiAdapter({}).prepare(
+      spec({ sandbox: "read-only", network: false }),
+      HUB,
+    );
+    const diags = plan.diagnostics ?? [];
+    expect(diags.some((d) => /PARLEY-DIAG posture: kimi sandbox=read-only/.test(d))).toBe(true);
+    expect(diags.some((d) => /PARLEY-DIAG posture: kimi network=false/.test(d))).toBe(true);
+  });
+
   it("preamble for declared channel teaches MCP tools only", () => {
     const adapter = createAdapterRegistrySync({}).get("kimi")!;
     const text = buildProtocolPreamble({

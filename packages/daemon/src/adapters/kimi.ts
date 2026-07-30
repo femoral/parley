@@ -1,5 +1,6 @@
 import path from "node:path";
 import type {
+  AdapterEnforcement,
   HubInfo,
   MaterializedFile,
   SpawnPlan,
@@ -7,7 +8,15 @@ import type {
   VendorAdapter,
   VendorEvent,
 } from "./types.js";
-import { VENDOR_DIAG_PREFIX } from "./types.js";
+import { VENDOR_DIAG_PREFIX, withPostureDiagnostics } from "./types.js";
+
+/** Kimi: no faithful sandbox/network matrix; --plan is soft RO only (#279). */
+const KIMI_ENFORCEMENT: AdapterEnforcement = {
+  "read-only": { level: "approximate", via: "--plan (soft exploration mode)" },
+  workspace: { level: "none", via: "print-mode afk auto-approve only" },
+  full: { level: "none", via: "print-mode afk auto-approve only" },
+  "network:false": { level: "none", via: "cannot be enforced" },
+};
 
 /**
  * The `kimi` vendor adapter — real delegation to Moonshot AI Kimi Code CLI
@@ -298,9 +307,10 @@ export function createKimiAdapter(env: NodeJS.ProcessEnv = process.env): VendorA
     };
   }
 
-  return {
+  return withPostureDiagnostics({
     id: "kimi",
     childChannel: "mcp",
+    enforcement: KIMI_ENFORCEMENT,
     // research §1: config-file default alias when nothing else names a model.
     defaultModel: "kimi-for-coding",
 
@@ -452,7 +462,7 @@ export function createKimiAdapter(env: NodeJS.ProcessEnv = process.env): VendorA
     },
 
     // listModels omitted — `kimi provider catalog list` JSON shape UNVERIFIED.
-  };
+  });
 }
 
 /** Exported for tests that assert isolation paths. */

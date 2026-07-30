@@ -1,4 +1,5 @@
 import type {
+  AdapterEnforcement,
   HubInfo,
   ModelEntry,
   ProbedModels,
@@ -8,9 +9,20 @@ import type {
   VendorAdapter,
   VendorEvent,
 } from "./types.js";
-import { VENDOR_DIAG_PREFIX } from "./types.js";
+import { VENDOR_DIAG_PREFIX, withPostureDiagnostics } from "./types.js";
 import { runProbe } from "./probe.js";
 import { tomlString } from "./toml.js";
+
+/** Codex maps postures to real `sandbox_mode` / network_access (ADR-0006 / #279). */
+const CODEX_ENFORCEMENT: AdapterEnforcement = {
+  "read-only": { level: "enforced", via: "sandbox_mode=read-only" },
+  workspace: { level: "enforced", via: "sandbox_mode=workspace-write" },
+  full: { level: "enforced", via: "sandbox_mode=danger-full-access" },
+  "network:false": {
+    level: "enforced",
+    via: "sandbox_workspace_write.network_access off under workspace; ignored for read-only/full",
+  },
+};
 
 /**
  * The `codex` vendor adapter (spec §9, ADR-0004). Real delegation to OpenAI's
@@ -229,9 +241,10 @@ function parseItem(item: unknown): VendorEvent[] {
 }
 
 export function createCodexAdapter(env: NodeJS.ProcessEnv = process.env): VendorAdapter {
-  return {
+  return withPostureDiagnostics({
     id: "codex",
     childChannel: "mcp",
+    enforcement: CODEX_ENFORCEMENT,
 
     prepare(task, hub) {
       const plan: SpawnPlan = {
@@ -325,5 +338,5 @@ export function createCodexAdapter(env: NodeJS.ProcessEnv = process.env): Vendor
       const stdout = await runProbe(CODEX_BIN, ["debug", "models"]);
       return { source: MODELS_SOURCE, models: parseCodexModels(stdout) };
     },
-  };
+  });
 }

@@ -1,4 +1,5 @@
 import type {
+  AdapterEnforcement,
   HubInfo,
   ModelEntry,
   ProbedModels,
@@ -8,8 +9,19 @@ import type {
   VendorEvent,
   VendorModels,
 } from "./types.js";
-import { VENDOR_DIAG_PREFIX } from "./types.js";
+import { VENDOR_DIAG_PREFIX, withPostureDiagnostics } from "./types.js";
 import { runProbe } from "./probe.js";
+
+/** OpenCode: permission-layer only; no OS sandbox; network partial (#279). */
+const OPENCODE_ENFORCEMENT: AdapterEnforcement = {
+  "read-only": { level: "approximate", via: "permission deny write/edit/bash (no OS sandbox)" },
+  workspace: { level: "approximate", via: "permission policy only (no OS sandbox)" },
+  full: { level: "approximate", via: "permission allow-all (no OS sandbox)" },
+  "network:false": {
+    level: "approximate",
+    via: "webfetch/websearch deny only; bash can still egress",
+  },
+};
 
 /**
  * The `opencode` vendor adapter — real delegation to OpenCode CLI via spawn-per-turn
@@ -341,9 +353,10 @@ export function parseOpencodeModels(
 export function createOpencodeAdapter(env: NodeJS.ProcessEnv = process.env): VendorAdapter {
   const bin = env.PARLEY_OPENCODE_BIN ?? DEFAULT_OPENCODE_BIN;
 
-  return {
+  return withPostureDiagnostics({
     id: "opencode",
     childChannel: "mcp",
+    enforcement: OPENCODE_ENFORCEMENT,
 
     prepare(task, hub): Promise<SpawnPlan> {
       // Fresh headless one-shot (research §2/§9):
@@ -461,5 +474,5 @@ export function createOpencodeAdapter(env: NodeJS.ProcessEnv = process.env): Ven
       const stdout = await runProbe(bin, ["models"]);
       return { source: MODELS_SOURCE, models: parseOpencodeModels(stdout, existing) };
     },
-  };
+  });
 }

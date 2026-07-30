@@ -1,5 +1,6 @@
 import path from "node:path";
 import type {
+  AdapterEnforcement,
   HubInfo,
   MaterializedFile,
   ModelEntry,
@@ -10,8 +11,16 @@ import type {
   VendorAdapter,
   VendorEvent,
 } from "./types.js";
-import { VENDOR_DIAG_PREFIX } from "./types.js";
+import { VENDOR_DIAG_PREFIX, withPostureDiagnostics } from "./types.js";
 import { runProbe } from "./probe.js";
+
+/** Pi: soft tool allowlists; network:false refused in prepare (#107 / #279). */
+const PI_ENFORCEMENT: AdapterEnforcement = {
+  "read-only": { level: "approximate", via: "--tools read-only allowlist" },
+  workspace: { level: "none", via: "default tools; no write sandbox" },
+  full: { level: "none", via: "default tools; no write sandbox" },
+  "network:false": { level: "refused", via: "prepare refuses (#107)" },
+};
 
 /**
  * The `pi` vendor adapter — real delegation to Pi Coding Agent (`pi` binary from
@@ -439,9 +448,10 @@ export function createPiAdapter(env: NodeJS.ProcessEnv = process.env): VendorAda
     return argv;
   }
 
-  return {
+  return withPostureDiagnostics({
     id: "pi",
     childChannel: "mcp",
+    enforcement: PI_ENFORCEMENT,
 
     prepare(task, hub): Promise<SpawnPlan> {
       try {
@@ -621,5 +631,5 @@ export function createPiAdapter(env: NodeJS.ProcessEnv = process.env): VendorAda
       const stdout = await runProbe(bin, ["--list-models"]);
       return { source: MODELS_SOURCE, models: parsePiModels(stdout) };
     },
-  };
+  });
 }

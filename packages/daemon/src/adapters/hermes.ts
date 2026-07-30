@@ -1,5 +1,6 @@
 import path from "node:path";
 import type {
+  AdapterEnforcement,
   HubInfo,
   MaterializedFile,
   SpawnPlan,
@@ -7,7 +8,21 @@ import type {
   VendorAdapter,
   VendorEvent,
 } from "./types.js";
-import { VENDOR_DIAG_PREFIX } from "./types.js";
+import { VENDOR_DIAG_PREFIX, withPostureDiagnostics } from "./types.js";
+
+/** Hermes: WRITE_SAFE_ROOT soft FS; no local network filter (#279). */
+const HERMES_ENFORCEMENT: AdapterEnforcement = {
+  "read-only": {
+    level: "approximate",
+    via: "HERMES_WRITE_SAFE_ROOT limited to private home (terminal may still write)",
+  },
+  workspace: {
+    level: "approximate",
+    via: "HERMES_WRITE_SAFE_ROOT=worktree+gitdirs",
+  },
+  full: { level: "enforced", via: "unset HERMES_WRITE_SAFE_ROOT" },
+  "network:false": { level: "none", via: "local backend has no egress filter" },
+};
 
 /**
  * The `hermes` vendor adapter — real delegation to Nous Research Hermes Agent
@@ -302,9 +317,10 @@ export function createHermesAdapter(env: NodeJS.ProcessEnv = process.env): Vendo
     };
   }
 
-  return {
+  return withPostureDiagnostics({
     id: "hermes",
     childChannel: "mcp",
+    enforcement: HERMES_ENFORCEMENT,
 
     prepare(task, hub): Promise<SpawnPlan> {
       // Fresh headless one-shot (research §2 / §9):
@@ -379,5 +395,5 @@ export function createHermesAdapter(env: NodeJS.ProcessEnv = process.env): Vendo
     },
 
     // listModels omitted: hermes model is interactive TUI only (research §7).
-  };
+  });
 }

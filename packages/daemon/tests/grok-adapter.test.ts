@@ -138,6 +138,15 @@ describe("grok adapter — prepare argv (golden)", () => {
     const a = createGrokAdapter({ PARLEY_GROK_BIN: "/opt/grok/grok" });
     expect((await a.prepare(spec({ sandbox: "full" }), HUB)).argv[0]).toBe("/opt/grok/grok");
   });
+
+  it("declares OS-sandbox enforcement including workspace gitdir grants (#279/#278)", () => {
+    const a = createGrokAdapter({ PARLEY_GROK_BIN: "/opt/grok/grok" });
+    expect(a.enforcement["read-only"].level).toBe("enforced");
+    expect(a.enforcement.workspace.level).toBe("enforced");
+    expect(a.enforcement.full.level).toBe("enforced");
+    expect(a.enforcement["network:false"].level).toBe("enforced");
+    expect(a.enforcement.workspace.via).toMatch(/gitdir/);
+  });
 });
 
 describe("grok adapter — resume argv (golden)", () => {
