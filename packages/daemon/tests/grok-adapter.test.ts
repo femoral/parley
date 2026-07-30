@@ -173,19 +173,33 @@ describe("grok adapter — resume argv (golden)", () => {
 });
 
 describe("grok adapter — env across the sandbox-posture matrix (golden)", () => {
+  /** Default gitdirs used by matrix content assertions (worktree-shaped task). */
+  const GIT_DIR = "/repo/.git/worktrees/t7";
+  const GIT_COMMON = "/repo/.git";
+
   const cases: {
     sandbox: SandboxMode;
     network: boolean;
     expectSandbox: string;
     extra: Record<string, string>;
+    /** Custom profile materializes for every sandboxed posture (#278). */
     sandboxToml: boolean;
+    /** Built-in base the custom profile must extend (when present). */
+    extendsBase?: string;
+    /** Whether the profile must set restrict_network = true. */
+    restrictNetwork?: boolean;
+    /** Whether the profile must grant both gitdirs via read_write. */
+    readWrite?: boolean;
   }[] = [
     {
       sandbox: "workspace",
       network: true,
-      expectSandbox: "workspace",
+      expectSandbox: "parley-restricted",
       extra: { GROK_SANDBOX_AUTO_ALLOW_BASH: "1" },
-      sandboxToml: false,
+      sandboxToml: true,
+      extendsBase: "workspace",
+      restrictNetwork: false,
+      readWrite: true,
     },
     {
       sandbox: "workspace",
@@ -193,13 +207,20 @@ describe("grok adapter — env across the sandbox-posture matrix (golden)", () =
       expectSandbox: "parley-restricted",
       extra: { GROK_SANDBOX_AUTO_ALLOW_BASH: "1" },
       sandboxToml: true,
+      extendsBase: "workspace",
+      restrictNetwork: true,
+      readWrite: true,
     },
     {
       sandbox: "read-only",
       network: true,
-      expectSandbox: "read-only",
+      expectSandbox: "parley-restricted",
       extra: { GROK_WRITE_FILE: "0" },
-      sandboxToml: false,
+      sandboxToml: true,
+      extendsBase: "read-only",
+      restrictNetwork: false,
+      // read-only grants no writes (same as codex writable_roots).
+      readWrite: false,
     },
     {
       sandbox: "read-only",
@@ -207,6 +228,9 @@ describe("grok adapter — env across the sandbox-posture matrix (golden)", () =
       expectSandbox: "parley-restricted",
       extra: { GROK_WRITE_FILE: "0" },
       sandboxToml: true,
+      extendsBase: "read-only",
+      restrictNetwork: true,
+      readWrite: false,
     },
     { sandbox: "full", network: true, expectSandbox: "off", extra: {}, sandboxToml: false },
     // full ignores network:false — danger-full-access is inherently network-on.
@@ -215,14 +239,40 @@ describe("grok adapter — env across the sandbox-posture matrix (golden)", () =
 
   for (const c of cases) {
     it(`${c.sandbox} + network:${c.network} → GROK_SANDBOX=${c.expectSandbox}`, async () => {
-      const plan = await adapter().prepare(spec({ sandbox: c.sandbox, network: c.network }), HUB);
+      const plan = await adapter().prepare(
+        spec({
+          sandbox: c.sandbox,
+          network: c.network,
+          gitDir: GIT_DIR,
+          gitCommonDir: GIT_COMMON,
+        }),
+        HUB,
+      );
       expect(plan.env.GROK_SANDBOX).toBe(c.expectSandbox);
       for (const [k, v] of Object.entries(c.extra)) expect(plan.env[k]).toBe(v);
       // Claude scanners always disabled.
       for (const key of SCANNERS) expect(plan.env[key]).toBe("0");
-      // A no-network posture (except full) materializes a custom profile.
-      const hasSandboxToml = plan.files.some((f) => f.path === ".grok/sandbox.toml");
-      expect(hasSandboxToml).toBe(c.sandboxToml);
+      // Every sandboxed posture materializes a custom profile; full never does.
+      const sb = plan.files.find((f) => f.path === ".grok/sandbox.toml");
+      expect(Boolean(sb)).toBe(c.sandboxToml);
+      if (c.sandboxToml && sb !== undefined) {
+        expect(sb.contents).toContain("[profiles.parley-restricted]");
+        expect(sb.contents).toContain(`extends = "${c.extendsBase}"`);
+        if (c.restrictNetwork) {
+          expect(sb.contents).toContain("restrict_network = true");
+        } else {
+          expect(sb.contents).not.toContain("restrict_network");
+        }
+        if (c.readWrite) {
+          // Neuter proof: delete the read_write emission in sandboxToml and
+          // this assertion (plus the dedicated content tests below) fails.
+          expect(sb.contents).toContain(
+            `read_write = ["${GIT_DIR}", "${GIT_COMMON}"]`,
+          );
+        } else {
+          expect(sb.contents).not.toContain("read_write");
+        }
+      }
     });
   }
 
@@ -316,12 +366,135 @@ describe("grok adapter — materialized .grok/config.toml", () => {
   });
 
   it("the no-network sandbox.toml extends the base built-in with restrict_network", async () => {
-    const plan = await adapter().prepare(spec({ sandbox: "workspace", network: false }), HUB);
+    const plan = await adapter().prepare(
+      spec({
+        sandbox: "workspace",
+        network: false,
+        gitDir: "/repo/.git/worktrees/t7",
+        gitCommonDir: "/repo/.git",
+      }),
+      HUB,
+    );
     const sb = plan.files.find((f) => f.path === ".grok/sandbox.toml");
     expect(sb).toBeDefined();
     expect(sb!.contents).toContain("[profiles.parley-restricted]");
     expect(sb!.contents).toContain('extends = "workspace"');
     expect(sb!.contents).toContain("restrict_network = true");
+    expect(sb!.contents).toContain(
+      'read_write = ["/repo/.git/worktrees/t7", "/repo/.git"]',
+    );
+  });
+});
+
+describe("grok adapter — sandbox.toml gitdir grants (#278)", () => {
+  it("workspace + network-on: profile has read_write for both gitdirs, no restrict_network", async () => {
+    const plan = await adapter().prepare(
+      spec({
+        sandbox: "workspace",
+        network: true,
+        gitDir: "/repo/.git/worktrees/t7",
+        gitCommonDir: "/repo/.git",
+      }),
+      HUB,
+    );
+    expect(plan.env.GROK_SANDBOX).toBe("parley-restricted");
+    const sb = plan.files.find((f) => f.path === ".grok/sandbox.toml");
+    expect(sb).toBeDefined();
+    expect(sb!.contents).toContain('extends = "workspace"');
+    expect(sb!.contents).not.toContain("restrict_network");
+    // Neuter proof: if the read_write line is deleted from sandboxToml, this fails.
+    expect(sb!.contents).toContain(
+      'read_write = ["/repo/.git/worktrees/t7", "/repo/.git"]',
+    );
+  });
+
+  it("workspace + network-off: profile has both read_write and restrict_network", async () => {
+    const plan = await adapter().prepare(
+      spec({
+        sandbox: "workspace",
+        network: false,
+        gitDir: "/repo/.git/worktrees/t7",
+        gitCommonDir: "/repo/.git",
+      }),
+      HUB,
+    );
+    const sb = plan.files.find((f) => f.path === ".grok/sandbox.toml")!.contents;
+    expect(sb).toContain("restrict_network = true");
+    expect(sb).toContain('read_write = ["/repo/.git/worktrees/t7", "/repo/.git"]');
+  });
+
+  it("workspace with gitDir/gitCommonDir undefined: profile materializes without read_write", async () => {
+    // --cwd tasks bypass the worktree; no gitdirs. Empty-of-grants profile is
+    // still materialized (pure extends) so GROK_SANDBOX stays uniform.
+    const plan = await adapter().prepare(
+      spec({ sandbox: "workspace", network: true }),
+      HUB,
+    );
+    expect(plan.env.GROK_SANDBOX).toBe("parley-restricted");
+    const sb = plan.files.find((f) => f.path === ".grok/sandbox.toml");
+    expect(sb).toBeDefined();
+    expect(sb!.contents).toContain('extends = "workspace"');
+    expect(sb!.contents).not.toContain("read_write");
+    expect(sb!.contents).not.toContain("restrict_network");
+  });
+
+  it("deduplicates when gitDir === gitCommonDir", async () => {
+    const plan = await adapter().prepare(
+      spec({
+        sandbox: "workspace",
+        network: true,
+        gitDir: "/repo/.git",
+        gitCommonDir: "/repo/.git",
+      }),
+      HUB,
+    );
+    const sb = plan.files.find((f) => f.path === ".grok/sandbox.toml")!.contents;
+    expect(sb).toContain('read_write = ["/repo/.git"]');
+    // Single entry — the path must not appear twice in the array.
+    expect(sb.match(/\/repo\/\.git/g)).toHaveLength(1);
+  });
+
+  it("escapes a gitDir path containing a quote or backslash (TOML-safe)", async () => {
+    // Mirror codex.test.ts writable_roots escaping (~line 184-190).
+    const gitDir = String.raw`/repo/my "worktree"\t1/.git/worktrees/t1`;
+    const plan = await adapter().prepare(
+      spec({ sandbox: "workspace", network: true, gitDir }),
+      HUB,
+    );
+    const sb = plan.files.find((f) => f.path === ".grok/sandbox.toml")!.contents;
+    expect(sb).toContain(
+      String.raw`read_write = ["/repo/my \"worktree\"\\t1/.git/worktrees/t1"]`,
+    );
+  });
+
+  it("full never materializes sandbox.toml even with gitdirs set", async () => {
+    const plan = await adapter().prepare(
+      spec({
+        sandbox: "full",
+        gitDir: "/repo/.git/worktrees/t7",
+        gitCommonDir: "/repo/.git",
+      }),
+      HUB,
+    );
+    expect(plan.files.some((f) => f.path === ".grok/sandbox.toml")).toBe(false);
+    expect(plan.env.GROK_SANDBOX).toBe("off");
+  });
+
+  it("resume maps gitdir grants identically to prepare", async () => {
+    const a = adapter();
+    const s = spec({
+      sandbox: "workspace",
+      network: true,
+      gitDir: "/repo/.git/worktrees/t7",
+      gitCommonDir: "/repo/.git",
+      sessionId: "sess-1",
+    });
+    const prepared = await a.prepare(s, HUB);
+    const resumed = await a.resume(s, HUB);
+    const prepToml = prepared.files.find((f) => f.path === ".grok/sandbox.toml")!.contents;
+    const resumeToml = resumed.files.find((f) => f.path === ".grok/sandbox.toml")!.contents;
+    expect(resumeToml).toBe(prepToml);
+    expect(resumed.env.GROK_SANDBOX).toBe(prepared.env.GROK_SANDBOX);
   });
 });
 
