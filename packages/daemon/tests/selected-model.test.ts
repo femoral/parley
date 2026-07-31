@@ -110,13 +110,20 @@ describe("parseClineSelectedModel", () => {
   });
 
   it("flags malformed JSON without embedding source (no secret leak)", () => {
-    const result = parseClineSelectedModel(
-      readFixture("cline", "providers.malformed.json"),
-    );
+    const text = readFixture("cline", "providers.malformed.json");
+    // Fixture places the syntax error next to the dummy secret so a
+    // regression that interpolated JSON.parse's message would leak it.
+    expect(text).toContain("sk-test-dummy-secret-must-never-leak");
+    const result = parseClineSelectedModel(text);
     expect(result.model).toBeNull();
+    // Load-bearing: fixed shape string only — never err.message (which can
+    // embed a source fragment carrying the secret on modern Node).
     expect(result.error).toBe("malformed providers.json");
-    // Parser error messages must never carry file content / secrets.
-    expect(JSON.stringify(result)).not.toMatch(/sk-test|secret|apiKey/i);
+    expect(result).toEqual({
+      model: null,
+      effort: null,
+      error: "malformed providers.json",
+    });
   });
 
   it("degrades on unexpected shape without throwing", () => {
@@ -159,12 +166,16 @@ describe("parseOpenhandsSelectedModel", () => {
   });
 
   it("flags malformed JSON without embedding source", () => {
-    const result = parseOpenhandsSelectedModel(
-      readFixture("openhands", "agent_settings.malformed.json"),
-    );
+    const text = readFixture("openhands", "agent_settings.malformed.json");
+    expect(text).toContain("sk-test-dummy-openhands-secret");
+    const result = parseOpenhandsSelectedModel(text);
     expect(result.model).toBeNull();
+    // Fixed shape only — never interpolate JSON.parse's message.
     expect(result.error).toBe("malformed agent_settings.json");
-    expect(JSON.stringify(result)).not.toMatch(/sk-test|secret/i);
+    expect(result).toEqual({
+      model: null,
+      error: "malformed agent_settings.json",
+    });
   });
 
   it("flags unexpected shape", () => {
@@ -446,7 +457,10 @@ describe("allowlist rejection names CLI selection (#284)", () => {
     },
   };
 
-  it("adds a line when CLI selection is readable and not allowlisted", () => {
+  it("formatCliSelectedHint adds a line when selection is outside the allowlist", () => {
+    // Callers (engine / run-preflight) append this to the pure-gate message.
+    const combos = listAllowedCombos(cfg);
+    let body: string | undefined;
     try {
       resolveAllowedCombo({
         vendor: "cline",
@@ -454,21 +468,24 @@ describe("allowlist rejection names CLI selection (#284)", () => {
         model: "gpt-6",
         effort: "low",
         configPath: CONFIG_PATH,
-        cliSelected: { model: "claude-sonnet-4-5", effort: "high" },
       });
       expect.unreachable();
     } catch (err) {
       expect(err).toBeInstanceOf(ModelAllowlistError);
-      const msg = (err as Error).message;
-      // Pre-existing rejection shape intact.
-      expect(msg).toMatch(/not allowed/);
-      expect(msg).toMatch(/Allowed:/);
-      expect(msg).toMatch(/did you mean/);
-      expect(msg).toMatch(/gpt-/);
-      // New advisory line (JSON.stringified combo).
-      expect(msg).toMatch(/CLI currently has "claude-sonnet-4-5@high" selected/);
-      expect(msg).toMatch(/not on the allowlist/);
+      body = (err as Error).message;
     }
+    // Pre-existing rejection shape intact (no hint from the gate itself).
+    expect(body).toMatch(/not allowed/);
+    expect(body).toMatch(/Allowed:/);
+    expect(body).toMatch(/did you mean/);
+    expect(body).toMatch(/gpt-/);
+    expect(body).not.toMatch(/CLI currently has/);
+    // Append path — the single choke point after item-3 cleanup.
+    const msg =
+      body! +
+      formatCliSelectedHint({ model: "claude-sonnet-4-5", effort: "high" }, combos);
+    expect(msg).toMatch(/CLI currently has "claude-sonnet-4-5@high" selected/);
+    expect(msg).toMatch(/not on the allowlist/);
   });
 
   it("preserves pre-existing output when no CLI selection is known", () => {
@@ -485,38 +502,17 @@ describe("allowlist rejection names CLI selection (#284)", () => {
     } catch (err) {
       without = (err as Error).message;
     }
-    let withNull: string | undefined;
-    try {
-      resolveAllowedCombo({
-        vendor: "codex",
-        vendorCfg: cfg,
-        model: "gpt-6",
-        effort: "low",
-        configPath: CONFIG_PATH,
-        cliSelected: null,
-      });
-      expect.unreachable();
-    } catch (err) {
-      withNull = (err as Error).message;
-    }
-    expect(without).toBe(withNull);
+    const combos = listAllowedCombos(cfg);
+    const withNullHint = without! + formatCliSelectedHint(null, combos);
+    expect(without).toBe(withNullHint);
     expect(without).not.toMatch(/CLI currently has/);
   });
 
   it("omits the line when the CLI selection is already allowlisted", () => {
-    try {
-      resolveAllowedCombo({
-        vendor: "codex",
-        vendorCfg: cfg,
-        model: "gpt-6",
-        effort: "low",
-        configPath: CONFIG_PATH,
-        cliSelected: { model: "gpt-5", effort: "medium" },
-      });
-      expect.unreachable();
-    } catch (err) {
-      expect((err as Error).message).not.toMatch(/CLI currently has/);
-    }
+    const combos = listAllowedCombos(cfg);
+    expect(
+      formatCliSelectedHint({ model: "gpt-5", effort: "medium" }, combos),
+    ).toBe("");
   });
 
   it("formatCliSelectedHint from a real cline fixture never includes credentials", () => {
@@ -654,6 +650,9 @@ describe("engine spawn path surfaces CLI selection on allowlist rejection (#284)
   });
 
   it("cliSelected matching the requested combo still rejects (no allowlist bypass)", () => {
+    // M3: engine must not short-circuit when adapter selection equals the
+    // request. Deleting the gate (or skipping when selection === request)
+    // would make this pass without throwing — must stay red under that mutation.
     fs.writeFileSync(
       path.join(parleyHome, "parley.json"),
       JSON.stringify(
@@ -706,6 +705,190 @@ describe("engine spawn path surfaces CLI selection on allowlist rejection (#284)
         type: null,
       }),
     ).toThrow(/not allowed/);
+  });
+
+  it("engine startRun preflight surfaces CLI selection on allowlist rejection (#284 M6)", () => {
+    // Load-bearing: deleting host.readSelectedModel wiring in engine.startRun
+    // (or preflightRunStart pass-through) makes the advisory line vanish.
+    // This is the operator-visible run/workflow path.
+    fs.writeFileSync(
+      path.join(parleyHome, "parley.json"),
+      JSON.stringify(
+        withFakeAllowlist({
+          vendors: {
+            fake: {
+              models: {
+                "fake-model": {
+                  efforts: ["low", "medium"],
+                  default: "medium",
+                },
+              },
+            },
+          },
+          profiles: {
+            deep: {
+              vendor: "fake",
+              model: "fake-model",
+              effort: "medium",
+            },
+          },
+        }),
+      ),
+    );
+
+    // Workflow with an explicit non-allowlisted model on the step.
+    const wfId = "sel-m6";
+    const wfDir = path.join(parleyHome, "workflows", wfId);
+    fs.mkdirSync(path.join(wfDir, "prompts"), { recursive: true });
+    fs.writeFileSync(path.join(wfDir, "prompts", "s.md"), "do it\n");
+    fs.writeFileSync(
+      path.join(wfDir, "workflow.json"),
+      JSON.stringify({
+        id: wfId,
+        version: 1,
+        type: "research",
+        workspace: "scratch",
+        inputs: {},
+        outputs: { out: { type: "text", from: "scope.report" } },
+        nodes: [
+          {
+            id: "scope",
+            kind: "step",
+            vendor: "fake",
+            model: "not-on-list",
+            effort: "low",
+            prompt: "prompts/s.md",
+            in: {},
+            out: { report: { type: "text" } },
+          },
+        ],
+      }),
+    );
+
+    const fake = createFakeAdapter(process.env);
+    const adapters = new Map([
+      [
+        "fake",
+        {
+          ...fake,
+          readSelectedModel: () => ({
+            model: "cli-only-model",
+            effort: "high" as string | null,
+          }),
+        },
+      ],
+    ]);
+    const engine = new TaskEngine(db, homePaths(parleyHome), adapters);
+    const result = engine.startRun({
+      workflow: wfId,
+      cwd: parleyHome,
+      orchestratorSessionId: "orch",
+    });
+    expect(result.kind).toBe("usage");
+    if (result.kind !== "usage") return;
+    // Pre-existing shape intact.
+    expect(result.message).toMatch(/not allowed/);
+    expect(result.message).toMatch(/Allowed/);
+    // Advisory line from engine → startRun host → preflight wiring.
+    expect(result.message).toMatch(
+      /CLI currently has "cli-only-model@high" selected/,
+    );
+  });
+
+  it("engine step-spawn path includes CLI selection on allowlist rejection (#284 M6 spawn)", () => {
+    // Direct spawnStepTasks path (hot-apply mid-run). Deleting the
+    // readSelectedModel block at spawnStepTasks must make this fail.
+    fs.writeFileSync(
+      path.join(parleyHome, "parley.json"),
+      JSON.stringify(
+        withFakeAllowlist({
+          vendors: {
+            fake: {
+              models: {
+                "fake-model": { efforts: ["low"], default: "low" },
+              },
+            },
+          },
+        }),
+      ),
+    );
+    const fake = createFakeAdapter(process.env);
+    const adapters = new Map([
+      [
+        "fake",
+        {
+          ...fake,
+          readSelectedModel: () => ({
+            model: "cli-spawn-model",
+            effort: "high" as string | null,
+          }),
+        },
+      ],
+    ]);
+    const engine = new TaskEngine(db, homePaths(parleyHome), adapters);
+
+    // Minimal scratch workspace so resolveRunWorkspaceRoot succeeds.
+    const runId = "r-m6spawn";
+    const ws = path.join(homePaths(parleyHome).runs, runId);
+    fs.mkdirSync(ws, { recursive: true });
+    const run = {
+      id: runId,
+      workflow: "m6",
+      version: 1,
+      type: "research",
+      workspace: "scratch" as const,
+      repo: null,
+      state: "running" as const,
+      current_node: "scope",
+      iteration: 1,
+      parent_run_id: null,
+      attempt: 1,
+      orchestrator_session_id: null,
+      created_at: "2026-01-01T00:00:00.000Z",
+      updated_at: "2026-01-01T00:00:00.000Z",
+      started_at: "2026-01-01T00:00:00.000Z",
+      completed_at: null,
+      error: null,
+      purged_at: null,
+      base_ref: null,
+      base_commit: null,
+    };
+    const definition = {
+      id: "m6",
+      version: 1,
+      type: "research",
+      workspace: "scratch" as const,
+      inputs: {},
+      outputs: {},
+      nodes: [],
+    };
+    const step = {
+      id: "scope",
+      kind: "step" as const,
+      vendor: "fake",
+      model: "not-on-list",
+      effort: "low",
+      prompt: "prompts/s.md",
+      in: {},
+      out: {},
+    };
+    const result = (
+      engine as unknown as {
+        spawnStepTasks: (args: unknown) => void | { error: string };
+      }
+    ).spawnStepTasks({
+      run,
+      definition,
+      step,
+      iteration: 1,
+      inputs: {},
+      loopFills: {},
+    });
+    expect(result).toBeDefined();
+    expect(result).toHaveProperty("error");
+    const err = (result as { error: string }).error;
+    expect(err).toMatch(/not allowed/);
+    expect(err).toMatch(/CLI currently has "cli-spawn-model@high" selected/);
   });
 });
 

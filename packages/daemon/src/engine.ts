@@ -1211,7 +1211,9 @@ export class TaskEngine {
     } catch (err) {
       if (err instanceof ModelAllowlistError) {
         let message = err.message;
-        if (err.code === "not_allowed") {
+        // Advisory only (#284). Include `no_allowlist` so empty-catalog
+        // vendors (goose/openhands) pre-init still name the CLI selection.
+        if (err.code === "not_allowed" || err.code === "no_allowlist") {
           let cliSelected = null;
           try {
             cliSelected =
@@ -4072,6 +4074,16 @@ export class TaskEngine {
       runsDir: this.paths.runs,
       config,
       configPath: this.paths.config,
+      // #284: wire selection read for run-start preflight so the advisory
+      // line is not dead plumbing (same lazy-on-rejection contract as
+      // resolveModelAllowlist / spawnStepTasks).
+      readSelectedModel: (v: string) => {
+        try {
+          return this.adapters.get(v)?.readSelectedModel?.() ?? null;
+        } catch {
+          return null;
+        }
+      },
     };
     const result = startRunImpl(this.db, host, {
       workflow: request.workflow,

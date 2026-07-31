@@ -21,6 +21,7 @@ import {
   formatPortType,
   resolveWorkflow,
   type PortType,
+  type SelectedModel,
   type WorkflowDefinition,
   type WorkflowInputPort,
   type WorkflowNode,
@@ -359,6 +360,12 @@ export interface StartRunHost extends RunDrainHost {
   runsDir: string;
   config: ParleyConfig;
   configPath: string;
+  /**
+   * Optional CLI selected-model lookup for preflight allowlist rejections
+   * (#284). Engine wires adapters here so run/workflow operators see the
+   * drift advisory line when a step is outside the allowlist.
+   */
+  readSelectedModel?: (vendor: string) => SelectedModel | null;
 }
 
 export type StartRunResult =
@@ -399,7 +406,7 @@ export interface Phase1Ok {
  * Phase 1 only — exported for tests that assert no side effects on failure.
  */
 export function runStartPhase1(
-  host: Pick<StartRunHost, "config" | "configPath">,
+  host: Pick<StartRunHost, "config" | "configPath" | "readSelectedModel">,
   request: StartRunRequest,
 ): Phase1Ok | { kind: "usage"; message: string } {
   let resolved: ReturnType<typeof resolveWorkflow>;
@@ -464,6 +471,11 @@ export function runStartPhase1(
       configPath: host.configPath,
       repoRoot: repo,
       baseRef: baseRefRaw,
+      // #284: wire selection read so run/workflow allowlist rejections at
+      // preflight (the operator-visible path) carry the drift advisory line.
+      ...(host.readSelectedModel === undefined
+        ? {}
+        : { readSelectedModel: host.readSelectedModel }),
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

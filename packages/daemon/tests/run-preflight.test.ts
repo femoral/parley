@@ -351,6 +351,32 @@ describe("resolveStepExecution", () => {
     expect(reads).toBe(1);
   });
 
+  it("enriches no_allowlist with CLI selection when wired (#284 N3)", () => {
+    // Empty-catalog vendors fail with no_allowlist pre-init; the selection
+    // is exactly the seed the operator needs to write.
+    try {
+      resolveStepExecution({
+        step: step({
+          id: "a",
+          vendor: "goose",
+          model: "anything",
+        }),
+        config: { vendors: { goose: {} } },
+        configPath,
+        readSelectedModel: () => ({
+          model: "deepseek-v4-flash",
+          effort: null,
+        }),
+      });
+      expect.unreachable();
+    } catch (err) {
+      expect((err as Error).message).toMatch(/no models configured/i);
+      expect((err as Error).message).toMatch(
+        /CLI currently has "deepseek-v4-flash" selected/,
+      );
+    }
+  });
+
   it("does not call readSelectedModel on a successful allowlist resolution", () => {
     let reads = 0;
     const r = resolveStepExecution({
@@ -527,6 +553,54 @@ describe("preflightRunStart", () => {
         baseRef: "main",
       }),
     ).toThrow(ScratchBaseRefNotAllowedError);
+  });
+
+  it("wires readSelectedModel into allowlist rejection (#284 — load-bearing)", () => {
+    // Mutation: delete readSelectedModel pass-through in preflightRunStart →
+    // this test dies. Operator-visible run/workflow path depends on it.
+    const definition = loadMiniWorkflow(wfDir, {
+      id: path.basename(wfDir),
+      version: 1,
+      type: "research",
+      workspace: "scratch",
+      inputs: {},
+      outputs: {},
+      nodes: [
+        {
+          id: "implement",
+          kind: "step",
+          vendor: "fake",
+          model: "not-on-list",
+          effort: "high",
+          prompt: "prompts/s.md",
+          in: {},
+          out: { q: { type: "text" } },
+        },
+      ],
+    });
+    let reads = 0;
+    try {
+      preflightRunStart({
+        definition,
+        config: baseConfig(),
+        configPath,
+        readSelectedModel: (vendor) => {
+          reads += 1;
+          expect(vendor).toBe("fake");
+          return { model: "cli-selected-model", effort: "high" };
+        },
+      });
+      expect.unreachable();
+    } catch (err) {
+      const msg = (err as Error).message;
+      // Pre-existing rejection shape intact.
+      expect(msg).toMatch(/not allowed/);
+      expect(msg).toMatch(/Allowed/);
+      expect(msg).toMatch(/did you mean/);
+      // Advisory line from the wired selection read.
+      expect(msg).toMatch(/CLI currently has "cli-selected-model@high" selected/);
+    }
+    expect(reads).toBe(1);
   });
 
   it("repo mode refuses missing repo root via preflightRepoRun", () => {

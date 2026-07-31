@@ -166,10 +166,11 @@ export interface ResolveStepExecutionOptions {
   configPath: string;
   /**
    * Optional lookup for the operator CLI's selected model (#284). Advisory
-   * for allowlist rejection text only — invoked **lazily on `not_allowed`**,
-   * never on the success path. Callers that omit it get the pre-#284
-   * rejection shape (no advisory line). Engine wires this for run/workflow
-   * spawn so the drift guard is not dead plumbing.
+   * for allowlist rejection text only — invoked **lazily on `not_allowed`
+   * or `no_allowlist`**, never on the success path. Callers that omit it get
+   * the pre-#284 rejection shape (no advisory line). Engine wires this for
+   * run/workflow preflight and step spawn so the drift guard is not dead
+   * plumbing.
    */
   readSelectedModel?: (vendor: string) => SelectedModel | null;
 }
@@ -268,7 +269,13 @@ export function resolveStepExecution(
       if (err instanceof ModelAllowlistError) {
         let message = err.message;
         // Lazy disk read — only when already rejecting (same as engine path).
-        if (err.code === "not_allowed" && options.readSelectedModel) {
+        // Include `no_allowlist`: empty-catalog vendors (goose/openhands)
+        // fail with that code pre-init, and the selection is the seed the
+        // operator needs to write.
+        if (
+          (err.code === "not_allowed" || err.code === "no_allowlist") &&
+          options.readSelectedModel
+        ) {
           let cliSelected: SelectedModel | null = null;
           try {
             cliSelected = options.readSelectedModel(vendor);
@@ -361,6 +368,12 @@ export interface PreflightRunStartOptions {
    * (via {@link preflightScratchRun}).
    */
   baseRef?: string | null;
+  /**
+   * Optional CLI selected-model lookup (#284). Passed through to every
+   * {@link resolveStepExecution} so run/workflow allowlist rejections at
+   * preflight carry the advisory drift line. Lazy on rejection only.
+   */
+  readSelectedModel?: (vendor: string) => SelectedModel | null;
 }
 
 /**
@@ -380,6 +393,7 @@ export function preflightRunStart(
   options: PreflightRunStartOptions,
 ): RunPreflightResult {
   const { definition, config, configPath } = options;
+  const readSelectedModel = options.readSelectedModel;
 
   if (definition.workspace === "scratch") {
     preflightScratchRun({ baseRef: options.baseRef });
@@ -401,6 +415,7 @@ export function preflightRunStart(
           slotId,
           config,
           configPath,
+          ...(readSelectedModel === undefined ? {} : { readSelectedModel }),
         });
         rows.push(toPreflightRow(resolved, config));
       }
@@ -411,6 +426,7 @@ export function preflightRunStart(
         slotId: null,
         config,
         configPath,
+        ...(readSelectedModel === undefined ? {} : { readSelectedModel }),
       });
       rows.push(toPreflightRow(resolved, config));
     }
