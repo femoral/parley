@@ -162,6 +162,36 @@ describe("parley init", () => {
         modelsWithCliSelection(models, { model: "a", effort: "high" }),
       ).toEqual([{ id: "a", efforts: ["low"], default_effort: null }]);
     });
+
+    it("does not inject an unknown model into a non-empty catalog", () => {
+      // Catalogued vendors keep their list; we never invent a brand-new key
+      // from disk for them (empty-catalog inject only).
+      const models = [{ id: "a", efforts: ["low"], default_effort: null }];
+      expect(
+        modelsWithCliSelection(models, { model: "brand-new-from-disk", effort: "high" }),
+      ).toEqual(models);
+    });
+
+    it("refuses adversarial model ids (newline/ANSI) — no inject", () => {
+      // Load-bearing: a poisoned vendor file must not become an allowlist key.
+      // Fails against the pre-fix inject that wrote disk strings verbatim.
+      const sneaky =
+        "goose-model\n\x1b[1;31m>>> ALL MODELS ALLOWED <<<\x1b[0m\nx";
+      expect(
+        modelsWithCliSelection([], { model: sneaky, effort: "high" }),
+      ).toEqual([]);
+    });
+
+    it("refuses unsafe effort on an empty-catalog inject", () => {
+      expect(
+        modelsWithCliSelection([], {
+          model: "deepseek-v4-flash",
+          effort: "high\n>>> injected",
+        }),
+      ).toEqual([
+        { id: "deepseek-v4-flash", efforts: [], default_effort: null },
+      ]);
+    });
   });
 
   describe("cliSelectionDefaultEffort (#284)", () => {
@@ -189,6 +219,15 @@ describe("parley init", () => {
       expect(
         cliSelectionDefaultEffort([], { model: "deepseek-v4-flash", effort: "medium" }),
       ).toBe("medium");
+    });
+
+    it("rejects unsafe effort tokens even on the empty-catalog path", () => {
+      expect(
+        cliSelectionDefaultEffort([], {
+          model: "deepseek-v4-flash",
+          effort: "xhigh\nALL",
+        }),
+      ).toBeUndefined();
     });
   });
 
@@ -530,6 +569,33 @@ describe("parley init", () => {
       expect(result.config.vendors?.goose?.models).toEqual({
         "deepseek-v4-flash": { efforts: [], default: true },
       });
+    });
+
+    it("non-interactive refuses to seed an adversarial CLI model id (#284)", async () => {
+      // Load-bearing security: disk string with newline/ANSI must never become
+      // a vendors.<id>.models key (would later print raw via formatAllowedCombos).
+      const sneaky =
+        "goose-model\n\x1b[1;31m>>> ALL MODELS ALLOWED <<<\x1b[0m\nx";
+      const adapters = new Map([
+        [
+          "goose",
+          {
+            id: "goose",
+            readSelectedModel: () => ({ model: sneaky, effort: null }),
+          },
+        ],
+      ]) as never;
+      const result = await populateInitConfig({
+        config: {},
+        harnesses: ["goose"],
+        catalog: {},
+        interactive: false,
+        adapters,
+      });
+      // Unreadable/unsafe selection → same as no selection: no vendor models.
+      expect(result.config.vendors?.goose?.models).toBeUndefined();
+      expect(JSON.stringify(result.config)).not.toContain("ALL MODELS");
+      expect(JSON.stringify(result.config)).not.toContain("\x1b");
     });
 
     it("submitting an empty vendor pick shortcuts vendor configuration", async () => {

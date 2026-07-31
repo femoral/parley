@@ -173,7 +173,10 @@ describe("resolveAllowedCombo — reject + suggest", () => {
     ).toThrow(/effort is required/);
   });
 
-  it("enriches not_allowed with CLI selection when outside the allowlist (#284)", () => {
+  it("not_allowed message has no CLI selection line (callers append via formatCliSelectedHint)", () => {
+    // resolveAllowedCombo is a pure gate — #284 advisory is appended by
+    // engine / run-preflight only. A regression that reintroduces a
+    // cliSelected parameter here would invite double-append.
     try {
       resolveAllowedCombo({
         vendor: "goose",
@@ -181,57 +184,26 @@ describe("resolveAllowedCombo — reject + suggest", () => {
         model: "gpt-6",
         effort: "low",
         configPath: CONFIG_PATH,
-        cliSelected: { model: "claude-sonnet-4-5-20250929", effort: null },
       });
       expect.unreachable();
     } catch (err) {
       const msg = (err as Error).message;
-      // Pre-existing shape intact.
       expect(msg).toMatch(/not allowed/);
       expect(msg).toMatch(/Allowed:/);
       expect(msg).toMatch(/did you mean/);
-      // Advisory line — model is JSON.stringified (escaping + length safety).
-      expect(msg).toMatch(
-        /CLI currently has "claude-sonnet-4-5-20250929" selected \(not on the allowlist\)/,
-      );
+      expect(msg).not.toMatch(/CLI currently has/);
     }
   });
 
-  it("does not change success path or exit semantics when cliSelected is set", () => {
+  it("success path is unchanged regardless of external selection state", () => {
     const r = resolveAllowedCombo({
       vendor: "codex",
       vendorCfg: cfg,
       model: "gpt-5",
       effort: "medium",
       configPath: CONFIG_PATH,
-      cliSelected: { model: "other", effort: "high" },
     });
     expect(r).toEqual({ model: "gpt-5", effort: "medium", usedDefault: false });
-  });
-
-  it("cliSelected equal to the requested non-allowlisted combo does NOT widen (#284 advisory-only)", () => {
-    // Load-bearing security property: selection is advisory for message text
-    // only. A mutation that short-circuits when request === cliSelected would
-    // be a complete allowlist bypass — this test must fail under that mutation.
-    const narrow = vendor({ "gpt-5": { efforts: ["low"], default: "low" } });
-    try {
-      resolveAllowedCombo({
-        vendor: "evil",
-        vendorCfg: narrow,
-        model: "evil-max-model",
-        effort: "ultra",
-        configPath: CONFIG_PATH,
-        cliSelected: { model: "evil-max-model", effort: "ultra" },
-      });
-      expect.unreachable();
-    } catch (err) {
-      expect(err).toBeInstanceOf(ModelAllowlistError);
-      expect((err as ModelAllowlistError).code).toBe("not_allowed");
-      expect((err as Error).message).toMatch(/not allowed/);
-      expect((err as Error).message).toMatch(
-        /CLI currently has "evil-max-model@ultra" selected/,
-      );
-    }
   });
 });
 
@@ -305,6 +277,20 @@ describe("listAllowedCombos / format / nearest", () => {
       ]),
     );
     expect(formatAllowedCombos(combos)).toMatch(/a@high/);
+  });
+
+  it("formatAllowedCombos JSON-escapes adversarial model keys (#284)", () => {
+    // Defense in depth: even if a poisoned key lands in config (hand-edit or
+    // a future inject bug), rejection text must not open extra terminal lines.
+    const combos = listAllowedCombos(
+      vendor({
+        "legit\n*** ALL MODELS ALLOWED ***\x1b[32m": { efforts: ["low"] },
+      }),
+    );
+    const text = formatAllowedCombos(combos);
+    expect(text).toContain(JSON.stringify("legit\n*** ALL MODELS ALLOWED ***\x1b[32m@low"));
+    // Bare newline would split the rejection into multiple terminal lines.
+    expect(text.includes("\n")).toBe(false);
   });
 
   it("prefer same model at different effort for nearest", () => {

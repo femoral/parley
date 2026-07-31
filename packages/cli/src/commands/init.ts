@@ -5,6 +5,7 @@ import { styleText } from "node:util";
 import * as p from "@clack/prompts";
 import {
   getShippedVendorModels,
+  isSafeAllowlistToken,
   loadCatalog,
   readConfig,
   refreshCatalog,
@@ -253,14 +254,18 @@ function defaultMarker(model: ModelEntry): true | string {
 /**
  * Merge a CLI-selected model into the advisory catalog list for setup (#284).
  *
- * When the selection is already in the catalog, leave efforts unchanged —
- * disk efforts unknown to the catalog are **not** injected (ADR-0014: a
- * string that exists only in the operator's vendor file must not widen the
- * authoritative allowlist). When the model is missing entirely, inject a
- * single-entry suggestion so vendors with empty shipped catalogs (goose,
- * openhands) can still be pre-filled and become delegatable from the CLI
- * selection — deliberate: those vendors otherwise stay deny-by-default with
- * nothing to seed. Unreadable selection → unchanged list.
+ * - Selection already in the catalog → leave efforts unchanged (disk-only
+ *   effort strings must not widen the authoritative allowlist).
+ * - Catalog non-empty and selection unknown → no inject. The operator can
+ *   type the id; we refuse to invent a brand-new allowlist key for a
+ *   catalogued vendor from an untrusted vendor file.
+ * - Catalog empty (goose, openhands) → inject one entry so pre-fill can make
+ *   the vendor delegatable. **Posture change (ADR-0014):** empty-catalog
+ *   vendors become spawnable from a readable vendor file alone.
+ *
+ * Injected model and effort ids must pass {@link isSafeAllowlistToken}
+ * (charset + length). Adversarial disk strings (newlines, ANSI, multi-MiB)
+ * are treated as "no selection known" — same as unreadable.
  */
 export function modelsWithCliSelection(
   models: readonly ModelEntry[],
@@ -269,21 +274,32 @@ export function modelsWithCliSelection(
   if (cliSelected === null || cliSelected === undefined || cliSelected.model === "") {
     return [...models];
   }
+  if (!isSafeAllowlistToken(cliSelected.model)) {
+    return [...models];
+  }
   const existing = models.find((m) => m.id === cliSelected.model);
   if (existing) {
     // Do not widen catalog efforts with disk-only values.
     return [...models];
   }
-  // Pure inject for empty/unknown catalogs (goose, openhands). The CLI effort
-  // is the only effort we know for that brand-new suggestion.
-  const efforts = cliSelected.effort ? [cliSelected.effort] : [];
+  // Pure inject only for empty catalogs (goose, openhands). Non-empty catalogs
+  // that lack this model keep the list unchanged — never invent a key for a
+  // catalogued vendor from disk.
+  if (models.length > 0) {
+    return [...models];
+  }
+  const effort =
+    cliSelected.effort !== null &&
+    cliSelected.effort !== "" &&
+    isSafeAllowlistToken(cliSelected.effort)
+      ? cliSelected.effort
+      : undefined;
   return [
     {
       id: cliSelected.model,
-      efforts,
-      default_effort: cliSelected.effort,
+      efforts: effort ? [effort] : [],
+      default_effort: effort ?? null,
     },
-    ...models,
   ];
 }
 
@@ -292,8 +308,11 @@ export function modelsWithCliSelection(
  * Validated against the **pre-injection** catalog so disk-only effort strings
  * never become the allowlist default of a catalog model (ADR-0014).
  *
- * When the model is not in the catalog at all (empty-catalog inject path),
- * the CLI effort is accepted as the sole known effort for that entry.
+ * When the model is a pure empty-catalog inject, the CLI effort is accepted
+ * only when it is a safe allowlist token (charset + length). That value then
+ * becomes both the sole allowed effort and the entry's `default` — deliberate:
+ * for empty-catalog vendors there is no catalog `default_effort` to consult,
+ * so the vendor file is the only source (documented in ADR-0014).
  */
 export function cliSelectionDefaultEffort(
   catalogModels: readonly ModelEntry[],
@@ -302,13 +321,16 @@ export function cliSelectionDefaultEffort(
   if (cliSelected.effort === null || cliSelected.effort === "") {
     return undefined;
   }
+  if (!isSafeAllowlistToken(cliSelected.effort)) {
+    return undefined;
+  }
   const catalogEntry = catalogModels.find((m) => m.id === cliSelected.model);
   if (catalogEntry) {
     return catalogEntry.efforts.includes(cliSelected.effort)
       ? cliSelected.effort
       : undefined;
   }
-  // Model injected from CLI only — effort is part of that suggestion.
+  // Empty-catalog inject path — effort is the sole known value for the entry.
   return cliSelected.effort;
 }
 

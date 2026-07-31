@@ -5,7 +5,9 @@
  * (delegate, fix, profiles) validates through {@link resolveAllowedCombo}.
  * The model catalog remains advisory — used only for nearest-combo ranking
  * when the caller supplies one. CLI selected-model data (#284) is advisory
- * for rejection messages only — it never gates or widens a spawn.
+ * for rejection messages only — it never gates or widens a spawn. The
+ * advisory line is appended by engine / run-preflight via
+ * {@link formatCliSelectedHint}; this module never reads a vendor home.
  */
 import type { SelectedModel } from "./adapter.js";
 import type { VendorConfig, VendorModelAllowlistEntry } from "./config.js";
@@ -107,11 +109,48 @@ function defaultEffortOf(
   return undefined;
 }
 
+/**
+ * Safe token shape for model/effort ids that may later land in config or
+ * rejection text. Real vendor ids use alphanumerics plus `/ . _ - @ ~ : +`
+ * (e.g. `kwaipilot/kat-coder`, `kilo/~anthropic/…`, `gpt-5.6-sol`).
+ * Rejects whitespace, control chars, and ANSI so a poisoned vendor file
+ * cannot inject multi-line rejection text or unreadable allowlist keys.
+ */
+const SAFE_ALLOWLIST_TOKEN = /^[\w./@~:+-]+$/;
+const SAFE_ALLOWLIST_TOKEN_MAX = 200;
+
+/** Whether a disk- or operator-supplied model/effort id is safe to seed. */
+export function isSafeAllowlistToken(id: string): boolean {
+  return (
+    typeof id === "string" &&
+    id.length > 0 &&
+    id.length <= SAFE_ALLOWLIST_TOKEN_MAX &&
+    SAFE_ALLOWLIST_TOKEN.test(id)
+  );
+}
+
+/**
+ * Format one combo for rejection text. Bare `model@effort` when the ids are
+ * safe tokens (the historical shape); JSON-escaped + length-capped otherwise
+ * so a hand-edited or poisoned allowlist key cannot open extra terminal lines.
+ */
+function formatComboForDisplay(model: string, effort: string | null): string {
+  const combo = effort === null || effort === "" ? model : `${model}@${effort}`;
+  if (isSafeAllowlistToken(model) && (effort === null || effort === "" || isSafeAllowlistToken(effort))) {
+    return combo;
+  }
+  let capped = combo;
+  if (capped.length > SAFE_ALLOWLIST_TOKEN_MAX) {
+    capped = `${capped.slice(0, SAFE_ALLOWLIST_TOKEN_MAX)}…`;
+  }
+  return JSON.stringify(capped);
+}
+
 /** Human list of allowed combos, e.g. `model@effort`, `model` (no effort). */
 export function formatAllowedCombos(combos: readonly AllowedCombo[]): string {
   if (combos.length === 0) return "(none)";
   return combos
-    .map((c) => (c.effort === null ? c.model : `${c.model}@${c.effort}`))
+    .map((c) => formatComboForDisplay(c.model, c.effort))
     .join(", ");
 }
 
@@ -283,16 +322,14 @@ export function formatCliSelectedHint(
   return ` CLI currently has ${JSON.stringify(combo)} selected (not on the allowlist).`;
 }
 
-function notAllowedMessage(
-  body: string,
-  combos: readonly AllowedCombo[],
-  selected: SelectedModel | null | undefined,
-): string {
-  return body + formatCliSelectedHint(selected, combos);
-}
-
 /**
  * Resolve model+effort against a vendor allowlist.
+ *
+ * Pure gate: success/failure and message body do not depend on CLI selection.
+ * Callers that want the #284 advisory line append {@link formatCliSelectedHint}
+ * themselves after a `not_allowed` / `no_allowlist` failure (engine +
+ * run-preflight are the single choke points — do not reintroduce a
+ * `cliSelected` parameter here, or a future double-append will reappear).
  *
  * @param vendor - vendor id (for error text)
  * @param vendorCfg - vendors.<id> entry (may be undefined)
@@ -300,8 +337,6 @@ function notAllowedMessage(
  * @param effort - resolved request/profile effort, or null if omitted
  * @param configPath - path shown in no-allowlist remedy
  * @param catalog - optional advisory catalog for nearest suggestions
- * @param cliSelected - optional CLI-selected model (#284); enriches
- *   `not_allowed` messages only — never gates or widens a spawn
  */
 export function resolveAllowedCombo(options: {
   vendor: string;
@@ -310,13 +345,10 @@ export function resolveAllowedCombo(options: {
   effort: string | null;
   configPath: string;
   catalog?: ModelCatalog | null;
-  /** Operator CLI selection for advisory rejection text (#284). */
-  cliSelected?: SelectedModel | null;
 }): ResolvedAllowedCombo {
   const { vendor, vendorCfg, configPath, catalog } = options;
   const model = options.model === "" ? null : options.model;
   const effort = options.effort === "" ? null : options.effort;
-  const cliSelected = options.cliSelected;
 
   if (!hasModelAllowlist(vendorCfg)) {
     throw new ModelAllowlistError("no_allowlist", noAllowlistMessage(vendor, configPath));
@@ -342,12 +374,8 @@ export function resolveAllowedCombo(options: {
         : `; did you mean ${formatCombo(nearest.model, nearest.effort)}?`;
     throw new ModelAllowlistError(
       "not_allowed",
-      notAllowedMessage(
-        `vendor ${vendor}: model is required when effort is set (got effort=${JSON.stringify(effort)}). ` +
-          `Allowed: ${formatAllowedCombos(combos)}${suggest}`,
-        combos,
-        cliSelected,
-      ),
+      `vendor ${vendor}: model is required when effort is set (got effort=${JSON.stringify(effort)}). ` +
+        `Allowed: ${formatAllowedCombos(combos)}${suggest}`,
     );
   }
 
@@ -360,12 +388,8 @@ export function resolveAllowedCombo(options: {
         : `; did you mean ${formatCombo(nearest.model, nearest.effort)}?`;
     throw new ModelAllowlistError(
       "not_allowed",
-      notAllowedMessage(
-        `vendor ${vendor}: model ${JSON.stringify(model)} is not allowed. ` +
-          `Allowed: ${formatAllowedCombos(combos)}${suggest}`,
-        combos,
-        cliSelected,
-      ),
+      `vendor ${vendor}: model ${JSON.stringify(model)} is not allowed. ` +
+        `Allowed: ${formatAllowedCombos(combos)}${suggest}`,
     );
   }
 
@@ -380,12 +404,8 @@ export function resolveAllowedCombo(options: {
           : `; did you mean ${formatCombo(nearest.model, nearest.effort)}?`;
       throw new ModelAllowlistError(
         "not_allowed",
-        notAllowedMessage(
-          `vendor ${vendor}: model ${JSON.stringify(model)} allows no effort (got ${JSON.stringify(effort)}). ` +
-            `Allowed: ${formatAllowedCombos(combos)}${suggest}`,
-          combos,
-          cliSelected,
-        ),
+        `vendor ${vendor}: model ${JSON.stringify(model)} allows no effort (got ${JSON.stringify(effort)}). ` +
+          `Allowed: ${formatAllowedCombos(combos)}${suggest}`,
       );
     }
     return { model, effort: null, usedDefault: false };
@@ -400,12 +420,8 @@ export function resolveAllowedCombo(options: {
         : `; did you mean ${formatCombo(nearest.model, nearest.effort)}?`;
     throw new ModelAllowlistError(
       "not_allowed",
-      notAllowedMessage(
-        `vendor ${vendor}: effort is required for model ${JSON.stringify(model)} ` +
-          `(allowed efforts: ${efforts.join(", ")}). Allowed combos: ${formatAllowedCombos(combos)}${suggest}`,
-        combos,
-        cliSelected,
-      ),
+      `vendor ${vendor}: effort is required for model ${JSON.stringify(model)} ` +
+        `(allowed efforts: ${efforts.join(", ")}). Allowed combos: ${formatAllowedCombos(combos)}${suggest}`,
     );
   }
 
@@ -417,12 +433,8 @@ export function resolveAllowedCombo(options: {
         : `; did you mean ${formatCombo(nearest.model, nearest.effort)}?`;
     throw new ModelAllowlistError(
       "not_allowed",
-      notAllowedMessage(
-        `vendor ${vendor}: effort ${JSON.stringify(effort)} is not allowed for model ${JSON.stringify(model)} ` +
-          `(allowed efforts: ${efforts.join(", ")}). Allowed combos: ${formatAllowedCombos(combos)}${suggest}`,
-        combos,
-        cliSelected,
-      ),
+      `vendor ${vendor}: effort ${JSON.stringify(effort)} is not allowed for model ${JSON.stringify(model)} ` +
+        `(allowed efforts: ${efforts.join(", ")}). Allowed combos: ${formatAllowedCombos(combos)}${suggest}`,
     );
   }
 
