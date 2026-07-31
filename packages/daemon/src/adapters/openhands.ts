@@ -1,4 +1,6 @@
+import fs from "node:fs";
 import path from "node:path";
+import { resolveOperatorVendorHome, type SelectedModel } from "@useparley/core";
 import type {
   AdapterEnforcement,
   HubInfo,
@@ -411,8 +413,85 @@ export function createOpenhandsAdapter(env: NodeJS.ProcessEnv = process.env): Ve
 
     // listModels omitted: no CLI enumeration command (research §7); only a static
     // SDK VERIFIED_MODELS allowlist, not a live probe.
+    // Selected-model read (#284): not a catalog — pre-fill + rejection only.
+    readSelectedModel(): SelectedModel | null {
+      return readOpenhandsSelectedModel(env);
+    },
   });
 }
 
 /** Exported for tests asserting the SDK MCP tool-timeout ceiling (#107). */
 export const OPENHANDS_MCP_TOOL_TIMEOUT_MS = MCP_TOOL_TIMEOUT_MS;
+
+/** On-disk agent settings under the operator openhands home (#284). */
+const AGENT_SETTINGS_FILE = "agent_settings.json";
+
+/** Cap on agent_settings.json — may co-locate secrets; never slurp unbounded. */
+export const OPENHANDS_AGENT_SETTINGS_MAX_BYTES = 2 * 1024 * 1024;
+
+/**
+ * Project only `llm.model` out of openhands `agent_settings.json` (#284).
+ *
+ * The file may co-locate API keys under `llm` — extract only the model string
+ * and never return, log, or re-serialize the rest. Fail-soft: never throws.
+ * Parser errors must not embed source fragments.
+ */
+export function parseOpenhandsSelectedModel(text: string): {
+  model: string | null;
+  error: string | null;
+} {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    return { model: null, error: "malformed agent_settings.json" };
+  }
+  const root = asRecord(parsed);
+  if (!root) {
+    return { model: null, error: "unexpected agent_settings.json shape" };
+  }
+  const llm = asRecord(root.llm);
+  if (!llm) {
+    // Empty/fresh agent settings without llm — not an error.
+    return { model: null, error: null };
+  }
+  const model =
+    typeof llm.model === "string" && llm.model.trim() !== ""
+      ? llm.model.trim()
+      : null;
+  if (model === null) {
+    return { model: null, error: null };
+  }
+  return { model, error: null };
+}
+
+/**
+ * Read the operator's openhands selection from agent_settings.json (#284).
+ * Fail soft on every path — never throws.
+ */
+export function readOpenhandsSelectedModel(
+  env: NodeJS.ProcessEnv = process.env,
+): SelectedModel | null {
+  const home = resolveOperatorVendorHome("openhands", env);
+  if (home === null) return null;
+  const settingsPath = path.join(home, AGENT_SETTINGS_FILE);
+  let text: string;
+  try {
+    // TOCTOU accepted: stat then read (same rationale as goose/cline —
+    // isFile() stops the static-FIFO hang; race-to-FIFO and hung mounts are
+    // accepted fail-soft residual risk on an advisory path).
+    const stat = fs.statSync(settingsPath);
+    // #288 / #284: refuse non-files (FIFO, dir, device). readFileSync on a
+    // FIFO blocks the daemon event loop forever — selection is fail-soft null.
+    if (!stat.isFile()) return null;
+    if (stat.size > OPENHANDS_AGENT_SETTINGS_MAX_BYTES) return null;
+    text = fs.readFileSync(settingsPath, "utf8");
+  } catch {
+    return null;
+  }
+  const { model } = parseOpenhandsSelectedModel(text);
+  if (model === null || model === "") return null;
+  // openhands may record `llm.reasoning_effort` on disk; #284 surfaces model
+  // drift only for this vendor (effort is out of the original AC scope).
+  return { model, effort: null };
+}

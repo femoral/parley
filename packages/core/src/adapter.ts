@@ -235,6 +235,25 @@ export interface VendorEvent {
  */
 export const VENDOR_DIAG_PREFIX = "PARLEY-DIAG";
 
+/**
+ * The operator's currently selected model in a vendor CLI (#284).
+ *
+ * Distinct from catalog discovery: at most one model (plus optional effort).
+ * Never feeds `readModels()` / `models.json` — used only to pre-fill setup
+ * allowlists and enrich allowlist rejections when the CLI selection is
+ * outside the configured allowlist.
+ */
+export interface SelectedModel {
+  model: string;
+  /**
+   * Reasoning effort the CLI has selected for this model, or `null` when the
+   * reader does not surface one. goose/openhands return null here even when a
+   * global effort may exist on disk — #284 surfaces model drift for those
+   * vendors; cline returns the stored `reasoning.effort` when present.
+   */
+  effort: string | null;
+}
+
 /** A vendor integration: how to spawn it and how to read its event stream. */
 export interface VendorAdapter {
   id: string;
@@ -250,17 +269,6 @@ export interface VendorAdapter {
    * Sourced by `parley info`, the README matrix, and prepare-time diagnostics.
    */
   enforcement: AdapterEnforcement;
-  /**
-   * Adapter-known default model when neither the request nor a profile names
-   * one (#154). Optional — most adapters leave this unset so model stays null
-   * rather than fabricating a guess.
-   */
-  defaultModel?: string | null;
-  /**
-   * Adapter-known default effort when neither the request nor a profile names
-   * one (#154). Optional; same "never fabricate" rule as {@link defaultModel}.
-   */
-  defaultEffort?: string | null;
   /** Build the spawn plan for a fresh run. */
   prepare(task: TaskSpec, hub: HubInfo): Promise<SpawnPlan>;
   /** Build the spawn plan for resuming a stalled task (vendor session resume). */
@@ -269,6 +277,18 @@ export interface VendorAdapter {
   parseEvent(line: string): VendorEvent[];
   /** Extract the vendor session id from the events seen so far, if any. */
   sessionId(events: VendorEvent[]): string | undefined;
+  /**
+   * Optional on-disk discovery (#281): read the vendor's own config/state files
+   * from the *operator* home (never a per-task isolated home). Same shape as
+   * {@link listModels}. Must fail soft — absent/malformed/unexpected files
+   * return empty models or reject; refresh never lets a bad file crash the
+   * catalog. Precedence: `readModels` → `listModels` → shipped fallback, with
+   * union / richest-wins merge across channels.
+   *
+   * Discovery stays advisory; spawn is gated by the vendor allowlist
+   * (#185 / ADR-0014).
+   */
+  readModels?(existing: VendorModels | undefined): Promise<ProbedModels>;
   /**
    * Optional `parley models --refresh` probe: re-enumerate the vendor's models
    * by shelling out to its CLI. Receives the vendor's current catalog entry so a
@@ -281,6 +301,16 @@ export interface VendorAdapter {
    * for discovery; spawn is gated by the vendor allowlist (#185 / ADR-0014).
    */
   listModels?(existing: VendorModels | undefined): Promise<ProbedModels>;
+  /**
+   * Optional selected-model read (#284): the operator's currently configured
+   * model in this vendor CLI (at most one). **Not a catalog channel** — never
+   * feed this into `readModels` / `models.json`. Used to pre-fill setup
+   * allowlists and enrich allowlist rejections.
+   *
+   * Sync by design: the allowlist choke point is synchronous. Fail soft always
+   * — absent / malformed / unreadable means `null`, never throw.
+   */
+  readSelectedModel?(): SelectedModel | null;
 }
 
 /**

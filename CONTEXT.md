@@ -64,6 +64,34 @@ human/agent driving parley is the **orchestrator**.
   *hint*). Vendors are **deny-by-default** until one is configured; every
   spawn path validates against it, rejecting out-of-list combos with a
   nearest-combo suggestion (ADR-0014). The model catalog remains advisory.
+- **Model catalog / discovery** — advisory only (never gates spawn). Three
+  channels feed `~/.parley/models.json` via `parley models --refresh` /
+  `parley init`, in precedence **disk → probe → shipped**:
+  1. **`readModels()`** — optional adapter method that reads the vendor's
+     own on-disk config/state under the **operator vendor home** (no
+     subprocess).
+  2. **`listModels()`** — optional CLI probe (subprocess).
+  3. **Shipped catalog** — point-in-time snapshot in
+     `packages/core/src/shipped-model-catalog.ts`.
+  Disk + probe merge is **union / richest-wins** (per-field; never shrink
+  the id set). Fail-soft: bad files never crash refresh.
+- **Selected model (CLI drift guard)** — optional `readSelectedModel()` on an
+  adapter returns at most one model (+ optional effort) the operator has
+  already chosen inside that vendor CLI. **Not a catalog channel** — never
+  written to `models.json`. Surfaces only as (1) a setup allowlist pre-fill
+  (empty-catalog vendors may become delegatable from a validated selection —
+  ADR-0014 amendment) and (2) an advisory line on allowlist rejections
+  (`not_allowed` and `no_allowlist`) when the CLI selection is outside the
+  allowlist. Used by vendors that persist a selection but no enumerable
+  catalog (goose, cline, openhands) (#284).
+- **Operator vendor home** — the directory the *operator* uses when they run
+  a vendor CLI interactively (`~/.codex`, `~/.kimi-code`, …, honouring the
+  CLI's env override when set). Distinct from a **per-task isolated home**
+  that adapters write into `SpawnPlan.env` for children (e.g.
+  `<cwd>/.parley-kimi`, `<cwd>/.openclaw-state`). Discovery and selected-model
+  reads must use the operator home and refuse parley-provisioned isolation
+  markers so a delegated child cannot inject task-controlled model ids into
+  the global catalog (`resolveOperatorVendorHome`, #281).
 - **Harness plugin** — a per-vendor package installed into the orchestrator's
   own harness (via that harness's native hook/plugin system) that exports
   session provenance at session start (env vars and/or INTERIM state file).

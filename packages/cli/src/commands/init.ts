@@ -5,6 +5,7 @@ import { styleText } from "node:util";
 import * as p from "@clack/prompts";
 import {
   getShippedVendorModels,
+  isSafeAllowlistToken,
   loadCatalog,
   readConfig,
   refreshCatalog,
@@ -13,6 +14,8 @@ import {
   type ModelCatalog,
   type ModelEntry,
   type ParleyConfig,
+  type SelectedModel,
+  type VendorAdapter,
   type VendorModelAllowlistEntry,
 } from "@useparley/core";
 import { createAdapterRegistry } from "@useparley/daemon/adapters/index.js";
@@ -249,6 +252,101 @@ function defaultMarker(model: ModelEntry): true | string {
 }
 
 /**
+ * Merge a CLI-selected model into the advisory catalog list for setup (#284).
+ *
+ * - Selection already in the catalog → leave efforts unchanged (disk-only
+ *   effort strings must not widen the authoritative allowlist).
+ * - Catalog non-empty and selection unknown → no inject. The operator can
+ *   type the id; we refuse to invent a brand-new allowlist key for a
+ *   catalogued vendor from an untrusted vendor file.
+ * - Catalog empty (goose, openhands) → inject one entry so pre-fill can make
+ *   the vendor delegatable. **Posture change (ADR-0014):** empty-catalog
+ *   vendors become spawnable from a readable vendor file alone.
+ *
+ * Injected model and effort ids must pass {@link isSafeAllowlistToken}
+ * (charset + length). Adversarial disk strings (newlines, ANSI, multi-MiB)
+ * are treated as "no selection known" — same as unreadable.
+ */
+export function modelsWithCliSelection(
+  models: readonly ModelEntry[],
+  cliSelected: SelectedModel | null | undefined,
+): ModelEntry[] {
+  if (cliSelected === null || cliSelected === undefined || cliSelected.model === "") {
+    return [...models];
+  }
+  if (!isSafeAllowlistToken(cliSelected.model)) {
+    return [...models];
+  }
+  const existing = models.find((m) => m.id === cliSelected.model);
+  if (existing) {
+    // Do not widen catalog efforts with disk-only values.
+    return [...models];
+  }
+  // Pure inject only for empty catalogs (goose, openhands). Non-empty catalogs
+  // that lack this model keep the list unchanged — never invent a key for a
+  // catalogued vendor from disk.
+  if (models.length > 0) {
+    return [...models];
+  }
+  const effort =
+    cliSelected.effort !== null &&
+    cliSelected.effort !== "" &&
+    isSafeAllowlistToken(cliSelected.effort)
+      ? cliSelected.effort
+      : undefined;
+  return [
+    {
+      id: cliSelected.model,
+      efforts: effort ? [effort] : [],
+      default_effort: effort ?? null,
+    },
+  ];
+}
+
+/**
+ * Default-effort marker for non-interactive seed from a CLI selection.
+ * Validated against the **pre-injection** catalog so disk-only effort strings
+ * never become the allowlist default of a catalog model (ADR-0014).
+ *
+ * When the model is a pure empty-catalog inject, the CLI effort is accepted
+ * only when it is a safe allowlist token (charset + length). That value then
+ * becomes both the sole allowed effort and the entry's `default` — deliberate:
+ * for empty-catalog vendors there is no catalog `default_effort` to consult,
+ * so the vendor file is the only source (documented in ADR-0014).
+ */
+export function cliSelectionDefaultEffort(
+  catalogModels: readonly ModelEntry[],
+  cliSelected: SelectedModel,
+): true | string | undefined {
+  if (cliSelected.effort === null || cliSelected.effort === "") {
+    return undefined;
+  }
+  if (!isSafeAllowlistToken(cliSelected.effort)) {
+    return undefined;
+  }
+  const catalogEntry = catalogModels.find((m) => m.id === cliSelected.model);
+  if (catalogEntry) {
+    return catalogEntry.efforts.includes(cliSelected.effort)
+      ? cliSelected.effort
+      : undefined;
+  }
+  // Empty-catalog inject path — effort is the sole known value for the entry.
+  return cliSelected.effort;
+}
+
+function tryReadSelectedModel(
+  adapters: Map<string, VendorAdapter> | undefined,
+  vendor: string,
+): SelectedModel | null {
+  if (!adapters) return null;
+  try {
+    return adapters.get(vendor)?.readSelectedModel?.() ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Build a valid authoritative allowlist from advisory catalog entries.
  *
  * `effortsById` narrows a model's allowed efforts (interactive opt-in);
@@ -303,20 +401,43 @@ function ensureMultiselectShortcutHints(): void {
  * Interactive model/effort allowlist for one vendor. Exported for unit tests.
  * Returns `null` when the user submits an empty model selection — the vendor
  * is skipped and no allowlist is written.
+ *
+ * When `cliSelected` is readable, pre-fills the multiselect and default
+ * prompts with the CLI's current selection (#284). The operator can always
+ * override; an unreadable selection leaves initial values empty (today's
+ * behavior).
  */
 export async function promptVendorModels(
   vendor: string,
   models: readonly ModelEntry[],
+  cliSelected?: SelectedModel | null,
 ): Promise<Record<string, VendorModelAllowlistEntry> | null> {
   ensureMultiselectShortcutHints();
+  const prefillId =
+    cliSelected && models.some((m) => m.id === cliSelected.model)
+      ? cliSelected.model
+      : undefined;
+  // When a CLI selection is pre-filled, Enter accepts it (does not skip).
+  // Call that out so "submit empty to skip" is not misleading.
+  const modelMessage =
+    prefillId !== undefined
+      ? `${vendor}: models to allow (CLI selection pre-filled; deselect all and submit empty to skip)`
+      : `${vendor}: models to allow (submit empty to skip)`;
   const selected = await p.multiselect({
-    message: `${vendor}: models to allow (submit empty to skip)`,
+    message: modelMessage,
     options: models.map((model) => ({
       value: model.id,
       label: model.id,
-      hint: model.efforts.length > 0 ? `efforts: ${model.efforts.join(", ")}` : "no effort flag",
+      hint:
+        model.id === prefillId
+          ? model.efforts.length > 0
+            ? `CLI selection; efforts: ${model.efforts.join(", ")}`
+            : "CLI selection; no effort flag"
+          : model.efforts.length > 0
+            ? `efforts: ${model.efforts.join(", ")}`
+            : "no effort flag",
     })),
-    initialValues: [],
+    initialValues: prefillId !== undefined ? [prefillId] : [],
     required: false,
   });
   if (p.isCancel(selected)) throw new PromptCancelled();
@@ -327,14 +448,25 @@ export async function promptVendorModels(
   const effortsById: Record<string, string[]> = {};
   for (const model of models) {
     if (!selected.includes(model.id) || model.efforts.length < 2) continue;
+    const prefillEffort =
+      cliSelected &&
+      cliSelected.model === model.id &&
+      cliSelected.effort !== null &&
+      model.efforts.includes(cliSelected.effort)
+        ? cliSelected.effort
+        : undefined;
     const efforts = await p.multiselect({
       message: `${vendor}: efforts to allow for ${model.id} (submit empty to keep all)`,
       options: model.efforts.map((effort) => ({
         value: effort,
         label: effort,
-        ...(effort === model.default_effort ? { hint: "catalog default" } : {}),
+        ...(effort === model.default_effort
+          ? { hint: "catalog default" }
+          : effort === prefillEffort
+            ? { hint: "CLI selection" }
+            : {}),
       })),
-      initialValues: [],
+      initialValues: prefillEffort !== undefined ? [prefillEffort] : [],
       required: false,
     });
     if (p.isCancel(efforts)) throw new PromptCancelled();
@@ -346,10 +478,14 @@ export async function promptVendorModels(
   if (selected.length === 1) {
     defaultId = selected[0]!;
   } else {
+    const defaultInitial =
+      prefillId !== undefined && selected.includes(prefillId)
+        ? prefillId
+        : selected[0];
     const picked = await p.select({
       message: `${vendor}: default model`,
       options: selected.map((id) => ({ value: id, label: id })),
-      initialValue: selected[0],
+      initialValue: defaultInitial,
     });
     if (p.isCancel(picked)) throw new PromptCancelled();
     defaultId = picked;
@@ -362,9 +498,17 @@ export async function promptVendorModels(
   let defaultEffort: true | string | undefined;
   if (defaultModel && allowedEfforts.length >= 2) {
     const resolved = defaultMarker({ ...defaultModel, efforts: [...allowedEfforts] });
-    // defaultMarker returns a string when efforts.length >= 2 (catalog default
-    // or first effort); never `true` in that branch.
-    const initialEffort = typeof resolved === "string" ? resolved : allowedEfforts[0]!;
+    // Prefer CLI selection when it is still among allowed efforts; else catalog.
+    const cliEffort =
+      cliSelected &&
+      cliSelected.model === defaultId &&
+      cliSelected.effort !== null &&
+      allowedEfforts.includes(cliSelected.effort)
+        ? cliSelected.effort
+        : undefined;
+    const initialEffort =
+      cliEffort ??
+      (typeof resolved === "string" ? resolved : allowedEfforts[0]!);
     const effort = await p.select({
       message: `${vendor}: default effort for ${defaultId}`,
       options: allowedEfforts.map((e) => ({ value: e, label: e })),
@@ -383,20 +527,31 @@ export async function populateInitConfig(opts: {
   harnesses: readonly string[];
   catalog: ModelCatalog;
   interactive: boolean;
+  /** Optional adapters for CLI selected-model pre-fill (#284). */
+  adapters?: Map<string, VendorAdapter>;
 }): Promise<{ config: ParleyConfig; changed: boolean; configuredVendors: string[] }> {
   const config = structuredClone(opts.config);
   const configuredVendors: string[] = [];
   let changed = false;
-  const pending: { vendor: string; models: ModelEntry[] }[] = [];
+  const pending: {
+    vendor: string;
+    models: ModelEntry[];
+    /** Pre-injection catalog (effort validation must use this, not `models`). */
+    catalogModels: ModelEntry[];
+    cliSelected: SelectedModel | null;
+  }[] = [];
   for (const vendor of opts.harnesses) {
     const existing = config.vendors?.[vendor]?.models;
     if (existing && Object.keys(existing).length > 0) {
       configuredVendors.push(vendor);
       continue;
     }
-    const models = modelEntries(opts.catalog, vendor);
+    const cliSelected = tryReadSelectedModel(opts.adapters, vendor);
+    // Keep the pre-injection catalog for effort validation (non-interactive).
+    const catalogModels = modelEntries(opts.catalog, vendor);
+    const models = modelsWithCliSelection(catalogModels, cliSelected);
     if (models.length === 0) continue;
-    pending.push({ vendor, models });
+    pending.push({ vendor, models, catalogModels, cliSelected });
   }
   // Interactive runs pick which vendors to walk through up front; submitting
   // nothing shortcuts vendor configuration entirely.
@@ -417,10 +572,24 @@ export async function populateInitConfig(opts: {
     const pickedSet = new Set(picked);
     chosen = pending.filter(({ vendor }) => pickedSet.has(vendor));
   }
-  for (const { vendor, models } of chosen) {
-    const allowlist = opts.interactive
-      ? await promptVendorModels(vendor, models)
-      : seedVendorModels(models);
+  for (const { vendor, models, catalogModels, cliSelected } of chosen) {
+    let allowlist: Record<string, VendorModelAllowlistEntry> | null;
+    if (opts.interactive) {
+      allowlist = await promptVendorModels(vendor, models, cliSelected);
+    } else if (cliSelected && models.some((m) => m.id === cliSelected.model)) {
+      // Non-interactive: seed all listed models; default effort is validated
+      // against the pre-injection catalog (never a disk-only string).
+      // Deliberate: empty-catalog vendors (goose/openhands) become delegatable
+      // when a CLI selection is readable — that is the pre-fill feature.
+      allowlist = seedVendorModels(
+        models,
+        models.map((m) => m.id),
+        cliSelected.model,
+        cliSelectionDefaultEffort(catalogModels, cliSelected),
+      );
+    } else {
+      allowlist = seedVendorModels(models);
+    }
     if (allowlist === null) continue;
     config.vendors ??= {};
     config.vendors[vendor] = { ...config.vendors[vendor], models: allowlist };
@@ -540,9 +709,12 @@ export async function runInit(ctx: CliContext, args: string[]): Promise<number> 
   let catalog = loadCatalog(modelsFile);
   const modelWarnings: string[] = [];
   const modelResults: HarnessModelResult[] = [];
+  // Shared with allowlist pre-fill so selected-model reads (#284) use the same
+  // operator-home env as the catalog refresh.
+  let adapters: Map<string, VendorAdapter> | undefined;
 
   if (harnesses.length > 0) {
-    const adapters = await createAdapterRegistry(ctx.env, {
+    adapters = await createAdapterRegistry(ctx.env, {
       config,
       parleyHome: ctx.paths.home,
       log: (line) => {
@@ -565,7 +737,13 @@ export async function runInit(ctx: CliContext, args: string[]): Promise<number> 
   // home config, regardless of the project-settings/skill install scope.
   let populated;
   try {
-    populated = await populateInitConfig({ config, harnesses, catalog, interactive });
+    populated = await populateInitConfig({
+      config,
+      harnesses,
+      catalog,
+      interactive,
+      adapters,
+    });
   } catch (err) {
     if (err instanceof PromptCancelled) return 130;
     throw err;

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   editDistance,
   formatAllowedCombos,
+  formatCliSelectedHint,
   listAllowedCombos,
   ModelAllowlistError,
   noAllowlistMessage,
@@ -171,6 +172,93 @@ describe("resolveAllowedCombo — reject + suggest", () => {
       }),
     ).toThrow(/effort is required/);
   });
+
+  it("not_allowed message has no CLI selection line (callers append via formatCliSelectedHint)", () => {
+    // resolveAllowedCombo is a pure gate — #284 advisory is appended by
+    // engine / run-preflight only. A regression that reintroduces a
+    // cliSelected parameter here would invite double-append.
+    try {
+      resolveAllowedCombo({
+        vendor: "goose",
+        vendorCfg: cfg,
+        model: "gpt-6",
+        effort: "low",
+        configPath: CONFIG_PATH,
+      });
+      expect.unreachable();
+    } catch (err) {
+      const msg = (err as Error).message;
+      expect(msg).toMatch(/not allowed/);
+      expect(msg).toMatch(/Allowed:/);
+      expect(msg).toMatch(/did you mean/);
+      expect(msg).not.toMatch(/CLI currently has/);
+    }
+  });
+
+  it("success path is unchanged regardless of external selection state", () => {
+    const r = resolveAllowedCombo({
+      vendor: "codex",
+      vendorCfg: cfg,
+      model: "gpt-5",
+      effort: "medium",
+      configPath: CONFIG_PATH,
+    });
+    expect(r).toEqual({ model: "gpt-5", effort: "medium", usedDefault: false });
+  });
+});
+
+describe("formatCliSelectedHint (#284)", () => {
+  it("is empty when selection is allowlisted or absent", () => {
+    const combos = listAllowedCombos(
+      vendor({ "gpt-5": { efforts: ["low", "medium"], default: "low" } }),
+    );
+    expect(formatCliSelectedHint(null, combos)).toBe("");
+    expect(formatCliSelectedHint({ model: "gpt-5", effort: "low" }, combos)).toBe("");
+    expect(formatCliSelectedHint({ model: "gpt-5", effort: null }, combos)).toBe("");
+  });
+
+  it("JSON.stringifies and length-caps disk-derived model/effort text", () => {
+    const combos = listAllowedCombos(
+      vendor({ "gpt-5": { efforts: ["low"], default: "low" } }),
+    );
+    const huge = "x".repeat(500_000);
+    const hint = formatCliSelectedHint({ model: huge, effort: "high" }, combos);
+    expect(hint.length).toBeLessThan(500);
+    expect(hint).toMatch(/CLI currently has "/);
+    // Newlines + ANSI in a model id must not open extra terminal lines.
+    const sneaky = "legit\n*** approved ***\x1b[32m";
+    const sneakyHint = formatCliSelectedHint(
+      { model: sneaky, effort: null },
+      combos,
+    );
+    expect(sneakyHint).toContain(JSON.stringify("legit\n*** approved ***\x1b[32m"));
+    // The raw control sequence is inside the JSON string, not as free message text
+    // that would render as a separate terminal line outside the quote.
+    expect(sneakyHint.startsWith(" CLI currently has ")).toBe(true);
+    expect(sneakyHint.endsWith(" selected (not on the allowlist).")).toBe(true);
+  });
+
+  it("hardens untyped / whitespace-only input to an empty hint", () => {
+    const combos = listAllowedCombos(
+      vendor({ "gpt-5": { efforts: ["low"], default: "low" } }),
+    );
+    expect(formatCliSelectedHint({ model: "   ", effort: null }, combos)).toBe("");
+    expect(
+      formatCliSelectedHint(
+        { model: 42, effort: 7 } as unknown as { model: string; effort: string | null },
+        combos,
+      ),
+    ).toBe("");
+    expect(
+      formatCliSelectedHint(
+        { model: undefined, effort: undefined } as unknown as {
+          model: string;
+          effort: string | null;
+        },
+        combos,
+      ),
+    ).toBe("");
+  });
 });
 
 describe("listAllowedCombos / format / nearest", () => {
@@ -189,6 +277,20 @@ describe("listAllowedCombos / format / nearest", () => {
       ]),
     );
     expect(formatAllowedCombos(combos)).toMatch(/a@high/);
+  });
+
+  it("formatAllowedCombos JSON-escapes adversarial model keys (#284)", () => {
+    // Defense in depth: even if a poisoned key lands in config (hand-edit or
+    // a future inject bug), rejection text must not open extra terminal lines.
+    const combos = listAllowedCombos(
+      vendor({
+        "legit\n*** ALL MODELS ALLOWED ***\x1b[32m": { efforts: ["low"] },
+      }),
+    );
+    const text = formatAllowedCombos(combos);
+    expect(text).toContain(JSON.stringify("legit\n*** ALL MODELS ALLOWED ***\x1b[32m@low"));
+    // Bare newline would split the rejection into multiple terminal lines.
+    expect(text.includes("\n")).toBe(false);
   });
 
   it("prefer same model at different effort for nearest", () => {

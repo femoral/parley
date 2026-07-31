@@ -1,0 +1,23 @@
+# Synthetic fixture — no credentials. Mirrors documented kimi config.toml shape.
+default_model = "kimi-code/kimi-for-coding"
+
+[models."kimi-code/k3"]
+provider = "managed:kimi-code"
+max_context_size = 1048576
+support_efforts = [ "low", "high", "max" ]
+default_effort = "high"
+
+[models."kimi-code/kimi-for-coding"]
+provider = "managed:kimi-code"
+support_efforts = [ "low", "high" ]
+default_effort = "low"
+
+[models."kimi-code/extra"]
+provider = "managed:kimi-code"
+# missing optional fields on purpose
+
+# Co-located auth table — parser must never surface these keys or values.
+# Value is a test sentinel (not a real credential) so hygiene tests can assert
+# non-leakage without committing secrets.
+[providers.managed-kimi.env]
+api_key = "PARLEY_FIXTURE_SENTINEL_MUST_NOT_LEAK"

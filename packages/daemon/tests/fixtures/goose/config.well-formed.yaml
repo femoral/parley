@@ -1,0 +1,13 @@
+# Synthetic goose config — no real credentials.
+# Active provider is deliberately NOT first under providers: so a parser that
+# grabs the first provider's model (instead of matching active_provider) fails.
+active_provider: anthropic
+providers:
+  openai:
+    enabled: false
+    model: gpt-4o
+  anthropic:
+    enabled: true
+    model: claude-sonnet-4-5-20250929
+    configured: true
+GOOSE_MODE: auto

@@ -1,0 +1,7 @@
+# Valid TOML shape, but not the model catalog we expect.
+some_other_key = 42
+[session]
+last_id = "sess-synthetic"
+
+[providers.other]
+name = "x"

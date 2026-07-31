@@ -17,6 +17,8 @@ import {
   isValidDifficulty,
   isValidSize,
   isValidTaskType,
+  formatCliSelectedHint,
+  listAllowedCombos,
   ModelAllowlistError,
   normalizeUsage,
   parseDuration,
@@ -1193,6 +1195,10 @@ export class TaskEngine {
     model: string | null,
     effort: string | null,
   ): { model: string; effort: string | null } {
+    // Allowlist gate first — no disk I/O on the success path. CLI selection
+    // is advisory for rejection text only (#284); reading it eagerly would
+    // put a synchronous vendor-home read on every spawn (and a FIFO there
+    // would hang the daemon event loop — #288). Defer to not_allowed only.
     try {
       const resolved = resolveAllowedCombo({
         vendor,
@@ -1204,7 +1210,23 @@ export class TaskEngine {
       return { model: resolved.model, effort: resolved.effort };
     } catch (err) {
       if (err instanceof ModelAllowlistError) {
-        throw new DelegateError(err.message);
+        let message = err.message;
+        // Advisory only (#284). Include `no_allowlist` so empty-catalog
+        // vendors (goose/openhands) pre-init still name the CLI selection.
+        if (err.code === "not_allowed" || err.code === "no_allowlist") {
+          let cliSelected = null;
+          try {
+            cliSelected =
+              this.adapters.get(vendor)?.readSelectedModel?.() ?? null;
+          } catch {
+            cliSelected = null;
+          }
+          message += formatCliSelectedHint(
+            cliSelected,
+            listAllowedCombos(config.vendors?.[vendor]),
+          );
+        }
+        throw new DelegateError(message);
       }
       throw err;
     }
@@ -4052,6 +4074,16 @@ export class TaskEngine {
       runsDir: this.paths.runs,
       config,
       configPath: this.paths.config,
+      // #284: wire selection read for run-start preflight so the advisory
+      // line is not dead plumbing (same lazy-on-rejection contract as
+      // resolveModelAllowlist / spawnStepTasks).
+      readSelectedModel: (v: string) => {
+        try {
+          return this.adapters.get(v)?.readSelectedModel?.() ?? null;
+        } catch {
+          return null;
+        }
+      },
     };
     const result = startRunImpl(this.db, host, {
       workflow: request.workflow,
@@ -4234,6 +4266,16 @@ export class TaskEngine {
         slotId: sib.slotId,
         config,
         configPath: this.paths.config,
+        // #284: wire selection read for run/workflow spawn so the advisory
+        // line is not dead plumbing (same lazy-on-rejection contract as
+        // resolveModelAllowlist — no disk I/O on the success path).
+        readSelectedModel: (v) => {
+          try {
+            return this.adapters.get(v)?.readSelectedModel?.() ?? null;
+          } catch {
+            return null;
+          }
+        },
       });
 
       // Per-sibling input: data fan-out peels one element.

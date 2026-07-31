@@ -1,4 +1,6 @@
+import fs from "node:fs";
 import path from "node:path";
+import { resolveOperatorVendorHome, type SelectedModel } from "@useparley/core";
 import type {
   AdapterEnforcement,
   HubInfo,
@@ -539,5 +541,198 @@ export function createGooseAdapter(env: NodeJS.ProcessEnv = process.env): Vendor
     },
 
     // listModels omitted — no stable cloud catalog command in v1.43.0 (§7).
+    // Selected-model read (#284): not a catalog — pre-fill + rejection only.
+    readSelectedModel(): SelectedModel | null {
+      return readGooseSelectedModel(env);
+    },
   });
+}
+
+/** On-disk config filename under the operator goose config dir (#284). */
+const OPERATOR_CONFIG_FILE = "config.yaml";
+
+/** Cap on operator config.yaml — small config; never slurp unbounded. */
+export const GOOSE_CONFIG_MAX_BYTES = 2 * 1024 * 1024;
+
+function isEnoent(err: unknown): boolean {
+  return (
+    typeof err === "object" &&
+    err !== null &&
+    "code" in err &&
+    (err as { code?: string }).code === "ENOENT"
+  );
+}
+
+/**
+ * Strip a trailing `#…` comment outside quotes (YAML line comment).
+ * Does not handle multi-line strings — goose's provider keys are simple.
+ */
+function stripYamlLineComment(line: string): string {
+  let inQuote: '"' | "'" | null = null;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i]!;
+    if (inQuote) {
+      if (ch === "\\" && inQuote === '"') {
+        i++;
+        continue;
+      }
+      if (ch === inQuote) inQuote = null;
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      inQuote = ch;
+      continue;
+    }
+    if (ch === "#") return line.slice(0, i);
+  }
+  return line;
+}
+
+/** Unquote a YAML scalar (double, single, or bare). Empty / broken → null. */
+function yamlScalar(raw: string): string | null {
+  const t = raw.trim();
+  if (t === "" || t === "~" || t === "null" || t === "Null" || t === "NULL") {
+    return null;
+  }
+  if (t.startsWith('"')) {
+    // Unterminated or empty double-quoted scalar → unusable.
+    if (t.length < 2 || !t.endsWith('"')) return null;
+    const inner = t.slice(1, -1);
+    return inner === "" ? null : inner;
+  }
+  if (t.startsWith("'")) {
+    if (t.length < 2 || !t.endsWith("'")) return null;
+    const inner = t.slice(1, -1);
+    return inner === "" ? null : inner;
+  }
+  return t;
+}
+
+/**
+ * Parse goose's operator `config.yaml` for the active provider's model (#284).
+ *
+ * Shape (docs): `active_provider` + `providers.<id>.model`. Effort is not
+ * per-model — a global `GOOSE_THINKING_EFFORT` may appear on disk or via env,
+ * but #284 surfaces model drift only (effort mapping is out of scope).
+ * Fail-soft: never throws; callers treat `model: null` as "no selection known".
+ *
+ * Minimal line-oriented reader (no YAML dependency). Handles the documented
+ * nesting depth and quoted/bare scalars; unexpected structure degrades to null.
+ */
+export function parseGooseSelectedModel(text: string): {
+  model: string | null;
+  /** Non-null only for clearly broken structure (callers still fail soft). */
+  error: string | null;
+} {
+  if (text.trim() === "") {
+    return { model: null, error: null };
+  }
+
+  type Line = { indent: number; key: string; value: string | null };
+  const lines: Line[] = [];
+  for (const raw of text.split(/\r?\n/)) {
+    const stripped = stripYamlLineComment(raw);
+    if (stripped.trim() === "") continue;
+    const indentMatch = /^(\s*)/.exec(stripped);
+    const indent = indentMatch?.[1]?.length ?? 0;
+    const body = stripped.trim();
+    // Skip list items and other non-mapping shapes.
+    if (body.startsWith("-") || body.startsWith("---")) continue;
+    const colon = body.indexOf(":");
+    if (colon < 0) continue;
+    const key = body.slice(0, colon).trim();
+    if (key === "") continue;
+    const rest = body.slice(colon + 1);
+    const value = rest.trim() === "" ? null : rest.trim();
+    lines.push({ indent, key, value });
+  }
+
+  if (lines.length === 0) {
+    // Present file with no parseable mappings — treat as unusable.
+    return { model: null, error: "unexpected config.yaml shape" };
+  }
+
+  let activeProvider: string | null = null;
+  for (const line of lines) {
+    if (line.indent === 0 && line.key === "active_provider" && line.value !== null) {
+      activeProvider = yamlScalar(line.value);
+      break;
+    }
+  }
+  if (activeProvider === null || activeProvider === "") {
+    return { model: null, error: null };
+  }
+
+  // Locate `providers:` then the active provider block, then its `model:`.
+  let providersIndent: number | null = null;
+  let providerIndent: number | null = null;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]!;
+    if (providersIndent === null) {
+      if (line.key === "providers" && line.value === null) {
+        providersIndent = line.indent;
+      }
+      continue;
+    }
+    if (line.indent <= providersIndent) {
+      // Left the providers mapping without finding the active provider.
+      break;
+    }
+    if (providerIndent === null) {
+      if (line.indent > providersIndent && line.key === activeProvider) {
+        providerIndent = line.indent;
+        // Inline value on the provider key is not the model — keep scanning children.
+      }
+      continue;
+    }
+    if (line.indent <= providerIndent) {
+      // Left this provider block.
+      break;
+    }
+    if (line.key === "model" && line.value !== null) {
+      const model = yamlScalar(line.value);
+      if (model === null || model === "") {
+        return { model: null, error: null };
+      }
+      return { model, error: null };
+    }
+  }
+  return { model: null, error: null };
+}
+
+/**
+ * Read the operator's goose selection from `config.yaml` under the operator
+ * config directory (#284). Fail soft on every path — never throws.
+ */
+export function readGooseSelectedModel(
+  env: NodeJS.ProcessEnv = process.env,
+): SelectedModel | null {
+  const home = resolveOperatorVendorHome("goose", env);
+  if (home === null) return null;
+  const configPath = path.join(home, OPERATOR_CONFIG_FILE);
+  let text: string;
+  try {
+    // TOCTOU accepted: stat then read. A path swapped to FIFO between the
+    // two calls can still block, and a regular file on a hung network mount
+    // blocks regardless. Bound open (O_RDONLY|O_NONBLOCK) is not portable
+    // enough for our Node target and would not fix hung mounts; selection is
+    // advisory fail-soft — operators who can rewrite the operator home can
+    // already DoS the home itself. The isFile() guard stops the common
+    // static-FIFO case without removing the check (removing it hangs suites).
+    const stat = fs.statSync(configPath);
+    // #288 / #284: refuse non-files (FIFO, dir, device). readFileSync on a
+    // FIFO blocks the daemon event loop forever — selection is fail-soft null.
+    if (!stat.isFile()) return null;
+    if (stat.size > GOOSE_CONFIG_MAX_BYTES) return null;
+    text = fs.readFileSync(configPath, "utf8");
+  } catch (err) {
+    if (isEnoent(err)) return null;
+    return null;
+  }
+  const { model } = parseGooseSelectedModel(text);
+  if (model === null || model === "") return null;
+  // Model only. Config may carry a global `GOOSE_THINKING_EFFORT` key on disk
+  // (not per-model); #284 surfaces model drift, not effort drift — goose's
+  // effort-to-environment mapping is out of scope (original AC).
+  return { model, effort: null };
 }

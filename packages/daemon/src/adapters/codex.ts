@@ -1,3 +1,6 @@
+import fs from "node:fs";
+import path from "node:path";
+import { displayVendorPath, resolveOperatorVendorHome } from "@useparley/core";
 import type {
   AdapterEnforcement,
   HubInfo,
@@ -162,12 +165,39 @@ function asString(value: unknown): string {
 /** The probe command recorded as the catalog entry's `source`. */
 const MODELS_SOURCE = "codex debug models";
 
+/** On-disk cache filename under the operator's codex home (#281). */
+const MODELS_CACHE_FILE = "models_cache.json";
+
+/**
+ * Shared codex catalog filter (#281 / fix round finding 3).
+ * Both the CLI probe and the on-disk cache read the same feed — they must
+ * agree, or union re-admits ids the disk filter correctly dropped.
+ * Load-bearing: `visibility === "list" && supported_in_api === true`.
+ */
+function isCodexListedModel(m: Record<string, unknown>): boolean {
+  return m.visibility === "list" && m.supported_in_api === true;
+}
+
+function modelEntryFromCodexRaw(m: Record<string, unknown>): ModelEntry | null {
+  if (!isCodexListedModel(m)) return null;
+  const id = asString(m.slug);
+  if (id === "") return null;
+  const levels = Array.isArray(m.supported_reasoning_levels)
+    ? m.supported_reasoning_levels
+    : [];
+  const efforts = levels
+    .map((level) => asString(asRecord(level)?.effort))
+    .filter((effort) => effort !== "");
+  const defaultEffort =
+    typeof m.default_reasoning_level === "string" ? m.default_reasoning_level : null;
+  return { id, efforts, default_effort: defaultEffort };
+}
+
 /**
  * Parse the JSON catalog `codex debug models` emits into normalized model
- * entries (#29, research §2). Drops `visibility:"hide"` models (internal, e.g.
- * `codex-auto-review`) and the huge per-model `base_instructions` blob — we keep
- * only `slug`, `supported_reasoning_levels[].effort`, and
- * `default_reasoning_level`. Throws on non-JSON or a missing `models` array so
+ * entries (#29, research §2). Same filter as the on-disk cache reader
+ * (`visibility === "list" && supported_in_api`) so union merge cannot re-admit
+ * internal / non-API models. Throws on non-JSON or a missing `models` array so
  * the refresh path can keep the existing entry rather than clobber it.
  */
 export function parseCodexModels(json: string): ModelEntry[] {
@@ -180,20 +210,86 @@ export function parseCodexModels(json: string): ModelEntry[] {
   for (const raw of models) {
     const m = asRecord(raw);
     if (!m) continue;
-    if (m.visibility === "hide") continue; // internal model, not user-selectable
-    const id = asString(m.slug);
-    if (id === "") continue;
-    const levels = Array.isArray(m.supported_reasoning_levels)
-      ? m.supported_reasoning_levels
-      : [];
-    const efforts = levels
-      .map((level) => asString(asRecord(level)?.effort))
-      .filter((effort) => effort !== "");
-    const defaultEffort =
-      typeof m.default_reasoning_level === "string" ? m.default_reasoning_level : null;
-    entries.push({ id, efforts, default_effort: defaultEffort });
+    const entry = modelEntryFromCodexRaw(m);
+    if (entry) entries.push(entry);
   }
   return entries;
+}
+
+/**
+ * Parse codex's on-disk `models_cache.json` (#281). Same feed as
+ * `codex debug models`, without a subprocess. Fail-soft for callers: never
+ * throws. Distinguishes usable empty (`error: null`, e.g. `models: []` fresh
+ * cache) from present-but-unusable (`error` set — malformed JSON or unexpected
+ * shape) so `readModels` can warn without treating a never-authenticated home
+ * as a failure. Filter is load-bearing:
+ * `visibility === "list" && supported_in_api` — skipping it turns "discovered"
+ * into "wrong". Surfaces the file's own `fetched_at` in the source string so
+ * a stale cache is visible (freshness ≠ truth).
+ */
+export function parseCodexModelsCache(json: string): {
+  models: ModelEntry[];
+  cacheFetchedAt: string | null;
+  /** Non-null when the file content is present but unusable. */
+  error: string | null;
+} {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(json);
+  } catch {
+    return { models: [], cacheFetchedAt: null, error: "malformed models_cache.json" };
+  }
+  const root = asRecord(parsed);
+  if (!root) {
+    return { models: [], cacheFetchedAt: null, error: "unexpected models_cache.json shape" };
+  }
+  const cacheFetchedAt = typeof root.fetched_at === "string" ? root.fetched_at : null;
+  const models = root.models;
+  if (!Array.isArray(models)) {
+    return {
+      models: [],
+      cacheFetchedAt,
+      error: "unexpected models_cache.json shape",
+    };
+  }
+  const entries: ModelEntry[] = [];
+  for (const raw of models) {
+    const m = asRecord(raw);
+    if (!m) continue;
+    const entry = modelEntryFromCodexRaw(m);
+    if (entry) entries.push(entry);
+  }
+  return { models: entries, cacheFetchedAt, error: null };
+}
+
+/** Re-export for adapter tests that import display helpers from the codex module. */
+export { displayVendorPath };
+
+/**
+ * Build the catalog `source` string for a cache read, including the file's
+ * own freshness stamp when present (caches can be arbitrarily stale).
+ * `cachePath` should already be tilde-collapsed when written to models.json.
+ */
+export function codexModelsCacheSource(cachePath: string, cacheFetchedAt: string | null): string {
+  if (cacheFetchedAt !== null) {
+    return `${cachePath} (cache fetched_at=${cacheFetchedAt})`;
+  }
+  return cachePath;
+}
+
+/** Cap on models_cache.json size — real caches embed large prompt blobs. */
+const MODELS_CACHE_MAX_BYTES = 8 * 1024 * 1024;
+
+/** Exported for size-cap tests. */
+export const CODEX_MODELS_CACHE_MAX_BYTES = MODELS_CACHE_MAX_BYTES;
+
+function isEnoent(err: unknown): boolean {
+  return (
+    typeof err === "object" &&
+    err !== null &&
+    "code" in err &&
+    (err as { code?: string }).code === "ENOENT"
+  );
 }
 
 /** Normalize a single `item.completed` item to a thin VendorEvent (or `[]` opaque). */
@@ -337,6 +433,41 @@ export function createCodexAdapter(env: NodeJS.ProcessEnv = process.env): Vendor
       // catalog file remains hand-editable when this drifts.
       const stdout = await runProbe(CODEX_BIN, ["debug", "models"]);
       return { source: MODELS_SOURCE, models: parseCodexModels(stdout) };
+    },
+
+    async readModels(): Promise<ProbedModels> {
+      // Operator home via resolveOperatorVendorHome (honours research-documented
+      // CODEX_HOME override; codex adapter does not set CODEX_HOME on spawn —
+      // isolation is flags-only). Absent file = quiet empty (fresh home);
+      // present-but-unusable (oversize / unreadable / malformed / unexpected)
+      // rejects so refreshCatalog can warn even when the probe fills the gap.
+      const home = resolveOperatorVendorHome("codex", env);
+      if (home === null) return { source: MODELS_CACHE_FILE, models: [] };
+      const cachePath = path.join(home, MODELS_CACHE_FILE);
+      const sourceBase = displayVendorPath(cachePath, env);
+      let text: string;
+      try {
+        const stat = fs.statSync(cachePath);
+        if (stat.size > MODELS_CACHE_MAX_BYTES) {
+          throw new Error(
+            `${MODELS_CACHE_FILE} exceeds size cap (${MODELS_CACHE_MAX_BYTES} bytes)`,
+          );
+        }
+        text = fs.readFileSync(cachePath, "utf8");
+      } catch (err) {
+        if (isEnoent(err)) {
+          return { source: codexModelsCacheSource(sourceBase, null), models: [] };
+        }
+        throw err instanceof Error ? err : new Error(String(err));
+      }
+      const { models, cacheFetchedAt, error } = parseCodexModelsCache(text);
+      if (error !== null) {
+        throw new Error(error);
+      }
+      return {
+        source: codexModelsCacheSource(sourceBase, cacheFetchedAt),
+        models,
+      };
     },
   });
 }

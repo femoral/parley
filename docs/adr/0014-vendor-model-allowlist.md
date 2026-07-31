@@ -36,3 +36,34 @@ combos but restrict nothing.
 - Profiles are being redesigned separately (#195: launch templating,
   tracking-only model/effort); until that lands they validate like any other
   path.
+
+## Amendment — selected-model setup pre-fill (#284)
+
+Some vendors (goose, openhands) ship an **empty** model catalog: they persist
+only a current selection on disk, never an enumerable list. Under the
+deny-by-default rule above those vendors were permanently undelegatable until
+the operator typed a model id by hand.
+
+`parley init` may now seed a **one-entry** allowlist from the operator CLI's
+selected model when:
+
+1. the vendor's advisory catalog is empty, and
+2. `readSelectedModel()` returns a readable selection whose model (and
+   optional effort) pass charset + length validation (`isSafeAllowlistToken`).
+
+This is a deliberate posture change: for those empty-catalog vendors a
+readable, validated vendor file becomes a sufficient source for the first
+allowlist entry. It does **not** change the gate — the allowlist remains the
+sole authority at spawn, and discovery still never feeds `models.json`.
+
+**Default effort for injected entries.** When the inject path writes an entry
+with an effort, that effort is both the sole allowed effort and the entry's
+`default` marker. There is no catalog `default_effort` to consult; the vendor
+file is the only source. Effort strings that fail token validation are
+dropped (effort-less entry) rather than written.
+
+**Rejection advisory.** When a spawn (or run-start preflight) is rejected for
+`not_allowed` or `no_allowlist` and the CLI selection is readable and outside
+the allowlist, the error message gains one advisory line naming that
+selection. Semantics are unchanged: still fails fast, nothing spawns, same
+exit code and allowed-combos / nearest-suggestion output.

@@ -4,8 +4,12 @@
  * Pure helpers: config shape lives on `VendorConfig.models`; every spawn path
  * (delegate, fix, profiles) validates through {@link resolveAllowedCombo}.
  * The model catalog remains advisory — used only for nearest-combo ranking
- * when the caller supplies one.
+ * when the caller supplies one. CLI selected-model data (#284) is advisory
+ * for rejection messages only — it never gates or widens a spawn. The
+ * advisory line is appended by engine / run-preflight via
+ * {@link formatCliSelectedHint}; this module never reads a vendor home.
  */
+import type { SelectedModel } from "./adapter.js";
 import type { VendorConfig, VendorModelAllowlistEntry } from "./config.js";
 import type { ModelCatalog } from "./models.js";
 
@@ -105,11 +109,48 @@ function defaultEffortOf(
   return undefined;
 }
 
+/**
+ * Safe token shape for model/effort ids that may later land in config or
+ * rejection text. Real vendor ids use alphanumerics plus `/ . _ - @ ~ : +`
+ * (e.g. `kwaipilot/kat-coder`, `kilo/~anthropic/…`, `gpt-5.6-sol`).
+ * Rejects whitespace, control chars, and ANSI so a poisoned vendor file
+ * cannot inject multi-line rejection text or unreadable allowlist keys.
+ */
+const SAFE_ALLOWLIST_TOKEN = /^[\w./@~:+-]+$/;
+const SAFE_ALLOWLIST_TOKEN_MAX = 200;
+
+/** Whether a disk- or operator-supplied model/effort id is safe to seed. */
+export function isSafeAllowlistToken(id: string): boolean {
+  return (
+    typeof id === "string" &&
+    id.length > 0 &&
+    id.length <= SAFE_ALLOWLIST_TOKEN_MAX &&
+    SAFE_ALLOWLIST_TOKEN.test(id)
+  );
+}
+
+/**
+ * Format one combo for rejection text. Bare `model@effort` when the ids are
+ * safe tokens (the historical shape); JSON-escaped + length-capped otherwise
+ * so a hand-edited or poisoned allowlist key cannot open extra terminal lines.
+ */
+function formatComboForDisplay(model: string, effort: string | null): string {
+  const combo = effort === null || effort === "" ? model : `${model}@${effort}`;
+  if (isSafeAllowlistToken(model) && (effort === null || effort === "" || isSafeAllowlistToken(effort))) {
+    return combo;
+  }
+  let capped = combo;
+  if (capped.length > SAFE_ALLOWLIST_TOKEN_MAX) {
+    capped = `${capped.slice(0, SAFE_ALLOWLIST_TOKEN_MAX)}…`;
+  }
+  return JSON.stringify(capped);
+}
+
 /** Human list of allowed combos, e.g. `model@effort`, `model` (no effort). */
 export function formatAllowedCombos(combos: readonly AllowedCombo[]): string {
   if (combos.length === 0) return "(none)";
   return combos
-    .map((c) => (c.effort === null ? c.model : `${c.model}@${c.effort}`))
+    .map((c) => formatComboForDisplay(c.model, c.effort))
     .join(", ");
 }
 
@@ -221,7 +262,74 @@ function formatCombo(model: string, effort: string | null): string {
 }
 
 /**
+ * Whether a CLI selected model+effort is already covered by the allowlist.
+ * Effort-less allowlist entries match any/null selected effort; when the
+ * entry lists efforts, the selected effort must be among them (or null
+ * only if the model is selected without a stored effort).
+ */
+function selectedIsAllowlisted(
+  selected: SelectedModel,
+  combos: readonly AllowedCombo[],
+): boolean {
+  for (const c of combos) {
+    if (c.model !== selected.model) continue;
+    if (selected.effort === null || selected.effort === "") {
+      // CLI has no effort on the selection — any allowlisted row for the model counts.
+      return true;
+    }
+    if (c.effort === null || c.effort === selected.effort) return true;
+  }
+  return false;
+}
+
+/**
+ * Max length of the displayed model@effort combo in the advisory line.
+ * Disk-derived text is untrusted (undocumented vendor files); without a cap a
+ * multi-MiB model id becomes a multi-MiB DelegateError / HTTP body / task error.
+ */
+const CLI_SELECTED_HINT_COMBO_MAX = 200;
+
+/**
+ * Advisory line naming the CLI's current selection when it is readable and
+ * not on the allowlist (#284). Empty string when there is nothing to add.
+ * Never includes credential material — only model id and optional effort.
+ *
+ * Disk-derived model/effort are JSON.stringified and length-capped so a
+ * newline/ANSI-laden or multi-MiB id cannot inject terminal lines or bloat
+ * rejection messages. Runtime shape defence: non-string / whitespace-only
+ * model → empty hint (callers may pass untyped adapter output).
+ */
+export function formatCliSelectedHint(
+  selected: SelectedModel | null | undefined,
+  combos: readonly AllowedCombo[],
+): string {
+  if (selected === null || selected === undefined) return "";
+  // Shape defence — untyped input must not yield "42@7" / "undefined@…".
+  if (typeof selected.model !== "string") return "";
+  const model = selected.model.trim();
+  if (model === "") return "";
+  const effort =
+    typeof selected.effort === "string" && selected.effort.trim() !== ""
+      ? selected.effort.trim()
+      : null;
+  const normalized: SelectedModel = { model, effort };
+  if (selectedIsAllowlisted(normalized, combos)) return "";
+  let combo = formatCombo(model, effort);
+  if (combo.length > CLI_SELECTED_HINT_COMBO_MAX) {
+    combo = `${combo.slice(0, CLI_SELECTED_HINT_COMBO_MAX)}…`;
+  }
+  // JSON.stringify escapes newlines/ANSI/quotes — sibling fields do the same.
+  return ` CLI currently has ${JSON.stringify(combo)} selected (not on the allowlist).`;
+}
+
+/**
  * Resolve model+effort against a vendor allowlist.
+ *
+ * Pure gate: success/failure and message body do not depend on CLI selection.
+ * Callers that want the #284 advisory line append {@link formatCliSelectedHint}
+ * themselves after a `not_allowed` / `no_allowlist` failure (engine +
+ * run-preflight are the single choke points — do not reintroduce a
+ * `cliSelected` parameter here, or a future double-append will reappear).
  *
  * @param vendor - vendor id (for error text)
  * @param vendorCfg - vendors.<id> entry (may be undefined)

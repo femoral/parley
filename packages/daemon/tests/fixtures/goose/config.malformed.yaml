@@ -1,0 +1,4 @@
+active_provider: anthropic
+providers:
+  anthropic:
+    model: "unterminated-string
