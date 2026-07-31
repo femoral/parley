@@ -611,10 +611,10 @@ function yamlScalar(raw: string): string | null {
 /**
  * Parse goose's operator `config.yaml` for the active provider's model (#284).
  *
- * Shape (docs): `active_provider` + `providers.<id>.model`. Effort is global
- * env-only (`GOOSE_THINKING_EFFORT` / provider knobs) — never per-model on
- * disk, so we never invent one. Fail-soft: never throws; callers treat
- * `model: null` as "no selection known".
+ * Shape (docs): `active_provider` + `providers.<id>.model`. Effort is not
+ * per-model — a global `GOOSE_THINKING_EFFORT` may appear on disk or via env,
+ * but #284 surfaces model drift only (effort mapping is out of scope).
+ * Fail-soft: never throws; callers treat `model: null` as "no selection known".
  *
  * Minimal line-oriented reader (no YAML dependency). Handles the documented
  * nesting depth and quoted/bare scalars; unexpected structure degrades to null.
@@ -713,6 +713,9 @@ export function readGooseSelectedModel(
   let text: string;
   try {
     const stat = fs.statSync(configPath);
+    // #288 / #284: refuse non-files (FIFO, dir, device). readFileSync on a
+    // FIFO blocks the daemon event loop forever — selection is fail-soft null.
+    if (!stat.isFile()) return null;
     if (stat.size > GOOSE_CONFIG_MAX_BYTES) return null;
     text = fs.readFileSync(configPath, "utf8");
   } catch (err) {
@@ -721,6 +724,8 @@ export function readGooseSelectedModel(
   }
   const { model } = parseGooseSelectedModel(text);
   if (model === null || model === "") return null;
-  // No per-model effort on disk — global env-only knobs are out of scope.
+  // Model only. Config may carry a global `GOOSE_THINKING_EFFORT` key on disk
+  // (not per-model); #284 surfaces model drift, not effort drift — goose's
+  // effort-to-environment mapping is out of scope (original AC).
   return { model, effort: null };
 }

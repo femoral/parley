@@ -134,10 +134,37 @@ export function createAdapter(_env) {
       }
       return undefined;
     },
+    // optional: listModels(existing) for `parley models --refresh`
+    // optional: readModels(existing) — on-disk catalog discovery (#281)
+    // optional: readSelectedModel() — CLI selection for setup pre-fill +
+    //   allowlist rejection advisory only (#284); never feeds models.json
   };
   return adapter;
 }
 ```
+
+### Optional: `readSelectedModel` (#284)
+
+Return at most one `{ model, effort }` the operator has already chosen inside
+this vendor CLI. **Not a catalog channel** — never write this into
+`models.json` / `readModels()`. Surfaces only as:
+
+1. a setup allowlist pre-fill (`parley init`), and
+2. an advisory line on allowlist rejections when the selection is outside
+   `vendors.<id>.models`.
+
+Sync by design (the allowlist choke point is synchronous). Fail soft always:
+absent / malformed / unreadable / non-file (FIFO, dir) → `null`, never throw.
+Do not log or re-serialize co-located credentials.
+
+### Breaking: `defaultModel` / `defaultEffort` removed (#284)
+
+`VendorAdapter.defaultModel` and `defaultEffort` no longer exist on the
+published `@useparley/core` contract. They had zero read sites; the allowlist
+per-entry `default` flag (ADR-0014) is the sole mechanism for which combo runs
+when a delegate omits model and effort. Out-of-tree adapters that set those
+fields as object-literal properties will fail TypeScript's excess-property
+check — delete them. There is no replacement adapter field.
 
 ## Register
 

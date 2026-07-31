@@ -323,6 +323,54 @@ describe("resolveStepExecution", () => {
     ).toThrow(/not allowed/);
   });
 
+  it("enriches allowlist rejection with CLI selection when wired (#284)", () => {
+    let reads = 0;
+    try {
+      resolveStepExecution({
+        step: step({
+          id: "a",
+          vendor: "fake",
+          model: "not-allowed",
+          effort: "high",
+        }),
+        config: baseConfig(),
+        configPath,
+        readSelectedModel: (vendor) => {
+          reads += 1;
+          expect(vendor).toBe("fake");
+          return { model: "cli-selected-model", effort: "high" };
+        },
+      });
+      expect.unreachable();
+    } catch (err) {
+      expect((err as Error).message).toMatch(
+        /CLI currently has "cli-selected-model@high" selected/,
+      );
+    }
+    // Lazy: only one read on the rejection path (not on success).
+    expect(reads).toBe(1);
+  });
+
+  it("does not call readSelectedModel on a successful allowlist resolution", () => {
+    let reads = 0;
+    const r = resolveStepExecution({
+      step: step({
+        id: "a",
+        vendor: "fake",
+        model: "fake-model",
+        effort: "medium",
+      }),
+      config: baseConfig(),
+      configPath,
+      readSelectedModel: () => {
+        reads += 1;
+        return { model: "should-not-be-read", effort: null };
+      },
+    });
+    expect(r.model).toBe("fake-model");
+    expect(reads).toBe(0);
+  });
+
   it("refuses missing vendor/profile with no defaults", () => {
     expect(() =>
       resolveStepExecution({

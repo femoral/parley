@@ -1,1 +1,1 @@
-{ "lastUsedProvider": "anthropic", "providers": {
+{ "lastUsedProvider": "anthropic", "providers": { "anthropic": { "settings": { "model": "claude-sonnet-4-5", "apiKey": "sk-test-dummy-secret-must-never-leak", "reasoning": { "enabled": true, "effort": "high" 

@@ -707,18 +707,19 @@ export function parseClineSelectedModel(text: string): {
     return { model: null, effort: null, error: null };
   }
   const settings = asRecord(provider.settings) ?? provider;
-  const model = typeof settings.model === "string" ? settings.model : null;
-  if (model === null || model === "") {
+  const rawModel = typeof settings.model === "string" ? settings.model.trim() : null;
+  if (rawModel === null || rawModel === "") {
     return { model: null, effort: null, error: null };
   }
   let effort: string | null = null;
   const reasoning = asRecord(settings.reasoning);
-  if (reasoning && typeof reasoning.effort === "string" && reasoning.effort !== "") {
+  if (reasoning && typeof reasoning.effort === "string") {
+    const e = reasoning.effort.trim();
     // Surface the stored effort when present. `enabled` is informational —
     // the CLI still records the effort value alongside it.
-    effort = reasoning.effort;
+    if (e !== "") effort = e;
   }
-  return { model, effort, error: null };
+  return { model: rawModel, effort, error: null };
 }
 
 /**
@@ -734,6 +735,9 @@ export function readClineSelectedModel(
   let text: string;
   try {
     const stat = fs.statSync(settingsPath);
+    // #288 / #284: refuse non-files (FIFO, dir, device). readFileSync on a
+    // FIFO blocks the daemon event loop forever — selection is fail-soft null.
+    if (!stat.isFile()) return null;
     if (stat.size > CLINE_PROVIDERS_MAX_BYTES) return null;
     text = fs.readFileSync(settingsPath, "utf8");
   } catch {

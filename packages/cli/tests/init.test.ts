@@ -8,6 +8,7 @@ import { loadWorkflowDefinition } from "@useparley/core";
 import {
   EXAMPLE_WORKFLOW_IDS,
   isInteractiveInit,
+  cliSelectionDefaultEffort,
   modelsWithCliSelection,
   populateInitConfig,
   promptVendorModels,
@@ -152,11 +153,42 @@ describe("parley init", () => {
       expect(modelsWithCliSelection(models, null)).toEqual(models);
     });
 
-    it("adds a missing effort onto an existing catalog entry", () => {
+    it("does not inject a disk-only effort onto an existing catalog entry (ADR-0014)", () => {
+      // Disk effort "high" is not in the catalog — must not widen the list.
+      // A regression that re-adds it would let non-interactive init write it
+      // into the authoritative allowlist as default.
       const models = [{ id: "a", efforts: ["low"], default_effort: null }];
       expect(
         modelsWithCliSelection(models, { model: "a", effort: "high" }),
-      ).toEqual([{ id: "a", efforts: ["low", "high"], default_effort: "high" }]);
+      ).toEqual([{ id: "a", efforts: ["low"], default_effort: null }]);
+    });
+  });
+
+  describe("cliSelectionDefaultEffort (#284)", () => {
+    it("accepts effort only when present on the pre-injection catalog entry", () => {
+      const catalog = [
+        { id: "kwaipilot/kat-coder", efforts: ["low", "high"], default_effort: "low" },
+      ];
+      expect(
+        cliSelectionDefaultEffort(catalog, {
+          model: "kwaipilot/kat-coder",
+          effort: "high",
+        }),
+      ).toBe("high");
+      // Disk-only effort — not in catalog — must not become the default.
+      expect(
+        cliSelectionDefaultEffort(catalog, {
+          model: "kwaipilot/kat-coder",
+          effort: "ultra-max",
+        }),
+      ).toBeUndefined();
+    });
+
+    it("accepts the CLI effort when the model is a pure empty-catalog inject", () => {
+      // goose/openhands: empty catalog + selection → deliberate allowlist seed.
+      expect(
+        cliSelectionDefaultEffort([], { model: "deepseek-v4-flash", effort: "medium" }),
+      ).toBe("medium");
     });
   });
 
@@ -202,9 +234,13 @@ describe("parley init", () => {
       });
 
       const modelCall = vi.mocked(p.multiselect).mock.calls[0]![0] as {
+        message: string;
         initialValues: string[];
       };
       expect(modelCall.initialValues).toEqual(["a"]);
+      // Prompt must not claim "submit empty to skip" when Enter accepts the pre-fill.
+      expect(modelCall.message).toMatch(/CLI selection pre-filled/);
+      expect(modelCall.message).toMatch(/deselect all and submit empty to skip/);
       const effortsCall = vi.mocked(p.multiselect).mock.calls[1]![0] as {
         initialValues: string[];
       };
@@ -436,6 +472,63 @@ describe("parley init", () => {
       });
       expect(result.config.vendors?.fake?.models).toEqual({
         "fake-model": { efforts: ["low", "high"], default: "high" },
+      });
+    });
+
+    it("non-interactive does not write a disk-only effort into the allowlist (#284)", async () => {
+      // Catalog knows low/high; CLI reports ultra-max. Guard must use the
+      // pre-injection catalog — a vacuous post-injection check would pass and
+      // mark ultra-max as default (ADR-0014 regression).
+      const adapters = new Map([
+        [
+          "fake",
+          {
+            id: "fake",
+            readSelectedModel: () => ({
+              model: "fake-model",
+              effort: "ultra-max",
+            }),
+          },
+        ],
+      ]) as never;
+      const result = await populateInitConfig({
+        config: {},
+        harnesses: ["fake"],
+        catalog,
+        interactive: false,
+        adapters,
+      });
+      const entry = result.config.vendors?.fake?.models?.["fake-model"];
+      expect(entry?.efforts).toEqual(["low", "high"]);
+      expect(entry?.efforts).not.toContain("ultra-max");
+      // Default falls back to catalog marker (not ultra-max).
+      expect(entry?.default).not.toBe("ultra-max");
+    });
+
+    it("non-interactive empty-catalog vendor becomes delegatable from CLI selection", async () => {
+      // Deliberate: goose/openhands ship models:[] — with a readable selection
+      // they gain a one-entry allowlist so setup pre-fill is useful.
+      const adapters = new Map([
+        [
+          "goose",
+          {
+            id: "goose",
+            readSelectedModel: () => ({
+              model: "deepseek-v4-flash",
+              effort: null,
+            }),
+          },
+        ],
+      ]) as never;
+      const result = await populateInitConfig({
+        config: {},
+        harnesses: ["goose"],
+        catalog: {}, // empty shipped catalog for goose
+        interactive: false,
+        adapters,
+      });
+      expect(result.config.vendors?.goose?.models).toEqual({
+        "deepseek-v4-flash": { efforts: [], default: true },
       });
     });
 

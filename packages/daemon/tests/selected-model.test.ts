@@ -4,7 +4,8 @@
  * These vendors persist only a current selection, never a catalog. Reads must
  * fail soft, never feed models.json, and never leak cline credentials.
  */
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -12,6 +13,7 @@ import { fileURLToPath } from "node:url";
 import {
   formatAllowedCombos,
   formatCliSelectedHint,
+  homePaths,
   listAllowedCombos,
   ModelAllowlistError,
   refreshCatalog,
@@ -33,6 +35,10 @@ import {
   readOpenhandsSelectedModel,
 } from "../src/adapters/openhands.js";
 import { createAdapterRegistrySync } from "../src/adapters/index.js";
+import { createFakeAdapter } from "../src/adapters/fake.js";
+import { openDatabase, type DatabaseHandle } from "../src/db.js";
+import { DelegateError, TaskEngine } from "../src/engine.js";
+import { withFakeAllowlist } from "./helpers.js";
 
 const FIXTURES = fileURLToPath(new URL("./fixtures/", import.meta.url));
 
@@ -204,6 +210,18 @@ describe("adapter readSelectedModel via operator home", () => {
     expect(adapter.readSelectedModel?.()).toBeNull();
   });
 
+  it("goose returns null without hanging when config.yaml is a FIFO (#288/#284)", () => {
+    home = makeHome();
+    const configDir = path.join(home, ".config", "goose");
+    fs.mkdirSync(configDir, { recursive: true });
+    const fifo = path.join(configDir, "config.yaml");
+    execFileSync("mkfifo", [fifo]);
+    const started = Date.now();
+    const result = readGooseSelectedModel({ HOME: home });
+    expect(Date.now() - started).toBeLessThan(2000);
+    expect(result).toBeNull();
+  });
+
   it("goose refuses isolated GOOSE_PATH_ROOT and falls back to operator home", () => {
     home = makeHome();
     const isolated = path.join(home, "work", ".parley-goose");
@@ -266,6 +284,18 @@ describe("adapter readSelectedModel via operator home", () => {
     ).toBeNull();
   });
 
+  it("cline returns null without hanging when providers.json is a FIFO (#288/#284)", () => {
+    home = makeHome();
+    const settingsDir = path.join(home, ".cline", "data", "settings");
+    fs.mkdirSync(settingsDir, { recursive: true });
+    const fifo = path.join(settingsDir, "providers.json");
+    execFileSync("mkfifo", [fifo]);
+    const started = Date.now();
+    const result = readClineSelectedModel({ HOME: home });
+    expect(Date.now() - started).toBeLessThan(2000);
+    expect(result).toBeNull();
+  });
+
   it("openhands reads agent_settings.json llm.model", () => {
     home = makeHome();
     const oh = path.join(home, ".openhands");
@@ -291,6 +321,18 @@ describe("adapter readSelectedModel via operator home", () => {
       readFixture("openhands", "agent_settings.malformed.json"),
     );
     expect(readOpenhandsSelectedModel({ HOME: home })).toBeNull();
+  });
+
+  it("openhands returns null without hanging when agent_settings.json is a FIFO (#288/#284)", () => {
+    home = makeHome();
+    const oh = path.join(home, ".openhands");
+    fs.mkdirSync(oh, { recursive: true });
+    const fifo = path.join(oh, "agent_settings.json");
+    execFileSync("mkfifo", [fifo]);
+    const started = Date.now();
+    const result = readOpenhandsSelectedModel({ HOME: home });
+    expect(Date.now() - started).toBeLessThan(2000);
+    expect(result).toBeNull();
   });
 });
 
@@ -423,8 +465,8 @@ describe("allowlist rejection names CLI selection (#284)", () => {
       expect(msg).toMatch(/Allowed:/);
       expect(msg).toMatch(/did you mean/);
       expect(msg).toMatch(/gpt-/);
-      // New advisory line.
-      expect(msg).toMatch(/CLI currently has claude-sonnet-4-5@high selected/);
+      // New advisory line (JSON.stringified combo).
+      expect(msg).toMatch(/CLI currently has "claude-sonnet-4-5@high" selected/);
       expect(msg).toMatch(/not on the allowlist/);
     }
   });
@@ -477,16 +519,193 @@ describe("allowlist rejection names CLI selection (#284)", () => {
     }
   });
 
-  it("formatCliSelectedHint never includes credential material", () => {
+  it("formatCliSelectedHint from a real cline fixture never includes credentials", () => {
+    // End-to-end: parse a fixture that co-locates a dummy secret, then format.
+    // A vacuous hand-built literal cannot produce credential material; this can.
+    const text = readFixture("cline", "providers.well-formed.json");
+    expect(text).toContain("sk-test-dummy-secret-must-never-leak");
+    const { model, effort } = parseClineSelectedModel(text);
+    expect(model).toBe("claude-sonnet-4-5");
     const combos = listAllowedCombos(cfg);
-    const hint = formatCliSelectedHint(
-      { model: "claude-sonnet-4-5", effort: "high" },
-      combos,
+    const hint = formatCliSelectedHint({ model: model!, effort }, combos);
+    expect(hint).toMatch(/claude-sonnet-4-5@high/);
+    expect(hint).not.toMatch(/sk-test|apiKey|dummy-secret|secret/i);
+    expect(JSON.stringify({ model, effort, hint })).not.toMatch(
+      /sk-test|apiKey|dummy-secret/i,
     );
-    expect(hint).toContain("claude-sonnet-4-5@high");
-    expect(hint).not.toMatch(/sk-|apiKey|secret/i);
     // Baseline allowed list still formats without the selection.
     expect(formatAllowedCombos(combos)).toMatch(/gpt-5@low/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Engine e2e: advisory line reaches a real spawn rejection (#284)
+// ---------------------------------------------------------------------------
+
+describe("engine spawn path surfaces CLI selection on allowlist rejection (#284)", () => {
+  let parleyHome: string;
+  let cwd: string;
+  let db: DatabaseHandle;
+  const FAKE_VENDOR_BIN = fileURLToPath(
+    new URL("../../cli/tests/fake-vendor.mjs", import.meta.url),
+  );
+
+  beforeEach(() => {
+    parleyHome = fs.mkdtempSync(path.join(os.tmpdir(), "parley-sel-eng-"));
+    cwd = fs.mkdtempSync(path.join(os.tmpdir(), "parley-sel-cwd-"));
+    fs.writeFileSync(
+      path.join(cwd, ".fake-vendor.json"),
+      JSON.stringify([
+        {
+          submit_report: {
+            summary: "ok",
+            outcome: "success",
+            files_changed: [],
+          },
+        },
+      ]),
+    );
+    db = openDatabase(homePaths(parleyHome));
+    process.env.PARLEY_HOME = parleyHome;
+    process.env.PARLEY_FAKE_VENDOR_BIN = FAKE_VENDOR_BIN;
+  });
+
+  afterEach(() => {
+    try {
+      db.close();
+    } catch {
+      /* already closed */
+    }
+    fs.rmSync(parleyHome, { recursive: true, force: true });
+    fs.rmSync(cwd, { recursive: true, force: true });
+    delete process.env.PARLEY_FAKE_VENDOR_BIN;
+    delete process.env.PARLEY_HOME;
+  });
+
+  it("rejection message includes the adapter's selected model (advisory only)", () => {
+    fs.writeFileSync(
+      path.join(parleyHome, "parley.json"),
+      JSON.stringify(
+        withFakeAllowlist({
+          vendors: {
+            fake: {
+              models: {
+                "fake-model": {
+                  efforts: ["low", "medium"],
+                  default: "medium",
+                },
+              },
+            },
+          },
+        }),
+      ),
+    );
+
+    const fake = createFakeAdapter(process.env);
+    // Inject a selection reader on the fake vendor so the engine path is real.
+    const adapters = new Map([
+      [
+        "fake",
+        {
+          ...fake,
+          readSelectedModel: () => ({
+            model: "cli-only-model",
+            effort: "high" as string | null,
+          }),
+        },
+      ],
+    ]);
+    const engine = new TaskEngine(db, homePaths(parleyHome), adapters);
+
+    try {
+      engine.delegate({
+        prompt: "do it",
+        vendor: "fake",
+        profile: null,
+        model: "not-on-list",
+        effort: "low",
+        name: null,
+        orchestratorSessionId: "orch",
+        cwd,
+        useWorktree: false,
+        baseRef: null,
+        sandbox: null,
+        network: null,
+        answerTimeoutMs: null,
+        reportSchema: null,
+        contexts: [],
+        runner: null,
+        size: null,
+        difficulty: null,
+        type: null,
+      });
+      expect.unreachable();
+    } catch (err) {
+      expect(err).toBeInstanceOf(DelegateError);
+      const msg = (err as Error).message;
+      // Pre-existing rejection shape intact.
+      expect(msg).toMatch(/not allowed/);
+      expect(msg).toMatch(/Allowed/);
+      expect(msg).toMatch(/did you mean/);
+      // Advisory line reached through engine.resolveModelAllowlist.
+      expect(msg).toMatch(/CLI currently has "cli-only-model@high" selected/);
+      expect(msg).toMatch(/not on the allowlist/);
+    }
+  });
+
+  it("cliSelected matching the requested combo still rejects (no allowlist bypass)", () => {
+    fs.writeFileSync(
+      path.join(parleyHome, "parley.json"),
+      JSON.stringify(
+        withFakeAllowlist({
+          vendors: {
+            fake: {
+              models: {
+                "fake-model": { efforts: ["low"], default: "low" },
+              },
+            },
+          },
+        }),
+      ),
+    );
+    const fake = createFakeAdapter(process.env);
+    const adapters = new Map([
+      [
+        "fake",
+        {
+          ...fake,
+          // Selection equals the requested non-allowlisted combo — must still reject.
+          readSelectedModel: () => ({
+            model: "evil-max-model",
+            effort: "ultra" as string | null,
+          }),
+        },
+      ],
+    ]);
+    const engine = new TaskEngine(db, homePaths(parleyHome), adapters);
+    expect(() =>
+      engine.delegate({
+        prompt: "do it",
+        vendor: "fake",
+        profile: null,
+        model: "evil-max-model",
+        effort: "ultra",
+        name: null,
+        orchestratorSessionId: "orch",
+        cwd,
+        useWorktree: false,
+        baseRef: null,
+        sandbox: null,
+        network: null,
+        answerTimeoutMs: null,
+        reportSchema: null,
+        contexts: [],
+        runner: null,
+        size: null,
+        difficulty: null,
+        type: null,
+      }),
+    ).toThrow(/not allowed/);
   });
 });
 

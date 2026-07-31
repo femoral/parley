@@ -247,8 +247,9 @@ export interface SelectedModel {
   model: string;
   /**
    * Reasoning effort the CLI has selected for this model, or `null` when the
-   * vendor does not persist a per-model effort (e.g. goose's global env-only
-   * thinking knobs).
+   * reader does not surface one. goose/openhands return null here even when a
+   * global effort may exist on disk — #284 surfaces model drift for those
+   * vendors; cline returns the stored `reasoning.effort` when present.
    */
   effort: string | null;
 }

@@ -244,19 +244,43 @@ function selectedIsAllowlisted(
 }
 
 /**
+ * Max length of the displayed model@effort combo in the advisory line.
+ * Disk-derived text is untrusted (undocumented vendor files); without a cap a
+ * multi-MiB model id becomes a multi-MiB DelegateError / HTTP body / task error.
+ */
+const CLI_SELECTED_HINT_COMBO_MAX = 200;
+
+/**
  * Advisory line naming the CLI's current selection when it is readable and
  * not on the allowlist (#284). Empty string when there is nothing to add.
  * Never includes credential material — only model id and optional effort.
+ *
+ * Disk-derived model/effort are JSON.stringified and length-capped so a
+ * newline/ANSI-laden or multi-MiB id cannot inject terminal lines or bloat
+ * rejection messages. Runtime shape defence: non-string / whitespace-only
+ * model → empty hint (callers may pass untyped adapter output).
  */
 export function formatCliSelectedHint(
   selected: SelectedModel | null | undefined,
   combos: readonly AllowedCombo[],
 ): string {
   if (selected === null || selected === undefined) return "";
-  if (selected.model === "") return "";
-  if (selectedIsAllowlisted(selected, combos)) return "";
-  const combo = formatCombo(selected.model, selected.effort);
-  return ` CLI currently has ${combo} selected (not on the allowlist).`;
+  // Shape defence — untyped input must not yield "42@7" / "undefined@…".
+  if (typeof selected.model !== "string") return "";
+  const model = selected.model.trim();
+  if (model === "") return "";
+  const effort =
+    typeof selected.effort === "string" && selected.effort.trim() !== ""
+      ? selected.effort.trim()
+      : null;
+  const normalized: SelectedModel = { model, effort };
+  if (selectedIsAllowlisted(normalized, combos)) return "";
+  let combo = formatCombo(model, effort);
+  if (combo.length > CLI_SELECTED_HINT_COMBO_MAX) {
+    combo = `${combo.slice(0, CLI_SELECTED_HINT_COMBO_MAX)}…`;
+  }
+  // JSON.stringify escapes newlines/ANSI/quotes — sibling fields do the same.
+  return ` CLI currently has ${JSON.stringify(combo)} selected (not on the allowlist).`;
 }
 
 function notAllowedMessage(

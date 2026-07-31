@@ -190,9 +190,9 @@ describe("resolveAllowedCombo — reject + suggest", () => {
       expect(msg).toMatch(/not allowed/);
       expect(msg).toMatch(/Allowed:/);
       expect(msg).toMatch(/did you mean/);
-      // Advisory line only.
+      // Advisory line — model is JSON.stringified (escaping + length safety).
       expect(msg).toMatch(
-        /CLI currently has claude-sonnet-4-5-20250929 selected \(not on the allowlist\)/,
+        /CLI currently has "claude-sonnet-4-5-20250929" selected \(not on the allowlist\)/,
       );
     }
   });
@@ -208,6 +208,31 @@ describe("resolveAllowedCombo — reject + suggest", () => {
     });
     expect(r).toEqual({ model: "gpt-5", effort: "medium", usedDefault: false });
   });
+
+  it("cliSelected equal to the requested non-allowlisted combo does NOT widen (#284 advisory-only)", () => {
+    // Load-bearing security property: selection is advisory for message text
+    // only. A mutation that short-circuits when request === cliSelected would
+    // be a complete allowlist bypass — this test must fail under that mutation.
+    const narrow = vendor({ "gpt-5": { efforts: ["low"], default: "low" } });
+    try {
+      resolveAllowedCombo({
+        vendor: "evil",
+        vendorCfg: narrow,
+        model: "evil-max-model",
+        effort: "ultra",
+        configPath: CONFIG_PATH,
+        cliSelected: { model: "evil-max-model", effort: "ultra" },
+      });
+      expect.unreachable();
+    } catch (err) {
+      expect(err).toBeInstanceOf(ModelAllowlistError);
+      expect((err as ModelAllowlistError).code).toBe("not_allowed");
+      expect((err as Error).message).toMatch(/not allowed/);
+      expect((err as Error).message).toMatch(
+        /CLI currently has "evil-max-model@ultra" selected/,
+      );
+    }
+  });
 });
 
 describe("formatCliSelectedHint (#284)", () => {
@@ -218,6 +243,49 @@ describe("formatCliSelectedHint (#284)", () => {
     expect(formatCliSelectedHint(null, combos)).toBe("");
     expect(formatCliSelectedHint({ model: "gpt-5", effort: "low" }, combos)).toBe("");
     expect(formatCliSelectedHint({ model: "gpt-5", effort: null }, combos)).toBe("");
+  });
+
+  it("JSON.stringifies and length-caps disk-derived model/effort text", () => {
+    const combos = listAllowedCombos(
+      vendor({ "gpt-5": { efforts: ["low"], default: "low" } }),
+    );
+    const huge = "x".repeat(500_000);
+    const hint = formatCliSelectedHint({ model: huge, effort: "high" }, combos);
+    expect(hint.length).toBeLessThan(500);
+    expect(hint).toMatch(/CLI currently has "/);
+    // Newlines + ANSI in a model id must not open extra terminal lines.
+    const sneaky = "legit\n*** approved ***\x1b[32m";
+    const sneakyHint = formatCliSelectedHint(
+      { model: sneaky, effort: null },
+      combos,
+    );
+    expect(sneakyHint).toContain(JSON.stringify("legit\n*** approved ***\x1b[32m"));
+    // The raw control sequence is inside the JSON string, not as free message text
+    // that would render as a separate terminal line outside the quote.
+    expect(sneakyHint.startsWith(" CLI currently has ")).toBe(true);
+    expect(sneakyHint.endsWith(" selected (not on the allowlist).")).toBe(true);
+  });
+
+  it("hardens untyped / whitespace-only input to an empty hint", () => {
+    const combos = listAllowedCombos(
+      vendor({ "gpt-5": { efforts: ["low"], default: "low" } }),
+    );
+    expect(formatCliSelectedHint({ model: "   ", effort: null }, combos)).toBe("");
+    expect(
+      formatCliSelectedHint(
+        { model: 42, effort: 7 } as unknown as { model: string; effort: string | null },
+        combos,
+      ),
+    ).toBe("");
+    expect(
+      formatCliSelectedHint(
+        { model: undefined, effort: undefined } as unknown as {
+          model: string;
+          effort: string | null;
+        },
+        combos,
+      ),
+    ).toBe("");
   });
 });
 

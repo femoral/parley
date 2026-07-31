@@ -455,8 +455,11 @@ export function parseOpenhandsSelectedModel(text: string): {
     // Empty/fresh agent settings without llm — not an error.
     return { model: null, error: null };
   }
-  const model = typeof llm.model === "string" ? llm.model : null;
-  if (model === null || model === "") {
+  const model =
+    typeof llm.model === "string" && llm.model.trim() !== ""
+      ? llm.model.trim()
+      : null;
+  if (model === null) {
     return { model: null, error: null };
   }
   return { model, error: null };
@@ -475,6 +478,9 @@ export function readOpenhandsSelectedModel(
   let text: string;
   try {
     const stat = fs.statSync(settingsPath);
+    // #288 / #284: refuse non-files (FIFO, dir, device). readFileSync on a
+    // FIFO blocks the daemon event loop forever — selection is fail-soft null.
+    if (!stat.isFile()) return null;
     if (stat.size > OPENHANDS_AGENT_SETTINGS_MAX_BYTES) return null;
     text = fs.readFileSync(settingsPath, "utf8");
   } catch {
@@ -482,7 +488,7 @@ export function readOpenhandsSelectedModel(
   }
   const { model } = parseOpenhandsSelectedModel(text);
   if (model === null || model === "") return null;
-  // openhands records reasoning_effort on disk sometimes, but #284 surfaces
-  // only the model for this vendor (no per-selection effort in the AC).
+  // openhands may record `llm.reasoning_effort` on disk; #284 surfaces model
+  // drift only for this vendor (effort is out of the original AC scope).
   return { model, effort: null };
 }
