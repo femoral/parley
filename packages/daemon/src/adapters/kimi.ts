@@ -139,8 +139,8 @@ function mcpJson(hub: HubInfo, answerTimeoutMs: number): string {
  *
  * When TaskSpec names no model, pin the CLI's documented config-file default
  * (`kimi-for-coding`, research §1 VERIFIED) so headless spawns stay deterministic.
- * That spawn-config literal is separate from adapter.defaultModel (left unset
- * in #281) and from catalog model ids (namespaced form — see shipped catalog).
+ * That spawn-config literal is separate from the allowlist default combo
+ * (ADR-0014) and from catalog model ids (namespaced form — see shipped catalog).
  */
 function configToml(task: TaskSpec): string {
   const lines = [
@@ -462,9 +462,6 @@ export function createKimiAdapter(env: NodeJS.ProcessEnv = process.env): VendorA
     id: "kimi",
     childChannel: "mcp",
     enforcement: KIMI_ENFORCEMENT,
-    // defaultModel left unset (#281) — no hardcoded vendor model literal; the
-    // allowlist / profile / TaskSpec name the model. Operator catalog still
-    // surfaces config.toml's default_model via readModels provenance.
 
     prepare(task, hub): Promise<SpawnPlan> {
       // Fresh headless one-shot (research §2 / recommended shape):

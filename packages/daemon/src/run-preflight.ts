@@ -35,6 +35,7 @@ import {
   type ParleyConfig,
   type ProfileConfig,
   type SandboxMode,
+  type SelectedModel,
   type WorkflowDefinition,
   type WorkflowSlot,
   type WorkflowStepNode,
@@ -161,6 +162,11 @@ export interface ResolveStepExecutionOptions {
   config: ParleyConfig;
   /** Path shown in allowlist remedy text. */
   configPath: string;
+  /**
+   * Optional lookup for the operator CLI's selected model (#284). Advisory
+   * for allowlist rejection text only. Fail-soft callers may omit it.
+   */
+  readSelectedModel?: (vendor: string) => SelectedModel | null;
 }
 
 /**
@@ -242,6 +248,14 @@ export function resolveStepExecution(
   let usedAllowlistDefault = false;
 
   if (!launchTemplate) {
+    let cliSelected: SelectedModel | null = null;
+    if (options.readSelectedModel) {
+      try {
+        cliSelected = options.readSelectedModel(vendor);
+      } catch {
+        cliSelected = null;
+      }
+    }
     try {
       const allowed = resolveAllowedCombo({
         vendor,
@@ -249,6 +263,7 @@ export function resolveStepExecution(
         model,
         effort,
         configPath,
+        cliSelected,
       });
       resolvedModel = allowed.model;
       resolvedEffort = allowed.effort;

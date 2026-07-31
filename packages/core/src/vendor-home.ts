@@ -16,7 +16,9 @@ import path from "node:path";
  * Env keys (provenance noted per entry):
  *  - adapter-set on spawn for isolation (must refuse when pointing at a
  *    parley-provisioned marker path): `KIMI_CODE_HOME`, `OPENCLAW_STATE_DIR`,
- *    `HERMES_HOME`, `GOOSE_PATH_ROOT`, `OPENHANDS_PERSISTENCE_DIR`
+ *    `HERMES_HOME`, `GOOSE_PATH_ROOT`, `OPENHANDS_PERSISTENCE_DIR`,
+ *    `CLINE_DATA_DIR` (cline also uses `--data-dir`; both point at
+ *    `.cline-parley` when parley spawns)
  *  - research-documented CLI override only (codex/grok adapters do not set
  *    these today): `CODEX_HOME`, `GROK_HOME`
  */
@@ -33,6 +35,7 @@ const PARLEY_ISOLATED_MARKERS: readonly string[] = [
   path.join(".parley", "hermes-home"), // hermes HERMES_HOME_REL
   ".parley-goose", // goose PATH_ROOT_DIR
   ".parley-openhands", // openhands PERSIST_REL parent
+  ".cline-parley", // cline DATA_DIR_REL
 ];
 
 type HomeSpec = {
@@ -104,6 +107,15 @@ const OPERATOR_HOME_SPECS: Record<string, HomeSpec> = {
   openhands: {
     envKey: "OPENHANDS_PERSISTENCE_DIR",
     defaultRel: ".openhands",
+    overrideKind: "home",
+    provenance: "adapter-isolation",
+  },
+  // research-documented CLI override (`--data-dir` / CLINE_DATA_DIR); adapter
+  // isolates via `--data-dir task.cwd/.cline-parley` rather than the env key,
+  // but refuse the marker if an override does point there.
+  cline: {
+    envKey: "CLINE_DATA_DIR",
+    defaultRel: ".cline",
     overrideKind: "home",
     provenance: "adapter-isolation",
   },

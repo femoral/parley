@@ -8,6 +8,7 @@ import { loadWorkflowDefinition } from "@useparley/core";
 import {
   EXAMPLE_WORKFLOW_IDS,
   isInteractiveInit,
+  modelsWithCliSelection,
   populateInitConfig,
   promptVendorModels,
   seedExampleWorkflows,
@@ -137,6 +138,28 @@ describe("parley init", () => {
     });
   });
 
+  describe("modelsWithCliSelection (#284)", () => {
+    it("injects a missing CLI selection so empty catalogs can pre-fill", () => {
+      expect(
+        modelsWithCliSelection([], { model: "cli-model", effort: "high" }),
+      ).toEqual([
+        { id: "cli-model", efforts: ["high"], default_effort: "high" },
+      ]);
+    });
+
+    it("leaves the list unchanged when selection is null", () => {
+      const models = [{ id: "a", efforts: ["low"], default_effort: null }];
+      expect(modelsWithCliSelection(models, null)).toEqual(models);
+    });
+
+    it("adds a missing effort onto an existing catalog entry", () => {
+      const models = [{ id: "a", efforts: ["low"], default_effort: null }];
+      expect(
+        modelsWithCliSelection(models, { model: "a", effort: "high" }),
+      ).toEqual([{ id: "a", efforts: ["low", "high"], default_effort: "high" }]);
+    });
+  });
+
   describe("promptVendorModels", () => {
     beforeEach(() => {
       vi.mocked(p.multiselect).mockReset();
@@ -160,6 +183,55 @@ describe("parley init", () => {
         .MULTISELECT_INSTRUCTIONS;
       expect(shortcuts.filter((entry) => entry.includes("toggle all"))).toHaveLength(1);
       expect(shortcuts.filter((entry) => entry.includes("invert"))).toHaveLength(1);
+    });
+
+    it("pre-fills the multiselect and default effort from CLI selection (#284)", async () => {
+      const catalog = [
+        { id: "a", efforts: ["low", "medium", "high"], default_effort: "medium" },
+        { id: "b", efforts: ["low"], default_effort: null },
+      ];
+      vi.mocked(p.multiselect)
+        .mockResolvedValueOnce(["a"]) // operator keeps the pre-fill
+        .mockResolvedValueOnce(["medium", "high"]); // keep multiple efforts
+      // Single model → no default-model select; default effort uses CLI initial.
+      vi.mocked(p.select).mockResolvedValueOnce("high");
+
+      const allowlist = await promptVendorModels("cline", catalog, {
+        model: "a",
+        effort: "high",
+      });
+
+      const modelCall = vi.mocked(p.multiselect).mock.calls[0]![0] as {
+        initialValues: string[];
+      };
+      expect(modelCall.initialValues).toEqual(["a"]);
+      const effortsCall = vi.mocked(p.multiselect).mock.calls[1]![0] as {
+        initialValues: string[];
+      };
+      expect(effortsCall.initialValues).toEqual(["high"]);
+      const effortCall = vi.mocked(p.select).mock.calls[0]![0] as {
+        initialValue: string;
+      };
+      // CLI effort "high" wins over catalog default "medium" as the initial value.
+      expect(effortCall.initialValue).toBe("high");
+      expect(allowlist).toEqual({
+        a: { efforts: ["medium", "high"], default: "high" },
+      });
+    });
+
+    it("behaves as today when CLI selection is unreadable (null)", async () => {
+      const catalog = [{ id: "solo", efforts: ["low", "high"], default_effort: "low" }];
+      vi.mocked(p.multiselect)
+        .mockResolvedValueOnce(["solo"])
+        .mockResolvedValueOnce([]);
+      vi.mocked(p.select).mockResolvedValueOnce("low");
+
+      await promptVendorModels("goose", catalog, null);
+
+      const modelCall = vi.mocked(p.multiselect).mock.calls[0]![0] as {
+        initialValues: string[];
+      };
+      expect(modelCall.initialValues).toEqual([]);
     });
 
     it("prompts opt-in efforts per selected multi-effort model, then the default effort", async () => {
@@ -343,6 +415,28 @@ describe("parley init", () => {
         fake: { models: { "fake-model": { efforts: ["low", "high"], default: "high" } } },
       });
       expect(result.config.defaults?.vendor).toBe("fake");
+    });
+
+    it("non-interactive seeds use CLI selection as default when present (#284)", async () => {
+      const adapters = new Map([
+        [
+          "fake",
+          {
+            id: "fake",
+            readSelectedModel: () => ({ model: "fake-model", effort: "high" }),
+          },
+        ],
+      ]) as never;
+      const result = await populateInitConfig({
+        config: {},
+        harnesses: ["fake"],
+        catalog,
+        interactive: false,
+        adapters,
+      });
+      expect(result.config.vendors?.fake?.models).toEqual({
+        "fake-model": { efforts: ["low", "high"], default: "high" },
+      });
     });
 
     it("submitting an empty vendor pick shortcuts vendor configuration", async () => {

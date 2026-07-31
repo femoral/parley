@@ -117,7 +117,27 @@ describe("resolveOperatorVendorHome", () => {
     expect(ids).toContain("codex");
     expect(ids).toContain("kimi");
     expect(ids).toContain("openclaw");
+    expect(ids).toContain("cline");
     expect(ids).not.toContain("fake");
+  });
+
+  it("resolves cline default home and refuses .cline-parley isolation (#284)", () => {
+    const home = "/tmp/operator";
+    expect(resolveOperatorVendorHome("cline", { HOME: home })).toBe(
+      path.join(home, ".cline"),
+    );
+    expect(
+      resolveOperatorVendorHome("cline", {
+        HOME: home,
+        CLINE_DATA_DIR: "/tmp/wt/.cline-parley",
+      }),
+    ).toBe(path.join(home, ".cline"));
+    expect(
+      resolveOperatorVendorHome("cline", {
+        HOME: home,
+        CLINE_DATA_DIR: "/opt/custom-cline",
+      }),
+    ).toBe(path.resolve("/opt/custom-cline"));
   });
 });
 

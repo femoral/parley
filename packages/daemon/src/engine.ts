@@ -1193,6 +1193,14 @@ export class TaskEngine {
     model: string | null,
     effort: string | null,
   ): { model: string; effort: string | null } {
+    // CLI selection is advisory for rejection text only (#284) — fail soft
+    // if the adapter throws (should not) or has no reader.
+    let cliSelected = null;
+    try {
+      cliSelected = this.adapters.get(vendor)?.readSelectedModel?.() ?? null;
+    } catch {
+      cliSelected = null;
+    }
     try {
       const resolved = resolveAllowedCombo({
         vendor,
@@ -1200,6 +1208,7 @@ export class TaskEngine {
         model,
         effort,
         configPath: this.paths.config,
+        cliSelected,
       });
       return { model: resolved.model, effort: resolved.effort };
     } catch (err) {

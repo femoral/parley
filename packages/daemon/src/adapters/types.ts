@@ -33,6 +33,7 @@ export {
   type Posture,
   type ProbedModels,
   type SandboxMode,
+  type SelectedModel,
   type SpawnPlan,
   type TaskSpec,
   type VendorAdapter,

@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { resolveOperatorVendorHome, type SelectedModel } from "@useparley/core";
 import type {
   AdapterEnforcement,
   HubInfo,
@@ -640,6 +641,10 @@ export function createClineAdapter(env: NodeJS.ProcessEnv = process.env): Vendor
     },
 
     // listModels omitted — no CLI enumeration command (research §7).
+    // Selected-model read (#284): not a catalog — pre-fill + rejection only.
+    readSelectedModel(): SelectedModel | null {
+      return readClineSelectedModel(env);
+    },
   });
 }
 
@@ -648,3 +653,93 @@ export const CLINE_DATA_DIR_REL = DATA_DIR_REL;
 export const CLINE_MCP_SETTINGS_REL = MCP_SETTINGS_REL;
 export const CLINE_SESSION_WRAP_REL = SESSION_WRAP_REL;
 export const CLINE_DATA_DIR_ENV = DATA_DIR_ENV;
+
+/**
+ * Relative path of the operator providers settings file under the cline home
+ * (`~/.cline/data/settings/providers.json`). Co-locates credentials with
+ * model data — parsers must extract only model/reasoning keys (#284).
+ */
+const PROVIDERS_SETTINGS_REL = path.join("data", "settings", "providers.json");
+
+/** Cap on providers.json — credentials co-located; never slurp unbounded. */
+export const CLINE_PROVIDERS_MAX_BYTES = 2 * 1024 * 1024;
+
+/**
+ * Project only the selected model + reasoning effort out of cline's
+ * `providers.json` (#284).
+ *
+ * The file co-locates API keys under each provider's settings — we walk only
+ * `lastUsedProvider` → `providers.<id>.settings.model` and
+ * `settings.reasoning.effort`, and never return, log, or re-serialize anything
+ * else. Fail-soft: never throws; `model: null` means no selection known.
+ *
+ * Parser errors must not embed source fragments (modern `JSON.parse` does) —
+ * callers only see our fixed shape messages, never `err.message`.
+ */
+export function parseClineSelectedModel(text: string): {
+  model: string | null;
+  effort: string | null;
+  error: string | null;
+} {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    // Never interpolate the parser error — it can embed file content (secrets).
+    return { model: null, effort: null, error: "malformed providers.json" };
+  }
+  const root = asRecord(parsed);
+  if (!root) {
+    return { model: null, effort: null, error: "unexpected providers.json shape" };
+  }
+  const lastUsed =
+    typeof root.lastUsedProvider === "string" ? root.lastUsedProvider : null;
+  if (lastUsed === null || lastUsed === "") {
+    // Empty/fresh settings without a selection — not an error.
+    return { model: null, effort: null, error: null };
+  }
+  const providers = asRecord(root.providers);
+  if (!providers) {
+    return { model: null, effort: null, error: "unexpected providers.json shape" };
+  }
+  const provider = asRecord(providers[lastUsed]);
+  if (!provider) {
+    return { model: null, effort: null, error: null };
+  }
+  const settings = asRecord(provider.settings) ?? provider;
+  const model = typeof settings.model === "string" ? settings.model : null;
+  if (model === null || model === "") {
+    return { model: null, effort: null, error: null };
+  }
+  let effort: string | null = null;
+  const reasoning = asRecord(settings.reasoning);
+  if (reasoning && typeof reasoning.effort === "string" && reasoning.effort !== "") {
+    // Surface the stored effort when present. `enabled` is informational —
+    // the CLI still records the effort value alongside it.
+    effort = reasoning.effort;
+  }
+  return { model, effort, error: null };
+}
+
+/**
+ * Read the operator's cline selection from providers.json (#284). Fail soft
+ * on every path — never throws; never logs credential material.
+ */
+export function readClineSelectedModel(
+  env: NodeJS.ProcessEnv = process.env,
+): SelectedModel | null {
+  const home = resolveOperatorVendorHome("cline", env);
+  if (home === null) return null;
+  const settingsPath = path.join(home, PROVIDERS_SETTINGS_REL);
+  let text: string;
+  try {
+    const stat = fs.statSync(settingsPath);
+    if (stat.size > CLINE_PROVIDERS_MAX_BYTES) return null;
+    text = fs.readFileSync(settingsPath, "utf8");
+  } catch {
+    return null;
+  }
+  const { model, effort } = parseClineSelectedModel(text);
+  if (model === null || model === "") return null;
+  return { model, effort };
+}

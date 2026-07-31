@@ -1,0 +1,11 @@
+# Synthetic goose config — no real credentials.
+active_provider: anthropic
+providers:
+  anthropic:
+    enabled: true
+    model: claude-sonnet-4-5-20250929
+    configured: true
+  openai:
+    enabled: false
+    model: gpt-4o
+GOOSE_MODE: auto

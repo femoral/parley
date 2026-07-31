@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   editDistance,
   formatAllowedCombos,
+  formatCliSelectedHint,
   listAllowedCombos,
   ModelAllowlistError,
   noAllowlistMessage,
@@ -170,6 +171,53 @@ describe("resolveAllowedCombo — reject + suggest", () => {
         configPath: CONFIG_PATH,
       }),
     ).toThrow(/effort is required/);
+  });
+
+  it("enriches not_allowed with CLI selection when outside the allowlist (#284)", () => {
+    try {
+      resolveAllowedCombo({
+        vendor: "goose",
+        vendorCfg: cfg,
+        model: "gpt-6",
+        effort: "low",
+        configPath: CONFIG_PATH,
+        cliSelected: { model: "claude-sonnet-4-5-20250929", effort: null },
+      });
+      expect.unreachable();
+    } catch (err) {
+      const msg = (err as Error).message;
+      // Pre-existing shape intact.
+      expect(msg).toMatch(/not allowed/);
+      expect(msg).toMatch(/Allowed:/);
+      expect(msg).toMatch(/did you mean/);
+      // Advisory line only.
+      expect(msg).toMatch(
+        /CLI currently has claude-sonnet-4-5-20250929 selected \(not on the allowlist\)/,
+      );
+    }
+  });
+
+  it("does not change success path or exit semantics when cliSelected is set", () => {
+    const r = resolveAllowedCombo({
+      vendor: "codex",
+      vendorCfg: cfg,
+      model: "gpt-5",
+      effort: "medium",
+      configPath: CONFIG_PATH,
+      cliSelected: { model: "other", effort: "high" },
+    });
+    expect(r).toEqual({ model: "gpt-5", effort: "medium", usedDefault: false });
+  });
+});
+
+describe("formatCliSelectedHint (#284)", () => {
+  it("is empty when selection is allowlisted or absent", () => {
+    const combos = listAllowedCombos(
+      vendor({ "gpt-5": { efforts: ["low", "medium"], default: "low" } }),
+    );
+    expect(formatCliSelectedHint(null, combos)).toBe("");
+    expect(formatCliSelectedHint({ model: "gpt-5", effort: "low" }, combos)).toBe("");
+    expect(formatCliSelectedHint({ model: "gpt-5", effort: null }, combos)).toBe("");
   });
 });
 

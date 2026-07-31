@@ -1,4 +1,6 @@
+import fs from "node:fs";
 import path from "node:path";
+import { resolveOperatorVendorHome, type SelectedModel } from "@useparley/core";
 import type {
   AdapterEnforcement,
   HubInfo,
@@ -411,8 +413,76 @@ export function createOpenhandsAdapter(env: NodeJS.ProcessEnv = process.env): Ve
 
     // listModels omitted: no CLI enumeration command (research §7); only a static
     // SDK VERIFIED_MODELS allowlist, not a live probe.
+    // Selected-model read (#284): not a catalog — pre-fill + rejection only.
+    readSelectedModel(): SelectedModel | null {
+      return readOpenhandsSelectedModel(env);
+    },
   });
 }
 
 /** Exported for tests asserting the SDK MCP tool-timeout ceiling (#107). */
 export const OPENHANDS_MCP_TOOL_TIMEOUT_MS = MCP_TOOL_TIMEOUT_MS;
+
+/** On-disk agent settings under the operator openhands home (#284). */
+const AGENT_SETTINGS_FILE = "agent_settings.json";
+
+/** Cap on agent_settings.json — may co-locate secrets; never slurp unbounded. */
+export const OPENHANDS_AGENT_SETTINGS_MAX_BYTES = 2 * 1024 * 1024;
+
+/**
+ * Project only `llm.model` out of openhands `agent_settings.json` (#284).
+ *
+ * The file may co-locate API keys under `llm` — extract only the model string
+ * and never return, log, or re-serialize the rest. Fail-soft: never throws.
+ * Parser errors must not embed source fragments.
+ */
+export function parseOpenhandsSelectedModel(text: string): {
+  model: string | null;
+  error: string | null;
+} {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    return { model: null, error: "malformed agent_settings.json" };
+  }
+  const root = asRecord(parsed);
+  if (!root) {
+    return { model: null, error: "unexpected agent_settings.json shape" };
+  }
+  const llm = asRecord(root.llm);
+  if (!llm) {
+    // Empty/fresh agent settings without llm — not an error.
+    return { model: null, error: null };
+  }
+  const model = typeof llm.model === "string" ? llm.model : null;
+  if (model === null || model === "") {
+    return { model: null, error: null };
+  }
+  return { model, error: null };
+}
+
+/**
+ * Read the operator's openhands selection from agent_settings.json (#284).
+ * Fail soft on every path — never throws.
+ */
+export function readOpenhandsSelectedModel(
+  env: NodeJS.ProcessEnv = process.env,
+): SelectedModel | null {
+  const home = resolveOperatorVendorHome("openhands", env);
+  if (home === null) return null;
+  const settingsPath = path.join(home, AGENT_SETTINGS_FILE);
+  let text: string;
+  try {
+    const stat = fs.statSync(settingsPath);
+    if (stat.size > OPENHANDS_AGENT_SETTINGS_MAX_BYTES) return null;
+    text = fs.readFileSync(settingsPath, "utf8");
+  } catch {
+    return null;
+  }
+  const { model } = parseOpenhandsSelectedModel(text);
+  if (model === null || model === "") return null;
+  // openhands records reasoning_effort on disk sometimes, but #284 surfaces
+  // only the model for this vendor (no per-selection effort in the AC).
+  return { model, effort: null };
+}

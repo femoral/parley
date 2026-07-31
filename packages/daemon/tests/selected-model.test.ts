@@ -1,0 +1,505 @@
+/**
+ * Selected-model drift guard (#284) — goose, cline, openhands.
+ *
+ * These vendors persist only a current selection, never a catalog. Reads must
+ * fail soft, never feed models.json, and never leak cline credentials.
+ */
+import { afterEach, describe, expect, it } from "vitest";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import {
+  formatAllowedCombos,
+  formatCliSelectedHint,
+  listAllowedCombos,
+  ModelAllowlistError,
+  refreshCatalog,
+  resolveAllowedCombo,
+} from "@useparley/core";
+import {
+  createGooseAdapter,
+  parseGooseSelectedModel,
+  readGooseSelectedModel,
+} from "../src/adapters/goose.js";
+import {
+  createClineAdapter,
+  parseClineSelectedModel,
+  readClineSelectedModel,
+} from "../src/adapters/cline.js";
+import {
+  createOpenhandsAdapter,
+  parseOpenhandsSelectedModel,
+  readOpenhandsSelectedModel,
+} from "../src/adapters/openhands.js";
+import { createAdapterRegistrySync } from "../src/adapters/index.js";
+
+const FIXTURES = fileURLToPath(new URL("./fixtures/", import.meta.url));
+
+function readFixture(...parts: string[]): string {
+  return fs.readFileSync(path.join(FIXTURES, ...parts), "utf8");
+}
+
+function makeHome(): string {
+  return fs.mkdtempSync(path.join(os.tmpdir(), "parley-selected-"));
+}
+
+const CONFIG_PATH = "/tmp/parley-test/parley.json";
+
+// ---------------------------------------------------------------------------
+// Parsers
+// ---------------------------------------------------------------------------
+
+describe("parseGooseSelectedModel", () => {
+  it("reads active_provider model with no per-model effort", () => {
+    const { model, error } = parseGooseSelectedModel(
+      readFixture("goose", "config.well-formed.yaml"),
+    );
+    expect(error).toBeNull();
+    expect(model).toBe("claude-sonnet-4-5-20250929");
+  });
+
+  it("returns null model for empty-but-valid config", () => {
+    const { model, error } = parseGooseSelectedModel(
+      readFixture("goose", "config.empty.yaml"),
+    );
+    expect(error).toBeNull();
+    expect(model).toBeNull();
+  });
+
+  it("degrades on malformed / truncated YAML", () => {
+    const { model } = parseGooseSelectedModel(
+      readFixture("goose", "config.malformed.yaml"),
+    );
+    // Fail soft: no model (unterminated string value is unusable).
+    expect(model).toBeNull();
+  });
+
+  it("returns null when shape is valid-but-unexpected (no providers model)", () => {
+    const { model, error } = parseGooseSelectedModel(
+      readFixture("goose", "config.unexpected.yaml"),
+    );
+    expect(model).toBeNull();
+    // Missing providers entry is "no selection", not a structural hard error.
+    expect(error).toBeNull();
+  });
+});
+
+describe("parseClineSelectedModel", () => {
+  it("returns model and reasoning effort from lastUsedProvider", () => {
+    const { model, effort, error } = parseClineSelectedModel(
+      readFixture("cline", "providers.well-formed.json"),
+    );
+    expect(error).toBeNull();
+    expect(model).toBe("claude-sonnet-4-5");
+    expect(effort).toBe("high");
+  });
+
+  it("returns null for empty-but-valid settings", () => {
+    expect(parseClineSelectedModel(readFixture("cline", "providers.empty.json"))).toEqual({
+      model: null,
+      effort: null,
+      error: null,
+    });
+  });
+
+  it("flags malformed JSON without embedding source (no secret leak)", () => {
+    const result = parseClineSelectedModel(
+      readFixture("cline", "providers.malformed.json"),
+    );
+    expect(result.model).toBeNull();
+    expect(result.error).toBe("malformed providers.json");
+    // Parser error messages must never carry file content / secrets.
+    expect(JSON.stringify(result)).not.toMatch(/sk-test|secret|apiKey/i);
+  });
+
+  it("degrades on unexpected shape without throwing", () => {
+    const result = parseClineSelectedModel(
+      readFixture("cline", "providers.unexpected.json"),
+    );
+    expect(result.model).toBeNull();
+    expect(result.effort).toBeNull();
+    // Fail soft: either a fixed shape error or silent empty — never a throw,
+    // never credential material.
+    if (result.error !== null) {
+      expect(result.error).toMatch(/unexpected|malformed/);
+    }
+  });
+
+  it("never returns credential keys from a well-formed file", () => {
+    const text = readFixture("cline", "providers.well-formed.json");
+    expect(text).toContain("sk-test-dummy-secret-must-never-leak");
+    const { model, effort, error } = parseClineSelectedModel(text);
+    const serialized = JSON.stringify({ model, effort, error });
+    expect(serialized).not.toContain("sk-test");
+    expect(serialized).not.toContain("apiKey");
+    expect(serialized).not.toContain("dummy-secret");
+  });
+});
+
+describe("parseOpenhandsSelectedModel", () => {
+  it("reads llm.model", () => {
+    const { model, error } = parseOpenhandsSelectedModel(
+      readFixture("openhands", "agent_settings.well-formed.json"),
+    );
+    expect(error).toBeNull();
+    expect(model).toBe("anthropic/claude-sonnet-4-5-20250929");
+  });
+
+  it("returns null for empty-but-valid settings", () => {
+    expect(
+      parseOpenhandsSelectedModel(readFixture("openhands", "agent_settings.empty.json")),
+    ).toEqual({ model: null, error: null });
+  });
+
+  it("flags malformed JSON without embedding source", () => {
+    const result = parseOpenhandsSelectedModel(
+      readFixture("openhands", "agent_settings.malformed.json"),
+    );
+    expect(result.model).toBeNull();
+    expect(result.error).toBe("malformed agent_settings.json");
+    expect(JSON.stringify(result)).not.toMatch(/sk-test|secret/i);
+  });
+
+  it("flags unexpected shape", () => {
+    const result = parseOpenhandsSelectedModel(
+      readFixture("openhands", "agent_settings.unexpected.json"),
+    );
+    expect(result.model).toBeNull();
+    expect(result.error).toBeNull(); // llm not an object → no selection
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Adapter readSelectedModel (operator home)
+// ---------------------------------------------------------------------------
+
+describe("adapter readSelectedModel via operator home", () => {
+  let home: string | undefined;
+  afterEach(() => {
+    if (home !== undefined) {
+      fs.rmSync(home, { recursive: true, force: true });
+      home = undefined;
+    }
+  });
+
+  it("goose reads config.yaml under the operator config dir", () => {
+    home = makeHome();
+    const configDir = path.join(home, ".config", "goose");
+    fs.mkdirSync(configDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(configDir, "config.yaml"),
+      readFixture("goose", "config.well-formed.yaml"),
+    );
+    const adapter = createGooseAdapter({ HOME: home });
+    expect(adapter.readSelectedModel?.()).toEqual({
+      model: "claude-sonnet-4-5-20250929",
+      effort: null,
+    });
+  });
+
+  it("goose returns null when config is missing (fresh home)", () => {
+    home = makeHome();
+    const adapter = createGooseAdapter({ HOME: home });
+    expect(adapter.readSelectedModel?.()).toBeNull();
+  });
+
+  it("goose refuses isolated GOOSE_PATH_ROOT and falls back to operator home", () => {
+    home = makeHome();
+    const isolated = path.join(home, "work", ".parley-goose");
+    fs.mkdirSync(path.join(isolated, "config"), { recursive: true });
+    fs.writeFileSync(
+      path.join(isolated, "config", "config.yaml"),
+      "active_provider: only-isolated\nproviders:\n  only-isolated:\n    model: isolated-model\n",
+    );
+    // Operator home empty → null, not the isolated model.
+    const result = readGooseSelectedModel({
+      HOME: home,
+      GOOSE_PATH_ROOT: isolated,
+    });
+    expect(result).toBeNull();
+  });
+
+  it("cline reads providers.json and returns model+effort", () => {
+    home = makeHome();
+    const settingsDir = path.join(home, ".cline", "data", "settings");
+    fs.mkdirSync(settingsDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(settingsDir, "providers.json"),
+      readFixture("cline", "providers.well-formed.json"),
+    );
+    const adapter = createClineAdapter({ HOME: home });
+    expect(adapter.readSelectedModel?.()).toEqual({
+      model: "claude-sonnet-4-5",
+      effort: "high",
+    });
+  });
+
+  it("cline returns null on missing file and never throws on malformed", () => {
+    home = makeHome();
+    const adapter = createClineAdapter({ HOME: home });
+    expect(adapter.readSelectedModel?.()).toBeNull();
+
+    const settingsDir = path.join(home, ".cline", "data", "settings");
+    fs.mkdirSync(settingsDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(settingsDir, "providers.json"),
+      readFixture("cline", "providers.malformed.json"),
+    );
+    expect(adapter.readSelectedModel?.()).toBeNull();
+  });
+
+  it("cline refuses CLINE_DATA_DIR pointing at .cline-parley", () => {
+    home = makeHome();
+    const isolated = path.join(home, "work", ".cline-parley");
+    const settingsDir = path.join(isolated, "data", "settings");
+    fs.mkdirSync(settingsDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(settingsDir, "providers.json"),
+      JSON.stringify({
+        lastUsedProvider: "x",
+        providers: { x: { settings: { model: "only-isolated" } } },
+      }),
+    );
+    expect(
+      readClineSelectedModel({ HOME: home, CLINE_DATA_DIR: isolated }),
+    ).toBeNull();
+  });
+
+  it("openhands reads agent_settings.json llm.model", () => {
+    home = makeHome();
+    const oh = path.join(home, ".openhands");
+    fs.mkdirSync(oh, { recursive: true });
+    fs.writeFileSync(
+      path.join(oh, "agent_settings.json"),
+      readFixture("openhands", "agent_settings.well-formed.json"),
+    );
+    const adapter = createOpenhandsAdapter({ HOME: home });
+    expect(adapter.readSelectedModel?.()).toEqual({
+      model: "anthropic/claude-sonnet-4-5-20250929",
+      effort: null,
+    });
+  });
+
+  it("openhands returns null on missing/malformed", () => {
+    home = makeHome();
+    expect(createOpenhandsAdapter({ HOME: home }).readSelectedModel?.()).toBeNull();
+    const oh = path.join(home, ".openhands");
+    fs.mkdirSync(oh, { recursive: true });
+    fs.writeFileSync(
+      path.join(oh, "agent_settings.json"),
+      readFixture("openhands", "agent_settings.malformed.json"),
+    );
+    expect(readOpenhandsSelectedModel({ HOME: home })).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Catalog isolation — selected-model data never reaches models.json
+// ---------------------------------------------------------------------------
+
+describe("selected-model data never reaches the model catalog (#284)", () => {
+  let home: string | undefined;
+  afterEach(() => {
+    if (home !== undefined) {
+      fs.rmSync(home, { recursive: true, force: true });
+      home = undefined;
+    }
+  });
+
+  it("refresh for goose/cline/openhands is unaffected by selection files", async () => {
+    home = makeHome();
+    // Plant rich selection data under the operator home.
+    const gooseDir = path.join(home, ".config", "goose");
+    fs.mkdirSync(gooseDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(gooseDir, "config.yaml"),
+      readFixture("goose", "config.well-formed.yaml"),
+    );
+    const clineDir = path.join(home, ".cline", "data", "settings");
+    fs.mkdirSync(clineDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(clineDir, "providers.json"),
+      readFixture("cline", "providers.well-formed.json"),
+    );
+    const ohDir = path.join(home, ".openhands");
+    fs.mkdirSync(ohDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(ohDir, "agent_settings.json"),
+      readFixture("openhands", "agent_settings.well-formed.json"),
+    );
+
+    const adapters = createAdapterRegistrySync({ HOME: home });
+    // Sanity: selected reads work.
+    expect(adapters.get("goose")!.readSelectedModel?.()?.model).toBe(
+      "claude-sonnet-4-5-20250929",
+    );
+    expect(adapters.get("cline")!.readSelectedModel?.()?.model).toBe("claude-sonnet-4-5");
+    expect(adapters.get("openhands")!.readSelectedModel?.()?.model).toBe(
+      "anthropic/claude-sonnet-4-5-20250929",
+    );
+
+    // These three must NOT implement readModels (selection ≠ catalog).
+    expect(adapters.get("goose")!.readModels).toBeUndefined();
+    expect(adapters.get("cline")!.readModels).toBeUndefined();
+    expect(adapters.get("openhands")!.readModels).toBeUndefined();
+
+    const before = {
+      goose: {
+        fetched_at: null,
+        source: "manual",
+        models: [{ id: "pre-existing-goose", efforts: [], default_effort: null }],
+      },
+      cline: {
+        fetched_at: null,
+        source: "manual",
+        models: [{ id: "pre-existing-cline", efforts: ["high"], default_effort: null }],
+      },
+      openhands: {
+        fetched_at: null,
+        source: "manual",
+        models: [{ id: "pre-existing-oh", efforts: [], default_effort: null }],
+      },
+    };
+
+    const { catalog, warnings } = await refreshCatalog(
+      before,
+      ["goose", "cline", "openhands"],
+      adapters,
+      () => "2026-07-30T00:00:00.000Z",
+    );
+
+    // Existing entries kept (no discovery channel to overwrite them).
+    expect(catalog.goose!.models.map((m) => m.id)).toEqual(["pre-existing-goose"]);
+    expect(catalog.cline!.models.map((m) => m.id)).toEqual(["pre-existing-cline"]);
+    expect(catalog.openhands!.models.map((m) => m.id)).toEqual(["pre-existing-oh"]);
+
+    // Selection ids must not appear in the catalog.
+    const allIds = ["goose", "cline", "openhands"].flatMap((v) =>
+      catalog[v]!.models.map((m) => m.id),
+    );
+    expect(allIds).not.toContain("claude-sonnet-4-5-20250929");
+    expect(allIds).not.toContain("claude-sonnet-4-5");
+    expect(allIds).not.toContain("anthropic/claude-sonnet-4-5-20250929");
+
+    // Selection files must not introduce new warning classes. The only
+    // expected lines are the pre-existing "no probe" keep-existing notices —
+    // nothing about providers.json / config.yaml / agent_settings.
+    for (const w of warnings) {
+      expect(w).toMatch(/no refresh probe available; kept existing entry/);
+      expect(w).not.toMatch(/providers\.json|config\.yaml|agent_settings|selected/i);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Allowlist rejection enrichment
+// ---------------------------------------------------------------------------
+
+describe("allowlist rejection names CLI selection (#284)", () => {
+  const cfg = {
+    models: {
+      "gpt-5": { efforts: ["low", "medium"], default: "low" as const },
+      "gpt-4": { efforts: ["high"] },
+    },
+  };
+
+  it("adds a line when CLI selection is readable and not allowlisted", () => {
+    try {
+      resolveAllowedCombo({
+        vendor: "cline",
+        vendorCfg: cfg,
+        model: "gpt-6",
+        effort: "low",
+        configPath: CONFIG_PATH,
+        cliSelected: { model: "claude-sonnet-4-5", effort: "high" },
+      });
+      expect.unreachable();
+    } catch (err) {
+      expect(err).toBeInstanceOf(ModelAllowlistError);
+      const msg = (err as Error).message;
+      // Pre-existing rejection shape intact.
+      expect(msg).toMatch(/not allowed/);
+      expect(msg).toMatch(/Allowed:/);
+      expect(msg).toMatch(/did you mean/);
+      expect(msg).toMatch(/gpt-/);
+      // New advisory line.
+      expect(msg).toMatch(/CLI currently has claude-sonnet-4-5@high selected/);
+      expect(msg).toMatch(/not on the allowlist/);
+    }
+  });
+
+  it("preserves pre-existing output when no CLI selection is known", () => {
+    let without: string | undefined;
+    try {
+      resolveAllowedCombo({
+        vendor: "codex",
+        vendorCfg: cfg,
+        model: "gpt-6",
+        effort: "low",
+        configPath: CONFIG_PATH,
+      });
+      expect.unreachable();
+    } catch (err) {
+      without = (err as Error).message;
+    }
+    let withNull: string | undefined;
+    try {
+      resolveAllowedCombo({
+        vendor: "codex",
+        vendorCfg: cfg,
+        model: "gpt-6",
+        effort: "low",
+        configPath: CONFIG_PATH,
+        cliSelected: null,
+      });
+      expect.unreachable();
+    } catch (err) {
+      withNull = (err as Error).message;
+    }
+    expect(without).toBe(withNull);
+    expect(without).not.toMatch(/CLI currently has/);
+  });
+
+  it("omits the line when the CLI selection is already allowlisted", () => {
+    try {
+      resolveAllowedCombo({
+        vendor: "codex",
+        vendorCfg: cfg,
+        model: "gpt-6",
+        effort: "low",
+        configPath: CONFIG_PATH,
+        cliSelected: { model: "gpt-5", effort: "medium" },
+      });
+      expect.unreachable();
+    } catch (err) {
+      expect((err as Error).message).not.toMatch(/CLI currently has/);
+    }
+  });
+
+  it("formatCliSelectedHint never includes credential material", () => {
+    const combos = listAllowedCombos(cfg);
+    const hint = formatCliSelectedHint(
+      { model: "claude-sonnet-4-5", effort: "high" },
+      combos,
+    );
+    expect(hint).toContain("claude-sonnet-4-5@high");
+    expect(hint).not.toMatch(/sk-|apiKey|secret/i);
+    // Baseline allowed list still formats without the selection.
+    expect(formatAllowedCombos(combos)).toMatch(/gpt-5@low/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Adapter contract: no defaultModel / defaultEffort
+// ---------------------------------------------------------------------------
+
+describe("VendorAdapter no longer declares defaultModel/defaultEffort (#284)", () => {
+  it("no built-in adapter sets defaultModel or defaultEffort", () => {
+    const registry = createAdapterRegistrySync({});
+    for (const [id, adapter] of registry) {
+      expect(adapter, id).not.toHaveProperty("defaultModel");
+      expect(adapter, id).not.toHaveProperty("defaultEffort");
+    }
+  });
+});
