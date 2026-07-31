@@ -734,6 +734,9 @@ export function readClineSelectedModel(
   const settingsPath = path.join(home, PROVIDERS_SETTINGS_REL);
   let text: string;
   try {
+    // TOCTOU accepted: stat then read (same rationale as goose/openhands —
+    // isFile() stops the static-FIFO hang; race-to-FIFO and hung mounts are
+    // accepted fail-soft residual risk on an advisory path).
     const stat = fs.statSync(settingsPath);
     // #288 / #284: refuse non-files (FIFO, dir, device). readFileSync on a
     // FIFO blocks the daemon event loop forever — selection is fail-soft null.

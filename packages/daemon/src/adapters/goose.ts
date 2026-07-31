@@ -712,6 +712,13 @@ export function readGooseSelectedModel(
   const configPath = path.join(home, OPERATOR_CONFIG_FILE);
   let text: string;
   try {
+    // TOCTOU accepted: stat then read. A path swapped to FIFO between the
+    // two calls can still block, and a regular file on a hung network mount
+    // blocks regardless. Bound open (O_RDONLY|O_NONBLOCK) is not portable
+    // enough for our Node target and would not fix hung mounts; selection is
+    // advisory fail-soft — operators who can rewrite the operator home can
+    // already DoS the home itself. The isFile() guard stops the common
+    // static-FIFO case without removing the check (removing it hangs suites).
     const stat = fs.statSync(configPath);
     // #288 / #284: refuse non-files (FIFO, dir, device). readFileSync on a
     // FIFO blocks the daemon event loop forever — selection is fail-soft null.

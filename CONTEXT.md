@@ -79,9 +79,11 @@ human/agent driving parley is the **orchestrator**.
   adapter returns at most one model (+ optional effort) the operator has
   already chosen inside that vendor CLI. **Not a catalog channel** — never
   written to `models.json`. Surfaces only as (1) a setup allowlist pre-fill
-  and (2) an advisory line on allowlist rejections when the CLI selection is
-  outside the allowlist. Used by vendors that persist a selection but no
-  enumerable catalog (goose, cline, openhands) (#284).
+  (empty-catalog vendors may become delegatable from a validated selection —
+  ADR-0014 amendment) and (2) an advisory line on allowlist rejections
+  (`not_allowed` and `no_allowlist`) when the CLI selection is outside the
+  allowlist. Used by vendors that persist a selection but no enumerable
+  catalog (goose, cline, openhands) (#284).
 - **Operator vendor home** — the directory the *operator* uses when they run
   a vendor CLI interactively (`~/.codex`, `~/.kimi-code`, …, honouring the
   CLI's env override when set). Distinct from a **per-task isolated home**
