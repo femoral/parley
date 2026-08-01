@@ -1,0 +1,20 @@
+{
+  "openrouter": {
+    "fp": "deadbeefcafebabe",
+    "at": 1721000000.0,
+    "models": [
+      "openrouter/model-00",
+      "openrouter/model-01",
+      "openrouter/model-02"
+    ],
+    "api_key": "PARLEY_FIXTURE_SENTINEL_MUST_NOT_LEAK"
+  },
+  "nous": {
+    "fp": "0123456789abcdef",
+    "at": 1721000000.0,
+    "models": [
+      "nous/model-00",
+      "nous/model-01"
+    ]
+  }
+}

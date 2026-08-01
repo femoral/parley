@@ -1,0 +1,285 @@
+{
+  "version": 1,
+  "updated_at": "2026-07-15T12:00:00Z",
+  "metadata": {
+    "source": "parley fixture",
+    "docs": "synthetic",
+    "api_key": "PARLEY_FIXTURE_SENTINEL_MUST_NOT_LEAK"
+  },
+  "providers": {
+    "openrouter": {
+      "metadata": {
+        "note": "curated"
+      },
+      "models": [
+        {
+          "id": "openrouter/model-00",
+          "description": "recommended",
+          "default": true
+        },
+        {
+          "id": "openrouter/model-01",
+          "description": "or desc 1"
+        },
+        {
+          "id": "openrouter/model-02",
+          "description": "or desc 2"
+        },
+        {
+          "id": "openrouter/model-03",
+          "description": "or desc 3"
+        },
+        {
+          "id": "openrouter/model-04",
+          "description": "or desc 4"
+        },
+        {
+          "id": "openrouter/model-05",
+          "description": "or desc 5"
+        },
+        {
+          "id": "openrouter/model-06",
+          "description": "or desc 6"
+        },
+        {
+          "id": "openrouter/model-07",
+          "description": "or desc 7"
+        },
+        {
+          "id": "openrouter/model-08",
+          "description": "or desc 8"
+        },
+        {
+          "id": "openrouter/model-09",
+          "description": "or desc 9"
+        },
+        {
+          "id": "openrouter/model-10",
+          "description": "or desc 10"
+        },
+        {
+          "id": "openrouter/model-11",
+          "description": "or desc 11"
+        },
+        {
+          "id": "openrouter/model-12",
+          "description": "or desc 12"
+        },
+        {
+          "id": "openrouter/model-13",
+          "description": "or desc 13"
+        },
+        {
+          "id": "openrouter/model-14",
+          "description": "or desc 14"
+        },
+        {
+          "id": "openrouter/model-15",
+          "description": "or desc 15"
+        },
+        {
+          "id": "openrouter/model-16",
+          "description": "or desc 16"
+        },
+        {
+          "id": "openrouter/model-17",
+          "description": "or desc 17"
+        },
+        {
+          "id": "openrouter/model-18",
+          "description": "or desc 18"
+        },
+        {
+          "id": "openrouter/model-19",
+          "description": "or desc 19"
+        },
+        {
+          "id": "openrouter/model-20",
+          "description": "or desc 20"
+        },
+        {
+          "id": "openrouter/model-21",
+          "description": "or desc 21"
+        },
+        {
+          "id": "openrouter/model-22",
+          "description": "or desc 22"
+        },
+        {
+          "id": "openrouter/model-23",
+          "description": "or desc 23"
+        },
+        {
+          "id": "openrouter/model-24",
+          "description": "or desc 24"
+        },
+        {
+          "id": "openrouter/model-25",
+          "description": "or desc 25"
+        },
+        {
+          "id": "openrouter/model-26",
+          "description": "or desc 26"
+        },
+        {
+          "id": "openrouter/model-27",
+          "description": "or desc 27"
+        },
+        {
+          "id": "openrouter/model-28",
+          "description": "or desc 28"
+        },
+        {
+          "id": "openrouter/model-29",
+          "description": "or desc 29"
+        },
+        {
+          "id": "openrouter/model-30",
+          "description": "or desc 30"
+        },
+        {
+          "id": "openrouter/model-31",
+          "description": "or desc 31"
+        },
+        {
+          "id": "openrouter/model-32",
+          "description": "or desc 32"
+        },
+        {
+          "id": "openrouter/model-33",
+          "description": "or desc 33"
+        },
+        {
+          "id": "openrouter/model-34",
+          "description": "or desc 34"
+        },
+        {
+          "id": "openrouter/model-35",
+          "description": "or desc 35"
+        },
+        {
+          "id": "openrouter/model-36",
+          "description": "or desc 36"
+        },
+        {
+          "id": "openrouter/model-37",
+          "description": "or desc 37"
+        },
+        {
+          "id": "openrouter/model-38",
+          "description": "or desc 38"
+        },
+        {
+          "id": "openrouter/model-39",
+          "description": "or desc 39"
+        },
+        {
+          "id": "openrouter/model-40",
+          "description": "or desc 40"
+        }
+      ]
+    },
+    "nous": {
+      "models": [
+        {
+          "id": "nous/model-00",
+          "default": true,
+          "description": "portal default"
+        },
+        {
+          "id": "nous/model-01"
+        },
+        {
+          "id": "nous/model-02"
+        },
+        {
+          "id": "nous/model-03"
+        },
+        {
+          "id": "nous/model-04"
+        },
+        {
+          "id": "nous/model-05"
+        },
+        {
+          "id": "nous/model-06"
+        },
+        {
+          "id": "nous/model-07"
+        },
+        {
+          "id": "nous/model-08"
+        },
+        {
+          "id": "nous/model-09"
+        },
+        {
+          "id": "nous/model-10"
+        },
+        {
+          "id": "nous/model-11"
+        },
+        {
+          "id": "nous/model-12"
+        },
+        {
+          "id": "nous/model-13"
+        },
+        {
+          "id": "nous/model-14"
+        },
+        {
+          "id": "nous/model-15"
+        },
+        {
+          "id": "nous/model-16"
+        },
+        {
+          "id": "nous/model-17"
+        },
+        {
+          "id": "nous/model-18"
+        },
+        {
+          "id": "nous/model-19"
+        },
+        {
+          "id": "nous/model-20"
+        },
+        {
+          "id": "nous/model-21"
+        },
+        {
+          "id": "nous/model-22"
+        },
+        {
+          "id": "nous/model-23"
+        },
+        {
+          "id": "nous/model-24"
+        },
+        {
+          "id": "nous/model-25"
+        },
+        {
+          "id": "nous/model-26"
+        },
+        {
+          "id": "nous/model-27"
+        },
+        {
+          "id": "nous/model-28"
+        },
+        {
+          "id": "nous/model-29"
+        },
+        {
+          "id": "nous/model-30"
+        },
+        {
+          "id": "nous/model-31"
+        }
+      ]
+    }
+  }
+}
