@@ -1,0 +1,10 @@
+{
+  "version": "not-a-number",
+  "updated_at": 12345,
+  "providers": [
+    "should-be-object"
+  ],
+  "metadata": {
+    "api_key": "PARLEY_FIXTURE_SENTINEL_MUST_NOT_LEAK"
+  }
+}
