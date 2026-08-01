@@ -182,6 +182,35 @@ export function displayVendorPath(
   return absolutePath;
 }
 
+/**
+ * Collapse operator-home absolute path prefixes embedded anywhere in free text
+ * (e.g. Node `fs` error messages, execFile binary paths) to `~/…` form. Used
+ * by catalog-refresh warnings so operator usernames do not leak into
+ * `~/.parley/models.json` or bug reports (#291). Reuses {@link operatorHomeDir}
+ * — the same home basis as {@link displayVendorPath} — but replaces mid-string
+ * occurrences, not only when the whole string is a path.
+ *
+ * Also collapses a bare home dir at a path boundary (end of string, quote, or
+ * whitespace). Longer paths that only share a prefix (`/home/ab` vs `/home/abc`)
+ * are left alone.
+ */
+export function collapseOperatorHomeInText(
+  text: string,
+  env: NodeJS.ProcessEnv = process.env,
+): string {
+  const home = operatorHomeDir(env);
+  // Degenerate homes would rewrite nearly every absolute path; leave text alone.
+  if (!home || home === path.sep) return text;
+  const prefix = home.endsWith(path.sep) ? home : `${home}${path.sep}`;
+  let out = text.includes(prefix) ? text.split(prefix).join(`~${path.sep}`) : text;
+  // Bare home at a path boundary (not a longer username/path that shares a prefix).
+  if (out.includes(home)) {
+    const escaped = home.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    out = out.replace(new RegExp(`${escaped}(?=$|[\\s"'])`, "g"), "~");
+  }
+  return out;
+}
+
 function defaultHome(spec: HomeSpec, env: NodeJS.ProcessEnv): string {
   return path.join(userHomeFromEnv(env), spec.defaultRel);
 }

@@ -1,3 +1,4 @@
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import type { ModelEntry, ModelProber, ProbedModels, VendorModels } from "../src/models.js";
 import {
@@ -6,6 +7,7 @@ import {
   refreshCatalog,
 } from "../src/models.js";
 import { getShippedVendorModels } from "../src/models.js";
+import { operatorHomeDir } from "../src/vendor-home.js";
 
 function entry(partial: Partial<ModelEntry> & { id: string }): ModelEntry {
   return {
@@ -198,6 +200,85 @@ describe("refreshCatalog with readModels + listModels", () => {
     expect(catalog.codex!.models).toEqual([entry({ id: "gpt-5.6-sol", efforts: ["low"] })]);
     expect(catalog.codex!.source).toBe("codex debug models");
     expect(warnings).toEqual(["codex: disk read failed (EACCES)"]);
+  });
+
+  it("collapses operator home paths in disk-read failure warnings (#291)", async () => {
+    // Simulate a real Node fs error: absolute path under the operator home is
+    // embedded mid-message. Collapse must happen at the shared refreshCatalog
+    // warning site so every reader benefits.
+    const home = operatorHomeDir();
+    const absPath = path.join(home, ".hermes", "cache", "model_catalog.json");
+    const fsMsg = `EACCES: permission denied, open '${absPath}'`;
+    const adapters = new Map([
+      [
+        "hermes",
+        prober({
+          readModels: () => Promise.reject(new Error(fsMsg)),
+          listModels: () =>
+            Promise.resolve({
+              source: "hermes models",
+              models: [entry({ id: "from-probe" })],
+            }),
+        }),
+      ],
+    ]);
+    const { warnings } = await refreshCatalog({}, ["hermes"], adapters, () => NOW);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toMatch(/hermes: disk read failed/);
+    expect(warnings[0]).toContain("~/.hermes/cache/model_catalog.json");
+    expect(warnings[0]).not.toContain(home);
+  });
+
+  it("collapses operator home paths when disk fails and both channels empty (#291)", async () => {
+    const home = operatorHomeDir();
+    const absPath = path.join(home, ".codex", "models_cache.json");
+    const fsMsg = `ENOENT: no such file or directory, open '${absPath}'`;
+    const adapters = new Map([
+      [
+        "codex",
+        prober({
+          readModels: () => Promise.reject(new Error(fsMsg)),
+          listModels: () => Promise.reject(new Error("not installed")),
+        }),
+      ],
+    ]);
+    const base: Record<string, VendorModels> = {
+      codex: {
+        fetched_at: null,
+        source: "manual",
+        models: [entry({ id: "kept" })],
+      },
+    };
+    const { warnings } = await refreshCatalog(base, ["codex"], adapters, () => NOW);
+    expect(warnings[0]).toMatch(/disk read failed/);
+    expect(warnings[0]).toContain("~/.codex/models_cache.json");
+    expect(warnings[0]).not.toContain(home);
+  });
+
+  it("collapses operator home paths in probe failure warnings (#291)", async () => {
+    // Probe errors can embed absolute paths (execFile binary under home via
+    // PARLEY_*_BIN, or vendor stderr naming config under home).
+    const home = operatorHomeDir();
+    const binPath = path.join(home, ".local", "bin", "hermes");
+    const probeMsg = `spawn ${binPath} EACCES`;
+    const adapters = new Map([
+      [
+        "hermes",
+        prober({
+          readModels: () =>
+            Promise.resolve({
+              source: "~/.hermes/cache/model_catalog.json",
+              models: [entry({ id: "from-disk" })],
+            }),
+          listModels: () => Promise.reject(new Error(probeMsg)),
+        }),
+      ],
+    ]);
+    const { warnings } = await refreshCatalog({}, ["hermes"], adapters, () => NOW);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toMatch(/hermes: probe failed/);
+    expect(warnings[0]).toContain("~/.local/bin/hermes");
+    expect(warnings[0]).not.toContain(home);
   });
 
   it("falls through to probe when disk returns empty (fresh home)", async () => {

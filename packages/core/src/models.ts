@@ -5,6 +5,7 @@ import {
   SHIPPED_CATALOG_VENDOR_IDS,
   SHIPPED_MODEL_CATALOG,
 } from "./shipped-model-catalog.js";
+import { collapseOperatorHomeInText } from "./vendor-home.js";
 
 export { SHIPPED_CATALOG_RETRIEVED_AT, SHIPPED_CATALOG_VENDOR_IDS, SHIPPED_MODEL_CATALOG };
 
@@ -371,16 +372,24 @@ export async function refreshCatalog<A extends ModelProber>(
     const disk = await safeDiscover(adapter.readModels?.bind(adapter), existing);
     const probe = await safeDiscover(adapter.listModels?.bind(adapter), existing);
     const merged = mergeDiscoveredModels(disk.result, probe.result);
+    // Collapse operator-home prefixes in caught error text once here so every
+    // reader/probe (codex, kimi, hermes, …) benefits without each adapter
+    // having to remember (#291). Paths may be embedded mid-string (fs open
+    // paths, execFile binary under home, stderr naming config under home).
+    const diskError =
+      disk.error !== null ? collapseOperatorHomeInText(disk.error) : null;
+    const probeError =
+      probe.error !== null ? collapseOperatorHomeInText(probe.error) : null;
 
     if (merged !== null && merged.models.length > 0) {
       // Fail-soft ≠ silent: surface a channel failure even when the other
       // channel filled the catalog (finding 4). Empty disk/probe (fresh home)
       // stays quiet — that is a normal non-error state.
-      if (adapter.readModels && disk.error) {
-        warnings.push(`${id}: disk read failed (${disk.error})`);
+      if (adapter.readModels && diskError) {
+        warnings.push(`${id}: disk read failed (${diskError})`);
       }
-      if (adapter.listModels && probe.error) {
-        warnings.push(`${id}: probe failed (${probe.error})`);
+      if (adapter.listModels && probeError) {
+        warnings.push(`${id}: probe failed (${probeError})`);
       }
       next[id] = { fetched_at: now(), source: merged.source, models: merged.models };
       continue;
@@ -389,11 +398,11 @@ export async function refreshCatalog<A extends ModelProber>(
     // Both channels empty/failed — explain why, then fall back.
     const reasons: string[] = [];
     if (adapter.readModels) {
-      if (disk.error) reasons.push(`disk read failed (${disk.error})`);
+      if (diskError) reasons.push(`disk read failed (${diskError})`);
       else reasons.push("disk read returned no models");
     }
     if (adapter.listModels) {
-      if (probe.error) reasons.push(`probe failed (${probe.error})`);
+      if (probeError) reasons.push(`probe failed (${probeError})`);
       else reasons.push("probe returned no models");
     }
     if (!adapter.readModels && !adapter.listModels) {
