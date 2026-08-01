@@ -447,7 +447,17 @@ export function createCodexAdapter(env: NodeJS.ProcessEnv = process.env): Vendor
       const sourceBase = displayVendorPath(cachePath, env);
       let text: string;
       try {
+        // TOCTOU accepted: stat then read. isFile() stops the static-FIFO /
+        // device hang (#288); a path swapped to FIFO between the two calls
+        // can still block, and a regular file on a hung network mount blocks
+        // regardless. Bound open is not portable enough for our Node target.
         const stat = fs.statSync(cachePath);
+        // #288: refuse non-files (FIFO, dir, device). readFileSync on a FIFO
+        // blocks the daemon event loop forever — treat as present-but-unusable
+        // so refreshCatalog can warn and fall through.
+        if (!stat.isFile()) {
+          throw new Error(`${MODELS_CACHE_FILE} is not a regular file`);
+        }
         if (stat.size > MODELS_CACHE_MAX_BYTES) {
           throw new Error(
             `${MODELS_CACHE_FILE} exceeds size cap (${MODELS_CACHE_MAX_BYTES} bytes)`,

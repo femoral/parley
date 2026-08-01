@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
+import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -198,6 +199,18 @@ describe("codex adapter readModels", () => {
     await expect(adapter.readModels!(undefined)).rejects.toThrow(/malformed models_cache/);
   });
 
+  it("rejects without hanging when models_cache.json is a FIFO (#288)", async () => {
+    // Never readFileSync the FIFO in the test — only the adapter's isFile()
+    // guard may touch the path, and it must refuse before opening.
+    home = makeOperatorHome();
+    const fifo = path.join(home, "models_cache.json");
+    execFileSync("mkfifo", [fifo]);
+    const adapter = createCodexAdapter({ CODEX_HOME: home });
+    const started = Date.now();
+    await expect(adapter.readModels!(undefined)).rejects.toThrow(/not a regular file/);
+    expect(Date.now() - started).toBeLessThan(2000);
+  });
+
   it("refuses CODEX_HOME pointing at a per-task isolated home (isolation guard)", async () => {
     // Shared resolver refuses isolation-marker paths on every override env,
     // including research-only CODEX_HOME. Decy cache under the marker must
@@ -298,5 +311,17 @@ describe("refreshCatalog end-to-end: degraded disk reads warn (finding 4 / round
     const { catalog, warnings } = await refreshCatalog({}, ["codex"], new Map([["codex", adapter]]));
     expect(catalog.codex!.models.map((m) => m.id)).toEqual(["from-probe"]);
     expect(warnings.some((w) => /disk read failed.*size cap/i.test(w))).toBe(true);
+  });
+
+  it("warns when models_cache.json is a FIFO without hanging (#288)", async () => {
+    home = makeOperatorHome();
+    const fifo = path.join(home, "models_cache.json");
+    execFileSync("mkfifo", [fifo]);
+    const adapter = { ...createCodexAdapter({ CODEX_HOME: home }), ...probeOk };
+    const started = Date.now();
+    const { catalog, warnings } = await refreshCatalog({}, ["codex"], new Map([["codex", adapter]]));
+    expect(Date.now() - started).toBeLessThan(2000);
+    expect(catalog.codex!.models.map((m) => m.id)).toEqual(["from-probe"]);
+    expect(warnings.some((w) => /disk read failed.*not a regular file/i.test(w))).toBe(true);
   });
 });

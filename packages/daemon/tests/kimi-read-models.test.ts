@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
+import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -155,6 +156,18 @@ describe("kimi adapter readModels", () => {
     await expect(adapter.readModels!(undefined)).rejects.toThrow(/malformed config\.toml/);
   });
 
+  it("rejects without hanging when config.toml is a FIFO (#288)", async () => {
+    // Never readFileSync the FIFO in the test — only the adapter's isFile()
+    // guard may touch the path, and it must refuse before opening.
+    home = makeOperatorHome();
+    const fifo = path.join(home, "config.toml");
+    execFileSync("mkfifo", [fifo]);
+    const adapter = createKimiAdapter({ KIMI_CODE_HOME: home });
+    const started = Date.now();
+    await expect(adapter.readModels!(undefined)).rejects.toThrow(/not a regular file/);
+    expect(Date.now() - started).toBeLessThan(2000);
+  });
+
   it("refuses KIMI_CODE_HOME pointing at a per-task isolated home (finding 2/6)", async () => {
     // Realistic child env: adapter set KIMI_CODE_HOME to <cwd>/.parley-kimi.
     // The isolated tree holds a decoy model; discovery must fall back to
@@ -247,5 +260,25 @@ describe("refreshCatalog end-to-end: degraded kimi disk reads warn", () => {
     const { catalog, warnings } = await refreshCatalog({}, ["kimi"], new Map([["kimi", adapter]]));
     expect(catalog.kimi!.models.map((m) => m.id)).toEqual(["from-probe"]);
     expect(warnings.some((w) => /disk read failed.*size cap/i.test(w))).toBe(true);
+  });
+
+  it("warns when config.toml is a FIFO without hanging (#288)", async () => {
+    home = makeOperatorHome();
+    const fifo = path.join(home, "config.toml");
+    execFileSync("mkfifo", [fifo]);
+    const base = createKimiAdapter({ KIMI_CODE_HOME: home });
+    const adapter = {
+      ...base,
+      listModels: () =>
+        Promise.resolve({
+          source: "kimi probe stub",
+          models: [{ id: "from-probe", efforts: [] as string[], default_effort: null }],
+        }),
+    };
+    const started = Date.now();
+    const { catalog, warnings } = await refreshCatalog({}, ["kimi"], new Map([["kimi", adapter]]));
+    expect(Date.now() - started).toBeLessThan(2000);
+    expect(catalog.kimi!.models.map((m) => m.id)).toEqual(["from-probe"]);
+    expect(warnings.some((w) => /disk read failed.*not a regular file/i.test(w))).toBe(true);
   });
 });
