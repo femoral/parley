@@ -1,0 +1,26 @@
+{
+  "generatedBy": "openclaw-plugin-model-catalog-v1",
+  "providers": {
+    "opencode": {
+      "baseUrl": "https://example.invalid/v1",
+      "models": [
+        {
+          "id": "claude-opus-4-6",
+          "name": "Claude Opus 4.6",
+          "api": "openai-completions",
+          "contextWindow": 200000
+        }
+      ]
+    },
+    "unauthed-provider": {
+      "baseUrl": "https://example.invalid/other",
+      "models": [
+        {
+          "id": "should-be-filtered",
+          "name": "Filtered Out",
+          "api": "openai-completions"
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "agents": { "list": [{ "id": "main" }] },
+  "gateway": {
+    "auth": { "mode": "token", "token": "PARLEY_FIXTURE_SENTINEL_MUST_NOT_LEAK" }
+  }
+}

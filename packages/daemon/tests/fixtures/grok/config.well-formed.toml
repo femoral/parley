@@ -1,0 +1,24 @@
+# Synthetic fixture — mirrors grok operator config with [model.*] variants.
+# Cache may hold only grok-4.5; agent/BYOK variants live here (#282).
+
+[models]
+default = "grok-4.5"
+default_reasoning_effort = "low"
+
+# Agent variant outside the cache (bare id, no dots).
+[model.grok-build]
+base_url = "https://example.invalid/v1"
+api_backend = "responses"
+env_key = "PARLEY_FIXTURE_SENTINEL_MUST_NOT_LEAK"
+context_window = 256000
+
+# Dotted id via quoted header (parseToml preserves the full id).
+[model."grok-4.5-build"]
+base_url = "https://example.invalid/v1"
+api_backend = "responses"
+context_window = 128000
+
+# Co-located credential material must never surface in catalog/errors.
+[model.byok-custom]
+api_key = "PARLEY_FIXTURE_SENTINEL_MUST_NOT_LEAK"
+base_url = "https://example.invalid/custom"

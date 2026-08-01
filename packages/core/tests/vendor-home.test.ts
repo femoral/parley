@@ -140,6 +140,20 @@ describe("resolveOperatorVendorHome", () => {
       }),
     ).toBe(path.resolve("/opt/custom-cline"));
   });
+
+  it("resolves pi agent home via PI_CODING_AGENT_DIR (#282)", () => {
+    const home = "/tmp/operator";
+    expect(resolveOperatorVendorHome("pi", { HOME: home })).toBe(
+      path.join(home, ".pi", "agent"),
+    );
+    expect(
+      resolveOperatorVendorHome("pi", {
+        HOME: home,
+        PI_CODING_AGENT_DIR: "/opt/custom-pi-agent",
+      }),
+    ).toBe(path.resolve("/opt/custom-pi-agent"));
+    expect(operatorVendorHomeIds()).toContain("pi");
+  });
 });
 
 describe("displayVendorPath / operatorHomeDir", () => {

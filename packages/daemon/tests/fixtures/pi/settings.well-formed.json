@@ -1,0 +1,9 @@
+{
+  "lastChangelogVersion": "0.81.1-fixture",
+  "theme": "dark",
+  "defaultProvider": "openai-codex",
+  "defaultModel": "gpt-5.5",
+  "defaultThinkingLevel": "high",
+  "packages": [],
+  "extensions": ["/tmp/PARLEY_FIXTURE_SENTINEL_MUST_NOT_LEAK/extension.ts"]
+}

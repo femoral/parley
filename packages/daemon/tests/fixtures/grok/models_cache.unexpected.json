@@ -1,0 +1,5 @@
+{
+  "fetched_at": "2026-07-15T10:00:00.000Z",
+  "not_models": "wrong shape",
+  "models": ["should-be-object-not-array"]
+}

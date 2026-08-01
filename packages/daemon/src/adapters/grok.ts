@@ -1,3 +1,6 @@
+import fs from "node:fs";
+import path from "node:path";
+import { displayVendorPath, resolveOperatorVendorHome } from "@useparley/core";
 import type {
   AdapterEnforcement,
   HubInfo,
@@ -13,7 +16,7 @@ import type {
 } from "./types.js";
 import { VENDOR_DIAG_PREFIX, withPostureDiagnostics } from "./types.js";
 import { runProbe } from "./probe.js";
-import { tomlString } from "./toml.js";
+import { parseToml, tomlString, type TomlTable, type TomlValue } from "./toml.js";
 
 /**
  * The `grok` vendor adapter — real delegation to Grok Build (`grok` binary,
@@ -218,6 +221,259 @@ function sandboxToml(base: string, task: TaskSpec): string {
 
 /** The probe command recorded as the catalog entry's `source` on refresh. */
 const MODELS_SOURCE = "grok models";
+
+/** On-disk cache under the operator's grok home (#282). */
+const MODELS_CACHE_FILE = "models_cache.json";
+/** Operator config with optional `[model.*]` BYOK / agent-variant tables (#282). */
+const OPERATOR_CONFIG_FILE = "config.toml";
+
+/**
+ * Cap on models_cache.json — real caches embed model info blobs and can hold
+ * co-located api_key fields; never slurp unbounded.
+ */
+export const GROK_MODELS_CACHE_MAX_BYTES = 8 * 1024 * 1024;
+/** Cap on operator config.toml (auth co-located under `[model.*]` env_key paths). */
+export const GROK_CONFIG_MAX_BYTES = 2 * 1024 * 1024;
+
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  return typeof value === "object" && value !== null
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
+function asString(value: unknown): string {
+  return typeof value === "string" ? value : "";
+}
+
+function isEnoent(err: unknown): boolean {
+  return (
+    typeof err === "object" &&
+    err !== null &&
+    "code" in err &&
+    (err as { code?: string }).code === "ENOENT"
+  );
+}
+
+function isTomlTable(value: TomlValue | undefined): value is TomlTable {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/**
+ * Load-bearing cache filter (#282): skip hidden models and anything not
+ * `supported_in_api === true`. Missing flags are treated as excluded — same
+ * class of mistake as skipping codex's visibility/API filters.
+ */
+function isGrokCacheListedModel(info: Record<string, unknown>): boolean {
+  return info.hidden !== true && info.supported_in_api === true;
+}
+
+/**
+ * Map one models_cache entry's `info` blob to a catalog row. Credentials that
+ * may sit on the parent entry (`api_key`) are never read.
+ */
+function modelEntryFromGrokCacheInfo(info: Record<string, unknown>): ModelEntry | null {
+  if (!isGrokCacheListedModel(info)) return null;
+  const id = asString(info.id) || asString(info.model);
+  if (id === "") return null;
+  const effortsRaw = info.reasoning_efforts;
+  const efforts: string[] = [];
+  let defaultEffort: string | null =
+    typeof info.reasoning_effort === "string" ? info.reasoning_effort : null;
+  if (Array.isArray(effortsRaw)) {
+    for (const raw of effortsRaw) {
+      const e = asRecord(raw);
+      if (!e) continue;
+      const effort = asString(e.value) || asString(e.id);
+      if (effort === "") continue;
+      efforts.push(effort);
+      if (e.default === true) defaultEffort = effort;
+    }
+  }
+  const label = typeof info.name === "string" && info.name !== "" ? info.name : undefined;
+  return {
+    id,
+    efforts,
+    default_effort: defaultEffort,
+    ...(label === undefined ? {} : { label }),
+  };
+}
+
+/**
+ * Parse grok's on-disk `models_cache.json` (#282). Shape (verified 0.2.112):
+ * `{ fetched_at, models: { [id]: { info: { hidden, supported_in_api,
+ * reasoning_efforts[], … }, api_key?, … } } }`. Fail-soft for callers: never
+ * throws. Distinguishes usable empty from present-but-unusable. Project only
+ * model keys — never return/log co-located `api_key` fields.
+ */
+export function parseGrokModelsCache(json: string): {
+  models: ModelEntry[];
+  cacheFetchedAt: string | null;
+  error: string | null;
+} {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(json);
+  } catch {
+    return { models: [], cacheFetchedAt: null, error: "malformed models_cache.json" };
+  }
+  const root = asRecord(parsed);
+  if (!root) {
+    return { models: [], cacheFetchedAt: null, error: "unexpected models_cache.json shape" };
+  }
+  const cacheFetchedAt = typeof root.fetched_at === "string" ? root.fetched_at : null;
+  const modelsObj = root.models;
+  // Empty-but-valid: `{}` object or empty array.
+  if (Array.isArray(modelsObj)) {
+    if (modelsObj.length === 0) {
+      return { models: [], cacheFetchedAt, error: null };
+    }
+    // Array form is unexpected for grok (dict-keyed in real homes).
+    return {
+      models: [],
+      cacheFetchedAt,
+      error: "unexpected models_cache.json shape",
+    };
+  }
+  const modelsMap = asRecord(modelsObj);
+  if (!modelsMap) {
+    return {
+      models: [],
+      cacheFetchedAt,
+      error: "unexpected models_cache.json shape",
+    };
+  }
+  const entries: ModelEntry[] = [];
+  for (const raw of Object.values(modelsMap)) {
+    const entry = asRecord(raw);
+    if (!entry) continue;
+    const info = asRecord(entry.info);
+    if (!info) continue;
+    const model = modelEntryFromGrokCacheInfo(info);
+    if (model) entries.push(model);
+  }
+  return { models: entries, cacheFetchedAt, error: null };
+}
+
+/**
+ * Collect `[model.*]` leaf tables from a parsed grok config.toml. Bare headers
+ * with dots nest (`[model.grok-4.5-build]` → grok-4 / 5-build); reconstruct the
+ * dotted id from the path. Credentials (`env_key`, keys under the table) are
+ * never returned.
+ */
+function collectGrokConfigModelIds(table: TomlTable, prefix: string, out: string[]): void {
+  let hasNested = false;
+  let hasLeaf = false;
+  for (const value of Object.values(table)) {
+    if (isTomlTable(value)) hasNested = true;
+    else hasLeaf = true;
+  }
+  // Intermediate nest nodes (only child tables) are not models themselves.
+  if (prefix !== "" && (hasLeaf || !hasNested)) {
+    out.push(prefix);
+  }
+  for (const [key, value] of Object.entries(table)) {
+    if (!isTomlTable(value)) continue;
+    const next = prefix === "" ? key : `${prefix}.${key}`;
+    collectGrokConfigModelIds(value, next, out);
+  }
+}
+
+/**
+ * Project model ids from grok operator `config.toml` `[model.*]` tables (#282).
+ * Agent variants / BYOK models often live only here — the cache can hold a
+ * single listed model. Never re-serializes the TOML tree (secret hygiene).
+ */
+export function parseGrokModelsConfig(text: string): {
+  models: ModelEntry[];
+  defaultModel: string | null;
+  error: string | null;
+} {
+  // parseToml is fail-soft; only reject obviously truncated headers that would
+  // silently drop content the operator intended as a model table.
+  for (const lineRaw of text.split(/\r?\n/)) {
+    const line = lineRaw.trim();
+    if (line.startsWith("[") && !line.startsWith("[[") && !line.endsWith("]")) {
+      return {
+        models: [],
+        defaultModel: null,
+        error: "malformed config.toml (unterminated table header)",
+      };
+    }
+  }
+  const root = parseToml(text);
+  const modelsTable = root.models;
+  const defaultModel =
+    isTomlTable(modelsTable) && typeof modelsTable.default === "string"
+      ? modelsTable.default
+      : null;
+  const modelRoot = root.model;
+  if (!isTomlTable(modelRoot)) {
+    return { models: [], defaultModel, error: null };
+  }
+  const ids: string[] = [];
+  collectGrokConfigModelIds(modelRoot, "", ids);
+  const entries: ModelEntry[] = [];
+  const seen = new Set<string>();
+  for (const id of ids) {
+    if (id === "" || seen.has(id)) continue;
+    seen.add(id);
+    // Config tables carry no effort list — empty; probe/cache may enrich via merge.
+    entries.push({ id, efforts: [], default_effort: null });
+  }
+  return { models: entries, defaultModel, error: null };
+}
+
+/** Catalog source string for a grok cache read (freshness stamp when present). */
+export function grokModelsCacheSource(cachePath: string, cacheFetchedAt: string | null): string {
+  if (cacheFetchedAt !== null) {
+    return `${cachePath} (cache fetched_at=${cacheFetchedAt})`;
+  }
+  return cachePath;
+}
+
+/**
+ * Union cache models with config.toml `[model.*]` ids. Same-id: cache wins
+ * (richer efforts). Order: cache first, then config-only ids.
+ */
+export function mergeGrokDiskModels(
+  cacheModels: ModelEntry[],
+  configModels: ModelEntry[],
+): ModelEntry[] {
+  const byId = new Map<string, ModelEntry>();
+  for (const m of cacheModels) byId.set(m.id, m);
+  for (const m of configModels) {
+    if (!byId.has(m.id)) byId.set(m.id, m);
+  }
+  return [...byId.values()];
+}
+
+function readOperatorFileText(
+  filePath: string,
+  fileLabel: string,
+  maxBytes: number,
+): { text: string | null; error: string | null } {
+  try {
+    const stat = fs.statSync(filePath);
+    // #288: refuse non-files (FIFO, dir, device). readFileSync on a FIFO
+    // blocks the daemon event loop forever.
+    if (!stat.isFile()) {
+      return { text: null, error: `${fileLabel} is not a regular file` };
+    }
+    if (stat.size > maxBytes) {
+      return {
+        text: null,
+        error: `${fileLabel} exceeds size cap (${maxBytes} bytes)`,
+      };
+    }
+    return { text: fs.readFileSync(filePath, "utf8"), error: null };
+  } catch (err) {
+    if (isEnoent(err)) return { text: null, error: null };
+    return {
+      text: null,
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
 
 /** True when the posture asks grok for OS isolation (built-in or custom profile). */
 export function isSandboxedGrokPosture(sandbox: SandboxMode): boolean {
@@ -689,6 +945,74 @@ export function createGrokAdapter(env: NodeJS.ProcessEnv = process.env): VendorA
       // §3); efforts ride the existing catalog entry (grok exposes none here).
       const stdout = await runProbe(bin, ["models"]);
       return { source: MODELS_SOURCE, models: parseGrokModels(stdout, existing) };
+    },
+
+    async readModels(): Promise<ProbedModels> {
+      // Operator home via resolveOperatorVendorHome (honours research-documented
+      // GROK_HOME; adapter does not set GROK_HOME on spawn — isolation is
+      // cwd-scoped config files). Merge models_cache.json with config.toml
+      // `[model.*]` so agent variants outside the cache still appear (#282).
+      // Absent files = quiet empty contribution; present-but-unusable rejects
+      // so refreshCatalog can warn even when the probe fills the gap.
+      const home = resolveOperatorVendorHome("grok", env);
+      if (home === null) return { source: MODELS_CACHE_FILE, models: [] };
+
+      const cachePath = path.join(home, MODELS_CACHE_FILE);
+      const configPath = path.join(home, OPERATOR_CONFIG_FILE);
+      const cacheSourceBase = displayVendorPath(cachePath, env);
+      const configSourceBase = displayVendorPath(configPath, env);
+
+      const cacheRead = readOperatorFileText(
+        cachePath,
+        MODELS_CACHE_FILE,
+        GROK_MODELS_CACHE_MAX_BYTES,
+      );
+      if (cacheRead.error !== null) {
+        throw new Error(cacheRead.error);
+      }
+      let cacheModels: ModelEntry[] = [];
+      let cacheFetchedAt: string | null = null;
+      if (cacheRead.text !== null) {
+        // Secret hygiene: parse → project model keys only. Never log `text`.
+        const parsed = parseGrokModelsCache(cacheRead.text);
+        if (parsed.error !== null) throw new Error(parsed.error);
+        cacheModels = parsed.models;
+        cacheFetchedAt = parsed.cacheFetchedAt;
+      }
+
+      const configRead = readOperatorFileText(
+        configPath,
+        OPERATOR_CONFIG_FILE,
+        GROK_CONFIG_MAX_BYTES,
+      );
+      if (configRead.error !== null) {
+        throw new Error(configRead.error);
+      }
+      let configModels: ModelEntry[] = [];
+      if (configRead.text !== null) {
+        const parsed = parseGrokModelsConfig(configRead.text);
+        if (parsed.error !== null) throw new Error(parsed.error);
+        configModels = parsed.models;
+      }
+
+      const models = mergeGrokDiskModels(cacheModels, configModels);
+      const sources: string[] = [];
+      if (cacheRead.text !== null) {
+        sources.push(grokModelsCacheSource(cacheSourceBase, cacheFetchedAt));
+      }
+      if (configModels.length > 0) {
+        sources.push(configSourceBase);
+      } else if (cacheRead.text === null && configRead.text !== null) {
+        // Config present but no [model.*] — still name it so source is useful.
+        sources.push(configSourceBase);
+      }
+      if (sources.length === 0) {
+        return {
+          source: grokModelsCacheSource(cacheSourceBase, null),
+          models: [],
+        };
+      }
+      return { source: sources.join(" + "), models };
     },
   });
 }

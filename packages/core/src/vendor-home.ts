@@ -90,6 +90,14 @@ const OPERATOR_HOME_SPECS: Record<string, HomeSpec> = {
     overrideKind: "home",
     provenance: "research-cli-override",
   },
+  // research-documented CLI override (pi adapter does not set PI_CODING_AGENT_DIR
+  // on spawn by default — auth stays on the operator home). #282 readModels.
+  pi: {
+    envKey: "PI_CODING_AGENT_DIR",
+    defaultRel: path.join(".pi", "agent"),
+    overrideKind: "home",
+    provenance: "research-cli-override",
+  },
   /**
    * goose: GOOSE_PATH_ROOT is a *tree root* (adapter sets it to
    * `task.cwd/.parley-goose`); config lives at `<root>/config/config.yaml`.
