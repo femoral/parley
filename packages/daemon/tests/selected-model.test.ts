@@ -119,6 +119,8 @@ describe("parseClineSelectedModel", () => {
     // Load-bearing: fixed shape string only — never err.message (which can
     // embed a source fragment carrying the secret on modern Node).
     expect(result.error).toBe("malformed providers.json");
+    // Secret-hygiene even if someone changes the fixture / error shape.
+    expect(result.error).not.toMatch(/sk-test/);
     expect(result).toEqual({
       model: null,
       effort: null,
@@ -172,6 +174,8 @@ describe("parseOpenhandsSelectedModel", () => {
     expect(result.model).toBeNull();
     // Fixed shape only — never interpolate JSON.parse's message.
     expect(result.error).toBe("malformed agent_settings.json");
+    // Secret-hygiene even if someone changes the fixture / error shape.
+    expect(result.error).not.toMatch(/sk-test/);
     expect(result).toEqual({
       model: null,
       error: "malformed agent_settings.json",
@@ -646,6 +650,70 @@ describe("engine spawn path surfaces CLI selection on allowlist rejection (#284)
       // Advisory line reached through engine.resolveModelAllowlist.
       expect(msg).toMatch(/CLI currently has "cli-only-model@high" selected/);
       expect(msg).toMatch(/not on the allowlist/);
+    }
+  });
+
+  it("enriches no_allowlist with CLI selection on engine spawn path (#292)", () => {
+    // Load-bearing twin of run-preflight's no_allowlist test: engine-side
+    // resolveModelAllowlist must include `no_allowlist` (not only not_allowed)
+    // so empty-catalog vendors still name the CLI selection. Reverting the
+    // condition to `not_allowed` alone leaves the suite green without this.
+    fs.writeFileSync(
+      path.join(parleyHome, "parley.json"),
+      JSON.stringify(
+        withFakeAllowlist({
+          vendors: {
+            fake: {
+              models: {},
+            },
+          },
+        }),
+      ),
+    );
+
+    const fake = createFakeAdapter(process.env);
+    const adapters = new Map([
+      [
+        "fake",
+        {
+          ...fake,
+          readSelectedModel: () => ({
+            model: "deepseek-v4-flash",
+            effort: null as string | null,
+          }),
+        },
+      ],
+    ]);
+    const engine = new TaskEngine(db, homePaths(parleyHome), adapters);
+
+    try {
+      engine.delegate({
+        prompt: "do it",
+        vendor: "fake",
+        profile: null,
+        model: "anything",
+        effort: null,
+        name: null,
+        orchestratorSessionId: "orch",
+        cwd,
+        useWorktree: false,
+        baseRef: null,
+        sandbox: null,
+        network: null,
+        answerTimeoutMs: null,
+        reportSchema: null,
+        contexts: [],
+        runner: null,
+        size: null,
+        difficulty: null,
+        type: null,
+      });
+      expect.unreachable();
+    } catch (err) {
+      expect(err).toBeInstanceOf(DelegateError);
+      const msg = (err as Error).message;
+      expect(msg).toMatch(/no models configured/i);
+      expect(msg).toMatch(/CLI currently has "deepseek-v4-flash" selected/);
     }
   });
 

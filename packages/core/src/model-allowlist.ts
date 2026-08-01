@@ -154,6 +154,11 @@ export function formatAllowedCombos(combos: readonly AllowedCombo[]): string {
     .join(", ");
 }
 
+/** Human list of effort tokens for rejection text (same escaping as combos). */
+function formatEffortsForDisplay(efforts: readonly string[]): string {
+  return efforts.map((e) => formatComboForDisplay(e, null)).join(", ");
+}
+
 /**
  * Format an error when the vendor has no allowlist. Names wizard + config path.
  */
@@ -371,7 +376,7 @@ export function resolveAllowedCombo(options: {
     const suggest =
       nearest === null
         ? ""
-        : `; did you mean ${formatCombo(nearest.model, nearest.effort)}?`;
+        : `; did you mean ${formatComboForDisplay(nearest.model, nearest.effort)}?`;
     throw new ModelAllowlistError(
       "not_allowed",
       `vendor ${vendor}: model is required when effort is set (got effort=${JSON.stringify(effort)}). ` +
@@ -385,7 +390,7 @@ export function resolveAllowedCombo(options: {
     const suggest =
       nearest === null
         ? ""
-        : `; did you mean ${formatCombo(nearest.model, nearest.effort)}?`;
+        : `; did you mean ${formatComboForDisplay(nearest.model, nearest.effort)}?`;
     throw new ModelAllowlistError(
       "not_allowed",
       `vendor ${vendor}: model ${JSON.stringify(model)} is not allowed. ` +
@@ -401,7 +406,7 @@ export function resolveAllowedCombo(options: {
       const suggest =
         nearest === null
           ? ""
-          : `; did you mean ${formatCombo(nearest.model, nearest.effort)}?`;
+          : `; did you mean ${formatComboForDisplay(nearest.model, nearest.effort)}?`;
       throw new ModelAllowlistError(
         "not_allowed",
         `vendor ${vendor}: model ${JSON.stringify(model)} allows no effort (got ${JSON.stringify(effort)}). ` +
@@ -417,11 +422,11 @@ export function resolveAllowedCombo(options: {
     const suggest =
       nearest === null
         ? ""
-        : `; did you mean ${formatCombo(nearest.model, nearest.effort)}?`;
+        : `; did you mean ${formatComboForDisplay(nearest.model, nearest.effort)}?`;
     throw new ModelAllowlistError(
       "not_allowed",
       `vendor ${vendor}: effort is required for model ${JSON.stringify(model)} ` +
-        `(allowed efforts: ${efforts.join(", ")}). Allowed combos: ${formatAllowedCombos(combos)}${suggest}`,
+        `(allowed efforts: ${formatEffortsForDisplay(efforts)}). Allowed combos: ${formatAllowedCombos(combos)}${suggest}`,
     );
   }
 
@@ -430,11 +435,11 @@ export function resolveAllowedCombo(options: {
     const suggest =
       nearest === null
         ? ""
-        : `; did you mean ${formatCombo(nearest.model, nearest.effort)}?`;
+        : `; did you mean ${formatComboForDisplay(nearest.model, nearest.effort)}?`;
     throw new ModelAllowlistError(
       "not_allowed",
       `vendor ${vendor}: effort ${JSON.stringify(effort)} is not allowed for model ${JSON.stringify(model)} ` +
-        `(allowed efforts: ${efforts.join(", ")}). Allowed combos: ${formatAllowedCombos(combos)}${suggest}`,
+        `(allowed efforts: ${formatEffortsForDisplay(efforts)}). Allowed combos: ${formatAllowedCombos(combos)}${suggest}`,
     );
   }
 

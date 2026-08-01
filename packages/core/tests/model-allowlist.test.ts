@@ -312,6 +312,121 @@ describe("listAllowedCombos / format / nearest", () => {
   });
 });
 
+describe("resolveAllowedCombo rejection escaping (#292)", () => {
+  /** Full rejection text must never carry raw control bytes (any of 3 sites). */
+  function expectNoRawControls(msg: string): void {
+    expect(msg.includes("\n")).toBe(false);
+    expect(msg.includes("\x1b")).toBe(false);
+  }
+
+  it("full rejection with poisoned model id has no raw newline or ESC", () => {
+    // Poisoned key can surface via formatAllowedCombos AND "did you mean"
+    // (formatCombo site) when it is the nearest suggestion.
+    const poisoned = "legit\n*** ALL MODELS ALLOWED ***\x1b[32m";
+    const cfg = vendor({
+      [poisoned]: { efforts: ["low"], default: "low" },
+    });
+    try {
+      resolveAllowedCombo({
+        vendor: "codex",
+        vendorCfg: cfg,
+        model: "unknown-model",
+        effort: "low",
+        configPath: CONFIG_PATH,
+      });
+      expect.unreachable();
+    } catch (err) {
+      const msg = (err as Error).message;
+      expectNoRawControls(msg);
+      expect(msg).toMatch(/not allowed/);
+      expect(msg).toMatch(/did you mean/);
+      // Escaped form appears (JSON) — not the raw control sequence as free text.
+      expect(msg).toContain(JSON.stringify(`${poisoned}@low`));
+    }
+  });
+
+  it("full rejection with poisoned effort id has no raw newline or ESC", () => {
+    // Poisoned efforts surface via "allowed efforts:" join AND suggestions.
+    const poisonedEffort = "low\n\x1b[31mhack";
+    const cfg = vendor({
+      "gpt-5": { efforts: [poisonedEffort, "medium"], default: "medium" },
+    });
+    try {
+      resolveAllowedCombo({
+        vendor: "codex",
+        vendorCfg: cfg,
+        model: "gpt-5",
+        effort: null,
+        configPath: CONFIG_PATH,
+      });
+      expect.unreachable();
+    } catch (err) {
+      const msg = (err as Error).message;
+      expectNoRawControls(msg);
+      expect(msg).toMatch(/effort is required/);
+      expect(msg).toMatch(/allowed efforts:/);
+      expect(msg).toContain(JSON.stringify(poisonedEffort));
+    }
+
+    try {
+      resolveAllowedCombo({
+        vendor: "codex",
+        vendorCfg: cfg,
+        model: "gpt-5",
+        effort: "ultra",
+        configPath: CONFIG_PATH,
+      });
+      expect.unreachable();
+    } catch (err) {
+      const msg = (err as Error).message;
+      expectNoRawControls(msg);
+      expect(msg).toMatch(/not allowed/);
+      expect(msg).toMatch(/allowed efforts:/);
+      expect(msg).toMatch(/did you mean/);
+      expect(msg).toContain(JSON.stringify(poisonedEffort));
+    }
+  });
+
+  it("clean rejection message renders byte-for-byte unchanged", () => {
+    const cfg = vendor({
+      "gpt-5": { efforts: ["low", "medium"], default: "low", hint: "main" },
+      "gpt-4": { efforts: ["high"] },
+    });
+    try {
+      resolveAllowedCombo({
+        vendor: "codex",
+        vendorCfg: cfg,
+        model: "gpt-5",
+        effort: "ultra",
+        configPath: CONFIG_PATH,
+      });
+      expect.unreachable();
+    } catch (err) {
+      expect((err as Error).message).toBe(
+        'vendor codex: effort "ultra" is not allowed for model "gpt-5" ' +
+          "(allowed efforts: low, medium). Allowed combos: gpt-5@low, gpt-5@medium, gpt-4@high; " +
+          "did you mean gpt-5@low?",
+      );
+    }
+
+    try {
+      resolveAllowedCombo({
+        vendor: "codex",
+        vendorCfg: cfg,
+        model: "gpt-6",
+        effort: "low",
+        configPath: CONFIG_PATH,
+      });
+      expect.unreachable();
+    } catch (err) {
+      expect((err as Error).message).toBe(
+        'vendor codex: model "gpt-6" is not allowed. ' +
+          "Allowed: gpt-5@low, gpt-5@medium, gpt-4@high; did you mean gpt-5@low?",
+      );
+    }
+  });
+});
+
 describe("noAllowlistMessage", () => {
   it("includes vendor, wizard, and path", () => {
     const msg = noAllowlistMessage("grok", "/home/u/.parley/parley.json");
