@@ -119,13 +119,59 @@ function isEnoent(err: unknown): boolean {
 }
 
 /**
+ * Standard pi thinking levels that default-map when a key is *omitted* from
+ * `thinkingLevelMap` (docs: "Thinking Level Map"). Extended levels `xhigh` /
+ * `max` are unsupported unless explicitly string-valued in the map.
+ */
+const PI_STANDARD_THINKING_LEVELS = ["off", "minimal", "low", "medium", "high"] as const;
+
+/**
+ * Derive catalog efforts from a pi `thinkingLevelMap` tristate override table
+ * (package docs models.md — not an enumeration of supported levels):
+ *  - key → string: level supported (key is the pi level name)
+ *  - key → null: level explicitly unsupported (exclude)
+ *  - key omitted: standard levels through `high` remain supported via provider
+ *    default; `xhigh` / `max` stay unsupported when omitted
+ *
+ * Returns the union of string-valued keys and omitted standard levels, in a
+ * stable order (standard ladder first, then any extra string-valued keys).
+ */
+export function effortsFromThinkingLevelMap(tlm: Record<string, unknown>): string[] {
+  const efforts: string[] = [];
+  const seen = new Set<string>();
+  // Standard levels: include when absent or string-valued; skip null.
+  for (const level of PI_STANDARD_THINKING_LEVELS) {
+    if (!(level in tlm)) {
+      efforts.push(level);
+      seen.add(level);
+      continue;
+    }
+    if (typeof tlm[level] === "string") {
+      efforts.push(level);
+      seen.add(level);
+    }
+    // null / non-string → excluded
+  }
+  // Explicit string-valued keys outside the standard set (xhigh, max, …).
+  for (const [key, value] of Object.entries(tlm)) {
+    if (key === "" || seen.has(key)) continue;
+    if (typeof value === "string") {
+      efforts.push(key);
+      seen.add(key);
+    }
+  }
+  return efforts;
+}
+
+/**
  * Parse pi's on-disk `models-store.json` (#282). Shape (verified):
  * `{ [provider]: { models: [ { id, thinkingLevelMap?, … } ], … } }`.
  *
- * **Sharp edge:** `thinkingLevelMap` is per-model and frequently absent.
- * Models without it get **empty** efforts — never the hardcoded
- * `PI_THINKING_LEVELS` constant reapplied. Ids are `provider/model` to match
- * the `--list-models` probe / `--model` flag.
+ * **Sharp edge:** `thinkingLevelMap` is a per-model *tristate override table*,
+ * not an enum of supported levels — see {@link effortsFromThinkingLevelMap}.
+ * Models with **no** map at all get **empty** efforts (issue #282 decision;
+ * never reapply the hardcoded `PI_THINKING_LEVELS` constant). Ids are
+ * `provider/model` to match the `--list-models` probe / `--model` flag.
  */
 export function parsePiModelsStore(json: string): {
   models: ModelEntry[];
@@ -158,13 +204,10 @@ export function parsePiModelsStore(json: string): {
       const id = `${provider}/${modelId}`;
       if (seen.has(id)) continue;
       seen.add(id);
-      // Only use thinkingLevelMap when present as a non-empty object.
-      // Absent / null / empty → empty efforts (do NOT apply PI_THINKING_LEVELS).
+      // Absent / null map → empty efforts. Present object (incl. empty) →
+      // tristate derivation. Never invent the full PI_THINKING_LEVELS constant.
       const tlm = asRecord(m.thinkingLevelMap);
-      const efforts =
-        tlm !== undefined
-          ? Object.keys(tlm).filter((k) => k !== "")
-          : [];
+      const efforts = tlm !== undefined ? effortsFromThinkingLevelMap(tlm) : [];
       const label = typeof m.name === "string" && m.name !== "" ? m.name : undefined;
       entries.push({
         id,

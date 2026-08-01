@@ -17,11 +17,14 @@
     "profiles": {
       "opencode:default": {
         "provider": "opencode",
-        "mode": "api_key"
+        "mode": "api_key",
+        "key": "PARLEY_FIXTURE_SENTINEL_MUST_NOT_LEAK",
+        "refresh": "PARLEY_FIXTURE_SENTINEL_MUST_NOT_LEAK"
       },
       "opencode-go:default": {
         "provider": "opencode-go",
-        "mode": "api_key"
+        "mode": "api_key",
+        "key": "PARLEY_FIXTURE_SENTINEL_MUST_NOT_LEAK"
       }
     },
     "order": {

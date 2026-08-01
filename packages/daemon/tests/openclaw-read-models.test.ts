@@ -37,11 +37,15 @@ function writePluginCatalog(home: string, plugin: string, fixtureName: string): 
 describe("parseOpenclawAuthProviders", () => {
   it("extracts unique provider ids from auth.profiles", () => {
     const text = readFixture("openclaw.well-formed.json");
+    // Sentinel lives inside auth profile key/refresh AND gateway token —
+    // profile fields are the co-located credential risk surface for this parser.
     expect(text).toContain(HYGIENE_SENTINEL);
+    expect(text).toMatch(/"profiles"[\s\S]*"key"\s*:\s*"PARLEY_FIXTURE_SENTINEL_MUST_NOT_LEAK"/);
     const { providers, error } = parseOpenclawAuthProviders(text);
     expect(error).toBeNull();
     expect([...providers].sort()).toEqual(["opencode", "opencode-go"]);
     expect(JSON.stringify([...providers])).not.toContain(HYGIENE_SENTINEL);
+    expect(JSON.stringify({ providers: [...providers], error })).not.toContain(HYGIENE_SENTINEL);
   });
 
   it("returns empty providers when auth block is absent (not an error)", () => {
@@ -162,7 +166,10 @@ describe("openclaw adapter readModels", () => {
 
   it("reads catalogs and intersects with auth.profiles providers", async () => {
     home = makeOperatorHome();
-    fs.writeFileSync(path.join(home, "openclaw.json"), readFixture("openclaw.well-formed.json"));
+    const configText = readFixture("openclaw.well-formed.json");
+    // Ensure the fixture plants credentials *inside* auth profiles (not only gateway).
+    expect(configText).toMatch(/"key"\s*:\s*"PARLEY_FIXTURE_SENTINEL_MUST_NOT_LEAK"/);
+    fs.writeFileSync(path.join(home, "openclaw.json"), configText);
     writePluginCatalog(home, "opencode-go", "catalog.opencode-go.json");
     writePluginCatalog(home, "opencode", "catalog.opencode.json");
     const adapter = createOpenclawAdapter({ OPENCLAW_STATE_DIR: home });
@@ -174,6 +181,7 @@ describe("openclaw adapter readModels", () => {
     expect(ids).not.toContain("unauthed-provider/should-be-filtered");
     expect(result.models.every((m) => m.efforts.length === 0)).toBe(true);
     expect(result.source).toContain("openclaw.json");
+    // Profile key/refresh must never leak into catalog source or model rows.
     expect(JSON.stringify(result)).not.toContain(HYGIENE_SENTINEL);
   });
 

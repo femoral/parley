@@ -8,6 +8,7 @@ import { displayVendorPath, mergeDiscoveredModels, refreshCatalog } from "@usepa
 import {
   applyPiSettingsDefaults,
   createPiAdapter,
+  effortsFromThinkingLevelMap,
   parsePiModels,
   parsePiModelsStore,
   parsePiSettings,
@@ -26,27 +27,86 @@ function makeOperatorHome(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), "parley-pi-home-"));
 }
 
+describe("effortsFromThinkingLevelMap (tristate override table)", () => {
+  it("unions string-valued keys with omitted standard levels; excludes nulls", () => {
+    // Docs deepseek-shaped map: only off (omitted), high, max are supported.
+    expect(
+      effortsFromThinkingLevelMap({
+        minimal: null,
+        low: null,
+        medium: null,
+        high: "high",
+        xhigh: null,
+        max: "max",
+      }),
+    ).toEqual(["off", "high", "max"]);
+  });
+
+  it("includes all standard levels when the map is empty (all omitted)", () => {
+    expect(effortsFromThinkingLevelMap({})).toEqual([
+      "off",
+      "minimal",
+      "low",
+      "medium",
+      "high",
+    ]);
+  });
+
+  it("includes xhigh only when explicitly string-valued", () => {
+    expect(effortsFromThinkingLevelMap({ xhigh: "xhigh", minimal: "low" })).toEqual([
+      "off",
+      "minimal",
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+    ]);
+    expect(effortsFromThinkingLevelMap({ xhigh: null })).toEqual([
+      "off",
+      "minimal",
+      "low",
+      "medium",
+      "high",
+    ]);
+  });
+});
+
 describe("parsePiModelsStore", () => {
-  it("maps provider/model ids and thinkingLevelMap keys as efforts", () => {
+  it("maps provider/model ids and derives efforts from the tristate map", () => {
     const { models, error } = parsePiModelsStore(readFixture("models-store.well-formed.json"));
     expect(error).toBeNull();
     const byId = new Map(models.map((m) => [m.id, m]));
-    expect(byId.get("openai-codex/gpt-5.5")).toMatchObject({
+    // Real-store shape: string overrides for minimal/high + explicit xhigh;
+    // omitted standard levels (off, low, medium) still supported.
+    expect(byId.get("openai-codex/gpt-5.5")).toEqual({
       id: "openai-codex/gpt-5.5",
-      efforts: expect.arrayContaining(["xhigh", "minimal", "high"]),
+      efforts: ["off", "minimal", "low", "medium", "high", "xhigh"],
       default_effort: null,
       label: "GPT-5.5",
     });
-    expect(byId.get("anthropic/claude-sonnet-4-5")!.efforts).toEqual(["low", "high"]);
+    // Partial map: low/high string-valued; off/minimal/medium omitted → included.
+    expect(byId.get("anthropic/claude-sonnet-4-5")!.efforts).toEqual([
+      "off",
+      "minimal",
+      "low",
+      "medium",
+      "high",
+    ]);
   });
 
-  it("gives empty efforts when thinkingLevelMap is absent or empty (not the hardcoded constant)", () => {
+  it("derives exact efforts for a map with nulls and omitted standard levels", () => {
+    const { models } = parsePiModelsStore(readFixture("models-store.well-formed.json"));
+    const deepseek = models.find((m) => m.id === "deepseek/deepseek-v4-pro")!;
+    // nulls excluded (minimal/low/medium/xhigh); omitted standard (off) included;
+    // xhigh only when string-valued (it is null → out); max string-valued → in.
+    expect(deepseek.efforts).toEqual(["off", "high", "max"]);
+  });
+
+  it("gives empty efforts when thinkingLevelMap is absent (not the hardcoded constant)", () => {
     const { models } = parsePiModelsStore(readFixture("models-store.well-formed.json"));
     const noMap = models.find((m) => m.id === "openai-codex/gpt-5.4-mini")!;
-    const emptyMap = models.find((m) => m.id === "openai-codex/gpt-no-map")!;
     expect(noMap.efforts).toEqual([]);
-    expect(emptyMap.efforts).toEqual([]);
-    // Probe applies the fixed thinking-level constant; disk must not.
+    // Probe applies the fixed thinking-level constant; disk must not for no-map.
     const probe = parsePiModels(
       "provider model context max-out thinking images\nopenai-codex gpt-5.4-mini 272K 128K yes yes\n",
     );
@@ -121,10 +181,15 @@ describe("union(probe, disk) is a superset of probe (#282 hard contract)", () =>
     }
     // Disk had empty efforts for mini; probe has the constant — richest-wins keeps probe.
     expect(byId.get("openai-codex/gpt-5.4-mini")!.efforts.length).toBeGreaterThan(0);
-    // Disk had a real map for gpt-5.5 — non-empty disk efforts win over probe.
-    expect(byId.get("openai-codex/gpt-5.5")!.efforts).toEqual(
-      expect.arrayContaining(["xhigh", "minimal", "high"]),
-    );
+    // Disk map for gpt-5.5 is non-empty (tristate) — disk efforts win over probe.
+    expect(byId.get("openai-codex/gpt-5.5")!.efforts).toEqual([
+      "off",
+      "minimal",
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+    ]);
   });
 });
 

@@ -19,8 +19,8 @@ import path from "node:path";
  *    `HERMES_HOME`, `GOOSE_PATH_ROOT`, `OPENHANDS_PERSISTENCE_DIR`
  *  - research-documented CLI override (adapters may isolate via flags rather
  *    than this env key; still refuse the marker if an override points there):
- *    `CODEX_HOME`, `GROK_HOME`, `CLINE_DATA_DIR` (cline isolates via
- *    `--data-dir …/.cline-parley`, not by setting the env key)
+ *    `CODEX_HOME`, `GROK_HOME`, `PI_CODING_AGENT_DIR`, `CLINE_DATA_DIR`
+ *    (cline isolates via `--data-dir …/.cline-parley`, not by setting the env key)
  */
 
 /**
