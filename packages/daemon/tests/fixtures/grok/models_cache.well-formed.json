@@ -1,0 +1,71 @@
+{
+  "fetched_at": "2026-07-15T10:00:00.000Z",
+  "grok_version": "0.2.112-fixture",
+  "auth_method": "session",
+  "origin": "https://example.invalid/v1/models",
+  "etag": "fixture-etag-not-a-secret",
+  "models": {
+    "grok-4.5": {
+      "info": {
+        "id": "grok-4.5",
+        "model": "grok-4.5",
+        "name": "Grok 4.5",
+        "hidden": false,
+        "supported_in_api": true,
+        "reasoning_effort": "high",
+        "supports_reasoning_effort": true,
+        "reasoning_efforts": [
+          {
+            "id": "high",
+            "value": "high",
+            "label": "High Effort",
+            "default": true
+          },
+          {
+            "id": "medium",
+            "value": "medium",
+            "label": "Medium Effort",
+            "default": false
+          },
+          {
+            "id": "low",
+            "value": "low",
+            "label": "Low Effort",
+            "default": false
+          }
+        ]
+      },
+      "api_key": "PARLEY_FIXTURE_SENTINEL_MUST_NOT_LEAK",
+      "env_key": null,
+      "api_base_url": null
+    },
+    "hidden-model": {
+      "info": {
+        "id": "hidden-model",
+        "model": "hidden-model",
+        "name": "Hidden",
+        "hidden": true,
+        "supported_in_api": true,
+        "reasoning_efforts": [{ "id": "low", "value": "low", "default": true }]
+      },
+      "api_key": null
+    },
+    "internal-not-in-api": {
+      "info": {
+        "id": "internal-not-in-api",
+        "model": "internal-not-in-api",
+        "hidden": false,
+        "supported_in_api": false,
+        "reasoning_efforts": [{ "id": "low", "value": "low", "default": true }]
+      }
+    },
+    "missing-api-flag": {
+      "info": {
+        "id": "missing-api-flag",
+        "model": "missing-api-flag",
+        "hidden": false,
+        "reasoning_efforts": [{ "id": "low", "value": "low", "default": true }]
+      }
+    }
+  }
+}

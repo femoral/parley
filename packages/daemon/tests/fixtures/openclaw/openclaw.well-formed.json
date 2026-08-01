@@ -1,0 +1,37 @@
+{
+  "agents": {
+    "defaults": {
+      "model": { "primary": "opencode-go/kimi-k2.6" }
+    },
+    "list": [{ "id": "main" }]
+  },
+  "gateway": {
+    "mode": "local",
+    "auth": {
+      "mode": "token",
+      "token": "PARLEY_FIXTURE_SENTINEL_MUST_NOT_LEAK"
+    },
+    "port": 18789
+  },
+  "auth": {
+    "profiles": {
+      "opencode:default": {
+        "provider": "opencode",
+        "mode": "api_key",
+        "key": "PARLEY_FIXTURE_SENTINEL_MUST_NOT_LEAK",
+        "refresh": "PARLEY_FIXTURE_SENTINEL_MUST_NOT_LEAK"
+      },
+      "opencode-go:default": {
+        "provider": "opencode-go",
+        "mode": "api_key",
+        "key": "PARLEY_FIXTURE_SENTINEL_MUST_NOT_LEAK"
+      }
+    },
+    "order": {
+      "opencode": ["opencode:default"]
+    }
+  },
+  "meta": {
+    "lastTouchedVersion": "2026.7.1-fixture"
+  }
+}

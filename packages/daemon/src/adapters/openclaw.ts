@@ -1,4 +1,6 @@
+import fs from "node:fs";
 import path from "node:path";
+import { displayVendorPath, resolveOperatorVendorHome } from "@useparley/core";
 import type {
   AdapterEnforcement,
   HubInfo,
@@ -122,6 +124,203 @@ const APPROVALS_REL = `${STATE_DIR_REL}/exec-approvals.json`;
 const COMPACT_WRAP_REL = `${STATE_DIR_REL}/parley-compact-stdout.mjs`;
 
 const MODELS_SOURCE = "openclaw models list --all --json";
+
+/** Operator config (auth profiles + credentials) under the openclaw home (#282). */
+const OPERATOR_CONFIG_FILE = "openclaw.json";
+/** Per-plugin catalog filename under agents/…/agent/plugins/… (#282). */
+const CATALOG_FILE = "catalog.json";
+
+/**
+ * Cap on openclaw.json — co-locates gateway tokens and auth; never unbounded.
+ */
+export const OPENCLAW_CONFIG_MAX_BYTES = 2 * 1024 * 1024;
+/** Cap on a single plugin catalog.json (large universes are still MBs-scale). */
+export const OPENCLAW_CATALOG_MAX_BYTES = 8 * 1024 * 1024;
+
+function isEnoent(err: unknown): boolean {
+  return (
+    typeof err === "object" &&
+    err !== null &&
+    "code" in err &&
+    (err as { code?: string }).code === "ENOENT"
+  );
+}
+
+/**
+ * Providers the operator is authenticated for, from `auth.profiles` in
+ * openclaw.json (#282). Project only the `provider` string — never tokens,
+ * api keys, or profile ids into returned data / errors.
+ */
+export function parseOpenclawAuthProviders(json: string): {
+  providers: Set<string>;
+  error: string | null;
+} {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(json);
+  } catch {
+    return { providers: new Set(), error: "malformed openclaw.json" };
+  }
+  const root = asRecord(parsed);
+  if (!root) {
+    return { providers: new Set(), error: "unexpected openclaw.json shape" };
+  }
+  const auth = asRecord(root.auth);
+  // Missing auth block = no authenticated providers (empty intersection), not an error.
+  if (!auth) {
+    return { providers: new Set(), error: null };
+  }
+  const profiles = asRecord(auth.profiles);
+  if (!profiles) {
+    return { providers: new Set(), error: null };
+  }
+  const providers = new Set<string>();
+  for (const raw of Object.values(profiles)) {
+    const p = asRecord(raw);
+    if (!p) continue;
+    const provider = asString(p.provider);
+    if (provider !== "") providers.add(provider);
+  }
+  return { providers, error: null };
+}
+
+/**
+ * Parse a per-plugin `catalog.json` (#282). Shape (verified):
+ * `{ generatedBy, providers: { [provider]: { models: [ { id, name, … } ] } } }`.
+ * Model ids become `provider/id` (same form as probe `key`). No efforts on
+ * disk — empty arrays; probe/merge may enrich. Never returns credential fields.
+ */
+export function parseOpenclawCatalog(json: string): {
+  models: ModelEntry[];
+  error: string | null;
+} {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(json);
+  } catch {
+    return { models: [], error: "malformed catalog.json" };
+  }
+  const root = asRecord(parsed);
+  if (!root || Array.isArray(parsed)) {
+    return { models: [], error: "unexpected catalog.json shape" };
+  }
+  const providers = asRecord(root.providers);
+  if (!providers) {
+    // Valid empty-ish catalog (no providers yet).
+    return { models: [], error: null };
+  }
+  const entries: ModelEntry[] = [];
+  const seen = new Set<string>();
+  for (const [provider, blob] of Object.entries(providers)) {
+    if (provider === "") continue;
+    const group = asRecord(blob);
+    if (!group) continue;
+    const models = group.models;
+    if (!Array.isArray(models)) continue;
+    for (const raw of models) {
+      const m = asRecord(raw);
+      if (!m) continue;
+      const modelId = asString(m.id);
+      if (modelId === "") continue;
+      const id = `${provider}/${modelId}`;
+      if (seen.has(id)) continue;
+      seen.add(id);
+      const label = typeof m.name === "string" && m.name !== "" ? m.name : undefined;
+      entries.push({
+        id,
+        efforts: [],
+        default_effort: null,
+        ...(label === undefined ? {} : { label }),
+      });
+    }
+  }
+  return { models: entries, error: null };
+}
+
+/**
+ * Keep only models whose provider segment is in `authedProviders` (#282).
+ * Load-bearing: the raw catalog universe is large (100+ entries / many
+ * providers); without intersection "discovered" becomes "wrong".
+ */
+export function filterOpenclawModelsByAuthedProviders(
+  models: ModelEntry[],
+  authedProviders: Set<string>,
+): ModelEntry[] {
+  if (authedProviders.size === 0) return [];
+  return models.filter((m) => {
+    const slash = m.id.indexOf("/");
+    if (slash <= 0) return false;
+    const provider = m.id.slice(0, slash);
+    return authedProviders.has(provider);
+  });
+}
+
+/**
+ * Discover plugin catalog.json paths under an operator openclaw home.
+ * Layout: `agents/<agentId>/agent/plugins/<plugin>/catalog.json`.
+ */
+export function listOpenclawCatalogPaths(home: string): string[] {
+  const agentsDir = path.join(home, "agents");
+  let agentIds: string[];
+  try {
+    agentIds = fs.readdirSync(agentsDir);
+  } catch (err) {
+    if (isEnoent(err)) return [];
+    throw err instanceof Error ? err : new Error(String(err));
+  }
+  const paths: string[] = [];
+  for (const agentId of agentIds) {
+    const pluginsDir = path.join(agentsDir, agentId, "agent", "plugins");
+    let pluginIds: string[];
+    try {
+      pluginIds = fs.readdirSync(pluginsDir);
+    } catch (err) {
+      if (isEnoent(err)) continue;
+      throw err instanceof Error ? err : new Error(String(err));
+    }
+    for (const pluginId of pluginIds) {
+      paths.push(path.join(pluginsDir, pluginId, CATALOG_FILE));
+    }
+  }
+  return paths;
+}
+
+function readRegularFileText(
+  filePath: string,
+  fileLabel: string,
+  maxBytes: number,
+): { text: string | null; error: string | null } {
+  try {
+    const stat = fs.statSync(filePath);
+    // #288: refuse non-files (FIFO, dir, device).
+    if (!stat.isFile()) {
+      return { text: null, error: `${fileLabel} is not a regular file` };
+    }
+    if (stat.size > maxBytes) {
+      return {
+        text: null,
+        error: `${fileLabel} exceeds size cap (${maxBytes} bytes)`,
+      };
+    }
+    return { text: fs.readFileSync(filePath, "utf8"), error: null };
+  } catch (err) {
+    if (isEnoent(err)) return { text: null, error: null };
+    return {
+      text: null,
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
+
+/** Catalog source string (tilde-collapsed path(s); never credential material). */
+export function openclawDiskModelsSource(
+  configPath: string,
+  catalogCount: number,
+): string {
+  if (catalogCount <= 0) return configPath;
+  if (catalogCount === 1) return `${configPath} + catalog.json`;
+  return `${configPath} + ${catalogCount} catalog.json`;
+}
 
 /**
  * Node wrap script: run openclaw, buffer stdout, re-emit as one compact JSON
@@ -608,6 +807,80 @@ export function createOpenclawAdapter(env: NodeJS.ProcessEnv = process.env): Ven
       // research §7: full catalog via --all --json; no per-model efforts.
       const stdout = await runProbe(bin, ["models", "list", "--all", "--json"]);
       return { source: MODELS_SOURCE, models: parseOpenclawModels(stdout, existing) };
+    },
+
+    async readModels(): Promise<ProbedModels> {
+      // Operator home via resolveOperatorVendorHome (refuses .openclaw-state
+      // isolation markers). Prefer per-plugin catalog.json (no sqlite) and
+      // intersect with auth.profiles providers from openclaw.json (#282).
+      // openclaw.json co-locates credentials — never log file body, never
+      // re-serialize profiles; errors/warnings must not contain secrets.
+      const home = resolveOperatorVendorHome("openclaw", env);
+      if (home === null) return { source: OPERATOR_CONFIG_FILE, models: [] };
+
+      const configPath = path.join(home, OPERATOR_CONFIG_FILE);
+      const configSource = displayVendorPath(configPath, env);
+
+      const configRead = readRegularFileText(
+        configPath,
+        OPERATOR_CONFIG_FILE,
+        OPENCLAW_CONFIG_MAX_BYTES,
+      );
+      if (configRead.error !== null) {
+        throw new Error(configRead.error);
+      }
+      let authedProviders = new Set<string>();
+      if (configRead.text !== null) {
+        // Secret hygiene: parse → project provider strings only.
+        const auth = parseOpenclawAuthProviders(configRead.text);
+        if (auth.error !== null) throw new Error(auth.error);
+        authedProviders = auth.providers;
+      }
+
+      // No auth profiles → empty disk catalog (intersection with empty set).
+      // Missing config is quiet empty (fresh home), same as no providers.
+      if (authedProviders.size === 0) {
+        return {
+          source: openclawDiskModelsSource(configSource, 0),
+          models: [],
+        };
+      }
+
+      let catalogPaths: string[];
+      try {
+        catalogPaths = listOpenclawCatalogPaths(home);
+      } catch (err) {
+        throw err instanceof Error ? err : new Error(String(err));
+      }
+
+      const allModels: ModelEntry[] = [];
+      const seen = new Set<string>();
+      let catalogsRead = 0;
+      for (const catalogPath of catalogPaths) {
+        const read = readRegularFileText(
+          catalogPath,
+          CATALOG_FILE,
+          OPENCLAW_CATALOG_MAX_BYTES,
+        );
+        if (read.error !== null) {
+          throw new Error(read.error);
+        }
+        if (read.text === null) continue; // path listed but file missing — skip
+        const parsed = parseOpenclawCatalog(read.text);
+        if (parsed.error !== null) throw new Error(parsed.error);
+        catalogsRead += 1;
+        for (const m of parsed.models) {
+          if (seen.has(m.id)) continue;
+          seen.add(m.id);
+          allModels.push(m);
+        }
+      }
+
+      const models = filterOpenclawModelsByAuthedProviders(allModels, authedProviders);
+      return {
+        source: openclawDiskModelsSource(configSource, catalogsRead),
+        models,
+      };
     },
   });
 }

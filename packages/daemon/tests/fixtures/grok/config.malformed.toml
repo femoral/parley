@@ -1,0 +1,4 @@
+# Unterminated table header — present-but-unusable.
+[model.broken
+base_url = "https://example.invalid"
+api_key = "PARLEY_FIXTURE_SENTINEL_MUST_NOT_LEAK"

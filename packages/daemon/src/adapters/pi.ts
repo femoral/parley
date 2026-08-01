@@ -1,4 +1,6 @@
+import fs from "node:fs";
 import path from "node:path";
+import { displayVendorPath, resolveOperatorVendorHome } from "@useparley/core";
 import type {
   AdapterEnforcement,
   HubInfo,
@@ -93,6 +95,207 @@ const AUTH_ENV_KEYS = [
 
 /** The probe command recorded as the catalog entry's `source` on refresh. */
 const MODELS_SOURCE = "pi --list-models";
+
+/** On-disk model store under the operator's pi agent home (#282). */
+const MODELS_STORE_FILE = "models-store.json";
+/** Adjacent settings (default provider/model/thinking) — not a catalog alone. */
+const SETTINGS_FILE = "settings.json";
+
+/**
+ * Cap on models-store.json — real stores hold multi-provider model blobs.
+ * Co-located baseUrl fields are not secrets but we still bound the read.
+ */
+export const PI_MODELS_STORE_MAX_BYTES = 8 * 1024 * 1024;
+/** Cap on settings.json (small; may name extension paths). */
+export const PI_SETTINGS_MAX_BYTES = 1 * 1024 * 1024;
+
+function isEnoent(err: unknown): boolean {
+  return (
+    typeof err === "object" &&
+    err !== null &&
+    "code" in err &&
+    (err as { code?: string }).code === "ENOENT"
+  );
+}
+
+/**
+ * Standard pi thinking levels that default-map when a key is *omitted* from
+ * `thinkingLevelMap` (docs: "Thinking Level Map"). Extended levels `xhigh` /
+ * `max` are unsupported unless explicitly string-valued in the map.
+ */
+const PI_STANDARD_THINKING_LEVELS = ["off", "minimal", "low", "medium", "high"] as const;
+
+/**
+ * Derive catalog efforts from a pi `thinkingLevelMap` tristate override table
+ * (package docs models.md — not an enumeration of supported levels):
+ *  - key → string: level supported (key is the pi level name)
+ *  - key → null: level explicitly unsupported (exclude)
+ *  - key omitted: standard levels through `high` remain supported via provider
+ *    default; `xhigh` / `max` stay unsupported when omitted
+ *
+ * Returns the union of string-valued keys and omitted standard levels, in a
+ * stable order (standard ladder first, then any extra string-valued keys).
+ */
+export function effortsFromThinkingLevelMap(tlm: Record<string, unknown>): string[] {
+  const efforts: string[] = [];
+  const seen = new Set<string>();
+  // Standard levels: include when absent or string-valued; skip null.
+  for (const level of PI_STANDARD_THINKING_LEVELS) {
+    if (!(level in tlm)) {
+      efforts.push(level);
+      seen.add(level);
+      continue;
+    }
+    if (typeof tlm[level] === "string") {
+      efforts.push(level);
+      seen.add(level);
+    }
+    // null / non-string → excluded
+  }
+  // Explicit string-valued keys outside the standard set (xhigh, max, …).
+  for (const [key, value] of Object.entries(tlm)) {
+    if (key === "" || seen.has(key)) continue;
+    if (typeof value === "string") {
+      efforts.push(key);
+      seen.add(key);
+    }
+  }
+  return efforts;
+}
+
+/**
+ * Parse pi's on-disk `models-store.json` (#282). Shape (verified):
+ * `{ [provider]: { models: [ { id, thinkingLevelMap?, … } ], … } }`.
+ *
+ * **Sharp edge:** `thinkingLevelMap` is a per-model *tristate override table*,
+ * not an enum of supported levels — see {@link effortsFromThinkingLevelMap}.
+ * Models with **no** map at all get **empty** efforts (issue #282 decision;
+ * never reapply the hardcoded `PI_THINKING_LEVELS` constant). Ids are
+ * `provider/model` to match the `--list-models` probe / `--model` flag.
+ */
+export function parsePiModelsStore(json: string): {
+  models: ModelEntry[];
+  error: string | null;
+} {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(json);
+  } catch {
+    return { models: [], error: "malformed models-store.json" };
+  }
+  // Root must be a plain object keyed by provider — not an array / scalar.
+  const root = asRecord(parsed);
+  if (!root || Array.isArray(parsed)) {
+    return { models: [], error: "unexpected models-store.json shape" };
+  }
+  const entries: ModelEntry[] = [];
+  const seen = new Set<string>();
+  for (const [provider, blob] of Object.entries(root)) {
+    if (provider === "") continue;
+    const group = asRecord(blob);
+    if (!group) continue;
+    const models = group.models;
+    if (!Array.isArray(models)) continue;
+    for (const raw of models) {
+      const m = asRecord(raw);
+      if (!m) continue;
+      const modelId = asString(m.id);
+      if (modelId === "") continue;
+      const id = `${provider}/${modelId}`;
+      if (seen.has(id)) continue;
+      seen.add(id);
+      // Absent / null map → empty efforts. Present object (incl. empty) →
+      // tristate derivation. Never invent the full PI_THINKING_LEVELS constant.
+      const tlm = asRecord(m.thinkingLevelMap);
+      const efforts = tlm !== undefined ? effortsFromThinkingLevelMap(tlm) : [];
+      const label = typeof m.name === "string" && m.name !== "" ? m.name : undefined;
+      entries.push({
+        id,
+        efforts,
+        default_effort: null,
+        ...(label === undefined ? {} : { label }),
+      });
+    }
+  }
+  // Empty root `{}` is a valid fresh-ish store — not an error.
+  return { models: entries, error: null };
+}
+
+/**
+ * Optional defaults from pi `settings.json` (#282). Project only
+ * defaultProvider / defaultModel / defaultThinkingLevel — never extension
+ * paths or package install records into the catalog.
+ */
+export function parsePiSettings(json: string): {
+  defaultProvider: string | null;
+  defaultModel: string | null;
+  defaultThinkingLevel: string | null;
+  error: string | null;
+} {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(json);
+  } catch {
+    return {
+      defaultProvider: null,
+      defaultModel: null,
+      defaultThinkingLevel: null,
+      error: "malformed settings.json",
+    };
+  }
+  const root = asRecord(parsed);
+  if (!root) {
+    return {
+      defaultProvider: null,
+      defaultModel: null,
+      defaultThinkingLevel: null,
+      error: "unexpected settings.json shape",
+    };
+  }
+  return {
+    defaultProvider: typeof root.defaultProvider === "string" ? root.defaultProvider : null,
+    defaultModel: typeof root.defaultModel === "string" ? root.defaultModel : null,
+    defaultThinkingLevel:
+      typeof root.defaultThinkingLevel === "string" ? root.defaultThinkingLevel : null,
+    error: null,
+  };
+}
+
+/**
+ * Apply settings defaults onto store models: set `default_effort` on the
+ * default provider/model when the settings thinking level appears in that
+ * model's efforts list. Does not invent efforts or stamp non-default rows.
+ */
+export function applyPiSettingsDefaults(
+  models: ModelEntry[],
+  settings: {
+    defaultProvider: string | null;
+    defaultModel: string | null;
+    defaultThinkingLevel: string | null;
+  },
+): ModelEntry[] {
+  const defaultId =
+    settings.defaultProvider && settings.defaultModel
+      ? `${settings.defaultProvider}/${settings.defaultModel}`
+      : null;
+  const level = settings.defaultThinkingLevel;
+  if (defaultId === null || level === null || level === "") return models;
+  return models.map((m) => {
+    if (m.id !== defaultId || !m.efforts.includes(level)) return m;
+    return { ...m, default_effort: level };
+  });
+}
+
+/** Catalog source string for a pi models-store read (optional default combo). */
+export function piModelsStoreSource(
+  storePath: string,
+  defaultId: string | null,
+): string {
+  if (defaultId !== null && defaultId !== "") {
+    return `${storePath} (default_model=${defaultId})`;
+  }
+  return storePath;
+}
 
 /**
  * Soft sandbox via tool allowlists (research §5). Pi has no OS sandbox or
@@ -630,6 +833,82 @@ export function createPiAdapter(env: NodeJS.ProcessEnv = process.env): VendorAda
       // Plain-text table (research §7); no --json flag.
       const stdout = await runProbe(bin, ["--list-models"]);
       return { source: MODELS_SOURCE, models: parsePiModels(stdout) };
+    },
+
+    async readModels(): Promise<ProbedModels> {
+      // Operator home via resolveOperatorVendorHome (honours PI_CODING_AGENT_DIR;
+      // adapter does not set it on spawn by default). models-store.json is the
+      // catalog; settings.json supplies defaults only (#282). Absent store =
+      // quiet empty; present-but-unusable rejects so refresh can warn.
+      const home = resolveOperatorVendorHome("pi", env);
+      if (home === null) return { source: MODELS_STORE_FILE, models: [] };
+      const storePath = path.join(home, MODELS_STORE_FILE);
+      const sourceBase = displayVendorPath(storePath, env);
+
+      let storeText: string;
+      try {
+        const stat = fs.statSync(storePath);
+        // #288: refuse non-files (FIFO, dir, device).
+        if (!stat.isFile()) {
+          throw new Error(`${MODELS_STORE_FILE} is not a regular file`);
+        }
+        if (stat.size > PI_MODELS_STORE_MAX_BYTES) {
+          throw new Error(
+            `${MODELS_STORE_FILE} exceeds size cap (${PI_MODELS_STORE_MAX_BYTES} bytes)`,
+          );
+        }
+        storeText = fs.readFileSync(storePath, "utf8");
+      } catch (err) {
+        if (isEnoent(err)) {
+          return { source: piModelsStoreSource(sourceBase, null), models: [] };
+        }
+        throw err instanceof Error ? err : new Error(String(err));
+      }
+
+      const { models: storeModels, error: storeError } = parsePiModelsStore(storeText);
+      if (storeError !== null) throw new Error(storeError);
+
+      // settings.json is optional enrichment — missing is fine; present-but-
+      // unusable warns via throw only when the file exists and is bad.
+      let settings = {
+        defaultProvider: null as string | null,
+        defaultModel: null as string | null,
+        defaultThinkingLevel: null as string | null,
+      };
+      const settingsPath = path.join(home, SETTINGS_FILE);
+      try {
+        const stat = fs.statSync(settingsPath);
+        if (!stat.isFile()) {
+          throw new Error(`${SETTINGS_FILE} is not a regular file`);
+        }
+        if (stat.size > PI_SETTINGS_MAX_BYTES) {
+          throw new Error(
+            `${SETTINGS_FILE} exceeds size cap (${PI_SETTINGS_MAX_BYTES} bytes)`,
+          );
+        }
+        const settingsText = fs.readFileSync(settingsPath, "utf8");
+        const parsed = parsePiSettings(settingsText);
+        if (parsed.error !== null) throw new Error(parsed.error);
+        settings = {
+          defaultProvider: parsed.defaultProvider,
+          defaultModel: parsed.defaultModel,
+          defaultThinkingLevel: parsed.defaultThinkingLevel,
+        };
+      } catch (err) {
+        if (!isEnoent(err)) {
+          throw err instanceof Error ? err : new Error(String(err));
+        }
+      }
+
+      const models = applyPiSettingsDefaults(storeModels, settings);
+      const defaultId =
+        settings.defaultProvider && settings.defaultModel
+          ? `${settings.defaultProvider}/${settings.defaultModel}`
+          : null;
+      return {
+        source: piModelsStoreSource(sourceBase, defaultId),
+        models,
+      };
     },
   });
 }

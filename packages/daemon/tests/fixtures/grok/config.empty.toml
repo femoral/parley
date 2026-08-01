@@ -1,0 +1,3 @@
+# Fresh operator home — no [model.*] tables.
+[models]
+default = "grok-4.5"
