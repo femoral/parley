@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import os from "node:os";
 import path from "node:path";
 import {
+  collapseOperatorHomeInText,
   displayVendorPath,
   isParleyIsolatedVendorHome,
   operatorHomeDir,
@@ -161,5 +162,34 @@ describe("displayVendorPath / operatorHomeDir", () => {
     expect(displayVendorPath("/opt/elsewhere/cache.json", { HOME: "/tmp/operator" })).toBe(
       "/opt/elsewhere/cache.json",
     );
+  });
+});
+
+describe("collapseOperatorHomeInText", () => {
+  it("collapses home path prefixes embedded mid-string (fs error shape)", () => {
+    const home = "/tmp/operator";
+    const msg = `EACCES: permission denied, open "${home}/.hermes/cache/model_catalog.json"`;
+    expect(collapseOperatorHomeInText(msg, { HOME: home })).toBe(
+      'EACCES: permission denied, open "~/.hermes/cache/model_catalog.json"',
+    );
+  });
+
+  it("collapses bare home at a path boundary (end, quote, whitespace)", () => {
+    const home = "/tmp/operator";
+    expect(collapseOperatorHomeInText(`open '${home}'`, { HOME: home })).toBe("open '~'");
+    expect(collapseOperatorHomeInText(`cwd ${home} ok`, { HOME: home })).toBe("cwd ~ ok");
+    expect(collapseOperatorHomeInText(home, { HOME: home })).toBe("~");
+  });
+
+  it("does not match a longer path that only shares a home prefix substring", () => {
+    // /tmp/operator-extra must not become ~/.extra when HOME is /tmp/operator
+    const msg = 'open "/tmp/operator-extra/.codex/cache.json"';
+    expect(collapseOperatorHomeInText(msg, { HOME: "/tmp/operator" })).toBe(msg);
+  });
+
+  it("leaves text without the home prefix unchanged", () => {
+    expect(
+      collapseOperatorHomeInText("EACCES: permission denied", { HOME: "/tmp/operator" }),
+    ).toBe("EACCES: permission denied");
   });
 });
