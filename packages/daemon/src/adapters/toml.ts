@@ -188,7 +188,13 @@ export function parseToml(text: string): TomlTable {
     if (line === "") continue;
 
     // Table header: [foo], [foo.bar], [models."kimi-code/k3"]
-    if (line.startsWith("[") && line.endsWith("]") && !line.startsWith("[[")) {
+    // Array-of-tables [[foo]] is not parsed, but must still detach `current`
+    // so following keys are not absorbed into the previous table (#289).
+    if (line.startsWith("[") && line.endsWith("]")) {
+      if (line.startsWith("[[")) {
+        current = emptyTable();
+        continue;
+      }
       const header = line.slice(1, -1).trim();
       const segments = splitTableHeader(header);
       if (segments === null) {
