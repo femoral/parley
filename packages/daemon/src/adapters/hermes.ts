@@ -413,10 +413,7 @@ export function parseHermesModelCatalog(json: string): {
  * check use non-overlapping ids.
  */
 export function hermesRowsToModelEntries(rows: readonly HermesCatalogRow[]): ModelEntry[] {
-  const byId = new Map<
-    string,
-    { description?: string; defaultFor: string[]; providerOrder: string[] }
-  >();
+  const byId = new Map<string, { description?: string; defaultFor: string[] }>();
   for (const row of rows) {
     const existing = byId.get(row.id);
     if (existing === undefined) {
@@ -425,7 +422,6 @@ export function hermesRowsToModelEntries(rows: readonly HermesCatalogRow[]): Mod
           ? {}
           : { description: row.description }),
         defaultFor: row.isDefault ? [row.provider] : [],
-        providerOrder: [row.provider],
       });
       continue;
     }
@@ -438,9 +434,6 @@ export function hermesRowsToModelEntries(rows: readonly HermesCatalogRow[]): Mod
     }
     if (row.isDefault && !existing.defaultFor.includes(row.provider)) {
       existing.defaultFor.push(row.provider);
-    }
-    if (!existing.providerOrder.includes(row.provider)) {
-      existing.providerOrder.push(row.provider);
     }
   }
   const entries: ModelEntry[] = [];
@@ -500,17 +493,47 @@ export function parseHermesProviderModelsCache(json: string): {
  * keep their full curated list (partial cache must not wipe the other
  * provider). When the cache map is empty, return rows unchanged (manifest
  * alone).
+ *
+ * Id-form mismatch guard: the two on-disk files do not share a verified id
+ * schema (curated rows may be `vendor/model` while the runtime cache holds
+ * bare API ids). If intersecting a provider that had curated models would
+ * drop *every* row for that provider, keep the unfiltered curated rows
+ * instead — otherwise discovery silently zeros the catalog and
+ * `refreshCatalog` falls through to the empty shipped hermes entry.
  */
 export function intersectHermesRowsWithProviderCache(
   rows: readonly HermesCatalogRow[],
   byProvider: Map<string, Set<string>>,
 ): HermesCatalogRow[] {
   if (byProvider.size === 0) return [...rows];
-  return rows.filter((row) => {
-    const allowed = byProvider.get(row.provider);
-    if (allowed === undefined) return true;
-    return allowed.has(row.id);
-  });
+
+  const rowsByProvider = new Map<string, HermesCatalogRow[]>();
+  for (const row of rows) {
+    const list = rowsByProvider.get(row.provider);
+    if (list === undefined) {
+      rowsByProvider.set(row.provider, [row]);
+    } else {
+      list.push(row);
+    }
+  }
+
+  const out: HermesCatalogRow[] = [];
+  for (const [provider, providerRows] of rowsByProvider) {
+    const allowed = byProvider.get(provider);
+    if (allowed === undefined) {
+      out.push(...providerRows);
+      continue;
+    }
+    const kept = providerRows.filter((row) => allowed.has(row.id));
+    // Empty intersection for a non-empty curated provider → id form mismatch;
+    // fall back to that provider's full curated list rather than wiping it.
+    if (kept.length === 0 && providerRows.length > 0) {
+      out.push(...providerRows);
+    } else {
+      out.push(...kept);
+    }
+  }
+  return out;
 }
 
 /**

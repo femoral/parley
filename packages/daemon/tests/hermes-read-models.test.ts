@@ -226,6 +226,64 @@ describe("provider models cache cross-check", () => {
     expect(filtered.filter((r) => r.provider === "openrouter")).toHaveLength(1);
     expect(filtered.filter((r) => r.provider === "nous")).toHaveLength(32);
   });
+
+  it("falls back to curated rows when cache ids share no form with the manifest", () => {
+    // Runtime /v1/models caches often hold bare API ids; the curated
+    // manifest uses provider-prefixed ids. A non-empty mismatch must not
+    // zero the catalog (discovery would silently become a no-op).
+    const { rows } = parseHermesModelCatalog(readFixture("model_catalog.well-formed.json"));
+    expect(rows.length).toBeGreaterThan(0);
+    const byProvider = new Map<string, Set<string>>([
+      ["openrouter", new Set(["claude-opus-4", "gpt-5", "bare-api-id"])],
+      ["nous", new Set(["portal-only-bare-id"])],
+    ]);
+    const filtered = intersectHermesRowsWithProviderCache(rows, byProvider);
+    expect(filtered).toHaveLength(rows.length);
+    expect(filtered.map((r) => r.id).sort()).toEqual(rows.map((r) => r.id).sort());
+  });
+
+  it("falls back per-provider when only one provider's cache ids mismatch", () => {
+    const { rows } = parseHermesModelCatalog(readFixture("model_catalog.well-formed.json"));
+    const byProvider = new Map<string, Set<string>>([
+      // Matching form — narrow openrouter.
+      ["openrouter", new Set(["openrouter/model-00", "openrouter/model-01"])],
+      // Mismatch — keep all nous curated rows.
+      ["nous", new Set(["bare-nous-id-1", "bare-nous-id-2"])],
+    ]);
+    const filtered = intersectHermesRowsWithProviderCache(rows, byProvider);
+    expect(filtered.filter((r) => r.provider === "openrouter")).toHaveLength(2);
+    expect(filtered.filter((r) => r.provider === "nous")).toHaveLength(32);
+  });
+});
+
+describe("parseHermesModelCatalog prototype safety", () => {
+  it("does not crash or pollute Object.prototype on a __proto__ provider key", () => {
+    // Raw JSON string so `__proto__` is a real own property of the providers
+    // object (object-literal `__proto__` would set the prototype instead).
+    const json = [
+      "{",
+      '"version":1,',
+      '"updated_at":"t",',
+      '"providers":{',
+      '"__proto__":{"models":[{"id":"should-not-pollute","default":true}],"polluted":true},',
+      '"openrouter":{"models":[{"id":"openrouter/safe","description":"ok"}]}',
+      "}",
+      "}",
+    ].join("");
+    const { models, rows, error } = parseHermesModelCatalog(json);
+    expect(error).toBeNull();
+    // Must not hang, throw, or put arbitrary keys on Object.prototype.
+    expect(Object.prototype.hasOwnProperty.call(Object.prototype, "polluted")).toBe(false);
+    expect((Object.prototype as { polluted?: unknown }).polluted).toBeUndefined();
+    // Legitimate provider still projects.
+    expect(models.some((m) => m.id === "openrouter/safe")).toBe(true);
+    // Own-key `__proto__` is iterated via Object.entries as a normal string key.
+    const protoRows = rows.filter((r) => r.provider === "__proto__");
+    expect(protoRows).toHaveLength(1);
+    expect(protoRows[0]!.id).toBe("should-not-pollute");
+    // Model projection must not inherit polluted fields onto entries.
+    expect(JSON.stringify(models)).not.toMatch(/"polluted"\s*:/);
+  });
 });
 
 describe("hermes adapter readModels", () => {
@@ -279,6 +337,58 @@ describe("hermes adapter readModels", () => {
     // 3 openrouter + 2 nous after per-provider intersection.
     expect(result.models).toHaveLength(5);
     expect(JSON.stringify(result)).not.toContain(HYGIENE_SENTINEL);
+  });
+
+  it("keeps the full manifest when provider cache ids do not match manifest form", async () => {
+    home = makeOperatorHome();
+    writeCatalog(home, "model_catalog.well-formed.json");
+    // Well-formed cache, but bare API ids that share no form with curated ids.
+    fs.writeFileSync(
+      path.join(home, HERMES_PROVIDER_MODELS_CACHE_FILE),
+      JSON.stringify({
+        openrouter: {
+          fp: "not-a-secret-hash",
+          at: 1721000000.0,
+          models: ["claude-opus-4", "gpt-5", "bare-api-id"],
+        },
+        nous: {
+          fp: "also-not-a-secret",
+          at: 1721000000.0,
+          models: ["portal-bare-1", "portal-bare-2"],
+        },
+      }),
+    );
+    const adapter = createHermesAdapter({ HERMES_HOME: home });
+    const result = await adapter.readModels!(undefined);
+    expect(result.models).toHaveLength(73);
+    expect(result.models.map((m) => m.id)).toContain("openrouter/model-00");
+    expect(result.models.map((m) => m.id)).toContain("nous/model-00");
+  });
+
+  it("does not reject readModels when provider_models_cache.json is malformed", async () => {
+    home = makeOperatorHome();
+    writeCatalog(home, "model_catalog.well-formed.json");
+    fs.writeFileSync(
+      path.join(home, HERMES_PROVIDER_MODELS_CACHE_FILE),
+      "{ not valid json for provider cache\n",
+    );
+    const adapter = createHermesAdapter({ HERMES_HOME: home });
+    // Primary catalog still wins; cache path is fail-soft (never rejects).
+    const result = await adapter.readModels!(undefined);
+    expect(result.models).toHaveLength(73);
+  });
+
+  it("does not reject or hang when provider_models_cache.json is a FIFO", async () => {
+    home = makeOperatorHome();
+    writeCatalog(home, "model_catalog.well-formed.json");
+    const fifo = path.join(home, HERMES_PROVIDER_MODELS_CACHE_FILE);
+    execFileSync("mkfifo", [fifo]);
+    const adapter = createHermesAdapter({ HERMES_HOME: home });
+    const started = Date.now();
+    // Cache is optional: non-file must not reject the whole readModels path.
+    const result = await adapter.readModels!(undefined);
+    expect(Date.now() - started).toBeLessThan(2000);
+    expect(result.models).toHaveLength(73);
   });
 
   it("returns empty models when the catalog file is missing (fresh home)", async () => {
