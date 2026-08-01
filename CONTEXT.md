@@ -13,6 +13,13 @@ human/agent driving parley is the **orchestrator**.
   set via `PARLEY_SESSION_ID` env > `--session` flag > ancestry; ADR-0013)
   tying together the tasks one orchestrator run spawned. The unit of listing
   filters *and* of inbox consumption.
+- **Session liveness** — a registered session is *live* while its anchor
+  process (`machine_id` + `pid` + `start_time`) is verifiably alive on the
+  daemon's machine; unverifiable anchors (foreign machine, degraded `"0"`
+  start-time) stay live until an idle TTL (default 7 days since `updated_at`,
+  refreshed on every successful bind) lapses. Only live sessions count for
+  workspace-fallback binding and ambiguity; `parley gc` deletes dead/expired
+  rows — provenance is already snapshotted onto tasks/runs (ADR-0024).
 - **Task state** — exact vocabulary: `pending`, `running`, `awaiting_answer`,
   `stalled`, `completed`, `failed`, `cancelled`. Terminal states: `completed`,
   `failed`, `cancelled`.
@@ -92,6 +99,13 @@ human/agent driving parley is the **orchestrator**.
   reads must use the operator home and refuse parley-provisioned isolation
   markers so a delegated child cannot inject task-controlled model ids into
   the global catalog (`resolveOperatorVendorHome`, #281).
+- **Posture enforcement declaration** — an adapter's self-declared ability to
+  enforce the normalized sandbox surface (per posture: *enforced* / *advisory*
+  / *none*, plus network-off). A requested posture is best-effort, not a
+  guarantee: tasks still run when the adapter can't enforce it; `parley init`
+  discloses the gap at vendor setup, and the README enforcement matrix derives
+  from the declarations. Adapters that don't declare (third-party plugins)
+  read as unknown → not enforced (ADR-0023).
 - **Harness plugin** — a per-vendor package installed into the orchestrator's
   own harness (via that harness's native hook/plugin system) that exports
   session provenance at session start (env vars and/or INTERIM state file).
