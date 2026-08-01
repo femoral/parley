@@ -103,4 +103,41 @@ describe("parseToml prototype pollution guards (finding 1)", () => {
     // Hostile keys must not land on root either.
     expect(root).not.toHaveProperty("default_effort");
   });
+
+  it("does not absorb keys after [[array of tables]] into the previous model table (#289)", () => {
+    // Array-of-tables headers were previously skipped without resetting
+    // `current`, so keys under [[mcp_servers]] leaked into the model entry.
+    const text = `[models."kimi-code/kimi-for-coding"]
+support_efforts = ["low","medium","high"]
+default_effort = "medium"
+max_context_size = 262144
+
+[[mcp_servers]]
+default_effort = "HIJACKED"
+max_context_size = 1
+`;
+    const root = parseToml(text);
+    const models = root.models as Record<string, Record<string, unknown>>;
+    expect(models["kimi-code/kimi-for-coding"]).toEqual({
+      support_efforts: ["low", "medium", "high"],
+      default_effort: "medium",
+      max_context_size: 262144,
+    });
+    // Array-of-tables content is intentionally not materialised.
+    expect(root).not.toHaveProperty("mcp_servers");
+    expect(root).not.toHaveProperty("default_effort");
+    expect(root).not.toHaveProperty("max_context_size");
+
+    const { models: projected } = parseKimiModelsConfig(text);
+    expect(projected).toEqual([
+      {
+        id: "kimi-code/kimi-for-coding",
+        efforts: ["low", "medium", "high"],
+        default_effort: "medium",
+        notes: "max_context_size=262144",
+      },
+    ]);
+    expect(projected[0]!.default_effort).not.toBe("HIJACKED");
+    expect(projected[0]!.notes).not.toBe("max_context_size=1");
+  });
 });
