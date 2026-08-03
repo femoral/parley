@@ -289,7 +289,10 @@ export function pickRicherModelEntry(primary: ModelEntry, secondary: ModelEntry)
  * Returns `null` when both sides are empty so the caller can fall through to
  * shipped. Source strings are joined with ` + ` when both contributed models.
  * Non-fatal channel warnings (#296) are unioned primary-then-secondary; the
- * field is omitted when neither side has any.
+ * field is omitted when neither side has any. The union is kept for direct
+ * callers of this helper; `refreshCatalog` sources notes from `safeDiscover`
+ * instead so empty-channel warnings still surface (#299) — do not re-add a
+ * `merged.warnings` loop there or notes would double-report.
  */
 export function mergeDiscoveredModels(
   primary: ProbedModels | null,

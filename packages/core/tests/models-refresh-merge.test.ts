@@ -258,6 +258,34 @@ describe("refreshCatalog with readModels + listModels", () => {
     expect(warnings).toContain("grok: malformed config.toml: expected table");
   });
 
+  it("surfaces empty-but-warned channel notes when the other channel fills (#299)", async () => {
+    // Success-branch coverage for the safeDiscover.warnings loop: disk returns
+    // zero models but a fail-soft note; probe fills the catalog. The note must
+    // still reach RefreshResult.warnings (vendor-prefixed).
+    const adapters = new Map([
+      [
+        "grok",
+        prober({
+          readModels: () =>
+            Promise.resolve({
+              source: "models_cache.json",
+              models: [],
+              warnings: ["malformed config.toml: expected table"],
+            }),
+          listModels: () =>
+            Promise.resolve({
+              source: "grok models",
+              models: [entry({ id: "from-probe" })],
+            }),
+        }),
+      ],
+    ]);
+    const { catalog, warnings } = await refreshCatalog({}, ["grok"], adapters, () => NOW);
+    expect(catalog.grok!.models).toEqual([entry({ id: "from-probe" })]);
+    expect(catalog.grok!.source).toBe("grok models");
+    expect(warnings).toEqual(["grok: malformed config.toml: expected table"]);
+  });
+
   it("warns when disk fails even if probe succeeds (finding 4)", async () => {
     const adapters = new Map([
       [
