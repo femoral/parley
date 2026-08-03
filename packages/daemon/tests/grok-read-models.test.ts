@@ -259,7 +259,7 @@ describe("grok adapter readModels", () => {
     await expect(adapter.readModels!(undefined)).rejects.toThrow(/malformed models_cache/);
   });
 
-  it("fail-soft: malformed config.toml still yields valid models_cache.json (#294)", async () => {
+  it("fail-soft: malformed config.toml still yields valid models_cache.json (#294/#296)", async () => {
     home = makeOperatorHome();
     fs.writeFileSync(
       path.join(home, "models_cache.json"),
@@ -271,11 +271,13 @@ describe("grok adapter readModels", () => {
     expect(result.models.map((m) => m.id)).toContain("grok-4.5");
     expect(result.models.map((m) => m.id)).not.toContain("grok-build");
     expect(result.source).toContain("models_cache.json");
-    expect(result.source).toMatch(/warning:.*malformed config\.toml/);
+    // Warning lives on the result field, not the persisted source (#296).
+    expect(result.source).not.toMatch(/warning:/);
+    expect(result.warnings?.some((w) => /malformed config\.toml/i.test(w))).toBe(true);
     expect(JSON.stringify(result)).not.toContain(HYGIENE_SENTINEL);
   });
 
-  it("fail-soft: malformed models_cache.json still yields valid config.toml (#294)", async () => {
+  it("fail-soft: malformed models_cache.json still yields valid config.toml (#294/#296)", async () => {
     home = makeOperatorHome();
     fs.writeFileSync(
       path.join(home, "models_cache.json"),
@@ -287,10 +289,11 @@ describe("grok adapter readModels", () => {
     expect(result.models.map((m) => m.id)).toContain("grok-build");
     expect(result.source).toContain("config.toml");
     expect(result.source).toContain("default_model=grok-4.5");
-    expect(result.source).toMatch(/warning:.*malformed models_cache/);
+    expect(result.source).not.toMatch(/warning:/);
+    expect(result.warnings?.some((w) => /malformed models_cache/i.test(w))).toBe(true);
   });
 
-  it("fail-soft: usable empty models_cache + malformed config returns (does not throw) (#294)", async () => {
+  it("fail-soft: usable empty models_cache + malformed config returns (does not throw) (#294/#296)", async () => {
     home = makeOperatorHome();
     fs.writeFileSync(path.join(home, "models_cache.json"), readFixture("models_cache.empty.json"));
     fs.writeFileSync(path.join(home, "config.toml"), readFixture("config.malformed.toml"));
@@ -298,7 +301,8 @@ describe("grok adapter readModels", () => {
     const result = await adapter.readModels!(undefined);
     expect(result.models).toEqual([]);
     expect(result.source).toContain("models_cache.json");
-    expect(result.source).toMatch(/warning:.*malformed config\.toml/);
+    expect(result.source).not.toMatch(/warning:/);
+    expect(result.warnings?.some((w) => /malformed config\.toml/i.test(w))).toBe(true);
   });
 
   it("rejects when both sources are present and malformed (#294)", async () => {
@@ -312,7 +316,7 @@ describe("grok adapter readModels", () => {
     await expect(adapter.readModels!(undefined)).rejects.toThrow(/malformed/);
   });
 
-  it("collapses absolute operator-home paths in source warning text (#294)", async () => {
+  it("collapses absolute operator-home paths in warning text (#294/#296)", async () => {
     // HOME-based layout so collapseOperatorHomeInText (which keys on HOME) can
     // rewrite EACCES paths that embed the absolute home.
     home = makeOperatorHome();
@@ -329,11 +333,14 @@ describe("grok adapter readModels", () => {
       const adapter = createGrokAdapter({ HOME: home });
       const result = await adapter.readModels!(undefined);
       expect(result.models.map((m) => m.id)).toContain("grok-4.5");
-      expect(result.source).toMatch(/warning:/);
-      // Absolute home must not appear in the persisted source string.
+      // Source stays clean; absolute home must not appear in source or warnings.
+      expect(result.source).not.toMatch(/warning:/);
       expect(result.source).not.toContain(home);
+      expect(result.warnings).toBeDefined();
+      expect(result.warnings!.length).toBeGreaterThan(0);
+      expect(JSON.stringify(result.warnings)).not.toContain(home);
       // Collapsed form (or label-only) is fine; raw open path under home is not.
-      expect(result.source).toMatch(/~\/.grok|permission denied|EACCES/i);
+      expect(result.warnings!.join(" ")).toMatch(/~\/.grok|permission denied|EACCES/i);
     } finally {
       // Restore so afterEach can rm -rf the tree.
       try {
@@ -424,7 +431,7 @@ describe("refreshCatalog end-to-end: degraded grok disk reads warn", () => {
     home = makeOperatorHome();
     // No usable cache (absent) + oversize config → no usable source → throw so
     // refresh gets disk-read-failed. (A usable empty cache would return soft
-    // with the size-cap note only in source text — see fail-soft empty-cache test.)
+    // with the size-cap note on warnings — see fail-soft empty-cache test.)
     const configPath = path.join(home, "config.toml");
     const fd = fs.openSync(configPath, "w");
     try {
@@ -435,5 +442,23 @@ describe("refreshCatalog end-to-end: degraded grok disk reads warn", () => {
     const adapter = { ...createGrokAdapter({ GROK_HOME: home }), ...probeOk };
     const { warnings } = await refreshCatalog({}, ["grok"], new Map([["grok", adapter]]));
     expect(warnings.some((w) => /disk read failed.*size cap/i.test(w))).toBe(true);
+  });
+
+  it("surfaces fail-soft partial disk warning when cache is valid (#296)", async () => {
+    // Malformed config + valid cache: channel succeeds (models from cache) but
+    // the soft failure must still land in refreshCatalog.warnings — not only
+    // on the source string.
+    home = makeOperatorHome();
+    fs.writeFileSync(
+      path.join(home, "models_cache.json"),
+      readFixture("models_cache.well-formed.json"),
+    );
+    fs.writeFileSync(path.join(home, "config.toml"), readFixture("config.malformed.toml"));
+    const adapter = createGrokAdapter({ GROK_HOME: home });
+    const { catalog, warnings } = await refreshCatalog({}, ["grok"], new Map([["grok", adapter]]));
+    expect(catalog.grok!.models.map((m) => m.id)).toContain("grok-4.5");
+    expect(catalog.grok!.source).not.toMatch(/warning:/);
+    expect(warnings.some((w) => /^grok:.*malformed config\.toml/i.test(w))).toBe(true);
+    expect(JSON.stringify(warnings)).not.toContain(HYGIENE_SENTINEL);
   });
 });

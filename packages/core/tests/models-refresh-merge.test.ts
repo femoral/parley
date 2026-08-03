@@ -124,6 +124,31 @@ describe("mergeDiscoveredModels (union / richest-wins)", () => {
     expect(mergeDiscoveredModels(disk, null)).toEqual(disk);
     expect(mergeDiscoveredModels(null, disk)).toEqual(disk);
   });
+
+  it("unions warnings primary-then-secondary (#296)", () => {
+    const disk: ProbedModels = {
+      source: "cache",
+      models: [entry({ id: "a" })],
+      warnings: ["malformed config.toml"],
+    };
+    const probe: ProbedModels = {
+      source: "cli",
+      models: [entry({ id: "b" })],
+      warnings: ["probe note"],
+    };
+    const merged = mergeDiscoveredModels(disk, probe)!;
+    expect(merged.warnings).toEqual(["malformed config.toml", "probe note"]);
+    // Side without warnings: only the other side's notes.
+    expect(mergeDiscoveredModels(disk, { source: "cli", models: [entry({ id: "b" })] })!.warnings)
+      .toEqual(["malformed config.toml"]);
+    // Neither side warns: field omitted.
+    expect(
+      mergeDiscoveredModels(
+        { source: "cache", models: [entry({ id: "a" })] },
+        { source: "cli", models: [entry({ id: "b" })] },
+      )!.warnings,
+    ).toBeUndefined();
+  });
 });
 
 describe("refreshCatalog with readModels + listModels", () => {
@@ -180,6 +205,28 @@ describe("refreshCatalog with readModels + listModels", () => {
     expect(ids).toEqual(["cache-only", "probe-only", "shared"]);
     expect(catalog.grok!.models.find((m) => m.id === "shared")!.efforts).toEqual(["low"]);
     expect(catalog.grok!.source).toBe("models_cache.json + grok models");
+  });
+
+  it("surfaces channel-provided warnings when catalog fill succeeds (#296)", async () => {
+    // Fail-soft ≠ silent: a successful disk read that still notes a partial
+    // failure (e.g. one of two on-disk sources bad) must push into warnings.
+    const adapters = new Map([
+      [
+        "grok",
+        prober({
+          readModels: () =>
+            Promise.resolve({
+              source: "models_cache.json",
+              models: [entry({ id: "from-disk" })],
+              warnings: ["malformed config.toml: expected table"],
+            }),
+        }),
+      ],
+    ]);
+    const { catalog, warnings } = await refreshCatalog({}, ["grok"], adapters, () => NOW);
+    expect(catalog.grok!.models.map((m) => m.id)).toEqual(["from-disk"]);
+    expect(catalog.grok!.source).toBe("models_cache.json");
+    expect(warnings).toEqual(["grok: malformed config.toml: expected table"]);
   });
 
   it("warns when disk fails even if probe succeeds (finding 4)", async () => {

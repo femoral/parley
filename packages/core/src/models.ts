@@ -47,6 +47,14 @@ export interface ProbedModels {
    */
   source: string;
   models: ModelEntry[];
+  /**
+   * Per-channel non-fatal failure notes (#296). Used when a discovery channel
+   * succeeds overall (returns models) but one of its on-disk sources failed
+   * soft — e.g. grok's config.toml is malformed while models_cache.json is fine.
+   * Adapters are responsible for collapsing operator-home paths in any warning
+   * text they emit; refreshCatalog surfaces these as-is (prefixed with vendor id).
+   */
+  warnings?: string[];
 }
 
 /**
@@ -279,6 +287,8 @@ export function pickRicherModelEntry(primary: ModelEntry, secondary: ModelEntry)
  *
  * Returns `null` when both sides are empty so the caller can fall through to
  * shipped. Source strings are joined with ` + ` when both contributed models.
+ * Non-fatal channel warnings (#296) are unioned primary-then-secondary; the
+ * field is omitted when neither side has any.
  */
 export function mergeDiscoveredModels(
   primary: ProbedModels | null,
@@ -302,9 +312,13 @@ export function mergeDiscoveredModels(
   if (primary !== null && primaryModels.length > 0) sources.push(primary.source);
   if (secondary !== null && secondaryModels.length > 0) sources.push(secondary.source);
 
+  // Primary then secondary; omit when neither side contributed warnings (#296).
+  const warnings = [...(primary?.warnings ?? []), ...(secondary?.warnings ?? [])];
+
   return {
     source: sources.join(" + "),
     models: [...byId.values()],
+    ...(warnings.length > 0 ? { warnings } : {}),
   };
 }
 
@@ -390,6 +404,13 @@ export async function refreshCatalog<A extends ModelProber>(
       }
       if (adapter.listModels && probeError) {
         warnings.push(`${id}: probe failed (${probeError})`);
+      }
+      // Per-channel non-fatal notes (partial disk fail-soft, #296). Adapters
+      // collapse operator-home paths themselves; leave text as-is here.
+      if (merged.warnings !== undefined) {
+        for (const note of merged.warnings) {
+          warnings.push(`${id}: ${note}`);
+        }
       }
       // Vendor-level effort_levels / notes are catalog metadata (usually from
       // the shipped seed). Discovery only refreshes fetched_at/source/models;
