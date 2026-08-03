@@ -114,10 +114,17 @@ Usage:
   parley clean --all-terminal   Sweep worktrees of all terminal-state tasks
   parley gc [--dry-run]         Purge expired terminal tasks (rows, logs,
                             worktrees; never branches). --dry-run lists only.
-  parley models [--vendor <id>] [--json] [--refresh]
-                            Show the model/effort catalog (~/.parley/models.json,
-                            hand-editable). --refresh re-probes vendor CLIs;
-                            advisory only — delegate never gates on it.
+  parley models [--vendor <id>] [--json]
+                            Show the daemon-wide model/effort allowlist
+                            (vendors.*.models). One policy for every client.
+  parley models set|unset <key> [value]
+                            Edit the allowlist over HTTP (scoped to
+                            vendors.<id>.models only; not raw config-admin).
+  parley models refresh [--vendor <id>] [--json]
+                            Ask the daemon to re-fingerprint its host and
+                            return the fleet aggregate (daemon catalog + each
+                            runner's last-advertised catalog with ages).
+                            Probes never run on the CLI host.
   parley daemon start           Start the background daemon (--replace takes over a running one)
   parley daemon stop            Stop the background daemon
   parley daemon status          Report daemon identity (pid, port, id, home, version, provenance)

@@ -29,9 +29,15 @@ import {
   type RunnerCapabilities,
   type RunnerListEntry,
   type TaskEnvelope,
+  type VendorAdapter,
   type WorkflowDefinition,
 } from "@useparley/core";
 import { createAdapterRegistry } from "./adapters/index.js";
+import {
+  extractAllowlist,
+  isModelsAllowlistKey,
+  refreshFleetCatalog,
+} from "./models-http.js";
 import {
   countUnsettledTasks,
   getDeliverable,
@@ -663,6 +669,11 @@ export type AuthRouteClass = "runner" | "child" | "client" | "config-admin";
 /**
  * Classify a request for the auth gate. Config write verbs are a separate
  * class so they can be rejected off-loopback regardless of any valid token.
+ *
+ * `/models` read and edit routes are intentionally **client** (not
+ * config-admin): allowlist edits are the dedicated #322 remote surface,
+ * scoped to `vendors.*.models` only so they cannot smuggle arbitrary config
+ * keys. Do not reclassify them as config-admin.
  */
 export function classifyAuthRoute(method: string, pathname: string): AuthRouteClass {
   const segments = pathname.split("/").filter((s) => s !== "");
@@ -677,6 +688,9 @@ export function classifyAuthRoute(method: string, pathname: string): AuthRouteCl
   }
   return "client";
 }
+
+// Re-export for tests / external classification of allowlist key scope (#322).
+export { isModelsAllowlistKey } from "./models-http.js";
 
 /** Pure-function inputs for the auth gate (unit-testable without sockets). */
 export interface AuthGateInput {
@@ -1240,6 +1254,194 @@ function handleConfigUnset(
     return;
   }
   sendJson(res, 200, { config: validated, key });
+}
+
+/**
+ * `GET /models` — daemon-wide vendor model allowlist (policy, ADR-0014).
+ * Hot: re-reads parley.json per call so hand-edits on the daemon host apply
+ * without restart. Optional `?vendor=<id>` filters to one vendor.
+ *
+ * CLIENT-class route (#322 / #323): readable off-loopback with a client token.
+ */
+function handleModelsGet(
+  paths: HomePaths,
+  res: http.ServerResponse,
+  vendor: string | null,
+): void {
+  let config: ParleyConfig;
+  try {
+    config = loadAdminConfig(paths);
+  } catch (err) {
+    sendJson(res, 500, { error: err instanceof Error ? err.message : String(err) });
+    return;
+  }
+  const allowlist = extractAllowlist(
+    config,
+    vendor === null || vendor === "" ? undefined : vendor,
+  );
+  sendJson(res, 200, { allowlist });
+}
+
+/**
+ * `POST /models/set` — set a dotted key under `vendors.<id>.models` only.
+ *
+ * CLIENT-class (#322): remote clients with a valid token may edit the
+ * allowlist. Keys outside the models subtree are rejected (400) so this
+ * cannot smuggle config-admin writes (bind, tokens, bin/args/env, …).
+ */
+function handleModelsSet(
+  paths: HomePaths,
+  res: http.ServerResponse,
+  body: unknown,
+): void {
+  if (!isRecord(body) || typeof body.key !== "string") {
+    sendJson(res, 400, { error: "key is required" });
+    return;
+  }
+  if (!("value" in body)) {
+    sendJson(res, 400, { error: "value is required" });
+    return;
+  }
+  const key = body.key;
+  // Subtree scope: only vendors.<id>.models[.<modelId>] — never arbitrary config.
+  if (!isModelsAllowlistKey(key)) {
+    sendJson(res, 400, {
+      error:
+        `models set is limited to vendors.<id>.models[.<modelId>]; refused key: ${key}`,
+    });
+    return;
+  }
+  let current: ParleyConfig;
+  try {
+    current = loadAdminConfig(paths);
+  } catch (err) {
+    sendJson(res, 500, { error: err instanceof Error ? err.message : String(err) });
+    return;
+  }
+  let next: Record<string, unknown>;
+  try {
+    next = setConfigPath(current as Record<string, unknown>, key, body.value);
+  } catch (err) {
+    sendJson(res, 400, { error: err instanceof Error ? err.message : String(err) });
+    return;
+  }
+  let validated: ParleyConfig;
+  try {
+    validated = validateConfig(paths.config, next);
+  } catch (err) {
+    sendJson(res, 400, { error: err instanceof Error ? err.message : String(err) });
+    return;
+  }
+  try {
+    persistAdminConfig(paths, validated);
+  } catch (err) {
+    sendJson(res, 500, { error: err instanceof Error ? err.message : String(err) });
+    return;
+  }
+  sendJson(res, 200, {
+    key,
+    value: body.value,
+    allowlist: extractAllowlist(validated),
+  });
+}
+
+/**
+ * `POST /models/unset` — remove a dotted key under `vendors.<id>.models` only.
+ * Same CLIENT-class + subtree scoping as {@link handleModelsSet}.
+ */
+function handleModelsUnset(
+  paths: HomePaths,
+  res: http.ServerResponse,
+  body: unknown,
+): void {
+  if (!isRecord(body) || typeof body.key !== "string") {
+    sendJson(res, 400, { error: "key is required" });
+    return;
+  }
+  const key = body.key;
+  if (!isModelsAllowlistKey(key)) {
+    sendJson(res, 400, {
+      error:
+        `models unset is limited to vendors.<id>.models[.<modelId>]; refused key: ${key}`,
+    });
+    return;
+  }
+  let current: ParleyConfig;
+  try {
+    current = loadAdminConfig(paths);
+  } catch (err) {
+    sendJson(res, 500, { error: err instanceof Error ? err.message : String(err) });
+    return;
+  }
+  let next: Record<string, unknown>;
+  try {
+    next = unsetConfigPath(current as Record<string, unknown>, key);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (message.startsWith("no such config key:")) {
+      sendJson(res, 404, { error: message });
+      return;
+    }
+    sendJson(res, 400, { error: message });
+    return;
+  }
+  let validated: ParleyConfig;
+  try {
+    validated = validateConfig(paths.config, next);
+  } catch (err) {
+    sendJson(res, 400, { error: err instanceof Error ? err.message : String(err) });
+    return;
+  }
+  try {
+    persistAdminConfig(paths, validated);
+  } catch (err) {
+    sendJson(res, 500, { error: err instanceof Error ? err.message : String(err) });
+    return;
+  }
+  sendJson(res, 200, { key, allowlist: extractAllowlist(validated) });
+}
+
+/**
+ * `POST /models/refresh` — re-fingerprint this daemon host now and return the
+ * fleet aggregate: daemon catalog (with discovery warnings, #299) plus each
+ * runner's last-advertised catalog flagged with advertisement age. No runner
+ * round-trip; probes never run on a CLI host (#322 / #307).
+ *
+ * Optional body `{ vendor?: string }` limits the probe/view to one vendor.
+ * CLIENT-class route.
+ */
+async function handleModelsRefresh(
+  paths: HomePaths,
+  res: http.ServerResponse,
+  db: DatabaseHandle,
+  adapters: Map<string, VendorAdapter>,
+  body: unknown,
+): Promise<void> {
+  let vendor: string | undefined;
+  if (body !== undefined && body !== null) {
+    if (!isRecord(body)) {
+      sendJson(res, 400, { error: "body must be an object" });
+      return;
+    }
+    if (body.vendor !== undefined) {
+      if (typeof body.vendor !== "string" || body.vendor === "") {
+        sendJson(res, 400, { error: "vendor must be a non-empty string when set" });
+        return;
+      }
+      vendor = body.vendor;
+    }
+  }
+  try {
+    const result = await refreshFleetCatalog({
+      paths,
+      adapters,
+      runners: listRunners(db),
+      vendor,
+    });
+    sendJson(res, 200, result);
+  } catch (err) {
+    sendJson(res, 500, { error: err instanceof Error ? err.message : String(err) });
+  }
 }
 
 /**
@@ -2462,6 +2664,7 @@ function createHandler(
   paths: HomePaths,
   identity: DaemonIdentity | undefined,
   db: DatabaseHandle,
+  adapters: Map<string, VendorAdapter>,
 ): http.RequestListener {
   return (req, res) => {
     void (async () => {
@@ -2829,6 +3032,30 @@ function createHandler(
         }
         if (method === "POST" && segments.length === 2 && segments[1] === "unset") {
           handleConfigUnset(req, paths, res, await readBody(req));
+          return;
+        }
+      }
+
+      // Model catalog + allowlist surface (#322 / #307):
+      // - GET /models — daemon-wide allowlist (policy), hot-read from parley.json
+      // - POST /models/set|unset — CLIENT-class edits scoped to vendors.*.models
+      // - POST /models/refresh — re-fingerprint this host + runner catalog ages
+      // All CLIENT-class (token off-loopback); not config-admin.
+      if (segments[0] === "models") {
+        if (method === "GET" && segments.length === 1) {
+          handleModelsGet(paths, res, url.searchParams.get("vendor"));
+          return;
+        }
+        if (method === "POST" && segments.length === 2 && segments[1] === "set") {
+          handleModelsSet(paths, res, await readBody(req));
+          return;
+        }
+        if (method === "POST" && segments.length === 2 && segments[1] === "unset") {
+          handleModelsUnset(paths, res, await readBody(req));
+          return;
+        }
+        if (method === "POST" && segments.length === 2 && segments[1] === "refresh") {
+          await handleModelsRefresh(paths, res, db, adapters, await readBody(req));
           return;
         }
       }
@@ -3436,7 +3663,7 @@ export async function startServer(
     process.stderr.write(`parley daemon: UI discovery failed, serving no UI: ${String(err)}\n`);
   }
   const server = http.createServer(
-    createHandler(engine, uiBundleDir, paths, options.identity, db),
+    createHandler(engine, uiBundleDir, paths, options.identity, db, adapters),
   );
   // Children must never outlive the daemon (no orphans): whatever path the
   // process exits through — graceful close below, crash, signal handler —

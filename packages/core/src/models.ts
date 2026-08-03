@@ -80,15 +80,15 @@ export interface ModelProber {
 }
 
 /**
- * Local, user-patchable model/effort catalog (`parley models`, #29).
+ * Advisory model/effort catalog (daemon-host `~/.parley/models.json`, #29 / #322).
  *
- * The file at `~/.parley/models.json` is the source of truth: `parley models`
- * reads it directly so a user can hand-edit it to add models or efforts with no
- * code change. `--refresh` re-probes vendors via each adapter's optional
- * `listModels()` / `readModels()` hooks and rewrites their entry — but a failed
- * or empty discovery keeps the existing entry (never clobber a manual patch
- * with nothing). The catalog is advisory only for discovery; spawn is gated by
- * the vendor allowlist (`vendors.<id>.models`, #185 / ADR-0014).
+ * `parley models refresh` runs discovery on the **daemon host** (never the CLI
+ * host) via each adapter's optional `listModels()` / `readModels()` hooks and
+ * rewrites the daemon's catalog file. A failed or empty discovery keeps the
+ * existing entry (never clobber a manual patch with nothing). Fail-soft channel
+ * warnings still surface (#299). The catalog is advisory only for discovery;
+ * spawn is gated by the vendor allowlist (`vendors.<id>.models`, #185 /
+ * ADR-0014), which is the daemon-owned policy edited via `parley models set`.
  */
 
 /**
