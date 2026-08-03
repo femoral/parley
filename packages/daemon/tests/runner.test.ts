@@ -58,6 +58,40 @@ async function json(
 
 const auth = { authorization: "Bearer secret-gpu" };
 
+/** Minimal successful register body for tests (ADR-0029). */
+function registerBody(
+  overrides: Record<string, unknown> = {},
+): Record<string, unknown> {
+  return {
+    runner: "gpu",
+    protocol_version: 1,
+    build_version: "0.0.4-test",
+    capabilities: {
+      vendors: [
+        {
+          id: "fake",
+          models: [
+            {
+              id: "fake-model",
+              efforts: ["low", "medium", "high"],
+              default_effort: "medium",
+            },
+          ],
+        },
+      ],
+    },
+    ...overrides,
+  };
+}
+
+async function registerRunner(
+  base: string,
+  overrides: Record<string, unknown> = {},
+  headers: Record<string, string> = auth,
+): Promise<{ status: number; body: unknown }> {
+  return json(base, "POST", "/runner/register", registerBody(overrides), headers);
+}
+
 async function createRunnerTask(
   base: string,
   repo: string,
@@ -81,6 +115,7 @@ beforeEach(() => {
   // Fast heartbeat for sweep tests.
   process.env.PARLEY_RUNNER_HEARTBEAT_MS = "200";
   process.env.PARLEY_LONG_POLL_MS = "300";
+  process.env.PARLEY_RUNNER_PRESENCE_GRACE_MS = "200";
   process.env.PARLEY_FAKE_VENDOR_BIN = path.resolve(
     path.dirname(new URL(import.meta.url).pathname),
     "../../cli/tests/fake-vendor.mjs",
@@ -100,6 +135,7 @@ afterEach(async () => {
   }
   delete process.env.PARLEY_RUNNER_HEARTBEAT_MS;
   delete process.env.PARLEY_LONG_POLL_MS;
+  delete process.env.PARLEY_RUNNER_PRESENCE_GRACE_MS;
 });
 
 describe("runner API auth", () => {
@@ -142,6 +178,96 @@ describe("runner API auth", () => {
   });
 });
 
+describe("runner registration", () => {
+  it("registers with capabilities and appears in GET /runners", async () => {
+    const home = makeHome();
+    const { base } = await boot(home);
+    const reg = await registerRunner(base);
+    expect(reg.status).toBe(200);
+    const body = reg.body as {
+      ok: true;
+      name: string;
+      registered_at: string;
+      last_seen: string;
+    };
+    expect(body.ok).toBe(true);
+    expect(body.name).toBe("gpu");
+    expect(body.registered_at).toMatch(/^\d{4}-/);
+
+    const listed = await json(base, "GET", "/runners");
+    expect(listed.status).toBe(200);
+    const runners = (listed.body as { runners: { name: string; vendors: string[]; status: string }[] })
+      .runners;
+    expect(runners).toHaveLength(1);
+    expect(runners[0]!.name).toBe("gpu");
+    expect(runners[0]!.vendors).toEqual(["fake"]);
+    expect(runners[0]!.status).toBe("online"); // within grace of register
+  });
+
+  it("rejects wrong protocol version with a precise error", async () => {
+    const home = makeHome();
+    const { base } = await boot(home);
+    const reg = await registerRunner(base, { protocol_version: 0 });
+    expect(reg.status).toBe(400);
+    expect(JSON.stringify(reg.body)).toMatch(/incompatible runner protocol version/);
+    expect(JSON.stringify(reg.body)).toMatch(/protocol_version_mismatch/);
+  });
+
+  it("rejects unknown runner name on register (401)", async () => {
+    const home = makeHome();
+    const { base } = await boot(home);
+    const reg = await registerRunner(base, { runner: "nope" });
+    expect(reg.status).toBe(401);
+  });
+
+  it("rejects lease without prior registration", async () => {
+    const home = makeHome();
+    const { base } = await boot(home);
+    const lease = await json(base, "POST", "/runner/lease", { runner: "gpu" }, auth);
+    expect(lease.status).toBe(403);
+    expect(JSON.stringify(lease.body)).toMatch(/not registered/);
+    expect(JSON.stringify(lease.body)).toMatch(/runner_not_registered/);
+  });
+
+  it("upsert re-register refreshes capabilities without losing registered_at", async () => {
+    const home = makeHome();
+    const { base } = await boot(home);
+    const first = await registerRunner(base);
+    expect(first.status).toBe(200);
+    const firstAt = (first.body as { registered_at: string }).registered_at;
+    await new Promise((r) => setTimeout(r, 20));
+    const second = await registerRunner(base, {
+      capabilities: {
+        vendors: [
+          { id: "fake", models: [] },
+          { id: "codex", models: [{ id: "gpt", efforts: [], default_effort: null }] },
+        ],
+      },
+    });
+    expect(second.status).toBe(200);
+    expect((second.body as { registered_at: string }).registered_at).toBe(firstAt);
+    const listed = await json(base, "GET", "/runners");
+    const runners = (listed.body as { runners: { vendors: string[] }[] }).runners;
+    expect(runners[0]!.vendors).toEqual(["fake", "codex"]);
+  });
+
+  it("persists runner rows across daemon restart", async () => {
+    const home = makeHome();
+    const { base } = await boot(home);
+    await registerRunner(base);
+    await server!.close();
+    server = null;
+    const { base: base2 } = await boot(home);
+    const listed = await json(base2, "GET", "/runners");
+    expect(listed.status).toBe(200);
+    const runners = (listed.body as { runners: { name: string; status: string }[] }).runners;
+    expect(runners).toHaveLength(1);
+    expect(runners[0]!.name).toBe("gpu");
+    // After restart there is no open poll; status depends on grace.
+    expect(["online", "offline"]).toContain(runners[0]!.status);
+  });
+});
+
 describe("runner lease", () => {
   it("rejects unknown runner on delegate with 400", async () => {
     const home = makeHome();
@@ -163,6 +289,7 @@ describe("runner lease", () => {
   it("leases oldest pending task and transitions to running", async () => {
     const home = makeHome();
     const { base } = await boot(home);
+    await registerRunner(base);
     const repo = makeGitRepo();
     repos.push(repo);
     const { task_id } = await createRunnerTask(base, repo);
@@ -200,6 +327,7 @@ describe("runner lease", () => {
   it("long-poll returns 204 when no task is pending", async () => {
     const home = makeHome();
     const { base } = await boot(home);
+    await registerRunner(base);
     const started = Date.now();
     const res = await json(base, "POST", "/runner/lease", { runner: "gpu" }, auth);
     expect(res.status).toBe(204);
@@ -226,6 +354,7 @@ describe("runner heartbeat / events / branch / fail", () => {
   it("fails a silent leased task when heartbeat window elapses", async () => {
     const home = makeHome();
     const { base } = await boot(home);
+    await registerRunner(base);
     const repo = makeGitRepo();
     repos.push(repo);
     const { task_id } = await createRunnerTask(base, repo);
@@ -243,6 +372,7 @@ describe("runner heartbeat / events / branch / fail", () => {
   it("heartbeat refreshes the lease", async () => {
     const home = makeHome();
     const { base } = await boot(home);
+    await registerRunner(base);
     const repo = makeGitRepo();
     repos.push(repo);
     const { task_id } = await createRunnerTask(base, repo);
@@ -266,6 +396,7 @@ describe("runner heartbeat / events / branch / fail", () => {
   it("events append JSONL and extract usage/session", async () => {
     const home = makeHome();
     const { base } = await boot(home);
+    await registerRunner(base);
     const repo = makeGitRepo();
     repos.push(repo);
     const { task_id } = await createRunnerTask(base, repo);
@@ -304,6 +435,7 @@ describe("runner heartbeat / events / branch / fail", () => {
   it("branch records the branch name with worktree null", async () => {
     const home = makeHome();
     const { base } = await boot(home);
+    await registerRunner(base);
     const repo = makeGitRepo();
     repos.push(repo);
     const { task_id } = await createRunnerTask(base, repo);
@@ -329,6 +461,7 @@ describe("runner heartbeat / events / branch / fail", () => {
   it("fail endpoint marks the task failed", async () => {
     const home = makeHome();
     const { base } = await boot(home);
+    await registerRunner(base);
     const repo = makeGitRepo();
     repos.push(repo);
     const { task_id } = await createRunnerTask(base, repo);

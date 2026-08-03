@@ -3,6 +3,9 @@ import http from "node:http";
 import path from "node:path";
 import {
   collectUnknownConfigKeys,
+  DEFAULT_RUNNER_PRESENCE_GRACE_MS,
+  DEFAULT_RUNNER_STALE_MS,
+  deriveRunnerStatus,
   eventNameForState,
   getConfigPath,
   isMetricsGroupBy,
@@ -13,6 +16,7 @@ import {
   parseTaskMetricsFilters,
   resolveWorkflow,
   RUN_METRICS_GROUP_BY,
+  RUNNER_PROTOCOL_VERSION,
   setConfigPath,
   unsetConfigPath,
   validateConfig,
@@ -20,6 +24,8 @@ import {
   type HomePaths,
   type ParleyConfig,
   readConfig,
+  type RunnerCapabilities,
+  type RunnerListEntry,
   type TaskEnvelope,
   type WorkflowDefinition,
 } from "@useparley/core";
@@ -29,9 +35,11 @@ import {
   getDeliverable,
   getMeta,
   getRun,
+  getRunner,
   latestNodeIteration,
   listDeliverablesForRun,
   listDeliverablesForRunNode,
+  listRunners,
   listRunsFiltered,
   listTasksForRun,
   META_LAST_GC_AT,
@@ -39,7 +47,10 @@ import {
   resolveRun,
   setMeta,
   sweepInterruptedTasks,
+  touchRunnerLastSeen,
+  upsertRunner,
   type DatabaseHandle,
+  type RunnerRow,
   type RunRow,
 } from "./db.js";
 import {
@@ -178,6 +189,88 @@ export interface DaemonServer {
 function longPollWindowMs(): number {
   const parsed = Number(process.env.PARLEY_LONG_POLL_MS ?? "");
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 25_000;
+}
+
+/**
+ * Online grace after last contact (default ~2× long-poll window). Tests shrink
+ * via `PARLEY_RUNNER_PRESENCE_GRACE_MS`.
+ */
+function runnerPresenceGraceMs(): number {
+  const parsed = Number(process.env.PARLEY_RUNNER_PRESENCE_GRACE_MS ?? "");
+  if (Number.isFinite(parsed) && parsed >= 0) return parsed;
+  // Track the live long-poll window so grace stays ~2× even when tests shrink it.
+  return Math.max(DEFAULT_RUNNER_PRESENCE_GRACE_MS, longPollWindowMs() * 2);
+}
+
+/** Stale threshold; `PARLEY_RUNNER_STALE_MS` overrides (tests). */
+function runnerStaleMs(): number {
+  const parsed = Number(process.env.PARLEY_RUNNER_STALE_MS ?? "");
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_RUNNER_STALE_MS;
+}
+
+/** In-process open lease-poll counts per runner name (presence signal). */
+const openRunnerPolls = new Map<string, number>();
+
+function beginRunnerPoll(name: string): void {
+  openRunnerPolls.set(name, (openRunnerPolls.get(name) ?? 0) + 1);
+}
+
+function endRunnerPoll(name: string): void {
+  const n = (openRunnerPolls.get(name) ?? 1) - 1;
+  if (n <= 0) openRunnerPolls.delete(name);
+  else openRunnerPolls.set(name, n);
+}
+
+function runnerHasOpenPoll(name: string): boolean {
+  return (openRunnerPolls.get(name) ?? 0) > 0;
+}
+
+function parseCapabilitiesJson(raw: string): RunnerCapabilities {
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (
+      typeof parsed === "object" &&
+      parsed !== null &&
+      Array.isArray((parsed as { vendors?: unknown }).vendors)
+    ) {
+      return parsed as RunnerCapabilities;
+    }
+  } catch {
+    /* fall through */
+  }
+  return { vendors: [] };
+}
+
+function projectRunnerListEntry(row: RunnerRow): RunnerListEntry {
+  const caps = parseCapabilitiesJson(row.capabilities);
+  return {
+    name: row.name,
+    status: deriveRunnerStatus({
+      hasOpenPoll: runnerHasOpenPoll(row.name),
+      lastSeenIso: row.last_seen,
+      graceMs: runnerPresenceGraceMs(),
+      staleMs: runnerStaleMs(),
+    }),
+    vendors: caps.vendors.map((v) => v.id),
+    last_seen: row.last_seen,
+    registered_at: row.registered_at,
+    protocol_version: row.protocol_version,
+    build_version: row.build_version,
+  };
+}
+
+function isValidCapabilities(value: unknown): value is RunnerCapabilities {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+  const vendors = (value as { vendors?: unknown }).vendors;
+  if (!Array.isArray(vendors)) return false;
+  for (const v of vendors) {
+    if (typeof v !== "object" || v === null || Array.isArray(v)) return false;
+    if (typeof (v as { id?: unknown }).id !== "string" || (v as { id: string }).id === "") {
+      return false;
+    }
+    if (!Array.isArray((v as { models?: unknown }).models)) return false;
+  }
+  return true;
 }
 
 function sendJson(res: http.ServerResponse, status: number, body: unknown): void {
@@ -1849,8 +1942,8 @@ function createHandler(
   engine: TaskEngine,
   uiBundleDir: string | null,
   paths: HomePaths,
-  identity?: DaemonIdentity,
-  db?: DatabaseHandle,
+  identity: DaemonIdentity | undefined,
+  db: DatabaseHandle,
 ): http.RequestListener {
   return (req, res) => {
     void (async () => {
@@ -1889,9 +1982,60 @@ function createHandler(
         }
       }
 
-      // Remote runner surface (#111 / ADR-0012): bearer-token auth; not localhost trust.
+      // Remote runner surface (#111 / ADR-0012 / ADR-0029): bearer-token auth;
+      // not localhost trust. Registration is required before lease.
       if (segments[0] === "runner") {
         const config = readRunnerConfig(paths);
+        if (method === "POST" && segments.length === 2 && segments[1] === "register") {
+          const body = await readBody(req);
+          if (!isRecord(body) || typeof body.runner !== "string" || body.runner === "") {
+            sendJson(res, 400, { error: "runner is required" });
+            return;
+          }
+          const runnerName = authenticateRunner(req, config, body.runner);
+          if (runnerName === null) {
+            sendJson(res, 401, { error: "unauthorized" });
+            return;
+          }
+          if (typeof body.protocol_version !== "number" || !Number.isInteger(body.protocol_version)) {
+            sendJson(res, 400, { error: "protocol_version is required (integer)" });
+            return;
+          }
+          if (body.protocol_version !== RUNNER_PROTOCOL_VERSION) {
+            sendJson(res, 400, {
+              error:
+                `incompatible runner protocol version: runner sent ${body.protocol_version}, ` +
+                `daemon requires ${RUNNER_PROTOCOL_VERSION}`,
+              code: "protocol_version_mismatch",
+              runner_protocol_version: body.protocol_version,
+              daemon_protocol_version: RUNNER_PROTOCOL_VERSION,
+            });
+            return;
+          }
+          if (typeof body.build_version !== "string" || body.build_version === "") {
+            sendJson(res, 400, { error: "build_version is required" });
+            return;
+          }
+          if (!isValidCapabilities(body.capabilities)) {
+            sendJson(res, 400, {
+              error: "capabilities is required ({ vendors: [{ id, models }] })",
+            });
+            return;
+          }
+          const row = upsertRunner(db, {
+            name: runnerName,
+            capabilities: JSON.stringify(body.capabilities),
+            protocol_version: body.protocol_version,
+            build_version: body.build_version,
+          });
+          sendJson(res, 200, {
+            ok: true as const,
+            name: row.name,
+            registered_at: row.registered_at,
+            last_seen: row.last_seen,
+          });
+          return;
+        }
         if (method === "POST" && segments.length === 2 && segments[1] === "lease") {
           const body = await readBody(req);
           if (!isRecord(body) || typeof body.runner !== "string" || body.runner === "") {
@@ -1903,16 +2047,34 @@ function createHandler(
             sendJson(res, 401, { error: "unauthorized" });
             return;
           }
+          // Registration-gated: lease requires a prior successful register.
+          if (getRunner(db, runnerName) === undefined) {
+            sendJson(res, 403, {
+              error:
+                `runner "${runnerName}" is not registered; call POST /runner/register ` +
+                `before leasing`,
+              code: "runner_not_registered",
+            });
+            return;
+          }
           // Disable socket idle timeouts for the long-poll window.
           req.setTimeout(0);
           res.setTimeout(0);
-          const leased = await engine.leaseRunnerTask(runnerName, longPollWindowMs());
-          if (leased === null) {
-            res.writeHead(204);
-            res.end();
-            return;
+          // Open poll is the presence signal; last_seen refreshes on enter/exit.
+          touchRunnerLastSeen(db, runnerName);
+          beginRunnerPoll(runnerName);
+          try {
+            const leased = await engine.leaseRunnerTask(runnerName, longPollWindowMs());
+            touchRunnerLastSeen(db, runnerName);
+            if (leased === null) {
+              res.writeHead(204);
+              res.end();
+              return;
+            }
+            sendJson(res, 200, leased);
+          } finally {
+            endRunnerPoll(runnerName);
           }
-          sendJson(res, 200, leased);
           return;
         }
         if (
@@ -2072,6 +2234,14 @@ function createHandler(
               }
             : {}),
         });
+        return;
+      }
+
+      // `GET /runners` — fleet table for `parley runners list` (ADR-0029 / #314).
+      // Status is derived from open lease polls + last_seen grace/stale windows.
+      if (method === "GET" && url.pathname === "/runners") {
+        const runners = listRunners(db).map(projectRunnerListEntry);
+        sendJson(res, 200, { runners });
         return;
       }
 

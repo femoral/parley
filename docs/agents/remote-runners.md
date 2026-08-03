@@ -88,10 +88,12 @@ updated (fetch regularly); the runner cuts a worktree from the recorded
 
 ### Vendor adapters
 
-The runner embeds the same built-in adapter registry as the daemon. Plugin
-adapters (`vendors.<id>.plugin`) are out of scope for the runner — install the
-vendor CLI on the runner host the same way you would for local execution.
-Sandbox postures apply on the runner host exactly as they would locally.
+The runner embeds the same adapter registry as the daemon (builtins plus any
+`vendors.<id>.plugin` adapters configured on the runner host). On register it
+advertises whatever that registry can load, with model catalogs from each
+adapter's discovery hooks. Install vendor CLIs on the runner host the same way
+you would for local execution. Sandbox postures apply on the runner host
+exactly as they would locally.
 
 ## Delegate and review flow
 
@@ -133,6 +135,19 @@ report remain on the daemon (`parley logs`, `parley status`).
 `SIGINT` / `SIGTERM` stop leasing new tasks and fail or finish the in-flight
 task (heartbeat-fail if the child is aborted mid-run).
 
+## Registration and fleet view (ADR-0029 / #314)
+
+On start (and every reconnect / periodic re-fingerprint) the runner probes its
+host for vendor bins and adapter model catalogs, then calls
+`POST /runner/register`. The daemon upserts a `runners` row; lease is rejected
+until registration succeeds. Status (online / offline / stale) is derived from
+open lease long-polls plus a short grace window on `last_seen`.
+
+```bash
+parley runners list          # name, status, vendors, last-seen
+parley runners list --json
+```
+
 ## API surface (daemon)
 
 Bearer auth: `Authorization: Bearer <token>` checked against
@@ -140,11 +155,13 @@ Bearer auth: `Authorization: Bearer <token>` checked against
 
 | Route | Role |
 | --- | --- |
-| `POST /runner/lease` `{runner}` | Long-poll (~25s → 204) for oldest pending task; leases → `running` + full spec |
+| `POST /runner/register` | Fingerprint + upsert capabilities (required before lease) |
+| `POST /runner/lease` `{runner}` | Long-poll (~25s → 204) for oldest pending task; leases → `running` + full spec; doubles as presence |
 | `POST /runner/tasks/:id/heartbeat` | Refresh lease |
 | `POST /runner/tasks/:id/events` `{lines}` | Append vendor JSONL + usage/session extraction |
 | `POST /runner/tasks/:id/branch` `{branch}` | Record branch (worktree stays null) |
 | `POST /runner/tasks/:id/fail` `{error}` | Runner cannot execute / child exited without report |
+| `GET /runners` | Fleet table for `parley runners list` |
 
 Child contract calls use the existing `/child/*` and `/mcp` endpoints (via the
 runner hub proxy).
@@ -152,5 +169,6 @@ runner hub proxy).
 ## Related
 
 - ADR-0012 — remote runners decision record
+- ADR-0029 — registration / advertisement wire
 - ADR-0011 — child HTTP/CLI channels (what the hub proxy forwards)
 - `docs/agents/adapter-authoring.md` — vendor adapter contract

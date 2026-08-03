@@ -1,9 +1,9 @@
 /**
- * Runner lease wire contract (ADR-0012 / #209).
+ * Runner lease + registration wire contract (ADR-0012 / ADR-0029 / #209 / #314).
  *
- * Types and the HTTP client for the five `/runner/*` verbs. Daemon server
- * methods and runner host execution stay in their packages; this module is
- * only the cross-process surface so shapes cannot drift silently.
+ * Types and the HTTP client for the `/runner/*` verbs. Daemon server methods
+ * and runner host execution stay in their packages; this module is only the
+ * cross-process surface so shapes cannot drift silently.
  *
  * `RunnerLeaseSpec.prompt` is the orchestrator brief, not the assembled
  * vendor argv prompt — hosts build the full child prompt after the worktree
@@ -11,12 +11,38 @@
  */
 import type { SandboxMode } from "./adapter.js";
 import type { JsonSchema } from "./contract.js";
+import type { ModelEntry } from "./models.js";
 
 /** Correlation header children send on every hub request (ADR-0003 / ADR-0011). */
 export const TASK_HEADER = "x-parley-task";
 
 /** Default runner heartbeat window (ADR-0012 / #111). */
 export const DEFAULT_RUNNER_HEARTBEAT_TIMEOUT_MS = 90_000;
+
+/**
+ * Registration / advertisement protocol version (ADR-0029).
+ * Bump when the register payload or lease gating semantics change incompatibly.
+ */
+export const RUNNER_PROTOCOL_VERSION = 1;
+
+/**
+ * Default re-fingerprint interval while a runner is up (ADR-0029 / #314).
+ * Overridable via `PARLEY_RUNNER_REFINGERPRINT_MS`.
+ */
+export const DEFAULT_RUNNER_REFINGERPRINT_MS = 60_000;
+
+/**
+ * Default online grace after last contact (~2× default long-poll window of 25s).
+ * A runner with an open lease poll is always online; otherwise last_seen within
+ * this window still counts as online. Overridable via `PARLEY_RUNNER_PRESENCE_GRACE_MS`.
+ */
+export const DEFAULT_RUNNER_PRESENCE_GRACE_MS = 50_000;
+
+/**
+ * Default stale threshold (14 days offline). Rows older than this surface as
+ * `stale` (eligible for cleanup). Overridable via `PARLEY_RUNNER_STALE_MS`.
+ */
+export const DEFAULT_RUNNER_STALE_MS = 14 * 24 * 60 * 60 * 1000;
 
 /**
  * One context file shipped by value on the lease (daemon-side materialization
@@ -65,6 +91,55 @@ export interface LeaseRequest {
   runner: string;
 }
 
+/** One vendor the runner advertises, with its fingerprinted model catalog. */
+export interface RunnerVendorCapability {
+  id: string;
+  /** Advisory model catalog for this vendor on the runner host (may be empty). */
+  models: ModelEntry[];
+}
+
+/** Fingerprinted host capabilities shipped on register (ADR-0029). */
+export interface RunnerCapabilities {
+  vendors: RunnerVendorCapability[];
+}
+
+/** POST /runner/register body. */
+export interface RegisterRequest {
+  runner: string;
+  protocol_version: number;
+  /** Runner package / build version string (informational). */
+  build_version: string;
+  capabilities: RunnerCapabilities;
+}
+
+/** POST /runner/register 200 body. */
+export interface RegisterResponse {
+  ok: true;
+  name: string;
+  registered_at: string;
+  last_seen: string;
+}
+
+/** Derived runner presence (ADR-0029). */
+export type RunnerStatus = "online" | "offline" | "stale";
+
+/** One row in GET /runners (minimal fleet table for `parley runners list`). */
+export interface RunnerListEntry {
+  name: string;
+  status: RunnerStatus;
+  /** Advertised vendor ids (order preserved from last registration). */
+  vendors: string[];
+  last_seen: string;
+  registered_at: string;
+  protocol_version: number;
+  build_version: string;
+}
+
+/** GET /runners body. */
+export interface RunnersListResponse {
+  runners: RunnerListEntry[];
+}
+
 /** POST /runner/tasks/:id/events body. */
 export interface EventsBody {
   lines: string[];
@@ -82,6 +157,8 @@ export interface FailBody {
 
 /** Client → daemon verb surface. HTTP is one implementation; tests use a fake. */
 export interface LeaseTransport {
+  /** Register (or re-register) this runner's capabilities. Idempotent upsert. */
+  register(request: RegisterRequest): Promise<RegisterResponse>;
   /** Long-poll. null = 204 (window elapsed, nothing claimed). */
   lease(runnerName: string): Promise<RunnerLeaseSpec | null>;
   heartbeat(taskId: string): Promise<void>;
@@ -98,15 +175,19 @@ export interface LeaseHttpOptions {
 }
 
 /**
- * Five REST verbs under /runner/* — single place for path + error mapping.
+ * REST verbs under /runner/* — single place for path + error mapping.
  *
  * Body shapes:
+ *   POST /runner/register           RegisterRequest → 200 RegisterResponse
  *   POST /runner/lease              { runner } → 200 RunnerLeaseSpec | 204
  *   POST /runner/tasks/:id/heartbeat {}
  *   POST /runner/tasks/:id/events    { lines: string[] }
  *   POST /runner/tasks/:id/branch    { branch: string }
  *   POST /runner/tasks/:id/fail      { error: string }
  * Auth: Authorization: Bearer <token> on every call.
+ *
+ * List surface (operator CLI, not runner-auth):
+ *   GET  /runners                   → 200 RunnersListResponse
  */
 export function createLeaseHttpTransport(opts: LeaseHttpOptions): LeaseTransport {
   const base = opts.daemonUrl.replace(/\/+$/, "");
@@ -125,6 +206,24 @@ export function createLeaseHttpTransport(opts: LeaseHttpOptions): LeaseTransport
   };
 
   return {
+    async register(request: RegisterRequest): Promise<RegisterResponse> {
+      const res = await doFetch(`${base}/runner/register`, {
+        method: "POST",
+        headers: headers(),
+        body: JSON.stringify(request satisfies RegisterRequest),
+      });
+      if (res.status === 401) {
+        throw new Error(
+          "runner auth failed (401): check name/token against daemon runners.*",
+        );
+      }
+      if (!res.ok) {
+        const body = await res.text();
+        throw new Error(`register failed (${res.status}): ${body}`);
+      }
+      return (await res.json()) as RegisterResponse;
+    },
+
     async lease(runnerName: string): Promise<RunnerLeaseSpec | null> {
       const res = await doFetch(`${base}/runner/lease`, {
         method: "POST",
@@ -193,4 +292,27 @@ export function createLeaseHttpTransport(opts: LeaseHttpOptions): LeaseTransport
       await checkOk(res, "fail");
     },
   };
+}
+
+/**
+ * Derive online / offline / stale from open-poll presence and last_seen.
+ * Pure helper shared by the daemon list surface and tests.
+ */
+export function deriveRunnerStatus(opts: {
+  hasOpenPoll: boolean;
+  lastSeenIso: string;
+  nowMs?: number;
+  graceMs?: number;
+  staleMs?: number;
+}): RunnerStatus {
+  if (opts.hasOpenPoll) return "online";
+  const now = opts.nowMs ?? Date.now();
+  const grace = opts.graceMs ?? DEFAULT_RUNNER_PRESENCE_GRACE_MS;
+  const stale = opts.staleMs ?? DEFAULT_RUNNER_STALE_MS;
+  const last = Date.parse(opts.lastSeenIso);
+  if (!Number.isFinite(last)) return "offline";
+  const age = now - last;
+  if (age <= grace) return "online";
+  if (age > stale) return "stale";
+  return "offline";
 }

@@ -822,6 +822,17 @@ const MIGRATIONS: string[] = [
   // when the named branch has moved.
   `ALTER TABLE runs ADD COLUMN base_ref TEXT;
    ALTER TABLE runs ADD COLUMN base_commit TEXT;`,
+  // #314 / ADR-0029: persisted remote-runner registration + capability ads.
+  // Status (online/offline/stale) is derived from lease long-poll presence +
+  // last_seen, not stored. capabilities is JSON RunnerCapabilities.
+  `CREATE TABLE runners (
+     name TEXT PRIMARY KEY NOT NULL,
+     capabilities TEXT NOT NULL,
+     protocol_version INTEGER NOT NULL,
+     build_version TEXT NOT NULL,
+     registered_at TEXT NOT NULL,
+     last_seen TEXT NOT NULL
+   );`,
 ];
 
 /** How many schema migrations have been applied — equals `PRAGMA user_version` after open. */
@@ -2403,6 +2414,94 @@ export function listTasksForRunNodeAny(
  * Patch only the structured-eval fields on a run (#243). Separated so eval
  * never has to share a write path with engine state transitions.
  */
+// ─── Remote runners (ADR-0029 / #314) ───────────────────────────────────────
+
+/** A registered remote runner row (capabilities JSON + timestamps). */
+export interface RunnerRow {
+  name: string;
+  /** JSON: RunnerCapabilities from @useparley/core. */
+  capabilities: string;
+  protocol_version: number;
+  build_version: string;
+  registered_at: string;
+  last_seen: string;
+}
+
+const RUNNER_COLUMNS = `name, capabilities, protocol_version, build_version,
+   registered_at, last_seen`;
+
+/** Fetch one registered runner by name. */
+export function getRunner(db: DatabaseHandle, name: string): RunnerRow | undefined {
+  const row = db
+    .prepare(`SELECT ${RUNNER_COLUMNS} FROM runners WHERE name = ?`)
+    .get(name);
+  return row === undefined ? undefined : asRow<RunnerRow>(row);
+}
+
+/** All registered runners, name-sorted. */
+export function listRunners(db: DatabaseHandle): RunnerRow[] {
+  return db
+    .prepare(`SELECT ${RUNNER_COLUMNS} FROM runners ORDER BY name ASC`)
+    .all()
+    .map((row) => asRow<RunnerRow>(row));
+}
+
+/**
+ * Idempotent upsert of a runner registration. On first insert `registered_at`
+ * is set; on re-register it is preserved and last_seen / capabilities refresh.
+ */
+export function upsertRunner(
+  db: DatabaseHandle,
+  runner: {
+    name: string;
+    capabilities: string;
+    protocol_version: number;
+    build_version: string;
+  },
+): RunnerRow {
+  const now = new Date().toISOString();
+  const existing = getRunner(db, runner.name);
+  if (existing === undefined) {
+    db.prepare(
+      `INSERT INTO runners
+         (name, capabilities, protocol_version, build_version, registered_at, last_seen)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+    ).run(
+      runner.name,
+      runner.capabilities,
+      runner.protocol_version,
+      runner.build_version,
+      now,
+      now,
+    );
+  } else {
+    db.prepare(
+      `UPDATE runners
+       SET capabilities = ?, protocol_version = ?, build_version = ?, last_seen = ?
+       WHERE name = ?`,
+    ).run(
+      runner.capabilities,
+      runner.protocol_version,
+      runner.build_version,
+      now,
+      runner.name,
+    );
+  }
+  return getRunner(db, runner.name)!;
+}
+
+/** Refresh last_seen only (presence / long-poll contact). */
+export function touchRunnerLastSeen(db: DatabaseHandle, name: string): void {
+  const now = new Date().toISOString();
+  db.prepare(`UPDATE runners SET last_seen = ? WHERE name = ?`).run(now, name);
+}
+
+/** Delete a persisted runner row (operator remove; not used by #314 list path). */
+export function deleteRunner(db: DatabaseHandle, name: string): boolean {
+  const result = db.prepare(`DELETE FROM runners WHERE name = ?`).run(name);
+  return (result.changes as number) > 0;
+}
+
 export function updateRunEval(
   db: DatabaseHandle,
   id: string,

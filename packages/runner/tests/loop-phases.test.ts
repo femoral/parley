@@ -46,6 +46,12 @@ function stubAdapter(id = "fake"): VendorAdapter {
   return {
     id,
     childChannel: "mcp",
+    enforcement: {
+      "read-only": { level: "enforced", via: "test" },
+      workspace: { level: "enforced", via: "test" },
+      full: { level: "enforced", via: "test" },
+      "network:false": { level: "enforced", via: "test" },
+    },
     async prepare(spec, _hub): Promise<SpawnPlan> {
       return {
         argv: ["true"],
@@ -65,6 +71,10 @@ function stubAdapter(id = "fake"): VendorAdapter {
     },
   };
 }
+
+const emptyCaps = {
+  vendors: [] as { id: string; models: never[] }[],
+};
 
 /** Host that never touches git or network — enough to finish execute. */
 function noopHost(overrides: {
@@ -122,16 +132,121 @@ async function runUntilIdle(loop: RunnerLoop, transport: FakeLeaseTransport): Pr
   await runPromise;
 }
 
+async function waitFor(
+  predicate: () => boolean,
+  message: string,
+  timeoutMs = 3_000,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    if (predicate()) return;
+    if (Date.now() >= deadline) throw new Error(`timed out waiting for: ${message}`);
+    await new Promise((r) => setTimeout(r, 10));
+  }
+}
+
+async function waitForRegister(transport: FakeLeaseTransport): Promise<void> {
+  await waitFor(
+    () => transport.calls.some((c) => c.verb === "register"),
+    "register call",
+  );
+}
+
+function loopOpts(
+  transport: FakeLeaseTransport,
+  overrides: {
+    config?: Partial<RunnerConfig>;
+    host?: Parameters<typeof noopHost>[0];
+    adapters?: Map<string, VendorAdapter>;
+    fingerprint?: () => typeof emptyCaps | Promise<typeof emptyCaps>;
+  } = {},
+): ConstructorParameters<typeof RunnerLoop>[0] {
+  return {
+    config: baseConfig(overrides.config),
+    transport,
+    adapters: overrides.adapters ?? new Map([["fake", stubAdapter()]]),
+    host: noopHost(overrides.host),
+    fingerprint: overrides.fingerprint ?? (() => emptyCaps),
+    log: () => {},
+  };
+}
+
+describe("RunnerLoop registration (fake transport)", () => {
+  it("registers before leasing", async () => {
+    const transport = createFakeLeaseTransport({ leases: [] });
+    const loop = new RunnerLoop(
+      loopOpts(transport, {
+        fingerprint: () => ({
+          vendors: [
+            {
+              id: "fake",
+              models: [
+                { id: "fake-model", efforts: ["low"], default_effort: "low" },
+              ],
+            },
+          ],
+        }),
+      }),
+    );
+    const runPromise = loop.run();
+    await waitForRegister(transport);
+    loop.stop();
+    await runPromise;
+    const reg = transport.calls.filter((c) => c.verb === "register");
+    expect(reg.length).toBeGreaterThanOrEqual(1);
+    const first = reg[0]!;
+    expect(first.verb).toBe("register");
+    if (first.verb === "register") {
+      expect(first.request.runner).toBe("gpu");
+      expect(first.request.protocol_version).toBe(1);
+      expect(first.request.capabilities.vendors.map((v) => v.id)).toEqual(["fake"]);
+    }
+    // Lease is attempted only after register.
+    const firstLeaseIdx = transport.calls.findIndex((c) => c.verb === "lease");
+    const firstRegIdx = transport.calls.findIndex((c) => c.verb === "register");
+    expect(firstRegIdx).toBeLessThan(firstLeaseIdx);
+  });
+
+  it("re-registers on the periodic timer with updated capabilities", async () => {
+    process.env.PARLEY_RUNNER_REFINGERPRINT_MS = "50";
+    try {
+      let vendors = ["fake"];
+      const transport = createFakeLeaseTransport({ leases: [] });
+      const loop = new RunnerLoop(
+        loopOpts(transport, {
+          fingerprint: () => ({
+            vendors: vendors.map((id) => ({ id, models: [] })),
+          }),
+        }),
+      );
+      const runPromise = loop.run();
+      await waitForRegister(transport);
+      vendors = ["fake", "codex"];
+      await waitFor(
+        () =>
+          transport.calls.some(
+            (c) =>
+              c.verb === "register" &&
+              c.request.capabilities.vendors.some((v) => v.id === "codex"),
+          ),
+        "re-fingerprint with codex",
+        3_000,
+      );
+      loop.stop();
+      await runPromise;
+      const regCalls = transport.calls.filter((c) => c.verb === "register");
+      expect(regCalls.length).toBeGreaterThanOrEqual(2);
+    } finally {
+      delete process.env.PARLEY_RUNNER_REFINGERPRINT_MS;
+    }
+  });
+});
+
 describe("RunnerLoop failure branches (fake transport)", () => {
   it("fails when repo mapping is missing", async () => {
     const lease = sampleLease({ repo: "/unknown/repo" });
     const transport = createFakeLeaseTransport({ leases: [lease] });
-    const loop = new RunnerLoop({
-      config: baseConfig({ repos: {} }),
-      transport,
-      adapters: new Map([["fake", stubAdapter()]]),
-      log: () => {},
-    });
+    const loop = new RunnerLoop(loopOpts(transport, { config: { repos: {} } }));
     await runUntilIdle(loop, transport);
     expect(failCalls(transport).some((e) => /no local repo mapping/.test(e))).toBe(
       true,
@@ -142,12 +257,9 @@ describe("RunnerLoop failure branches (fake transport)", () => {
     const missing = path.join(tmp("parley-missing-parent-"), "no-such-repo");
     const lease = sampleLease({ repo: "/orch/repo" });
     const transport = createFakeLeaseTransport({ leases: [lease] });
-    const loop = new RunnerLoop({
-      config: baseConfig({ repos: { "/orch/repo": missing } }),
-      transport,
-      adapters: new Map([["fake", stubAdapter()]]),
-      log: () => {},
-    });
+    const loop = new RunnerLoop(
+      loopOpts(transport, { config: { repos: { "/orch/repo": missing } } }),
+    );
     await runUntilIdle(loop, transport);
     expect(
       failCalls(transport).some((e) => /mapped repo path does not exist/.test(e)),
@@ -158,12 +270,9 @@ describe("RunnerLoop failure branches (fake transport)", () => {
     const repo = tmp("parley-repo-");
     const lease = sampleLease({ vendor: "nope", repo: "/orch/repo" });
     const transport = createFakeLeaseTransport({ leases: [lease] });
-    const loop = new RunnerLoop({
-      config: baseConfig({ repos: { "/orch/repo": repo } }),
-      transport,
-      adapters: new Map([["fake", stubAdapter()]]),
-      log: () => {},
-    });
+    const loop = new RunnerLoop(
+      loopOpts(transport, { config: { repos: { "/orch/repo": repo } } }),
+    );
     await runUntilIdle(loop, transport);
     expect(failCalls(transport).some((e) => /unknown vendor on runner: nope/.test(e))).toBe(
       true,
@@ -174,18 +283,16 @@ describe("RunnerLoop failure branches (fake transport)", () => {
     const repo = tmp("parley-repo-");
     const lease = sampleLease({ repo: "/orch/repo" });
     const transport = createFakeLeaseTransport({ leases: [lease] });
-    const loop = new RunnerLoop({
-      config: baseConfig({ repos: { "/orch/repo": repo } }),
-      transport,
-      adapters: new Map([["fake", stubAdapter()]]),
-      host: {
-        ...noopHost(),
-        createWorktree: () => {
-          throw new Error("git worktree add failed");
+    const loop = new RunnerLoop(
+      loopOpts(transport, {
+        config: { repos: { "/orch/repo": repo } },
+        host: {
+          createWorktree: () => {
+            throw new Error("git worktree add failed");
+          },
         },
-      },
-      log: () => {},
-    });
+      }),
+    );
     await runUntilIdle(loop, transport);
     expect(
       failCalls(transport).some((e) =>
@@ -198,19 +305,16 @@ describe("RunnerLoop failure branches (fake transport)", () => {
     const repo = tmp("parley-repo-");
     const lease = sampleLease({ repo: "/orch/repo" });
     const transport = createFakeLeaseTransport({ leases: [lease] });
-    const loop = new RunnerLoop({
-      config: baseConfig({ repos: { "/orch/repo": repo } }),
-      transport,
-      adapters: new Map([["fake", stubAdapter()]]),
-      host: {
-        ...noopHost({
+    const loop = new RunnerLoop(
+      loopOpts(transport, {
+        config: { repos: { "/orch/repo": repo } },
+        host: {
           pushBranch: () => {
             throw new Error("permission denied");
           },
-        }),
-      },
-      log: () => {},
-    });
+        },
+      }),
+    );
     await runUntilIdle(loop, transport);
     expect(
       failCalls(transport).some((e) => /branch handoff failed: permission denied/.test(e)),
@@ -221,13 +325,12 @@ describe("RunnerLoop failure branches (fake transport)", () => {
     const repo = tmp("parley-repo-");
     const lease = sampleLease({ repo: "/orch/repo" });
     const transport = createFakeLeaseTransport({ leases: [lease] });
-    const loop = new RunnerLoop({
-      config: baseConfig({ repos: { "/orch/repo": repo } }),
-      transport,
-      adapters: new Map([["fake", stubAdapter()]]),
-      host: noopHost({ spawnExitCode: 7 }),
-      log: () => {},
-    });
+    const loop = new RunnerLoop(
+      loopOpts(transport, {
+        config: { repos: { "/orch/repo": repo } },
+        host: { spawnExitCode: 7 },
+      }),
+    );
     await runUntilIdle(loop, transport);
     expect(
       failCalls(transport).some((e) =>
@@ -251,12 +354,7 @@ describe("RunnerLoop failure branches (fake transport)", () => {
         },
       ],
     });
-    const loop = new RunnerLoop({
-      config: baseConfig(),
-      transport,
-      adapters: new Map([["fake", stubAdapter()]]),
-      log: () => {},
-    });
+    const loop = new RunnerLoop(loopOpts(transport));
     running.loop = loop;
     await loop.run();
     expect(

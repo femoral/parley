@@ -4,22 +4,30 @@ import fs from "node:fs";
 import readline from "node:readline";
 import {
   createLeaseHttpTransport,
+  DEFAULT_RUNNER_REFINGERPRINT_MS,
   homePathsFromEnv,
+  readConfig,
+  RUNNER_PROTOCOL_VERSION,
   TASK_HEADER,
   type ChildChannel,
   type HubInfo,
   type JsonSchema,
   type LeaseTransport,
+  type RunnerCapabilities,
   type RunnerLeaseSpec,
   type SpawnPlan,
   type TaskSpec,
   type VendorAdapter,
 } from "@useparley/core";
-import { createBuiltinAdapters } from "@useparley/daemon/adapters/index.js";
+import {
+  createAdapterRegistry,
+  createBuiltinAdapters,
+} from "@useparley/daemon/adapters/index.js";
 import {
   materializeChildHub,
   materializeContext,
 } from "@useparley/daemon/context.js";
+import { fingerprintCapabilities } from "@useparley/daemon/fingerprint.js";
 import { DEFAULT_REPORT_SCHEMA } from "@useparley/daemon/report.js";
 import { buildProtocolPreamble } from "@useparley/daemon/preamble.js";
 import {
@@ -34,12 +42,20 @@ import {
 } from "@useparley/daemon/worktree.js";
 import { type RunnerConfig, resolveRepoPath } from "./config.js";
 import { startHubProxy, type HubProxy } from "./hub-proxy.js";
+import { RUNNER_VERSION } from "./version.js";
 
 /** Default heartbeat interval — well under the daemon's 90s window. */
 const HEARTBEAT_INTERVAL_MS = 20_000;
 
 /** How long a stopped child gets to exit on SIGTERM before SIGKILL. */
 const CHILD_STOP_GRACE_MS = 2_000;
+
+function refingerprintIntervalMs(): number {
+  const parsed = Number(process.env.PARLEY_RUNNER_REFINGERPRINT_MS ?? "");
+  return Number.isFinite(parsed) && parsed > 0
+    ? parsed
+    : DEFAULT_RUNNER_REFINGERPRINT_MS;
+}
 
 /**
  * Host-side seams for unit tests. Production uses real worktree/git/proxy
@@ -77,29 +93,48 @@ export interface RunnerLoopOptions {
   host?: Partial<RunnerHost>;
   /** Override the adapter registry (tests). */
   adapters?: Map<string, VendorAdapter>;
+  /**
+   * Optional fingerprint override (tests). When set, skips PATH/model probing
+   * and uses the returned capabilities for every register call.
+   */
+  fingerprint?: () => Promise<RunnerCapabilities> | RunnerCapabilities;
+  /** Override build_version advertised on register (tests). */
+  buildVersion?: string;
 }
 
 /**
- * Persistent runner loop: lease → execute → stream → push branch → repeat.
- * SIGINT/SIGTERM stop leasing and fail or finish the in-flight task.
+ * Persistent runner loop: register → lease → execute → stream → push branch →
+ * re-fingerprint periodically. SIGINT/SIGTERM stop leasing and fail or finish
+ * the in-flight task.
  */
 export class RunnerLoop {
   private readonly transport: LeaseTransport;
-  private readonly adapters: Map<string, VendorAdapter>;
+  private adapters: Map<string, VendorAdapter>;
   private readonly host: RunnerHost;
   private readonly log: (line: string) => void;
+  private readonly env: NodeJS.ProcessEnv;
   private stopping = false;
+  private adaptersReady: Promise<void>;
   private inFlight: { taskId: string; child: ChildProcess | null; proxy: HubProxy | null } | null =
     null;
+  private reFingerprintTimer: NodeJS.Timeout | null = null;
 
   constructor(private readonly options: RunnerLoopOptions) {
+    this.env = options.env ?? process.env;
     this.transport =
       options.transport ??
       createLeaseHttpTransport({
         daemonUrl: options.config.daemonUrl,
         token: options.config.token,
       });
-    this.adapters = options.adapters ?? createBuiltinAdapters(options.env ?? process.env);
+    if (options.adapters !== undefined) {
+      this.adapters = options.adapters;
+      this.adaptersReady = Promise.resolve();
+    } else {
+      // Start with builtins; async plugin load fills in before first register.
+      this.adapters = createBuiltinAdapters(this.env);
+      this.adaptersReady = this.loadAdaptersWithPlugins();
+    }
     this.host = {
       createWorktree,
       removeWorktree,
@@ -113,9 +148,73 @@ export class RunnerLoop {
       options.log ?? ((line: string) => process.stderr.write(`parley-runner: ${line}\n`));
   }
 
+  private async loadAdaptersWithPlugins(): Promise<void> {
+    try {
+      const paths = homePathsFromEnv(this.env);
+      let config = {};
+      try {
+        config = readConfig(paths.config);
+      } catch {
+        /* optional */
+      }
+      this.adapters = await createAdapterRegistry(this.env, {
+        config,
+        parleyHome: paths.home,
+        log: (line) => this.log(line),
+      });
+    } catch (err) {
+      this.log(
+        `adapter registry load failed, using builtins: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+    }
+  }
+
   /** Request graceful shutdown (stop leasing; finish/fail in-flight). */
   stop(): void {
     this.stopping = true;
+    if (this.reFingerprintTimer !== null) {
+      clearInterval(this.reFingerprintTimer);
+      this.reFingerprintTimer = null;
+    }
+  }
+
+  /** Fingerprint host capabilities (PATH bins + adapter model catalogs). */
+  async fingerprint(): Promise<RunnerCapabilities> {
+    if (this.options.fingerprint !== undefined) {
+      return await this.options.fingerprint();
+    }
+    await this.adaptersReady;
+    const paths = homePathsFromEnv(this.env);
+    let config = {};
+    try {
+      config = readConfig(paths.config);
+    } catch {
+      /* optional */
+    }
+    return fingerprintCapabilities({
+      adapters: this.adapters,
+      config,
+      env: this.env,
+    });
+  }
+
+  /** Register (or re-register) with the daemon. Idempotent upsert server-side. */
+  async register(): Promise<void> {
+    await this.adaptersReady;
+    const capabilities = await this.fingerprint();
+    const vendorIds = capabilities.vendors.map((v) => v.id).join(",") || "(none)";
+    this.log(
+      `registering name=${this.options.config.name} vendors=${vendorIds} ` +
+        `protocol=${RUNNER_PROTOCOL_VERSION}`,
+    );
+    await this.transport.register({
+      runner: this.options.config.name,
+      protocol_version: RUNNER_PROTOCOL_VERSION,
+      build_version: this.options.buildVersion ?? RUNNER_VERSION,
+      capabilities,
+    });
   }
 
   /** Run until stopped. */
@@ -123,13 +222,50 @@ export class RunnerLoop {
     this.log(
       `started name=${this.options.config.name} daemon=${this.options.config.daemonUrl}`,
     );
+    await this.adaptersReady;
+
+    // Initial registration — required before any lease.
+    try {
+      await this.register();
+    } catch (err) {
+      this.log(
+        `register error: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      // Keep trying register in the main loop rather than exiting — a
+      // temporarily unreachable daemon should not kill the runner process.
+    }
+
+    // Periodic re-fingerprint so installing a vendor CLI needs no restart.
+    const interval = refingerprintIntervalMs();
+    this.reFingerprintTimer = setInterval(() => {
+      if (this.stopping) return;
+      void this.register().catch((err: unknown) => {
+        this.log(
+          `re-register error: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      });
+    }, interval);
+    this.reFingerprintTimer.unref();
+
     while (!this.stopping) {
       let lease: RunnerLeaseSpec | null;
       try {
         lease = await this.transport.lease(this.options.config.name);
       } catch (err) {
         if (this.stopping) break;
-        this.log(`lease error: ${err instanceof Error ? err.message : String(err)}`);
+        const msg = err instanceof Error ? err.message : String(err);
+        this.log(`lease error: ${msg}`);
+        // Reconnect path: re-register after transport errors (auth/registration
+        // gaps, daemon restart). Best-effort; next lease retries regardless.
+        try {
+          await this.register();
+        } catch (regErr) {
+          this.log(
+            `re-register after lease error failed: ${
+              regErr instanceof Error ? regErr.message : String(regErr)
+            }`,
+          );
+        }
         await sleep(2_000);
         continue;
       }
@@ -144,6 +280,10 @@ export class RunnerLoop {
         break;
       }
       await this.execute(lease);
+    }
+    if (this.reFingerprintTimer !== null) {
+      clearInterval(this.reFingerprintTimer);
+      this.reFingerprintTimer = null;
     }
     this.log("stopped");
   }

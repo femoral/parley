@@ -2,7 +2,12 @@ import { describe, expect, it, vi } from "vitest";
 import {
   createLeaseHttpTransport,
   DEFAULT_RUNNER_HEARTBEAT_TIMEOUT_MS,
+  DEFAULT_RUNNER_PRESENCE_GRACE_MS,
+  DEFAULT_RUNNER_STALE_MS,
+  deriveRunnerStatus,
+  RUNNER_PROTOCOL_VERSION,
   TASK_HEADER,
+  type RegisterRequest,
   type RunnerLeaseSpec,
 } from "../src/lease.js";
 
@@ -44,9 +49,142 @@ describe("lease wire constants", () => {
   it("exports the ADR-0012 heartbeat default", () => {
     expect(DEFAULT_RUNNER_HEARTBEAT_TIMEOUT_MS).toBe(90_000);
   });
+
+  it("exports the registration protocol version", () => {
+    expect(RUNNER_PROTOCOL_VERSION).toBe(1);
+  });
+
+  it("exports presence grace and stale defaults", () => {
+    expect(DEFAULT_RUNNER_PRESENCE_GRACE_MS).toBe(50_000);
+    expect(DEFAULT_RUNNER_STALE_MS).toBe(14 * 24 * 60 * 60 * 1000);
+  });
+});
+
+describe("deriveRunnerStatus", () => {
+  const now = Date.parse("2026-08-03T12:00:00.000Z");
+
+  it("is online with an open lease poll", () => {
+    expect(
+      deriveRunnerStatus({
+        hasOpenPoll: true,
+        lastSeenIso: "2020-01-01T00:00:00.000Z",
+        nowMs: now,
+      }),
+    ).toBe("online");
+  });
+
+  it("is online within the grace window after last_seen", () => {
+    expect(
+      deriveRunnerStatus({
+        hasOpenPoll: false,
+        lastSeenIso: new Date(now - 10_000).toISOString(),
+        nowMs: now,
+        graceMs: 50_000,
+      }),
+    ).toBe("online");
+  });
+
+  it("is offline after grace and before stale", () => {
+    expect(
+      deriveRunnerStatus({
+        hasOpenPoll: false,
+        lastSeenIso: new Date(now - 60_000).toISOString(),
+        nowMs: now,
+        graceMs: 50_000,
+        staleMs: 86_400_000,
+      }),
+    ).toBe("offline");
+  });
+
+  it("is stale past the stale window", () => {
+    expect(
+      deriveRunnerStatus({
+        hasOpenPoll: false,
+        lastSeenIso: new Date(now - 20 * 24 * 60 * 60 * 1000).toISOString(),
+        nowMs: now,
+        graceMs: 50_000,
+        staleMs: 14 * 24 * 60 * 60 * 1000,
+      }),
+    ).toBe("stale");
+  });
 });
 
 describe("createLeaseHttpTransport", () => {
+  it("POSTs /runner/register with capabilities payload", async () => {
+    const fetchMock = vi.fn(async () =>
+      jsonResponse(200, {
+        ok: true,
+        name: "gpu",
+        registered_at: "2026-08-03T00:00:00.000Z",
+        last_seen: "2026-08-03T00:00:00.000Z",
+      }),
+    );
+    const transport = createLeaseHttpTransport({
+      daemonUrl: "http://daemon.example:9/",
+      token: "tok",
+      fetch: fetchMock as unknown as typeof fetch,
+    });
+    const request: RegisterRequest = {
+      runner: "gpu",
+      protocol_version: RUNNER_PROTOCOL_VERSION,
+      build_version: "0.0.4",
+      capabilities: {
+        vendors: [
+          {
+            id: "fake",
+            models: [
+              { id: "fake-model", efforts: ["low", "medium", "high"], default_effort: "medium" },
+            ],
+          },
+        ],
+      },
+    };
+    const res = await transport.register(request);
+    expect(res.ok).toBe(true);
+    expect(res.name).toBe("gpu");
+    expect(fetchMock).toHaveBeenCalledOnce();
+    const [url, init] = fetchMock.mock.calls[0]!;
+    expect(url).toBe("http://daemon.example:9/runner/register");
+    expect(init?.method).toBe("POST");
+    expect((init?.headers as Record<string, string>).authorization).toBe("Bearer tok");
+    expect(JSON.parse(String(init?.body))).toEqual(request);
+  });
+
+  it("maps register 401 to a runner-auth message", async () => {
+    const transport = createLeaseHttpTransport({
+      daemonUrl: "http://d",
+      token: "bad",
+      fetch: (async () => jsonResponse(401, { error: "nope" })) as unknown as typeof fetch,
+    });
+    await expect(
+      transport.register({
+        runner: "gpu",
+        protocol_version: 1,
+        build_version: "0.0.4",
+        capabilities: { vendors: [] },
+      }),
+    ).rejects.toThrow(/runner auth failed \(401\)/);
+  });
+
+  it("surfaces register non-OK status with body", async () => {
+    const transport = createLeaseHttpTransport({
+      daemonUrl: "http://d",
+      token: "t",
+      fetch: (async () =>
+        jsonResponse(400, {
+          error: "incompatible runner protocol version: runner sent 0, daemon requires 1",
+        })) as unknown as typeof fetch,
+    });
+    await expect(
+      transport.register({
+        runner: "gpu",
+        protocol_version: 0,
+        build_version: "0.0.4",
+        capabilities: { vendors: [] },
+      }),
+    ).rejects.toThrow(/register failed \(400\).*incompatible runner protocol/);
+  });
+
   it("POSTs /runner/lease with bearer auth and runner body", async () => {
     const fetchMock = vi.fn(async () => jsonResponse(200, sampleLease));
     const transport = createLeaseHttpTransport({
