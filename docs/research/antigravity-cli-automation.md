@@ -339,6 +339,15 @@ VERIFIED: with exactly this layout, a `-p` run authenticated normally **and**
 the task-private stdio MCP server was spawned (marker file created) — the
 operator's own `~/.gemini` was never mutated.
 
+> **Parley decision (#298 / ADR-0026):** this per-task-`HOME` + credential-copy
+> recipe is **verified but REJECTED** for the parley adapter. Copying
+> `antigravity-oauth-token` / `installation_id` into the task tree is not
+> acceptable; mutating the operator's global `mcp_config.json` is not either.
+> Parley therefore spawns against the real operator `~/.gemini` (no `HOME`
+> override) and delivers the child channel over **http** (daemon
+> `POST /child/report` / `POST /child/ask`), not MCP. Conversation-store
+> sharing is accepted (ADR-0025 posture). See ADR-0026.
+
 **Open item for #286:** Parley's hub is a Streamable-HTTP MCP endpoint with
 correlation **headers**. `agy` documents only `serverUrl` (SSE) with no header
 map. A `serverUrl` entry is *accepted* without error (VERIFIED: run completed
@@ -763,6 +772,11 @@ agy
 
 Binary resolution: `env.PARLEY_ANTIGRAVITY_BIN ?? "agy"`.
 
+> **Parley deviation (#298 / ADR-0026):** the table above is the research-verified
+> recipe. Parley **does not** set `HOME` or materialize those files; it spawns
+> against the operator home and declares child channel `http` (engine injects
+> `PARLEY_HUB_URL` / `PARLEY_TASK_ID`). See §3 note and ADR-0026.
+
 ### `resume(task, hub)` → `SpawnPlan`
 
 Identical, plus `--conversation <task.sessionId>`, and the **same** `HOME` path
@@ -815,13 +829,18 @@ denial diagnostic.
    only bridge back from `settings.json`'s stored display label to an id —
    require a **pty**. TTY mode also injects a spinner prefix and `\r\n`.
 8. **MCP is global-only.** No flag; `.agents/mcp_config.json` is *not*
-   discovered (verified). Per-task injection ⇒ per-task `HOME`.
+   discovered (verified). Per-task injection ⇒ per-task `HOME`. **Parley
+   rejects that path** (credential copy) and uses the http child channel
+   instead (#298 / ADR-0026).
 9. **No `headers` and no Streamable-HTTP key** in `mcp_config.json` — only
-   stdio and SSE `serverUrl`. Prefer a stdio bridge for the parley hub;
-   correlation must ride in `env`, not headers.
+   stdio and SSE `serverUrl`. Prefer a stdio bridge for the parley hub *if*
+   using MCP; correlation must ride in `env`, not headers. Parley does not
+   use MCP for antigravity (#298).
 10. **`HOME` is the only home override.** `ANTIGRAVITY_EXECUTABLE_DATA_DIR` does
-    nothing. Copy `antigravity-oauth-token` (+ `installation_id`) into the task
+    nothing. Copy `antigravity-oauth-token` (+ `installation_id`) into a task
     home or the run stalls 60 s on an interactive OAuth prompt then exits 1.
+    **Parley does not copy credentials** — it spawns with the operator's real
+    home (#298 / ADR-0026).
 11. **`--sandbox` fails open** — the command still ran and wrote to disk while
     the result reported a sandbox connection error. Do not pass it and do not
     treat it as isolation.

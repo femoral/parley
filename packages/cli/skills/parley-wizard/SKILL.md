@@ -231,7 +231,7 @@ parley config set vendors.<id>.childChannel mcp|http|cli
 | `claude` | `mcp` | Native streamable-HTTP MCP + headers via `--mcp-config` / `--strict-mcp-config`. |
 | `cline` | `mcp` | MCP via materialized `cline_mcp_settings.json` under an isolated data-dir. |
 | `codex` | `mcp` | Strong MCP inject via `-c` / `CODEX_HOME`; canonical Parley path. |
-| `antigravity` | `mcp` | MCP via per-task `HOME` + `~/.gemini/config/mcp_config.json` stdio bridge (no Streamable-HTTP/headers on `agy`). |
+| `antigravity` | `http` | Child REST (`POST /child/report`, `POST /child/ask`) against the operator's real `~/.gemini` — no per-task `HOME` or credential copy. |
 | `goose` | `mcp` | Streamable HTTP MCP under `GOOSE_PATH_ROOT` isolation. |
 | `grok` | `mcp` | MCP via worktree `.grok/config.toml` or Claude-format `.mcp.json`. |
 | `hermes` | `mcp` | MCP HTTP + headers in private `HERMES_HOME` `config.yaml`. |

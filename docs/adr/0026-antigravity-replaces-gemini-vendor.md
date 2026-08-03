@@ -31,8 +31,23 @@ break, not a silent remap.
   implements `listModels` via `agy models`, stripping only `-high`/`-medium`/
   `-low` into efforts and never synthesizing unlisted combos. On-disk
   `readModels` is omitted — settings store a display label, not a catalog.
-- Implementation follows the research doc's §9 recommendation (stdio MCP
-  bridge under a per-task `HOME`, success triple, posture refusals).
+- **Child channel is `http`, not MCP** ([#298](https://github.com/femoral/parley/issues/298)).
+  Research §3/§9 verified a per-task `HOME` + stdio MCP bridge (agy reads MCP
+  config only from `$HOME/.gemini/config/mcp_config.json`). That recipe is
+  **rejected for parley**: injecting a task-private MCP server under a private
+  home requires copying the operator's OAuth token (and `installation_id`) into
+  the task tree, and the alternative — writing the operator's global
+  `mcp_config.json` — mutates operator config. Neither is acceptable. The
+  daemon child REST surface (`POST /child/report`, `POST /child/ask`, ADR-0011)
+  is taught by the engine preamble when the adapter declares `childChannel:
+  "http"`; the engine already injects `PARLEY_HUB_URL` / `PARLEY_TASK_ID`. No
+  MaterializedFiles, no `HOME` override, never write the operator's MCP config.
+- **Spawn against the operator's real `~/.gemini`.** Auth and
+  `--conversation` resume work natively. Concurrent tasks share the operator's
+  conversation store — same posture as kimi/codex (ADR-0025). Success-detection
+  triple, stream-json parsing, effort/model semantics, and posture refusals
+  follow the research doc; only the home/MCP injection path is deliberately
+  different.
 
 ## Consequences
 
@@ -42,8 +57,13 @@ break, not a silent remap.
   a record of the retired surface; it is not a live adapter contract.
 - UI faction coats, wizard skill defaults, and the README enforcement matrix
   track `antigravity` only.
-- Credential materialisation under a private `HOME` requires careful file
-  modes and git-excludes on `--cwd` tasks so OAuth tokens are never committed.
+- Children report via curl/HTTP as taught in the protocol preamble; `sandbox=
+  read-only` remains approximate (RO cannot reliably run curl, and without a
+  private home we cannot inject `permissions.allow`).
+- Engine materialization hardening (`MaterializedFile.mode`,
+  `writeFileSync({mode})` + chmod, `.git/info/exclude` via commonGitDir)
+  stays for other adapters that still materialize plumbing files; antigravity
+  no longer uses it for credentials.
 - Exclude entries appended for `--cwd` tasks are permanent and accumulate
   (deduped on respawn); a future real file at one of those repo paths would be
   silently ignored in that repo.
