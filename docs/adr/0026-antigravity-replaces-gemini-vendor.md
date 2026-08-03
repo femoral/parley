@@ -1,6 +1,6 @@
 # ADR-0026: Antigravity replaces the gemini vendor id
 
-**Status**: accepted · **Date**: 2026-08-02 · **Decided**: [#286](https://github.com/femoral/parley/issues/286)
+**Status**: accepted · **Date**: 2026-08-02 · **Decided**: [#286](https://github.com/femoral/parley/issues/286) (amended by [#298](https://github.com/femoral/parley/issues/298))
 
 ## Context
 

@@ -176,7 +176,8 @@ export function excludeMaterializedFiles(wtPath: string, relPaths: string[]): vo
  * Distinct from {@link excludeMaterializedFiles}, which uses a *worktree-private*
  * exclude file so source-repo checkouts are never affected. A `--cwd` task
  * *is* the operator's real tree, so local `info/exclude` is the right lever
- * for secrets materialised under e.g. `.parley-antigravity/` (#286).
+ * for files materialised with a restrictive `mode` (e.g. credentials, should
+ * an adapter ever need one again — none does since #298).
  */
 export function excludeMaterializedFilesInCwdRepo(
   cwd: string,

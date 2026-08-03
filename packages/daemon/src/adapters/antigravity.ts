@@ -85,7 +85,7 @@ const JETSKI_DENY_RE = /^jetski:\s*no output produced/i;
 const ANTIGRAVITY_ENFORCEMENT: AdapterEnforcement = {
   "read-only": {
     level: "approximate",
-    via: "omit dangerously-skip-permissions; no private-home permissions.allow inject (#298); host-wide reads, silent deny on write/command",
+    via: "omit dangerously-skip-permissions; no private-home permissions.allow inject (#298); all permissioned tools auto-denied incl. reads — the child cannot report over http",
   },
   workspace: {
     level: "none",
