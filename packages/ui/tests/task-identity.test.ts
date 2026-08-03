@@ -105,7 +105,6 @@ describe("task identity tokens", () => {
     expect(modelVendorFor("google-gemini-2.5-pro", "opencode").label).toBe("Gemini");
   });
 
-
   it("falls back from an opaque model to an adapter alias, then unknown", () => {
     expect(modelVendorFor(null, "grok")).toBe(VENDOR_EMBLEMS.grok);
     expect(modelVendorFor("custom-model", "claude")).toBe(VENDOR_EMBLEMS.claude);
