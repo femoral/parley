@@ -29,6 +29,12 @@ export interface HomePaths {
   /** Parley-created git worktrees live here (ADR-0005 / ADR-0018). */
   worktrees: string;
   /**
+   * Parley-managed bare git mirrors, one per repo key (ADR-0031 / #316).
+   * Layout: `clones/<encoded-repo-key>/` (bare). Runners (and later the local
+   * executor) fetch origin here on claim and cut task worktrees from them.
+   */
+  clones: string;
+  /**
    * Scratch-mode run workspaces (`workspace: scratch`) live here
    * (`~/.parley/runs/<runId>/` — ADR-0018 / #235).
    */
@@ -55,6 +61,7 @@ export function homePaths(home: string): HomePaths {
     config: path.join(home, "parley.json"),
     tasks: path.join(home, "tasks"),
     worktrees: path.join(home, "worktrees"),
+    clones: path.join(home, "clones"),
     runs: path.join(home, "runs"),
   };
 }

@@ -78,12 +78,50 @@ const emptyCaps = {
 
 /** Host that never touches git or network — enough to finish execute. */
 function noopHost(overrides: {
+  prepareClaimRepo?: () => {
+    repoLocal: string;
+    baseRef: string;
+    branch: string;
+    pushToOrigin: boolean;
+    source: "mirror" | "override" | "local";
+  };
   createWorktree?: () => { path: string; branch: string; baseSha: string };
   pushBranch?: () => void;
   spawnExitCode?: number | null;
+  /** When true, omit spawnAndStream so tests can assert it was never set/called. */
+  noSpawn?: boolean;
 } = {}) {
   const wt = tmp("parley-fake-wt-");
-  return {
+  const repo = tmp("parley-fake-repo-");
+  const host: {
+    prepareClaimRepo: () => {
+      repoLocal: string;
+      baseRef: string;
+      branch: string;
+      pushToOrigin: boolean;
+      source: "mirror" | "override" | "local";
+    };
+    createWorktree: () => { path: string; branch: string; baseSha: string };
+    removeWorktree: () => void;
+    pushBranch: () => void;
+    startHubProxy: () => Promise<{
+      url: string;
+      port: number;
+      close: () => Promise<void>;
+    }>;
+    materializeContext: () => void;
+    materializeChildHub: () => void;
+    spawnAndStream?: () => Promise<number | null>;
+  } = {
+    prepareClaimRepo:
+      overrides.prepareClaimRepo ??
+      (() => ({
+        repoLocal: repo,
+        baseRef: "abc",
+        branch: "parley/task-1",
+        pushToOrigin: true,
+        source: "mirror" as const,
+      })),
     createWorktree:
       overrides.createWorktree ??
       (() => ({
@@ -112,8 +150,11 @@ function noopHost(overrides: {
     materializeChildHub: () => {
       /* noop */
     },
-    spawnAndStream: async () => overrides.spawnExitCode ?? 0,
   };
+  if (!overrides.noSpawn) {
+    host.spawnAndStream = async () => overrides.spawnExitCode ?? 0;
+  }
+  return host;
 }
 
 /** Drain one lease (or shutdown fail) then stop when transport is idle. */
@@ -243,36 +284,76 @@ describe("RunnerLoop registration (fake transport)", () => {
 });
 
 describe("RunnerLoop failure branches (fake transport)", () => {
-  it("fails when repo mapping is missing", async () => {
+  it("fails at claim time when prepareClaimRepo throws (vendor never spawned)", async () => {
     const lease = sampleLease({ repo: "/unknown/repo" });
     const transport = createFakeLeaseTransport({ leases: [lease] });
-    const loop = new RunnerLoop(loopOpts(transport, { config: { repos: {} } }));
-    await runUntilIdle(loop, transport);
-    expect(failCalls(transport).some((e) => /no local repo mapping/.test(e))).toBe(
-      true,
-    );
-  });
-
-  it("fails when mapped repo path does not exist", async () => {
-    const missing = path.join(tmp("parley-missing-parent-"), "no-such-repo");
-    const lease = sampleLease({ repo: "/orch/repo" });
-    const transport = createFakeLeaseTransport({ leases: [lease] });
     const loop = new RunnerLoop(
-      loopOpts(transport, { config: { repos: { "/orch/repo": missing } } }),
+      loopOpts(transport, {
+        host: {
+          prepareClaimRepo: () => {
+            throw new Error("base_sha not resolvable from origin: deadbeef");
+          },
+          noSpawn: true,
+          createWorktree: () => {
+            throw new Error("should not create worktree");
+          },
+        },
+      }),
     );
     await runUntilIdle(loop, transport);
     expect(
-      failCalls(transport).some((e) => /mapped repo path does not exist/.test(e)),
+      failCalls(transport).some((e) => /base_sha not resolvable from origin/.test(e)),
     ).toBe(true);
+    // Claim-time fail: no branch record, and noSpawn means vendor was not launched.
+    expect(transport.calls.some((c) => c.verb === "branch")).toBe(false);
   });
 
-  it("fails on unknown vendor", async () => {
-    const repo = tmp("parley-repo-");
-    const lease = sampleLease({ vendor: "nope", repo: "/orch/repo" });
+  it("fails when repos override path does not exist", async () => {
+    const missing = path.join(tmp("parley-missing-parent-"), "no-such-repo");
+    const lease = sampleLease({
+      repo: "/orch/repo",
+      repo_key: "github.com/org/repo",
+    });
     const transport = createFakeLeaseTransport({ leases: [lease] });
-    const loop = new RunnerLoop(
-      loopOpts(transport, { config: { repos: { "/orch/repo": repo } } }),
-    );
+    // Use real prepareClaimRepo with override pointing at missing path.
+    const loop = new RunnerLoop({
+      config: baseConfig({
+        repos: { "github.com/org/repo": missing },
+      }),
+      transport,
+      adapters: new Map([["fake", stubAdapter()]]),
+      fingerprint: () => emptyCaps,
+      log: () => {},
+      host: {
+        // keep default prepareClaimRepo (real); stub only post-claim host bits
+        createWorktree: () => {
+          throw new Error("should not reach worktree");
+        },
+        removeWorktree: () => {},
+        pushBranch: () => {},
+        startHubProxy: async () => ({
+          url: "http://127.0.0.1:1",
+          port: 1,
+          close: async () => {},
+        }),
+        materializeContext: () => {},
+        materializeChildHub: () => {},
+        spawnAndStream: async () => {
+          throw new Error("vendor must not spawn");
+        },
+      },
+    });
+    await runUntilIdle(loop, transport);
+    expect(
+      failCalls(transport).some((e) => /repos override path does not exist/.test(e)),
+    ).toBe(true);
+    expect(transport.calls.some((c) => c.verb === "branch")).toBe(false);
+  });
+
+  it("fails on unknown vendor after successful claim-time prepare", async () => {
+    const lease = sampleLease({ vendor: "nope" });
+    const transport = createFakeLeaseTransport({ leases: [lease] });
+    const loop = new RunnerLoop(loopOpts(transport, {}));
     await runUntilIdle(loop, transport);
     expect(failCalls(transport).some((e) => /unknown vendor on runner: nope/.test(e))).toBe(
       true,
@@ -280,12 +361,10 @@ describe("RunnerLoop failure branches (fake transport)", () => {
   });
 
   it("fails when worktree create throws", async () => {
-    const repo = tmp("parley-repo-");
-    const lease = sampleLease({ repo: "/orch/repo" });
+    const lease = sampleLease();
     const transport = createFakeLeaseTransport({ leases: [lease] });
     const loop = new RunnerLoop(
       loopOpts(transport, {
-        config: { repos: { "/orch/repo": repo } },
         host: {
           createWorktree: () => {
             throw new Error("git worktree add failed");
@@ -302,12 +381,10 @@ describe("RunnerLoop failure branches (fake transport)", () => {
   });
 
   it("fails with branch handoff message when push throws", async () => {
-    const repo = tmp("parley-repo-");
-    const lease = sampleLease({ repo: "/orch/repo" });
+    const lease = sampleLease();
     const transport = createFakeLeaseTransport({ leases: [lease] });
     const loop = new RunnerLoop(
       loopOpts(transport, {
-        config: { repos: { "/orch/repo": repo } },
         host: {
           pushBranch: () => {
             throw new Error("permission denied");
@@ -322,12 +399,10 @@ describe("RunnerLoop failure branches (fake transport)", () => {
   });
 
   it("safety-net fails when child exits without a report", async () => {
-    const repo = tmp("parley-repo-");
-    const lease = sampleLease({ repo: "/orch/repo" });
+    const lease = sampleLease();
     const transport = createFakeLeaseTransport({ leases: [lease] });
     const loop = new RunnerLoop(
       loopOpts(transport, {
-        config: { repos: { "/orch/repo": repo } },
         host: { spawnExitCode: 7 },
       }),
     );
@@ -339,6 +414,32 @@ describe("RunnerLoop failure branches (fake transport)", () => {
     ).toBe(true);
     // Branch was still recorded on success path before safety-net fail.
     expect(transport.calls.some((c) => c.verb === "branch")).toBe(true);
+  });
+
+  it("claim-time failure ordering: fail before createWorktree and spawn", async () => {
+    const order: string[] = [];
+    const lease = sampleLease();
+    const transport = createFakeLeaseTransport({ leases: [lease] });
+    const loop = new RunnerLoop(
+      loopOpts(transport, {
+        host: {
+          prepareClaimRepo: () => {
+            order.push("prepare");
+            throw new Error("push denied at claim time (branch parley/task-1): denied");
+          },
+          createWorktree: () => {
+            order.push("worktree");
+            return { path: tmp("x-"), branch: "parley/task-1", baseSha: "abc" };
+          },
+          noSpawn: true,
+        },
+      }),
+    );
+    await runUntilIdle(loop, transport);
+    expect(order).toEqual(["prepare"]);
+    expect(failCalls(transport).some((e) => /push denied at claim time/.test(e))).toBe(
+      true,
+    );
   });
 
   it("fails a claimed lease when shutting down before execute", async () => {

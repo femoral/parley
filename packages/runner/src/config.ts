@@ -13,9 +13,10 @@ export interface RunnerConfig {
   /** Bearer token matching `runners.<name>.token` on the daemon. */
   token: string;
   /**
-   * Map of repo identifier → local clone path. The identifier is the `repo`
-   * field the daemon recorded at delegate time (usually an absolute path on
-   * the orchestrator host). Keys are matched exactly, then by basename.
+   * Optional operator override: repo key (or legacy path id) → local clone.
+   * When set, the runner uses that checkout instead of a parley-managed bare
+   * mirror (ADR-0031 / #316). Empty by default — zero-config runners fetch
+   * mirrors from the lease's `repo_fetch_url`.
    */
   repos: Record<string, string>;
   /**
@@ -135,16 +136,21 @@ export function loadRunnerConfig(options: LoadRunnerConfigOptions = {}): RunnerC
 }
 
 /**
- * Resolve a daemon-recorded repo identifier to a local clone path.
- * Tries exact match, then basename match against configured keys/values.
+ * Resolve an optional operator-managed clone override.
+ *
+ * Tries exact match on the id (prefer the lease's `repo_key`, then `repo`
+ * path), then basename match against configured keys/values so short names
+ * still work.
  */
 export function resolveRepoPath(
   repos: Record<string, string>,
   repoId: string,
 ): string | null {
+  if (repoId === "") return null;
   if (repos[repoId] !== undefined) return repos[repoId] ?? null;
   const base = path.basename(repoId);
   for (const [key, local] of Object.entries(repos)) {
+    if (key === repoId) return local;
     if (path.basename(key) === base || path.basename(local) === base) {
       return local;
     }
