@@ -1,4 +1,3 @@
-import fs from "node:fs";
 import path from "node:path";
 import { displayVendorPath, resolveOperatorVendorHome } from "@useparley/core";
 import type {
@@ -14,6 +13,7 @@ import type {
 } from "./types.js";
 import { VENDOR_DIAG_PREFIX, withPostureDiagnostics } from "./types.js";
 import { runProbe } from "./probe.js";
+import { readOperatorFileText } from "./read-operator-file.js";
 import { tomlString } from "./toml.js";
 
 /** Codex maps postures to real `sandbox_mode` / network_access (ADR-0006 / #279). */
@@ -283,15 +283,6 @@ const MODELS_CACHE_MAX_BYTES = 8 * 1024 * 1024;
 /** Exported for size-cap tests. */
 export const CODEX_MODELS_CACHE_MAX_BYTES = MODELS_CACHE_MAX_BYTES;
 
-function isEnoent(err: unknown): boolean {
-  return (
-    typeof err === "object" &&
-    err !== null &&
-    "code" in err &&
-    (err as { code?: string }).code === "ENOENT"
-  );
-}
-
 /** Normalize a single `item.completed` item to a thin VendorEvent (or `[]` opaque). */
 function parseItem(item: unknown): VendorEvent[] {
   const it = asRecord(item);
@@ -445,32 +436,18 @@ export function createCodexAdapter(env: NodeJS.ProcessEnv = process.env): Vendor
       if (home === null) return { source: MODELS_CACHE_FILE, models: [] };
       const cachePath = path.join(home, MODELS_CACHE_FILE);
       const sourceBase = displayVendorPath(cachePath, env);
-      let text: string;
-      try {
-        // TOCTOU accepted: stat then read. isFile() stops the static-FIFO /
-        // device hang (#288); a path swapped to FIFO between the two calls
-        // can still block, and a regular file on a hung network mount blocks
-        // regardless. Bound open is not portable enough for our Node target.
-        const stat = fs.statSync(cachePath);
-        // #288: refuse non-files (FIFO, dir, device). readFileSync on a FIFO
-        // blocks the daemon event loop forever — treat as present-but-unusable
-        // so refreshCatalog can warn and fall through.
-        if (!stat.isFile()) {
-          throw new Error(`${MODELS_CACHE_FILE} is not a regular file`);
-        }
-        if (stat.size > MODELS_CACHE_MAX_BYTES) {
-          throw new Error(
-            `${MODELS_CACHE_FILE} exceeds size cap (${MODELS_CACHE_MAX_BYTES} bytes)`,
-          );
-        }
-        text = fs.readFileSync(cachePath, "utf8");
-      } catch (err) {
-        if (isEnoent(err)) {
-          return { source: codexModelsCacheSource(sourceBase, null), models: [] };
-        }
-        throw err instanceof Error ? err : new Error(String(err));
+      const cacheRead = readOperatorFileText(
+        cachePath,
+        MODELS_CACHE_FILE,
+        MODELS_CACHE_MAX_BYTES,
+      );
+      if (cacheRead.error !== null) {
+        throw new Error(cacheRead.error);
       }
-      const { models, cacheFetchedAt, error } = parseCodexModelsCache(text);
+      if (cacheRead.text === null) {
+        return { source: codexModelsCacheSource(sourceBase, null), models: [] };
+      }
+      const { models, cacheFetchedAt, error } = parseCodexModelsCache(cacheRead.text);
       if (error !== null) {
         throw new Error(error);
       }

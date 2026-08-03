@@ -69,6 +69,31 @@ describe("effortsFromThinkingLevelMap (tristate override table)", () => {
       "high",
     ]);
   });
+
+  it("filters hostile / unknown keys to the known pi effort set (#294)", () => {
+    // JSON.parse is the realistic path (models-store.json) and creates own
+    // properties named __proto__ without mutating Object.prototype.
+    const hostile = JSON.parse(
+      '{"__proto__":"high","constructor":"low","evil":"max","xhigh":"xhigh","max":"max"}',
+    ) as Record<string, unknown>;
+    expect(effortsFromThinkingLevelMap(hostile)).toEqual([
+      "off",
+      "minimal",
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+      "max",
+    ]);
+    const onlyHostile = JSON.parse(
+      '{"__proto__":"pollute","toString":"nope","not-an-effort":"high"}',
+    ) as Record<string, unknown>;
+    const efforts = effortsFromThinkingLevelMap(onlyHostile);
+    expect(efforts).toEqual(["off", "minimal", "low", "medium", "high"]);
+    expect(efforts).not.toContain("__proto__");
+    expect(efforts).not.toContain("toString");
+    expect(efforts).not.toContain("not-an-effort");
+  });
 });
 
 describe("parsePiModelsStore", () => {

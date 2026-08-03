@@ -1,4 +1,3 @@
-import fs from "node:fs";
 import path from "node:path";
 import { displayVendorPath, resolveOperatorVendorHome } from "@useparley/core";
 import type {
@@ -13,6 +12,7 @@ import type {
   VendorEvent,
 } from "./types.js";
 import { VENDOR_DIAG_PREFIX, withPostureDiagnostics } from "./types.js";
+import { readOperatorFileText } from "./read-operator-file.js";
 import { parseToml, type TomlTable, type TomlValue } from "./toml.js";
 
 /** Kimi: no faithful sandbox/network matrix; --plan is soft RO only (#279). */
@@ -261,15 +261,6 @@ export function kimiModelsConfigSource(configPath: string, defaultModel: string 
 
 /** Cap on operator config.toml — small; auth co-located so we never slurp it whole into memory unbounded. */
 export const KIMI_CONFIG_MAX_BYTES = 2 * 1024 * 1024;
-
-function isEnoent(err: unknown): boolean {
-  return (
-    typeof err === "object" &&
-    err !== null &&
-    "code" in err &&
-    (err as { code?: string }).code === "ENOENT"
-  );
-}
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
   return typeof value === "object" && value !== null
@@ -594,35 +585,21 @@ export function createKimiAdapter(env: NodeJS.ProcessEnv = process.env): VendorA
       if (home === null) return { source: OPERATOR_CONFIG_FILE, models: [] };
       const configPath = path.join(home, OPERATOR_CONFIG_FILE);
       const sourceBase = displayVendorPath(configPath, env);
-      let text: string;
-      try {
-        // TOCTOU accepted: stat then read. isFile() stops the static-FIFO /
-        // device hang (#288); a path swapped to FIFO between the two calls
-        // can still block, and a regular file on a hung network mount blocks
-        // regardless. Bound open is not portable enough for our Node target.
-        const stat = fs.statSync(configPath);
-        // #288: refuse non-files (FIFO, dir, device). readFileSync on a FIFO
-        // blocks the daemon event loop forever — treat as present-but-unusable
-        // so refreshCatalog can warn and fall through.
-        if (!stat.isFile()) {
-          throw new Error(`${OPERATOR_CONFIG_FILE} is not a regular file`);
-        }
-        if (stat.size > KIMI_CONFIG_MAX_BYTES) {
-          throw new Error(
-            `${OPERATOR_CONFIG_FILE} exceeds size cap (${KIMI_CONFIG_MAX_BYTES} bytes)`,
-          );
-        }
-        text = fs.readFileSync(configPath, "utf8");
-      } catch (err) {
-        if (isEnoent(err)) {
-          return { source: kimiModelsConfigSource(sourceBase, null), models: [] };
-        }
-        throw err instanceof Error ? err : new Error(String(err));
+      const configRead = readOperatorFileText(
+        configPath,
+        OPERATOR_CONFIG_FILE,
+        KIMI_CONFIG_MAX_BYTES,
+      );
+      if (configRead.error !== null) {
+        throw new Error(configRead.error);
+      }
+      if (configRead.text === null) {
+        return { source: kimiModelsConfigSource(sourceBase, null), models: [] };
       }
       // Secret hygiene: parse → project model keys only. Never log `text`,
       // never re-serialize the full parse tree (credentials live alongside).
       // Errors from the parser carry no file body / credential material.
-      const { models, defaultModel, error } = parseKimiModelsConfig(text);
+      const { models, defaultModel, error } = parseKimiModelsConfig(configRead.text);
       if (error !== null) {
         throw new Error(error);
       }

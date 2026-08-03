@@ -461,6 +461,28 @@ Config precedence (DOCS): CLI args > `config.yaml` > `.env` > built-ins.
 There is no Codex-equivalent `codex debug models` or Grok `grok models`
 stable CLI surface to pin.
 
+### On-disk model caches (Parley `readModels` — #283)
+
+Hermes has no non-interactive list CLI, so Parley's disk discovery channel
+reads two operator-home files under `$HERMES_HOME` (default `~/.hermes`):
+
+| Path | Role | Source |
+|------|------|--------|
+| `cache/model_catalog.json` | Versioned **curated** provider→models manifest (`version`, `updated_at`, `providers.<name>.models[]` with `id` / optional `description` / optional `default`). Primary catalog feed. | `hermes_cli/model_catalog.py` |
+| `provider_models_cache.json` | Per-provider `/v1/models` runtime cache at **HERMES_HOME root** (not under `cache/`). Optional cross-check: when present and readable, Parley intersects curated rows with the ids observed at runtime. | `hermes_cli/models.py` |
+
+**Id-form divergence assumption:** the two files do **not** share a verified
+id schema. Curated catalog rows may use `vendor/model` (or other picker forms)
+while the provider models cache often holds bare API ids. If intersecting a
+provider that had curated models would drop *every* row for that provider,
+Parley keeps the unfiltered curated list for that provider rather than wiping
+the catalog (see `intersectHermesRowsWithProviderCache` in the hermes adapter).
+Malformed / missing provider cache never rejects the whole read — the curated
+manifest alone remains a useful catalog.
+
+`hermes model --refresh` wipes and re-fetches the runtime `/v1/models` cache;
+it does not replace the curated `cache/model_catalog.json` feed.
+
 ---
 
 ## 8. Token usage

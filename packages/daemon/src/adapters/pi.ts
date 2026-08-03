@@ -59,7 +59,9 @@ const HUB_EXTENSION_PATH = ".parley/pi-hub-extension.ts";
 
 /**
  * Fixed Pi thinking levels used as catalog efforts (research §7: `--list-models`
- * only reports thinking yes/no, not per-row enums).
+ * only reports thinking yes/no, not per-row enums). Also the allowlist for
+ * keys derived from `thinkingLevelMap` (#294) — hostile / unknown keys must
+ * not become effort strings.
  */
 const PI_THINKING_LEVELS = [
   "off",
@@ -70,6 +72,9 @@ const PI_THINKING_LEVELS = [
   "xhigh",
   "max",
 ] as const;
+
+/** Known pi effort level set (standard + extended). */
+const PI_KNOWN_EFFORT_LEVELS: ReadonlySet<string> = new Set(PI_THINKING_LEVELS);
 
 /**
  * Provider auth env keys named in research §6. Only forwarded when set in the
@@ -152,9 +157,12 @@ export function effortsFromThinkingLevelMap(tlm: Record<string, unknown>): strin
     }
     // null / non-string → excluded
   }
-  // Explicit string-valued keys outside the standard set (xhigh, max, …).
+  // Explicit string-valued keys outside the standard set (xhigh, max).
+  // Filter to the known pi effort set so hostile keys (__proto__, etc.) never
+  // become effort strings (#294).
   for (const [key, value] of Object.entries(tlm)) {
     if (key === "" || seen.has(key)) continue;
+    if (!PI_KNOWN_EFFORT_LEVELS.has(key)) continue;
     if (typeof value === "string") {
       efforts.push(key);
       seen.add(key);
