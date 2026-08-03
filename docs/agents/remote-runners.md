@@ -33,11 +33,16 @@ The daemon re-reads this file for auth on each runner request (same hot posture
 as profiles). Restart is not required to add a runner token, but the runner
 process must be started with the matching name and token.
 
-Expose the daemon so runners can reach it (bind is localhost by default — put a
-reverse proxy or SSH tunnel in front for remote hosts). Child contract calls
+Expose the daemon so runners can reach it. Default bind is loopback-only
+(`daemon.bind` defaults to `127.0.0.1`). For remote hosts set e.g.
+`"daemon": { "bind": "0.0.0.0" }` on the daemon; bearer auth is then mandatory
+for every non-loopback peer (runner token on `/runner/*` and on hub-proxied
+child traffic). Parley does not implement TLS — use a private/overlay network
+(Tailscale, WireGuard, LAN) or a TLS-terminating reverse proxy in front; see
+[ADR-0030](../adr/0030-client-auth-and-bind-posture.md). Child contract calls
 from the remote child go through the **runner's local hub proxy**, which
-forwards `/child/*` and `/mcp` to the daemon — children never need direct
-daemon reachability.
+forwards `/child/*` and `/mcp` to the daemon with the runner bearer token —
+children never need direct daemon reachability.
 
 ## Runner install and config
 

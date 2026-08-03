@@ -39,6 +39,11 @@ config round-trip; the wire carries only the bearer token. One bearer scheme,
 two principal namespaces — client and runner maps stay separate so logs and
 revocation stay attributable.
 
+Client-side `daemon.client` / `daemon.token` are **hand-edited** for now (via
+`parley config set` or direct JSON edit). There is no dedicated mint/enroll
+CLI verb — the same convention as runner tokens. A future ticket may add
+ergonomics; do not invent a verb here.
+
 ### Opt-in bind; peer-address enforcement
 
 New `daemon.bind` (default `127.0.0.1`). Cold setting — requires daemon
@@ -48,19 +53,33 @@ auth is mandatory for every non-loopback peer**:
 | Route class | Principal off-loopback |
 | --- | --- |
 | `/runner/*` | Runner token (name-matched as today; already required on loopback too) |
-| `/child/*`, `/mcp` | Runner or client token (hub proxy attaches the runner token) |
+| `/child/*`, `/mcp` | Runner token **bound to the task's lease holder** (`task.runner`) |
 | All other routes (client surface, `/health`, `GET /runners`, UI, `/xai/…`) | Client token only |
+| `PUT /config`, `POST /config/set`, `POST /config/unset` | **Forbidden off-loopback** (403) regardless of any valid token |
 
 **Enforcement keys off the peer address** (`socket.remoteAddress`), not bind
 config alone. Loopback peers (`127.0.0.0/8`, `::1`, IPv4-mapped forms) keep
 today's tokenless trust and the daemon-id isolation handshake (#130). A local
 CLI talking to `http://127.0.0.1:<port>` is unchanged even when the process
-also listens on `0.0.0.0`.
+also listens on `0.0.0.0`. Missing/`undefined` peer address fails closed
+(treated as non-loopback).
 
 Runner-hosted children never dial the daemon directly: they talk to the
 runner's local hub proxy, which forwards `/child/*` and `/mcp` and attaches
-the runner bearer token so non-loopback hops authenticate. In-daemon children
-still hit loopback and stay tokenless.
+the runner bearer token so non-loopback hops authenticate as that runner.
+The gate requires the authenticated runner name to match `task.runner` (the
+lease holder); unleased tasks, local (null-runner) tasks, and other runners
+are rejected. In-daemon children still hit loopback and stay tokenless.
+Client tokens are **not** admitted on the child channel.
+
+### Config read vs admin
+
+- `GET /config` off-loopback requires a client token and **redacts**
+  `clients.*.token` and `runners.*.token` (values become `"<redacted>"`).
+  Loopback `GET /config` is unredacted.
+- Config **writes** (`PUT /config`, `POST /config/set`, `POST /config/unset`)
+  are loopback / host-shell only. Remote model-allowlist editing arrives later
+  via dedicated routes in #322 — not via wholesale config push.
 
 ### No native TLS
 
@@ -82,4 +101,14 @@ Parley speaks plain HTTP. Documented postures:
 - Default install remains loopback-only and tokenless for local use.
 - Hub proxy always attaches the runner token on upstream child/MCP forwards
   (harmless on loopback).
+- **Client tokens are deliberately not admin credentials.** Config
+  administration (`PUT /config`, `POST /config/set|unset`) is a
+  loopback/host-shell operation only. A remote client may `GET /config` with
+  secrets redacted; it cannot mint runners, revoke peers, or change
+  `vendors.*.bin/args/env` over the wire. Dedicated remote allowlist edits
+  land later (#322).
+- **Browser UI is unreachable off-loopback** until UI work (#324): a browser
+  cannot attach a bearer token to ordinary document navigation, so static
+  bundle fetches and API calls from Cove fail auth when the peer is not
+  loopback. Local `parley ui` against loopback is unchanged.
 - No compatibility shims — greenfield wire/config change (pre-release).

@@ -1,27 +1,45 @@
 /**
  * Client auth + opt-in bind beyond loopback (#323 / ADR-0030).
  *
- * Peer-address enforcement: loopback stays tokenless; non-loopback peers need
- * a valid bearer. Tests bind `0.0.0.0` and dial a non-internal host address
- * so `socket.remoteAddress` is not loopback.
+ * Deterministic unit tests exercise `authorizeRequest` with a faked
+ * remoteAddress (no sockets). Live-dial tests against a non-internal host IP
+ * remain as extra coverage when the host has one.
  */
 import { afterEach, describe, expect, it } from "vitest";
 import fs from "node:fs";
 import http from "node:http";
 import os from "node:os";
 import path from "node:path";
-import { homePaths } from "@useparley/core";
+import { homePaths, type ParleyConfig } from "@useparley/core";
 import {
+  authorizeRequest,
+  classifyAuthRoute,
   DEFAULT_DAEMON_BIND,
   isLoopbackAddress,
+  matchClientToken,
+  matchRunnerToken,
+  redactConfigKeyValue,
+  redactConfigSecrets,
   resolveDaemonBind,
   startServer,
+  tokensEqual,
   type DaemonServer,
 } from "../src/server.js";
 import { withFakeAllowlist } from "./helpers.js";
 
 const homes: string[] = [];
 let server: DaemonServer | null = null;
+
+const AUTH_CONFIG: ParleyConfig = {
+  clients: {
+    laptop: { token: "fake-client-token-laptop" },
+    ci: { token: "fake-client-token-ci" },
+  },
+  runners: {
+    gpu: { token: "fake-runner-token-gpu" },
+    cpu: { token: "fake-runner-token-cpu" },
+  },
+};
 
 function makeHome(config: Record<string, unknown> = {}): string {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), "parley-client-auth-"));
@@ -113,13 +131,331 @@ describe("isLoopbackAddress", () => {
     expect(isLoopbackAddress("::ffff:127.0.0.2")).toBe(true);
   });
 
-  it("rejects non-loopback and empty", () => {
+  it("rejects non-loopback and empty (fails closed)", () => {
     expect(isLoopbackAddress("10.0.0.1")).toBe(false);
     expect(isLoopbackAddress("192.168.1.1")).toBe(false);
     expect(isLoopbackAddress("0.0.0.0")).toBe(false);
     expect(isLoopbackAddress("")).toBe(false);
     expect(isLoopbackAddress(undefined)).toBe(false);
     expect(isLoopbackAddress(null)).toBe(false);
+  });
+});
+
+describe("tokensEqual (timing-safe)", () => {
+  it("matches equal tokens and rejects unequal", () => {
+    expect(tokensEqual("fake-a", "fake-a")).toBe(true);
+    expect(tokensEqual("fake-a", "fake-b")).toBe(false);
+    expect(tokensEqual("short", "much-longer-token")).toBe(false);
+  });
+});
+
+describe("classifyAuthRoute", () => {
+  it("classifies runner, child, client, and config-admin", () => {
+    expect(classifyAuthRoute("POST", "/runner/lease")).toBe("runner");
+    expect(classifyAuthRoute("GET", "/child/task")).toBe("child");
+    expect(classifyAuthRoute("POST", "/mcp")).toBe("child");
+    expect(classifyAuthRoute("GET", "/tasks")).toBe("client");
+    expect(classifyAuthRoute("GET", "/config")).toBe("client");
+    expect(classifyAuthRoute("PUT", "/config")).toBe("config-admin");
+    expect(classifyAuthRoute("POST", "/config/set")).toBe("config-admin");
+    expect(classifyAuthRoute("POST", "/config/unset")).toBe("config-admin");
+  });
+});
+
+describe("authorizeRequest — deterministic gate (no sockets)", () => {
+  const remote = "10.0.0.5";
+
+  it("loopback bypasses the gate for every route class", () => {
+    for (const [method, path] of [
+      ["GET", "/tasks"],
+      ["POST", "/runner/lease"],
+      ["GET", "/child/task"],
+      ["PUT", "/config"],
+    ] as const) {
+      const d = authorizeRequest({
+        remoteAddress: "127.0.0.1",
+        method,
+        pathname: path,
+        authorization: undefined,
+        config: AUTH_CONFIG,
+      });
+      expect(d.ok, path).toBe(true);
+      if (d.ok) expect(d.loopback).toBe(true);
+    }
+  });
+
+  it("undefined remoteAddress fails closed (not loopback)", () => {
+    const d = authorizeRequest({
+      remoteAddress: undefined,
+      method: "GET",
+      pathname: "/health",
+      authorization: undefined,
+      config: AUTH_CONFIG,
+    });
+    expect(d.ok).toBe(false);
+    if (!d.ok) {
+      expect(d.status).toBe(401);
+      expect(d.routeClass).toBe("client");
+      expect(d.peer).toBe("(unknown)");
+    }
+  });
+
+  it("non-loopback client route: no token → 401", () => {
+    const d = authorizeRequest({
+      remoteAddress: remote,
+      method: "GET",
+      pathname: "/tasks",
+      authorization: undefined,
+      config: AUTH_CONFIG,
+    });
+    expect(d.ok).toBe(false);
+    if (!d.ok) {
+      expect(d.status).toBe(401);
+      expect(d.routeClass).toBe("client");
+    }
+  });
+
+  it("non-loopback client route: wrong token → 401", () => {
+    const d = authorizeRequest({
+      remoteAddress: remote,
+      method: "GET",
+      pathname: "/health",
+      authorization: "Bearer wrong",
+      config: AUTH_CONFIG,
+    });
+    expect(d.ok).toBe(false);
+    if (!d.ok) expect(d.status).toBe(401);
+  });
+
+  it("non-loopback client route: runner token rejected → 401", () => {
+    const d = authorizeRequest({
+      remoteAddress: remote,
+      method: "GET",
+      pathname: "/tasks",
+      authorization: "Bearer fake-runner-token-gpu",
+      config: AUTH_CONFIG,
+    });
+    expect(d.ok).toBe(false);
+    if (!d.ok) expect(d.status).toBe(401);
+  });
+
+  it("non-loopback client route: valid client token passes", () => {
+    const d = authorizeRequest({
+      remoteAddress: remote,
+      method: "GET",
+      pathname: "/tasks",
+      authorization: "Bearer fake-client-token-laptop",
+      config: AUTH_CONFIG,
+    });
+    expect(d.ok).toBe(true);
+    if (d.ok) {
+      expect(d.clientName).toBe("laptop");
+      expect(d.runnerName).toBeNull();
+      expect(d.loopback).toBe(false);
+    }
+  });
+
+  it("non-loopback runner route: no token → 401", () => {
+    const d = authorizeRequest({
+      remoteAddress: remote,
+      method: "POST",
+      pathname: "/runner/lease",
+      authorization: undefined,
+      config: AUTH_CONFIG,
+    });
+    expect(d.ok).toBe(false);
+    if (!d.ok) {
+      expect(d.status).toBe(401);
+      expect(d.routeClass).toBe("runner");
+    }
+  });
+
+  it("non-loopback runner route: client token rejected → 401", () => {
+    const d = authorizeRequest({
+      remoteAddress: remote,
+      method: "POST",
+      pathname: "/runner/register",
+      authorization: "Bearer fake-client-token-laptop",
+      config: AUTH_CONFIG,
+    });
+    expect(d.ok).toBe(false);
+    if (!d.ok) expect(d.status).toBe(401);
+  });
+
+  it("non-loopback runner route: valid runner token passes", () => {
+    const d = authorizeRequest({
+      remoteAddress: remote,
+      method: "POST",
+      pathname: "/runner/lease",
+      authorization: "Bearer fake-runner-token-gpu",
+      config: AUTH_CONFIG,
+    });
+    expect(d.ok).toBe(true);
+    if (d.ok) expect(d.runnerName).toBe("gpu");
+  });
+
+  it("non-loopback child route: no token → 401", () => {
+    const d = authorizeRequest({
+      remoteAddress: remote,
+      method: "GET",
+      pathname: "/child/task",
+      authorization: undefined,
+      config: AUTH_CONFIG,
+      taskFound: true,
+      taskRunner: "gpu",
+    });
+    expect(d.ok).toBe(false);
+    if (!d.ok) {
+      expect(d.status).toBe(401);
+      expect(d.routeClass).toBe("child");
+    }
+  });
+
+  it("non-loopback child route: client token rejected → 401 (F2)", () => {
+    const d = authorizeRequest({
+      remoteAddress: remote,
+      method: "POST",
+      pathname: "/child/report",
+      authorization: "Bearer fake-client-token-laptop",
+      config: AUTH_CONFIG,
+      taskFound: true,
+      taskRunner: "gpu",
+    });
+    expect(d.ok).toBe(false);
+    if (!d.ok) {
+      expect(d.status).toBe(401);
+      expect(d.error).toMatch(/runner token/);
+    }
+  });
+
+  it("non-loopback child route: runner without matching lease → 403 (F2)", () => {
+    const d = authorizeRequest({
+      remoteAddress: remote,
+      method: "POST",
+      pathname: "/child/report",
+      authorization: "Bearer fake-runner-token-cpu",
+      config: AUTH_CONFIG,
+      taskFound: true,
+      taskRunner: "gpu",
+    });
+    expect(d.ok).toBe(false);
+    if (!d.ok) {
+      expect(d.status).toBe(403);
+      expect(d.error).toMatch(/does not hold the lease/);
+    }
+  });
+
+  it("non-loopback child route: unleased task → 403 (F2)", () => {
+    const d = authorizeRequest({
+      remoteAddress: remote,
+      method: "POST",
+      pathname: "/mcp",
+      authorization: "Bearer fake-runner-token-gpu",
+      config: AUTH_CONFIG,
+      taskFound: true,
+      taskRunner: null,
+    });
+    expect(d.ok).toBe(false);
+    if (!d.ok) {
+      expect(d.status).toBe(403);
+      expect(d.error).toMatch(/not leased/);
+    }
+  });
+
+  it("non-loopback child route: missing task → 403 (F2)", () => {
+    const d = authorizeRequest({
+      remoteAddress: remote,
+      method: "GET",
+      pathname: "/child/task",
+      authorization: "Bearer fake-runner-token-gpu",
+      config: AUTH_CONFIG,
+      taskFound: false,
+      taskRunner: null,
+    });
+    expect(d.ok).toBe(false);
+    if (!d.ok) {
+      expect(d.status).toBe(403);
+      expect(d.error).toMatch(/missing or unknown/);
+    }
+  });
+
+  it("non-loopback child route: lease-holder runner token passes (F2)", () => {
+    const d = authorizeRequest({
+      remoteAddress: remote,
+      method: "POST",
+      pathname: "/child/report",
+      authorization: "Bearer fake-runner-token-gpu",
+      config: AUTH_CONFIG,
+      taskFound: true,
+      taskRunner: "gpu",
+    });
+    expect(d.ok).toBe(true);
+    if (d.ok) expect(d.runnerName).toBe("gpu");
+  });
+
+  it("non-loopback config-admin always 403 even with valid client token (F1)", () => {
+    for (const [method, path] of [
+      ["PUT", "/config"],
+      ["POST", "/config/set"],
+      ["POST", "/config/unset"],
+    ] as const) {
+      const d = authorizeRequest({
+        remoteAddress: remote,
+        method,
+        pathname: path,
+        authorization: "Bearer fake-client-token-laptop",
+        config: AUTH_CONFIG,
+      });
+      expect(d.ok, path).toBe(false);
+      if (!d.ok) {
+        expect(d.status).toBe(403);
+        expect(d.routeClass).toBe("config-admin");
+        expect(d.error).toMatch(/loopback/);
+      }
+    }
+  });
+
+  it("non-loopback config-admin 403 even with runner token (F1)", () => {
+    const d = authorizeRequest({
+      remoteAddress: remote,
+      method: "PUT",
+      pathname: "/config",
+      authorization: "Bearer fake-runner-token-gpu",
+      config: AUTH_CONFIG,
+    });
+    expect(d.ok).toBe(false);
+    if (!d.ok) expect(d.status).toBe(403);
+  });
+});
+
+describe("redactConfigSecrets (F1 GET /config)", () => {
+  it("redacts clients and runners tokens", () => {
+    const redacted = redactConfigSecrets(AUTH_CONFIG);
+    expect(redacted.clients?.laptop?.token).toBe("<redacted>");
+    expect(redacted.clients?.ci?.token).toBe("<redacted>");
+    expect(redacted.runners?.gpu?.token).toBe("<redacted>");
+    // Original unchanged.
+    expect(AUTH_CONFIG.clients?.laptop?.token).toBe("fake-client-token-laptop");
+  });
+
+  it("redacts single-key lookups", () => {
+    expect(redactConfigKeyValue("clients.laptop.token", "secret")).toBe("<redacted>");
+    expect(redactConfigKeyValue("runners.gpu.token", "secret")).toBe("<redacted>");
+    expect(redactConfigKeyValue("clients.laptop", { token: "secret" })).toEqual({
+      token: "<redacted>",
+    });
+    expect(redactConfigKeyValue("daemon.bind", "0.0.0.0")).toBe("0.0.0.0");
+  });
+});
+
+describe("matchClientToken / matchRunnerToken", () => {
+  it("matches and isolates namespaces", () => {
+    expect(matchClientToken("fake-client-token-laptop", AUTH_CONFIG)).toBe("laptop");
+    expect(matchClientToken("fake-runner-token-gpu", AUTH_CONFIG)).toBeNull();
+    expect(matchRunnerToken("fake-runner-token-gpu", AUTH_CONFIG)).toBe("gpu");
+    expect(matchRunnerToken("fake-client-token-laptop", AUTH_CONFIG)).toBeNull();
+    expect(matchRunnerToken("fake-runner-token-gpu", AUTH_CONFIG, "cpu")).toBeNull();
+    expect(matchRunnerToken("fake-runner-token-gpu", AUTH_CONFIG, "gpu")).toBe("gpu");
   });
 });
 
@@ -167,9 +503,19 @@ describe("loopback remains tokenless", () => {
     const lease = await json(loopbackBase, "POST", "/runner/lease", { runner: "gpu" });
     expect(lease.status).toBe(401);
   });
+
+  it("allows config admin from loopback", async () => {
+    const home = makeHome();
+    const { loopbackBase } = await boot(home);
+    const get = await json(loopbackBase, "GET", "/config");
+    expect(get.status).toBe(200);
+    const body = get.body as { config: ParleyConfig };
+    // Loopback GET is unredacted.
+    expect(body.config.clients?.laptop?.token).toBe("fake-client-token-laptop");
+  });
 });
 
-describe("non-loopback client auth", () => {
+describe("non-loopback live dial (extra coverage)", () => {
   const hostIp = nonLoopbackIPv4();
   const describeIf = hostIp !== null ? describe : describe.skip;
 
@@ -205,6 +551,47 @@ describe("non-loopback client auth", () => {
       }
     });
 
+    it("GET /config redacts tokens off-loopback (F1)", async () => {
+      const home = makeHome();
+      const { port } = await boot(home, { bind: "0.0.0.0" });
+      const base = remoteBase(port);
+      const res = await json(base, "GET", "/config", undefined, {
+        authorization: "Bearer fake-client-token-laptop",
+      });
+      expect(res.status).toBe(200);
+      const body = res.body as { config: ParleyConfig };
+      expect(body.config.clients?.laptop?.token).toBe("<redacted>");
+      expect(body.config.runners?.gpu?.token).toBe("<redacted>");
+    });
+
+    it("PUT /config is 403 off-loopback even with client token (F1)", async () => {
+      const home = makeHome();
+      const { port } = await boot(home, { bind: "0.0.0.0" });
+      const base = remoteBase(port);
+      const res = await json(
+        base,
+        "PUT",
+        "/config",
+        { clients: { evil: { token: "x" } } },
+        { authorization: "Bearer fake-client-token-laptop" },
+      );
+      expect(res.status).toBe(403);
+    });
+
+    it("POST /config/set is 403 off-loopback (F1)", async () => {
+      const home = makeHome();
+      const { port } = await boot(home, { bind: "0.0.0.0" });
+      const base = remoteBase(port);
+      const res = await json(
+        base,
+        "POST",
+        "/config/set",
+        { key: "clients.evil.token", value: "x" },
+        { authorization: "Bearer fake-client-token-laptop" },
+      );
+      expect(res.status).toBe(403);
+    });
+
     it("returns 401 with wrong client token", async () => {
       const home = makeHome();
       const { port } = await boot(home, { bind: "0.0.0.0" });
@@ -230,7 +617,6 @@ describe("non-loopback client auth", () => {
       const { port } = await boot(home, { bind: "0.0.0.0" });
       const base = remoteBase(port);
 
-      // Both work.
       expect(
         (
           await json(base, "GET", "/health", undefined, {
@@ -246,7 +632,6 @@ describe("non-loopback client auth", () => {
         ).status,
       ).toBe(200);
 
-      // Hot-revoke laptop by rewriting settings (no restart — tokens re-read).
       const configPath = path.join(home, "parley.json");
       const cfg = JSON.parse(fs.readFileSync(configPath, "utf8")) as {
         clients: Record<string, { token: string }>;
@@ -269,17 +654,6 @@ describe("non-loopback client auth", () => {
         ).status,
       ).toBe(200);
     });
-  });
-});
-
-describe("non-loopback runner and child auth", () => {
-  const hostIp = nonLoopbackIPv4();
-  const describeIf = hostIp !== null ? describe : describe.skip;
-
-  describeIf("via host non-loopback address", () => {
-    function remoteBase(port: number): string {
-      return `http://${hostIp}:${port}`;
-    }
 
     it("returns 401 on runner routes without token", async () => {
       const home = makeHome();
@@ -312,7 +686,6 @@ describe("non-loopback runner and child auth", () => {
         },
         { authorization: "Bearer fake-runner-token-gpu" },
       );
-      // 200 on success; protocol may also 400 on version — not 401.
       expect(res.status).not.toBe(401);
       expect([200, 400]).toContain(res.status);
     });
@@ -325,25 +698,15 @@ describe("non-loopback runner and child auth", () => {
       expect(res.status).toBe(401);
     });
 
-    it("accepts runner token on child routes off-loopback", async () => {
-      const home = makeHome();
-      const { port } = await boot(home, { bind: "0.0.0.0" });
-      const base = remoteBase(port);
-      // Missing task header → 400-class from child handler, not 401.
-      const res = await json(base, "GET", "/child/task", undefined, {
-        authorization: "Bearer fake-runner-token-gpu",
-      });
-      expect(res.status).not.toBe(401);
-    });
-
-    it("accepts client token on child routes off-loopback", async () => {
+    it("rejects client token on child routes off-loopback (F2)", async () => {
       const home = makeHome();
       const { port } = await boot(home, { bind: "0.0.0.0" });
       const base = remoteBase(port);
       const res = await json(base, "GET", "/child/task", undefined, {
         authorization: "Bearer fake-client-token-laptop",
+        "x-parley-task": "t-nonexistent",
       });
-      expect(res.status).not.toBe(401);
+      expect(res.status).toBe(401);
     });
   });
 });
@@ -357,7 +720,6 @@ describe("daemon.bind config drives listen (integration)", () => {
     const { port } = await boot(home); // default 127.0.0.1
     expect(server!.bind).toBe("127.0.0.1");
 
-    // Connecting to the host IP should fail (nothing listening there).
     await expect(
       new Promise<void>((resolve, reject) => {
         const req = http.get(`http://${hostIp}:${port}/health`, (res) => {
