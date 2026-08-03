@@ -101,6 +101,11 @@ import {
   type TaskRow,
 } from "./db.js";
 import {
+  hasRunnerAffinity,
+  InProcessExecutor,
+  type InProcessExecutorHost,
+} from "./executor.js";
+import {
   createInbox,
   sqliteAckStore,
   sqliteRunSnapshot,
@@ -750,6 +755,12 @@ export class TaskEngine {
    */
   private readonly runnerLeaseWaiters = new Set<() => void>();
   /**
+   * Daemon-local executor (#312 / ADR-0028): claims non-runner-affine tasks
+   * and runs them in-process. Same claim-shaped handoff a runner implements
+   * over the lease wire; capability routing across a fleet is later work.
+   */
+  private readonly localExecutor: InProcessExecutor;
+  /**
    * Set once the daemon is going down: child exits stop being lifecycle events
    * (their tasks stay recorded `running`/`awaiting_answer`, and the *next*
    * daemon's startup sweep marks them `stalled` — the crash story, spec §3)
@@ -764,6 +775,19 @@ export class TaskEngine {
     private readonly paths: HomePaths,
     private readonly adapters: Map<string, VendorAdapter>,
   ) {
+    // In-process executor host: concurrency + spawn stay on the engine; the
+    // claim loop lives on InProcessExecutor (see packages/daemon/src/executor.ts).
+    const localHost: InProcessExecutorHost = {
+      isShuttingDown: () => this.shuttingDown,
+      isLocalTask: (task) => !hasRunnerAffinity(task),
+      canAdmit: (task) => this.canAdmit(task),
+      enqueue: (taskId) => this.enqueueTask(taskId),
+      executeClaimed: (task) => this.admitAndStart(task),
+      listQueued: () => listQueuedTasks(this.db),
+      isAlreadyAdmitted: (taskId) => this.admitted.has(taskId),
+    };
+    this.localExecutor = new InProcessExecutor(localHost);
+
     const transitionHooks = {
       append: (t: Transition) => {
         this.transitions.push(t);
@@ -819,8 +843,7 @@ export class TaskEngine {
     // (excluded from the process-group crash sweep).
     for (const task of listTasks(this.db)) {
       if (
-        task.runner !== null &&
-        task.runner !== "" &&
+        hasRunnerAffinity(task) &&
         !isTerminalState(task.state) &&
         task.state !== "pending"
       ) {
@@ -828,7 +851,7 @@ export class TaskEngine {
       }
     }
     // #171: re-drain durable queued tasks in original FIFO order after restart.
-    // Synchronous: only admits (async spawn is fire-and-forget via admitAndStart).
+    // Synchronous: only claims (async spawn is fire-and-forget via admitAndStart).
     this.drainConcurrencyQueue();
     // #237: resume advance for any run left mid-flight across a restart.
     this.drainRuns();
@@ -1503,13 +1526,9 @@ export class TaskEngine {
       this.dryRunTaskIds.add(id);
     }
 
-    if (isRemote) {
-      // Wake any lease long-polls waiting for this runner.
-      this.wakeRunnerLeaseWaiters();
-      return row;
-    }
-
-    this.scheduleLocalStart(row);
+    // #312: single claim handoff — local → InProcessExecutor; runner-affine →
+    // lease waiters (wire unchanged). No direct-spawn special case here.
+    this.dispatchClaim(row);
     return getTask(this.db, row.id) ?? row;
   }
 
@@ -1696,13 +1715,8 @@ export class TaskEngine {
       session_id: canResume ? parent.session_id : null,
     });
 
-    // Remote-affine parents stay remote: the runner leases the new attempt.
-    if (parent.runner !== null && parent.runner !== "") {
-      this.wakeRunnerLeaseWaiters();
-      return row;
-    }
-
-    this.scheduleLocalStart(row);
+    // #312: same claim handoff as delegate (remote parents stay remote).
+    this.dispatchClaim(row);
     return getTask(this.db, row.id) ?? row;
   }
 
@@ -1959,7 +1973,7 @@ export class TaskEngine {
     recreated: boolean;
   } {
     // Remote runners materialize on the runner host; do not recreate locally.
-    if (parent.runner !== null && parent.runner !== "") {
+    if (hasRunnerAffinity(parent)) {
       const workingDir = parent.cwd ?? parent.repo ?? process.cwd();
       return {
         workingDir,
@@ -3110,6 +3124,10 @@ export class TaskEngine {
   /**
    * Atomically claim the oldest pending task for `runnerName` (transition to
    * `running`) and return its lease spec, or null when none is waiting.
+   *
+   * This is the remote-runner half of the claim-shaped executor model (#312 /
+   * ADR-0028). Local claims go through {@link InProcessExecutor}; capability-
+   * matched claim across both is later work. Wire and affinity query unchanged.
    */
   private tryClaimRunnerTask(runnerName: string): RunnerLeaseSpec | null {
     const pending = claimOldestPendingRunnerTask(this.db, runnerName);
@@ -3565,21 +3583,24 @@ export class TaskEngine {
 
 
   // ---------------------------------------------------------------------------
-  // Concurrency queue (#171)
+  // Executor claim handoff (#312 / ADR-0028) + concurrency queue (#171)
   // ---------------------------------------------------------------------------
 
   /**
-   * Admit a local (non-runner) task for spawn, or park it in `queued` when a
-   * vendor/profile `maxConcurrent` cap is full. FIFO per cap; both caps must
-   * have a free slot when both apply.
+   * Hand a newly-created pending task to the appropriate executor (#312).
+   *
+   * - Runner-affine → wake lease long-polls (wire claim path unchanged).
+   * - Local → {@link InProcessExecutor.offer} (claim under caps or park queued).
+   *
+   * The engine no longer special-cases local spawn at this site: both paths
+   * are claim-shaped. Capability-matched routing across a fleet is later work.
    */
-  private scheduleLocalStart(task: TaskRow): void {
-    if (task.runner !== null && task.runner !== "") return;
-    if (this.canAdmit(task)) {
-      this.admitAndStart(task);
+  private dispatchClaim(task: TaskRow): void {
+    if (hasRunnerAffinity(task)) {
+      this.wakeRunnerLeaseWaiters();
       return;
     }
-    this.enqueueTask(task.id);
+    this.localExecutor.offer(task);
   }
 
   /** Persist `queued` + `queued_at` and surface a `task.queued` transition. */
@@ -3727,7 +3748,11 @@ export class TaskEngine {
     };
   }
 
-  /** Reserve a slot and kick off the appropriate spawn path for `task`. */
+  /**
+   * Accept an in-process claim (#312): reserve a concurrency slot and kick off
+   * the existing spawn path for `task`. Host callback for
+   * {@link InProcessExecutor} (`executeClaimed`).
+   */
   private admitAndStart(task: TaskRow): void {
     if (this.admitted.has(task.id)) return;
     if (isTerminalState(task.state)) return;
@@ -3805,32 +3830,15 @@ export class TaskEngine {
   }
 
   /**
-   * Walk the durable FIFO queue and admit any task that now fits under its
-   * caps. Re-entrant safe; stops when no further task can be admitted.
+   * Walk the durable FIFO queue and claim any task that now fits under its
+   * caps (#171 / #312). Re-entrant safe; stops when no further task can be
+   * claimed. Implementation lives on {@link InProcessExecutor.drain}.
    */
   private drainConcurrencyQueue(): void {
     if (this.drainingQueue || this.shuttingDown) return;
     this.drainingQueue = true;
     try {
-      let progressed = true;
-      while (progressed) {
-        progressed = false;
-        let queued: TaskRow[];
-        try {
-          queued = listQueuedTasks(this.db);
-        } catch {
-          // DB may already be closed (tests / shutdown race).
-          return;
-        }
-        for (const task of queued) {
-          if (this.admitted.has(task.id)) continue;
-          if (!this.canAdmit(task)) continue;
-          this.admitAndStart(task);
-          progressed = true;
-          // Re-list after each admit so slot counts stay accurate.
-          break;
-        }
-      }
+      this.localExecutor.drain();
     } finally {
       this.drainingQueue = false;
     }
@@ -4448,7 +4456,8 @@ export class TaskEngine {
         slot: sib.slotId,
       });
 
-      this.scheduleLocalStart(row);
+      // #312: run-owned step tasks are always local (no runner affinity today).
+      this.dispatchClaim(row);
     }
   }
 
