@@ -994,9 +994,9 @@ export function createGrokAdapter(env: NodeJS.ProcessEnv = process.env): VendorA
 
       // Fail-soft per file (#294): only throw when *no* source is usable.
       // A usable-but-empty source (e.g. fresh models_cache with models: {}) is
-      // still a successful channel contribution — return empty models and note
-      // sibling failures in the source string; refreshCatalog handles empty
-      // via its normal fallback.
+      // still a successful channel contribution — return empty models and put
+      // sibling failures on `warnings` (#296); refreshCatalog handles empty
+      // via its normal fallback and surfaces warnings when models land.
       if (!cacheUsable && !configUsable) {
         if (failures.length > 0) {
           throw new Error(failures.join("; "));
@@ -1022,16 +1022,19 @@ export function createGrokAdapter(env: NodeJS.ProcessEnv = process.env): VendorA
         }
       }
       // At least one of cacheUsable/configUsable is true, so sources is non-empty.
-      let source = sources.join(" + ");
-      if (failures.length > 0) {
-        // Collapse operator-home prefixes: source is persisted to models.json
-        // verbatim (refreshCatalog only collapses thrown channel errors).
-        const collapsed = failures
-          .map((f) => collapseOperatorHomeInText(f, env))
-          .join("; ");
-        source = `${source}; warning: ${collapsed}`;
-      }
-      return { source, models };
+      // Source is persisted to models.json — keep it free of warning suffixes
+      // (#296). Collapse operator-home prefixes in warning text here: adapters
+      // own path hygiene for non-thrown notes (refreshCatalog only collapses
+      // thrown channel errors).
+      const warnings =
+        failures.length > 0
+          ? failures.map((f) => collapseOperatorHomeInText(f, env))
+          : undefined;
+      return {
+        source: sources.join(" + "),
+        models,
+        ...(warnings !== undefined ? { warnings } : {}),
+      };
     },
   });
 }
