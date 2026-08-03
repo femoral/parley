@@ -41,10 +41,10 @@ function contrastRatio(
 
 describe("task identity tokens", () => {
   it("provides distinct authored marks for the required model vendors", () => {
-    const required = ["gpt", "claude", "grok", "kimi", "qwen"];
+    const required = ["gpt", "claude", "grok", "kimi", "qwen", "gemini"];
     const signatures = required.map((vendor) => JSON.stringify(vendorEmblemFor(vendor).emblem));
     expect(new Set(signatures).size).toBe(required.length);
-    expect(Object.keys(VENDOR_EMBLEMS)).toEqual(expect.arrayContaining([...required, "codex"]));
+    expect(Object.keys(VENDOR_EMBLEMS)).toEqual(expect.arrayContaining([...required, "codex", "google"]));
     // Pi (Inflection) no longer ships an authored mark; it resolves as unknown.
     expect(Object.keys(VENDOR_EMBLEMS)).not.toContain("pi");
   });
@@ -101,6 +101,8 @@ describe("task identity tokens", () => {
     expect(modelVendorFor("grok-4.5", "opencode").label).toBe("Grok");
     expect(modelVendorFor("claude-sonnet-4", "opencode").label).toBe("Claude");
     expect(modelVendorFor("kimi-k2", "opencode").label).toBe("Kimi");
+    expect(modelVendorFor("gemini-3.6-flash", "antigravity").label).toBe("Gemini");
+    expect(modelVendorFor("google-gemini-2.5-pro", "opencode").label).toBe("Gemini");
   });
 
   it("falls back from an opaque model to an adapter alias, then unknown", () => {
