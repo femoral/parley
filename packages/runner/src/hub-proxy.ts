@@ -15,13 +15,17 @@ export interface HubProxy {
 
 export interface StartHubProxyOptions {
   daemonUrl: string;
-  /** Bearer token for authenticated daemon routes; child routes use task header only. */
+  /**
+   * Runner bearer token (`runners.<name>.token`). Attached on every upstream
+   * hop so non-loopback daemons accept child-contract traffic (#323 /
+   * ADR-0030). Harmless on loopback (tokenless trust still applies).
+   */
   token: string;
   taskId: string;
 }
 
 export async function startHubProxy(options: StartHubProxyOptions): Promise<HubProxy> {
-  const { daemonUrl, taskId } = options;
+  const { daemonUrl, taskId, token } = options;
 
   const server = http.createServer((req, res) => {
     void (async () => {
@@ -50,6 +54,11 @@ export async function startHubProxy(options: StartHubProxyOptions): Promise<HubP
             : "application/json",
         [TASK_HEADER]: taskId,
       };
+      // Non-loopback daemons require bearer auth on child/MCP routes; attach
+      // the runner token so hub-proxied children authenticate as the runner.
+      if (token !== "") {
+        headers.authorization = `Bearer ${token}`;
+      }
       // Preserve accept for MCP streamable HTTP.
       if (typeof req.headers.accept === "string") {
         headers.accept = req.headers.accept;

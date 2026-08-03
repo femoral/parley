@@ -33,6 +33,17 @@ export interface Discovery {
    * without it never attaches to an id-stamped daemon (#130).
    */
   daemon_id?: string;
+  /**
+   * Bearer token for remote daemon auth (#323 / ADR-0030). When set, every
+   * `daemonGet`/`daemonPost`/`daemonPut` and the remote health probe send
+   * `Authorization: Bearer <token>`. Loopback auto-spawn leaves this unset.
+   */
+  token?: string;
+  /**
+   * Client name matching `clients.<name>` on the daemon (stored for
+   * attribution / config round-trip; the wire only carries the bearer token).
+   */
+  client?: string;
 }
 
 /**
@@ -65,9 +76,16 @@ export function discoveryBaseUrl(discovery: Discovery): string {
   return `http://127.0.0.1:${discovery.port}`;
 }
 
+/** Authorization headers when Discovery carries a remote client token. */
+function authHeaders(discovery: Discovery): Record<string, string> {
+  if (discovery.token === undefined || discovery.token === "") return {};
+  return { authorization: `Bearer ${discovery.token}` };
+}
+
 async function healthy(discovery: Discovery): Promise<boolean> {
   try {
     const res = await fetch(`${discoveryBaseUrl(discovery)}/health`, {
+      headers: authHeaders(discovery),
       signal: AbortSignal.timeout(1000),
     });
     return res.ok;
@@ -97,16 +115,39 @@ async function waitForDaemon(launcher: DaemonLauncher, pid: number): Promise<Dis
   }
 }
 
+/** Options for a remote (`daemon.url`) connection (#323). */
+export interface RemoteDaemonOptions {
+  /** Base URL of the remote daemon (trailing slash stripped). */
+  url: string;
+  /** Bearer token matching `clients.<name>.token` on the daemon. */
+  token?: string;
+  /** Client name (`clients.<name>`); stored on Discovery, not sent on the wire. */
+  client?: string;
+}
+
 /**
  * Probe a non-local daemon at `url` (`GET /health`) and return a Discovery that
  * routes subsequent requests there. Skips local discovery/spawn entirely.
  * Throws a clear error naming the URL when unreachable.
+ *
+ * When `token` is set it is sent as bearer auth on the health probe and
+ * carried on the returned Discovery for subsequent RPC (#323 / ADR-0030).
  */
-export async function ensureRemoteDaemon(url: string): Promise<Discovery> {
+export async function ensureRemoteDaemon(
+  url: string,
+  options?: { token?: string; client?: string },
+): Promise<Discovery> {
   const base = url.replace(/\/$/, "");
+  const token = options?.token;
+  const client = options?.client;
+  const headers: Record<string, string> = {};
+  if (token !== undefined && token !== "") {
+    headers.authorization = `Bearer ${token}`;
+  }
   let res: Response;
   try {
     res = await fetch(`${base}/health`, {
+      headers,
       signal: AbortSignal.timeout(REMOTE_HEALTH_TIMEOUT_MS),
     });
   } catch (err) {
@@ -133,6 +174,8 @@ export async function ensureRemoteDaemon(url: string): Promise<Discovery> {
     started_at:
       typeof body.started_at === "string" ? body.started_at : new Date().toISOString(),
     url: base,
+    ...(token !== undefined && token !== "" ? { token } : {}),
+    ...(client !== undefined && client !== "" ? { client } : {}),
   };
 }
 
@@ -146,14 +189,18 @@ export async function ensureRemoteDaemon(url: string): Promise<Discovery> {
  *  3. Clear any stale discovery (dead pid), spawn a fresh daemon, wait for it.
  *
  * When `options.url` is set (config `daemon.url`), skip discovery/spawn and
- * probe that URL instead (ADR-0010).
+ * probe that URL instead (ADR-0010). Optional `token` / `client` ride along
+ * for remote auth (#323).
  */
 export async function ensureDaemon(
   launcher: DaemonLauncher,
-  options?: { url?: string },
+  options?: { url?: string; token?: string; client?: string },
 ): Promise<Discovery> {
   if (options?.url !== undefined && options.url !== "") {
-    return ensureRemoteDaemon(options.url);
+    return ensureRemoteDaemon(options.url, {
+      token: options.token,
+      client: options.client,
+    });
   }
 
   const existing = launcher.liveDiscovery();
@@ -190,7 +237,14 @@ async function daemonFetch<T>(
   pathname: string,
   init: RequestInit,
 ): Promise<T> {
-  const res = await fetch(`${discoveryBaseUrl(discovery)}${pathname}`, init);
+  const headers = new Headers(init.headers);
+  for (const [key, value] of Object.entries(authHeaders(discovery))) {
+    if (!headers.has(key)) headers.set(key, value);
+  }
+  const res = await fetch(`${discoveryBaseUrl(discovery)}${pathname}`, {
+    ...init,
+    headers,
+  });
   const raw = await res.text();
   if (!res.ok) {
     let detail = `daemon request ${pathname} failed with status ${res.status}`;

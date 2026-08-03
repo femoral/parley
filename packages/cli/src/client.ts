@@ -45,8 +45,13 @@ export function ensureDaemon(paths: HomePaths, env: NodeJS.ProcessEnv): Promise<
     );
   }
   let remoteUrl: string | undefined;
+  let remoteToken: string | undefined;
+  let remoteClient: string | undefined;
   try {
-    remoteUrl = readConfig(paths.config).daemon?.url;
+    const daemon = readConfig(paths.config).daemon;
+    remoteUrl = daemon?.url;
+    remoteToken = daemon?.token;
+    remoteClient = daemon?.client;
   } catch {
     remoteUrl = undefined;
   }
@@ -58,5 +63,10 @@ export function ensureDaemon(paths: HomePaths, env: NodeJS.ProcessEnv): Promise<
     spawnDaemon: () => spawnDaemon(env),
     withLock: (fn) => withLock(paths, fn),
   };
-  return ensureDaemonCore(launcher, remoteUrl !== undefined ? { url: remoteUrl } : undefined);
+  return ensureDaemonCore(
+    launcher,
+    remoteUrl !== undefined
+      ? { url: remoteUrl, token: remoteToken, client: remoteClient }
+      : undefined,
+  );
 }

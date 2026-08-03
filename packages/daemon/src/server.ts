@@ -175,6 +175,11 @@ function scheduleRetentionGc(
 export interface DaemonServer {
   /** The port the server is listening on. */
   port: number;
+  /**
+   * Address the server bound to (`daemon.bind`, default `127.0.0.1`).
+   * See #323 / ADR-0030.
+   */
+  bind: string;
   /** Close the server and its database. */
   close: () => Promise<void>;
 }
@@ -533,6 +538,36 @@ function handleDelegate(engine: TaskEngine, res: http.ServerResponse, body: unkn
 }
 
 /**
+ * Extract `Authorization: Bearer <token>`, or null when absent/malformed.
+ */
+function extractBearerToken(req: http.IncomingMessage): string | null {
+  const header = req.headers.authorization;
+  if (typeof header !== "string" || !header.startsWith("Bearer ")) return null;
+  const token = header.slice("Bearer ".length).trim();
+  return token === "" ? null : token;
+}
+
+/**
+ * True when the peer address is loopback (IPv4 127.0.0.0/8 or IPv6 ::1,
+ * including IPv4-mapped forms Node reports). Auth enforcement keys off the
+ * peer address, not bind config alone (#323 / ADR-0030).
+ */
+export function isLoopbackAddress(addr: string | undefined | null): boolean {
+  if (addr === undefined || addr === null || addr === "") return false;
+  if (addr === "127.0.0.1" || addr === "::1" || addr === "::ffff:127.0.0.1") {
+    return true;
+  }
+  // 127.0.0.0/8 and IPv4-mapped 127.x.x.x
+  if (addr.startsWith("127.")) return true;
+  if (addr.startsWith("::ffff:127.")) return true;
+  return false;
+}
+
+function isLoopbackRequest(req: http.IncomingMessage): boolean {
+  return isLoopbackAddress(req.socket.remoteAddress);
+}
+
+/**
  * Extract `Authorization: Bearer <token>` and match it to a configured runner
  * name. Returns the runner name, or null when auth fails (caller sends 401).
  * When `expectedName` is set, the token must belong to that exact runner.
@@ -542,10 +577,8 @@ function authenticateRunner(
   config: ParleyConfig,
   expectedName?: string,
 ): string | null {
-  const header = req.headers.authorization;
-  if (typeof header !== "string" || !header.startsWith("Bearer ")) return null;
-  const token = header.slice("Bearer ".length).trim();
-  if (token === "") return null;
+  const token = extractBearerToken(req);
+  if (token === null) return null;
   const runners = config.runners ?? {};
   if (expectedName !== undefined) {
     const entry = runners[expectedName];
@@ -558,13 +591,97 @@ function authenticateRunner(
   return null;
 }
 
-/** Re-read config for runner auth (hot, same posture as profiles). */
-function readRunnerConfig(paths: HomePaths): ParleyConfig {
+/**
+ * Match bearer token to a configured client name (`clients.<name>.token`).
+ * Returns the client name, or null when auth fails.
+ */
+function authenticateClient(
+  req: http.IncomingMessage,
+  config: ParleyConfig,
+): string | null {
+  const token = extractBearerToken(req);
+  if (token === null) return null;
+  const clients = config.clients ?? {};
+  for (const [name, entry] of Object.entries(clients)) {
+    if (entry.token === token) return name;
+  }
+  return null;
+}
+
+/** Re-read config for runner/client auth (hot, same posture as profiles). */
+function readAuthConfig(paths: HomePaths): ParleyConfig {
   try {
     return readConfig(paths.config);
   } catch {
     return {};
   }
+}
+
+/**
+ * Default listen address: loopback-only (#323). Non-loopback bind is opt-in
+ * via `daemon.bind` (e.g. `0.0.0.0`). Cold — read once at server start.
+ */
+export const DEFAULT_DAEMON_BIND = "127.0.0.1";
+
+/**
+ * Resolve the daemon listen address from config. Missing/corrupt/empty →
+ * {@link DEFAULT_DAEMON_BIND}.
+ */
+export function resolveDaemonBind(config: ParleyConfig): string {
+  const bind = config.daemon?.bind;
+  if (typeof bind === "string" && bind !== "") return bind;
+  return DEFAULT_DAEMON_BIND;
+}
+
+/**
+ * Non-loopback enforcement (#323 / ADR-0030): when the peer is not loopback,
+ * every request needs a valid bearer token. Route classes use separate
+ * principal namespaces:
+ *
+ * - `/runner/*` — runner token (handlers also enforce name match)
+ * - `/child/*`, `/mcp` — runner or client token (hub proxy attaches runner)
+ * - everything else (client surface, including `/health`, `/runners`, UI) —
+ *   client token only
+ *
+ * Loopback peers skip this gate; runner routes still self-auth as today.
+ * Returns true when the request was rejected (401 already written).
+ */
+function rejectUnauthorizedNonLoopback(
+  req: http.IncomingMessage,
+  res: http.ServerResponse,
+  paths: HomePaths,
+  pathname: string,
+): boolean {
+  if (isLoopbackRequest(req)) return false;
+  const config = readAuthConfig(paths);
+  const segments = pathname.split("/").filter((s) => s !== "");
+  const isRunnerRoute = segments[0] === "runner";
+  const isChildRoute =
+    segments[0] === "child" || pathname === "/mcp";
+
+  if (isRunnerRoute) {
+    if (authenticateRunner(req, config) === null) {
+      sendJson(res, 401, { error: "unauthorized" });
+      return true;
+    }
+    return false;
+  }
+  if (isChildRoute) {
+    if (
+      authenticateRunner(req, config) === null &&
+      authenticateClient(req, config) === null
+    ) {
+      sendJson(res, 401, { error: "unauthorized" });
+      return true;
+    }
+    return false;
+  }
+  // Client-facing routes (and /xai, UI static, etc.)
+  if (authenticateClient(req, config) === null) {
+    sendJson(res, 401, { error: "unauthorized" });
+    return true;
+  }
+  return false;
 }
 
 /**
@@ -1971,6 +2088,12 @@ function createHandler(
       const url = new URL(req.url ?? "/", "http://127.0.0.1");
       const segments = url.pathname.split("/").filter((s) => s !== "");
 
+      // Off-loopback: bearer auth on every route (#323 / ADR-0030).
+      // Loopback keeps tokenless trust; runner routes still self-auth.
+      if (rejectUnauthorizedNonLoopback(req, res, paths, url.pathname)) {
+        return;
+      }
+
       if (url.pathname === "/mcp") {
         const body = method === "POST" ? await readBody(req) : undefined;
         await handleMcpRequest(engine, req, res, body);
@@ -2005,7 +2128,7 @@ function createHandler(
       // Remote runner surface (#111 / ADR-0012 / ADR-0029): bearer-token auth;
       // not localhost trust. Registration is required before lease.
       if (segments[0] === "runner") {
-        const config = readRunnerConfig(paths);
+        const config = readAuthConfig(paths);
         if (method === "POST" && segments.length === 2 && segments[1] === "register") {
           const body = await readBody(req);
           if (!isRecord(body) || typeof body.runner !== "string" || body.runner === "") {
@@ -2854,13 +2977,15 @@ function lookupPortType(
 // ── end #241 handlers ──
 
 /**
- * Start the daemon HTTP server bound to `127.0.0.1:0` (ephemeral port), open
- * the task-state database, and wire up the task engine. Does not touch the
- * discovery file — the daemon entry point publishes discovery once the port is
- * known.
+ * Start the daemon HTTP server on an ephemeral port, open the task-state
+ * database, and wire up the task engine. Bind address comes from
+ * `daemon.bind` (default `127.0.0.1` — loopback-only; #323 / ADR-0030). Does
+ * not touch the discovery file — the daemon entry point publishes discovery
+ * once the port is known.
  *
  * Plugin adapters (`vendors.<id>.plugin`) load here at startup only — adding a
  * plugin requires a daemon restart. Vendor args/env/profiles re-read per task.
+ * `daemon.bind` is also cold (listen-time).
  */
 /** Optional lifecycle wiring for `startServer` (#130); tests may omit it all. */
 export interface StartServerOptions {
@@ -2873,6 +2998,11 @@ export interface StartServerOptions {
    */
   idleTimeoutMs?: number;
   onIdle?: () => void;
+  /**
+   * Override listen address for tests. When omitted, reads `daemon.bind` from
+   * config (default {@link DEFAULT_DAEMON_BIND}).
+   */
+  bind?: string;
 }
 
 export async function startServer(
@@ -2886,7 +3016,7 @@ export async function startServer(
   // Config for plugins only: a corrupt file must not brick the daemon at
   // startup (UI discovery already degrades). Plugin load failures are logged
   // inside createAdapterRegistry; missing config is fine (built-ins only).
-  let startupConfig = {};
+  let startupConfig: ParleyConfig = {};
   try {
     startupConfig = readConfig(paths.config);
   } catch (err) {
@@ -2894,6 +3024,7 @@ export async function startServer(
       `parley daemon: config unreadable at startup, loading built-in adapters only: ${String(err)}\n`,
     );
   }
+  const bind = options.bind ?? resolveDaemonBind(startupConfig);
   const adapters = await createAdapterRegistry(process.env, {
     config: startupConfig,
     parleyHome: paths.home,
@@ -2970,7 +3101,7 @@ export async function startServer(
       reject(err);
     };
     server.once("error", failed);
-    server.listen(0, "127.0.0.1", () => {
+    server.listen(0, bind, () => {
       server.removeListener("error", failed);
       const address = server.address();
       if (address === null || typeof address === "string") {
@@ -2996,7 +3127,7 @@ export async function startServer(
           // a 25s poll window.
           server.closeAllConnections();
         });
-      resolve({ port, close });
+      resolve({ port, bind, close });
     });
   });
 }
