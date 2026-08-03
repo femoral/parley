@@ -42,11 +42,20 @@ export const SHIPPED_MODEL_CATALOG: ModelCatalog = {
     source: "stub",
     models: [entry("fake-model", ["low", "medium", "high"], "medium")],
   },
-  gemini: {
-    fetched_at: SHIPPED_CATALOG_RETRIEVED_AT,
-    source: "docs/research/gemini-cli-cli-automation.md",
-    notes: "No CLI effort flag.",
-    models: ["auto", "pro", "flash", "flash-lite", "gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-3-pro-preview", "gemini-3-flash-preview", "gemini-3.1-pro-preview", "gemini-3.1-flash-lite"].map((id) => entry(id)),
+  antigravity: {
+    fetched_at: "2026-08-02",
+    source: "docs/research/antigravity-cli-automation.md §7 (agy models 1.1.7)",
+    notes:
+      "Efforts only from listed rows; strip -high/-medium/-low only. " +
+      "claude-*-thinking is one id (no --effort). Labels from TTY listing.",
+    models: [
+      entry("gemini-3.6-flash", ["high", "medium", "low"]),
+      entry("gemini-3.5-flash", ["high", "medium", "low"]),
+      entry("gemini-3.1-pro", ["high", "low"]),
+      entry("claude-sonnet-4-6"),
+      entry("claude-opus-4-6-thinking"),
+      entry("gpt-oss-120b", ["medium"]),
+    ],
   },
   goose: {
     fetched_at: SHIPPED_CATALOG_RETRIEVED_AT,

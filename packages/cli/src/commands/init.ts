@@ -100,7 +100,7 @@ export const BUILTIN_VENDOR_BINS: Readonly<Record<string, string>> = {
   cline: "cline",
   codex: "codex",
   fake: "fake",
-  gemini: "gemini",
+  antigravity: "agy",
   goose: "goose",
   grok: "grok",
   hermes: "hermes",

@@ -94,7 +94,7 @@ export const HARNESS_COLORS: Record<string, HarnessColor> = {
   codex: { label: "Codex", coat: "#18A886", coatDark: "#08634F" },
   grok: { label: "Grok", coat: "#59616F", coatDark: "#282D35" },
   claude: { label: "Claude", coat: "#D1784C", coatDark: "#783A21" },
-  gemini: { label: "Gemini", coat: "#4D8CE8", coatDark: "#244E91" },
+  antigravity: { label: "Antigravity", coat: "#4D8CE8", coatDark: "#244E91" },
   kilo: { label: "Kilo", coat: "#D64E80", coatDark: "#7C2446" },
   goose: { label: "Goose", coat: "#B99435", coatDark: "#665019" },
   openclaw: { label: "OpenClaw", coat: "#D65A45", coatDark: "#7E2A20" },

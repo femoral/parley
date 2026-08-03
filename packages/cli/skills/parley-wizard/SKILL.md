@@ -54,7 +54,7 @@ cat .parley/classification.json 2>/dev/null
 ls "${PARLEY_HOME:-$HOME/.parley}/parley.json" "${PARLEY_HOME:-$HOME/.parley}/config.json" 2>/dev/null
 parley config show --json 2>/dev/null
 parley models --json 2>/dev/null
-command -v codex grok claude gemini opencode goose pi cline kilo openhands hermes openclaw kimi 2>/dev/null
+command -v codex grok claude agy opencode goose pi cline kilo openhands hermes openclaw kimi 2>/dev/null
 ```
 
 Summarize what is already configured vs still at shipped defaults — including whether a **global home config** is present. Preserve the scope choice already made; discovery never silently changes it. Done when you know the baseline you will edit from.
@@ -231,7 +231,7 @@ parley config set vendors.<id>.childChannel mcp|http|cli
 | `claude` | `mcp` | Native streamable-HTTP MCP + headers via `--mcp-config` / `--strict-mcp-config`. |
 | `cline` | `mcp` | MCP via materialized `cline_mcp_settings.json` under an isolated data-dir. |
 | `codex` | `mcp` | Strong MCP inject via `-c` / `CODEX_HOME`; canonical Parley path. |
-| `gemini` | `mcp` | MCP via project `.gemini/settings.json` (`httpUrl` + headers); no CLI MCP inject flag. |
+| `antigravity` | `mcp` | MCP via per-task `HOME` + `~/.gemini/config/mcp_config.json` stdio bridge (no Streamable-HTTP/headers on `agy`). |
 | `goose` | `mcp` | Streamable HTTP MCP under `GOOSE_PATH_ROOT` isolation. |
 | `grok` | `mcp` | MCP via worktree `.grok/config.toml` or Claude-format `.mcp.json`. |
 | `hermes` | `mcp` | MCP HTTP + headers in private `HERMES_HOME` `config.yaml`. |

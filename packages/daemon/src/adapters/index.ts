@@ -3,7 +3,7 @@ import { createFakeAdapter } from "./fake.js";
 import { createCodexAdapter } from "./codex.js";
 import { createGrokAdapter } from "./grok.js";
 import { createClaudeAdapter } from "./claude.js";
-import { createGeminiAdapter } from "./gemini.js";
+import { createAntigravityAdapter } from "./antigravity.js";
 import { createKiloAdapter } from "./kilo.js";
 import { createGooseAdapter } from "./goose.js";
 import { createOpenclawAdapter } from "./openclaw.js";
@@ -27,7 +27,7 @@ export function createBuiltinAdapters(
     createCodexAdapter(env),
     createGrokAdapter(env),
     createClaudeAdapter(env),
-    createGeminiAdapter(env),
+    createAntigravityAdapter(env),
     createKiloAdapter(env),
     createGooseAdapter(env),
     createOpenclawAdapter(env),

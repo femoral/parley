@@ -343,7 +343,7 @@ describe("bundled skill contents", () => {
       "claude",
       "cline",
       "codex",
-      "gemini",
+      "antigravity",
       "goose",
       "grok",
       "hermes",

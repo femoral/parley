@@ -83,7 +83,7 @@ describe("normalizeUsage (#118)", () => {
     ).toEqual({ input: 12, output: 8, cached: 1 });
   });
 
-  it("maps gemini cached field", () => {
+  it("maps vendor cached field alias", () => {
     expect(normalizeUsage({ input_tokens: 5, output_tokens: 3, cached: 2 })).toEqual({
       input: 5,
       output: 3,

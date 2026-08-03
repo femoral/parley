@@ -317,6 +317,20 @@ export class DelegateError extends Error {
   }
 }
 
+/**
+ * Breaking rename message for retired vendor ids (#286). Returns null for
+ * unknown-but-not-retired ids so callers fall through to the generic list.
+ */
+export function retiredVendorMessage(vendor: string): string | null {
+  if (vendor === "gemini") {
+    return (
+      "unknown vendor: gemini — replaced by antigravity (binary `agy`); " +
+      "update vendors.gemini → vendors.antigravity (#286). No alias or auto-migration."
+    );
+  }
+  return null;
+}
+
 /** Best-effort message from a thrown value (git errors arrive as `Error`). */
 function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
@@ -1246,6 +1260,8 @@ export class TaskEngine {
       // Template profiles may declare a free-form vendor outside the registry
       // (#195 / ADR-0015). Without a template the same id is still unknown.
       if (!resolved.launchTemplate) {
+        const retired = retiredVendorMessage(resolved.vendor);
+        if (retired !== null) throw new DelegateError(retired);
         const known = [...this.adapters.keys()].join(", ");
         // When the vendor came only from defaults.vendor (no flags, no profile),
         // name the setting so a stale default is easy to fix (#175).
@@ -1541,6 +1557,8 @@ export class TaskEngine {
     const parentIsTemplate = this.profileUsesLaunchTemplate(parent.profile);
     const adapter = this.adapters.get(vendor);
     if (!adapter && !parentIsTemplate) {
+      const retired = retiredVendorMessage(vendor);
+      if (retired !== null) throw new DelegateError(retired);
       const known = [...this.adapters.keys()].join(", ");
       throw new DelegateError(`unknown vendor: ${vendor} (known: ${known})`);
     }
@@ -3515,6 +3533,8 @@ export class TaskEngine {
     }
     const adapter = this.adapters.get(vendor);
     if (!adapter) {
+      const retired = retiredVendorMessage(vendor);
+      if (retired !== null) throw new DelegateError(retired);
       const known = [...this.adapters.keys()].join(", ");
       throw new DelegateError(`unknown vendor: ${vendor} (known: ${known})`);
     }
@@ -3730,7 +3750,7 @@ export class TaskEngine {
     const adapter = this.adapterForTask(task);
     if (!adapter) {
       this.admitted.delete(task.id);
-      this.fail(task.id, `unknown vendor: ${vendor}`);
+      this.fail(task.id, retiredVendorMessage(vendor) ?? `unknown vendor: ${vendor}`);
       return;
     }
 

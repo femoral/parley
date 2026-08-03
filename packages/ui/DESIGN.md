@@ -42,7 +42,7 @@ colors:
   faction-codex: "#18A886"
   faction-grok: "#59616F"
   faction-claude: "#D1784C"
-  faction-gemini: "#4D8CE8"
+  faction-antigravity: "#4D8CE8"
   faction-kilo: "#D64E80"
   faction-goose: "#B99435"
   faction-openclaw: "#D65A45"
@@ -251,7 +251,7 @@ A warm-on-cold palette: cool teal seas underneath, warm brass and parchment on t
   **One continuous sea.** The DOM backdrop and the sailing canvas draw the *same* ellipse from the same `--sea-grad-*` / `--sea-vignette-*` fractions, both scoped to the cockpit box, so the living chart has no visible edge against the surrounding water. Those fractions are **radii**, and CSS `radial-gradient(<rx> <ry> at …)` takes radii too — so both sides multiply by 100, never 200. Doubling one side draws that sea at half depth and puts a hard rectangle around the centre stage.
 
 ### Tertiary
-- **Faction Coats** — one loud hue per harness, worn only on that harness's emblem, sail, and hull. Flagship examples are **Codex Green** (`#18A886`), **Grok Slate** (`#59616F`), **Claude Terracotta** (`#D1784C`), **Gemini Blue** (`#4D8CE8`), **Pi Purple** (`#7567D8`), and **Unaligned Brass** (`#8A6A34`, the neutral privateer for unknown harnesses); the full list lives in `src/tokens/factions.ts`. Faction color is the only run-time color in the system; everything else is a fixed token.
+- **Faction Coats** — one loud hue per harness, worn only on that harness's emblem, sail, and hull. Flagship examples are **Codex Green** (`#18A886`), **Grok Slate** (`#59616F`), **Claude Terracotta** (`#D1784C`), **Antigravity Blue** (`#4D8CE8`), **Pi Purple** (`#7567D8`), and **Unaligned Brass** (`#8A6A34`, the neutral privateer for unknown harnesses); the full list lives in `src/tokens/factions.ts`. Faction color is the only run-time color in the system; everything else is a fixed token.
 
 `src/tokens/factions.ts` is the source of truth for faction coats, reflecting PRODUCT.md's data-driven vendor-as-faction model.
 
