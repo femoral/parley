@@ -391,7 +391,18 @@ export async function refreshCatalog<A extends ModelProber>(
       if (adapter.listModels && probeError) {
         warnings.push(`${id}: probe failed (${probeError})`);
       }
-      next[id] = { fetched_at: now(), source: merged.source, models: merged.models };
+      // Vendor-level effort_levels / notes are catalog metadata (usually from
+      // the shipped seed). Discovery only refreshes fetched_at/source/models;
+      // always carry those vendor fields through unchanged when present (#293).
+      next[id] = {
+        fetched_at: now(),
+        source: merged.source,
+        models: merged.models,
+        ...(existing?.effort_levels !== undefined
+          ? { effort_levels: existing.effort_levels }
+          : {}),
+        ...(existing?.notes !== undefined ? { notes: existing.notes } : {}),
+      };
       continue;
     }
 

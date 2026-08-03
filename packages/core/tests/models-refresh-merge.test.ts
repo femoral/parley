@@ -364,6 +364,118 @@ describe("refreshCatalog with readModels + listModels", () => {
     expect(catalog.grok!.models).toEqual([entry({ id: "grok-4.5" })]);
   });
 
+  it("preserves vendor effort_levels and notes on successful refresh (#293)", async () => {
+    // Hermes-shaped: shipped vocabulary + discovery models with empty efforts.
+    // Refresh must not drop the only on-disk record of the effort vocabulary.
+    const shippedEffortLevels = ["none", "minimal", "low", "medium", "high", "xhigh"] as const;
+    const shippedNotes = "Interactive picker only.";
+    const base: Record<string, VendorModels> = {
+      hermes: {
+        fetched_at: null,
+        source: "docs/research/hermes-cli-automation.md",
+        notes: shippedNotes,
+        effort_levels: [...shippedEffortLevels],
+        models: [],
+      },
+    };
+    const adapters = new Map([
+      [
+        "hermes",
+        prober({
+          readModels: () =>
+            Promise.resolve({
+              source: "~/.hermes/cache/model_catalog.json",
+              models: [
+                entry({ id: "openrouter/anthropic/claude-sonnet-4" }),
+                entry({ id: "openrouter/openai/gpt-5" }),
+              ],
+            }),
+        }),
+      ],
+    ]);
+    const { catalog, warnings } = await refreshCatalog(base, ["hermes"], adapters, () => NOW);
+    expect(warnings).toEqual([]);
+    const refreshed = catalog.hermes!;
+    expect(refreshed.fetched_at).toBe(NOW);
+    expect(refreshed.source).toBe("~/.hermes/cache/model_catalog.json");
+    expect(refreshed.models).toEqual([
+      entry({ id: "openrouter/anthropic/claude-sonnet-4" }),
+      entry({ id: "openrouter/openai/gpt-5" }),
+    ]);
+    // Byte-for-byte: same vocabulary and notes as the prior entry.
+    expect(refreshed.effort_levels).toEqual([...shippedEffortLevels]);
+    expect(refreshed.notes).toBe(shippedNotes);
+  });
+
+  it("does not invent effort_levels or notes when prior entry lacks them (#293)", async () => {
+    const base: Record<string, VendorModels> = {
+      grok: {
+        fetched_at: null,
+        source: "manual",
+        models: [entry({ id: "old" })],
+      },
+    };
+    const adapters = new Map([
+      [
+        "grok",
+        prober({
+          listModels: () =>
+            Promise.resolve({
+              source: "grok models",
+              models: [entry({ id: "grok-4.5" })],
+            }),
+        }),
+      ],
+    ]);
+    const { catalog } = await refreshCatalog(base, ["grok"], adapters, () => NOW);
+    expect(catalog.grok).toEqual({
+      fetched_at: NOW,
+      source: "grok models",
+      models: [entry({ id: "grok-4.5" })],
+    });
+    expect(catalog.grok).not.toHaveProperty("effort_levels");
+    expect(catalog.grok).not.toHaveProperty("notes");
+  });
+
+  it("preserves effort_levels alone or notes alone (#293)", async () => {
+    const adapters = new Map([
+      [
+        "kimi",
+        prober({
+          listModels: () =>
+            Promise.resolve({
+              source: "kimi probe",
+              models: [entry({ id: "kimi-code/k3" })],
+            }),
+        }),
+      ],
+    ]);
+    const onlyEfforts: Record<string, VendorModels> = {
+      kimi: {
+        fetched_at: null,
+        source: "manual",
+        effort_levels: ["low", "high"],
+        models: [],
+      },
+    };
+    const withEfforts = await refreshCatalog(onlyEfforts, ["kimi"], adapters, () => NOW);
+    expect(withEfforts.catalog.kimi!.effort_levels).toEqual(["low", "high"]);
+    expect(withEfforts.catalog.kimi).not.toHaveProperty("notes");
+    expect(withEfforts.catalog.kimi!.models).toEqual([entry({ id: "kimi-code/k3" })]);
+
+    const onlyNotes: Record<string, VendorModels> = {
+      kimi: {
+        fetched_at: null,
+        source: "manual",
+        notes: "from shipped",
+        models: [],
+      },
+    };
+    const withNotes = await refreshCatalog(onlyNotes, ["kimi"], adapters, () => NOW);
+    expect(withNotes.catalog.kimi!.notes).toBe("from shipped");
+    expect(withNotes.catalog.kimi).not.toHaveProperty("effort_levels");
+  });
+
   it("excludes codex non-API models from the merged catalog (finding 3)", async () => {
     // Divergent channel inputs (not a shared array reference): disk and probe
     // each return a different *allowed* subset after the shared filter. Union
