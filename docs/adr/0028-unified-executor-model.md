@@ -16,37 +16,44 @@ The daemon has two ways a pending task begins execution:
 
 Distributed execution (#311) makes the daemon one executor among many, with
 capability-matched claim and fleet surfaces (info, runners list, Cove). That
-requires a single claim-shaped handoff rather than a local-only direct-spawn
-path. Full routing, registration, and mirrors are later tickets; this ADR
-records the structural model introduced by the #312 prefactor.
+needs a named local executor and a single handoff at task-create time rather
+than an ad-hoc local-only start path. Full routing, registration, and mirrors
+are later tickets; this ADR records the structural prefactor from #312.
 
 ## Decision
 
-- **Claim-shaped executor surface.** An executor claims work it can run, then
-  executes it. Types live in `packages/daemon/src/executor.ts`:
-  `TaskExecutor`, `ExecutorClaim`, `LOCAL_EXECUTOR_ID` (`"local"`).
-- **Daemon-local execution is an in-process executor.**
-  `InProcessExecutor` claims non-runner-affine tasks and runs them via the
-  existing spawn path (`admitAndStart` → `run` / fix / resume). Concurrency
-  queue semantics (#171) are unchanged: under capacity → claim immediately;
-  otherwise → `queued`, drained when slots free (`InProcessExecutor.drain`).
-- **Engine claim handoff.** After a task row is inserted, the engine calls
+- **Naming + one concrete local executor.** `#312` introduces
+  `packages/daemon/src/executor.ts` with `LOCAL_EXECUTOR_ID` (`"local"`), a
+  thin `TaskExecutor` identity tag (`{ readonly id: string }` only), and
+  **`InProcessExecutor`** with the real methods: `offer` (new work) and
+  `drain` (concurrency queue). A polymorphic claim/execute interface shared
+  with remote runners is **deferred** to routing work (#315 / #311) — not
+  invented here.
+- **Engine handoff at insert.** After a task row is inserted, the engine calls
   `dispatchClaim`: runner-affine → wake lease long-polls; local →
-  `localExecutor.offer`. The engine no longer special-cases local spawn at
-  the claim site.
+  `localExecutor.offer`. That replaces the former `scheduleLocalStart` site
+  for `delegate` / `fix` / run-step spawn. Concurrency queue semantics (#171)
+  are unchanged: under capacity → admit immediately; otherwise → `queued`,
+  drained when slots free (`InProcessExecutor.drain`).
 - **Runner wire unchanged in #312.** Remote claim remains
   `tryClaimRunnerTask` / `leaseRunnerTask` with oldest-pending-per-named-runner
   affinity. Capability matching across executors (including preferring runners
-  over `local`) is #311 follow-on work; this ADR only places local execution
-  behind the same conceptual claim surface.
+  over `local`) is follow-on work.
+- **Out of scope / still direct-spawn.** Not every local spawn goes through
+  the executor. In particular, **stall recovery** —
+  `TaskEngine.answer` on a `stalled` task calls `resume` / `run` directly
+  (bypassing `dispatchClaim`, the executor, and concurrency-cap accounting) —
+  is deliberately identical to develop and untouched in #312. Routing work
+  must not assume stall revive is behind `InProcessExecutor`.
 
 ## Consequences
 
-- Local delegation, retries, stall detection, concurrency, and runs keep the
-  same observable behavior — the prefactor is structural only.
-- Later routing can treat `local` as one registered executor, advertise
-  daemon host capabilities, and fail or queue on no-match without rewriting
-  the spawn stack.
+- Local `delegate` / `fix` / run-step insert, retries into the queue,
+  concurrency, and runner lease keep the same observable behavior — the
+  prefactor is structural only (plus the explicit stall-path carve-out above).
+- Later routing can treat `local` as one registered executor, grow a real
+  claim surface on `TaskExecutor`, advertise daemon host capabilities, and
+  fail or queue on no-match without rewriting the spawn stack.
 - No schema migration, wire change, CLI flag, or HTTP surface change in the
   implementing ticket. Runner package and `packages/core/src/lease.ts` stay
   out of scope for the prefactor.

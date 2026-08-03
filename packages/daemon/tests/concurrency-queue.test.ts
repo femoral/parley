@@ -159,9 +159,9 @@ describe("concurrency queue (#171)", () => {
     // Use engine.fail path via cancel on a real row... holders have no child;
     // force terminal through updateTask + manual drain by cancelling the queued
     // task is wrong. Instead complete a holder and call cancel on nothing —
-    // scheduleLocalStart only on new work. Drain runs on transitioned(terminal).
-    // cancel requires non-terminal; use a tiny helper path: cancel is fine on
-    // holders (no child) and frees the slot.
+    // dispatchClaim / InProcessExecutor.offer only on new work. Drain runs on
+    // transitioned(terminal). cancel requires non-terminal; use a tiny helper
+    // path: cancel is fine on holders (no child) and frees the slot.
     eng.cancel(h1);
     // Waiter may go pending→running→failed quickly without a hub; the important
     // acceptance is that it *left* queued once a slot freed.
@@ -428,5 +428,27 @@ describe("concurrency queue (#171)", () => {
     const cap = eng.blockingCapFor(getTask(db, row.id)!);
     expect(cap).toMatch(/vendor:fake|profile:deep/);
     eng.cancel(row.id);
+  });
+
+  /**
+   * #312: InProcessExecutor.offer must not short-circuit on shutdown.
+   * Develop's scheduleLocalStart never checked shuttingDown; only drain does.
+   * A mid-shutdown delegate at the concurrency cap must become durable
+   * `queued` (survives crash sweep) rather than stranded `pending` (swept to
+   * stalled and never re-drained).
+   */
+  it("mid-shutdown delegate at cap still parks as queued, not pending (#312)", () => {
+    writeParleyConfig({ vendors: { fake: { maxConcurrent: 1 } } });
+    insertRunningSlot();
+    const eng = engine();
+    // Production SIGTERM sets this flag before server.close(); in-flight HTTP
+    // may still complete and insert a row after the flag flips.
+    eng.killChildren();
+
+    const row = eng.delegate(baseRequest());
+    const after = getTask(db, row.id)!;
+    expect(after.state).toBe("queued");
+    expect(listQueuedTasks(db).map((t) => t.id)).toContain(row.id);
+    expect(after.state).not.toBe("pending");
   });
 });

@@ -1,16 +1,15 @@
 /**
  * Unified executor model (#312 / ADR-0028).
  *
- * Prefactor for distributed execution (#311): daemon-local spawn and remote
- * runners share a claim-shaped handoff. This module defines the interface and
- * the in-process (daemon-local) executor. Capability-matched routing across a
- * fleet of executors is later work — this ticket is a pure structural move
- * with zero behavior change.
+ * Prefactor for distributed execution (#311): names the daemon-local path as
+ * an in-process executor and moves `delegate`/`fix`/run-step insert handoff
+ * behind it. A polymorphic claim interface across local + runners is deferred
+ * to routing work (#315 / #311). This ticket is a pure structural move with
+ * zero behavior change.
  *
- * Remote runners already implement the same *shape* over the lease wire
- * (ADR-0012 / `LeaseTransport`): claim → execute → heartbeat/events/fail.
- * Their claim half stays on `TaskEngine.tryClaimRunnerTask`; their execute
- * half stays on the runner host. The wire is untouched here.
+ * Remote runners still claim over the lease wire (ADR-0012 /
+ * `LeaseTransport`). Their claim half stays on `TaskEngine.tryClaimRunnerTask`;
+ * execute stays on the runner host. The wire is untouched here.
  */
 import type { TaskRow } from "./db.js";
 
@@ -18,29 +17,11 @@ import type { TaskRow } from "./db.js";
 export const LOCAL_EXECUTOR_ID = "local";
 
 /**
- * A task claimed by an executor and ready to run.
+ * Executor identity tag (#312).
  *
- * Remote runners receive an equivalent payload as `RunnerLeaseSpec` over HTTP.
- * Local claims stay in-process and carry the task row snapshot.
- */
-export interface ExecutorClaim {
-  /** Executor that holds the claim (`local` or a runner name). */
-  executorId: string;
-  /** Task snapshot at claim time. */
-  task: TaskRow;
-}
-
-/**
- * Claim-shaped executor surface (#312).
- *
- * An executor claims work it can run, then executes it. The engine's job at
- * the claim site is only: hand a pending task to the right executor (or wake
- * the waiter that will claim it). It does not special-case local spawn.
- *
- * - **In-process**: {@link InProcessExecutor} implements claim + execute
- *   inside the daemon process.
- * - **Remote runner**: claim is `tryClaimRunnerTask` / `leaseRunnerTask`;
- *   execute is the runner process (out of band of this interface today).
+ * A name holder only in this prefactor (`id`). A polymorphic claim/execute
+ * surface across local + runners is deferred to routing (#315 / #311).
+ * The concrete local path is {@link InProcessExecutor} (`offer` / `drain`).
  */
 export interface TaskExecutor {
   /** Stable executor identity (`local` or a registered runner name). */
@@ -56,7 +37,7 @@ export interface TaskExecutor {
  * ownership.
  */
 export interface InProcessExecutorHost {
-  /** True once the daemon is shutting down (no new claims). */
+  /** True once the daemon is shutting down (drain must not admit new work). */
   isShuttingDown(): boolean;
   /** True when the task has no runner affinity (local executor's work). */
   isLocalTask(task: TaskRow): boolean;
@@ -77,12 +58,13 @@ export interface InProcessExecutorHost {
 }
 
 /**
- * Daemon-local executor: claims non-runner-affine tasks and executes them
- * in-process via the engine host.
+ * Daemon-local executor: offers non-runner-affine tasks to the in-process
+ * spawn path via the engine host.
  *
- * Mirrors what a runner does over the lease wire (claim then execute) without
- * an HTTP hop. Concurrency queue semantics (#171) are preserved: under capacity
- * → claim immediately; otherwise → `queued`, drained when slots free.
+ * Concurrency queue semantics (#171) are preserved: under capacity →
+ * `executeClaimed` immediately; otherwise → `queued`, drained when slots free.
+ * `offer` does not consult shutdown (same as pre-#312 `scheduleLocalStart`);
+ * only {@link drain} refuses new admits while the daemon is going down.
  */
 export class InProcessExecutor implements TaskExecutor {
   readonly id = LOCAL_EXECUTOR_ID;
@@ -95,10 +77,11 @@ export class InProcessExecutor implements TaskExecutor {
    * Runner-affine tasks are ignored — those stay pending until a remote runner
    * leases them. Under capacity the task is claimed and handed to
    * {@link InProcessExecutorHost.executeClaimed}; otherwise it is parked in
-   * `queued`.
+   * `queued`. Intentionally ignores shutdown so a mid-shutdown delegate at the
+   * concurrency cap still becomes durable `queued` (survives the next daemon's
+   * crash sweep and is re-drained on startup).
    */
   offer(task: TaskRow): void {
-    if (this.host.isShuttingDown()) return;
     if (!this.host.isLocalTask(task)) return;
     if (this.host.canAdmit(task)) {
       this.host.executeClaimed(task);
