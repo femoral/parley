@@ -125,4 +125,32 @@ describe("repo key on every task (#313)", () => {
     expect(human.stdout).toMatch(/key:\s+github\.com\/org\/demo/);
     expect(human.stdout).toMatch(/fetch:\s+git@github\.com:org\/demo\.git/);
   });
+
+  it("never stores or displays embedded origin credentials", async () => {
+    const secret = "ghp_CLI_STATUS_SECRET";
+    const repo = makeGitRepo(HAPPY, {}, {
+      origin: `https://x-access-token:${secret}@github.com/org/demo.git`,
+    });
+    repos.push(repo);
+
+    const del = await runCli(
+      ["delegate", "-v", "fake", "-n", "no-creds", "--cwd", repo, "brief"],
+      home,
+      { cwd: repo },
+    );
+    expect(del.code).toBe(0);
+    const taskId = (JSON.parse(del.stdout) as { task_id: string }).task_id;
+    await waitForState(home, taskId, "completed");
+
+    const status = await statusJson(taskId);
+    expect(status.repo_key).toBe("github.com/org/demo");
+    expect(status.repo_fetch_url).toBe("https://github.com/org/demo.git");
+    expect(status.repo_fetch_url).not.toContain(secret);
+    expect(status.repo_fetch_url).not.toMatch(/:\/\/[^/]*:[^/]*@/);
+
+    const human = await runCli(["status", taskId], home);
+    expect(human.code).toBe(0);
+    expect(human.stdout).not.toContain(secret);
+    expect(human.stdout).toMatch(/fetch:\s+https:\/\/github\.com\/org\/demo\.git/);
+  });
 });

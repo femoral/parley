@@ -59,4 +59,31 @@ describe("resolveRepoIdentity", () => {
     const b = initRepo("https://github.com/femoral/parley.git");
     expect(resolveRepoIdentity(a).key).toBe(resolveRepoIdentity(b).key);
   });
+
+  it("strips embedded credentials from the stored fetch URL", () => {
+    const tokenUrl =
+      "https://x-access-token:ghp_SECRETtoken123@github.com/org/parley.git";
+    const repo = initRepo(tokenUrl);
+    const id = resolveRepoIdentity(repo);
+    expect(id.fetchUrl).toBe("https://github.com/org/parley.git");
+    expect(id.fetchUrl).not.toMatch(/:\/\/[^/]*:[^/]*@/); // no userinfo
+    expect(id.fetchUrl).not.toContain("ghp_");
+    expect(id.fetchUrl).not.toContain("x-access-token");
+    expect(id.key).toBe("github.com/org/parley");
+    // Config still holds the raw URL; we only strip at resolution time.
+    expect(readOriginFetchUrl(repo)).toBe(tokenUrl);
+  });
+
+  it("reads config remote.origin.url (not insteadOf-rewritten get-url)", () => {
+    const repo = initRepo("https://github.com/org/configured.git");
+    // insteadOf would rewrite get-url; config --get keeps the configured value.
+    execFileSync(
+      "git",
+      ["-C", repo, "config", "url.https://mirror.example/.insteadOf", "https://github.com/"],
+      { stdio: "ignore" },
+    );
+    const raw = readOriginFetchUrl(repo);
+    expect(raw).toBe("https://github.com/org/configured.git");
+    expect(raw).not.toContain("mirror.example");
+  });
 });

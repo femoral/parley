@@ -4297,6 +4297,12 @@ export class TaskEngine {
 
     const isFanOut = siblings.length > 1 || step.over !== undefined || step.slots !== undefined;
 
+    // Run-owned steps share one repo path — resolve identity once (not per sibling).
+    const runIdentity =
+      run.repo !== null && run.repo !== ""
+        ? resolveRepoIdentity(run.repo)
+        : { key: null, fetchUrl: null };
+
     for (const sib of siblings) {
       const slot =
         sib.slotId !== null && step.slots !== undefined
@@ -4440,12 +4446,6 @@ export class TaskEngine {
           cwd = workspaceRoot;
         }
       }
-
-      // Run-owned steps share the run's repo path; resolve identity when present.
-      const runIdentity =
-        run.repo !== null && run.repo !== ""
-          ? resolveRepoIdentity(run.repo)
-          : { key: null, fetchUrl: null };
 
       const row = insertTask(this.db, {
         id,
