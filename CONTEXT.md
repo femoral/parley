@@ -97,9 +97,11 @@ human/agent driving parley is the **orchestrator**.
   **per-task isolated home** that some adapters write into `SpawnPlan.env` for
   children when isolation does not sever auth (e.g. openclaw's
   `<cwd>/.openclaw-state`).
-  kimi, codex, and antigravity are flags-only: they spawn against the operator
-  home (ADR-0025; antigravity's rejected per-task-home recipe is recorded in
-  [ADR-0026](docs/adr/0026-antigravity-replaces-gemini-vendor.md)). Discovery and selected-model reads must use the operator home and
+  kimi, codex, antigravity, and cursor are flags-only: they spawn against the
+  operator home (ADR-0025; antigravity's rejected per-task-home recipe is
+  recorded in [ADR-0026](docs/adr/0026-antigravity-replaces-gemini-vendor.md);
+  cursor's opaque model ids in
+  [ADR-0027](docs/adr/0027-cursor-vendor-opaque-model-ids.md)). Discovery and selected-model reads must use the operator home and
   refuse parley-provisioned isolation markers so a delegated child cannot inject
   task-controlled model ids into the global catalog
   (`resolveOperatorVendorHome`, #281).
