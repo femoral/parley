@@ -143,6 +143,15 @@ export function makeTaskDir(
   return dir;
 }
 
+/** Options for {@link makeGitRepo}. */
+export interface MakeGitRepoOptions {
+  /**
+   * When set, `git remote add origin <url>` after the initial commit.
+   * Used by repo-identity tests (#313) for SSH/HTTPS key equivalence.
+   */
+  origin?: string;
+}
+
 /**
  * Create a real git repository (the only worktree fixture the suite uses). The
  * fake vendor's action script is committed as `.fake-vendor.json` so it appears
@@ -152,6 +161,7 @@ export function makeTaskDir(
 export function makeGitRepo(
   actions: FakeVendorAction[],
   files: Record<string, string> = {},
+  options: MakeGitRepoOptions = {},
 ): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "parley-repo-"));
   const run = (args: string[]): void => {
@@ -163,6 +173,9 @@ export function makeGitRepo(
   writeFiles(dir, { ".fake-vendor.json": JSON.stringify(actions, null, 2), ...files });
   run(["add", "-A"]);
   run(["commit", "-m", "initial"]);
+  if (options.origin !== undefined && options.origin !== "") {
+    run(["remote", "add", "origin", options.origin]);
+  }
   return dir;
 }
 

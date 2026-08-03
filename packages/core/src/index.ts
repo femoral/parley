@@ -12,6 +12,7 @@ export * from "./model-allowlist.js";
 export * from "./project-config.js";
 export * from "./contract.js";
 export * from "./lease.js";
+export * from "./repo-key.js";
 export * from "./home.js";
 export * from "./models.js";
 export * from "./vendor-home.js";

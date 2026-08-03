@@ -40,6 +40,7 @@ import {
   type WorkflowDefinition,
   type WorkflowStepNode,
 } from "@useparley/core";
+import { resolveRepoIdentity } from "./repo-identity.js";
 
 /** Compat re-exports for deep imports (`@useparley/daemon/engine.js`) during #209 migration. */
 export { DEFAULT_RUNNER_HEARTBEAT_TIMEOUT_MS, TASK_HEADER, type RunnerLeaseSpec };
@@ -1492,6 +1493,10 @@ export class TaskEngine {
       });
     }
 
+    // Repo identity (#313): key + exact fetch URL from origin; local path is
+    // always `repo`. No-origin checkouts record only the path.
+    const identity = resolveRepoIdentity(repo);
+
     const row = insertTask(this.db, {
       id,
       name: request.name,
@@ -1503,6 +1508,8 @@ export class TaskEngine {
       profile: resolved.profile,
       runner: request.runner,
       repo,
+      repo_key: identity.key,
+      repo_fetch_url: identity.fetchUrl,
       cwd: workingDir,
       prompt: request.prompt,
       orchestrator_session_id: orchSessionId,
@@ -1692,6 +1699,9 @@ export class TaskEngine {
       profile: parent.profile,
       runner: parent.runner,
       repo: parent.repo,
+      // Inherit identity from the parent attempt (#313).
+      repo_key: parent.repo_key,
+      repo_fetch_url: parent.repo_fetch_url,
       cwd: workingDir,
       prompt: request.prompt,
       orchestrator_session_id: orchSessionId,
@@ -3114,6 +3124,8 @@ export class TaskEngine {
         parseJsonColumn<JsonSchema>(task.report_schema) ?? DEFAULT_REPORT_SCHEMA,
       base_ref: meta.base_ref,
       base_sha: task.base_sha,
+      repo_key: task.repo_key ?? null,
+      repo_fetch_url: task.repo_fetch_url ?? null,
       repo: task.repo,
       contexts: meta.contexts,
       extra_args: this.extraArgsFor(task),
@@ -4429,6 +4441,12 @@ export class TaskEngine {
         }
       }
 
+      // Run-owned steps share the run's repo path; resolve identity when present.
+      const runIdentity =
+        run.repo !== null && run.repo !== ""
+          ? resolveRepoIdentity(run.repo)
+          : { key: null, fetchUrl: null };
+
       const row = insertTask(this.db, {
         id,
         name: null,
@@ -4437,6 +4455,8 @@ export class TaskEngine {
         effort: resolved.effort,
         profile: resolved.profile,
         repo: run.repo,
+        repo_key: runIdentity.key,
+        repo_fetch_url: runIdentity.fetchUrl,
         cwd,
         prompt: body,
         orchestrator_session_id: run.orchestrator_session_id,

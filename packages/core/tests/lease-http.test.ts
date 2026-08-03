@@ -35,6 +35,8 @@ const sampleLease: RunnerLeaseSpec = {
   report_schema: { type: "object" },
   base_ref: null,
   base_sha: null,
+  repo_key: "github.com/org/repo",
+  repo_fetch_url: "https://github.com/org/repo.git",
   repo: "/repo",
   contexts: [],
   extra_args: [],
@@ -195,6 +197,10 @@ describe("createLeaseHttpTransport", () => {
 
     const lease = await transport.lease("gpu");
     expect(lease).toEqual(sampleLease);
+    // #313: lease wire carries key + fetch URL + local path.
+    expect(lease?.repo_key).toBe("github.com/org/repo");
+    expect(lease?.repo_fetch_url).toBe("https://github.com/org/repo.git");
+    expect(lease?.repo).toBe("/repo");
     expect(fetchMock).toHaveBeenCalledOnce();
     const [url, init] = fetchMock.mock.calls[0]!;
     expect(url).toBe("http://daemon.example:9/runner/lease");
