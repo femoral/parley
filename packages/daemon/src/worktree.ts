@@ -1,6 +1,7 @@
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import type { MaterializedFile } from "@useparley/core";
 import { PARLEY_DIR } from "./context.js";
 
 /**
@@ -161,6 +162,93 @@ export function excludeMaterializedFiles(wtPath: string, relPaths: string[]): vo
     /* no exclude file yet */
   }
   appendExclude(wtPath, entries.filter((entry) => !existing.has(entry)));
+}
+
+/**
+ * Git-exclude vendor-materialized files for a `--cwd` task (no parley worktree).
+ *
+ * When `cwd` sits inside a git working tree, appends exact paths (relative to
+ * the repo root) to that repo's local `.git/info/exclude` — never committed,
+ * so the operator's global ignore stays clean. Entries already present are
+ * skipped (dedupe on repeat spawn/resume). When `cwd` is not in a git repo,
+ * returns silently (nothing to exclude against).
+ *
+ * Distinct from {@link excludeMaterializedFiles}, which uses a *worktree-private*
+ * exclude file so source-repo checkouts are never affected. A `--cwd` task
+ * *is* the operator's real tree, so local `info/exclude` is the right lever
+ * for secrets materialised under e.g. `.parley-antigravity/` (#286).
+ */
+export function excludeMaterializedFilesInCwdRepo(
+  cwd: string,
+  relPaths: string[],
+): void {
+  const root = repoRoot(cwd);
+  if (root === null) return;
+  if (relPaths.length === 0) return;
+
+  const entries = [
+    ...new Set(
+      relPaths
+        .map((rel) => rel.replace(/^\/+/, ""))
+        .filter((rel) => rel !== "")
+        .map((rel) => {
+          // Materialized paths are relative to task cwd; exclude patterns are
+          // relative to the repo root. When cwd is a subdir, join then relativize.
+          const abs = path.resolve(cwd, rel);
+          const fromRoot = path.relative(root, abs);
+          // Refuse to write exclude entries that escape the repo.
+          if (fromRoot.startsWith("..") || path.isAbsolute(fromRoot)) return null;
+          return `/${fromRoot.split(path.sep).join("/")}`;
+        })
+        .filter((entry): entry is string => entry !== null),
+    ),
+  ];
+  if (entries.length === 0) return;
+
+  // info/exclude lives under the *common* git dir. For a linked worktree,
+  // gitDir() is <repo>/.git/worktrees/<name>/ — entries there are ignored by
+  // git; only <repo>/.git/info/exclude is read (same pitfall as appendExclude).
+  let gd: string;
+  try {
+    gd = commonGitDir(cwd);
+  } catch {
+    return;
+  }
+  const excludePath = path.join(gd, "info", "exclude");
+  let existingText = "";
+  try {
+    existingText = fs.readFileSync(excludePath, "utf8");
+  } catch {
+    /* create below */
+  }
+  const existing = new Set(existingText.split("\n"));
+  const toAdd = entries.filter((entry) => !existing.has(entry));
+  if (toAdd.length === 0) return;
+  fs.mkdirSync(path.dirname(excludePath), { recursive: true });
+  const gap = existingText.length > 0 && !existingText.endsWith("\n") ? "\n" : "";
+  fs.appendFileSync(excludePath, `${gap}${toAdd.join("\n")}\n`);
+}
+
+/**
+ * Write adapter {@link MaterializedFile}s into `cwd` before spawn (engine +
+ * runner). Honours optional `mode` (e.g. `0o600` for OAuth tokens): passed to
+ * writeFileSync so a credential never lands at the umask default even between
+ * syscalls, then chmod after to cover an already-existing file.
+ */
+export function writeMaterializedFiles(
+  cwd: string,
+  files: readonly MaterializedFile[],
+): void {
+  for (const file of files) {
+    const target = path.join(cwd, file.path);
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    if (file.mode !== undefined) {
+      fs.writeFileSync(target, file.contents, { mode: file.mode });
+      fs.chmodSync(target, file.mode);
+    } else {
+      fs.writeFileSync(target, file.contents);
+    }
+  }
 }
 
 export interface CreateWorktreeOptions {

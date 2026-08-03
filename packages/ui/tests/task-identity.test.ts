@@ -56,7 +56,7 @@ describe("task identity tokens", () => {
 
   it("provides distinct colours for every built-in harness", () => {
     const builtIns = [
-      "fake", "codex", "grok", "claude", "gemini", "kilo", "goose",
+      "fake", "codex", "grok", "claude", "antigravity", "kilo", "goose",
       "openclaw", "cline", "openhands", "opencode", "hermes", "pi", "kimi",
     ];
     expect(Object.keys(HARNESS_COLORS)).toEqual(expect.arrayContaining(builtIns));

@@ -92,13 +92,15 @@ human/agent driving parley is the **orchestrator**.
   allowlist. Used by vendors that persist a selection but no enumerable
   catalog (goose, cline, openhands) (#284).
 - **Operator vendor home** — the directory the *operator* uses when they run
-  a vendor CLI interactively (`~/.codex`, `~/.kimi-code`, …, honouring the
-  CLI's env override when set). Distinct from a **per-task isolated home**
-  that some adapters write into `SpawnPlan.env` for children when isolation
-  does not sever auth (e.g. openclaw's `<cwd>/.openclaw-state`). kimi and
-  codex are flags-only: they spawn against the operator home (ADR-0025).
-  Discovery and selected-model reads must use the operator home and refuse
-  parley-provisioned isolation markers so a delegated child cannot inject
+  a vendor CLI interactively (`~/.codex`, `~/.kimi-code`, `~/.gemini` for
+  antigravity, …, honouring the CLI's env override when set). Distinct from a
+  **per-task isolated home** that some adapters write into `SpawnPlan.env` for
+  children when isolation does not sever auth (e.g. openclaw's
+  `<cwd>/.openclaw-state`, antigravity's `<cwd>/.parley-antigravity` via
+  `HOME` — [ADR-0026](docs/adr/0026-antigravity-replaces-gemini-vendor.md)).
+  kimi and codex are flags-only: they spawn against the operator home
+  (ADR-0025). Discovery and selected-model reads must use the operator home and
+  refuse parley-provisioned isolation markers so a delegated child cannot inject
   task-controlled model ids into the global catalog
   (`resolveOperatorVendorHome`, #281).
 - **Posture enforcement declaration** — an adapter's self-declared ability to

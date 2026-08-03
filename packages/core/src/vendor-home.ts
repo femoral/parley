@@ -36,6 +36,7 @@ const PARLEY_ISOLATED_MARKERS: readonly string[] = [
   ".parley-goose", // goose PATH_ROOT_DIR
   ".parley-openhands", // openhands PERSIST_REL parent
   ".cline-parley", // cline DATA_DIR_REL
+  ".parley-antigravity", // antigravity private HOME (research §1)
 ];
 
 type HomeSpec = {
@@ -125,6 +126,20 @@ const OPERATOR_HOME_SPECS: Record<string, HomeSpec> = {
   cline: {
     envKey: "CLINE_DATA_DIR",
     defaultRel: ".cline",
+    overrideKind: "home",
+    provenance: "research-cli-override",
+  },
+  /**
+   * antigravity: CLI home is always `$HOME/.gemini` (kept Gemini CLI's dir
+   * name; research §1). The only relocation lever is `HOME` itself — the
+   * adapter sets `HOME` to `task.cwd/.parley-antigravity` for isolation.
+   * There is no `ANTIGRAVITY_HOME` / `AGY_HOME` (verified absent). Discovery
+   * reads the operator default under the real OS home; a test-only override
+   * key lets unit tests inject a fake operator home without clobbering HOME.
+   */
+  antigravity: {
+    envKey: "PARLEY_ANTIGRAVITY_OPERATOR_HOME",
+    defaultRel: ".gemini",
     overrideKind: "home",
     provenance: "research-cli-override",
   },

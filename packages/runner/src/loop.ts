@@ -1,7 +1,6 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
-import path from "node:path";
 import readline from "node:readline";
 import {
   createLeaseHttpTransport,
@@ -31,6 +30,7 @@ import {
   createWorktree,
   excludeMaterializedFiles,
   removeWorktree,
+  writeMaterializedFiles,
 } from "@useparley/daemon/worktree.js";
 import { type RunnerConfig, resolveRepoPath } from "./config.js";
 import { startHubProxy, type HubProxy } from "./hub-proxy.js";
@@ -267,11 +267,7 @@ export class RunnerLoop {
           );
         }
       }
-      for (const file of plan.files) {
-        const target = path.join(plan.cwd, file.path);
-        fs.mkdirSync(path.dirname(target), { recursive: true });
-        fs.writeFileSync(target, file.contents);
-      }
+      writeMaterializedFiles(plan.cwd, plan.files);
 
       const exitCode =
         this.host.spawnAndStream !== undefined

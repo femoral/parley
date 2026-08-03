@@ -239,11 +239,13 @@ import {
   commonGitDir,
   createWorktree,
   excludeMaterializedFiles,
+  excludeMaterializedFilesInCwdRepo,
   gitDir,
   isValidGitCheckout,
   isWorktreeModified,
   removeWorktree,
   repoRoot,
+  writeMaterializedFiles,
 } from "./worktree.js";
 
 /** Re-export transition type for callers that imported it from the engine. */
@@ -315,6 +317,20 @@ export class DelegateError extends Error {
   ) {
     super(message);
   }
+}
+
+/**
+ * Breaking rename message for retired vendor ids (#286). Returns null for
+ * unknown-but-not-retired ids so callers fall through to the generic list.
+ */
+export function retiredVendorMessage(vendor: string): string | null {
+  if (vendor === "gemini") {
+    return (
+      "unknown vendor: gemini — replaced by antigravity (binary `agy`); " +
+      "update vendors.gemini → vendors.antigravity (#286). No alias or auto-migration."
+    );
+  }
+  return null;
 }
 
 /** Best-effort message from a thrown value (git errors arrive as `Error`). */
@@ -1246,6 +1262,8 @@ export class TaskEngine {
       // Template profiles may declare a free-form vendor outside the registry
       // (#195 / ADR-0015). Without a template the same id is still unknown.
       if (!resolved.launchTemplate) {
+        const retired = retiredVendorMessage(resolved.vendor);
+        if (retired !== null) throw new DelegateError(retired);
         const known = [...this.adapters.keys()].join(", ");
         // When the vendor came only from defaults.vendor (no flags, no profile),
         // name the setting so a stale default is easy to fix (#175).
@@ -1541,6 +1559,8 @@ export class TaskEngine {
     const parentIsTemplate = this.profileUsesLaunchTemplate(parent.profile);
     const adapter = this.adapters.get(vendor);
     if (!adapter && !parentIsTemplate) {
+      const retired = retiredVendorMessage(vendor);
+      if (retired !== null) throw new DelegateError(retired);
       const known = [...this.adapters.keys()].join(", ");
       throw new DelegateError(`unknown vendor: ${vendor} (known: ${known})`);
     }
@@ -3515,6 +3535,8 @@ export class TaskEngine {
     }
     const adapter = this.adapters.get(vendor);
     if (!adapter) {
+      const retired = retiredVendorMessage(vendor);
+      if (retired !== null) throw new DelegateError(retired);
       const known = [...this.adapters.keys()].join(", ");
       throw new DelegateError(`unknown vendor: ${vendor} (known: ${known})`);
     }
@@ -3730,7 +3752,7 @@ export class TaskEngine {
     const adapter = this.adapterForTask(task);
     if (!adapter) {
       this.admitted.delete(task.id);
-      this.fail(task.id, `unknown vendor: ${vendor}`);
+      this.fail(task.id, retiredVendorMessage(vendor) ?? `unknown vendor: ${vendor}`);
       return;
     }
 
@@ -4641,28 +4663,32 @@ export class TaskEngine {
       );
     }
 
-    // Git-exclude vendor plumbing before writing it, so a worktree task's
-    // `git status` stays clean, the files never count as "modified" (which would
-    // block auto-remove of an otherwise-untouched worktree), and the child can
-    // never stage them. A `--cwd` task has no parley worktree to manage.
-    if (plan.files.length > 0 && task.worktree !== null) {
+    // Git-exclude vendor plumbing before writing it so the child can never
+    // stage secrets / MCP bridge scripts:
+    //  - parley worktree → worktree-private exclude (never touches source repo)
+    //  - --cwd inside a git repo → that repo's local .git/info/exclude (#286)
+    //  - --cwd outside git → skip silently
+    if (plan.files.length > 0) {
+      const relPaths = plan.files.map((file) => file.path);
       try {
-        excludeMaterializedFiles(task.worktree, plan.files.map((file) => file.path));
+        if (task.worktree !== null) {
+          excludeMaterializedFiles(task.worktree, relPaths);
+        } else {
+          excludeMaterializedFilesInCwdRepo(plan.cwd, relPaths);
+        }
       } catch (err) {
         // Best-effort: a git failure here must not stop the task from running —
         // but it leaves plumbing visible as untracked (blocking auto-remove of
         // an untouched worktree), so record it in the daemon log, don't hide it.
         console.error(
-          `task ${task.id}: failed to git-exclude vendor files in ${task.worktree}: ${errorMessage(err)}`,
+          `task ${task.id}: failed to git-exclude vendor files in ${
+            task.worktree ?? plan.cwd
+          }: ${errorMessage(err)}`,
         );
       }
     }
 
-    for (const file of plan.files) {
-      const target = path.join(plan.cwd, file.path);
-      fs.mkdirSync(path.dirname(target), { recursive: true });
-      fs.writeFileSync(target, file.contents);
-    }
+    writeMaterializedFiles(plan.cwd, plan.files);
 
     const logDir = taskLogDir(this.paths, task.id);
     fs.mkdirSync(logDir, { recursive: true });

@@ -154,6 +154,24 @@ describe("resolveOperatorVendorHome", () => {
     ).toBe(path.resolve("/opt/custom-pi-agent"));
     expect(operatorVendorHomeIds()).toContain("pi");
   });
+
+  it("resolves antigravity operator home under ~/.gemini (#286)", () => {
+    const home = "/tmp/operator";
+    expect(resolveOperatorVendorHome("antigravity", { HOME: home })).toBe(
+      path.join(home, ".gemini"),
+    );
+    expect(
+      resolveOperatorVendorHome("antigravity", {
+        HOME: home,
+        PARLEY_ANTIGRAVITY_OPERATOR_HOME: "/opt/custom-gemini-home",
+      }),
+    ).toBe(path.resolve("/opt/custom-gemini-home"));
+    // Refuse per-task private HOME isolation marker.
+    expect(
+      isParleyIsolatedVendorHome(path.join("/work/tree", ".parley-antigravity")),
+    ).toBe(true);
+    expect(operatorVendorHomeIds()).toContain("antigravity");
+  });
 });
 
 describe("displayVendorPath / operatorHomeDir", () => {

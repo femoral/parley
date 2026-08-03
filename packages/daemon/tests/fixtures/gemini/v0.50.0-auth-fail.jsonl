@@ -1,3 +1,0 @@
-{"type":"init","timestamp":"2026-07-16T08:11:55.484Z","session_id":"a559d264-82c8-48a4-85ec-0fbe645d82e0","model":"auto"}
-{"type":"message","timestamp":"2026-07-16T08:11:55.485Z","role":"user","content":"say hi only"}
-{"type":"result","timestamp":"2026-07-16T08:11:56.681Z","status":"error","error":{"type":"unknown","message":"[API Error: API_KEY_INVALID]"},"stats":{"total_tokens":0,"input_tokens":0,"output_tokens":0,"cached":0,"input":0,"duration_ms":0,"tool_calls":0,"models":{"gemini-3.1-flash-lite":{"total_tokens":0,"input_tokens":0,"output_tokens":0,"cached":0,"input":0},"gemini-3.1-pro-preview":{"total_tokens":0,"input_tokens":0,"output_tokens":0,"cached":0,"input":0}}}}
