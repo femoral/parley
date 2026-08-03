@@ -22,6 +22,10 @@ export interface UiConfig {
 /**
  * Non-local daemon connection (`daemon.url`). When set, the CLI skips local
  * discovery/spawn and talks to that base URL (ADR-0010).
+ *
+ * Remote auth (#323 / ADR-0030): the client also stores its name + token
+ * beside the URL (`daemon.client`, `daemon.token`) and sends bearer auth.
+ * `daemon.bind` is daemon-side only — listen address; default loopback.
  */
 export interface DaemonConfig {
   /** Base URL of a running daemon, e.g. `http://host:57123` (no trailing slash). */
@@ -32,6 +36,23 @@ export interface DaemonConfig {
    * disables. Default: 5 minutes.
    */
   idleTimeoutMs?: number;
+  /**
+   * Listen address for the daemon HTTP server (#323 / ADR-0030). Default
+   * `127.0.0.1` (loopback-only). Set to e.g. `0.0.0.0` to accept non-local
+   * connections; bearer auth is then mandatory for every non-loopback peer.
+   * Cold — requires daemon restart.
+   */
+  bind?: string;
+  /**
+   * This client's registered name on the remote daemon (`clients.<name>`).
+   * Stored beside `daemon.url` / `daemon.token` on the client host only.
+   */
+  client?: string;
+  /**
+   * Bearer token matching `clients.<name>.token` on the remote daemon.
+   * Sent as `Authorization: Bearer <token>` on every remote request.
+   */
+  token?: string;
 }
 
 /**
@@ -174,6 +195,16 @@ export interface RunnerConfig {
   token: string;
 }
 
+/**
+ * Named remote client under `clients.<name>` (#323 / ADR-0030). Mirrors
+ * {@link RunnerConfig}: each device/UI holds its own revocable bearer token.
+ * Tokens live in settings (not the db); deleting an entry revokes that client.
+ */
+export interface ClientConfig {
+  /** Shared secret the client presents as `Authorization: Bearer <token>`. */
+  token: string;
+}
+
 /** Eval on/off for a project or global defaults (#157 / #178). */
 export interface EvalConfig {
   enabled?: boolean;
@@ -222,6 +253,12 @@ export interface ParleyConfig {
   profiles?: Record<string, ProfileConfig>;
   /** Remote runner credentials (`runners.<name>.token`); see ADR-0012. */
   runners?: Record<string, RunnerConfig>;
+  /**
+   * Remote client credentials (`clients.<name>.token`); see ADR-0030.
+   * Daemon-side map of named tokens; clients store their own name+token
+   * under `daemon.client` / `daemon.token` beside `daemon.url`.
+   */
+  clients?: Record<string, ClientConfig>;
   /** Task data retention window for `parley gc` / daemon sweep (#153). */
   retention?: RetentionConfig;
   /** Fallback vendor/profile when delegate omits `-v` / `--profile` (#175). */
@@ -294,6 +331,15 @@ function validateDaemon(file: string, raw: unknown): void {
         `invalid config at ${file}: daemon.idleTimeoutMs must be a non-negative integer`,
       );
     }
+  }
+  if (raw.bind !== undefined) {
+    assertNonEmptyString(file, "daemon.bind", raw.bind);
+  }
+  if (raw.client !== undefined) {
+    assertNonEmptyString(file, "daemon.client", raw.client);
+  }
+  if (raw.token !== undefined) {
+    assertNonEmptyString(file, "daemon.token", raw.token);
   }
 }
 
@@ -551,6 +597,29 @@ function validateRunners(file: string, raw: unknown): void {
   }
 }
 
+function validateClientEntry(file: string, name: string, raw: unknown): void {
+  if (!isRecord(raw)) {
+    throw new Error(`invalid config at ${file}: clients.${name} must be an object`);
+  }
+  if (raw.token === undefined) {
+    throw new Error(`invalid config at ${file}: clients.${name}.token is required`);
+  }
+  assertNonEmptyString(file, `clients.${name}.token`, raw.token);
+}
+
+function validateClients(file: string, raw: unknown): void {
+  if (raw === undefined) return;
+  if (!isRecord(raw)) {
+    throw new Error(`invalid config at ${file}: clients must be an object`);
+  }
+  for (const [name, entry] of Object.entries(raw)) {
+    if (name === "") {
+      throw new Error(`invalid config at ${file}: clients keys must be non-empty strings`);
+    }
+    validateClientEntry(file, name, entry);
+  }
+}
+
 function validateDefaults(file: string, raw: unknown): void {
   if (raw === undefined) return;
   if (!isRecord(raw)) {
@@ -670,6 +739,7 @@ export function validateConfig(source: string, raw: unknown): ParleyConfig {
   validateVendors(source, config.vendors);
   validateProfiles(source, config.profiles);
   validateRunners(source, config.runners);
+  validateClients(source, config.clients);
   validateRetention(source, config.retention);
   validateDefaults(source, config.defaults);
   validateEval(source, config.eval);
@@ -732,6 +802,7 @@ const KNOWN_TOP_LEVEL = new Set([
   "vendors",
   "profiles",
   "runners",
+  "clients",
   "retention",
   "defaults",
   "eval",
@@ -743,7 +814,7 @@ const KNOWN_EVAL = new Set(["enabled", "expected"]);
 const KNOWN_RESUME = new Set(["enabled"]);
 const KNOWN_RETRY = new Set(["max", "window"]);
 const KNOWN_UI = new Set(["path", "package"]);
-const KNOWN_DAEMON = new Set(["url", "idleTimeoutMs"]);
+const KNOWN_DAEMON = new Set(["url", "idleTimeoutMs", "bind", "client", "token"]);
 const KNOWN_VENDOR = new Set([
   "bin",
   "args",
@@ -765,6 +836,7 @@ const KNOWN_PROFILE = new Set([
   "maxConcurrent",
 ]);
 const KNOWN_RUNNER = new Set(["token"]);
+const KNOWN_CLIENT = new Set(["token"]);
 const KNOWN_RETENTION = new Set(["days"]);
 const KNOWN_DEFAULTS = new Set(["vendor", "profile"]);
 
@@ -825,6 +897,15 @@ export function collectUnknownConfigKeys(config: Record<string, unknown>): strin
       if (!isRecord(entry)) continue;
       for (const key of Object.keys(entry)) {
         if (!KNOWN_RUNNER.has(key)) unknown.push(`runners.${name}.${key}`);
+      }
+    }
+  }
+  const clients = config.clients;
+  if (isRecord(clients)) {
+    for (const [name, entry] of Object.entries(clients)) {
+      if (!isRecord(entry)) continue;
+      for (const key of Object.keys(entry)) {
+        if (!KNOWN_CLIENT.has(key)) unknown.push(`clients.${name}.${key}`);
       }
     }
   }

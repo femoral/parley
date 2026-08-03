@@ -3,6 +3,7 @@
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  daemonGet,
   discoveryBaseUrl,
   ensureDaemon,
   ensureRemoteDaemon,
@@ -59,6 +60,24 @@ describe("ensureRemoteDaemon", () => {
     expect(d.started_at).toBe("2020-01-01T00:00:00.000Z");
   });
 
+  it("attaches bearer token on the health probe and Discovery (#323)", async () => {
+    const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => {
+      const headers = new Headers(init?.headers);
+      expect(headers.get("authorization")).toBe("Bearer fake-client-token-ccc");
+      return new Response(JSON.stringify({ status: "ok", pid: 1, started_at: "t" }), {
+        status: 200,
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const d = await ensureRemoteDaemon("http://remote:9999", {
+      token: "fake-client-token-ccc",
+      client: "laptop",
+    });
+    expect(d.token).toBe("fake-client-token-ccc");
+    expect(d.client).toBe("laptop");
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
   it("names the URL when unreachable", async () => {
     vi.stubGlobal(
       "fetch",
@@ -93,5 +112,44 @@ describe("ensureDaemon with options.url", () => {
       url: "http://configured:8",
     });
     expect(d.url).toBe("http://configured:8");
+  });
+
+  it("forwards token and client for remote auth (#323)", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        new Response(JSON.stringify({ status: "ok", pid: 7, started_at: "t" }), {
+          status: 200,
+        }),
+      ),
+    );
+    const d: Discovery = await ensureDaemon(launcherNever(), {
+      url: "http://configured:8",
+      token: "fake-client-token-ddd",
+      client: "ci",
+    });
+    expect(d.token).toBe("fake-client-token-ddd");
+    expect(d.client).toBe("ci");
+  });
+});
+
+describe("daemonGet with Discovery.token (#323)", () => {
+  it("sends Authorization bearer on subsequent RPC", async () => {
+    const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => {
+      const headers = new Headers(init?.headers);
+      expect(headers.get("authorization")).toBe("Bearer fake-client-token-eee");
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const discovery: Discovery = {
+      port: 0,
+      pid: 1,
+      started_at: "t",
+      url: "http://remote:9",
+      token: "fake-client-token-eee",
+    };
+    const body = await daemonGet<{ ok: boolean }>(discovery, "/tasks");
+    expect(body).toEqual({ ok: true });
+    expect(fetchMock).toHaveBeenCalledOnce();
   });
 });

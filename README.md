@@ -230,9 +230,12 @@ Run children on other machines while keeping one daemon and one inbox:
 # on the remote host
 npm install -g @useparley/runner    # give it the daemon URL + a token
 
-# in ~/.parley/parley.json
-# "daemon":  { "url": "http://build-box:7777" },
-# "runners": { "gpu-box": { "token": "…" } }
+# in ~/.parley/parley.json on the *client* host
+# "daemon":  { "url": "http://build-box:7777", "client": "laptop", "token": "fake-client-token-example" },
+# on the *daemon* host, also register that client + the runner:
+# "clients": { "laptop": { "token": "fake-client-token-example" } },
+# "runners": { "gpu-box": { "token": "fake-runner-token-example" } },
+# "daemon":  { "bind": "0.0.0.0" }
 
 parley delegate --runner gpu-box …
 ```

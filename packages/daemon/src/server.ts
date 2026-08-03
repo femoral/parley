@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import fs from "node:fs";
 import http from "node:http";
 import path from "node:path";
@@ -18,6 +19,7 @@ import {
   RUN_METRICS_GROUP_BY,
   RUNNER_PROTOCOL_VERSION,
   setConfigPath,
+  TASK_HEADER,
   unsetConfigPath,
   validateConfig,
   writeConfig,
@@ -175,6 +177,11 @@ function scheduleRetentionGc(
 export interface DaemonServer {
   /** The port the server is listening on. */
   port: number;
+  /**
+   * Address the server bound to (`daemon.bind`, default `127.0.0.1`).
+   * See #323 / ADR-0030.
+   */
+  bind: string;
   /** Close the server and its database. */
   close: () => Promise<void>;
 }
@@ -533,38 +540,483 @@ function handleDelegate(engine: TaskEngine, res: http.ServerResponse, body: unkn
 }
 
 /**
- * Extract `Authorization: Bearer <token>` and match it to a configured runner
- * name. Returns the runner name, or null when auth fails (caller sends 401).
- * When `expectedName` is set, the token must belong to that exact runner.
+ * Extract `Authorization: Bearer <token>`, or null when absent/malformed.
+ */
+export function extractBearerToken(authorization: string | undefined): string | null {
+  if (typeof authorization !== "string" || !authorization.startsWith("Bearer ")) {
+    return null;
+  }
+  const token = authorization.slice("Bearer ".length).trim();
+  return token === "" ? null : token;
+}
+
+/**
+ * Constant-time token comparison via fixed-length digests (#323 F7).
+ * Never short-circuits on length of the presented secret.
+ */
+export function tokensEqual(presented: string, expected: string): boolean {
+  const a = crypto.createHash("sha256").update(presented, "utf8").digest();
+  const b = crypto.createHash("sha256").update(expected, "utf8").digest();
+  return crypto.timingSafeEqual(a, b);
+}
+
+/**
+ * True when the peer address is loopback (IPv4 127.0.0.0/8 or IPv6 ::1,
+ * including IPv4-mapped forms Node reports). Auth enforcement keys off the
+ * peer address, not bind config alone (#323 / ADR-0030).
+ *
+ * `undefined` / empty peer fails closed (not loopback) so a missing
+ * remoteAddress never bypasses the gate.
+ */
+export function isLoopbackAddress(addr: string | undefined | null): boolean {
+  if (addr === undefined || addr === null || addr === "") return false;
+  if (addr === "127.0.0.1" || addr === "::1" || addr === "::ffff:127.0.0.1") {
+    return true;
+  }
+  // 127.0.0.0/8 and IPv4-mapped 127.x.x.x
+  if (addr.startsWith("127.")) return true;
+  if (addr.startsWith("::ffff:127.")) return true;
+  return false;
+}
+
+function isLoopbackRequest(req: http.IncomingMessage): boolean {
+  return isLoopbackAddress(req.socket.remoteAddress);
+}
+
+/**
+ * Match a presented bearer to a configured runner name. Returns the runner
+ * name, or null when auth fails. When `expectedName` is set, the token must
+ * belong to that exact runner.
+ */
+export function matchRunnerToken(
+  token: string,
+  config: ParleyConfig,
+  expectedName?: string,
+): string | null {
+  const runners = config.runners ?? {};
+  if (expectedName !== undefined) {
+    const entry = runners[expectedName];
+    if (entry === undefined || !tokensEqual(token, entry.token)) return null;
+    return expectedName;
+  }
+  for (const [name, entry] of Object.entries(runners)) {
+    if (tokensEqual(token, entry.token)) return name;
+  }
+  return null;
+}
+
+/**
+ * Match a presented bearer to a configured client name (`clients.<name>.token`).
+ */
+export function matchClientToken(token: string, config: ParleyConfig): string | null {
+  const clients = config.clients ?? {};
+  for (const [name, entry] of Object.entries(clients)) {
+    if (tokensEqual(token, entry.token)) return name;
+  }
+  return null;
+}
+
+/**
+ * Extract bearer from the request and match a runner. Thin wrapper for
+ * handlers that still take the IncomingMessage.
  */
 function authenticateRunner(
   req: http.IncomingMessage,
   config: ParleyConfig,
   expectedName?: string,
 ): string | null {
-  const header = req.headers.authorization;
-  if (typeof header !== "string" || !header.startsWith("Bearer ")) return null;
-  const token = header.slice("Bearer ".length).trim();
-  if (token === "") return null;
-  const runners = config.runners ?? {};
-  if (expectedName !== undefined) {
-    const entry = runners[expectedName];
-    if (entry === undefined || entry.token !== token) return null;
-    return expectedName;
-  }
-  for (const [name, entry] of Object.entries(runners)) {
-    if (entry.token === token) return name;
-  }
-  return null;
+  const token = extractBearerToken(
+    typeof req.headers.authorization === "string" ? req.headers.authorization : undefined,
+  );
+  if (token === null) return null;
+  return matchRunnerToken(token, config, expectedName);
 }
 
-/** Re-read config for runner auth (hot, same posture as profiles). */
-function readRunnerConfig(paths: HomePaths): ParleyConfig {
+/** Re-read config for runner/client auth (hot, same posture as profiles). */
+function readAuthConfig(paths: HomePaths): ParleyConfig {
   try {
     return readConfig(paths.config);
   } catch {
     return {};
   }
+}
+
+/**
+ * Default listen address: loopback-only (#323). Non-loopback bind is opt-in
+ * via `daemon.bind` (e.g. `0.0.0.0`). Cold — read once at server start.
+ */
+export const DEFAULT_DAEMON_BIND = "127.0.0.1";
+
+/**
+ * Resolve the daemon listen address from config. Missing/corrupt/empty →
+ * {@link DEFAULT_DAEMON_BIND}.
+ */
+export function resolveDaemonBind(config: ParleyConfig): string {
+  const bind = config.daemon?.bind;
+  if (typeof bind === "string" && bind !== "") return bind;
+  return DEFAULT_DAEMON_BIND;
+}
+
+/** Route class for the non-loopback auth gate (#323). */
+export type AuthRouteClass = "runner" | "child" | "client" | "config-admin";
+
+/**
+ * Classify a request for the auth gate. Config write verbs are a separate
+ * class so they can be rejected off-loopback regardless of any valid token.
+ */
+export function classifyAuthRoute(method: string, pathname: string): AuthRouteClass {
+  const segments = pathname.split("/").filter((s) => s !== "");
+  if (segments[0] === "runner") return "runner";
+  if (segments[0] === "child" || pathname === "/mcp") return "child";
+  if (
+    (method === "PUT" && pathname === "/config") ||
+    (method === "POST" &&
+      (pathname === "/config/set" || pathname === "/config/unset"))
+  ) {
+    return "config-admin";
+  }
+  return "client";
+}
+
+/** Pure-function inputs for the auth gate (unit-testable without sockets). */
+export interface AuthGateInput {
+  remoteAddress: string | undefined | null;
+  method: string;
+  pathname: string;
+  authorization: string | undefined;
+  config: ParleyConfig;
+  /**
+   * For child routes off-loopback: the task's `runner` field (submit-time
+   * affinity; not a live lease by itself), or `null` when the task exists but
+   * has no runner affinity. Omit when the task id header is missing or the
+   * task is unknown.
+   */
+  taskRunner?: string | null;
+  /** For child routes: whether a task was resolved from the correlation header. */
+  taskFound?: boolean;
+  /**
+   * For child routes off-loopback: the task's current lifecycle state. Used
+   * with the affinity name match so only an *actively executing* task grants
+   * child-channel access (pending/queued/terminal are rejected).
+   */
+  taskState?: string | null;
+}
+
+export interface AuthGateAllow {
+  ok: true;
+  loopback: boolean;
+  routeClass: AuthRouteClass;
+  /** Authenticated runner name when a runner token was presented and matched. */
+  runnerName: string | null;
+  /** Authenticated client name when a client token was presented and matched. */
+  clientName: string | null;
+}
+
+export interface AuthGateDeny {
+  ok: false;
+  status: 401 | 403;
+  error: string;
+  routeClass: AuthRouteClass;
+  /** Peer address string for diag (never a token). */
+  peer: string;
+}
+
+/**
+ * Pure auth gate (#323 / ADR-0030). Deterministic and socket-free so tests
+ * can fake `remoteAddress` without a live dial.
+ *
+ * Loopback peers: always allow (runner routes still self-auth in handlers).
+ * Non-loopback:
+ * - `config-admin` → 403 always (host-shell / loopback only)
+ * - `runner` → valid runner token
+ * - `child` → valid runner token whose name matches the task's affinity
+ *   **and** the task is actively executing (not pending/queued/terminal)
+ * - `client` → valid client token (never a runner token)
+ */
+export function authorizeRequest(input: AuthGateInput): AuthGateAllow | AuthGateDeny {
+  const routeClass = classifyAuthRoute(input.method, input.pathname);
+  const peer =
+    input.remoteAddress === undefined || input.remoteAddress === null || input.remoteAddress === ""
+      ? "(unknown)"
+      : input.remoteAddress;
+  const loopback = isLoopbackAddress(input.remoteAddress);
+
+  if (loopback) {
+    // Loopback: no gate. Handlers for /runner/* still require runner tokens.
+    return {
+      ok: true,
+      loopback: true,
+      routeClass,
+      runnerName: null,
+      clientName: null,
+    };
+  }
+
+  // F1: config administration is a loopback/host-shell operation only.
+  if (routeClass === "config-admin") {
+    return {
+      ok: false,
+      status: 403,
+      error: "config administration is only allowed from loopback",
+      routeClass,
+      peer,
+    };
+  }
+
+  const token = extractBearerToken(input.authorization);
+  if (token === null) {
+    return {
+      ok: false,
+      status: 401,
+      error: "unauthorized",
+      routeClass,
+      peer,
+    };
+  }
+
+  if (routeClass === "runner") {
+    const runnerName = matchRunnerToken(token, input.config);
+    if (runnerName === null) {
+      return {
+        ok: false,
+        status: 401,
+        error: "unauthorized",
+        routeClass,
+        peer,
+      };
+    }
+    return {
+      ok: true,
+      loopback: false,
+      routeClass,
+      runnerName,
+      clientName: null,
+    };
+  }
+
+  if (routeClass === "child") {
+    // F2: child channel is runner-only and bound to the *active* lease holder
+    // (affinity name match + non-pending/non-queued/non-terminal state).
+    // Client tokens are never admitted here. `task.runner` alone is submit-time
+    // affinity and is not sufficient — a pending or terminal task must not
+    // grant child-channel access to the affine runner.
+    const runnerName = matchRunnerToken(token, input.config);
+    if (runnerName === null) {
+      // Presenter was not a runner (missing/wrong/client token).
+      return {
+        ok: false,
+        status: 401,
+        error: "unauthorized: child channel requires a runner token",
+        routeClass,
+        peer,
+      };
+    }
+    if (input.taskFound !== true) {
+      return {
+        ok: false,
+        status: 403,
+        error:
+          "forbidden: child channel requires a task leased to this runner " +
+          `(missing or unknown ${TASK_HEADER})`,
+        routeClass,
+        peer,
+      };
+    }
+    if (input.taskRunner === null || input.taskRunner === undefined) {
+      return {
+        ok: false,
+        status: 403,
+        error: "forbidden: task is not leased to a runner",
+        routeClass,
+        peer,
+      };
+    }
+    if (input.taskRunner !== runnerName) {
+      return {
+        ok: false,
+        status: 403,
+        error: `forbidden: runner "${runnerName}" does not hold the lease for this task`,
+        routeClass,
+        peer,
+      };
+    }
+    // State guard: affinity is set at submit time for the task's whole life.
+    // Only an actively executing (claimed) task may use the child channel.
+    // Mirrors engine runner-surface checks (affinity + not terminal) and also
+    // rejects pre-claim states where no lease exists yet.
+    const taskState = input.taskState;
+    if (
+      taskState === "pending" ||
+      taskState === "queued" ||
+      (typeof taskState === "string" && isTerminalState(taskState))
+    ) {
+      return {
+        ok: false,
+        status: 403,
+        error:
+          taskState === "pending" || taskState === "queued"
+            ? `forbidden: task is not actively leased (state is ${taskState})`
+            : `forbidden: task is already ${taskState}`,
+        routeClass,
+        peer,
+      };
+    }
+    return {
+      ok: true,
+      loopback: false,
+      routeClass,
+      runnerName,
+      clientName: null,
+    };
+  }
+
+  // Client-facing routes: client tokens only (runner tokens rejected).
+  const clientName = matchClientToken(token, input.config);
+  if (clientName === null) {
+    return {
+      ok: false,
+      status: 401,
+      error: "unauthorized",
+      routeClass,
+      peer,
+    };
+  }
+  return {
+    ok: true,
+    loopback: false,
+    routeClass,
+    runnerName: null,
+    clientName,
+  };
+}
+
+/**
+ * Apply {@link authorizeRequest} to a live HTTP request: read config once,
+ * resolve child task lease when needed, write 401/403 + diag on deny.
+ * Returns the allow result (with config) or null when the response was written.
+ */
+function gateRequest(
+  req: http.IncomingMessage,
+  res: http.ServerResponse,
+  paths: HomePaths,
+  engine: TaskEngine,
+  method: string,
+  pathname: string,
+): (AuthGateAllow & { config: ParleyConfig }) | null {
+  const config = readAuthConfig(paths);
+  const routeClass = classifyAuthRoute(method, pathname);
+
+  let taskRunner: string | null | undefined;
+  let taskFound: boolean | undefined;
+  let taskState: string | null | undefined;
+  if (routeClass === "child" && !isLoopbackRequest(req)) {
+    const header = req.headers[TASK_HEADER];
+    const taskId = Array.isArray(header) ? header[0] : header;
+    if (typeof taskId === "string" && taskId !== "") {
+      const task = engine.get(taskId);
+      if (task !== undefined) {
+        taskFound = true;
+        taskRunner = task.runner;
+        taskState = task.state;
+      } else {
+        taskFound = false;
+        taskRunner = null;
+        taskState = null;
+      }
+    } else {
+      taskFound = false;
+      taskRunner = null;
+      taskState = null;
+    }
+  }
+
+  const decision = authorizeRequest({
+    remoteAddress: req.socket.remoteAddress,
+    method,
+    pathname,
+    authorization:
+      typeof req.headers.authorization === "string"
+        ? req.headers.authorization
+        : undefined,
+    config,
+    taskRunner,
+    taskFound,
+    taskState,
+  });
+
+  if (!decision.ok) {
+    // F8: log failed off-loopback auth without ever writing the presented token.
+    appendDaemonDiag(
+      paths,
+      `auth: denied ${decision.status} peer=${decision.peer} class=${decision.routeClass} path=${pathname}`,
+    );
+    sendJson(res, decision.status, { error: decision.error });
+    return null;
+  }
+
+  return { ...decision, config };
+}
+
+/**
+ * Redact secret token fields from a config object for non-loopback GET /config
+ * responses (#323 F1). Loopback responses stay unredacted.
+ */
+export function redactConfigSecrets(config: ParleyConfig): ParleyConfig {
+  const out: ParleyConfig = { ...config };
+  if (config.clients !== undefined) {
+    const clients: NonNullable<ParleyConfig["clients"]> = {};
+    for (const [name, entry] of Object.entries(config.clients)) {
+      clients[name] = { ...entry, token: "<redacted>" };
+    }
+    out.clients = clients;
+  }
+  if (config.runners !== undefined) {
+    const runners: NonNullable<ParleyConfig["runners"]> = {};
+    for (const [name, entry] of Object.entries(config.runners)) {
+      runners[name] = { ...entry, token: "<redacted>" };
+    }
+    out.runners = runners;
+  }
+  return out;
+}
+
+/**
+ * Redact a single config key lookup result when the path points at a secret.
+ */
+export function redactConfigKeyValue(key: string, value: unknown): unknown {
+  if (/^(clients|runners)\.[^.]+\.token$/.test(key)) return "<redacted>";
+  if (
+    /^(clients|runners)\.[^.]+$/.test(key) &&
+    typeof value === "object" &&
+    value !== null &&
+    !Array.isArray(value) &&
+    "token" in value
+  ) {
+    return { ...(value as Record<string, unknown>), token: "<redacted>" };
+  }
+  if (
+    (key === "clients" || key === "runners") &&
+    typeof value === "object" &&
+    value !== null &&
+    !Array.isArray(value)
+  ) {
+    const map = value as Record<string, unknown>;
+    const out: Record<string, unknown> = {};
+    for (const [name, entry] of Object.entries(map)) {
+      if (
+        typeof entry === "object" &&
+        entry !== null &&
+        !Array.isArray(entry) &&
+        "token" in entry
+      ) {
+        out[name] = { ...(entry as Record<string, unknown>), token: "<redacted>" };
+      } else {
+        out[name] = entry;
+      }
+    }
+    return out;
+  }
+  return value;
 }
 
 /**
@@ -603,7 +1055,17 @@ function loadConfigForPull(paths: HomePaths): ParleyConfig {
   return out;
 }
 
-function handleConfigGet(paths: HomePaths, res: http.ServerResponse, key: string | null): void {
+/**
+ * `GET /config` — full effective config (show/pull). Optional `?key=` returns a
+ * single dotted path (`{ key, value }`). Off-loopback responses redact
+ * `clients.*.token` and `runners.*.token` (#323 F1); loopback is unredacted.
+ */
+function handleConfigGet(
+  paths: HomePaths,
+  res: http.ServerResponse,
+  key: string | null,
+  loopback: boolean,
+): void {
   let config: ParleyConfig;
   try {
     // Pull merges global project-settings so remote/local CLI share one path.
@@ -613,7 +1075,9 @@ function handleConfigGet(paths: HomePaths, res: http.ServerResponse, key: string
     return;
   }
   if (key === null || key === "") {
-    sendJson(res, 200, { config });
+    sendJson(res, 200, {
+      config: loopback ? config : redactConfigSecrets(config),
+    });
     return;
   }
   try {
@@ -622,7 +1086,8 @@ function handleConfigGet(paths: HomePaths, res: http.ServerResponse, key: string
       sendJson(res, 404, { error: `no such config key: ${key}` });
       return;
     }
-    sendJson(res, 200, { key, value: hit.value });
+    const value = loopback ? hit.value : redactConfigKeyValue(key, hit.value);
+    sendJson(res, 200, { key, value });
   } catch (err) {
     sendJson(res, 400, { error: err instanceof Error ? err.message : String(err) });
   }
@@ -632,8 +1097,19 @@ function handleConfigGet(paths: HomePaths, res: http.ServerResponse, key: string
  * `PUT /config` — wholesale replace (push). Validates the entire body first;
  * on failure nothing is written. Unknown keys are preserved and listed in
  * `warnings` so the CLI can surface them without rejecting the push.
+ *
+ * Loopback-only (#323 F1): client tokens are not admin credentials.
  */
-function handleConfigPut(paths: HomePaths, res: http.ServerResponse, body: unknown): void {
+function handleConfigPut(
+  req: http.IncomingMessage,
+  paths: HomePaths,
+  res: http.ServerResponse,
+  body: unknown,
+): void {
+  if (!isLoopbackRequest(req)) {
+    sendJson(res, 403, { error: "config administration is only allowed from loopback" });
+    return;
+  }
   let config: ParleyConfig;
   try {
     config = validateConfig(paths.config, body);
@@ -656,8 +1132,19 @@ function handleConfigPut(paths: HomePaths, res: http.ServerResponse, body: unkno
 /**
  * `POST /config/set` — set a dotted key. Validates the resulting whole config
  * before write so an invalid value is rejected wholesale with the field named.
+ *
+ * Loopback-only (#323 F1): client tokens are not admin credentials.
  */
-function handleConfigSet(paths: HomePaths, res: http.ServerResponse, body: unknown): void {
+function handleConfigSet(
+  req: http.IncomingMessage,
+  paths: HomePaths,
+  res: http.ServerResponse,
+  body: unknown,
+): void {
+  if (!isLoopbackRequest(req)) {
+    sendJson(res, 403, { error: "config administration is only allowed from loopback" });
+    return;
+  }
   if (!isRecord(body) || typeof body.key !== "string") {
     sendJson(res, 400, { error: "key is required" });
     return;
@@ -700,8 +1187,19 @@ function handleConfigSet(paths: HomePaths, res: http.ServerResponse, body: unkno
 /**
  * `POST /config/unset` — remove a dotted key. Absent keys are 404; the write
  * is skipped until the key is confirmed present.
+ *
+ * Loopback-only (#323 F1): client tokens are not admin credentials.
  */
-function handleConfigUnset(paths: HomePaths, res: http.ServerResponse, body: unknown): void {
+function handleConfigUnset(
+  req: http.IncomingMessage,
+  paths: HomePaths,
+  res: http.ServerResponse,
+  body: unknown,
+): void {
+  if (!isLoopbackRequest(req)) {
+    sendJson(res, 403, { error: "config administration is only allowed from loopback" });
+    return;
+  }
   if (!isRecord(body) || typeof body.key !== "string") {
     sendJson(res, 400, { error: "key is required" });
     return;
@@ -1971,6 +2469,13 @@ function createHandler(
       const url = new URL(req.url ?? "/", "http://127.0.0.1");
       const segments = url.pathname.split("/").filter((s) => s !== "");
 
+      // Off-loopback: bearer auth on every route (#323 / ADR-0030).
+      // Loopback keeps tokenless trust; runner routes still self-auth.
+      // Config is read once here and reused by runner handlers (F8).
+      const auth = gateRequest(req, res, paths, engine, method, url.pathname);
+      if (auth === null) return;
+      const { config, loopback } = auth;
+
       if (url.pathname === "/mcp") {
         const body = method === "POST" ? await readBody(req) : undefined;
         await handleMcpRequest(engine, req, res, body);
@@ -1987,6 +2492,7 @@ function createHandler(
 
       // Child REST surface (ADR-0011): same correlation header as MCP, thin
       // front-end over engine.submitReport / askOrchestrator / the envelope.
+      // Off-loopback: gate already bound the presenter to the task's runner.
       if (segments[0] === "child") {
         if (method === "POST" && segments.length === 2 && segments[1] === "report") {
           handleChildReport(engine, req, res, await readBody(req));
@@ -2004,8 +2510,9 @@ function createHandler(
 
       // Remote runner surface (#111 / ADR-0012 / ADR-0029): bearer-token auth;
       // not localhost trust. Registration is required before lease.
+      // Config already loaded by the gate — do not re-read (F8).
       if (segments[0] === "runner") {
-        const config = readRunnerConfig(paths);
+        // `config` from gateRequest above.
         if (method === "POST" && segments.length === 2 && segments[1] === "register") {
           const body = await readBody(req);
           if (!isRecord(body) || typeof body.runner !== "string" || body.runner === "") {
@@ -2306,21 +2813,22 @@ function createHandler(
 
       // Config admin surface (#156): daemon's own parley.json via endpoints so
       // local and remote daemons share the same CLI path (never touch the file).
+      // Writes are loopback-only (#323 F1); GET redacts tokens off-loopback.
       if (segments[0] === "config") {
         if (method === "GET" && segments.length === 1) {
-          handleConfigGet(paths, res, url.searchParams.get("key"));
+          handleConfigGet(paths, res, url.searchParams.get("key"), loopback);
           return;
         }
         if (method === "PUT" && segments.length === 1) {
-          handleConfigPut(paths, res, await readBody(req));
+          handleConfigPut(req, paths, res, await readBody(req));
           return;
         }
         if (method === "POST" && segments.length === 2 && segments[1] === "set") {
-          handleConfigSet(paths, res, await readBody(req));
+          handleConfigSet(req, paths, res, await readBody(req));
           return;
         }
         if (method === "POST" && segments.length === 2 && segments[1] === "unset") {
-          handleConfigUnset(paths, res, await readBody(req));
+          handleConfigUnset(req, paths, res, await readBody(req));
           return;
         }
       }
@@ -2854,13 +3362,15 @@ function lookupPortType(
 // ── end #241 handlers ──
 
 /**
- * Start the daemon HTTP server bound to `127.0.0.1:0` (ephemeral port), open
- * the task-state database, and wire up the task engine. Does not touch the
- * discovery file — the daemon entry point publishes discovery once the port is
- * known.
+ * Start the daemon HTTP server on an ephemeral port, open the task-state
+ * database, and wire up the task engine. Bind address comes from
+ * `daemon.bind` (default `127.0.0.1` — loopback-only; #323 / ADR-0030). Does
+ * not touch the discovery file — the daemon entry point publishes discovery
+ * once the port is known.
  *
  * Plugin adapters (`vendors.<id>.plugin`) load here at startup only — adding a
  * plugin requires a daemon restart. Vendor args/env/profiles re-read per task.
+ * `daemon.bind` is also cold (listen-time).
  */
 /** Optional lifecycle wiring for `startServer` (#130); tests may omit it all. */
 export interface StartServerOptions {
@@ -2873,6 +3383,11 @@ export interface StartServerOptions {
    */
   idleTimeoutMs?: number;
   onIdle?: () => void;
+  /**
+   * Override listen address for tests. When omitted, reads `daemon.bind` from
+   * config (default {@link DEFAULT_DAEMON_BIND}).
+   */
+  bind?: string;
 }
 
 export async function startServer(
@@ -2886,7 +3401,7 @@ export async function startServer(
   // Config for plugins only: a corrupt file must not brick the daemon at
   // startup (UI discovery already degrades). Plugin load failures are logged
   // inside createAdapterRegistry; missing config is fine (built-ins only).
-  let startupConfig = {};
+  let startupConfig: ParleyConfig = {};
   try {
     startupConfig = readConfig(paths.config);
   } catch (err) {
@@ -2894,6 +3409,7 @@ export async function startServer(
       `parley daemon: config unreadable at startup, loading built-in adapters only: ${String(err)}\n`,
     );
   }
+  const bind = options.bind ?? resolveDaemonBind(startupConfig);
   const adapters = await createAdapterRegistry(process.env, {
     config: startupConfig,
     parleyHome: paths.home,
@@ -2970,7 +3486,7 @@ export async function startServer(
       reject(err);
     };
     server.once("error", failed);
-    server.listen(0, "127.0.0.1", () => {
+    server.listen(0, bind, () => {
       server.removeListener("error", failed);
       const address = server.address();
       if (address === null || typeof address === "string") {
@@ -2996,7 +3512,7 @@ export async function startServer(
           // a 25s poll window.
           server.closeAllConnections();
         });
-      resolve({ port, close });
+      resolve({ port, bind, close });
     });
   });
 }

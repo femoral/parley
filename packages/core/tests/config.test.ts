@@ -71,6 +71,40 @@ describe("readConfig — daemon.*", () => {
     const file = writeConfig(JSON.stringify({ daemon: "x" }));
     expect(() => readConfig(file)).toThrow(/daemon must be an object/);
   });
+
+  it("accepts daemon.bind, daemon.client, daemon.token (#323)", () => {
+    const file = writeConfig(
+      JSON.stringify({
+        daemon: {
+          url: "http://host:9",
+          bind: "0.0.0.0",
+          client: "laptop",
+          token: "fake-client-token-aaa",
+        },
+      }),
+    );
+    expect(readConfig(file).daemon).toEqual({
+      url: "http://host:9",
+      bind: "0.0.0.0",
+      client: "laptop",
+      token: "fake-client-token-aaa",
+    });
+  });
+
+  it("rejects empty daemon.bind", () => {
+    const file = writeConfig(JSON.stringify({ daemon: { bind: "" } }));
+    expect(() => readConfig(file)).toThrow(/daemon\.bind must be a non-empty string/);
+  });
+
+  it("rejects empty daemon.client", () => {
+    const file = writeConfig(JSON.stringify({ daemon: { client: "" } }));
+    expect(() => readConfig(file)).toThrow(/daemon\.client must be a non-empty string/);
+  });
+
+  it("rejects empty daemon.token", () => {
+    const file = writeConfig(JSON.stringify({ daemon: { token: "" } }));
+    expect(() => readConfig(file)).toThrow(/daemon\.token must be a non-empty string/);
+  });
 });
 
 describe("readConfig — retention.*", () => {
@@ -398,6 +432,35 @@ describe("readConfig — runners.*", () => {
   it("rejects empty runner names", () => {
     const file = writeConfig(JSON.stringify({ runners: { "": { token: "x" } } }));
     expect(() => readConfig(file)).toThrow(/runners keys must be non-empty strings/);
+  });
+});
+
+describe("readConfig — clients.* (#323)", () => {
+  it("accepts clients.<name>.token", () => {
+    const file = writeConfig(
+      JSON.stringify({ clients: { laptop: { token: "fake-client-token-bbb" } } }),
+    );
+    expect(readConfig(file).clients?.laptop).toEqual({ token: "fake-client-token-bbb" });
+  });
+
+  it("requires clients.<name>.token", () => {
+    const file = writeConfig(JSON.stringify({ clients: { laptop: {} } }));
+    expect(() => readConfig(file)).toThrow(/clients\.laptop\.token is required/);
+  });
+
+  it("rejects empty clients.<name>.token", () => {
+    const file = writeConfig(JSON.stringify({ clients: { laptop: { token: "" } } }));
+    expect(() => readConfig(file)).toThrow(/clients\.laptop\.token must be a non-empty string/);
+  });
+
+  it("rejects non-object clients", () => {
+    const file = writeConfig(JSON.stringify({ clients: "x" }));
+    expect(() => readConfig(file)).toThrow(/clients must be an object/);
+  });
+
+  it("rejects empty client names", () => {
+    const file = writeConfig(JSON.stringify({ clients: { "": { token: "x" } } }));
+    expect(() => readConfig(file)).toThrow(/clients keys must be non-empty strings/);
   });
 });
 

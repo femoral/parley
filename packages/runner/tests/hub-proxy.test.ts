@@ -38,17 +38,25 @@ function listenUpstream(
 }
 
 describe("hub proxy allowlist", () => {
-  it("forwards /mcp and /child/* with TASK_HEADER", async () => {
-    const seen: { path: string; header: string | string[] | undefined }[] = [];
+  it("forwards /mcp and /child/* with TASK_HEADER and runner bearer (#323)", async () => {
+    const seen: {
+      path: string;
+      header: string | string[] | undefined;
+      authorization: string | string[] | undefined;
+    }[] = [];
     const upstream = await listenUpstream((req, res) => {
-      seen.push({ path: req.url ?? "", header: req.headers[TASK_HEADER] });
+      seen.push({
+        path: req.url ?? "",
+        header: req.headers[TASK_HEADER],
+        authorization: req.headers.authorization,
+      });
       res.writeHead(200, { "content-type": "application/json" });
       res.end(JSON.stringify({ ok: true, path: req.url }));
     });
 
     const proxy = await startHubProxy({
       daemonUrl: upstream.url,
-      token: "unused-for-child",
+      token: "fake-runner-token-proxy",
       taskId: "task-42",
     });
     proxies.push(proxy);
@@ -64,8 +72,16 @@ describe("hub proxy allowlist", () => {
     expect(child.status).toBe(200);
 
     expect(seen).toEqual([
-      { path: "/mcp", header: "task-42" },
-      { path: "/child/report", header: "task-42" },
+      {
+        path: "/mcp",
+        header: "task-42",
+        authorization: "Bearer fake-runner-token-proxy",
+      },
+      {
+        path: "/child/report",
+        header: "task-42",
+        authorization: "Bearer fake-runner-token-proxy",
+      },
     ]);
   });
 
