@@ -3,6 +3,7 @@
  *
  * Engine materialization goes through writeMaterializedFiles; --cwd tasks
  * exclude secrets via excludeMaterializedFilesInCwdRepo → .git/info/exclude.
+ * Paths below are generic fixtures (not antigravity credentials — #298).
  */
 import { afterEach, describe, expect, it } from "vitest";
 import { execFileSync } from "node:child_process";
@@ -29,23 +30,17 @@ describe("writeMaterializedFiles (engine materialization path)", () => {
     temps.push(dir);
     writeMaterializedFiles(dir, [
       {
-        path: ".parley-antigravity/.gemini/antigravity-cli/antigravity-oauth-token",
+        path: ".parley-example/secret.token",
         contents: "secret-token\n",
         mode: 0o600,
       },
       {
-        path: ".parley-antigravity/.gemini/antigravity-cli/settings.json",
+        path: ".parley-example/settings.json",
         contents: "{}\n",
       },
     ]);
-    const tokenPath = path.join(
-      dir,
-      ".parley-antigravity/.gemini/antigravity-cli/antigravity-oauth-token",
-    );
-    const settingsPath = path.join(
-      dir,
-      ".parley-antigravity/.gemini/antigravity-cli/settings.json",
-    );
+    const tokenPath = path.join(dir, ".parley-example/secret.token");
+    const settingsPath = path.join(dir, ".parley-example/settings.json");
     expect(fs.readFileSync(tokenPath, "utf8")).toBe("secret-token\n");
     const tokenMode = fs.statSync(tokenPath).mode & 0o777;
     expect(tokenMode).toBe(0o600);
@@ -59,18 +54,15 @@ describe("excludeMaterializedFilesInCwdRepo (--cwd tasks)", () => {
   it("appends materialized paths to .git/info/exclude and dedupes", () => {
     const repo = makeGitRepo({ "README.md": "hi\n" });
     temps.push(repo);
-    const rel = [
-      ".parley-antigravity/.gemini/antigravity-cli/antigravity-oauth-token",
-      ".parley-antigravity/parley-mcp-bridge.mjs",
-    ];
+    const rel = [".parley-example/secret.token", ".parley-example/bridge.mjs"];
     excludeMaterializedFilesInCwdRepo(repo, rel);
     excludeMaterializedFilesInCwdRepo(repo, rel); // second call must not grow
 
     const excludePath = path.join(repo, ".git", "info", "exclude");
     const text = fs.readFileSync(excludePath, "utf8");
     const lines = text.split("\n").filter(Boolean);
-    const tokenEntry = "/.parley-antigravity/.gemini/antigravity-cli/antigravity-oauth-token";
-    const bridgeEntry = "/.parley-antigravity/parley-mcp-bridge.mjs";
+    const tokenEntry = "/.parley-example/secret.token";
+    const bridgeEntry = "/.parley-example/bridge.mjs";
     expect(lines.filter((l) => l === tokenEntry)).toHaveLength(1);
     expect(lines.filter((l) => l === bridgeEntry)).toHaveLength(1);
 
@@ -81,14 +73,14 @@ describe("excludeMaterializedFilesInCwdRepo (--cwd tasks)", () => {
     const status = execFileSync("git", ["-C", repo, "status", "--porcelain"], {
       encoding: "utf8",
     });
-    expect(status).not.toMatch(/parley-antigravity/);
+    expect(status).not.toMatch(/parley-example/);
   });
 
   it("skips silently when cwd is not a git repo", () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "parley-nongit-"));
     temps.push(dir);
     expect(() =>
-      excludeMaterializedFilesInCwdRepo(dir, [".parley-antigravity/x"]),
+      excludeMaterializedFilesInCwdRepo(dir, [".parley-example/x"]),
     ).not.toThrow();
     expect(fs.existsSync(path.join(dir, ".git"))).toBe(false);
   });
@@ -107,9 +99,7 @@ describe("excludeMaterializedFilesInCwdRepo (--cwd tasks)", () => {
       { encoding: "utf8" },
     );
 
-    const rel = [
-      ".parley-antigravity/.gemini/antigravity-cli/antigravity-oauth-token",
-    ];
+    const rel = [".parley-example/secret.token"];
     writeMaterializedFiles(linked, [
       {
         path: rel[0]!,
@@ -122,13 +112,11 @@ describe("excludeMaterializedFilesInCwdRepo (--cwd tasks)", () => {
     // Entry must land in common .git/info/exclude, not worktree-private gitdir.
     const commonExclude = path.join(repo, ".git", "info", "exclude");
     const excludeText = fs.readFileSync(commonExclude, "utf8");
-    expect(excludeText).toContain(
-      "/.parley-antigravity/.gemini/antigravity-cli/antigravity-oauth-token",
-    );
+    expect(excludeText).toContain("/.parley-example/secret.token");
 
     const status = execFileSync("git", ["-C", linked, "status", "--porcelain"], {
       encoding: "utf8",
     });
-    expect(status).not.toMatch(/parley-antigravity/);
+    expect(status).not.toMatch(/parley-example/);
   });
 });

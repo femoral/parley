@@ -1,7 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
-import fs from "node:fs";
-import os from "node:os";
-import path from "node:path";
+import { describe, expect, it } from "vitest";
 import {
   assertAntigravityNetworkPosture,
   createAntigravityAdapter,
@@ -12,34 +9,16 @@ import { createAdapterRegistrySync } from "../src/adapters/index.js";
 import type { HubInfo, TaskSpec } from "../src/adapters/types.js";
 
 /**
- * Golden unit tests for the antigravity adapter (#286). Pins argv/env/files
+ * Golden unit tests for the antigravity adapter (#286 / #298). Pins argv/env
  * and stream-json event normalization against agy v1.1.7
- * (docs/research/antigravity-cli-automation.md).
+ * (docs/research/antigravity-cli-automation.md). Channel is http against the
+ * operator's real ~/.gemini — no per-task HOME, no credential materialization.
  */
 
 const HUB: HubInfo = {
   url: "http://127.0.0.1:54321/mcp",
   headers: { "x-parley-task": "t286", "X-Parley-Extra": "v" },
 };
-
-const tempHomes: string[] = [];
-
-afterEach(() => {
-  for (const h of tempHomes.splice(0)) {
-    fs.rmSync(h, { recursive: true, force: true });
-  }
-});
-
-/** Operator home with a seed OAuth token (required for prepare/resume). */
-function operatorEnv(): NodeJS.ProcessEnv {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "agy-op-"));
-  tempHomes.push(root);
-  const cli = path.join(root, "antigravity-cli");
-  fs.mkdirSync(cli, { recursive: true });
-  fs.writeFileSync(path.join(cli, "antigravity-oauth-token"), "test-token\n");
-  fs.writeFileSync(path.join(cli, "installation_id"), "install-1\n");
-  return { PARLEY_ANTIGRAVITY_OPERATOR_HOME: root };
-}
 
 function spec(overrides: Partial<TaskSpec> = {}): TaskSpec {
   return {
@@ -59,18 +38,18 @@ function spec(overrides: Partial<TaskSpec> = {}): TaskSpec {
 }
 
 describe("antigravity adapter — registry", () => {
-  it("is registered as a built-in with childChannel mcp", () => {
+  it("is registered as a built-in with childChannel http", () => {
     const registry = createAdapterRegistrySync({});
     const adapter = registry.get("antigravity");
     expect(adapter).toBeDefined();
-    expect(adapter!.childChannel).toBe("mcp");
+    expect(adapter!.childChannel).toBe("http");
     expect(registry.has("gemini")).toBe(false);
   });
 });
 
 describe("antigravity adapter — prepare argv (golden)", () => {
   it("builds the pinned headless stream-json invocation (research §2/§9)", async () => {
-    const adapter = createAntigravityAdapter(operatorEnv());
+    const adapter = createAntigravityAdapter({});
     const plan = await adapter.prepare(spec(), HUB);
     expect(plan.argv).toEqual([
       "agy",
@@ -83,11 +62,15 @@ describe("antigravity adapter — prepare argv (golden)", () => {
       "do the thing",
     ]);
     expect(plan.cwd).toBe("/work/tree");
-    expect(plan.env.HOME).toBe(path.join("/work/tree", ".parley-antigravity"));
+    // No HOME override — operator real home (#298 / ADR-0026).
+    expect(plan.env.HOME).toBeUndefined();
+    expect("HOME" in plan.env).toBe(false);
+    // No MaterializedFiles (no credential copy, no MCP bridge).
+    expect(plan.files).toEqual([]);
   });
 
   it("passes --model and --effort as separate flags (never flattened id)", async () => {
-    const adapter = createAntigravityAdapter(operatorEnv());
+    const adapter = createAntigravityAdapter({});
     const plan = await adapter.prepare(
       spec({ model: "gemini-3.6-flash", effort: "low" }),
       HUB,
@@ -105,7 +88,7 @@ describe("antigravity adapter — prepare argv (golden)", () => {
   });
 
   it("omits --effort for suffixless models when effort is null", async () => {
-    const adapter = createAntigravityAdapter(operatorEnv());
+    const adapter = createAntigravityAdapter({});
     const plan = await adapter.prepare(
       spec({ model: "claude-sonnet-4-6", effort: null }),
       HUB,
@@ -116,20 +99,20 @@ describe("antigravity adapter — prepare argv (golden)", () => {
   });
 
   it("omits --model and --effort when neither is set (no-model default)", async () => {
-    const adapter = createAntigravityAdapter(operatorEnv());
+    const adapter = createAntigravityAdapter({});
     const plan = await adapter.prepare(spec({ model: null, effort: null }), HUB);
     expect(plan.argv).not.toContain("--model");
     expect(plan.argv).not.toContain("--effort");
   });
 
   it("honours PARLEY_ANTIGRAVITY_BIN override", async () => {
-    const env = { ...operatorEnv(), PARLEY_ANTIGRAVITY_BIN: "/opt/agy/agy" };
+    const env = { PARLEY_ANTIGRAVITY_BIN: "/opt/agy/agy" };
     const plan = await createAntigravityAdapter(env).prepare(spec(), HUB);
     expect(plan.argv[0]).toBe("/opt/agy/agy");
   });
 
   it("splices extraArgs into the flags region (not after -p value)", async () => {
-    const plan = await createAntigravityAdapter(operatorEnv()).prepare(
+    const plan = await createAntigravityAdapter({}).prepare(
       spec({ extraArgs: ["--verbose"] }),
       HUB,
     );
@@ -139,7 +122,7 @@ describe("antigravity adapter — prepare argv (golden)", () => {
   });
 
   it("passes --add-dir for gitDir / gitCommonDir", async () => {
-    const plan = await createAntigravityAdapter(operatorEnv()).prepare(
+    const plan = await createAntigravityAdapter({}).prepare(
       spec({
         gitDir: "/repo/.git/worktrees/t",
         gitCommonDir: "/repo/.git",
@@ -162,8 +145,8 @@ describe("antigravity adapter — prepare argv (golden)", () => {
 });
 
 describe("antigravity adapter — resume argv (golden)", () => {
-  it("resumes with --conversation and the same HOME", async () => {
-    const adapter = createAntigravityAdapter(operatorEnv());
+  it("resumes with --conversation against operator home (no HOME override)", async () => {
+    const adapter = createAntigravityAdapter({});
     const plan = await adapter.resume(
       spec({ prompt: "the answer", sessionId: "bfa7ed1b-b6d1-4392-ae88-54d79bde48ad" }),
       HUB,
@@ -172,30 +155,23 @@ describe("antigravity adapter — resume argv (golden)", () => {
     expect(plan.argv).toContain("bfa7ed1b-b6d1-4392-ae88-54d79bde48ad");
     expect(plan.argv).toContain("-p");
     expect(plan.argv).toContain("the answer");
-    expect(plan.env.HOME).toBe(path.join("/work/tree", ".parley-antigravity"));
+    expect(plan.env.HOME).toBeUndefined();
+    expect("HOME" in plan.env).toBe(false);
+    expect(plan.files).toEqual([]);
     // Do not use racy --continue.
     expect(plan.argv).not.toContain("--continue");
     expect(plan.argv).not.toContain("-c");
   });
 
   it("rejects a resume without a session id", async () => {
-    const adapter = createAntigravityAdapter(operatorEnv());
+    const adapter = createAntigravityAdapter({});
     await expect(adapter.resume(spec(), HUB)).rejects.toThrow(/no session id/);
-  });
-
-  it("re-materializes MCP bridge + auth files on resume", async () => {
-    const adapter = createAntigravityAdapter(operatorEnv());
-    const plan = await adapter.resume(spec({ sessionId: "sess-1" }), HUB);
-    const paths = plan.files.map((f) => f.path);
-    expect(paths.some((p) => p.endsWith("mcp_config.json"))).toBe(true);
-    expect(paths.some((p) => p.endsWith("parley-mcp-bridge.mjs"))).toBe(true);
-    expect(paths.some((p) => p.endsWith("antigravity-oauth-token"))).toBe(true);
   });
 });
 
 describe("antigravity adapter — sandbox × network posture (golden)", () => {
   it("workspace + network on → dangerously-skip-permissions", async () => {
-    const plan = await createAntigravityAdapter(operatorEnv()).prepare(
+    const plan = await createAntigravityAdapter({}).prepare(
       spec({ sandbox: "workspace", network: true }),
       HUB,
     );
@@ -205,7 +181,7 @@ describe("antigravity adapter — sandbox × network posture (golden)", () => {
   });
 
   it("full + network on → dangerously-skip-permissions, no sandbox", async () => {
-    const plan = await createAntigravityAdapter(operatorEnv()).prepare(
+    const plan = await createAntigravityAdapter({}).prepare(
       spec({ sandbox: "full", network: true }),
       HUB,
     );
@@ -213,24 +189,18 @@ describe("antigravity adapter — sandbox × network posture (golden)", () => {
     expect(plan.argv).not.toContain("--sandbox");
   });
 
-  it("read-only + network on → omit skip-permissions; only verified-adjacent allow", async () => {
-    const plan = await createAntigravityAdapter(operatorEnv()).prepare(
+  it("read-only + network on → omit skip-permissions; no materialised settings", async () => {
+    const plan = await createAntigravityAdapter({}).prepare(
       spec({ sandbox: "read-only", network: true }),
       HUB,
     );
     expect(plan.argv).not.toContain("--dangerously-skip-permissions");
-    const settings = plan.files.find((f) => f.path.endsWith("settings.json"));
-    expect(settings).toBeDefined();
-    const json = JSON.parse(settings!.contents) as {
-      permissions: { allow: string[] };
-    };
-    // Only read_file(*) is verified-adjacent (research §5); do not invent
-    // view_file / code_search / call_mcp_tool as permission names.
-    expect(json.permissions.allow).toEqual(["read_file(*)"]);
+    // Without a private home we cannot inject permissions.allow (#298).
+    expect(plan.files).toEqual([]);
   });
 
   it("refuses network:false for every sandbox (research §5)", async () => {
-    const adapter = createAntigravityAdapter(operatorEnv());
+    const adapter = createAntigravityAdapter({});
     for (const sandbox of ["workspace", "full", "read-only"] as const) {
       await expect(
         adapter.prepare(spec({ sandbox, network: false }), HUB),
@@ -242,58 +212,27 @@ describe("antigravity adapter — sandbox × network posture (golden)", () => {
   });
 
   it("resume refuses network:false like prepare", async () => {
-    const adapter = createAntigravityAdapter(operatorEnv());
+    const adapter = createAntigravityAdapter({});
     await expect(
       adapter.resume(spec({ sandbox: "workspace", network: false, sessionId: "s1" }), HUB),
     ).rejects.toThrow(/network:false is not enforced/);
   });
 });
 
-describe("antigravity adapter — MCP stdio bridge (research §3/§9)", () => {
-  it("materializes mcp_config.json with stdio command (not serverUrl/httpUrl)", async () => {
-    const plan = await createAntigravityAdapter(operatorEnv()).prepare(spec(), HUB);
-    const mcp = plan.files.find((f) => f.path.endsWith("mcp_config.json"));
-    expect(mcp).toBeDefined();
-    const json = JSON.parse(mcp!.contents) as {
-      mcpServers: {
-        parley: {
-          command: string;
-          args: string[];
-          env: Record<string, string>;
-          serverUrl?: string;
-          httpUrl?: string;
-          headers?: unknown;
-        };
-      };
-    };
-    expect(json.mcpServers.parley.command).toBe("node");
-    expect(json.mcpServers.parley.args[0]).toContain("parley-mcp-bridge.mjs");
-    expect(json.mcpServers.parley.env.PARLEY_TASK_ID).toBe("t286");
-    expect(json.mcpServers.parley.serverUrl).toBeUndefined();
-    expect(json.mcpServers.parley.httpUrl).toBeUndefined();
-    expect(json.mcpServers.parley.headers).toBeUndefined();
-  });
-
-  it("embeds hub base + task correlation in the bridge source", async () => {
-    const plan = await createAntigravityAdapter(operatorEnv()).prepare(spec(), HUB);
-    const bridge = plan.files.find((f) => f.path.endsWith("parley-mcp-bridge.mjs"));
-    expect(bridge).toBeDefined();
-    expect(bridge!.contents).toContain("http://127.0.0.1:54321");
-    expect(bridge!.contents).toContain("t286");
-    expect(bridge!.contents).toContain("submit_report");
-    expect(bridge!.contents).toContain("ask_orchestrator");
-    expect(bridge!.contents).toContain("/child/report");
-  });
-
-  it("sets mode 0o600 on OAuth token and installation_id MaterializedFiles", async () => {
-    const plan = await createAntigravityAdapter(operatorEnv()).prepare(spec(), HUB);
-    const token = plan.files.find((f) => f.path.endsWith("antigravity-oauth-token"));
-    const installId = plan.files.find((f) => f.path.endsWith("installation_id"));
-    expect(token?.mode).toBe(0o600);
-    expect(installId?.mode).toBe(0o600);
-    // Non-credential files stay mode-less (umask default).
-    const settings = plan.files.find((f) => f.path.endsWith("settings.json"));
-    expect(settings?.mode).toBeUndefined();
+describe("antigravity adapter — no credential / MCP materialization (#298)", () => {
+  it("prepare and resume never set HOME or materialize files", async () => {
+    const adapter = createAntigravityAdapter({});
+    const prepared = await adapter.prepare(spec(), HUB);
+    const resumed = await adapter.resume(spec({ sessionId: "sess-1" }), HUB);
+    for (const plan of [prepared, resumed]) {
+      expect(plan.env).toEqual({});
+      expect(plan.files).toEqual([]);
+      // No private-home / MCP-bridge plumbing paths either.
+      const blob = JSON.stringify(plan);
+      expect(blob).not.toMatch(/mcp_config/);
+      expect(blob).not.toMatch(/parley-mcp-bridge/);
+      expect(blob).not.toMatch(/\.parley-antigravity/);
+    }
   });
 });
 
@@ -561,17 +500,5 @@ describe("antigravity adapter — models listing parse (research §7)", () => {
     const adapter = createAntigravityAdapter({});
     expect(typeof adapter.listModels).toBe("function");
     expect(adapter.readModels).toBeUndefined();
-  });
-});
-
-describe("antigravity adapter — missing auth fails loud (research §6)", () => {
-  it("prepare rejects when the OAuth token is absent", async () => {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), "agy-empty-"));
-    tempHomes.push(root);
-    fs.mkdirSync(path.join(root, "antigravity-cli"), { recursive: true });
-    const adapter = createAntigravityAdapter({
-      PARLEY_ANTIGRAVITY_OPERATOR_HOME: root,
-    });
-    await expect(adapter.prepare(spec(), HUB)).rejects.toThrow(/OAuth token|sign in/i);
   });
 });
