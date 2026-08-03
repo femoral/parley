@@ -257,6 +257,8 @@ export function buildEnvelope(
     task_id: task.id,
     name: task.name,
     repo: task.repo,
+    repo_key: task.repo_key ?? null,
+    repo_fetch_url: task.repo_fetch_url ?? null,
     worktree: task.worktree,
     branch: task.branch,
     vendor: task.vendor,

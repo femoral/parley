@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -351,6 +352,19 @@ describe("runner lease", () => {
     const { base } = await boot(home);
     await registerRunner(base);
     const repo = makeGitRepo();
+    // Token-clone style origin: lease must carry stripped fetch URL + key (#313).
+    execFileSync(
+      "git",
+      [
+        "-C",
+        repo,
+        "remote",
+        "add",
+        "origin",
+        "https://x-access-token:ghp_LEASE_SECRET@github.com/org/parley.git",
+      ],
+      { stdio: "ignore" },
+    );
     repos.push(repo);
     const { task_id } = await createRunnerTask(base, repo);
 
@@ -369,6 +383,8 @@ describe("runner lease", () => {
       prompt: string;
       vendor: string;
       repo: string;
+      repo_key: string | null;
+      repo_fetch_url: string | null;
       contexts: { name: string; contents: string }[];
       extra_args: string[];
       base_sha: string | null;
@@ -377,11 +393,23 @@ describe("runner lease", () => {
     expect(spec.vendor).toBe("fake");
     expect(spec.prompt).toBe("do the remote thing");
     expect(spec.repo).toBe(repo);
+    // Producer pins: lease carries identity from the task's origin (MEDIUM-2 / HIGH-1).
+    expect(spec.repo_key).toBe("github.com/org/parley");
+    expect(spec.repo_fetch_url).toBe("https://github.com/org/parley.git");
+    expect(spec.repo_fetch_url).not.toContain("ghp_");
+    expect(spec.repo_fetch_url).not.toMatch(/:\/\/[^/]*:[^/]*@/);
     expect(spec.contexts).toEqual([{ name: "notes.md", contents: "context body\n" }]);
     expect(spec.base_sha).toMatch(/^[0-9a-f]{40}$/);
 
     const after = await json(base, "GET", `/tasks/${task_id}`);
     expect((after.body as { row: { state: string } }).row.state).toBe("running");
+    const row = (
+      after.body as {
+        row: { repo_key: string | null; repo_fetch_url: string | null };
+      }
+    ).row;
+    expect(row.repo_key).toBe("github.com/org/parley");
+    expect(row.repo_fetch_url).toBe("https://github.com/org/parley.git");
   });
 
   it("long-poll returns 204 when no task is pending", async () => {

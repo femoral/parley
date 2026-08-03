@@ -75,8 +75,19 @@ export interface RunnerLeaseSpec {
   /** Resolved base commit at create time; null when the daemon could not resolve it. */
   base_sha: string | null;
   /**
-   * Repo path as recorded at create time — the runner maps this identifier to
-   * a local clone via its `repos` config.
+   * Normalized repo key (`host/path`, case-folded, `.git` stripped) derived
+   * from origin at create time (#313 / #305). Null when the repo has no origin
+   * or the fetch URL is not a network remote.
+   */
+  repo_key: string | null;
+  /**
+   * Exact origin fetch URL as recorded at create time (#313). Null when the
+   * repo has no origin remote.
+   */
+  repo_fetch_url: string | null;
+  /**
+   * Delegate-time local path of the repo (or cwd). Used for the same-host
+   * fast path; runners may also map it via `runner.repos`.
    */
   repo: string;
   contexts: LeaseContextFile[];

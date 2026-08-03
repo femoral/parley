@@ -15,6 +15,8 @@ function storageRow(partial: Partial<TaskRow> & { id: string }): TaskRow {
     profile: null,
     runner: null,
     repo: "/tmp/repo",
+    repo_key: null,
+    repo_fetch_url: null,
     state: "running",
     created_at: "2026-01-01T00:00:00.000Z",
     updated_at: "2026-01-01T00:00:05.000Z",

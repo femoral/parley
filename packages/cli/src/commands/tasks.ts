@@ -142,10 +142,11 @@ function formatSigned(n: number): string {
   return String(rounded);
 }
 
-/** Render Session / Eval / Attempts sections for single-task status (#164). */
+/** Render Session / Repo / Eval / Attempts sections for single-task status. */
 function renderDetailSections(
   ctx: CliContext,
   detail: {
+    task: TaskEnvelope;
     session: SessionProvenance;
     eval_detail: EvalDetail | null;
     attempts: AttemptLineageEntry[];
@@ -157,6 +158,14 @@ function renderDetailSections(
   ctx.stdout(`  harness: ${s.harness ?? "-"}\n`);
   ctx.stdout(`  model:   ${s.model ?? "-"}\n`);
   ctx.stdout(`  effort:  ${s.effort ?? "-"}\n`);
+
+  // Repo identity (#313): always show key when present so operators can see
+  // the distributed-routing handle without --json.
+  const t = detail.task;
+  ctx.stdout("\nRepo\n");
+  ctx.stdout(`  key:   ${t.repo_key ?? "-"}\n`);
+  ctx.stdout(`  fetch: ${t.repo_fetch_url ?? "-"}\n`);
+  ctx.stdout(`  path:  ${t.repo ?? "-"}\n`);
 
   const e = detail.eval_detail;
   ctx.stdout("\nEval\n");
@@ -379,7 +388,12 @@ export async function runStatus(ctx: CliContext, args: string[]): Promise<number
       printJson(ctx, presentDetail(detail));
     } else {
       renderTable(ctx, [detail.task]);
-      renderDetailSections(ctx, detail);
+      renderDetailSections(ctx, {
+        task: detail.task,
+        session: detail.session,
+        eval_detail: detail.eval_detail,
+        attempts: detail.attempts,
+      });
     }
     return 0;
   }

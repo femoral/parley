@@ -57,6 +57,15 @@ export interface TaskRow {
    */
   runner: string | null;
   repo: string | null;
+  /**
+   * Normalized repo key (`host/path`) from origin at create time (#313).
+   * Null when the repo has no origin or the fetch URL is not a network remote.
+   */
+  repo_key: string | null;
+  /**
+   * Exact origin fetch URL at create time (#313). Null when no origin remote.
+   */
+  repo_fetch_url: string | null;
   state: string;
   created_at: string;
   updated_at: string;
@@ -237,6 +246,15 @@ export interface NewTask {
    */
   runner?: string | null;
   repo: string | null;
+  /**
+   * Normalized repo key from origin at create time (#313). Null/omitted when
+   * the repo has no origin.
+   */
+  repo_key?: string | null;
+  /**
+   * Exact origin fetch URL at create time (#313). Null/omitted with no origin.
+   */
+  repo_fetch_url?: string | null;
   cwd: string;
   prompt: string;
   /**
@@ -833,6 +851,10 @@ const MIGRATIONS: string[] = [
      registered_at TEXT NOT NULL,
      last_seen TEXT NOT NULL
    );`,
+  // #313 / #305: repo identity on every task — normalized key + exact origin
+  // fetch URL. Local path stays in `repo`. Null when the repo has no origin.
+  `ALTER TABLE tasks ADD COLUMN repo_key TEXT;
+   ALTER TABLE tasks ADD COLUMN repo_fetch_url TEXT;`,
 ];
 
 /** How many schema migrations have been applied — equals `PRAGMA user_version` after open. */
@@ -907,7 +929,8 @@ export function openDatabaseUpTo(paths: HomePaths, upTo: number): DatabaseHandle
   return db;
 }
 
-const TASK_COLUMNS = `id, name, vendor, model, effort, profile, runner, repo, state, created_at, updated_at,
+const TASK_COLUMNS = `id, name, vendor, model, effort, profile, runner, repo, repo_key, repo_fetch_url,
+   state, created_at, updated_at,
    cwd, prompt, session_id, usage, report, error, started_at, completed_at,
    question_id, question, worktree, branch, base_sha, sandbox, network,
    answer_timeout_ms, report_schema, seq, orchestrator_session_id, eval_score, eval_feedback,
@@ -1374,13 +1397,14 @@ export function insertTask(db: DatabaseHandle, task: NewTask): TaskRow {
   const resumed = task.resumed === true ? 1 : 0;
   db.prepare(
     `INSERT INTO tasks
-       (id, name, vendor, model, effort, profile, runner, repo, state, created_at, updated_at,
+       (id, name, vendor, model, effort, profile, runner, repo, repo_key, repo_fetch_url,
+        state, created_at, updated_at,
         cwd, prompt, session_id, orchestrator_session_id, worktree, branch, base_sha, sandbox,
         network, answer_timeout_ms, report_schema, size, difficulty, type,
         parent_task_id, attempt, resumed, model_source, effort_source,
         orch_harness, orch_model, orch_effort,
         run_id, node, iteration, slot)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     task.id,
     task.name,
@@ -1390,6 +1414,8 @@ export function insertTask(db: DatabaseHandle, task: NewTask): TaskRow {
     task.profile,
     task.runner ?? null,
     task.repo,
+    task.repo_key ?? null,
+    task.repo_fetch_url ?? null,
     now,
     now,
     task.cwd,
@@ -2251,7 +2277,8 @@ const RUN_QUERY_RUN_COLUMNS = `id, workflow, version, type, workspace, repo, sta
    eval_baseline, eval_session_id, eval_harness, eval_model, eval_effort,
    base_ref, base_commit`;
 
-const RUN_QUERY_TASK_COLUMNS = `id, name, vendor, model, effort, profile, runner, repo, state, created_at, updated_at,
+const RUN_QUERY_TASK_COLUMNS = `id, name, vendor, model, effort, profile, runner, repo, repo_key, repo_fetch_url,
+   state, created_at, updated_at,
    cwd, prompt, session_id, usage, report, error, started_at, completed_at,
    question_id, question, worktree, branch, base_sha, sandbox, network,
    answer_timeout_ms, report_schema, seq, orchestrator_session_id, eval_score, eval_feedback,

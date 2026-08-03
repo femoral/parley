@@ -106,6 +106,8 @@ export function sampleLease(
     report_schema: { type: "object" },
     base_ref: null,
     base_sha: null,
+    repo_key: null,
+    repo_fetch_url: null,
     repo: "/orchestrator/repo",
     contexts: [],
     extra_args: [],

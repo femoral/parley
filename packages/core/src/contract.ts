@@ -35,6 +35,17 @@ export interface TaskEnvelope {
   task_id: string;
   name: string | null;
   repo: string | null;
+  /**
+   * Normalized repo key (`host/path`) from origin at create time (#313).
+   * Null when the repo has no origin or the URL is not a network remote.
+   * Optional on the wire so older fixtures remain assignable.
+   */
+  repo_key?: string | null;
+  /**
+   * Exact origin fetch URL at create time (#313). Null with no origin.
+   * Optional on the wire so older fixtures remain assignable.
+   */
+  repo_fetch_url?: string | null;
   /** The parley worktree path; null when `--cwd` bypassed worktree creation. */
   worktree: string | null;
   /** The branch parley created; the child's commits live here (parley never merges). */
@@ -166,6 +177,16 @@ export interface TaskRow {
    */
   runner?: string | null;
   repo: string | null;
+  /**
+   * Normalized repo key from origin at create time (#313). Null with no origin.
+   * Optional so older fixtures remain assignable.
+   */
+  repo_key?: string | null;
+  /**
+   * Exact origin fetch URL at create time (#313). Null with no origin.
+   * Optional so older fixtures remain assignable.
+   */
+  repo_fetch_url?: string | null;
   state: string;
   created_at: string;
   updated_at: string;
