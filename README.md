@@ -125,6 +125,7 @@ orchestrator-readable prose.
 | `codex` | OpenAI Codex CLI | ✅ tested |
 | `grok` | Grok Build | ✅ tested |
 | `claude` | Claude Code | 🧪 under testing |
+| `cursor` | Cursor CLI (`cursor-agent`) | 🧪 under testing |
 | `antigravity` | Antigravity CLI (`agy`) | 🧪 under testing |
 | `opencode` | OpenCode | 🧪 under testing |
 | `goose` | Goose | 🧪 under testing |
@@ -153,6 +154,7 @@ sandbox-dimension diagnostic.
 | `claude` | approximate (permission-mode dontAsk + tool allowlist) | approximate (permission-mode acceptEdits + tool allowlist) | enforced (bypassPermissions) | approximate (Bash sandbox settings when not full; MCP path may bypass) |
 | `cline` | approximate (CLINE_COMMAND_PERMISSIONS deny-all shell (edit tools may still write)) | none (unconstrained tools + auto-approve) | enforced (unconstrained tools + auto-approve (unrestricted as requested)) | none (no first-class network toggle) |
 | `codex` | enforced (sandbox_mode=read-only) | enforced (sandbox_mode=workspace-write) | enforced (sandbox_mode=danger-full-access) | enforced (sandbox_workspace_write.network_access off under workspace; ignored for read-only/full) |
+| `cursor` | approximate (cli.json deny Write/Shell + no --force (denies verified to hold); reads + hub MCP allowed) | none (--force; cli.json cannot scope writes to the workspace and --sandbox is a no-op on Linux) | enforced (--force (unrestricted as requested)) | approximate (cli.json deny WebFetch(*); shell and MCP network unrestricted) |
 | `antigravity` | approximate (omit dangerously-skip-permissions; no private-home permissions.allow inject (#298); all permissioned tools auto-denied incl. reads — the child cannot report over http) | none (dangerously-skip-permissions; no write confinement (path-scoped allow rules do not work)) | enforced (dangerously-skip-permissions, no --sandbox) | refused (no network lever exists (research §5); prepare refuses rather than under-isolate) |
 | `goose` | approximate (GOOSE_MODE=chat (no tools / file mods)) | none (GOOSE_MODE=auto; no OS sandbox) | enforced (GOOSE_MODE=auto (unrestricted as requested)) | none (no native network toggle) |
 | `grok` | enforced (bubblewrap OS sandbox; fail-closed without bwrap (#247)) | enforced (bubblewrap OS sandbox + worktree gitdir grants; fail-closed without bwrap (#247/#278)) | enforced (GROK_SANDBOX=off) | enforced (restrict_network in custom sandbox profile (sandboxed postures; ignored for full)) |

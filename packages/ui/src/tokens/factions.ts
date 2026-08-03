@@ -109,6 +109,7 @@ export const HARNESS_COLORS: Record<string, HarnessColor> = {
   hermes: { label: "Hermes", coat: "#D18B2F", coatDark: "#754912" },
   pi: { label: "Pi", coat: "#7567D8", coatDark: "#40358D" },
   kimi: { label: "Kimi", coat: "#39A06F", coatDark: "#1A5B3D" },
+  cursor: { label: "Cursor", coat: "#3E5DB8", coatDark: "#1F3169" },
 };
 
 /**
