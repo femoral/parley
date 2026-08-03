@@ -3,7 +3,8 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { homePaths } from "@useparley/core";
+import { homePaths, readConfig } from "@useparley/core";
+import { openDatabase, setRunnerLastSeen } from "../src/db.js";
 import { startServer, type DaemonServer } from "../src/server.js";
 import { makeGitRepo, withFakeAllowlist } from "./helpers.js";
 
@@ -569,5 +570,161 @@ describe("runner heartbeat / events / branch / fail", () => {
     expect((status.body as { row: { error: string } }).row.error).toBe(
       "no local repo mapping",
     );
+  });
+});
+
+describe("runner show / remove / stale cleanup (#320)", () => {
+  it("GET /runners/:name returns full advertisement + recent tasks", async () => {
+    const home = makeHome();
+    const { base } = await boot(home);
+    await registerRunner(base, {
+      capabilities: {
+        vendors: [
+          {
+            id: "fake",
+            models: [
+              {
+                id: "fake-model",
+                efforts: ["low", "medium", "high"],
+                default_effort: "medium",
+              },
+            ],
+          },
+        ],
+        // Optional wire field — mirrors may add formally later.
+        repo_reachability: { "github.com/acme/app": true },
+      },
+    });
+    const repo = makeGitRepo();
+    repos.push(repo);
+    const { task_id } = await createRunnerTask(base, repo, {
+      name: "recent-job",
+    });
+
+    const show = await json(base, "GET", "/runners/gpu");
+    expect(show.status).toBe(200);
+    const body = show.body as {
+      name: string;
+      status: string;
+      build_version: string;
+      advertisement_age_ms: number;
+      vendors: { id: string; models: { id: string }[] }[];
+      repo_reachability: { repo_key: string; reachable: boolean }[] | null;
+      recent_tasks: { id: string; name: string | null; state: string }[];
+    };
+    expect(body.name).toBe("gpu");
+    expect(body.build_version).toBe("0.0.4-test");
+    expect(body.advertisement_age_ms).toBeGreaterThanOrEqual(0);
+    expect(body.vendors).toEqual([
+      {
+        id: "fake",
+        models: [
+          {
+            id: "fake-model",
+            efforts: ["low", "medium", "high"],
+            default_effort: "medium",
+          },
+        ],
+      },
+    ]);
+    expect(body.repo_reachability).toEqual([
+      { repo_key: "github.com/acme/app", reachable: true },
+    ]);
+    expect(body.recent_tasks.some((t) => t.id === task_id && t.name === "recent-job")).toBe(
+      true,
+    );
+  });
+
+  it("GET /runners/:name reports reachability as null when not advertised", async () => {
+    const home = makeHome();
+    const { base } = await boot(home);
+    await registerRunner(base);
+    const show = await json(base, "GET", "/runners/gpu");
+    expect(show.status).toBe(200);
+    expect((show.body as { repo_reachability: unknown }).repo_reachability).toBeNull();
+  });
+
+  it("GET /runners/:name returns 404 for unknown runner", async () => {
+    const home = makeHome();
+    const { base } = await boot(home);
+    const show = await json(base, "GET", "/runners/nope");
+    expect(show.status).toBe(404);
+  });
+
+  it("DELETE /runners/:name drops row + config; re-register is unknown", async () => {
+    const home = makeHome();
+    const { base } = await boot(home);
+    await registerRunner(base);
+
+    const removed = await json(base, "DELETE", "/runners/gpu");
+    expect(removed.status).toBe(200);
+    expect(removed.body).toEqual({
+      ok: true,
+      name: "gpu",
+      deleted_row: true,
+      deleted_config: true,
+    });
+
+    const listed = await json(base, "GET", "/runners");
+    expect((listed.body as { runners: unknown[] }).runners).toHaveLength(0);
+
+    const cfg = readConfig(path.join(home, "parley.json"));
+    expect(cfg.runners?.gpu).toBeUndefined();
+
+    // Token no longer matches any configured runner → 401 unknown.
+    const reReg = await registerRunner(base);
+    expect(reReg.status).toBe(401);
+  });
+
+  it("DELETE /runners/:name returns 404 when neither row nor config exists", async () => {
+    const home = makeHome();
+    const { base } = await boot(home);
+    const removed = await json(base, "DELETE", "/runners/ghost");
+    expect(removed.status).toBe(404);
+  });
+
+  it("stale rows auto-delete on list when past runnerSettings.staleWindowMs", async () => {
+    const home = makeHome({
+      runnerSettings: { staleWindowMs: 50 },
+    });
+    const { base } = await boot(home);
+    await registerRunner(base);
+
+    // Backdate last_seen past the stale window while the daemon holds the db.
+    // Close server first so we can open the db file, then reopen the server.
+    await server!.close();
+    server = null;
+    const db = openDatabase(homePaths(home));
+    setRunnerLastSeen(db, "gpu", new Date(Date.now() - 5_000).toISOString());
+    db.close();
+
+    const { base: base2 } = await boot(home);
+    const listed = await json(base2, "GET", "/runners");
+    expect(listed.status).toBe(200);
+    expect((listed.body as { runners: unknown[] }).runners).toHaveLength(0);
+
+    // Config token remains — only the registration row is swept.
+    const cfg = readConfig(path.join(home, "parley.json"));
+    expect(cfg.runners?.gpu?.token).toBe("secret-gpu");
+  });
+
+  it("stale rows auto-delete via PARLEY_RUNNER_STALE_MS env override", async () => {
+    process.env.PARLEY_RUNNER_STALE_MS = "30";
+    try {
+      const home = makeHome();
+      const { base } = await boot(home);
+      await registerRunner(base);
+      await server!.close();
+      server = null;
+      const db = openDatabase(homePaths(home));
+      setRunnerLastSeen(db, "gpu", new Date(Date.now() - 5_000).toISOString());
+      db.close();
+
+      const { base: base2 } = await boot(home);
+      const listed = await json(base2, "GET", "/runners");
+      expect((listed.body as { runners: unknown[] }).runners).toHaveLength(0);
+    } finally {
+      delete process.env.PARLEY_RUNNER_STALE_MS;
+    }
   });
 });

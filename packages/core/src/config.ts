@@ -6,6 +6,7 @@ import {
   type ChildChannel,
   type SandboxMode,
 } from "./adapter.js";
+import { DEFAULT_RUNNER_STALE_MS } from "./lease.js";
 
 /**
  * UI bundle discovery settings (`docs/spec/ui-interface-contract.md` §"Serving
@@ -70,6 +71,24 @@ export interface RetentionConfig {
 
 /** Default retention window when `retention.days` is unset (#153). */
 export const DEFAULT_RETENTION_DAYS = 30;
+
+/**
+ * Runner fleet lifecycle settings (#320 / #309). Distinct from the named
+ * credential map under `runners.<name>` — credentials stay there; this section
+ * only controls registration-row lifecycle (stale auto-cleanup).
+ *
+ * Lazy sweep: rows with `last_seen` older than {@link staleWindowMs} are deleted
+ * on list / show / register (not a background timer). Env `PARLEY_RUNNER_STALE_MS`
+ * remains a test override and wins over this setting when set.
+ */
+export interface RunnerSettingsConfig {
+  /**
+   * Milliseconds after last contact before a registration row is auto-deleted.
+   * Positive integer; default {@link DEFAULT_RUNNER_STALE_MS} (14 days) from
+   * `@useparley/core` lease module. Does not revoke `runners.<name>.token`.
+   */
+  staleWindowMs?: number;
+}
 
 /**
  * One model entry in a vendor's model+effort allowlist
@@ -254,6 +273,11 @@ export interface ParleyConfig {
   /** Remote runner credentials (`runners.<name>.token`); see ADR-0012. */
   runners?: Record<string, RunnerConfig>;
   /**
+   * Runner fleet lifecycle (#320): stale registration auto-cleanup window.
+   * Credentials remain under `runners.<name>` — this does not hold tokens.
+   */
+  runnerSettings?: RunnerSettingsConfig;
+  /**
    * Remote client credentials (`clients.<name>.token`); see ADR-0030.
    * Daemon-side map of named tokens; clients store their own name+token
    * under `daemon.client` / `daemon.token` beside `daemon.url`.
@@ -353,6 +377,21 @@ function validateRetention(file: string, raw: unknown): void {
     if (typeof v !== "number" || !Number.isInteger(v) || v < 0) {
       throw new Error(
         `invalid config at ${file}: retention.days must be a non-negative integer`,
+      );
+    }
+  }
+}
+
+function validateRunnerSettings(file: string, raw: unknown): void {
+  if (raw === undefined) return;
+  if (!isRecord(raw)) {
+    throw new Error(`invalid config at ${file}: runnerSettings must be an object`);
+  }
+  if (raw.staleWindowMs !== undefined) {
+    const v = raw.staleWindowMs;
+    if (typeof v !== "number" || !Number.isInteger(v) || v <= 0) {
+      throw new Error(
+        `invalid config at ${file}: runnerSettings.staleWindowMs must be a positive integer`,
       );
     }
   }
@@ -739,6 +778,7 @@ export function validateConfig(source: string, raw: unknown): ParleyConfig {
   validateVendors(source, config.vendors);
   validateProfiles(source, config.profiles);
   validateRunners(source, config.runners);
+  validateRunnerSettings(source, config.runnerSettings);
   validateClients(source, config.clients);
   validateRetention(source, config.retention);
   validateDefaults(source, config.defaults);
@@ -802,6 +842,7 @@ const KNOWN_TOP_LEVEL = new Set([
   "vendors",
   "profiles",
   "runners",
+  "runnerSettings",
   "clients",
   "retention",
   "defaults",
@@ -836,6 +877,7 @@ const KNOWN_PROFILE = new Set([
   "maxConcurrent",
 ]);
 const KNOWN_RUNNER = new Set(["token"]);
+const KNOWN_RUNNER_SETTINGS = new Set(["staleWindowMs"]);
 const KNOWN_CLIENT = new Set(["token"]);
 const KNOWN_RETENTION = new Set(["days"]);
 const KNOWN_DEFAULTS = new Set(["vendor", "profile"]);
@@ -898,6 +940,12 @@ export function collectUnknownConfigKeys(config: Record<string, unknown>): strin
       for (const key of Object.keys(entry)) {
         if (!KNOWN_RUNNER.has(key)) unknown.push(`runners.${name}.${key}`);
       }
+    }
+  }
+  const runnerSettings = config.runnerSettings;
+  if (isRecord(runnerSettings)) {
+    for (const key of Object.keys(runnerSettings)) {
+      if (!KNOWN_RUNNER_SETTINGS.has(key)) unknown.push(`runnerSettings.${key}`);
     }
   }
   const clients = config.clients;
@@ -1039,4 +1087,16 @@ export function unsetConfigPath(
  */
 export function retentionDays(config: ParleyConfig): number {
   return config.retention?.days ?? DEFAULT_RETENTION_DAYS;
+}
+
+/**
+ * Resolve the runner registration stale window in milliseconds (#320).
+ * Uses `runnerSettings.staleWindowMs` when set; otherwise
+ * {@link DEFAULT_RUNNER_STALE_MS} (14 days). Callers that honor the test env
+ * override (`PARLEY_RUNNER_STALE_MS`) should check that first.
+ */
+export function runnerStaleWindowMs(config: ParleyConfig): number {
+  const v = config.runnerSettings?.staleWindowMs;
+  if (typeof v === "number" && Number.isInteger(v) && v > 0) return v;
+  return DEFAULT_RUNNER_STALE_MS;
 }

@@ -18,6 +18,7 @@ import {
   resolveWorkflow,
   RUN_METRICS_GROUP_BY,
   RUNNER_PROTOCOL_VERSION,
+  runnerStaleWindowMs as runnerStaleWindowMsFromConfig,
   setConfigPath,
   TASK_HEADER,
   unsetConfigPath,
@@ -28,12 +29,17 @@ import {
   readConfig,
   type RunnerCapabilities,
   type RunnerListEntry,
+  type RunnerRecentTask,
+  type RunnerRepoReachability,
+  type RunnerShowResponse,
+  type RunnerVendorCapability,
   type TaskEnvelope,
   type WorkflowDefinition,
 } from "@useparley/core";
 import { createAdapterRegistry } from "./adapters/index.js";
 import {
   countUnsettledTasks,
+  deleteRunner,
   getDeliverable,
   getMeta,
   getRun,
@@ -41,6 +47,7 @@ import {
   latestNodeIteration,
   listDeliverablesForRun,
   listDeliverablesForRunNode,
+  listRecentTasksForRunner,
   listRunners,
   listRunsFiltered,
   listTasksForRun,
@@ -223,16 +230,37 @@ function runnerPresenceGraceMs(): number {
 }
 
 /**
- * Stale threshold. Unset/empty/non-positive → DEFAULT_RUNNER_STALE_MS.
- * `PARLEY_RUNNER_STALE_MS` overrides for tests.
+ * Stale threshold (#320): env `PARLEY_RUNNER_STALE_MS` wins (test override),
+ * else `runnerSettings.staleWindowMs` from config, else DEFAULT_RUNNER_STALE_MS
+ * (14 days). Used for status derivation and lazy row auto-delete.
  */
-function runnerStaleMs(): number {
+function runnerStaleMs(config?: ParleyConfig): number {
   const raw = process.env.PARLEY_RUNNER_STALE_MS;
   if (raw !== undefined && raw !== "") {
     const parsed = Number(raw);
     if (Number.isFinite(parsed) && parsed > 0) return parsed;
   }
+  if (config !== undefined) return runnerStaleWindowMsFromConfig(config);
   return DEFAULT_RUNNER_STALE_MS;
+}
+
+/**
+ * Lazy stale auto-cleanup (#320): delete registration rows whose last_seen is
+ * older than the stale window, skipping runners with an open lease poll.
+ * Runs on list / show / register — no background timer. Does not touch
+ * `runners.<name>` config tokens (re-registration remains allowed).
+ */
+function sweepStaleRunners(db: DatabaseHandle, config?: ParleyConfig): void {
+  const staleMs = runnerStaleMs(config);
+  const now = Date.now();
+  for (const row of listRunners(db)) {
+    if (runnerHasOpenPoll(row.name)) continue;
+    const last = Date.parse(row.last_seen);
+    if (!Number.isFinite(last)) continue;
+    if (now - last > staleMs) {
+      deleteRunner(db, row.name);
+    }
+  }
 }
 
 /** In-process open lease-poll counts per runner name (presence signal). */
@@ -268,7 +296,10 @@ function parseCapabilitiesJson(raw: string): RunnerCapabilities {
   return { vendors: [] };
 }
 
-function projectRunnerListEntry(row: RunnerRow): RunnerListEntry {
+function projectRunnerListEntry(
+  row: RunnerRow,
+  config?: ParleyConfig,
+): RunnerListEntry {
   const caps = parseCapabilitiesJson(row.capabilities);
   return {
     name: row.name,
@@ -276,13 +307,112 @@ function projectRunnerListEntry(row: RunnerRow): RunnerListEntry {
       hasOpenPoll: runnerHasOpenPoll(row.name),
       lastSeenIso: row.last_seen,
       graceMs: runnerPresenceGraceMs(),
-      staleMs: runnerStaleMs(),
+      staleMs: runnerStaleMs(config),
     }),
     vendors: caps.vendors.map((v) => v.id),
     last_seen: row.last_seen,
     registered_at: row.registered_at,
     protocol_version: row.protocol_version,
     build_version: row.build_version,
+  };
+}
+
+/**
+ * Extract optional repo-reachability from a capabilities payload.
+ * Current wire (#314) may omit it; mirrors work may add later. Accepts:
+ * - `repo_reachability: Record<string, boolean>`
+ * - `repo_reachability: Array<{ repo_key|key|repo, reachable|ok }>`
+ * - `repos: Array<{ ... }>` (alias)
+ * Returns null when absent or unparseable ("not advertised").
+ */
+function projectRepoReachability(
+  caps: RunnerCapabilities & Record<string, unknown>,
+): RunnerRepoReachability[] | null {
+  const raw =
+    caps.repo_reachability !== undefined
+      ? caps.repo_reachability
+      : caps.repos !== undefined
+        ? caps.repos
+        : undefined;
+  if (raw === undefined || raw === null) return null;
+  if (Array.isArray(raw)) {
+    const out: RunnerRepoReachability[] = [];
+    for (const entry of raw) {
+      if (typeof entry !== "object" || entry === null) continue;
+      const rec = entry as Record<string, unknown>;
+      const key =
+        typeof rec.repo_key === "string"
+          ? rec.repo_key
+          : typeof rec.key === "string"
+            ? rec.key
+            : typeof rec.repo === "string"
+              ? rec.repo
+              : null;
+      if (key === null || key === "") continue;
+      const reachable =
+        typeof rec.reachable === "boolean"
+          ? rec.reachable
+          : typeof rec.ok === "boolean"
+            ? rec.ok
+            : null;
+      if (reachable === null) continue;
+      out.push({ repo_key: key, reachable });
+    }
+    return out.length > 0 ? out : null;
+  }
+  if (typeof raw === "object") {
+    const out: RunnerRepoReachability[] = [];
+    for (const [repo_key, v] of Object.entries(raw as Record<string, unknown>)) {
+      if (typeof v === "boolean") out.push({ repo_key, reachable: v });
+    }
+    return out.length > 0 ? out : null;
+  }
+  return null;
+}
+
+function projectRunnerShow(
+  row: RunnerRow,
+  db: DatabaseHandle,
+  config?: ParleyConfig,
+): RunnerShowResponse {
+  const caps = parseCapabilitiesJson(row.capabilities) as RunnerCapabilities &
+    Record<string, unknown>;
+  const lastMs = Date.parse(row.last_seen);
+  const advertisement_age_ms = Number.isFinite(lastMs)
+    ? Math.max(0, Date.now() - lastMs)
+    : 0;
+  const vendors: RunnerVendorCapability[] = caps.vendors.map((v) => ({
+    id: v.id,
+    models: Array.isArray(v.models) ? v.models : [],
+  }));
+  const recent_tasks: RunnerRecentTask[] = listRecentTasksForRunner(db, row.name).map(
+    (t) => ({
+      id: t.id,
+      name: t.name,
+      state: t.state,
+      vendor: t.vendor,
+      model: t.model,
+      created_at: t.created_at,
+      updated_at: t.updated_at,
+      completed_at: t.completed_at,
+    }),
+  );
+  return {
+    name: row.name,
+    status: deriveRunnerStatus({
+      hasOpenPoll: runnerHasOpenPoll(row.name),
+      lastSeenIso: row.last_seen,
+      graceMs: runnerPresenceGraceMs(),
+      staleMs: runnerStaleMs(config),
+    }),
+    last_seen: row.last_seen,
+    registered_at: row.registered_at,
+    protocol_version: row.protocol_version,
+    build_version: row.build_version,
+    advertisement_age_ms,
+    vendors,
+    repo_reachability: projectRepoReachability(caps),
+    recent_tasks,
   };
 }
 
@@ -671,7 +801,11 @@ export function classifyAuthRoute(method: string, pathname: string): AuthRouteCl
   if (
     (method === "PUT" && pathname === "/config") ||
     (method === "POST" &&
-      (pathname === "/config/set" || pathname === "/config/unset"))
+      (pathname === "/config/set" || pathname === "/config/unset")) ||
+    // DELETE /runners/:name mutates runners.* config — loopback-only (#320).
+    (method === "DELETE" &&
+      segments[0] === "runners" &&
+      segments.length === 2)
   ) {
     return "config-admin";
   }
@@ -2549,6 +2683,8 @@ function createHandler(
             });
             return;
           }
+          // Lazy stale auto-cleanup on registration (#320).
+          sweepStaleRunners(db, config);
           const row = upsertRunner(db, {
             name: runnerName,
             capabilities: JSON.stringify(body.capabilities),
@@ -2772,9 +2908,84 @@ function createHandler(
 
       // `GET /runners` — fleet table for `parley runners list` (ADR-0029 / #314).
       // Status is derived from open lease polls + last_seen grace/stale windows.
+      // Lazy stale auto-cleanup runs on read (#320).
       if (method === "GET" && url.pathname === "/runners") {
-        const runners = listRunners(db).map(projectRunnerListEntry);
+        sweepStaleRunners(db, config);
+        const runners = listRunners(db).map((row) =>
+          projectRunnerListEntry(row, config),
+        );
         sendJson(res, 200, { runners });
+        return;
+      }
+
+      // `GET /runners/:name` — full advertisement for `parley runners show` (#320).
+      // Client class (default fallthrough). Lazy stale sweep first.
+      if (
+        method === "GET" &&
+        segments[0] === "runners" &&
+        segments.length === 2 &&
+        segments[1] !== undefined
+      ) {
+        const name = decodeURIComponent(segments[1]);
+        sweepStaleRunners(db, config);
+        const row = getRunner(db, name);
+        if (row === undefined) {
+          sendJson(res, 404, { error: `runner "${name}" is not registered` });
+          return;
+        }
+        sendJson(res, 200, projectRunnerShow(row, db, config));
+        return;
+      }
+
+      // `DELETE /runners/:name` — operator remove (#320): drop the SQLite row and
+      // the `runners.<name>` config entry. Config-admin (loopback-only) because
+      // it mutates credentials. Re-registration then fails as unknown (401).
+      if (
+        method === "DELETE" &&
+        segments[0] === "runners" &&
+        segments.length === 2 &&
+        segments[1] !== undefined
+      ) {
+        // Defense in depth: classifyAuthRoute already gates non-loopback to
+        // config-admin (403), but handlers for config writes also self-check.
+        if (!loopback) {
+          sendJson(res, 403, {
+            error: "runner remove is only allowed from loopback",
+          });
+          return;
+        }
+        const name = decodeURIComponent(segments[1]);
+        const deleted_row = deleteRunner(db, name);
+        let deleted_config = false;
+        try {
+          const current = loadAdminConfig(paths);
+          if (current.runners !== undefined && name in current.runners) {
+            const next = unsetConfigPath(
+              current as Record<string, unknown>,
+              `runners.${name}`,
+            );
+            const validated = validateConfig(paths.config, next);
+            persistAdminConfig(paths, validated);
+            deleted_config = true;
+          }
+        } catch (err) {
+          sendJson(res, 500, {
+            error: err instanceof Error ? err.message : String(err),
+          });
+          return;
+        }
+        if (!deleted_row && !deleted_config) {
+          sendJson(res, 404, {
+            error: `runner "${name}" not found (no registration row or config entry)`,
+          });
+          return;
+        }
+        sendJson(res, 200, {
+          ok: true as const,
+          name,
+          deleted_row,
+          deleted_config,
+        });
         return;
       }
 

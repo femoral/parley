@@ -2543,10 +2543,64 @@ export function touchRunnerLastSeen(db: DatabaseHandle, name: string): void {
   db.prepare(`UPDATE runners SET last_seen = ? WHERE name = ?`).run(now, name);
 }
 
-/** Delete a persisted runner row (operator remove; not used by #314 list path). */
+/** Delete a persisted runner row (operator remove / stale sweep, #320). */
 export function deleteRunner(db: DatabaseHandle, name: string): boolean {
   const result = db.prepare(`DELETE FROM runners WHERE name = ?`).run(name);
   return (result.changes as number) > 0;
+}
+
+/**
+ * Delete registration rows whose `last_seen` is strictly older than the ISO
+ * cutoff (lazy stale auto-cleanup, #320). Returns the deleted names.
+ * Callers that track in-process open polls should filter those names out
+ * before invoking, or pass a cutoff that already accounts for presence.
+ */
+export function deleteStaleRunners(
+  db: DatabaseHandle,
+  olderThanIso: string,
+): string[] {
+  const rows = db
+    .prepare(
+      `SELECT name FROM runners WHERE last_seen < ? ORDER BY name ASC`,
+    )
+    .all(olderThanIso) as Array<{ name: string }>;
+  const names = rows.map((r) => r.name);
+  if (names.length === 0) return [];
+  const del = db.prepare(`DELETE FROM runners WHERE name = ?`);
+  for (const name of names) {
+    del.run(name);
+  }
+  return names;
+}
+
+/**
+ * Recent tasks with runner affinity `runner` (read-only; #320 show surface).
+ * Newest `updated_at` first. Does not touch claim / state-machine logic.
+ */
+export function listRecentTasksForRunner(
+  db: DatabaseHandle,
+  runner: string,
+  limit = 20,
+): TaskRow[] {
+  const cap = Math.max(0, Math.min(Math.floor(limit), 100));
+  return db
+    .prepare(
+      `SELECT ${TASK_COLUMNS} FROM tasks
+       WHERE runner = ?
+       ORDER BY updated_at DESC, id DESC
+       LIMIT ?`,
+    )
+    .all(runner, cap)
+    .map((row) => asRow<TaskRow>(row));
+}
+
+/** Test/helper: set last_seen on a runner row (stale-sweep tests, #320). */
+export function setRunnerLastSeen(
+  db: DatabaseHandle,
+  name: string,
+  lastSeenIso: string,
+): void {
+  db.prepare(`UPDATE runners SET last_seen = ? WHERE name = ?`).run(lastSeenIso, name);
 }
 
 // ── end #243 ──

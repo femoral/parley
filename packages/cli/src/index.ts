@@ -155,6 +155,12 @@ Usage:
   parley runners list [--json]
                             Fleet table of registered remote runners (name,
                             status, vendors, last-seen). Daemon-served.
+  parley runners show <name> [--json]
+                            Full advertisement: models, reachability, age,
+                            build version, recent tasks.
+  parley runners remove <name> [--json]
+                            Delete registration row + runners.<name> config
+                            (loopback only).
   parley init                   One-shot setup: skills, config, example workflows, harnesses, models
     --layout claude|agents|<path>
                               Vendor skill layout, or a custom directory path

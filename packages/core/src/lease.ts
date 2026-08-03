@@ -40,7 +40,8 @@ export const DEFAULT_RUNNER_PRESENCE_GRACE_MS = 50_000;
 
 /**
  * Default stale threshold (14 days offline). Rows older than this surface as
- * `stale` (eligible for cleanup). Overridable via `PARLEY_RUNNER_STALE_MS`.
+ * `stale` and are auto-deleted by the daemon's lazy sweep (#320). Config:
+ * `runnerSettings.staleWindowMs`. Test override: `PARLEY_RUNNER_STALE_MS`.
  */
 export const DEFAULT_RUNNER_STALE_MS = 14 * 24 * 60 * 60 * 1000;
 
@@ -151,6 +152,61 @@ export interface RunnersListResponse {
   runners: RunnerListEntry[];
 }
 
+/** One recent task on a runner detail (GET /runners/:name). */
+export interface RunnerRecentTask {
+  id: string;
+  name: string | null;
+  state: string;
+  vendor: string | null;
+  model: string | null;
+  created_at: string;
+  updated_at: string;
+  completed_at: string | null;
+}
+
+/**
+ * One advertised repo-reachability flag (optional on the wire until mirrors
+ * land; absent advertisement surfaces as null on the show response).
+ */
+export interface RunnerRepoReachability {
+  repo_key: string;
+  reachable: boolean;
+}
+
+/**
+ * Full advertisement for `parley runners show` (GET /runners/:name, #320).
+ * Extends the list row with models, optional reachability, age, and recent tasks.
+ */
+export interface RunnerShowResponse {
+  name: string;
+  status: RunnerStatus;
+  last_seen: string;
+  registered_at: string;
+  protocol_version: number;
+  build_version: string;
+  /** Milliseconds since last_seen (advertisement / presence age). */
+  advertisement_age_ms: number;
+  /** Vendors with full model catalogs from the last registration. */
+  vendors: RunnerVendorCapability[];
+  /**
+   * Repo-reachability flags from the last advertisement when present; `null`
+   * when the runner did not advertise them (current wire may omit until
+   * mirrors work lands).
+   */
+  repo_reachability: RunnerRepoReachability[] | null;
+  recent_tasks: RunnerRecentTask[];
+}
+
+/** DELETE /runners/:name body (#320). */
+export interface RunnerRemoveResponse {
+  ok: true;
+  name: string;
+  /** Whether a SQLite registration row was deleted. */
+  deleted_row: boolean;
+  /** Whether `runners.<name>` was removed from config. */
+  deleted_config: boolean;
+}
+
 /** POST /runner/tasks/:id/events body. */
 export interface EventsBody {
   lines: string[];
@@ -197,8 +253,11 @@ export interface LeaseHttpOptions {
  *   POST /runner/tasks/:id/fail      { error: string }
  * Auth: Authorization: Bearer <token> on every call.
  *
- * List surface (operator CLI, not runner-auth):
- *   GET  /runners                   → 200 RunnersListResponse
+ * List / show / remove surface (operator CLI, not runner-auth):
+ *   GET    /runners                 → 200 RunnersListResponse
+ *   GET    /runners/:name           → 200 RunnerShowResponse (client class)
+ *   DELETE /runners/:name           → 200 RunnerRemoveResponse (config-admin /
+ *                                     loopback-only — mutates runners.* config)
  */
 export function createLeaseHttpTransport(opts: LeaseHttpOptions): LeaseTransport {
   const base = opts.daemonUrl.replace(/\/+$/, "");
