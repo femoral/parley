@@ -94,11 +94,13 @@ human/agent driving parley is the **orchestrator**.
 - **Operator vendor home** — the directory the *operator* uses when they run
   a vendor CLI interactively (`~/.codex`, `~/.kimi-code`, …, honouring the
   CLI's env override when set). Distinct from a **per-task isolated home**
-  that adapters write into `SpawnPlan.env` for children (e.g.
-  `<cwd>/.parley-kimi`, `<cwd>/.openclaw-state`). Discovery and selected-model
-  reads must use the operator home and refuse parley-provisioned isolation
-  markers so a delegated child cannot inject task-controlled model ids into
-  the global catalog (`resolveOperatorVendorHome`, #281).
+  that some adapters write into `SpawnPlan.env` for children when isolation
+  does not sever auth (e.g. openclaw's `<cwd>/.openclaw-state`). kimi and
+  codex are flags-only: they spawn against the operator home (ADR-0025).
+  Discovery and selected-model reads must use the operator home and refuse
+  parley-provisioned isolation markers so a delegated child cannot inject
+  task-controlled model ids into the global catalog
+  (`resolveOperatorVendorHome`, #281).
 - **Posture enforcement declaration** — an adapter's self-declared ability to
   enforce the normalized sandbox surface (per posture: *enforced* / *advisory*
   / *none*, plus network-off). A requested posture is best-effort, not a
