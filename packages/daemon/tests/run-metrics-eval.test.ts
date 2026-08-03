@@ -143,9 +143,9 @@ describe("migration #243", () => {
     db.close();
     fs.rmSync(home, { recursive: true, force: true });
     home = fs.mkdtempSync(path.join(os.tmpdir(), "parley-run-eval-mig-"));
-    // Pre-#243 schema: one migration follows (#249 base_ref/base_commit) after
-    // #243, so the snapshot is SCHEMA_VERSION - 2.
-    const prev = openDatabaseUpTo(homePaths(home), SCHEMA_VERSION - 2);
+    // Pre-#243 schema: migrations after #243 are #249 (base_ref/base_commit)
+    // and #314 (runners table), so the snapshot is SCHEMA_VERSION - 3.
+    const prev = openDatabaseUpTo(homePaths(home), SCHEMA_VERSION - 3);
     const colsBefore = prev
       .prepare("PRAGMA table_info(runs)")
       .all()

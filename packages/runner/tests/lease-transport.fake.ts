@@ -1,7 +1,13 @@
-import type { LeaseTransport, RunnerLeaseSpec } from "@useparley/core";
+import type {
+  LeaseTransport,
+  RegisterRequest,
+  RegisterResponse,
+  RunnerLeaseSpec,
+} from "@useparley/core";
 
 /** One recorded transport call. */
 export type TransportCall =
+  | { verb: "register"; request: RegisterRequest }
   | { verb: "lease"; runner: string }
   | { verb: "heartbeat"; taskId: string }
   | { verb: "events"; taskId: string; lines: string[] }
@@ -12,6 +18,8 @@ export interface FakeLeaseTransport extends LeaseTransport {
   readonly calls: TransportCall[];
   /** Fail verbs matching these names (throw). */
   failVerbs: Set<string>;
+  /** Last successful register request (if any). */
+  lastRegister: RegisterRequest | null;
 }
 
 export interface FakeLeaseOptions {
@@ -29,10 +37,26 @@ export function createFakeLeaseTransport(
   const queue = [...(options.leases ?? [])];
   const calls: TransportCall[] = [];
   const failVerbs = new Set<string>();
+  let lastRegister: RegisterRequest | null = null;
 
   const transport: FakeLeaseTransport = {
     calls,
     failVerbs,
+    get lastRegister() {
+      return lastRegister;
+    },
+    async register(request: RegisterRequest): Promise<RegisterResponse> {
+      calls.push({ verb: "register", request });
+      if (failVerbs.has("register")) throw new Error("fake register failed");
+      lastRegister = request;
+      const now = new Date().toISOString();
+      return {
+        ok: true,
+        name: request.runner,
+        registered_at: now,
+        last_seen: now,
+      };
+    },
     async lease(runnerName: string) {
       calls.push({ verb: "lease", runner: runnerName });
       if (failVerbs.has("lease")) throw new Error("fake lease failed");

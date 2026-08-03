@@ -19,6 +19,12 @@ import {
   type VendorModelAllowlistEntry,
 } from "@useparley/core";
 import { createAdapterRegistry } from "@useparley/daemon/adapters/index.js";
+import {
+  BUILTIN_VENDOR_BINS,
+  BUILTIN_VENDOR_IDS,
+  detectHarnesses,
+  isExecutableOnPath,
+} from "@useparley/daemon/fingerprint.js";
 import { type CliContext, printJson } from "../context.js";
 import { UsageError } from "../errors.js";
 import {
@@ -91,83 +97,13 @@ export function formatWorkflowSeedSummary(records: readonly WorkflowSeedRecord[]
   return `${lines.join("\n")}\n`;
 }
 
-/**
- * Built-in vendor ids and default CLI binary names (adapter DEFAULT_*_BIN).
- * Detection walks PATH (or absolute override) for these names.
- */
-export const BUILTIN_VENDOR_BINS: Readonly<Record<string, string>> = {
-  claude: "claude",
-  cline: "cline",
-  codex: "codex",
-  cursor: "cursor-agent",
-  fake: "fake",
-  antigravity: "agy",
-  goose: "goose",
-  grok: "grok",
-  hermes: "hermes",
-  kilo: "kilo",
-  kimi: "kimi",
-  openclaw: "openclaw",
-  opencode: "opencode",
-  openhands: "openhands",
-  pi: "pi",
+// Shared with the runner fingerprint path (ADR-0029 / #314) — do not fork.
+export {
+  BUILTIN_VENDOR_BINS,
+  BUILTIN_VENDOR_IDS,
+  detectHarnesses,
+  isExecutableOnPath,
 };
-
-export const BUILTIN_VENDOR_IDS = Object.keys(BUILTIN_VENDOR_BINS);
-
-/** True when `bin` is executable on PATH or as an absolute path. */
-export function isExecutableOnPath(bin: string, env: NodeJS.ProcessEnv = process.env): boolean {
-  if (bin.includes(path.sep) || path.isAbsolute(bin)) {
-    try {
-      fs.accessSync(bin, fs.constants.X_OK);
-      return true;
-    } catch {
-      return false;
-    }
-  }
-  const pathEnv = env.PATH ?? "";
-  for (const dir of pathEnv.split(path.delimiter)) {
-    if (!dir) continue;
-    const candidate = path.join(dir, bin);
-    try {
-      fs.accessSync(candidate, fs.constants.X_OK);
-      return true;
-    } catch {
-      // try next
-    }
-  }
-  return false;
-}
-
-/**
- * Detect which built-in vendor CLIs are available.
- * Respects `vendors.<id>.bin` overrides. `fake` only when
- * `PARLEY_FAKE_VENDOR_BIN` or `vendors.fake.bin` is set (and executable).
- */
-export function detectHarnesses(
-  config: ParleyConfig,
-  env: NodeJS.ProcessEnv = process.env,
-): string[] {
-  const found: string[] = [];
-  for (const id of BUILTIN_VENDOR_IDS) {
-    const override = config.vendors?.[id]?.bin;
-    if (id === "fake") {
-      // Test double: only when explicitly configured. Accept an existing path
-      // (script may not be +x; spawn uses node on the script) or a PATH hit.
-      const fakeBin = override ?? env.PARLEY_FAKE_VENDOR_BIN;
-      if (fakeBin === undefined || fakeBin === "") continue;
-      if (path.isAbsolute(fakeBin) || fakeBin.includes(path.sep)) {
-        if (fs.existsSync(fakeBin)) found.push(id);
-      } else if (isExecutableOnPath(fakeBin, env)) {
-        found.push(id);
-      }
-      continue;
-    }
-    const bin = override ?? BUILTIN_VENDOR_BINS[id]!;
-    if (isExecutableOnPath(bin, env)) found.push(id);
-  }
-  return found;
-}
 
 /** Ensure a JSON object file exists; create `{}` when missing. Never overwrite. */
 function ensureEmptyJsonFile(file: string): { path: string; created: boolean } {

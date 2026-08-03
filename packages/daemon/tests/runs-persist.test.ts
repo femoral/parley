@@ -87,12 +87,12 @@ describe("migration (#233)", () => {
     home = fs.mkdtempSync(path.join(os.tmpdir(), "parley-runs-mig-"));
 
     // Pre-#233 schema: every migration before the runs/deliverables entry.
-    // Four migrations now follow #233 — #244 (deliverables.task_id nullable),
+    // Five migrations now follow #233 — #244 (deliverables.task_id nullable),
     // #240 (sessions.panicked / event_acks / run_seqs / event_deliveries),
-    // #243 (run eval / metrics columns), and #249 (base_ref / base_commit) —
-    // so the pre-runs snapshot is SCHEMA_VERSION - 5. Keep this in step when
-    // appending further entries.
-    const prev = openDatabaseUpTo(homePaths(home), SCHEMA_VERSION - 5);
+    // #243 (run eval / metrics columns), #249 (base_ref / base_commit), and
+    // #314 (runners table) — so the pre-runs snapshot is SCHEMA_VERSION - 6.
+    // Keep this in step when appending further entries.
+    const prev = openDatabaseUpTo(homePaths(home), SCHEMA_VERSION - 6);
     const tablesBefore = prev
       .prepare(`SELECT name FROM sqlite_master WHERE type = 'table'`)
       .all()

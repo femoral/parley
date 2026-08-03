@@ -23,6 +23,7 @@ import { runPrompt } from "./commands/prompt.js";
 import { runInfo } from "./commands/info.js";
 import { runLint } from "./commands/lint.js";
 import { runSession } from "./commands/session.js";
+import { runRunners } from "./commands/runners.js";
 import { runRun } from "./commands/run.js";
 import { VERSION_LINE } from "./version.js";
 
@@ -151,6 +152,9 @@ Usage:
                             PARLEY_* env > session-state file > null. Session
                             id: PARLEY_SESSION_ID > -s > state file > fresh.
                             Known id re-anchors after restart.
+  parley runners list [--json]
+                            Fleet table of registered remote runners (name,
+                            status, vendors, last-seen). Daemon-served.
   parley init                   One-shot setup: skills, config, example workflows, harnesses, models
     --layout claude|agents|<path>
                               Vendor skill layout, or a custom directory path
@@ -253,6 +257,8 @@ export async function run(argv: string[], ctx: CliContext): Promise<number> {
       return runLint(ctx, rest);
     case "session":
       return runSession(ctx, rest);
+    case "runners":
+      return runRunners(ctx, rest);
     case "init":
       return runInit(ctx, rest);
     case "skills":
