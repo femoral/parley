@@ -218,6 +218,11 @@ export interface TaskRow {
    * has a single task (no fan-out) or the task is not run-owned.
    */
   slot: string | null;
+  /**
+   * Visible routing wait reason when capable executors exist but none is
+   * online (#315 / #304). Null when not waiting on routing.
+   */
+  queue_reason: string | null;
 }
 
 /** Fields the daemon writes when creating a task. */
@@ -855,6 +860,12 @@ const MIGRATIONS: string[] = [
   // fetch URL. Local path stays in `repo`. Null when the repo has no origin.
   `ALTER TABLE tasks ADD COLUMN repo_key TEXT;
    ALTER TABLE tasks ADD COLUMN repo_fetch_url TEXT;`,
+  // #315 / #304: capability-matched routing — visible wait reason when capable
+  // executors exist but none is online; warm-executor last-completion stamp.
+  // Requirements are the existing vendor/model columns; hard affinity is the
+  // existing `runner` column (set at pin or on claim of an unpinned task).
+  `ALTER TABLE tasks ADD COLUMN queue_reason TEXT;
+   ALTER TABLE runners ADD COLUMN last_completed_at TEXT;`,
 ];
 
 /** How many schema migrations have been applied — equals `PRAGMA user_version` after open. */
@@ -939,7 +950,7 @@ const TASK_COLUMNS = `id, name, vendor, model, effort, profile, runner, repo, re
    launch_command, model_source, effort_source,
    orch_harness, orch_model, orch_effort,
    eval_session_id, eval_harness, eval_model, eval_effort, queued_at,
-   run_id, node, iteration, slot`;
+   run_id, node, iteration, slot, queue_reason`;
 
 const RUN_COLUMNS = `id, workflow, version, type, workspace, repo, state, current_node, iteration,
    parent_run_id, attempt, orchestrator_session_id, created_at, updated_at,
@@ -1449,62 +1460,154 @@ export function insertTask(db: DatabaseHandle, task: NewTask): TaskRow {
 }
 
 /**
- * Oldest pending task with the given runner affinity, or undefined when none
- * is waiting. Used by `POST /runner/lease` (#111).
+ * Capability-matched claim candidate list for one executor (#315 / #304).
+ *
+ * Replaces the old name-pinned `WHERE runner = ?` query. A candidate is any
+ * `pending` task whose vendor the executor advertises and whose hard affinity
+ * is either unset or names this executor. Callers apply warm-executor ranking
+ * and atomic transition; this is the pure SELECT half.
  */
-export function claimOldestPendingRunnerTask(
+export function listCapablePendingTasks(
   db: DatabaseHandle,
-  runner: string,
-): TaskRow | undefined {
-  const row = db
+  opts: {
+    executorName: string;
+    /** Vendor ids this executor advertises. Empty ⇒ no candidates. */
+    vendorIds: readonly string[];
+  },
+): TaskRow[] {
+  if (opts.vendorIds.length === 0) return [];
+  const placeholders = opts.vendorIds.map(() => "?").join(", ");
+  return db
     .prepare(
       `SELECT ${TASK_COLUMNS} FROM tasks
-       WHERE state = 'pending' AND runner = ?
-       ORDER BY created_at ASC, id ASC
-       LIMIT 1`,
+       WHERE state = 'pending'
+         AND vendor IN (${placeholders})
+         AND (runner IS NULL OR runner = '' OR runner = ?)
+       ORDER BY created_at ASC, id ASC`,
     )
-    .get(runner);
-  return row === undefined ? undefined : asRow<TaskRow>(row);
+    .all(...opts.vendorIds, opts.executorName)
+    .map((row) => asRow<TaskRow>(row));
 }
 
 /**
- * Startup crash sweep (spec §3): tasks recorded live (`pending`, `running`,
- * `awaiting_answer`) when the previous daemon died are marked `stalled` — their
- * children ran in the daemon's process group and died with it. Terminal and
- * already-stalled tasks are untouched. Questions stay recorded; a stalled task
- * resumes via `parley answer` like any other. Returns the number swept.
+ * Oldest pending task this executor may claim under capability matching
+ * (#315 / #304). Warm-executor preference: when multiple online peers could
+ * take an unpinned task, prefer the peer with the most recent completion;
+ * this executor only claims unpinned tasks for which it is preferred (or the
+ * sole capable online peer). Hard-affinity pins always match when capable.
+ *
+ * @deprecated name kept only as a private alias site — use
+ * {@link selectClaimablePendingTask} via the engine.
+ */
+export function selectClaimablePendingTask(
+  db: DatabaseHandle,
+  opts: {
+    executorName: string;
+    vendorIds: readonly string[];
+    /**
+     * Online peers that also advertise overlapping vendors, for warm ranking.
+     * Omit or empty ⇒ this executor claims any candidate it can (sole online).
+     */
+    onlinePeers?: ReadonlyArray<{
+      name: string;
+      vendorIds: readonly string[];
+      last_completed_at: string | null;
+    }>;
+  },
+): TaskRow | undefined {
+  const candidates = listCapablePendingTasks(db, {
+    executorName: opts.executorName,
+    vendorIds: opts.vendorIds,
+  });
+  if (candidates.length === 0) return undefined;
+  const peers = opts.onlinePeers ?? [];
+
+  for (const task of candidates) {
+    const affinity = task.runner !== null && task.runner !== "" ? task.runner : null;
+    // Hard pin: only this executor may take it (already filtered by SQL).
+    if (affinity !== null) return task;
+
+    const vendor = task.vendor ?? "";
+    if (vendor === "") continue;
+
+    // Unpinned: among online peers that advertise this vendor, prefer the
+    // warmest (most recent completion); name ASC breaks residual ties.
+    const capableOnline = peers.filter(
+      (p) => p.name !== opts.executorName && p.vendorIds.includes(vendor),
+    );
+    if (capableOnline.length === 0) return task;
+
+    const ranked = [
+      {
+        name: opts.executorName,
+        last_completed_at: peers.find((p) => p.name === opts.executorName)
+          ?.last_completed_at ?? null,
+      },
+      ...capableOnline.map((p) => ({
+        name: p.name,
+        last_completed_at: p.last_completed_at,
+      })),
+    ];
+    ranked.sort((a, b) => {
+      const at = a.last_completed_at ? Date.parse(a.last_completed_at) : 0;
+      const bt = b.last_completed_at ? Date.parse(b.last_completed_at) : 0;
+      if (at !== bt) return bt - at; // more recent first
+      return a.name.localeCompare(b.name);
+    });
+    if (ranked[0]?.name === opts.executorName) return task;
+    // Not preferred for this task — leave it for the warmer peer; try next.
+  }
+  // No preferred unpinned task, but we may still take hard-affinity or be the
+  // only one polling: fall back to first candidate so work does not starve.
+  return candidates[0];
+}
+
+/**
+ * Pending tasks waiting on capable-but-offline routing (#315).
+ */
+export function listRoutingWaitTasks(db: DatabaseHandle): TaskRow[] {
+  return db
+    .prepare(
+      `SELECT ${TASK_COLUMNS} FROM tasks
+       WHERE state = 'pending' AND queue_reason IS NOT NULL
+       ORDER BY created_at ASC, id ASC`,
+    )
+    .all()
+    .map((row) => asRow<TaskRow>(row));
+}
+
+/**
+ * Startup crash sweep (spec §3): local tasks that held a live child
+ * (`running` / `awaiting_answer`) when the previous daemon died are marked
+ * `stalled` — their children ran in the daemon's process group and died with
+ * it. Terminal and already-stalled tasks are untouched. Questions stay
+ * recorded; a stalled task resumes via `parley answer` like any other.
+ * Returns the number swept.
  *
  * Runner-affine tasks (#111 / ADR-0012) are excluded: their children live on
- * the remote runner host, not in the daemon's process group. Those tasks keep
- * their state; the engine re-arms heartbeat timers after restart.
+ * the remote runner host. Pending tasks (including capability-routing waits,
+ * #315) and concurrency-queued tasks (#171) have no child process — they
+ * survive restart.
  */
 export function sweepInterruptedTasks(db: DatabaseHandle): number {
-  // "Live" is defined as the complement of the settled states, so a future
-  // state is swept by default rather than surviving restarts as a zombie.
-  // Runner-affine tasks keep their children on the remote host.
-  // Queued tasks (#171) have no child process — they survive restart and are
-  // re-drained by the engine in original FIFO order.
-  const placeholders = [...SETTLED_STATES].map(() => "?").join(", ");
+  // Only states that can hold a local child process.
   const live = db
     .prepare(
       `SELECT id FROM tasks
-       WHERE state NOT IN (${placeholders})
-         AND state != 'queued'
+       WHERE state IN ('running', 'awaiting_answer')
          AND (runner IS NULL OR runner = '')`,
     )
-    .all(...SETTLED_STATES)
+    .all()
     .map((row) => asRow<{ id: string }>(row));
   const result = db
     .prepare(
       `UPDATE tasks SET state = 'stalled', error = ?, updated_at = ?
-       WHERE state NOT IN (${placeholders})
-         AND state != 'queued'
+       WHERE state IN ('running', 'awaiting_answer')
          AND (runner IS NULL OR runner = '')`,
     )
     .run(
       "daemon restarted while the task was live; the child died with the daemon's process group",
       new Date().toISOString(),
-      ...SETTLED_STATES,
     );
   // Bootstrap transition (#206): bulk SQL state write + per-id seq bump only.
   // No in-memory event log / waiter wake — the engine is not constructed until
@@ -1555,6 +1658,8 @@ export type TaskDataPatch = Partial<
     | "eval_model"
     | "eval_effort"
     | "queued_at"
+    | "queue_reason"
+    | "runner"
   >
 >;
 
@@ -2287,7 +2392,7 @@ const RUN_QUERY_TASK_COLUMNS = `id, name, vendor, model, effort, profile, runner
    launch_command, model_source, effort_source,
    orch_harness, orch_model, orch_effort,
    eval_session_id, eval_harness, eval_model, eval_effort, queued_at,
-   run_id, node, iteration, slot`;
+   run_id, node, iteration, slot, queue_reason`;
 
 const RUN_QUERY_DELIVERABLE_COLUMNS = `id, run_id, node, port, iteration, slot, task_id, kind, value,
    created_at, purged_at`;
@@ -2472,10 +2577,15 @@ export interface RunnerRow {
   build_version: string;
   registered_at: string;
   last_seen: string;
+  /**
+   * ISO-8601 of the most recent task completion on this runner (#315 warm
+   * executor preference). Null until the first completion after registration.
+   */
+  last_completed_at: string | null;
 }
 
 const RUNNER_COLUMNS = `name, capabilities, protocol_version, build_version,
-   registered_at, last_seen`;
+   registered_at, last_seen, last_completed_at`;
 
 /** Fetch one registered runner by name. */
 export function getRunner(db: DatabaseHandle, name: string): RunnerRow | undefined {
@@ -2547,6 +2657,12 @@ export function touchRunnerLastSeen(db: DatabaseHandle, name: string): void {
 export function deleteRunner(db: DatabaseHandle, name: string): boolean {
   const result = db.prepare(`DELETE FROM runners WHERE name = ?`).run(name);
   return (result.changes as number) > 0;
+}
+
+/** Stamp last_completed_at for warm-executor ranking (#315). */
+export function markRunnerCompleted(db: DatabaseHandle, name: string, atIso?: string): void {
+  const now = atIso ?? new Date().toISOString();
+  db.prepare(`UPDATE runners SET last_completed_at = ? WHERE name = ?`).run(now, name);
 }
 
 // ── end #243 ──

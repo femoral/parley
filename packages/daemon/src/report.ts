@@ -296,5 +296,6 @@ export function buildEnvelope(
     cached_input_tokens: task.cached_input_tokens,
     queue_position: queue?.position ?? null,
     blocking_cap: queue?.blockingCap ?? null,
+    queue_reason: task.queue_reason ?? null,
   };
 }

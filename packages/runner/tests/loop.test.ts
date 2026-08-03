@@ -129,6 +129,21 @@ describe("runner loop integration", () => {
     server = await startServer(homePaths(home));
     const base = `http://127.0.0.1:${server.port}`;
 
+    // #315: pin requires a registered runner that advertises the vendor.
+    const reg = await json(
+      base,
+      "POST",
+      "/runner/register",
+      {
+        runner: "gpu",
+        protocol_version: 1,
+        build_version: "test",
+        capabilities: { vendors: [{ id: "fake", models: [] }] },
+      },
+      { authorization: "Bearer secret-gpu" },
+    );
+    expect(reg.status).toBe(200);
+
     const created = await json(base, "POST", "/tasks", {
       prompt: "run remotely",
       vendor: "fake",

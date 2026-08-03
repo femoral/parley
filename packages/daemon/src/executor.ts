@@ -1,27 +1,25 @@
 /**
- * Unified executor model (#312 / ADR-0028).
+ * Unified executor model (#312 / ADR-0028, routing #315).
  *
- * Prefactor for distributed execution (#311): names the daemon-local path as
- * an in-process executor and moves `delegate`/`fix`/run-step insert handoff
- * behind it. A polymorphic claim interface across local + runners is deferred
- * to routing work (#315 / #311). This ticket is a pure structural move with
- * zero behavior change.
+ * Names the daemon-local path as an in-process executor and moves
+ * `delegate`/`fix`/run-step insert handoff behind it. Capability-matched
+ * claim across local + runners lives in the engine (`dispatchClaim` /
+ * `tryClaimRunnerTask`); this module owns the local offer/drain loop.
  *
  * Remote runners still claim over the lease wire (ADR-0012 /
  * `LeaseTransport`). Their claim half stays on `TaskEngine.tryClaimRunnerTask`;
- * execute stays on the runner host. The wire is untouched here.
+ * execute stays on the runner host.
  */
+import { LOCAL_EXECUTOR_ID } from "@useparley/core";
 import type { TaskRow } from "./db.js";
 
-/** Stable id for the daemon's own in-process executor. */
-export const LOCAL_EXECUTOR_ID = "local";
+export { LOCAL_EXECUTOR_ID };
 
 /**
- * Executor identity tag (#312).
+ * Executor identity tag (#312 / #315).
  *
- * A name holder only in this prefactor (`id`). A polymorphic claim/execute
- * surface across local + runners is deferred to routing (#315 / #311).
- * The concrete local path is {@link InProcessExecutor} (`offer` / `drain`).
+ * `id` is `local` or a registered runner name. The concrete local path is
+ * {@link InProcessExecutor} (`offer` / `drain`).
  */
 export interface TaskExecutor {
   /** Stable executor identity (`local` or a registered runner name). */
@@ -58,8 +56,8 @@ export interface InProcessExecutorHost {
 }
 
 /**
- * Daemon-local executor: offers non-runner-affine tasks to the in-process
- * spawn path via the engine host.
+ * Daemon-local executor: offers tasks the engine decided should run in-process
+ * (capability match with no preferred online runner, #315).
  *
  * Concurrency queue semantics (#171) are preserved: under capacity →
  * `executeClaimed` immediately; otherwise → `queued`, drained when slots free.
@@ -72,10 +70,9 @@ export class InProcessExecutor implements TaskExecutor {
   constructor(private readonly host: InProcessExecutorHost) {}
 
   /**
-   * Offer a newly created (or re-offered) task for local claim.
-   *
-   * Runner-affine tasks are ignored — those stay pending until a remote runner
-   * leases them. Under capacity the task is claimed and handed to
+   * Offer a task for local claim. The engine only calls this when routing
+   * selected the local executor (#315). Runner-affine / remote-routed tasks
+   * never reach here. Under capacity the task is claimed and handed to
    * {@link InProcessExecutorHost.executeClaimed}; otherwise it is parked in
    * `queued`. Intentionally ignores shutdown so a mid-shutdown delegate at the
    * concurrency cap still becomes durable `queued` (survives the next daemon's

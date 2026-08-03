@@ -93,11 +93,23 @@ async function registerRunner(
   return json(base, "POST", "/runner/register", registerBody(overrides), headers);
 }
 
+/** Ensure the fixture repo has an origin (required for --runner pin, #315). */
+function ensureOrigin(repo: string, url = "https://github.com/org/parley.git"): void {
+  try {
+    execFileSync("git", ["-C", repo, "remote", "get-url", "origin"], { stdio: "ignore" });
+  } catch {
+    execFileSync("git", ["-C", repo, "remote", "add", "origin", url], { stdio: "ignore" });
+  }
+}
+
 async function createRunnerTask(
   base: string,
   repo: string,
   overrides: Record<string, unknown> = {},
 ): Promise<{ task_id: string }> {
+  ensureOrigin(repo);
+  // #315: pin requires a registered runner that advertises the vendor.
+  await registerRunner(base);
   const res = await json(base, "POST", "/tasks", {
     prompt: "do the remote thing",
     vendor: "fake",

@@ -67,6 +67,7 @@ function storageRow(partial: Partial<TaskRow> & { id: string }): TaskRow {
     node: null,
     iteration: null,
     slot: null,
+    queue_reason: null,
     ...partial,
   };
 }

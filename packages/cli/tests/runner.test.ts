@@ -127,17 +127,56 @@ async function waitForRunnerOnline(
 
 describe("delegate --runner affinity", () => {
   it("creates a pending runner-affine task that is never locally spawned", async () => {
-    const repo = makeGitRepo([
-      { emit: { type: "session", session_id: "should-not-run" } },
-      {
-        submit_report: {
-          summary: "should not run",
-          outcome: "success",
-          files_changed: [],
+    const repo = makeGitRepo(
+      [
+        { emit: { type: "session", session_id: "should-not-run" } },
+        {
+          submit_report: {
+            summary: "should not run",
+            outcome: "success",
+            files_changed: [],
+          },
         },
-      },
-    ]);
+      ],
+      {},
+      { origin: "https://github.com/org/parley.git" },
+    );
     repos.push(repo);
+
+    // #315: pin requires a registered capable runner (capabilities from register).
+    const boot = await runCli(["daemon", "start"], home, {
+      extraEnv: {
+        PARLEY_LONG_POLL_MS: "300",
+        PARLEY_RUNNER_PRESENCE_GRACE_MS: "400",
+      },
+    });
+    expect(boot.code).toBe(0);
+    await waitFor(
+      () => fs.existsSync(path.join(home, "daemon.json")),
+      "daemon discovery",
+    );
+    const discovery = JSON.parse(
+      fs.readFileSync(path.join(home, "daemon.json"), "utf8"),
+    ) as { port: number; url?: string };
+    const daemonUrl =
+      discovery.url ?? `http://127.0.0.1:${discovery.port}`;
+    // Register without starting a long-lived lease loop — register only.
+    const reg = await fetch(`${daemonUrl}/runner/register`, {
+      method: "POST",
+      headers: {
+        authorization: "Bearer secret-gpu",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        runner: "gpu",
+        protocol_version: 1,
+        build_version: "test",
+        capabilities: {
+          vendors: [{ id: "fake", models: [] }],
+        },
+      }),
+    });
+    expect(reg.status).toBe(200);
 
     const result = await runCli(
       [
@@ -181,7 +220,7 @@ describe("delegate --runner affinity", () => {
   });
 
   it("rejects unknown --runner with exit 2", async () => {
-    const repo = makeGitRepo([]);
+    const repo = makeGitRepo([], {}, { origin: "https://github.com/org/parley.git" });
     repos.push(repo);
     const result = await runCli(
       ["delegate", "-v", "fake", "--runner", "nope", "x"],
@@ -193,24 +232,319 @@ describe("delegate --runner affinity", () => {
   });
 
   it("surfaces runner on list/status table", async () => {
-    const repo = makeGitRepo([]);
+    const repo = makeGitRepo([], {}, { origin: "https://github.com/org/parley.git" });
     repos.push(repo);
+    const boot = await runCli(["daemon", "start"], home, {
+      extraEnv: {
+        PARLEY_LONG_POLL_MS: "300",
+        PARLEY_RUNNER_PRESENCE_GRACE_MS: "400",
+      },
+    });
+    expect(boot.code).toBe(0);
+    await waitFor(
+      () => fs.existsSync(path.join(home, "daemon.json")),
+      "daemon discovery",
+    );
+    const discovery = JSON.parse(
+      fs.readFileSync(path.join(home, "daemon.json"), "utf8"),
+    ) as { port: number; url?: string };
+    const daemonUrl =
+      discovery.url ?? `http://127.0.0.1:${discovery.port}`;
+    const reg = await fetch(`${daemonUrl}/runner/register`, {
+      method: "POST",
+      headers: {
+        authorization: "Bearer secret-gpu",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        runner: "gpu",
+        protocol_version: 1,
+        build_version: "test",
+        capabilities: { vendors: [{ id: "fake", models: [] }] },
+      }),
+    });
+    expect(reg.status).toBe(200);
+
     await runCli(
       ["delegate", "-v", "fake", "--runner", "gpu", "-n", "listed", "x"],
       home,
       { cwd: repo },
     );
-    await waitFor(
-      () => {
-        const discovery = path.join(home, "daemon.json");
-        return fs.existsSync(discovery);
-      },
-      "daemon discovery",
-    );
     const listed = await runCli(["list", "--all"], home);
     expect(listed.code).toBe(0);
     expect(listed.stdout).toMatch(/RUNNER/);
     expect(listed.stdout).toMatch(/gpu/);
+  });
+});
+
+describe("capability-matched routing (#315)", () => {
+  async function bootDaemon(extraEnv: NodeJS.ProcessEnv = {}): Promise<string> {
+    const boot = await runCli(["daemon", "start"], home, {
+      extraEnv: {
+        PARLEY_LONG_POLL_MS: "300",
+        PARLEY_RUNNER_PRESENCE_GRACE_MS: "200",
+        ...extraEnv,
+      },
+    });
+    expect(boot.code).toBe(0);
+    await waitFor(
+      () => fs.existsSync(path.join(home, "daemon.json")),
+      "daemon discovery",
+    );
+    const discovery = JSON.parse(
+      fs.readFileSync(path.join(home, "daemon.json"), "utf8"),
+    ) as { port: number; url?: string };
+    return discovery.url ?? `http://127.0.0.1:${discovery.port}`;
+  }
+
+  async function registerViaHttp(
+    daemonUrl: string,
+    name: string,
+    token: string,
+    vendors: string[],
+  ): Promise<void> {
+    const res = await fetch(`${daemonUrl}/runner/register`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${token}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        runner: name,
+        protocol_version: 1,
+        build_version: "test",
+        capabilities: {
+          vendors: vendors.map((id) => ({ id, models: [] })),
+        },
+      }),
+    });
+    expect(res.status).toBe(200);
+  }
+
+  it("unpinned: vendor only on runner routes to that runner (not local)", async () => {
+    // Daemon without fake; real runner process advertises fake and claims.
+    const repo = makeGitRepo(
+      [
+        { emit: { type: "session", session_id: "remote-sess" } },
+        {
+          submit_report: {
+            summary: "ran on runner",
+            outcome: "success",
+            files_changed: [],
+          },
+        },
+      ],
+      {},
+      { origin: "https://github.com/org/parley.git" },
+    );
+    repos.push(repo);
+
+    const daemonUrl = await bootDaemon({ PARLEY_FAKE_VENDOR_BIN: "" });
+    startRunner({
+      home,
+      name: "gpu",
+      token: "secret-gpu",
+      daemonUrl,
+      repos: { [repo]: repo },
+      extraEnv: { PARLEY_FAKE_VENDOR_BIN: FAKE_VENDOR_BIN },
+    });
+    await waitForRunnerOnline(home, "gpu");
+
+    const result = await runCli(
+      ["delegate", "-v", "fake", "-n", "auto-route", "route me"],
+      home,
+      {
+        cwd: repo,
+        extraEnv: { PARLEY_FAKE_VENDOR_BIN: "" },
+      },
+    );
+    expect(result.stderr).toBe("");
+    expect(result.code).toBe(0);
+    const ack = JSON.parse(result.stdout) as { task_id: string; state: string };
+    expect(ack.state).toBe("pending");
+
+    // Poll until the runner claims (runner field set) or completes.
+    const deadline = Date.now() + 20_000;
+    let body: { state: string; runner: string | null; worktree: string | null } | null =
+      null;
+    while (Date.now() < deadline) {
+      const status = await runCli(["status", ack.task_id, "--json"], home);
+      if (status.code === 0) {
+        body = JSON.parse(status.stdout) as {
+          state: string;
+          runner: string | null;
+          worktree: string | null;
+        };
+        if (body.runner === "gpu" || body.state === "completed" || body.state === "running") {
+          break;
+        }
+      }
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    expect(body).not.toBeNull();
+    expect(body!.runner).toBe("gpu");
+    expect(body!.worktree).toBeNull();
+  });
+
+  it("unpinned: vendor only on daemon executes locally", async () => {
+    // Register a runner that only advertises a different vendor.
+    const daemonUrl = await bootDaemon();
+    await registerViaHttp(daemonUrl, "gpu", "secret-gpu", ["codex"]);
+
+    const repo = makeGitRepo([
+      { emit: { type: "session", session_id: "local-sess" } },
+      {
+        submit_report: {
+          summary: "local run",
+          outcome: "success",
+          files_changed: [],
+        },
+      },
+    ]);
+    repos.push(repo);
+
+    const result = await runCli(
+      ["delegate", "-v", "fake", "-n", "local-only", "run local"],
+      home,
+      { cwd: repo },
+    );
+    expect(result.stderr).toBe("");
+    expect(result.code).toBe(0);
+    const ack = JSON.parse(result.stdout) as { task_id: string; state: string };
+
+    const deadline = Date.now() + 15_000;
+    let body: { state: string; runner: string | null; worktree: string | null } | null =
+      null;
+    while (Date.now() < deadline) {
+      const status = await runCli(["status", ack.task_id, "--json"], home);
+      if (status.code === 0) {
+        body = JSON.parse(status.stdout) as {
+          state: string;
+          runner: string | null;
+          worktree: string | null;
+        };
+        if (body.state === "completed") break;
+      }
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    expect(body?.state).toBe("completed");
+    // Local path: never assigned to a runner (affinity / claimer stays null).
+    expect(body?.runner).toBeNull();
+  });
+
+  it("pin to incapable runner fails with capability diagnosis", async () => {
+    const daemonUrl = await bootDaemon();
+    await registerViaHttp(daemonUrl, "gpu", "secret-gpu", ["codex"]);
+
+    const repo = makeGitRepo([], {}, { origin: "https://github.com/org/parley.git" });
+    repos.push(repo);
+
+    const result = await runCli(
+      ["delegate", "-v", "fake", "--runner", "gpu", "x"],
+      home,
+      { cwd: repo },
+    );
+    expect(result.code).toBe(2);
+    expect(result.stderr).toMatch(/cannot run vendor "fake"/);
+    expect(result.stderr).toMatch(/advertises: codex/);
+    expect(result.stderr).toMatch(/known executors/);
+  });
+
+  it("no capable executor fails immediately naming executors and vendors", async () => {
+    const daemonUrl = await bootDaemon({ PARLEY_FAKE_VENDOR_BIN: "" });
+    await registerViaHttp(daemonUrl, "gpu", "secret-gpu", ["codex"]);
+
+    const repo = makeGitRepo([], {}, { origin: "https://github.com/org/parley.git" });
+    repos.push(repo);
+
+    const result = await runCli(
+      ["delegate", "-v", "fake", "x"],
+      home,
+      {
+        cwd: repo,
+        extraEnv: { PARLEY_FAKE_VENDOR_BIN: "" },
+      },
+    );
+    expect(result.code).toBe(2);
+    expect(result.stderr).toMatch(/no capable executor for vendor "fake"/);
+    expect(result.stderr).toMatch(/known executors/);
+    expect(result.stderr).toMatch(/gpu=\[codex\]/);
+  });
+
+  it("capable-but-offline queues with visible reason and fails on timeout", async () => {
+    // Register runner with fake, then wait past presence grace so it is offline.
+    // Daemon has no fake so only the offline runner is capable.
+    const daemonUrl = await bootDaemon({
+      PARLEY_FAKE_VENDOR_BIN: "",
+      PARLEY_RUNNER_PRESENCE_GRACE_MS: "50",
+      PARLEY_ROUTING_QUEUE_TIMEOUT_MS: "800",
+    });
+    await registerViaHttp(daemonUrl, "gpu", "secret-gpu", ["fake"]);
+    // Wait past grace — no open poll, so offline.
+    await new Promise((r) => setTimeout(r, 150));
+
+    const repo = makeGitRepo([], {}, { origin: "https://github.com/org/parley.git" });
+    repos.push(repo);
+
+    const result = await runCli(
+      ["delegate", "-v", "fake", "-n", "wait-runner", "wait"],
+      home,
+      {
+        cwd: repo,
+        extraEnv: {
+          PARLEY_FAKE_VENDOR_BIN: "",
+          PARLEY_ROUTING_QUEUE_TIMEOUT_MS: "800",
+        },
+      },
+    );
+    expect(result.stderr).toBe("");
+    expect(result.code).toBe(0);
+    const ack = JSON.parse(result.stdout) as { task_id: string; state: string };
+    expect(ack.state).toBe("pending");
+
+    const mid = await runCli(["status", ack.task_id, "--json"], home);
+    expect(mid.code).toBe(0);
+    const midBody = JSON.parse(mid.stdout) as {
+      state: string;
+      queue_reason: string | null;
+    };
+    expect(midBody.state).toBe("pending");
+    expect(midBody.queue_reason).toMatch(/waiting for capable runner: gpu \(offline\)/);
+
+    // Table surface also shows the reason.
+    const table = await runCli(["status", ack.task_id], home);
+    expect(table.stdout).toMatch(/waiting for capable runner/);
+
+    const failDeadline = Date.now() + 10_000;
+    let failBody: { state: string; error: string | null } | null = null;
+    while (Date.now() < failDeadline) {
+      const failed = await runCli(["status", ack.task_id, "--json"], home);
+      if (failed.code === 0) {
+        failBody = JSON.parse(failed.stdout) as {
+          state: string;
+          error: string | null;
+        };
+        if (failBody.state === "failed") break;
+      }
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    expect(failBody?.state).toBe("failed");
+    expect(failBody?.error).toMatch(/routing timed out/);
+    expect(failBody?.error).toMatch(/known executors/);
+    expect(failBody?.error).toMatch(/gpu=\[fake\]/);
+  });
+
+  it("no-origin + --runner fails at delegate with a clear explanation", async () => {
+    const repo = makeGitRepo([]); // no origin
+    repos.push(repo);
+    const result = await runCli(
+      ["delegate", "-v", "fake", "--runner", "gpu", "x"],
+      home,
+      { cwd: repo },
+    );
+    expect(result.code).toBe(2);
+    expect(result.stderr).toMatch(/--runner requires a git remote/);
+    expect(result.stderr).toMatch(/no origin/);
   });
 });
 

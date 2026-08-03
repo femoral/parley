@@ -24,9 +24,15 @@ function writeParleyConfig(body: Record<string, unknown> = {}): void {
   fs.writeFileSync(path.join(home, "parley.json"), JSON.stringify(withFakeAllowlist(body)));
 }
 
+const FAKE_VENDOR_BIN = path.resolve(
+  path.dirname(new URL(import.meta.url).pathname),
+  "../../cli/tests/fake-vendor.mjs",
+);
+
 beforeEach(() => {
   home = fs.mkdtempSync(path.join(os.tmpdir(), "parley-profiles-"));
   db = openDatabase(homePaths(home));
+  process.env.PARLEY_FAKE_VENDOR_BIN = FAKE_VENDOR_BIN;
 });
 
 afterEach(() => {
@@ -36,10 +42,11 @@ afterEach(() => {
     /* already closed */
   }
   fs.rmSync(home, { recursive: true, force: true });
+  delete process.env.PARLEY_FAKE_VENDOR_BIN;
 });
 
 function engine(): TaskEngine {
-  return new TaskEngine(db, homePaths(home), createAdapterRegistrySync({}));
+  return new TaskEngine(db, homePaths(home), createAdapterRegistrySync(process.env));
 }
 
 function baseRequest(

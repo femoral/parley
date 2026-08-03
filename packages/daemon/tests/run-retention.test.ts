@@ -1034,8 +1034,9 @@ describe("migration #244", () => {
 
     // Pre-#244 schema: every migration before the deliverables rebuild.
     // Five migrations follow #244 (#240 inbox, #243 run eval, #249 base,
-    // #314 runners, #313 repo identity) so the snapshot is SCHEMA_VERSION - 6.
-    const prev = openDatabaseUpTo(homePaths(home), SCHEMA_VERSION - 6);
+    // #314 runners, #313 repo identity, #315 routing) so the snapshot is
+    // SCHEMA_VERSION - 7.
+    const prev = openDatabaseUpTo(homePaths(home), SCHEMA_VERSION - 7);
     const now = new Date().toISOString();
     prev
       .prepare(

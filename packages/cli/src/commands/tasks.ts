@@ -81,17 +81,27 @@ function cacheHit(cached: number | null | undefined): boolean | null {
 }
 
 /**
- * STATE column (#171): plain state, or `queued #N (vendor:X)` when waiting
- * on a concurrency cap so operators see position without --json.
+ * STATE column (#171 / #315): plain state, `queued #N (vendor:X)` when waiting
+ * on a concurrency cap, or `pending (waiting for capable runner…)` when
+ * capability routing is waiting on offline executors.
  */
 function formatState(task: TaskEnvelope): string {
-  if (task.state !== "queued") return task.state;
-  const pos = typeof task.queue_position === "number" ? task.queue_position : null;
-  const cap = task.blocking_cap ?? null;
-  const parts: string[] = ["queued"];
-  if (pos !== null) parts.push(`#${pos}`);
-  if (cap) parts.push(`(${cap})`);
-  return parts.join(" ");
+  if (task.state === "queued") {
+    const pos = typeof task.queue_position === "number" ? task.queue_position : null;
+    const cap = task.blocking_cap ?? null;
+    const parts: string[] = ["queued"];
+    if (pos !== null) parts.push(`#${pos}`);
+    if (cap) parts.push(`(${cap})`);
+    return parts.join(" ");
+  }
+  if (
+    task.state === "pending" &&
+    typeof task.queue_reason === "string" &&
+    task.queue_reason !== ""
+  ) {
+    return `pending (${task.queue_reason})`;
+  }
+  return task.state;
 }
 
 function renderTable(ctx: CliContext, tasks: TaskEnvelope[]): void {

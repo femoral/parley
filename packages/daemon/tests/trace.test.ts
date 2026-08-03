@@ -165,6 +165,10 @@ describe("launch_command + model_source migration (#154)", () => {
 describe("engine resolution order with allowlist default (#154 / #185)", () => {
   let home: string;
   let db: DatabaseHandle;
+  const FAKE_VENDOR_BIN = path.resolve(
+    path.dirname(new URL(import.meta.url).pathname),
+    "../../cli/tests/fake-vendor.mjs",
+  );
 
   beforeEach(() => {
     home = fs.mkdtempSync(path.join(os.tmpdir(), "parley-trace-eng-"));
@@ -173,6 +177,7 @@ describe("engine resolution order with allowlist default (#154 / #185)", () => {
       path.join(home, "parley.json"),
       JSON.stringify(withFakeAllowlist({})),
     );
+    process.env.PARLEY_FAKE_VENDOR_BIN = FAKE_VENDOR_BIN;
   });
 
   afterEach(() => {
@@ -182,10 +187,11 @@ describe("engine resolution order with allowlist default (#154 / #185)", () => {
       /* already closed */
     }
     fs.rmSync(home, { recursive: true, force: true });
+    delete process.env.PARLEY_FAKE_VENDOR_BIN;
   });
 
   function engineBare(): TaskEngine {
-    return new TaskEngine(db, homePaths(home), createAdapterRegistrySync({}));
+    return new TaskEngine(db, homePaths(home), createAdapterRegistrySync(process.env));
   }
 
   function baseRequest(

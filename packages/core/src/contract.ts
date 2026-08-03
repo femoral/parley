@@ -144,6 +144,12 @@ export interface TaskEnvelope {
    */
   blocking_cap?: string | null;
   /**
+   * Visible routing wait reason when capable executors exist but none is
+   * online (#315 / #304). Null when not waiting on routing. Optional for
+   * older clients.
+   */
+  queue_reason?: string | null;
+  /**
    * Owning run id when this task is run-owned (ADR-0018 / ADR-0019 / #233).
    * Null for ordinary tasks. On every `task.*` firehose event.
    */
