@@ -205,9 +205,12 @@ export function excludeMaterializedFilesInCwdRepo(
   ];
   if (entries.length === 0) return;
 
+  // info/exclude lives under the *common* git dir. For a linked worktree,
+  // gitDir() is <repo>/.git/worktrees/<name>/ — entries there are ignored by
+  // git; only <repo>/.git/info/exclude is read (same pitfall as appendExclude).
   let gd: string;
   try {
-    gd = gitDir(cwd);
+    gd = commonGitDir(cwd);
   } catch {
     return;
   }
@@ -228,8 +231,9 @@ export function excludeMaterializedFilesInCwdRepo(
 
 /**
  * Write adapter {@link MaterializedFile}s into `cwd` before spawn (engine +
- * runner). Honours optional `mode` (e.g. `0o600` for OAuth tokens) via
- * chmod after write so the bit is applied even when the file already exists.
+ * runner). Honours optional `mode` (e.g. `0o600` for OAuth tokens): passed to
+ * writeFileSync so a credential never lands at the umask default even between
+ * syscalls, then chmod after to cover an already-existing file.
  */
 export function writeMaterializedFiles(
   cwd: string,
@@ -238,9 +242,11 @@ export function writeMaterializedFiles(
   for (const file of files) {
     const target = path.join(cwd, file.path);
     fs.mkdirSync(path.dirname(target), { recursive: true });
-    fs.writeFileSync(target, file.contents);
     if (file.mode !== undefined) {
+      fs.writeFileSync(target, file.contents, { mode: file.mode });
       fs.chmodSync(target, file.mode);
+    } else {
+      fs.writeFileSync(target, file.contents);
     }
   }
 }

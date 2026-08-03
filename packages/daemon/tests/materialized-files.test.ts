@@ -92,4 +92,43 @@ describe("excludeMaterializedFilesInCwdRepo (--cwd tasks)", () => {
     ).not.toThrow();
     expect(fs.existsSync(path.join(dir, ".git"))).toBe(false);
   });
+
+  it("excludes via common git dir when cwd is a linked worktree", () => {
+    // gitDir(linked) → <repo>/.git/worktrees/<name>/; git only reads
+    // info/exclude from the common dir (<repo>/.git/). Materialize + exclude
+    // into the linked checkout and assert git status stays clean.
+    const repo = makeGitRepo({ "README.md": "hi\n" });
+    temps.push(repo);
+    const linked = path.join(path.dirname(repo), `${path.basename(repo)}-wt`);
+    temps.push(linked);
+    execFileSync(
+      "git",
+      ["-C", repo, "worktree", "add", "--detach", linked, "HEAD"],
+      { encoding: "utf8" },
+    );
+
+    const rel = [
+      ".parley-antigravity/.gemini/antigravity-cli/antigravity-oauth-token",
+    ];
+    writeMaterializedFiles(linked, [
+      {
+        path: rel[0]!,
+        contents: "secret-token\n",
+        mode: 0o600,
+      },
+    ]);
+    excludeMaterializedFilesInCwdRepo(linked, rel);
+
+    // Entry must land in common .git/info/exclude, not worktree-private gitdir.
+    const commonExclude = path.join(repo, ".git", "info", "exclude");
+    const excludeText = fs.readFileSync(commonExclude, "utf8");
+    expect(excludeText).toContain(
+      "/.parley-antigravity/.gemini/antigravity-cli/antigravity-oauth-token",
+    );
+
+    const status = execFileSync("git", ["-C", linked, "status", "--porcelain"], {
+      encoding: "utf8",
+    });
+    expect(status).not.toMatch(/parley-antigravity/);
+  });
 });

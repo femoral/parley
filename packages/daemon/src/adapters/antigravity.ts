@@ -166,7 +166,8 @@ export function parseAgyModels(text: string): ModelEntry[] {
 
   for (const rawLine of text.split(/\r?\n/)) {
     // Strip spinner/ANSI residue that can precede TTY rows (research §7).
-    let line = rawLine.replace(/\x1b\[[0-9;]*[A-Za-z]/g, "").replace(/\r/g, "").trim();
+    // eslint-disable-next-line no-control-regex -- intentional ESC CSI strip; research §7 TTY spinner/ANSI
+    const line = rawLine.replace(/\x1b\[[0-9;]*[A-Za-z]/g, "").replace(/\r/g, "").trim();
     if (line === "") continue;
     // Drop spinner / status chatter that is not a model row.
     if (/^fetching available models/i.test(line)) continue;

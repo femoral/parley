@@ -44,3 +44,6 @@ break, not a silent remap.
   track `antigravity` only.
 - Credential materialisation under a private `HOME` requires careful file
   modes and git-excludes on `--cwd` tasks so OAuth tokens are never committed.
+- Exclude entries appended for `--cwd` tasks are permanent and accumulate
+  (deduped on respawn); a future real file at one of those repo paths would be
+  silently ignored in that repo.
