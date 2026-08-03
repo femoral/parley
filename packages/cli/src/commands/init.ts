@@ -99,6 +99,7 @@ export const BUILTIN_VENDOR_BINS: Readonly<Record<string, string>> = {
   claude: "claude",
   cline: "cline",
   codex: "codex",
+  cursor: "cursor-agent",
   fake: "fake",
   antigravity: "agy",
   goose: "goose",
