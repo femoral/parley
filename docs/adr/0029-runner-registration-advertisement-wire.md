@@ -46,9 +46,13 @@ The runner probes its host:
 1. **PATH** (and config `vendors.<id>.bin` / `PARLEY_FAKE_VENDOR_BIN`) via the
    shared `detectHarnesses` / `isExecutableOnPath` module
    (`packages/daemon/src/fingerprint.ts`) — same logic as CLI init, not forked.
-2. **Model catalogs** per loaded adapter (`readModels` → `listModels` → shipped
-   fallback), including runner-side plugin adapters from
-   `createAdapterRegistry`.
+2. **Model catalogs** per loaded adapter, including runner-side plugin adapters
+   from `createAdapterRegistry`. Registration precedence is deliberately
+   **disk (`readModels`) → shipped catalog → CLI (`listModels`) last**, with a
+   hard timeout on discovery channels. Shipped is preferred over a live CLI
+   probe when disk is empty so a multi-vendor host does not stall on hung
+   vendor binaries at register time. Periodic re-fingerprint can deepen
+   catalogs later.
 
 The daemon stores the last advertisement as JSON; routing (later tickets) can
 match without loading plugin code.
@@ -62,9 +66,19 @@ Status is **derived**, not stored:
 
 | Status | Rule |
 | --- | --- |
-| `online` | Open lease long-poll, **or** `last_seen` within grace (~2× long-poll window; `PARLEY_RUNNER_PRESENCE_GRACE_MS`) |
+| `online` | Open lease long-poll, **or** `last_seen` within grace (default `max(50s, 2× long-poll)`; `PARLEY_RUNNER_PRESENCE_GRACE_MS`, explicit `0` = no grace) |
 | `offline` | No open poll and last contact past grace but within stale window |
 | `stale` | Last contact older than stale window (default 14 days; `PARLEY_RUNNER_STALE_MS`) |
+
+`last_seen` advances on register, lease poll enter/exit, and every runner-
+authenticated task-traffic verb (heartbeat, events, branch, fail) so a runner
+mid-execute (no open poll) stays online.
+
+**Offline detection lag:** there is no client-disconnect listener on the lease
+socket. Presence drops only after the long-poll resolves (or is aborted) and
+the grace window on the final `last_seen` bump elapses — so worst-case offline
+detection is roughly **grace + up to one long-poll window**. That is why grace
+is defaulted near **2× the long-poll window**.
 
 Rows survive daemon restart so the fleet can distinguish "never registered"
 from "registered but offline."

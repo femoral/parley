@@ -184,28 +184,48 @@ export interface DaemonServer {
  * `PARLEY_LONG_POLL_MS` overrides it — tests shrink the window to exercise
  * re-poll behavior (e.g. a waiter observing a stall after missing the
  * question event) without 25s waits. Read per call so tests can set the env
- * after the module loads.
+ * after the module loads. Unset/empty/non-positive → 25s default.
  */
 function longPollWindowMs(): number {
-  const parsed = Number(process.env.PARLEY_LONG_POLL_MS ?? "");
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : 25_000;
+  const raw = process.env.PARLEY_LONG_POLL_MS;
+  if (raw !== undefined && raw !== "") {
+    const parsed = Number(raw);
+    if (Number.isFinite(parsed) && parsed > 0) return parsed;
+  }
+  return 25_000;
 }
 
 /**
- * Online grace after last contact (default ~2× long-poll window). Tests shrink
- * via `PARLEY_RUNNER_PRESENCE_GRACE_MS`.
+ * Online grace after last contact. Unset/empty →
+ * `max(DEFAULT_RUNNER_PRESENCE_GRACE_MS, 2× long-poll)` so production stays
+ * ~2× the default 25s poll (50s floor). Explicit `0` is honored as "no grace"
+ * (tests that need offline immediately after last_seen). Non-finite values
+ * fall through to the default.
  */
 function runnerPresenceGraceMs(): number {
-  const parsed = Number(process.env.PARLEY_RUNNER_PRESENCE_GRACE_MS ?? "");
-  if (Number.isFinite(parsed) && parsed >= 0) return parsed;
-  // Track the live long-poll window so grace stays ~2× even when tests shrink it.
+  const raw = process.env.PARLEY_RUNNER_PRESENCE_GRACE_MS;
+  if (raw !== undefined && raw !== "") {
+    const parsed = Number(raw);
+    // Explicit 0 = no grace (test seam). Positive values override the default.
+    if (Number.isFinite(parsed) && parsed >= 0) return parsed;
+  }
+  // Floor at DEFAULT (50s). The 2× term only raises grace when long-poll is
+  // longer than 25s; shrinking PARLEY_LONG_POLL_MS for tests does not lower
+  // the floor — use PARLEY_RUNNER_PRESENCE_GRACE_MS for that.
   return Math.max(DEFAULT_RUNNER_PRESENCE_GRACE_MS, longPollWindowMs() * 2);
 }
 
-/** Stale threshold; `PARLEY_RUNNER_STALE_MS` overrides (tests). */
+/**
+ * Stale threshold. Unset/empty/non-positive → DEFAULT_RUNNER_STALE_MS.
+ * `PARLEY_RUNNER_STALE_MS` overrides for tests.
+ */
 function runnerStaleMs(): number {
-  const parsed = Number(process.env.PARLEY_RUNNER_STALE_MS ?? "");
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_RUNNER_STALE_MS;
+  const raw = process.env.PARLEY_RUNNER_STALE_MS;
+  if (raw !== undefined && raw !== "") {
+    const parsed = Number(raw);
+    if (Number.isFinite(parsed) && parsed > 0) return parsed;
+  }
+  return DEFAULT_RUNNER_STALE_MS;
 }
 
 /** In-process open lease-poll counts per runner name (presence signal). */
@@ -2091,6 +2111,9 @@ function createHandler(
           }
           try {
             engine.runnerHeartbeat(taskId, runnerName);
+            // Task traffic refreshes presence while the runner is mid-execute
+            // (no open lease poll during execute; see ADR-0029).
+            touchRunnerLastSeen(db, runnerName);
             sendJson(res, 200, { ok: true });
           } catch (err) {
             if (err instanceof DelegateError) {
@@ -2128,6 +2151,7 @@ function createHandler(
           }
           try {
             engine.processRunnerEvents(taskId, runnerName, lines);
+            touchRunnerLastSeen(db, runnerName);
             sendJson(res, 200, { ok: true });
           } catch (err) {
             if (err instanceof DelegateError) {
@@ -2157,6 +2181,7 @@ function createHandler(
           }
           try {
             const row = engine.recordRunnerBranch(taskId, runnerName, body.branch);
+            touchRunnerLastSeen(db, runnerName);
             sendJson(res, 200, {
               task_id: row.id,
               name: row.name,
@@ -2192,6 +2217,7 @@ function createHandler(
           }
           try {
             const row = engine.failRunnerTask(taskId, runnerName, body.error);
+            touchRunnerLastSeen(db, runnerName);
             sendJson(res, 200, {
               task_id: row.id,
               name: row.name,

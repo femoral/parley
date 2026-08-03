@@ -2414,6 +2414,26 @@ export function listTasksForRunNodeAny(
  * Patch only the structured-eval fields on a run (#243). Separated so eval
  * never has to share a write path with engine state transitions.
  */
+export function updateRunEval(
+  db: DatabaseHandle,
+  id: string,
+  patch: Pick<
+    RunDataPatch,
+    | "eval_score"
+    | "eval_feedback"
+    | "eval_answers"
+    | "eval_rubric"
+    | "eval_rubric_version"
+    | "eval_baseline"
+    | "eval_session_id"
+    | "eval_harness"
+    | "eval_model"
+    | "eval_effort"
+  >,
+): void {
+  updateRun(db, id, patch);
+}
+
 // ─── Remote runners (ADR-0029 / #314) ───────────────────────────────────────
 
 /** A registered remote runner row (capabilities JSON + timestamps). */
@@ -2490,7 +2510,7 @@ export function upsertRunner(
   return getRunner(db, runner.name)!;
 }
 
-/** Refresh last_seen only (presence / long-poll contact). */
+/** Refresh last_seen only (presence / long-poll / task-traffic contact). */
 export function touchRunnerLastSeen(db: DatabaseHandle, name: string): void {
   const now = new Date().toISOString();
   db.prepare(`UPDATE runners SET last_seen = ? WHERE name = ?`).run(now, name);
@@ -2500,26 +2520,6 @@ export function touchRunnerLastSeen(db: DatabaseHandle, name: string): void {
 export function deleteRunner(db: DatabaseHandle, name: string): boolean {
   const result = db.prepare(`DELETE FROM runners WHERE name = ?`).run(name);
   return (result.changes as number) > 0;
-}
-
-export function updateRunEval(
-  db: DatabaseHandle,
-  id: string,
-  patch: Pick<
-    RunDataPatch,
-    | "eval_score"
-    | "eval_feedback"
-    | "eval_answers"
-    | "eval_rubric"
-    | "eval_rubric_version"
-    | "eval_baseline"
-    | "eval_session_id"
-    | "eval_harness"
-    | "eval_model"
-    | "eval_effort"
-  >,
-): void {
-  updateRun(db, id, patch);
 }
 
 // ── end #243 ──

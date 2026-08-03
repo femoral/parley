@@ -252,6 +252,9 @@ describe("runner registration", () => {
   });
 
   it("persists runner rows across daemon restart", async () => {
+    // Default 50s grace keeps a just-registered row online after restart
+    // (no open poll; last_seen from register is still recent).
+    delete process.env.PARLEY_RUNNER_PRESENCE_GRACE_MS;
     const home = makeHome();
     const { base } = await boot(home);
     await registerRunner(base);
@@ -263,8 +266,65 @@ describe("runner registration", () => {
     const runners = (listed.body as { runners: { name: string; status: string }[] }).runners;
     expect(runners).toHaveLength(1);
     expect(runners[0]!.name).toBe("gpu");
-    // After restart there is no open poll; status depends on grace.
-    expect(["online", "offline"]).toContain(runners[0]!.status);
+    expect(runners[0]!.status).toBe("online");
+  });
+
+  it("just-registered runner is online with default presence grace (no env override)", async () => {
+    // Regression pin for HIGH-1: Number("") === 0 must not collapse grace to 0ms.
+    delete process.env.PARLEY_RUNNER_PRESENCE_GRACE_MS;
+    const home = makeHome();
+    const { base } = await boot(home);
+    await registerRunner(base);
+    const listed = await json(base, "GET", "/runners");
+    expect(listed.status).toBe(200);
+    const runners = (listed.body as { runners: { status: string }[] }).runners;
+    expect(runners).toHaveLength(1);
+    expect(runners[0]!.status).toBe("online");
+  });
+
+  it("becomes offline after grace with no open poll and no further contact", async () => {
+    process.env.PARLEY_RUNNER_PRESENCE_GRACE_MS = "80";
+    const home = makeHome();
+    const { base } = await boot(home);
+    await registerRunner(base);
+    // No lease poll — only the register last_seen bump. Wait past grace.
+    await new Promise((r) => setTimeout(r, 150));
+    const listed = await json(base, "GET", "/runners");
+    expect(listed.status).toBe(200);
+    const runners = (listed.body as { runners: { status: string }[] }).runners;
+    expect(runners[0]!.status).toBe("offline");
+  });
+
+  it("task-traffic heartbeat refreshes last_seen so status stays online mid-execute", async () => {
+    // Serial lease→execute leaves no open poll; heartbeat must keep presence.
+    process.env.PARLEY_RUNNER_PRESENCE_GRACE_MS = "80";
+    const home = makeHome();
+    const { base } = await boot(home);
+    await registerRunner(base);
+    const repo = makeGitRepo();
+    repos.push(repo);
+    const { task_id } = await createRunnerTask(base, repo);
+    const lease = await json(base, "POST", "/runner/lease", { runner: "gpu" }, auth);
+    expect(lease.status).toBe(200);
+    // Lease poll ended; wait past grace with no traffic → would go offline.
+    await new Promise((r) => setTimeout(r, 150));
+    const before = await json(base, "GET", "/runners");
+    expect(
+      (before.body as { runners: { status: string }[] }).runners[0]!.status,
+    ).toBe("offline");
+    // Heartbeat (task traffic) must refresh last_seen without an open poll.
+    const hb = await json(
+      base,
+      "POST",
+      `/runner/tasks/${task_id}/heartbeat`,
+      {},
+      auth,
+    );
+    expect(hb.status).toBe(200);
+    const after = await json(base, "GET", "/runners");
+    expect(
+      (after.body as { runners: { status: string }[] }).runners[0]!.status,
+    ).toBe("online");
   });
 });
 
