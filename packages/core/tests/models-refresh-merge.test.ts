@@ -229,6 +229,35 @@ describe("refreshCatalog with readModels + listModels", () => {
     expect(warnings).toEqual(["grok: malformed config.toml: expected table"]);
   });
 
+  it("surfaces empty-channel warnings on the fallback path (#299)", async () => {
+    // Previously safeDiscover discarded the whole ProbedModels when models were
+    // empty, so a fail-soft note (e.g. fresh empty models_cache.json + malformed
+    // config.toml) never reached RefreshResult.warnings.
+    const adapters = new Map([
+      [
+        "grok",
+        prober({
+          readModels: () =>
+            Promise.resolve({
+              source: "models_cache.json",
+              models: [],
+              warnings: ["malformed config.toml: expected table"],
+            }),
+          listModels: () => Promise.resolve({ source: "grok models", models: [] }),
+        }),
+      ],
+    ]);
+    const { catalog, warnings } = await refreshCatalog({}, ["grok"], adapters, () => NOW);
+    // Normal empty-channel fallback still applies (shipped when entry empty).
+    const shipped = getShippedVendorModels("grok")!;
+    expect(catalog.grok!.models).toEqual(shipped.models);
+    expect(catalog.grok!.source).toMatch(/^shipped catalog \(point-in-time reference;/);
+    expect(warnings[0]).toMatch(/disk read returned no models/);
+    expect(warnings[0]).toMatch(/probe returned no models/);
+    // Channel note survives alongside the fallback reason (#296 prefix form).
+    expect(warnings).toContain("grok: malformed config.toml: expected table");
+  });
+
   it("warns when disk fails even if probe succeeds (finding 4)", async () => {
     const adapters = new Map([
       [

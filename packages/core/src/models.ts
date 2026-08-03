@@ -48,11 +48,12 @@ export interface ProbedModels {
   source: string;
   models: ModelEntry[];
   /**
-   * Per-channel non-fatal failure notes (#296). Used when a discovery channel
-   * succeeds overall (returns models) but one of its on-disk sources failed
-   * soft — e.g. grok's config.toml is malformed while models_cache.json is fine.
-   * Adapters are responsible for collapsing operator-home paths in any warning
-   * text they emit; refreshCatalog surfaces these as-is (prefixed with vendor id).
+   * Per-channel non-fatal failure notes (#296 / #299). Used when a discovery
+   * channel fails soft on one of its sources — e.g. grok's config.toml is
+   * malformed while models_cache.json is fine, or both sources yield zero
+   * models but still have a note. Adapters collapse operator-home paths in any
+   * warning text they emit; refreshCatalog surfaces these as-is (prefixed with
+   * vendor id), even when `models` is empty.
    */
   warnings?: string[];
 }
@@ -324,22 +325,28 @@ export function mergeDiscoveredModels(
 
 /**
  * Invoke an optional discovery channel, swallowing throws so a bad file or
- * missing binary never takes down refresh / `parley init`. Empty results and
- * missing hooks both yield `null` (no contribution to the merge).
+ * missing binary never takes down refresh / `parley init`. Empty models and
+ * missing hooks both yield `result: null` (no contribution to the merge).
+ * Fail-soft notes still survive when models are empty (#299): `warnings` is
+ * populated from the channel even though `result` is null, so refreshCatalog
+ * can surface them on the fallback path.
  */
 async function safeDiscover(
   hook: ((existing: VendorModels | undefined) => Promise<ProbedModels>) | undefined,
   existing: VendorModels | undefined,
-): Promise<{ result: ProbedModels | null; error: string | null }> {
-  if (!hook) return { result: null, error: null };
+): Promise<{ result: ProbedModels | null; error: string | null; warnings: string[] }> {
+  if (!hook) return { result: null, error: null, warnings: [] };
   try {
     const probed = await hook(existing);
-    if (probed.models.length === 0) return { result: null, error: null };
-    return { result: probed, error: null };
+    const warnings = probed.warnings ?? [];
+    // Empty models → no merge contribution, but keep non-fatal notes (#299).
+    if (probed.models.length === 0) return { result: null, error: null, warnings };
+    return { result: probed, error: null, warnings };
   } catch (err) {
     return {
       result: null,
       error: err instanceof Error ? err.message : String(err),
+      warnings: [],
     };
   }
 }
@@ -405,12 +412,11 @@ export async function refreshCatalog<A extends ModelProber>(
       if (adapter.listModels && probeError) {
         warnings.push(`${id}: probe failed (${probeError})`);
       }
-      // Per-channel non-fatal notes (partial disk fail-soft, #296). Adapters
+      // Per-channel non-fatal notes (#296 / #299). Sourced from safeDiscover so
+      // notes survive even when that channel contributed zero models. Adapters
       // collapse operator-home paths themselves; leave text as-is here.
-      if (merged.warnings !== undefined) {
-        for (const note of merged.warnings) {
-          warnings.push(`${id}: ${note}`);
-        }
+      for (const note of [...disk.warnings, ...probe.warnings]) {
+        warnings.push(`${id}: ${note}`);
       }
       // Vendor-level effort_levels / notes are catalog metadata (usually from
       // the shipped seed). Discovery only refreshes fetched_at/source/models;
@@ -441,6 +447,12 @@ export async function refreshCatalog<A extends ModelProber>(
       reasons.push("no refresh probe available");
     }
     applyRefreshFallback(next, id, reasons.join("; "), warnings);
+    // Empty-channel fail-soft notes still reach the operator (#299): safeDiscover
+    // kept them even though result was null. Append after the fallback reason so
+    // existing reason text stays first.
+    for (const note of [...disk.warnings, ...probe.warnings]) {
+      warnings.push(`${id}: ${note}`);
+    }
   }
   return { catalog: next, warnings };
 }
