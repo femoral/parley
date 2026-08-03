@@ -1,5 +1,9 @@
 import path from "node:path";
-import { displayVendorPath, resolveOperatorVendorHome } from "@useparley/core";
+import {
+  collapseOperatorHomeInText,
+  displayVendorPath,
+  resolveOperatorVendorHome,
+} from "@useparley/core";
 import type {
   AdapterEnforcement,
   HubInfo,
@@ -988,14 +992,15 @@ export function createGrokAdapter(env: NodeJS.ProcessEnv = process.env): VendorA
 
       const models = mergeGrokDiskModels(cacheModels, configModels);
 
-      // Fail-soft per file (#294): when at least one source yielded models,
-      // return them and surface sibling failures in the source string. When
-      // models are empty and any present-but-unusable failure remains, throw
-      // so refreshCatalog can warn (preserves size-cap / sole-malformed paths).
-      if (models.length === 0 && failures.length > 0) {
-        throw new Error(failures.join("; "));
-      }
+      // Fail-soft per file (#294): only throw when *no* source is usable.
+      // A usable-but-empty source (e.g. fresh models_cache with models: {}) is
+      // still a successful channel contribution — return empty models and note
+      // sibling failures in the source string; refreshCatalog handles empty
+      // via its normal fallback.
       if (!cacheUsable && !configUsable) {
+        if (failures.length > 0) {
+          throw new Error(failures.join("; "));
+        }
         return {
           source: grokModelsCacheSource(cacheSourceBase, null),
           models: [],
@@ -1016,12 +1021,15 @@ export function createGrokAdapter(env: NodeJS.ProcessEnv = process.env): VendorA
           sources.push(grokModelsConfigSource(configSourceBase, defaultModel));
         }
       }
-      let source =
-        sources.length > 0
-          ? sources.join(" + ")
-          : grokModelsCacheSource(cacheSourceBase, null);
+      // At least one of cacheUsable/configUsable is true, so sources is non-empty.
+      let source = sources.join(" + ");
       if (failures.length > 0) {
-        source = `${source}; warning: ${failures.join("; ")}`;
+        // Collapse operator-home prefixes: source is persisted to models.json
+        // verbatim (refreshCatalog only collapses thrown channel errors).
+        const collapsed = failures
+          .map((f) => collapseOperatorHomeInText(f, env))
+          .join("; ");
+        source = `${source}; warning: ${collapsed}`;
       }
       return { source, models };
     },

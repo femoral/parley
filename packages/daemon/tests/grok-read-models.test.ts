@@ -290,6 +290,60 @@ describe("grok adapter readModels", () => {
     expect(result.source).toMatch(/warning:.*malformed models_cache/);
   });
 
+  it("fail-soft: usable empty models_cache + malformed config returns (does not throw) (#294)", async () => {
+    home = makeOperatorHome();
+    fs.writeFileSync(path.join(home, "models_cache.json"), readFixture("models_cache.empty.json"));
+    fs.writeFileSync(path.join(home, "config.toml"), readFixture("config.malformed.toml"));
+    const adapter = createGrokAdapter({ GROK_HOME: home });
+    const result = await adapter.readModels!(undefined);
+    expect(result.models).toEqual([]);
+    expect(result.source).toContain("models_cache.json");
+    expect(result.source).toMatch(/warning:.*malformed config\.toml/);
+  });
+
+  it("rejects when both sources are present and malformed (#294)", async () => {
+    home = makeOperatorHome();
+    fs.writeFileSync(
+      path.join(home, "models_cache.json"),
+      readFixture("models_cache.malformed.json"),
+    );
+    fs.writeFileSync(path.join(home, "config.toml"), readFixture("config.malformed.toml"));
+    const adapter = createGrokAdapter({ GROK_HOME: home });
+    await expect(adapter.readModels!(undefined)).rejects.toThrow(/malformed/);
+  });
+
+  it("collapses absolute operator-home paths in source warning text (#294)", async () => {
+    // HOME-based layout so collapseOperatorHomeInText (which keys on HOME) can
+    // rewrite EACCES paths that embed the absolute home.
+    home = makeOperatorHome();
+    const grokDir = path.join(home, ".grok");
+    fs.mkdirSync(grokDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(grokDir, "models_cache.json"),
+      readFixture("models_cache.well-formed.json"),
+    );
+    const configPath = path.join(grokDir, "config.toml");
+    fs.writeFileSync(configPath, "models.default = \"x\"\n");
+    fs.chmodSync(configPath, 0);
+    try {
+      const adapter = createGrokAdapter({ HOME: home });
+      const result = await adapter.readModels!(undefined);
+      expect(result.models.map((m) => m.id)).toContain("grok-4.5");
+      expect(result.source).toMatch(/warning:/);
+      // Absolute home must not appear in the persisted source string.
+      expect(result.source).not.toContain(home);
+      // Collapsed form (or label-only) is fine; raw open path under home is not.
+      expect(result.source).toMatch(/~\/.grok|permission denied|EACCES/i);
+    } finally {
+      // Restore so afterEach can rm -rf the tree.
+      try {
+        fs.chmodSync(configPath, 0o644);
+      } catch {
+        /* ignore */
+      }
+    }
+  });
+
   it("rejects without hanging when models_cache.json is a FIFO (#288)", async () => {
     home = makeOperatorHome();
     const fifo = path.join(home, "models_cache.json");
@@ -368,8 +422,9 @@ describe("refreshCatalog end-to-end: degraded grok disk reads warn", () => {
 
   it("warns when config.toml exceeds the size cap", async () => {
     home = makeOperatorHome();
-    // Valid empty cache so the path fails on config, not cache.
-    fs.writeFileSync(path.join(home, "models_cache.json"), readFixture("models_cache.empty.json"));
+    // No usable cache (absent) + oversize config → no usable source → throw so
+    // refresh gets disk-read-failed. (A usable empty cache would return soft
+    // with the size-cap note only in source text — see fail-soft empty-cache test.)
     const configPath = path.join(home, "config.toml");
     const fd = fs.openSync(configPath, "w");
     try {
