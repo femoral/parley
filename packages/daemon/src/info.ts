@@ -27,6 +27,7 @@ import {
   type HomePaths,
   type ParleyConfig,
   type ProfileConfig,
+  type RunnerStatus,
   type TaskTypesMap,
 } from "@useparley/core";
 import type { VendorAdapter } from "./adapters/types.js";
@@ -34,6 +35,11 @@ import {
   readProjectClassification,
   resolveProjectSettings,
 } from "./context.js";
+import { LOCAL_EXECUTOR_ID } from "./executor.js";
+import {
+  detectHostVendorIds,
+  isExecutableOnPath,
+} from "./fingerprint.js";
 import { composeOrchestratorInstructions } from "./prompt-layers.js";
 import {
   CODE_REATTEMPT_WINDOW_EXPIRED,
@@ -201,6 +207,19 @@ export interface InfoVendor {
 }
 
 /**
+ * One executor in the fleet view (#321 / #307): the daemon host (`local`) plus
+ * each registered remote runner. Summary only — models and host detail live in
+ * `parley runners show`.
+ */
+export interface InfoExecutor {
+  /** `local` for the daemon host, or a registered runner name. */
+  name: string;
+  status: RunnerStatus;
+  /** Advertised vendor ids (host fingerprint or last registration). */
+  vendors: string[];
+}
+
+/**
  * One row of the sandbox/network enforcement matrix (#279) — every registered
  * adapter (not only configured vendors), sourced from
  * {@link VendorAdapter.enforcement}.
@@ -314,12 +333,16 @@ export interface InfoConfig {
   instructions: string | null;
   /** Vendors present in daemon config and/or referenced by profiles (#169). */
   vendors: InfoVendor[];
-  /** Built-in vendor CLIs found on PATH but absent from effective configuration. */
-  detected_vendors: string[];
   /**
-   * Host/capability advisories (not gates). Populated by the CLI after layered
-   * merge when host checks apply (e.g. missing bubblewrap for grok, #247).
-   * Empty when nothing to warn about; omitted from JSON only when undefined.
+   * Executor fleet (#321): daemon host first (`local`), then registered runners.
+   * Vendor availability is host-fingerprinted / last-advertised — never the CLI
+   * host's PATH. One summary line each in prose; depth deferred to runners show.
+   */
+  executors: InfoExecutor[];
+  /**
+   * Host/capability advisories (not gates). Built on the **daemon** host
+   * (e.g. missing bubblewrap for grok, #247 / #321). Empty when nothing to
+   * warn about; omitted from JSON only when undefined.
    */
   warnings?: string[];
   /**
@@ -343,11 +366,13 @@ export interface InfoConfig {
 }
 
 /**
- * Advisory warning when sandboxed grok postures cannot run on this host (#247).
- * Pure: inject platform / PATH presence so tests never depend on the machine.
+ * Advisory warning when sandboxed grok postures cannot run on the **daemon**
+ * host (#247 / #321). Pure: inject platform / PATH presence so tests never
+ * depend on the machine. Runner-host sandbox posture is capability detail
+ * (see `parley runners show`), not listed here.
  *
- * "Grok present" means configured in effective config **or** detected on PATH
- * (same detection path `parley info` already uses for `detected_vendors`).
+ * "Grok present" means configured in effective config **or** advertised by the
+ * local (`local`) executor fingerprint.
  */
 export function grokSandboxHostWarnings(opts: {
   platform: NodeJS.Platform;
@@ -358,7 +383,7 @@ export function grokSandboxHostWarnings(opts: {
   if (!opts.grokPresent) return [];
   if (opts.hasBubblewrap) return [];
   return [
-    "Sandboxed grok postures (workspace, read-only) will fail on this host: " +
+    "Sandboxed grok postures (workspace, read-only) will fail on the daemon host: " +
       "bubblewrap (`bwrap`) is not on PATH. Install bubblewrap for your " +
       'distribution, or use a profile with sandbox: "full".',
   ];
@@ -375,6 +400,25 @@ export interface BuildInfoOptions {
   projectDir: string;
   paths: HomePaths;
   adapters: Map<string, VendorAdapter>;
+  /**
+   * Env used for the daemon host fingerprint and sandbox probe (defaults to
+   * `process.env`). Tests inject a controlled PATH.
+   */
+  env?: NodeJS.ProcessEnv;
+  /**
+   * Registered remote runners (status already derived; vendor ids from last
+   * advertisement). Daemon host is always prepended as `local` / online.
+   */
+  runners?: ReadonlyArray<{
+    name: string;
+    status: RunnerStatus;
+    vendors: readonly string[];
+  }>;
+  /**
+   * Platform for the daemon-host sandbox advisory (defaults to
+   * `process.platform`). Injected in tests.
+   */
+  platform?: NodeJS.Platform;
 }
 
 function effectiveChildChannel(
@@ -485,6 +529,8 @@ function rubricRef(typeId: string, taskTypes: TaskTypesMap): InfoRubricSummary {
  */
 export function buildInfoConfig(options: BuildInfoOptions): InfoConfig {
   const { projectDir, paths, adapters } = options;
+  const env = options.env ?? process.env;
+  const platform = options.platform ?? process.platform;
 
   let daemonConfig: ParleyConfig;
   try {
@@ -515,6 +561,27 @@ export function buildInfoConfig(options: BuildInfoOptions): InfoConfig {
     }
     return entry;
   });
+
+  // #321: executor fleet — daemon host first, then registered runners.
+  // Vendor ids are host-fingerprinted (daemon PATH / plugin registry), never
+  // the CLI caller's PATH. Model catalogs stay on runners show / registration.
+  const localVendors = detectHostVendorIds({
+    adapters,
+    config: daemonConfig,
+    env,
+  });
+  const executors: InfoExecutor[] = [
+    {
+      name: LOCAL_EXECUTOR_ID,
+      status: "online",
+      vendors: localVendors,
+    },
+    ...(options.runners ?? []).map((r) => ({
+      name: r.name,
+      status: r.status,
+      vendors: [...r.vendors],
+    })),
+  ];
 
   // #279: full registry matrix (all loaded adapters), stable id order.
   const enforcement_matrix: InfoEnforcementRow[] = [...adapters.entries()]
@@ -641,11 +708,22 @@ export function buildInfoConfig(options: BuildInfoOptions): InfoConfig {
     classification: classificationSource,
   };
 
+  // Daemon-host sandbox advisory (#247 / #321): describes this process's host,
+  // not the CLI caller's. Grok "present" = configured allowlist or local fingerprint.
+  const configuredVendorIdsSet = new Set(vendors.map((v) => v.id));
+  const grokPresent =
+    configuredVendorIdsSet.has("grok") || localVendors.includes("grok");
+  const hostWarnings = grokSandboxHostWarnings({
+    platform,
+    hasBubblewrap: isExecutableOnPath("bwrap", env),
+    grokPresent,
+  });
+
   const config: InfoConfig = {
     project: projectDir,
     instructions,
     vendors,
-    detected_vendors: [],
+    executors,
     enforcement_matrix,
     profiles,
     defaults,
@@ -653,6 +731,7 @@ export function buildInfoConfig(options: BuildInfoOptions): InfoConfig {
     fix,
     provenance,
   };
+  if (hostWarnings.length > 0) config.warnings = hostWarnings;
   if (taskTypes !== undefined) config.taskTypes = taskTypes;
   if (classification !== undefined) config.classification = classification;
   return config;
@@ -724,14 +803,17 @@ export function renderInfoProse(config: InfoConfig): string {
     }
   }
   lines.push("");
-  lines.push("### Detected, unconfigured vendors");
-  if (config.detected_vendors.length === 0) {
-    lines.push("(none detected on PATH)");
+  lines.push("### Executors");
+  lines.push(
+    "Vendor availability per executor host (daemon first, then registered runners). Detail: `parley runners show <name>`.",
+  );
+  if (config.executors.length === 0) {
+    lines.push("(no executors)");
   } else {
-    for (const id of config.detected_vendors) {
-      lines.push(
-        `- \`${id}\` — detected on PATH, but delegation is denied until a model allowlist is configured; run /parley-wizard`,
-      );
+    for (const ex of config.executors) {
+      const vendorList =
+        ex.vendors.length > 0 ? ex.vendors.join(", ") : "(none)";
+      lines.push(`- \`${ex.name}\` (${ex.status}): ${vendorList}`);
     }
   }
   lines.push("");

@@ -32,6 +32,7 @@ import {
   type WorkflowDefinition,
 } from "@useparley/core";
 import { createAdapterRegistry } from "./adapters/index.js";
+import type { VendorAdapter } from "./adapters/types.js";
 import {
   countUnsettledTasks,
   getDeliverable,
@@ -93,6 +94,7 @@ import {
 import { discoverUiBundle, isReservedPath, serveUiRequest } from "./ui.js";
 import { DAEMON_VERSION } from "./version.js";
 import { handleXaiProxyRequest } from "./xai-proxy.js";
+import { buildInfo } from "./info.js";
 
 /** Default scheduled retention sweep interval (#153): 24 hours. */
 const DEFAULT_GC_INTERVAL_MS = 24 * 60 * 60 * 1000;
@@ -1244,13 +1246,17 @@ function handleConfigUnset(
 
 /**
  * `GET /info?project=<abs>` — effective configuration as prose + the structured
- * config it was rendered from (#163). Project root is required so remote
- * daemons resolve the caller's workspace (never the daemon's cwd).
+ * config it was rendered from (#163 / #321). Project root is required so remote
+ * daemons resolve the caller's workspace (never the daemon's cwd). Executor
+ * availability is daemon-sourced: local host fingerprint + registered runners
+ * (same status derivation as GET /runners).
  */
 function handleInfo(
-  engine: TaskEngine,
   res: http.ServerResponse,
   params: URLSearchParams,
+  paths: HomePaths,
+  adapters: Map<string, VendorAdapter>,
+  db: DatabaseHandle,
 ): void {
   const project = params.get("project");
   if (project === null || project.trim() === "") {
@@ -1258,7 +1264,22 @@ function handleInfo(
     return;
   }
   try {
-    sendJson(res, 200, engine.info(project));
+    const runners = listRunners(db).map(projectRunnerListEntry);
+    sendJson(
+      res,
+      200,
+      buildInfo({
+        projectDir: project,
+        paths,
+        adapters,
+        env: process.env,
+        runners: runners.map((r) => ({
+          name: r.name,
+          status: r.status,
+          vendors: r.vendors,
+        })),
+      }),
+    );
   } catch (err) {
     // Bad project config (classification/taskTypes/rubrics) is a caller mistake.
     sendJson(res, 400, { error: err instanceof Error ? err.message : String(err) });
@@ -2462,6 +2483,7 @@ function createHandler(
   paths: HomePaths,
   identity: DaemonIdentity | undefined,
   db: DatabaseHandle,
+  adapters: Map<string, VendorAdapter>,
 ): http.RequestListener {
   return (req, res) => {
     void (async () => {
@@ -2799,9 +2821,9 @@ function createHandler(
         return;
       }
 
-      // `GET /info` — effective config as prose + structured twin (#163).
+      // `GET /info` — effective config as prose + structured twin (#163 / #321).
       if (method === "GET" && url.pathname === "/info") {
-        handleInfo(engine, res, url.searchParams);
+        handleInfo(res, url.searchParams, paths, adapters, db);
         return;
       }
 
@@ -3436,7 +3458,7 @@ export async function startServer(
     process.stderr.write(`parley daemon: UI discovery failed, serving no UI: ${String(err)}\n`);
   }
   const server = http.createServer(
-    createHandler(engine, uiBundleDir, paths, options.identity, db),
+    createHandler(engine, uiBundleDir, paths, options.identity, db, adapters),
   );
   // Children must never outlive the daemon (no orphans): whatever path the
   // process exits through — graceful close below, crash, signal handler —

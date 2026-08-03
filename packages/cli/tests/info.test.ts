@@ -54,8 +54,8 @@ function vendorPath(...vendors: string[]): string {
   return dir;
 }
 
-describe("parley info — sections from live config (#163 / #169)", () => {
-  it("lists PATH-detected vendors separately and explains the allowlist requirement", async () => {
+describe("parley info — sections from live config (#163 / #169 / #321)", () => {
+  it("lists daemon-host executor vendors from PATH (not CLI-only)", async () => {
     const cwd = projectDir();
     const detectedPath = vendorPath("codex", "grok");
 
@@ -65,10 +65,11 @@ describe("parley info — sections from live config (#163 / #169)", () => {
     });
     expect(prose.code).toBe(0);
     expect(prose.stdout).toContain("(none configured");
-    expect(prose.stdout).toContain("### Detected, unconfigured vendors");
-    expect(prose.stdout).toContain("`codex` — detected on PATH");
-    expect(prose.stdout).toContain("`grok` — detected on PATH");
-    expect(prose.stdout).toMatch(/delegation is denied until a model allowlist is configured/);
+    expect(prose.stdout).toContain("### Executors");
+    expect(prose.stdout).toContain("`local` (online):");
+    expect(prose.stdout).toMatch(/`local` \(online\):.*codex/);
+    expect(prose.stdout).toMatch(/`local` \(online\):.*grok/);
+    expect(prose.stdout).toContain("parley runners show");
     expect(prose.stdout).toContain("/parley-wizard");
 
     const json = await runCli(["info", "--json"], home, {
@@ -78,10 +79,12 @@ describe("parley info — sections from live config (#163 / #169)", () => {
     expect(json.code).toBe(0);
     const config = JSON.parse(json.stdout) as InfoConfig;
     expect(config.vendors).toEqual([]);
-    expect(config.detected_vendors).toEqual(["codex", "grok"]);
+    expect(config.executors).toEqual([
+      { name: "local", status: "online", vendors: ["codex", "grok"] },
+    ]);
   });
 
-  it("excludes configured vendors from the detected, unconfigured group", async () => {
+  it("keeps configured vendors separate from executor availability", async () => {
     const cwd = projectDir();
     const detectedPath = vendorPath("codex", "grok");
     writeFiles(home, {
@@ -99,10 +102,11 @@ describe("parley info — sections from live config (#163 / #169)", () => {
     expect(res.code).toBe(0);
     const config = JSON.parse(res.stdout) as InfoConfig;
     expect(config.vendors.map((vendor) => vendor.id)).toEqual(["codex"]);
-    expect(config.detected_vendors).toEqual(["grok"]);
+    // Both remain on the local executor fingerprint even when configured.
+    expect(config.executors[0]?.vendors).toEqual(["codex", "grok"]);
   });
 
-  it("keeps an explicit empty configured state and wizard hint when nothing is detected", async () => {
+  it("keeps an explicit empty configured state and wizard hint when nothing is on the daemon PATH", async () => {
     const cwd = projectDir();
     const emptyPath = vendorPath();
     const res = await runCli(["info"], home, {
@@ -112,7 +116,40 @@ describe("parley info — sections from live config (#163 / #169)", () => {
     expect(res.code).toBe(0);
     expect(res.stdout).toContain("(none configured");
     expect(res.stdout).toContain("/parley-wizard");
-    expect(res.stdout).toContain("(none detected on PATH)");
+    expect(res.stdout).toContain("`local` (online): (none)");
+  });
+
+  it("uses the daemon host PATH when the CLI PATH differs (#321)", async () => {
+    const cwd = projectDir();
+    const daemonPath = vendorPath("codex");
+    const cliPath = vendorPath("grok"); // CLI host has grok only; daemon has codex.
+
+    // Spawn daemon with codex on PATH.
+    const start = await runCli(["daemon", "start"], home, {
+      extraEnv: { PATH: daemonPath, PARLEY_FAKE_VENDOR_BIN: "" },
+    });
+    expect(start.code).toBe(0);
+
+    // CLI process PATH has grok (not codex) — info must report daemon truth.
+    const json = await runCli(["info", "--json"], home, {
+      cwd,
+      extraEnv: { PATH: cliPath, PARLEY_FAKE_VENDOR_BIN: "" },
+    });
+    expect(json.code).toBe(0);
+    const config = JSON.parse(json.stdout) as InfoConfig;
+    const local = config.executors.find((e) => e.name === "local");
+    expect(local).toBeDefined();
+    expect(local!.status).toBe("online");
+    expect(local!.vendors).toContain("codex");
+    expect(local!.vendors).not.toContain("grok");
+
+    const prose = await runCli(["info"], home, {
+      cwd,
+      extraEnv: { PATH: cliPath, PARLEY_FAKE_VENDOR_BIN: "" },
+    });
+    expect(prose.code).toBe(0);
+    expect(prose.stdout).toMatch(/`local` \(online\):.*codex/);
+    expect(prose.stdout).not.toMatch(/`local` \(online\):.*grok/);
   });
 
   it("renders all six section headers against fixture configs when eval is on", async () => {
@@ -191,9 +228,11 @@ describe("parley info — sections from live config (#163 / #169)", () => {
     expect(out).toContain("### Defaults");
     expect(out).toMatch(/profile: `fast`/);
     expect(out).toMatch(/vendor: `fake`/);
+    expect(out).toContain("### Executors");
+    expect(out).toMatch(/`local` \(online\)/);
     const configuredSection = out.slice(
       out.indexOf("### Vendors"),
-      out.indexOf("### Detected, unconfigured vendors"),
+      out.indexOf("### Executors"),
     );
     expect(configuredSection).not.toContain("`claude`");
     expect(configuredSection).not.toContain("`codex`");

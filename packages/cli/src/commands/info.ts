@@ -6,10 +6,8 @@ import {
   parseDuration,
   resolveEffectiveProjectSettings,
   type ProjectConfigLayer,
-  type ParleyConfig,
 } from "@useparley/core";
 import {
-  grokSandboxHostWarnings,
   materializeInfoRubrics,
   renderInfoProse,
   type InfoConfig,
@@ -19,7 +17,6 @@ import { parseArgs } from "../args.js";
 import { DaemonRequestError, daemonGet, ensureDaemon } from "../client.js";
 import { type CliContext, printJson } from "../context.js";
 import { UsageError } from "../errors.js";
-import { detectHarnesses, isExecutableOnPath } from "./init.js";
 
 interface InfoBody {
   prose: string;
@@ -44,6 +41,9 @@ function readLocalProjectLayer(projectRoot: string): ProjectConfigLayer {
 /**
  * Apply CLI-side layered merge (daemon globals via GET /config + local project)
  * onto the daemon-built InfoConfig so remote and local share one code path (#178).
+ *
+ * Executor availability and host warnings stay daemon-sourced (#321) — this
+ * merge only rewrites project-layer settings the CLI can read locally.
  */
 function applyLayeredSettings(
   config: InfoConfig,
@@ -151,6 +151,11 @@ function applyLayeredSettings(
   };
   next.provenance = provenance;
 
+  // #321: executors + host warnings are daemon truth — never re-probe the CLI host.
+  next.executors = config.executors;
+  if (config.warnings !== undefined) next.warnings = config.warnings;
+  else delete next.warnings;
+
   return next;
 }
 
@@ -158,8 +163,8 @@ function applyLayeredSettings(
 /**
  * `parley info [--json]` — print the project's effective configuration as
  * orchestrator-facing prose, or the structured config the prose was rendered
- * from (#163 / #178). Global settings come from the daemon (`GET /config`);
- * project overrides are read locally and deep-merged.
+ * from (#163 / #178 / #321). Global settings and executor availability come
+ * from the daemon; project overrides are read locally and deep-merged.
  */
 export async function runInfo(ctx: CliContext, args: string[]): Promise<number> {
   const { positionals, flags } = parseArgs(args, { "--json": {} });
@@ -176,13 +181,9 @@ export async function runInfo(ctx: CliContext, args: string[]): Promise<number> 
 
   // Global layer exclusively via daemon API (never read home from CLI).
   let globalLayer: ProjectConfigLayer = {};
-  let globalConfig: ParleyConfig = {};
   try {
     const configBody = await daemonGet<ConfigBody>(discovery, "/config");
     globalLayer = extractProjectConfigLayer(configBody.config);
-    if (typeof configBody.config === "object" && configBody.config !== null) {
-      globalConfig = configBody.config as ParleyConfig;
-    }
   } catch (err) {
     // Unreachable daemon fails hard below on /info; soft-fail here only if
     // /config is missing on an older daemon — treat as empty global.
@@ -206,20 +207,8 @@ export async function runInfo(ctx: CliContext, args: string[]): Promise<number> 
 
   // One merge implementation: daemon-reported globals + local project overrides.
   // Materialize rubric markdown after layered merge so final taskTypes win (#176).
+  // Executors / host warnings are left as the daemon reported them (#321).
   const layered = applyLayeredSettings(body.config, globalLayer, projectLayer);
-  const configuredVendorIds = new Set(layered.vendors.map((vendor) => vendor.id));
-  layered.detected_vendors = detectHarnesses(globalConfig, ctx.env)
-    .filter((id) => !configuredVendorIds.has(id))
-    .sort((a, b) => a.localeCompare(b));
-  // Host advisories (#247): ride the same vendor detection path; never fail info.
-  const grokPresent =
-    configuredVendorIds.has("grok") || layered.detected_vendors.includes("grok");
-  const hostWarnings = grokSandboxHostWarnings({
-    platform: process.platform,
-    hasBubblewrap: isExecutableOnPath("bwrap", ctx.env),
-    grokPresent,
-  });
-  if (hostWarnings.length > 0) layered.warnings = hostWarnings;
   const config = materializeInfoRubrics(project, layered);
   const prose = renderInfoProse(config);
 
