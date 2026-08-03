@@ -686,13 +686,20 @@ export interface AuthGateInput {
   authorization: string | undefined;
   config: ParleyConfig;
   /**
-   * For child routes off-loopback: the task's `runner` field (lease holder),
-   * or `null` when the task exists but has no runner affinity / is unleased
-   * to a runner. Omit when the task id header is missing or the task is unknown.
+   * For child routes off-loopback: the task's `runner` field (submit-time
+   * affinity; not a live lease by itself), or `null` when the task exists but
+   * has no runner affinity. Omit when the task id header is missing or the
+   * task is unknown.
    */
   taskRunner?: string | null;
   /** For child routes: whether a task was resolved from the correlation header. */
   taskFound?: boolean;
+  /**
+   * For child routes off-loopback: the task's current lifecycle state. Used
+   * with the affinity name match so only an *actively executing* task grants
+   * child-channel access (pending/queued/terminal are rejected).
+   */
+  taskState?: string | null;
 }
 
 export interface AuthGateAllow {
@@ -722,7 +729,8 @@ export interface AuthGateDeny {
  * Non-loopback:
  * - `config-admin` → 403 always (host-shell / loopback only)
  * - `runner` → valid runner token
- * - `child` → valid runner token whose name matches the task's lease holder
+ * - `child` → valid runner token whose name matches the task's affinity
+ *   **and** the task is actively executing (not pending/queued/terminal)
  * - `client` → valid client token (never a runner token)
  */
 export function authorizeRequest(input: AuthGateInput): AuthGateAllow | AuthGateDeny {
@@ -787,8 +795,11 @@ export function authorizeRequest(input: AuthGateInput): AuthGateAllow | AuthGate
   }
 
   if (routeClass === "child") {
-    // F2: child channel is runner-only and bound to the task's lease holder.
-    // Client tokens are never admitted here.
+    // F2: child channel is runner-only and bound to the *active* lease holder
+    // (affinity name match + non-pending/non-queued/non-terminal state).
+    // Client tokens are never admitted here. `task.runner` alone is submit-time
+    // affinity and is not sufficient — a pending or terminal task must not
+    // grant child-channel access to the affine runner.
     const runnerName = matchRunnerToken(token, input.config);
     if (runnerName === null) {
       // Presenter was not a runner (missing/wrong/client token).
@@ -825,6 +836,27 @@ export function authorizeRequest(input: AuthGateInput): AuthGateAllow | AuthGate
         ok: false,
         status: 403,
         error: `forbidden: runner "${runnerName}" does not hold the lease for this task`,
+        routeClass,
+        peer,
+      };
+    }
+    // State guard: affinity is set at submit time for the task's whole life.
+    // Only an actively executing (claimed) task may use the child channel.
+    // Mirrors engine runner-surface checks (affinity + not terminal) and also
+    // rejects pre-claim states where no lease exists yet.
+    const taskState = input.taskState;
+    if (
+      taskState === "pending" ||
+      taskState === "queued" ||
+      (typeof taskState === "string" && isTerminalState(taskState))
+    ) {
+      return {
+        ok: false,
+        status: 403,
+        error:
+          taskState === "pending" || taskState === "queued"
+            ? `forbidden: task is not actively leased (state is ${taskState})`
+            : `forbidden: task is already ${taskState}`,
         routeClass,
         peer,
       };
@@ -876,6 +908,7 @@ function gateRequest(
 
   let taskRunner: string | null | undefined;
   let taskFound: boolean | undefined;
+  let taskState: string | null | undefined;
   if (routeClass === "child" && !isLoopbackRequest(req)) {
     const header = req.headers[TASK_HEADER];
     const taskId = Array.isArray(header) ? header[0] : header;
@@ -884,13 +917,16 @@ function gateRequest(
       if (task !== undefined) {
         taskFound = true;
         taskRunner = task.runner;
+        taskState = task.state;
       } else {
         taskFound = false;
         taskRunner = null;
+        taskState = null;
       }
     } else {
       taskFound = false;
       taskRunner = null;
+      taskState = null;
     }
   }
 
@@ -905,6 +941,7 @@ function gateRequest(
     config,
     taskRunner,
     taskFound,
+    taskState,
   });
 
   if (!decision.ok) {

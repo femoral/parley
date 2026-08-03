@@ -53,7 +53,7 @@ auth is mandatory for every non-loopback peer**:
 | Route class | Principal off-loopback |
 | --- | --- |
 | `/runner/*` | Runner token (name-matched as today; already required on loopback too) |
-| `/child/*`, `/mcp` | Runner token **bound to the task's lease holder** (`task.runner`) |
+| `/child/*`, `/mcp` | Runner token **bound to the active lease holder while the task executes** |
 | All other routes (client surface, `/health`, `GET /runners`, UI, `/xai/…`) | Client token only |
 | `PUT /config`, `POST /config/set`, `POST /config/unset` | **Forbidden off-loopback** (403) regardless of any valid token |
 
@@ -67,10 +67,20 @@ also listens on `0.0.0.0`. Missing/`undefined` peer address fails closed
 Runner-hosted children never dial the daemon directly: they talk to the
 runner's local hub proxy, which forwards `/child/*` and `/mcp` and attaches
 the runner bearer token so non-loopback hops authenticate as that runner.
-The gate requires the authenticated runner name to match `task.runner` (the
-lease holder); unleased tasks, local (null-runner) tasks, and other runners
-are rejected. In-daemon children still hit loopback and stay tokenless.
-Client tokens are **not** admitted on the child channel.
+The child-channel gate pairs two checks (mirroring runner-surface handlers):
+
+1. **Name match** — authenticated runner equals `task.runner` (submit-time
+   affinity; the field is set for the task's whole life, not only while leased).
+2. **Active execution** — task state is neither pre-claim (`pending`/`queued`)
+   nor terminal (`completed`/`failed`/`cancelled`). Only an actively executing
+   task (e.g. `running`, `awaiting_answer`) grants child-channel access.
+
+Affinity alone is not a lease: a pending task must not accept forged
+`/child/report` traffic from the affine runner, and a terminal task must not
+keep indefinite `GET /child/task` envelope access. Unleased / local
+(null-runner) tasks and other runners are rejected. In-daemon children still
+hit loopback and stay tokenless. Client tokens are **not** admitted on the
+child channel.
 
 ### Config read vs admin
 

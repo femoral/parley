@@ -303,6 +303,7 @@ describe("authorizeRequest — deterministic gate (no sockets)", () => {
       config: AUTH_CONFIG,
       taskFound: true,
       taskRunner: "gpu",
+      taskState: "running",
     });
     expect(d.ok).toBe(false);
     if (!d.ok) {
@@ -320,6 +321,7 @@ describe("authorizeRequest — deterministic gate (no sockets)", () => {
       config: AUTH_CONFIG,
       taskFound: true,
       taskRunner: "gpu",
+      taskState: "running",
     });
     expect(d.ok).toBe(false);
     if (!d.ok) {
@@ -337,6 +339,7 @@ describe("authorizeRequest — deterministic gate (no sockets)", () => {
       config: AUTH_CONFIG,
       taskFound: true,
       taskRunner: "gpu",
+      taskState: "running",
     });
     expect(d.ok).toBe(false);
     if (!d.ok) {
@@ -354,6 +357,7 @@ describe("authorizeRequest — deterministic gate (no sockets)", () => {
       config: AUTH_CONFIG,
       taskFound: true,
       taskRunner: null,
+      taskState: "running",
     });
     expect(d.ok).toBe(false);
     if (!d.ok) {
@@ -388,6 +392,97 @@ describe("authorizeRequest — deterministic gate (no sockets)", () => {
       config: AUTH_CONFIG,
       taskFound: true,
       taskRunner: "gpu",
+      taskState: "running",
+    });
+    expect(d.ok).toBe(true);
+    if (d.ok) expect(d.runnerName).toBe("gpu");
+  });
+
+  it("non-loopback child route: affine runner + pending task → 403 (active lease)", () => {
+    // task.runner is submit-time affinity, not a live lease. A pending task
+    // must not grant child-channel access to the affine runner.
+    const d = authorizeRequest({
+      remoteAddress: remote,
+      method: "POST",
+      pathname: "/child/report",
+      authorization: "Bearer fake-runner-token-gpu",
+      config: AUTH_CONFIG,
+      taskFound: true,
+      taskRunner: "gpu",
+      taskState: "pending",
+    });
+    expect(d.ok).toBe(false);
+    if (!d.ok) {
+      expect(d.status).toBe(403);
+      expect(d.error).toMatch(/not actively leased/);
+      expect(d.error).toMatch(/pending/);
+    }
+  });
+
+  it("non-loopback child route: affine runner + queued task → 403 (active lease)", () => {
+    const d = authorizeRequest({
+      remoteAddress: remote,
+      method: "POST",
+      pathname: "/child/report",
+      authorization: "Bearer fake-runner-token-gpu",
+      config: AUTH_CONFIG,
+      taskFound: true,
+      taskRunner: "gpu",
+      taskState: "queued",
+    });
+    expect(d.ok).toBe(false);
+    if (!d.ok) {
+      expect(d.status).toBe(403);
+      expect(d.error).toMatch(/not actively leased/);
+      expect(d.error).toMatch(/queued/);
+    }
+  });
+
+  it("non-loopback child route: affine runner + terminal (failed) task → 403 (active lease)", () => {
+    // After terminal, the affine runner must not keep indefinite child-channel
+    // access (e.g. GET /child/task envelope).
+    const d = authorizeRequest({
+      remoteAddress: remote,
+      method: "GET",
+      pathname: "/child/task",
+      authorization: "Bearer fake-runner-token-gpu",
+      config: AUTH_CONFIG,
+      taskFound: true,
+      taskRunner: "gpu",
+      taskState: "failed",
+    });
+    expect(d.ok).toBe(false);
+    if (!d.ok) {
+      expect(d.status).toBe(403);
+      expect(d.error).toMatch(/already failed/);
+    }
+  });
+
+  it("non-loopback child route: affine runner + actively running task → pass (active lease)", () => {
+    const d = authorizeRequest({
+      remoteAddress: remote,
+      method: "POST",
+      pathname: "/child/report",
+      authorization: "Bearer fake-runner-token-gpu",
+      config: AUTH_CONFIG,
+      taskFound: true,
+      taskRunner: "gpu",
+      taskState: "running",
+    });
+    expect(d.ok).toBe(true);
+    if (d.ok) expect(d.runnerName).toBe("gpu");
+  });
+
+  it("non-loopback child route: affine runner + awaiting_answer → pass (active lease)", () => {
+    const d = authorizeRequest({
+      remoteAddress: remote,
+      method: "POST",
+      pathname: "/mcp",
+      authorization: "Bearer fake-runner-token-gpu",
+      config: AUTH_CONFIG,
+      taskFound: true,
+      taskRunner: "gpu",
+      taskState: "awaiting_answer",
     });
     expect(d.ok).toBe(true);
     if (d.ok) expect(d.runnerName).toBe("gpu");
