@@ -213,7 +213,7 @@ describe("antigravity adapter — sandbox × network posture (golden)", () => {
     expect(plan.argv).not.toContain("--sandbox");
   });
 
-  it("read-only + network on → omit skip-permissions; materialize allow rules", async () => {
+  it("read-only + network on → omit skip-permissions; only verified-adjacent allow", async () => {
     const plan = await createAntigravityAdapter(operatorEnv()).prepare(
       spec({ sandbox: "read-only", network: true }),
       HUB,
@@ -224,8 +224,9 @@ describe("antigravity adapter — sandbox × network posture (golden)", () => {
     const json = JSON.parse(settings!.contents) as {
       permissions: { allow: string[] };
     };
-    expect(json.permissions.allow).toContain("read_file(*)");
-    expect(json.permissions.allow).toContain("call_mcp_tool(*)");
+    // Only read_file(*) is verified-adjacent (research §5); do not invent
+    // view_file / code_search / call_mcp_tool as permission names.
+    expect(json.permissions.allow).toEqual(["read_file(*)"]);
   });
 
   it("refuses network:false for every sandbox (research §5)", async () => {
@@ -282,6 +283,17 @@ describe("antigravity adapter — MCP stdio bridge (research §3/§9)", () => {
     expect(bridge!.contents).toContain("submit_report");
     expect(bridge!.contents).toContain("ask_orchestrator");
     expect(bridge!.contents).toContain("/child/report");
+  });
+
+  it("sets mode 0o600 on OAuth token and installation_id MaterializedFiles", async () => {
+    const plan = await createAntigravityAdapter(operatorEnv()).prepare(spec(), HUB);
+    const token = plan.files.find((f) => f.path.endsWith("antigravity-oauth-token"));
+    const installId = plan.files.find((f) => f.path.endsWith("installation_id"));
+    expect(token?.mode).toBe(0o600);
+    expect(installId?.mode).toBe(0o600);
+    // Non-credential files stay mode-less (umask default).
+    const settings = plan.files.find((f) => f.path.endsWith("settings.json"));
+    expect(settings?.mode).toBeUndefined();
   });
 });
 
@@ -545,10 +557,10 @@ describe("antigravity adapter — models listing parse (research §7)", () => {
     expect(byId.get("gpt-oss-120b")?.label).toBe("GPT-OSS 120B (Medium)");
   });
 
-  it("exposes listModels on the adapter", () => {
+  it("exposes listModels and omits readModels (no on-disk catalog)", () => {
     const adapter = createAntigravityAdapter({});
     expect(typeof adapter.listModels).toBe("function");
-    expect(typeof adapter.readModels).toBe("function");
+    expect(adapter.readModels).toBeUndefined();
   });
 });
 

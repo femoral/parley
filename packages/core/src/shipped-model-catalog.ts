@@ -47,7 +47,9 @@ export const SHIPPED_MODEL_CATALOG: ModelCatalog = {
     source: "docs/research/antigravity-cli-automation.md §7 (agy models 1.1.7)",
     notes:
       "Efforts only from listed rows; strip -high/-medium/-low only. " +
-      "claude-*-thinking is one id (no --effort). Labels from TTY listing.",
+      "claude-*-thinking is one id (no --effort). " +
+      "Labels: probe pipes stdout (ids only); label↔id bridge needs pty " +
+      "allocation for a future settings-selection feature (research §7).",
     models: [
       entry("gemini-3.6-flash", ["high", "medium", "low"]),
       entry("gemini-3.5-flash", ["high", "medium", "low"]),

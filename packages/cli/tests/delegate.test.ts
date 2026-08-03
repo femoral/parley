@@ -714,6 +714,14 @@ describe("delegate usage errors (exit 2)", () => {
     expect(result.stderr).toMatch(/vendor/);
   });
 
+  it("rejects retired vendor gemini naming antigravity (#286)", async () => {
+    const cwd = taskDir([]);
+    const result = await runCli(["delegate", "-v", "gemini", "--cwd", cwd, "x"], home);
+    expect(result.code).toBe(2);
+    expect(result.stderr).toMatch(/gemini.*antigravity|antigravity.*gemini/i);
+    expect(result.stderr).toMatch(/agy/);
+  });
+
   it("rejects a missing vendor/profile when no defaults are configured", async () => {
     const result = await runCli(["delegate", "--cwd", "/tmp", "x"], home);
     expect(result.code).toBe(2);

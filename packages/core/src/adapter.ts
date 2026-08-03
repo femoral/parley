@@ -172,6 +172,12 @@ export interface MaterializedFile {
   /** Path relative to `SpawnPlan.cwd`. */
   path: string;
   contents: string;
+  /**
+   * Optional POSIX file mode applied after write (e.g. `0o600` for credentials).
+   * When omitted the engine uses the process umask default (typically 0644).
+   * Adapters that materialize secrets MUST set this explicitly.
+   */
+  mode?: number;
 }
 
 /** Everything needed to spawn a vendor child process. */

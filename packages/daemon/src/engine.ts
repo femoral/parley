@@ -239,11 +239,13 @@ import {
   commonGitDir,
   createWorktree,
   excludeMaterializedFiles,
+  excludeMaterializedFilesInCwdRepo,
   gitDir,
   isValidGitCheckout,
   isWorktreeModified,
   removeWorktree,
   repoRoot,
+  writeMaterializedFiles,
 } from "./worktree.js";
 
 /** Re-export transition type for callers that imported it from the engine. */
@@ -4661,28 +4663,32 @@ export class TaskEngine {
       );
     }
 
-    // Git-exclude vendor plumbing before writing it, so a worktree task's
-    // `git status` stays clean, the files never count as "modified" (which would
-    // block auto-remove of an otherwise-untouched worktree), and the child can
-    // never stage them. A `--cwd` task has no parley worktree to manage.
-    if (plan.files.length > 0 && task.worktree !== null) {
+    // Git-exclude vendor plumbing before writing it so the child can never
+    // stage secrets / MCP bridge scripts:
+    //  - parley worktree → worktree-private exclude (never touches source repo)
+    //  - --cwd inside a git repo → that repo's local .git/info/exclude (#286)
+    //  - --cwd outside git → skip silently
+    if (plan.files.length > 0) {
+      const relPaths = plan.files.map((file) => file.path);
       try {
-        excludeMaterializedFiles(task.worktree, plan.files.map((file) => file.path));
+        if (task.worktree !== null) {
+          excludeMaterializedFiles(task.worktree, relPaths);
+        } else {
+          excludeMaterializedFilesInCwdRepo(plan.cwd, relPaths);
+        }
       } catch (err) {
         // Best-effort: a git failure here must not stop the task from running —
         // but it leaves plumbing visible as untracked (blocking auto-remove of
         // an untouched worktree), so record it in the daemon log, don't hide it.
         console.error(
-          `task ${task.id}: failed to git-exclude vendor files in ${task.worktree}: ${errorMessage(err)}`,
+          `task ${task.id}: failed to git-exclude vendor files in ${
+            task.worktree ?? plan.cwd
+          }: ${errorMessage(err)}`,
         );
       }
     }
 
-    for (const file of plan.files) {
-      const target = path.join(plan.cwd, file.path);
-      fs.mkdirSync(path.dirname(target), { recursive: true });
-      fs.writeFileSync(target, file.contents);
-    }
+    writeMaterializedFiles(plan.cwd, plan.files);
 
     const logDir = taskLogDir(this.paths, task.id);
     fs.mkdirSync(logDir, { recursive: true });

@@ -17,8 +17,10 @@ import { runProbe } from "./probe.js";
 
 /**
  * The `antigravity` vendor adapter — real delegation to Google's Antigravity
- * CLI (`agy` binary, #286). Verified against `agy` v1.1.7 (2026-08-02); see
- * `docs/research/antigravity-cli-automation.md` for the surface.
+ * CLI (`agy` binary, #286 / ADR-0026). Verified against `agy` v1.1.7
+ * (2026-08-02); see `docs/research/antigravity-cli-automation.md` for the
+ * surface. Breaking rename of the retired `gemini` vendor id — no alias
+ * (ADR-0026).
  *
  * Headless one-shot (research §2 / §9):
  *   agy --output-format stream-json --dangerously-skip-permissions
@@ -33,10 +35,10 @@ import { runProbe } from "./probe.js";
  *
  * MCP is global-only under `$HOME/.gemini/config/mcp_config.json` (research
  * §3). Per-task injection uses a private `HOME` (the only home lever —
- * research §1) seeded with the operator's OAuth token + installation_id, plus
- * a stdio MCP bridge that proxies to the daemon child REST surface (no
- * Streamable-HTTP/`headers` support on agy — research §3/§9). Correlation
- * rides in env / embedded constants, not headers.
+ * research §1) seeded with the operator's OAuth token + installation_id
+ * (mode 0600), plus a stdio MCP bridge that proxies to the daemon child REST
+ * surface (no Streamable-HTTP/`headers` support on agy — research §3/§9).
+ * Correlation rides in env / embedded constants, not headers.
  *
  * Resume: `--conversation <uuid>` across process invocations; conversations
  * live under the home, so prepare and resume must share the same HOME
@@ -45,12 +47,13 @@ import { runProbe } from "./probe.js";
  * Effort: only `low|medium|high` (research §6). Strip only those suffixes when
  * parsing `agy models`; `-thinking` is part of the model id. Suffixless models
  * (e.g. `claude-sonnet-4-6`) reject `--effort` entirely — never pass it unless
- * `task.effort` is set (allowlist is the spawn authority).
+ * `task.effort` is set (allowlist is the spawn authority). Discovery is a real
+ * `listModels` probe with efforts (ADR-0026) — not a hand-maintained id list.
  *
  * Network: no lever at all (research §5). Refuse `network:false` for every
- * sandbox value rather than under-isolate (ADR-0023 / gemini adapter
- * precedent). Do not pass `--sandbox` (fails open). `--mode plan|accept-edits`
- * are no-ops in print mode — do not map postures onto them.
+ * sandbox value rather than under-isolate (ADR-0023). Do not pass `--sandbox`
+ * (fails open). `--mode plan|accept-edits` are no-ops in print mode — do not
+ * map postures onto them.
  */
 
 /** Default binary; override via `PARLEY_ANTIGRAVITY_BIN` (smoke tests, custom installs). */
@@ -71,9 +74,11 @@ const MCP_SERVER_NAME = "parley";
 /** Probe command recorded as catalog `source` on refresh (research §7). */
 const MODELS_SOURCE = "agy models";
 
-/** Cap on oauth/token/settings reads from the operator home. */
+/** Cap on oauth/token reads from the operator home. */
 const OPERATOR_AUTH_MAX_BYTES = 256 * 1024;
-const OPERATOR_SETTINGS_MAX_BYTES = 1 * 1024 * 1024;
+
+/** Credential file mode (research §9: antigravity-oauth-token is mode 0600). */
+const CREDENTIAL_MODE = 0o600;
 
 /**
  * Effort suffixes stripped from piped/TTY model listing ids (research §6/§7).
@@ -147,8 +152,13 @@ export function formatPrintTimeout(answerTimeoutMs: number): string {
  * TTY form: `id<spaces>label` — split on the first run of 2+ spaces.
  *
  * Strip only trailing `-high`/`-medium`/`-low` → base id + effort. Collect
- * efforts per base id only from listed rows — never synthesize. Preserve
- * label when present (label↔id bridge; unavailable without a pty).
+ * efforts per base id only from listed rows — never synthesize.
+ *
+ * Label capture: the TTY two-column branch is kept for unit tests and for a
+ * future settings-selection feature that needs the label↔id bridge (settings
+ * store a display *label*, not an id — research §7). Real `listModels` probes
+ * pipe stdout, so labels are never present on the refresh path; reviving them
+ * requires allocating a pty for `agy models`.
  */
 export function parseAgyModels(text: string): ModelEntry[] {
   // Map base id → { efforts (order preserved), label? }
@@ -164,6 +174,8 @@ export function parseAgyModels(text: string): ModelEntry[] {
 
     let idPart = line;
     let label: string | undefined;
+    // TTY-only label column (research §7). Unreachable on piped probes —
+    // keep for tests / future pty allocation; do not invent labels from ids.
     const split = line.match(/^(\S+)\s{2,}(.+)$/);
     if (split) {
       idPart = split[1]!;
@@ -468,21 +480,26 @@ function mcpConfigJson(task: TaskSpec, hub: HubInfo): string {
 }
 
 /**
- * `settings.json` permissions for read-only posture (research §5). Only
- * `<tool>(*)` patterns are observed to grant; path-scoped patterns do not
- * work. Workspace/full use `--dangerously-skip-permissions` instead.
+ * `settings.json` for read-only posture (research §5).
+ *
+ * Best-effort until §5 is extended: research verified granting patterns
+ * `write_file(*)` and `command(*)`, plus `read_file` as the permission name
+ * in agy's own denial hint. Path-scoped patterns do not work. Tool names from
+ * `init.tools` (e.g. `view_file`, `code_search`, `call_mcp_tool`) are **not**
+ * verified permission names — inventing them risks silent auto-deny of the
+ * MCP child channel. Keep only the verified-adjacent entry.
+ *
+ * // UNKNOWN(research §5): whether `read_file(*)` alone is sufficient for
+ * // useful RO agent work, and the full permission-name vocabulary.
  */
 function settingsJsonReadOnly(): string {
   return (
     JSON.stringify(
       {
         permissions: {
-          allow: [
-            "read_file(*)",
-            "view_file(*)",
-            "code_search(*)",
-            "call_mcp_tool(*)",
-          ],
+          // UNKNOWN(research §5): only verified-adjacent permission name;
+          // read-only posture remains approximate (enforcement declaration).
+          allow: ["read_file(*)"],
         },
       },
       null,
@@ -491,20 +508,13 @@ function settingsJsonReadOnly(): string {
   );
 }
 
-/** Empty/minimal settings so the home layout exists for non-read-only runs. */
+/**
+ * Minimal settings so the home layout exists for workspace/full runs.
+ * Approvals come from argv `--dangerously-skip-permissions` (research §5);
+ * do not invent `permissions.allow` shapes beyond `<tool>(*)`.
+ */
 function settingsJsonDefault(): string {
-  return (
-    JSON.stringify(
-      {
-        permissions: {
-          // Prefer argv --dangerously-skip-permissions; this is belt-and-braces.
-          allow: ["*"],
-        },
-      },
-      null,
-      2,
-    ) + "\n"
-  );
+  return JSON.stringify({}, null, 2) + "\n";
 }
 
 /**
@@ -572,6 +582,8 @@ export function createAntigravityAdapter(
       {
         path: path.join(homeRel, ".gemini", "antigravity-cli", "antigravity-oauth-token"),
         contents: auth.token.endsWith("\n") ? auth.token : `${auth.token}\n`,
+        // research §9: operator token is mode 0600; engine honours MaterializedFile.mode
+        mode: CREDENTIAL_MODE,
       },
       {
         path: path.join(
@@ -598,6 +610,7 @@ export function createAntigravityAdapter(
         contents: auth.installationId.endsWith("\n")
           ? auth.installationId
           : `${auth.installationId}\n`,
+        mode: CREDENTIAL_MODE,
       });
     }
     return { files: out, diagnostics: auth.diagnostics };
@@ -837,37 +850,10 @@ export function createAntigravityAdapter(
 
     async listModels(): Promise<ProbedModels> {
       // Piped stdout is ids-only (research §7) — labels need a pty and are
-      // UNVERIFIED for the probe path. Parse ids + effort suffixes only.
+      // unreachable on this path. Parse ids + effort suffixes only.
+      // readModels omitted: no on-disk catalog (issue #286 out of scope).
       const stdout = await runProbe(bin, ["models"]);
       return { source: MODELS_SOURCE, models: parseAgyModels(stdout) };
-    },
-
-    async readModels(): Promise<ProbedModels> {
-      // No on-disk model catalog (research §7 / issue #286): agy holds the
-      // listing in memory only and persists a display *label* in settings.json,
-      // not an id. Catalog channel is the probe (`listModels`). Settings read
-      // is best-effort metadata for source provenance only — never invent ids
-      // from a label without the TTY listing.
-      const home = resolveOperatorVendorHome("antigravity", env);
-      if (home === null) {
-        return { source: "~/.gemini/antigravity-cli/settings.json", models: [] };
-      }
-      const settingsPath = path.join(home, "antigravity-cli", "settings.json");
-      const sourceBase = displayVendorPath(settingsPath, env);
-      const read = readOperatorFileText(
-        settingsPath,
-        "settings.json",
-        OPERATOR_SETTINGS_MAX_BYTES,
-      );
-      if (read.error !== null) {
-        throw new Error(read.error);
-      }
-      // Absent or present — either way there is no model *catalog* on disk.
-      // Return empty so refresh falls through to probe / shipped catalog.
-      return {
-        source: read.text === null ? sourceBase : `${sourceBase} (label only; no catalog)`,
-        models: [],
-      };
     },
   });
 }

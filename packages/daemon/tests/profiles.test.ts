@@ -225,6 +225,30 @@ describe("default vendor/profile fallback (#175)", () => {
       /unknown vendor from defaults\.vendor: not-a-vendor/,
     );
   });
+
+  it("retired vendor gemini via defaults.vendor fails fast naming antigravity (#286)", () => {
+    writeParleyConfig({ defaults: { vendor: "gemini" } });
+    expect(() => engine().delegate(baseRequest())).toThrow(DelegateError);
+    expect(() => engine().delegate(baseRequest())).toThrow(
+      /unknown vendor: gemini — replaced by antigravity.*agy/i,
+    );
+  });
+});
+
+describe("retired gemini vendor id fail-fast (#286 / ADR-0026)", () => {
+  it("delegate -v gemini fails fast naming antigravity", () => {
+    writeParleyConfig({});
+    expect(() =>
+      engine().delegate(baseRequest({ vendor: "gemini" })),
+    ).toThrow(/unknown vendor: gemini — replaced by antigravity.*agy/i);
+  });
+
+  it("retiredVendorMessage is stable for gemini and null otherwise", async () => {
+    const { retiredVendorMessage } = await import("../src/engine.js");
+    expect(retiredVendorMessage("gemini")).toMatch(/antigravity/);
+    expect(retiredVendorMessage("antigravity")).toBeNull();
+    expect(retiredVendorMessage("codex")).toBeNull();
+  });
 });
 
 describe("profile column migration (#113)", () => {
