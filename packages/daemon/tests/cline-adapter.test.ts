@@ -520,6 +520,27 @@ describe("cline adapter — #107 session id from data-dir scrape (old code never
     }
   });
 
+  it("scrapeClineSessionId skips a directory at the session JSON path without throwing (#294)", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "cline-sess-dir-"));
+    try {
+      const goodSid = "1784193690918_good";
+      const badSid = "1784193690918_isdir";
+      const goodDir = path.join(root, "sessions", goodSid);
+      const badDir = path.join(root, "sessions", badSid);
+      fs.mkdirSync(goodDir, { recursive: true });
+      fs.mkdirSync(badDir, { recursive: true });
+      // Candidate path sessions/<id>/<id>.json is a directory, not a file.
+      fs.mkdirSync(path.join(badDir, `${badSid}.json`), { recursive: true });
+      fs.writeFileSync(
+        path.join(goodDir, `${goodSid}.json`),
+        JSON.stringify({ session_id: goodSid }),
+      );
+      expect(scrapeClineSessionId(root)).toBe(goodSid);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it("returns undefined when the stream never carried a session_id (3.0.42 NDJSON alone)", () => {
     const lines = fs
       .readFileSync(path.join(FIXTURES, "v3.0.42-auth-fail.jsonl"), "utf8")

@@ -1,4 +1,3 @@
-import fs from "node:fs";
 import path from "node:path";
 import { displayVendorPath, resolveOperatorVendorHome } from "@useparley/core";
 import type {
@@ -13,6 +12,7 @@ import type {
   VendorEvent,
 } from "./types.js";
 import { VENDOR_DIAG_PREFIX, withPostureDiagnostics } from "./types.js";
+import { readOperatorFileText } from "./read-operator-file.js";
 
 /** Hermes: WRITE_SAFE_ROOT soft FS; no local network filter (#279). */
 const HERMES_ENFORCEMENT: AdapterEnforcement = {
@@ -55,7 +55,8 @@ const HERMES_ENFORCEMENT: AdapterEnforcement = {
  *
  * `listModels` is omitted — `hermes model` is interactive only (research §7).
  * Model discovery uses `readModels` against the operator's curated
- * `model_catalog.json` cache (#283).
+ * `cache/model_catalog.json` and optional `provider_models_cache.json`
+ * (docs/research/hermes-cli-automation.md §7; #283).
  */
 
 /** Default binary; override via `PARLEY_HERMES_BIN` (smoke tests, custom installs). */
@@ -227,6 +228,7 @@ function isFatalErrorText(text: string): boolean {
  * (hermes_cli/model_catalog.py). Schema v1: `version`, `updated_at`,
  * `providers.<name>.models[]` with `id`, optional `description`, optional
  * boolean `default`. No efforts of any kind.
+ * See docs/research/hermes-cli-automation.md §7 (on-disk caches).
  */
 const MODEL_CATALOG_REL = path.join("cache", "model_catalog.json");
 
@@ -235,6 +237,8 @@ const MODEL_CATALOG_REL = path.join("cache", "model_catalog.json");
  * (hermes_cli/models.py). The curated manifest is a *superset* of what the
  * operator can actually run (tier / tool-call filtering happens at runtime);
  * when this cache is present and readable we prefer the intersection.
+ * Id-form divergence assumption: see research doc §7 and
+ * {@link intersectHermesRowsWithProviderCache}.
  */
 const PROVIDER_MODELS_CACHE_FILE = "provider_models_cache.json";
 
@@ -248,15 +252,6 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
   return typeof value === "object" && value !== null
     ? (value as Record<string, unknown>)
     : undefined;
-}
-
-function isEnoent(err: unknown): boolean {
-  return (
-    typeof err === "object" &&
-    err !== null &&
-    "code" in err &&
-    (err as { code?: string }).code === "ENOENT"
-  );
 }
 
 /**
@@ -494,12 +489,13 @@ export function parseHermesProviderModelsCache(json: string): {
  * provider). When the cache map is empty, return rows unchanged (manifest
  * alone).
  *
- * Id-form mismatch guard: the two on-disk files do not share a verified id
- * schema (curated rows may be `vendor/model` while the runtime cache holds
- * bare API ids). If intersecting a provider that had curated models would
- * drop *every* row for that provider, keep the unfiltered curated rows
- * instead — otherwise discovery silently zeros the catalog and
- * `refreshCatalog` falls through to the empty shipped hermes entry.
+ * Id-form mismatch guard (docs/research/hermes-cli-automation.md §7): the two
+ * on-disk files do not share a verified id schema (curated rows may be
+ * `vendor/model` while the runtime cache holds bare API ids). If intersecting
+ * a provider that had curated models would drop *every* row for that provider,
+ * keep the unfiltered curated rows instead — otherwise discovery silently zeros
+ * the catalog and `refreshCatalog` falls through to the empty shipped hermes
+ * entry.
  */
 export function intersectHermesRowsWithProviderCache(
   rows: readonly HermesCatalogRow[],
@@ -527,6 +523,7 @@ export function intersectHermesRowsWithProviderCache(
     const kept = providerRows.filter((row) => allowed.has(row.id));
     // Empty intersection for a non-empty curated provider → id form mismatch;
     // fall back to that provider's full curated list rather than wiping it.
+    // See research doc §7 (id-form divergence).
     if (kept.length === 0 && providerRows.length > 0) {
       out.push(...providerRows);
     } else {
@@ -537,43 +534,18 @@ export function intersectHermesRowsWithProviderCache(
 }
 
 /**
- * Best-effort read of a regular file under the size cap. Returns:
- *  - `{ kind: "missing" }` on ENOENT
- *  - `{ kind: "error", message }` for oversize / non-file / unreadable
- *  - `{ kind: "ok", text }` on success
- * Never includes file body in error messages (secret hygiene).
+ * Adapter-shaped read over {@link readOperatorFileText}: missing vs error vs ok.
+ * Preserves hermes' prior kind-tagged call sites and error-text behavior.
  */
 function readCappedFile(
   filePath: string,
   fileLabel: string,
   maxBytes: number,
 ): { kind: "missing" } | { kind: "error"; message: string } | { kind: "ok"; text: string } {
-  try {
-    // TOCTOU accepted: stat then read. isFile() stops the static-FIFO /
-    // device hang (#288); a path swapped to FIFO between the two calls
-    // can still block, and a regular file on a hung network mount blocks
-    // regardless. Bound open is not portable enough for our Node target.
-    const stat = fs.statSync(filePath);
-    // #288: refuse non-files (FIFO, dir, device). readFileSync on a FIFO
-    // blocks the daemon event loop forever — treat as present-but-unusable
-    // so refreshCatalog can warn and fall through.
-    if (!stat.isFile()) {
-      return { kind: "error", message: `${fileLabel} is not a regular file` };
-    }
-    if (stat.size > maxBytes) {
-      return {
-        kind: "error",
-        message: `${fileLabel} exceeds size cap (${maxBytes} bytes)`,
-      };
-    }
-    return { kind: "ok", text: fs.readFileSync(filePath, "utf8") };
-  } catch (err) {
-    if (isEnoent(err)) return { kind: "missing" };
-    const message = err instanceof Error ? err.message : String(err);
-    // Never append file body; fs errors may embed the path (collapsed later
-    // by refreshCatalog via collapseOperatorHomeInText).
-    return { kind: "error", message };
-  }
+  const read = readOperatorFileText(filePath, fileLabel, maxBytes);
+  if (read.error !== null) return { kind: "error", message: read.error };
+  if (read.text === null) return { kind: "missing" };
+  return { kind: "ok", text: read.text };
 }
 
 /**

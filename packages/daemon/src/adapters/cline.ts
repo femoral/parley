@@ -508,6 +508,10 @@ export function scrapeClineSessionId(dataDir: string): string | undefined {
     const jsonPath = path.join(sessionsRoot, dir, `${dir}.json`);
     try {
       const st = fs.statSync(jsonPath);
+      // #288 / #294: refuse non-files (FIFO, dir, device). Match the guard
+      // pattern used by readClineSelectedModel — readFileSync on a FIFO would
+      // block the daemon event loop forever.
+      if (!st.isFile()) continue;
       if (st.mtimeMs < bestMtime) continue;
       const raw = JSON.parse(fs.readFileSync(jsonPath, "utf8")) as {
         session_id?: unknown;

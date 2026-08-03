@@ -1,4 +1,3 @@
-import fs from "node:fs";
 import path from "node:path";
 import { displayVendorPath, resolveOperatorVendorHome } from "@useparley/core";
 import type {
@@ -16,6 +15,7 @@ import type {
 } from "./types.js";
 import { VENDOR_DIAG_PREFIX, withPostureDiagnostics } from "./types.js";
 import { runProbe } from "./probe.js";
+import { readOperatorFileText } from "./read-operator-file.js";
 import { parseToml, tomlString, type TomlTable, type TomlValue } from "./toml.js";
 
 /**
@@ -245,15 +245,6 @@ function asString(value: unknown): string {
   return typeof value === "string" ? value : "";
 }
 
-function isEnoent(err: unknown): boolean {
-  return (
-    typeof err === "object" &&
-    err !== null &&
-    "code" in err &&
-    (err as { code?: string }).code === "ENOENT"
-  );
-}
-
 function isTomlTable(value: TomlValue | undefined): value is TomlTable {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -432,6 +423,20 @@ export function grokModelsCacheSource(cachePath: string, cacheFetchedAt: string 
 }
 
 /**
+ * Catalog source string for a grok config.toml contribution (#294). Surfaces
+ * `models.default` when present — same cosmetic pattern as pi's default_model=.
+ */
+export function grokModelsConfigSource(
+  configPath: string,
+  defaultModel: string | null,
+): string {
+  if (defaultModel !== null && defaultModel !== "") {
+    return `${configPath} (default_model=${defaultModel})`;
+  }
+  return configPath;
+}
+
+/**
  * Union cache models with config.toml `[model.*]` ids. Same-id: cache wins
  * (richer efforts). Order: cache first, then config-only ids.
  */
@@ -445,34 +450,6 @@ export function mergeGrokDiskModels(
     if (!byId.has(m.id)) byId.set(m.id, m);
   }
   return [...byId.values()];
-}
-
-function readOperatorFileText(
-  filePath: string,
-  fileLabel: string,
-  maxBytes: number,
-): { text: string | null; error: string | null } {
-  try {
-    const stat = fs.statSync(filePath);
-    // #288: refuse non-files (FIFO, dir, device). readFileSync on a FIFO
-    // blocks the daemon event loop forever.
-    if (!stat.isFile()) {
-      return { text: null, error: `${fileLabel} is not a regular file` };
-    }
-    if (stat.size > maxBytes) {
-      return {
-        text: null,
-        error: `${fileLabel} exceeds size cap (${maxBytes} bytes)`,
-      };
-    }
-    return { text: fs.readFileSync(filePath, "utf8"), error: null };
-  } catch (err) {
-    if (isEnoent(err)) return { text: null, error: null };
-    return {
-      text: null,
-      error: err instanceof Error ? err.message : String(err),
-    };
-  }
 }
 
 /** True when the posture asks grok for OS isolation (built-in or custom profile). */
@@ -952,8 +929,10 @@ export function createGrokAdapter(env: NodeJS.ProcessEnv = process.env): VendorA
       // GROK_HOME; adapter does not set GROK_HOME on spawn — isolation is
       // cwd-scoped config files). Merge models_cache.json with config.toml
       // `[model.*]` so agent variants outside the cache still appear (#282).
-      // Absent files = quiet empty contribution; present-but-unusable rejects
-      // so refreshCatalog can warn even when the probe fills the gap.
+      // Each on-disk source fails independently (#294): a bad config.toml still
+      // lets models_cache.json contribute (and vice versa). Absent files = quiet
+      // empty contribution; when every present source is unusable we reject so
+      // refreshCatalog can warn even when the probe fills the gap.
       const home = resolveOperatorVendorHome("grok", env);
       if (home === null) return { source: MODELS_CACHE_FILE, models: [] };
 
@@ -962,22 +941,28 @@ export function createGrokAdapter(env: NodeJS.ProcessEnv = process.env): VendorA
       const cacheSourceBase = displayVendorPath(cachePath, env);
       const configSourceBase = displayVendorPath(configPath, env);
 
+      const failures: string[] = [];
+
       const cacheRead = readOperatorFileText(
         cachePath,
         MODELS_CACHE_FILE,
         GROK_MODELS_CACHE_MAX_BYTES,
       );
-      if (cacheRead.error !== null) {
-        throw new Error(cacheRead.error);
-      }
       let cacheModels: ModelEntry[] = [];
       let cacheFetchedAt: string | null = null;
-      if (cacheRead.text !== null) {
+      let cacheUsable = false;
+      if (cacheRead.error !== null) {
+        failures.push(cacheRead.error);
+      } else if (cacheRead.text !== null) {
         // Secret hygiene: parse → project model keys only. Never log `text`.
         const parsed = parseGrokModelsCache(cacheRead.text);
-        if (parsed.error !== null) throw new Error(parsed.error);
-        cacheModels = parsed.models;
-        cacheFetchedAt = parsed.cacheFetchedAt;
+        if (parsed.error !== null) {
+          failures.push(parsed.error);
+        } else {
+          cacheModels = parsed.models;
+          cacheFetchedAt = parsed.cacheFetchedAt;
+          cacheUsable = true;
+        }
       }
 
       const configRead = readOperatorFileText(
@@ -985,34 +970,60 @@ export function createGrokAdapter(env: NodeJS.ProcessEnv = process.env): VendorA
         OPERATOR_CONFIG_FILE,
         GROK_CONFIG_MAX_BYTES,
       );
-      if (configRead.error !== null) {
-        throw new Error(configRead.error);
-      }
       let configModels: ModelEntry[] = [];
-      if (configRead.text !== null) {
+      let defaultModel: string | null = null;
+      let configUsable = false;
+      if (configRead.error !== null) {
+        failures.push(configRead.error);
+      } else if (configRead.text !== null) {
         const parsed = parseGrokModelsConfig(configRead.text);
-        if (parsed.error !== null) throw new Error(parsed.error);
-        configModels = parsed.models;
+        if (parsed.error !== null) {
+          failures.push(parsed.error);
+        } else {
+          configModels = parsed.models;
+          defaultModel = parsed.defaultModel;
+          configUsable = true;
+        }
       }
 
       const models = mergeGrokDiskModels(cacheModels, configModels);
-      const sources: string[] = [];
-      if (cacheRead.text !== null) {
-        sources.push(grokModelsCacheSource(cacheSourceBase, cacheFetchedAt));
+
+      // Fail-soft per file (#294): when at least one source yielded models,
+      // return them and surface sibling failures in the source string. When
+      // models are empty and any present-but-unusable failure remains, throw
+      // so refreshCatalog can warn (preserves size-cap / sole-malformed paths).
+      if (models.length === 0 && failures.length > 0) {
+        throw new Error(failures.join("; "));
       }
-      if (configModels.length > 0) {
-        sources.push(configSourceBase);
-      } else if (cacheRead.text === null && configRead.text !== null) {
-        // Config present but no [model.*] — still name it so source is useful.
-        sources.push(configSourceBase);
-      }
-      if (sources.length === 0) {
+      if (!cacheUsable && !configUsable) {
         return {
           source: grokModelsCacheSource(cacheSourceBase, null),
           models: [],
         };
       }
-      return { source: sources.join(" + "), models };
+
+      const sources: string[] = [];
+      if (cacheUsable) {
+        sources.push(grokModelsCacheSource(cacheSourceBase, cacheFetchedAt));
+      }
+      if (configUsable) {
+        if (configModels.length > 0 || !cacheUsable) {
+          // Config contributed models, or is the only usable source (even if
+          // empty of [model.*]) — name it so source is useful.
+          sources.push(grokModelsConfigSource(configSourceBase, defaultModel));
+        } else if (defaultModel !== null && defaultModel !== "") {
+          // Cache already named; still surface default_model when present.
+          sources.push(grokModelsConfigSource(configSourceBase, defaultModel));
+        }
+      }
+      let source =
+        sources.length > 0
+          ? sources.join(" + ")
+          : grokModelsCacheSource(cacheSourceBase, null);
+      if (failures.length > 0) {
+        source = `${source}; warning: ${failures.join("; ")}`;
+      }
+      return { source, models };
     },
   });
 }

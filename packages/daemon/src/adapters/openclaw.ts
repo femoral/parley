@@ -16,6 +16,7 @@ import type {
 } from "./types.js";
 import { VENDOR_DIAG_PREFIX, withPostureDiagnostics } from "./types.js";
 import { runProbe } from "./probe.js";
+import { readOperatorFileText } from "./read-operator-file.js";
 
 /** OpenClaw: docker sandbox when mode=all; default workspace is host-local (#279). */
 const OPENCLAW_ENFORCEMENT: AdapterEnforcement = {
@@ -283,33 +284,6 @@ export function listOpenclawCatalogPaths(home: string): string[] {
     }
   }
   return paths;
-}
-
-function readRegularFileText(
-  filePath: string,
-  fileLabel: string,
-  maxBytes: number,
-): { text: string | null; error: string | null } {
-  try {
-    const stat = fs.statSync(filePath);
-    // #288: refuse non-files (FIFO, dir, device).
-    if (!stat.isFile()) {
-      return { text: null, error: `${fileLabel} is not a regular file` };
-    }
-    if (stat.size > maxBytes) {
-      return {
-        text: null,
-        error: `${fileLabel} exceeds size cap (${maxBytes} bytes)`,
-      };
-    }
-    return { text: fs.readFileSync(filePath, "utf8"), error: null };
-  } catch (err) {
-    if (isEnoent(err)) return { text: null, error: null };
-    return {
-      text: null,
-      error: err instanceof Error ? err.message : String(err),
-    };
-  }
 }
 
 /** Catalog source string (tilde-collapsed path(s); never credential material). */
@@ -821,7 +795,7 @@ export function createOpenclawAdapter(env: NodeJS.ProcessEnv = process.env): Ven
       const configPath = path.join(home, OPERATOR_CONFIG_FILE);
       const configSource = displayVendorPath(configPath, env);
 
-      const configRead = readRegularFileText(
+      const configRead = readOperatorFileText(
         configPath,
         OPERATOR_CONFIG_FILE,
         OPENCLAW_CONFIG_MAX_BYTES,
@@ -857,7 +831,7 @@ export function createOpenclawAdapter(env: NodeJS.ProcessEnv = process.env): Ven
       const seen = new Set<string>();
       let catalogsRead = 0;
       for (const catalogPath of catalogPaths) {
-        const read = readRegularFileText(
+        const read = readOperatorFileText(
           catalogPath,
           CATALOG_FILE,
           OPENCLAW_CATALOG_MAX_BYTES,

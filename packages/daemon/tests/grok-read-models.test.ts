@@ -10,6 +10,7 @@ import {
   GROK_CONFIG_MAX_BYTES,
   GROK_MODELS_CACHE_MAX_BYTES,
   grokModelsCacheSource,
+  grokModelsConfigSource,
   mergeGrokDiskModels,
   parseGrokModels,
   parseGrokModelsCache,
@@ -176,11 +177,18 @@ describe("union(probe, disk) is a superset of probe (#282 hard contract)", () =>
   });
 });
 
-describe("grokModelsCacheSource / displayVendorPath", () => {
+describe("grokModelsCacheSource / grokModelsConfigSource / displayVendorPath", () => {
   it("surfaces the cache freshness stamp when present", () => {
     expect(grokModelsCacheSource("~/.grok/models_cache.json", "2026-07-15T10:00:00.000Z")).toBe(
       "~/.grok/models_cache.json (cache fetched_at=2026-07-15T10:00:00.000Z)",
     );
+  });
+
+  it("surfaces default_model on the config source when present (#294)", () => {
+    expect(grokModelsConfigSource("~/.grok/config.toml", "grok-4.5")).toBe(
+      "~/.grok/config.toml (default_model=grok-4.5)",
+    );
+    expect(grokModelsConfigSource("~/.grok/config.toml", null)).toBe("~/.grok/config.toml");
   });
 
   it("tilde-collapses against os.homedir() when HOME is unset or empty", () => {
@@ -218,6 +226,7 @@ describe("grok adapter readModels", () => {
     expect(ids).not.toContain("hidden-model");
     expect(result.source).toContain("models_cache.json");
     expect(result.source).toContain("config.toml");
+    expect(result.source).toContain("default_model=grok-4.5");
     expect(JSON.stringify(result)).not.toContain(HYGIENE_SENTINEL);
   });
 
@@ -248,6 +257,37 @@ describe("grok adapter readModels", () => {
     );
     const adapter = createGrokAdapter({ GROK_HOME: home });
     await expect(adapter.readModels!(undefined)).rejects.toThrow(/malformed models_cache/);
+  });
+
+  it("fail-soft: malformed config.toml still yields valid models_cache.json (#294)", async () => {
+    home = makeOperatorHome();
+    fs.writeFileSync(
+      path.join(home, "models_cache.json"),
+      readFixture("models_cache.well-formed.json"),
+    );
+    fs.writeFileSync(path.join(home, "config.toml"), readFixture("config.malformed.toml"));
+    const adapter = createGrokAdapter({ GROK_HOME: home });
+    const result = await adapter.readModels!(undefined);
+    expect(result.models.map((m) => m.id)).toContain("grok-4.5");
+    expect(result.models.map((m) => m.id)).not.toContain("grok-build");
+    expect(result.source).toContain("models_cache.json");
+    expect(result.source).toMatch(/warning:.*malformed config\.toml/);
+    expect(JSON.stringify(result)).not.toContain(HYGIENE_SENTINEL);
+  });
+
+  it("fail-soft: malformed models_cache.json still yields valid config.toml (#294)", async () => {
+    home = makeOperatorHome();
+    fs.writeFileSync(
+      path.join(home, "models_cache.json"),
+      readFixture("models_cache.malformed.json"),
+    );
+    fs.writeFileSync(path.join(home, "config.toml"), readFixture("config.well-formed.toml"));
+    const adapter = createGrokAdapter({ GROK_HOME: home });
+    const result = await adapter.readModels!(undefined);
+    expect(result.models.map((m) => m.id)).toContain("grok-build");
+    expect(result.source).toContain("config.toml");
+    expect(result.source).toContain("default_model=grok-4.5");
+    expect(result.source).toMatch(/warning:.*malformed models_cache/);
   });
 
   it("rejects without hanging when models_cache.json is a FIFO (#288)", async () => {
