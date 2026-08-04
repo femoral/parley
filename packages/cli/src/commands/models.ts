@@ -115,7 +115,8 @@ interface RefreshBody {
     capabilities: { vendors: Array<{ id: string; models: ModelEntry[] }> };
     last_seen: string;
     registered_at: string;
-    advertised_age_ms: number;
+    /** Presence / last contact age — not capabilities advertisement age. */
+    last_contact_age_ms: number;
   }>;
 }
 
@@ -136,7 +137,7 @@ function renderRefresh(ctx: CliContext, body: RefreshBody): void {
   }
   for (const runner of body.runners) {
     ctx.stdout(
-      `\nrunner ${runner.name}  (advertised ${formatAge(runner.advertised_age_ms)} ago)\n`,
+      `\nrunner ${runner.name}  (last contact ${formatAge(runner.last_contact_age_ms)} ago)\n`,
     );
     if (runner.capabilities.vendors.length === 0) {
       ctx.stdout("  (no vendors advertised)\n");

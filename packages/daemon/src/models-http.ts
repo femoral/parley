@@ -8,6 +8,10 @@
  * Edit routes are intentionally scoped to the `vendors.<id>.models` subtree
  * only. Accepting arbitrary dotted keys here would reopen the config-admin
  * hole (mint runners, change bind, rewrite bin/args/env, …).
+ *
+ * Model ids commonly contain dots (`gpt-5.6-sol`, opencode/pi ids). Paths are
+ * parsed as `vendors` / `<vendorId>` / `models` / `<modelId…>` where the model
+ * id is the remainder re-joined with dots — not a hard 4-segment cap.
  */
 import {
   loadCatalog,
@@ -24,27 +28,197 @@ import {
 } from "@useparley/core";
 import type { RunnerRow } from "./db.js";
 
+/** Object-prototype poison keys — never allow as vendor or model ids. */
+const RESERVED_IDS = new Set(["__proto__", "constructor", "prototype"]);
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+export type ModelsAllowlistKeyOk = {
+  ok: true;
+  vendorId: string;
+  /** Null when the key addresses the whole `models` map for the vendor. */
+  modelId: string | null;
+};
+
+export type ModelsAllowlistKeyErr = {
+  ok: false;
+  /** Honest rejection message for 400 responses. */
+  error: string;
+};
+
 /**
- * True when `key` addresses the vendor model-allowlist subtree only.
+ * Parse a models-edit key into vendor + optional model id.
  *
  * Allowed shapes:
  * - `vendors.<id>.models` — whole allowlist map for one vendor
- * - `vendors.<id>.models.<modelId>` — one model entry (model ids may contain
- *   dots? No — config keys split on `.`, so model ids with dots are not
- *   addressable as a single segment; set the whole map for those.)
+ * - `vendors.<id>.models.<modelId>` — one model entry; modelId may contain
+ *   dots (`gpt-5.6-sol`) because everything after segment 3 is re-joined
  *
- * Rejects `vendors.<id>.bin`, `daemon.*`, `runners.*`, bare `vendors`, etc.
+ * Rejects empty vendor/model ids, `*` vendor (no wildcard semantics),
+ * reserved dunder ids (`__proto__`, `constructor`, `prototype`) in either
+ * position, and any key outside the models subtree.
+ */
+export function parseModelsAllowlistKey(key: string): ModelsAllowlistKeyOk | ModelsAllowlistKeyErr {
+  if (typeof key !== "string" || key === "") {
+    return { ok: false, error: "key is required" };
+  }
+  const parts = key.split(".");
+  if (parts.length < 3) {
+    return {
+      ok: false,
+      error:
+        `models edit is limited to vendors.<id>.models[.<modelId>]; refused key: ${key}`,
+    };
+  }
+  if (parts[0] !== "vendors") {
+    return {
+      ok: false,
+      error:
+        `models edit is limited to vendors.<id>.models[.<modelId>]; refused key: ${key}`,
+    };
+  }
+  if (parts[2] !== "models") {
+    return {
+      ok: false,
+      error:
+        `models edit is limited to vendors.<id>.models[.<modelId>]; refused key: ${key}`,
+    };
+  }
+  // Reject empty segments in the fixed prefix (vendors..models / vendors.x.models.).
+  if (parts.slice(0, 3).some((p) => p === "")) {
+    return {
+      ok: false,
+      error: `invalid models key (empty path segment): ${key}`,
+    };
+  }
+
+  const vendorId = parts[1]!;
+  if (vendorId === "*") {
+    return {
+      ok: false,
+      error: `vendor id '*' is not allowed (no wildcard semantics)`,
+    };
+  }
+  if (RESERVED_IDS.has(vendorId)) {
+    return {
+      ok: false,
+      error: `refused reserved id in vendor position: ${vendorId}`,
+    };
+  }
+
+  if (parts.length === 3) {
+    return { ok: true, vendorId, modelId: null };
+  }
+
+  // Model id = remainder of the path re-joined with dots (F1).
+  const modelId = parts.slice(3).join(".");
+  if (modelId === "" || parts.slice(3).some((p) => p === "")) {
+    return {
+      ok: false,
+      error: `invalid models key (empty model id segment): ${key}`,
+    };
+  }
+  if (RESERVED_IDS.has(modelId) || parts.slice(3).some((p) => RESERVED_IDS.has(p))) {
+    return {
+      ok: false,
+      error: `refused reserved id in model position: ${modelId}`,
+    };
+  }
+  return { ok: true, vendorId, modelId };
+}
+
+/**
+ * True when `key` addresses the vendor model-allowlist subtree only.
+ * Prefer {@link parseModelsAllowlistKey} when an error message is needed.
  */
 export function isModelsAllowlistKey(key: string): boolean {
-  if (typeof key !== "string" || key === "") return false;
-  const parts = key.split(".");
-  // vendors.<id>.models  OR  vendors.<id>.models.<modelId>
-  if (parts.length < 3 || parts.length > 4) return false;
-  if (parts[0] !== "vendors") return false;
-  if (parts[1] === undefined || parts[1] === "") return false;
-  if (parts[2] !== "models") return false;
-  if (parts.length === 4 && (parts[3] === undefined || parts[3] === "")) return false;
-  return true;
+  return parseModelsAllowlistKey(key).ok;
+}
+
+/**
+ * Set a models-allowlist path without splitting the model id on dots.
+ * (Generic `setConfigPath` would nest `gpt-5.6-sol` as gpt-5 → 6 → sol.)
+ */
+export function setModelsAllowlistPath(
+  root: Record<string, unknown>,
+  key: string,
+  value: unknown,
+): Record<string, unknown> {
+  const parsed = parseModelsAllowlistKey(key);
+  if (!parsed.ok) throw new Error(parsed.error);
+
+  const result = structuredClone(root) as Record<string, unknown>;
+  if (!isRecord(result.vendors)) {
+    result.vendors = {};
+  }
+  const vendors = result.vendors as Record<string, unknown>;
+  const existing = vendors[parsed.vendorId];
+  if (existing !== undefined && !isRecord(existing)) {
+    throw new Error(
+      `invalid config key ${key}: vendors.${parsed.vendorId} is not an object`,
+    );
+  }
+  const vendor: Record<string, unknown> = isRecord(existing)
+    ? { ...existing }
+    : {};
+  vendors[parsed.vendorId] = vendor;
+
+  if (parsed.modelId === null) {
+    vendor.models = value;
+    return result;
+  }
+
+  const modelsRaw = vendor.models;
+  if (modelsRaw !== undefined && !isRecord(modelsRaw)) {
+    throw new Error(
+      `invalid config key ${key}: vendors.${parsed.vendorId}.models is not an object`,
+    );
+  }
+  const models: Record<string, unknown> = isRecord(modelsRaw) ? { ...modelsRaw } : {};
+  models[parsed.modelId] = value;
+  vendor.models = models;
+  return result;
+}
+
+/**
+ * Unset a models-allowlist path, treating dotted model ids as a single leaf key.
+ */
+export function unsetModelsAllowlistPath(
+  root: Record<string, unknown>,
+  key: string,
+): Record<string, unknown> {
+  const parsed = parseModelsAllowlistKey(key);
+  if (!parsed.ok) throw new Error(parsed.error);
+
+  const result = structuredClone(root) as Record<string, unknown>;
+  if (!isRecord(result.vendors)) {
+    throw new Error(`no such config key: ${key}`);
+  }
+  const vendors = result.vendors as Record<string, unknown>;
+  const vendor = vendors[parsed.vendorId];
+  if (!isRecord(vendor)) {
+    throw new Error(`no such config key: ${key}`);
+  }
+
+  if (parsed.modelId === null) {
+    if (!("models" in vendor)) {
+      throw new Error(`no such config key: ${key}`);
+    }
+    const nextVendor = { ...vendor };
+    delete nextVendor.models;
+    vendors[parsed.vendorId] = nextVendor;
+    return result;
+  }
+
+  if (!isRecord(vendor.models) || !(parsed.modelId in vendor.models)) {
+    throw new Error(`no such config key: ${key}`);
+  }
+  const models = { ...(vendor.models as Record<string, unknown>) };
+  delete models[parsed.modelId];
+  vendors[parsed.vendorId] = { ...vendor, models };
+  return result;
 }
 
 /** Collect `vendors.*.models` maps from a hot-loaded config. */
@@ -70,10 +244,13 @@ export interface RunnerCatalogEntry {
   last_seen: string;
   registered_at: string;
   /**
-   * Milliseconds since `last_seen` (advertisement age). No runner round-trip —
-   * the stored row is the source of truth (#314 / #322).
+   * Milliseconds since `last_seen` (presence / last contact — lease polls and
+   * task traffic refresh this, so it is **not** capabilities advertisement age).
+   *
+   * True capabilities age needs a `capabilities_updated_at` column on the
+   * runners table (follow-up issue); do not invent that here without a migration.
    */
-  advertised_age_ms: number;
+  last_contact_age_ms: number;
 }
 
 export interface ModelsRefreshResult {
@@ -82,7 +259,7 @@ export interface ModelsRefreshResult {
     catalog: ModelCatalog;
     warnings: string[];
   };
-  /** Each registered runner's last-advertised catalog + age. */
+  /** Each registered runner's last-advertised catalog + last-contact age. */
   runners: RunnerCatalogEntry[];
 }
 
@@ -104,7 +281,7 @@ function parseCapabilitiesJson(raw: string): RunnerCapabilities {
 
 /**
  * Re-fingerprint the daemon host (refreshCatalog + write models.json) and
- * project every runner's last-advertised catalog with advertisement age.
+ * project every runner's last-advertised catalog with last-contact age.
  * Probes never leave this host — runners are not contacted.
  */
 export async function refreshFleetCatalog(options: {
@@ -151,7 +328,7 @@ export async function refreshFleetCatalog(options: {
       capabilities: filtered,
       last_seen: row.last_seen,
       registered_at: row.registered_at,
-      advertised_age_ms: age,
+      last_contact_age_ms: age,
     };
   });
 

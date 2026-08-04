@@ -53,11 +53,12 @@ cat .parley/config.json 2>/dev/null
 cat .parley/classification.json 2>/dev/null
 ls "${PARLEY_HOME:-$HOME/.parley}/parley.json" "${PARLEY_HOME:-$HOME/.parley}/config.json" 2>/dev/null
 parley config show --json 2>/dev/null
+# Daemon-owned allowlist (policy). Requires a reachable daemon (auto-spawned locally).
 parley models --json 2>/dev/null
 command -v codex grok claude agy opencode goose pi cline kilo openhands hermes openclaw kimi 2>/dev/null
 ```
 
-Summarize what is already configured vs still at shipped defaults — including whether a **global home config** is present. Preserve the scope choice already made; discovery never silently changes it. Done when you know the baseline you will edit from.
+Summarize what is already configured vs still at shipped defaults — including whether a **global home config** is present, and what the **daemon allowlist** already contains (`parley models --json`). Preserve the scope choice already made; discovery never silently changes it. Done when you know the baseline you will edit from.
 
 ### 1. Evaluation on/off
 
@@ -181,29 +182,31 @@ Probe PATH (stage 0). For each vendor the user wants:
 
 #### Model+effort allowlist (required per vendor)
 
-**Breaking / deny-by-default:** until `vendors.<id>.models` is set, `parley delegate -v <id>` fails fast and points here. The advisory catalog (`parley models`) is for discovery only — the allowlist is the authority.
+**Breaking / deny-by-default:** until `vendors.<id>.models` is set, `parley delegate -v <id>` fails fast and points here. The allowlist is the authority at spawn. Bare `parley models` **shows that allowlist** (daemon-owned, over HTTP); `parley models refresh` is separate and returns the fleet discovery catalog (daemon host probe + runners).
 
 For each vendor, walk:
 
-1. **Refresh discovery** (optional but recommended) — see [Model discovery](#model-discovery) below — then show catalog models/efforts for that vendor.
-2. **Pick combos** — which model+effort pairs are allowed. Prefer catalog ids/efforts when present; free-entry (hand-typed model or effort) is fine when the catalog is empty or incomplete. Efforts are **explicit**: listing a model does not unlock max/ultra-class levels unless the user names them.
+1. **Refresh discovery** (optional but recommended) — see [Model discovery](#model-discovery) below — then use refresh output for candidate model/effort ids.
+2. **Pick combos** — which model+effort pairs are allowed. Prefer discovery ids/efforts when present; free-entry (hand-typed model or effort) is fine when discovery is empty or incomplete. Efforts are **explicit**: listing a model does not unlock max/ultra-class levels unless the user names them.
 3. **Mark one default** — exactly one combo is the default used when `parley delegate` omits `-m`/`-e`. If none is marked, omit-model/effort delegates fail with an error that says so.
 4. **Optional hints** — free-text per model, surfaced by `parley info` so orchestrators know when to pick that model.
 
-Write the map with `parley config set` (JSON value), e.g.:
+Write the map with `parley models set` (preferred remote surface) or whole-map JSON, e.g.:
 
 ```
-parley config set vendors.codex.models '{
+parley models set vendors.codex.models '{
   "gpt-5.4": {
     "efforts": ["low", "medium", "high"],
     "default": "medium",
     "hint": "daily coding driver"
   },
-  "o3": {
+  "gpt-5.6-sol": {
     "efforts": ["medium"],
     "hint": "hard reasoning only"
   }
 }'
+# Per-model leaf (dotted model ids are one key after models/):
+parley models set vendors.codex.models.gpt-5.6-sol '{"efforts":["medium"]}'
 ```
 
 Field rules:
@@ -246,7 +249,7 @@ Omit `childChannel` when the adapter default already matches (most vendors defau
 
 #### Model discovery
 
-During vendor/model setup, refresh the advisory catalog so profiles and the interview use what the vendor actually offers (ids + effort levels):
+During vendor/model setup, refresh fleet discovery so profiles and the interview use what the **daemon host** (and registered runners) actually offer (ids + effort levels). Probes run on the daemon, never on the CLI host:
 
 ```
 parley models refresh
@@ -254,12 +257,13 @@ parley models refresh
 # optional: parley models refresh --vendor <id>
 ```
 
-Then show the result (`parley models` or `parley models --vendor <id> --json`).
+Refresh returns a JSON aggregate: `daemon.catalog` (just re-probed) plus each runner's last-advertised catalog with last-contact age. Show that with `--json` (or human output). Bare `parley models` is **not** the refresh result — it shows the daemon allowlist (policy).
 
-- **Live probe wins** when the vendor CLI answers.
-- **If refresh cannot fetch** (vendor missing, probe fails, empty list, or no probe hook) and the entry would be empty, the CLI fills **shipped reference catalog** entries and labels the source as a **point-in-time reference** (`shipped catalog (point-in-time reference; …)` — `fetched_at` / provenance come from the catalog). Tell the user those rows are snapshot data, not a live listing. The on-disk catalog (`~/.parley/models.json`) remains the source of truth after refresh.
+- **Live probe wins** when the vendor CLI on the daemon host answers.
+- **If refresh cannot fetch** (vendor missing, probe fails, empty list, or no probe hook) and the entry would be empty, the daemon fills **shipped reference catalog** entries and labels the source as a **point-in-time reference** (`shipped catalog (point-in-time reference; …)`). Tell the user those rows are snapshot data, not a live listing. Fail-soft channel warnings are printed on stderr.
+- The advisory catalog file lives on the **daemon home** after refresh; hand-edits of the **allowlist** on the daemon host (`parley.json` `vendors.*.models`) are picked up hot without restart.
 
-Use refreshed (or shipped-fallback) model ids and efforts when offering **allowlist combos** and profile `.model` / `.effort` values. Profiles beat ad-hoc flags for metrics. Catalog stays advisory and hand-editable; the allowlist gates spawn.
+Use refreshed (or shipped-fallback) model ids and efforts when offering **allowlist combos** and profile `.model` / `.effort` values. Profiles beat ad-hoc flags for metrics. Discovery stays advisory; the allowlist (shown/edited via `parley models` / `parley models set`) gates spawn.
 
 Also offer the first-party session-provenance plugins for detected Claude Code, Codex, Grok, and Pi harnesses. `parley init` surfaces the supported plugin picker and setup commands; it installs `@useparley/plugin-claude-code`, `@useparley/plugin-codex`, `@useparley/plugin-grok`, or `@useparley/plugin-pi` through each harness's native plugin manager. These provenance plugins are unrelated to vendor adapter modules configured at `vendors.<id>.plugin`.
 
@@ -363,8 +367,9 @@ Skip the dry run entirely when the user declines. Done when lint is clean and th
 | eval, resume, retry, taskTypes (global defaults) | `parley config` → `~/.parley/parley.json` and/or `~/.parley/config.json` |
 | size/difficulty guidance | `.parley/classification.json` |
 | custom/edited rubrics | `.parley/rubrics/<id>.json` |
-| retention, daemon.url, vendors, profiles, defaults.vendor/profile | `parley config` (daemon home) |
-| model catalog | `parley models` → `~/.parley/models.json` |
+| retention, daemon.url, vendors bin/args/env, profiles, defaults.vendor/profile | `parley config` (daemon home; writes loopback-only off-LAN) |
+| model allowlist (policy) | `parley models` / `parley models set|unset` → daemon HTTP (`vendors.*.models`) |
+| fleet model discovery | `parley models refresh` → daemon re-fingerprint + runner catalogs |
 | validate project files | `parley lint` |
 
 Resolution order for project-settings keys: shipped defaults < global home < project. Missing project files mean that layer is empty — still valid. `other` is always a valid `--type`; it is not listed in `taskTypes`.

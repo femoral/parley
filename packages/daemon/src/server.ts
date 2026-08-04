@@ -35,8 +35,10 @@ import {
 import { createAdapterRegistry } from "./adapters/index.js";
 import {
   extractAllowlist,
-  isModelsAllowlistKey,
+  parseModelsAllowlistKey,
   refreshFleetCatalog,
+  setModelsAllowlistPath,
+  unsetModelsAllowlistPath,
 } from "./models-http.js";
 import {
   countUnsettledTasks,
@@ -1303,12 +1305,10 @@ function handleModelsSet(
     return;
   }
   const key = body.key;
-  // Subtree scope: only vendors.<id>.models[.<modelId>] — never arbitrary config.
-  if (!isModelsAllowlistKey(key)) {
-    sendJson(res, 400, {
-      error:
-        `models set is limited to vendors.<id>.models[.<modelId>]; refused key: ${key}`,
-    });
+  // Subtree scope + dotted model ids: parseModelsAllowlistKey (not setConfigPath).
+  const parsed = parseModelsAllowlistKey(key);
+  if (!parsed.ok) {
+    sendJson(res, 400, { error: parsed.error });
     return;
   }
   let current: ParleyConfig;
@@ -1320,7 +1320,7 @@ function handleModelsSet(
   }
   let next: Record<string, unknown>;
   try {
-    next = setConfigPath(current as Record<string, unknown>, key, body.value);
+    next = setModelsAllowlistPath(current as Record<string, unknown>, key, body.value);
   } catch (err) {
     sendJson(res, 400, { error: err instanceof Error ? err.message : String(err) });
     return;
@@ -1359,11 +1359,9 @@ function handleModelsUnset(
     return;
   }
   const key = body.key;
-  if (!isModelsAllowlistKey(key)) {
-    sendJson(res, 400, {
-      error:
-        `models unset is limited to vendors.<id>.models[.<modelId>]; refused key: ${key}`,
-    });
+  const parsed = parseModelsAllowlistKey(key);
+  if (!parsed.ok) {
+    sendJson(res, 400, { error: parsed.error });
     return;
   }
   let current: ParleyConfig;
@@ -1375,7 +1373,7 @@ function handleModelsUnset(
   }
   let next: Record<string, unknown>;
   try {
-    next = unsetConfigPath(current as Record<string, unknown>, key);
+    next = unsetModelsAllowlistPath(current as Record<string, unknown>, key);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     if (message.startsWith("no such config key:")) {

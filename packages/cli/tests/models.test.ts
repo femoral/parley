@@ -302,10 +302,84 @@ describe("parley models command (daemon-owned allowlist + fleet refresh, #322)",
       home,
     );
     expect(res.code).toBe(1);
-    expect(res.stderr).toMatch(/limited to vendors\.<id>\.models/);
+    expect(res.stderr).toMatch(/limited to vendors|refused key/);
     // Original config untouched.
     const get = await runCli(["config", "get", "vendors.fake.bin"], home);
     expect(get.code).toBe(1);
+  });
+
+  it("set/unset keeps dotted model id gpt-5.6-sol as a single leaf (F1)", async () => {
+    // Seed codex vendor so set can attach under it.
+    expect(
+      (
+        await runCli(
+          ["models", "set", "vendors.codex.models", '{"seed":{"efforts":["low"]}}'],
+          home,
+        )
+      ).code,
+    ).toBe(0);
+
+    const set = await runCli(
+      [
+        "models",
+        "set",
+        "vendors.codex.models.gpt-5.6-sol",
+        '{"efforts":["low","medium","high"]}',
+      ],
+      home,
+    );
+    expect(set.code).toBe(0);
+    expect(set.stdout).toMatch(/set vendors\.codex\.models\.gpt-5\.6-sol/);
+
+    const listed = await runCli(["models", "--vendor", "codex", "--json"], home);
+    expect(listed.code).toBe(0);
+    const codex = JSON.parse(listed.stdout).codex as Record<string, unknown>;
+    expect(codex["gpt-5.6-sol"]).toEqual({
+      efforts: ["low", "medium", "high"],
+    });
+    expect(codex["gpt-5"]).toBeUndefined();
+
+    // Two-dot opencode-style id.
+    const set2 = await runCli(
+      [
+        "models",
+        "set",
+        "vendors.codex.models.foo.bar.baz",
+        '{"efforts":["low"]}',
+      ],
+      home,
+    );
+    expect(set2.code).toBe(0);
+    const after = JSON.parse(
+      (await runCli(["models", "--vendor", "codex", "--json"], home)).stdout,
+    ).codex as Record<string, unknown>;
+    expect(after["foo.bar.baz"]).toEqual({ efforts: ["low"] });
+
+    const unset = await runCli(
+      ["models", "unset", "vendors.codex.models.gpt-5.6-sol"],
+      home,
+    );
+    expect(unset.code).toBe(0);
+    const gone = JSON.parse(
+      (await runCli(["models", "--vendor", "codex", "--json"], home)).stdout,
+    ).codex as Record<string, unknown>;
+    expect(gone["gpt-5.6-sol"]).toBeUndefined();
+  });
+
+  it("rejects __proto__ and * vendor via models set with honest errors (F1)", async () => {
+    const proto = await runCli(
+      ["models", "set", "vendors.fake.models.__proto__", '{"efforts":["low"]}'],
+      home,
+    );
+    expect(proto.code).toBe(1);
+    expect(proto.stderr).toMatch(/reserved id/);
+
+    const star = await runCli(
+      ["models", "set", "vendors.*.models", "{}"],
+      home,
+    );
+    expect(star.code).toBe(1);
+    expect(star.stderr).toMatch(/wildcard|'\*'/);
   });
 
   it("refresh returns daemon catalog shape and does not require CLI-local models.json", async () => {

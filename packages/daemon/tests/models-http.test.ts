@@ -11,7 +11,9 @@ import { openDatabase, upsertRunner, type DatabaseHandle } from "../src/db.js";
 import {
   extractAllowlist,
   isModelsAllowlistKey,
+  parseModelsAllowlistKey,
   refreshFleetCatalog,
+  setModelsAllowlistPath,
 } from "../src/models-http.js";
 import {
   classifyAuthRoute,
@@ -20,6 +22,7 @@ import {
   type DaemonServer,
 } from "../src/server.js";
 import { withFakeAllowlist } from "./helpers.js";
+import type { ModelProber } from "@useparley/core";
 
 const homes: string[] = [];
 let server: DaemonServer | null = null;
@@ -88,10 +91,20 @@ afterEach(async () => {
 });
 
 describe("isModelsAllowlistKey (subtree scope)", () => {
-  it("accepts vendors.<id>.models and one model id segment", () => {
+  it("accepts vendors.<id>.models and model ids that contain dots (F1)", () => {
     expect(isModelsAllowlistKey("vendors.fake.models")).toBe(true);
     expect(isModelsAllowlistKey("vendors.codex.models.gpt-5")).toBe(true);
+    expect(isModelsAllowlistKey("vendors.codex.models.gpt-5.6-sol")).toBe(true);
+    expect(isModelsAllowlistKey("vendors.opencode.models.opencode/gpt-5.2")).toBe(true);
+    // Two-dot id: remainder after models/ is one model id.
+    expect(isModelsAllowlistKey("vendors.opencode.models.foo.bar.baz")).toBe(true);
     expect(exportedKeyGuard("vendors.x.models.y")).toBe(true);
+    const dotted = parseModelsAllowlistKey("vendors.codex.models.gpt-5.6-sol");
+    expect(dotted).toEqual({
+      ok: true,
+      vendorId: "codex",
+      modelId: "gpt-5.6-sol",
+    });
   });
 
   it("rejects config-admin keys that must not be writable remotely", () => {
@@ -103,8 +116,35 @@ describe("isModelsAllowlistKey (subtree scope)", () => {
     expect(isModelsAllowlistKey("runners.gpu.token")).toBe(false);
     expect(isModelsAllowlistKey("vendors")).toBe(false);
     expect(isModelsAllowlistKey("vendors.fake")).toBe(false);
-    expect(isModelsAllowlistKey("vendors.fake.models.a.b")).toBe(false);
     expect(isModelsAllowlistKey("")).toBe(false);
+  });
+
+  it("rejects reserved dunder ids and wildcard vendor * (F1)", () => {
+    expect(parseModelsAllowlistKey("vendors.__proto__.models").ok).toBe(false);
+    expect(parseModelsAllowlistKey("vendors.fake.models.__proto__").ok).toBe(false);
+    expect(parseModelsAllowlistKey("vendors.fake.models.constructor").ok).toBe(false);
+    expect(parseModelsAllowlistKey("vendors.fake.models.prototype").ok).toBe(false);
+    expect(parseModelsAllowlistKey("vendors.*.models").ok).toBe(false);
+    expect(parseModelsAllowlistKey("vendors.*.models.x")!.ok).toBe(false);
+    const star = parseModelsAllowlistKey("vendors.*.models");
+    expect(star.ok).toBe(false);
+    if (!star.ok) expect(star.error).toMatch(/wildcard|'\*'/);
+    const proto = parseModelsAllowlistKey("vendors.fake.models.__proto__");
+    expect(proto.ok).toBe(false);
+    if (!proto.ok) expect(proto.error).toMatch(/reserved id/);
+  });
+
+  it("setModelsAllowlistPath keeps dotted model ids as a single leaf key", () => {
+    const next = setModelsAllowlistPath(
+      { vendors: { codex: { models: {} } } },
+      "vendors.codex.models.gpt-5.6-sol",
+      { efforts: ["low"] },
+    );
+    const models = (next as { vendors: { codex: { models: Record<string, unknown> } } })
+      .vendors.codex.models;
+    expect(models["gpt-5.6-sol"]).toEqual({ efforts: ["low"] });
+    // Must not nest as gpt-5 → 6 → sol.
+    expect(models["gpt-5"]).toBeUndefined();
   });
 });
 
@@ -198,7 +238,9 @@ describe("HTTP /models routes", () => {
     ]) {
       const res = await json(base, "POST", "/models/set", { key, value: "x" });
       expect(res.status).toBe(400);
-      expect((res.body as { error: string }).error).toMatch(/limited to vendors/);
+      expect((res.body as { error: string }).error).toMatch(
+        /limited to vendors|refused key/,
+      );
     }
     // Config file must not have grown those keys.
     const onDisk = JSON.parse(
@@ -206,6 +248,72 @@ describe("HTTP /models routes", () => {
     ) as ParleyConfig;
     expect(onDisk.daemon).toBeUndefined();
     expect(onDisk.clients?.evil).toBeUndefined();
+  });
+
+  it("POST set/unset keeps dotted model ids as a single leaf (gpt-5.6-sol)", async () => {
+    const home = makeHome({
+      vendors: {
+        fake: {
+          models: { "fake-model": { efforts: ["low"], default: "low" } },
+        },
+        codex: { models: {} },
+      },
+    });
+    const base = await boot(home);
+    const set = await json(base, "POST", "/models/set", {
+      key: "vendors.codex.models.gpt-5.6-sol",
+      value: { efforts: ["medium"], default: "medium" },
+    });
+    expect(set.status).toBe(200);
+    const setBody = set.body as {
+      allowlist: { codex: Record<string, unknown> };
+    };
+    expect(setBody.allowlist.codex["gpt-5.6-sol"]).toEqual({
+      efforts: ["medium"],
+      default: "medium",
+    });
+    // Nested gpt-5.6 must not appear.
+    expect(setBody.allowlist.codex["gpt-5"]).toBeUndefined();
+
+    const unset = await json(base, "POST", "/models/unset", {
+      key: "vendors.codex.models.gpt-5.6-sol",
+    });
+    expect(unset.status).toBe(200);
+    expect(
+      (unset.body as { allowlist: { codex?: Record<string, unknown> } }).allowlist
+        .codex?.["gpt-5.6-sol"],
+    ).toBeUndefined();
+  });
+
+  it("POST set rejects __proto__ and * with honest 400 (not a silent drop)", async () => {
+    const home = makeHome();
+    const base = await boot(home);
+    const proto = await json(base, "POST", "/models/set", {
+      key: "vendors.fake.models.__proto__",
+      value: { efforts: ["low"] },
+    });
+    expect(proto.status).toBe(400);
+    expect((proto.body as { error: string }).error).toMatch(/reserved id/);
+
+    const star = await json(base, "POST", "/models/set", {
+      key: "vendors.*.models",
+      value: {},
+    });
+    expect(star.status).toBe(400);
+    expect((star.body as { error: string }).error).toMatch(/wildcard|'\*'/);
+
+    // On-disk config must not have gained a "*" vendor or poisoned models.
+    const onDisk = JSON.parse(
+      fs.readFileSync(path.join(home, "parley.json"), "utf8"),
+    ) as ParleyConfig;
+    expect(onDisk.vendors?.["*"]).toBeUndefined();
+    // Bracket __proto__ hits the prototype getter — assert own-key absence.
+    const fakeModels = onDisk.vendors?.fake?.models as
+      | Record<string, unknown>
+      | undefined;
+    expect(fakeModels !== undefined && Object.hasOwn(fakeModels, "__proto__")).toBe(
+      false,
+    );
   });
 
   it("off-loopback: models set works with client token; config set stays 403", async () => {
@@ -292,7 +400,7 @@ describe("HTTP /models routes", () => {
       daemon: { catalog: Record<string, unknown>; warnings: string[] };
       runners: Array<{
         name: string;
-        advertised_age_ms: number;
+        last_contact_age_ms: number;
         last_seen: string;
         capabilities: { vendors: Array<{ id: string }> };
       }>;
@@ -301,7 +409,8 @@ describe("HTTP /models routes", () => {
     expect(Array.isArray(body.daemon.warnings)).toBe(true);
     expect(body.runners).toHaveLength(1);
     expect(body.runners[0]!.name).toBe("gpu");
-    expect(body.runners[0]!.advertised_age_ms).toBeGreaterThanOrEqual(10_000);
+    // last_seen was backdated ~12s — field is last contact, not advertisement age.
+    expect(body.runners[0]!.last_contact_age_ms).toBeGreaterThanOrEqual(10_000);
     expect(body.runners[0]!.capabilities.vendors.some((v) => v.id === "fake")).toBe(
       true,
     );
@@ -309,7 +418,7 @@ describe("HTTP /models routes", () => {
 });
 
 describe("refreshFleetCatalog (unit)", () => {
-  it("writes models.json and attaches runner ages without adapter probes when empty registry", async () => {
+  it("writes models.json and attaches last_contact_age_ms from last_seen", async () => {
     const home = makeHome();
     const paths = homePaths(home);
     const db = openDatabase(paths);
@@ -350,6 +459,37 @@ describe("refreshFleetCatalog (unit)", () => {
     expect(result.daemon.catalog).toBeDefined();
     expect(fs.existsSync(paths.models)).toBe(true);
     expect(result.runners).toHaveLength(1);
-    expect(result.runners[0]!.advertised_age_ms).toBe(5_000);
+    expect(result.runners[0]!.last_contact_age_ms).toBe(5_000);
+  });
+
+  it("propagates non-empty discovery warnings from a failing probe (#299 / F3)", async () => {
+    const home = makeHome();
+    const paths = homePaths(home);
+    // Empty entry so fallback path still runs after both channels fail.
+    fs.writeFileSync(
+      paths.models,
+      JSON.stringify({
+        "probe-vendor": { fetched_at: null, source: "manual", models: [] },
+      }),
+    );
+    const failing: ModelProber = {
+      listModels: () => Promise.reject(new Error("probe exploded for warning test")),
+      readModels: () =>
+        Promise.resolve({
+          source: "disk",
+          models: [],
+          warnings: ["config.toml empty-channel note"],
+        }),
+    };
+    const result = await refreshFleetCatalog({
+      paths,
+      adapters: new Map([["probe-vendor", failing]]),
+      runners: [],
+      vendor: "probe-vendor",
+    });
+    // Neuter-proof: hardcoding warnings: [] here would fail this assertion.
+    expect(result.daemon.warnings.length).toBeGreaterThan(0);
+    const joined = result.daemon.warnings.join("\n");
+    expect(joined).toMatch(/probe exploded for warning test|empty-channel note|probe-vendor/);
   });
 });
