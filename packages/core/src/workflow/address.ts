@@ -6,50 +6,14 @@
  *
  * Mode-independent: both `repo` and `scratch` workspaces use the same
  * address and the same tmp layout under the workspace root.
+ *
+ * Pure string formatting lives in `./step-address.js` (browser-safe). Path
+ * helpers below are host-only (`node:path`).
  */
 
 import path from "node:path";
 
-/** Coordinates of a step attempt inside a run. */
-export interface StepAddress {
-  /** Node id within the workflow. */
-  node: string;
-  /** 1-based iteration (0 marks inheritance on a fork). */
-  iteration: number;
-  /** Authored slot name or data-fan-out key; null/omitted when no fan-out. */
-  slot?: string | null;
-  /**
-   * 1-based retry index appended as `-r<n>`. Omit, null, or 0 for the first
-   * attempt (no suffix).
-   */
-  retry?: number | null;
-}
-
-/**
- * Format a step address: `<node>.<iteration>[.<slot>][-r<n>]`.
- *
- * Slot is omitted when null/undefined/empty. Retry is omitted when null,
- * undefined, or ≤ 0.
- */
-export function formatStepAddress(addr: StepAddress): string {
-  if (addr.node === "") {
-    throw new Error("step address requires a non-empty node id");
-  }
-  if (!Number.isInteger(addr.iteration) || addr.iteration < 0) {
-    throw new Error(`step address iteration must be a non-negative integer, got ${addr.iteration}`);
-  }
-  let s = `${addr.node}.${addr.iteration}`;
-  if (addr.slot != null && addr.slot !== "") {
-    s += `.${addr.slot}`;
-  }
-  if (addr.retry != null && addr.retry > 0) {
-    if (!Number.isInteger(addr.retry)) {
-      throw new Error(`step address retry must be an integer, got ${addr.retry}`);
-    }
-    s += `-r${addr.retry}`;
-  }
-  return s;
-}
+export { formatStepAddress, type StepAddress } from "./step-address.js";
 
 /**
  * Relative path of the address-scoped tmp directory under a workspace:

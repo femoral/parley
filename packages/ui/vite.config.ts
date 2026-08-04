@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { builtinModules } from "node:module";
 import os from "node:os";
 import path from "node:path";
 import { defineConfig, type Plugin, type ProxyOptions } from "vite";
@@ -164,6 +165,44 @@ function preloadCriticalFonts(): Plugin {
   };
 }
 
+/** Bare Node builtin names (no `node:` prefix), plus their `node:` forms. */
+const NODE_BUILTIN_IDS = new Set<string>([
+  ...builtinModules,
+  ...builtinModules.map((m) => (m.startsWith("node:") ? m : `node:${m}`)),
+]);
+
+/**
+ * Fail the production client build if any Node builtin would enter the graph.
+ *
+ * `@useparley/core` exposes a node-free barrel under the `"browser"` export
+ * condition (#330). Soft externalization ("Module path has been externalized
+ * for browser compatibility") used to ship a DOA cockpit; this turns the next
+ * barrel leak into a hard build failure instead.
+ *
+ * Vitest inherits this config but does not run production `build` — tests may
+ * still import `node:fs` / `node:path` for filesystem fixtures.
+ */
+export function rejectNodeBuiltinsInClient(): Plugin {
+  return {
+    name: "parley-cove-reject-node-builtins",
+    apply: "build",
+    enforce: "pre",
+    resolveId(id, importer) {
+      if (id.startsWith("\0")) return;
+      // Ignore deep imports of packages that happen to start with a builtin name.
+      const bare = id.startsWith("node:") ? id.slice("node:".length) : id;
+      if (bare.includes("/") || bare.includes("\\")) return;
+      if (!NODE_BUILTIN_IDS.has(id) && !NODE_BUILTIN_IDS.has(bare)) return;
+      const from = importer ? ` (imported by ${importer})` : "";
+      return this.error(
+        `[parley-cove] Node builtin "${id}" must not enter the browser bundle${from}. ` +
+          "Import only browser-safe exports from @useparley/core " +
+          "(packages/core/src/browser.ts); host-only modules belong on the daemon/CLI.",
+      );
+    },
+  };
+}
+
 /**
  * Parley Cove build. The daemon serves the emitted bundle at `/` via the
  * `parley.ui` discovery marker (which points at `www`), so:
@@ -175,33 +214,19 @@ function preloadCriticalFonts(): Plugin {
  *    the woff2 into `www/assets`. Nothing is ever fetched from a CDN at runtime.
  *  - `.woff` fallbacks are stripped at emit time (see {@link stripWoffFallback}).
  *  - Critical faces are preloaded into `index.html` (see {@link preloadCriticalFonts}).
- *  - Browser shims for `node:path` / `node:os` — see alias block below (#330).
+ *  - Node builtins in the client graph fail the build (see
+ *    {@link rejectNodeBuiltinsInClient}) — #330.
  */
 export default defineConfig(() => {
   const proxy = daemonProxy();
-  const shimDir = path.resolve(import.meta.dirname, "src/shims");
-  // Vitest inherits this config; keep real Node path/os for test filesystem
-  // helpers (resolve/readFileSync). Shims are for the browser client only.
-  const isVitest = process.env.VITEST === "true";
   return {
-    plugins: [react(), stripWoffFallback(), preloadCriticalFonts()],
+    plugins: [
+      react(),
+      stripWoffFallback(),
+      preloadCriticalFonts(),
+      rejectNodeBuiltinsInClient(),
+    ],
     base: "/",
-    resolve: {
-      // Work around: incomplete tree-shaking of `@useparley/core` lets Node
-      // builtins (`path`/`os`, e.g. top-level `join` in vendor-home) leak into
-      // the browser client bundle and crash production Cove at boot. These
-      // aliases redirect to tiny browser shims under `src/shims/`. Proper
-      // core-side fix tracked as GitHub issue #330 — do not remove until
-      // that lands; do not attempt the core fix from packages/ui.
-      alias: isVitest
-        ? []
-        : [
-            { find: /^node:path$/, replacement: path.join(shimDir, "path.ts") },
-            { find: /^path$/, replacement: path.join(shimDir, "path.ts") },
-            { find: /^node:os$/, replacement: path.join(shimDir, "os.ts") },
-            { find: /^os$/, replacement: path.join(shimDir, "os.ts") },
-          ],
-    },
     server: { proxy },
     preview: { proxy },
     build: {

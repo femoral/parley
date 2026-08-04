@@ -3,6 +3,11 @@
  * catalog, parley-home resolution, and shared utilities. Depends on nothing
  * else in the workspace; the daemon and CLI build on top of it. Doubles as the
  * SDK custom UIs build against (see docs/spec/monorepo-layout.md).
+ *
+ * Browser invariant (with `browser.ts`): the browser barrel is a strict subset
+ * of this main barrel and must never re-export modules that import Node
+ * builtins transitively. Bundlers pick `browser.ts` via the package
+ * `"browser"` export condition; Node keeps this full entry.
  */
 export * from "./adapter.js";
 export * from "./classification.js";
