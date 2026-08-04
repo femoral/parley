@@ -5,6 +5,14 @@ import { TASK_HEADER } from "@useparley/core";
  * Local hub proxy: children on the runner host talk to `127.0.0.1:<port>`;
  * the proxy forwards `/child/*`, `/mcp`, and `/xai/*` to the daemon with the
  * right correlation headers and bearer token (ADR-0012 / #327).
+ *
+ * Auth channels (#327):
+ * - `/child/*` + `/mcp`: runner token in `Authorization` (child channel has no
+ *   third-party credential to preserve).
+ * - `/xai/*`: child's `Authorization` (xAI API key) is forwarded untouched;
+ *   runner credential rides in `Proxy-Authorization` so the daemon lease gate
+ *   can authenticate without overwriting the key that api.x.ai needs, and so
+ *   the hop-by-hop runner token never reaches the third-party origin.
  */
 export interface HubProxy {
   /** Base URL children should use (no path), e.g. `http://127.0.0.1:12345`. */
@@ -19,9 +27,21 @@ export interface StartHubProxyOptions {
    * Runner bearer token (`runners.<name>.token`). Attached on every upstream
    * hop so non-loopback daemons accept child-contract traffic (#323 /
    * ADR-0030). Harmless on loopback (tokenless trust still applies).
+   *
+   * Placement depends on the route: `Authorization` for `/child/*` + `/mcp`;
+   * `Proxy-Authorization` for `/xai/*` (see module docs).
    */
   token: string;
   taskId: string;
+}
+
+function denyAllowlist(res: http.ServerResponse): void {
+  res.writeHead(404, { "content-type": "application/json" });
+  res.end(
+    JSON.stringify({
+      error: "hub proxy only forwards /child/*, /mcp, and /xai/*",
+    }),
+  );
 }
 
 export async function startHubProxy(options: StartHubProxyOptions): Promise<HubProxy> {
@@ -32,6 +52,7 @@ export async function startHubProxy(options: StartHubProxyOptions): Promise<HubP
       const method = req.method ?? "GET";
       const url = new URL(req.url ?? "/", "http://127.0.0.1");
       const targetPath = url.pathname + url.search;
+      const isXai = url.pathname.startsWith("/xai/");
 
       // Only forward child contract, MCP, and xAI usage proxy — never the
       // full daemon surface (#327: /xai/* was previously denied, which made
@@ -39,15 +60,21 @@ export async function startHubProxy(options: StartHubProxyOptions): Promise<HubP
       const allowed =
         url.pathname === "/mcp" ||
         url.pathname.startsWith("/child/") ||
-        url.pathname.startsWith("/xai/");
+        isXai;
       if (!allowed) {
-        res.writeHead(404, { "content-type": "application/json" });
-        res.end(
-          JSON.stringify({
-            error: "hub proxy only forwards /child/*, /mcp, and /xai/*",
-          }),
-        );
+        denyAllowlist(res);
         return;
+      }
+
+      // Pin path task id to this proxy's lease so a child cannot attribute
+      // usage to a sibling task on the same runner (#327 defect 2).
+      if (isXai) {
+        const segments = url.pathname.split("/").filter((s) => s !== "");
+        const pathTaskId = segments[1];
+        if (pathTaskId === undefined || pathTaskId === "" || pathTaskId !== taskId) {
+          denyAllowlist(res);
+          return;
+        }
       }
 
       const chunks: Buffer[] = [];
@@ -61,10 +88,21 @@ export async function startHubProxy(options: StartHubProxyOptions): Promise<HubP
             : "application/json",
         [TASK_HEADER]: taskId,
       };
-      // Non-loopback daemons require bearer auth on child/MCP routes; attach
-      // the runner token so hub-proxied children authenticate as the runner.
-      if (token !== "") {
-        headers.authorization = `Bearer ${token}`;
+
+      if (isXai) {
+        // Preserve the child's xAI API key; put the runner credential on a
+        // hop-by-hop header the daemon gate reads and xai-proxy strips.
+        if (typeof req.headers.authorization === "string") {
+          headers.authorization = req.headers.authorization;
+        }
+        if (token !== "") {
+          headers["proxy-authorization"] = `Bearer ${token}`;
+        }
+      } else {
+        // Child channel / MCP: runner token is the sole auth credential.
+        if (token !== "") {
+          headers.authorization = `Bearer ${token}`;
+        }
       }
       // Preserve accept for MCP streamable HTTP.
       if (typeof req.headers.accept === "string") {

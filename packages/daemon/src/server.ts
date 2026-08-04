@@ -950,7 +950,18 @@ export interface AuthGateInput {
   remoteAddress: string | undefined | null;
   method: string;
   pathname: string;
+  /**
+   * `Authorization` header. For `/child/*` + `/mcp` + runner/client routes
+   * this is the gate credential. For `/xai/*` it is the child's xAI API key
+   * and must not be treated as a runner token (#327).
+   */
   authorization: string | undefined;
+  /**
+   * `Proxy-Authorization` header. For `/xai/*` off-loopback this is the runner
+   * credential the hub proxy attaches; the gate reads it for lease binding
+   * and the xAI reverse proxy strips it as hop-by-hop before api.x.ai (#327).
+   */
+  proxyAuthorization?: string | undefined;
   config: ParleyConfig;
   /**
    * For child routes off-loopback: the task's `runner` field (submit-time
@@ -1034,12 +1045,22 @@ export function authorizeRequest(input: AuthGateInput): AuthGateAllow | AuthGate
     };
   }
 
-  const token = extractBearerToken(input.authorization);
+  // Credential source: `/xai/*` uses Proxy-Authorization for the runner token
+  // so Authorization can remain the child's xAI API key (#327). All other
+  // routes still gate on Authorization alone.
+  const segments = input.pathname.split("/").filter((s) => s !== "");
+  const isXaiRoute = routeClass === "child" && segments[0] === "xai";
+  const credentialHeader = isXaiRoute
+    ? input.proxyAuthorization
+    : input.authorization;
+  const token = extractBearerToken(credentialHeader);
   if (token === null) {
     return {
       ok: false,
       status: 401,
-      error: "unauthorized",
+      error: isXaiRoute
+        ? "unauthorized: child channel requires a runner token"
+        : "unauthorized",
       routeClass,
       peer,
     };
@@ -1071,6 +1092,9 @@ export function authorizeRequest(input: AuthGateInput): AuthGateAllow | AuthGate
     // Client tokens are never admitted here. `task.runner` alone is submit-time
     // affinity and is not sufficient — a pending or terminal task must not
     // grant child-channel access to the affine runner.
+    //
+    // For `/xai/*`, `token` was taken from Proxy-Authorization (see above);
+    // Authorization is intentionally not consulted for the runner match.
     const runnerName = matchRunnerToken(token, input.config);
     if (runnerName === null) {
       // Presenter was not a runner (missing/wrong/client token).
@@ -1218,6 +1242,12 @@ function gateRequest(
     authorization:
       typeof req.headers.authorization === "string"
         ? req.headers.authorization
+        : undefined,
+    // #327: hub proxy puts the runner credential here for `/xai/*` so the
+    // child's xAI Authorization can pass through to api.x.ai untouched.
+    proxyAuthorization:
+      typeof req.headers["proxy-authorization"] === "string"
+        ? req.headers["proxy-authorization"]
         : undefined,
     config,
     taskRunner,
