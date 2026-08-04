@@ -86,12 +86,13 @@ export async function startHubProxy(options: StartHubProxyOptions): Promise<HubP
           typeof req.headers["content-type"] === "string"
             ? req.headers["content-type"]
             : "application/json",
-        [TASK_HEADER]: taskId,
       };
 
       if (isXai) {
         // Preserve the child's xAI API key; put the runner credential on a
         // hop-by-hop header the daemon gate reads and xai-proxy strips.
+        // Correlation is path-based (`/xai/<taskId>/...`); do not inject
+        // TASK_HEADER so the parley task id never reaches api.x.ai (#331).
         if (typeof req.headers.authorization === "string") {
           headers.authorization = req.headers.authorization;
         }
@@ -99,7 +100,9 @@ export async function startHubProxy(options: StartHubProxyOptions): Promise<HubP
           headers["proxy-authorization"] = `Bearer ${token}`;
         }
       } else {
-        // Child channel / MCP: runner token is the sole auth credential.
+        // Child channel / MCP: runner token is the sole auth credential;
+        // TASK_HEADER is the correlation mechanism for these routes.
+        headers[TASK_HEADER] = taskId;
         if (token !== "") {
           headers.authorization = `Bearer ${token}`;
         }

@@ -139,7 +139,8 @@ describe("hub proxy allowlist", () => {
     expect(seen).toHaveLength(1);
     const hop = seen[0]!;
     expect(hop.path).toBe("/xai/task-42/v1/chat/completions");
-    expect(hop.header).toBe("task-42");
+    // Correlation is path-based on /xai/*; do not inject TASK_HEADER (#331).
+    expect(hop.header).toBeUndefined();
     expect(hop.method).toBe("POST");
     // Child's xAI key preserved on Authorization — never overwritten by runner token.
     expect(hop.authorization).toBe(`Bearer ${childXaiKey}`);

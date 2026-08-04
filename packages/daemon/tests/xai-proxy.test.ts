@@ -7,7 +7,7 @@ import http from "node:http";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { homePaths } from "@useparley/core";
+import { homePaths, TASK_HEADER } from "@useparley/core";
 import { insertTask, openDatabase, type DatabaseHandle, type NewTask } from "../src/db.js";
 import { TaskEngine } from "../src/engine.js";
 import {
@@ -307,6 +307,52 @@ describe("handleXaiProxyRequest (stub upstream)", () => {
     // Runner credential must not survive the hop-by-hop strip.
     expect(seen.proxyAuthorization).toBeUndefined();
     expect(seen.headerKeys.map((k) => k.toLowerCase())).not.toContain("proxy-authorization");
+
+    db.close();
+  });
+
+  it("strips TASK_HEADER before the xAI upstream hop (#331)", async () => {
+    // Belt-and-braces: even if a client sends the parley correlation header,
+    // it must never reach api.x.ai. Path segment remains the correlation source.
+    const seen: {
+      authorization?: string | string[];
+      taskHeader?: string | string[];
+      headerKeys: string[];
+    } = { headerKeys: [] };
+
+    const upstream = await listen((req, res) => {
+      seen.authorization = req.headers.authorization;
+      seen.taskHeader = req.headers[TASK_HEADER];
+      seen.headerKeys = Object.keys(req.headers);
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ usage: { prompt_tokens: 1, completion_tokens: 0, total_tokens: 1 } }));
+    });
+
+    const { engine, db } = makeEngine(["task-corr"]);
+    const proxy = await listen((req, res) => {
+      void handleXaiProxyRequest(engine, req, res, {
+        upstreamOrigin: `http://127.0.0.1:${upstream.port}`,
+      });
+    });
+
+    const res = await fetch(
+      `http://127.0.0.1:${proxy.port}/xai/task-corr/v1/chat/completions`,
+      {
+        method: "POST",
+        headers: {
+          authorization: "Bearer sk-secret",
+          [TASK_HEADER]: "task-corr",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ model: "grok-4" }),
+      },
+    );
+    expect(res.status).toBe(200);
+    // Child Authorization passthrough intact.
+    expect(seen.authorization).toBe("Bearer sk-secret");
+    // Correlation header must not reach the upstream origin.
+    expect(seen.taskHeader).toBeUndefined();
+    expect(seen.headerKeys.map((k) => k.toLowerCase())).not.toContain(TASK_HEADER.toLowerCase());
 
     db.close();
   });
