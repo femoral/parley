@@ -237,6 +237,12 @@ function renderDetailSections(
     }
   }
 
+  // Failure payload (incl. lost-runner enrichment: runner/phase/branch/age, #319).
+  if (t.error !== null && t.error !== "") {
+    ctx.stdout("\nError\n");
+    ctx.stdout(`  ${t.error}\n`);
+  }
+
   ctx.stdout("\nAttempts\n");
   if (detail.attempts.length === 0) {
     ctx.stdout("  (none)\n");

@@ -1372,3 +1372,279 @@ describe("runner registration + parley runners list", () => {
     expect(cfg.runners?.gpu).toBeUndefined();
   });
 });
+
+describe("lost-runner failures carry actionable state (#319)", () => {
+  async function bootWithShortHeartbeat(): Promise<string> {
+    const boot = await runCli(["daemon", "start"], home, {
+      extraEnv: {
+        PARLEY_LONG_POLL_MS: "300",
+        PARLEY_RUNNER_PRESENCE_GRACE_MS: "400",
+        // Fail quickly once the runner stops heartbeating.
+        PARLEY_RUNNER_HEARTBEAT_MS: "400",
+      },
+    });
+    expect(boot.code).toBe(0);
+    await waitFor(
+      () => fs.existsSync(path.join(home, "daemon.json")),
+      "daemon discovery",
+    );
+    const discovery = JSON.parse(
+      fs.readFileSync(path.join(home, "daemon.json"), "utf8"),
+    ) as { port: number; url?: string };
+    return discovery.url ?? `http://127.0.0.1:${discovery.port}`;
+  }
+
+  it("kill mid-task after events: failure names runner, phase, last-event age; no requeue", async () => {
+    const daemonUrl = await bootWithShortHeartbeat();
+
+    const bare = fs.mkdtempSync(path.join(os.tmpdir(), "parley-bare-lost-"));
+    repos.push(bare);
+    execFileSync("git", ["init", "--bare", "-b", "main"], {
+      cwd: bare,
+      stdio: "ignore",
+    });
+    // Emit session + long sleep so the runner is mid-task when killed.
+    const repo = makeGitRepo(
+      [
+        { emit: { type: "session", session_id: "lost-sess" } },
+        { emit: { type: "text", text: "still working" } },
+        { sleep: 60_000 },
+        {
+          submit_report: {
+            summary: "should not finish",
+            outcome: "success",
+            files_changed: [],
+          },
+        },
+      ],
+      {},
+      { origin: bare },
+    );
+    repos.push(repo);
+    git(repo, ["push", "-u", "origin", "main"]);
+
+    const runner = startRunner({
+      home,
+      name: "gpu",
+      token: "secret-gpu",
+      daemonUrl,
+      repos: {},
+      extraEnv: {
+        // Heartbeat faster than the 400ms daemon window while alive.
+        PARLEY_RUNNER_HEARTBEAT_INTERVAL_MS: "80",
+      },
+    });
+    await waitForRunnerOnline(home, "gpu");
+
+    const del = await runCli(
+      [
+        "delegate",
+        "-v",
+        "fake",
+        "--runner",
+        "gpu",
+        "-n",
+        "lost-mid",
+        "work then die",
+      ],
+      home,
+      { cwd: repo },
+    );
+    expect(del.code).toBe(0);
+    const taskId = (JSON.parse(del.stdout) as { task_id: string }).task_id;
+
+    // Wait until vendor events have been streamed to the daemon.
+    const eventsDeadline = Date.now() + 20_000;
+    let sawEvents = false;
+    while (Date.now() < eventsDeadline) {
+      const logPath = path.join(home, "tasks", taskId, "vendor.jsonl");
+      if (fs.existsSync(logPath)) {
+        const log = fs.readFileSync(logPath, "utf8");
+        if (log.includes("lost-sess") || log.includes("still working")) {
+          sawEvents = true;
+          break;
+        }
+      }
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    expect(sawEvents).toBe(true);
+
+    runner.kill("SIGKILL");
+
+    const failDeadline = Date.now() + 15_000;
+    let row: {
+      state: string;
+      error: string | null;
+      attempt?: number;
+      runner?: string | null;
+    } | null = null;
+    while (Date.now() < failDeadline) {
+      const status = await runCli(["status", taskId, "--json"], home);
+      if (status.code === 0) {
+        row = JSON.parse(status.stdout) as {
+          state: string;
+          error: string | null;
+          attempt?: number;
+          runner?: string | null;
+        };
+        if (row.state === "failed" || row.state === "completed") break;
+      }
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    expect(row?.state).toBe("failed");
+    expect(row?.error ?? "").toMatch(/runner lost/);
+    expect(row?.error ?? "").toMatch(/runner=gpu/);
+    // After events streamed, phase is at least events_streamed (or later).
+    expect(row?.error ?? "").toMatch(
+      /phase=(events_streamed|branch_pushed|worktree_created)/,
+    );
+    expect(row?.error ?? "").toMatch(/last_event_age_ms=\d+/);
+    expect(row?.attempt ?? 1).toBe(1);
+
+    // Human status surfaces the enriched error (#319 CLI detail).
+    const human = await runCli(["status", taskId], home);
+    expect(human.code).toBe(0);
+    expect(human.stdout).toMatch(/Error/);
+    expect(human.stdout).toMatch(/runner lost/);
+
+    // No automatic requeue: state stays failed after another heartbeat window.
+    await new Promise((r) => setTimeout(r, 600));
+    const again = await runCli(["status", taskId, "--json"], home);
+    expect(again.code).toBe(0);
+    const row2 = JSON.parse(again.stdout) as {
+      state: string;
+      error: string | null;
+      attempt?: number;
+    };
+    expect(row2.state).toBe("failed");
+    expect(row2.error).toBe(row?.error);
+    expect(row2.attempt ?? 1).toBe(1);
+
+    const listed = await runCli(["list", "--all", "--json"], home);
+    expect(listed.code).toBe(0);
+    const tasks = JSON.parse(listed.stdout) as { task_id: string }[];
+    expect(tasks.filter((t) => t.task_id === taskId)).toHaveLength(1);
+  }, 60_000);
+
+  it("kill after branch push: failure includes branch name (#319)", async () => {
+    const daemonUrl = await bootWithShortHeartbeat();
+
+    const bare = fs.mkdtempSync(path.join(os.tmpdir(), "parley-bare-lost-br-"));
+    repos.push(bare);
+    execFileSync("git", ["init", "--bare", "-b", "main"], {
+      cwd: bare,
+      stdio: "ignore",
+    });
+    // Hang mid-vendor so we can land a branch record then kill the runner.
+    // Real branch handoff is after child exit; here we POST /branch once the
+    // task is mid-execute (events flowing) to simulate a push that landed
+    // before loss — same daemon bookkeeping as the real path.
+    const repo = makeGitRepo(
+      [
+        { emit: { type: "session", session_id: "lost-br-sess" } },
+        { emit: { type: "text", text: "before branch loss" } },
+        { sleep: 60_000 },
+      ],
+      {},
+      { origin: bare },
+    );
+    repos.push(repo);
+    git(repo, ["push", "-u", "origin", "main"]);
+
+    const runner = startRunner({
+      home,
+      name: "gpu",
+      token: "secret-gpu",
+      daemonUrl,
+      repos: {},
+      extraEnv: {
+        PARLEY_RUNNER_HEARTBEAT_INTERVAL_MS: "80",
+      },
+    });
+    await waitForRunnerOnline(home, "gpu");
+
+    const del = await runCli(
+      [
+        "delegate",
+        "-v",
+        "fake",
+        "--runner",
+        "gpu",
+        "-n",
+        "lost-branch",
+        "stream then hang",
+      ],
+      home,
+      { cwd: repo },
+    );
+    expect(del.code).toBe(0);
+    const taskId = (JSON.parse(del.stdout) as { task_id: string }).task_id;
+
+    // Wait until events have streamed (task mid-execute, heartbeats alive).
+    const eventsDeadline = Date.now() + 25_000;
+    let sawEvents = false;
+    while (Date.now() < eventsDeadline) {
+      const logPath = path.join(home, "tasks", taskId, "vendor.jsonl");
+      if (fs.existsSync(logPath)) {
+        const log = fs.readFileSync(logPath, "utf8");
+        if (log.includes("lost-br-sess") || log.includes("before branch loss")) {
+          sawEvents = true;
+          break;
+        }
+      }
+      const status = await runCli(["status", taskId, "--json"], home);
+      if (status.code === 0) {
+        const row = JSON.parse(status.stdout) as {
+          state: string;
+          error: string | null;
+        };
+        if (row.state === "failed" || row.state === "completed") {
+          throw new Error(
+            `task ended before events: state=${row.state} error=${row.error}`,
+          );
+        }
+      }
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    expect(sawEvents).toBe(true);
+
+    // Branch handoff that landed before the runner was lost.
+    const br = await fetch(
+      `${daemonUrl}/runner/tasks/${encodeURIComponent(taskId)}/branch`,
+      {
+        method: "POST",
+        headers: {
+          authorization: "Bearer secret-gpu",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ branch: "parley/lost-branch-cli" }),
+      },
+    );
+    expect(br.status).toBe(200);
+
+    runner.kill("SIGKILL");
+
+    const failDeadline = Date.now() + 15_000;
+    let row: { state: string; error: string | null; branch: string | null } | null =
+      null;
+    while (Date.now() < failDeadline) {
+      const status = await runCli(["status", taskId, "--json"], home);
+      if (status.code === 0) {
+        row = JSON.parse(status.stdout) as {
+          state: string;
+          error: string | null;
+          branch: string | null;
+        };
+        if (row.state === "failed" || row.state === "completed") break;
+      }
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    expect(row?.state).toBe("failed");
+    expect(row?.branch).toBe("parley/lost-branch-cli");
+    expect(row?.error ?? "").toMatch(/runner lost/);
+    expect(row?.error ?? "").toMatch(/runner=gpu/);
+    expect(row?.error ?? "").toMatch(/phase=branch_pushed/);
+    expect(row?.error ?? "").toMatch(/branch=parley\/lost-branch-cli/);
+    expect(row?.error ?? "").toMatch(/last_event_age_ms=/);
+  }, 60_000);
+});

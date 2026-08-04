@@ -470,6 +470,396 @@ describe("runner heartbeat / events / branch / fail", () => {
     expect(row.error).toMatch(/runner lost/);
   });
 
+  it("lost-runner failure names runner, phase=leased, and last_event_age_ms=none (#319)", async () => {
+    const home = makeHome();
+    const { base } = await boot(home);
+    await registerRunner(base);
+    const repo = makeGitRepo();
+    repos.push(repo);
+    const { task_id } = await createRunnerTask(base, repo);
+    await json(base, "POST", "/runner/lease", { runner: "gpu" }, auth);
+
+    await new Promise((r) => setTimeout(r, 500));
+    const status = await json(base, "GET", `/tasks/${task_id}`);
+    const row = (
+      status.body as { row: { state: string; error: string | null; attempt: number } }
+    ).row;
+    expect(row.state).toBe("failed");
+    expect(row.error).toMatch(/runner lost: no heartbeat within \d+ms/);
+    expect(row.error).toMatch(/runner=gpu/);
+    expect(row.error).toMatch(/phase=leased/);
+    expect(row.error).toMatch(/last_event_age_ms=none/);
+    expect(row.error).not.toMatch(/branch=/);
+    // Envelope surfaces the same error string (task detail / inbox).
+    const env = (status.body as { task: { error: string | null } }).task;
+    expect(env.error).toBe(row.error);
+  });
+
+  it("lost-runner after events names phase=events_streamed and a finite last-event age (#319)", async () => {
+    const home = makeHome();
+    const { base } = await boot(home);
+    await registerRunner(base);
+    const repo = makeGitRepo();
+    repos.push(repo);
+    const { task_id } = await createRunnerTask(base, repo);
+    await json(base, "POST", "/runner/lease", { runner: "gpu" }, auth);
+
+    const events = await json(
+      base,
+      "POST",
+      `/runner/tasks/${task_id}/events`,
+      {
+        lines: [
+          JSON.stringify({ type: "session", session_id: "sess-lost-1" }),
+          JSON.stringify({ type: "text", text: "working" }),
+        ],
+      },
+      auth,
+    );
+    expect(events.status).toBe(200);
+
+    // Small pause so last_event_age_ms is strictly > 0, then wait past heartbeat.
+    await new Promise((r) => setTimeout(r, 50));
+    await new Promise((r) => setTimeout(r, 500));
+    const status = await json(base, "GET", `/tasks/${task_id}`);
+    const row = (status.body as { row: { state: string; error: string | null } }).row;
+    expect(row.state).toBe("failed");
+    expect(row.error).toMatch(/runner=gpu/);
+    expect(row.error).toMatch(/phase=events_streamed/);
+    expect(row.error).toMatch(/last_event_age_ms=\d+/);
+    expect(row.error).not.toMatch(/last_event_age_ms=none/);
+  });
+
+  it("lost-runner after branch record includes branch name and phase=branch_pushed (#319)", async () => {
+    const home = makeHome();
+    const { base } = await boot(home);
+    await registerRunner(base);
+    const repo = makeGitRepo();
+    repos.push(repo);
+    const { task_id } = await createRunnerTask(base, repo);
+    await json(base, "POST", "/runner/lease", { runner: "gpu" }, auth);
+
+    await json(
+      base,
+      "POST",
+      `/runner/tasks/${task_id}/events`,
+      { lines: [JSON.stringify({ type: "session", session_id: "sess-br" })] },
+      auth,
+    );
+    const br = await json(
+      base,
+      "POST",
+      `/runner/tasks/${task_id}/branch`,
+      { branch: "parley/lost-branch-319" },
+      auth,
+    );
+    expect(br.status).toBe(200);
+
+    await new Promise((r) => setTimeout(r, 500));
+    const status = await json(base, "GET", `/tasks/${task_id}`);
+    const row = (
+      status.body as {
+        row: { state: string; error: string | null; branch: string | null };
+      }
+    ).row;
+    expect(row.state).toBe("failed");
+    expect(row.branch).toBe("parley/lost-branch-319");
+    expect(row.error).toMatch(/runner=gpu/);
+    expect(row.error).toMatch(/phase=branch_pushed/);
+    expect(row.error).toMatch(/branch=parley\/lost-branch-319/);
+    expect(row.error).toMatch(/last_event_age_ms=\d+/);
+  });
+
+  it("heartbeat phase=worktree_created advances lost-runner phase (#319)", async () => {
+    const home = makeHome();
+    const { base } = await boot(home);
+    await registerRunner(base);
+    const repo = makeGitRepo();
+    repos.push(repo);
+    const { task_id } = await createRunnerTask(base, repo);
+    await json(base, "POST", "/runner/lease", { runner: "gpu" }, auth);
+
+    const hb = await json(
+      base,
+      "POST",
+      `/runner/tasks/${task_id}/heartbeat`,
+      { phase: "worktree_created" },
+      auth,
+    );
+    expect(hb.status).toBe(200);
+
+    await new Promise((r) => setTimeout(r, 500));
+    const status = await json(base, "GET", `/tasks/${task_id}`);
+    const row = (status.body as { row: { state: string; error: string | null } }).row;
+    expect(row.state).toBe("failed");
+    expect(row.error).toMatch(/phase=worktree_created/);
+    expect(row.error).toMatch(/last_event_age_ms=none/);
+  });
+
+  it("phase is monotonic: worktree_created after events_streamed does not regress (#319 F4)", async () => {
+    const home = makeHome();
+    const { base } = await boot(home);
+    await registerRunner(base);
+    const repo = makeGitRepo();
+    repos.push(repo);
+    const { task_id } = await createRunnerTask(base, repo);
+    await json(base, "POST", "/runner/lease", { runner: "gpu" }, auth);
+
+    const events = await json(
+      base,
+      "POST",
+      `/runner/tasks/${task_id}/events`,
+      {
+        lines: [JSON.stringify({ type: "session", session_id: "sess-mono" })],
+      },
+      auth,
+    );
+    expect(events.status).toBe(200);
+
+    // Lower wire phase after a higher daemon-derived phase must not regress.
+    const hb = await json(
+      base,
+      "POST",
+      `/runner/tasks/${task_id}/heartbeat`,
+      { phase: "worktree_created" },
+      auth,
+    );
+    expect(hb.status).toBe(200);
+
+    await new Promise((r) => setTimeout(r, 500));
+    const status = await json(base, "GET", `/tasks/${task_id}`);
+    const row = (status.body as { row: { state: string; error: string | null } }).row;
+    expect(row.state).toBe("failed");
+    expect(row.error).toMatch(/phase=events_streamed/);
+    expect(row.error).not.toMatch(/phase=worktree_created/);
+    expect(row.error).toMatch(/last_event_age_ms=\d+/);
+  });
+
+  it("heartbeat rejects daemon-derived and unknown phase on the wire (#319 F3/F4)", async () => {
+    const home = makeHome();
+    const { base } = await boot(home);
+    await registerRunner(base);
+    const repo = makeGitRepo();
+    repos.push(repo);
+    const { task_id } = await createRunnerTask(base, repo);
+    await json(base, "POST", "/runner/lease", { runner: "gpu" }, auth);
+
+    const derived = await json(
+      base,
+      "POST",
+      `/runner/tasks/${task_id}/heartbeat`,
+      { phase: "branch_pushed" },
+      auth,
+    );
+    expect(derived.status).toBe(400);
+    expect((derived.body as { error: string }).error).toMatch(/worktree_created/);
+
+    const leased = await json(
+      base,
+      "POST",
+      `/runner/tasks/${task_id}/heartbeat`,
+      { phase: "leased" },
+      auth,
+    );
+    expect(leased.status).toBe(400);
+
+    const bad = await json(
+      base,
+      "POST",
+      `/runner/tasks/${task_id}/heartbeat`,
+      { phase: "not-a-phase" },
+      auth,
+    );
+    expect(bad.status).toBe(400);
+
+    // Empty / missing phase still refreshes the timer.
+    const ok = await json(
+      base,
+      "POST",
+      `/runner/tasks/${task_id}/heartbeat`,
+      {},
+      auth,
+    );
+    expect(ok.status).toBe(200);
+  });
+
+  it("events rewrite only runner-progress.json, not the context sidecar (#319 F2)", async () => {
+    const home = makeHome();
+    const { base } = await boot(home);
+    await registerRunner(base);
+    const repo = makeGitRepo();
+    repos.push(repo);
+    // Large context to make accidental meta rewrites obvious by size.
+    const big = "x".repeat(64 * 1024);
+    const { task_id } = await createRunnerTask(base, repo, {
+      contexts: [{ name: "big.md", contents: big }],
+    });
+    await json(base, "POST", "/runner/lease", { runner: "gpu" }, auth);
+
+    const metaPath = path.join(home, "tasks", task_id, "runner-meta.json");
+    const progressPath = path.join(home, "tasks", task_id, "runner-progress.json");
+    expect(fs.existsSync(metaPath)).toBe(true);
+    expect(fs.existsSync(progressPath)).toBe(true);
+    const metaBefore = fs.readFileSync(metaPath);
+    const metaMtimeBefore = fs.statSync(metaPath).mtimeMs;
+
+    for (let i = 0; i < 20; i++) {
+      const events = await json(
+        base,
+        "POST",
+        `/runner/tasks/${task_id}/events`,
+        { lines: [JSON.stringify({ type: "text", text: `chunk-${i}` })] },
+        auth,
+      );
+      expect(events.status).toBe(200);
+    }
+
+    const metaAfter = fs.readFileSync(metaPath);
+    expect(metaAfter.equals(metaBefore)).toBe(true);
+    // mtime should be unchanged (or at worst not rewritten 20 times — byte identity is the pin).
+    expect(fs.statSync(metaPath).mtimeMs).toBe(metaMtimeBefore);
+    const progress = JSON.parse(fs.readFileSync(progressPath, "utf8")) as {
+      phase: string;
+      last_event_at: string | null;
+    };
+    expect(progress.phase).toBe("events_streamed");
+    expect(progress.last_event_at).toMatch(/^\d{4}-/);
+    // Progress file stays tiny relative to the context sidecar.
+    expect(fs.statSync(progressPath).size).toBeLessThan(512);
+    expect(fs.statSync(metaPath).size).toBeGreaterThan(60_000);
+  });
+
+  it("lost-runner progress survives daemon restart (#319 F2 durability)", async () => {
+    const home = makeHome();
+    let { base } = await boot(home);
+    await registerRunner(base);
+    const repo = makeGitRepo();
+    repos.push(repo);
+    const { task_id } = await createRunnerTask(base, repo);
+    await json(base, "POST", "/runner/lease", { runner: "gpu" }, auth);
+
+    const events = await json(
+      base,
+      "POST",
+      `/runner/tasks/${task_id}/events`,
+      {
+        lines: [
+          JSON.stringify({ type: "session", session_id: "sess-restart" }),
+          JSON.stringify({ type: "text", text: "pre-restart" }),
+        ],
+      },
+      auth,
+    );
+    expect(events.status).toBe(200);
+
+    // Progress on disk before restart.
+    const progressPath = path.join(home, "tasks", task_id, "runner-progress.json");
+    const progressBefore = JSON.parse(fs.readFileSync(progressPath, "utf8")) as {
+      phase: string;
+      last_event_at: string | null;
+    };
+    expect(progressBefore.phase).toBe("events_streamed");
+    expect(progressBefore.last_event_at).not.toBeNull();
+
+    // Restart daemon — progress file must still drive the lost-runner payload.
+    if (server) {
+      await server.close();
+      server = null;
+    }
+    // Brief pause so the prior heartbeat timer is definitely gone with the process.
+    await new Promise((r) => setTimeout(r, 50));
+    ({ base } = await boot(home));
+    // Re-register so the runner token path is live; task is still running with
+    // re-armed heartbeat from engine constructor.
+    await registerRunner(base);
+
+    await new Promise((r) => setTimeout(r, 500));
+    const status = await json(base, "GET", `/tasks/${task_id}`);
+    const row = (status.body as { row: { state: string; error: string | null } }).row;
+    expect(row.state).toBe("failed");
+    expect(row.error).toMatch(/runner=gpu/);
+    expect(row.error).toMatch(/phase=events_streamed/);
+    expect(row.error).toMatch(/last_event_age_ms=\d+/);
+    expect(row.error).not.toMatch(/last_event_age_ms=none/);
+  });
+
+  it("phase floor uses task.branch when progress is missing (#319 F3)", async () => {
+    const home = makeHome();
+    const { base } = await boot(home);
+    await registerRunner(base);
+    const repo = makeGitRepo();
+    repos.push(repo);
+    const { task_id } = await createRunnerTask(base, repo);
+    await json(base, "POST", "/runner/lease", { runner: "gpu" }, auth);
+
+    const br = await json(
+      base,
+      "POST",
+      `/runner/tasks/${task_id}/branch`,
+      { branch: "parley/floor-branch" },
+      auth,
+    );
+    expect(br.status).toBe(200);
+
+    // Simulate unreadable progress (operator/tool deleted the tiny file).
+    const progressPath = path.join(home, "tasks", task_id, "runner-progress.json");
+    fs.rmSync(progressPath, { force: true });
+
+    await new Promise((r) => setTimeout(r, 500));
+    const status = await json(base, "GET", `/tasks/${task_id}`);
+    const row = (
+      status.body as {
+        row: { state: string; error: string | null; branch: string | null };
+      }
+    ).row;
+    expect(row.state).toBe("failed");
+    expect(row.branch).toBe("parley/floor-branch");
+    // Must not claim phase=leased while branch=... is present.
+    expect(row.error).toMatch(/phase=branch_pushed/);
+    expect(row.error).toMatch(/branch=parley\/floor-branch/);
+    expect(row.error).not.toMatch(/phase=leased/);
+  });
+
+  it("lost-runner is not auto-retried: stays failed, single attempt row (#319)", async () => {
+    const home = makeHome();
+    const { base } = await boot(home);
+    await registerRunner(base);
+    const repo = makeGitRepo();
+    repos.push(repo);
+    const { task_id } = await createRunnerTask(base, repo);
+    await json(base, "POST", "/runner/lease", { runner: "gpu" }, auth);
+
+    await new Promise((r) => setTimeout(r, 500));
+    const first = await json(base, "GET", `/tasks/${task_id}`);
+    const row1 = (
+      first.body as {
+        row: { state: string; error: string | null; attempt: number };
+        attempts?: { id: string }[];
+      }
+    ).row;
+    expect(row1.state).toBe("failed");
+    expect(row1.error).toMatch(/runner lost/);
+    expect(row1.attempt).toBe(1);
+
+    // Wait another window; state must remain failed (no requeue/retry).
+    await new Promise((r) => setTimeout(r, 500));
+    const second = await json(base, "GET", `/tasks/${task_id}`);
+    const row2 = (
+      second.body as { row: { state: string; error: string | null; attempt: number } }
+    ).row;
+    expect(row2.state).toBe("failed");
+    expect(row2.error).toBe(row1.error);
+    expect(row2.attempt).toBe(1);
+
+    // List must not grow a second attempt row for this failure.
+    const listed = await json(base, "GET", "/tasks");
+    const tasks = (listed.body as { tasks: { task_id: string; attempt?: number }[] }).tasks;
+    const related = tasks.filter(
+      (t) => t.task_id === task_id || t.task_id.startsWith(`${task_id}-`),
+    );
+    expect(related).toHaveLength(1);
+  });
+
   it("heartbeat refreshes the lease", async () => {
     const home = makeHome();
     const { base } = await boot(home);

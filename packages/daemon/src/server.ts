@@ -17,6 +17,7 @@ import {
   parseTaskMetricsFilters,
   resolveWorkflow,
   RUN_METRICS_GROUP_BY,
+  isRunnerWirePhase,
   RUNNER_PROTOCOL_VERSION,
   runnerStaleWindowMs as runnerStaleWindowMsFromConfig,
   setConfigPath,
@@ -33,6 +34,7 @@ import {
   type RunnerRepoReachability,
   type RunnerShowResponse,
   type RunnerVendorCapability,
+  type RunnerWirePhase,
   type TaskEnvelope,
   type WorkflowDefinition,
   isGitAuthFailureCode,
@@ -3055,8 +3057,29 @@ function createHandler(
             sendJson(res, 401, { error: "unauthorized" });
             return;
           }
+          // Optional body: { phase?: "worktree_created" } only (#319 F3).
+          // Empty / missing body remains valid (timer refresh only).
+          // Daemon-derived phases (leased/events_streamed/branch_pushed) → 400.
+          const rawBody = await readBody(req);
+          let phase: RunnerWirePhase | undefined;
+          if (rawBody !== undefined && rawBody !== null && rawBody !== "") {
+            if (!isRecord(rawBody)) {
+              sendJson(res, 400, { error: "heartbeat body must be an object" });
+              return;
+            }
+            if (rawBody.phase !== undefined) {
+              if (!isRunnerWirePhase(rawBody.phase)) {
+                sendJson(res, 400, {
+                  error:
+                    "phase must be worktree_created (leased/events_streamed/branch_pushed are daemon-derived)",
+                });
+                return;
+              }
+              phase = rawBody.phase;
+            }
+          }
           try {
-            engine.runnerHeartbeat(taskId, runnerName);
+            engine.runnerHeartbeat(taskId, runnerName, phase !== undefined ? { phase } : {});
             // Task traffic refreshes presence while the runner is mid-execute
             // (no open lease poll during execute; see ADR-0029).
             touchRunnerLastSeen(db, runnerName);

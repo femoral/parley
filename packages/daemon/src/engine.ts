@@ -18,6 +18,8 @@ import {
   isValidSize,
   isValidTaskType,
   formatCliSelectedHint,
+  isRunnerTaskPhase,
+  isRunnerWirePhase,
   listAllowedCombos,
   LOCAL_EXECUTOR_ID,
   ModelAllowlistError,
@@ -29,6 +31,7 @@ import {
   resolveRoutingQueueTimeoutMs,
   resolveWorkflow,
   retentionDays,
+  RUNNER_TASK_PHASE_RANK,
   scoreRubric,
   expandLaunchTemplate,
   formatStepAddress,
@@ -41,6 +44,8 @@ import {
   type ProfileConfig,
   type RunnerCapabilities,
   type RunnerLeaseSpec,
+  type RunnerTaskPhase,
+  type RunnerWirePhase,
   type TaskErrorCategory,
   type WorkflowDefinition,
   type WorkflowStepNode,
@@ -294,6 +299,13 @@ export function runnerHeartbeatTimeoutMs(): number {
 
 /** Filename under the task log dir for contexts + base_ref of runner-affine tasks. */
 const RUNNER_META_FILE = "runner-meta.json";
+
+/**
+ * Tiny #319 progress sidecar (phase / last_event_at / leased_at). Kept separate
+ * from runner-meta so the events/heartbeat hot path never rewrites multi-MB
+ * context blobs (F2).
+ */
+const RUNNER_PROGRESS_FILE = "runner-progress.json";
 
 /**
  * After `submit_report` is accepted the task stays `running` until the vendor
@@ -659,6 +671,19 @@ export interface SessionBindInput {
 interface RunnerMeta {
   contexts: ContextFile[];
   base_ref: string | null;
+}
+
+/**
+ * Tiny #319 progress file — never holds context contents. Written on claim,
+ * events, worktree heartbeat, and branch; read only on lost-runner fail.
+ */
+interface RunnerProgress {
+  /** Highest phase reached on this lease. */
+  phase: RunnerTaskPhase;
+  /** ISO timestamp when the lease was claimed. */
+  leased_at: string | null;
+  /** ISO timestamp of the most recent non-empty events POST; null if none. */
+  last_event_at: string | null;
 }
 
 /** Resolved create-time fields after profile + defaults (#113 / #154 / #195). */
@@ -3231,12 +3256,123 @@ export class TaskEngine {
     }
   }
 
+  private runnerProgressPath(taskId: string): string {
+    return path.join(taskLogDir(this.paths, taskId), RUNNER_PROGRESS_FILE);
+  }
+
+  /**
+   * Read #319 progress; missing/corrupt → leased floor (never throws).
+   * Does not open the context-bearing runner-meta sidecar.
+   */
+  private readRunnerProgress(taskId: string): RunnerProgress {
+    try {
+      const raw = fs.readFileSync(this.runnerProgressPath(taskId), "utf8");
+      const parsed = JSON.parse(raw) as Partial<RunnerProgress>;
+      return {
+        phase: isRunnerTaskPhase(parsed.phase) ? parsed.phase : "leased",
+        leased_at:
+          typeof parsed.leased_at === "string" ? parsed.leased_at : null,
+        last_event_at:
+          typeof parsed.last_event_at === "string" ? parsed.last_event_at : null,
+      };
+    } catch {
+      return { phase: "leased", leased_at: null, last_event_at: null };
+    }
+  }
+
+  private writeRunnerProgress(taskId: string, progress: RunnerProgress): void {
+    const dir = taskLogDir(this.paths, taskId);
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(
+      this.runnerProgressPath(taskId),
+      `${JSON.stringify(progress)}\n`,
+    );
+  }
+
+  /**
+   * Advance runner phase if `phase` is higher than the current progress value.
+   * Never regresses; only touches the tiny progress file (not runner-meta).
+   */
+  private advanceRunnerPhase(taskId: string, phase: RunnerTaskPhase): void {
+    const progress = this.readRunnerProgress(taskId);
+    const current = progress.phase;
+    if (RUNNER_TASK_PHASE_RANK[phase] < RUNNER_TASK_PHASE_RANK[current]) {
+      return;
+    }
+    if (current === phase) return;
+    this.writeRunnerProgress(taskId, { ...progress, phase });
+  }
+
+  /** Record that vendor event lines arrived (phase + last-event clock, #319). */
+  private noteRunnerEvents(taskId: string): void {
+    const progress = this.readRunnerProgress(taskId);
+    const next: RunnerProgress = {
+      ...progress,
+      last_event_at: new Date().toISOString(),
+    };
+    if (
+      RUNNER_TASK_PHASE_RANK[progress.phase] <
+      RUNNER_TASK_PHASE_RANK.events_streamed
+    ) {
+      next.phase = "events_streamed";
+    }
+    this.writeRunnerProgress(taskId, next);
+  }
+
+  /**
+   * Highest phase for a lost-runner payload: progress file, then a floor from
+   * durable task facts so we never claim `leased` when `branch` is set (F3).
+   */
+  private resolveLostRunnerPhase(
+    task: { branch: string | null } | null | undefined,
+    progress: RunnerProgress,
+  ): RunnerTaskPhase {
+    let phase: RunnerTaskPhase = progress.phase;
+    if (
+      task?.branch !== null &&
+      task?.branch !== undefined &&
+      task.branch !== "" &&
+      RUNNER_TASK_PHASE_RANK[phase] < RUNNER_TASK_PHASE_RANK.branch_pushed
+    ) {
+      phase = "branch_pushed";
+    }
+    return phase;
+  }
+
+  /**
+   * Structured lost-runner failure text (#319): runner, phase, branch if any,
+   * last-event age. Readable single line so inbox/detail show the full payload.
+   */
+  private formatLostRunnerError(taskId: string, windowMs: number): string {
+    const task = getTask(this.db, taskId);
+    const progress = this.readRunnerProgress(taskId);
+    const runner = task?.runner && task.runner !== "" ? task.runner : "unknown";
+    const phase = this.resolveLostRunnerPhase(task, progress);
+    const parts = [
+      `runner lost: no heartbeat within ${windowMs}ms`,
+      `runner=${runner}`,
+      `phase=${phase}`,
+    ];
+    if (task?.branch !== null && task?.branch !== undefined && task.branch !== "") {
+      parts.push(`branch=${task.branch}`);
+    }
+    if (progress.last_event_at) {
+      const age = Math.max(0, Date.now() - Date.parse(progress.last_event_at));
+      parts.push(
+        Number.isFinite(age) ? `last_event_age_ms=${age}` : "last_event_age_ms=none",
+      );
+    } else {
+      parts.push("last_event_age_ms=none");
+    }
+    return parts.join("; ");
+  }
+
   private armRunnerHeartbeat(taskId: string): void {
     this.clearRunnerHeartbeat(taskId);
     const windowMs = runnerHeartbeatTimeoutMs();
     const timer = setTimeout(() => {
       this.runnerHeartbeatTimers.delete(taskId);
-      this.fail(taskId, `runner lost: no heartbeat within ${windowMs}ms`);
+      this.fail(taskId, this.formatLostRunnerError(taskId, windowMs));
     }, windowMs);
     timer.unref();
     this.runnerHeartbeatTimers.set(taskId, timer);
@@ -3359,6 +3495,12 @@ export class TaskEngine {
       cause: "runner_claim",
       fields: claimFields,
     });
+    // Seed lost-runner progress at claim (#319): tiny file, not runner-meta.
+    this.writeRunnerProgress(pending.id, {
+      phase: "leased",
+      leased_at: new Date().toISOString(),
+      last_event_at: null,
+    });
     this.armRunnerHeartbeat(pending.id);
     const claimed = getTask(this.db, pending.id);
     if (!claimed) return null;
@@ -3400,10 +3542,15 @@ export class TaskEngine {
   }
 
   /**
-   * `POST /runner/tasks/:id/heartbeat` — refresh the lease timer. Throws
+   * `POST /runner/tasks/:id/heartbeat` — refresh the lease timer. Optional
+   * wire `phase` may only be `worktree_created` (#319 F3). Throws
    * `DelegateError` when the task is unknown, not runner-affine, or terminal.
    */
-  runnerHeartbeat(taskId: string, runnerName: string): void {
+  runnerHeartbeat(
+    taskId: string,
+    runnerName: string,
+    body: { phase?: RunnerWirePhase } = {},
+  ): void {
     const task = getTask(this.db, taskId);
     if (!task) throw new DelegateError(`no such task: ${taskId}`);
     if (task.runner !== runnerName) {
@@ -3413,6 +3560,14 @@ export class TaskEngine {
       throw new DelegateError(`task ${taskId} is already ${task.state}`);
     }
     this.armRunnerHeartbeat(taskId);
+    if (body.phase !== undefined) {
+      if (!isRunnerWirePhase(body.phase)) {
+        throw new DelegateError(
+          "phase must be worktree_created (leased/events_streamed/branch_pushed are daemon-derived)",
+        );
+      }
+      this.advanceRunnerPhase(taskId, body.phase);
+    }
   }
 
   /**
@@ -3480,6 +3635,8 @@ export class TaskEngine {
 
     if (appendRaw.length > 0) {
       fs.appendFileSync(rawLogPath, `${appendRaw.join("\n")}\n`);
+      // Non-empty events advance phase and last-event clock (#319).
+      this.noteRunnerEvents(taskId);
     }
     if (appendDiag.length > 0) {
       fs.appendFileSync(diagLogPath, `${appendDiag.join("\n")}\n`);
@@ -3506,6 +3663,7 @@ export class TaskEngine {
       throw new DelegateError("branch must be a non-empty string");
     }
     updateTask(this.db, taskId, { branch });
+    this.advanceRunnerPhase(taskId, "branch_pushed");
     if (task.report !== null && !isTerminalState(task.state)) {
       this.completeAcceptedReport(taskId);
     }

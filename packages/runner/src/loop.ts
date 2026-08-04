@@ -16,6 +16,7 @@ import {
   type LeaseTransport,
   type RunnerCapabilities,
   type RunnerLeaseSpec,
+  type RunnerWirePhase,
   type SpawnPlan,
   type TaskSpec,
   type VendorAdapter,
@@ -53,6 +54,16 @@ import { RUNNER_VERSION } from "./version.js";
 
 /** Default heartbeat interval — well under the daemon's 90s window. */
 const HEARTBEAT_INTERVAL_MS = 20_000;
+
+/**
+ * How often the runner posts in-task heartbeats. Override via
+ * `PARLEY_RUNNER_HEARTBEAT_INTERVAL_MS` for tests (must stay under the daemon's
+ * `PARLEY_RUNNER_HEARTBEAT_MS` window).
+ */
+function runnerHeartbeatIntervalMs(): number {
+  const parsed = Number(process.env.PARLEY_RUNNER_HEARTBEAT_INTERVAL_MS ?? "");
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : HEARTBEAT_INTERVAL_MS;
+}
 
 /** How long a stopped child gets to exit on SIGTERM before SIGKILL. */
 const CHILD_STOP_GRACE_MS = 2_000;
@@ -315,13 +326,20 @@ export class RunnerLoop {
     this.log(`leased ${taskId} vendor=${lease.vendor}`);
     this.inFlight = { taskId, child: null, proxy: null };
 
+    // Wire phase for heartbeat payloads (#319 F3): only worktree_created is
+    // claimable; other phases are daemon-derived. Heartbeats omit phase until
+    // the worktree exists, then always send worktree_created (monotonic on
+    // the daemon; never regresses higher phases).
+    let wirePhase: RunnerWirePhase | undefined;
     const heartbeat = setInterval(() => {
-      void this.transport.heartbeat(taskId).catch((err: unknown) => {
-        this.log(
-          `heartbeat error for ${taskId}: ${err instanceof Error ? err.message : String(err)}`,
-        );
-      });
-    }, HEARTBEAT_INTERVAL_MS);
+      void this.transport
+        .heartbeat(taskId, wirePhase !== undefined ? { phase: wirePhase } : {})
+        .catch((err: unknown) => {
+          this.log(
+            `heartbeat error for ${taskId}: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        });
+    }, runnerHeartbeatIntervalMs());
     heartbeat.unref();
 
     let worktreePath: string | null = null;
@@ -413,6 +431,17 @@ export class RunnerLoop {
       }
       worktreePath = info.path;
       branch = info.branch;
+      // Signal worktree phase so a lost-runner failure can name it (#319).
+      wirePhase = "worktree_created";
+      try {
+        await this.transport.heartbeat(taskId, { phase: wirePhase });
+      } catch (err) {
+        this.log(
+          `heartbeat (worktree_created) error for ${taskId}: ${
+            err instanceof Error ? err.message : String(err)
+          }`,
+        );
+      }
 
       this.host.materializeContext(worktreePath, lease.prompt, lease.contexts);
 

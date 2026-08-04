@@ -384,6 +384,24 @@ describe("RunnerLoop failure branches (fake transport)", () => {
     ).toBe(true);
   });
 
+  it("heartbeats phase=worktree_created after worktree succeeds (#319)", async () => {
+    const lease = sampleLease();
+    const transport = createFakeLeaseTransport({ leases: [lease] });
+    const loop = new RunnerLoop(
+      loopOpts(transport, {
+        host: { spawnExitCode: 0 },
+      }),
+    );
+    await runUntilIdle(loop, transport);
+    const phaseHb = transport.calls.filter(
+      (c): c is Extract<typeof c, { verb: "heartbeat" }> =>
+        c.verb === "heartbeat" && c.body?.phase === "worktree_created",
+    );
+    expect(phaseHb.length).toBeGreaterThanOrEqual(1);
+    // Branch record still happens on the success path after spawn.
+    expect(transport.calls.some((c) => c.verb === "branch")).toBe(true);
+  });
+
   it("fails with branch handoff message when push throws", async () => {
     const lease = sampleLease();
     const transport = createFakeLeaseTransport({ leases: [lease] });
