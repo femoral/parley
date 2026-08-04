@@ -199,27 +199,11 @@ export function tryWithMirrorLock(
   const lockDir = `${mirrorPath}.lock`;
   const deadline = Date.now() + Math.max(0, waitMs);
   for (;;) {
+    // Only mkdirSync may legitimately EEXIST (lock held). Catch narrowly so
+    // an EEXIST-coded error from `fn` always propagates — never re-invokes
+    // unboundedly (#318 LOW-C).
     try {
       fs.mkdirSync(lockDir);
-      try {
-        fs.writeFileSync(
-          path.join(lockDir, "owner"),
-          `${process.pid}\n${Date.now()}\n`,
-          { flag: "wx" },
-        );
-      } catch {
-        /* owner stamp is best-effort */
-      }
-      try {
-        fn();
-      } finally {
-        try {
-          fs.rmSync(lockDir, { recursive: true, force: true });
-        } catch {
-          /* leave for stale reaper */
-        }
-      }
-      return true;
     } catch (err) {
       const code = (err as NodeJS.ErrnoException).code;
       if (code !== "EEXIST") throw err;
@@ -233,7 +217,27 @@ export function tryWithMirrorLock(
       }
       if (Date.now() >= deadline) return false;
       sleepMs(50);
+      continue;
     }
+    try {
+      fs.writeFileSync(
+        path.join(lockDir, "owner"),
+        `${process.pid}\n${Date.now()}\n`,
+        { flag: "wx" },
+      );
+    } catch {
+      /* owner stamp is best-effort */
+    }
+    try {
+      fn();
+    } finally {
+      try {
+        fs.rmSync(lockDir, { recursive: true, force: true });
+      } catch {
+        /* leave for stale reaper */
+      }
+    }
+    return true;
   }
 }
 

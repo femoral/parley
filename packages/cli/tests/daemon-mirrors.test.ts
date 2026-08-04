@@ -199,14 +199,17 @@ describe("daemon mirror execution (#318)", () => {
       cwd: bare,
       stdio: "ignore",
     });
+    // Dirty the worktree so auto-remove keeps it linked (tests bare-mirror
+    // reuse while prior worktrees remain; clean completion would reclaim).
     const repo = makeGitRepo(
       [
         { emit: { type: "session", session_id: "reuse-sess" } },
+        { write_file: { path: "dirty-reuse.txt", contents: "keep" } },
         {
           submit_report: {
             summary: "reuse mirror",
             outcome: "success",
-            files_changed: [],
+            files_changed: ["dirty-reuse.txt"],
           },
         },
       ],
@@ -310,14 +313,17 @@ describe("daemon mirror execution (#318)", () => {
     const markerA = "CONTENT_FROM_REPO_A";
     const markerB = "CONTENT_FROM_REPO_B";
 
+    // Dirty so the worktree is retained for the MARKER assertion (auto-remove
+    // now correctly reclaims clean mirror worktrees — #318 HIGH-A).
     const seedA = makeGitRepo(
       [
         { emit: { type: "session", session_id: "wrong-a-sess" } },
+        { write_file: { path: "dirty-a.txt", contents: "keep" } },
         {
           submit_report: {
             summary: "from A",
             outcome: "success",
-            files_changed: [],
+            files_changed: ["dirty-a.txt"],
           },
         },
       ],
@@ -461,6 +467,252 @@ describe("daemon mirror execution (#318)", () => {
       /no origin fetch URL|managed mirror|not usable|base_sha is required|does not match/i,
     );
   }, 30_000);
+
+  it("clean reclaims worktrees for completed + failed mirror tasks (#318 HIGH-A)", async () => {
+    await bootDaemon();
+
+    const bare = fs.mkdtempSync(path.join(os.tmpdir(), "parley-bare-clean-"));
+    repos.push(bare);
+    execFileSync("git", ["init", "--bare", "-b", "main"], {
+      cwd: bare,
+      stdio: "ignore",
+    });
+    // Seed origin once; both tasks clone from the same bare.
+    const seed = makeGitRepo(
+      [
+        { emit: { type: "session", session_id: "clean-seed" } },
+        {
+          submit_report: {
+            summary: "seed",
+            outcome: "success",
+            files_changed: [],
+          },
+        },
+      ],
+      {},
+      { origin: bare },
+    );
+    repos.push(seed);
+    git(seed, ["push", "-u", "origin", "main"]);
+
+    const discovery = JSON.parse(
+      fs.readFileSync(path.join(home, "daemon.json"), "utf8"),
+    ) as { port: number; url?: string };
+    const daemonUrl =
+      discovery.url ?? `http://127.0.0.1:${discovery.port}`;
+
+    async function postMirrorTask(
+      name: string,
+      actions: Record<string, unknown>[],
+    ): Promise<{ taskId: string; worktree: string; state: string }> {
+      // Vendor script is read from the worktree (cut from bare at base_sha).
+      // Push an updated .fake-vendor.json to the bare tip for each task.
+      const fabricated = path.join(
+        os.tmpdir(),
+        `parley-missing-clean-${name}-${Date.now()}`,
+      );
+      fs.writeFileSync(
+        path.join(seed, ".fake-vendor.json"),
+        JSON.stringify(actions, null, 2),
+      );
+      git(seed, ["add", "-A"]);
+      git(seed, ["commit", "-m", `script ${name}`]);
+      git(seed, ["push", "origin", "main"]);
+      const tip = git(seed, ["rev-parse", "HEAD"]);
+
+      const res = await fetch(`${daemonUrl}/tasks`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          prompt: `mirror clean ${name}`,
+          vendor: "fake",
+          name,
+          cwd: fabricated,
+          use_worktree: true,
+          repo_fetch_url: bare,
+          base_sha: tip,
+          ancestry_chain: [],
+          workspace_root: fabricated,
+          contexts: [],
+        }),
+      });
+      expect(res.status).toBe(201);
+      const ack = (await res.json()) as { task_id: string };
+      const row = await waitTerminal(ack.task_id);
+      expect(row.worktree).toBeTruthy();
+      return {
+        taskId: ack.task_id,
+        worktree: row.worktree!,
+        state: row.state,
+      };
+    }
+
+    // Completed with dirty tree so auto-remove keeps the worktree for clean.
+    const completed = await postMirrorTask("mirror-clean-ok", [
+      { emit: { type: "session", session_id: "clean-ok-sess" } },
+      { write_file: { path: "dirty-ok.txt", contents: "keep me" } },
+      {
+        submit_report: {
+          summary: "completed mirror",
+          outcome: "success",
+          files_changed: ["dirty-ok.txt"],
+        },
+      },
+    ]);
+    expect(completed.state).toBe("completed");
+    expect(fs.existsSync(completed.worktree)).toBe(true);
+
+    // Failed after committing child work — worktree retained for diagnosis.
+    const failed = await postMirrorTask("mirror-clean-fail", [
+      { emit: { type: "session", session_id: "clean-fail-sess" } },
+      {
+        write_file: {
+          path: "child-work.txt",
+          contents: "failed child payload",
+        },
+      },
+      { git_commit: { message: "child failed work" } },
+      { exit: 1 },
+    ]);
+    expect(failed.state).toBe("failed");
+    expect(fs.existsSync(failed.worktree)).toBe(true);
+
+    const clonesDir = homePaths(home).clones;
+    const mirrors = fs
+      .readdirSync(clonesDir)
+      .filter((n) => !n.startsWith(".") && !n.endsWith(".lock"));
+    expect(mirrors.length).toBe(1);
+    const mirrorPath = path.join(clonesDir, mirrors[0]!);
+
+    // Before clean: both worktrees linked under the bare.
+    const beforeList = execFileSync(
+      "git",
+      ["-C", mirrorPath, "worktree", "list", "--porcelain"],
+      { encoding: "utf8" },
+    );
+    expect(beforeList).toContain(completed.worktree);
+    expect(beforeList).toContain(failed.worktree);
+
+    const sweep = await runCli(["clean", "--all-terminal"], home);
+    expect(sweep.code).toBe(0);
+    expect(fs.existsSync(completed.worktree)).toBe(false);
+    expect(fs.existsSync(failed.worktree)).toBe(false);
+
+    // Columns nulled.
+    for (const id of [completed.taskId, failed.taskId]) {
+      const st = await runCli(["status", id, "--json"], home);
+      expect(st.code).toBe(0);
+      const body = JSON.parse(st.stdout) as {
+        worktree: string | null;
+        cwd: string | null;
+      };
+      expect(body.worktree).toBeNull();
+      expect(body.cwd).toBeNull();
+    }
+
+    // Mirror's worktree list shows only the bare itself.
+    const afterList = execFileSync(
+      "git",
+      ["-C", mirrorPath, "worktree", "list", "--porcelain"],
+      { encoding: "utf8" },
+    );
+    const worktreeLines = afterList
+      .split("\n")
+      .filter((l) => l.startsWith("worktree "));
+    expect(worktreeLines).toEqual([`worktree ${mirrorPath}`]);
+  }, 120_000);
+
+  it("failed mirror worktree stays git-usable for diagnosis (#318 MEDIUM-B)", async () => {
+    await bootDaemon();
+
+    const bare = fs.mkdtempSync(path.join(os.tmpdir(), "parley-bare-fail-diag-"));
+    repos.push(bare);
+    execFileSync("git", ["init", "--bare", "-b", "main"], {
+      cwd: bare,
+      stdio: "ignore",
+    });
+    // Child writes + commits then exits non-zero. Identity config is needed
+    // inside the worktree (bare-linked checkouts don't inherit seed config).
+    const seed = makeGitRepo(
+      [
+        { emit: { type: "session", session_id: "fail-diag-sess" } },
+        {
+          write_file: {
+            path: "child-work.txt",
+            contents: "diagnosable child work",
+          },
+        },
+        // Configure identity then commit via shell-less git actions:
+        // fake-vendor's git_commit only runs add+commit; seed identity is not
+        // on the bare, so we rely on write_file + dirty tree for diagnosis.
+        { exit: 1 },
+      ],
+      {},
+      { origin: bare },
+    );
+    repos.push(seed);
+    git(seed, ["push", "-u", "origin", "main"]);
+    const tip = git(seed, ["rev-parse", "HEAD"]);
+
+    const fabricated = path.join(
+      os.tmpdir(),
+      `parley-missing-fail-diag-${Date.now()}`,
+    );
+    const discovery = JSON.parse(
+      fs.readFileSync(path.join(home, "daemon.json"), "utf8"),
+    ) as { port: number; url?: string };
+    const daemonUrl =
+      discovery.url ?? `http://127.0.0.1:${discovery.port}`;
+
+    const res = await fetch(`${daemonUrl}/tasks`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        prompt: "fail for diagnosis",
+        vendor: "fake",
+        name: "fail-diag",
+        cwd: fabricated,
+        use_worktree: true,
+        repo_fetch_url: bare,
+        base_sha: tip,
+        ancestry_chain: [],
+        workspace_root: fabricated,
+        contexts: [],
+      }),
+    });
+    expect(res.status).toBe(201);
+    const ack = (await res.json()) as { task_id: string };
+    const row = await waitTerminal(ack.task_id);
+    expect(row.state).toBe("failed");
+    expect(row.worktree).toBeTruthy();
+    const wt = row.worktree!;
+    expect(fs.existsSync(wt)).toBe(true);
+
+    // Detach-before-delete-remote: HEAD resolves and status is a real checkout
+    // (not "everything untracked" from a broken/orphaned worktree).
+    const headOk = execFileSync("git", ["-C", wt, "rev-parse", "HEAD"], {
+      encoding: "utf8",
+    }).trim();
+    expect(headOk).toMatch(/^[0-9a-f]{40}$/);
+
+    const log1 = execFileSync("git", ["-C", wt, "log", "-1", "--format=%s"], {
+      encoding: "utf8",
+    }).trim();
+    // At least the base commit is visible (HEAD is not dangling).
+    expect(log1.length).toBeGreaterThan(0);
+
+    const status = execFileSync("git", ["-C", wt, "status", "--porcelain"], {
+      encoding: "utf8",
+    });
+    // Child payload is a tracked-tree modification, not a total ?? dump.
+    // .fake-vendor.json / tracked files must not all appear as untracked.
+    expect(status).not.toMatch(/^\?\? \.fake-vendor\.json$/m);
+    expect(fs.readFileSync(path.join(wt, "child-work.txt"), "utf8")).toBe(
+      "diagnosable child work",
+    );
+    // Child's untracked write should show in status (usable diagnosis surface).
+    expect(status).toMatch(/child-work\.txt/);
+  }, 60_000);
 
   it("clones list reports sizes; prune removes only unused", async () => {
     await bootDaemon();

@@ -2390,12 +2390,21 @@ export class TaskEngine {
    */
   private removeTaskWorktree(task: TaskRow): void {
     if (task.worktree === null) return;
-    if (task.repo === null) {
+    // Mirror-executed tasks record the client-declared path in `task.repo`
+    // (often absent on this host). The worktree belongs to the bare mirror —
+    // prefer `local_mirror.repo_local` from runner-meta so clean/gc can reclaim
+    // it (#318 HIGH-A).
+    const mirrorRepo = this.readRunnerMeta(task.id).local_mirror?.repo_local;
+    const repoRoot =
+      typeof mirrorRepo === "string" && mirrorRepo !== ""
+        ? mirrorRepo
+        : task.repo;
+    if (repoRoot === null || repoRoot === "") {
       // Worktree tasks always record their source repo; a null here is a
       // corrupt row, and silently nulling the worktree would orphan the dir.
       throw new Error(`task ${task.id} has a worktree but no repo recorded`);
     }
-    removeWorktree(task.repo, task.worktree);
+    removeWorktree(repoRoot, task.worktree);
     // Null both so fix can tell "cleaned worktree" from "user --cwd still set".
     updateTask(this.db, task.id, { worktree: null, cwd: null });
   }
@@ -4957,14 +4966,17 @@ export class TaskEngine {
     const meta = this.readRunnerMeta(task.id);
     const mirror = meta.local_mirror;
     if (mirror === null || mirror === undefined) return;
+    // Detach first: deleting the remote branch with `:refs/heads/<branch>`
+    // also drops the mirror-local tracking ref, so detach cannot resolve HEAD
+    // and the retained worktree becomes git-unusable for diagnosis (#318 MEDIUM-B).
+    if (task.worktree !== null && task.worktree !== "") {
+      detachWorktreeHead(task.worktree);
+    }
     if (mirror.push_to_origin && mirror.preflight_pushed) {
       const branch = task.branch;
       if (branch !== null && branch !== "") {
         deleteRemoteBranchBestEffort(mirror.repo_local, branch);
       }
-    }
-    if (task.worktree !== null && task.worktree !== "") {
-      detachWorktreeHead(task.worktree);
     }
   }
 

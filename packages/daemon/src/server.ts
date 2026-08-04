@@ -448,28 +448,46 @@ const HELD_MIRRORS_MAX = 256;
 /** Max chars per held-mirror repo key on the wire. */
 const HELD_MIRROR_KEY_MAX = 512;
 
-function isValidCapabilities(value: unknown): value is RunnerCapabilities {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+/** Wire rule text for held_mirrors 400s (#318 LOW-D). */
+const HELD_MIRRORS_RULE =
+  `held_mirrors must be an array of strings (≤${HELD_MIRROR_KEY_MAX} chars each, ≤${HELD_MIRRORS_MAX} entries)`;
+
+/**
+ * Validate runner capabilities. Returns null when valid; otherwise a distinct
+ * error message (held_mirrors rejections name the actual rule — #318 LOW-D).
+ */
+function capabilitiesValidationError(value: unknown): string | null {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return "capabilities is required ({ vendors: [{ id, models }] })";
+  }
   const vendors = (value as { vendors?: unknown }).vendors;
-  if (!Array.isArray(vendors)) return false;
+  if (!Array.isArray(vendors)) {
+    return "capabilities is required ({ vendors: [{ id, models }] })";
+  }
   for (const v of vendors) {
-    if (typeof v !== "object" || v === null || Array.isArray(v)) return false;
-    if (typeof (v as { id?: unknown }).id !== "string" || (v as { id: string }).id === "") {
-      return false;
+    if (typeof v !== "object" || v === null || Array.isArray(v)) {
+      return "capabilities is required ({ vendors: [{ id, models }] })";
     }
-    if (!Array.isArray((v as { models?: unknown }).models)) return false;
+    if (typeof (v as { id?: unknown }).id !== "string" || (v as { id: string }).id === "") {
+      return "capabilities is required ({ vendors: [{ id, models }] })";
+    }
+    if (!Array.isArray((v as { models?: unknown }).models)) {
+      return "capabilities is required ({ vendors: [{ id, models }] })";
+    }
   }
   // held_mirrors is optional; when present must be string[] (bounded).
   // A non-array blob would 500 every /runner/lease via `.includes` (#318 HIGH-3).
   if (Object.prototype.hasOwnProperty.call(value, "held_mirrors")) {
     const held = (value as { held_mirrors?: unknown }).held_mirrors;
-    if (!Array.isArray(held)) return false;
-    if (held.length > HELD_MIRRORS_MAX) return false;
+    if (!Array.isArray(held)) return HELD_MIRRORS_RULE;
+    if (held.length > HELD_MIRRORS_MAX) return HELD_MIRRORS_RULE;
     for (const k of held) {
-      if (typeof k !== "string" || k.length > HELD_MIRROR_KEY_MAX) return false;
+      if (typeof k !== "string" || k.length > HELD_MIRROR_KEY_MAX) {
+        return HELD_MIRRORS_RULE;
+      }
     }
   }
-  return true;
+  return null;
 }
 
 function sendJson(res: http.ServerResponse, status: number, body: unknown): void {
@@ -2994,11 +3012,12 @@ function createHandler(
             sendJson(res, 400, { error: "build_version is required" });
             return;
           }
-          if (!isValidCapabilities(body.capabilities)) {
-            sendJson(res, 400, {
-              error: "capabilities is required ({ vendors: [{ id, models }] })",
-            });
-            return;
+          {
+            const capsErr = capabilitiesValidationError(body.capabilities);
+            if (capsErr !== null) {
+              sendJson(res, 400, { error: capsErr });
+              return;
+            }
           }
           // #315 F2: `local` is reserved for the daemon's in-process executor.
           if (runnerName === "local" || body.runner === "local") {

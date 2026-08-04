@@ -234,7 +234,7 @@ describe("runner registration", () => {
     expect(reg.status).toBe(401);
   });
 
-  it("rejects malformed held_mirrors on register (400) (#318 HIGH-3)", async () => {
+  it("rejects malformed held_mirrors on register (400) (#318 HIGH-3 / LOW-D)", async () => {
     const home = makeHome();
     const { base } = await boot(home);
     const bad = await registerRunner(base, {
@@ -244,7 +244,12 @@ describe("runner registration", () => {
       },
     });
     expect(bad.status).toBe(400);
-    expect(JSON.stringify(bad.body)).toMatch(/capabilities/i);
+    // Distinct message naming the held_mirrors rule — not the generic vendors one.
+    expect(JSON.stringify(bad.body)).toMatch(/held_mirrors/i);
+    expect(JSON.stringify(bad.body)).toMatch(/array of strings/i);
+    expect(JSON.stringify(bad.body)).not.toMatch(
+      /capabilities is required \(\{ vendors/,
+    );
 
     // Lease still works after a hostile registration attempt (no 500 fleet-wide).
     const ok = await registerRunner(base);
@@ -261,7 +266,7 @@ describe("runner registration", () => {
     expect([200, 204]).toContain(lease.status);
   });
 
-  it("rejects oversized held_mirrors on register (400) (#318 HIGH-3)", async () => {
+  it("rejects oversized held_mirrors on register (400) (#318 HIGH-3 / LOW-D)", async () => {
     const home = makeHome();
     const { base } = await boot(home);
     const tooMany = Array.from(
@@ -275,6 +280,8 @@ describe("runner registration", () => {
       },
     });
     expect(reg.status).toBe(400);
+    expect(JSON.stringify(reg.body)).toMatch(/held_mirrors/i);
+    expect(JSON.stringify(reg.body)).toMatch(/≤256 entries|256 entries/i);
 
     const tooLong = await registerRunner(base, {
       capabilities: {
@@ -283,6 +290,8 @@ describe("runner registration", () => {
       },
     });
     expect(tooLong.status).toBe(400);
+    expect(JSON.stringify(tooLong.body)).toMatch(/held_mirrors/i);
+    expect(JSON.stringify(tooLong.body)).toMatch(/≤512 chars|512 chars/i);
 
     // Valid bounded list is accepted.
     const good = await registerRunner(base, {

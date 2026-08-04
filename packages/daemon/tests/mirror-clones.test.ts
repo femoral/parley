@@ -318,6 +318,24 @@ describe("listManagedClones + pruneUnusedClones", () => {
       fs.rmSync(lockDir, { recursive: true, force: true });
     }
   });
+
+  it("tryWithMirrorLock propagates EEXIST from fn without unbounded retry (#318 LOW-C)", () => {
+    const mirror = tmp("parley-lock-eexist-fn-");
+    let calls = 0;
+    const err = Object.assign(new Error("fn simulated EEXIST"), {
+      code: "EEXIST",
+    });
+    expect(() =>
+      tryWithMirrorLock(mirror, () => {
+        calls += 1;
+        throw err;
+      }, 5_000),
+    ).toThrow(/fn simulated EEXIST/);
+    // Narrow catch: fn runs once; must not re-invoke on its EEXIST.
+    expect(calls).toBe(1);
+    // Lock dir cleaned in finally even when fn throws.
+    expect(fs.existsSync(`${mirror}.lock`)).toBe(false);
+  });
 });
 
 describe("real fingerprint held_mirrors + localHeld advertisement (#318 coverage)", () => {
