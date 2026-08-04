@@ -450,15 +450,21 @@ describe("aggregateMetrics (#118)", () => {
 
 describe("GET /metrics (#118)", () => {
   let server: DaemonServer | null = null;
+  const FAKE_VENDOR_BIN = path.resolve(
+    path.dirname(new URL(import.meta.url).pathname),
+    "../../cli/tests/fake-vendor.mjs",
+  );
 
   // The fixture tasks carry old completed_at timestamps; keep the retention
   // sweep (#153) from purging them at server startup.
   beforeEach(() => {
     process.env.PARLEY_GC_INTERVAL_MS = "0";
+    process.env.PARLEY_FAKE_VENDOR_BIN = FAKE_VENDOR_BIN;
   });
 
   afterEach(async () => {
     delete process.env.PARLEY_GC_INTERVAL_MS;
+    delete process.env.PARLEY_FAKE_VENDOR_BIN;
     if (server) {
       await server.close();
       server = null;

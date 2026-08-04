@@ -6,6 +6,9 @@ import {
   type ChildChannel,
   type SandboxMode,
 } from "./adapter.js";
+import { DEFAULT_ROUTING_QUEUE_TIMEOUT_MS } from "./lease.js";
+
+export { DEFAULT_ROUTING_QUEUE_TIMEOUT_MS } from "./lease.js";
 
 /**
  * UI bundle discovery settings (`docs/spec/ui-interface-contract.md` §"Serving
@@ -53,6 +56,25 @@ export interface DaemonConfig {
    * Sent as `Authorization: Bearer <token>` on every remote request.
    */
   token?: string;
+  /**
+   * Capability-matched routing knobs (#315 / #304). Nested under `daemon.routing`.
+   */
+  routing?: DaemonRoutingConfig;
+}
+
+/**
+ * Routing settings under `daemon.routing` (#315 / #304).
+ * When capable executors exist but none is online, a task queues with a
+ * visible reason until one comes online or this timeout elapses.
+ */
+export interface DaemonRoutingConfig {
+  /**
+   * Max wait (ms) for a capable online executor when only offline capable
+   * ones are registered. Default: 1 hour. `0` fails immediately on expiry
+   * of a zero-length wait (effectively no wait — task fails at once after
+   * queue). Non-negative integer.
+   */
+  queueTimeoutMs?: number;
 }
 
 /**
@@ -341,6 +363,36 @@ function validateDaemon(file: string, raw: unknown): void {
   if (raw.token !== undefined) {
     assertNonEmptyString(file, "daemon.token", raw.token);
   }
+  if (raw.routing !== undefined) {
+    if (!isRecord(raw.routing)) {
+      throw new Error(`invalid config at ${file}: daemon.routing must be an object`);
+    }
+    if (raw.routing.queueTimeoutMs !== undefined) {
+      const v = raw.routing.queueTimeoutMs;
+      if (typeof v !== "number" || !Number.isInteger(v) || v < 0) {
+        throw new Error(
+          `invalid config at ${file}: daemon.routing.queueTimeoutMs must be a non-negative integer`,
+        );
+      }
+    }
+  }
+}
+
+/**
+ * Resolve the routing queue timeout (#315): env `PARLEY_ROUTING_QUEUE_TIMEOUT_MS`
+ * (tests) > `daemon.routing.queueTimeoutMs` > default 1 h.
+ */
+export function resolveRoutingQueueTimeoutMs(config: ParleyConfig = {}): number {
+  const fromEnv = process.env.PARLEY_ROUTING_QUEUE_TIMEOUT_MS;
+  if (fromEnv !== undefined && fromEnv.trim() !== "") {
+    const parsed = Number(fromEnv);
+    if (Number.isFinite(parsed) && parsed >= 0 && Number.isInteger(parsed)) {
+      return parsed;
+    }
+  }
+  const configured = config.daemon?.routing?.queueTimeoutMs;
+  if (configured !== undefined) return configured;
+  return DEFAULT_ROUTING_QUEUE_TIMEOUT_MS;
 }
 
 function validateRetention(file: string, raw: unknown): void {
@@ -814,7 +866,8 @@ const KNOWN_EVAL = new Set(["enabled", "expected"]);
 const KNOWN_RESUME = new Set(["enabled"]);
 const KNOWN_RETRY = new Set(["max", "window"]);
 const KNOWN_UI = new Set(["path", "package"]);
-const KNOWN_DAEMON = new Set(["url", "idleTimeoutMs", "bind", "client", "token"]);
+const KNOWN_DAEMON = new Set(["url", "idleTimeoutMs", "bind", "client", "token", "routing"]);
+const KNOWN_DAEMON_ROUTING = new Set(["queueTimeoutMs"]);
 const KNOWN_VENDOR = new Set([
   "bin",
   "args",
@@ -860,6 +913,12 @@ export function collectUnknownConfigKeys(config: Record<string, unknown>): strin
   if (isRecord(daemon)) {
     for (const key of Object.keys(daemon)) {
       if (!KNOWN_DAEMON.has(key)) unknown.push(`daemon.${key}`);
+    }
+    const routing = daemon.routing;
+    if (isRecord(routing)) {
+      for (const key of Object.keys(routing)) {
+        if (!KNOWN_DAEMON_ROUTING.has(key)) unknown.push(`daemon.routing.${key}`);
+      }
     }
   }
   const vendors = config.vendors;

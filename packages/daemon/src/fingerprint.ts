@@ -40,6 +40,29 @@ export const BUILTIN_VENDOR_BINS: Readonly<Record<string, string>> = {
   pi: "pi",
 };
 
+/**
+ * Env overrides each adapter honors for its binary (PARLEY_<VENDOR>_BIN).
+ * Capability detection must check these before PATH (#315 F9).
+ */
+export const BUILTIN_VENDOR_ENV_BINS: Readonly<Record<string, string>> = {
+  claude: "PARLEY_CLAUDE_BIN",
+  cline: "PARLEY_CLINE_BIN",
+  // codex adapter hard-codes bin "codex" with no PARLEY_CODEX_BIN override —
+  // do not advertise env capability the adapter cannot honor (#315 G3).
+  cursor: "PARLEY_CURSOR_BIN",
+  fake: "PARLEY_FAKE_VENDOR_BIN",
+  antigravity: "PARLEY_ANTIGRAVITY_BIN",
+  goose: "PARLEY_GOOSE_BIN",
+  grok: "PARLEY_GROK_BIN",
+  hermes: "PARLEY_HERMES_BIN",
+  kilo: "PARLEY_KILO_BIN",
+  kimi: "PARLEY_KIMI_BIN",
+  openclaw: "PARLEY_OPENCLAW_BIN",
+  opencode: "PARLEY_OPENCODE_BIN",
+  openhands: "PARLEY_OPENHANDS_BIN",
+  pi: "PARLEY_PI_BIN",
+};
+
 export const BUILTIN_VENDOR_IDS = Object.keys(BUILTIN_VENDOR_BINS);
 
 /** True when `bin` is executable on PATH or as an absolute path. */
@@ -68,8 +91,9 @@ export function isExecutableOnPath(bin: string, env: NodeJS.ProcessEnv = process
 
 /**
  * Detect which built-in vendor CLIs are available.
- * Respects `vendors.<id>.bin` overrides. `fake` only when
- * `PARLEY_FAKE_VENDOR_BIN` or `vendors.fake.bin` is set (and executable).
+ * Precedence: `vendors.<id>.bin` config → `PARLEY_<VENDOR>_BIN` env (same as
+ * adapters, #315 F9) → default binary on PATH. `fake` only when explicitly
+ * configured (config or `PARLEY_FAKE_VENDOR_BIN`).
  */
 export function detectHarnesses(
   config: ParleyConfig,
@@ -77,11 +101,16 @@ export function detectHarnesses(
 ): string[] {
   const found: string[] = [];
   for (const id of BUILTIN_VENDOR_IDS) {
-    const override = config.vendors?.[id]?.bin;
+    const configBin = config.vendors?.[id]?.bin;
+    const envKey = BUILTIN_VENDOR_ENV_BINS[id];
+    const envBin =
+      envKey !== undefined && env[envKey] !== undefined && env[envKey] !== ""
+        ? env[envKey]
+        : undefined;
     if (id === "fake") {
       // Test double: only when explicitly configured. Accept an existing path
       // (script may not be +x; spawn uses node on the script) or a PATH hit.
-      const fakeBin = override ?? env.PARLEY_FAKE_VENDOR_BIN;
+      const fakeBin = configBin ?? envBin;
       if (fakeBin === undefined || fakeBin === "") continue;
       if (path.isAbsolute(fakeBin) || fakeBin.includes(path.sep)) {
         if (fs.existsSync(fakeBin)) found.push(id);
@@ -90,7 +119,23 @@ export function detectHarnesses(
       }
       continue;
     }
-    const bin = override ?? BUILTIN_VENDOR_BINS[id]!;
+    // Config bin wins; else env override (off-PATH installs); else default name.
+    const bin = configBin ?? envBin ?? BUILTIN_VENDOR_BINS[id]!;
+    if (configBin !== undefined || envBin !== undefined) {
+      // Explicit override: path must exist (absolute) or be on PATH.
+      if (path.isAbsolute(bin) || bin.includes(path.sep)) {
+        try {
+          fs.accessSync(bin, fs.constants.X_OK);
+          found.push(id);
+        } catch {
+          // Not executable; still accept if the file exists (scripts).
+          if (fs.existsSync(bin)) found.push(id);
+        }
+      } else if (isExecutableOnPath(bin, env)) {
+        found.push(id);
+      }
+      continue;
+    }
     if (isExecutableOnPath(bin, env)) found.push(id);
   }
   return found;

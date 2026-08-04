@@ -19,12 +19,14 @@ import {
   isValidTaskType,
   formatCliSelectedHint,
   listAllowedCombos,
+  LOCAL_EXECUTOR_ID,
   ModelAllowlistError,
   normalizeUsage,
   parseDuration,
   profileHasLaunchTemplate,
   readConfig,
   resolveAllowedCombo,
+  resolveRoutingQueueTimeoutMs,
   resolveWorkflow,
   retentionDays,
   scoreRubric,
@@ -36,11 +38,13 @@ import {
   type HomePaths,
   type ParleyConfig,
   type ProfileConfig,
+  type RunnerCapabilities,
   type RunnerLeaseSpec,
   type WorkflowDefinition,
   type WorkflowStepNode,
 } from "@useparley/core";
 import { resolveRepoIdentity } from "./repo-identity.js";
+import { detectHarnesses } from "./fingerprint.js";
 
 /** Compat re-exports for deep imports (`@useparley/daemon/engine.js`) during #209 migration. */
 export { DEFAULT_RUNNER_HEARTBEAT_TIMEOUT_MS, TASK_HEADER, type RunnerLeaseSpec };
@@ -55,7 +59,6 @@ import type {
 import { VENDOR_DIAG_PREFIX } from "./adapters/types.js";
 import {
   answerQaTurn,
-  claimOldestPendingRunnerTask,
   currentSeq,
   deleteSession,
   deleteTask,
@@ -63,6 +66,7 @@ import {
   getRun,
   getRunBlockReason,
   getRunSeq,
+  getRunner,
   getSession,
   getTask,
   isRunTerminalState,
@@ -76,16 +80,20 @@ import {
   listExpiredSessions,
   listExpiredTasks,
   listQaTurns,
+  listRunners,
+  listRoutingWaitTasks,
   listRuns,
   listRunsForSession,
   listSessions,
   listQueuedTasks,
   listTasks,
+  markRunnerCompleted,
   nextDeliverableId,
   nextQuestionId,
   nextTaskId,
   resolveRun,
   resolveTask,
+  selectClaimablePendingTask,
   updateRunEval,
   updateSession,
   updateTask,
@@ -106,6 +114,13 @@ import {
   InProcessExecutor,
   type InProcessExecutorHost,
 } from "./executor.js";
+import {
+  decideDispatch,
+  formatCapabilityDiagnosis,
+  formatWaitingReason,
+  matchExecutors,
+  type ExecutorCapability,
+} from "./routing.js";
 import {
   createInbox,
   sqliteAckStore,
@@ -756,11 +771,28 @@ export class TaskEngine {
    */
   private readonly runnerLeaseWaiters = new Set<() => void>();
   /**
-   * Daemon-local executor (#312 / ADR-0028): claims non-runner-affine tasks
-   * and runs them in-process. Same claim-shaped handoff a runner implements
-   * over the lease wire; capability routing across a fleet is later work.
+   * Daemon-local executor (#312 / ADR-0028 / #315): claims tasks routing
+   * selected for in-process execution. Runners claim over the lease wire.
    */
   private readonly localExecutor: InProcessExecutor;
+  /**
+   * Presence probe for registered runners (#315). Injected by the server so
+   * open lease long-polls count as online without coupling engine to HTTP.
+   * Default: last_seen-only (grace via derive is server-side; without a probe
+   * every registered runner is treated as online so claim still works).
+   */
+  private runnerOnlineProbe: ((name: string) => boolean) | null = null;
+  /**
+   * Per-task routing-queue timers (#315): fire fail with capability diagnosis
+   * when capable-but-offline wait exceeds `daemon.routing.queueTimeoutMs`.
+   */
+  private readonly routingTimeoutTimers = new Map<string, NodeJS.Timeout>();
+  /**
+   * Short-TTL cache for fleet inventory (config + PATH fingerprint) so
+   * dispatchClaim / timeout ticks do not re-sweep PATH every call (#315 F10).
+   */
+  private fleetCache: { atMs: number; fleet: ExecutorCapability[] } | null = null;
+  private static readonly FLEET_CACHE_TTL_MS = 3_000;
   /**
    * Set once the daemon is going down: child exits stop being lifecycle events
    * (their tasks stay recorded `running`/`awaiting_answer`, and the *next*
@@ -778,6 +810,8 @@ export class TaskEngine {
   ) {
     // In-process executor host: concurrency + spawn stay on the engine; the
     // claim loop lives on InProcessExecutor (see packages/daemon/src/executor.ts).
+    // isLocalTask: only true for tasks with no runner field (unpinned, or not
+    // yet claimed by a remote executor). Once a runner claims, runner is set.
     const localHost: InProcessExecutorHost = {
       isShuttingDown: () => this.shuttingDown,
       isLocalTask: (task) => !hasRunnerAffinity(task),
@@ -856,10 +890,39 @@ export class TaskEngine {
     this.drainConcurrencyQueue();
     // #237: resume advance for any run left mid-flight across a restart.
     this.drainRuns();
+    // #315: re-arm or expire durable routing deadlines across restart.
+    this.rearmRoutingDeadlines();
   }
 
   setHubPort(port: number): void {
     this.hubPort = port;
+  }
+
+  /**
+   * Inject runner presence for routing (#315). Server passes open-poll +
+   * last_seen derivation so the engine never owns HTTP connection state.
+   */
+  setRunnerOnlineProbe(probe: (name: string) => boolean): void {
+    this.runnerOnlineProbe = probe;
+  }
+
+  /**
+   * Re-evaluate pending tasks waiting on capable-but-offline routing after a
+   * runner registers or comes online (#315). Clears wait reasons and either
+   * wakes lease waiters or offers local when appropriate.
+   */
+  redispatchRoutingWaits(): void {
+    this.invalidateFleetCache();
+    for (const task of listRoutingWaitTasks(this.db)) {
+      if (task.state !== "pending") continue;
+      // Do not clear the durable deadline until a claim or local start wins;
+      // only re-evaluate (may clear queue_reason when a runner is now online).
+      this.clearRoutingTimeout(task.id);
+      const refreshed = getTask(this.db, task.id);
+      if (refreshed) this.dispatchClaim(refreshed);
+    }
+    // Wake lease waiters so a newly online runner can claim remote-routed work.
+    this.wakeRunnerLeaseWaiters();
   }
 
   list(): TaskRow[] {
@@ -1324,6 +1387,13 @@ export class TaskEngine {
     }
     // Validate runner affinity against settings before the task exists.
     if (request.runner !== null) {
+      // `local` is the daemon in-process executor id — never a remote pin (#315 G4).
+      if (request.runner === LOCAL_EXECUTOR_ID) {
+        throw new DelegateError(
+          `runner name "${LOCAL_EXECUTOR_ID}" is reserved for the daemon in-process ` +
+            `executor; omit --runner to run locally`,
+        );
+      }
       const config = this.readParleyConfig();
       if (config.runners?.[request.runner] === undefined) {
         const known = Object.keys(config.runners ?? {});
@@ -1364,11 +1434,84 @@ export class TaskEngine {
       throw new DelegateError(`cwd is not a directory: ${cwd}`);
     }
 
-    // `--cwd` runs the child directly in that directory (no worktree); the
-    // default path creates a parley-owned worktree from the repo's HEAD.
-    // Runner-affine tasks never cut a local worktree — the remote runner does.
-    const isRemote = request.runner !== null;
+    // Resolve repo root early so routing can decide local vs remote before any
+    // worktree is cut (#315). Capability match + no-origin pin checks happen
+    // before insert; remote-routed tasks never create a local worktree.
     let repo = cwd;
+    if (request.useWorktree) {
+      const root = repoRoot(cwd);
+      if (root === null) {
+        throw new DelegateError(
+          `not a git repository: ${cwd} — pass --cwd to delegate outside a worktree`,
+        );
+      }
+      repo = root;
+    }
+    const identityEarly = resolveRepoIdentity(repo);
+    // Hard pin on a no-origin repo (#315): remote cannot fetch without origin.
+    if (request.runner !== null && identityEarly.fetchUrl === null) {
+      throw new DelegateError(
+        `--runner requires a git remote (origin); this repo has no origin so a ` +
+          `remote runner cannot fetch it. Remove --runner to run locally, or ` +
+          `add an origin remote first.`,
+      );
+    }
+
+    const fleet = this.listExecutorCapabilities();
+    const affinity = request.runner;
+    // Launch-template free-form vendors (#195) always run in-process when
+    // unpinned: the template argv is the capability, not a PATH bin. Pinned
+    // templates still need a capable runner advertisement.
+    let decision = decideDispatch(
+      matchExecutors(fleet, resolved.vendor, affinity),
+      fleet,
+      resolved.vendor,
+      affinity,
+    );
+    if (
+      decision.kind === "fail" &&
+      resolved.launchTemplate &&
+      (affinity === null || affinity === "")
+    ) {
+      decision = { kind: "local" };
+    }
+    // --cwd is workspace-bound: never re-route to a remote executor (#315 F3).
+    if (!request.useWorktree && (decision.kind === "runner" || decision.kind === "wait")) {
+      const localCapable = matchExecutors(fleet, resolved.vendor, null).capable.some(
+        (e) => e.isLocal,
+      );
+      if (localCapable || resolved.launchTemplate) {
+        decision = { kind: "local" };
+      } else {
+        throw new DelegateError(
+          `--cwd requires a local executor for vendor "${resolved.vendor}"; ` +
+            `no local capability is available (known executors: ${fleet
+              .map((e) => `${e.name}=[${e.vendors.join(", ") || "(none)"}]`)
+              .join("; ") || "(none)"})`,
+        );
+      }
+    }
+    if (decision.kind === "fail") {
+      throw new DelegateError(decision.diagnosis);
+    }
+    // Automatic remote path without origin cannot be fetched by a runner (#315 F4).
+    if (
+      (decision.kind === "runner" || decision.kind === "wait") &&
+      identityEarly.fetchUrl === null
+    ) {
+      throw new DelegateError(
+        `remote routing requires a git remote (origin); this repo has no origin so a ` +
+          `remote executor cannot fetch it. Run with a vendor available on this host, ` +
+          `or add an origin remote first.`,
+      );
+    }
+    // Remote path: hard pin, preferred online runner, or capable-but-offline wait.
+    // Local path only when dispatch selected the in-process executor.
+    const isRemote = decision.kind === "runner" || decision.kind === "wait";
+    // Durable placement intent (#315 G1/G2): set once here; dispatchClaim never
+    // re-derives a different side (remote never flips to local, local never remote).
+    const placement: "local" | "remote" = isRemote ? "remote" : "local";
+
     let workingDir = cwd;
     let worktreePath: string | null = null;
     let branch: string | null = null;
@@ -1378,21 +1521,14 @@ export class TaskEngine {
     const id = nextTaskId(this.db);
 
     if (request.useWorktree) {
-      const root = repoRoot(cwd);
-      if (root === null) {
-        throw new DelegateError(
-          `not a git repository: ${cwd} — pass --cwd to delegate outside a worktree`,
-        );
-      }
-      repo = root;
       if (isRemote) {
         // Resolve base SHA now so the lease can hand the runner a fixed commit;
         // worktree + branch are created on the runner host.
-        workingDir = root;
+        workingDir = repo;
         try {
           baseSha = execFileSync(
             "git",
-            ["-C", root, "rev-parse", request.baseRef ?? "HEAD"],
+            ["-C", repo, "rev-parse", request.baseRef ?? "HEAD"],
             { encoding: "utf8" },
           ).trim();
         } catch (err) {
@@ -1402,7 +1538,7 @@ export class TaskEngine {
         let info;
         try {
           info = createWorktree({
-            repoRoot: root,
+            repoRoot: repo,
             worktreesDir: this.paths.worktrees,
             taskId: id,
             name: request.name,
@@ -1494,8 +1630,8 @@ export class TaskEngine {
     }
 
     // Repo identity (#313): key + exact fetch URL from origin; local path is
-    // always `repo`. No-origin checkouts record only the path.
-    const identity = resolveRepoIdentity(repo);
+    // always `repo`. Reuse the early resolve so key/url match the pin check.
+    const identity = identityEarly;
 
     const row = insertTask(this.db, {
       id,
@@ -1506,6 +1642,7 @@ export class TaskEngine {
       model_source: resolved.model_source,
       effort_source: resolved.effort_source,
       profile: resolved.profile,
+      // Hard affinity pin only; unpinned tasks leave runner null until claim.
       runner: request.runner,
       repo,
       repo_key: identity.key,
@@ -1527,14 +1664,14 @@ export class TaskEngine {
       size,
       difficulty,
       type: taskType,
+      placement,
     });
 
     if (request.dryRun === true) {
       this.dryRunTaskIds.add(id);
     }
 
-    // #312: single claim handoff — local → InProcessExecutor; runner-affine →
-    // lease waiters (wire unchanged). No direct-spawn special case here.
+    // #312 / #315: single claim handoff — capability-matched routing.
     this.dispatchClaim(row);
     return getTask(this.db, row.id) ?? row;
   }
@@ -1723,6 +1860,8 @@ export class TaskEngine {
       resumed: canResume,
       // Seed so buildSpec/resume see the parent's vendor session immediately.
       session_id: canResume ? parent.session_id : null,
+      // Fix inherits parent placement so reattempts never flip local↔remote (#315).
+      placement: this.inheritedPlacement(parent),
     });
 
     // #312: same claim handoff as delegate (remote parents stay remote).
@@ -2205,6 +2344,11 @@ export class TaskEngine {
       cause: "complete",
       fields,
     });
+    // Warm-executor stamp for capability-matched routing (#315).
+    if (task.runner !== null && task.runner !== "") {
+      markRunnerCompleted(this.db, task.runner);
+    }
+    this.clearRoutingTimeout(taskId);
   }
 
   /**
@@ -2430,6 +2574,11 @@ export class TaskEngine {
     }
     for (const taskId of this.runnerHeartbeatTimers.keys()) {
       this.clearRunnerHeartbeat(taskId);
+    }
+    // #315 F6: disarm routing timeouts before the DB closes (unref'd timers
+    // would otherwise throw "database is not open" after close).
+    for (const taskId of [...this.routingTimeoutTimers.keys()]) {
+      this.clearRoutingTimeout(taskId);
     }
     // Unblock lease long-polls so shutdown is not held open.
     this.wakeRunnerLeaseWaiters();
@@ -3023,6 +3172,7 @@ export class TaskEngine {
     }
     this.clearReportFallback(taskId);
     this.clearRunnerHeartbeat(taskId);
+    this.clearRoutingTimeout(taskId);
     this.admitted.delete(taskId);
     this.taskTransitions.apply(taskId, "failed", {
       cause: "fail",
@@ -3030,6 +3180,8 @@ export class TaskEngine {
         error,
         completed_at: new Date().toISOString(),
         queued_at: null,
+        queue_reason: null,
+        routing_deadline_at: null,
       },
     });
   }
@@ -3134,19 +3286,55 @@ export class TaskEngine {
   }
 
   /**
-   * Atomically claim the oldest pending task for `runnerName` (transition to
-   * `running`) and return its lease spec, or null when none is waiting.
-   *
-   * This is the remote-runner half of the claim-shaped executor model (#312 /
-   * ADR-0028). Local claims go through {@link InProcessExecutor}; capability-
-   * matched claim across both is later work. Wire and affinity query unchanged.
+   * Atomically claim the oldest pending task this runner can satisfy
+   * (capability match + affinity, #315) and return its lease spec, or null
+   * when none is waiting. Sets `runner` to the claimer for unpinned tasks.
    */
   private tryClaimRunnerTask(runnerName: string): RunnerLeaseSpec | null {
-    const pending = claimOldestPendingRunnerTask(this.db, runnerName);
+    const row = getRunner(this.db, runnerName);
+    if (row === undefined) return null;
+    const caps = this.parseRunnerCapabilities(row.capabilities);
+    const vendorIds = caps.vendors.map((v) => v.id);
+    if (vendorIds.length === 0) return null;
+
+    // Online peers for warm ranking (exclude self; include other online runners).
+    const onlinePeers: {
+      name: string;
+      vendorIds: string[];
+      last_completed_at: string | null;
+    }[] = [];
+    for (const peer of listRunners(this.db)) {
+      if (!this.isRunnerOnline(peer.name, peer.last_seen)) continue;
+      const peerCaps = this.parseRunnerCapabilities(peer.capabilities);
+      onlinePeers.push({
+        name: peer.name,
+        vendorIds: peerCaps.vendors.map((v) => v.id),
+        last_completed_at: peer.last_completed_at ?? null,
+      });
+    }
+
+    const pending = selectClaimablePendingTask(this.db, {
+      executorName: runnerName,
+      vendorIds,
+      onlinePeers,
+    });
     if (!pending) return null;
+
+    // Record claimer on the row (affinity pin already set; unpinned gains it).
+    const claimFields: TaskDataPatch = {
+      started_at: new Date().toISOString(),
+      queue_reason: null,
+      routing_deadline_at: null,
+      runner: runnerName,
+    };
+    if (pending.runner !== null && pending.runner !== "" && pending.runner !== runnerName) {
+      // Should not happen (SQL filters affinity); refuse.
+      return null;
+    }
+    this.clearRoutingTimeout(pending.id);
     this.taskTransitions.apply(pending.id, "running", {
       cause: "runner_claim",
-      fields: { started_at: new Date().toISOString() },
+      fields: claimFields,
     });
     this.armRunnerHeartbeat(pending.id);
     const claimed = getTask(this.db, pending.id);
@@ -3599,20 +3787,396 @@ export class TaskEngine {
   // ---------------------------------------------------------------------------
 
   /**
-   * Hand a newly-created pending task to the appropriate executor (#312).
+   * Hand a newly-created pending task to the appropriate executor
+   * (#312 / #315). Placement is durable on the row (set at create):
    *
-   * - Runner-affine → wake lease long-polls (wire claim path unchanged).
-   * - Local → {@link InProcessExecutor.offer} (claim under caps or park queued).
-   *
-   * The engine no longer special-cases local spawn at this site: both paths
-   * are claim-shaped. Capability-matched routing across a fleet is later work.
+   * - `placement === 'local'` → only {@link InProcessExecutor.offer}
+   * - `placement === 'remote'` → only runner wake/wait; never local fallback
+   * - null (legacy) → re-derive once via workspace-bound heuristics + match
    */
   private dispatchClaim(task: TaskRow): void {
-    if (hasRunnerAffinity(task)) {
+    if (task.placement === "local") {
+      this.clearRemoteRouting(task.id);
+      this.localExecutor.offer(task);
+      return;
+    }
+
+    if (task.placement === "remote") {
+      this.dispatchRemotePlacement(task);
+      return;
+    }
+
+    // Legacy null placement: workspace-bound stays local; otherwise re-match.
+    if (this.isWorkspaceBoundLocal(task)) {
+      this.clearRemoteRouting(task.id);
+      this.localExecutor.offer(task);
+      return;
+    }
+
+    const vendor = task.vendor ?? "";
+    if (vendor === "") {
+      this.clearRemoteRouting(task.id);
+      this.localExecutor.offer(task);
+      return;
+    }
+    const affinity =
+      task.runner !== null && task.runner !== "" ? task.runner : null;
+    const fleet = this.listExecutorCapabilities();
+    const match = matchExecutors(fleet, vendor, affinity);
+    const decision = decideDispatch(match, fleet, vendor, affinity);
+
+    if (decision.kind === "fail") {
+      // Launch-template free-form vendors (#195) are always local-capable when
+      // unpinned — the template argv is the capability. Same exemption as
+      // delegate-time (re-dispatch / fix paths).
+      if (
+        this.profileUsesLaunchTemplate(task.profile) &&
+        (affinity === null || affinity === "")
+      ) {
+        this.clearRemoteRouting(task.id);
+        this.localExecutor.offer(task);
+        return;
+      }
+      // Should have been caught at delegate; fail the row if it still lands.
+      this.fail(task.id, decision.diagnosis);
+      return;
+    }
+    if (decision.kind === "runner") {
+      // F2: every remote-routed pending task carries a durable deadline even
+      // when a capable runner looked online at decision time.
+      this.beginRemoteRoutingWait(task, {
+        queueReason: null,
+        vendor,
+      });
       this.wakeRunnerLeaseWaiters();
       return;
     }
+    if (decision.kind === "wait") {
+      this.beginRemoteRoutingWait(task, {
+        queueReason: decision.reason,
+        vendor,
+      });
+      return;
+    }
+    // local
+    this.clearRemoteRouting(task.id);
     this.localExecutor.offer(task);
+  }
+
+  /**
+   * Remote-only handoff: wake online capable runners or keep waiting with a
+   * durable deadline. Never offers local, even when local is the only capable
+   * executor left (#315 G1).
+   */
+  private dispatchRemotePlacement(task: TaskRow): void {
+    const vendor = task.vendor ?? "";
+    const affinity =
+      task.runner !== null && task.runner !== "" ? task.runner : null;
+    const fleet = this.listExecutorCapabilities();
+    // Exclude local so decideDispatch cannot return `local` for unpinned remote.
+    const remoteOnly = affinity
+      ? fleet
+      : fleet.filter((e) => !e.isLocal);
+    const match = matchExecutors(remoteOnly, vendor, affinity);
+    const decision = decideDispatch(match, fleet, vendor, affinity);
+
+    if (decision.kind === "runner") {
+      this.beginRemoteRoutingWait(task, {
+        queueReason: null,
+        vendor,
+      });
+      this.wakeRunnerLeaseWaiters();
+      return;
+    }
+    if (decision.kind === "wait") {
+      this.beginRemoteRoutingWait(task, {
+        queueReason: decision.reason,
+        vendor,
+      });
+      return;
+    }
+    // fail / local: stay in routing-wait until the durable deadline fails the
+    // task with the capability diagnosis — never flip to in-process.
+    const waitReason =
+      task.queue_reason ??
+      (match.offlineCapable.length > 0
+        ? formatWaitingReason(match.offlineCapable)
+        : `waiting for capable runner`);
+    this.beginRemoteRoutingWait(task, {
+      queueReason: waitReason,
+      vendor,
+    });
+  }
+
+  /**
+   * Placement inherited by a fix reattempt: prefer the parent's durable
+   * column; fall back to runner/worktree/run heuristics for legacy parents.
+   */
+  private inheritedPlacement(parent: TaskRow): "local" | "remote" {
+    if (parent.placement === "local" || parent.placement === "remote") {
+      return parent.placement;
+    }
+    if (parent.runner !== null && parent.runner !== "") return "remote";
+    if (parent.run_id !== null && parent.run_id !== "") return "local";
+    if (parent.worktree !== null && parent.worktree !== "") return "local";
+    return "local";
+  }
+
+  /**
+   * True when this task must execute in-process (#315 F3 legacy null placement):
+   * - run-owned step (pre-materialized fan-out workspace)
+   * - local worktree already cut
+   * - fix reattempt of a local parent (parent has no runner placement)
+   */
+  private isWorkspaceBoundLocal(task: TaskRow): boolean {
+    if (task.placement === "remote") return false;
+    if (task.placement === "local") return true;
+    if (task.run_id !== null && task.run_id !== "") return true;
+    if (task.worktree !== null && task.worktree !== "") return true;
+    if (task.parent_task_id !== null && task.parent_task_id !== "") {
+      const parent = getTask(this.db, task.parent_task_id);
+      if (parent === undefined) return false;
+      if (parent.placement === "local") return true;
+      if (parent.placement === "remote") return false;
+      if (parent.runner === null || parent.runner === "") return true;
+    }
+    return false;
+  }
+
+  /**
+   * Persist durable remote-routing wait state and arm the in-memory timer
+   * to the absolute deadline (#315 F1/F2).
+   *
+   * Note: `queue_reason` / `routing_deadline_at` are non-state field writes —
+   * there is no seq bump or firehose event for them today, so watchers only
+   * observe the wait via polling status until a state transition (claim/fail).
+   * File as a follow-up if live watch surfaces need it.
+   */
+  private beginRemoteRoutingWait(
+    task: TaskRow,
+    opts: { queueReason: string | null; vendor: string },
+  ): void {
+    let timeoutMs: number;
+    try {
+      timeoutMs = resolveRoutingQueueTimeoutMs(this.readParleyConfig());
+    } catch {
+      timeoutMs = resolveRoutingQueueTimeoutMs({});
+    }
+    // Preserve an existing unexpired deadline across re-dispatch so restart
+    // and re-evaluation do not extend the wait indefinitely.
+    let deadlineMs: number;
+    const existing =
+      task.routing_deadline_at !== null ? Date.parse(task.routing_deadline_at) : NaN;
+    if (Number.isFinite(existing) && existing > Date.now()) {
+      deadlineMs = existing;
+    } else {
+      deadlineMs = Date.now() + timeoutMs;
+    }
+    const deadlineIso = new Date(deadlineMs).toISOString();
+    const patch: TaskDataPatch = {
+      routing_deadline_at: deadlineIso,
+      queue_reason: opts.queueReason,
+    };
+    updateTask(this.db, task.id, patch);
+    this.armRoutingTimeout(task.id, opts.vendor, deadlineMs);
+  }
+
+  /** Clear remote-routing wait fields and in-memory timer. */
+  private clearRemoteRouting(taskId: string): void {
+    this.clearRoutingTimeout(taskId);
+    const row = getTask(this.db, taskId);
+    if (!row) return;
+    if (row.queue_reason !== null || row.routing_deadline_at !== null) {
+      updateTask(this.db, taskId, {
+        queue_reason: null,
+        routing_deadline_at: null,
+      });
+    }
+  }
+
+  /**
+   * On engine construction: expire overdue remote waits and re-arm timers for
+   * still-valid deadlines (#315 F1).
+   */
+  private rearmRoutingDeadlines(): void {
+    for (const task of listRoutingWaitTasks(this.db)) {
+      if (task.state !== "pending") continue;
+      const deadlineMs =
+        task.routing_deadline_at !== null ? Date.parse(task.routing_deadline_at) : NaN;
+      if (!Number.isFinite(deadlineMs)) {
+        // queue_reason without deadline (legacy/partial) — re-derive a deadline.
+        this.beginRemoteRoutingWait(task, {
+          queueReason: task.queue_reason,
+          vendor: task.vendor ?? "",
+        });
+        continue;
+      }
+      if (Date.now() >= deadlineMs) {
+        this.failRoutingTimeout(task);
+        continue;
+      }
+      this.armRoutingTimeout(task.id, task.vendor ?? "", deadlineMs);
+    }
+  }
+
+  private failRoutingTimeout(task: TaskRow): void {
+    const fleet = this.listExecutorCapabilities();
+    const diagnosis = formatCapabilityDiagnosis({
+      vendor: task.vendor ?? "",
+      fleet,
+      affinity: task.runner,
+      reason: "timeout",
+    });
+    this.fail(task.id, diagnosis);
+  }
+
+  /**
+   * Build the fleet inventory for routing: local daemon (fingerprinted vendors
+   * on PATH / plugin adapters) plus every registered runner's last advertisement.
+   * Cached briefly so dispatch/timeout paths do not re-scan PATH every call.
+   */
+  private listExecutorCapabilities(): ExecutorCapability[] {
+    const now = Date.now();
+    if (
+      this.fleetCache !== null &&
+      now - this.fleetCache.atMs < TaskEngine.FLEET_CACHE_TTL_MS
+    ) {
+      return this.fleetCache.fleet;
+    }
+    const out: ExecutorCapability[] = [];
+    let config: ParleyConfig = {};
+    try {
+      config = this.readParleyConfig();
+    } catch {
+      /* use empty config for PATH detection */
+    }
+    const localVendors = this.localAdvertisedVendors(config);
+    out.push({
+      name: LOCAL_EXECUTOR_ID,
+      vendors: localVendors,
+      online: true, // this process is always "online"
+      isLocal: true,
+      last_completed_at: null,
+    });
+
+    for (const row of listRunners(this.db)) {
+      const caps = this.parseRunnerCapabilities(row.capabilities);
+      const vendors = caps.vendors.map((v) => v.id);
+      const online = this.isRunnerOnline(row.name, row.last_seen);
+      out.push({
+        name: row.name,
+        vendors,
+        online,
+        isLocal: false,
+        last_completed_at: row.last_completed_at ?? null,
+      });
+    }
+    this.fleetCache = { atMs: now, fleet: out };
+    return out;
+  }
+
+  private invalidateFleetCache(): void {
+    this.fleetCache = null;
+  }
+
+  /**
+   * Vendors this daemon host can run: PATH bins (detectHarnesses) ∩ loaded
+   * adapters, plus non-builtin plugin adapters present in the registry.
+   */
+  private localAdvertisedVendors(config: ParleyConfig): string[] {
+    const detected = new Set(detectHarnesses(config, process.env));
+    for (const id of this.adapters.keys()) {
+      // Plugin / free-form adapters are a capability signal even without a bin.
+      if (!detected.has(id)) {
+        // Only auto-include when it's not a builtin that simply isn't on PATH.
+        // Builtins without a bin are not advertised (same as fingerprint).
+        const builtins = new Set([
+          "claude",
+          "cline",
+          "codex",
+          "cursor",
+          "fake",
+          "antigravity",
+          "goose",
+          "grok",
+          "hermes",
+          "kilo",
+          "kimi",
+          "openclaw",
+          "opencode",
+          "openhands",
+          "pi",
+        ]);
+        if (!builtins.has(id)) detected.add(id);
+      }
+    }
+    const ordered: string[] = [];
+    for (const id of this.adapters.keys()) {
+      if (detected.has(id)) ordered.push(id);
+    }
+    return ordered;
+  }
+
+  private parseRunnerCapabilities(raw: string): RunnerCapabilities {
+    try {
+      const parsed: unknown = JSON.parse(raw);
+      if (
+        typeof parsed === "object" &&
+        parsed !== null &&
+        Array.isArray((parsed as { vendors?: unknown }).vendors)
+      ) {
+        return parsed as RunnerCapabilities;
+      }
+    } catch {
+      /* fall through */
+    }
+    return { vendors: [] };
+  }
+
+  private isRunnerOnline(name: string, lastSeenIso: string): boolean {
+    if (this.runnerOnlineProbe !== null) {
+      return this.runnerOnlineProbe(name);
+    }
+    // Fallback without probe: treat recent last_seen as online (50s grace).
+    const last = Date.parse(lastSeenIso);
+    if (!Number.isFinite(last)) return false;
+    return Date.now() - last <= 50_000;
+  }
+
+  /**
+   * Arm an in-memory timer that fires at absolute `deadlineMs` (or immediately
+   * if already past). The durable source of truth is `routing_deadline_at`.
+   */
+  private armRoutingTimeout(taskId: string, vendor: string, deadlineMs: number): void {
+    this.clearRoutingTimeout(taskId);
+    if (this.shuttingDown) return;
+    const delay = Math.max(0, deadlineMs - Date.now());
+    const timer = setTimeout(() => {
+      this.routingTimeoutTimers.delete(taskId);
+      if (this.shuttingDown) return;
+      let task: TaskRow | undefined;
+      try {
+        task = getTask(this.db, taskId);
+      } catch {
+        // DB already closed (shutdown race on unref'd timer) — drop silently.
+        return;
+      }
+      if (!task || task.state !== "pending") return;
+      // Still remote-waiting if a deadline or queue_reason remains.
+      if (task.routing_deadline_at === null && task.queue_reason === null) return;
+      this.failRoutingTimeout(task);
+    }, delay);
+    timer.unref();
+    this.routingTimeoutTimers.set(taskId, timer);
+    void vendor; // retained for call-site clarity; diagnosis re-reads the row
+  }
+
+  private clearRoutingTimeout(taskId: string): void {
+    const timer = this.routingTimeoutTimers.get(taskId);
+    if (timer !== undefined) {
+      clearTimeout(timer);
+      this.routingTimeoutTimers.delete(taskId);
+    }
   }
 
   /** Persist `queued` + `queued_at` and surface a `task.queued` transition. */
@@ -4474,9 +5038,11 @@ export class TaskEngine {
         node: step.id,
         iteration,
         slot: sib.slotId,
+        // Run-owned steps always execute in the pre-materialized workspace (#315).
+        placement: "local",
       });
 
-      // #312: run-owned step tasks are always local (no runner affinity today).
+      // #312 / #315: placement=local → InProcessExecutor only.
       this.dispatchClaim(row);
     }
   }

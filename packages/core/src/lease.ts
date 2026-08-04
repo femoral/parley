@@ -20,6 +20,16 @@ export const TASK_HEADER = "x-parley-task";
 export const DEFAULT_RUNNER_HEARTBEAT_TIMEOUT_MS = 90_000;
 
 /**
+ * Default wait for a capable online executor when only offline capable ones
+ * are registered (#315 / #304). Overridable via `daemon.routing.queueTimeoutMs`
+ * or `PARLEY_ROUTING_QUEUE_TIMEOUT_MS`.
+ */
+export const DEFAULT_ROUTING_QUEUE_TIMEOUT_MS = 60 * 60 * 1000;
+
+/** Stable id for the daemon's in-process executor on routing surfaces (#315). */
+export const LOCAL_EXECUTOR_ID = "local";
+
+/**
  * Registration / advertisement protocol version (ADR-0029).
  * Bump when the register payload or lease gating semantics change incompatibly.
  */
@@ -62,7 +72,15 @@ export interface RunnerLeaseSpec {
   name: string | null;
   /** Orchestrator brief (not the full vendor child prompt). */
   prompt: string;
+  /**
+   * Required vendor id for this task (capability requirement, #315).
+   * Claim matching is primarily by vendor advertisement.
+   */
   vendor: string;
+  /**
+   * Optional model requirement (#315). Advisory relative to runner catalogs;
+   * matching is vendor-primary.
+   */
   model: string | null;
   effort: string | null;
   profile: string | null;

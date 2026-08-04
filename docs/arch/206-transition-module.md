@@ -189,7 +189,7 @@ The module must accept **injected side-effect hooks** for wake and queue drain s
 
 Today `tryClaimRunnerTask` (engine.ts L2495–2507):
 
-1. `claimOldestPendingRunnerTask` — pure SELECT of oldest `pending` with runner affinity (`db.ts` L862–875); **not** atomic with the state write.
+1. `selectClaimablePendingTask` / `listCapablePendingTasks` — pure SELECT of oldest `pending` whose vendor the claimer advertises and whose affinity is unset or names the claimer (#315; replaces the former name-pinned claim); **not** atomic with the state write.
 2. `updateTask(..., { state: "running", started_at })`
 3. `this.transitioned(pending.id)`
 4. arm heartbeat
@@ -564,7 +564,7 @@ Stated assumptions only — these tickets are explored in parallel; do not desig
 - **Assumption**: #209 lifts `RunnerLeaseSpec`, headers, and REST verbs out of engine; runner remains a state-less executor (ADR-0012).
 - **Consumer relationship**: lease claim's `pending → running` is a **call site** of `TaskTransitions.apply`, not a parallel state store.
 - **Do not** put lease HTTP concerns into `transition.ts`.
-- **Atomic claim**: if #209 upgrades `claimOldestPendingRunnerTask` to `UPDATE … WHERE state='pending' RETURNING`, the transition helper still performs seq/log/wake after the winning update (or folds into one daemon-side function `claimAndTransition`).
+- **Atomic claim**: if #209 upgrades `selectClaimablePendingTask` to `UPDATE … WHERE state='pending' RETURNING`, the transition helper still performs seq/log/wake after the winning update (or folds into one daemon-side function `claimAndTransition`).
 
 ### Consumer: #212 spawn-plan seam
 

@@ -1,10 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   createLeaseHttpTransport,
+  DEFAULT_ROUTING_QUEUE_TIMEOUT_MS,
   DEFAULT_RUNNER_HEARTBEAT_TIMEOUT_MS,
   DEFAULT_RUNNER_PRESENCE_GRACE_MS,
   DEFAULT_RUNNER_STALE_MS,
   deriveRunnerStatus,
+  LOCAL_EXECUTOR_ID,
   RUNNER_PROTOCOL_VERSION,
   TASK_HEADER,
   type RegisterRequest,
@@ -59,6 +61,11 @@ describe("lease wire constants", () => {
   it("exports presence grace and stale defaults", () => {
     expect(DEFAULT_RUNNER_PRESENCE_GRACE_MS).toBe(50_000);
     expect(DEFAULT_RUNNER_STALE_MS).toBe(14 * 24 * 60 * 60 * 1000);
+  });
+
+  it("exports routing queue timeout default and local executor id (#315)", () => {
+    expect(DEFAULT_ROUTING_QUEUE_TIMEOUT_MS).toBe(60 * 60 * 1000);
+    expect(LOCAL_EXECUTOR_ID).toBe("local");
   });
 });
 

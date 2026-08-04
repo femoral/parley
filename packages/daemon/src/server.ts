@@ -2549,12 +2549,23 @@ function createHandler(
             });
             return;
           }
+          // #315 F2: `local` is reserved for the daemon's in-process executor.
+          if (runnerName === "local" || body.runner === "local") {
+            sendJson(res, 400, {
+              error:
+                'runner name "local" is reserved for the daemon in-process executor',
+              code: "reserved_runner_name",
+            });
+            return;
+          }
           const row = upsertRunner(db, {
             name: runnerName,
             capabilities: JSON.stringify(body.capabilities),
             protocol_version: body.protocol_version,
             build_version: body.build_version,
           });
+          // #315: a newly capable online runner may unblock routing-wait tasks.
+          engine.redispatchRoutingWaits();
           sendJson(res, 200, {
             ok: true as const,
             name: row.name,
@@ -2590,6 +2601,8 @@ function createHandler(
           // Open poll is the presence signal; last_seen refreshes on enter/exit.
           touchRunnerLastSeen(db, runnerName);
           beginRunnerPoll(runnerName);
+          // #315: online presence may unblock capable-but-offline waits.
+          engine.redispatchRoutingWaits();
           try {
             const leased = await engine.leaseRunnerTask(runnerName, longPollWindowMs());
             touchRunnerLastSeen(db, runnerName);
@@ -3415,6 +3428,15 @@ export async function startServer(
     parleyHome: paths.home,
   });
   const engine = new TaskEngine(db, paths, adapters);
+  // #315: presence for capability-matched routing (open poll + last_seen grace).
+  engine.setRunnerOnlineProbe((name) => {
+    if (runnerHasOpenPoll(name)) return true;
+    const row = getRunner(db, name);
+    if (row === undefined) return false;
+    const last = Date.parse(row.last_seen);
+    if (!Number.isFinite(last)) return false;
+    return Date.now() - last <= runnerPresenceGraceMs();
+  });
   // Dead-orchestrator session reap on start (#280) — do not wait for the
   // scheduled retention sweep (may be delayed by last_gc_at).
   try {

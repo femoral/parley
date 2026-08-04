@@ -1,18 +1,25 @@
 # Remote runners
 
-Remote runners (ADR-0012 / #111) execute delegated tasks on another host while
-one daemon remains the source of truth. The orchestrator surface
-(`delegate` / `watch` / `answer` / inbox) is unchanged; remote-ness is one flag
-plus daemon-side settings.
+Remote runners (ADR-0012 / #111, routing ADR-0032 / #315) execute delegated
+tasks on another host while one daemon remains the source of truth. The
+orchestrator surface (`delegate` / `watch` / `answer` / inbox) is unchanged;
+remote-ness is either an automatic capability match or an explicit pin.
 
 ## Shape
 
 - **Daemon**: holds all task state; registers runners under `runners.<name>.token`.
 - **Runner** (`parley-runner` / `@useparley/runner`): long-lived process on the
-  remote host that authenticates *outbound* to the daemon, leases pending tasks
-  tagged for it, executes them locally, and streams results back.
-- **Affinity**: `parley delegate --runner <name>` tags a task. Tasks without
-  affinity keep executing in-daemon (default unchanged).
+  remote host that authenticates *outbound* to the daemon, registers
+  capabilities, leases pending tasks it can run, executes them locally, and
+  streams results back.
+- **Routing** (ADR-0032 / #315): unpinned tasks match advertised vendors;
+  online runners are preferred over the daemon; `--runner <name>` remains a
+  hard pin. Placement is persisted once at create (`tasks.placement` =
+  `local`|`remote`); dispatch never flips a remote-routed row to local.
+  Workspace-bound work (`--cwd`, local worktrees, run-owned steps,
+  fix-of-local-parent) is always `local`.
+- **Affinity pin**: `parley delegate --runner <name>` forces that runner when
+  it advertises the vendor.
 
 Firewall model: the daemon needs **no** credentials to any host. Runners need
 exactly one outbound URL + token. Works through NAT.
@@ -25,13 +32,24 @@ In `~/.parley/parley.json` (or `$PARLEY_HOME/parley.json`):
 {
   "runners": {
     "gpu": { "token": "generate-a-long-random-secret" }
+  },
+  "daemon": {
+    "routing": {
+      "queueTimeoutMs": 3600000
+    }
   }
 }
 ```
 
+- `runners.<name>.token` — bearer for that runner (required).
+- `daemon.routing.queueTimeoutMs` — max wait when capable executors exist but
+  none is online (or a remote-routed task is never claimed); default **1 hour**.
+  Overridable in tests via `PARLEY_ROUTING_QUEUE_TIMEOUT_MS`.
+
 The daemon re-reads this file for auth on each runner request (same hot posture
 as profiles). Restart is not required to add a runner token, but the runner
-process must be started with the matching name and token.
+process must be started with the matching name and token. The name `local` is
+reserved for the daemon in-process executor and is rejected at register.
 
 Expose the daemon so runners can reach it. Default bind is loopback-only
 (`daemon.bind` defaults to `127.0.0.1`). For remote hosts set e.g.
@@ -160,8 +178,8 @@ Bearer auth: `Authorization: Bearer <token>` checked against
 
 | Route | Role |
 | --- | --- |
-| `POST /runner/register` | Fingerprint + upsert capabilities (required before lease) |
-| `POST /runner/lease` `{runner}` | Long-poll (~25s → 204) for oldest pending task; leases → `running` + full spec; doubles as presence |
+| `POST /runner/register` | Fingerprint + upsert capabilities (required before lease); name `local` reserved |
+| `POST /runner/lease` `{runner}` | Long-poll (~25s → 204) for oldest **capability-matched** pending task (vendor + affinity); leases → `running` + full spec; doubles as presence |
 | `POST /runner/tasks/:id/heartbeat` | Refresh lease |
 | `POST /runner/tasks/:id/events` `{lines}` | Append vendor JSONL + usage/session extraction |
 | `POST /runner/tasks/:id/branch` `{branch}` | Record branch (worktree stays null) |
@@ -175,5 +193,6 @@ runner hub proxy).
 
 - ADR-0012 — remote runners decision record
 - ADR-0029 — registration / advertisement wire
+- ADR-0032 — capability-matched routing
 - ADR-0011 — child HTTP/CLI channels (what the hub proxy forwards)
 - `docs/agents/adapter-authoring.md` — vendor adapter contract
