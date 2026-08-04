@@ -1465,6 +1465,13 @@ describe("runner registration + parley runners list", () => {
     expect(text.stdout).toMatch(/models:/);
     expect(text.stdout).toMatch(/not advertised/);
     expect(text.stdout).toMatch(/recent_tasks:/);
+    // #329: advertisement age alongside last-contact age.
+    expect(text.stdout).toMatch(/last_contact:\s+\S+/);
+    expect(text.stdout).toMatch(/advertisement:\s+\S+/);
+    expect(detail).toMatchObject({
+      capabilities_updated_at: expect.stringMatching(/^\d{4}-/),
+      advertisement_age_ms: expect.any(Number),
+    });
 
     const removed = await runCli(["runners", "remove", "gpu", "--json"], home);
     expect(removed.code).toBe(0);
@@ -1763,4 +1770,33 @@ describe("lost-runner failures carry actionable state (#319)", () => {
     expect(row?.error ?? "").toMatch(/branch=parley\/lost-branch-cli/);
     expect(row?.error ?? "").toMatch(/last_event_age_ms=/);
   }, 60_000);
+});
+
+describe("runners show advertisement age formatting (#329)", () => {
+  it("renders finite advertisement age and unknown for pre-migration null", async () => {
+    const { formatAdvertisementAge, formatShow } = await import(
+      "../src/commands/runners.js"
+    );
+    expect(formatAdvertisementAge(5_000)).toMatch(/5s|s/);
+    expect(formatAdvertisementAge(null)).toBe("unknown");
+    expect(formatAdvertisementAge(undefined)).toBe("unknown");
+
+    const rendered = formatShow({
+      name: "gpu",
+      status: "online",
+      last_seen: "2026-08-03T00:00:00.000Z",
+      registered_at: "2026-08-03T00:00:00.000Z",
+      protocol_version: 1,
+      build_version: "test",
+      last_contact_age_ms: 1_000,
+      capabilities_updated_at: null,
+      advertisement_age_ms: null,
+      vendors: [],
+      repo_reachability: null,
+      unreachable_repos: [],
+      recent_tasks: [],
+    });
+    expect(rendered).toMatch(/last_contact:\s+1s/);
+    expect(rendered).toMatch(/advertisement:\s+unknown/);
+  });
 });

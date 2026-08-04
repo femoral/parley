@@ -4,7 +4,13 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { homePaths, readConfig } from "@useparley/core";
-import { openDatabase, setRunnerLastSeen } from "../src/db.js";
+import {
+  getRunner,
+  openDatabase,
+  setRunnerLastSeen,
+  touchRunnerLastSeen,
+  upsertRunner,
+} from "../src/db.js";
 import { startServer, type DaemonServer } from "../src/server.js";
 import { makeGitRepo, withFakeAllowlist } from "./helpers.js";
 
@@ -1519,5 +1525,151 @@ describe("runner show / remove / stale cleanup (#320)", () => {
 
     const health = await json(base, "GET", "/health");
     expect(health.status).toBe(200);
+  });
+});
+
+describe("capabilities_updated_at (#329)", () => {
+  const capsJson = JSON.stringify({
+    vendors: [{ id: "fake", models: [] }],
+  });
+
+  it("upsert sets capabilities_updated_at on insert and refreshes on re-register (incl. byte-identical)", () => {
+    const home = makeHome();
+    const db = openDatabase(homePaths(home));
+    try {
+      const first = upsertRunner(db, {
+        name: "gpu",
+        capabilities: capsJson,
+        protocol_version: 1,
+        build_version: "a",
+      });
+      expect(first.capabilities_updated_at).toMatch(/^\d{4}-/);
+      const firstAt = first.capabilities_updated_at!;
+
+      // Pin an older advertisement time so the next upsert must advance it.
+      db.prepare(
+        `UPDATE runners SET capabilities_updated_at = ?, last_seen = ? WHERE name = ?`,
+      ).run(
+        new Date(Date.now() - 60_000).toISOString(),
+        new Date(Date.now() - 60_000).toISOString(),
+        "gpu",
+      );
+      const pinned = getRunner(db, "gpu")!.capabilities_updated_at!;
+      expect(pinned).not.toBe(firstAt);
+
+      // Byte-identical capabilities still refresh advertisement time.
+      const second = upsertRunner(db, {
+        name: "gpu",
+        capabilities: capsJson,
+        protocol_version: 1,
+        build_version: "a",
+      });
+      expect(second.capabilities_updated_at).toMatch(/^\d{4}-/);
+      expect(Date.parse(second.capabilities_updated_at!)).toBeGreaterThan(
+        Date.parse(pinned),
+      );
+      // registered_at is preserved across re-register.
+      expect(second.registered_at).toBe(first.registered_at);
+    } finally {
+      db.close();
+    }
+  });
+
+  it("touchRunnerLastSeen refreshes last_seen but leaves capabilities_updated_at stable", () => {
+    const home = makeHome();
+    const db = openDatabase(homePaths(home));
+    try {
+      upsertRunner(db, {
+        name: "gpu",
+        capabilities: capsJson,
+        protocol_version: 1,
+        build_version: "a",
+      });
+      const adPast = new Date(Date.now() - 120_000).toISOString();
+      const seenPast = new Date(Date.now() - 120_000).toISOString();
+      db.prepare(
+        `UPDATE runners SET capabilities_updated_at = ?, last_seen = ? WHERE name = ?`,
+      ).run(adPast, seenPast, "gpu");
+
+      touchRunnerLastSeen(db, "gpu");
+      const row = getRunner(db, "gpu")!;
+      expect(row.capabilities_updated_at).toBe(adPast);
+      expect(Date.parse(row.last_seen)).toBeGreaterThan(Date.parse(seenPast));
+    } finally {
+      db.close();
+    }
+  });
+
+  it("GET /runners/:name returns advertisement age; NULL pre-migration row yields null age", async () => {
+    const home = makeHome();
+    const { base } = await boot(home);
+    await registerRunner(base);
+
+    const show = await json(base, "GET", "/runners/gpu");
+    expect(show.status).toBe(200);
+    const body = show.body as {
+      last_contact_age_ms: number;
+      capabilities_updated_at: string | null;
+      advertisement_age_ms: number | null;
+    };
+    expect(body.capabilities_updated_at).toMatch(/^\d{4}-/);
+    expect(body.advertisement_age_ms).toBeGreaterThanOrEqual(0);
+    expect(body.last_contact_age_ms).toBeGreaterThanOrEqual(0);
+
+    // Simulate a pre-migration row: NULL advertisement timestamp.
+    await server!.close();
+    server = null;
+    const db = openDatabase(homePaths(home));
+    db.prepare(`UPDATE runners SET capabilities_updated_at = NULL WHERE name = ?`).run(
+      "gpu",
+    );
+    // Presence still recent; only advertisement is unknown.
+    setRunnerLastSeen(db, "gpu", new Date().toISOString());
+    db.close();
+
+    const { base: base2 } = await boot(home);
+    const showNull = await json(base2, "GET", "/runners/gpu");
+    expect(showNull.status).toBe(200);
+    const nullBody = showNull.body as {
+      capabilities_updated_at: string | null;
+      advertisement_age_ms: number | null;
+      last_contact_age_ms: number;
+    };
+    expect(nullBody.capabilities_updated_at).toBeNull();
+    expect(nullBody.advertisement_age_ms).toBeNull();
+    // last_contact remains a finite presence age.
+    expect(nullBody.last_contact_age_ms).toBeGreaterThanOrEqual(0);
+  });
+
+  it("re-register after contact-only traffic refreshes advertisement while registered_at holds", async () => {
+    const home = makeHome();
+    const { base } = await boot(home);
+    const first = await registerRunner(base);
+    const firstAt = (first.body as { registered_at: string }).registered_at;
+
+    await server!.close();
+    server = null;
+    const db = openDatabase(homePaths(home));
+    const adPast = new Date(Date.now() - 90_000).toISOString();
+    db.prepare(
+      `UPDATE runners SET capabilities_updated_at = ?, last_seen = ? WHERE name = ?`,
+    ).run(adPast, adPast, "gpu");
+    // Heartbeat-style presence bump must not move advertisement time.
+    touchRunnerLastSeen(db, "gpu");
+    expect(getRunner(db, "gpu")!.capabilities_updated_at).toBe(adPast);
+    db.close();
+
+    const { base: base2 } = await boot(home);
+    const second = await registerRunner(base2);
+    expect(second.status).toBe(200);
+    expect((second.body as { registered_at: string }).registered_at).toBe(firstAt);
+
+    const show = await json(base2, "GET", "/runners/gpu");
+    const body = show.body as {
+      capabilities_updated_at: string;
+      advertisement_age_ms: number;
+    };
+    expect(Date.parse(body.capabilities_updated_at)).toBeGreaterThan(Date.parse(adPast));
+    expect(body.advertisement_age_ms).toBeLessThan(30_000);
   });
 });

@@ -370,7 +370,8 @@ describe("HTTP /models routes", () => {
     // Seed a runner row directly (no runner process) so refresh can attach ages.
     const db = openDatabase(paths);
     dbs.push(db);
-    const past = new Date(Date.now() - 12_000).toISOString();
+    const contactPast = new Date(Date.now() - 12_000).toISOString();
+    const adPast = new Date(Date.now() - 45_000).toISOString();
     upsertRunner(db, {
       name: "gpu",
       capabilities: JSON.stringify({
@@ -384,12 +385,10 @@ describe("HTTP /models routes", () => {
       protocol_version: 1,
       build_version: "test",
     });
-    // Force last_seen into the past for a non-zero age.
-    db.prepare(`UPDATE runners SET last_seen = ?, registered_at = ? WHERE name = ?`).run(
-      past,
-      past,
-      "gpu",
-    );
+    // Diverge contact vs advertisement ages (#329).
+    db.prepare(
+      `UPDATE runners SET last_seen = ?, registered_at = ?, capabilities_updated_at = ? WHERE name = ?`,
+    ).run(contactPast, contactPast, adPast, "gpu");
     db.close();
     dbs.pop();
 
@@ -402,6 +401,8 @@ describe("HTTP /models routes", () => {
         name: string;
         last_contact_age_ms: number;
         last_seen: string;
+        capabilities_updated_at: string | null;
+        advertisement_age_ms: number | null;
         capabilities: { vendors: Array<{ id: string }> };
       }>;
     };
@@ -411,6 +412,9 @@ describe("HTTP /models routes", () => {
     expect(body.runners[0]!.name).toBe("gpu");
     // last_seen was backdated ~12s — field is last contact, not advertisement age.
     expect(body.runners[0]!.last_contact_age_ms).toBeGreaterThanOrEqual(10_000);
+    // Advertisement was backdated further (~45s).
+    expect(body.runners[0]!.advertisement_age_ms).toBeGreaterThanOrEqual(40_000);
+    expect(body.runners[0]!.capabilities_updated_at).toBe(adPast);
     expect(body.runners[0]!.capabilities.vendors.some((v) => v.id === "fake")).toBe(
       true,
     );
@@ -418,12 +422,13 @@ describe("HTTP /models routes", () => {
 });
 
 describe("refreshFleetCatalog (unit)", () => {
-  it("writes models.json and attaches last_contact_age_ms from last_seen", async () => {
+  it("writes models.json and attaches last_contact_age_ms + advertisement_age_ms", async () => {
     const home = makeHome();
     const paths = homePaths(home);
     const db = openDatabase(paths);
     dbs.push(db);
     const past = new Date(Date.now() - 5_000).toISOString();
+    const adPast = new Date(Date.now() - 30_000).toISOString();
     upsertRunner(db, {
       name: "cpu",
       capabilities: JSON.stringify({
@@ -432,10 +437,14 @@ describe("refreshFleetCatalog (unit)", () => {
       protocol_version: 1,
       build_version: "t",
     });
-    db.prepare(`UPDATE runners SET last_seen = ? WHERE name = ?`).run(past, "cpu");
+    db.prepare(
+      `UPDATE runners SET last_seen = ?, capabilities_updated_at = ? WHERE name = ?`,
+    ).run(past, adPast, "cpu");
     const rows = db
       .prepare(
-        `SELECT name, capabilities, protocol_version, build_version, registered_at, last_seen, last_completed_at FROM runners`,
+        `SELECT name, capabilities, protocol_version, build_version, registered_at,
+                last_seen, capabilities_updated_at, last_completed_at, unreachable_repos
+         FROM runners`,
       )
       .all() as Array<{
       name: string;
@@ -444,6 +453,61 @@ describe("refreshFleetCatalog (unit)", () => {
       build_version: string;
       registered_at: string;
       last_seen: string;
+      capabilities_updated_at: string | null;
+      last_completed_at: string | null;
+      unreachable_repos: string | null;
+    }>;
+    db.close();
+    dbs.pop();
+
+    const nowMs = Date.parse(past) + 5_000;
+    const result = await refreshFleetCatalog({
+      paths,
+      adapters: new Map(),
+      runners: rows,
+      vendor: "codex",
+      now: () => "2026-08-03T00:00:00.000Z",
+      nowMs: () => nowMs,
+    });
+    expect(result.daemon.catalog).toBeDefined();
+    expect(fs.existsSync(paths.models)).toBe(true);
+    expect(result.runners).toHaveLength(1);
+    expect(result.runners[0]!.last_contact_age_ms).toBe(5_000);
+    expect(result.runners[0]!.advertisement_age_ms).toBe(nowMs - Date.parse(adPast));
+    expect(result.runners[0]!.capabilities_updated_at).toBe(adPast);
+  });
+
+  it("NULL capabilities_updated_at yields null advertisement_age_ms (pre-migration)", async () => {
+    const home = makeHome();
+    const paths = homePaths(home);
+    const db = openDatabase(paths);
+    dbs.push(db);
+    const past = new Date(Date.now() - 5_000).toISOString();
+    upsertRunner(db, {
+      name: "legacy",
+      capabilities: JSON.stringify({
+        vendors: [{ id: "codex", models: [] }],
+      }),
+      protocol_version: 1,
+      build_version: "t",
+    });
+    db.prepare(
+      `UPDATE runners SET last_seen = ?, capabilities_updated_at = NULL WHERE name = ?`,
+    ).run(past, "legacy");
+    const rows = db
+      .prepare(
+        `SELECT name, capabilities, protocol_version, build_version, registered_at,
+                last_seen, capabilities_updated_at, last_completed_at, unreachable_repos
+         FROM runners`,
+      )
+      .all() as Array<{
+      name: string;
+      capabilities: string;
+      protocol_version: number;
+      build_version: string;
+      registered_at: string;
+      last_seen: string;
+      capabilities_updated_at: string | null;
       last_completed_at: string | null;
       unreachable_repos: string | null;
     }>;
@@ -454,14 +518,12 @@ describe("refreshFleetCatalog (unit)", () => {
       paths,
       adapters: new Map(),
       runners: rows,
-      vendor: "codex",
-      now: () => "2026-08-03T00:00:00.000Z",
       nowMs: () => Date.parse(past) + 5_000,
     });
-    expect(result.daemon.catalog).toBeDefined();
-    expect(fs.existsSync(paths.models)).toBe(true);
     expect(result.runners).toHaveLength(1);
     expect(result.runners[0]!.last_contact_age_ms).toBe(5_000);
+    expect(result.runners[0]!.capabilities_updated_at).toBeNull();
+    expect(result.runners[0]!.advertisement_age_ms).toBeNull();
   });
 
   it("propagates non-empty discovery warnings from a failing probe (#299 / F3)", async () => {

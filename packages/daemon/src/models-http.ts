@@ -246,11 +246,18 @@ export interface RunnerCatalogEntry {
   /**
    * Milliseconds since `last_seen` (presence / last contact — lease polls and
    * task traffic refresh this, so it is **not** capabilities advertisement age).
-   *
-   * True capabilities age needs a `capabilities_updated_at` column on the
-   * runners table (follow-up issue); do not invent that here without a migration.
    */
   last_contact_age_ms: number;
+  /**
+   * ISO-8601 of last successful registration upsert (#329). Null for
+   * pre-migration rows (CLI renders as unknown).
+   */
+  capabilities_updated_at: string | null;
+  /**
+   * Milliseconds since `capabilities_updated_at`. Null when the timestamp is
+   * null so pre-migration rows never surface as epoch-age.
+   */
+  advertisement_age_ms: number | null;
 }
 
 export interface ModelsRefreshResult {
@@ -323,12 +330,22 @@ export async function refreshFleetCatalog(options: {
     }
     const lastMs = Date.parse(row.last_seen);
     const age = Number.isFinite(lastMs) ? Math.max(0, nowMs() - lastMs) : 0;
+    const capsAt = row.capabilities_updated_at;
+    const capsMs =
+      capsAt !== null && capsAt !== undefined && capsAt !== ""
+        ? Date.parse(capsAt)
+        : NaN;
+    const advertisement_age_ms = Number.isFinite(capsMs)
+      ? Math.max(0, nowMs() - capsMs)
+      : null;
     return {
       name: row.name,
       capabilities: filtered,
       last_seen: row.last_seen,
       registered_at: row.registered_at,
       last_contact_age_ms: age,
+      capabilities_updated_at: capsAt ?? null,
+      advertisement_age_ms,
     };
   });
 

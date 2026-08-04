@@ -384,20 +384,41 @@ function projectRepoReachability(
   return null;
 }
 
+/**
+ * GET /runners/:name payload (#320 + #329). Extends the core show shape with
+ * advertisement freshness so CLI can distinguish contact age from catalog age.
+ */
+export type RunnerShowPayload = RunnerShowResponse & {
+  /**
+   * ISO-8601 of last successful registration upsert. Null for pre-migration
+   * rows (CLI renders as unknown).
+   */
+  capabilities_updated_at: string | null;
+  /**
+   * Milliseconds since `capabilities_updated_at`. Null when the timestamp is
+   * null so operators never see epoch-age for pre-migration rows.
+   */
+  advertisement_age_ms: number | null;
+};
+
 function projectRunnerShow(
   row: RunnerRow,
   db: DatabaseHandle,
   config?: ParleyConfig,
-): RunnerShowResponse {
+): RunnerShowPayload {
   const caps = parseCapabilitiesJson(row.capabilities) as RunnerCapabilities &
     Record<string, unknown>;
   const lastMs = Date.parse(row.last_seen);
-  // last_seen is refreshed on every poll/heartbeat/event — this is presence age,
-  // not capabilities-advertisement age. True capabilities age needs a separate
-  // column (tracked as #329; parallel branch owns the next migration).
+  // last_seen is refreshed on every poll/heartbeat/event — presence age only.
+  // Advertisement age is capabilities_updated_at (#329).
   const last_contact_age_ms = Number.isFinite(lastMs)
     ? Math.max(0, Date.now() - lastMs)
     : 0;
+  const capsAt = row.capabilities_updated_at;
+  const capsMs = capsAt !== null && capsAt !== "" ? Date.parse(capsAt) : NaN;
+  const advertisement_age_ms = Number.isFinite(capsMs)
+    ? Math.max(0, Date.now() - capsMs)
+    : null;
   const vendors: RunnerVendorCapability[] = caps.vendors.map((v) => ({
     id: v.id,
     models: Array.isArray(v.models) ? v.models : [],
@@ -436,6 +457,8 @@ function projectRunnerShow(
     protocol_version: row.protocol_version,
     build_version: row.build_version,
     last_contact_age_ms,
+    capabilities_updated_at: capsAt,
+    advertisement_age_ms,
     vendors,
     repo_reachability: projectRepoReachability(caps),
     unreachable_repos,

@@ -108,6 +108,16 @@ function formatAge(ms: number): string {
   return `${Math.round(ms / 3_600_000)}h`;
 }
 
+/** Advertisement age for fleet refresh; null/missing → "unknown" (#329). */
+export function formatAdvertisementAgeLabel(
+  ageMs: number | null | undefined,
+): string {
+  if (ageMs !== null && ageMs !== undefined && Number.isFinite(ageMs)) {
+    return `${formatAge(ageMs)} ago`;
+  }
+  return "unknown";
+}
+
 interface RefreshBody {
   daemon: { catalog: ModelCatalog; warnings: string[] };
   runners: Array<{
@@ -117,6 +127,10 @@ interface RefreshBody {
     registered_at: string;
     /** Presence / last contact age — not capabilities advertisement age. */
     last_contact_age_ms: number;
+    /** ISO of last successful re-advertise; null for pre-migration rows. */
+    capabilities_updated_at?: string | null;
+    /** Age of capabilities advertisement; null when timestamp is null. */
+    advertisement_age_ms?: number | null;
   }>;
 }
 
@@ -136,8 +150,9 @@ function renderRefresh(ctx: CliContext, body: RefreshBody): void {
     return;
   }
   for (const runner of body.runners) {
+    const adAge = formatAdvertisementAgeLabel(runner.advertisement_age_ms);
     ctx.stdout(
-      `\nrunner ${runner.name}  (last contact ${formatAge(runner.last_contact_age_ms)} ago)\n`,
+      `\nrunner ${runner.name}  (last contact ${formatAge(runner.last_contact_age_ms)} ago, advertisement ${adAge})\n`,
     );
     if (runner.capabilities.vendors.length === 0) {
       ctx.stdout("  (no vendors advertised)\n");
