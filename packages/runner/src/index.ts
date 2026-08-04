@@ -8,6 +8,21 @@ export {
   type RunnerHost,
   type RunnerLoopOptions,
 } from "./loop.js";
+export {
+  ClaimGitError,
+  deleteRemoteBranchBestEffort,
+  encodeFetchUrlForFs,
+  encodeRepoKeyForFs,
+  ensureMirror,
+  isMirrorTempName,
+  isPushDeniedDetail,
+  mirrorPathFor,
+  MIRROR_TEMP_PREFIX,
+  prepareClaimRepo,
+  taskBranchName,
+  type ClaimGitFailureCode,
+  type PreparedRepo,
+} from "./mirror.js";
 export { startHubProxy, type HubProxy } from "./hub-proxy.js";
 /** Lease wire types + HTTP transport live in core (#209). */
 export {

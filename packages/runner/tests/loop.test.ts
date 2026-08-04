@@ -85,7 +85,7 @@ afterEach(async () => {
 });
 
 describe("runner loop integration", () => {
-  it("leases a task, runs the fake vendor, and completes via report", async () => {
+  it("zero-config: managed mirror, worktree, push branch, complete via report", async () => {
     const home = tmp("parley-runner-home-");
     fs.writeFileSync(
       path.join(home, "parley.json"),
@@ -115,16 +115,10 @@ describe("runner loop integration", () => {
         },
       },
     ]);
-
-    // Runner uses a separate clone path mapping to the same repo.
-    const runnerClone = tmp("parley-runner-clone-");
-    execFileSync("git", ["clone", repo, runnerClone], { stdio: "ignore" });
-    execFileSync("git", ["-C", runnerClone, "config", "user.email", "test@parley.test"], {
-      stdio: "ignore",
-    });
-    execFileSync("git", ["-C", runnerClone, "config", "user.name", "parley test"], {
-      stdio: "ignore",
-    });
+    // Origin is a local bare (file path) — lease carries repo_fetch_url.
+    const origin = execFileSync("git", ["-C", repo, "remote", "get-url", "origin"], {
+      encoding: "utf8",
+    }).trim();
 
     server = await startServer(homePaths(home));
     const base = `http://127.0.0.1:${server.port}`;
@@ -162,10 +156,14 @@ describe("runner loop integration", () => {
         daemonUrl: base,
         name: "gpu",
         token: "secret-gpu",
-        repos: { [repo]: runnerClone },
+        repos: {}, // zero-config — managed mirror
         worktreesDir,
       },
-      env: { ...process.env, PARLEY_FAKE_VENDOR_BIN: FAKE_VENDOR_BIN },
+      env: {
+        ...process.env,
+        PARLEY_HOME: home,
+        PARLEY_FAKE_VENDOR_BIN: FAKE_VENDOR_BIN,
+      },
       log: () => {
         /* quiet in tests */
       },
@@ -174,8 +172,13 @@ describe("runner loop integration", () => {
     const runPromise = loop.run();
     // Wait until the task completes (or fails).
     const deadline = Date.now() + 20_000;
-    let row: { state: string; report: string | null; branch: string | null; usage: string | null } | null =
-      null;
+    let row: {
+      state: string;
+      report: string | null;
+      branch: string | null;
+      usage: string | null;
+      error: string | null;
+    } | null = null;
     while (Date.now() < deadline) {
       const status = await json(base, "GET", `/tasks/${taskId}`);
       row = (status.body as { row: typeof row }).row;
@@ -194,9 +197,119 @@ describe("runner loop integration", () => {
     expect(row!.branch).toMatch(/^parley\//);
     expect(JSON.parse(row!.usage!)).toEqual({ input_tokens: 5, output_tokens: 3 });
 
+    // Managed mirror was created under parley home clones/.
+    const clonesDir = homePaths(home).clones;
+    expect(fs.existsSync(clonesDir)).toBe(true);
+    const mirrors = fs.readdirSync(clonesDir);
+    expect(mirrors.length).toBeGreaterThanOrEqual(1);
+
+    // Branch was pushed to the bare origin.
+    const remoteBranches = execFileSync("git", ["-C", origin, "branch"], {
+      encoding: "utf8",
+    });
+    expect(remoteBranches).toMatch(/parley\//);
+
     // Events landed in the daemon log.
     const logPath = path.join(home, "tasks", taskId, "vendor.jsonl");
     expect(fs.existsSync(logPath)).toBe(true);
     expect(fs.readFileSync(logPath, "utf8")).toContain("remote-sess");
+  }, 30_000);
+
+  it("repos override still routes to an operator-managed clone", async () => {
+    const home = tmp("parley-runner-home-");
+    fs.writeFileSync(
+      path.join(home, "parley.json"),
+      JSON.stringify({
+        runners: { gpu: { token: "secret-gpu" } },
+        vendors: {
+          fake: {
+            models: {
+              "fake-model": {
+                efforts: ["low", "medium", "high"],
+                default: "medium",
+              },
+            },
+          },
+        },
+      }),
+    );
+
+    const repo = makeGitRepo([
+      {
+        submit_report: {
+          summary: "override done",
+          outcome: "success",
+          files_changed: [],
+        },
+      },
+    ]);
+    // Force a network-style repo_key via insteadOf is heavy; map by path id
+    // (resolveRepoPath matches lease.repo when key is null for path origins).
+    const runnerClone = tmp("parley-runner-clone-");
+    execFileSync("git", ["clone", repo, runnerClone], { stdio: "ignore" });
+    execFileSync("git", ["-C", runnerClone, "config", "user.email", "test@parley.test"], {
+      stdio: "ignore",
+    });
+    execFileSync("git", ["-C", runnerClone, "config", "user.name", "parley test"], {
+      stdio: "ignore",
+    });
+    // Point clone's origin at the same bare as the seed repo.
+    const origin = execFileSync("git", ["-C", repo, "remote", "get-url", "origin"], {
+      encoding: "utf8",
+    }).trim();
+    execFileSync("git", ["-C", runnerClone, "remote", "set-url", "origin", origin], {
+      stdio: "ignore",
+    });
+
+    server = await startServer(homePaths(home));
+    const base = `http://127.0.0.1:${server.port}`;
+
+    const created = await json(base, "POST", "/tasks", {
+      prompt: "run with override",
+      vendor: "fake",
+      orchestrator_session_id: "orch-remote",
+      cwd: repo,
+      use_worktree: true,
+      runner: "gpu",
+    });
+    expect(created.status).toBe(201);
+    const taskId = (created.body as { task_id: string }).task_id;
+
+    const loop = new RunnerLoop({
+      config: {
+        daemonUrl: base,
+        name: "gpu",
+        token: "secret-gpu",
+        // Override by orchestrator path (basename match also works).
+        repos: { [repo]: runnerClone },
+        worktreesDir: tmp("parley-runner-wts-"),
+      },
+      env: {
+        ...process.env,
+        PARLEY_HOME: home,
+        PARLEY_FAKE_VENDOR_BIN: FAKE_VENDOR_BIN,
+      },
+      log: () => {},
+    });
+
+    const runPromise = loop.run();
+    const deadline = Date.now() + 20_000;
+    let row: { state: string; branch: string | null } | null = null;
+    while (Date.now() < deadline) {
+      const status = await json(base, "GET", `/tasks/${taskId}`);
+      row = (status.body as { row: typeof row }).row;
+      if (row && (row.state === "completed" || row.state === "failed")) break;
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    loop.stop();
+    await runPromise;
+
+    expect(row?.state).toBe("completed");
+    expect(row?.branch).toMatch(/^parley\//);
+    // Override path: no managed mirror required.
+    const clonesDir = homePaths(home).clones;
+    if (fs.existsSync(clonesDir)) {
+      expect(fs.readdirSync(clonesDir)).toEqual([]);
+    }
   }, 30_000);
 });

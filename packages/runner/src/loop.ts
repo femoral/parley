@@ -1,6 +1,5 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { execFileSync } from "node:child_process";
-import fs from "node:fs";
 import readline from "node:readline";
 import {
   createLeaseHttpTransport,
@@ -40,8 +39,14 @@ import {
   removeWorktree,
   writeMaterializedFiles,
 } from "@useparley/daemon/worktree.js";
-import { type RunnerConfig, resolveRepoPath } from "./config.js";
+import { type RunnerConfig } from "./config.js";
 import { startHubProxy, type HubProxy } from "./hub-proxy.js";
+import {
+  ClaimGitError,
+  deleteRemoteBranchBestEffort,
+  prepareClaimRepo,
+  type PreparedRepo,
+} from "./mirror.js";
 import { RUNNER_VERSION } from "./version.js";
 
 /** Default heartbeat interval — well under the daemon's 90s window. */
@@ -62,6 +67,14 @@ function refingerprintIntervalMs(): number {
  * implementations; inject fakes to exercise fail branches without a daemon.
  */
 export interface RunnerHost {
+  /**
+   * Claim-time repo sync: mirror/override resolve, fetch, base_sha verify,
+   * dry-run push. Runs before worktree create / vendor spawn (#316).
+   */
+  prepareClaimRepo: (
+    lease: RunnerLeaseSpec,
+    config: RunnerConfig,
+  ) => PreparedRepo;
   createWorktree: typeof createWorktree;
   removeWorktree: typeof removeWorktree;
   pushBranch: (repoRoot: string, worktreePath: string, branch: string) => void;
@@ -136,6 +149,13 @@ export class RunnerLoop {
       this.adaptersReady = this.loadAdaptersWithPlugins();
     }
     this.host = {
+      prepareClaimRepo: (lease, config) => {
+        const paths = homePathsFromEnv(this.env);
+        return prepareClaimRepo(lease, {
+          repos: config.repos,
+          clonesDir: paths.clones,
+        });
+      },
       createWorktree,
       removeWorktree,
       pushBranch,
@@ -305,24 +325,54 @@ export class RunnerLoop {
     let worktreePath: string | null = null;
     let repoLocal: string | null = null;
     let branch: string | null = null;
+    let pushToOrigin = false;
+    /** Set after claim-time preflight pushed a remote branch; cleaned up on fail. */
+    let preflight: { repoLocal: string; branch: string } | null = null;
+    /** True once POST /runner/tasks/:id/branch succeeds — keep remote ref. */
+    let branchHandoffOk = false;
+
+    const cleanupOrphanPreflight = (): void => {
+      if (preflight === null || branchHandoffOk) return;
+      try {
+        this.log(
+          `best-effort delete preflight branch ${preflight.branch} on origin`,
+        );
+        deleteRemoteBranchBestEffort(preflight.repoLocal, preflight.branch);
+      } catch {
+        /* ignore */
+      }
+    };
 
     try {
-      repoLocal = resolveRepoPath(this.options.config.repos, lease.repo);
-      if (repoLocal === null) {
-        await this.transport.fail(
-          taskId,
-          `no local repo mapping for ${lease.repo} — configure runner.repos`,
-        );
+      // Claim-time git: mirror/override, fetch, base_sha, push preflight — before
+      // any vendor spawn (ADR-0031 / #316).
+      let prepared: PreparedRepo;
+      try {
+        prepared = this.host.prepareClaimRepo(lease, this.options.config);
+      } catch (err) {
+        const msg =
+          err instanceof ClaimGitError
+            ? err.message
+            : err instanceof Error
+              ? err.message
+              : String(err);
+        this.log(`claim-time git failed for ${taskId}: ${msg}`);
+        await this.transport.fail(taskId, msg);
         return;
       }
-      if (!fs.existsSync(repoLocal)) {
-        await this.transport.fail(taskId, `mapped repo path does not exist: ${repoLocal}`);
-        return;
+      repoLocal = prepared.repoLocal;
+      pushToOrigin = prepared.pushToOrigin;
+      if (prepared.preflightPushed) {
+        preflight = { repoLocal: prepared.repoLocal, branch: prepared.branch };
       }
+      this.log(
+        `repo ready source=${prepared.source} path=${repoLocal} base=${prepared.baseRef.slice(0, 12)}`,
+      );
 
       const adapter = this.adapters.get(lease.vendor);
       if (!adapter) {
         const known = [...this.adapters.keys()].join(", ");
+        cleanupOrphanPreflight();
         await this.transport.fail(
           taskId,
           `unknown vendor on runner: ${lease.vendor} (known: ${known})`,
@@ -330,7 +380,6 @@ export class RunnerLoop {
         return;
       }
 
-      const baseRef = lease.base_sha ?? lease.base_ref ?? "HEAD";
       let info;
       try {
         info = this.host.createWorktree({
@@ -338,9 +387,10 @@ export class RunnerLoop {
           worktreesDir: this.options.config.worktreesDir,
           taskId,
           name: lease.name,
-          baseRef,
+          baseRef: prepared.baseRef,
         });
       } catch (err) {
+        cleanupOrphanPreflight();
         await this.transport.fail(
           taskId,
           `failed to create worktree: ${err instanceof Error ? err.message : String(err)}`,
@@ -413,15 +463,20 @@ export class RunnerLoop {
         this.host.spawnAndStream !== undefined
           ? await this.host.spawnAndStream(taskId, plan)
           : await this.spawnAndStream(taskId, adapter, plan);
-      // Push the task branch so the orchestrator can fetch it. Report submission
-      // already flowed through /child/report (completes via fallback or branch).
+      // Push the task branch so the orchestrator can fetch it (managed mirror /
+      // override only — local fast path leaves the branch on the host). Report
+      // submission already flowed through /child/report.
       if (branch !== null && worktreePath !== null && repoLocal !== null) {
         try {
-          this.host.pushBranch(repoLocal, worktreePath, branch);
+          if (pushToOrigin) {
+            this.host.pushBranch(repoLocal, worktreePath, branch);
+          }
           await this.transport.branch(taskId, branch);
+          branchHandoffOk = true;
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
           this.log(`branch push/record failed for ${taskId}: ${msg}`);
+          cleanupOrphanPreflight();
           try {
             await this.transport.fail(taskId, `branch handoff failed: ${msg}`);
           } catch {
@@ -436,12 +491,15 @@ export class RunnerLoop {
           taskId,
           `vendor child exited (code ${exitCode ?? "?"}) without submitting a report`,
         );
+        // Fail accepted as a real failure (not promoted) → drop orphan preflight.
+        if (!branchHandoffOk) cleanupOrphanPreflight();
       } catch {
         /* already terminal (completed via report/branch) */
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       this.log(`execute error for ${taskId}: ${msg}`);
+      cleanupOrphanPreflight();
       try {
         await this.transport.fail(taskId, msg);
       } catch {

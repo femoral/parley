@@ -79,9 +79,6 @@ Create `runner.json` (or pass flags / env):
   "daemonUrl": "https://parley.example.com",
   "name": "gpu",
   "token": "generate-a-long-random-secret",
-  "repos": {
-    "/home/orch/src/myrepo": "/home/runner/src/myrepo"
-  },
   "worktreesDir": "/home/runner/.parley-runner/worktrees"
 }
 ```
@@ -91,7 +88,7 @@ Create `runner.json` (or pass flags / env):
 | `daemonUrl` | `PARLEY_RUNNER_DAEMON_URL` | Daemon base URL (no trailing slash) |
 | `name` | `PARLEY_RUNNER_NAME` | Must match `runners.<name>` on the daemon |
 | `token` | `PARLEY_RUNNER_TOKEN` | Must match `runners.<name>.token` |
-| `repos` | — | Map of daemon-recorded repo path → local clone |
+| `repos` | — | Optional: repo key → operator-managed clone override |
 | `worktreesDir` | `PARLEY_RUNNER_WORKTREES` | Parent dir for worktrees on this host |
 | (config path) | `PARLEY_RUNNER_CONFIG` | Path to `runner.json` |
 
@@ -101,13 +98,31 @@ parley-runner --config ./runner.json
 parley-runner --daemon-url https://parley.example.com --name gpu --token '…'
 ```
 
-### Repo mapping
+### Managed mirrors (default)
 
-At `delegate` time the daemon records the orchestrator's repo path (absolute)
-on the task. The runner maps that identifier to a **local clone** via `repos`.
-Matching is exact key first, then basename. Keep clones on the runner host
-updated (fetch regularly); the runner cuts a worktree from the recorded
-`base_sha` / `base_ref`.
+With no `repos` config the runner creates/updates a **parley-managed bare
+mirror** under `$PARLEY_HOME/clones/<encoded-repo-key>/` from the lease's
+`repo_fetch_url` (ADR-0031 / #316). Encoding is injective (readable slug plus a
+short hash of the raw key). On claim it fetches with prune, verifies `base_sha`
+(direct sha fetch as fallback), **preflight-pushes** the base sha to the task
+branch (real push — so permission / hooks fail before the vendor spawns), cuts
+a worktree, runs the vendor, then pushes the branch tip to origin. Concurrent
+runners sharing one parley home serialize cold clones with a per-mirror lock
+and clone-into-temp + rename. The host's ambient git credentials are used
+throughout.
+
+If the task fails after a successful preflight and the branch was never
+recorded as handed off, the runner best-effort deletes the remote preflight
+ref (`git push origin :refs/heads/<branch>`). If that cleanup fails, a residual
+zero-diff branch may remain on origin until an operator removes it.
+
+### Optional repo override
+
+`repos` maps a **repo key** (e.g. `github.com/org/repo`) to an operator-managed
+existing clone when you do not want parley to own the mirror. Matching is
+**exact key only** (no basename fallback — `…/acme/api` must not match
+`…/other/api`). Claim-time fetch / base_sha / push preflight still run against
+that clone.
 
 ### Vendor adapters
 

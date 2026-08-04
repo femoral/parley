@@ -21,11 +21,12 @@ Config file (runner.json) example:
     "daemonUrl": "http://daemon.example:57123",
     "name": "gpu",
     "token": "shared-secret",
-    "repos": {
-      "/home/orch/src/myrepo": "/home/runner/src/myrepo"
-    },
     "worktreesDir": "/home/runner/.parley-runner/worktrees"
   }
+
+repos is optional (operator-managed clone override keyed by repo key).
+With no repos config the runner creates parley-managed bare mirrors under
+$PARLEY_HOME/clones/ on claim (ADR-0031).
 
 See docs/agents/remote-runners.md for setup.
 `);

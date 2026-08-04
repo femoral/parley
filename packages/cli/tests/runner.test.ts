@@ -1,12 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { spawn, type ChildProcess } from "node:child_process";
+import { execFileSync, spawn, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { createRequire } from "node:module";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { homePaths } from "@useparley/core";
 import {
   cleanupHome,
   FAKE_VENDOR_BIN,
+  git,
   makeGitRepo,
   makeHome,
   runCli,
@@ -686,6 +689,312 @@ describe("runner registration + parley runners list", () => {
       true,
     );
   });
+
+  it("zero-config managed mirror: completes, pushes branch, reuses warm mirror", async () => {
+    const boot = await runCli(["daemon", "start"], home, {
+      extraEnv: {
+        PARLEY_LONG_POLL_MS: "300",
+        PARLEY_RUNNER_PRESENCE_GRACE_MS: "400",
+        PARLEY_REPORT_ACCEPTED_FALLBACK_MS: "500",
+      },
+    });
+    expect(boot.code).toBe(0);
+    await waitFor(
+      () => fs.existsSync(path.join(home, "daemon.json")),
+      "daemon discovery",
+    );
+    const discovery = JSON.parse(
+      fs.readFileSync(path.join(home, "daemon.json"), "utf8"),
+    ) as { port: number; url?: string };
+    const daemonUrl =
+      discovery.url ?? `http://127.0.0.1:${discovery.port}`;
+
+    // Local bare origin + working tree with fake-vendor script committed.
+    const bare = fs.mkdtempSync(path.join(os.tmpdir(), "parley-bare-origin-"));
+    repos.push(bare);
+    execFileSync("git", ["init", "--bare", "-b", "main"], {
+      cwd: bare,
+      stdio: "ignore",
+    });
+    const repo = makeGitRepo(
+      [
+        { emit: { type: "session", session_id: "mirror-sess" } },
+        {
+          submit_report: {
+            summary: "mirror e2e",
+            outcome: "success",
+            files_changed: [],
+          },
+        },
+      ],
+      {},
+      { origin: bare },
+    );
+    repos.push(repo);
+    git(repo, ["push", "-u", "origin", "main"]);
+
+    startRunner({
+      home,
+      name: "gpu",
+      token: "secret-gpu",
+      daemonUrl,
+      // zero repos — managed mirror path
+      repos: {},
+    });
+    await waitForRunnerOnline(home, "gpu");
+
+    const del = await runCli(
+      [
+        "delegate",
+        "-v",
+        "fake",
+        "--runner",
+        "gpu",
+        "-n",
+        "mirror-job",
+        "implement via mirror",
+      ],
+      home,
+      { cwd: repo },
+    );
+    expect(del.code).toBe(0);
+    const { task_id: taskId } = JSON.parse(del.stdout) as { task_id: string };
+
+    const deadline = Date.now() + 25_000;
+    let state = "";
+    let branch: string | null = null;
+    while (Date.now() < deadline) {
+      const status = await runCli(["status", taskId, "--json"], home);
+      if (status.code === 0) {
+        const row = JSON.parse(status.stdout) as {
+          state: string;
+          branch: string | null;
+          error: string | null;
+        };
+        state = row.state;
+        branch = row.branch;
+        if (row.state === "completed" || row.state === "failed") break;
+      }
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    expect(state).toBe("completed");
+    expect(branch).toMatch(/^parley\//);
+
+    // Mirror under parley home.
+    const clonesDir = homePaths(home).clones;
+    expect(fs.existsSync(clonesDir)).toBe(true);
+    const mirrors = fs.readdirSync(clonesDir);
+    expect(mirrors.length).toBe(1);
+    const mirrorPath = path.join(clonesDir, mirrors[0]!);
+    const mirrorIno = fs.statSync(mirrorPath).ino;
+
+    // Branch on bare origin.
+    const remoteBranches = execFileSync("git", ["-C", bare, "branch"], {
+      encoding: "utf8",
+    });
+    expect(remoteBranches).toContain(branch!);
+
+    // Second task reuses the same mirror directory (warm — no re-clone).
+    const del2 = await runCli(
+      ["delegate", "-v", "fake", "--runner", "gpu", "-n", "mirror-2", "again"],
+      home,
+      { cwd: repo },
+    );
+    expect(del2.code).toBe(0);
+    const task2 = (JSON.parse(del2.stdout) as { task_id: string }).task_id;
+    const deadline2 = Date.now() + 25_000;
+    let state2 = "";
+    while (Date.now() < deadline2) {
+      const status = await runCli(["status", task2, "--json"], home);
+      if (status.code === 0) {
+        const row = JSON.parse(status.stdout) as { state: string };
+        state2 = row.state;
+        if (row.state === "completed" || row.state === "failed") break;
+      }
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    expect(state2).toBe("completed");
+    expect(fs.statSync(mirrorPath).ino).toBe(mirrorIno);
+    expect(fs.readdirSync(clonesDir).length).toBe(1);
+  }, 60_000);
+
+  it("unresolvable base_sha fails at claim time without spawning vendor", async () => {
+    const boot = await runCli(["daemon", "start"], home, {
+      extraEnv: {
+        PARLEY_LONG_POLL_MS: "300",
+        PARLEY_RUNNER_PRESENCE_GRACE_MS: "400",
+      },
+    });
+    expect(boot.code).toBe(0);
+    await waitFor(
+      () => fs.existsSync(path.join(home, "daemon.json")),
+      "daemon discovery",
+    );
+    const discovery = JSON.parse(
+      fs.readFileSync(path.join(home, "daemon.json"), "utf8"),
+    ) as { port: number; url?: string };
+    const daemonUrl =
+      discovery.url ?? `http://127.0.0.1:${discovery.port}`;
+
+    const bare = fs.mkdtempSync(path.join(os.tmpdir(), "parley-bare-origin-"));
+    repos.push(bare);
+    execFileSync("git", ["init", "--bare", "-b", "main"], {
+      cwd: bare,
+      stdio: "ignore",
+    });
+    const repo = makeGitRepo(
+      [
+        {
+          submit_report: {
+            summary: "should not run",
+            outcome: "success",
+            files_changed: [],
+          },
+        },
+      ],
+      {},
+      { origin: bare },
+    );
+    repos.push(repo);
+    git(repo, ["push", "-u", "origin", "main"]);
+
+    startRunner({
+      home,
+      name: "gpu",
+      token: "secret-gpu",
+      daemonUrl,
+      repos: {},
+    });
+    await waitForRunnerOnline(home, "gpu");
+
+    // Delegate with a base ref that will not exist on the runner's fetch of origin.
+    // Use a non-existent base_ref so base_sha resolution at create may fail OR
+    // we force an impossible sha via a branch that is never pushed.
+    // Create a local-only commit sha, record it as base, but never push it to bare.
+    fs.writeFileSync(path.join(repo, "only-local.txt"), "local\n");
+    git(repo, ["add", "only-local.txt"]);
+    git(repo, ["commit", "-m", "local only"]);
+    const localOnlySha = git(repo, ["rev-parse", "HEAD"]);
+    // Reset origin/main knowledge: the bare still has the previous commit only.
+
+    const del = await runCli(
+      [
+        "delegate",
+        "-v",
+        "fake",
+        "--runner",
+        "gpu",
+        "--base-ref",
+        localOnlySha,
+        "unreachable base",
+      ],
+      home,
+      { cwd: repo },
+    );
+    expect(del.code).toBe(0);
+    const taskId = (JSON.parse(del.stdout) as { task_id: string }).task_id;
+
+    const deadline = Date.now() + 20_000;
+    let row: { state: string; error: string | null } | null = null;
+    while (Date.now() < deadline) {
+      const status = await runCli(["status", taskId, "--json"], home);
+      if (status.code === 0) {
+        row = JSON.parse(status.stdout) as { state: string; error: string | null };
+        if (row.state === "failed" || row.state === "completed") break;
+      }
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    expect(row?.state).toBe("failed");
+    expect(row?.error ?? "").toMatch(/base_sha not resolvable from origin/);
+    // Vendor never spawned — no vendor log with hello/session.
+    const logPath = path.join(home, "tasks", taskId, "vendor.jsonl");
+    if (fs.existsSync(logPath)) {
+      expect(fs.readFileSync(logPath, "utf8")).not.toMatch(/hello|should not run|session/);
+    }
+  }, 40_000);
+
+  it("denied push fails at claim time without spawning vendor", async () => {
+    const boot = await runCli(["daemon", "start"], home, {
+      extraEnv: {
+        PARLEY_LONG_POLL_MS: "300",
+        PARLEY_RUNNER_PRESENCE_GRACE_MS: "400",
+      },
+    });
+    expect(boot.code).toBe(0);
+    await waitFor(
+      () => fs.existsSync(path.join(home, "daemon.json")),
+      "daemon discovery",
+    );
+    const discovery = JSON.parse(
+      fs.readFileSync(path.join(home, "daemon.json"), "utf8"),
+    ) as { port: number; url?: string };
+    const daemonUrl =
+      discovery.url ?? `http://127.0.0.1:${discovery.port}`;
+
+    const bare = fs.mkdtempSync(path.join(os.tmpdir(), "parley-bare-origin-"));
+    repos.push(bare);
+    execFileSync("git", ["init", "--bare", "-b", "main"], {
+      cwd: bare,
+      stdio: "ignore",
+    });
+    const repo = makeGitRepo(
+      [
+        {
+          submit_report: {
+            summary: "should not run",
+            outcome: "success",
+            files_changed: [],
+          },
+        },
+      ],
+      {},
+      { origin: bare },
+    );
+    repos.push(repo);
+    // Seed main before installing a deny hook (and pin hooksPath — global
+    // core.hooksPath would otherwise ignore the bare's hooks/).
+    git(repo, ["push", "-u", "origin", "main"]);
+    git(bare, ["config", "core.hooksPath", path.join(bare, "hooks")]);
+    const hooks = path.join(bare, "hooks");
+    fs.mkdirSync(hooks, { recursive: true });
+    const hook = path.join(hooks, "pre-receive");
+    fs.writeFileSync(hook, "#!/bin/sh\necho DENIED_BY_HOOK >&2\nexit 1\n");
+    fs.chmodSync(hook, 0o755);
+
+    startRunner({
+      home,
+      name: "gpu",
+      token: "secret-gpu",
+      daemonUrl,
+      repos: {},
+    });
+    await waitForRunnerOnline(home, "gpu");
+
+    const del = await runCli(
+      ["delegate", "-v", "fake", "--runner", "gpu", "push will fail"],
+      home,
+      { cwd: repo },
+    );
+    expect(del.code).toBe(0);
+    const taskId = (JSON.parse(del.stdout) as { task_id: string }).task_id;
+
+    const deadline = Date.now() + 20_000;
+    let row: { state: string; error: string | null } | null = null;
+    while (Date.now() < deadline) {
+      const status = await runCli(["status", taskId, "--json"], home);
+      if (status.code === 0) {
+        row = JSON.parse(status.stdout) as { state: string; error: string | null };
+        if (row.state === "failed" || row.state === "completed") break;
+      }
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    expect(row?.state).toBe("failed");
+    expect(row?.error ?? "").toMatch(/push denied at claim time/);
+    const logPath = path.join(home, "tasks", taskId, "vendor.jsonl");
+    if (fs.existsSync(logPath)) {
+      expect(fs.readFileSync(logPath, "utf8")).not.toMatch(/hello|should not run/);
+    }
+  }, 40_000);
 
   it("re-fingerprint reflects vendor capability changes without restart", async () => {
     // Unit-level re-fingerprint is covered in runner/tests; here exercise the
