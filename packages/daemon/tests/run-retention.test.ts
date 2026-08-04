@@ -1034,9 +1034,9 @@ describe("migration #244", () => {
 
     // Pre-#244 schema: every migration before the deliverables rebuild.
     // Migrations after #244 (#240 inbox, #243 run eval, #249 base, #314
-    // runners, #313 repo identity, #315 routing + placement, #317 git-auth)
-    // → SCHEMA_VERSION - 10.
-    const prev = openDatabaseUpTo(homePaths(home), SCHEMA_VERSION - 10);
+    // runners, #313 repo identity, #315 routing + placement, #317 git-auth,
+    // #329 capabilities_updated_at) → SCHEMA_VERSION - 11.
+    const prev = openDatabaseUpTo(homePaths(home), SCHEMA_VERSION - 11);
     const now = new Date().toISOString();
     prev
       .prepare(

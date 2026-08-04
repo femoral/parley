@@ -62,7 +62,36 @@ function formatTable(runners: RunnerListEntry[]): string {
   return `${lines.join("\n")}\n`;
 }
 
-function formatShow(detail: RunnerShowResponse): string {
+/**
+ * Show payload with #329 advertisement freshness. Core type lacks the fields;
+ * daemon always sends them (null for pre-migration rows).
+ */
+type RunnerShowDetail = RunnerShowResponse & {
+  capabilities_updated_at?: string | null;
+  advertisement_age_ms?: number | null;
+};
+
+/** Render advertisement age; null/missing → "unknown" (pre-migration rows). */
+export function formatAdvertisementAge(
+  ageMs: number | null | undefined,
+  capabilitiesUpdatedAt?: string | null,
+): string {
+  if (ageMs !== null && ageMs !== undefined && Number.isFinite(ageMs)) {
+    return formatAgeMs(ageMs);
+  }
+  if (
+    typeof capabilitiesUpdatedAt === "string" &&
+    capabilitiesUpdatedAt !== ""
+  ) {
+    const ms = Date.parse(capabilitiesUpdatedAt);
+    if (Number.isFinite(ms)) {
+      return formatAgeMs(Math.max(0, Date.now() - ms));
+    }
+  }
+  return "unknown";
+}
+
+function formatShow(detail: RunnerShowDetail): string {
   const lines: string[] = [];
   lines.push(`name:               ${detail.name}`);
   lines.push(`status:             ${detail.status}`);
@@ -74,6 +103,13 @@ function formatShow(detail: RunnerShowResponse): string {
   );
   lines.push(
     `last_contact:       ${formatAgeMs(detail.last_contact_age_ms)}`,
+  );
+  // #329: advertisement age is independent of last_contact (presence).
+  lines.push(
+    `advertisement:      ${formatAdvertisementAge(
+      detail.advertisement_age_ms,
+      detail.capabilities_updated_at,
+    )}`,
   );
 
   lines.push("");
@@ -163,6 +199,9 @@ async function runnersList(ctx: CliContext, args: string[]): Promise<number> {
   return 0;
 }
 
+/** @internal exported for unit tests of #329 null/unknown rendering. */
+export { formatShow };
+
 async function runnersShow(ctx: CliContext, args: string[]): Promise<number> {
   const { positionals, flags } = parseArgs(args, {
     "--json": {},
@@ -177,9 +216,9 @@ async function runnersShow(ctx: CliContext, args: string[]): Promise<number> {
 
   const json = flags["--json"] === true;
   const discovery = await ensureDaemon(ctx.paths, ctx.env);
-  let body: RunnerShowResponse;
+  let body: RunnerShowDetail;
   try {
-    body = await daemonGet<RunnerShowResponse>(
+    body = await daemonGet<RunnerShowDetail>(
       discovery,
       `/runners/${encodeURIComponent(name)}`,
     );

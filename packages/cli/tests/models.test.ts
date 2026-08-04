@@ -569,3 +569,12 @@ describe("parley models — two clients, one daemon (#322)", () => {
     expect(fs.existsSync(path.join(client, "models.json"))).toBe(false);
   });
 });
+
+describe("models refresh advertisement age label (#329)", () => {
+  it("formats finite ages and unknown for null pre-migration rows", async () => {
+    const { formatAdvertisementAgeLabel } = await import("../src/commands/models.js");
+    expect(formatAdvertisementAgeLabel(12_000)).toBe("12s ago");
+    expect(formatAdvertisementAgeLabel(null)).toBe("unknown");
+    expect(formatAdvertisementAgeLabel(undefined)).toBe("unknown");
+  });
+});

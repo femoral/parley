@@ -900,6 +900,10 @@ const MIGRATIONS: string[] = [
   // re-register. error_category: JSON TaskErrorCategory beside tasks.error.
   `ALTER TABLE runners ADD COLUMN unreachable_repos TEXT;
    ALTER TABLE tasks ADD COLUMN error_category TEXT;`,
+  // #329: last successful capabilities advertisement time. Distinct from
+  // last_seen (presence: lease polls / heartbeats / task traffic). Nullable
+  // so pre-migration rows render as unknown rather than epoch-age.
+  `ALTER TABLE runners ADD COLUMN capabilities_updated_at TEXT;`,
 ];
 
 /** How many schema migrations have been applied — equals `PRAGMA user_version` after open. */
@@ -2711,6 +2715,13 @@ export interface RunnerRow {
   registered_at: string;
   last_seen: string;
   /**
+   * ISO-8601 of the most recent successful registration upsert (#329).
+   * "When did this runner last tell us what it can do." Refreshed on every
+   * register (including byte-identical capabilities); never by last_seen
+   * touch points. Null for pre-migration rows.
+   */
+  capabilities_updated_at: string | null;
+  /**
    * ISO-8601 of the most recent task completion on this runner (#315 warm
    * executor preference). Null until the first completion after registration.
    */
@@ -2723,7 +2734,8 @@ export interface RunnerRow {
 }
 
 const RUNNER_COLUMNS = `name, capabilities, protocol_version, build_version,
-   registered_at, last_seen, last_completed_at, unreachable_repos`;
+   registered_at, last_seen, capabilities_updated_at, last_completed_at,
+   unreachable_repos`;
 
 /** Parse `runners.unreachable_repos` JSON; corrupt / null → empty map. */
 export function parseUnreachableRepos(
@@ -2776,8 +2788,11 @@ export function listRunners(db: DatabaseHandle): RunnerRow[] {
 /**
  * Idempotent upsert of a runner registration. On first insert `registered_at`
  * is set; on re-register it is preserved and last_seen / capabilities refresh.
- * Re-registration **clears** `unreachable_repos` so eligibility is restored
- * after restart or periodic re-fingerprint (#317).
+ * `capabilities_updated_at` is set on every successful upsert — including when
+ * the advertised capabilities are byte-identical — so a live re-fingerprint
+ * timer is distinguishable from mere presence (#329). Re-registration also
+ * **clears** `unreachable_repos` so eligibility is restored after restart or
+ * periodic re-fingerprint (#317).
  */
 export function upsertRunner(
   db: DatabaseHandle,
@@ -2794,8 +2809,8 @@ export function upsertRunner(
     db.prepare(
       `INSERT INTO runners
          (name, capabilities, protocol_version, build_version, registered_at, last_seen,
-          unreachable_repos)
-       VALUES (?, ?, ?, ?, ?, ?, NULL)`,
+          capabilities_updated_at, unreachable_repos)
+       VALUES (?, ?, ?, ?, ?, ?, ?, NULL)`,
     ).run(
       runner.name,
       runner.capabilities,
@@ -2803,17 +2818,19 @@ export function upsertRunner(
       runner.build_version,
       now,
       now,
+      now,
     );
   } else {
     db.prepare(
       `UPDATE runners
        SET capabilities = ?, protocol_version = ?, build_version = ?, last_seen = ?,
-           unreachable_repos = NULL
+           capabilities_updated_at = ?, unreachable_repos = NULL
        WHERE name = ?`,
     ).run(
       runner.capabilities,
       runner.protocol_version,
       runner.build_version,
+      now,
       now,
       runner.name,
     );
@@ -2858,7 +2875,10 @@ export function markRunnerUnreachable(
   );
 }
 
-/** Refresh last_seen only (presence / long-poll / task-traffic contact). */
+/**
+ * Refresh last_seen only (presence / long-poll / task-traffic contact).
+ * Does **not** touch `capabilities_updated_at` (#329).
+ */
 export function touchRunnerLastSeen(db: DatabaseHandle, name: string): void {
   const now = new Date().toISOString();
   db.prepare(`UPDATE runners SET last_seen = ? WHERE name = ?`).run(now, name);
