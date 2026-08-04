@@ -98,6 +98,11 @@ vi.mock("../src/app/hooks/useHealth.js", () => ({
   }),
 }));
 
+vi.mock("../src/app/hooks/useRunners.js", () => ({
+  useRunners: () => ({ status: "online" as const, runners: [] }),
+  fetchRunnersList: async () => [],
+}));
+
 vi.mock("../src/app/hooks/useTaskDetail.js", () => ({
   useTaskDetail: () => null,
 }));

@@ -21,6 +21,7 @@ import type {
   RosterTask,
 } from "../../hud/types.js";
 import { toDisplayTask } from "./displayTask.js";
+import { formatExecutorLabel } from "./executors.js";
 import { formatRunChip } from "./runs.js";
 
 /**
@@ -80,6 +81,11 @@ export interface RosterTaskInput {
   iteration?: number | null;
   /** Run address slot. */
   slot?: string | null;
+  /**
+   * Remote runner affinity / claim name from wire `runner` (#324).
+   * Null/absent = daemon-local execution.
+   */
+  runner?: string | null;
 }
 
 /**
@@ -357,6 +363,8 @@ function toRosterTask(
       iteration: task.iteration,
       slot: task.slot,
     }),
+    // Executor host name for task-card attribution (#324).
+    executor: formatExecutorLabel(task.runner),
   };
 }
 

@@ -3,6 +3,7 @@ import {
   Cartouche,
   ChartKey,
   DayChip,
+  ExecutorsPanel,
   HealthPanel,
   InboxPanel,
   Inspector,
@@ -34,6 +35,8 @@ export function Cockpit() {
   const {
     health,
     snapshot,
+    executors,
+    executorsConnecting,
     roster,
     clock,
     day,
@@ -176,6 +179,7 @@ export function Cockpit() {
 
           <aside id="pc-status-stack" className="pc-region--right" aria-label="Status stack" tabIndex={-1}>
             <HealthPanel health={health} />
+            <ExecutorsPanel executors={executors} connecting={executorsConnecting} />
             <InboxPanel
               tasks={snapshot.inbox}
               onSelectTask={roster.selectInboxTask}

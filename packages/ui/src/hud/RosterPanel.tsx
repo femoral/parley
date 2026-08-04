@@ -352,9 +352,10 @@ function TaskRow({
     showAttentionAge(groupState, task.freshFailure) && task.updatedAt
       ? formatRelativeAge(task.updatedAt, nowMs)
       : null;
+  const executor = task.executor ?? null;
   const accessibleName = age
-    ? `${task.name} — ${meta.label}, ${age}`
-    : `${task.name} — ${meta.label}`;
+    ? `${task.name} — ${meta.label}, ${age}${executor ? `, on ${executor}` : ""}`
+    : `${task.name} — ${meta.label}${executor ? `, on ${executor}` : ""}`;
   const { branch, idRef } = metaBranchAndId(task.meta, task.id);
   const splitId = task.meta.includes(" · ");
   const runChip = task.runChip ?? null;
@@ -390,6 +391,16 @@ function TaskRow({
           )}
           <span className="pc-visually-hidden">task id {task.id}</span>
         </span>
+        {executor && (
+          <span
+            className="pc-roster__executor"
+            data-testid={`task-executor-${task.id}`}
+            title={`Executor: ${executor}`}
+            aria-hidden="true"
+          >
+            {executor}
+          </span>
+        )}
       </span>
       {age && (
         <span className="pc-roster__age" title={task.updatedAt ?? undefined} aria-hidden="true">

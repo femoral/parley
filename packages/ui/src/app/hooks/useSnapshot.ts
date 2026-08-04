@@ -80,6 +80,9 @@ function fromEnvelope(task: TaskEnvelope): RosterTaskInput {
     node: task.node ?? null,
     iteration: task.iteration ?? null,
     slot: task.slot ?? null,
+    // Executor affinity / claim for roster + executors panel (#324).
+    // Preserve undefined when the wire omits the field so merge can keep prior.
+    runner: task.runner !== undefined ? (task.runner ?? null) : undefined,
   };
 }
 
@@ -104,6 +107,9 @@ function mergeEnvelope(prev: RosterTaskInput | undefined, event: StreamEvent): R
     node: next.node ?? prev?.node ?? null,
     iteration: next.iteration ?? prev?.iteration ?? null,
     slot: next.slot ?? prev?.slot ?? null,
+    // Keep prior executor when a partial envelope omits runner (#324).
+    // Explicit null (local) wins; undefined (omitted) keeps prior.
+    runner: next.runner !== undefined ? next.runner : (prev?.runner ?? null),
   };
 }
 

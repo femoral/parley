@@ -64,6 +64,8 @@ function daemonProxy(): Record<string, ProxyOptions> | undefined {
     "/health",
     "/runs",
     "/deliverables",
+    // Executor fleet for the Cove executors panel (#324).
+    "/runners",
   ];
   return Object.fromEntries(routes.map((route) => [route, { target }]));
 }
@@ -173,12 +175,29 @@ function preloadCriticalFonts(): Plugin {
  *    the woff2 into `www/assets`. Nothing is ever fetched from a CDN at runtime.
  *  - `.woff` fallbacks are stripped at emit time (see {@link stripWoffFallback}).
  *  - Critical faces are preloaded into `index.html` (see {@link preloadCriticalFonts}).
+ *  - `node:path` / `node:os` alias to tiny browser shims so incomplete tree-shaking
+ *    of `@useparley/core` (e.g. vendor-home top-level path.join) does not crash
+ *    the client. No new deps.
  */
 export default defineConfig(() => {
   const proxy = daemonProxy();
+  const shimDir = path.resolve(import.meta.dirname, "src/shims");
+  // Vitest inherits this config; keep real Node path/os for test filesystem
+  // helpers (resolve/readFileSync). Shims are for the browser client only.
+  const isVitest = process.env.VITEST === "true";
   return {
     plugins: [react(), stripWoffFallback(), preloadCriticalFonts()],
     base: "/",
+    resolve: {
+      alias: isVitest
+        ? []
+        : [
+            { find: /^node:path$/, replacement: path.join(shimDir, "path.ts") },
+            { find: /^path$/, replacement: path.join(shimDir, "path.ts") },
+            { find: /^node:os$/, replacement: path.join(shimDir, "os.ts") },
+            { find: /^os$/, replacement: path.join(shimDir, "os.ts") },
+          ],
+    },
     server: { proxy },
     preview: { proxy },
     build: {

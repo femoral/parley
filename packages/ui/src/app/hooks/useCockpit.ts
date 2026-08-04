@@ -11,6 +11,10 @@ import type {
 } from "../../hud/types.js";
 import type { InspectorTabKey } from "../../hud/Inspector/index.js";
 import { formatClock, formatUptime } from "./format.js";
+import {
+  projectExecutors,
+  type ExecutorCardView,
+} from "./executors.js";
 import { useHealth, type HealthStatus } from "./useHealth.js";
 import { projectInspector } from "./inspector.js";
 import { metricsRefreshKey, projectSoundings } from "./metrics.js";
@@ -26,6 +30,7 @@ import { useEvalFilters } from "./useEvalFilters.js";
 import { useLogTail } from "./useLogTail.js";
 import { useMetrics } from "./useMetrics.js";
 import { useInspectorRun, useRuns } from "./useRuns.js";
+import { useRunners } from "./useRunners.js";
 import { useSettings, type SettingsView } from "./useSettings.js";
 import { useSnapshot, type SnapshotView } from "./useSnapshot.js";
 import { useTaskDetail } from "./useTaskDetail.js";
@@ -219,6 +224,13 @@ export interface CockpitView {
    * recent-N subset (#88); older sessions come from {@link RosterSelection.searchSessions}.
    */
   snapshot: SnapshotView;
+  /**
+   * Executor fleet for the right-rail panel (#324): daemon card always present,
+   * then registered runners with live status and in-flight counts.
+   */
+  executors: ExecutorCardView[];
+  /** True until the first `GET /runners` poll settles. */
+  executorsConnecting: boolean;
   roster: RosterSelection;
   /** Wall-clock `HH:MM` for the day chip. */
   clock: string;
@@ -271,6 +283,7 @@ export function useCockpit(): CockpitView {
   const client = useMemo(() => new ParleyClient({ baseUrl: "" }), []);
   const health = useHealth(client);
   const live = useSnapshot(client);
+  const runners = useRunners(client);
   const settings = useSettings();
   const chartStale = useChartStale(live.connected, health.online);
   // Inbox count is the awaiting_answer (and any other question-bearing) tally.
@@ -587,6 +600,20 @@ export function useCockpit(): CockpitView {
     durableSessions: live.durableSessions,
   };
 
+  // Executor fleet (#324): daemon always present; runners from GET /runners;
+  // in-flight counts from running tasks grouped by wire `runner`.
+  const executorsConnecting = runners.status === "connecting";
+  const executors = useMemo(
+    () =>
+      projectExecutors({
+        runners: runners.runners,
+        tasks: live.tasks,
+        daemonOnline: health.online,
+        connecting: executorsConnecting,
+      }),
+    [runners.runners, live.tasks, health.online, executorsConnecting],
+  );
+
   const daemonUptimeDays =
     health.startedAt !== null
       ? deriveVoyageDay(health.startedAt, now)
@@ -674,6 +701,8 @@ export function useCockpit(): CockpitView {
   return {
     health: healthView,
     snapshot,
+    executors,
+    executorsConnecting,
     roster,
     clock: formatClock(new Date(now)),
     day,

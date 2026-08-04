@@ -164,6 +164,118 @@
   animation: pc-beacon 1.8s ease-in-out infinite;
 }
 
+/* ── Executors panel (#324) ────────────────────────────────────────────── */
+.pc-executors__body {
+  padding-top: 4px;
+  padding-bottom: 10px;
+}
+.pc-executors__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.pc-executors__empty {
+  margin: 0;
+  font-family: var(--font-flavor);
+  font-style: italic;
+  font-size: var(--text-flavor);
+  color: var(--ink-soft);
+}
+.pc-exec-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  border-radius: var(--radius-card);
+  border: 1px solid var(--brass-frame);
+  background: var(--wash-black-22);
+}
+.pc-exec-card--dim {
+  opacity: 0.78;
+}
+.pc-exec-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+.pc-exec-card__identity {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+.pc-exec-card__name {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--text-chrome);
+  letter-spacing: var(--track-micro);
+  color: var(--brass);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pc-exec-card__kind {
+  font-family: var(--font-body);
+  font-size: var(--text-label);
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: var(--ink-label);
+  flex: 0 0 auto;
+}
+.pc-exec-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--exec-chip-color, var(--healthy-dot));
+  background: var(--badge-bg);
+  color: var(--exec-chip-color, var(--healthy-text));
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: var(--text-label);
+  letter-spacing: 0.8px;
+  flex: 0 0 auto;
+}
+.pc-exec-card__body {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.pc-exec-card__row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+.pc-exec-card__k {
+  font-family: var(--font-body);
+  font-size: var(--text-label);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--ink-label);
+  flex: 0 0 auto;
+}
+.pc-exec-card__v {
+  font-family: var(--font-mono);
+  font-size: var(--text-meta);
+  color: var(--brass-soft);
+  text-align: right;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+.pc-exec-card__v--count {
+  color: var(--ink-parchment);
+}
+
 /* ── Roster ────────────────────────────────────────────────────────────── */
 .pc-roster {
   display: flex;
@@ -496,6 +608,27 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+/* Executor host attribution under the meta line (#324). Quiet mono label —
+   not a second faction chip; state legibility stays on the row badge. */
+.pc-roster__executor {
+  font-family: var(--font-mono);
+  font-size: var(--text-label);
+  letter-spacing: 0.4px;
+  color: var(--ink-label);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 1px;
+}
+.pc-roster__executor::before {
+  content: "on ";
+  font-family: var(--font-body);
+  font-size: var(--text-label);
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: var(--ink-label);
+  opacity: 0.85;
 }
 /* Quiet terminals (STATE_META.quiet) — token ink steps, not opacity.
    Ratios on plate wood #1d140c; see state-meta.ts for the full write-up. */
