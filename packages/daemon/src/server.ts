@@ -34,6 +34,7 @@ import {
   type RunnerShowResponse,
   type RunnerVendorCapability,
   type TaskEnvelope,
+  type TaskErrorCategory,
   type WorkflowDefinition,
 } from "@useparley/core";
 import { createAdapterRegistry } from "./adapters/index.js";
@@ -475,6 +476,31 @@ async function readBody(req: http.IncomingMessage): Promise<unknown> {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
+}
+
+/**
+ * Optional structured fail category (#317). Accepts only well-formed
+ * `git_auth` objects; anything else is treated as absent so plain fails
+ * keep working.
+ */
+function parseFailCategory(value: unknown): TaskErrorCategory | null {
+  if (!isRecord(value) || value.kind !== "git_auth") return null;
+  if (typeof value.operation !== "string" || value.operation === "") return null;
+  if (typeof value.code !== "string" || value.code === "") return null;
+  if (typeof value.runner !== "string" || value.runner === "") return null;
+  const repoKey =
+    value.repo_key === null || value.repo_key === undefined
+      ? null
+      : typeof value.repo_key === "string"
+        ? value.repo_key
+        : null;
+  return {
+    kind: "git_auth",
+    operation: value.operation as TaskErrorCategory["operation"],
+    code: value.code as TaskErrorCategory["code"],
+    repo_key: repoKey,
+    runner: value.runner,
+  };
 }
 
 function optionalString(value: unknown): string | null {
@@ -3097,8 +3123,11 @@ function createHandler(
             sendJson(res, 400, { error: "error is required" });
             return;
           }
+          // Optional structured category (#317) — invalid shapes are ignored
+          // (message still fails the task as a plain vendor-style error).
+          const category = parseFailCategory(body.category);
           try {
-            const row = engine.failRunnerTask(taskId, runnerName, body.error);
+            const row = engine.failRunnerTask(taskId, runnerName, body.error, category);
             touchRunnerLastSeen(db, runnerName);
             sendJson(res, 200, {
               task_id: row.id,

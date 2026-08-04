@@ -144,9 +144,10 @@ describe("migration #243", () => {
     fs.rmSync(home, { recursive: true, force: true });
     home = fs.mkdtempSync(path.join(os.tmpdir(), "parley-run-eval-mig-"));
     // Pre-#243 schema: migrations after #243 are #249 (base_ref/base_commit),
-    // #314 (runners table), #313 (repo identity), and #315 routing columns
-    // (queue_reason, deadline, placement), so the snapshot is SCHEMA_VERSION - 7.
-    const prev = openDatabaseUpTo(homePaths(home), SCHEMA_VERSION - 7);
+    // #314 (runners table), #313 (repo identity), #315 routing columns
+    // (queue_reason, deadline, placement), and #317 git-auth memory —
+    // so the snapshot is SCHEMA_VERSION - 8.
+    const prev = openDatabaseUpTo(homePaths(home), SCHEMA_VERSION - 8);
     const colsBefore = prev
       .prepare("PRAGMA table_info(runs)")
       .all()

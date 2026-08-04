@@ -445,6 +445,7 @@ describe("refreshFleetCatalog (unit)", () => {
       registered_at: string;
       last_seen: string;
       last_completed_at: string | null;
+      unreachable_repos: string | null;
     }>;
     db.close();
     dbs.pop();

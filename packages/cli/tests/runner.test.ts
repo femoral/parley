@@ -1005,11 +1005,235 @@ describe("runner registration + parley runners list", () => {
     }
     expect(row?.state).toBe("failed");
     expect(row?.error ?? "").toMatch(/push denied at claim time/);
+    // #317: structured git-auth category (distinct from vendor failures).
+    const cat = (
+      row as {
+        error_category?: {
+          kind: string;
+          operation: string;
+          code: string;
+          runner: string;
+          repo_key: string | null;
+        } | null;
+      }
+    ).error_category;
+    expect(cat?.kind).toBe("git_auth");
+    expect(cat?.operation).toBe("push");
+    expect(cat?.code).toBe("push_denied");
+    expect(cat?.runner).toBe("gpu");
+    // Local bare path origins yield null repo_key (#313); category still lands.
     const logPath = path.join(home, "tasks", taskId, "vendor.jsonl");
     if (fs.existsSync(logPath)) {
       expect(fs.readFileSync(logPath, "utf8")).not.toMatch(/hello|should not run/);
     }
+
+    // Human status/detail distinguishes git-auth from vendor.
+    const human = await runCli(["status", taskId], home);
+    expect(human.code).toBe(0);
+    expect(human.stdout).toMatch(/failed \[git-auth:push\]/);
+    expect(human.stdout).toMatch(/category:\s*git-auth \(push\)/);
+    expect(human.stdout).toMatch(/code:\s*push denied/);
   }, 40_000);
+
+  it("git-auth fail-once-then-avoid: second task skips runner until re-register (#317)", async () => {
+    // Network-style origin so tasks get a real repo_key (pairing key for
+    // avoidance). Map it to a local bare with a deny hook via insteadOf so
+    // git still pushes locally.
+    const ORIGIN = "https://github.com/org/denied-repo.git";
+    const REPO_KEY = "github.com/org/denied-repo";
+
+    fs.writeFileSync(
+      path.join(home, "parley.json"),
+      JSON.stringify(
+        withFakeAllowlist({
+          runners: {
+            gpu: { token: "secret-gpu" },
+            cpu: { token: "secret-cpu" },
+          },
+        }),
+      ),
+    );
+
+    const bare = fs.mkdtempSync(path.join(os.tmpdir(), "parley-bare-deny-"));
+    repos.push(bare);
+    execFileSync("git", ["init", "--bare", "-b", "main"], {
+      cwd: bare,
+      stdio: "ignore",
+    });
+    const bareUrl = pathToFileURL(bare).href;
+    const insteadEnv: NodeJS.ProcessEnv = {
+      GIT_CONFIG_COUNT: "1",
+      GIT_CONFIG_KEY_0: `url.${bareUrl}.insteadOf`,
+      GIT_CONFIG_VALUE_0: ORIGIN,
+    };
+
+    // Build the working repo first and push HEAD to bare *before* the deny
+    // hook so claim-time base_sha resolves; only the preflight push is denied.
+    const repo = makeGitRepo(
+      [
+        {
+          submit_report: {
+            summary: "ok from cpu",
+            outcome: "success",
+            files_changed: [],
+          },
+        },
+      ],
+      {},
+      { origin: ORIGIN },
+    );
+    repos.push(repo);
+    execFileSync("git", ["-C", repo, "push", "-u", "origin", "HEAD:main"], {
+      stdio: "ignore",
+      env: { ...process.env, ...insteadEnv },
+    });
+
+    git(bare, ["config", "core.hooksPath", path.join(bare, "hooks")]);
+    const hooks = path.join(bare, "hooks");
+    fs.mkdirSync(hooks, { recursive: true });
+    fs.writeFileSync(
+      path.join(hooks, "pre-receive"),
+      "#!/bin/sh\necho DENIED_BY_HOOK >&2\nexit 1\n",
+    );
+    fs.chmodSync(path.join(hooks, "pre-receive"), 0o755);
+
+    const boot = await runCli(["daemon", "start"], home, {
+      extraEnv: {
+        PARLEY_LONG_POLL_MS: "300",
+        PARLEY_RUNNER_PRESENCE_GRACE_MS: "400",
+        // Local has no fake → remote-only routing.
+        PARLEY_FAKE_VENDOR_BIN: "",
+        ...insteadEnv,
+      },
+    });
+    expect(boot.code).toBe(0);
+    await waitFor(
+      () => fs.existsSync(path.join(home, "daemon.json")),
+      "daemon discovery",
+    );
+    const discovery = JSON.parse(
+      fs.readFileSync(path.join(home, "daemon.json"), "utf8"),
+    ) as { port: number; url?: string };
+    const daemonUrl =
+      discovery.url ?? `http://127.0.0.1:${discovery.port}`;
+
+    startRunner({
+      home,
+      name: "gpu",
+      token: "secret-gpu",
+      daemonUrl,
+      repos: {},
+      extraEnv: insteadEnv,
+    });
+    await waitForRunnerOnline(home, "gpu");
+
+    const del1 = await runCli(
+      ["delegate", "-v", "fake", "--runner", "gpu", "first fail git-auth"],
+      home,
+      { cwd: repo, extraEnv: insteadEnv },
+    );
+    expect(del1.code).toBe(0);
+    const task1 = (JSON.parse(del1.stdout) as { task_id: string }).task_id;
+
+    type StatusSnap = {
+      state: string;
+      error: string | null;
+      runner?: string | null;
+      repo_key?: string | null;
+      error_category?: { kind?: string; repo_key?: string | null } | null;
+    };
+
+    const deadline1 = Date.now() + 25_000;
+    let row1: StatusSnap | null = null;
+    while (Date.now() < deadline1) {
+      const status = await runCli(["status", task1, "--json"], home);
+      if (status.code === 0) {
+        row1 = JSON.parse(status.stdout) as StatusSnap;
+        if (row1.state === "failed" || row1.state === "completed") break;
+      }
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    expect(row1?.state).toBe("failed");
+    expect(row1?.error ?? "").toMatch(/push denied at claim time/);
+    expect(row1?.repo_key).toBe(REPO_KEY);
+    expect(row1?.error_category?.kind).toBe("git_auth");
+    expect(row1?.error_category?.repo_key).toBe(REPO_KEY);
+
+    // Remove deny hook so cpu (and later re-registered gpu) can succeed.
+    fs.unlinkSync(path.join(hooks, "pre-receive"));
+
+    startRunner({
+      home,
+      name: "cpu",
+      token: "secret-cpu",
+      daemonUrl,
+      repos: {},
+      extraEnv: insteadEnv,
+    });
+    await waitForRunnerOnline(home, "cpu");
+
+    const del2 = await runCli(
+      ["delegate", "-v", "fake", "second should skip gpu"],
+      home,
+      { cwd: repo, extraEnv: insteadEnv },
+    );
+    expect(del2.code).toBe(0);
+    const task2 = (JSON.parse(del2.stdout) as { task_id: string }).task_id;
+
+    const deadline2 = Date.now() + 40_000;
+    let row2: StatusSnap | null = null;
+    while (Date.now() < deadline2) {
+      const status = await runCli(["status", task2, "--json"], home);
+      if (status.code === 0) {
+        row2 = JSON.parse(status.stdout) as StatusSnap;
+        if (row2.state === "failed" || row2.state === "completed") break;
+      }
+      await new Promise((r) => setTimeout(r, 150));
+    }
+    // Must not re-fail on gpu with the same git-auth (avoidance working).
+    if (row2?.state === "failed") {
+      expect(row2.error ?? "").toMatch(/excluded|cannot reach/);
+      expect(row2.error ?? "").not.toMatch(/push denied at claim time/);
+    } else {
+      expect(row2?.state).toBe("completed");
+      expect(row2?.runner).toBe("cpu");
+    }
+
+    // Kill all runners; restart only gpu (re-register clears unreachability).
+    for (const child of children.splice(0)) {
+      if (!child.killed) child.kill("SIGTERM");
+    }
+    await new Promise((r) => setTimeout(r, 500));
+    startRunner({
+      home,
+      name: "gpu",
+      token: "secret-gpu",
+      daemonUrl,
+      repos: {},
+      extraEnv: insteadEnv,
+    });
+    await waitForRunnerOnline(home, "gpu");
+
+    const del3 = await runCli(
+      ["delegate", "-v", "fake", "--runner", "gpu", "after re-register"],
+      home,
+      { cwd: repo, extraEnv: insteadEnv },
+    );
+    expect(del3.code).toBe(0);
+    const task3 = (JSON.parse(del3.stdout) as { task_id: string }).task_id;
+    const deadline3 = Date.now() + 40_000;
+    let row3: StatusSnap | null = null;
+    while (Date.now() < deadline3) {
+      const status = await runCli(["status", task3, "--json"], home);
+      if (status.code === 0) {
+        row3 = JSON.parse(status.stdout) as StatusSnap;
+        if (row3.state === "failed" || row3.state === "completed") break;
+      }
+      await new Promise((r) => setTimeout(r, 150));
+    }
+    expect(row3?.state).toBe("completed");
+    expect(row3?.runner).toBe("gpu");
+  }, 120_000);
 
   it("re-fingerprint reflects vendor capability changes without restart", async () => {
     // Unit-level re-fingerprint is covered in runner/tests; here exercise the

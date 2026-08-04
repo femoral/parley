@@ -4,11 +4,13 @@ import readline from "node:readline";
 import {
   createLeaseHttpTransport,
   DEFAULT_RUNNER_REFINGERPRINT_MS,
+  gitAuthOperationForCode,
   homePathsFromEnv,
   readConfig,
   RUNNER_PROTOCOL_VERSION,
   TASK_HEADER,
   type ChildChannel,
+  type GitAuthErrorCategory,
   type HubInfo,
   type JsonSchema,
   type LeaseTransport,
@@ -357,7 +359,19 @@ export class RunnerLoop {
               ? err.message
               : String(err);
         this.log(`claim-time git failed for ${taskId}: ${msg}`);
-        await this.transport.fail(taskId, msg);
+        // Structured git-auth category (#317): daemon records routing memory
+        // and surfaces a distinct failure category from vendor crashes.
+        const category: GitAuthErrorCategory | null =
+          err instanceof ClaimGitError
+            ? {
+                kind: "git_auth",
+                operation: gitAuthOperationForCode(err.code),
+                code: err.code,
+                repo_key: lease.repo_key ?? null,
+                runner: this.options.config.name,
+              }
+            : null;
+        await this.transport.fail(taskId, msg, category);
         return;
       }
       repoLocal = prepared.repoLocal;

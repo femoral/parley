@@ -79,6 +79,11 @@ export interface TaskRow {
   /** JSON: the validated report body submitted via `submit_report`. */
   report: string | null;
   error: string | null;
+  /**
+   * JSON structured failure category (#317), e.g. git-auth detail. Null when
+   * unset or the fail was a plain vendor crash (message only).
+   */
+  error_category: string | null;
   started_at: string | null;
   completed_at: string | null;
   /** The outstanding `ask_orchestrator` question id while `awaiting_answer`. */
@@ -890,6 +895,11 @@ const MIGRATIONS: string[] = [
   // remote-routed row never flips to local when runners go offline (and --cwd
   // / workspace-bound never flip to remote on re-dispatch).
   `ALTER TABLE tasks ADD COLUMN placement TEXT;`,
+  // #317: git-auth failure category + fail-once-then-avoid routing memory.
+  // unreachable_repos: JSON map repo_key → {code, at, operation?}; cleared on
+  // re-register. error_category: JSON TaskErrorCategory beside tasks.error.
+  `ALTER TABLE runners ADD COLUMN unreachable_repos TEXT;
+   ALTER TABLE tasks ADD COLUMN error_category TEXT;`,
 ];
 
 /** How many schema migrations have been applied — equals `PRAGMA user_version` after open. */
@@ -966,7 +976,7 @@ export function openDatabaseUpTo(paths: HomePaths, upTo: number): DatabaseHandle
 
 const TASK_COLUMNS = `id, name, vendor, model, effort, profile, runner, repo, repo_key, repo_fetch_url,
    state, created_at, updated_at,
-   cwd, prompt, session_id, usage, report, error, started_at, completed_at,
+   cwd, prompt, session_id, usage, report, error, error_category, started_at, completed_at,
    question_id, question, worktree, branch, base_sha, sandbox, network,
    answer_timeout_ms, report_schema, seq, orchestrator_session_id, eval_score, eval_feedback,
    eval_answers, eval_rubric, eval_rubric_version, eval_baseline,
@@ -1491,6 +1501,9 @@ export function insertTask(db: DatabaseHandle, task: NewTask): TaskRow {
  * `pending` task whose vendor the executor advertises and whose hard affinity
  * is either unset or names this executor. Callers apply warm-executor ranking
  * and atomic transition; this is the pure SELECT half.
+ *
+ * Tasks whose `repo_key` is listed in `unreachableRepoKeys` are excluded
+ * (fail-once-then-avoid, #317). Null/`""` repo_key rows are never filtered.
  */
 export function listCapablePendingTasks(
   db: DatabaseHandle,
@@ -1498,11 +1511,15 @@ export function listCapablePendingTasks(
     executorName: string;
     /** Vendor ids this executor advertises. Empty ⇒ no candidates. */
     vendorIds: readonly string[];
+    /**
+     * Repo keys this executor cannot reach (#317). Omitted/empty ⇒ no filter.
+     */
+    unreachableRepoKeys?: readonly string[];
   },
 ): TaskRow[] {
   if (opts.vendorIds.length === 0) return [];
   const placeholders = opts.vendorIds.map(() => "?").join(", ");
-  return db
+  const rows = db
     .prepare(
       `SELECT ${TASK_COLUMNS} FROM tasks
        WHERE state = 'pending'
@@ -1513,6 +1530,12 @@ export function listCapablePendingTasks(
     )
     .all(...opts.vendorIds, opts.executorName)
     .map((row) => asRow<TaskRow>(row));
+  const blocked = opts.unreachableRepoKeys ?? [];
+  if (blocked.length === 0) return rows;
+  const blockedSet = new Set(blocked);
+  return rows.filter(
+    (t) => t.repo_key === null || t.repo_key === "" || !blockedSet.has(t.repo_key),
+  );
 }
 
 /**
@@ -1546,6 +1569,11 @@ export function selectClaimablePendingTask(
       vendorIds: readonly string[];
       last_completed_at: string | null;
     }>;
+    /**
+     * Repo keys this executor cannot reach (#317). Forwarded to
+     * {@link listCapablePendingTasks}.
+     */
+    unreachableRepoKeys?: readonly string[];
     /** Override clock for tests (ms since epoch). */
     nowMs?: number;
     /** Override reservation window for tests. */
@@ -1555,6 +1583,7 @@ export function selectClaimablePendingTask(
   const candidates = listCapablePendingTasks(db, {
     executorName: opts.executorName,
     vendorIds: opts.vendorIds,
+    unreachableRepoKeys: opts.unreachableRepoKeys,
   });
   if (candidates.length === 0) return undefined;
   const peers = opts.onlinePeers ?? [];
@@ -1670,6 +1699,7 @@ export type TaskDataPatch = Partial<
     | "usage"
     | "report"
     | "error"
+    | "error_category"
     | "started_at"
     | "completed_at"
     | "question_id"
@@ -2426,7 +2456,7 @@ const RUN_QUERY_RUN_COLUMNS = `id, workflow, version, type, workspace, repo, sta
 
 const RUN_QUERY_TASK_COLUMNS = `id, name, vendor, model, effort, profile, runner, repo, repo_key, repo_fetch_url,
    state, created_at, updated_at,
-   cwd, prompt, session_id, usage, report, error, started_at, completed_at,
+   cwd, prompt, session_id, usage, report, error, error_category, started_at, completed_at,
    question_id, question, worktree, branch, base_sha, sandbox, network,
    answer_timeout_ms, report_schema, seq, orchestrator_session_id, eval_score, eval_feedback,
    eval_answers, eval_rubric, eval_rubric_version, eval_baseline,
@@ -2610,6 +2640,22 @@ export function updateRunEval(
 
 // ─── Remote runners (ADR-0029 / #314) ───────────────────────────────────────
 
+/**
+ * One entry in a runner's fail-once-then-avoid map (#317): claim-time git
+ * failure recorded against a repo_key until re-registration clears it.
+ */
+export interface UnreachableRepoEntry {
+  /** Claim-time git failure code (`push_denied`, …). */
+  code: string;
+  /** ISO-8601 when the failure was recorded. */
+  at: string;
+  /** Optional operation bucket (`clone` | `fetch` | `push`). */
+  operation?: string;
+}
+
+/** `repo_key` → unreachability entry. Empty object / null column = no memory. */
+export type UnreachableReposMap = Record<string, UnreachableRepoEntry>;
+
 /** A registered remote runner row (capabilities JSON + timestamps). */
 export interface RunnerRow {
   name: string;
@@ -2624,10 +2670,47 @@ export interface RunnerRow {
    * executor preference). Null until the first completion after registration.
    */
   last_completed_at: string | null;
+  /**
+   * JSON map of repo_key → {@link UnreachableRepoEntry} (#317). Null/empty
+   * when the runner has no recorded unreachability. Cleared on re-register.
+   */
+  unreachable_repos: string | null;
 }
 
 const RUNNER_COLUMNS = `name, capabilities, protocol_version, build_version,
-   registered_at, last_seen, last_completed_at`;
+   registered_at, last_seen, last_completed_at, unreachable_repos`;
+
+/** Parse `runners.unreachable_repos` JSON; corrupt / null → empty map. */
+export function parseUnreachableRepos(
+  raw: string | null | undefined,
+): UnreachableReposMap {
+  if (raw === null || raw === undefined || raw === "") return {};
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+      return {};
+    }
+    const out: UnreachableReposMap = {};
+    for (const [key, value] of Object.entries(parsed as Record<string, unknown>)) {
+      if (typeof value !== "object" || value === null) continue;
+      const entry = value as Partial<UnreachableRepoEntry>;
+      if (typeof entry.code !== "string" || typeof entry.at !== "string") continue;
+      out[key] = {
+        code: entry.code,
+        at: entry.at,
+        ...(typeof entry.operation === "string" ? { operation: entry.operation } : {}),
+      };
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+/** Repo keys a runner cannot currently reach (#317). */
+export function unreachableRepoKeys(row: RunnerRow): string[] {
+  return Object.keys(parseUnreachableRepos(row.unreachable_repos));
+}
 
 /** Fetch one registered runner by name. */
 export function getRunner(db: DatabaseHandle, name: string): RunnerRow | undefined {
@@ -2648,6 +2731,8 @@ export function listRunners(db: DatabaseHandle): RunnerRow[] {
 /**
  * Idempotent upsert of a runner registration. On first insert `registered_at`
  * is set; on re-register it is preserved and last_seen / capabilities refresh.
+ * Re-registration **clears** `unreachable_repos` so eligibility is restored
+ * after restart or periodic re-fingerprint (#317).
  */
 export function upsertRunner(
   db: DatabaseHandle,
@@ -2663,8 +2748,9 @@ export function upsertRunner(
   if (existing === undefined) {
     db.prepare(
       `INSERT INTO runners
-         (name, capabilities, protocol_version, build_version, registered_at, last_seen)
-       VALUES (?, ?, ?, ?, ?, ?)`,
+         (name, capabilities, protocol_version, build_version, registered_at, last_seen,
+          unreachable_repos)
+       VALUES (?, ?, ?, ?, ?, ?, NULL)`,
     ).run(
       runner.name,
       runner.capabilities,
@@ -2676,7 +2762,8 @@ export function upsertRunner(
   } else {
     db.prepare(
       `UPDATE runners
-       SET capabilities = ?, protocol_version = ?, build_version = ?, last_seen = ?
+       SET capabilities = ?, protocol_version = ?, build_version = ?, last_seen = ?,
+           unreachable_repos = NULL
        WHERE name = ?`,
     ).run(
       runner.capabilities,
@@ -2687,6 +2774,26 @@ export function upsertRunner(
     );
   }
   return getRunner(db, runner.name)!;
+}
+
+/**
+ * Record that a runner cannot reach `repoKey` after a claim-time git failure
+ * (#317). Merges into the existing map (other keys preserved).
+ */
+export function markRunnerUnreachable(
+  db: DatabaseHandle,
+  name: string,
+  repoKey: string,
+  entry: UnreachableRepoEntry,
+): void {
+  const row = getRunner(db, name);
+  if (row === undefined) return;
+  const map = parseUnreachableRepos(row.unreachable_repos);
+  map[repoKey] = entry;
+  db.prepare(`UPDATE runners SET unreachable_repos = ? WHERE name = ?`).run(
+    JSON.stringify(map),
+    name,
+  );
 }
 
 /** Refresh last_seen only (presence / long-poll / task-traffic contact). */

@@ -27,6 +27,7 @@ function storageRow(partial: Partial<TaskRow> & { id: string }): TaskRow {
     usage: JSON.stringify({ input_tokens: 10, output_tokens: 4 }),
     report: null,
     error: null,
+    error_category: null,
     started_at: "2026-01-01T00:00:01.000Z",
     completed_at: null,
     question_id: null,
