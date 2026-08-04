@@ -1547,13 +1547,17 @@ export const WARM_CLAIM_RESERVATION_MS = 5_000;
 
 /**
  * Oldest pending task this executor may claim under capability matching
- * (#315 / #304).
+ * (#315 / #304 / #318).
  *
  * Hard-affinity pins always match when capable. Unpinned: within
  * {@link WARM_CLAIM_RESERVATION_MS} of `created_at`, only the warm-preferred
- * online peer (most recent completion, then name ASC) may claim; after the
- * window any capable online claimer may take the task. When the preferred
- * peer is not online, any capable claimer may take it immediately.
+ * online peer may claim; after the window any capable online claimer may take
+ * the task. When the preferred peer is not online, any capable claimer may
+ * take it immediately.
+ *
+ * Preference among capable online peers: warm-clone (holds the task's
+ * `repo_key` mirror) over warm-executor (most recent `last_completed_at`),
+ * then name ASC. Excluded peers (#317) never hold the reservation.
  */
 export function selectClaimablePendingTask(
   db: DatabaseHandle,
@@ -1574,6 +1578,11 @@ export function selectClaimablePendingTask(
        * hold the reservation for a task they will never claim.
        */
       unreachableRepoKeys?: readonly string[];
+      /**
+       * Repo keys for which this peer holds a managed mirror (#318).
+       * Warm-clone preference ranks holders above cold peers.
+       */
+      heldMirrors?: readonly string[];
     }>;
     /**
      * Repo keys this executor cannot reach (#317). Forwarded to
@@ -1618,7 +1627,7 @@ export function selectClaimablePendingTask(
     });
     if (capableOnline.length <= 1) return task;
 
-    const preferred = preferredWarmRunner(capableOnline);
+    const preferred = preferredWarmRunner(capableOnline, repoKey);
     if (preferred === null || preferred === opts.executorName) return task;
 
     const created = Date.parse(task.created_at);
@@ -1631,14 +1640,29 @@ export function selectClaimablePendingTask(
 }
 
 /**
- * Warm-preferred runner name among online peers: most recent completion first,
- * then name ASC. Null when the list is empty.
+ * Warm-preferred runner among online peers (#315 / #318):
+ * 1. Prefer peers that hold a mirror for `repoKey` (warm-clone)
+ * 2. Among the preferred set (or all peers when none hold the mirror), most
+ *    recent completion first, then name ASC.
+ * Null when the list is empty.
  */
 export function preferredWarmRunner(
-  peers: ReadonlyArray<{ name: string; last_completed_at: string | null }>,
+  peers: ReadonlyArray<{
+    name: string;
+    last_completed_at: string | null;
+    heldMirrors?: readonly string[];
+  }>,
+  repoKey: string | null = null,
 ): string | null {
   if (peers.length === 0) return null;
-  const ranked = [...peers].sort((a, b) => {
+  let pool = peers;
+  if (repoKey !== null && repoKey !== "") {
+    const withClone = peers.filter((p) =>
+      (p.heldMirrors ?? []).includes(repoKey),
+    );
+    if (withClone.length > 0) pool = withClone;
+  }
+  const ranked = [...pool].sort((a, b) => {
     const at = a.last_completed_at ? Date.parse(a.last_completed_at) : 0;
     const bt = b.last_completed_at ? Date.parse(b.last_completed_at) : 0;
     if (at !== bt) return bt - at;
@@ -1724,6 +1748,8 @@ export type TaskDataPatch = Partial<
     | "question"
     | "worktree"
     | "branch"
+    /** Claim-time resolved base commit; set when deferred mirror workspace is prepared (#318). */
+    | "base_sha"
     /** Cleared with worktree on clean so fix can tell cleaned wt from --cwd (#180). */
     | "cwd"
     | "eval_score"

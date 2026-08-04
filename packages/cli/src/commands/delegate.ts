@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { parseArgs } from "../args.js";
@@ -7,7 +8,9 @@ import { type CliContext, printJson } from "../context.js";
 import { UsageError } from "../errors.js";
 import { parseDuration } from "@useparley/core";
 import { SANDBOX_MODES, isSandboxMode } from "@useparley/daemon/adapters/types.js";
+import { resolveRepoIdentity } from "@useparley/daemon/repo-identity.js";
 import { CODE_SESSION_REQUIRED } from "@useparley/daemon/session-binding.js";
+import { repoRoot } from "@useparley/daemon/worktree.js";
 import { resolveExplicitSessionId } from "../session-state-match.js";
 
 interface DelegateAck {
@@ -215,6 +218,38 @@ export async function runDelegate(ctx: CliContext, args: string[]): Promise<numb
   });
   const workspaceRoot = resolveWorkspaceRoot(cwd);
 
+  // Client-side repo identity + base_sha for remote-daemon mirror path (#318).
+  // When the daemon host lacks this cwd, it uses these fields to execute from
+  // a managed mirror and push the branch back to origin.
+  let repoKey: string | null = null;
+  let repoFetchUrl: string | null = null;
+  let baseSha: string | null = null;
+  const useWorktree = !explicitCwd;
+  try {
+    if (fs.existsSync(cwd) && fs.statSync(cwd).isDirectory()) {
+      const identityRoot =
+        useWorktree ? (repoRoot(cwd) ?? cwd) : cwd;
+      const identity = resolveRepoIdentity(identityRoot);
+      repoKey = identity.key;
+      repoFetchUrl = identity.fetchUrl;
+      if (useWorktree) {
+        const baseRef =
+          typeof flags["--base-ref"] === "string" ? flags["--base-ref"] : "HEAD";
+        try {
+          baseSha = execFileSync(
+            "git",
+            ["-C", identityRoot, "rev-parse", baseRef],
+            { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] },
+          ).trim();
+        } catch {
+          baseSha = null;
+        }
+      }
+    }
+  } catch {
+    /* identity is best-effort on the client; daemon re-resolves when path exists */
+  }
+
   const discovery = await ensureDaemon(ctx.paths, ctx.env);
   let ack: DelegateAck;
   try {
@@ -226,7 +261,7 @@ export async function runDelegate(ctx: CliContext, args: string[]): Promise<numb
       effort: typeof flags["--effort"] === "string" ? flags["--effort"] : null,
       name: typeof flags["--name"] === "string" ? flags["--name"] : null,
       cwd,
-      use_worktree: !explicitCwd,
+      use_worktree: useWorktree,
       base_ref: typeof flags["--base-ref"] === "string" ? flags["--base-ref"] : null,
       answer_timeout_ms: answerTimeoutMs,
       report_schema: reportSchema,
@@ -244,6 +279,9 @@ export async function runDelegate(ctx: CliContext, args: string[]): Promise<numb
     if (sandbox !== undefined) body.sandbox = sandbox;
     if (networkExplicit !== undefined) body.network = networkExplicit;
     if (typeof flags["--runner"] === "string") body.runner = flags["--runner"];
+    if (repoKey !== null) body.repo_key = repoKey;
+    if (repoFetchUrl !== null) body.repo_fetch_url = repoFetchUrl;
+    if (baseSha !== null) body.base_sha = baseSha;
     ack = await daemonPost<DelegateAck>(discovery, "/tasks", body);
   } catch (err) {
     // Daemon-side request rejections (unknown vendor, bad cwd, session_required)

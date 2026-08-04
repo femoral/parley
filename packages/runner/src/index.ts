@@ -11,16 +11,22 @@ export {
 export {
   ClaimGitError,
   deleteRemoteBranchBestEffort,
+  dirSizeBytes,
   encodeFetchUrlForFs,
   encodeRepoKeyForFs,
   ensureMirror,
   isMirrorTempName,
   isPushDeniedDetail,
+  listHeldMirrorRepoKeys,
+  listManagedClones,
   mirrorPathFor,
   MIRROR_TEMP_PREFIX,
   prepareClaimRepo,
+  pruneUnusedClones,
+  pushTaskBranch,
   taskBranchName,
   type ClaimGitFailureCode,
+  type ManagedCloneInfo,
   type PreparedRepo,
 } from "./mirror.js";
 export { startHubProxy, type HubProxy } from "./hub-proxy.js";

@@ -131,6 +131,12 @@ export interface RunnerVendorCapability {
 /** Fingerprinted host capabilities shipped on register (ADR-0029). */
 export interface RunnerCapabilities {
   vendors: RunnerVendorCapability[];
+  /**
+   * Repo keys (`host/path`) for which this host holds a parley-managed bare
+   * mirror under `$PARLEY_HOME/clones/` (#318). Used for warm-clone routing
+   * preference. Optional so older runners remain valid on the wire.
+   */
+  held_mirrors?: string[];
 }
 
 /** POST /runner/register body. */

@@ -694,6 +694,11 @@ function handleDelegate(engine: TaskEngine, res: http.ServerResponse, body: unkn
     type = body.type;
   }
   const dryRun = body.dry_run === true;
+  // Client-resolved identity for remote-daemon mirror path (#318). Optional;
+  // when cwd exists on this host the engine re-resolves from the checkout.
+  const repoKey = optionalString(body.repo_key);
+  const repoFetchUrl = optionalString(body.repo_fetch_url);
+  const baseSha = optionalString(body.base_sha);
   try {
     const task = engine.delegate({
       prompt,
@@ -722,6 +727,9 @@ function handleDelegate(engine: TaskEngine, res: http.ServerResponse, body: unkn
       difficulty,
       type,
       dryRun,
+      repoKey,
+      repoFetchUrl,
+      baseSha,
     });
     // Multi-live fallback warning (#280) — CLI prints to stderr, not stdout JSON.
     const bindingWarning = engine.takeSessionBindingWarning();
@@ -887,7 +895,9 @@ export function classifyAuthRoute(method: string, pathname: string): AuthRouteCl
     // DELETE /runners/:name mutates runners.* config — loopback-only (#320).
     (method === "DELETE" &&
       segments[0] === "runners" &&
-      segments.length === 2)
+      segments.length === 2) ||
+    // POST /clones/prune removes disk mirrors — loopback / config-admin (#318).
+    (method === "POST" && pathname === "/clones/prune")
   ) {
     return "config-admin";
   }
@@ -3253,6 +3263,53 @@ function createHandler(
           projectRunnerListEntry(row, config),
         );
         sendJson(res, 200, { runners });
+        return;
+      }
+
+      // `GET /clones` — list managed mirrors with sizes + used flags (#318).
+      // Client class: readable off-loopback with a client token.
+      if (method === "GET" && url.pathname === "/clones") {
+        const clones = engine.listClones();
+        sendJson(res, 200, {
+          clones: clones.map((c) => ({
+            name: c.name,
+            path: c.path,
+            repo_key: c.repo_key,
+            fetch_url: c.fetch_url,
+            size_bytes: c.size_bytes,
+            used: c.used,
+          })),
+        });
+        return;
+      }
+
+      // `POST /clones/prune` — remove unused mirrors only (#318). Config-admin /
+      // loopback (classifyAuthRoute). Never auto-called.
+      if (method === "POST" && url.pathname === "/clones/prune") {
+        if (!loopback) {
+          sendJson(res, 403, {
+            error: "clones prune is only allowed from loopback",
+          });
+          return;
+        }
+        const result = engine.pruneClones();
+        sendJson(res, 200, {
+          removed: result.removed.map((c) => ({
+            name: c.name,
+            path: c.path,
+            repo_key: c.repo_key,
+            fetch_url: c.fetch_url,
+            size_bytes: c.size_bytes,
+          })),
+          kept: result.kept.map((c) => ({
+            name: c.name,
+            path: c.path,
+            repo_key: c.repo_key,
+            fetch_url: c.fetch_url,
+            size_bytes: c.size_bytes,
+            used: c.used,
+          })),
+        });
         return;
       }
 

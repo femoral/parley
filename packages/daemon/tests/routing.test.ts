@@ -308,6 +308,79 @@ describe("capability-matched claim SELECT", () => {
     });
     expect(forGpu.map((t) => t.id)).toEqual(["t1"]);
   });
+
+  it("warm-clone: runner holding the mirror wins over warmer executor (#318)", () => {
+    const db = openDb();
+    seedPending(db, { id: "t1", vendor: "fake", runner: null });
+    // cpu completed more recently (warm-executor favorite) but has no mirror.
+    // gpu holds the mirror for the task's repo_key.
+    const peers = [
+      {
+        name: "cpu",
+        vendorIds: ["fake"] as string[],
+        last_completed_at: "2026-08-03T14:00:00.000Z",
+        heldMirrors: [] as string[],
+      },
+      {
+        name: "gpu",
+        vendorIds: ["fake"] as string[],
+        last_completed_at: "2026-08-03T10:00:00.000Z",
+        heldMirrors: ["github.com/org/repo"],
+      },
+    ];
+    const created = Date.parse(getCreated(db, "t1"));
+
+    // Within reservation: cold-but-recent cpu cannot claim.
+    const forCpu = selectClaimablePendingTask(db, {
+      executorName: "cpu",
+      vendorIds: ["fake"],
+      onlinePeers: peers,
+      nowMs: created + 100,
+      reservationMs: 5_000,
+    });
+    expect(forCpu).toBeUndefined();
+
+    // Warm-clone peer claims.
+    const forGpu = selectClaimablePendingTask(db, {
+      executorName: "gpu",
+      vendorIds: ["fake"],
+      onlinePeers: peers,
+      nowMs: created + 100,
+      reservationMs: 5_000,
+    });
+    expect(forGpu?.id).toBe("t1");
+  });
+
+  it("warm-clone: excluded-but-warm does not hold reservation (#318/#317)", () => {
+    const db = openDb();
+    seedPending(db, { id: "t1", vendor: "fake", runner: null });
+    // gpu holds the mirror but is excluded for this repo_key.
+    // cpu is cold and has no mirror — still claimable because preferred is excluded.
+    const peers = [
+      {
+        name: "gpu",
+        vendorIds: ["fake"] as string[],
+        last_completed_at: "2026-08-03T14:00:00.000Z",
+        heldMirrors: ["github.com/org/repo"],
+        unreachableRepoKeys: ["github.com/org/repo"],
+      },
+      {
+        name: "cpu",
+        vendorIds: ["fake"] as string[],
+        last_completed_at: null as string | null,
+        heldMirrors: [] as string[],
+      },
+    ];
+    const created = Date.parse(getCreated(db, "t1"));
+    const forCpu = selectClaimablePendingTask(db, {
+      executorName: "cpu",
+      vendorIds: ["fake"],
+      onlinePeers: peers,
+      nowMs: created + 100,
+      reservationMs: 5_000,
+    });
+    expect(forCpu?.id).toBe("t1");
+  });
 });
 
 function getCreated(db: DatabaseHandle, id: string): string {

@@ -305,6 +305,7 @@ describe("capability-matched routing (#315)", () => {
     name: string,
     token: string,
     vendors: string[],
+    heldMirrors: string[] = [],
   ): Promise<void> {
     const res = await fetch(`${daemonUrl}/runner/register`, {
       method: "POST",
@@ -318,6 +319,7 @@ describe("capability-matched routing (#315)", () => {
         build_version: "test",
         capabilities: {
           vendors: vendors.map((id) => ({ id, models: [] })),
+          ...(heldMirrors.length > 0 ? { held_mirrors: heldMirrors } : {}),
         },
       }),
     });
@@ -433,6 +435,120 @@ describe("capability-matched routing (#315)", () => {
     expect(body?.state).toBe("completed");
     // Local path: never assigned to a runner (affinity / claimer stays null).
     expect(body?.runner).toBeNull();
+  });
+
+  it("warm-clone preference: mirror holder claims within reservation (#318)", async () => {
+    // Two registered runners; cpu is warmer by last_completed but cold for the
+    // repo; gpu advertises held_mirrors → only gpu may claim within the window.
+    fs.writeFileSync(
+      path.join(home, "parley.json"),
+      JSON.stringify(
+        withFakeAllowlist({
+          runners: {
+            gpu: { token: "secret-gpu" },
+            cpu: { token: "secret-cpu" },
+          },
+        }),
+      ),
+    );
+    // Long presence grace so both peers stay online for warm ranking without
+    // open lease polls (bootDaemon default is 200ms).
+    const daemonUrl = await bootDaemon({
+      PARLEY_FAKE_VENDOR_BIN: "",
+      PARLEY_RUNNER_PRESENCE_GRACE_MS: "30_000".replace("_", ""),
+    });
+    await registerViaHttp(daemonUrl, "cpu", "secret-cpu", ["fake"], []);
+    await registerViaHttp(
+      daemonUrl,
+      "gpu",
+      "secret-gpu",
+      ["fake"],
+      ["github.com/org/parley"],
+    );
+    // Stamp warmth via the daemon DB (node:sqlite; vitest cannot static-import it).
+    const DatabaseSync = createRequire(import.meta.url)("node:sqlite")
+      .DatabaseSync as new (path: string) => {
+      prepare(sql: string): { run(...args: unknown[]): void };
+      close(): void;
+    };
+    const db = new DatabaseSync(path.join(home, "parley.db"));
+    try {
+      db.prepare(
+        `UPDATE runners SET last_completed_at = ? WHERE name = ?`,
+      ).run("2099-01-01T00:00:00.000Z", "cpu");
+      db.prepare(
+        `UPDATE runners SET last_completed_at = ? WHERE name = ?`,
+      ).run("2000-01-01T00:00:00.000Z", "gpu");
+    } finally {
+      db.close();
+    }
+
+    const repo = makeGitRepo([], {}, { origin: "https://github.com/org/parley.git" });
+    repos.push(repo);
+
+    const del = await runCli(
+      ["delegate", "-v", "fake", "-n", "warm-clone", "prefer mirror"],
+      home,
+      {
+        cwd: repo,
+        extraEnv: { PARLEY_FAKE_VENDOR_BIN: "" },
+      },
+    );
+    expect(del.code).toBe(0);
+    const { task_id: taskId } = JSON.parse(del.stdout) as { task_id: string };
+
+    // Refresh last_seen so both stay online, then re-assert held_mirrors.
+    await registerViaHttp(daemonUrl, "cpu", "secret-cpu", ["fake"], []);
+    await registerViaHttp(
+      daemonUrl,
+      "gpu",
+      "secret-gpu",
+      ["fake"],
+      ["github.com/org/parley"],
+    );
+    // Re-stamp warmth (re-register preserves it, but be explicit).
+    {
+      const db2 = new DatabaseSync(path.join(home, "parley.db"));
+      try {
+        db2
+          .prepare(`UPDATE runners SET last_completed_at = ? WHERE name = ?`)
+          .run("2099-01-01T00:00:00.000Z", "cpu");
+        db2
+          .prepare(`UPDATE runners SET last_completed_at = ? WHERE name = ?`)
+          .run("2000-01-01T00:00:00.000Z", "gpu");
+      } finally {
+        db2.close();
+      }
+    }
+
+    // Cold peer lease within reservation → empty (204).
+    const coldLease = await fetch(`${daemonUrl}/runner/lease`, {
+      method: "POST",
+      headers: {
+        authorization: "Bearer secret-cpu",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ runner: "cpu", timeout_ms: 50 }),
+    });
+    expect(coldLease.status).toBe(204);
+
+    // Warm-clone peer claims.
+    const warmLease = await fetch(`${daemonUrl}/runner/lease`, {
+      method: "POST",
+      headers: {
+        authorization: "Bearer secret-gpu",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ runner: "gpu", timeout_ms: 200 }),
+    });
+    expect(warmLease.status).toBe(200);
+    const lease = (await warmLease.json()) as { task_id: string };
+    expect(lease.task_id).toBe(taskId);
+
+    const status = await runCli(["status", taskId, "--json"], home);
+    expect(status.code).toBe(0);
+    const body = JSON.parse(status.stdout) as { runner: string | null };
+    expect(body.runner).toBe("gpu");
   });
 
   it("pin to incapable runner fails with capability diagnosis", async () => {

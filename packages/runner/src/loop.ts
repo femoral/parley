@@ -1,5 +1,4 @@
 import { spawn, type ChildProcess } from "node:child_process";
-import { execFileSync } from "node:child_process";
 import readline from "node:readline";
 import {
   createLeaseHttpTransport,
@@ -48,6 +47,7 @@ import {
   ClaimGitError,
   deleteRemoteBranchBestEffort,
   prepareClaimRepo,
+  pushTaskBranch,
   type PreparedRepo,
 } from "./mirror.js";
 import { RUNNER_VERSION } from "./version.js";
@@ -723,23 +723,8 @@ function applyLeaseEnv(plan: SpawnPlan, lease: RunnerLeaseSpec): SpawnPlan {
 }
 
 function pushBranch(repoRoot: string, worktreePath: string, branch: string): void {
-  // Ensure commits on the worktree branch are reachable, then push to origin.
-  // The runner host needs push access to origin (documented).
-  try {
-    execFileSync("git", ["-C", worktreePath, "push", "-u", "origin", branch], {
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-  } catch (err) {
-    // Surface stderr when present.
-    const stderr =
-      err && typeof err === "object" && "stderr" in err
-        ? String((err as { stderr: unknown }).stderr)
-        : "";
-    throw new Error(
-      `git push origin ${branch} failed${stderr ? `: ${stderr.trim()}` : ""} (repo ${repoRoot})`,
-    );
-  }
+  // Shared with the daemon local-mirror path (#318 / ADR-0031).
+  pushTaskBranch(repoRoot, worktreePath, branch);
 }
 
 function sleep(ms: number): Promise<void> {

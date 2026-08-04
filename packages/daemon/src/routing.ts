@@ -27,6 +27,11 @@ export interface ExecutorCapability {
    * failure. Local executor leaves this empty/undefined.
    */
   unreachable_repos?: Readonly<Record<string, { code: string; at: string; operation?: string }>>;
+  /**
+   * Repo keys for which this executor holds a managed bare mirror (#318).
+   * Used for warm-clone preference above warm-executor.
+   */
+  held_mirrors?: readonly string[];
 }
 
 /** One runner excluded for a task because of recorded repo unreachability (#317). */
@@ -236,21 +241,39 @@ export function formatWaitingReason(offlineCapable: readonly ExecutorCapability[
 }
 
 /**
- * Among online capable runners (non-local), pick preferred order: warmest
- * (most recent completion) first, then name ASC. Empty when no online runners.
- * Used by claim-time warm reservation (#315 F5) via the same ranking rule as
+ * Among online capable runners (non-local), pick preferred order:
+ * warm-clone (holds `repoKey` mirror) first, then warmest completion, then
+ * name ASC (#315 / #318). Empty when no online runners.
+ * Used by claim-time warm reservation via the same ranking rule as
  * `preferredWarmRunner` in db.ts.
  */
 export function rankOnlineRunners(
   onlineCapable: readonly ExecutorCapability[],
+  repoKey: string | null = null,
 ): ExecutorCapability[] {
   const runners = onlineCapable.filter((e) => !e.isLocal);
   return [...runners].sort((a, b) => {
+    if (repoKey !== null && repoKey !== "") {
+      const aWarm = (a.held_mirrors ?? []).includes(repoKey) ? 1 : 0;
+      const bWarm = (b.held_mirrors ?? []).includes(repoKey) ? 1 : 0;
+      if (aWarm !== bWarm) return bWarm - aWarm;
+    }
     const at = a.last_completed_at ? Date.parse(a.last_completed_at) : 0;
     const bt = b.last_completed_at ? Date.parse(b.last_completed_at) : 0;
     if (at !== bt) return bt - at;
     return a.name.localeCompare(b.name);
   });
+}
+
+/**
+ * True when this executor advertises a held mirror for `repoKey` (#318).
+ */
+export function holdsMirror(
+  executor: { held_mirrors?: readonly string[] },
+  repoKey: string | null | undefined,
+): boolean {
+  if (repoKey === null || repoKey === undefined || repoKey === "") return false;
+  return (executor.held_mirrors ?? []).includes(repoKey);
 }
 
 /**

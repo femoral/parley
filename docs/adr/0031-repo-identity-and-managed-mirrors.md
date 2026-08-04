@@ -130,9 +130,11 @@ path fails at claim with `no_repo_source`.
 - Claim-time push preflight catches permission problems before spending a vendor
   turn; failed tasks best-effort remove the preflight branch.
 - Concurrent runners on one home share mirrors safely via lock + atomic rename.
-- Mirror disk growth and prune policy ride with later runner lifecycle / status
-  work; this ADR does not auto-gc clones (including residual orphan branches
-  if delete fails).
-- Local daemon executor adopting the same mirror layout is follow-on (routing /
-  unified executor tickets); this ticket wires the **runner** path and the
-  shared `homePaths.clones` layout.
+- Mirror disk growth is never auto-gc'd. Operators reclaim via the explicit
+  `parley clones list|prune` verb on the daemon host (#318): prune removes only
+  mirrors whose `repo_key` is not referenced by any live (non-terminal) task.
+  Residual orphan remote branches from failed preflight delete are still left
+  for the operator / later GC.
+- The daemon in-process executor reuses the same mirror module (#318): same-host
+  path match stays a no-clone/no-push fast path; otherwise local placement
+  executes from a managed mirror and pushes the branch to origin.
