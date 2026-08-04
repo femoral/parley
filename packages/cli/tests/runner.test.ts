@@ -648,6 +648,21 @@ describe("runner registration + parley runners list", () => {
     expect(table.stdout).toMatch(/online/);
     expect(table.stdout).toMatch(/fake/);
 
+    // Pin /info runner wiring (#321 H1): must go through handleInfo → listRunners(db).
+    // Hardwiring runners: [] in the route leaves pure buildInfoConfig unit tests green.
+    const infoJson = await runCli(["info", "--json"], home, { cwd: home });
+    expect(infoJson.code).toBe(0);
+    const infoConfig = JSON.parse(infoJson.stdout) as {
+      executors: { name: string; status: string; vendors: string[] }[];
+    };
+    const gpuExec = infoConfig.executors.find((e) => e.name === "gpu");
+    expect(gpuExec).toBeDefined();
+    expect(gpuExec!.status).toBe("online");
+    expect(gpuExec!.vendors).toContain("fake");
+    const infoProse = await runCli(["info"], home, { cwd: home });
+    expect(infoProse.code).toBe(0);
+    expect(infoProse.stdout).toMatch(/`gpu` \(online\):.*fake/);
+
     // Kill the runner and wait past the presence grace for offline.
     runner.kill("SIGTERM");
     const offlineDeadline = Date.now() + 10_000;

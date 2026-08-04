@@ -396,7 +396,7 @@ describe("rubric markdown materialization (#176)", () => {
   });
 });
 
-describe("grokSandboxHostWarnings (#247)", () => {
+describe("grokSandboxHostWarnings (#247 / #321)", () => {
   it("warns only on Linux when grok is present and bubblewrap is absent", () => {
     const warnings = grokSandboxHostWarnings({
       platform: "linux",
@@ -405,6 +405,7 @@ describe("grokSandboxHostWarnings (#247)", () => {
     });
     expect(warnings).toHaveLength(1);
     expect(warnings[0]).toMatch(/bubblewrap/i);
+    expect(warnings[0]).toMatch(/daemon host/i);
     expect(warnings[0]).toContain('sandbox: "full"');
     expect(warnings[0]).not.toMatch(/apt install/);
   });
@@ -436,7 +437,13 @@ describe("grokSandboxHostWarnings (#247)", () => {
   it("renderInfoProse surfaces warnings under ## Warnings", () => {
     const paths = homePathsFromEnv({ PARLEY_HOME: home });
     const adapters = createAdapterRegistrySync();
-    const config = buildInfoConfig({ projectDir: project, paths, adapters });
+    const config = buildInfoConfig({
+      projectDir: project,
+      paths,
+      adapters,
+      env: { PATH: "" },
+      platform: "darwin",
+    });
     config.warnings = grokSandboxHostWarnings({
       platform: "linux",
       hasBubblewrap: false,
@@ -445,8 +452,119 @@ describe("grokSandboxHostWarnings (#247)", () => {
     const prose = renderInfoProse(config);
     expect(prose).toContain("## Warnings");
     expect(prose).toMatch(/bubblewrap/i);
+    expect(prose).toMatch(/daemon host/i);
     // Without warnings the section is omitted.
     delete config.warnings;
     expect(renderInfoProse(config)).not.toContain("## Warnings");
+  });
+});
+
+describe("executors fleet (#321)", () => {
+  it("always includes local online with fingerprinted vendor ids", () => {
+    const paths = homePathsFromEnv({ PARLEY_HOME: home });
+    const adapters = createAdapterRegistrySync();
+    const binDir = fs.mkdtempSync(path.join(os.tmpdir(), "parley-info-exec-"));
+    try {
+      for (const name of ["codex", "grok"]) {
+        const p = path.join(binDir, name);
+        fs.writeFileSync(p, "#!/bin/sh\nexit 0\n");
+        fs.chmodSync(p, 0o755);
+      }
+      const config = buildInfoConfig({
+        projectDir: project,
+        paths,
+        adapters,
+        env: { PATH: binDir },
+        platform: "darwin",
+      });
+      expect(config.executors).toHaveLength(1);
+      expect(config.executors[0]!.name).toBe("local");
+      expect(config.executors[0]!.status).toBe("online");
+      // Builtin order: codex before grok.
+      expect(config.executors[0]!.vendors).toEqual(["codex", "grok"]);
+    } finally {
+      fs.rmSync(binDir, { recursive: true, force: true });
+    }
+  });
+
+  it("appends registered runners after local with name/status/vendors", () => {
+    const paths = homePathsFromEnv({ PARLEY_HOME: home });
+    const adapters = createAdapterRegistrySync();
+    const config = buildInfoConfig({
+      projectDir: project,
+      paths,
+      adapters,
+      env: { PATH: "" },
+      platform: "darwin",
+      runners: [
+        { name: "gpu", status: "online", vendors: ["fake", "claude"] },
+        { name: "edge", status: "stale", vendors: [] },
+      ],
+    });
+    expect(config.executors.map((e) => e.name)).toEqual(["local", "gpu", "edge"]);
+    expect(config.executors[1]).toEqual({
+      name: "gpu",
+      status: "online",
+      vendors: ["fake", "claude"],
+    });
+    expect(config.executors[2]).toEqual({
+      name: "edge",
+      status: "stale",
+      vendors: [],
+    });
+    const prose = renderInfoProse(config);
+    expect(prose).toContain("### Executors");
+    expect(prose).toContain("`local` (online):");
+    expect(prose).toContain("`gpu` (online): fake, claude");
+    expect(prose).toContain("`edge` (stale): (none)");
+    expect(prose).toContain("parley runners show");
+  });
+
+  it("tolerates older daemon body without executors field (version skew)", () => {
+    // Pre-#321 shape: no executors — must not throw on config.executors.length.
+    const paths = homePathsFromEnv({ PARLEY_HOME: home });
+    const adapters = createAdapterRegistrySync();
+    const modern = buildInfoConfig({
+      projectDir: project,
+      paths,
+      adapters,
+      env: { PATH: "" },
+      platform: "darwin",
+    });
+    const { executors: _drop, ...withoutExecutors } = modern;
+    void _drop;
+    const oldShape = withoutExecutors as unknown as Parameters<
+      typeof renderInfoProse
+    >[0];
+    let prose: string | undefined;
+    expect(() => {
+      prose = renderInfoProse(oldShape);
+    }).not.toThrow();
+    expect(prose).toBeDefined();
+    expect(prose!).toContain("### Executors");
+    expect(prose!).toContain("(no executors)");
+  });
+
+  it("emits daemon-host bwrap warning when grok is fingerprinted on linux", () => {
+    const paths = homePathsFromEnv({ PARLEY_HOME: home });
+    const adapters = createAdapterRegistrySync();
+    const binDir = fs.mkdtempSync(path.join(os.tmpdir(), "parley-info-bwrap-"));
+    try {
+      const grok = path.join(binDir, "grok");
+      fs.writeFileSync(grok, "#!/bin/sh\nexit 0\n");
+      fs.chmodSync(grok, 0o755);
+      const config = buildInfoConfig({
+        projectDir: project,
+        paths,
+        adapters,
+        env: { PATH: binDir },
+        platform: "linux",
+      });
+      expect(config.warnings).toBeDefined();
+      expect(config.warnings![0]).toMatch(/daemon host/i);
+      expect(config.warnings![0]).toMatch(/bubblewrap/i);
+    } finally {
+      fs.rmSync(binDir, { recursive: true, force: true });
+    }
   });
 });

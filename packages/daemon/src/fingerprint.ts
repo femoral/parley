@@ -217,12 +217,12 @@ export interface FingerprintOptions {
 }
 
 /**
- * Fingerprint this host: vendor bins on PATH plus plugin adapters in the
- * registry, each with a model catalog from readModels/listModels/shipped.
+ * Vendor ids this host can run: PATH-detected bins (via {@link detectHarnesses})
+ * plus non-builtin plugin adapters in the registry. Stable order: builtins in
+ * {@link BUILTIN_VENDOR_IDS} order, then other ids sorted. Sync — no model
+ * probes (those live in {@link fingerprintCapabilities} / registration).
  */
-export async function fingerprintCapabilities(
-  options: FingerprintOptions,
-): Promise<RunnerCapabilities> {
+export function detectHostVendorIds(options: FingerprintOptions): string[] {
   const env = options.env ?? process.env;
   const config = options.config ?? {};
   const detected = new Set(detectHarnesses(config, env));
@@ -235,7 +235,6 @@ export async function fingerprintCapabilities(
     }
   }
 
-  const vendors: RunnerVendorCapability[] = [];
   // Stable order: builtins first (BUILTIN_VENDOR_IDS order), then other ids sorted.
   const ordered: string[] = [];
   for (const id of BUILTIN_VENDOR_IDS) {
@@ -244,15 +243,25 @@ export async function fingerprintCapabilities(
   for (const id of [...detected].sort()) {
     if (!ordered.includes(id) && options.adapters.has(id)) ordered.push(id);
   }
+  return ordered;
+}
+
+/**
+ * Fingerprint this host: vendor bins on PATH plus plugin adapters in the
+ * registry, each with a model catalog from readModels/listModels/shipped.
+ */
+export async function fingerprintCapabilities(
+  options: FingerprintOptions,
+): Promise<RunnerCapabilities> {
+  const ordered = detectHostVendorIds(options);
 
   // Parallel per-vendor probe — host may have many bins on PATH.
-  const probed = await Promise.all(
+  const vendors = await Promise.all(
     ordered.map(async (id) => {
       const models = await probeVendorModels(options.adapters.get(id), id);
       return { id, models } satisfies RunnerVendorCapability;
     }),
   );
-  vendors.push(...probed);
 
   return { vendors };
 }
