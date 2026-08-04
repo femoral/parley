@@ -138,22 +138,15 @@ export function loadRunnerConfig(options: LoadRunnerConfigOptions = {}): RunnerC
 /**
  * Resolve an optional operator-managed clone override.
  *
- * Tries exact match on the id (prefer the lease's `repo_key`, then `repo`
- * path), then basename match against configured keys/values so short names
- * still work.
+ * Exact key match only (repo key or full path id). Basename heuristics are
+ * intentionally absent: `github.com/acme/api` and `github.com/other/api` must
+ * never share a mapping (ADR-0031 / #316 review F1).
  */
 export function resolveRepoPath(
   repos: Record<string, string>,
   repoId: string,
 ): string | null {
   if (repoId === "") return null;
-  if (repos[repoId] !== undefined) return repos[repoId] ?? null;
-  const base = path.basename(repoId);
-  for (const [key, local] of Object.entries(repos)) {
-    if (key === repoId) return local;
-    if (path.basename(key) === base || path.basename(local) === base) {
-      return local;
-    }
-  }
-  return null;
+  const hit = repos[repoId];
+  return hit !== undefined ? hit : null;
 }

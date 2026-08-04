@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
+import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
@@ -9,11 +10,15 @@ import {
   encodeRepoKeyForFs,
   ensureBaseSha,
   ensureMirror,
+  isMirrorTempName,
+  isPushDeniedDetail,
   mirrorPathFor,
+  MIRROR_TEMP_PREFIX,
   preflightPushBranch,
   prepareClaimRepo,
   taskBranchName,
 } from "../src/mirror.js";
+import { resolveRepoPath } from "../src/config.js";
 import { sampleLease } from "./lease-transport.fake.js";
 
 const temps: string[] = [];
@@ -55,24 +60,59 @@ afterEach(() => {
 });
 
 describe("encodeRepoKeyForFs", () => {
-  it("replaces slashes with --", () => {
-    expect(encodeRepoKeyForFs("github.com/femoral/parley")).toBe(
-      "github.com--femoral--parley",
-    );
+  it("is stable for the same key and ends with sha256[:8]", () => {
+    const a = encodeRepoKeyForFs("github.com/femoral/parley");
+    const b = encodeRepoKeyForFs("github.com/femoral/parley");
+    expect(a).toBe(b);
+    const hash = createHash("sha256")
+      .update("github.com/femoral/parley")
+      .digest("hex")
+      .slice(0, 8);
+    expect(a.endsWith(`-${hash}`)).toBe(true);
+    expect(a.startsWith("github.com--femoral--parley-")).toBe(true);
   });
 
-  it("is stable for the same key", () => {
-    const a = encodeRepoKeyForFs("gitlab.com/group/sub/repo");
-    const b = encodeRepoKeyForFs("gitlab.com/group/sub/repo");
-    expect(a).toBe(b);
-    expect(a).toBe("gitlab.com--group--sub--repo");
+  it("is injective for slug-colliding keys (F2)", () => {
+    // Pairs that share a slug under `/`→`--` alone must still diverge.
+    const pairs: [string, string][] = [
+      ["a/b--c", "a--b/c"],
+      ["g/s/p", "g--s/p"],
+      ["org/re po", "org/re_po"],
+      ["gitlab.com/group/sub/proj", "gitlab.com/group--sub/proj"],
+    ];
+    for (const [x, y] of pairs) {
+      const ex = encodeRepoKeyForFs(x);
+      const ey = encodeRepoKeyForFs(y);
+      expect(ex).not.toBe(ey);
+      // Distinct mirror dirs under the same parent.
+      expect(path.join("/clones", ex)).not.toBe(path.join("/clones", ey));
+    }
+  });
+});
+
+describe("resolveRepoPath exact match (F1)", () => {
+  it("matches exact repo key only — not basename", () => {
+    const repos = {
+      "github.com/acme/api": "/clones/acme-api",
+    };
+    expect(resolveRepoPath(repos, "github.com/acme/api")).toBe("/clones/acme-api");
+    expect(resolveRepoPath(repos, "github.com/other/api")).toBeNull();
+    expect(resolveRepoPath(repos, "api")).toBeNull();
+  });
+
+  it("matches exact path id when that is the map key", () => {
+    const repos = { "/orch/repo": "/local/repo" };
+    expect(resolveRepoPath(repos, "/orch/repo")).toBe("/local/repo");
+    expect(resolveRepoPath(repos, "/other/repo")).toBeNull();
   });
 });
 
 describe("mirrorPathFor", () => {
   it("keys off repo_key when present", () => {
     const p = mirrorPathFor("/home/.parley/clones", "github.com/org/r", "https://x");
-    expect(p).toBe(path.join("/home/.parley/clones", "github.com--org--r"));
+    expect(p).toBe(
+      path.join("/home/.parley/clones", encodeRepoKeyForFs("github.com/org/r")),
+    );
   });
 
   it("falls back to fetch-url hash when key is null", () => {
@@ -99,12 +139,40 @@ describe("ensureMirror + warm reuse", () => {
     expect(fs.existsSync(path.join(mirror, "HEAD"))).toBe(true);
     expect(git(mirror, ["rev-parse", "HEAD"])).toBe(sha);
 
-    // Stamp so we can detect no re-clone (same directory inode preserved).
     const st1 = fs.statSync(mirror);
     ensureMirror(mirror, bare);
     const st2 = fs.statSync(mirror);
     expect(st1.ino).toBe(st2.ino);
     expect(st1.dev).toBe(st2.dev);
+  });
+
+  it("recovers when a non-bare half-clone dir is present (F4)", () => {
+    const { bare, sha } = makeBareOrigin();
+    const clones = tmp("parley-clones-");
+    const mirror = mirrorPathFor(clones, "half/clone", bare);
+    // Simulate crashed clone: final path is a plain directory, not a bare repo.
+    fs.mkdirSync(mirror, { recursive: true });
+    fs.writeFileSync(path.join(mirror, "junk"), "not a git dir\n");
+    expect(fs.existsSync(path.join(mirror, "junk"))).toBe(true);
+
+    ensureMirror(mirror, bare);
+    expect(fs.existsSync(path.join(mirror, "HEAD"))).toBe(true);
+    expect(git(mirror, ["rev-parse", "HEAD"])).toBe(sha);
+  });
+
+  it("temp clone names cannot collide with real mirror encodings (F4)", () => {
+    const keys = [
+      "github.com/org/repo",
+      ".parley-clone-tmp-evil",
+      "a/b--c",
+      "url-abcdef",
+    ];
+    for (const k of keys) {
+      expect(isMirrorTempName(encodeRepoKeyForFs(k))).toBe(false);
+    }
+    expect(isMirrorTempName(`${MIRROR_TEMP_PREFIX}github.com--org-abc123`)).toBe(
+      true,
+    );
   });
 });
 
@@ -138,13 +206,11 @@ describe("preflightPushBranch", () => {
     const mirror = path.join(tmp("parley-clones-"), "m");
     ensureMirror(mirror, bare);
     expect(() => preflightPushBranch(mirror, sha, "parley/t-test")).not.toThrow();
-    // Branch now exists on origin at base_sha.
     expect(git(bare, ["rev-parse", "parley/t-test"])).toBe(sha);
   });
 
   it("throws push_denied when pre-receive rejects", () => {
     const { bare, sha } = makeBareOrigin();
-    // This environment may set global core.hooksPath; pin hooks to the bare.
     git(bare, ["config", "core.hooksPath", path.join(bare, "hooks")]);
     const hooks = path.join(bare, "hooks");
     fs.mkdirSync(hooks, { recursive: true });
@@ -164,6 +230,14 @@ describe("preflightPushBranch", () => {
     expect((threw as ClaimGitError).code).toBe("push_denied");
     expect((threw as ClaimGitError).message).toMatch(/push denied at claim time/);
   });
+
+  it("classes read-only origin object-dir errors as push_denied (F6)", () => {
+    expect(
+      isPushDeniedDetail("unable to create temporary object directory"),
+    ).toBe(true);
+    expect(isPushDeniedDetail("Read-only file system")).toBe(true);
+    expect(isPushDeniedDetail("some unrelated pack error")).toBe(false);
+  });
 });
 
 describe("prepareClaimRepo", () => {
@@ -181,6 +255,7 @@ describe("prepareClaimRepo", () => {
     const prepared = prepareClaimRepo(lease, { repos: {}, clonesDir: clones });
     expect(prepared.source).toBe("mirror");
     expect(prepared.pushToOrigin).toBe(true);
+    expect(prepared.preflightPushed).toBe(true);
     expect(prepared.baseRef).toBe(sha);
     expect(prepared.branch).toBe("parley/t9-feat");
     expect(fs.existsSync(prepared.repoLocal)).toBe(true);
@@ -189,9 +264,8 @@ describe("prepareClaimRepo", () => {
     );
   });
 
-  it("routes repos override by repo key", () => {
+  it("routes repos override by exact repo key", () => {
     const { bare, sha } = makeBareOrigin();
-    // Operator clone (non-bare) of the same origin.
     const clone = tmp("parley-op-clone-");
     execFileSync("git", ["clone", bare, clone], { stdio: "ignore" });
     git(clone, ["config", "user.email", "test@parley.test"]);
@@ -210,10 +284,42 @@ describe("prepareClaimRepo", () => {
     });
     expect(prepared.source).toBe("override");
     expect(prepared.repoLocal).toBe(clone);
-    // No managed mirror created when override wins.
     expect(fs.existsSync(mirrorPathFor(clones, "test.local/demo", bare))).toBe(
       false,
     );
+  });
+
+  it("does not use basename-colliding override — uses managed mirror (F1)", () => {
+    const acme = makeBareOrigin();
+    const other = makeBareOrigin();
+    // Distinct content so we can prove which origin was used.
+    const acmeClone = tmp("parley-acme-clone-");
+    execFileSync("git", ["clone", acme.bare, acmeClone], { stdio: "ignore" });
+    git(acmeClone, ["config", "user.email", "test@parley.test"]);
+    git(acmeClone, ["config", "user.name", "parley test"]);
+
+    const clones = tmp("parley-clones-");
+    const lease = sampleLease({
+      task_id: "t-other",
+      name: null,
+      repo: "/orch/other-api",
+      repo_key: "github.com/other/api",
+      repo_fetch_url: other.bare,
+      base_sha: other.sha,
+    });
+    const prepared = prepareClaimRepo(lease, {
+      // Basename "api" collides — must NOT match other/api.
+      repos: { "github.com/acme/api": acmeClone },
+      clonesDir: clones,
+    });
+    expect(prepared.source).toBe("mirror");
+    expect(prepared.repoLocal).toBe(
+      mirrorPathFor(clones, "github.com/other/api", other.bare),
+    );
+    expect(prepared.repoLocal).not.toBe(acmeClone);
+    // Preflight landed on OTHER origin, not ACME.
+    expect(git(other.bare, ["rev-parse", "parley/t-other"])).toBe(other.sha);
+    expect(() => git(acme.bare, ["rev-parse", "parley/t-other"])).toThrow();
   });
 
   it("fails with no_repo_source when nothing is available", () => {
@@ -225,5 +331,26 @@ describe("prepareClaimRepo", () => {
     expect(() =>
       prepareClaimRepo(lease, { repos: {}, clonesDir: tmp("c-") }),
     ).toThrow(/no repo source/);
+  });
+
+  it("redacts credential userinfo from mirror clone diagnoses (F8)", () => {
+    const clones = tmp("parley-clones-");
+    const lease = sampleLease({
+      repo: "/orch/x",
+      repo_key: "github.com/org/secret-repo",
+      repo_fetch_url: "https://x-access-token:ghp_SUPERSECRET@127.0.0.1:1/org/repo.git",
+      base_sha: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    });
+    let threw: unknown;
+    try {
+      prepareClaimRepo(lease, { repos: {}, clonesDir: clones });
+    } catch (err) {
+      threw = err;
+    }
+    expect(threw).toBeInstanceOf(ClaimGitError);
+    const msg = (threw as ClaimGitError).message;
+    expect(msg).not.toContain("ghp_SUPERSECRET");
+    expect(msg).not.toContain("x-access-token:");
+    expect(msg).toMatch(/mirror clone failed/);
   });
 });

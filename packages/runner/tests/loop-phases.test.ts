@@ -5,6 +5,7 @@ import path from "node:path";
 import type { SpawnPlan, VendorAdapter } from "@useparley/core";
 import { RunnerLoop } from "../src/loop.js";
 import type { RunnerConfig } from "../src/config.js";
+import { prepareClaimRepo } from "../src/mirror.js";
 import {
   createFakeLeaseTransport,
   sampleLease,
@@ -83,6 +84,7 @@ function noopHost(overrides: {
     baseRef: string;
     branch: string;
     pushToOrigin: boolean;
+    preflightPushed: boolean;
     source: "mirror" | "override" | "local";
   };
   createWorktree?: () => { path: string; branch: string; baseSha: string };
@@ -99,6 +101,7 @@ function noopHost(overrides: {
       baseRef: string;
       branch: string;
       pushToOrigin: boolean;
+      preflightPushed: boolean;
       source: "mirror" | "override" | "local";
     };
     createWorktree: () => { path: string; branch: string; baseSha: string };
@@ -120,6 +123,7 @@ function noopHost(overrides: {
         baseRef: "abc",
         branch: "parley/task-1",
         pushToOrigin: true,
+        preflightPushed: true,
         source: "mirror" as const,
       })),
     createWorktree:
@@ -440,6 +444,77 @@ describe("RunnerLoop failure branches (fake transport)", () => {
     expect(failCalls(transport).some((e) => /push denied at claim time/.test(e))).toBe(
       true,
     );
+  });
+
+  it("best-effort deletes preflight branch when worktree fails after preflight (F3)", async () => {
+    const { execFileSync } = await import("node:child_process");
+    const bare = tmp("parley-bare-f3-");
+    execFileSync("git", ["init", "--bare", "-b", "main"], {
+      cwd: bare,
+      stdio: "ignore",
+    });
+    const seed = tmp("parley-seed-f3-");
+    const run = (args: string[]): string =>
+      execFileSync("git", args, { cwd: seed, encoding: "utf8" }).trim();
+    run(["init", "-b", "main"]);
+    run(["config", "user.email", "test@parley.test"]);
+    run(["config", "user.name", "parley test"]);
+    fs.writeFileSync(path.join(seed, "f"), "x\n");
+    run(["add", "-A"]);
+    run(["commit", "-m", "i"]);
+    const sha = run(["rev-parse", "HEAD"]);
+    run(["remote", "add", "origin", bare]);
+    run(["push", "-u", "origin", "main"]);
+
+    // Real prepareClaimRepo so preflight actually pushes.
+    const clones = tmp("parley-clones-f3-");
+    const lease = sampleLease({
+      task_id: "t-f3",
+      name: null,
+      repo: "/orch/missing",
+      repo_key: "test.local/f3",
+      repo_fetch_url: bare,
+      base_sha: sha,
+    });
+    const transport = createFakeLeaseTransport({ leases: [lease] });
+    const loop = new RunnerLoop({
+      config: baseConfig({ repos: {} }),
+      transport,
+      adapters: new Map([["fake", stubAdapter()]]),
+      fingerprint: () => emptyCaps,
+      log: () => {},
+      env: { ...process.env, PARLEY_HOME: tmp("parley-home-f3-") },
+      host: {
+        prepareClaimRepo: (l, cfg) =>
+          prepareClaimRepo(l, { repos: cfg.repos, clonesDir: clones }),
+        createWorktree: () => {
+          throw new Error("simulated worktree failure");
+        },
+        removeWorktree: () => {},
+        pushBranch: () => {},
+        startHubProxy: async () => ({
+          url: "http://127.0.0.1:1",
+          port: 1,
+          close: async () => {},
+        }),
+        materializeContext: () => {},
+        materializeChildHub: () => {},
+        spawnAndStream: async () => {
+          throw new Error("vendor must not spawn");
+        },
+      },
+    });
+    await runUntilIdle(loop, transport);
+    expect(
+      failCalls(transport).some((e) => /failed to create worktree: simulated worktree failure/.test(e)),
+    ).toBe(true);
+    // Preflight branch should be gone from origin (best-effort cleanup).
+    expect(() =>
+      execFileSync("git", ["-C", bare, "rev-parse", "parley/t-f3"], {
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "pipe"],
+      }),
+    ).toThrow();
   });
 
   it("fails a claimed lease when shutting down before execute", async () => {

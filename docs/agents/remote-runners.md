@@ -84,18 +84,27 @@ parley-runner --daemon-url https://parley.example.com --name gpu --token '…'
 
 With no `repos` config the runner creates/updates a **parley-managed bare
 mirror** under `$PARLEY_HOME/clones/<encoded-repo-key>/` from the lease's
-`repo_fetch_url` (ADR-0031 / #316). On claim it fetches with prune, verifies
-`base_sha` (direct sha fetch as fallback), pushes the base sha to the task
-branch as a pre-flight (so push permission / hooks fail before the vendor
-spawns), cuts a worktree, runs the vendor, then pushes the branch tip to
-origin. The host's ambient git credentials are used throughout.
+`repo_fetch_url` (ADR-0031 / #316). Encoding is injective (readable slug plus a
+short hash of the raw key). On claim it fetches with prune, verifies `base_sha`
+(direct sha fetch as fallback), **preflight-pushes** the base sha to the task
+branch (real push — so permission / hooks fail before the vendor spawns), cuts
+a worktree, runs the vendor, then pushes the branch tip to origin. Concurrent
+runners sharing one parley home serialize cold clones with a per-mirror lock
+and clone-into-temp + rename. The host's ambient git credentials are used
+throughout.
+
+If the task fails after a successful preflight and the branch was never
+recorded as handed off, the runner best-effort deletes the remote preflight
+ref (`git push origin :refs/heads/<branch>`). If that cleanup fails, a residual
+zero-diff branch may remain on origin until an operator removes it.
 
 ### Optional repo override
 
 `repos` maps a **repo key** (e.g. `github.com/org/repo`) to an operator-managed
-existing clone when you do not want parley to own the mirror. Matching is exact
-key first, then basename. Claim-time fetch / base_sha / push preflight still run
-against that clone.
+existing clone when you do not want parley to own the mirror. Matching is
+**exact key only** (no basename fallback — `…/acme/api` must not match
+`…/other/api`). Claim-time fetch / base_sha / push preflight still run against
+that clone.
 
 ### Vendor adapters
 

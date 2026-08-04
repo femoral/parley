@@ -43,6 +43,7 @@ import { type RunnerConfig } from "./config.js";
 import { startHubProxy, type HubProxy } from "./hub-proxy.js";
 import {
   ClaimGitError,
+  deleteRemoteBranchBestEffort,
   prepareClaimRepo,
   type PreparedRepo,
 } from "./mirror.js";
@@ -325,6 +326,22 @@ export class RunnerLoop {
     let repoLocal: string | null = null;
     let branch: string | null = null;
     let pushToOrigin = false;
+    /** Set after claim-time preflight pushed a remote branch; cleaned up on fail. */
+    let preflight: { repoLocal: string; branch: string } | null = null;
+    /** True once POST /runner/tasks/:id/branch succeeds — keep remote ref. */
+    let branchHandoffOk = false;
+
+    const cleanupOrphanPreflight = (): void => {
+      if (preflight === null || branchHandoffOk) return;
+      try {
+        this.log(
+          `best-effort delete preflight branch ${preflight.branch} on origin`,
+        );
+        deleteRemoteBranchBestEffort(preflight.repoLocal, preflight.branch);
+      } catch {
+        /* ignore */
+      }
+    };
 
     try {
       // Claim-time git: mirror/override, fetch, base_sha, push preflight — before
@@ -345,6 +362,9 @@ export class RunnerLoop {
       }
       repoLocal = prepared.repoLocal;
       pushToOrigin = prepared.pushToOrigin;
+      if (prepared.preflightPushed) {
+        preflight = { repoLocal: prepared.repoLocal, branch: prepared.branch };
+      }
       this.log(
         `repo ready source=${prepared.source} path=${repoLocal} base=${prepared.baseRef.slice(0, 12)}`,
       );
@@ -352,6 +372,7 @@ export class RunnerLoop {
       const adapter = this.adapters.get(lease.vendor);
       if (!adapter) {
         const known = [...this.adapters.keys()].join(", ");
+        cleanupOrphanPreflight();
         await this.transport.fail(
           taskId,
           `unknown vendor on runner: ${lease.vendor} (known: ${known})`,
@@ -369,6 +390,7 @@ export class RunnerLoop {
           baseRef: prepared.baseRef,
         });
       } catch (err) {
+        cleanupOrphanPreflight();
         await this.transport.fail(
           taskId,
           `failed to create worktree: ${err instanceof Error ? err.message : String(err)}`,
@@ -450,9 +472,11 @@ export class RunnerLoop {
             this.host.pushBranch(repoLocal, worktreePath, branch);
           }
           await this.transport.branch(taskId, branch);
+          branchHandoffOk = true;
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
           this.log(`branch push/record failed for ${taskId}: ${msg}`);
+          cleanupOrphanPreflight();
           try {
             await this.transport.fail(taskId, `branch handoff failed: ${msg}`);
           } catch {
@@ -467,12 +491,15 @@ export class RunnerLoop {
           taskId,
           `vendor child exited (code ${exitCode ?? "?"}) without submitting a report`,
         );
+        // Fail accepted as a real failure (not promoted) → drop orphan preflight.
+        if (!branchHandoffOk) cleanupOrphanPreflight();
       } catch {
         /* already terminal (completed via report/branch) */
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       this.log(`execute error for ${taskId}: ${msg}`);
+      cleanupOrphanPreflight();
       try {
         await this.transport.fail(taskId, msg);
       } catch {

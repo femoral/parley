@@ -12,12 +12,26 @@ import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
-import type { RunnerLeaseSpec } from "@useparley/core";
+import {
+  stripFetchUrlCredentials,
+  type RunnerLeaseSpec,
+} from "@useparley/core";
 import { resolveRepoPath } from "./config.js";
 
 /** Bound git I/O so a hung remote cannot stall the runner forever. */
 const GIT_TIMEOUT_MS = 120_000;
 const GIT_MAX_BUFFER = 16 * 1024 * 1024;
+
+/** Stale mkdir-lock age before another process may steal it. */
+const MIRROR_LOCK_STALE_MS = 10 * 60 * 1000;
+/** How long to wait for a peer holding the mirror lock. */
+const MIRROR_LOCK_WAIT_MS = 120_000;
+
+/**
+ * Temp clone directories live under clones/ with this prefix. Real mirror
+ * encodings never use it (see {@link isMirrorTempName}).
+ */
+export const MIRROR_TEMP_PREFIX = ".parley-clone-tmp-";
 
 /**
  * Diagnosis class for claim-time git failures. The `code` is a stable token
@@ -42,30 +56,40 @@ export class ClaimGitError extends Error {
   }
 }
 
+/** Redact userinfo before embedding a fetch URL in a diagnosis string. */
+function safeUrl(fetchUrl: string): string {
+  return stripFetchUrlCredentials(fetchUrl);
+}
+
 /**
- * Encode a repo key (`host/path`, may contain `/`) into a single filesystem
- * path segment. Slashes become `--`; other path-hostile chars are replaced
- * with `_`. Empty / degenerate results fall back to a short hash of the key.
+ * Encode a repo key (`host/path`) into a single filesystem path segment.
+ *
+ * Readable slug (`/` → `--`, other path-hostile chars → `_`) plus a fixed
+ * `-<sha256(rawKey)[:8]>` suffix so the mapping is injective: keys that
+ * collapse under the slug alone (e.g. `a/b--c` vs `a--b/c`) still get
+ * distinct directories.
  *
  * @example
  * encodeRepoKeyForFs("github.com/femoral/parley")
- * // → "github.com--femoral--parley"
+ * // → "github.com--femoral--parley-<8 hex chars>"
  */
 export function encodeRepoKeyForFs(repoKey: string): string {
-  const cleaned = repoKey
-    .trim()
+  const raw = repoKey.trim();
+  const hash = createHash("sha256").update(raw).digest("hex").slice(0, 8);
+  const cleaned = raw
     .toLowerCase()
     .replace(/\//g, "--")
     .replace(/[^a-z0-9._+-]+/g, "_")
-    .replace(/^_+|_+$/g, "");
-  if (cleaned === "" || cleaned === "." || cleaned === "..") {
-    return `key-${shortHash(repoKey)}`;
+    // No leading dots: temp clone dirs use a `.parley-clone-tmp-` prefix and
+    // must never collide with a real encoding (F4).
+    .replace(/^[._]+|[._]+$/g, "");
+  let slug = cleaned;
+  if (slug === "" || slug === "." || slug === "..") {
+    slug = "key";
+  } else if (slug.length > 140) {
+    slug = slug.slice(0, 140);
   }
-  // Cap length so deeply nested group paths stay within path limits.
-  if (cleaned.length > 180) {
-    return `${cleaned.slice(0, 140)}-${shortHash(repoKey)}`;
-  }
-  return cleaned;
+  return `${slug}-${hash}`;
 }
 
 /**
@@ -75,6 +99,11 @@ export function encodeRepoKeyForFs(repoKey: string): string {
  */
 export function encodeFetchUrlForFs(fetchUrl: string): string {
   return `url-${shortHash(fetchUrl.trim())}`;
+}
+
+/** True when a clones/ entry name is a temp clone dir, never a real mirror. */
+export function isMirrorTempName(name: string): boolean {
+  return name.startsWith(MIRROR_TEMP_PREFIX);
 }
 
 /** Absolute path of the managed bare mirror for this identity. */
@@ -141,9 +170,86 @@ function isBareGitDir(dir: string): boolean {
   }
 }
 
+function sleepMs(ms: number): void {
+  // Synchronous sleep: claim-time git is already sync; keep the lock path simple.
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+/**
+ * mkdir-based lock for a mirror path. Lock lives at `<mirrorPath>.lock` (a
+ * directory). Stale locks older than {@link MIRROR_LOCK_STALE_MS} are stolen.
+ */
+export function withMirrorLock(mirrorPath: string, fn: () => void): void {
+  const lockDir = `${mirrorPath}.lock`;
+  const deadline = Date.now() + MIRROR_LOCK_WAIT_MS;
+  for (;;) {
+    try {
+      fs.mkdirSync(lockDir);
+      try {
+        fs.writeFileSync(
+          path.join(lockDir, "owner"),
+          `${process.pid}\n${Date.now()}\n`,
+          { flag: "wx" },
+        );
+      } catch {
+        /* owner stamp is best-effort */
+      }
+      break;
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code;
+      if (code !== "EEXIST") throw err;
+      if (isStaleLock(lockDir, MIRROR_LOCK_STALE_MS)) {
+        try {
+          fs.rmSync(lockDir, { recursive: true, force: true });
+        } catch {
+          /* peer may be reclaiming */
+        }
+        continue;
+      }
+      if (Date.now() >= deadline) {
+        throw new ClaimGitError(
+          "mirror_clone_failed",
+          `timed out waiting for mirror lock at ${lockDir}`,
+        );
+      }
+      sleepMs(50);
+    }
+  }
+  try {
+    fn();
+  } finally {
+    try {
+      fs.rmSync(lockDir, { recursive: true, force: true });
+    } catch {
+      /* leave for stale reaper */
+    }
+  }
+}
+
+function isStaleLock(lockDir: string, staleMs: number): boolean {
+  try {
+    const ownerPath = path.join(lockDir, "owner");
+    if (fs.existsSync(ownerPath)) {
+      const text = fs.readFileSync(ownerPath, "utf8");
+      const lines = text.split("\n");
+      const ts = Number(lines[1]);
+      if (Number.isFinite(ts) && Date.now() - ts > staleMs) return true;
+    }
+    const st = fs.statSync(lockDir);
+    return Date.now() - st.mtimeMs > staleMs;
+  } catch {
+    return true;
+  }
+}
+
 /**
  * Create the bare mirror if missing, otherwise fetch all refs with prune.
  * Uses the host's ambient git credentials.
+ *
+ * Concurrency: a mkdir-lock serializes ensure for the same mirror path. Cold
+ * clones go into a sibling temp dir then `rename` into place so a peer never
+ * observes a half-cloned destination (and we never `rmSync` a peer's in-flight
+ * clone at the final path).
  *
  * Implementation note: we clone with `--mirror` for a full ref fetch, then
  * clear `remote.origin.mirror` so later `git push origin <refspec>` (claim-time
@@ -151,44 +257,75 @@ function isBareGitDir(dir: string): boolean {
  * mirror remote rejects refspecs (`--mirror can't be combined with refspecs`).
  */
 export function ensureMirror(mirrorPath: string, fetchUrl: string): void {
-  if (isBareGitDir(mirrorPath)) {
+  const display = safeUrl(fetchUrl);
+  fs.mkdirSync(path.dirname(mirrorPath), { recursive: true });
+
+  withMirrorLock(mirrorPath, () => {
+    if (isBareGitDir(mirrorPath)) {
+      try {
+        configureMirrorRemote(mirrorPath, fetchUrl);
+        git(["-C", mirrorPath, "fetch", "--prune", "origin", "+refs/*:refs/*"]);
+      } catch (err) {
+        if (err instanceof ClaimGitError) throw err;
+        throw new ClaimGitError(
+          "mirror_fetch_failed",
+          `mirror fetch failed for ${display}: ${gitErrorMessage(err)}`,
+        );
+      }
+      return;
+    }
+
+    // Residue at the final path (half-clone, non-bare junk). Safe under the
+    // lock: no peer is mid-clone into this path (clones use a temp sibling).
+    if (fs.existsSync(mirrorPath)) {
+      fs.rmSync(mirrorPath, { recursive: true, force: true });
+    }
+
+    const parent = path.dirname(mirrorPath);
+    const base = path.basename(mirrorPath);
+    const tmp = path.join(
+      parent,
+      `${MIRROR_TEMP_PREFIX}${base}-${process.pid}-${Date.now().toString(36)}`,
+    );
     try {
-      configureMirrorRemote(mirrorPath, fetchUrl);
-      // Fetch every ref and drop deleted remote refs (warm-mirror update).
-      git(["-C", mirrorPath, "fetch", "--prune", "origin", "+refs/*:refs/*"]);
+      if (fs.existsSync(tmp)) {
+        fs.rmSync(tmp, { recursive: true, force: true });
+      }
+      git(["clone", "--mirror", fetchUrl, tmp]);
+      configureMirrorRemote(tmp, fetchUrl);
+      // Re-check: peer may have finished while we cloned (shouldn't under lock,
+      // but rename must not clobber a good bare).
+      if (isBareGitDir(mirrorPath)) {
+        fs.rmSync(tmp, { recursive: true, force: true });
+        configureMirrorRemote(mirrorPath, fetchUrl);
+        git(["-C", mirrorPath, "fetch", "--prune", "origin", "+refs/*:refs/*"]);
+        return;
+      }
+      if (fs.existsSync(mirrorPath)) {
+        fs.rmSync(mirrorPath, { recursive: true, force: true });
+      }
+      fs.renameSync(tmp, mirrorPath);
     } catch (err) {
+      try {
+        if (fs.existsSync(tmp)) fs.rmSync(tmp, { recursive: true, force: true });
+      } catch {
+        /* best-effort */
+      }
       if (err instanceof ClaimGitError) throw err;
       throw new ClaimGitError(
-        "mirror_fetch_failed",
-        `mirror fetch failed for ${fetchUrl}: ${gitErrorMessage(err)}`,
+        "mirror_clone_failed",
+        `mirror clone failed for ${display}: ${gitErrorMessage(err)}`,
       );
     }
-    return;
-  }
-
-  // Stale non-bare residue — clear so clone can proceed.
-  if (fs.existsSync(mirrorPath)) {
-    fs.rmSync(mirrorPath, { recursive: true, force: true });
-  }
-  fs.mkdirSync(path.dirname(mirrorPath), { recursive: true });
-  try {
-    git(["clone", "--mirror", fetchUrl, mirrorPath]);
-    configureMirrorRemote(mirrorPath, fetchUrl);
-  } catch (err) {
-    if (err instanceof ClaimGitError) throw err;
-    throw new ClaimGitError(
-      "mirror_clone_failed",
-      `mirror clone failed for ${fetchUrl}: ${gitErrorMessage(err)}`,
-    );
-  }
+  });
 }
 
 /**
  * Keep full-ref fetch while allowing single-branch push (see ensureMirror).
  */
 function configureMirrorRemote(mirrorPath: string, fetchUrl: string): void {
+  const display = safeUrl(fetchUrl);
   try {
-    // Ensure origin points at the lease fetch URL (may change if URL moved).
     git(["-C", mirrorPath, "remote", "set-url", "origin", fetchUrl]);
   } catch {
     try {
@@ -196,11 +333,10 @@ function configureMirrorRemote(mirrorPath: string, fetchUrl: string): void {
     } catch (err) {
       throw new ClaimGitError(
         "mirror_fetch_failed",
-        `could not set origin to ${fetchUrl}: ${gitErrorMessage(err)}`,
+        `could not set origin to ${display}: ${gitErrorMessage(err)}`,
       );
     }
   }
-  // Disable mirror *push* mode so refspec pushes work; keep broad fetch.
   try {
     git(["-C", mirrorPath, "config", "remote.origin.mirror", "false"]);
   } catch {
@@ -227,7 +363,6 @@ export function ensureBaseSha(repoPath: string, sha: string): void {
   }
   if (hasCommit(repoPath, target)) return;
 
-  // Direct sha fetch fallback (object may not be on any advertised branch).
   try {
     git(["-C", repoPath, "fetch", "origin", target]);
   } catch {
@@ -248,6 +383,13 @@ function hasCommit(repoPath: string, sha: string): boolean {
   } catch {
     return false;
   }
+}
+
+/** Whether a git push error should be classed as permission / denial. */
+export function isPushDeniedDetail(detail: string): boolean {
+  return /denied|forbidden|not allowed|pre-receive hook declined|hook declined|authentication failed|permission|read.?only|PROHIBITED|unauthorized|unable to create temporary object directory|operation not permitted|cannot create|disk quota|Read-only file system/i.test(
+    detail,
+  );
 }
 
 /**
@@ -274,10 +416,7 @@ export function preflightPushBranch(
     ]);
   } catch (err) {
     const detail = gitErrorMessage(err);
-    const denied =
-      /denied|forbidden|not allowed|pre-receive hook declined|hook declined|authentication failed|permission|read.only|PROHIBITED|unauthorized/i.test(
-        detail,
-      );
+    const denied = isPushDeniedDetail(detail);
     throw new ClaimGitError(
       denied ? "push_denied" : "push_preflight_failed",
       denied
@@ -293,6 +432,21 @@ export function preflightPushBranch(
     git(["-C", repoPath, "update-ref", "-d", `refs/heads/${branch}`]);
   } catch {
     /* non-bare clones only have remotes/origin/<branch> — nothing to delete */
+  }
+}
+
+/**
+ * Best-effort delete of a preflight branch left on origin after a task fails.
+ * Errors are swallowed — a residual remote branch is preferable to blocking fail.
+ */
+export function deleteRemoteBranchBestEffort(
+  repoPath: string,
+  branch: string,
+): void {
+  try {
+    git(["-C", repoPath, "push", "origin", `:refs/heads/${branch}`]);
+  } catch {
+    /* residual orphan documented in ADR-0031 */
   }
 }
 
@@ -321,6 +475,11 @@ export interface PreparedRepo {
   branch: string;
   /** Whether to push the task branch to origin after the child exits. */
   pushToOrigin: boolean;
+  /**
+   * True when claim-time preflight successfully pushed `branch` to origin.
+   * On later task failure the runner best-effort deletes that remote ref.
+   */
+  preflightPushed: boolean;
   /** How the repo was obtained (for logs / tests). */
   source: "mirror" | "override" | "local";
 }
@@ -344,9 +503,12 @@ export function prepareClaimRepo(
   const baseSha = lease.base_sha?.trim() || null;
   const baseRef = baseSha ?? lease.base_ref ?? "HEAD";
 
-  // 1) Optional operator-managed clone override (keyed by repo_key, then path).
-  const overrideId = lease.repo_key ?? lease.repo;
-  const override = resolveRepoPath(opts.repos, overrideId);
+  // 1) Optional operator-managed clone — exact match on repo_key, else exact
+  // path id (no basename heuristics; F1).
+  const override =
+    (lease.repo_key !== null && lease.repo_key !== ""
+      ? resolveRepoPath(opts.repos, lease.repo_key)
+      : null) ?? resolveRepoPath(opts.repos, lease.repo);
   if (override !== null) {
     if (!fs.existsSync(override)) {
       throw new ClaimGitError(
@@ -358,7 +520,6 @@ export function prepareClaimRepo(
     if (baseSha !== null) {
       ensureBaseSha(override, baseSha);
     } else {
-      // No recorded sha — ensure the ref resolves at all.
       try {
         git(["-C", override, "rev-parse", "--verify", `${baseRef}^{commit}`]);
       } catch (err) {
@@ -377,6 +538,7 @@ export function prepareClaimRepo(
       baseRef: resolved,
       branch,
       pushToOrigin: true,
+      preflightPushed: true,
       source: "override",
     };
   }
@@ -410,6 +572,7 @@ export function prepareClaimRepo(
       baseRef: resolved,
       branch,
       pushToOrigin: true,
+      preflightPushed: true,
       source: "mirror",
     };
   }
@@ -421,6 +584,7 @@ export function prepareClaimRepo(
       baseRef,
       branch,
       pushToOrigin: false,
+      preflightPushed: false,
       source: "local",
     };
   }

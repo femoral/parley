@@ -37,24 +37,36 @@ parley home:
 $PARLEY_HOME/clones/<encoded-repo-key>/
 ```
 
-- Encoding: replace `/` with `--`, scrub other path-hostile characters
-  (`encodeRepoKeyForFs`). Example: `github.com/femoral/parley` →
-  `github.com--femoral--parley`.
+- Encoding is **injective**: a readable slug (`/` → `--`, other path-hostile
+  chars scrubbed) plus a fixed `-<sha256(rawKey)[:8]>` suffix so keys that
+  would collide under the slug alone (e.g. `a/b--c` vs `a--b/c`) still map to
+  distinct directories.
 - When `repo_key` is null but `repo_fetch_url` is set (bare path / `file://`
   origins that do not normalize), the directory is `url-<sha256-16>` of the
   fetch URL so warm reuse still works.
-- First claim: `git clone --mirror <repo_fetch_url> <mirror>`.
+- First claim: `git clone --mirror <repo_fetch_url> <tmp>` then atomic rename
+  into the final mirror path (see concurrency below).
 - Later claims: `git fetch --prune origin '+refs/*:refs/*'` (no re-clone).
 - No shallow mirrors — every ref must be available so arbitrary `base_sha`
   values resolve.
 - Task worktrees are cut from the mirror with the existing worktree module
   (`createWorktree`); branches remain `parley/<id>[-<slug>]`.
 
+### Concurrency (mirror lock)
+
+Two runner processes sharing one `$PARLEY_HOME` may claim the same repo key at
+once. `ensureMirror` serializes per mirror path with a mkdir-lock at
+`<mirror>.lock` (stale after 10 minutes), clones into a sibling temp directory
+(`.parley-clone-tmp-…`, never a real mirror name), then renames into place.
+Peers never observe a half-cloned final path, and a waiter never `rmSync`s a
+peer’s in-flight temp clone.
+
 ### Claim-time git sequence (before vendor spawn)
 
 On lease, before any adapter prepare / child spawn:
 
-1. Resolve source: optional `runner.repos` override → else managed mirror from
+1. Resolve source: optional `runner.repos` override (exact repo-key or exact
+   path id only — **no basename matching**) → else managed mirror from
    `repo_fetch_url` → else local path when it exists and there is no origin
    (no-origin fast path; no push).
 2. Update: mirror fetch with prune, or best-effort `fetch --prune` on an
@@ -64,7 +76,8 @@ On lease, before any adapter prepare / child spawn:
    `base_sha not resolvable from origin: <sha>`.
 4. Push pre-flight:
    `git push origin <base_sha>:refs/heads/<task-branch>`.
-   Permission / hook denials → **fail** with `push denied at claim time…`.
+   Permission / hook denials (including read-only origin / unable to create
+   temporary object directory) → **fail** with `push denied at claim time…`.
    (A real push, not `--dry-run`: git dry-run does not run remote hooks, so
    denials would only surface after the vendor. The branch tip starts at
    `base_sha`; the post-task push advances it.)
@@ -73,15 +86,26 @@ On lease, before any adapter prepare / child spawn:
    override paths only) and record the branch via `POST /runner/tasks/:id/branch`.
 
 Any failure in steps 1–5 fails the task at claim time with a precise diagnosis;
-the vendor **never** spawns.
+the vendor **never** spawns. Diagnosis text that embeds a fetch URL always runs
+it through `stripFetchUrlCredentials` so userinfo never lands in `tasks.error`.
+
+### Orphan preflight branches
+
+Because preflight is a real push, a failure after step 4 (unknown vendor,
+worktree error, vendor crash without a successful branch handoff) would leave a
+zero-diff branch at `base_sha` on origin. The runner **best-effort deletes**
+that remote ref on failure (`git push origin :refs/heads/<branch>`). If cleanup
+itself fails (network blip, concurrent deny hook), the residual branch is left
+for the operator / later GC — documented here so it is not a silent leak.
 
 ### Optional `runner.repos` override
 
-`runner.repos` is **optional** and maps a **repo key** (or path id) to an
-operator-managed existing clone. It is no longer required for a runner to
-function. When present, claim-time still fetches/verifies/dry-run-pushes against
-that clone and pushes the result branch to its `origin`. Greenfield: the old
-"must configure runner.repos" hard requirement is removed with no compat shim.
+`runner.repos` is **optional** and maps a **repo key** (or exact path id) to an
+operator-managed existing clone. Matching is **exact only** — basename
+heuristics are forbidden so `…/acme/api` never steals `…/other/api`. When
+present, claim-time still fetches/verifies/preflight-pushes against that clone
+and pushes the result branch to its `origin`. Greenfield: the old "must
+configure runner.repos" hard requirement is removed with no compat shim.
 
 ### Credentials
 
@@ -103,10 +127,12 @@ path fails at claim with `no_repo_source`.
   and push, with warm mirrors across tasks on the same key.
 - Operators can still pin a hand-managed clone via `repos` when they need a
   special layout or offline cache.
-- Claim-time dry-run push catches permission problems before spending a vendor
-  turn.
+- Claim-time push preflight catches permission problems before spending a vendor
+  turn; failed tasks best-effort remove the preflight branch.
+- Concurrent runners on one home share mirrors safely via lock + atomic rename.
 - Mirror disk growth and prune policy ride with later runner lifecycle / status
-  work; this ADR does not auto-gc clones.
+  work; this ADR does not auto-gc clones (including residual orphan branches
+  if delete fails).
 - Local daemon executor adopting the same mirror layout is follow-on (routing /
   unified executor tickets); this ticket wires the **runner** path and the
   shared `homePaths.clones` layout.

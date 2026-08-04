@@ -10,9 +10,14 @@ export {
 } from "./loop.js";
 export {
   ClaimGitError,
+  deleteRemoteBranchBestEffort,
   encodeFetchUrlForFs,
   encodeRepoKeyForFs,
+  ensureMirror,
+  isMirrorTempName,
+  isPushDeniedDetail,
   mirrorPathFor,
+  MIRROR_TEMP_PREFIX,
   prepareClaimRepo,
   taskBranchName,
   type ClaimGitFailureCode,

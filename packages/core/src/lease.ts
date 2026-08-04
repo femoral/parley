@@ -86,9 +86,8 @@ export interface RunnerLeaseSpec {
    */
   repo_fetch_url: string | null;
   /**
-   * Delegate-time local path of the repo (or cwd). Used for the no-origin
-   * local fast path on the executing host; optional `runner.repos` may also
-   * override by repo key to an operator-managed clone (ADR-0031 / #316).
+   * Delegate-time local path of the repo (or cwd). Used for the same-host
+   * fast path; runners may also map it via `runner.repos`.
    */
   repo: string;
   contexts: LeaseContextFile[];
