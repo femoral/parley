@@ -20,8 +20,13 @@ import {
   sweepInterruptedTasks,
   updateTask, writeTaskState,
   type DatabaseHandle,
+  type TaskRow,
 } from "../src/db.js";
 import { TaskEngine } from "../src/engine.js";
+import {
+  InProcessExecutor,
+  type InProcessExecutorHost,
+} from "../src/executor.js";
 import { withFakeAllowlist } from "./helpers.js";
 
 const FAKE_VENDOR_BIN = fileURLToPath(
@@ -255,9 +260,8 @@ describe("concurrency queue (#171)", () => {
     expect(eng.queuePositionFor(getTask(db, t1)!)).toBe(1);
     expect(eng.queuePositionFor(getTask(db, t2)!)).toBe(2);
     expect(eng.queuePositionFor(getTask(db, t3)!)).toBe(3);
-    // Head-of-line drain when a slot frees is covered by the vendor-cap test;
-    // here we only pin restart durability + order (spawn cascade without a
-    // hub would empty the queue via quick fail→drain loops).
+    // Head-of-line admission identity is pinned by the #326 drain tests below;
+    // here we only pin restart durability + observable FIFO positions.
   });
 
   it("profile + vendor caps both must have free slots", async () => {
@@ -450,5 +454,97 @@ describe("concurrency queue (#171)", () => {
     expect(after.state).toBe("queued");
     expect(listQueuedTasks(db).map((t) => t.id)).toContain(row.id);
     expect(after.state).not.toBe("pending");
+  });
+
+});
+
+/**
+ * Direct host-level pins for {@link InProcessExecutor.drain} (#326).
+ *
+ * Engine-level "who left queued" snapshots race with spawn→fail cascade
+ * without a hub and can false-green under LIFO (both waiters leave before
+ * the next poll). These host stubs record `executeClaimed` identity with
+ * one free slot, so a LIFO walk of the drain loop turns the suite red.
+ */
+describe("InProcessExecutor drain (#326)", () => {
+  function stubTask(id: string): TaskRow {
+    // Minimal row: drain only needs id + host callbacks.
+    return { id, state: "queued", vendor: "fake" } as TaskRow;
+  }
+
+  it("with cap saturated and ≥2 queued, one free slot admits the oldest (FIFO head-of-line)", () => {
+    const queue = [stubTask("t-old"), stubTask("t-mid"), stubTask("t-new")];
+    const admitted: string[] = [];
+    // One free slot: first successful canAdmit admits exactly one task.
+    let freeSlots = 1;
+
+    const host: InProcessExecutorHost = {
+      isShuttingDown: () => false,
+      isLocalTask: () => true,
+      canAdmit: () => freeSlots > 0,
+      enqueue: () => {
+        /* unused */
+      },
+      executeClaimed: (task) => {
+        admitted.push(task.id);
+        freeSlots -= 1;
+      },
+      listQueued: () => queue.filter((t) => !admitted.includes(t.id)),
+      isAlreadyAdmitted: (id) => admitted.includes(id),
+    };
+
+    const exec = new InProcessExecutor(host);
+    exec.drain();
+
+    // Head-of-line identity: oldest first — not the tail a LIFO walk picks.
+    expect(admitted).toEqual(["t-old"]);
+    expect(admitted).not.toContain("t-new");
+    expect(admitted).not.toContain("t-mid");
+  });
+
+  it("re-entrant drain during admit is a no-op (no nested walk)", () => {
+    const queue = [stubTask("a"), stubTask("b")];
+    const admitted: string[] = [];
+    let freeSlots = 2;
+    let concurrentWalks = 0;
+    let maxConcurrentWalks = 0;
+    let listQueuedCalls = 0;
+
+    const host: InProcessExecutorHost = {
+      isShuttingDown: () => false,
+      isLocalTask: () => true,
+      canAdmit: () => freeSlots > 0,
+      enqueue: () => {
+        /* unused */
+      },
+      executeClaimed: (task) => {
+        admitted.push(task.id);
+        freeSlots -= 1;
+        // Nested call while the outer walk still holds the guard.
+        exec.drain();
+      },
+      listQueued: () => {
+        listQueuedCalls += 1;
+        concurrentWalks += 1;
+        maxConcurrentWalks = Math.max(maxConcurrentWalks, concurrentWalks);
+        try {
+          return queue.filter((t) => !admitted.includes(t.id));
+        } finally {
+          concurrentWalks -= 1;
+        }
+      },
+      isAlreadyAdmitted: (id) => admitted.includes(id),
+    };
+
+    const exec = new InProcessExecutor(host);
+    exec.drain();
+
+    // Outer walk admits both (two free slots); nested drain never walks.
+    expect(admitted).toEqual(["a", "b"]);
+    expect(maxConcurrentWalks).toBe(1);
+    // Without the guard, each executeClaimed would start a nested walk that
+    // also calls listQueued — listQueuedCalls would exceed the outer passes.
+    // With the guard: one list per outer while-iteration only.
+    expect(listQueuedCalls).toBeLessThanOrEqual(3);
   });
 });

@@ -67,6 +67,12 @@ export interface InProcessExecutorHost {
 export class InProcessExecutor implements TaskExecutor {
   readonly id = LOCAL_EXECUTOR_ID;
 
+  /**
+   * Re-entrancy guard for {@link drain}: a nested call (e.g. from a hook
+   * fired during admit) is a no-op so the admit walk never nests (#326).
+   */
+  private draining = false;
+
   constructor(private readonly host: InProcessExecutorHost) {}
 
   /**
@@ -89,29 +95,35 @@ export class InProcessExecutor implements TaskExecutor {
 
   /**
    * Drain the durable concurrency queue: claim and start any queued task that
-   * now fits under its caps. Re-lists after each admit so slot counts stay
-   * accurate. Caller supplies re-entrancy guarding if needed.
+   * now fits under its caps (FIFO head-of-line). Re-lists after each admit so
+   * slot counts stay accurate. Internally re-entrancy-safe: a call while a
+   * drain is already in progress is a no-op (#326).
    */
   drain(): void {
-    if (this.host.isShuttingDown()) return;
-    let progressed = true;
-    while (progressed) {
-      progressed = false;
-      let queued: TaskRow[];
-      try {
-        queued = this.host.listQueued();
-      } catch {
-        // DB may already be closed (tests / shutdown race).
-        return;
+    if (this.draining || this.host.isShuttingDown()) return;
+    this.draining = true;
+    try {
+      let progressed = true;
+      while (progressed) {
+        progressed = false;
+        let queued: TaskRow[];
+        try {
+          queued = this.host.listQueued();
+        } catch {
+          // DB may already be closed (tests / shutdown race).
+          return;
+        }
+        for (const task of queued) {
+          if (this.host.isAlreadyAdmitted(task.id)) continue;
+          if (!this.host.canAdmit(task)) continue;
+          this.host.executeClaimed(task);
+          progressed = true;
+          // Re-list after each admit so slot counts stay accurate.
+          break;
+        }
       }
-      for (const task of queued) {
-        if (this.host.isAlreadyAdmitted(task.id)) continue;
-        if (!this.host.canAdmit(task)) continue;
-        this.host.executeClaimed(task);
-        progressed = true;
-        // Re-list after each admit so slot counts stay accurate.
-        break;
-      }
+    } finally {
+      this.draining = false;
     }
   }
 }
