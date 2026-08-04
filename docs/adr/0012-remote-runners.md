@@ -69,3 +69,17 @@ N runners, all state in the daemon's sqlite.
 - The runner reuses adapters/worktree logic via shared packages — no forked
   execution semantics; sandbox postures apply on the runner host exactly as
   they would locally.
+
+## Superseded in part (#311 program)
+
+The lease-based outbound runner shape stands. Later ADRs amend operator
+contracts that this decision first recorded:
+
+| Original claim here | Superseded by |
+| --- | --- |
+| Tasks without affinity always execute in-daemon | [ADR-0032](0032-capability-matched-routing.md) — unpinned work prefers online capable runners; placement persisted |
+| Mandatory / path-map `runner.repos` pre-clone | [ADR-0031](0031-repo-identity-and-managed-mirrors.md) — managed bare mirrors; `repos` optional exact-key override |
+| Name-affinity claim as the only remote path | ADR-0029 registration + ADR-0032 capability-matched claim |
+| Reverse-proxy-only path to non-loopback | [ADR-0030](0030-client-auth-and-bind-posture.md) — opt-in `daemon.bind` + client/runner tokens |
+
+Operator narrative: `docs/agents/remote-runners.md`.

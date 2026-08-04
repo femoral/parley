@@ -138,3 +138,18 @@ path fails at claim with `no_repo_source`.
 - The daemon in-process executor reuses the same mirror module (#318): same-host
   path match stays a no-clone/no-push fast path; otherwise local placement
   executes from a managed mirror and pushes the branch to origin.
+- Fingerprint advertises held mirror keys as `capabilities.held_mirrors`
+  (ADR-0029); routing prefers warm clone holders (ADR-0032 / #318).
+
+## Related
+
+- ADR-0012 remote runners (original path-map contract this ADR replaces)
+- [ADR-0029](0029-runner-registration-advertisement-wire.md) registration
+  carries `held_mirrors`
+- [ADR-0032](0032-capability-matched-routing.md) warm-clone preference and
+  claim-time git-auth avoidance (`unreachable_repos`) interlock with this
+  mirror module
+- `docs/agents/remote-runners.md`
+- Issues: [#316](https://github.com/femoral/parley/issues/316),
+  [#313](https://github.com/femoral/parley/issues/313),
+  [#318](https://github.com/femoral/parley/issues/318)

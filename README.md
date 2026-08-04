@@ -224,7 +224,11 @@ edges.
 
 ### Remote runners & remote daemon
 
-Run children on other machines while keeping one daemon and one inbox:
+Run children on other machines while keeping one daemon and one inbox. Runners
+register capabilities (vendors + held mirrors); the daemon routes unpinned work
+to a capable online executor automatically (`--runner` remains a hard pin).
+Repos sync via parley-managed mirrors with the host's git credentials — no
+pre-provisioned clones required.
 
 ```bash
 # on the remote host
@@ -237,13 +241,15 @@ npm install -g @useparley/runner    # give it the daemon URL + a token
 # "runners": { "gpu-box": { "token": "fake-runner-token-example" } },
 # "daemon":  { "bind": "0.0.0.0" }
 
-parley delegate --runner gpu-box …
+parley delegate -v codex …          # auto-routes when a capable runner is online
+parley delegate --runner gpu-box …  # hard pin
 ```
 
-The runner leases tasks, executes them with the same adapters and worktree
-semantics, streams logs and heartbeats back, and pushes the finished branch to
-your git remote for review. Outbound-only from the runner — no reach-in
-credentials. Details: [docs/agents/remote-runners.md](docs/agents/remote-runners.md).
+The runner leases capability-matched tasks, executes them with the same
+adapters and worktree semantics, streams logs and heartbeats back, and pushes
+the finished branch to your git remote for review. Outbound-only from the
+runner — no reach-in credentials. Details:
+[docs/agents/remote-runners.md](docs/agents/remote-runners.md).
 
 ### Evaluation flow
 

@@ -29,7 +29,7 @@ detectable executors.
   | `runner` | Pre-declared name (must match token) |
   | `protocol_version` | Integer wire version (`RUNNER_PROTOCOL_VERSION` in `@useparley/core`) |
   | `build_version` | Runner package version string |
-  | `capabilities` | `{ vendors: [{ id, models: ModelEntry[] }] }` |
+  | `capabilities` | `{ vendors: [{ id, models: ModelEntry[] }], held_mirrors?: string[] }` — vendors required; optional `held_mirrors` is repo keys this host holds under `$PARLEY_HOME/clones/` (#318 / ADR-0031 / ADR-0032 warm-clone) |
 
 - Lease long-poll stays identity-only (`{ runner }`) and **is the presence
   signal** — no separate idle heartbeat. In-task 90s heartbeat is unchanged.
@@ -39,7 +39,7 @@ detectable executors.
   `code: "protocol_version_mismatch"`, naming both sides' versions.
 - Unknown names / wrong tokens remain **401** (auth before body semantics).
 
-### Advertisement — self-fingerprinted vendors + models
+### Advertisement — self-fingerprinted vendors + models (+ held mirrors)
 
 The runner probes its host:
 
@@ -53,9 +53,15 @@ The runner probes its host:
    probe when disk is empty so a multi-vendor host does not stall on hung
    vendor binaries at register time. Periodic re-fingerprint can deepen
    catalogs later.
+3. **Held mirrors** (#318): `listHeldMirrorRepoKeys` on
+   `$PARLEY_HOME/clones/` → optional `capabilities.held_mirrors` (repo keys
+   this host already has as managed bare mirrors). Used by routing for
+   warm-clone preference (ADR-0032); omitted when empty so older runners stay
+   valid on the wire.
 
-The daemon stores the last advertisement as JSON; routing (later tickets) can
-match without loading plugin code.
+The daemon stores the last advertisement as JSON; routing (ADR-0032) matches
+without loading plugin code. Re-registration also clears git-auth avoidance
+memory on the runner row (ADR-0032 / #317).
 
 ### Persistence and status
 
@@ -108,13 +114,14 @@ no runner restart.
 - `GET /runners` → `{ runners: RunnerListEntry[] }` (name, status, vendor ids,
   last_seen, registered_at, protocol/build versions). Lazy stale sweep first.
 - `GET /runners/:name` → full advertisement (`RunnerShowResponse`: models,
-  optional reachability, `last_contact_age_ms`, recent tasks). Client class.
+  held mirrors, optional reachability / unreachable repos, `last_contact_age_ms`,
+  recent tasks). Client class.
 - `DELETE /runners/:name` → remove SQLite row **and** `runners.<name>` config
   (loopback / config-admin only). Config write commits before row delete.
   Re-registration then fails as unknown (401).
 - CLI: `parley runners list|show|remove [--json]`.
 
-Cove cards remain deferred to the broader #309 surface.
+Cove executors panel and task executor attribution landed in #324.
 
 ## Consequences
 
@@ -126,3 +133,16 @@ Cove cards remain deferred to the broader #309 surface.
 - Protocol bumps use `RUNNER_PROTOCOL_VERSION`; mismatched runners fail fast at
   register with a precise message rather than silent partial behavior.
 - Presence is cheap (no new wire traffic while idle long-polling).
+
+## Related
+
+- ADR-0012 remote runners · [ADR-0028](0028-unified-executor-model.md) unified
+  executor · [ADR-0030](0030-client-auth-and-bind-posture.md) client tokens
+  (separate principal namespace from `runners.<name>.token`)
+- [ADR-0031](0031-repo-identity-and-managed-mirrors.md) managed mirrors feed
+  `held_mirrors` · [ADR-0032](0032-capability-matched-routing.md) consumes
+  advertisements for claim and warm-clone ranking
+- `docs/agents/remote-runners.md`
+- Issues: [#314](https://github.com/femoral/parley/issues/314),
+  [#320](https://github.com/femoral/parley/issues/320),
+  [#318](https://github.com/femoral/parley/issues/318)
