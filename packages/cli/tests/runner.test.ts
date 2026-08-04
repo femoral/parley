@@ -1036,12 +1036,14 @@ describe("runner registration + parley runners list", () => {
   }, 40_000);
 
   it("git-auth fail-once-then-avoid: second task skips runner until re-register (#317)", async () => {
-    // Network-style origin so tasks get a real repo_key (pairing key for
-    // avoidance). Map it to a local bare with a deny hook via insteadOf so
-    // git still pushes locally.
+    // Load-bearing avoidance:
+    // 1. Disable re-fingerprint for the test window so the exclusion sticks.
+    // 2. Make gpu warm-preferred (a prior completion) so without exclusion it
+    //    would claim task 2 during the 5s reservation — only avoidance explains
+    //    cpu winning.
+    // 3. Assert unconditionally: task2 completed on cpu.
     const ORIGIN = "https://github.com/org/denied-repo.git";
     const REPO_KEY = "github.com/org/denied-repo";
-
     fs.writeFileSync(
       path.join(home, "parley.json"),
       JSON.stringify(
@@ -1065,15 +1067,16 @@ describe("runner registration + parley runners list", () => {
       GIT_CONFIG_COUNT: "1",
       GIT_CONFIG_KEY_0: `url.${bareUrl}.insteadOf`,
       GIT_CONFIG_VALUE_0: ORIGIN,
+      // vitest/env may keep underscores; use a pure integer ms string.
+      PARLEY_RUNNER_REFINGERPRINT_MS: "3600000",
     };
 
-    // Build the working repo first and push HEAD to bare *before* the deny
-    // hook so claim-time base_sha resolves; only the preflight push is denied.
+    // Working repo: push HEAD to bare first (no deny hook yet).
     const repo = makeGitRepo(
       [
         {
           submit_report: {
-            summary: "ok from cpu",
+            summary: "ok",
             outcome: "success",
             files_changed: [],
           },
@@ -1087,15 +1090,6 @@ describe("runner registration + parley runners list", () => {
       stdio: "ignore",
       env: { ...process.env, ...insteadEnv },
     });
-
-    git(bare, ["config", "core.hooksPath", path.join(bare, "hooks")]);
-    const hooks = path.join(bare, "hooks");
-    fs.mkdirSync(hooks, { recursive: true });
-    fs.writeFileSync(
-      path.join(hooks, "pre-receive"),
-      "#!/bin/sh\necho DENIED_BY_HOOK >&2\nexit 1\n",
-    );
-    fs.chmodSync(path.join(hooks, "pre-receive"), 0o755);
 
     const boot = await runCli(["daemon", "start"], home, {
       extraEnv: {
@@ -1117,15 +1111,67 @@ describe("runner registration + parley runners list", () => {
     const daemonUrl =
       discovery.url ?? `http://127.0.0.1:${discovery.port}`;
 
+    // gpu only first — complete a task so it is warm-preferred over later cpu.
     startRunner({
       home,
       name: "gpu",
       token: "secret-gpu",
       daemonUrl,
       repos: {},
+      // insteadEnv carries PARLEY_RUNNER_REFINGERPRINT_MS=3600000 (overrides
+      // startRunner default of 300ms so exclusion is not wiped mid-test).
       extraEnv: insteadEnv,
     });
     await waitForRunnerOnline(home, "gpu");
+
+    type StatusSnap = {
+      state: string;
+      error: string | null;
+      runner?: string | null;
+      repo_key?: string | null;
+      error_category?: {
+        kind?: string;
+        repo_key?: string | null;
+        runner?: string;
+        operation?: string;
+        code?: string;
+      } | null;
+    };
+
+    async function waitTerminal(taskId: string, ms = 40_000): Promise<StatusSnap> {
+      const deadline = Date.now() + ms;
+      let row: StatusSnap | null = null;
+      while (Date.now() < deadline) {
+        const status = await runCli(["status", taskId, "--json"], home);
+        if (status.code === 0) {
+          row = JSON.parse(status.stdout) as StatusSnap;
+          if (row.state === "failed" || row.state === "completed") return row;
+        }
+        await new Promise((r) => setTimeout(r, 120));
+      }
+      throw new Error(`task ${taskId} did not terminate: ${JSON.stringify(row)}`);
+    }
+
+    const warmDel = await runCli(
+      ["delegate", "-v", "fake", "--runner", "gpu", "warm completion for gpu"],
+      home,
+      { cwd: repo, extraEnv: insteadEnv },
+    );
+    expect(warmDel.code).toBe(0);
+    const warmId = (JSON.parse(warmDel.stdout) as { task_id: string }).task_id;
+    const warmRow = await waitTerminal(warmId);
+    expect(warmRow.state).toBe("completed");
+    expect(warmRow.runner).toBe("gpu");
+
+    // Install deny hook — next claim-time preflight on this origin fails.
+    git(bare, ["config", "core.hooksPath", path.join(bare, "hooks")]);
+    const hooks = path.join(bare, "hooks");
+    fs.mkdirSync(hooks, { recursive: true });
+    fs.writeFileSync(
+      path.join(hooks, "pre-receive"),
+      "#!/bin/sh\necho DENIED_BY_HOOK >&2\nexit 1\n",
+    );
+    fs.chmodSync(path.join(hooks, "pre-receive"), 0o755);
 
     const del1 = await runCli(
       ["delegate", "-v", "fake", "--runner", "gpu", "first fail git-auth"],
@@ -1134,32 +1180,22 @@ describe("runner registration + parley runners list", () => {
     );
     expect(del1.code).toBe(0);
     const task1 = (JSON.parse(del1.stdout) as { task_id: string }).task_id;
+    const row1 = await waitTerminal(task1);
+    expect(row1.state).toBe("failed");
+    expect(row1.error ?? "").toMatch(/push denied at claim time/);
+    expect(row1.repo_key).toBe(REPO_KEY);
+    expect(row1.error_category?.kind).toBe("git_auth");
+    expect(row1.error_category?.repo_key).toBe(REPO_KEY);
+    expect(row1.error_category?.runner).toBe("gpu");
 
-    type StatusSnap = {
-      state: string;
-      error: string | null;
-      runner?: string | null;
-      repo_key?: string | null;
-      error_category?: { kind?: string; repo_key?: string | null } | null;
-    };
+    // Surface: runners show lists the recorded unreachability.
+    const shown = await runCli(["runners", "show", "gpu"], home);
+    expect(shown.code).toBe(0);
+    expect(shown.stdout).toMatch(/unreachable \(recorded\)/);
+    expect(shown.stdout).toMatch(new RegExp(REPO_KEY));
+    expect(shown.stdout).toMatch(/push denied/i);
 
-    const deadline1 = Date.now() + 25_000;
-    let row1: StatusSnap | null = null;
-    while (Date.now() < deadline1) {
-      const status = await runCli(["status", task1, "--json"], home);
-      if (status.code === 0) {
-        row1 = JSON.parse(status.stdout) as StatusSnap;
-        if (row1.state === "failed" || row1.state === "completed") break;
-      }
-      await new Promise((r) => setTimeout(r, 100));
-    }
-    expect(row1?.state).toBe("failed");
-    expect(row1?.error ?? "").toMatch(/push denied at claim time/);
-    expect(row1?.repo_key).toBe(REPO_KEY);
-    expect(row1?.error_category?.kind).toBe("git_auth");
-    expect(row1?.error_category?.repo_key).toBe(REPO_KEY);
-
-    // Remove deny hook so cpu (and later re-registered gpu) can succeed.
+    // Remove deny hook so cpu can complete; gpu still excluded until re-register.
     fs.unlinkSync(path.join(hooks, "pre-receive"));
 
     startRunner({
@@ -1172,32 +1208,18 @@ describe("runner registration + parley runners list", () => {
     });
     await waitForRunnerOnline(home, "cpu");
 
+    // Unpinned: gpu is warmer (prior completion) but excluded for this repo →
+    // only avoidance lets cpu claim immediately.
     const del2 = await runCli(
-      ["delegate", "-v", "fake", "second should skip gpu"],
+      ["delegate", "-v", "fake", "second must land on cpu via exclusion"],
       home,
       { cwd: repo, extraEnv: insteadEnv },
     );
     expect(del2.code).toBe(0);
     const task2 = (JSON.parse(del2.stdout) as { task_id: string }).task_id;
-
-    const deadline2 = Date.now() + 40_000;
-    let row2: StatusSnap | null = null;
-    while (Date.now() < deadline2) {
-      const status = await runCli(["status", task2, "--json"], home);
-      if (status.code === 0) {
-        row2 = JSON.parse(status.stdout) as StatusSnap;
-        if (row2.state === "failed" || row2.state === "completed") break;
-      }
-      await new Promise((r) => setTimeout(r, 150));
-    }
-    // Must not re-fail on gpu with the same git-auth (avoidance working).
-    if (row2?.state === "failed") {
-      expect(row2.error ?? "").toMatch(/excluded|cannot reach/);
-      expect(row2.error ?? "").not.toMatch(/push denied at claim time/);
-    } else {
-      expect(row2?.state).toBe("completed");
-      expect(row2?.runner).toBe("cpu");
-    }
+    const row2 = await waitTerminal(task2, 45_000);
+    expect(row2.state).toBe("completed");
+    expect(row2.runner).toBe("cpu");
 
     // Kill all runners; restart only gpu (re-register clears unreachability).
     for (const child of children.splice(0)) {
@@ -1214,6 +1236,14 @@ describe("runner registration + parley runners list", () => {
     });
     await waitForRunnerOnline(home, "gpu");
 
+    // After re-register, exclusion is gone.
+    const cleared = await runCli(["runners", "show", "gpu", "--json"], home);
+    expect(cleared.code).toBe(0);
+    const clearBody = JSON.parse(cleared.stdout) as {
+      unreachable_repos: unknown[];
+    };
+    expect(clearBody.unreachable_repos).toEqual([]);
+
     const del3 = await runCli(
       ["delegate", "-v", "fake", "--runner", "gpu", "after re-register"],
       home,
@@ -1221,18 +1251,9 @@ describe("runner registration + parley runners list", () => {
     );
     expect(del3.code).toBe(0);
     const task3 = (JSON.parse(del3.stdout) as { task_id: string }).task_id;
-    const deadline3 = Date.now() + 40_000;
-    let row3: StatusSnap | null = null;
-    while (Date.now() < deadline3) {
-      const status = await runCli(["status", task3, "--json"], home);
-      if (status.code === 0) {
-        row3 = JSON.parse(status.stdout) as StatusSnap;
-        if (row3.state === "failed" || row3.state === "completed") break;
-      }
-      await new Promise((r) => setTimeout(r, 150));
-    }
-    expect(row3?.state).toBe("completed");
-    expect(row3?.runner).toBe("gpu");
+    const row3 = await waitTerminal(task3);
+    expect(row3.state).toBe("completed");
+    expect(row3.runner).toBe("gpu");
   }, 120_000);
 
   it("re-fingerprint reflects vendor capability changes without restart", async () => {
@@ -1317,6 +1338,9 @@ describe("runner registration + parley runners list", () => {
     expect(detail.last_contact_age_ms).toBeGreaterThanOrEqual(0);
     // Reachability is not on the wire yet from packages/runner — graceful null.
     expect(detail.repo_reachability).toBeNull();
+    expect(
+      (detail as { unreachable_repos?: unknown[] }).unreachable_repos ?? [],
+    ).toEqual([]);
     expect(Array.isArray(detail.recent_tasks)).toBe(true);
 
     const text = await runCli(["runners", "show", "gpu"], home);

@@ -177,12 +177,13 @@ export function formatCapabilityDiagnosis(opts: {
     exclusionNote === "" ? base : `${base}; ${exclusionNote}`;
 
   // Hard pin excluded for repo reachability (#317) — prefer over vendor diagnosis.
+  // Do not re-append the same exclusion via withExclusions (dedupe LOW-6).
   if (affinity !== null && opts.exclusions !== undefined) {
     const pinnedExclusion = opts.exclusions.find((e) => e.name === affinity);
     if (pinnedExclusion !== undefined) {
-      return withExclusions(
+      return (
         `runner "${affinity}" cannot reach ${pinnedExclusion.repo_key} ` +
-          `(${formatGitAuthCode(pinnedExclusion.code)}); known executors: ${known}`,
+        `(${formatGitAuthCode(pinnedExclusion.code)}); known executors: ${known}`
       );
     }
   }

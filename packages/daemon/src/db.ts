@@ -1568,6 +1568,12 @@ export function selectClaimablePendingTask(
       name: string;
       vendorIds: readonly string[];
       last_completed_at: string | null;
+      /**
+       * Repo keys this peer cannot reach (#317). Peers that cannot reach the
+       * candidate's `repo_key` are dropped from warm ranking so they do not
+       * hold the reservation for a task they will never claim.
+       */
+      unreachableRepoKeys?: readonly string[];
     }>;
     /**
      * Repo keys this executor cannot reach (#317). Forwarded to
@@ -1597,7 +1603,19 @@ export function selectClaimablePendingTask(
     const vendor = task.vendor ?? "";
     if (vendor === "") continue;
 
-    const capableOnline = peers.filter((p) => p.vendorIds.includes(vendor));
+    const repoKey = task.repo_key;
+    const capableOnline = peers.filter((p) => {
+      if (!p.vendorIds.includes(vendor)) return false;
+      // Fail-once-then-avoid: excluded pairings do not hold warm reservation.
+      if (
+        repoKey !== null &&
+        repoKey !== "" &&
+        (p.unreachableRepoKeys ?? []).includes(repoKey)
+      ) {
+        return false;
+      }
+      return true;
+    });
     if (capableOnline.length <= 1) return task;
 
     const preferred = preferredWarmRunner(capableOnline);
@@ -2776,9 +2794,15 @@ export function upsertRunner(
   return getRunner(db, runner.name)!;
 }
 
+/** Max repo_key length accepted into unreachable memory (#317 wire hygiene). */
+export const UNREACHABLE_REPO_KEY_MAX_LEN = 512;
+/** Cap map size so a pathological flood cannot bloat claim polls (#317). */
+export const UNREACHABLE_REPOS_MAX_ENTRIES = 64;
+
 /**
  * Record that a runner cannot reach `repoKey` after a claim-time git failure
- * (#317). Merges into the existing map (other keys preserved).
+ * (#317). Merges into the existing map (other keys preserved). Oversize keys
+ * and maps beyond {@link UNREACHABLE_REPOS_MAX_ENTRIES} are refused (no-op).
  */
 export function markRunnerUnreachable(
   db: DatabaseHandle,
@@ -2786,10 +2810,21 @@ export function markRunnerUnreachable(
   repoKey: string,
   entry: UnreachableRepoEntry,
 ): void {
+  if (repoKey === "" || repoKey.length > UNREACHABLE_REPO_KEY_MAX_LEN) return;
+  // Codes/operations are closed enums on the fail wire; still clamp free text.
+  if (entry.code.length === 0 || entry.code.length > 64) return;
+  if (entry.operation !== undefined && entry.operation.length > 16) return;
   const row = getRunner(db, name);
   if (row === undefined) return;
   const map = parseUnreachableRepos(row.unreachable_repos);
-  map[repoKey] = entry;
+  if (!(repoKey in map) && Object.keys(map).length >= UNREACHABLE_REPOS_MAX_ENTRIES) {
+    return;
+  }
+  map[repoKey] = {
+    code: entry.code,
+    at: entry.at,
+    ...(entry.operation !== undefined ? { operation: entry.operation } : {}),
+  };
   db.prepare(`UPDATE runners SET unreachable_repos = ? WHERE name = ?`).run(
     JSON.stringify(map),
     name,

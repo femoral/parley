@@ -112,6 +112,21 @@ function formatShow(detail: RunnerShowResponse): string {
     }
   }
 
+  // Daemon-recorded fail-once-then-avoid memory (#317) — distinct from
+  // self-advertised repo_reachability above.
+  lines.push("");
+  lines.push("unreachable (recorded):");
+  const unreachable = detail.unreachable_repos ?? [];
+  if (unreachable.length === 0) {
+    lines.push("  (none)");
+  } else {
+    for (const u of unreachable) {
+      const code = u.code.replace(/_/g, " ");
+      const age = formatLastSeen(u.at);
+      lines.push(`  ${u.repo_key} — ${code}, ${age}`);
+    }
+  }
+
   lines.push("");
   lines.push("recent_tasks:");
   if (detail.recent_tasks.length === 0) {

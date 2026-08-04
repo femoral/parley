@@ -1092,6 +1092,10 @@ describe("git-auth fail-once-then-avoid (#317)", () => {
     if (d.kind === "fail") {
       expect(d.diagnosis).toMatch(/runner "gpu" cannot reach github.com\/org\/repo/);
       expect(d.diagnosis).toMatch(/push denied/);
+      // LOW-6: exclusion stated once, not duplicated by withExclusions.
+      const hits = d.diagnosis.match(/cannot reach github\.com\/org\/repo/g) ?? [];
+      expect(hits.length).toBe(1);
+      expect(d.diagnosis).not.toMatch(/gpu excluded:/);
     }
   });
 
@@ -1198,12 +1202,11 @@ describe("git-auth fail-once-then-avoid (#317)", () => {
       homePaths(home),
       createAdapterRegistrySync(process.env),
     );
+    // Wire only needs kind/operation/code — engine fills identity.
     engine.failRunnerTask("t-fail", "gpu", "push denied at claim time (branch x): DENIED", {
       kind: "git_auth",
       operation: "push",
       code: "push_denied",
-      repo_key: "github.com/org/repo",
-      runner: "gpu",
     });
 
     const failed = getTask(db, "t-fail")!;
@@ -1211,6 +1214,13 @@ describe("git-auth fail-once-then-avoid (#317)", () => {
     expect(failed.error).toMatch(/push denied/);
     expect(failed.error_category).toMatch(/"kind":"git_auth"/);
     expect(failed.error_category).toMatch(/push_denied/);
+    // Daemon-owned identity on the stored category.
+    const cat = JSON.parse(failed.error_category!) as {
+      repo_key: string;
+      runner: string;
+    };
+    expect(cat.repo_key).toBe("github.com/org/repo");
+    expect(cat.runner).toBe("gpu");
 
     const runner = getRunner(db, "gpu")!;
     const map = parseUnreachableRepos(runner.unreachable_repos);
@@ -1226,5 +1236,171 @@ describe("git-auth fail-once-then-avoid (#317)", () => {
       onlinePeers: [{ name: "gpu", vendorIds: ["fake"], last_completed_at: null }],
     });
     expect(claim).toBeUndefined();
+  });
+
+  it("failRunnerTask ignores spoofed wire repo_key / runner (daemon owns identity)", () => {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), "parley-git-auth-spoof-"));
+    homes.push(home);
+    const db = openDatabase(homePaths(home));
+    upsertRunner(db, {
+      name: "gpu",
+      capabilities: JSON.stringify({ vendors: [{ id: "fake", models: [] }] }),
+      protocol_version: 1,
+      build_version: "t",
+    });
+    insertTask(db, {
+      id: "t-spoof",
+      name: null,
+      vendor: "fake",
+      model: null,
+      effort: null,
+      profile: null,
+      runner: "gpu",
+      repo: "/repo",
+      repo_key: "github.com/real/repo",
+      repo_fetch_url: "https://github.com/real/repo.git",
+      cwd: "/repo",
+      prompt: "x",
+      orchestrator_session_id: "s",
+      worktree: null,
+      branch: null,
+      base_sha: "abc",
+      sandbox: "workspace",
+      network: true,
+      answer_timeout_ms: null,
+      report_schema: null,
+      size: null,
+      difficulty: null,
+      type: "other",
+      placement: "remote",
+    });
+    writeTaskState(db, "t-spoof", "running", {
+      started_at: new Date().toISOString(),
+    });
+
+    const engine = new TaskEngine(
+      db,
+      homePaths(home),
+      createAdapterRegistrySync(process.env),
+    );
+    // Engine API only accepts kind/operation/code — identity is daemon-owned.
+    engine.failRunnerTask("t-spoof", "gpu", "denied", {
+      kind: "git_auth",
+      operation: "push",
+      code: "push_denied",
+    });
+
+    const failed = getTask(db, "t-spoof")!;
+    const cat = JSON.parse(failed.error_category!) as {
+      repo_key: string;
+      runner: string;
+    };
+    expect(cat.repo_key).toBe("github.com/real/repo");
+    expect(cat.runner).toBe("gpu");
+    const map = parseUnreachableRepos(getRunner(db, "gpu")!.unreachable_repos);
+    expect(map["github.com/real/repo"]?.code).toBe("push_denied");
+    expect(map["evil.com/other/repo"]).toBeUndefined();
+  });
+
+  it("excluded warm peer does not hold warm reservation (cpu claims immediately)", () => {
+    const db = openDb();
+    // Unpinned task for github.com/org/repo (seed default).
+    seedPending(db, {
+      id: "t-warm",
+      vendor: "fake",
+      runner: null,
+      created_at: new Date().toISOString(),
+    });
+    // gpu is warmer (recent completion) but excluded for this repo.
+    // cpu is colder / never completed. Without exclusion filtering, gpu would
+    // hold the 5s reservation and cpu could not claim immediately.
+    const claim = selectClaimablePendingTask(db, {
+      executorName: "cpu",
+      vendorIds: ["fake"],
+      nowMs: Date.now(), // well within reservation window
+      reservationMs: 5_000,
+      onlinePeers: [
+        {
+          name: "gpu",
+          vendorIds: ["fake"],
+          last_completed_at: new Date().toISOString(),
+          unreachableRepoKeys: ["github.com/org/repo"],
+        },
+        {
+          name: "cpu",
+          vendorIds: ["fake"],
+          last_completed_at: null,
+          unreachableRepoKeys: [],
+        },
+      ],
+    });
+    expect(claim?.id).toBe("t-warm");
+  });
+
+  it("queue_reason is refreshed when exclusions change on re-dispatch", () => {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), "parley-qreason-"));
+    homes.push(home);
+    writeConfig(home, {
+      runners: { gpu: { token: "secret-gpu" }, cpu: { token: "secret-cpu" } },
+    });
+    process.env.PARLEY_FAKE_VENDOR_BIN = ""; // local cannot run fake
+    process.env.PARLEY_ROUTING_QUEUE_TIMEOUT_MS = "60000";
+    const db = openDatabase(homePaths(home));
+    // Only offline capable → wait with base reason.
+    upsertRunner(db, {
+      name: "gpu",
+      capabilities: JSON.stringify({ vendors: [{ id: "fake", models: [] }] }),
+      protocol_version: 1,
+      build_version: "t",
+    });
+    markRunnerUnreachable(db, "gpu", "github.com/org/r", {
+      code: "push_denied",
+      at: new Date().toISOString(),
+      operation: "push",
+    });
+    const row = insertTask(db, {
+      id: "t-q",
+      name: null,
+      vendor: "fake",
+      model: null,
+      effort: null,
+      profile: null,
+      runner: null,
+      repo: home,
+      repo_key: "github.com/org/r",
+      repo_fetch_url: "https://github.com/org/r.git",
+      cwd: home,
+      prompt: "x",
+      orchestrator_session_id: "s",
+      worktree: null,
+      branch: null,
+      base_sha: "abc",
+      sandbox: "workspace",
+      network: true,
+      answer_timeout_ms: null,
+      report_schema: null,
+      size: null,
+      difficulty: null,
+      type: "other",
+      placement: "remote",
+    });
+    // Seed a stale queue_reason without exclusion notes.
+    updateTask(db, row.id, {
+      queue_reason: "waiting for capable runner: gpu (offline)",
+      routing_deadline_at: new Date(Date.now() + 60_000).toISOString(),
+    });
+
+    const engine = new TaskEngine(
+      db,
+      homePaths(home),
+      createAdapterRegistrySync(process.env),
+    );
+    engine.setRunnerOnlineProbe(() => false);
+    engine.redispatchRoutingWaits();
+
+    const after = getTask(db, "t-q")!;
+    expect(after.queue_reason ?? "").toMatch(/excluded|cannot reach|push denied/);
+    delete process.env.PARLEY_ROUTING_QUEUE_TIMEOUT_MS;
+    delete process.env.PARLEY_FAKE_VENDOR_BIN;
   });
 });

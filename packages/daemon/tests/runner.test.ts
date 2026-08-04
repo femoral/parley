@@ -583,6 +583,112 @@ describe("runner heartbeat / events / branch / fail", () => {
       "no local repo mapping",
     );
   });
+
+  it("fail category: invalid operation/code → 400; nothing hostile persisted (#317)", async () => {
+    const home = makeHome();
+    const { base } = await boot(home);
+    await registerRunner(base);
+    const repo = makeGitRepo();
+    repos.push(repo);
+    const { task_id } = await createRunnerTask(base, repo);
+    await json(base, "POST", "/runner/lease", { runner: "gpu" }, auth);
+
+    const ansi = await json(
+      base,
+      "POST",
+      `/runner/tasks/${task_id}/fail`,
+      {
+        error: "x",
+        category: {
+          kind: "git_auth",
+          operation: "push\x1b[31m",
+          code: "push_denied",
+        },
+      },
+      auth,
+    );
+    expect(ansi.status).toBe(400);
+    expect(JSON.stringify(ansi.body)).toMatch(/operation/);
+
+    const bogus = await json(
+      base,
+      "POST",
+      `/runner/tasks/${task_id}/fail`,
+      {
+        error: "x",
+        category: {
+          kind: "git_auth",
+          operation: "push",
+          code: "not_a_real_code",
+        },
+      },
+      auth,
+    );
+    expect(bogus.status).toBe(400);
+    expect(JSON.stringify(bogus.body)).toMatch(/code/);
+
+    // Task still running — invalid category did not apply.
+    const still = await json(base, "GET", `/tasks/${task_id}`);
+    expect((still.body as { row: { state: string } }).row.state).toBe("running");
+  });
+
+  it("fail category: ignores spoofed repo_key/runner; uses task + auth (#317)", async () => {
+    const home = makeHome();
+    const { base } = await boot(home);
+    await registerRunner(base);
+    const repo = makeGitRepo();
+    repos.push(repo);
+    // ensureOrigin defaults to github.com/org/parley → repo_key github.com/org/parley
+    const { task_id } = await createRunnerTask(base, repo);
+    await json(base, "POST", "/runner/lease", { runner: "gpu" }, auth);
+
+    const fail = await json(
+      base,
+      "POST",
+      `/runner/tasks/${task_id}/fail`,
+      {
+        error: "push denied at claim time",
+        category: {
+          kind: "git_auth",
+          operation: "push",
+          code: "push_denied",
+          // Spoofed identity — must not land in storage or unreachable map.
+          repo_key: "evil.com/spoofed/repo",
+          runner: "not-gpu",
+        },
+      },
+      auth,
+    );
+    expect(fail.status).toBe(200);
+
+    const status = await json(base, "GET", `/tasks/${task_id}`);
+    const env = (
+      status.body as {
+        task: {
+          error_category: {
+            kind: string;
+            repo_key: string | null;
+            runner: string;
+            code: string;
+          } | null;
+        };
+      }
+    ).task;
+    expect(env.error_category?.kind).toBe("git_auth");
+    expect(env.error_category?.code).toBe("push_denied");
+    expect(env.error_category?.runner).toBe("gpu");
+    expect(env.error_category?.repo_key).toBe("github.com/org/parley");
+    expect(env.error_category?.repo_key).not.toBe("evil.com/spoofed/repo");
+
+    const show = await json(base, "GET", "/runners/gpu");
+    const unreachable = (
+      show.body as {
+        unreachable_repos: { repo_key: string; code: string }[];
+      }
+    ).unreachable_repos;
+    expect(unreachable.some((u) => u.repo_key === "github.com/org/parley")).toBe(true);
+    expect(unreachable.some((u) => u.repo_key === "evil.com/spoofed/repo")).toBe(false);
+  });
 });
 
 describe("runner show / remove / stale cleanup (#320)", () => {
@@ -646,6 +752,9 @@ describe("runner show / remove / stale cleanup (#320)", () => {
     expect(body.repo_reachability).toEqual([
       { repo_key: "github.com/acme/app", reachable: true },
     ]);
+    expect(
+      (body as { unreachable_repos?: unknown[] }).unreachable_repos,
+    ).toEqual([]);
     expect(body.recent_tasks.some((t) => t.id === task_id && t.name === "recent-job")).toBe(
       true,
     );
@@ -658,6 +767,41 @@ describe("runner show / remove / stale cleanup (#320)", () => {
     const show = await json(base, "GET", "/runners/gpu");
     expect(show.status).toBe(200);
     expect((show.body as { repo_reachability: unknown }).repo_reachability).toBeNull();
+    expect(
+      (show.body as { unreachable_repos?: unknown[] }).unreachable_repos,
+    ).toEqual([]);
+  });
+
+  it("GET /runners/:name surfaces recorded unreachable_repos (#317)", async () => {
+    const home = makeHome();
+    const { base } = await boot(home);
+    await registerRunner(base);
+    const repo = makeGitRepo();
+    repos.push(repo);
+    const { task_id } = await createRunnerTask(base, repo);
+    await json(base, "POST", "/runner/lease", { runner: "gpu" }, auth);
+    await json(
+      base,
+      "POST",
+      `/runner/tasks/${task_id}/fail`,
+      {
+        error: "push denied",
+        category: { kind: "git_auth", operation: "push", code: "push_denied" },
+      },
+      auth,
+    );
+
+    const show = await json(base, "GET", "/runners/gpu");
+    expect(show.status).toBe(200);
+    const unreachable = (
+      show.body as {
+        unreachable_repos: { repo_key: string; code: string; at: string }[];
+      }
+    ).unreachable_repos;
+    expect(unreachable.length).toBe(1);
+    expect(unreachable[0]!.repo_key).toBe("github.com/org/parley");
+    expect(unreachable[0]!.code).toBe("push_denied");
+    expect(unreachable[0]!.at).toMatch(/^\d{4}-/);
   });
 
   it("GET /runners/:name returns 404 for unknown runner", async () => {

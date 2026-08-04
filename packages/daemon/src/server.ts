@@ -34,8 +34,10 @@ import {
   type RunnerShowResponse,
   type RunnerVendorCapability,
   type TaskEnvelope,
-  type TaskErrorCategory,
   type WorkflowDefinition,
+  isGitAuthFailureCode,
+  isGitAuthOperation,
+  type GitAuthFailCategoryWire,
 } from "@useparley/core";
 import { createAdapterRegistry } from "./adapters/index.js";
 import type { VendorAdapter } from "./adapters/types.js";
@@ -63,6 +65,7 @@ import {
   listTasksForRun,
   META_LAST_GC_AT,
   openDatabase,
+  parseUnreachableRepos,
   resolveRun,
   setMeta,
   sweepInterruptedTasks,
@@ -409,6 +412,15 @@ function projectRunnerShow(
       completed_at: t.completed_at,
     }),
   );
+  const unreachableMap = parseUnreachableRepos(row.unreachable_repos);
+  const unreachable_repos = Object.entries(unreachableMap)
+    .map(([repo_key, entry]) => ({
+      repo_key,
+      code: entry.code,
+      at: entry.at,
+      ...(entry.operation !== undefined ? { operation: entry.operation } : {}),
+    }))
+    .sort((a, b) => a.repo_key.localeCompare(b.repo_key));
   return {
     name: row.name,
     status: deriveRunnerStatus({
@@ -424,6 +436,7 @@ function projectRunnerShow(
     last_contact_age_ms,
     vendors,
     repo_reachability: projectRepoReachability(caps),
+    unreachable_repos,
     recent_tasks,
   };
 }
@@ -479,27 +492,52 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 /**
- * Optional structured fail category (#317). Accepts only well-formed
- * `git_auth` objects; anything else is treated as absent so plain fails
- * keep working.
+ * Optional structured fail category (#317).
+ *
+ * - Absent / non-object / non-`git_auth` → `{ ok: true, category: null }`
+ *   (plain message-only fail).
+ * - `kind: "git_auth"` with invalid `operation`/`code` (not in the closed
+ *   enums, or non-strings) → `{ ok: false }` → HTTP 400. Hostile free-form
+ *   strings (ANSI, garbage) never reach storage.
+ * - Valid enums only — `repo_key` and `runner` on the wire are ignored;
+ *   the engine fills them from the task row + authenticated runner name.
  */
-function parseFailCategory(value: unknown): TaskErrorCategory | null {
-  if (!isRecord(value) || value.kind !== "git_auth") return null;
-  if (typeof value.operation !== "string" || value.operation === "") return null;
-  if (typeof value.code !== "string" || value.code === "") return null;
-  if (typeof value.runner !== "string" || value.runner === "") return null;
-  const repoKey =
-    value.repo_key === null || value.repo_key === undefined
-      ? null
-      : typeof value.repo_key === "string"
-        ? value.repo_key
-        : null;
+function parseFailCategory(
+  value: unknown,
+):
+  | { ok: true; category: Pick<GitAuthFailCategoryWire, "kind" | "operation" | "code"> | null }
+  | { ok: false; error: string } {
+  if (value === undefined || value === null) {
+    return { ok: true, category: null };
+  }
+  if (!isRecord(value)) {
+    return { ok: true, category: null };
+  }
+  if (value.kind !== "git_auth") {
+    // Unknown kind: treat as plain fail (forward-compat), not 400.
+    return { ok: true, category: null };
+  }
+  if (typeof value.operation !== "string" || !isGitAuthOperation(value.operation)) {
+    return {
+      ok: false,
+      error:
+        'category.operation must be one of "clone", "fetch", "push" when kind is "git_auth"',
+    };
+  }
+  if (typeof value.code !== "string" || !isGitAuthFailureCode(value.code)) {
+    return {
+      ok: false,
+      error:
+        "category.code must be a known GitAuthFailureCode when kind is \"git_auth\"",
+    };
+  }
   return {
-    kind: "git_auth",
-    operation: value.operation as TaskErrorCategory["operation"],
-    code: value.code as TaskErrorCategory["code"],
-    repo_key: repoKey,
-    runner: value.runner,
+    ok: true,
+    category: {
+      kind: "git_auth",
+      operation: value.operation,
+      code: value.code,
+    },
   };
 }
 
@@ -3123,11 +3161,20 @@ function createHandler(
             sendJson(res, 400, { error: "error is required" });
             return;
           }
-          // Optional structured category (#317) — invalid shapes are ignored
-          // (message still fails the task as a plain vendor-style error).
-          const category = parseFailCategory(body.category);
+          // Optional structured category (#317): invalid git_auth enums → 400;
+          // absent/unknown kind → plain fail. Wire repo_key/runner are ignored.
+          const parsed = parseFailCategory(body.category);
+          if (!parsed.ok) {
+            sendJson(res, 400, { error: parsed.error });
+            return;
+          }
           try {
-            const row = engine.failRunnerTask(taskId, runnerName, body.error, category);
+            const row = engine.failRunnerTask(
+              taskId,
+              runnerName,
+              body.error,
+              parsed.category,
+            );
             touchRunnerLastSeen(db, runnerName);
             sendJson(res, 200, {
               task_id: row.id,

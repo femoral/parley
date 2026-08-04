@@ -35,6 +35,7 @@ import {
   TASK_HEADER,
   validateAnswers,
   type ChildChannel,
+  type GitAuthFailCategoryWire,
   type HomePaths,
   type ParleyConfig,
   type ProfileConfig,
@@ -3314,11 +3315,13 @@ export class TaskEngine {
     const vendorIds = caps.vendors.map((v) => v.id);
     if (vendorIds.length === 0) return null;
 
-    // Online peers for warm ranking (exclude self; include other online runners).
+    // Online peers for warm ranking. Include each peer's unreachable map so
+    // excluded pairings do not hold the warm reservation (#317 MEDIUM-3).
     const onlinePeers: {
       name: string;
       vendorIds: string[];
       last_completed_at: string | null;
+      unreachableRepoKeys: string[];
     }[] = [];
     for (const peer of listRunners(this.db)) {
       if (!this.isRunnerOnline(peer.name, peer.last_seen)) continue;
@@ -3327,6 +3330,7 @@ export class TaskEngine {
         name: peer.name,
         vendorIds: peerCaps.vendors.map((v) => v.id),
         last_completed_at: peer.last_completed_at ?? null,
+        unreachableRepoKeys: unreachableRepoKeys(peer),
       });
     }
 
@@ -3512,15 +3516,18 @@ export class TaskEngine {
    * `POST /runner/tasks/:id/fail` — runner cannot execute (or child exited
    * without a report). An accepted report still wins (#72).
    *
-   * When `category.kind === "git_auth"` with a repo_key, also records
-   * executor×repo unreachability so routing skips the pairing until
-   * re-registration (#317).
+   * When `category.kind === "git_auth"`, records executor×repo unreachability
+   * so routing skips the pairing until re-registration (#317).
+   *
+   * **Identity is daemon-owned**: wire `repo_key` / `runner` are ignored.
+   * Stored category always uses `task.repo_key` and the authenticated
+   * `runnerName`. Callers must already have validated `operation`/`code`.
    */
   failRunnerTask(
     taskId: string,
     runnerName: string,
     error: string,
-    category?: TaskErrorCategory | null,
+    category?: Pick<GitAuthFailCategoryWire, "kind" | "operation" | "code"> | null,
   ): TaskRow {
     const task = getTask(this.db, taskId);
     if (!task) throw new DelegateError(`no such task: ${taskId}`);
@@ -3529,8 +3536,16 @@ export class TaskEngine {
     }
     let errorCategoryJson: string | null = null;
     if (category !== null && category !== undefined && category.kind === "git_auth") {
-      errorCategoryJson = JSON.stringify(category);
-      const repoKey = category.repo_key ?? task.repo_key;
+      // Daemon fills identity — never trust the wire for pairing keys.
+      const stored: TaskErrorCategory = {
+        kind: "git_auth",
+        operation: category.operation,
+        code: category.code,
+        repo_key: task.repo_key ?? null,
+        runner: runnerName,
+      };
+      errorCategoryJson = JSON.stringify(stored);
+      const repoKey = task.repo_key;
       if (repoKey !== null && repoKey !== "") {
         markRunnerUnreachable(this.db, runnerName, repoKey, {
           code: category.code,
@@ -3928,14 +3943,15 @@ export class TaskEngine {
     }
     // fail / local: stay in routing-wait until the durable deadline fails the
     // task with the capability diagnosis — never flip to in-process.
+    // Always recompute the reason so newly recorded exclusions appear on
+    // already-queued rows (#317 LOW-5) — do not freeze the first queue_reason.
     const baseWait =
       match.offlineCapable.length > 0
         ? formatWaitingReason(match.offlineCapable)
         : "waiting for capable runner";
     const exclusionNote = formatRepoExclusions(excluded);
-    const composed =
+    const waitReason =
       exclusionNote === "" ? baseWait : `${baseWait}; ${exclusionNote}`;
-    const waitReason = task.queue_reason ?? composed;
     this.beginRemoteRoutingWait(task, {
       queueReason: waitReason,
       vendor,
