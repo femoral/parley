@@ -214,7 +214,7 @@ describe("catalog refresh merge semantics", () => {
   });
 });
 
-describe("parley models command", () => {
+describe("parley models command (daemon-owned allowlist + fleet refresh, #322)", () => {
   let home: string;
   beforeEach(() => {
     home = makeHome();
@@ -223,65 +223,349 @@ describe("parley models command", () => {
     cleanupHome(home);
   });
 
-  it("seeds ~/.parley/models.json on first run and prints the catalog as JSON", async () => {
+  it("lists the daemon allowlist as JSON (seeded fake vendor)", async () => {
     const result = await runCli(["models", "--json"], home);
     expect(result.code).toBe(0);
-    expect(JSON.parse(result.stdout)).toEqual(DEFAULT_CATALOG);
-    // The file is written so the user can hand-edit it.
-    const file = path.join(home, "models.json");
-    expect(fs.existsSync(file)).toBe(true);
-    expect(JSON.parse(fs.readFileSync(file, "utf8"))).toEqual(DEFAULT_CATALOG);
+    const allowlist = JSON.parse(result.stdout) as Record<string, unknown>;
+    expect(Object.keys(allowlist)).toContain("fake");
+    expect((allowlist.fake as Record<string, unknown>)["fake-model"]).toBeDefined();
   });
 
-  it("renders a human table listing both vendors and their models", async () => {
+  it("renders a human table of the allowlist", async () => {
     const result = await runCli(["models"], home);
     expect(result.code).toBe(0);
-    expect(result.stdout).toContain("codex");
-    expect(result.stdout).toContain("gpt-5.6-sol");
-    expect(result.stdout).toContain("grok-4.5");
-    expect(result.stdout).toContain("default: high");
+    expect(result.stdout).toContain("fake");
+    expect(result.stdout).toContain("fake-model");
+    expect(result.stdout).toMatch(/efforts:/);
   });
 
   it("filters to one vendor with --vendor", async () => {
-    const result = await runCli(["models", "--vendor", "grok", "--json"], home);
+    const result = await runCli(["models", "--vendor", "fake", "--json"], home);
     expect(result.code).toBe(0);
-    expect(Object.keys(JSON.parse(result.stdout))).toEqual(["grok"]);
+    expect(Object.keys(JSON.parse(result.stdout))).toEqual(["fake"]);
   });
 
-  it("reads a hand-edited catalog back verbatim (file is the source of truth)", async () => {
-    const file = path.join(home, "models.json");
-    const patched = {
-      codex: {
-        fetched_at: null,
-        source: "manual",
-        models: [{ id: "gpt-6-future", efforts: ["low", "max"], default_effort: "low" }],
-      },
+  it("picks up hand-edits of parley.json on the daemon host without restart", async () => {
+    // Start the daemon first so the subsequent edit is a true hot pick-up.
+    expect((await runCli(["daemon", "start"], home)).code).toBe(0);
+    const before = await runCli(["models", "--json"], home);
+    expect(before.code).toBe(0);
+    expect(JSON.parse(before.stdout).fake["hot-edit-model"]).toBeUndefined();
+
+    const configPath = path.join(home, "parley.json");
+    const cfg = JSON.parse(fs.readFileSync(configPath, "utf8")) as {
+      vendors: { fake: { models: Record<string, unknown> } };
     };
-    fs.writeFileSync(file, JSON.stringify(patched));
-    const result = await runCli(["models", "--json"], home);
-    expect(JSON.parse(result.stdout)).toEqual(patched);
+    // At most one default marker per vendor (#185) — do not add a second.
+    cfg.vendors.fake.models["hot-edit-model"] = {
+      efforts: ["low"],
+    };
+    fs.writeFileSync(configPath, JSON.stringify(cfg, null, 2));
+
+    const after = await runCli(["models", "--json"], home);
+    expect(after.code).toBe(0);
+    expect(JSON.parse(after.stdout).fake["hot-edit-model"]).toEqual({
+      efforts: ["low"],
+    });
   });
 
-  it("accepts `refresh` as a subcommand alias for --refresh", async () => {
-    // Empty entry + no working probe → shipped fallback still surfaces models.
-    const file = path.join(home, "models.json");
+  it("set/unset round-trip an allowlist key over HTTP", async () => {
+    const set = await runCli(
+      [
+        "models",
+        "set",
+        "vendors.fake.models.round-trip",
+        '{"efforts":["low","high"]}',
+      ],
+      home,
+    );
+    expect(set.code).toBe(0);
+    expect(set.stdout).toMatch(/set vendors\.fake\.models\.round-trip/);
+
+    const listed = await runCli(["models", "--json"], home);
+    expect(JSON.parse(listed.stdout).fake["round-trip"]).toEqual({
+      efforts: ["low", "high"],
+    });
+
+    const unset = await runCli(
+      ["models", "unset", "vendors.fake.models.round-trip"],
+      home,
+    );
+    expect(unset.code).toBe(0);
+    const after = await runCli(["models", "--json"], home);
+    expect(JSON.parse(after.stdout).fake["round-trip"]).toBeUndefined();
+  });
+
+  it("rejects smuggling a non-models config key via models set", async () => {
+    const res = await runCli(
+      ["models", "set", "vendors.fake.bin", "evil-bin"],
+      home,
+    );
+    expect(res.code).toBe(1);
+    expect(res.stderr).toMatch(/limited to vendors|refused key/);
+    // Original config untouched.
+    const get = await runCli(["config", "get", "vendors.fake.bin"], home);
+    expect(get.code).toBe(1);
+  });
+
+  it("set/unset keeps dotted model id gpt-5.6-sol as a single leaf (F1)", async () => {
+    // Seed codex vendor so set can attach under it.
+    expect(
+      (
+        await runCli(
+          ["models", "set", "vendors.codex.models", '{"seed":{"efforts":["low"]}}'],
+          home,
+        )
+      ).code,
+    ).toBe(0);
+
+    const set = await runCli(
+      [
+        "models",
+        "set",
+        "vendors.codex.models.gpt-5.6-sol",
+        '{"efforts":["low","medium","high"]}',
+      ],
+      home,
+    );
+    expect(set.code).toBe(0);
+    expect(set.stdout).toMatch(/set vendors\.codex\.models\.gpt-5\.6-sol/);
+
+    const listed = await runCli(["models", "--vendor", "codex", "--json"], home);
+    expect(listed.code).toBe(0);
+    const codex = JSON.parse(listed.stdout).codex as Record<string, unknown>;
+    expect(codex["gpt-5.6-sol"]).toEqual({
+      efforts: ["low", "medium", "high"],
+    });
+    expect(codex["gpt-5"]).toBeUndefined();
+
+    // Two-dot opencode-style id.
+    const set2 = await runCli(
+      [
+        "models",
+        "set",
+        "vendors.codex.models.foo.bar.baz",
+        '{"efforts":["low"]}',
+      ],
+      home,
+    );
+    expect(set2.code).toBe(0);
+    const after = JSON.parse(
+      (await runCli(["models", "--vendor", "codex", "--json"], home)).stdout,
+    ).codex as Record<string, unknown>;
+    expect(after["foo.bar.baz"]).toEqual({ efforts: ["low"] });
+
+    const unset = await runCli(
+      ["models", "unset", "vendors.codex.models.gpt-5.6-sol"],
+      home,
+    );
+    expect(unset.code).toBe(0);
+    const gone = JSON.parse(
+      (await runCli(["models", "--vendor", "codex", "--json"], home)).stdout,
+    ).codex as Record<string, unknown>;
+    expect(gone["gpt-5.6-sol"]).toBeUndefined();
+  });
+
+  it("rejects __proto__ and * vendor via models set with honest errors (F1)", async () => {
+    const proto = await runCli(
+      ["models", "set", "vendors.fake.models.__proto__", '{"efforts":["low"]}'],
+      home,
+    );
+    expect(proto.code).toBe(1);
+    expect(proto.stderr).toMatch(/reserved id/);
+
+    const star = await runCli(
+      ["models", "set", "vendors.*.models", "{}"],
+      home,
+    );
+    expect(star.code).toBe(1);
+    expect(star.stderr).toMatch(/wildcard|'\*'/);
+  });
+
+  it("refresh returns daemon catalog shape and does not require CLI-local models.json", async () => {
+    // Ensure no local catalog file exists on the CLI home before refresh.
+    const localCatalog = path.join(home, "models.json");
+    if (fs.existsSync(localCatalog)) fs.unlinkSync(localCatalog);
+
+    const result = await runCli(
+      ["models", "refresh", "--vendor", "fake", "--json"],
+      home,
+    );
+    expect(result.code).toBe(0);
+    const out = JSON.parse(result.stdout) as {
+      daemon: { catalog: Record<string, unknown>; warnings: string[] };
+      runners: unknown[];
+    };
+    expect(out.daemon).toBeDefined();
+    expect(out.daemon.catalog).toBeDefined();
+    expect(Array.isArray(out.runners)).toBe(true);
+    // Daemon persists its catalog under the daemon home (same as this home when local).
+    expect(fs.existsSync(localCatalog)).toBe(true);
+  });
+
+  it("accepts --refresh as an alias for the refresh subcommand", async () => {
+    const result = await runCli(
+      ["models", "--refresh", "--vendor", "fake", "--json"],
+      home,
+    );
+    expect(result.code).toBe(0);
+    const out = JSON.parse(result.stdout) as { daemon: unknown; runners: unknown };
+    expect(out.daemon).toBeDefined();
+    expect(out.runners).toBeDefined();
+  });
+});
+
+describe("parley models — two clients, one daemon (#322)", () => {
+  const homes: string[] = [];
+  afterEach(() => {
+    for (const h of homes.splice(0)) cleanupHome(h);
+  });
+
+  it("two remote clients see the same allowlist and each other's edits", async () => {
+    const daemonHome = makeHome();
+    homes.push(daemonHome);
+    // Register two client tokens on the daemon host.
     fs.writeFileSync(
-      file,
+      path.join(daemonHome, "parley.json"),
+      JSON.stringify(
+        {
+          vendors: {
+            fake: {
+              models: {
+                "shared-model": { efforts: ["low", "medium"], default: "medium" },
+              },
+            },
+          },
+          clients: {
+            alice: { token: "token-alice" },
+            bob: { token: "token-bob" },
+          },
+          // Keep loopback; clients still use daemon.url → same host port.
+          daemon: { idleTimeoutMs: 0 },
+        },
+        null,
+        2,
+      ),
+    );
+    expect((await runCli(["daemon", "start"], daemonHome)).code).toBe(0);
+    const discovery = JSON.parse(
+      fs.readFileSync(path.join(daemonHome, "daemon.json"), "utf8"),
+    ) as { port: number };
+    const url = `http://127.0.0.1:${discovery.port}`;
+
+    const alice = makeHome({ seedAllowlist: false });
+    homes.push(alice);
+    const bob = makeHome({ seedAllowlist: false });
+    homes.push(bob);
+    for (const [clientHome, name, token] of [
+      [alice, "alice", "token-alice"],
+      [bob, "bob", "token-bob"],
+    ] as const) {
+      fs.writeFileSync(
+        path.join(clientHome, "parley.json"),
+        JSON.stringify({
+          daemon: { url, client: name, token },
+        }),
+      );
+    }
+
+    const aliceList = await runCli(["models", "--json"], alice);
+    expect(aliceList.code).toBe(0);
+    expect(JSON.parse(aliceList.stdout)).toEqual({
+      fake: { "shared-model": { efforts: ["low", "medium"], default: "medium" } },
+    });
+
+    const bobList = await runCli(["models", "--json"], bob);
+    expect(bobList.code).toBe(0);
+    expect(JSON.parse(bobList.stdout)).toEqual(JSON.parse(aliceList.stdout));
+
+    // Alice edits; Bob sees it. No second default marker (shared-model is default).
+    const set = await runCli(
+      [
+        "models",
+        "set",
+        "vendors.fake.models.from-alice",
+        '{"efforts":["high"]}',
+      ],
+      alice,
+    );
+    expect(set.code).toBe(0);
+
+    const bobAfter = await runCli(["models", "--json"], bob);
+    expect(bobAfter.code).toBe(0);
+    const allow = JSON.parse(bobAfter.stdout) as {
+      fake: Record<string, unknown>;
+    };
+    expect(allow.fake["from-alice"]).toEqual({
+      efforts: ["high"],
+    });
+    expect(allow.fake["shared-model"]).toBeDefined();
+
+    // Bob edits; Alice sees it.
+    expect(
+      (
+        await runCli(
+          [
+            "models",
+            "set",
+            "vendors.fake.models.from-bob",
+            '{"efforts":["low"]}',
+          ],
+          bob,
+        )
+      ).code,
+    ).toBe(0);
+    const aliceAfter = await runCli(["models", "--json"], alice);
+    expect(JSON.parse(aliceAfter.stdout).fake["from-bob"]).toEqual({
+      efforts: ["low"],
+    });
+  });
+
+  it("refresh runs no probe on the CLI host (PATH without vendor bins)", async () => {
+    const daemonHome = makeHome();
+    homes.push(daemonHome);
+    fs.writeFileSync(
+      path.join(daemonHome, "parley.json"),
       JSON.stringify({
-        codex: { fetched_at: null, source: "manual", models: [] },
+        vendors: { fake: { models: { "m": { efforts: ["low"], default: "low" } } } },
+        clients: { remote: { token: "token-remote" } },
+        daemon: { idleTimeoutMs: 0 },
       }),
     );
-    // codex may or may not be on PATH; either live data or shipped fallback is fine.
-    const result = await runCli(["models", "refresh", "--vendor", "codex", "--json"], home);
+    expect((await runCli(["daemon", "start"], daemonHome)).code).toBe(0);
+    const discovery = JSON.parse(
+      fs.readFileSync(path.join(daemonHome, "daemon.json"), "utf8"),
+    ) as { port: number };
+    const url = `http://127.0.0.1:${discovery.port}`;
+
+    const client = makeHome({ seedAllowlist: false });
+    homes.push(client);
+    fs.writeFileSync(
+      path.join(client, "parley.json"),
+      JSON.stringify({
+        daemon: { url, client: "remote", token: "token-remote" },
+      }),
+    );
+    // Empty PATH on the client: no vendor CLIs available to probe.
+    const emptyBin = path.join(client, "empty-bin");
+    fs.mkdirSync(emptyBin);
+    const result = await runCli(["models", "refresh", "--vendor", "fake", "--json"], client, {
+      extraEnv: {
+        PATH: emptyBin,
+        // Drop the fake-vendor bin so the client cannot probe even via env.
+        PARLEY_FAKE_VENDOR_BIN: "",
+      },
+    });
     expect(result.code).toBe(0);
-    const out = JSON.parse(result.stdout) as { codex?: { models: unknown[]; source: string } };
-    expect(out.codex).toBeDefined();
-    // If live probe worked, models non-empty from probe; if not, shipped fallback.
-    if (result.stderr.includes("shipped catalog")) {
-      expect(out.codex!.source).toMatch(/shipped catalog \(point-in-time reference/);
-      expect(out.codex!.models.length).toBeGreaterThan(0);
-    } else {
-      expect(out.codex!.models.length).toBeGreaterThan(0);
-    }
+    const out = JSON.parse(result.stdout) as {
+      daemon: { catalog: Record<string, unknown> };
+      runners: unknown[];
+    };
+    // Response came from the daemon (has catalog envelope) even though the
+    // client host has nothing on PATH.
+    expect(out.daemon.catalog).toBeDefined();
+    expect(Array.isArray(out.runners)).toBe(true);
+    // Client home must not grow a models.json from a local probe path.
+    expect(fs.existsSync(path.join(client, "models.json"))).toBe(false);
   });
 });

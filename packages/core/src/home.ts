@@ -17,7 +17,10 @@ export interface HomePaths {
   lock: string;
   /** SQLite task-state database. */
   db: string;
-  /** User-patchable model/effort catalog file (`parley models`). */
+  /**
+   * Advisory model/effort catalog file on this home (daemon host after #322).
+   * Written by `parley models refresh` on the daemon; not the allowlist.
+   */
   models: string;
   /**
    * User-patchable settings file (`ui.*`, `daemon.url`, `vendors.*`,
