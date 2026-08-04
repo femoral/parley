@@ -4,6 +4,9 @@ import { defineConfig } from "tsdown";
 // module tree and clean stack traces (see docs/research/cli-standalone-packaging.md).
 // ESM-only output plus `.d.ts` declarations; workspace and runtime deps stay
 // external (tsdown externalizes everything in `dependencies` by default).
+//
+// The wildcard entry includes `src/browser.ts` so the published package's
+// `"browser"` export condition resolves to `dist/browser.js` (+ `.d.ts`).
 export default defineConfig({
   entry: ["src/**/*.ts"],
   format: "esm",

@@ -16,6 +16,10 @@
   ],
   "exports": {
     ".": {
+      "browser": {
+        "types": "./src/browser.ts",
+        "default": "./src/browser.ts"
+      },
       "types": "./src/index.ts",
       "default": "./src/index.ts"
     },
@@ -29,6 +33,10 @@
     "access": "public",
     "exports": {
       ".": {
+        "browser": {
+          "types": "./dist/browser.d.ts",
+          "default": "./dist/browser.js"
+        },
         "types": "./dist/index.d.ts",
         "default": "./dist/index.js"
       },
