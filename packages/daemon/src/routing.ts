@@ -27,6 +27,11 @@ export interface ExecutorCapability {
    * failure. Local executor leaves this empty/undefined.
    */
   unreachable_repos?: Readonly<Record<string, { code: string; at: string; operation?: string }>>;
+  /**
+   * Repo keys for which this executor holds a managed bare mirror (#318).
+   * Used for warm-clone preference above warm-executor.
+   */
+  held_mirrors?: readonly string[];
 }
 
 /** One runner excluded for a task because of recorded repo unreachability (#317). */
@@ -236,16 +241,25 @@ export function formatWaitingReason(offlineCapable: readonly ExecutorCapability[
 }
 
 /**
- * Among online capable runners (non-local), pick preferred order: warmest
- * (most recent completion) first, then name ASC. Empty when no online runners.
- * Used by claim-time warm reservation (#315 F5) via the same ranking rule as
+ * Among online capable runners (non-local), pick preferred order:
+ * warm-clone (holds `repoKey` mirror) first, then warmest completion, then
+ * name ASC (#315 / #318). Empty when no online runners.
+ * Used by claim-time warm reservation via the same ranking rule as
  * `preferredWarmRunner` in db.ts.
  */
 export function rankOnlineRunners(
   onlineCapable: readonly ExecutorCapability[],
+  repoKey: string | null = null,
 ): ExecutorCapability[] {
   const runners = onlineCapable.filter((e) => !e.isLocal);
   return [...runners].sort((a, b) => {
+    if (repoKey !== null && repoKey !== "") {
+      const aHeld = Array.isArray(a.held_mirrors) ? a.held_mirrors : [];
+      const bHeld = Array.isArray(b.held_mirrors) ? b.held_mirrors : [];
+      const aWarm = aHeld.includes(repoKey) ? 1 : 0;
+      const bWarm = bHeld.includes(repoKey) ? 1 : 0;
+      if (aWarm !== bWarm) return bWarm - aWarm;
+    }
     const at = a.last_completed_at ? Date.parse(a.last_completed_at) : 0;
     const bt = b.last_completed_at ? Date.parse(b.last_completed_at) : 0;
     if (at !== bt) return bt - at;

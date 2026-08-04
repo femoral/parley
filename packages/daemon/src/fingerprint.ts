@@ -9,6 +9,7 @@ import fs from "node:fs";
 import path from "node:path";
 import {
   getShippedVendorModels,
+  homePathsFromEnv,
   type ModelEntry,
   type ModelProber,
   type ParleyConfig,
@@ -17,6 +18,7 @@ import {
   type RunnerVendorCapability,
   type VendorModels,
 } from "@useparley/core";
+import { listHeldMirrorRepoKeys } from "./mirror.js";
 
 /**
  * Built-in vendor ids and default CLI binary names (adapter DEFAULT_*_BIN).
@@ -214,6 +216,11 @@ export interface FingerprintOptions {
   adapters: Map<string, ModelProber & { id: string }>;
   config?: ParleyConfig;
   env?: NodeJS.ProcessEnv;
+  /**
+   * Optional clones directory override for held-mirror advertisement (#318).
+   * Defaults to `homePathsFromEnv(env).clones`.
+   */
+  clonesDir?: string;
 }
 
 /**
@@ -249,6 +256,7 @@ export function detectHostVendorIds(options: FingerprintOptions): string[] {
 /**
  * Fingerprint this host: vendor bins on PATH plus plugin adapters in the
  * registry, each with a model catalog from readModels/listModels/shipped.
+ * Also advertises held managed-mirror repo keys for warm-clone routing (#318).
  */
 export async function fingerprintCapabilities(
   options: FingerprintOptions,
@@ -263,5 +271,13 @@ export async function fingerprintCapabilities(
     }),
   );
 
-  return { vendors };
+  const env = options.env ?? process.env;
+  const clonesDir =
+    options.clonesDir ?? homePathsFromEnv(env).clones;
+  const held_mirrors = listHeldMirrorRepoKeys(clonesDir);
+
+  return {
+    vendors,
+    ...(held_mirrors.length > 0 ? { held_mirrors } : {}),
+  };
 }

@@ -2,7 +2,7 @@
  * `@useparley/runner` — remote task executor (ADR-0012 / #111).
  * The CLI entry is `parley-runner` (`bin/parley-runner.mjs` → `main.ts`).
  */
-export { loadRunnerConfig, resolveRepoPath, type RunnerConfig } from "./config.js";
+export { loadRunnerConfig, type RunnerConfig } from "./config.js";
 export {
   RunnerLoop,
   type RunnerHost,
@@ -11,16 +11,25 @@ export {
 export {
   ClaimGitError,
   deleteRemoteBranchBestEffort,
+  detachWorktreeHead,
+  dirSizeBytes,
   encodeFetchUrlForFs,
   encodeRepoKeyForFs,
   ensureMirror,
   isMirrorTempName,
   isPushDeniedDetail,
+  listHeldMirrorRepoKeys,
+  listManagedClones,
   mirrorPathFor,
   MIRROR_TEMP_PREFIX,
   prepareClaimRepo,
+  pruneUnusedClones,
+  pushTaskBranch,
+  resolveReposOverride,
   taskBranchName,
   type ClaimGitFailureCode,
+  type LiveMirrorUsage,
+  type ManagedCloneInfo,
   type PreparedRepo,
 } from "./mirror.js";
 export { startHubProxy, type HubProxy } from "./hub-proxy.js";

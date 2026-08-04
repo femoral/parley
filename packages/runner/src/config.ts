@@ -135,18 +135,3 @@ export function loadRunnerConfig(options: LoadRunnerConfigOptions = {}): RunnerC
   };
 }
 
-/**
- * Resolve an optional operator-managed clone override.
- *
- * Exact key match only (repo key or full path id). Basename heuristics are
- * intentionally absent: `github.com/acme/api` and `github.com/other/api` must
- * never share a mapping (ADR-0031 / #316 review F1).
- */
-export function resolveRepoPath(
-  repos: Record<string, string>,
-  repoId: string,
-): string | null {
-  if (repoId === "") return null;
-  const hit = repos[repoId];
-  return hit !== undefined ? hit : null;
-}

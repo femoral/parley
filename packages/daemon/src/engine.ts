@@ -18,11 +18,13 @@ import {
   isValidSize,
   isValidTaskType,
   formatCliSelectedHint,
+  gitAuthOperationForCode,
   isRunnerTaskPhase,
   isRunnerWirePhase,
   listAllowedCombos,
   LOCAL_EXECUTOR_ID,
   ModelAllowlistError,
+  normalizeRepoKey,
   normalizeUsage,
   parseDuration,
   profileHasLaunchTemplate,
@@ -35,6 +37,7 @@ import {
   scoreRubric,
   expandLaunchTemplate,
   formatStepAddress,
+  stripFetchUrlCredentials,
   TASK_HEADER,
   validateAnswers,
   type ChildChannel,
@@ -52,6 +55,19 @@ import {
 } from "@useparley/core";
 import { resolveRepoIdentity } from "./repo-identity.js";
 import { detectHarnesses } from "./fingerprint.js";
+import {
+  ClaimGitError,
+  deleteRemoteBranchBestEffort,
+  detachWorktreeHead,
+  listHeldMirrorRepoKeys,
+  listManagedClones,
+  prepareClaimRepo,
+  pruneUnusedClones,
+  pushTaskBranch,
+  type LiveMirrorUsage,
+  type ManagedCloneInfo,
+  type PreparedRepo,
+} from "./mirror.js";
 
 /** Compat re-exports for deep imports (`@useparley/daemon/engine.js`) during #209 migration. */
 export { DEFAULT_RUNNER_HEARTBEAT_TIMEOUT_MS, TASK_HEADER, type RunnerLeaseSpec };
@@ -571,6 +587,15 @@ export interface DelegateRequest {
    */
   runner: string | null;
   /**
+   * Client-resolved repo identity for remote-daemon cases where `cwd` may not
+   * exist on the daemon host (#318). When the path is present on this host,
+   * identity is still re-resolved from the checkout (authoritative).
+   */
+  repoKey?: string | null;
+  repoFetchUrl?: string | null;
+  /** Client-resolved base commit (required for deferred mirror workspace). */
+  baseSha?: string | null;
+  /**
    * Task size classification; null when unset (#118 / #161). Validated against
    * the project's hot-read classification set after repo resolution.
    */
@@ -671,6 +696,17 @@ export interface SessionBindInput {
 interface RunnerMeta {
   contexts: ContextFile[];
   base_ref: string | null;
+  /**
+   * Local-executor mirror path bookkeeping (#318). Set when placement=local
+   * but the delegate-time path is absent / not the same repo — workspace is
+   * cut from a managed mirror at claim and the branch is pushed on complete.
+   */
+  local_mirror?: {
+    push_to_origin: boolean;
+    repo_local: string;
+    preflight_pushed: boolean;
+    source: PreparedRepo["source"];
+  } | null;
 }
 
 /**
@@ -1461,7 +1497,29 @@ export class TaskEngine {
     } catch {
       isDir = false;
     }
-    if (!isDir) {
+    // Client-supplied identity for remote-daemon (#318): when cwd is absent on
+    // this host, we still accept the task if the client shipped a fetch URL.
+    const clientFetchUrl =
+      typeof request.repoFetchUrl === "string" && request.repoFetchUrl.trim() !== ""
+        ? request.repoFetchUrl.trim()
+        : null;
+    const clientRepoKey =
+      typeof request.repoKey === "string" && request.repoKey.trim() !== ""
+        ? request.repoKey.trim()
+        : null;
+    const clientBaseSha =
+      typeof request.baseSha === "string" && request.baseSha.trim() !== ""
+        ? request.baseSha.trim()
+        : null;
+
+    if (!isDir && clientFetchUrl === null) {
+      throw new DelegateError(
+        `cwd is not a directory: ${cwd} ` +
+          `(and no repo_fetch_url was provided for remote-daemon mirror execution)`,
+      );
+    }
+    // --cwd requires a real directory on this host (workspace-bound).
+    if (!request.useWorktree && !isDir) {
       throw new DelegateError(`cwd is not a directory: ${cwd}`);
     }
 
@@ -1469,7 +1527,7 @@ export class TaskEngine {
     // worktree is cut (#315). Capability match + no-origin pin checks happen
     // before insert; remote-routed tasks never create a local worktree.
     let repo = cwd;
-    if (request.useWorktree) {
+    if (isDir && request.useWorktree) {
       const root = repoRoot(cwd);
       if (root === null) {
         throw new DelegateError(
@@ -1478,7 +1536,42 @@ export class TaskEngine {
       }
       repo = root;
     }
-    const identityEarly = resolveRepoIdentity(repo);
+    // Identity (#318 review BLOCKER-2): when the client declares a repo key /
+    // fetch URL, that declaration wins for storage and fast-path matching.
+    // Path-only resolve is authoritative only when the client sent no identity
+    // (same-host CLI). Never discard a client key and then compare the path
+    // key to itself — that silently executed the wrong repo.
+    const pathIdentity = isDir ? resolveRepoIdentity(repo) : null;
+    const clientFetchStripped =
+      clientFetchUrl !== null ? stripFetchUrlCredentials(clientFetchUrl) : null;
+    const clientDeclaredKey =
+      clientRepoKey ??
+      (clientFetchStripped !== null
+        ? normalizeRepoKey(clientFetchStripped)
+        : null);
+    // When the client declares identity, never silently adopt the path's
+    // fetch URL if the keys disagree — that rewrote repo-a → repo-b.
+    const pathKeyMatchesClient =
+      clientDeclaredKey === null ||
+      pathIdentity === null ||
+      pathIdentity.key === null ||
+      pathIdentity.key === clientDeclaredKey;
+    const identityEarly =
+      !isDir || pathIdentity === null
+        ? {
+            localPath: repo,
+            key: clientDeclaredKey,
+            fetchUrl: clientFetchStripped,
+          }
+        : clientRepoKey !== null || clientFetchUrl !== null
+          ? {
+              localPath: repo,
+              key: clientDeclaredKey ?? pathIdentity.key,
+              fetchUrl:
+                clientFetchStripped ??
+                (pathKeyMatchesClient ? pathIdentity.fetchUrl : null),
+            }
+          : pathIdentity;
     // Hard pin on a no-origin repo (#315): remote cannot fetch without origin.
     if (request.runner !== null && identityEarly.fetchUrl === null) {
       throw new DelegateError(
@@ -1550,27 +1643,65 @@ export class TaskEngine {
     // re-derives a different side (remote never flips to local, local never remote).
     const placement: "local" | "remote" = isRemote ? "remote" : "local";
 
-    let workingDir = cwd;
+    // Fast path for local placement: path exists on this host AND is the same
+    // repo the client asked for. Expected key is the *client-declared* key
+    // when present (not the path-resolved key — that was a tautology).
+    // Mismatch → mirror path when fetch URL is set; no fetch URL → fail below.
+    const expectedKeyForFastPath =
+      clientDeclaredKey ?? identityEarly.key;
+    const fastPathLocal =
+      placement === "local" &&
+      request.useWorktree &&
+      isDir &&
+      this.localPathMatchesRepo(repo, expectedKeyForFastPath);
+
+    let workingDir = isDir ? cwd : repo;
     let worktreePath: string | null = null;
     let branch: string | null = null;
     let baseSha: string | null = null;
+    /** Local placement with deferred mirror workspace (#318). */
+    const deferLocalMirror =
+      placement === "local" && request.useWorktree && !fastPathLocal;
 
     // The branch name embeds the id, so the id is allocated before the row.
     const id = nextTaskId(this.db);
 
     if (request.useWorktree) {
-      if (isRemote) {
-        // Resolve base SHA now so the lease can hand the runner a fixed commit;
-        // worktree + branch are created on the runner host.
+      if (isRemote || deferLocalMirror) {
+        // Resolve base SHA now so claim/lease can hand a fixed commit;
+        // worktree + branch are created on the executor host at claim.
+        // Prefer client-supplied base_sha; only trust the local path's HEAD
+        // when that path is the same repo (fast-path key match). Wrong-repo
+        // at the path would otherwise pin the wrong commit (#318 BLOCKER-2).
         workingDir = repo;
-        try {
-          baseSha = execFileSync(
-            "git",
-            ["-C", repo, "rev-parse", request.baseRef ?? "HEAD"],
-            { encoding: "utf8" },
-          ).trim();
-        } catch (err) {
-          throw new DelegateError(`failed to resolve base ref: ${errorMessage(err)}`);
+        if (clientBaseSha !== null) {
+          baseSha = clientBaseSha;
+        } else if (
+          isDir &&
+          this.localPathMatchesRepo(repo, expectedKeyForFastPath)
+        ) {
+          try {
+            baseSha = execFileSync(
+              "git",
+              ["-C", repo, "rev-parse", request.baseRef ?? "HEAD"],
+              { encoding: "utf8" },
+            ).trim();
+          } catch (err) {
+            throw new DelegateError(`failed to resolve base ref: ${errorMessage(err)}`);
+          }
+        } else {
+          throw new DelegateError(
+            `base_sha is required when the repo path is not available on this host ` +
+              `(or does not match the declared repo; cwd ${cwd}); the client must ` +
+              `resolve HEAD and send base_sha`,
+          );
+        }
+        if (deferLocalMirror && identityEarly.fetchUrl === null) {
+          throw new DelegateError(
+            `local path is not usable on this host and no origin fetch URL is recorded ` +
+              `for ${repo}; cannot execute via managed mirror. Ensure the path exists ` +
+              `and matches the repo, or provide repo_fetch_url.`,
+          );
         }
       } else {
         let info;
@@ -1593,42 +1724,49 @@ export class TaskEngine {
     }
 
     // Classification + work-domain type (#151 / #161): hot-read project files
-    // at the resolved repo. Omitted type ⇒ other; unknown size/difficulty/type
-    // ⇒ usage error listing the project's valid set. Validate before
-    // materializing context so a bad value never leaves a task row — and roll
-    // back any worktree already cut for the same reason.
+    // at the resolved repo when present. When the path is absent (remote-daemon
+    // mirror path), accept defaults / client values without project validation.
     let taskType: string;
     let size: string | null = request.size;
     let difficulty: string | null = request.difficulty;
     try {
-      const taskTypes = readProjectTaskTypes(repo);
-      taskType =
-        request.type === null || request.type === undefined || request.type === ""
-          ? FALLBACK_TASK_TYPE
-          : request.type;
-      if (!isValidTaskType(taskType, taskTypes)) {
-        throw new DelegateError(
-          `unknown task type: ${taskType} (expected ${formatValidTaskTypes(taskTypes)})`,
-        );
-      }
-      const classification = readProjectClassification(repo);
-      if (size !== null && size !== "") {
-        if (!isValidSize(size, classification)) {
+      if (isDir) {
+        const taskTypes = readProjectTaskTypes(repo);
+        taskType =
+          request.type === null || request.type === undefined || request.type === ""
+            ? FALLBACK_TASK_TYPE
+            : request.type;
+        if (!isValidTaskType(taskType, taskTypes)) {
           throw new DelegateError(
-            `invalid size: ${size} (expected ${formatValidSizes(classification)})`,
+            `unknown task type: ${taskType} (expected ${formatValidTaskTypes(taskTypes)})`,
           );
         }
-      } else {
-        size = null;
-      }
-      if (difficulty !== null && difficulty !== "") {
-        if (!isValidDifficulty(difficulty, classification)) {
-          throw new DelegateError(
-            `invalid difficulty: ${difficulty} (expected ${formatValidDifficulties(classification)})`,
-          );
+        const classification = readProjectClassification(repo);
+        if (size !== null && size !== "") {
+          if (!isValidSize(size, classification)) {
+            throw new DelegateError(
+              `invalid size: ${size} (expected ${formatValidSizes(classification)})`,
+            );
+          }
+        } else {
+          size = null;
+        }
+        if (difficulty !== null && difficulty !== "") {
+          if (!isValidDifficulty(difficulty, classification)) {
+            throw new DelegateError(
+              `invalid difficulty: ${difficulty} (expected ${formatValidDifficulties(classification)})`,
+            );
+          }
+        } else {
+          difficulty = null;
         }
       } else {
-        difficulty = null;
+        taskType =
+          request.type === null || request.type === undefined || request.type === ""
+            ? FALLBACK_TASK_TYPE
+            : request.type;
+        if (size === "") size = null;
+        if (difficulty === "") difficulty = null;
       }
     } catch (err) {
       if (worktreePath !== null) {
@@ -1643,7 +1781,7 @@ export class TaskEngine {
       throw new DelegateError(`invalid project config: ${errorMessage(err)}`);
     }
 
-    if (!isRemote) {
+    if (!isRemote && !deferLocalMirror) {
       // Task context rides the workspace, not the prompt (spec §7): the brief and
       // any `--context` files land under `.parley/`, which the worktree already
       // git-excludes. Roll a worktree back if this fails so nothing leaks untracked.
@@ -1660,10 +1798,11 @@ export class TaskEngine {
         throw new DelegateError(`failed to materialize task context: ${errorMessage(err)}`);
       }
     } else {
-      // Persist contexts for the lease response (no local workspace yet).
+      // Persist contexts for the lease / local-mirror claim path (no workspace yet).
       this.writeRunnerMeta(id, {
         contexts: request.contexts,
         base_ref: request.baseRef,
+        local_mirror: null,
       });
     }
 
@@ -2251,12 +2390,21 @@ export class TaskEngine {
    */
   private removeTaskWorktree(task: TaskRow): void {
     if (task.worktree === null) return;
-    if (task.repo === null) {
+    // Mirror-executed tasks record the client-declared path in `task.repo`
+    // (often absent on this host). The worktree belongs to the bare mirror —
+    // prefer `local_mirror.repo_local` from runner-meta so clean/gc can reclaim
+    // it (#318 HIGH-A).
+    const mirrorRepo = this.readRunnerMeta(task.id).local_mirror?.repo_local;
+    const repoRoot =
+      typeof mirrorRepo === "string" && mirrorRepo !== ""
+        ? mirrorRepo
+        : task.repo;
+    if (repoRoot === null || repoRoot === "") {
       // Worktree tasks always record their source repo; a null here is a
       // corrupt row, and silently nulling the worktree would orphan the dir.
       throw new Error(`task ${task.id} has a worktree but no repo recorded`);
     }
-    removeWorktree(task.repo, task.worktree);
+    removeWorktree(repoRoot, task.worktree);
     // Null both so fix can tell "cleaned worktree" from "user --cwd still set".
     updateTask(this.db, task.id, { worktree: null, cwd: null });
   }
@@ -2376,6 +2524,49 @@ export class TaskEngine {
     // recorder so a throw still leaves the task completed below.
     if (task.run_id !== null && task.node !== null && report !== null) {
       this.recordRunDeliverables(task, report);
+    }
+
+    // Local-mirror path: push the task branch before complete so a push
+    // failure can still fail the task (#318). Distant clients fetch from origin.
+    // After push (or failed push cleanup), detach the worktree HEAD so the bare
+    // mirror stays fetchable for the next task while the directory survives for
+    // review (#318 review BLOCKER-1).
+    const mirrorMeta = this.readRunnerMeta(taskId).local_mirror;
+    if (
+      mirrorMeta !== null &&
+      mirrorMeta !== undefined &&
+      mirrorMeta.push_to_origin &&
+      task.branch !== null &&
+      task.branch !== "" &&
+      task.worktree !== null
+    ) {
+      try {
+        pushTaskBranch(mirrorMeta.repo_local, task.worktree, task.branch);
+      } catch (err) {
+        if (mirrorMeta.preflight_pushed) {
+          deleteRemoteBranchBestEffort(mirrorMeta.repo_local, task.branch);
+        }
+        detachWorktreeHead(task.worktree);
+        this.taskTransitions.apply(taskId, "failed", {
+          cause: "fail",
+          fields: {
+            ...fields,
+            error: `branch handoff failed: ${errorMessage(err)}`,
+          },
+        });
+        this.clearRoutingTimeout(taskId);
+        return;
+      }
+    }
+    // Always detach after a mirror worktree task reaches terminal success, even
+    // when push was skipped — the branch checkout alone blocks the next fetch.
+    if (
+      mirrorMeta !== null &&
+      mirrorMeta !== undefined &&
+      task.worktree !== null &&
+      task.worktree !== ""
+    ) {
+      detachWorktreeHead(task.worktree);
     }
 
     this.taskTransitions.apply(taskId, "completed", {
@@ -3212,6 +3403,8 @@ export class TaskEngine {
       this.completeAcceptedReport(taskId);
       return;
     }
+    // Best-effort orphan preflight cleanup + detach for local-mirror path (#318).
+    this.cleanupFailedLocalMirror(task);
     this.clearReportFallback(taskId);
     this.clearRunnerHeartbeat(taskId);
     this.clearRoutingTimeout(taskId);
@@ -3250,9 +3443,11 @@ export class TaskEngine {
       return {
         contexts: Array.isArray(parsed.contexts) ? parsed.contexts : [],
         base_ref: typeof parsed.base_ref === "string" ? parsed.base_ref : null,
+        local_mirror:
+          parsed.local_mirror !== undefined ? parsed.local_mirror : null,
       };
     } catch {
-      return { contexts: [], base_ref: null };
+      return { contexts: [], base_ref: null, local_mirror: null };
     }
   }
 
@@ -3452,12 +3647,14 @@ export class TaskEngine {
     if (vendorIds.length === 0) return null;
 
     // Online peers for warm ranking. Include each peer's unreachable map so
-    // excluded pairings do not hold the warm reservation (#317 MEDIUM-3).
+    // excluded pairings do not hold the warm reservation (#317 MEDIUM-3), and
+    // held_mirrors so warm-clone beats warm-executor (#318).
     const onlinePeers: {
       name: string;
       vendorIds: string[];
       last_completed_at: string | null;
       unreachableRepoKeys: string[];
+      heldMirrors: string[];
     }[] = [];
     for (const peer of listRunners(this.db)) {
       if (!this.isRunnerOnline(peer.name, peer.last_seen)) continue;
@@ -3467,6 +3664,11 @@ export class TaskEngine {
         vendorIds: peerCaps.vendors.map((v) => v.id),
         last_completed_at: peer.last_completed_at ?? null,
         unreachableRepoKeys: unreachableRepoKeys(peer),
+        heldMirrors: Array.isArray(peerCaps.held_mirrors)
+          ? peerCaps.held_mirrors.filter(
+              (k): k is string => typeof k === "string" && k !== "",
+            )
+          : [],
       });
     }
 
@@ -4261,12 +4463,15 @@ export class TaskEngine {
       /* use empty config for PATH detection */
     }
     const localVendors = this.localAdvertisedVendors(config);
+    // Daemon's own managed mirrors count for warm-clone preference (#318).
+    const localHeld = listHeldMirrorRepoKeys(this.paths.clones);
     out.push({
       name: LOCAL_EXECUTOR_ID,
       vendors: localVendors,
       online: true, // this process is always "online"
       isLocal: true,
       last_completed_at: null,
+      ...(localHeld.length > 0 ? { held_mirrors: localHeld } : {}),
     });
 
     for (const row of listRunners(this.db)) {
@@ -4274,6 +4479,11 @@ export class TaskEngine {
       const vendors = caps.vendors.map((v) => v.id);
       const online = this.isRunnerOnline(row.name, row.last_seen);
       const unreachable = parseUnreachableRepos(row.unreachable_repos);
+      const held = Array.isArray(caps.held_mirrors)
+        ? caps.held_mirrors.filter(
+            (k): k is string => typeof k === "string" && k !== "",
+          )
+        : [];
       out.push({
         name: row.name,
         vendors,
@@ -4282,6 +4492,7 @@ export class TaskEngine {
         last_completed_at: row.last_completed_at ?? null,
         unreachable_repos:
           Object.keys(unreachable).length > 0 ? unreachable : undefined,
+        ...(held.length > 0 ? { held_mirrors: held } : {}),
       });
     }
     this.fleetCache = { atMs: now, fleet: out };
@@ -4338,12 +4549,57 @@ export class TaskEngine {
         parsed !== null &&
         Array.isArray((parsed as { vendors?: unknown }).vendors)
       ) {
-        return parsed as RunnerCapabilities;
+        const caps = parsed as RunnerCapabilities;
+        // Normalize held_mirrors to string[] when present; drop malformed
+        // shapes so fleet ranking never calls `.includes` on a non-array.
+        if (Array.isArray(caps.held_mirrors)) {
+          caps.held_mirrors = caps.held_mirrors.filter(
+            (k): k is string => typeof k === "string" && k !== "",
+          );
+        } else {
+          delete caps.held_mirrors;
+        }
+        return caps;
       }
     } catch {
       /* fall through */
     }
     return { vendors: [] };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Managed clones list / prune (#318)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Live (non-terminal) task references for clones list/prune.
+   * Keys + raw fetch URLs/paths so path-origin mirrors stay "used" mid-task.
+   */
+  private liveMirrorUsage(): LiveMirrorUsage {
+    const repoKeys = new Set<string>();
+    const refs = new Set<string>();
+    for (const t of listTasks(this.db)) {
+      if (isTerminalState(t.state)) continue;
+      if (t.repo_key !== null && t.repo_key !== "") repoKeys.add(t.repo_key);
+      if (t.repo_fetch_url !== null && t.repo_fetch_url !== "") {
+        refs.add(t.repo_fetch_url);
+      }
+      if (t.repo !== null && t.repo !== "") refs.add(t.repo);
+    }
+    return { repoKeys, refs };
+  }
+
+  /** `GET /clones` — list managed mirrors with sizes and used flags. */
+  listClones(): ManagedCloneInfo[] {
+    return listManagedClones(this.paths.clones, this.liveMirrorUsage());
+  }
+
+  /**
+   * `POST /clones/prune` — remove unused mirrors only. Never auto-called.
+   * Returns removed + kept inventories after the walk.
+   */
+  pruneClones(): { removed: ManagedCloneInfo[]; kept: ManagedCloneInfo[] } {
+    return pruneUnusedClones(this.paths.clones, this.liveMirrorUsage());
   }
 
   private isRunnerOnline(name: string, lastSeenIso: string): boolean {
@@ -4553,6 +4809,178 @@ export class TaskEngine {
   }
 
   /**
+   * True when `repoPath` exists and, when `expectedKey` is set, its origin
+   * normalizes to that key. Used for same-host fast path (#318).
+   */
+  private localPathMatchesRepo(
+    repoPath: string,
+    expectedKey: string | null,
+  ): boolean {
+    if (!fs.existsSync(repoPath)) return false;
+    try {
+      if (!fs.statSync(repoPath).isDirectory()) return false;
+    } catch {
+      return false;
+    }
+    if (expectedKey === null || expectedKey === "") {
+      // No-origin / unparseable: path existence is enough for the fast path.
+      return true;
+    }
+    const identity = resolveRepoIdentity(repoPath);
+    return identity.key === expectedKey;
+  }
+
+  /**
+   * For placement=local tasks whose worktree was deferred (remote-daemon /
+   * missing path), prepare a managed mirror + worktree before spawn (#318).
+   * No-ops when the task already has a worktree (same-host fast path), is a
+   * run-owned step (pre-materialized fan-out / linear workspace, ADR-0018),
+   * or was never a worktree task (`--cwd` leaves `base_sha` null).
+   */
+  private ensureLocalMirrorWorkspace(task: TaskRow): TaskRow {
+    if (task.worktree !== null && task.worktree !== "") return task;
+    if (task.placement === "remote") return task;
+    // Run-owned steps intentionally record worktree=null (run owns checkout).
+    if (task.run_id !== null && task.run_id !== "") return task;
+    // --cwd / non-worktree tasks: base_sha is never set at create.
+    if (task.base_sha === null || task.base_sha === "") return task;
+    if (task.repo === null) return task;
+    // Already prepared this process (meta has local_mirror).
+    const existingMeta = this.readRunnerMeta(task.id);
+    if (
+      existingMeta.local_mirror !== null &&
+      existingMeta.local_mirror !== undefined &&
+      task.cwd !== null &&
+      fs.existsSync(task.cwd)
+    ) {
+      return task;
+    }
+
+    // If the local path is usable, cut the worktree from it (late fast path).
+    if (this.localPathMatchesRepo(task.repo, task.repo_key)) {
+      try {
+        const info = createWorktree({
+          repoRoot: task.repo,
+          worktreesDir: this.paths.worktrees,
+          taskId: task.id,
+          name: task.name,
+          baseRef: task.base_sha ?? existingMeta.base_ref ?? "HEAD",
+        });
+        const contexts = existingMeta.contexts;
+        materializeContext(info.path, task.prompt ?? "", contexts);
+        updateTask(this.db, task.id, {
+          worktree: info.path,
+          branch: info.branch,
+          cwd: info.path,
+          base_sha: info.baseSha,
+        });
+        return getTask(this.db, task.id) ?? task;
+      } catch (err) {
+        throw new ClaimGitError(
+          "no_repo_source",
+          `failed to create local worktree: ${errorMessage(err)}`,
+        );
+      }
+    }
+
+    // Mirror path: require fetch URL.
+    if (task.repo_fetch_url === null || task.repo_fetch_url === "") {
+      throw new ClaimGitError(
+        "no_repo_source",
+        `no repo source for task: missing repo_fetch_url and no local path at ${task.repo}`,
+      );
+    }
+
+    const leaseLike: RunnerLeaseSpec = {
+      task_id: task.id,
+      name: task.name,
+      prompt: task.prompt ?? "",
+      vendor: task.vendor ?? "",
+      model: task.model,
+      effort: task.effort,
+      profile: task.profile,
+      sandbox: task.sandbox,
+      network: task.network === 1,
+      answer_timeout_ms: task.answer_timeout_ms ?? 0,
+      report_schema: {},
+      base_ref: existingMeta.base_ref,
+      base_sha: task.base_sha,
+      repo_key: task.repo_key ?? null,
+      repo_fetch_url: task.repo_fetch_url,
+      repo: task.repo,
+      contexts: existingMeta.contexts,
+      extra_args: [],
+      env: {},
+    };
+    const prepared = prepareClaimRepo(leaseLike, {
+      repos: {},
+      clonesDir: this.paths.clones,
+    });
+    let info;
+    try {
+      info = createWorktree({
+        repoRoot: prepared.repoLocal,
+        worktreesDir: this.paths.worktrees,
+        taskId: task.id,
+        name: task.name,
+        baseRef: prepared.baseRef,
+      });
+    } catch (err) {
+      if (prepared.preflightPushed) {
+        deleteRemoteBranchBestEffort(prepared.repoLocal, prepared.branch);
+      }
+      throw new ClaimGitError(
+        "mirror_clone_failed",
+        `failed to create worktree from mirror: ${errorMessage(err)}`,
+      );
+    }
+    materializeContext(info.path, task.prompt ?? "", existingMeta.contexts);
+    this.writeRunnerMeta(task.id, {
+      contexts: existingMeta.contexts,
+      base_ref: existingMeta.base_ref,
+      local_mirror: {
+        push_to_origin: prepared.pushToOrigin,
+        repo_local: prepared.repoLocal,
+        preflight_pushed: prepared.preflightPushed,
+        source: prepared.source,
+      },
+    });
+    // Invalidate fleet cache so warm-clone advertisement sees the new mirror.
+    this.invalidateFleetCache();
+    updateTask(this.db, task.id, {
+      worktree: info.path,
+      branch: info.branch,
+      cwd: info.path,
+      base_sha: prepared.baseRef,
+    });
+    return getTask(this.db, task.id) ?? task;
+  }
+
+  /**
+   * Fail-path cleanup for local-mirror tasks: drop orphan preflight remote
+   * branches and detach the worktree so the bare mirror can fetch again.
+   * Success-path push is inline in `completeAcceptedReport` (this method is
+   * fail-only — the old `ok===true` branch was unreachable dead code).
+   */
+  private cleanupFailedLocalMirror(task: TaskRow): void {
+    const meta = this.readRunnerMeta(task.id);
+    const mirror = meta.local_mirror;
+    if (mirror === null || mirror === undefined) return;
+    // Detach first: deleting the remote branch with `:refs/heads/<branch>`
+    // also drops the mirror-local tracking ref, so detach cannot resolve HEAD
+    // and the retained worktree becomes git-unusable for diagnosis (#318 MEDIUM-B).
+    if (task.worktree !== null && task.worktree !== "") {
+      detachWorktreeHead(task.worktree);
+    }
+    if (mirror.push_to_origin && mirror.preflight_pushed) {
+      const branch = task.branch;
+      if (branch !== null && branch !== "") {
+        deleteRemoteBranchBestEffort(mirror.repo_local, branch);
+      }
+    }
+  }
+
+  /**
    * Start a previously-admitted task: re-validate resume freshness at dequeue,
    * then spawn via run / resumeFix / runFreshFix as appropriate.
    */
@@ -4570,37 +4998,77 @@ export class TaskEngine {
       return;
     }
 
+    // Claim-time mirror/workspace for deferred local placement (#318).
+    // Only when worktree was deferred at create (base_sha set, worktree null).
+    // `--cwd` tasks also have null worktree but no base_sha — leave alone.
+    // Run-owned steps (run_id set) keep a pre-materialized cwd and intentionally
+    // record worktree=null (ADR-0018); never cut a task-owned worktree for them.
+    let live = task;
+    if (
+      (task.worktree === null || task.worktree === "") &&
+      task.placement !== "remote" &&
+      (task.run_id === null || task.run_id === "") &&
+      task.base_sha !== null &&
+      task.base_sha !== ""
+    ) {
+      try {
+        live = this.ensureLocalMirrorWorkspace(task);
+      } catch (err) {
+        this.admitted.delete(task.id);
+        const msg =
+          err instanceof ClaimGitError
+            ? err.message
+            : err instanceof Error
+              ? err.message
+              : String(err);
+        const errorCategory =
+          err instanceof ClaimGitError
+            ? JSON.stringify({
+                kind: "git_auth",
+                operation: gitAuthOperationForCode(err.code),
+                code: err.code,
+                repo_key: task.repo_key ?? null,
+                runner: LOCAL_EXECUTOR_ID,
+              } satisfies TaskErrorCategory)
+            : null;
+        this.fail(task.id, msg, {
+          error_category: errorCategory,
+        });
+        return;
+      }
+    }
+
     // Template profiles never resume (#195) — treat any residual resumed=1 as fresh.
-    const useTemplate = this.profileUsesLaunchTemplate(task.profile);
+    const useTemplate = this.profileUsesLaunchTemplate(live.profile);
 
     // Freshness at dequeue for resumed fix attempts (#171).
-    if (!useTemplate && task.parent_task_id !== null && task.resumed === 1) {
-      const parent = getTask(this.db, task.parent_task_id);
+    if (!useTemplate && live.parent_task_id !== null && live.resumed === 1) {
+      const parent = getTask(this.db, live.parent_task_id);
       if (!parent) {
-        this.admitted.delete(task.id);
-        this.fail(task.id, `parent task ${task.parent_task_id} is gone; cannot resume`);
+        this.admitted.delete(live.id);
+        this.fail(live.id, `parent task ${live.parent_task_id} is gone; cannot resume`);
         return;
       }
       try {
         this.assertResumeWindow(parent, vendor);
       } catch (err) {
-        this.admitted.delete(task.id);
+        this.admitted.delete(live.id);
         const message = err instanceof Error ? err.message : String(err);
-        this.fail(task.id, message);
+        this.fail(live.id, message);
         return;
       }
-      const prompt = task.prompt ?? "";
-      await this.resumeFix(task, adapter, prompt);
+      const prompt = live.prompt ?? "";
+      await this.resumeFix(live, adapter, prompt);
       return;
     }
 
-    if (task.parent_task_id !== null) {
-      const prompt = task.prompt ?? "";
-      await this.runFreshFix(task, adapter, prompt);
+    if (live.parent_task_id !== null) {
+      const prompt = live.prompt ?? "";
+      await this.runFreshFix(live, adapter, prompt);
       return;
     }
 
-    await this.run(task, adapter);
+    await this.run(live, adapter);
   }
 
   /**

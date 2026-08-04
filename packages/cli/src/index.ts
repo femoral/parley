@@ -24,6 +24,7 @@ import { runInfo } from "./commands/info.js";
 import { runLint } from "./commands/lint.js";
 import { runSession } from "./commands/session.js";
 import { runRunners } from "./commands/runners.js";
+import { runClones } from "./commands/clones.js";
 import { runRun } from "./commands/run.js";
 import { VERSION_LINE } from "./version.js";
 
@@ -168,6 +169,13 @@ Usage:
   parley runners remove <name> [--json]
                             Delete registration row + runners.<name> config
                             (loopback only).
+  parley clones list [--json]
+                            List managed mirrors on the daemon host (sizes,
+                            used/unused). Never auto-deleted.
+  parley clones prune [--json]
+                            Remove unused managed mirrors only (loopback /
+                            config-admin). Used = live non-terminal task
+                            references the repo key.
   parley init                   One-shot setup: skills, config, example workflows, harnesses, models
     --layout claude|agents|<path>
                               Vendor skill layout, or a custom directory path
@@ -272,6 +280,8 @@ export async function run(argv: string[], ctx: CliContext): Promise<number> {
       return runSession(ctx, rest);
     case "runners":
       return runRunners(ctx, rest);
+    case "clones":
+      return runClones(ctx, rest);
     case "init":
       return runInit(ctx, rest);
     case "skills":

@@ -16,9 +16,9 @@ import {
   MIRROR_TEMP_PREFIX,
   preflightPushBranch,
   prepareClaimRepo,
+  resolveReposOverride,
   taskBranchName,
 } from "../src/mirror.js";
-import { resolveRepoPath } from "../src/config.js";
 import { sampleLease } from "./lease-transport.fake.js";
 
 const temps: string[] = [];
@@ -90,20 +90,20 @@ describe("encodeRepoKeyForFs", () => {
   });
 });
 
-describe("resolveRepoPath exact match (F1)", () => {
+describe("resolveReposOverride exact match (F1)", () => {
   it("matches exact repo key only — not basename", () => {
     const repos = {
       "github.com/acme/api": "/clones/acme-api",
     };
-    expect(resolveRepoPath(repos, "github.com/acme/api")).toBe("/clones/acme-api");
-    expect(resolveRepoPath(repos, "github.com/other/api")).toBeNull();
-    expect(resolveRepoPath(repos, "api")).toBeNull();
+    expect(resolveReposOverride(repos, "github.com/acme/api")).toBe("/clones/acme-api");
+    expect(resolveReposOverride(repos, "github.com/other/api")).toBeNull();
+    expect(resolveReposOverride(repos, "api")).toBeNull();
   });
 
   it("matches exact path id when that is the map key", () => {
     const repos = { "/orch/repo": "/local/repo" };
-    expect(resolveRepoPath(repos, "/orch/repo")).toBe("/local/repo");
-    expect(resolveRepoPath(repos, "/other/repo")).toBeNull();
+    expect(resolveReposOverride(repos, "/orch/repo")).toBe("/local/repo");
+    expect(resolveReposOverride(repos, "/other/repo")).toBeNull();
   });
 });
 

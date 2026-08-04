@@ -443,18 +443,51 @@ function projectRunnerShow(
   };
 }
 
-function isValidCapabilities(value: unknown): value is RunnerCapabilities {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
-  const vendors = (value as { vendors?: unknown }).vendors;
-  if (!Array.isArray(vendors)) return false;
-  for (const v of vendors) {
-    if (typeof v !== "object" || v === null || Array.isArray(v)) return false;
-    if (typeof (v as { id?: unknown }).id !== "string" || (v as { id: string }).id === "") {
-      return false;
-    }
-    if (!Array.isArray((v as { models?: unknown }).models)) return false;
+/** Max entries accepted in `held_mirrors` on register (#318 review HIGH-3 / MEDIUM-5). */
+const HELD_MIRRORS_MAX = 256;
+/** Max chars per held-mirror repo key on the wire. */
+const HELD_MIRROR_KEY_MAX = 512;
+
+/** Wire rule text for held_mirrors 400s (#318 LOW-D). */
+const HELD_MIRRORS_RULE =
+  `held_mirrors must be an array of strings (≤${HELD_MIRROR_KEY_MAX} chars each, ≤${HELD_MIRRORS_MAX} entries)`;
+
+/**
+ * Validate runner capabilities. Returns null when valid; otherwise a distinct
+ * error message (held_mirrors rejections name the actual rule — #318 LOW-D).
+ */
+function capabilitiesValidationError(value: unknown): string | null {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return "capabilities is required ({ vendors: [{ id, models }] })";
   }
-  return true;
+  const vendors = (value as { vendors?: unknown }).vendors;
+  if (!Array.isArray(vendors)) {
+    return "capabilities is required ({ vendors: [{ id, models }] })";
+  }
+  for (const v of vendors) {
+    if (typeof v !== "object" || v === null || Array.isArray(v)) {
+      return "capabilities is required ({ vendors: [{ id, models }] })";
+    }
+    if (typeof (v as { id?: unknown }).id !== "string" || (v as { id: string }).id === "") {
+      return "capabilities is required ({ vendors: [{ id, models }] })";
+    }
+    if (!Array.isArray((v as { models?: unknown }).models)) {
+      return "capabilities is required ({ vendors: [{ id, models }] })";
+    }
+  }
+  // held_mirrors is optional; when present must be string[] (bounded).
+  // A non-array blob would 500 every /runner/lease via `.includes` (#318 HIGH-3).
+  if (Object.prototype.hasOwnProperty.call(value, "held_mirrors")) {
+    const held = (value as { held_mirrors?: unknown }).held_mirrors;
+    if (!Array.isArray(held)) return HELD_MIRRORS_RULE;
+    if (held.length > HELD_MIRRORS_MAX) return HELD_MIRRORS_RULE;
+    for (const k of held) {
+      if (typeof k !== "string" || k.length > HELD_MIRROR_KEY_MAX) {
+        return HELD_MIRRORS_RULE;
+      }
+    }
+  }
+  return null;
 }
 
 function sendJson(res: http.ServerResponse, status: number, body: unknown): void {
@@ -694,6 +727,11 @@ function handleDelegate(engine: TaskEngine, res: http.ServerResponse, body: unkn
     type = body.type;
   }
   const dryRun = body.dry_run === true;
+  // Client-resolved identity for remote-daemon mirror path (#318). Optional;
+  // when cwd exists on this host the engine re-resolves from the checkout.
+  const repoKey = optionalString(body.repo_key);
+  const repoFetchUrl = optionalString(body.repo_fetch_url);
+  const baseSha = optionalString(body.base_sha);
   try {
     const task = engine.delegate({
       prompt,
@@ -722,6 +760,9 @@ function handleDelegate(engine: TaskEngine, res: http.ServerResponse, body: unkn
       difficulty,
       type,
       dryRun,
+      repoKey,
+      repoFetchUrl,
+      baseSha,
     });
     // Multi-live fallback warning (#280) — CLI prints to stderr, not stdout JSON.
     const bindingWarning = engine.takeSessionBindingWarning();
@@ -887,7 +928,9 @@ export function classifyAuthRoute(method: string, pathname: string): AuthRouteCl
     // DELETE /runners/:name mutates runners.* config — loopback-only (#320).
     (method === "DELETE" &&
       segments[0] === "runners" &&
-      segments.length === 2)
+      segments.length === 2) ||
+    // POST /clones/prune removes disk mirrors — loopback / config-admin (#318).
+    (method === "POST" && pathname === "/clones/prune")
   ) {
     return "config-admin";
   }
@@ -2969,11 +3012,12 @@ function createHandler(
             sendJson(res, 400, { error: "build_version is required" });
             return;
           }
-          if (!isValidCapabilities(body.capabilities)) {
-            sendJson(res, 400, {
-              error: "capabilities is required ({ vendors: [{ id, models }] })",
-            });
-            return;
+          {
+            const capsErr = capabilitiesValidationError(body.capabilities);
+            if (capsErr !== null) {
+              sendJson(res, 400, { error: capsErr });
+              return;
+            }
           }
           // #315 F2: `local` is reserved for the daemon's in-process executor.
           if (runnerName === "local" || body.runner === "local") {
@@ -3253,6 +3297,53 @@ function createHandler(
           projectRunnerListEntry(row, config),
         );
         sendJson(res, 200, { runners });
+        return;
+      }
+
+      // `GET /clones` — list managed mirrors with sizes + used flags (#318).
+      // Client class: readable off-loopback with a client token.
+      if (method === "GET" && url.pathname === "/clones") {
+        const clones = engine.listClones();
+        sendJson(res, 200, {
+          clones: clones.map((c) => ({
+            name: c.name,
+            path: c.path,
+            repo_key: c.repo_key,
+            fetch_url: c.fetch_url,
+            size_bytes: c.size_bytes,
+            used: c.used,
+          })),
+        });
+        return;
+      }
+
+      // `POST /clones/prune` — remove unused mirrors only (#318). Config-admin /
+      // loopback (classifyAuthRoute). Never auto-called.
+      if (method === "POST" && url.pathname === "/clones/prune") {
+        if (!loopback) {
+          sendJson(res, 403, {
+            error: "clones prune is only allowed from loopback",
+          });
+          return;
+        }
+        const result = engine.pruneClones();
+        sendJson(res, 200, {
+          removed: result.removed.map((c) => ({
+            name: c.name,
+            path: c.path,
+            repo_key: c.repo_key,
+            fetch_url: c.fetch_url,
+            size_bytes: c.size_bytes,
+          })),
+          kept: result.kept.map((c) => ({
+            name: c.name,
+            path: c.path,
+            repo_key: c.repo_key,
+            fetch_url: c.fetch_url,
+            size_bytes: c.size_bytes,
+            used: c.used,
+          })),
+        });
         return;
       }
 

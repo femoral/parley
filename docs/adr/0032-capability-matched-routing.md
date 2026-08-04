@@ -39,11 +39,13 @@ Decision order among the fleet (after placement is set / at re-dispatch):
    (`gpu excluded: cannot reach host/path (push denied)`).
 2. **Hard pin** (`runner` set): only that executor among the eligible pool;
    pin excluded or incapable → fail with diagnosis.
-3. **Warm clone** (future #318): prefer executors that already hold a mirror
-   for the repo key — not implemented yet.
-4. **Warm executor** (#315): among remaining online capable runners, prefer
-   most recent `last_completed_at`, then name ASC. Unpinned claim uses a
-   short reservation window for that preferred peer.
+3. **Warm clone** (#318): among capable online runners, prefer those that
+   advertise the task's `repo_key` in `held_mirrors` (managed bare under
+   `$PARLEY_HOME/clones/`). The daemon's own clones count for `local`.
+4. **Warm executor** (#315): among remaining online capable runners (or among
+   warm-clone holders when any exist), prefer most recent `last_completed_at`,
+   then name ASC. Unpinned claim uses a short reservation window for that
+   preferred peer.
 
 Delegate-time decision that *sets* placement:
 

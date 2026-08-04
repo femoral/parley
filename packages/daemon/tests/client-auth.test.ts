@@ -163,6 +163,9 @@ describe("classifyAuthRoute", () => {
     expect(classifyAuthRoute("GET", "/runners")).toBe("client");
     expect(classifyAuthRoute("GET", "/runners/gpu")).toBe("client");
     expect(classifyAuthRoute("DELETE", "/runners/gpu")).toBe("config-admin");
+    // #318: list is client; prune mutates disk → config-admin.
+    expect(classifyAuthRoute("GET", "/clones")).toBe("client");
+    expect(classifyAuthRoute("POST", "/clones/prune")).toBe("config-admin");
   });
 });
 

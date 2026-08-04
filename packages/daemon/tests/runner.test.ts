@@ -234,6 +234,75 @@ describe("runner registration", () => {
     expect(reg.status).toBe(401);
   });
 
+  it("rejects malformed held_mirrors on register (400) (#318 HIGH-3 / LOW-D)", async () => {
+    const home = makeHome();
+    const { base } = await boot(home);
+    const bad = await registerRunner(base, {
+      capabilities: {
+        vendors: [{ id: "fake", models: [] }],
+        held_mirrors: { k: 1 },
+      },
+    });
+    expect(bad.status).toBe(400);
+    // Distinct message naming the held_mirrors rule — not the generic vendors one.
+    expect(JSON.stringify(bad.body)).toMatch(/held_mirrors/i);
+    expect(JSON.stringify(bad.body)).toMatch(/array of strings/i);
+    expect(JSON.stringify(bad.body)).not.toMatch(
+      /capabilities is required \(\{ vendors/,
+    );
+
+    // Lease still works after a hostile registration attempt (no 500 fleet-wide).
+    const ok = await registerRunner(base);
+    expect(ok.status).toBe(200);
+    const lease = await json(
+      base,
+      "POST",
+      "/runner/lease",
+      { runner: "gpu" },
+      auth,
+    );
+    // 204 empty or 200 with lease — not 500.
+    expect(lease.status).not.toBe(500);
+    expect([200, 204]).toContain(lease.status);
+  });
+
+  it("rejects oversized held_mirrors on register (400) (#318 HIGH-3 / LOW-D)", async () => {
+    const home = makeHome();
+    const { base } = await boot(home);
+    const tooMany = Array.from(
+      { length: 257 },
+      (_, i) => `github.com/org/r${i}`,
+    );
+    const reg = await registerRunner(base, {
+      capabilities: {
+        vendors: [{ id: "fake", models: [] }],
+        held_mirrors: tooMany,
+      },
+    });
+    expect(reg.status).toBe(400);
+    expect(JSON.stringify(reg.body)).toMatch(/held_mirrors/i);
+    expect(JSON.stringify(reg.body)).toMatch(/≤256 entries|256 entries/i);
+
+    const tooLong = await registerRunner(base, {
+      capabilities: {
+        vendors: [{ id: "fake", models: [] }],
+        held_mirrors: ["x".repeat(513)],
+      },
+    });
+    expect(tooLong.status).toBe(400);
+    expect(JSON.stringify(tooLong.body)).toMatch(/held_mirrors/i);
+    expect(JSON.stringify(tooLong.body)).toMatch(/≤512 chars|512 chars/i);
+
+    // Valid bounded list is accepted.
+    const good = await registerRunner(base, {
+      capabilities: {
+        vendors: [{ id: "fake", models: [] }],
+        held_mirrors: ["github.com/org/ok"],
+      },
+    });
+    expect(good.status).toBe(200);
+  });
+
   it("rejects lease without prior registration", async () => {
     const home = makeHome();
     const { base } = await boot(home);
