@@ -825,11 +825,10 @@ export class TaskEngine {
    * cannot over-admit (#171).
    */
   private readonly admitted = new Set<string>();
-  /** Re-entrancy guard for {@link drainConcurrencyQueue}. */
-  private drainingQueue = false;
   /**
-   * Re-entrancy guard for {@link drainRuns} (#237). Same shape as
-   * {@link drainingQueue}: a state change may unlock more work.
+   * Re-entrancy guard for {@link drainRuns} (#237). A state change may unlock
+   * more work mid-walk; nested calls are no-ops. (Concurrency-queue re-entrancy
+   * is owned by {@link InProcessExecutor.drain} — #326.)
    */
   private drainingRuns = false;
   /**
@@ -5088,17 +5087,12 @@ export class TaskEngine {
 
   /**
    * Walk the durable FIFO queue and claim any task that now fits under its
-   * caps (#171 / #312). Re-entrant safe; stops when no further task can be
-   * claimed. Implementation lives on {@link InProcessExecutor.drain}.
+   * caps (#171 / #312). Re-entrancy and the admit walk live on
+   * {@link InProcessExecutor.drain} (#326); this wrapper is the engine entry
+   * point used by onSlotFreed / restart.
    */
   private drainConcurrencyQueue(): void {
-    if (this.drainingQueue || this.shuttingDown) return;
-    this.drainingQueue = true;
-    try {
-      this.localExecutor.drain();
-    } finally {
-      this.drainingQueue = false;
-    }
+    this.localExecutor.drain();
   }
 
   /**
