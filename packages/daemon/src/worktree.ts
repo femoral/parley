@@ -130,6 +130,11 @@ function appendExclude(wt: string, entries: string[]): void {
   // `--worktree` config requires the extension; enabling it is git's own
   // documented prerequisite (git-worktree(1)) for per-worktree settings.
   git(["-C", wt, "config", "extensions.worktreeConfig", "true"]);
+  // Bare mirrors (managed clones, #316/#318) inherit `core.bare=true` from the
+  // common config. Once worktreeConfig is on, that leaks into the worktree and
+  // git reports `is-inside-work-tree: false` — checkout/status break, and
+  // post-task detach for mirror reuse fails. Linked worktrees are never bare.
+  git(["-C", wt, "config", "--worktree", "core.bare", "false"]);
   git(["-C", wt, "config", "--worktree", "core.excludesFile", excludePath]);
 }
 

@@ -234,6 +234,66 @@ describe("runner registration", () => {
     expect(reg.status).toBe(401);
   });
 
+  it("rejects malformed held_mirrors on register (400) (#318 HIGH-3)", async () => {
+    const home = makeHome();
+    const { base } = await boot(home);
+    const bad = await registerRunner(base, {
+      capabilities: {
+        vendors: [{ id: "fake", models: [] }],
+        held_mirrors: { k: 1 },
+      },
+    });
+    expect(bad.status).toBe(400);
+    expect(JSON.stringify(bad.body)).toMatch(/capabilities/i);
+
+    // Lease still works after a hostile registration attempt (no 500 fleet-wide).
+    const ok = await registerRunner(base);
+    expect(ok.status).toBe(200);
+    const lease = await json(
+      base,
+      "POST",
+      "/runner/lease",
+      { runner: "gpu" },
+      auth,
+    );
+    // 204 empty or 200 with lease — not 500.
+    expect(lease.status).not.toBe(500);
+    expect([200, 204]).toContain(lease.status);
+  });
+
+  it("rejects oversized held_mirrors on register (400) (#318 HIGH-3)", async () => {
+    const home = makeHome();
+    const { base } = await boot(home);
+    const tooMany = Array.from(
+      { length: 257 },
+      (_, i) => `github.com/org/r${i}`,
+    );
+    const reg = await registerRunner(base, {
+      capabilities: {
+        vendors: [{ id: "fake", models: [] }],
+        held_mirrors: tooMany,
+      },
+    });
+    expect(reg.status).toBe(400);
+
+    const tooLong = await registerRunner(base, {
+      capabilities: {
+        vendors: [{ id: "fake", models: [] }],
+        held_mirrors: ["x".repeat(513)],
+      },
+    });
+    expect(tooLong.status).toBe(400);
+
+    // Valid bounded list is accepted.
+    const good = await registerRunner(base, {
+      capabilities: {
+        vendors: [{ id: "fake", models: [] }],
+        held_mirrors: ["github.com/org/ok"],
+      },
+    });
+    expect(good.status).toBe(200);
+  });
+
   it("rejects lease without prior registration", async () => {
     const home = makeHome();
     const { base } = await boot(home);

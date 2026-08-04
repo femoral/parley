@@ -1657,9 +1657,10 @@ export function preferredWarmRunner(
   if (peers.length === 0) return null;
   let pool = peers;
   if (repoKey !== null && repoKey !== "") {
-    const withClone = peers.filter((p) =>
-      (p.heldMirrors ?? []).includes(repoKey),
-    );
+    const withClone = peers.filter((p) => {
+      const held = p.heldMirrors;
+      return Array.isArray(held) && held.includes(repoKey);
+    });
     if (withClone.length > 0) pool = withClone;
   }
   const ranked = [...pool].sort((a, b) => {

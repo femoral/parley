@@ -176,8 +176,28 @@ function sleepMs(ms: number): void {
  * directory). Stale locks older than {@link MIRROR_LOCK_STALE_MS} are stolen.
  */
 export function withMirrorLock(mirrorPath: string, fn: () => void): void {
+  const acquired = tryWithMirrorLock(mirrorPath, fn, MIRROR_LOCK_WAIT_MS);
+  if (!acquired) {
+    throw new ClaimGitError(
+      "mirror_clone_failed",
+      `timed out waiting for mirror lock at ${mirrorPath}.lock`,
+    );
+  }
+}
+
+/**
+ * Try to take the mirror lock (stealing only when stale). Returns false when
+ * another process holds a non-stale lock and `waitMs` elapses without
+ * acquisition. Used by prune so a mid-task mirror is skipped, not waited on
+ * for the full claim timeout (#318 review HIGH-4).
+ */
+export function tryWithMirrorLock(
+  mirrorPath: string,
+  fn: () => void,
+  waitMs = 0,
+): boolean {
   const lockDir = `${mirrorPath}.lock`;
-  const deadline = Date.now() + MIRROR_LOCK_WAIT_MS;
+  const deadline = Date.now() + Math.max(0, waitMs);
   for (;;) {
     try {
       fs.mkdirSync(lockDir);
@@ -190,7 +210,16 @@ export function withMirrorLock(mirrorPath: string, fn: () => void): void {
       } catch {
         /* owner stamp is best-effort */
       }
-      break;
+      try {
+        fn();
+      } finally {
+        try {
+          fs.rmSync(lockDir, { recursive: true, force: true });
+        } catch {
+          /* leave for stale reaper */
+        }
+      }
+      return true;
     } catch (err) {
       const code = (err as NodeJS.ErrnoException).code;
       if (code !== "EEXIST") throw err;
@@ -202,22 +231,8 @@ export function withMirrorLock(mirrorPath: string, fn: () => void): void {
         }
         continue;
       }
-      if (Date.now() >= deadline) {
-        throw new ClaimGitError(
-          "mirror_clone_failed",
-          `timed out waiting for mirror lock at ${lockDir}`,
-        );
-      }
+      if (Date.now() >= deadline) return false;
       sleepMs(50);
-    }
-  }
-  try {
-    fn();
-  } finally {
-    try {
-      fs.rmSync(lockDir, { recursive: true, force: true });
-    } catch {
-      /* leave for stale reaper */
     }
   }
 }
@@ -260,6 +275,9 @@ export function ensureMirror(mirrorPath: string, fetchUrl: string): void {
     if (isBareGitDir(mirrorPath)) {
       try {
         configureMirrorRemote(mirrorPath, fetchUrl);
+        // Free any task branch still checked out in a surviving daemon worktree
+        // so +refs/*:refs/* can update those refs (#318 BLOCKER-1).
+        detachLinkedWorktreeBranches(mirrorPath);
         git(["-C", mirrorPath, "fetch", "--prune", "origin", "+refs/*:refs/*"]);
       } catch (err) {
         if (err instanceof ClaimGitError) throw err;
@@ -693,20 +711,109 @@ export interface ManagedCloneInfo {
   /** Total bytes under the mirror directory. */
   size_bytes: number;
   /**
-   * True when a live (non-terminal) task references this mirror's repo_key.
-   * Path/url-only mirrors with no key are never "used" by key matching.
+   * True when a live (non-terminal) task references this mirror by key or by
+   * raw fetch URL/path. Mirrors with undetermined usage are marked used so
+   * prune never deletes on uncertainty (#318 review HIGH-4).
    */
   used: boolean;
 }
 
 /**
- * List managed bare mirrors with sizes. `liveRepoKeys` are repo_keys of
- * non-terminal tasks — any match marks the mirror used (#318).
+ * Live (non-terminal) task references used to mark mirrors "used" for list/prune.
+ * Match by normalized key **and** raw fetch URL / local path so path-origin
+ * mirrors (null key) are not falsely treated as free (#318 review HIGH-4).
+ */
+export interface LiveMirrorUsage {
+  repoKeys: ReadonlySet<string>;
+  /** `repo_fetch_url` and `repo` path values from live tasks. */
+  refs: ReadonlySet<string>;
+}
+
+/** Empty usage set — all determinable mirrors appear unused. */
+export function emptyLiveMirrorUsage(): LiveMirrorUsage {
+  return { repoKeys: new Set(), refs: new Set() };
+}
+
+/**
+ * Normalize the various historical call shapes for list/prune usage.
+ * Accepts a Set of keys (legacy), a full {@link LiveMirrorUsage}, or nothing.
+ */
+function coerceLiveUsage(
+  live:
+    | LiveMirrorUsage
+    | ReadonlySet<string>
+    | readonly string[]
+    | undefined,
+): LiveMirrorUsage {
+  if (live === undefined) return emptyLiveMirrorUsage();
+  if (Array.isArray(live)) {
+    return { repoKeys: new Set(live), refs: new Set() };
+  }
+  // LiveMirrorUsage shape (repoKeys + refs).
+  if (
+    typeof live === "object" &&
+    live !== null &&
+    "repoKeys" in live &&
+    "refs" in live
+  ) {
+    return live as LiveMirrorUsage;
+  }
+  // ReadonlySet / Set of keys.
+  return { repoKeys: new Set(live as ReadonlySet<string>), refs: new Set() };
+}
+
+/** Loose equality for path/file origins (resolve when both look like paths). */
+function refsMatch(a: string, b: string): boolean {
+  if (a === b) return true;
+  // file:// URLs vs bare paths
+  const stripFile = (s: string): string =>
+    s.startsWith("file://") ? s.slice("file://".length) : s;
+  const aa = stripFile(a);
+  const bb = stripFile(b);
+  if (aa === bb) return true;
+  try {
+    if (path.isAbsolute(aa) || path.isAbsolute(bb)) {
+      return path.resolve(aa) === path.resolve(bb);
+    }
+  } catch {
+    /* ignore */
+  }
+  return false;
+}
+
+/**
+ * Whether a mirror is referenced by any live task. Never returns false when
+ * usage cannot be determined (null key and null/empty fetch URL).
+ */
+export function isMirrorUsedByLiveTasks(
+  repoKey: string | null,
+  fetchUrl: string | null,
+  usage: LiveMirrorUsage,
+): boolean {
+  const keyOk = repoKey !== null && repoKey !== "";
+  const urlOk = fetchUrl !== null && fetchUrl !== "";
+  if (!keyOk && !urlOk) {
+    // No identity at all — never delete on uncertainty.
+    return true;
+  }
+  if (keyOk && usage.repoKeys.has(repoKey!)) return true;
+  if (urlOk) {
+    for (const ref of usage.refs) {
+      if (refsMatch(ref, fetchUrl!)) return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * List managed bare mirrors with sizes. Live usage marks a mirror used when
+ * any non-terminal task references its key or raw origin URL/path (#318).
  */
 export function listManagedClones(
   clonesDir: string,
-  liveRepoKeys: ReadonlySet<string> = new Set(),
+  live: LiveMirrorUsage | ReadonlySet<string> | readonly string[] = emptyLiveMirrorUsage(),
 ): ManagedCloneInfo[] {
+  const usage = coerceLiveUsage(live);
   if (!fs.existsSync(clonesDir)) return [];
   let entries: fs.Dirent[];
   try {
@@ -726,8 +833,7 @@ export function listManagedClones(
       origin !== null ? stripFetchUrlCredentials(origin) : null;
     const repoKey =
       fetchUrl !== null ? normalizeRepoKey(fetchUrl) : null;
-    const used =
-      repoKey !== null && repoKey !== "" && liveRepoKeys.has(repoKey);
+    const used = isMirrorUsedByLiveTasks(repoKey, fetchUrl, usage);
     out.push({
       name: ent.name,
       path: full,
@@ -743,14 +849,14 @@ export function listManagedClones(
 
 /**
  * Remove unused managed mirrors. Never auto-called — only the explicit prune
- * verb. Returns removed and kept entries (kept includes used + any remove
- * failures).
+ * verb. Takes the per-mirror lock (skips when held); never deletes used or
+ * lock-busy mirrors. Returns removed and kept inventories.
  */
 export function pruneUnusedClones(
   clonesDir: string,
-  liveRepoKeys: ReadonlySet<string> = new Set(),
+  live: LiveMirrorUsage | ReadonlySet<string> | readonly string[] = emptyLiveMirrorUsage(),
 ): { removed: ManagedCloneInfo[]; kept: ManagedCloneInfo[] } {
-  const all = listManagedClones(clonesDir, liveRepoKeys);
+  const all = listManagedClones(clonesDir, live);
   const removed: ManagedCloneInfo[] = [];
   const kept: ManagedCloneInfo[] = [];
   for (const entry of all) {
@@ -758,16 +864,29 @@ export function pruneUnusedClones(
       kept.push(entry);
       continue;
     }
+    let didRemove = false;
     try {
-      fs.rmSync(entry.path, { recursive: true, force: true });
-      // Best-effort: drop a sibling lock dir if present.
-      try {
-        fs.rmSync(`${entry.path}.lock`, { recursive: true, force: true });
-      } catch {
-        /* ignore */
+      const acquired = tryWithMirrorLock(entry.path, () => {
+        // Re-read under lock: a peer may have started using it.
+        if (!fs.existsSync(entry.path) || !isBareGitDir(entry.path)) {
+          didRemove = true;
+          return;
+        }
+        fs.rmSync(entry.path, { recursive: true, force: true });
+        didRemove = true;
+      }, 0);
+      if (!acquired) {
+        // Lock held by ensureMirror / peer — treat as in use.
+        kept.push(entry);
+        continue;
       }
-      removed.push(entry);
     } catch {
+      kept.push(entry);
+      continue;
+    }
+    if (didRemove) {
+      removed.push(entry);
+    } else {
       kept.push(entry);
     }
   }
@@ -789,5 +908,118 @@ export function pushTaskBranch(
     throw new Error(
       `git push origin ${branch} failed: ${gitErrorMessage(err)} (repo ${repoRoot})`,
     );
+  }
+}
+
+/**
+ * Detach HEAD in a linked worktree so the bare mirror can fetch/update branch
+ * refs again. Daemon worktrees deliberately survive for review (`parley clean`);
+ * leaving the task branch checked out blocks the next task's
+ * `fetch --prune origin +refs/*:refs/*` (#318 review BLOCKER-1).
+ *
+ * Files and the branch tip on origin remain; only the checkout moves to
+ * detached HEAD at the same commit. Best-effort — never throws.
+ *
+ * Prefers rewriting the worktree private HEAD file via the bare (works even
+ * when the worktree briefly reports `is-inside-work-tree: false`); falls back
+ * to `git checkout --detach`.
+ */
+export function detachWorktreeHead(worktreePath: string): void {
+  if (!fs.existsSync(worktreePath)) return;
+  // Prefer bare-side HEAD rewrite (reliable for bare-mirror linked worktrees).
+  try {
+    const common = git([
+      "-C",
+      worktreePath,
+      "rev-parse",
+      "--path-format=absolute",
+      "--git-common-dir",
+    ]);
+    const privateGitDir = git([
+      "-C",
+      worktreePath,
+      "rev-parse",
+      "--absolute-git-dir",
+    ]);
+    if (detachWorktreeHeadAtGitDir(common, privateGitDir)) return;
+  } catch {
+    /* fall through to checkout */
+  }
+  try {
+    git(["-C", worktreePath, "checkout", "--detach", "--force", "HEAD"]);
+  } catch {
+    /* residual attached checkout is preferable to failing terminal handoff */
+  }
+}
+
+/**
+ * Rewrite a worktree private HEAD from `ref: refs/heads/...` to a raw sha
+ * (detached). Returns true when the HEAD file was detached (or already was).
+ */
+function detachWorktreeHeadAtGitDir(
+  barePath: string,
+  privateGitDir: string,
+): boolean {
+  const headFile = path.join(privateGitDir, "HEAD");
+  if (!fs.existsSync(headFile)) return false;
+  let head: string;
+  try {
+    head = fs.readFileSync(headFile, "utf8").trim();
+  } catch {
+    return false;
+  }
+  if (!head.startsWith("ref: ")) {
+    // Already detached (raw sha) or empty.
+    return head !== "";
+  }
+  const ref = head.slice("ref: ".length).trim();
+  try {
+    const sha = git(["-C", barePath, "rev-parse", "--verify", `${ref}^{commit}`]);
+    fs.writeFileSync(headFile, `${sha}\n`);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Detach every linked worktree of a bare that still has a branch checked out.
+ * Called before mirror fetch so a leftover attached daemon worktree cannot
+ * block `+refs/*:refs/*` (#318 review BLOCKER-1 belt-and-suspenders).
+ */
+export function detachLinkedWorktreeBranches(barePath: string): void {
+  let porcelain: string;
+  try {
+    porcelain = git(["-C", barePath, "worktree", "list", "--porcelain"]);
+  } catch {
+    return;
+  }
+  let current: string | null = null;
+  for (const line of porcelain.split("\n")) {
+    if (line.startsWith("worktree ")) {
+      current = line.slice("worktree ".length).trim();
+      continue;
+    }
+    if (line.startsWith("branch ") && current !== null) {
+      if (current !== barePath) {
+        // Bare-side first: resolve private gitdir from porcelain path.
+        try {
+          const privateGitDir = git([
+            "-C",
+            current,
+            "rev-parse",
+            "--absolute-git-dir",
+          ]);
+          if (!detachWorktreeHeadAtGitDir(barePath, privateGitDir)) {
+            detachWorktreeHead(current);
+          }
+        } catch {
+          detachWorktreeHead(current);
+        }
+      }
+      current = null;
+      continue;
+    }
+    if (line === "") current = null;
   }
 }

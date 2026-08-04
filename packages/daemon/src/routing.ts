@@ -254,8 +254,10 @@ export function rankOnlineRunners(
   const runners = onlineCapable.filter((e) => !e.isLocal);
   return [...runners].sort((a, b) => {
     if (repoKey !== null && repoKey !== "") {
-      const aWarm = (a.held_mirrors ?? []).includes(repoKey) ? 1 : 0;
-      const bWarm = (b.held_mirrors ?? []).includes(repoKey) ? 1 : 0;
+      const aHeld = Array.isArray(a.held_mirrors) ? a.held_mirrors : [];
+      const bHeld = Array.isArray(b.held_mirrors) ? b.held_mirrors : [];
+      const aWarm = aHeld.includes(repoKey) ? 1 : 0;
+      const bWarm = bHeld.includes(repoKey) ? 1 : 0;
       if (aWarm !== bWarm) return bWarm - aWarm;
     }
     const at = a.last_completed_at ? Date.parse(a.last_completed_at) : 0;
@@ -263,17 +265,6 @@ export function rankOnlineRunners(
     if (at !== bt) return bt - at;
     return a.name.localeCompare(b.name);
   });
-}
-
-/**
- * True when this executor advertises a held mirror for `repoKey` (#318).
- */
-export function holdsMirror(
-  executor: { held_mirrors?: readonly string[] },
-  repoKey: string | null | undefined,
-): boolean {
-  if (repoKey === null || repoKey === undefined || repoKey === "") return false;
-  return (executor.held_mirrors ?? []).includes(repoKey);
 }
 
 /**

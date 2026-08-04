@@ -443,6 +443,11 @@ function projectRunnerShow(
   };
 }
 
+/** Max entries accepted in `held_mirrors` on register (#318 review HIGH-3 / MEDIUM-5). */
+const HELD_MIRRORS_MAX = 256;
+/** Max chars per held-mirror repo key on the wire. */
+const HELD_MIRROR_KEY_MAX = 512;
+
 function isValidCapabilities(value: unknown): value is RunnerCapabilities {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
   const vendors = (value as { vendors?: unknown }).vendors;
@@ -453,6 +458,16 @@ function isValidCapabilities(value: unknown): value is RunnerCapabilities {
       return false;
     }
     if (!Array.isArray((v as { models?: unknown }).models)) return false;
+  }
+  // held_mirrors is optional; when present must be string[] (bounded).
+  // A non-array blob would 500 every /runner/lease via `.includes` (#318 HIGH-3).
+  if (Object.prototype.hasOwnProperty.call(value, "held_mirrors")) {
+    const held = (value as { held_mirrors?: unknown }).held_mirrors;
+    if (!Array.isArray(held)) return false;
+    if (held.length > HELD_MIRRORS_MAX) return false;
+    for (const k of held) {
+      if (typeof k !== "string" || k.length > HELD_MIRROR_KEY_MAX) return false;
+    }
   }
   return true;
 }
