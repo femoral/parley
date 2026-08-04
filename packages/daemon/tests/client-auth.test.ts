@@ -167,6 +167,18 @@ describe("classifyAuthRoute", () => {
     expect(classifyAuthRoute("GET", "/clones")).toBe("client");
     expect(classifyAuthRoute("POST", "/clones/prune")).toBe("config-admin");
   });
+
+  it("classifies /xai/* as child, not client (#327)", () => {
+    expect(classifyAuthRoute("POST", "/xai/task-1/v1/chat/completions")).toBe(
+      "child",
+    );
+    expect(classifyAuthRoute("POST", "/xai/t-abc/v1/responses")).toBe("child");
+    expect(classifyAuthRoute("GET", "/xai/t1/v1/models")).toBe("child");
+    // Malformed / bare prefixes still route to the child class so the gate
+    // denies them rather than treating them as client-token traffic.
+    expect(classifyAuthRoute("POST", "/xai")).toBe("child");
+    expect(classifyAuthRoute("POST", "/xai/t1")).toBe("child");
+  });
 });
 
 describe("authorizeRequest — deterministic gate (no sockets)", () => {
@@ -493,6 +505,129 @@ describe("authorizeRequest — deterministic gate (no sockets)", () => {
     });
     expect(d.ok).toBe(true);
     if (d.ok) expect(d.runnerName).toBe("gpu");
+  });
+
+  // #327: /xai/* is child-class with the same lease-binding semantics, but the
+  // runner credential is read from Proxy-Authorization so Authorization can
+  // carry the child's xAI API key through to api.x.ai.
+  it("non-loopback /xai/*: lease-holding runner token via Proxy-Authorization is allowed (#327)", () => {
+    const d = authorizeRequest({
+      remoteAddress: remote,
+      method: "POST",
+      pathname: "/xai/task-1/v1/chat/completions",
+      authorization: "Bearer xai-child-api-key",
+      proxyAuthorization: "Bearer fake-runner-token-gpu",
+      config: AUTH_CONFIG,
+      taskFound: true,
+      taskRunner: "gpu",
+      taskState: "running",
+    });
+    expect(d.ok).toBe(true);
+    if (d.ok) {
+      expect(d.routeClass).toBe("child");
+      expect(d.runnerName).toBe("gpu");
+    }
+  });
+
+  it("non-loopback /xai/*: runner token only in Authorization is denied (#327)", () => {
+    // Authorization is the child's xAI key channel — a runner token there
+    // must not authorize the gate (and would also leak if forwarded upstream).
+    const d = authorizeRequest({
+      remoteAddress: remote,
+      method: "POST",
+      pathname: "/xai/task-1/v1/chat/completions",
+      authorization: "Bearer fake-runner-token-gpu",
+      proxyAuthorization: undefined,
+      config: AUTH_CONFIG,
+      taskFound: true,
+      taskRunner: "gpu",
+      taskState: "running",
+    });
+    expect(d.ok).toBe(false);
+    if (!d.ok) {
+      expect(d.status).toBe(401);
+      expect(d.routeClass).toBe("child");
+    }
+  });
+
+  it("non-loopback /xai/*: different runner's Proxy-Authorization is denied (#327)", () => {
+    const d = authorizeRequest({
+      remoteAddress: remote,
+      method: "POST",
+      pathname: "/xai/task-1/v1/responses",
+      authorization: "Bearer xai-child-api-key",
+      proxyAuthorization: "Bearer fake-runner-token-cpu",
+      config: AUTH_CONFIG,
+      taskFound: true,
+      taskRunner: "gpu",
+      taskState: "running",
+    });
+    expect(d.ok).toBe(false);
+    if (!d.ok) {
+      expect(d.status).toBe(403);
+      expect(d.routeClass).toBe("child");
+      expect(d.error).toMatch(/does not hold the lease/);
+    }
+  });
+
+  it("non-loopback /xai/*: client token in Proxy-Authorization is denied (#327)", () => {
+    const d = authorizeRequest({
+      remoteAddress: remote,
+      method: "POST",
+      pathname: "/xai/task-1/v1/chat/completions",
+      authorization: "Bearer xai-child-api-key",
+      proxyAuthorization: "Bearer fake-client-token-laptop",
+      config: AUTH_CONFIG,
+      taskFound: true,
+      taskRunner: "gpu",
+      taskState: "running",
+    });
+    expect(d.ok).toBe(false);
+    if (!d.ok) {
+      expect(d.status).toBe(401);
+      expect(d.routeClass).toBe("child");
+      expect(d.error).toMatch(/runner token/);
+    }
+  });
+
+  it("non-loopback /xai/*: unknown task id is denied (#327)", () => {
+    const d = authorizeRequest({
+      remoteAddress: remote,
+      method: "POST",
+      pathname: "/xai/unknown-task/v1/models",
+      authorization: "Bearer xai-child-api-key",
+      proxyAuthorization: "Bearer fake-runner-token-gpu",
+      config: AUTH_CONFIG,
+      taskFound: false,
+      taskRunner: null,
+    });
+    expect(d.ok).toBe(false);
+    if (!d.ok) {
+      expect(d.status).toBe(403);
+      expect(d.routeClass).toBe("child");
+      expect(d.error).toMatch(/missing or unknown/);
+    }
+  });
+
+  it("non-loopback /xai/*: non-executing task states are denied (#327)", () => {
+    for (const state of ["pending", "queued", "failed", "completed"] as const) {
+      const d = authorizeRequest({
+        remoteAddress: remote,
+        method: "POST",
+        pathname: "/xai/task-1/v1/responses",
+        authorization: "Bearer xai-child-api-key",
+        proxyAuthorization: "Bearer fake-runner-token-gpu",
+        config: AUTH_CONFIG,
+        taskFound: true,
+        taskRunner: "gpu",
+        taskState: state,
+      });
+      expect(d.ok, state).toBe(false);
+      if (!d.ok) {
+        expect(d.status).toBe(403);
+        expect(d.routeClass).toBe("child");
+      }
+    }
   });
 
   it("non-loopback config-admin always 403 even with valid client token (F1)", () => {

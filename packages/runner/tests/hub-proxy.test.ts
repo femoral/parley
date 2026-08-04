@@ -85,6 +85,104 @@ describe("hub proxy allowlist", () => {
     ]);
   });
 
+  it("forwards /xai/* with child Authorization + Proxy-Authorization runner token (#327)", async () => {
+    const seen: {
+      path: string;
+      header: string | string[] | undefined;
+      authorization: string | string[] | undefined;
+      proxyAuthorization: string | string[] | undefined;
+      method: string | undefined;
+      allHeaderValues: string[];
+    }[] = [];
+    const upstream = await listenUpstream((req, res) => {
+      const allHeaderValues: string[] = [];
+      for (const [key, value] of Object.entries(req.headers)) {
+        if (value === undefined) continue;
+        if (Array.isArray(value)) allHeaderValues.push(...value.map((v) => `${key}: ${v}`));
+        else allHeaderValues.push(`${key}: ${value}`);
+      }
+      seen.push({
+        path: req.url ?? "",
+        header: req.headers[TASK_HEADER],
+        authorization: req.headers.authorization,
+        proxyAuthorization: req.headers["proxy-authorization"],
+        method: req.method,
+        allHeaderValues,
+      });
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ ok: true, path: req.url }));
+    });
+
+    const runnerToken = "fake-runner-token-proxy";
+    const childXaiKey = "xai-child-key";
+    const proxy = await startHubProxy({
+      daemonUrl: upstream.url,
+      token: runnerToken,
+      taskId: "task-42",
+    });
+    proxies.push(proxy);
+
+    const xai = await fetch(`${proxy.url}/xai/task-42/v1/chat/completions`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${childXaiKey}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ model: "grok-3", messages: [] }),
+    });
+    expect(xai.status).toBe(200);
+    expect(await xai.json()).toMatchObject({
+      ok: true,
+      path: "/xai/task-42/v1/chat/completions",
+    });
+
+    expect(seen).toHaveLength(1);
+    const hop = seen[0]!;
+    expect(hop.path).toBe("/xai/task-42/v1/chat/completions");
+    expect(hop.header).toBe("task-42");
+    expect(hop.method).toBe("POST");
+    // Child's xAI key preserved on Authorization — never overwritten by runner token.
+    expect(hop.authorization).toBe(`Bearer ${childXaiKey}`);
+    // Runner credential on the hop-by-hop channel the daemon gate reads.
+    expect(hop.proxyAuthorization).toBe(`Bearer ${runnerToken}`);
+    // Runner token must not appear in Authorization (or any non-Proxy-Authorization
+    // header value), so it cannot leak to api.x.ai via auth passthrough.
+    expect(hop.authorization).not.toContain(runnerToken);
+    for (const line of hop.allHeaderValues) {
+      if (line.toLowerCase().startsWith("proxy-authorization:")) continue;
+      expect(line, line).not.toContain(runnerToken);
+    }
+  });
+
+  it("rejects /xai/<other-task-id> without hitting upstream (#327)", async () => {
+    const upstreamHits: string[] = [];
+    const upstream = await listenUpstream((req, res) => {
+      upstreamHits.push(req.url ?? "");
+      res.writeHead(200);
+      res.end("ok");
+    });
+
+    const proxy = await startHubProxy({
+      daemonUrl: upstream.url,
+      token: "fake-runner-token-proxy",
+      taskId: "task-42",
+    });
+    proxies.push(proxy);
+
+    const smuggle = await fetch(`${proxy.url}/xai/other-task/v1/chat/completions`, {
+      method: "POST",
+      headers: {
+        authorization: "Bearer xai-child-key",
+        "content-type": "application/json",
+      },
+      body: "{}",
+    });
+    expect(smuggle.status).toBe(404);
+    const body = (await smuggle.json()) as { error: string };
+    expect(body.error).toMatch(/only forwards \/child\/\*, \/mcp, and \/xai\/\*/);
+    expect(upstreamHits).toEqual([]);
+  });
+
   it("returns 404 for non-allowlisted paths", async () => {
     const upstreamHits: string[] = [];
     const upstream = await listenUpstream((req, res) => {
@@ -103,11 +201,15 @@ describe("hub proxy allowlist", () => {
     const blocked = await fetch(`${proxy.url}/runner/lease`, { method: "POST" });
     expect(blocked.status).toBe(404);
     const body = (await blocked.json()) as { error: string };
-    expect(body.error).toMatch(/only forwards \/child\/\* and \/mcp/);
+    expect(body.error).toMatch(/only forwards \/child\/\*, \/mcp, and \/xai\/\*/);
     expect(upstreamHits).toEqual([]);
 
     const tasks = await fetch(`${proxy.url}/tasks`);
     expect(tasks.status).toBe(404);
+    expect(upstreamHits).toEqual([]);
+
+    const health = await fetch(`${proxy.url}/health`);
+    expect(health.status).toBe(404);
     expect(upstreamHits).toEqual([]);
   });
 

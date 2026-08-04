@@ -263,6 +263,54 @@ describe("handleXaiProxyRequest (stub upstream)", () => {
     db.close();
   });
 
+  it("strips Proxy-Authorization before the xAI upstream hop (#327)", async () => {
+    // Hub proxy puts the runner credential on Proxy-Authorization; the daemon
+    // gate reads it for lease binding, then xai-proxy must strip it so the
+    // runner bearer never reaches api.x.ai.
+    const seen: {
+      authorization?: string | string[];
+      proxyAuthorization?: string | string[];
+      headerKeys: string[];
+    } = { headerKeys: [] };
+
+    const upstream = await listen((req, res) => {
+      seen.authorization = req.headers.authorization;
+      seen.proxyAuthorization = req.headers["proxy-authorization"];
+      seen.headerKeys = Object.keys(req.headers);
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ usage: { prompt_tokens: 1, completion_tokens: 0, total_tokens: 1 } }));
+    });
+
+    const { engine, db } = makeEngine(["task-hop"]);
+    const proxy = await listen((req, res) => {
+      void handleXaiProxyRequest(engine, req, res, {
+        upstreamOrigin: `http://127.0.0.1:${upstream.port}`,
+      });
+    });
+
+    const runnerToken = "fake-runner-token-must-not-leak";
+    const res = await fetch(
+      `http://127.0.0.1:${proxy.port}/xai/task-hop/v1/chat/completions`,
+      {
+        method: "POST",
+        headers: {
+          authorization: "Bearer sk-secret",
+          "proxy-authorization": `Bearer ${runnerToken}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ model: "grok-4" }),
+      },
+    );
+    expect(res.status).toBe(200);
+    // Child xAI key preserved.
+    expect(seen.authorization).toBe("Bearer sk-secret");
+    // Runner credential must not survive the hop-by-hop strip.
+    expect(seen.proxyAuthorization).toBeUndefined();
+    expect(seen.headerKeys.map((k) => k.toLowerCase())).not.toContain("proxy-authorization");
+
+    db.close();
+  });
+
   it("attributes non-streaming JSON usage to the task id in the path", async () => {
     const upstream = await listen((req, res) => {
       void (async () => {

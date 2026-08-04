@@ -114,7 +114,7 @@ import {
 } from "./task-detail.js";
 import { discoverUiBundle, isReservedPath, serveUiRequest } from "./ui.js";
 import { DAEMON_VERSION } from "./version.js";
-import { handleXaiProxyRequest } from "./xai-proxy.js";
+import { handleXaiProxyRequest, parseXaiProxyPath } from "./xai-proxy.js";
 import { buildInfo } from "./info.js";
 
 /** Default scheduled retention sweep interval (#153): 24 hours. */
@@ -943,7 +943,12 @@ export type AuthRouteClass = "runner" | "child" | "client" | "config-admin";
 export function classifyAuthRoute(method: string, pathname: string): AuthRouteClass {
   const segments = pathname.split("/").filter((s) => s !== "");
   if (segments[0] === "runner") return "runner";
-  if (segments[0] === "child" || pathname === "/mcp") return "child";
+  // Child channel + grok xAI usage proxy (#327): same lease-binding semantics.
+  // Task id for `/xai/*` is path-embedded; gateRequest resolves it from the
+  // path rather than the correlation header used by `/child/*` and `/mcp`.
+  if (segments[0] === "child" || pathname === "/mcp" || segments[0] === "xai") {
+    return "child";
+  }
   if (
     (method === "PUT" && pathname === "/config") ||
     (method === "POST" &&
@@ -968,16 +973,31 @@ export interface AuthGateInput {
   remoteAddress: string | undefined | null;
   method: string;
   pathname: string;
+  /**
+   * `Authorization` header. For `/child/*` + `/mcp` + runner/client routes
+   * this is the gate credential. For `/xai/*` it is the child's xAI API key
+   * and must not be treated as a runner token (#327).
+   */
   authorization: string | undefined;
+  /**
+   * `Proxy-Authorization` header. For `/xai/*` off-loopback this is the runner
+   * credential the hub proxy attaches; the gate reads it for lease binding
+   * and the xAI reverse proxy strips it as hop-by-hop before api.x.ai (#327).
+   */
+  proxyAuthorization?: string | undefined;
   config: ParleyConfig;
   /**
    * For child routes off-loopback: the task's `runner` field (submit-time
    * affinity; not a live lease by itself), or `null` when the task exists but
-   * has no runner affinity. Omit when the task id header is missing or the
-   * task is unknown.
+   * has no runner affinity. Omit when the task id is missing or the task is
+   * unknown. Task id comes from the correlation header for `/child/*` +
+   * `/mcp`, or from the path segment for `/xai/<taskId>/…` (#327).
    */
   taskRunner?: string | null;
-  /** For child routes: whether a task was resolved from the correlation header. */
+  /**
+   * For child routes: whether a task was resolved (from the correlation
+   * header, or from the `/xai/<taskId>` path segment).
+   */
   taskFound?: boolean;
   /**
    * For child routes off-loopback: the task's current lifecycle state. Used
@@ -1048,12 +1068,22 @@ export function authorizeRequest(input: AuthGateInput): AuthGateAllow | AuthGate
     };
   }
 
-  const token = extractBearerToken(input.authorization);
+  // Credential source: `/xai/*` uses Proxy-Authorization for the runner token
+  // so Authorization can remain the child's xAI API key (#327). All other
+  // routes still gate on Authorization alone.
+  const segments = input.pathname.split("/").filter((s) => s !== "");
+  const isXaiRoute = routeClass === "child" && segments[0] === "xai";
+  const credentialHeader = isXaiRoute
+    ? input.proxyAuthorization
+    : input.authorization;
+  const token = extractBearerToken(credentialHeader);
   if (token === null) {
     return {
       ok: false,
       status: 401,
-      error: "unauthorized",
+      error: isXaiRoute
+        ? "unauthorized: child channel requires a runner token"
+        : "unauthorized",
       routeClass,
       peer,
     };
@@ -1085,6 +1115,9 @@ export function authorizeRequest(input: AuthGateInput): AuthGateAllow | AuthGate
     // Client tokens are never admitted here. `task.runner` alone is submit-time
     // affinity and is not sufficient — a pending or terminal task must not
     // grant child-channel access to the affine runner.
+    //
+    // For `/xai/*`, `token` was taken from Proxy-Authorization (see above);
+    // Authorization is intentionally not consulted for the runner match.
     const runnerName = matchRunnerToken(token, input.config);
     if (runnerName === null) {
       // Presenter was not a runner (missing/wrong/client token).
@@ -1195,8 +1228,18 @@ function gateRequest(
   let taskFound: boolean | undefined;
   let taskState: string | null | undefined;
   if (routeClass === "child" && !isLoopbackRequest(req)) {
-    const header = req.headers[TASK_HEADER];
-    const taskId = Array.isArray(header) ? header[0] : header;
+    // `/xai/<taskId>/v1/...` embeds the task id in the path; `/child/*` and
+    // `/mcp` use the correlation header. Unknown or malformed ids deny.
+    let taskId: string | undefined;
+    const segments = pathname.split("/").filter((s) => s !== "");
+    if (segments[0] === "xai") {
+      const parsed = parseXaiProxyPath(pathname);
+      taskId = parsed?.taskId;
+    } else {
+      const header = req.headers[TASK_HEADER];
+      const fromHeader = Array.isArray(header) ? header[0] : header;
+      taskId = typeof fromHeader === "string" ? fromHeader : undefined;
+    }
     if (typeof taskId === "string" && taskId !== "") {
       const task = engine.get(taskId);
       if (task !== undefined) {
@@ -1222,6 +1265,12 @@ function gateRequest(
     authorization:
       typeof req.headers.authorization === "string"
         ? req.headers.authorization
+        : undefined,
+    // #327: hub proxy puts the runner credential here for `/xai/*` so the
+    // child's xAI Authorization can pass through to api.x.ai untouched.
+    proxyAuthorization:
+      typeof req.headers["proxy-authorization"] === "string"
+        ? req.headers["proxy-authorization"]
         : undefined,
     config,
     taskRunner,
