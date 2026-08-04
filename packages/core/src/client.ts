@@ -313,3 +313,14 @@ export async function daemonPut<T>(
     signal: AbortSignal.timeout(10_000),
   });
 }
+
+/** Issue a DELETE against the running daemon and parse the JSON response. */
+export async function daemonDelete<T>(
+  discovery: Discovery,
+  pathname: string,
+): Promise<T> {
+  return daemonFetch<T>(discovery, pathname, {
+    method: "DELETE",
+    signal: AbortSignal.timeout(10_000),
+  });
+}

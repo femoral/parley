@@ -1036,4 +1036,76 @@ describe("runner registration + parley runners list", () => {
     expect(row?.status).toBe("online");
     expect(row?.vendors).toContain("fake");
   });
+
+  it("runners show renders advertisement; remove drops row + config", async () => {
+    const boot = await runCli(["daemon", "start"], home, {
+      extraEnv: {
+        PARLEY_LONG_POLL_MS: "300",
+        PARLEY_RUNNER_PRESENCE_GRACE_MS: "400",
+      },
+    });
+    expect(boot.code).toBe(0);
+    await waitFor(
+      () => fs.existsSync(path.join(home, "daemon.json")),
+      "daemon discovery",
+    );
+    const discovery = JSON.parse(
+      fs.readFileSync(path.join(home, "daemon.json"), "utf8"),
+    ) as { port: number; url?: string };
+    const daemonUrl =
+      discovery.url ?? `http://127.0.0.1:${discovery.port}`;
+
+    startRunner({
+      home,
+      name: "gpu",
+      token: "secret-gpu",
+      daemonUrl,
+    });
+    await waitForRunnerOnline(home, "gpu");
+
+    const shown = await runCli(["runners", "show", "gpu", "--json"], home);
+    expect(shown.code).toBe(0);
+    const detail = JSON.parse(shown.stdout) as {
+      name: string;
+      vendors: { id: string; models: unknown[] }[];
+      build_version: string;
+      last_contact_age_ms: number;
+      repo_reachability: unknown;
+      recent_tasks: unknown[];
+    };
+    expect(detail.name).toBe("gpu");
+    expect(detail.vendors.some((v) => v.id === "fake")).toBe(true);
+    expect(detail.last_contact_age_ms).toBeGreaterThanOrEqual(0);
+    // Reachability is not on the wire yet from packages/runner — graceful null.
+    expect(detail.repo_reachability).toBeNull();
+    expect(Array.isArray(detail.recent_tasks)).toBe(true);
+
+    const text = await runCli(["runners", "show", "gpu"], home);
+    expect(text.code).toBe(0);
+    expect(text.stdout).toMatch(/name:\s+gpu/);
+    expect(text.stdout).toMatch(/models:/);
+    expect(text.stdout).toMatch(/not advertised/);
+    expect(text.stdout).toMatch(/recent_tasks:/);
+
+    const removed = await runCli(["runners", "remove", "gpu", "--json"], home);
+    expect(removed.code).toBe(0);
+    const rm = JSON.parse(removed.stdout) as {
+      ok: boolean;
+      deleted_row: boolean;
+      deleted_config: boolean;
+    };
+    expect(rm.ok).toBe(true);
+    expect(rm.deleted_row).toBe(true);
+    expect(rm.deleted_config).toBe(true);
+
+    const listed = await runCli(["runners", "list", "--json"], home);
+    expect(listed.code).toBe(0);
+    const body = JSON.parse(listed.stdout) as { runners: unknown[] };
+    expect(body.runners).toHaveLength(0);
+
+    const cfg = JSON.parse(
+      fs.readFileSync(path.join(home, "parley.json"), "utf8"),
+    ) as { runners?: Record<string, unknown> };
+    expect(cfg.runners?.gpu).toBeUndefined();
+  });
 });

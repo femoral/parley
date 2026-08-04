@@ -435,6 +435,43 @@ describe("readConfig — runners.*", () => {
   });
 });
 
+describe("readConfig — runnerSettings.* (#320)", () => {
+  it("accepts runnerSettings.staleWindowMs", () => {
+    const file = writeConfig(
+      JSON.stringify({ runnerSettings: { staleWindowMs: 86_400_000 } }),
+    );
+    expect(readConfig(file).runnerSettings?.staleWindowMs).toBe(86_400_000);
+  });
+
+  it("rejects non-positive staleWindowMs", () => {
+    const file = writeConfig(
+      JSON.stringify({ runnerSettings: { staleWindowMs: 0 } }),
+    );
+    expect(() => readConfig(file)).toThrow(
+      /runnerSettings\.staleWindowMs must be an integer/,
+    );
+  });
+
+  it("rejects non-integer staleWindowMs", () => {
+    const file = writeConfig(
+      JSON.stringify({ runnerSettings: { staleWindowMs: 1.5 } }),
+    );
+    expect(() => readConfig(file)).toThrow(
+      /runnerSettings\.staleWindowMs must be an integer/,
+    );
+  });
+
+  it("rejects staleWindowMs below DEFAULT_RUNNER_PRESENCE_GRACE_MS (L7)", () => {
+    // 1ms would vanish just-registered runners and break registered_at preservation.
+    const file = writeConfig(
+      JSON.stringify({ runnerSettings: { staleWindowMs: 1 } }),
+    );
+    expect(() => readConfig(file)).toThrow(
+      /runnerSettings\.staleWindowMs must be an integer >= 50000/,
+    );
+  });
+});
+
 describe("readConfig — clients.* (#323)", () => {
   it("accepts clients.<name>.token", () => {
     const file = writeConfig(

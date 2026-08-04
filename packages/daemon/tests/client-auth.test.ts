@@ -159,6 +159,10 @@ describe("classifyAuthRoute", () => {
     expect(classifyAuthRoute("PUT", "/config")).toBe("config-admin");
     expect(classifyAuthRoute("POST", "/config/set")).toBe("config-admin");
     expect(classifyAuthRoute("POST", "/config/unset")).toBe("config-admin");
+    // #320: show is client-facing; remove mutates config → config-admin.
+    expect(classifyAuthRoute("GET", "/runners")).toBe("client");
+    expect(classifyAuthRoute("GET", "/runners/gpu")).toBe("client");
+    expect(classifyAuthRoute("DELETE", "/runners/gpu")).toBe("config-admin");
   });
 });
 
@@ -520,6 +524,46 @@ describe("authorizeRequest — deterministic gate (no sockets)", () => {
     });
     expect(d.ok).toBe(false);
     if (!d.ok) expect(d.status).toBe(403);
+  });
+
+  it("non-loopback DELETE /runners/:name is config-admin 403 (#320)", () => {
+    const d = authorizeRequest({
+      remoteAddress: remote,
+      method: "DELETE",
+      pathname: "/runners/gpu",
+      authorization: "Bearer fake-client-token-laptop",
+      config: AUTH_CONFIG,
+    });
+    expect(d.ok).toBe(false);
+    if (!d.ok) {
+      expect(d.status).toBe(403);
+      expect(d.routeClass).toBe("config-admin");
+    }
+  });
+
+  it("non-loopback GET /runners/:name requires client token (#320)", () => {
+    const noTok = authorizeRequest({
+      remoteAddress: remote,
+      method: "GET",
+      pathname: "/runners/gpu",
+      authorization: undefined,
+      config: AUTH_CONFIG,
+    });
+    expect(noTok.ok).toBe(false);
+    if (!noTok.ok) {
+      expect(noTok.status).toBe(401);
+      expect(noTok.routeClass).toBe("client");
+    }
+
+    const withClient = authorizeRequest({
+      remoteAddress: remote,
+      method: "GET",
+      pathname: "/runners/gpu",
+      authorization: "Bearer fake-client-token-laptop",
+      config: AUTH_CONFIG,
+    });
+    expect(withClient.ok).toBe(true);
+    if (withClient.ok) expect(withClient.routeClass).toBe("client");
   });
 });
 

@@ -15,7 +15,13 @@ import { daemonIdMatches } from "@useparley/daemon/identity";
 import { withLock } from "@useparley/daemon/lock";
 import { spawnDaemon } from "./spawn.js";
 
-export { DaemonRequestError, daemonGet, daemonPost, daemonPut } from "@useparley/core";
+export {
+  DaemonRequestError,
+  daemonDelete,
+  daemonGet,
+  daemonPost,
+  daemonPut,
+} from "@useparley/core";
 export type { Discovery } from "@useparley/core";
 
 /**
