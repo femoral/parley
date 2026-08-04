@@ -237,11 +237,8 @@ function renderDetailSections(
     }
   }
 
-  // Failure payload (incl. lost-runner enrichment: runner/phase/branch/age, #319).
-  if (t.error !== null && t.error !== "") {
-    ctx.stdout("\nError\n");
-    ctx.stdout(`  ${t.error}\n`);
-  }
+  // #319's lost-runner enrichment rides the `message:` line of the single
+  // category-aware Error section above (#317) — no second section here.
 
   ctx.stdout("\nAttempts\n");
   if (detail.attempts.length === 0) {
