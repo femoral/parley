@@ -264,6 +264,22 @@ describe("runner loop integration", () => {
     server = await startServer(homePaths(home));
     const base = `http://127.0.0.1:${server.port}`;
 
+    // #315: a pin requires the runner to be registered and advertise the
+    // vendor before delegate — pre-register gpu as the loop itself would.
+    const reg = await json(
+      base,
+      "POST",
+      "/runner/register",
+      {
+        runner: "gpu",
+        protocol_version: 1,
+        build_version: "test",
+        capabilities: { vendors: [{ id: "fake", models: [] }] },
+      },
+      { Authorization: "Bearer secret-gpu" },
+    );
+    expect(reg.status).toBe(200);
+
     const created = await json(base, "POST", "/tasks", {
       prompt: "run with override",
       vendor: "fake",

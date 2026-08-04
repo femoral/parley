@@ -589,6 +589,15 @@ describe("runner show / remove / stale cleanup (#320)", () => {
   it("GET /runners/:name returns full advertisement + recent tasks", async () => {
     const home = makeHome();
     const { base } = await boot(home);
+        const repo = makeGitRepo();
+    repos.push(repo);
+    const { task_id } = await createRunnerTask(base, repo, {
+      name: "recent-job",
+    });
+
+    // Re-advertise custom capabilities AFTER task creation: createRunnerTask
+    // re-registers with default capabilities (#315 pin requires capable runner),
+    // which would otherwise clobber this advertisement.
     await registerRunner(base, {
       capabilities: {
         vendors: [
@@ -606,11 +615,6 @@ describe("runner show / remove / stale cleanup (#320)", () => {
         // Optional wire field — mirrors may add formally later.
         repo_reachability: { "github.com/acme/app": true },
       },
-    });
-    const repo = makeGitRepo();
-    repos.push(repo);
-    const { task_id } = await createRunnerTask(base, repo, {
-      name: "recent-job",
     });
 
     const show = await json(base, "GET", "/runners/gpu");
