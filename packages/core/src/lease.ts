@@ -229,6 +229,44 @@ export interface RunnerRemoveResponse {
   deleted_config: boolean;
 }
 
+/**
+ * Highest phase a remote runner has reached on a leased task (#319 / #311).
+ * Daemon derives most phases from observed traffic; `worktree_created` is
+ * reported by the runner via the heartbeat body (invisible otherwise).
+ */
+export type RunnerTaskPhase =
+  | "leased"
+  | "worktree_created"
+  | "events_streamed"
+  | "branch_pushed";
+
+/** Ordered ranks so phase only advances, never regresses (#319). */
+export const RUNNER_TASK_PHASE_RANK: Record<RunnerTaskPhase, number> = {
+  leased: 0,
+  worktree_created: 1,
+  events_streamed: 2,
+  branch_pushed: 3,
+};
+
+/** True when `value` is a known {@link RunnerTaskPhase}. */
+export function isRunnerTaskPhase(value: unknown): value is RunnerTaskPhase {
+  return (
+    value === "leased" ||
+    value === "worktree_created" ||
+    value === "events_streamed" ||
+    value === "branch_pushed"
+  );
+}
+
+/** POST /runner/tasks/:id/heartbeat body (#319: optional phase advance). */
+export interface HeartbeatBody {
+  /**
+   * Optional phase the runner has reached. Daemon keeps the highest phase
+   * observed; unknown values are ignored.
+   */
+  phase?: RunnerTaskPhase;
+}
+
 /** POST /runner/tasks/:id/events body. */
 export interface EventsBody {
   lines: string[];
@@ -250,7 +288,8 @@ export interface LeaseTransport {
   register(request: RegisterRequest): Promise<RegisterResponse>;
   /** Long-poll. null = 204 (window elapsed, nothing claimed). */
   lease(runnerName: string): Promise<RunnerLeaseSpec | null>;
-  heartbeat(taskId: string): Promise<void>;
+  /** Refresh the lease timer; optional body may advance phase (#319). */
+  heartbeat(taskId: string, body?: HeartbeatBody): Promise<void>;
   events(taskId: string, lines: string[]): Promise<void>;
   branch(taskId: string, branch: string): Promise<void>;
   fail(taskId: string, error: string): Promise<void>;
@@ -269,7 +308,7 @@ export interface LeaseHttpOptions {
  * Body shapes:
  *   POST /runner/register           RegisterRequest → 200 RegisterResponse
  *   POST /runner/lease              { runner } → 200 RunnerLeaseSpec | 204
- *   POST /runner/tasks/:id/heartbeat {}
+ *   POST /runner/tasks/:id/heartbeat { phase? }  (#319 phase optional)
  *   POST /runner/tasks/:id/events    { lines: string[] }
  *   POST /runner/tasks/:id/branch    { branch: string }
  *   POST /runner/tasks/:id/fail      { error: string }
@@ -335,13 +374,13 @@ export function createLeaseHttpTransport(opts: LeaseHttpOptions): LeaseTransport
       return (await res.json()) as RunnerLeaseSpec;
     },
 
-    async heartbeat(taskId: string): Promise<void> {
+    async heartbeat(taskId: string, body: HeartbeatBody = {}): Promise<void> {
       const res = await doFetch(
         `${base}/runner/tasks/${encodeURIComponent(taskId)}/heartbeat`,
         {
           method: "POST",
           headers: headers(),
-          body: "{}",
+          body: JSON.stringify(body satisfies HeartbeatBody),
         },
       );
       await checkOk(res, "heartbeat");

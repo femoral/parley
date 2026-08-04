@@ -470,6 +470,172 @@ describe("runner heartbeat / events / branch / fail", () => {
     expect(row.error).toMatch(/runner lost/);
   });
 
+  it("lost-runner failure names runner, phase=leased, and last_event_age_ms=none (#319)", async () => {
+    const home = makeHome();
+    const { base } = await boot(home);
+    await registerRunner(base);
+    const repo = makeGitRepo();
+    repos.push(repo);
+    const { task_id } = await createRunnerTask(base, repo);
+    await json(base, "POST", "/runner/lease", { runner: "gpu" }, auth);
+
+    await new Promise((r) => setTimeout(r, 500));
+    const status = await json(base, "GET", `/tasks/${task_id}`);
+    const row = (
+      status.body as { row: { state: string; error: string | null; attempt: number } }
+    ).row;
+    expect(row.state).toBe("failed");
+    expect(row.error).toMatch(/runner lost: no heartbeat within \d+ms/);
+    expect(row.error).toMatch(/runner=gpu/);
+    expect(row.error).toMatch(/phase=leased/);
+    expect(row.error).toMatch(/last_event_age_ms=none/);
+    expect(row.error).not.toMatch(/branch=/);
+    // Envelope surfaces the same error string (task detail / inbox).
+    const env = (status.body as { task: { error: string | null } }).task;
+    expect(env.error).toBe(row.error);
+  });
+
+  it("lost-runner after events names phase=events_streamed and a finite last-event age (#319)", async () => {
+    const home = makeHome();
+    const { base } = await boot(home);
+    await registerRunner(base);
+    const repo = makeGitRepo();
+    repos.push(repo);
+    const { task_id } = await createRunnerTask(base, repo);
+    await json(base, "POST", "/runner/lease", { runner: "gpu" }, auth);
+
+    const events = await json(
+      base,
+      "POST",
+      `/runner/tasks/${task_id}/events`,
+      {
+        lines: [
+          JSON.stringify({ type: "session", session_id: "sess-lost-1" }),
+          JSON.stringify({ type: "text", text: "working" }),
+        ],
+      },
+      auth,
+    );
+    expect(events.status).toBe(200);
+
+    // Small pause so last_event_age_ms is strictly > 0, then wait past heartbeat.
+    await new Promise((r) => setTimeout(r, 50));
+    await new Promise((r) => setTimeout(r, 500));
+    const status = await json(base, "GET", `/tasks/${task_id}`);
+    const row = (status.body as { row: { state: string; error: string | null } }).row;
+    expect(row.state).toBe("failed");
+    expect(row.error).toMatch(/runner=gpu/);
+    expect(row.error).toMatch(/phase=events_streamed/);
+    expect(row.error).toMatch(/last_event_age_ms=\d+/);
+    expect(row.error).not.toMatch(/last_event_age_ms=none/);
+  });
+
+  it("lost-runner after branch record includes branch name and phase=branch_pushed (#319)", async () => {
+    const home = makeHome();
+    const { base } = await boot(home);
+    await registerRunner(base);
+    const repo = makeGitRepo();
+    repos.push(repo);
+    const { task_id } = await createRunnerTask(base, repo);
+    await json(base, "POST", "/runner/lease", { runner: "gpu" }, auth);
+
+    await json(
+      base,
+      "POST",
+      `/runner/tasks/${task_id}/events`,
+      { lines: [JSON.stringify({ type: "session", session_id: "sess-br" })] },
+      auth,
+    );
+    const br = await json(
+      base,
+      "POST",
+      `/runner/tasks/${task_id}/branch`,
+      { branch: "parley/lost-branch-319" },
+      auth,
+    );
+    expect(br.status).toBe(200);
+
+    await new Promise((r) => setTimeout(r, 500));
+    const status = await json(base, "GET", `/tasks/${task_id}`);
+    const row = (
+      status.body as {
+        row: { state: string; error: string | null; branch: string | null };
+      }
+    ).row;
+    expect(row.state).toBe("failed");
+    expect(row.branch).toBe("parley/lost-branch-319");
+    expect(row.error).toMatch(/runner=gpu/);
+    expect(row.error).toMatch(/phase=branch_pushed/);
+    expect(row.error).toMatch(/branch=parley\/lost-branch-319/);
+    expect(row.error).toMatch(/last_event_age_ms=\d+/);
+  });
+
+  it("heartbeat phase=worktree_created advances lost-runner phase (#319)", async () => {
+    const home = makeHome();
+    const { base } = await boot(home);
+    await registerRunner(base);
+    const repo = makeGitRepo();
+    repos.push(repo);
+    const { task_id } = await createRunnerTask(base, repo);
+    await json(base, "POST", "/runner/lease", { runner: "gpu" }, auth);
+
+    const hb = await json(
+      base,
+      "POST",
+      `/runner/tasks/${task_id}/heartbeat`,
+      { phase: "worktree_created" },
+      auth,
+    );
+    expect(hb.status).toBe(200);
+
+    await new Promise((r) => setTimeout(r, 500));
+    const status = await json(base, "GET", `/tasks/${task_id}`);
+    const row = (status.body as { row: { state: string; error: string | null } }).row;
+    expect(row.state).toBe("failed");
+    expect(row.error).toMatch(/phase=worktree_created/);
+    expect(row.error).toMatch(/last_event_age_ms=none/);
+  });
+
+  it("lost-runner is not auto-retried: stays failed, single attempt row (#319)", async () => {
+    const home = makeHome();
+    const { base } = await boot(home);
+    await registerRunner(base);
+    const repo = makeGitRepo();
+    repos.push(repo);
+    const { task_id } = await createRunnerTask(base, repo);
+    await json(base, "POST", "/runner/lease", { runner: "gpu" }, auth);
+
+    await new Promise((r) => setTimeout(r, 500));
+    const first = await json(base, "GET", `/tasks/${task_id}`);
+    const row1 = (
+      first.body as {
+        row: { state: string; error: string | null; attempt: number };
+        attempts?: { id: string }[];
+      }
+    ).row;
+    expect(row1.state).toBe("failed");
+    expect(row1.error).toMatch(/runner lost/);
+    expect(row1.attempt).toBe(1);
+
+    // Wait another window; state must remain failed (no requeue/retry).
+    await new Promise((r) => setTimeout(r, 500));
+    const second = await json(base, "GET", `/tasks/${task_id}`);
+    const row2 = (
+      second.body as { row: { state: string; error: string | null; attempt: number } }
+    ).row;
+    expect(row2.state).toBe("failed");
+    expect(row2.error).toBe(row1.error);
+    expect(row2.attempt).toBe(1);
+
+    // List must not grow a second attempt row for this failure.
+    const listed = await json(base, "GET", "/tasks");
+    const tasks = (listed.body as { tasks: { task_id: string; attempt?: number }[] }).tasks;
+    const related = tasks.filter(
+      (t) => t.task_id === task_id || t.task_id.startsWith(`${task_id}-`),
+    );
+    expect(related).toHaveLength(1);
+  });
+
   it("heartbeat refreshes the lease", async () => {
     const home = makeHome();
     const { base } = await boot(home);

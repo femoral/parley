@@ -18,6 +18,7 @@ import {
   isValidSize,
   isValidTaskType,
   formatCliSelectedHint,
+  isRunnerTaskPhase,
   listAllowedCombos,
   LOCAL_EXECUTOR_ID,
   ModelAllowlistError,
@@ -29,6 +30,7 @@ import {
   resolveRoutingQueueTimeoutMs,
   resolveWorkflow,
   retentionDays,
+  RUNNER_TASK_PHASE_RANK,
   scoreRubric,
   expandLaunchTemplate,
   formatStepAddress,
@@ -40,6 +42,7 @@ import {
   type ProfileConfig,
   type RunnerCapabilities,
   type RunnerLeaseSpec,
+  type RunnerTaskPhase,
   type WorkflowDefinition,
   type WorkflowStepNode,
 } from "@useparley/core";
@@ -648,10 +651,20 @@ export interface SessionBindInput {
   evalProjectRoot: string | null;
 }
 
-/** Sidecar written for runner-affine tasks (contexts survive until lease). */
+/**
+ * Sidecar written for runner-affine tasks (contexts survive until lease).
+ * Progress fields (#319) are daemon-observed phase bookkeeping so a heartbeat
+ * miss can name runner, phase, branch, and last-event age without a migration.
+ */
 interface RunnerMeta {
   contexts: ContextFile[];
   base_ref: string | null;
+  /** Highest phase reached on this lease (#319). */
+  phase?: RunnerTaskPhase;
+  /** ISO timestamp when the lease was claimed. */
+  leased_at?: string | null;
+  /** ISO timestamp of the most recent non-empty events POST; null if none. */
+  last_event_at?: string | null;
 }
 
 /** Resolved create-time fields after profile + defaults (#113 / #154 / #195). */
@@ -3206,10 +3219,77 @@ export class TaskEngine {
       return {
         contexts: Array.isArray(parsed.contexts) ? parsed.contexts : [],
         base_ref: typeof parsed.base_ref === "string" ? parsed.base_ref : null,
+        phase: isRunnerTaskPhase(parsed.phase) ? parsed.phase : undefined,
+        leased_at:
+          typeof parsed.leased_at === "string" ? parsed.leased_at : null,
+        last_event_at:
+          typeof parsed.last_event_at === "string" ? parsed.last_event_at : null,
       };
     } catch {
       return { contexts: [], base_ref: null };
     }
+  }
+
+  /**
+   * Advance runner phase if `phase` is higher than the current sidecar value.
+   * Never regresses (e.g. events after branch still leave `branch_pushed`).
+   */
+  private advanceRunnerPhase(taskId: string, phase: RunnerTaskPhase): void {
+    const meta = this.readRunnerMeta(taskId);
+    const current = meta.phase;
+    if (
+      current !== undefined &&
+      RUNNER_TASK_PHASE_RANK[phase] < RUNNER_TASK_PHASE_RANK[current]
+    ) {
+      return;
+    }
+    if (current === phase) return;
+    this.writeRunnerMeta(taskId, { ...meta, phase });
+  }
+
+  /** Record that vendor event lines arrived (phase + last-event clock, #319). */
+  private noteRunnerEvents(taskId: string): void {
+    const meta = this.readRunnerMeta(taskId);
+    const next: RunnerMeta = {
+      ...meta,
+      last_event_at: new Date().toISOString(),
+    };
+    const current = meta.phase;
+    if (
+      current === undefined ||
+      RUNNER_TASK_PHASE_RANK[current] < RUNNER_TASK_PHASE_RANK.events_streamed
+    ) {
+      next.phase = "events_streamed";
+    }
+    this.writeRunnerMeta(taskId, next);
+  }
+
+  /**
+   * Structured lost-runner failure text (#319): runner, phase, branch if any,
+   * last-event age. Readable single line so inbox/detail show the full payload.
+   */
+  private formatLostRunnerError(taskId: string, windowMs: number): string {
+    const task = getTask(this.db, taskId);
+    const meta = this.readRunnerMeta(taskId);
+    const runner = task?.runner && task.runner !== "" ? task.runner : "unknown";
+    const phase: RunnerTaskPhase = meta.phase ?? "leased";
+    const parts = [
+      `runner lost: no heartbeat within ${windowMs}ms`,
+      `runner=${runner}`,
+      `phase=${phase}`,
+    ];
+    if (task?.branch !== null && task?.branch !== undefined && task.branch !== "") {
+      parts.push(`branch=${task.branch}`);
+    }
+    if (meta.last_event_at) {
+      const age = Math.max(0, Date.now() - Date.parse(meta.last_event_at));
+      parts.push(
+        Number.isFinite(age) ? `last_event_age_ms=${age}` : "last_event_age_ms=none",
+      );
+    } else {
+      parts.push("last_event_age_ms=none");
+    }
+    return parts.join("; ");
   }
 
   private armRunnerHeartbeat(taskId: string): void {
@@ -3217,7 +3297,7 @@ export class TaskEngine {
     const windowMs = runnerHeartbeatTimeoutMs();
     const timer = setTimeout(() => {
       this.runnerHeartbeatTimers.delete(taskId);
-      this.fail(taskId, `runner lost: no heartbeat within ${windowMs}ms`);
+      this.fail(taskId, this.formatLostRunnerError(taskId, windowMs));
     }, windowMs);
     timer.unref();
     this.runnerHeartbeatTimers.set(taskId, timer);
@@ -3335,6 +3415,16 @@ export class TaskEngine {
       cause: "runner_claim",
       fields: claimFields,
     });
+    // Seed lost-runner progress at claim (#319): phase=leased.
+    {
+      const meta = this.readRunnerMeta(pending.id);
+      this.writeRunnerMeta(pending.id, {
+        ...meta,
+        phase: "leased",
+        leased_at: new Date().toISOString(),
+        last_event_at: meta.last_event_at ?? null,
+      });
+    }
     this.armRunnerHeartbeat(pending.id);
     const claimed = getTask(this.db, pending.id);
     if (!claimed) return null;
@@ -3376,10 +3466,15 @@ export class TaskEngine {
   }
 
   /**
-   * `POST /runner/tasks/:id/heartbeat` — refresh the lease timer. Throws
+   * `POST /runner/tasks/:id/heartbeat` — refresh the lease timer. Optional
+   * `phase` advances runner progress bookkeeping (#319). Throws
    * `DelegateError` when the task is unknown, not runner-affine, or terminal.
    */
-  runnerHeartbeat(taskId: string, runnerName: string): void {
+  runnerHeartbeat(
+    taskId: string,
+    runnerName: string,
+    body: { phase?: RunnerTaskPhase } = {},
+  ): void {
     const task = getTask(this.db, taskId);
     if (!task) throw new DelegateError(`no such task: ${taskId}`);
     if (task.runner !== runnerName) {
@@ -3389,6 +3484,9 @@ export class TaskEngine {
       throw new DelegateError(`task ${taskId} is already ${task.state}`);
     }
     this.armRunnerHeartbeat(taskId);
+    if (body.phase !== undefined) {
+      this.advanceRunnerPhase(taskId, body.phase);
+    }
   }
 
   /**
@@ -3456,6 +3554,8 @@ export class TaskEngine {
 
     if (appendRaw.length > 0) {
       fs.appendFileSync(rawLogPath, `${appendRaw.join("\n")}\n`);
+      // Non-empty events advance phase and last-event clock (#319).
+      this.noteRunnerEvents(taskId);
     }
     if (appendDiag.length > 0) {
       fs.appendFileSync(diagLogPath, `${appendDiag.join("\n")}\n`);
@@ -3482,6 +3582,7 @@ export class TaskEngine {
       throw new DelegateError("branch must be a non-empty string");
     }
     updateTask(this.db, taskId, { branch });
+    this.advanceRunnerPhase(taskId, "branch_pushed");
     if (task.report !== null && !isTerminalState(task.state)) {
       this.completeAcceptedReport(taskId);
     }

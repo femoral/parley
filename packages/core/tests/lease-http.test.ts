@@ -261,19 +261,23 @@ describe("createLeaseHttpTransport", () => {
     });
 
     await transport.heartbeat("task/1");
+    await transport.heartbeat("task/1", { phase: "worktree_created" });
     await transport.events("task/1", ["line-a", "line-b"]);
     await transport.branch("task/1", "parley/t1");
     await transport.fail("task/1", "gave up");
 
     expect(calls.map((c) => c.url)).toEqual([
       "http://d/runner/tasks/task%2F1/heartbeat",
+      "http://d/runner/tasks/task%2F1/heartbeat",
       "http://d/runner/tasks/task%2F1/events",
       "http://d/runner/tasks/task%2F1/branch",
       "http://d/runner/tasks/task%2F1/fail",
     ]);
-    expect(JSON.parse(calls[1]!.body)).toEqual({ lines: ["line-a", "line-b"] });
-    expect(JSON.parse(calls[2]!.body)).toEqual({ branch: "parley/t1" });
-    expect(JSON.parse(calls[3]!.body)).toEqual({ error: "gave up" });
+    expect(JSON.parse(calls[0]!.body)).toEqual({});
+    expect(JSON.parse(calls[1]!.body)).toEqual({ phase: "worktree_created" });
+    expect(JSON.parse(calls[2]!.body)).toEqual({ lines: ["line-a", "line-b"] });
+    expect(JSON.parse(calls[3]!.body)).toEqual({ branch: "parley/t1" });
+    expect(JSON.parse(calls[4]!.body)).toEqual({ error: "gave up" });
   });
 
   it("no-ops events when lines is empty", async () => {

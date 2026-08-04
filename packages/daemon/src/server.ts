@@ -17,6 +17,7 @@ import {
   parseTaskMetricsFilters,
   resolveWorkflow,
   RUN_METRICS_GROUP_BY,
+  isRunnerTaskPhase,
   RUNNER_PROTOCOL_VERSION,
   runnerStaleWindowMs as runnerStaleWindowMsFromConfig,
   setConfigPath,
@@ -32,6 +33,7 @@ import {
   type RunnerRecentTask,
   type RunnerRepoReachability,
   type RunnerShowResponse,
+  type RunnerTaskPhase,
   type RunnerVendorCapability,
   type TaskEnvelope,
   type WorkflowDefinition,
@@ -2991,8 +2993,26 @@ function createHandler(
             sendJson(res, 401, { error: "unauthorized" });
             return;
           }
+          // Optional body: { phase? } advances lost-runner progress (#319).
+          // Empty / missing body remains valid (timer refresh only).
+          const rawBody = await readBody(req);
+          let phase: RunnerTaskPhase | undefined;
+          if (rawBody !== undefined && rawBody !== null && rawBody !== "") {
+            if (!isRecord(rawBody)) {
+              sendJson(res, 400, { error: "heartbeat body must be an object" });
+              return;
+            }
+            if (rawBody.phase !== undefined && !isRunnerTaskPhase(rawBody.phase)) {
+              sendJson(res, 400, {
+                error:
+                  "phase must be leased|worktree_created|events_streamed|branch_pushed",
+              });
+              return;
+            }
+            if (isRunnerTaskPhase(rawBody.phase)) phase = rawBody.phase;
+          }
           try {
-            engine.runnerHeartbeat(taskId, runnerName);
+            engine.runnerHeartbeat(taskId, runnerName, phase !== undefined ? { phase } : {});
             // Task traffic refreshes presence while the runner is mid-execute
             // (no open lease poll during execute; see ADR-0029).
             touchRunnerLastSeen(db, runnerName);

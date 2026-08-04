@@ -1,4 +1,5 @@
 import type {
+  HeartbeatBody,
   LeaseTransport,
   RegisterRequest,
   RegisterResponse,
@@ -9,7 +10,7 @@ import type {
 export type TransportCall =
   | { verb: "register"; request: RegisterRequest }
   | { verb: "lease"; runner: string }
-  | { verb: "heartbeat"; taskId: string }
+  | { verb: "heartbeat"; taskId: string; body?: HeartbeatBody }
   | { verb: "events"; taskId: string; lines: string[] }
   | { verb: "branch"; taskId: string; branch: string }
   | { verb: "fail"; taskId: string; error: string };
@@ -69,8 +70,8 @@ export function createFakeLeaseTransport(
       }
       return typeof next === "function" ? next() : next;
     },
-    async heartbeat(taskId: string) {
-      calls.push({ verb: "heartbeat", taskId });
+    async heartbeat(taskId: string, body: HeartbeatBody = {}) {
+      calls.push({ verb: "heartbeat", taskId, body });
       if (failVerbs.has("heartbeat")) throw new Error("fake heartbeat failed");
     },
     async events(taskId: string, lines: string[]) {
