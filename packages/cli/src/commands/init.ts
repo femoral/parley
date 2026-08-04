@@ -648,12 +648,12 @@ export async function runInit(ctx: CliContext, args: string[]): Promise<number> 
   }
 
   // Load home config for vendor.bin overrides (created empty above if missing).
-  let config: ParleyConfig = {};
-  try {
-    config = readConfig(ctx.paths.config);
-  } catch (err) {
-    ctx.stderr(`warning: ${err instanceof Error ? err.message : String(err)}\n`);
-  }
+  // Fail hard when the file exists but is unparseable/invalid (#332): do not
+  // fall back to {} and rewrite — that silently destroyed user config. ENOENT
+  // is already handled by readConfig (returns {}); ensureInitConfig created
+  // the file when missing, so a throw here means a present-but-bad file and
+  // writeConfig below stays unreachable.
+  let config: ParleyConfig = readConfig(ctx.paths.config);
 
   // Remote daemon (#328): allowlist/catalog probe reflect the daemon host's
   // vendor reality, not this CLI host. Skip local catalog probe + vendors.*.models
