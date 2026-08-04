@@ -40,6 +40,7 @@ import { createAdapterRegistry } from "./adapters/index.js";
 import {
   countUnsettledTasks,
   deleteRunner,
+  deleteStaleRunners,
   getDeliverable,
   getMeta,
   getRun,
@@ -249,18 +250,16 @@ function runnerStaleMs(config?: ParleyConfig): number {
  * older than the stale window, skipping runners with an open lease poll.
  * Runs on list / show / register — no background timer. Does not touch
  * `runners.<name>` config tokens (re-registration remains allowed).
+ *
+ * Single implementation: SQL cutoff via {@link deleteStaleRunners}, with
+ * open-poll names excluded (in-process presence is not in SQLite).
  */
 function sweepStaleRunners(db: DatabaseHandle, config?: ParleyConfig): void {
   const staleMs = runnerStaleMs(config);
-  const now = Date.now();
-  for (const row of listRunners(db)) {
-    if (runnerHasOpenPoll(row.name)) continue;
-    const last = Date.parse(row.last_seen);
-    if (!Number.isFinite(last)) continue;
-    if (now - last > staleMs) {
-      deleteRunner(db, row.name);
-    }
-  }
+  // `now - last > staleMs` ≡ `last < now - staleMs` (strict). ISO cutoff matches.
+  const cutoff = new Date(Date.now() - staleMs).toISOString();
+  // openRunnerPolls only holds entries with count > 0.
+  deleteStaleRunners(db, cutoff, new Set(openRunnerPolls.keys()));
 }
 
 /** In-process open lease-poll counts per runner name (presence signal). */
@@ -378,7 +377,10 @@ function projectRunnerShow(
   const caps = parseCapabilitiesJson(row.capabilities) as RunnerCapabilities &
     Record<string, unknown>;
   const lastMs = Date.parse(row.last_seen);
-  const advertisement_age_ms = Number.isFinite(lastMs)
+  // last_seen is refreshed on every poll/heartbeat/event — this is presence age,
+  // not capabilities-advertisement age. True capabilities age needs a separate
+  // column (tracked as #329; parallel branch owns the next migration).
+  const last_contact_age_ms = Number.isFinite(lastMs)
     ? Math.max(0, Date.now() - lastMs)
     : 0;
   const vendors: RunnerVendorCapability[] = caps.vendors.map((v) => ({
@@ -409,7 +411,7 @@ function projectRunnerShow(
     registered_at: row.registered_at,
     protocol_version: row.protocol_version,
     build_version: row.build_version,
-    advertisement_age_ms,
+    last_contact_age_ms,
     vendors,
     repo_reachability: projectRepoReachability(caps),
     recent_tasks,
@@ -2940,6 +2942,12 @@ function createHandler(
       // `DELETE /runners/:name` — operator remove (#320): drop the SQLite row and
       // the `runners.<name>` config entry. Config-admin (loopback-only) because
       // it mutates credentials. Re-registration then fails as unknown (401).
+      //
+      // Atomic order: persist the next config FIRST, then delete the row. A
+      // config-write failure must leave the registration row intact so the
+      // runner does not vanish from list while still holding a live credential.
+      // Config keys are removed by object key (not dotted-path) so names that
+      // contain dots (e.g. `gpu.west`) work.
       if (
         method === "DELETE" &&
         segments[0] === "runners" &&
@@ -2955,31 +2963,50 @@ function createHandler(
           return;
         }
         const name = decodeURIComponent(segments[1]);
-        const deleted_row = deleteRunner(db, name);
-        let deleted_config = false;
+        let current: ParleyConfig;
         try {
-          const current = loadAdminConfig(paths);
-          if (current.runners !== undefined && name in current.runners) {
-            const next = unsetConfigPath(
-              current as Record<string, unknown>,
-              `runners.${name}`,
-            );
-            const validated = validateConfig(paths.config, next);
-            persistAdminConfig(paths, validated);
-            deleted_config = true;
-          }
+          current = loadAdminConfig(paths);
         } catch (err) {
           sendJson(res, 500, {
             error: err instanceof Error ? err.message : String(err),
           });
           return;
         }
-        if (!deleted_row && !deleted_config) {
+        const had_row = getRunner(db, name) !== undefined;
+        const had_config =
+          current.runners !== undefined &&
+          Object.prototype.hasOwnProperty.call(current.runners, name);
+        if (!had_row && !had_config) {
           sendJson(res, 404, {
             error: `runner "${name}" not found (no registration row or config entry)`,
           });
           return;
         }
+        let deleted_config = false;
+        if (had_config) {
+          try {
+            // Direct key delete — do not use unsetConfigPath (splits on `.`).
+            const next = structuredClone(current) as ParleyConfig &
+              Record<string, unknown>;
+            const runners = { ...(next.runners as Record<string, unknown>) };
+            delete runners[name];
+            if (Object.keys(runners).length === 0) {
+              delete next.runners;
+            } else {
+              next.runners = runners as NonNullable<ParleyConfig["runners"]>;
+            }
+            const validated = validateConfig(paths.config, next);
+            persistAdminConfig(paths, validated);
+            deleted_config = true;
+          } catch (err) {
+            // Config write failed — leave the SQLite row untouched.
+            sendJson(res, 500, {
+              error: err instanceof Error ? err.message : String(err),
+            });
+            return;
+          }
+        }
+        const deleted_row = had_row ? deleteRunner(db, name) : false;
         sendJson(res, 200, {
           ok: true as const,
           name,

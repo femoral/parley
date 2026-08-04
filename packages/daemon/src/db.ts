@@ -2552,25 +2552,31 @@ export function deleteRunner(db: DatabaseHandle, name: string): boolean {
 /**
  * Delete registration rows whose `last_seen` is strictly older than the ISO
  * cutoff (lazy stale auto-cleanup, #320). Returns the deleted names.
- * Callers that track in-process open polls should filter those names out
- * before invoking, or pass a cutoff that already accounts for presence.
+ *
+ * `excludeNames` skips runners that still have an in-process open lease poll
+ * (presence is not stored in SQLite). Used by the daemon's single sweep path.
+ *
+ * Semantics: `last_seen < olderThanIso` matches `now - last > staleMs` when
+ * `olderThanIso = new Date(now - staleMs).toISOString()`.
  */
 export function deleteStaleRunners(
   db: DatabaseHandle,
   olderThanIso: string,
+  excludeNames?: ReadonlySet<string>,
 ): string[] {
   const rows = db
     .prepare(
       `SELECT name FROM runners WHERE last_seen < ? ORDER BY name ASC`,
     )
     .all(olderThanIso) as Array<{ name: string }>;
-  const names = rows.map((r) => r.name);
-  if (names.length === 0) return [];
   const del = db.prepare(`DELETE FROM runners WHERE name = ?`);
-  for (const name of names) {
+  const deleted: string[] = [];
+  for (const { name } of rows) {
+    if (excludeNames !== undefined && excludeNames.has(name)) continue;
     del.run(name);
+    deleted.push(name);
   }
-  return names;
+  return deleted;
 }
 
 /**

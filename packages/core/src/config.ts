@@ -6,7 +6,10 @@ import {
   type ChildChannel,
   type SandboxMode,
 } from "./adapter.js";
-import { DEFAULT_RUNNER_STALE_MS } from "./lease.js";
+import {
+  DEFAULT_RUNNER_PRESENCE_GRACE_MS,
+  DEFAULT_RUNNER_STALE_MS,
+} from "./lease.js";
 
 /**
  * UI bundle discovery settings (`docs/spec/ui-interface-contract.md` §"Serving
@@ -84,8 +87,10 @@ export const DEFAULT_RETENTION_DAYS = 30;
 export interface RunnerSettingsConfig {
   /**
    * Milliseconds after last contact before a registration row is auto-deleted.
-   * Positive integer; default {@link DEFAULT_RUNNER_STALE_MS} (14 days) from
-   * `@useparley/core` lease module. Does not revoke `runners.<name>.token`.
+   * Integer ≥ {@link DEFAULT_RUNNER_PRESENCE_GRACE_MS} (50s) so a just-
+   * registered runner cannot vanish inside the presence-grace floor; default
+   * {@link DEFAULT_RUNNER_STALE_MS} (14 days). Does not revoke
+   * `runners.<name>.token`.
    */
   staleWindowMs?: number;
 }
@@ -389,9 +394,14 @@ function validateRunnerSettings(file: string, raw: unknown): void {
   }
   if (raw.staleWindowMs !== undefined) {
     const v = raw.staleWindowMs;
-    if (typeof v !== "number" || !Number.isInteger(v) || v <= 0) {
+    if (
+      typeof v !== "number" ||
+      !Number.isInteger(v) ||
+      v < DEFAULT_RUNNER_PRESENCE_GRACE_MS
+    ) {
       throw new Error(
-        `invalid config at ${file}: runnerSettings.staleWindowMs must be a positive integer`,
+        `invalid config at ${file}: runnerSettings.staleWindowMs must be an integer ` +
+          `>= ${DEFAULT_RUNNER_PRESENCE_GRACE_MS} (DEFAULT_RUNNER_PRESENCE_GRACE_MS)`,
       );
     }
   }

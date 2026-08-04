@@ -607,14 +607,14 @@ describe("runner show / remove / stale cleanup (#320)", () => {
       name: string;
       status: string;
       build_version: string;
-      advertisement_age_ms: number;
+      last_contact_age_ms: number;
       vendors: { id: string; models: { id: string }[] }[];
       repo_reachability: { repo_key: string; reachable: boolean }[] | null;
       recent_tasks: { id: string; name: string | null; state: string }[];
     };
     expect(body.name).toBe("gpu");
     expect(body.build_version).toBe("0.0.4-test");
-    expect(body.advertisement_age_ms).toBeGreaterThanOrEqual(0);
+    expect(body.last_contact_age_ms).toBeGreaterThanOrEqual(0);
     expect(body.vendors).toEqual([
       {
         id: "fake",
@@ -684,8 +684,10 @@ describe("runner show / remove / stale cleanup (#320)", () => {
   });
 
   it("stale rows auto-delete on list when past runnerSettings.staleWindowMs", async () => {
+    // Config floor is DEFAULT_RUNNER_PRESENCE_GRACE_MS (50s); use a valid
+    // window and backdate last_seen past it (env override covers short windows).
     const home = makeHome({
-      runnerSettings: { staleWindowMs: 50 },
+      runnerSettings: { staleWindowMs: 60_000 },
     });
     const { base } = await boot(home);
     await registerRunner(base);
@@ -695,7 +697,7 @@ describe("runner show / remove / stale cleanup (#320)", () => {
     await server!.close();
     server = null;
     const db = openDatabase(homePaths(home));
-    setRunnerLastSeen(db, "gpu", new Date(Date.now() - 5_000).toISOString());
+    setRunnerLastSeen(db, "gpu", new Date(Date.now() - 120_000).toISOString());
     db.close();
 
     const { base: base2 } = await boot(home);
@@ -726,5 +728,177 @@ describe("runner show / remove / stale cleanup (#320)", () => {
     } finally {
       delete process.env.PARLEY_RUNNER_STALE_MS;
     }
+  });
+
+  it("DELETE config-write failure leaves the row intact (M1 atomic)", async () => {
+    const home = makeHome();
+    const { base } = await boot(home);
+    await registerRunner(base);
+    const configPath = path.join(home, "parley.json");
+    // writeConfig uses temp file + rename in the home dir — make the directory
+    // non-writable so the atomic write fails. File mode alone is not enough
+    // (rename can still replace a read-only target when the dir is writable).
+    fs.chmodSync(home, 0o555);
+    try {
+      const removed = await json(base, "DELETE", "/runners/gpu");
+      expect(removed.status).toBe(500);
+      // Row must still be present — config write failed before row delete.
+      const listed = await json(base, "GET", "/runners");
+      expect((listed.body as { runners: { name: string }[] }).runners).toEqual([
+        expect.objectContaining({ name: "gpu" }),
+      ]);
+    } finally {
+      fs.chmodSync(home, 0o755);
+    }
+    // Credential still live on disk.
+    const cfg = readConfig(configPath);
+    expect(cfg.runners?.gpu?.token).toBe("secret-gpu");
+  });
+
+  it("DELETE removes dotted runner names from config (M2)", async () => {
+    const home = makeHome({
+      runners: { "gpu.west": { token: "secret-west" } },
+    });
+    const { base } = await boot(home);
+    const westAuth = { authorization: "Bearer secret-west" };
+    const reg = await registerRunner(
+      base,
+      { runner: "gpu.west" },
+      westAuth,
+    );
+    expect(reg.status).toBe(200);
+
+    const removed = await json(base, "DELETE", "/runners/gpu.west");
+    expect(removed.status).toBe(200);
+    expect(removed.body).toEqual({
+      ok: true,
+      name: "gpu.west",
+      deleted_row: true,
+      deleted_config: true,
+    });
+
+    const listed = await json(base, "GET", "/runners");
+    expect((listed.body as { runners: unknown[] }).runners).toHaveLength(0);
+
+    const cfg = readConfig(path.join(home, "parley.json"));
+    expect(cfg.runners?.["gpu.west"]).toBeUndefined();
+
+    // Re-register is unknown (401) — credential gone.
+    const reReg = await registerRunner(
+      base,
+      { runner: "gpu.west" },
+      westAuth,
+    );
+    expect(reReg.status).toBe(401);
+  });
+
+  it("sweep excludes runners with an open lease poll (M3a)", async () => {
+    process.env.PARLEY_RUNNER_STALE_MS = "30";
+    try {
+      const home = makeHome();
+      const { base } = await boot(home);
+      await registerRunner(base);
+
+      // Hold an open long-poll so presence excludes the row from the sweep.
+      // PARLEY_LONG_POLL_MS is 300 in beforeEach — start without awaiting.
+      const leasePromise = json(
+        base,
+        "POST",
+        "/runner/lease",
+        { runner: "gpu" },
+        auth,
+      );
+      // Allow the handler to call beginRunnerPoll.
+      await new Promise((r) => setTimeout(r, 40));
+
+      // Backdate last_seen past the short env window while the poll is open.
+      // WAL allows a second connection against the live daemon db.
+      const db = openDatabase(homePaths(home));
+      setRunnerLastSeen(db, "gpu", new Date(Date.now() - 5_000).toISOString());
+      db.close();
+
+      const listed = await json(base, "GET", "/runners");
+      expect(listed.status).toBe(200);
+      expect((listed.body as { runners: { name: string }[] }).runners).toEqual([
+        expect.objectContaining({ name: "gpu" }),
+      ]);
+
+      // Drain the long-poll (204 — no pending task).
+      const lease = await leasePromise;
+      expect([200, 204]).toContain(lease.status);
+    } finally {
+      delete process.env.PARLEY_RUNNER_STALE_MS;
+    }
+  });
+
+  it("re-register after stale sweep restores the row with config kept (M3b)", async () => {
+    process.env.PARLEY_RUNNER_STALE_MS = "30";
+    try {
+      const home = makeHome();
+      const { base } = await boot(home);
+      await registerRunner(base);
+      await server!.close();
+      server = null;
+      const db = openDatabase(homePaths(home));
+      setRunnerLastSeen(db, "gpu", new Date(Date.now() - 5_000).toISOString());
+      db.close();
+
+      const { base: base2 } = await boot(home);
+      const listed = await json(base2, "GET", "/runners");
+      expect((listed.body as { runners: unknown[] }).runners).toHaveLength(0);
+
+      // Config token kept by sweep — re-register succeeds and restores the row.
+      const reReg = await registerRunner(base2);
+      expect(reReg.status).toBe(200);
+      const after = await json(base2, "GET", "/runners");
+      expect((after.body as { runners: { name: string }[] }).runners).toEqual([
+        expect.objectContaining({ name: "gpu" }),
+      ]);
+    } finally {
+      delete process.env.PARLEY_RUNNER_STALE_MS;
+    }
+  });
+
+  it("DELETE mid-lease: next poll/heartbeat 401; task fails; daemon serves (M3c)", async () => {
+    // PARLEY_RUNNER_HEARTBEAT_MS=200 is set in beforeEach.
+    const home = makeHome();
+    const { base } = await boot(home);
+    await registerRunner(base);
+    const repo = makeGitRepo();
+    repos.push(repo);
+    const { task_id } = await createRunnerTask(base, repo);
+
+    const lease = await json(base, "POST", "/runner/lease", { runner: "gpu" }, auth);
+    expect(lease.status).toBe(200);
+
+    const removed = await json(base, "DELETE", "/runners/gpu");
+    expect(removed.status).toBe(200);
+
+    // Credential gone — runner surface rejects with 401.
+    const hb = await json(
+      base,
+      "POST",
+      `/runner/tasks/${task_id}/heartbeat`,
+      {},
+      auth,
+    );
+    expect(hb.status).toBe(401);
+
+    const poll = await json(base, "POST", "/runner/lease", { runner: "gpu" }, auth);
+    expect(poll.status).toBe(401);
+
+    // Heartbeat window eventually fails the leased task; daemon stays up.
+    const deadline = Date.now() + 5_000;
+    let state = "";
+    while (Date.now() < deadline) {
+      const status = await json(base, "GET", `/tasks/${task_id}`);
+      state = (status.body as { row: { state: string } }).row.state;
+      if (state === "failed") break;
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    expect(state).toBe("failed");
+
+    const health = await json(base, "GET", "/health");
+    expect(health.status).toBe(200);
   });
 });

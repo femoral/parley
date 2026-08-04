@@ -184,8 +184,12 @@ export interface RunnerShowResponse {
   registered_at: string;
   protocol_version: number;
   build_version: string;
-  /** Milliseconds since last_seen (advertisement / presence age). */
-  advertisement_age_ms: number;
+  /**
+   * Milliseconds since `last_seen` (last contact / presence age). Refreshed on
+   * every poll, heartbeat, and task-traffic event — **not** capabilities age.
+   * True advertisement age needs a separate column; tracked as #329.
+   */
+  last_contact_age_ms: number;
   /** Vendors with full model catalogs from the last registration. */
   vendors: RunnerVendorCapability[];
   /**

@@ -140,18 +140,30 @@ report remain on the daemon (`parley logs`, `parley status`).
 `SIGINT` / `SIGTERM` stop leasing new tasks and fail or finish the in-flight
 task (heartbeat-fail if the child is aborted mid-run).
 
-## Registration and fleet view (ADR-0029 / #314)
+## Registration and fleet view (ADR-0029 / #314 / #320)
 
 On start (and every reconnect / periodic re-fingerprint) the runner probes its
 host for vendor bins and adapter model catalogs, then calls
 `POST /runner/register`. The daemon upserts a `runners` row; lease is rejected
-until registration succeeds. Status (online / offline / stale) is derived from
-open lease long-polls plus a short grace window on `last_seen`.
+until registration succeeds. Status (`online` / `offline`) is derived from
+open lease long-polls plus a short grace window on `last_seen`. Rows past the
+stale window (`runnerSettings.staleWindowMs`, default 14d) are **auto-deleted**
+on list/show/register (config token kept so the runner can re-register).
 
 ```bash
-parley runners list          # name, status, vendors, last-seen
+parley runners list                  # name, status, vendors, last-seen
 parley runners list --json
+parley runners show <name>           # models, reachability, last contact, recent tasks
+parley runners show <name> --json
+parley runners remove <name>         # drop registration row + runners.<name> config
 ```
+
+**Remove semantics:** `parley runners remove` / `DELETE /runners/:name` is
+loopback-only (config-admin). It deletes the SQLite row and the named config
+entry (credentials). The runner's next register/lease attempt is rejected as
+unknown (401). Config is written before the row is deleted so a write failure
+does not orphan a live credential without a listable row. Names may contain
+dots (e.g. `gpu.west`).
 
 ## API surface (daemon)
 
@@ -166,7 +178,9 @@ Bearer auth: `Authorization: Bearer <token>` checked against
 | `POST /runner/tasks/:id/events` `{lines}` | Append vendor JSONL + usage/session extraction |
 | `POST /runner/tasks/:id/branch` `{branch}` | Record branch (worktree stays null) |
 | `POST /runner/tasks/:id/fail` `{error}` | Runner cannot execute / child exited without report |
-| `GET /runners` | Fleet table for `parley runners list` |
+| `GET /runners` | Fleet table for `parley runners list` (lazy stale sweep) |
+| `GET /runners/:name` | Full advertisement for `parley runners show` (client class) |
+| `DELETE /runners/:name` | Operator remove: row + config (loopback / config-admin) |
 
 Child contract calls use the existing `/child/*` and `/mcp` endpoints (via the
 runner hub proxy).

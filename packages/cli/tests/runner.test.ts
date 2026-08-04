@@ -365,13 +365,13 @@ describe("runner registration + parley runners list", () => {
       name: string;
       vendors: { id: string; models: unknown[] }[];
       build_version: string;
-      advertisement_age_ms: number;
+      last_contact_age_ms: number;
       repo_reachability: unknown;
       recent_tasks: unknown[];
     };
     expect(detail.name).toBe("gpu");
     expect(detail.vendors.some((v) => v.id === "fake")).toBe(true);
-    expect(detail.advertisement_age_ms).toBeGreaterThanOrEqual(0);
+    expect(detail.last_contact_age_ms).toBeGreaterThanOrEqual(0);
     // Reachability is not on the wire yet from packages/runner — graceful null.
     expect(detail.repo_reachability).toBeNull();
     expect(Array.isArray(detail.recent_tasks)).toBe(true);

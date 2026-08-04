@@ -62,13 +62,26 @@ match without loading plugin code.
 SQLite `runners` table (append-only migration): `name` PK, `capabilities`,
 `protocol_version`, `build_version`, `registered_at`, `last_seen`.
 
-Status is **derived**, not stored:
+Status is **derived**, not stored. The fleet list only ever surfaces
+`online` or `offline` under normal operation:
 
 | Status | Rule |
 | --- | --- |
 | `online` | Open lease long-poll, **or** `last_seen` within grace (default `max(50s, 2× long-poll)`; `PARLEY_RUNNER_PRESENCE_GRACE_MS`, explicit `0` = no grace) |
-| `offline` | No open poll and last contact past grace but within stale window |
-| `stale` | Last contact older than stale window (default 14 days; `PARLEY_RUNNER_STALE_MS`) |
+| `offline` | No open poll and last contact past grace but still within the stale window |
+
+**Stale auto-delete (#320):** when last contact is older than the stale window
+(default 14 days; config `runnerSettings.staleWindowMs`, floor
+`DEFAULT_RUNNER_PRESENCE_GRACE_MS`), the registration **row is deleted** on the
+next lazy sweep (list / show / register). Open-poll runners are excluded from
+the sweep. Config tokens (`runners.<name>.token`) are **not** revoked by the
+sweep — only operator `DELETE /runners/:name` / `parley runners remove` does
+that. Env `PARLEY_RUNNER_STALE_MS` is a **test override** of
+`runnerSettings.staleWindowMs` (wins when set); not a production setting.
+
+`deriveRunnerStatus` in core still has a `"stale"` branch for pure unit tests /
+callers that pass an explicit `staleMs` without sweeping; the daemon list/show
+path never returns `stale` because rows past the window are deleted first.
 
 `last_seen` advances on register, lease poll enter/exit, and every runner-
 authenticated task-traffic verb (heartbeat, events, branch, fail) so a runner
@@ -90,14 +103,18 @@ Idempotent upsert on every register: `registered_at` preserved, capabilities +
 (default 60s; `PARLEY_RUNNER_REFINGERPRINT_MS`) so installing a vendor CLI needs
 no runner restart.
 
-### Operator surface (minimal)
+### Operator surface (#314 / #320)
 
 - `GET /runners` → `{ runners: RunnerListEntry[] }` (name, status, vendor ids,
-  last_seen, registered_at, protocol/build versions).
-- `parley runners list [--json]` — daemon-served fleet table.
+  last_seen, registered_at, protocol/build versions). Lazy stale sweep first.
+- `GET /runners/:name` → full advertisement (`RunnerShowResponse`: models,
+  optional reachability, `last_contact_age_ms`, recent tasks). Client class.
+- `DELETE /runners/:name` → remove SQLite row **and** `runners.<name>` config
+  (loopback / config-admin only). Config write commits before row delete.
+  Re-registration then fails as unknown (401).
+- CLI: `parley runners list|show|remove [--json]`.
 
-Show/remove and Cove cards are deferred to the broader #309 surface; this ADR
-locks the wire and the minimal list.
+Cove cards remain deferred to the broader #309 surface.
 
 ## Consequences
 

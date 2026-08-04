@@ -448,7 +448,7 @@ describe("readConfig — runnerSettings.* (#320)", () => {
       JSON.stringify({ runnerSettings: { staleWindowMs: 0 } }),
     );
     expect(() => readConfig(file)).toThrow(
-      /runnerSettings\.staleWindowMs must be a positive integer/,
+      /runnerSettings\.staleWindowMs must be an integer/,
     );
   });
 
@@ -457,7 +457,17 @@ describe("readConfig — runnerSettings.* (#320)", () => {
       JSON.stringify({ runnerSettings: { staleWindowMs: 1.5 } }),
     );
     expect(() => readConfig(file)).toThrow(
-      /runnerSettings\.staleWindowMs must be a positive integer/,
+      /runnerSettings\.staleWindowMs must be an integer/,
+    );
+  });
+
+  it("rejects staleWindowMs below DEFAULT_RUNNER_PRESENCE_GRACE_MS (L7)", () => {
+    // 1ms would vanish just-registered runners and break registered_at preservation.
+    const file = writeConfig(
+      JSON.stringify({ runnerSettings: { staleWindowMs: 1 } }),
+    );
+    expect(() => readConfig(file)).toThrow(
+      /runnerSettings\.staleWindowMs must be an integer >= 50000/,
     );
   });
 });

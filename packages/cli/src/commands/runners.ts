@@ -73,7 +73,7 @@ function formatShow(detail: RunnerShowResponse): string {
     `last_seen:          ${detail.last_seen} (${formatLastSeen(detail.last_seen)})`,
   );
   lines.push(
-    `advertisement_age:  ${formatAgeMs(detail.advertisement_age_ms)}`,
+    `last_contact:       ${formatAgeMs(detail.last_contact_age_ms)}`,
   );
 
   lines.push("");
