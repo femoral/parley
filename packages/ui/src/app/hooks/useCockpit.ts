@@ -231,6 +231,11 @@ export interface CockpitView {
   executors: ExecutorCardView[];
   /** True until the first `GET /runners` poll settles. */
   executorsConnecting: boolean;
+  /**
+   * True when `GET /runners` is failing. Last-known fleet stays visible but
+   * the plate marks presence stale (#324 F2).
+   */
+  executorsStale: boolean;
   roster: RosterSelection;
   /** Wall-clock `HH:MM` for the day chip. */
   clock: string;
@@ -462,6 +467,9 @@ export function useCockpit(): CockpitView {
   // defeating RosterPanel's memo 86 400×/day for a boundary that moves twice
   // a minute at most.
   const freshnessNow = now - (now % FRESHNESS_TICK_MS);
+  // multiExecutor: registered runners present → stamp "on local" too; otherwise
+  // only non-local tasks name their host (#324 F4). Derived after runners poll.
+  const multiExecutorFleet = runners.runners.length > 0;
   const filteredRoster = useMemo(
     () =>
       projectRoster(
@@ -474,6 +482,7 @@ export function useCockpit(): CockpitView {
           now: freshnessNow,
         },
         liveRuns.runs,
+        { multiExecutor: multiExecutorFleet },
       ),
     [
       live.tasks,
@@ -483,6 +492,7 @@ export function useCockpit(): CockpitView {
       selectedTaskId,
       freshnessNow,
       liveRuns.runs,
+      multiExecutorFleet,
     ],
   );
 
@@ -602,7 +612,10 @@ export function useCockpit(): CockpitView {
 
   // Executor fleet (#324): daemon always present; runners from GET /runners;
   // in-flight counts from running tasks grouped by wire `runner`.
+  // Probe lifecycle is consumed end-to-end: connecting → sounding subtitle;
+  // offline → force runner cards stale so presence never lies (#324 F2).
   const executorsConnecting = runners.status === "connecting";
+  const executorsStale = runners.status === "offline";
   const executors = useMemo(
     () =>
       projectExecutors({
@@ -610,8 +623,11 @@ export function useCockpit(): CockpitView {
         tasks: live.tasks,
         daemonOnline: health.online,
         connecting: executorsConnecting,
+        runnersProbe: runners.status,
+        // No daemonVendors: cockpit has no project path for GET /info?project=
+        // and empty vendors are omitted from the daemon card (#324 F3).
       }),
-    [runners.runners, live.tasks, health.online, executorsConnecting],
+    [runners.runners, runners.status, live.tasks, health.online, executorsConnecting],
   );
 
   const daemonUptimeDays =
@@ -703,6 +719,7 @@ export function useCockpit(): CockpitView {
     snapshot,
     executors,
     executorsConnecting,
+    executorsStale,
     roster,
     clock: formatClock(new Date(now)),
     day,

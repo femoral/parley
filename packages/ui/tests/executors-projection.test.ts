@@ -45,12 +45,22 @@ describe("executorIdForRunner / formatExecutorLabel (#324)", () => {
     expect(executorIdForRunner(null)).toBe(LOCAL_EXECUTOR_ID);
     expect(executorIdForRunner(undefined)).toBe(LOCAL_EXECUTOR_ID);
     expect(executorIdForRunner("")).toBe(LOCAL_EXECUTOR_ID);
-    expect(formatExecutorLabel(null)).toBe("local");
   });
 
-  it("preserves runner names", () => {
+  it("hides local attribution when not multi-executor (#324 F4)", () => {
+    expect(formatExecutorLabel(null)).toBeNull();
+    expect(formatExecutorLabel(undefined)).toBeNull();
+    expect(formatExecutorLabel(null, { multiExecutor: false })).toBeNull();
+  });
+
+  it("names local when multi-executor (#324 F4)", () => {
+    expect(formatExecutorLabel(null, { multiExecutor: true })).toBe("local");
+  });
+
+  it("always names non-local runners (#324 F4)", () => {
     expect(executorIdForRunner("gpu")).toBe("gpu");
     expect(formatExecutorLabel("gpu.west")).toBe("gpu.west");
+    expect(formatExecutorLabel("gpu", { multiExecutor: false })).toBe("gpu");
   });
 });
 
@@ -146,16 +156,78 @@ describe("projectExecutors (#324)", () => {
     expect(executorStatusLabel("stale")).toBe("STALE");
     expect(executorStatusLabel("online")).toBe("ONLINE");
   });
+
+  /**
+   * Neuter-proof: if useCockpit stops passing runnersProbe / only checks
+   * connecting, this reds — last-known ONLINE must not survive a dead poll.
+   */
+  it("forces runner cards stale when runners probe is offline (#324 F2)", () => {
+    const cards = projectExecutors({
+      runners: [
+        runner({ name: "gpu", status: "online", vendors: ["fake"] }),
+        runner({ name: "cpu", status: "online", vendors: ["codex"] }),
+      ],
+      tasks: [
+        task({ id: "t1", state: "running", runner: "gpu" }),
+        task({ id: "t2", state: "running", runner: null }),
+      ],
+      daemonOnline: true,
+      runnersProbe: "offline",
+    });
+    // Daemon still follows health (probe is runners-only).
+    expect(cards[0]!.status).toBe("online");
+    expect(cards[0]!.inFlight).toBe(1);
+    // Last-known shape retained, presence forced stale — not ONLINE.
+    expect(cards[1]!.status).toBe("stale");
+    expect(cards[1]!.vendors).toEqual(["fake"]);
+    expect(cards[1]!.inFlight).toBe(1);
+    expect(cards[2]!.status).toBe("stale");
+    expect(cards.every((c) => c.kind === "runner" ? c.status === "stale" : true)).toBe(
+      true,
+    );
+    // Online count for subtitle math must not count forced-stale runners.
+    const onlineCount = cards.filter((e) => e.status === "online").length;
+    expect(onlineCount).toBe(1); // daemon only
+  });
+
+  it("does not force stale when runners probe is online", () => {
+    const cards = projectExecutors({
+      runners: [runner({ name: "gpu", status: "online" })],
+      tasks: [],
+      daemonOnline: true,
+      runnersProbe: "online",
+    });
+    expect(cards[1]!.status).toBe("online");
+  });
 });
 
-describe("roster task executor attribution (#324)", () => {
-  it("projects local for null runner and runner name when set", () => {
+describe("roster task executor attribution (#324 F4)", () => {
+  it("hides local attribution in a zero-runner (single-executor) fleet", () => {
     const { groups } = projectRoster([
       task({ id: "local-task", state: "running", runner: null }),
       task({ id: "remote-task", state: "running", runner: "gpu" }),
     ]);
     const running = groups.find((g) => g.state === "running");
     expect(running).toBeTruthy();
+    const byId = Object.fromEntries(running!.tasks.map((t) => [t.id, t.executor]));
+    // Local is noise when multiExecutor is off.
+    expect(byId["local-task"]).toBeNull();
+    // Non-local always names the host.
+    expect(byId["remote-task"]).toBe("gpu");
+  });
+
+  it("names local and runner when multiExecutor is true", () => {
+    const { groups } = projectRoster(
+      [
+        task({ id: "local-task", state: "running", runner: null }),
+        task({ id: "remote-task", state: "running", runner: "gpu" }),
+      ],
+      null,
+      null,
+      [],
+      { multiExecutor: true },
+    );
+    const running = groups.find((g) => g.state === "running");
     const byId = Object.fromEntries(running!.tasks.map((t) => [t.id, t.executor]));
     expect(byId["local-task"]).toBe("local");
     expect(byId["remote-task"]).toBe("gpu");

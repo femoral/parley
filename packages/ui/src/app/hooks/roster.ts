@@ -341,6 +341,7 @@ export function advanceFailedObservations(
 function toRosterTask(
   task: RosterTaskInput,
   freshness: FailedFreshness | null | undefined,
+  multiExecutor = false,
 ): RosterTask {
   const identity = toDisplayTask(task);
   const freshFailure = isFreshFailure(task.id, task.state, freshness);
@@ -363,8 +364,9 @@ function toRosterTask(
       iteration: task.iteration,
       slot: task.slot,
     }),
-    // Executor host name for task-card attribution (#324).
-    executor: formatExecutorLabel(task.runner),
+    // Executor host only when informative: non-local always, local only in a
+    // multi-executor fleet (#324 F4). Null → RosterPanel hides the line.
+    executor: formatExecutorLabel(task.runner, { multiExecutor }),
   };
 }
 
@@ -389,12 +391,26 @@ function toRosterTask(
  * that falls outside the cap is pinned onto the chip list so the active state
  * stays visible.
  */
+/**
+ * Optional fleet-aware flags for roster projection.
+ */
+export interface ProjectRosterOptions {
+  /**
+   * When true, local tasks also show executor attribution ("on local").
+   * When false (default), only non-local runners are named — zero-runner
+   * installs must not stamp every row with noise (#324 F4).
+   */
+  multiExecutor?: boolean;
+}
+
 export function projectRoster(
   tasks: Iterable<RosterTaskInput>,
   selectedSessionId: string | null = null,
   freshness: FailedFreshness | null = null,
   runs: Iterable<RosterRun> = [],
+  options?: ProjectRosterOptions,
 ): RosterProjection {
+  const multiExecutor = options?.multiExecutor === true;
   const all = [...tasks];
   const allRuns = [...runs];
   const sessionCounts = new Map<string, number>();
@@ -444,7 +460,7 @@ export function projectRoster(
   for (const task of visible) {
     totalTasks += 1;
     if (!byState.has(task.state)) byState.set(task.state, { tasks: [], runs: [] });
-    byState.get(task.state)!.tasks.push(toRosterTask(task, freshness));
+    byState.get(task.state)!.tasks.push(toRosterTask(task, freshness, multiExecutor));
     if (!isTerminalState(task.state)) activeTasks += 1;
   }
 

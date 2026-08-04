@@ -37,6 +37,7 @@ export function Cockpit() {
     snapshot,
     executors,
     executorsConnecting,
+    executorsStale,
     roster,
     clock,
     day,
@@ -179,7 +180,11 @@ export function Cockpit() {
 
           <aside id="pc-status-stack" className="pc-region--right" aria-label="Status stack" tabIndex={-1}>
             <HealthPanel health={health} />
-            <ExecutorsPanel executors={executors} connecting={executorsConnecting} />
+            <ExecutorsPanel
+              executors={executors}
+              connecting={executorsConnecting}
+              stale={executorsStale}
+            />
             <InboxPanel
               tasks={snapshot.inbox}
               onSelectTask={roster.selectInboxTask}

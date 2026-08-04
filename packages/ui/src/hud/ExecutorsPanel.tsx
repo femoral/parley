@@ -14,6 +14,12 @@ export interface ExecutorsPanelProps {
    * soundings" from a fleet with only the daemon card.
    */
   connecting?: boolean;
+  /**
+   * True when `GET /runners` is failing after (or without) a successful poll.
+   * Last-known cards stay visible but the plate marks presence as stale —
+   * never claims live ONLINE from a dead probe (#324 F2).
+   */
+  stale?: boolean;
 }
 
 function statusChipStyle(status: ExecutorCardView["status"]): CSSProperties {
@@ -33,8 +39,8 @@ function statusChipStyle(status: ExecutorCardView["status"]): CSSProperties {
 
 function ExecutorCard({ card }: { card: ExecutorCardView }) {
   const chipLabel = executorStatusLabel(card.status);
-  const vendors =
-    card.vendors.length > 0 ? card.vendors.join(", ") : "—";
+  const showVendors = card.vendors.length > 0;
+  const vendorsLabel = showVendors ? card.vendors.join(", ") : "";
   const inFlightLabel =
     card.inFlight === 1 ? "1 in flight" : `${card.inFlight} in flight`;
   const kindLabel = card.kind === "daemon" ? "daemon" : "runner";
@@ -60,7 +66,6 @@ function ExecutorCard({ card }: { card: ExecutorCardView }) {
             card.status === "connecting" ? " pc-exec-chip--connecting" : ""
           }`}
           style={statusChipStyle(card.status)}
-          role="status"
           aria-label={`${card.label} ${chipLabel.toLowerCase()}`}
         >
           <span
@@ -70,12 +75,15 @@ function ExecutorCard({ card }: { card: ExecutorCardView }) {
         </span>
       </header>
       <div className="pc-exec-card__body">
-        <span className="pc-exec-card__row">
-          <span className="pc-exec-card__k">Vendors</span>
-          <span className="pc-exec-card__v" title={vendors}>
-            {vendors}
+        {/* Vendors only when known — no permanent dead "—" on the daemon card (#324 F3). */}
+        {showVendors && (
+          <span className="pc-exec-card__row">
+            <span className="pc-exec-card__k">Vendors</span>
+            <span className="pc-exec-card__v" title={vendorsLabel}>
+              {vendorsLabel}
+            </span>
           </span>
-        </span>
+        )}
         <span className="pc-exec-card__row">
           <span className="pc-exec-card__k">In flight</span>
           <span
@@ -96,23 +104,57 @@ function ExecutorCard({ card }: { card: ExecutorCardView }) {
  * each registered runner — with live presence, vendor ids, and in-flight
  * counts. Matches HealthPanel density so the right rail stays scannable.
  */
-export function ExecutorsPanel({ executors, connecting = false }: ExecutorsPanelProps) {
+export function ExecutorsPanel({
+  executors,
+  connecting = false,
+  stale = false,
+}: ExecutorsPanelProps) {
   const onlineCount = executors.filter((e) => e.status === "online").length;
   const subtitle = connecting
     ? "sounding the fleet…"
-    : executors.length === 1
-      ? "daemon host only"
-      : `${onlineCount} online · ${executors.length} total`;
+    : stale
+      ? "presence may be stale — reconnecting…"
+      : executors.length === 1
+        ? "daemon host only"
+        : `${onlineCount} online · ${executors.length} total`;
+
+  // One live region for the whole plate (not per card) — screen readers get a
+  // single fleet summary when presence shifts (#324 F5).
+  const liveSummary = connecting
+    ? "Sounding the executor fleet"
+    : stale
+      ? `Executor presence may be stale. Last known: ${executors.length} executor${
+          executors.length === 1 ? "" : "s"
+        }.`
+      : executors.length === 1
+        ? "Daemon host only"
+        : `${onlineCount} of ${executors.length} executors online`;
 
   return (
-    <Plate padded={false} className="pc-executors">
+    <Plate
+      padded={false}
+      className={`pc-executors${stale ? " pc-executors--stale" : ""}`}
+    >
       <PlateHeader
         icon={<Mark mark={MARK_COMPASS} size={14} />}
         title="EXECUTORS"
         subtitle={subtitle}
         divider
       />
-      <div className="pc-plate__body pc-executors__body" data-testid="executors-list">
+      {/* Single polite live region for the fleet (not per card) — #324 F5. */}
+      <div
+        className="pc-visually-hidden"
+        role="status"
+        aria-live="polite"
+        data-testid="executors-live"
+      >
+        {liveSummary}
+      </div>
+      <div
+        className="pc-plate__body pc-executors__body"
+        data-testid="executors-list"
+        data-stale={stale ? "true" : undefined}
+      >
         {executors.length === 0 ? (
           <p className="pc-executors__empty">No executors reported.</p>
         ) : (

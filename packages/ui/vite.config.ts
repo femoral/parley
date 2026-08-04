@@ -175,9 +175,7 @@ function preloadCriticalFonts(): Plugin {
  *    the woff2 into `www/assets`. Nothing is ever fetched from a CDN at runtime.
  *  - `.woff` fallbacks are stripped at emit time (see {@link stripWoffFallback}).
  *  - Critical faces are preloaded into `index.html` (see {@link preloadCriticalFonts}).
- *  - `node:path` / `node:os` alias to tiny browser shims so incomplete tree-shaking
- *    of `@useparley/core` (e.g. vendor-home top-level path.join) does not crash
- *    the client. No new deps.
+ *  - Browser shims for `node:path` / `node:os` — see alias block below (#330).
  */
 export default defineConfig(() => {
   const proxy = daemonProxy();
@@ -189,6 +187,12 @@ export default defineConfig(() => {
     plugins: [react(), stripWoffFallback(), preloadCriticalFonts()],
     base: "/",
     resolve: {
+      // Work around: incomplete tree-shaking of `@useparley/core` lets Node
+      // builtins (`path`/`os`, e.g. top-level `join` in vendor-home) leak into
+      // the browser client bundle and crash production Cove at boot. These
+      // aliases redirect to tiny browser shims under `src/shims/`. Proper
+      // core-side fix tracked as GitHub issue #330 — do not remove until
+      // that lands; do not attempt the core fix from packages/ui.
       alias: isVitest
         ? []
         : [

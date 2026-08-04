@@ -52,10 +52,12 @@ export function useRunners(client: ParleyClient, pollMs = 5000): RunnersState {
         if (cancelled) return;
         setState({ status: "online", runners });
       } catch {
+        // Keep last-known runners; mark the probe offline so the panel can
+        // present presence as stale rather than echoing last ONLINE chips (#324 F2).
         if (!cancelled) {
           setState((prev) => ({
             ...prev,
-            status: prev.status === "connecting" ? "offline" : "offline",
+            status: "offline",
           }));
         }
       }

@@ -41,6 +41,7 @@ export type {
   ExecutorCardView,
   ExecutorTaskInput,
   ProjectExecutorsOptions,
+  RunnersProbeStatus,
 } from "./executors.js";
 export { useRunners, fetchRunnersList } from "./useRunners.js";
 export type { RunnersState } from "./useRunners.js";

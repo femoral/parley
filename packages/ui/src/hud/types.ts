@@ -52,8 +52,9 @@ export interface RosterTask {
    */
   runChip?: string | null;
   /**
-   * Executor attribution label (`local` for daemon-host execution, else the
-   * registered runner name). From wire `runner` via hooks (#324).
+   * Executor attribution label when informative: runner name always, or
+   * `local` only in a multi-executor fleet. Null/absent → hide the line
+   * (zero-runner installs must not stamp every row "on local") (#324 F4).
    */
   executor?: string | null;
 }

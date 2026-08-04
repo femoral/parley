@@ -122,6 +122,7 @@ function baseView(overrides: Partial<CockpitView> = {}): CockpitView {
       },
     ],
     executorsConnecting: false,
+    executorsStale: false,
     roster: {
       selectedSessionId: null,
       selectedTaskId: null,
