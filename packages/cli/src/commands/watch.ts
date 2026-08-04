@@ -1,4 +1,5 @@
 import {
+  formatErrorCategoryLabel,
   isActionableState,
   isTerminalState,
   type FollowEventResponse,
@@ -321,6 +322,12 @@ function report(ctx: CliContext, ev: InboxEventResponse, json: boolean): void {
     );
   }
   if (isActionableState(t.state) && t.state === "failed" && t.error !== null) {
-    ctx.stderr(`error: ${t.error}\n`);
+    // Distinguish claim-time git-auth from plain vendor failures (#317).
+    const cat = formatErrorCategoryLabel(t.error_category ?? null);
+    if (cat !== null) {
+      ctx.stderr(`error [${cat}]: ${t.error}\n`);
+    } else {
+      ctx.stderr(`error: ${t.error}\n`);
+    }
   }
 }

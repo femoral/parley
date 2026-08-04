@@ -6,7 +6,7 @@ import type {
   TaskEnvelope,
   TaskRow as WireTaskRow,
 } from "@useparley/core";
-import { isSyntacticUrl } from "@useparley/core";
+import { isSyntacticUrl, parseErrorCategory } from "@useparley/core";
 import type { QaTurnRow, TaskRow } from "./db.js";
 import { readEvalExpected } from "./context.js";
 
@@ -282,6 +282,7 @@ export function buildEnvelope(
     report: parseJsonColumn<Report>(task.report),
     report_schema: parseJsonColumn<JsonSchema>(task.report_schema) ?? DEFAULT_REPORT_SCHEMA,
     error: task.error,
+    error_category: parseErrorCategory(task.error_category ?? null),
     logs_dir: logsDir,
     question_id: task.question_id,
     question: task.question,

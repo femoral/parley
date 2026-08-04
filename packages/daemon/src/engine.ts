@@ -35,11 +35,13 @@ import {
   TASK_HEADER,
   validateAnswers,
   type ChildChannel,
+  type GitAuthFailCategoryWire,
   type HomePaths,
   type ParleyConfig,
   type ProfileConfig,
   type RunnerCapabilities,
   type RunnerLeaseSpec,
+  type TaskErrorCategory,
   type WorkflowDefinition,
   type WorkflowStepNode,
 } from "@useparley/core";
@@ -88,12 +90,15 @@ import {
   listQueuedTasks,
   listTasks,
   markRunnerCompleted,
+  markRunnerUnreachable,
   nextDeliverableId,
   nextQuestionId,
   nextTaskId,
+  parseUnreachableRepos,
   resolveRun,
   resolveTask,
   selectClaimablePendingTask,
+  unreachableRepoKeys,
   updateRunEval,
   updateSession,
   updateTask,
@@ -117,8 +122,10 @@ import {
 import {
   decideDispatch,
   formatCapabilityDiagnosis,
+  formatRepoExclusions,
   formatWaitingReason,
   matchExecutors,
+  partitionFleetForRepo,
   type ExecutorCapability,
 } from "./routing.js";
 import {
@@ -1458,14 +1465,21 @@ export class TaskEngine {
 
     const fleet = this.listExecutorCapabilities();
     const affinity = request.runner;
+    // Fail-once-then-avoid: exclude runners that already failed git-auth on
+    // this repo_key (#317). Match against the eligible pool only.
+    const { eligible, excluded } = partitionFleetForRepo(
+      fleet,
+      identityEarly.key,
+    );
     // Launch-template free-form vendors (#195) always run in-process when
     // unpinned: the template argv is the capability, not a PATH bin. Pinned
     // templates still need a capable runner advertisement.
     let decision = decideDispatch(
-      matchExecutors(fleet, resolved.vendor, affinity),
+      matchExecutors(eligible, resolved.vendor, affinity),
       fleet,
       resolved.vendor,
       affinity,
+      excluded,
     );
     if (
       decision.kind === "fail" &&
@@ -1476,7 +1490,7 @@ export class TaskEngine {
     }
     // --cwd is workspace-bound: never re-route to a remote executor (#315 F3).
     if (!request.useWorktree && (decision.kind === "runner" || decision.kind === "wait")) {
-      const localCapable = matchExecutors(fleet, resolved.vendor, null).capable.some(
+      const localCapable = matchExecutors(eligible, resolved.vendor, null).capable.some(
         (e) => e.isLocal,
       );
       if (localCapable || resolved.launchTemplate) {
@@ -3161,7 +3175,11 @@ export class TaskEngine {
     }
   }
 
-  private fail(taskId: string, error: string): void {
+  private fail(
+    taskId: string,
+    error: string,
+    extra?: { error_category?: string | null },
+  ): void {
     const task = getTask(this.db, taskId);
     if (!task || isTerminalState(task.state)) return;
     // An accepted report wins over any subsequent failure path (#72).
@@ -3177,6 +3195,7 @@ export class TaskEngine {
       cause: "fail",
       fields: {
         error,
+        error_category: extra?.error_category ?? null,
         completed_at: new Date().toISOString(),
         queued_at: null,
         queue_reason: null,
@@ -3296,11 +3315,13 @@ export class TaskEngine {
     const vendorIds = caps.vendors.map((v) => v.id);
     if (vendorIds.length === 0) return null;
 
-    // Online peers for warm ranking (exclude self; include other online runners).
+    // Online peers for warm ranking. Include each peer's unreachable map so
+    // excluded pairings do not hold the warm reservation (#317 MEDIUM-3).
     const onlinePeers: {
       name: string;
       vendorIds: string[];
       last_completed_at: string | null;
+      unreachableRepoKeys: string[];
     }[] = [];
     for (const peer of listRunners(this.db)) {
       if (!this.isRunnerOnline(peer.name, peer.last_seen)) continue;
@@ -3309,6 +3330,7 @@ export class TaskEngine {
         name: peer.name,
         vendorIds: peerCaps.vendors.map((v) => v.id),
         last_completed_at: peer.last_completed_at ?? null,
+        unreachableRepoKeys: unreachableRepoKeys(peer),
       });
     }
 
@@ -3316,6 +3338,8 @@ export class TaskEngine {
       executorName: runnerName,
       vendorIds,
       onlinePeers,
+      // Fail-once-then-avoid: skip repos this runner already failed on (#317).
+      unreachableRepoKeys: unreachableRepoKeys(row),
     });
     if (!pending) return null;
 
@@ -3491,14 +3515,48 @@ export class TaskEngine {
   /**
    * `POST /runner/tasks/:id/fail` — runner cannot execute (or child exited
    * without a report). An accepted report still wins (#72).
+   *
+   * When `category.kind === "git_auth"`, records executor×repo unreachability
+   * so routing skips the pairing until re-registration (#317).
+   *
+   * **Identity is daemon-owned**: wire `repo_key` / `runner` are ignored.
+   * Stored category always uses `task.repo_key` and the authenticated
+   * `runnerName`. Callers must already have validated `operation`/`code`.
    */
-  failRunnerTask(taskId: string, runnerName: string, error: string): TaskRow {
+  failRunnerTask(
+    taskId: string,
+    runnerName: string,
+    error: string,
+    category?: Pick<GitAuthFailCategoryWire, "kind" | "operation" | "code"> | null,
+  ): TaskRow {
     const task = getTask(this.db, taskId);
     if (!task) throw new DelegateError(`no such task: ${taskId}`);
     if (task.runner !== runnerName) {
       throw new DelegateError(`task ${taskId} is not leased to runner ${runnerName}`);
     }
-    this.fail(taskId, error);
+    let errorCategoryJson: string | null = null;
+    if (category !== null && category !== undefined && category.kind === "git_auth") {
+      // Daemon fills identity — never trust the wire for pairing keys.
+      const stored: TaskErrorCategory = {
+        kind: "git_auth",
+        operation: category.operation,
+        code: category.code,
+        repo_key: task.repo_key ?? null,
+        runner: runnerName,
+      };
+      errorCategoryJson = JSON.stringify(stored);
+      const repoKey = task.repo_key;
+      if (repoKey !== null && repoKey !== "") {
+        markRunnerUnreachable(this.db, runnerName, repoKey, {
+          code: category.code,
+          at: new Date().toISOString(),
+          operation: category.operation,
+        });
+        // Routing must see the new exclusion immediately (not after TTL).
+        this.invalidateFleetCache();
+      }
+    }
+    this.fail(taskId, error, { error_category: errorCategoryJson });
     return getTask(this.db, taskId)!;
   }
 
@@ -3808,8 +3866,9 @@ export class TaskEngine {
     const affinity =
       task.runner !== null && task.runner !== "" ? task.runner : null;
     const fleet = this.listExecutorCapabilities();
-    const match = matchExecutors(fleet, vendor, affinity);
-    const decision = decideDispatch(match, fleet, vendor, affinity);
+    const { eligible, excluded } = partitionFleetForRepo(fleet, task.repo_key);
+    const match = matchExecutors(eligible, vendor, affinity);
+    const decision = decideDispatch(match, fleet, vendor, affinity, excluded);
 
     if (decision.kind === "fail") {
       // Launch-template free-form vendors (#195) are always local-capable when
@@ -3859,12 +3918,13 @@ export class TaskEngine {
     const affinity =
       task.runner !== null && task.runner !== "" ? task.runner : null;
     const fleet = this.listExecutorCapabilities();
+    const { eligible, excluded } = partitionFleetForRepo(fleet, task.repo_key);
     // Exclude local so decideDispatch cannot return `local` for unpinned remote.
     const remoteOnly = affinity
-      ? fleet
-      : fleet.filter((e) => !e.isLocal);
+      ? eligible
+      : eligible.filter((e) => !e.isLocal);
     const match = matchExecutors(remoteOnly, vendor, affinity);
-    const decision = decideDispatch(match, fleet, vendor, affinity);
+    const decision = decideDispatch(match, fleet, vendor, affinity, excluded);
 
     if (decision.kind === "runner") {
       this.beginRemoteRoutingWait(task, {
@@ -3883,11 +3943,15 @@ export class TaskEngine {
     }
     // fail / local: stay in routing-wait until the durable deadline fails the
     // task with the capability diagnosis — never flip to in-process.
-    const waitReason =
-      task.queue_reason ??
-      (match.offlineCapable.length > 0
+    // Always recompute the reason so newly recorded exclusions appear on
+    // already-queued rows (#317 LOW-5) — do not freeze the first queue_reason.
+    const baseWait =
+      match.offlineCapable.length > 0
         ? formatWaitingReason(match.offlineCapable)
-        : `waiting for capable runner`);
+        : "waiting for capable runner";
+    const exclusionNote = formatRepoExclusions(excluded);
+    const waitReason =
+      exclusionNote === "" ? baseWait : `${baseWait}; ${exclusionNote}`;
     this.beginRemoteRoutingWait(task, {
       queueReason: waitReason,
       vendor,
@@ -4007,11 +4071,13 @@ export class TaskEngine {
 
   private failRoutingTimeout(task: TaskRow): void {
     const fleet = this.listExecutorCapabilities();
+    const { excluded } = partitionFleetForRepo(fleet, task.repo_key);
     const diagnosis = formatCapabilityDiagnosis({
       vendor: task.vendor ?? "",
       fleet,
       affinity: task.runner,
       reason: "timeout",
+      exclusions: excluded,
     });
     this.fail(task.id, diagnosis);
   }
@@ -4049,12 +4115,15 @@ export class TaskEngine {
       const caps = this.parseRunnerCapabilities(row.capabilities);
       const vendors = caps.vendors.map((v) => v.id);
       const online = this.isRunnerOnline(row.name, row.last_seen);
+      const unreachable = parseUnreachableRepos(row.unreachable_repos);
       out.push({
         name: row.name,
         vendors,
         online,
         isLocal: false,
         last_completed_at: row.last_completed_at ?? null,
+        unreachable_repos:
+          Object.keys(unreachable).length > 0 ? unreachable : undefined,
       });
     }
     this.fleetCache = { atMs: now, fleet: out };

@@ -14,6 +14,7 @@ import fs from "node:fs";
 import path from "node:path";
 import {
   stripFetchUrlCredentials,
+  type GitAuthFailureCode,
   type RunnerLeaseSpec,
 } from "@useparley/core";
 import { resolveRepoPath } from "./config.js";
@@ -36,15 +37,9 @@ export const MIRROR_TEMP_PREFIX = ".parley-clone-tmp-";
 /**
  * Diagnosis class for claim-time git failures. The `code` is a stable token
  * for operators / tests; `message` is the human-readable fail string.
+ * Codes match {@link GitAuthFailureCode} on the fail wire (#317).
  */
-export type ClaimGitFailureCode =
-  | "no_repo_source"
-  | "mirror_clone_failed"
-  | "mirror_fetch_failed"
-  | "base_sha_unresolvable"
-  | "push_denied"
-  | "push_preflight_failed"
-  | "override_missing";
+export type ClaimGitFailureCode = GitAuthFailureCode;
 
 export class ClaimGitError extends Error {
   readonly code: ClaimGitFailureCode;

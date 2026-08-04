@@ -31,6 +31,20 @@ re-derives a different side:
   falls back to local (even if the daemon advertises the vendor). Fix
   reattempts inherit the parent's placement.
 
+Decision order among the fleet (after placement is set / at re-dispatch):
+
+1. **Repo-reachability exclusion** (#317): drop any runner with a recorded
+   claim-time git failure for this task's `repo_key` (`runners.unreachable_repos`).
+   Excluded runners are named in no-match / wait diagnoses
+   (`gpu excluded: cannot reach host/path (push denied)`).
+2. **Hard pin** (`runner` set): only that executor among the eligible pool;
+   pin excluded or incapable → fail with diagnosis.
+3. **Warm clone** (future #318): prefer executors that already hold a mirror
+   for the repo key — not implemented yet.
+4. **Warm executor** (#315): among remaining online capable runners, prefer
+   most recent `last_completed_at`, then name ASC. Unpinned claim uses a
+   short reservation window for that preferred peer.
+
 Delegate-time decision that *sets* placement:
 
 1. **Workspace-bound → local**: run-owned steps, `--cwd` / `use_worktree:false`,
@@ -54,13 +68,36 @@ re-dispatch only.
 `selectClaimablePendingTask` replaces name-pinned claim:
 
 - `pending` + vendor advertised by the claimer + affinity null or equals claimer
+- **Fail-once-then-avoid** (#317): candidates whose `repo_key` is in the
+  claimer's `unreachable_repos` are skipped. Warm ranking also drops peers
+  that cannot reach the candidate's `repo_key`, so an excluded-but-warm
+  runner does not hold the reservation for a task it will never claim.
 - **Warm reservation** (#315): for unpinned tasks, within
   `WARM_CLAIM_RESERVATION_MS` (5s) of `created_at`, only the warm-preferred
-  online peer (most recent `last_completed_at`, then name ASC) may claim; after
-  the window any capable online claimer may take the task. If the preferred
-  peer is not online, any capable claimer may take it immediately.
+  *eligible* online peer (most recent `last_completed_at`, then name ASC) may
+  claim; after the window any capable online claimer may take the task. If the
+  preferred peer is not online (or is excluded), any capable claimer may take
+  it immediately.
 - On claim: set `runner` to the claimer; clear `queue_reason` and
   `routing_deadline_at`.
+
+### Git-auth memory and self-clear (#317)
+
+A claim-time git failure (`git_auth` category on the fail wire) fails that
+task and records `executor × repo_key` unreachability on the runner row
+(`runners.unreachable_repos` JSON map). Routing and claim skip the pairing
+until the runner **re-registers** — which clears the map. Re-registration
+happens on:
+
+- runner **restart** (cold start always calls `/runner/register`), and
+- **periodic re-fingerprint** (default every 60s via
+  `PARLEY_RUNNER_REFINGERPRINT_MS` / `DEFAULT_RUNNER_REFINGERPRINT_MS`), which
+  hits the same upsert path and restores eligibility without a process restart.
+
+The fail wire accepts only closed-set `operation` (`clone`|`fetch`|`push`) and
+`code` (the seven claim-time git codes); invalid enums are rejected with 400.
+Wire `repo_key` / `runner` are ignored — the daemon always uses the task row's
+`repo_key` and the authenticated runner name.
 
 ### Timeout durability
 
@@ -97,4 +134,7 @@ Pending (including routing waits) and concurrency-queued tasks survive.
 ## Related
 
 - ADR-0012 remote runners · ADR-0028 unified executor · ADR-0029 registration
+- ADR-0031 repo identity and managed mirrors (claim-time git codes)
 - `docs/agents/remote-runners.md`
+- Issues: [#315](https://github.com/femoral/parley/issues/315),
+  [#317](https://github.com/femoral/parley/issues/317)

@@ -36,6 +36,7 @@ function row(partial: Partial<TaskRow> & { id: string }): TaskRow {
     usage: null,
     report: null,
     error: null,
+    error_category: null,
     started_at: null,
     completed_at: "2026-01-01T00:00:00.000Z",
     question_id: null,

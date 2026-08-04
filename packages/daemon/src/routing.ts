@@ -1,11 +1,14 @@
 /**
- * Capability-matched routing helpers (#315 / #304).
+ * Capability-matched routing helpers (#315 / #304 / #317).
  *
  * Pure diagnosis and matching logic shared by delegate-time fail-fast and
  * claim-time selection. Executor inventory is assembled by the engine from
  * the runner registry + the daemon's own fingerprinted vendor list.
  */
-import { LOCAL_EXECUTOR_ID } from "@useparley/core";
+import {
+  formatGitAuthCode,
+  LOCAL_EXECUTOR_ID,
+} from "@useparley/core";
 
 /** One known executor and the vendor ids it advertises. */
 export interface ExecutorCapability {
@@ -19,6 +22,19 @@ export interface ExecutorCapability {
   isLocal: boolean;
   /** Warm ranking stamp; null until first completion. */
   last_completed_at: string | null;
+  /**
+   * Fail-once-then-avoid map (#317): repo_key → recorded claim-time git
+   * failure. Local executor leaves this empty/undefined.
+   */
+  unreachable_repos?: Readonly<Record<string, { code: string; at: string; operation?: string }>>;
+}
+
+/** One runner excluded for a task because of recorded repo unreachability (#317). */
+export interface RepoReachabilityExclusion {
+  name: string;
+  repo_key: string;
+  code: string;
+  operation?: string;
 }
 
 /** Outcome of matching a vendor (and optional hard affinity) against the fleet. */
@@ -45,6 +61,8 @@ export function advertisesVendor(
 /**
  * Partition the fleet into capable / online / offline for a vendor requirement.
  * When `affinity` is set, only that named executor is considered (pin).
+ * Does **not** apply repo-reachability exclusions — use
+ * {@link partitionFleetForRepo} first when a task has a `repo_key` (#317).
  */
 export function matchExecutors(
   fleet: readonly ExecutorCapability[],
@@ -62,6 +80,69 @@ export function matchExecutors(
 }
 
 /**
+ * True when this executor is recorded as unable to reach `repoKey` (#317).
+ * Local has no memory; missing/empty map is eligible.
+ */
+export function cannotReachRepo(
+  executor: ExecutorCapability,
+  repoKey: string | null | undefined,
+): boolean {
+  if (repoKey === null || repoKey === undefined || repoKey === "") return false;
+  const map = executor.unreachable_repos;
+  if (map === undefined) return false;
+  return Object.prototype.hasOwnProperty.call(map, repoKey);
+}
+
+/**
+ * Split the fleet for a task with `repoKey`: eligible executors vs those with
+ * recorded unreachability for that key (#317). No-origin tasks exclude none.
+ */
+export function partitionFleetForRepo(
+  fleet: readonly ExecutorCapability[],
+  repoKey: string | null | undefined,
+): {
+  eligible: ExecutorCapability[];
+  excluded: RepoReachabilityExclusion[];
+} {
+  if (repoKey === null || repoKey === undefined || repoKey === "") {
+    return { eligible: [...fleet], excluded: [] };
+  }
+  const eligible: ExecutorCapability[] = [];
+  const excluded: RepoReachabilityExclusion[] = [];
+  for (const e of fleet) {
+    if (cannotReachRepo(e, repoKey)) {
+      const entry = e.unreachable_repos?.[repoKey];
+      excluded.push({
+        name: e.name,
+        repo_key: repoKey,
+        code: entry?.code ?? "unreachable",
+        ...(entry?.operation !== undefined ? { operation: entry.operation } : {}),
+      });
+    } else {
+      eligible.push(e);
+    }
+  }
+  return { eligible, excluded };
+}
+
+/**
+ * Format one reachability exclusion for diagnosis / queue reasons:
+ * `gpu excluded: cannot reach github.com/org/repo (push denied)`.
+ */
+export function formatRepoExclusion(ex: RepoReachabilityExclusion): string {
+  const detail = formatGitAuthCode(ex.code);
+  return `${ex.name} excluded: cannot reach ${ex.repo_key} (${detail})`;
+}
+
+/** Join exclusion lines (empty → empty string). */
+export function formatRepoExclusions(
+  exclusions: readonly RepoReachabilityExclusion[],
+): string {
+  if (exclusions.length === 0) return "";
+  return exclusions.map(formatRepoExclusion).join("; ");
+}
+
+/**
  * Format one executor for a diagnosis line: `name=[v1, v2]` or `name=(none)`.
  */
 export function formatExecutorVendors(e: ExecutorCapability): string {
@@ -72,13 +153,17 @@ export function formatExecutorVendors(e: ExecutorCapability): string {
 
 /**
  * Diagnosis when no registered executor (daemon included) advertises the
- * vendor — or a hard pin names an incapable executor.
+ * vendor — or a hard pin names an incapable executor. When repo-reachability
+ * exclusions are present (#317), they are appended so operators see why a
+ * named runner was skipped.
  */
 export function formatCapabilityDiagnosis(opts: {
   vendor: string;
   fleet: readonly ExecutorCapability[];
   affinity?: string | null;
   reason?: "no_capable" | "pin_incapable" | "timeout";
+  /** Runners skipped because of recorded repo unreachability (#317). */
+  exclusions?: readonly RepoReachabilityExclusion[];
 }): string {
   const known =
     opts.fleet.length > 0
@@ -87,35 +172,50 @@ export function formatCapabilityDiagnosis(opts: {
   const affinity = opts.affinity !== null && opts.affinity !== undefined && opts.affinity !== ""
     ? opts.affinity
     : null;
+  const exclusionNote = formatRepoExclusions(opts.exclusions ?? []);
+  const withExclusions = (base: string): string =>
+    exclusionNote === "" ? base : `${base}; ${exclusionNote}`;
+
+  // Hard pin excluded for repo reachability (#317) — prefer over vendor diagnosis.
+  // Do not re-append the same exclusion via withExclusions (dedupe LOW-6).
+  if (affinity !== null && opts.exclusions !== undefined) {
+    const pinnedExclusion = opts.exclusions.find((e) => e.name === affinity);
+    if (pinnedExclusion !== undefined) {
+      return (
+        `runner "${affinity}" cannot reach ${pinnedExclusion.repo_key} ` +
+        `(${formatGitAuthCode(pinnedExclusion.code)}); known executors: ${known}`
+      );
+    }
+  }
 
   if (affinity !== null && (opts.reason === "pin_incapable" || opts.reason === undefined)) {
     const pinned = opts.fleet.find((e) => e.name === affinity);
     if (pinned === undefined) {
-      return (
+      return withExclusions(
         `runner "${affinity}" has no registered capabilities for vendor "${opts.vendor}"; ` +
-        `known executors: ${known}`
+          `known executors: ${known}`,
       );
     }
     if (!advertisesVendor(pinned.vendors, opts.vendor)) {
       const ads =
         pinned.vendors.length > 0 ? pinned.vendors.join(", ") : "(none)";
-      return (
+      return withExclusions(
         `runner "${affinity}" cannot run vendor "${opts.vendor}" ` +
-        `(advertises: ${ads}); known executors: ${known}`
+          `(advertises: ${ads}); known executors: ${known}`,
       );
     }
   }
 
   if (opts.reason === "timeout") {
-    return (
+    return withExclusions(
       `routing timed out waiting for a capable online executor for vendor "${opts.vendor}"; ` +
-      `known executors: ${known}`
+        `known executors: ${known}`,
     );
   }
 
-  return (
+  return withExclusions(
     `no capable executor for vendor "${opts.vendor}"; ` +
-    `known executors: ${known}`
+      `known executors: ${known}`,
   );
 }
 
@@ -169,12 +269,18 @@ export type DispatchDecision =
 /**
  * Decide how to hand off a task given the match against the current fleet.
  * Runners preferred over local when any capable runner is online.
+ *
+ * `fleet` is the full inventory for diagnosis "known executors" lines;
+ * `match` should already be computed against the **eligible** pool after
+ * repo-reachability filtering (#317). Pass `exclusions` so no-match
+ * diagnoses name skipped runners and why.
  */
 export function decideDispatch(
   match: RoutingMatch,
   fleet: readonly ExecutorCapability[],
   vendor: string,
   affinity: string | null,
+  exclusions: readonly RepoReachabilityExclusion[] = [],
 ): DispatchDecision {
   if (affinity !== null && affinity !== "") {
     if (match.capable.length === 0) {
@@ -185,6 +291,7 @@ export function decideDispatch(
           fleet,
           affinity,
           reason: "pin_incapable",
+          exclusions,
         }),
       };
     }
@@ -193,7 +300,10 @@ export function decideDispatch(
     }
     return {
       kind: "wait",
-      reason: formatWaitingReason(match.offlineCapable),
+      reason: appendExclusionNote(
+        formatWaitingReason(match.offlineCapable),
+        exclusions,
+      ),
       offlineCapable: match.offlineCapable,
     };
   }
@@ -205,6 +315,7 @@ export function decideDispatch(
         vendor,
         fleet,
         reason: "no_capable",
+        exclusions,
       }),
     };
   }
@@ -223,9 +334,21 @@ export function decideDispatch(
   // so this is runner-only capable + offline).
   return {
     kind: "wait",
-    reason: formatWaitingReason(match.offlineCapable),
+    reason: appendExclusionNote(
+      formatWaitingReason(match.offlineCapable),
+      exclusions,
+    ),
     offlineCapable: match.offlineCapable,
   };
+}
+
+/** Append exclusion notes to a wait/diagnosis base string when present. */
+function appendExclusionNote(
+  base: string,
+  exclusions: readonly RepoReachabilityExclusion[],
+): string {
+  const note = formatRepoExclusions(exclusions);
+  return note === "" ? base : `${base}; ${note}`;
 }
 
 export { LOCAL_EXECUTOR_ID };

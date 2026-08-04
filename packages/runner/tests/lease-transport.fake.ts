@@ -3,6 +3,7 @@ import type {
   RegisterRequest,
   RegisterResponse,
   RunnerLeaseSpec,
+  TaskErrorCategory,
 } from "@useparley/core";
 
 /** One recorded transport call. */
@@ -12,7 +13,12 @@ export type TransportCall =
   | { verb: "heartbeat"; taskId: string }
   | { verb: "events"; taskId: string; lines: string[] }
   | { verb: "branch"; taskId: string; branch: string }
-  | { verb: "fail"; taskId: string; error: string };
+  | {
+      verb: "fail";
+      taskId: string;
+      error: string;
+      category?: TaskErrorCategory | null;
+    };
 
 export interface FakeLeaseTransport extends LeaseTransport {
   readonly calls: TransportCall[];
@@ -81,8 +87,8 @@ export function createFakeLeaseTransport(
       calls.push({ verb: "branch", taskId, branch });
       if (failVerbs.has("branch")) throw new Error("fake branch failed");
     },
-    async fail(taskId: string, error: string) {
-      calls.push({ verb: "fail", taskId, error });
+    async fail(taskId: string, error: string, category?: TaskErrorCategory | null) {
+      calls.push({ verb: "fail", taskId, error, category: category ?? null });
       if (failVerbs.has("fail")) throw new Error("fake fail failed");
     },
   };

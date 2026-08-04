@@ -195,6 +195,18 @@ export interface RunnerRepoReachability {
  * Full advertisement for `parley runners show` (GET /runners/:name, #320).
  * Extends the list row with models, optional reachability, age, and recent tasks.
  */
+/**
+ * One fail-once-then-avoid entry from `runners.unreachable_repos` (#317).
+ * Daemon-recorded claim-time git failures until re-registration clears them.
+ */
+export interface RunnerUnreachableRepo {
+  repo_key: string;
+  code: string;
+  /** ISO-8601 when the failure was recorded. */
+  at: string;
+  operation?: string;
+}
+
 export interface RunnerShowResponse {
   name: string;
   status: RunnerStatus;
@@ -216,6 +228,11 @@ export interface RunnerShowResponse {
    * mirrors work lands).
    */
   repo_reachability: RunnerRepoReachability[] | null;
+  /**
+   * Daemon-recorded fail-once-then-avoid map (#317). Empty array when none;
+   * never null so operators always see the section.
+   */
+  unreachable_repos: RunnerUnreachableRepo[];
   recent_tasks: RunnerRecentTask[];
 }
 
@@ -239,9 +256,170 @@ export interface BranchBody {
   branch: string;
 }
 
+/**
+ * Claim-time git failure codes (ADR-0031 / #316 / #317). Stable tokens for
+ * operators, routing memory, and tests — not free-form message text.
+ */
+export type GitAuthFailureCode =
+  | "no_repo_source"
+  | "mirror_clone_failed"
+  | "mirror_fetch_failed"
+  | "base_sha_unresolvable"
+  | "push_denied"
+  | "push_preflight_failed"
+  | "override_missing";
+
+/** Closed set of {@link GitAuthFailureCode} values — use for wire validation. */
+export const GIT_AUTH_FAILURE_CODES: readonly GitAuthFailureCode[] = [
+  "no_repo_source",
+  "mirror_clone_failed",
+  "mirror_fetch_failed",
+  "base_sha_unresolvable",
+  "push_denied",
+  "push_preflight_failed",
+  "override_missing",
+] as const;
+
+/** Git operation that failed at claim time (#317). */
+export type GitAuthOperation = "clone" | "fetch" | "push";
+
+/** Closed set of {@link GitAuthOperation} values — use for wire validation. */
+export const GIT_AUTH_OPERATIONS: readonly GitAuthOperation[] = [
+  "clone",
+  "fetch",
+  "push",
+] as const;
+
+export function isGitAuthOperation(value: string): value is GitAuthOperation {
+  return (GIT_AUTH_OPERATIONS as readonly string[]).includes(value);
+}
+
+export function isGitAuthFailureCode(value: string): value is GitAuthFailureCode {
+  return (GIT_AUTH_FAILURE_CODES as readonly string[]).includes(value);
+}
+
+/**
+ * Structured task error category for claim-time git failures (#317).
+ * Distinguishes infrastructure (auth / reachability) from vendor crashes.
+ *
+ * **Daemon-owned identity**: `repo_key` and `runner` on the stored category
+ * always come from the task row and the authenticated runner name — never from
+ * the fail body (wire may still send them; the daemon ignores them).
+ */
+export interface GitAuthErrorCategory {
+  kind: "git_auth";
+  operation: GitAuthOperation;
+  code: GitAuthFailureCode;
+  /** Normalized repo key (`host/path`); null when the task had none. */
+  repo_key: string | null;
+  /** Executor name that failed (authenticated runner or `local`). */
+  runner: string;
+}
+
+/** Known structured fail categories persisted on tasks (#317). */
+export type TaskErrorCategory = GitAuthErrorCategory;
+
+/**
+ * Wire-only fail category body (#317). Only `kind`, `operation`, and `code`
+ * are validated and used. `repo_key` / `runner` are optional and **ignored**
+ * by the daemon (identity comes from the task row + bearer auth).
+ */
+export interface GitAuthFailCategoryWire {
+  kind: "git_auth";
+  operation: GitAuthOperation;
+  code: GitAuthFailureCode;
+  /** Ignored on the wire — daemon uses `task.repo_key`. */
+  repo_key?: string | null;
+  /** Ignored on the wire — daemon uses the authenticated runner name. */
+  runner?: string;
+}
+
+/** Map a claim-time git code to the operation bucket operators care about. */
+export function gitAuthOperationForCode(code: GitAuthFailureCode): GitAuthOperation {
+  switch (code) {
+    case "mirror_clone_failed":
+    case "no_repo_source":
+    case "override_missing":
+      return "clone";
+    case "mirror_fetch_failed":
+    case "base_sha_unresolvable":
+      return "fetch";
+    case "push_denied":
+    case "push_preflight_failed":
+      return "push";
+  }
+}
+
+/** Human-readable form of a snake_case git-auth code (`push_denied` → `push denied`). */
+export function formatGitAuthCode(code: string): string {
+  return code.replace(/_/g, " ");
+}
+
+/**
+ * Compact label for CLI status / inbox: `git-auth:push` or `git-auth`.
+ * Returns null when the value is not a git-auth category.
+ */
+export function formatErrorCategoryLabel(
+  category: TaskErrorCategory | null | undefined,
+): string | null {
+  if (category === null || category === undefined) return null;
+  if (category.kind === "git_auth") {
+    return `git-auth:${category.operation}`;
+  }
+  return null;
+}
+
+/** Parse a stored JSON `error_category` column / envelope field. */
+export function parseErrorCategory(raw: string | null | undefined): TaskErrorCategory | null {
+  if (raw === null || raw === undefined || raw === "") return null;
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (
+      typeof parsed === "object" &&
+      parsed !== null &&
+      (parsed as { kind?: unknown }).kind === "git_auth"
+    ) {
+      const c = parsed as Partial<GitAuthErrorCategory>;
+      if (
+        typeof c.operation === "string" &&
+        isGitAuthOperation(c.operation) &&
+        typeof c.code === "string" &&
+        isGitAuthFailureCode(c.code) &&
+        typeof c.runner === "string" &&
+        c.runner.length > 0 &&
+        c.runner.length <= 256
+      ) {
+        const repoKey =
+          c.repo_key === null || c.repo_key === undefined
+            ? null
+            : typeof c.repo_key === "string" && c.repo_key.length <= 512
+              ? c.repo_key
+              : null;
+        return {
+          kind: "git_auth",
+          operation: c.operation,
+          code: c.code,
+          repo_key: repoKey,
+          runner: c.runner,
+        };
+      }
+    }
+  } catch {
+    /* corrupt column → treat as absent */
+  }
+  return null;
+}
+
 /** POST /runner/tasks/:id/fail body. */
 export interface FailBody {
   error: string;
+  /**
+   * Optional structured category (#317). When present with `kind: "git_auth"`,
+   * the daemon validates `operation`/`code` enums (400 on invalid), ignores
+   * wire `repo_key`/`runner`, and records executor×repo unreachability from
+   * the task row + authenticated runner.
+   */
+  category?: GitAuthFailCategoryWire;
 }
 
 /** Client → daemon verb surface. HTTP is one implementation; tests use a fake. */
@@ -253,7 +431,16 @@ export interface LeaseTransport {
   heartbeat(taskId: string): Promise<void>;
   events(taskId: string, lines: string[]): Promise<void>;
   branch(taskId: string, branch: string): Promise<void>;
-  fail(taskId: string, error: string): Promise<void>;
+  /**
+   * Fail a leased task. Optional `category` carries structured git-auth detail
+   * so the daemon can persist routing memory (#317). Only `operation`/`code`
+   * are trusted; daemon fills `repo_key`/`runner` from the task + auth.
+   */
+  fail(
+    taskId: string,
+    error: string,
+    category?: GitAuthFailCategoryWire | TaskErrorCategory | null,
+  ): Promise<void>;
 }
 
 export interface LeaseHttpOptions {
@@ -272,7 +459,7 @@ export interface LeaseHttpOptions {
  *   POST /runner/tasks/:id/heartbeat {}
  *   POST /runner/tasks/:id/events    { lines: string[] }
  *   POST /runner/tasks/:id/branch    { branch: string }
- *   POST /runner/tasks/:id/fail      { error: string }
+ *   POST /runner/tasks/:id/fail      { error: string, category?: TaskErrorCategory }
  * Auth: Authorization: Bearer <token> on every call.
  *
  * List / show / remove surface (operator CLI, not runner-auth):
@@ -372,13 +559,31 @@ export function createLeaseHttpTransport(opts: LeaseHttpOptions): LeaseTransport
       await checkOk(res, "branch");
     },
 
-    async fail(taskId: string, error: string): Promise<void> {
+    async fail(
+      taskId: string,
+      error: string,
+      category?: GitAuthFailCategoryWire | TaskErrorCategory | null,
+    ): Promise<void> {
+      const body: FailBody =
+        category !== null && category !== undefined
+          ? {
+              error,
+              category: {
+                kind: "git_auth",
+                operation: category.operation,
+                code: category.code,
+                // Wire may include these; daemon ignores them (task + auth win).
+                repo_key: category.repo_key,
+                runner: category.runner,
+              },
+            }
+          : { error };
       const res = await doFetch(
         `${base}/runner/tasks/${encodeURIComponent(taskId)}/fail`,
         {
           method: "POST",
           headers: headers(),
-          body: JSON.stringify({ error } satisfies FailBody),
+          body: JSON.stringify(body),
         },
       );
       await checkOk(res, "fail");

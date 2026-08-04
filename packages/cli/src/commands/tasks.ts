@@ -8,7 +8,12 @@ import type {
   TaskRow,
   TasksResponse,
 } from "@useparley/core";
-import { filtersToSearchParams } from "@useparley/core";
+import {
+  filtersToSearchParams,
+  formatErrorCategoryLabel,
+  formatGitAuthCode,
+  parseErrorCategory,
+} from "@useparley/core";
 import { parseArgs } from "../args.js";
 import { type CliContext, printJson } from "../context.js";
 import { daemonGet, ensureDaemon } from "../client.js";
@@ -81,9 +86,10 @@ function cacheHit(cached: number | null | undefined): boolean | null {
 }
 
 /**
- * STATE column (#171 / #315): plain state, `queued #N (vendor:X)` when waiting
- * on a concurrency cap, or `pending (waiting for capable runner…)` when
- * capability routing is waiting on offline executors.
+ * STATE column (#171 / #315 / #317): plain state, `queued #N (vendor:X)` when
+ * waiting on a concurrency cap, `pending (waiting for capable runner…)` when
+ * capability routing is waiting, or `failed [git-auth:push]` when the fail is
+ * a structured claim-time git failure (distinct from vendor crashes).
  */
 function formatState(task: TaskEnvelope): string {
   if (task.state === "queued") {
@@ -100,6 +106,10 @@ function formatState(task: TaskEnvelope): string {
     task.queue_reason !== ""
   ) {
     return `pending (${task.queue_reason})`;
+  }
+  if (task.state === "failed") {
+    const label = formatErrorCategoryLabel(task.error_category ?? null);
+    if (label !== null) return `failed [${label}]`;
   }
   return task.state;
 }
@@ -176,6 +186,21 @@ function renderDetailSections(
   ctx.stdout(`  key:   ${t.repo_key ?? "-"}\n`);
   ctx.stdout(`  fetch: ${t.repo_fetch_url ?? "-"}\n`);
   ctx.stdout(`  path:  ${t.repo ?? "-"}\n`);
+
+  // Structured failure category (#317): git-auth vs plain vendor crash.
+  if (t.state === "failed") {
+    ctx.stdout("\nError\n");
+    const cat = t.error_category ?? null;
+    if (cat !== null && cat.kind === "git_auth") {
+      ctx.stdout(`  category: git-auth (${cat.operation})\n`);
+      ctx.stdout(`  code:     ${formatGitAuthCode(cat.code)}\n`);
+      ctx.stdout(`  runner:   ${cat.runner}\n`);
+      ctx.stdout(`  repo:     ${cat.repo_key ?? "-"}\n`);
+    } else {
+      ctx.stdout(`  category: vendor\n`);
+    }
+    if (t.error) ctx.stdout(`  message:  ${t.error}\n`);
+  }
 
   const e = detail.eval_detail;
   ctx.stdout("\nEval\n");
@@ -277,6 +302,10 @@ function presentStorageRow(row: TaskRow): Record<string, unknown> {
     report: parseJson(row.report),
     launch_command: parseJson(row.launch_command),
     eval_answers: parseJson(row.eval_answers ?? null),
+    // Decode structured fail category for --json scripts (#317).
+    error_category: parseErrorCategory(
+      typeof row.error_category === "string" ? row.error_category : null,
+    ),
     network: row.network === 1,
     resumed: row.resumed === 1,
     attempt: row.attempt ?? 1,

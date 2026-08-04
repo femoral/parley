@@ -10,10 +10,13 @@ import path from "node:path";
 import { homePaths } from "@useparley/core";
 import { createAdapterRegistrySync } from "../src/adapters/index.js";
 import {
+  getRunner,
   getTask,
   insertTask,
   listCapablePendingTasks,
+  markRunnerUnreachable,
   openDatabase,
+  parseUnreachableRepos,
   selectClaimablePendingTask,
   sweepInterruptedTasks,
   updateTask,
@@ -27,8 +30,10 @@ import { detectHarnesses } from "../src/fingerprint.js";
 import {
   decideDispatch,
   formatCapabilityDiagnosis,
+  formatRepoExclusion,
   formatWaitingReason,
   matchExecutors,
+  partitionFleetForRepo,
   type ExecutorCapability,
 } from "../src/routing.js";
 import { startServer, type DaemonServer } from "../src/server.js";
@@ -1014,5 +1019,388 @@ describe("detectHarnesses env bin overrides (F9)", () => {
       },
     );
     expect(found).toContain("openhands");
+  });
+});
+
+describe("git-auth fail-once-then-avoid (#317)", () => {
+  it("partitionFleetForRepo excludes runners with recorded unreachability", () => {
+    const fleet: ExecutorCapability[] = [
+      localFake,
+      {
+        ...gpuFakeOnline,
+        unreachable_repos: {
+          "github.com/org/repo": { code: "push_denied", at: "2026-01-01T00:00:00.000Z" },
+        },
+      },
+      cpuCodexOnline,
+    ];
+    const { eligible, excluded } = partitionFleetForRepo(fleet, "github.com/org/repo");
+    expect(eligible.map((e) => e.name).sort()).toEqual(["cpu", "local"]);
+    expect(excluded).toEqual([
+      {
+        name: "gpu",
+        repo_key: "github.com/org/repo",
+        code: "push_denied",
+      },
+    ]);
+    // No-origin tasks exclude nobody.
+    expect(partitionFleetForRepo(fleet, null).excluded).toEqual([]);
+  });
+
+  it("formatRepoExclusion names runner, repo, and human code", () => {
+    expect(
+      formatRepoExclusion({
+        name: "gpu",
+        repo_key: "github.com/org/repo",
+        code: "push_denied",
+      }),
+    ).toBe("gpu excluded: cannot reach github.com/org/repo (push denied)");
+  });
+
+  it("no-match diagnosis appends exclusion notes", () => {
+    const fleet = [localFake, gpuFakeOnline];
+    const exclusions = [
+      {
+        name: "gpu",
+        repo_key: "github.com/org/repo",
+        code: "push_denied" as const,
+      },
+    ];
+    // After excluding gpu, only local remains — but for a remote-only fail:
+    const msg = formatCapabilityDiagnosis({
+      vendor: "fake",
+      fleet,
+      reason: "no_capable",
+      exclusions,
+    });
+    expect(msg).toMatch(/gpu excluded: cannot reach github.com\/org\/repo \(push denied\)/);
+  });
+
+  it("decideDispatch fails pin when pinned runner is repo-excluded", () => {
+    const fleet: ExecutorCapability[] = [
+      {
+        ...gpuFakeOnline,
+        unreachable_repos: {
+          "github.com/org/repo": { code: "push_denied", at: "t" },
+        },
+      },
+    ];
+    const { eligible, excluded } = partitionFleetForRepo(fleet, "github.com/org/repo");
+    const match = matchExecutors(eligible, "fake", "gpu");
+    const d = decideDispatch(match, fleet, "fake", "gpu", excluded);
+    expect(d.kind).toBe("fail");
+    if (d.kind === "fail") {
+      expect(d.diagnosis).toMatch(/runner "gpu" cannot reach github.com\/org\/repo/);
+      expect(d.diagnosis).toMatch(/push denied/);
+      // LOW-6: exclusion stated once, not duplicated by withExclusions.
+      const hits = d.diagnosis.match(/cannot reach github\.com\/org\/repo/g) ?? [];
+      expect(hits.length).toBe(1);
+      expect(d.diagnosis).not.toMatch(/gpu excluded:/);
+    }
+  });
+
+  it("claim SELECT skips tasks whose repo_key is unreachable for the claimer", () => {
+    const db = openDb();
+    seedPending(db, { id: "t1", vendor: "fake", runner: null });
+    seedPending(db, { id: "t2", vendor: "fake", runner: null });
+    // t1 is for github.com/org/repo (seed default); mark it unreachable.
+    const blocked = listCapablePendingTasks(db, {
+      executorName: "gpu",
+      vendorIds: ["fake"],
+      unreachableRepoKeys: ["github.com/org/repo"],
+    });
+    expect(blocked).toEqual([]);
+
+    const open = listCapablePendingTasks(db, {
+      executorName: "gpu",
+      vendorIds: ["fake"],
+      unreachableRepoKeys: ["github.com/other"],
+    });
+    expect(open.map((t) => t.id)).toEqual(["t1", "t2"]);
+
+    const claim = selectClaimablePendingTask(db, {
+      executorName: "gpu",
+      vendorIds: ["fake"],
+      unreachableRepoKeys: ["github.com/org/repo"],
+      onlinePeers: [{ name: "gpu", vendorIds: ["fake"], last_completed_at: null }],
+    });
+    expect(claim).toBeUndefined();
+  });
+
+  it("markRunnerUnreachable + upsertRunner clear restores eligibility", () => {
+    const db = openDb();
+    upsertRunner(db, {
+      name: "gpu",
+      capabilities: JSON.stringify({ vendors: [{ id: "fake", models: [] }] }),
+      protocol_version: 1,
+      build_version: "t",
+    });
+    markRunnerUnreachable(db, "gpu", "github.com/org/repo", {
+      code: "push_denied",
+      at: new Date().toISOString(),
+      operation: "push",
+    });
+    let row = getRunner(db, "gpu")!;
+    expect(parseUnreachableRepos(row.unreachable_repos)["github.com/org/repo"]?.code).toBe(
+      "push_denied",
+    );
+
+    // Re-register clears the map.
+    upsertRunner(db, {
+      name: "gpu",
+      capabilities: JSON.stringify({ vendors: [{ id: "fake", models: [] }] }),
+      protocol_version: 1,
+      build_version: "t2",
+    });
+    row = getRunner(db, "gpu")!;
+    expect(row.unreachable_repos).toBeNull();
+    expect(parseUnreachableRepos(row.unreachable_repos)).toEqual({});
+  });
+
+  it("failRunnerTask with git_auth category records memory and error_category", async () => {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), "parley-git-auth-"));
+    homes.push(home);
+    const db = openDatabase(homePaths(home));
+    upsertRunner(db, {
+      name: "gpu",
+      capabilities: JSON.stringify({ vendors: [{ id: "fake", models: [] }] }),
+      protocol_version: 1,
+      build_version: "t",
+    });
+    const task = insertTask(db, {
+      id: "t-fail",
+      name: null,
+      vendor: "fake",
+      model: null,
+      effort: null,
+      profile: null,
+      runner: "gpu",
+      repo: "/repo",
+      repo_key: "github.com/org/repo",
+      repo_fetch_url: "https://github.com/org/repo.git",
+      cwd: "/repo",
+      prompt: "x",
+      orchestrator_session_id: "s",
+      worktree: null,
+      branch: "parley/t-fail",
+      base_sha: "abc",
+      sandbox: "workspace",
+      network: true,
+      answer_timeout_ms: null,
+      report_schema: null,
+      size: null,
+      difficulty: null,
+      type: "other",
+      placement: "remote",
+    });
+    writeTaskState(db, task.id, "running", {
+      started_at: new Date().toISOString(),
+    });
+
+    const engine = new TaskEngine(
+      db,
+      homePaths(home),
+      createAdapterRegistrySync(process.env),
+    );
+    // Wire only needs kind/operation/code — engine fills identity.
+    engine.failRunnerTask("t-fail", "gpu", "push denied at claim time (branch x): DENIED", {
+      kind: "git_auth",
+      operation: "push",
+      code: "push_denied",
+    });
+
+    const failed = getTask(db, "t-fail")!;
+    expect(failed.state).toBe("failed");
+    expect(failed.error).toMatch(/push denied/);
+    expect(failed.error_category).toMatch(/"kind":"git_auth"/);
+    expect(failed.error_category).toMatch(/push_denied/);
+    // Daemon-owned identity on the stored category.
+    const cat = JSON.parse(failed.error_category!) as {
+      repo_key: string;
+      runner: string;
+    };
+    expect(cat.repo_key).toBe("github.com/org/repo");
+    expect(cat.runner).toBe("gpu");
+
+    const runner = getRunner(db, "gpu")!;
+    const map = parseUnreachableRepos(runner.unreachable_repos);
+    expect(map["github.com/org/repo"]?.code).toBe("push_denied");
+    expect(map["github.com/org/repo"]?.operation).toBe("push");
+
+    // Second claim for same repo is skipped.
+    seedPending(db, { id: "t-next", vendor: "fake", runner: null });
+    const claim = selectClaimablePendingTask(db, {
+      executorName: "gpu",
+      vendorIds: ["fake"],
+      unreachableRepoKeys: Object.keys(map),
+      onlinePeers: [{ name: "gpu", vendorIds: ["fake"], last_completed_at: null }],
+    });
+    expect(claim).toBeUndefined();
+  });
+
+  it("failRunnerTask ignores spoofed wire repo_key / runner (daemon owns identity)", () => {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), "parley-git-auth-spoof-"));
+    homes.push(home);
+    const db = openDatabase(homePaths(home));
+    upsertRunner(db, {
+      name: "gpu",
+      capabilities: JSON.stringify({ vendors: [{ id: "fake", models: [] }] }),
+      protocol_version: 1,
+      build_version: "t",
+    });
+    insertTask(db, {
+      id: "t-spoof",
+      name: null,
+      vendor: "fake",
+      model: null,
+      effort: null,
+      profile: null,
+      runner: "gpu",
+      repo: "/repo",
+      repo_key: "github.com/real/repo",
+      repo_fetch_url: "https://github.com/real/repo.git",
+      cwd: "/repo",
+      prompt: "x",
+      orchestrator_session_id: "s",
+      worktree: null,
+      branch: null,
+      base_sha: "abc",
+      sandbox: "workspace",
+      network: true,
+      answer_timeout_ms: null,
+      report_schema: null,
+      size: null,
+      difficulty: null,
+      type: "other",
+      placement: "remote",
+    });
+    writeTaskState(db, "t-spoof", "running", {
+      started_at: new Date().toISOString(),
+    });
+
+    const engine = new TaskEngine(
+      db,
+      homePaths(home),
+      createAdapterRegistrySync(process.env),
+    );
+    // Engine API only accepts kind/operation/code — identity is daemon-owned.
+    engine.failRunnerTask("t-spoof", "gpu", "denied", {
+      kind: "git_auth",
+      operation: "push",
+      code: "push_denied",
+    });
+
+    const failed = getTask(db, "t-spoof")!;
+    const cat = JSON.parse(failed.error_category!) as {
+      repo_key: string;
+      runner: string;
+    };
+    expect(cat.repo_key).toBe("github.com/real/repo");
+    expect(cat.runner).toBe("gpu");
+    const map = parseUnreachableRepos(getRunner(db, "gpu")!.unreachable_repos);
+    expect(map["github.com/real/repo"]?.code).toBe("push_denied");
+    expect(map["evil.com/other/repo"]).toBeUndefined();
+  });
+
+  it("excluded warm peer does not hold warm reservation (cpu claims immediately)", () => {
+    const db = openDb();
+    // Unpinned task for github.com/org/repo (seed default).
+    seedPending(db, {
+      id: "t-warm",
+      vendor: "fake",
+      runner: null,
+      created_at: new Date().toISOString(),
+    });
+    // gpu is warmer (recent completion) but excluded for this repo.
+    // cpu is colder / never completed. Without exclusion filtering, gpu would
+    // hold the 5s reservation and cpu could not claim immediately.
+    const claim = selectClaimablePendingTask(db, {
+      executorName: "cpu",
+      vendorIds: ["fake"],
+      nowMs: Date.now(), // well within reservation window
+      reservationMs: 5_000,
+      onlinePeers: [
+        {
+          name: "gpu",
+          vendorIds: ["fake"],
+          last_completed_at: new Date().toISOString(),
+          unreachableRepoKeys: ["github.com/org/repo"],
+        },
+        {
+          name: "cpu",
+          vendorIds: ["fake"],
+          last_completed_at: null,
+          unreachableRepoKeys: [],
+        },
+      ],
+    });
+    expect(claim?.id).toBe("t-warm");
+  });
+
+  it("queue_reason is refreshed when exclusions change on re-dispatch", () => {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), "parley-qreason-"));
+    homes.push(home);
+    writeConfig(home, {
+      runners: { gpu: { token: "secret-gpu" }, cpu: { token: "secret-cpu" } },
+    });
+    process.env.PARLEY_FAKE_VENDOR_BIN = ""; // local cannot run fake
+    process.env.PARLEY_ROUTING_QUEUE_TIMEOUT_MS = "60000";
+    const db = openDatabase(homePaths(home));
+    // Only offline capable → wait with base reason.
+    upsertRunner(db, {
+      name: "gpu",
+      capabilities: JSON.stringify({ vendors: [{ id: "fake", models: [] }] }),
+      protocol_version: 1,
+      build_version: "t",
+    });
+    markRunnerUnreachable(db, "gpu", "github.com/org/r", {
+      code: "push_denied",
+      at: new Date().toISOString(),
+      operation: "push",
+    });
+    const row = insertTask(db, {
+      id: "t-q",
+      name: null,
+      vendor: "fake",
+      model: null,
+      effort: null,
+      profile: null,
+      runner: null,
+      repo: home,
+      repo_key: "github.com/org/r",
+      repo_fetch_url: "https://github.com/org/r.git",
+      cwd: home,
+      prompt: "x",
+      orchestrator_session_id: "s",
+      worktree: null,
+      branch: null,
+      base_sha: "abc",
+      sandbox: "workspace",
+      network: true,
+      answer_timeout_ms: null,
+      report_schema: null,
+      size: null,
+      difficulty: null,
+      type: "other",
+      placement: "remote",
+    });
+    // Seed a stale queue_reason without exclusion notes.
+    updateTask(db, row.id, {
+      queue_reason: "waiting for capable runner: gpu (offline)",
+      routing_deadline_at: new Date(Date.now() + 60_000).toISOString(),
+    });
+
+    const engine = new TaskEngine(
+      db,
+      homePaths(home),
+      createAdapterRegistrySync(process.env),
+    );
+    engine.setRunnerOnlineProbe(() => false);
+    engine.redispatchRoutingWaits();
+
+    const after = getTask(db, "t-q")!;
+    expect(after.queue_reason ?? "").toMatch(/excluded|cannot reach|push denied/);
+    delete process.env.PARLEY_ROUTING_QUEUE_TIMEOUT_MS;
+    delete process.env.PARLEY_FAKE_VENDOR_BIN;
   });
 });

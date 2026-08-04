@@ -6,6 +6,7 @@
  * UIs consume them through the typed client and SSE helper.
  */
 import type { Posture } from "./adapter.js";
+import type { TaskErrorCategory } from "./lease.js";
 
 /** A JSON Schema — an object of keywords, or a boolean schema. */
 export type JsonSchema = Record<string, unknown> | boolean;
@@ -98,6 +99,12 @@ export interface TaskEnvelope {
    */
   report_schema: JsonSchema;
   error: string | null;
+  /**
+   * Structured failure category when present (#317). Distinguishes claim-time
+   * git-auth failures (`kind: "git_auth"`) from plain vendor crashes (null).
+   * Optional so older clients remain assignable.
+   */
+  error_category?: TaskErrorCategory | null;
   /** Directory holding the task's captured vendor output — the diagnostics reference. */
   logs_dir: string | null;
   /** The outstanding question id while `awaiting_answer` (else null). */
@@ -205,6 +212,11 @@ export interface TaskRow {
   /** JSON string of the validated report body. */
   report: string | null;
   error: string | null;
+  /**
+   * JSON string of structured failure category (#317), or null when unset /
+   * vendor crash. Optional on the wire so older fixtures remain assignable.
+   */
+  error_category?: string | null;
   started_at: string | null;
   completed_at: string | null;
   question_id: string | null;
