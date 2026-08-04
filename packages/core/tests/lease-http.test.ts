@@ -261,6 +261,7 @@ describe("createLeaseHttpTransport", () => {
     });
 
     await transport.heartbeat("task/1");
+    // Wire phase may only claim worktree_created (#319 F3); client type enforces it.
     await transport.heartbeat("task/1", { phase: "worktree_created" });
     await transport.events("task/1", ["line-a", "line-b"]);
     await transport.branch("task/1", "parley/t1");

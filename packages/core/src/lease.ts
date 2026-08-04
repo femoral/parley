@@ -231,14 +231,20 @@ export interface RunnerRemoveResponse {
 
 /**
  * Highest phase a remote runner has reached on a leased task (#319 / #311).
- * Daemon derives most phases from observed traffic; `worktree_created` is
- * reported by the runner via the heartbeat body (invisible otherwise).
+ * Daemon derives most phases from observed traffic; only
+ * {@link RunnerWirePhase} may be claimed on the heartbeat wire.
  */
 export type RunnerTaskPhase =
   | "leased"
   | "worktree_created"
   | "events_streamed"
   | "branch_pushed";
+
+/**
+ * Phase values the runner may post on heartbeat (#319 F3).
+ * `leased` / `events_streamed` / `branch_pushed` are daemon-derived only.
+ */
+export type RunnerWirePhase = "worktree_created";
 
 /** Ordered ranks so phase only advances, never regresses (#319). */
 export const RUNNER_TASK_PHASE_RANK: Record<RunnerTaskPhase, number> = {
@@ -258,13 +264,18 @@ export function isRunnerTaskPhase(value: unknown): value is RunnerTaskPhase {
   );
 }
 
-/** POST /runner/tasks/:id/heartbeat body (#319: optional phase advance). */
+/** True when `value` is a runner-claimable heartbeat phase (#319 F3). */
+export function isRunnerWirePhase(value: unknown): value is RunnerWirePhase {
+  return value === "worktree_created";
+}
+
+/** POST /runner/tasks/:id/heartbeat body (#319: optional worktree phase only). */
 export interface HeartbeatBody {
   /**
-   * Optional phase the runner has reached. Daemon keeps the highest phase
-   * observed; unknown values are ignored.
+   * Optional wire phase. Only `worktree_created` is accepted; daemon-derived
+   * phases must not be claimed by the runner (400).
    */
-  phase?: RunnerTaskPhase;
+  phase?: RunnerWirePhase;
 }
 
 /** POST /runner/tasks/:id/events body. */
@@ -308,7 +319,7 @@ export interface LeaseHttpOptions {
  * Body shapes:
  *   POST /runner/register           RegisterRequest → 200 RegisterResponse
  *   POST /runner/lease              { runner } → 200 RunnerLeaseSpec | 204
- *   POST /runner/tasks/:id/heartbeat { phase? }  (#319 phase optional)
+ *   POST /runner/tasks/:id/heartbeat { phase?: "worktree_created" }  (#319)
  *   POST /runner/tasks/:id/events    { lines: string[] }
  *   POST /runner/tasks/:id/branch    { branch: string }
  *   POST /runner/tasks/:id/fail      { error: string }

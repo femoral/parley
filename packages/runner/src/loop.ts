@@ -14,7 +14,7 @@ import {
   type LeaseTransport,
   type RunnerCapabilities,
   type RunnerLeaseSpec,
-  type RunnerTaskPhase,
+  type RunnerWirePhase,
   type SpawnPlan,
   type TaskSpec,
   type VendorAdapter,
@@ -324,16 +324,19 @@ export class RunnerLoop {
     this.log(`leased ${taskId} vendor=${lease.vendor}`);
     this.inFlight = { taskId, child: null, proxy: null };
 
-    // Highest phase reached for heartbeat payloads (#319). Daemon derives
-    // events_streamed / branch_pushed from traffic; worktree_created needs a
-    // runner-side hint because the worktree never lands on the task row.
-    let phase: RunnerTaskPhase = "leased";
+    // Wire phase for heartbeat payloads (#319 F3): only worktree_created is
+    // claimable; other phases are daemon-derived. Heartbeats omit phase until
+    // the worktree exists, then always send worktree_created (monotonic on
+    // the daemon; never regresses higher phases).
+    let wirePhase: RunnerWirePhase | undefined;
     const heartbeat = setInterval(() => {
-      void this.transport.heartbeat(taskId, { phase }).catch((err: unknown) => {
-        this.log(
-          `heartbeat error for ${taskId}: ${err instanceof Error ? err.message : String(err)}`,
-        );
-      });
+      void this.transport
+        .heartbeat(taskId, wirePhase !== undefined ? { phase: wirePhase } : {})
+        .catch((err: unknown) => {
+          this.log(
+            `heartbeat error for ${taskId}: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        });
     }, runnerHeartbeatIntervalMs());
     heartbeat.unref();
 
@@ -415,9 +418,9 @@ export class RunnerLoop {
       worktreePath = info.path;
       branch = info.branch;
       // Signal worktree phase so a lost-runner failure can name it (#319).
-      phase = "worktree_created";
+      wirePhase = "worktree_created";
       try {
-        await this.transport.heartbeat(taskId, { phase });
+        await this.transport.heartbeat(taskId, { phase: wirePhase });
       } catch (err) {
         this.log(
           `heartbeat (worktree_created) error for ${taskId}: ${
