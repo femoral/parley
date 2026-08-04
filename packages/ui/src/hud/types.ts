@@ -51,6 +51,12 @@ export interface RosterTask {
    * plain tasks (#254).
    */
   runChip?: string | null;
+  /**
+   * Executor attribution label when informative: runner name always, or
+   * `local` only in a multi-executor fleet. Null/absent → hide the line
+   * (zero-runner installs must not stamp every row "on local") (#324 F4).
+   */
+  executor?: string | null;
 }
 
 /**

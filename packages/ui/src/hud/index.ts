@@ -10,6 +10,8 @@ export { ChartKey } from "./ChartKey.js";
 export { DayChip } from "./DayChip.js";
 export type { DayChipProps } from "./DayChip.js";
 export { HealthPanel } from "./HealthPanel.js";
+export { ExecutorsPanel } from "./ExecutorsPanel.js";
+export type { ExecutorsPanelProps } from "./ExecutorsPanel.js";
 export { InboxCard } from "./InboxCard.js";
 export type { InboxCardProps } from "./InboxCard.js";
 export { InboxPanel } from "./InboxPanel.js";

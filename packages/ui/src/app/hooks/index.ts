@@ -29,6 +29,22 @@ export {
 export type { CockpitKeysOptions, RosterSearchHandle } from "./useCockpitKeys.js";
 export { useHealth } from "./useHealth.js";
 export type { HealthState } from "./useHealth.js";
+export {
+  projectExecutors,
+  countInFlightByExecutor,
+  executorIdForRunner,
+  formatExecutorLabel,
+  executorStatusLabel,
+  LOCAL_EXECUTOR_ID,
+} from "./executors.js";
+export type {
+  ExecutorCardView,
+  ExecutorTaskInput,
+  ProjectExecutorsOptions,
+  RunnersProbeStatus,
+} from "./executors.js";
+export { useRunners, fetchRunnersList } from "./useRunners.js";
+export type { RunnersState } from "./useRunners.js";
 export { useLogTail } from "./useLogTail.js";
 export { useMetrics } from "./useMetrics.js";
 export type { MetricsState, MetricsStatus, UseMetricsOptions } from "./useMetrics.js";

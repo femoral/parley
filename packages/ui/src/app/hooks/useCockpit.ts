@@ -11,6 +11,10 @@ import type {
 } from "../../hud/types.js";
 import type { InspectorTabKey } from "../../hud/Inspector/index.js";
 import { formatClock, formatUptime } from "./format.js";
+import {
+  projectExecutors,
+  type ExecutorCardView,
+} from "./executors.js";
 import { useHealth, type HealthStatus } from "./useHealth.js";
 import { projectInspector } from "./inspector.js";
 import { metricsRefreshKey, projectSoundings } from "./metrics.js";
@@ -26,6 +30,7 @@ import { useEvalFilters } from "./useEvalFilters.js";
 import { useLogTail } from "./useLogTail.js";
 import { useMetrics } from "./useMetrics.js";
 import { useInspectorRun, useRuns } from "./useRuns.js";
+import { useRunners } from "./useRunners.js";
 import { useSettings, type SettingsView } from "./useSettings.js";
 import { useSnapshot, type SnapshotView } from "./useSnapshot.js";
 import { useTaskDetail } from "./useTaskDetail.js";
@@ -219,6 +224,18 @@ export interface CockpitView {
    * recent-N subset (#88); older sessions come from {@link RosterSelection.searchSessions}.
    */
   snapshot: SnapshotView;
+  /**
+   * Executor fleet for the right-rail panel (#324): daemon card always present,
+   * then registered runners with live status and in-flight counts.
+   */
+  executors: ExecutorCardView[];
+  /** True until the first `GET /runners` poll settles. */
+  executorsConnecting: boolean;
+  /**
+   * True when `GET /runners` is failing. Last-known fleet stays visible but
+   * the plate marks presence stale (#324 F2).
+   */
+  executorsStale: boolean;
   roster: RosterSelection;
   /** Wall-clock `HH:MM` for the day chip. */
   clock: string;
@@ -271,6 +288,7 @@ export function useCockpit(): CockpitView {
   const client = useMemo(() => new ParleyClient({ baseUrl: "" }), []);
   const health = useHealth(client);
   const live = useSnapshot(client);
+  const runners = useRunners(client);
   const settings = useSettings();
   const chartStale = useChartStale(live.connected, health.online);
   // Inbox count is the awaiting_answer (and any other question-bearing) tally.
@@ -449,6 +467,9 @@ export function useCockpit(): CockpitView {
   // defeating RosterPanel's memo 86 400×/day for a boundary that moves twice
   // a minute at most.
   const freshnessNow = now - (now % FRESHNESS_TICK_MS);
+  // multiExecutor: registered runners present → stamp "on local" too; otherwise
+  // only non-local tasks name their host (#324 F4). Derived after runners poll.
+  const multiExecutorFleet = runners.runners.length > 0;
   const filteredRoster = useMemo(
     () =>
       projectRoster(
@@ -461,6 +482,7 @@ export function useCockpit(): CockpitView {
           now: freshnessNow,
         },
         liveRuns.runs,
+        { multiExecutor: multiExecutorFleet },
       ),
     [
       live.tasks,
@@ -470,6 +492,7 @@ export function useCockpit(): CockpitView {
       selectedTaskId,
       freshnessNow,
       liveRuns.runs,
+      multiExecutorFleet,
     ],
   );
 
@@ -587,6 +610,26 @@ export function useCockpit(): CockpitView {
     durableSessions: live.durableSessions,
   };
 
+  // Executor fleet (#324): daemon always present; runners from GET /runners;
+  // in-flight counts from running tasks grouped by wire `runner`.
+  // Probe lifecycle is consumed end-to-end: connecting → sounding subtitle;
+  // offline → force runner cards stale so presence never lies (#324 F2).
+  const executorsConnecting = runners.status === "connecting";
+  const executorsStale = runners.status === "offline";
+  const executors = useMemo(
+    () =>
+      projectExecutors({
+        runners: runners.runners,
+        tasks: live.tasks,
+        daemonOnline: health.online,
+        connecting: executorsConnecting,
+        runnersProbe: runners.status,
+        // No daemonVendors: cockpit has no project path for GET /info?project=
+        // and empty vendors are omitted from the daemon card (#324 F3).
+      }),
+    [runners.runners, runners.status, live.tasks, health.online, executorsConnecting],
+  );
+
   const daemonUptimeDays =
     health.startedAt !== null
       ? deriveVoyageDay(health.startedAt, now)
@@ -674,6 +717,9 @@ export function useCockpit(): CockpitView {
   return {
     health: healthView,
     snapshot,
+    executors,
+    executorsConnecting,
+    executorsStale,
     roster,
     clock: formatClock(new Date(now)),
     day,

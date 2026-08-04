@@ -64,6 +64,8 @@ function daemonProxy(): Record<string, ProxyOptions> | undefined {
     "/health",
     "/runs",
     "/deliverables",
+    // Executor fleet for the Cove executors panel (#324).
+    "/runners",
   ];
   return Object.fromEntries(routes.map((route) => [route, { target }]));
 }
@@ -173,12 +175,33 @@ function preloadCriticalFonts(): Plugin {
  *    the woff2 into `www/assets`. Nothing is ever fetched from a CDN at runtime.
  *  - `.woff` fallbacks are stripped at emit time (see {@link stripWoffFallback}).
  *  - Critical faces are preloaded into `index.html` (see {@link preloadCriticalFonts}).
+ *  - Browser shims for `node:path` / `node:os` — see alias block below (#330).
  */
 export default defineConfig(() => {
   const proxy = daemonProxy();
+  const shimDir = path.resolve(import.meta.dirname, "src/shims");
+  // Vitest inherits this config; keep real Node path/os for test filesystem
+  // helpers (resolve/readFileSync). Shims are for the browser client only.
+  const isVitest = process.env.VITEST === "true";
   return {
     plugins: [react(), stripWoffFallback(), preloadCriticalFonts()],
     base: "/",
+    resolve: {
+      // Work around: incomplete tree-shaking of `@useparley/core` lets Node
+      // builtins (`path`/`os`, e.g. top-level `join` in vendor-home) leak into
+      // the browser client bundle and crash production Cove at boot. These
+      // aliases redirect to tiny browser shims under `src/shims/`. Proper
+      // core-side fix tracked as GitHub issue #330 — do not remove until
+      // that lands; do not attempt the core fix from packages/ui.
+      alias: isVitest
+        ? []
+        : [
+            { find: /^node:path$/, replacement: path.join(shimDir, "path.ts") },
+            { find: /^path$/, replacement: path.join(shimDir, "path.ts") },
+            { find: /^node:os$/, replacement: path.join(shimDir, "os.ts") },
+            { find: /^os$/, replacement: path.join(shimDir, "os.ts") },
+          ],
+    },
     server: { proxy },
     preview: { proxy },
     build: {

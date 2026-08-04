@@ -110,6 +110,19 @@ function baseView(overrides: Partial<CockpitView> = {}): CockpitView {
       ready: true,
       streamLostSince: null,
     },
+    executors: [
+      {
+        id: "local",
+        label: "local",
+        kind: "daemon",
+        status: "online",
+        vendors: [],
+        inFlight: 0,
+        lastSeen: null,
+      },
+    ],
+    executorsConnecting: false,
+    executorsStale: false,
     roster: {
       selectedSessionId: null,
       selectedTaskId: null,
