@@ -1,4 +1,5 @@
 import type http from "node:http";
+import { TASK_HEADER } from "@useparley/core";
 import type { TaskEngine } from "./engine.js";
 
 /**
@@ -36,6 +37,8 @@ const HOP_BY_HOP = new Set([
   "upgrade",
   "host",
   "content-length",
+  // Parley-internal correlation; path segment is the source of truth (#331).
+  TASK_HEADER.toLowerCase(),
 ]);
 
 export type XaiProxyPath = {
