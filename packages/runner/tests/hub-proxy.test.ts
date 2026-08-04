@@ -85,6 +85,51 @@ describe("hub proxy allowlist", () => {
     ]);
   });
 
+  it("forwards /xai/* with runner bearer and TASK_HEADER (#327)", async () => {
+    const seen: {
+      path: string;
+      header: string | string[] | undefined;
+      authorization: string | string[] | undefined;
+      method: string | undefined;
+    }[] = [];
+    const upstream = await listenUpstream((req, res) => {
+      seen.push({
+        path: req.url ?? "",
+        header: req.headers[TASK_HEADER],
+        authorization: req.headers.authorization,
+        method: req.method,
+      });
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ ok: true, path: req.url }));
+    });
+
+    const proxy = await startHubProxy({
+      daemonUrl: upstream.url,
+      token: "fake-runner-token-proxy",
+      taskId: "task-42",
+    });
+    proxies.push(proxy);
+
+    const xai = await fetch(`${proxy.url}/xai/task-42/v1/chat/completions`, {
+      method: "POST",
+      body: JSON.stringify({ model: "grok-3", messages: [] }),
+    });
+    expect(xai.status).toBe(200);
+    expect(await xai.json()).toMatchObject({
+      ok: true,
+      path: "/xai/task-42/v1/chat/completions",
+    });
+
+    expect(seen).toEqual([
+      {
+        path: "/xai/task-42/v1/chat/completions",
+        header: "task-42",
+        authorization: "Bearer fake-runner-token-proxy",
+        method: "POST",
+      },
+    ]);
+  });
+
   it("returns 404 for non-allowlisted paths", async () => {
     const upstreamHits: string[] = [];
     const upstream = await listenUpstream((req, res) => {
@@ -103,11 +148,15 @@ describe("hub proxy allowlist", () => {
     const blocked = await fetch(`${proxy.url}/runner/lease`, { method: "POST" });
     expect(blocked.status).toBe(404);
     const body = (await blocked.json()) as { error: string };
-    expect(body.error).toMatch(/only forwards \/child\/\* and \/mcp/);
+    expect(body.error).toMatch(/only forwards \/child\/\*, \/mcp, and \/xai\/\*/);
     expect(upstreamHits).toEqual([]);
 
     const tasks = await fetch(`${proxy.url}/tasks`);
     expect(tasks.status).toBe(404);
+    expect(upstreamHits).toEqual([]);
+
+    const health = await fetch(`${proxy.url}/health`);
+    expect(health.status).toBe(404);
     expect(upstreamHits).toEqual([]);
   });
 

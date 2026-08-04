@@ -3,8 +3,8 @@ import { TASK_HEADER } from "@useparley/core";
 
 /**
  * Local hub proxy: children on the runner host talk to `127.0.0.1:<port>`;
- * the proxy forwards `/child/*` and `/mcp` to the daemon with the right
- * correlation headers and bearer token (ADR-0012).
+ * the proxy forwards `/child/*`, `/mcp`, and `/xai/*` to the daemon with the
+ * right correlation headers and bearer token (ADR-0012 / #327).
  */
 export interface HubProxy {
   /** Base URL children should use (no path), e.g. `http://127.0.0.1:12345`. */
@@ -33,13 +33,20 @@ export async function startHubProxy(options: StartHubProxyOptions): Promise<HubP
       const url = new URL(req.url ?? "/", "http://127.0.0.1");
       const targetPath = url.pathname + url.search;
 
-      // Only forward child contract + MCP — never expose the full daemon.
+      // Only forward child contract, MCP, and xAI usage proxy — never the
+      // full daemon surface (#327: /xai/* was previously denied, which made
+      // grok usage capture silently dead on runner-hosted children).
       const allowed =
         url.pathname === "/mcp" ||
-        url.pathname.startsWith("/child/");
+        url.pathname.startsWith("/child/") ||
+        url.pathname.startsWith("/xai/");
       if (!allowed) {
         res.writeHead(404, { "content-type": "application/json" });
-        res.end(JSON.stringify({ error: "hub proxy only forwards /child/* and /mcp" }));
+        res.end(
+          JSON.stringify({
+            error: "hub proxy only forwards /child/*, /mcp, and /xai/*",
+          }),
+        );
         return;
       }
 

@@ -114,7 +114,7 @@ import {
 } from "./task-detail.js";
 import { discoverUiBundle, isReservedPath, serveUiRequest } from "./ui.js";
 import { DAEMON_VERSION } from "./version.js";
-import { handleXaiProxyRequest } from "./xai-proxy.js";
+import { handleXaiProxyRequest, parseXaiProxyPath } from "./xai-proxy.js";
 import { buildInfo } from "./info.js";
 
 /** Default scheduled retention sweep interval (#153): 24 hours. */
@@ -920,7 +920,12 @@ export type AuthRouteClass = "runner" | "child" | "client" | "config-admin";
 export function classifyAuthRoute(method: string, pathname: string): AuthRouteClass {
   const segments = pathname.split("/").filter((s) => s !== "");
   if (segments[0] === "runner") return "runner";
-  if (segments[0] === "child" || pathname === "/mcp") return "child";
+  // Child channel + grok xAI usage proxy (#327): same lease-binding semantics.
+  // Task id for `/xai/*` is path-embedded; gateRequest resolves it from the
+  // path rather than the correlation header used by `/child/*` and `/mcp`.
+  if (segments[0] === "child" || pathname === "/mcp" || segments[0] === "xai") {
+    return "child";
+  }
   if (
     (method === "PUT" && pathname === "/config") ||
     (method === "POST" &&
@@ -950,11 +955,15 @@ export interface AuthGateInput {
   /**
    * For child routes off-loopback: the task's `runner` field (submit-time
    * affinity; not a live lease by itself), or `null` when the task exists but
-   * has no runner affinity. Omit when the task id header is missing or the
-   * task is unknown.
+   * has no runner affinity. Omit when the task id is missing or the task is
+   * unknown. Task id comes from the correlation header for `/child/*` +
+   * `/mcp`, or from the path segment for `/xai/<taskId>/…` (#327).
    */
   taskRunner?: string | null;
-  /** For child routes: whether a task was resolved from the correlation header. */
+  /**
+   * For child routes: whether a task was resolved (from the correlation
+   * header, or from the `/xai/<taskId>` path segment).
+   */
   taskFound?: boolean;
   /**
    * For child routes off-loopback: the task's current lifecycle state. Used
@@ -1172,8 +1181,18 @@ function gateRequest(
   let taskFound: boolean | undefined;
   let taskState: string | null | undefined;
   if (routeClass === "child" && !isLoopbackRequest(req)) {
-    const header = req.headers[TASK_HEADER];
-    const taskId = Array.isArray(header) ? header[0] : header;
+    // `/xai/<taskId>/v1/...` embeds the task id in the path; `/child/*` and
+    // `/mcp` use the correlation header. Unknown or malformed ids deny.
+    let taskId: string | undefined;
+    const segments = pathname.split("/").filter((s) => s !== "");
+    if (segments[0] === "xai") {
+      const parsed = parseXaiProxyPath(pathname);
+      taskId = parsed?.taskId;
+    } else {
+      const header = req.headers[TASK_HEADER];
+      const fromHeader = Array.isArray(header) ? header[0] : header;
+      taskId = typeof fromHeader === "string" ? fromHeader : undefined;
+    }
     if (typeof taskId === "string" && taskId !== "") {
       const task = engine.get(taskId);
       if (task !== undefined) {
