@@ -229,6 +229,12 @@ export interface TaskRow {
    * cleared on claim / local start / terminal. Survives daemon restart.
    */
   routing_deadline_at: string | null;
+  /**
+   * Durable placement intent set once at delegate/fix/run-step create (#315).
+   * `local` → only in-process; `remote` → only runner claim / wait (never local
+   * fallback). Null on legacy rows written before this column existed.
+   */
+  placement: "local" | "remote" | null;
 }
 
 /** Fields the daemon writes when creating a task. */
@@ -327,6 +333,11 @@ export interface NewTask {
   node?: string | null;
   iteration?: number | null;
   slot?: string | null;
+  /**
+   * Durable placement intent (`local` | `remote`) set at create (#315).
+   * Null/omitted only for tests and legacy paths; production insert always sets it.
+   */
+  placement?: "local" | "remote" | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -875,6 +886,10 @@ const MIGRATIONS: string[] = [
   // #315 durability: absolute ISO deadline for pending remote-routed tasks so
   // restart re-arms or fails on expiry (not an in-memory-only timer).
   `ALTER TABLE tasks ADD COLUMN routing_deadline_at TEXT;`,
+  // #315 placement intent: set once at create; dispatchClaim honors it so a
+  // remote-routed row never flips to local when runners go offline (and --cwd
+  // / workspace-bound never flip to remote on re-dispatch).
+  `ALTER TABLE tasks ADD COLUMN placement TEXT;`,
 ];
 
 /** How many schema migrations have been applied — equals `PRAGMA user_version` after open. */
@@ -959,7 +974,7 @@ const TASK_COLUMNS = `id, name, vendor, model, effort, profile, runner, repo, re
    launch_command, model_source, effort_source,
    orch_harness, orch_model, orch_effort,
    eval_session_id, eval_harness, eval_model, eval_effort, queued_at,
-   run_id, node, iteration, slot, queue_reason, routing_deadline_at`;
+   run_id, node, iteration, slot, queue_reason, routing_deadline_at, placement`;
 
 const RUN_COLUMNS = `id, workflow, version, type, workspace, repo, state, current_node, iteration,
    parent_run_id, attempt, orchestrator_session_id, created_at, updated_at,
@@ -1423,8 +1438,8 @@ export function insertTask(db: DatabaseHandle, task: NewTask): TaskRow {
         network, answer_timeout_ms, report_schema, size, difficulty, type,
         parent_task_id, attempt, resumed, model_source, effort_source,
         orch_harness, orch_model, orch_effort,
-        run_id, node, iteration, slot)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        run_id, node, iteration, slot, placement)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     task.id,
     task.name,
@@ -1464,6 +1479,7 @@ export function insertTask(db: DatabaseHandle, task: NewTask): TaskRow {
     task.node ?? null,
     task.iteration ?? null,
     task.slot ?? null,
+    task.placement ?? null,
   );
   return getTask(db, task.id)!;
 }
@@ -1492,6 +1508,7 @@ export function listCapablePendingTasks(
        WHERE state = 'pending'
          AND vendor IN (${placeholders})
          AND (runner IS NULL OR runner = '' OR runner = ?)
+         AND (placement IS NULL OR placement = 'remote')
        ORDER BY created_at ASC, id ASC`,
     )
     .all(...opts.vendorIds, opts.executorName)
@@ -1683,6 +1700,7 @@ export type TaskDataPatch = Partial<
     | "queued_at"
     | "queue_reason"
     | "routing_deadline_at"
+    | "placement"
     | "runner"
   >
 >;
@@ -2416,7 +2434,7 @@ const RUN_QUERY_TASK_COLUMNS = `id, name, vendor, model, effort, profile, runner
    launch_command, model_source, effort_source,
    orch_harness, orch_model, orch_effort,
    eval_session_id, eval_harness, eval_model, eval_effort, queued_at,
-   run_id, node, iteration, slot, queue_reason, routing_deadline_at`;
+   run_id, node, iteration, slot, queue_reason, routing_deadline_at, placement`;
 
 const RUN_QUERY_DELIVERABLE_COLUMNS = `id, run_id, node, port, iteration, slot, task_id, kind, value,
    created_at, purged_at`;

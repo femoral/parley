@@ -521,7 +521,10 @@ describe("workspace-bound routing (F3)", () => {
     home = fs.mkdtempSync(path.join(os.tmpdir(), "parley-ws-bound-"));
     homes.push(home);
     writeConfig(home, {
-      runners: { gpu: { token: "secret-gpu" } },
+      runners: {
+        gpu: { token: "secret-gpu" },
+        cpu: { token: "secret-cpu" },
+      },
     });
     process.env.PARLEY_FAKE_VENDOR_BIN = FAKE_BIN;
     db = openDatabase(homePaths(home));
@@ -569,6 +572,7 @@ describe("workspace-bound routing (F3)", () => {
       size: null,
       difficulty: null,
       type: "other",
+      placement: "local",
     });
     writeTaskState(db, parent.id, "completed", {
       completed_at: new Date().toISOString(),
@@ -613,6 +617,7 @@ describe("workspace-bound routing (F3)", () => {
       type: "other",
       parent_task_id: "t1",
       attempt: 2,
+      placement: "local",
     });
     // Invoke private dispatch via public surface: offer path after insert
     // by calling fix would need more setup — assert isWorkspaceBound via
@@ -627,6 +632,7 @@ describe("workspace-bound routing (F3)", () => {
     // Either admitted/running/queued (local) or still pending without remote deadline.
     expect(after.runner).toBeNull();
     expect(after.routing_deadline_at).toBeNull();
+    expect(after.placement).toBe("local");
   });
 
   it("run-owned step stays local", () => {
@@ -656,6 +662,7 @@ describe("workspace-bound routing (F3)", () => {
       node: "n1",
       iteration: 1,
       slot: null,
+      placement: "local",
     });
     const engine = new TaskEngine(
       db,
@@ -667,6 +674,259 @@ describe("workspace-bound routing (F3)", () => {
     const after = getTask(db, "t1")!;
     expect(after.runner).toBeNull();
     expect(after.routing_deadline_at).toBeNull();
+    expect(after.placement).toBe("local");
+  });
+
+  it("--cwd + capable online runner runs locally (G2); runner lease 204", async () => {
+    let server: DaemonServer | null = null;
+    try {
+      db.close();
+      process.env.PARLEY_LONG_POLL_MS = "100";
+      writeConfig(home, {
+        runners: { gpu: { token: "secret-gpu" } },
+      });
+      server = await startServer(homePaths(home));
+      const base = `http://127.0.0.1:${server.port}`;
+      const auth = { authorization: "Bearer secret-gpu" };
+
+      const reg = await fetch(`${base}/runner/register`, {
+        method: "POST",
+        headers: { "content-type": "application/json", ...auth },
+        body: JSON.stringify({
+          runner: "gpu",
+          protocol_version: 1,
+          build_version: "t",
+          capabilities: { vendors: [{ id: "fake", models: [] }] },
+        }),
+      });
+      expect(reg.status).toBe(200);
+
+      const cwdDir = fs.mkdtempSync(path.join(os.tmpdir(), "parley-cwd-"));
+      homes.push(cwdDir);
+      // --cwd: omit use_worktree (false). Local is capable via FAKE_BIN.
+      const created = await fetch(`${base}/tasks`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          prompt: "cwd local",
+          vendor: "fake",
+          cwd: cwdDir,
+          orchestrator_session_id: "s",
+        }),
+      });
+      expect(created.status).toBe(201);
+      const taskId = ((await created.json()) as { task_id: string }).task_id;
+
+      const detail = await fetch(`${base}/tasks/${taskId}`);
+      expect(detail.status).toBe(200);
+      const row = ((await detail.json()) as { row: TaskRow }).row;
+      expect(row.placement).toBe("local");
+      expect(row.runner).toBeNull();
+      expect(row.routing_deadline_at).toBeNull();
+      expect(row.cwd).toBe(path.resolve(cwdDir));
+      // Context materializes under the given cwd, not a worktree.
+      expect(fs.existsSync(path.join(cwdDir, ".parley"))).toBe(true);
+
+      const lease = await fetch(`${base}/runner/lease`, {
+        method: "POST",
+        headers: { "content-type": "application/json", ...auth },
+        body: JSON.stringify({ runner: "gpu" }),
+      });
+      expect(lease.status).toBe(204);
+    } finally {
+      if (server) await server.close();
+      delete process.env.PARLEY_LONG_POLL_MS;
+      // Restore a db handle so afterEach can close safely.
+      try {
+        db = openDatabase(homePaths(home));
+      } catch {
+        /* */
+      }
+    }
+  });
+
+  it("remote placement never flips to local when runner goes offline (G1)", () => {
+    upsertRunner(db, {
+      name: "gpu",
+      capabilities: JSON.stringify({ vendors: [{ id: "fake", models: [] }] }),
+      protocol_version: 1,
+      build_version: "t",
+    });
+    const repo = makeOriginRepo();
+    // Simulate remote-routed row: worktree deliberately not cut (cwd = repo root).
+    const row = insertTask(db, {
+      id: "t-remote",
+      name: null,
+      vendor: "fake",
+      model: "fake-model",
+      effort: "medium",
+      profile: null,
+      runner: null,
+      repo,
+      repo_key: "github.com/org/r",
+      repo_fetch_url: "https://github.com/org/r.git",
+      cwd: repo,
+      prompt: "remote",
+      orchestrator_session_id: "s",
+      worktree: null,
+      branch: null,
+      base_sha: "abc",
+      sandbox: "workspace",
+      network: true,
+      answer_timeout_ms: null,
+      report_schema: null,
+      size: null,
+      difficulty: null,
+      type: "other",
+      placement: "remote",
+    });
+    updateTask(db, row.id, {
+      routing_deadline_at: new Date(Date.now() + 60_000).toISOString(),
+      queue_reason: "waiting for capable runner: gpu (offline)",
+    });
+
+    const engine = new TaskEngine(
+      db,
+      homePaths(home),
+      createAdapterRegistrySync(process.env),
+    );
+    // Original runner offline; local is still capable via FAKE_BIN.
+    engine.setRunnerOnlineProbe(() => false);
+    (engine as unknown as { dispatchClaim: (t: TaskRow) => void }).dispatchClaim(
+      getTask(db, "t-remote")!,
+    );
+
+    let after = getTask(db, "t-remote")!;
+    expect(after.placement).toBe("remote");
+    expect(after.runner).toBeNull();
+    expect(after.routing_deadline_at).not.toBeNull();
+    // Must NOT have started locally in the user's checkout.
+    expect(["pending"]).toContain(after.state);
+    expect(fs.existsSync(path.join(repo, ".parley"))).toBe(false);
+
+    // A different capable runner registers online → still remote (claimable), never local.
+    upsertRunner(db, {
+      name: "cpu",
+      capabilities: JSON.stringify({ vendors: [{ id: "fake", models: [] }] }),
+      protocol_version: 1,
+      build_version: "t",
+    });
+    engine.setRunnerOnlineProbe((name) => name === "cpu");
+    engine.redispatchRoutingWaits();
+    after = getTask(db, "t-remote")!;
+    expect(after.placement).toBe("remote");
+    expect(after.state).toBe("pending");
+    expect(fs.existsSync(path.join(repo, ".parley"))).toBe(false);
+    // Now claimable by the new online runner.
+    const claim = selectClaimablePendingTask(db, {
+      executorName: "cpu",
+      vendorIds: ["fake"],
+      onlinePeers: [{ name: "cpu", vendorIds: ["fake"], last_completed_at: null }],
+    });
+    expect(claim?.id).toBe("t-remote");
+  });
+
+  it("placement survives daemon restart (remote stays remote after rearm)", async () => {
+    let server: DaemonServer | null = null;
+    try {
+      db.close();
+      process.env.PARLEY_FAKE_VENDOR_BIN = ""; // local cannot run fake
+      process.env.PARLEY_ROUTING_QUEUE_TIMEOUT_MS = "60000";
+      writeConfig(home, {
+        runners: { gpu: { token: "secret-gpu" } },
+        daemon: { routing: { queueTimeoutMs: 60000 } },
+      });
+      server = await startServer(homePaths(home));
+      const base = `http://127.0.0.1:${server.port}`;
+      const auth = { authorization: "Bearer secret-gpu" };
+
+      await fetch(`${base}/runner/register`, {
+        method: "POST",
+        headers: { "content-type": "application/json", ...auth },
+        body: JSON.stringify({
+          runner: "gpu",
+          protocol_version: 1,
+          build_version: "t",
+          capabilities: { vendors: [{ id: "fake", models: [] }] },
+        }),
+      });
+      const repo = makeOriginRepo();
+      const created = await fetch(`${base}/tasks`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          prompt: "remote durable",
+          vendor: "fake",
+          cwd: repo,
+          use_worktree: true,
+          orchestrator_session_id: "s",
+        }),
+      });
+      expect(created.status).toBe(201);
+      const taskId = ((await created.json()) as { task_id: string }).task_id;
+
+      let detail = await fetch(`${base}/tasks/${taskId}`);
+      let row = ((await detail.json()) as { row: TaskRow }).row;
+      expect(row.placement).toBe("remote");
+      expect(row.routing_deadline_at).not.toBeNull();
+
+      await server.close();
+      server = null;
+
+      // Restart: rearm must keep placement remote (not flip to local).
+      server = await startServer(homePaths(home));
+      const base2 = `http://127.0.0.1:${server.port}`;
+      await new Promise((r) => setTimeout(r, 30));
+      detail = await fetch(`${base2}/tasks/${taskId}`);
+      row = ((await detail.json()) as { row: TaskRow }).row;
+      expect(row.placement).toBe("remote");
+      expect(row.state).toBe("pending");
+      expect(row.worktree).toBeNull();
+      expect(fs.existsSync(path.join(repo, ".parley"))).toBe(false);
+    } finally {
+      if (server) await server.close();
+      delete process.env.PARLEY_ROUTING_QUEUE_TIMEOUT_MS;
+      try {
+        db = openDatabase(homePaths(home));
+      } catch {
+        /* */
+      }
+    }
+  });
+
+  it("rejects --runner local at delegate (G4)", async () => {
+    let server: DaemonServer | null = null;
+    try {
+      db.close();
+      writeConfig(home, {
+        runners: { local: { token: "secret-local" } },
+      });
+      server = await startServer(homePaths(home));
+      const base = `http://127.0.0.1:${server.port}`;
+      const repo = makeOriginRepo();
+      const created = await fetch(`${base}/tasks`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          prompt: "pin local",
+          vendor: "fake",
+          cwd: repo,
+          use_worktree: true,
+          runner: "local",
+          orchestrator_session_id: "s",
+        }),
+      });
+      expect(created.status).toBe(400);
+      const bodyText = await created.text();
+      expect(bodyText).toMatch(/omit --runner to run locally|reserved/i);
+    } finally {
+      if (server) await server.close();
+      try {
+        db = openDatabase(homePaths(home));
+      } catch {
+        /* */
+      }
+    }
   });
 });
 

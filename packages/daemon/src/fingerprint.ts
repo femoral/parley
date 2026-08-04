@@ -47,7 +47,8 @@ export const BUILTIN_VENDOR_BINS: Readonly<Record<string, string>> = {
 export const BUILTIN_VENDOR_ENV_BINS: Readonly<Record<string, string>> = {
   claude: "PARLEY_CLAUDE_BIN",
   cline: "PARLEY_CLINE_BIN",
-  codex: "PARLEY_CODEX_BIN",
+  // codex adapter hard-codes bin "codex" with no PARLEY_CODEX_BIN override —
+  // do not advertise env capability the adapter cannot honor (#315 G3).
   cursor: "PARLEY_CURSOR_BIN",
   fake: "PARLEY_FAKE_VENDOR_BIN",
   antigravity: "PARLEY_ANTIGRAVITY_BIN",

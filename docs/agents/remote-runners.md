@@ -14,8 +14,10 @@ remote-ness is either an automatic capability match or an explicit pin.
   streams results back.
 - **Routing** (ADR-0032 / #315): unpinned tasks match advertised vendors;
   online runners are preferred over the daemon; `--runner <name>` remains a
-  hard pin. Workspace-bound work (`--cwd`, local worktrees, run-owned steps,
-  fix-of-local-parent) always stays in-daemon.
+  hard pin. Placement is persisted once at create (`tasks.placement` =
+  `local`|`remote`); dispatch never flips a remote-routed row to local.
+  Workspace-bound work (`--cwd`, local worktrees, run-owned steps,
+  fix-of-local-parent) is always `local`.
 - **Affinity pin**: `parley delegate --runner <name>` forces that runner when
   it advertises the vendor.
 

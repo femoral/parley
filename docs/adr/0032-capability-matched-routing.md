@@ -19,21 +19,35 @@ leave `runner` null until a remote claimer is recorded at lease time.
 
 ### Matching order (dispatch)
 
-At `dispatchClaim` (and pre-insert at `delegate`):
+At pre-insert `delegate` (and the equivalent create paths for fix / run steps),
+the engine chooses **placement once** and persists it on `tasks.placement`
+(`local` | `remote`). `dispatchClaim` **honors** that column and never
+re-derives a different side:
 
-1. **Workspace-bound → always local** (never remote):
-   - run-owned step tasks (`run_id` set; pre-materialized workspaces)
-   - tasks with a local worktree already cut
-   - fix reattempts of a local parent (`parent.runner` null)
-   - `--cwd` / `use_worktree: false` (forced local at delegate)
+- `placement = local` → only `InProcessExecutor.offer` (clear any wait fields).
+- `placement = remote` → only runner wake / routing-wait machinery. When no
+  capable runner remains online, the row stays in wait until
+  `routing_deadline_at` fails it with the capability diagnosis — **never**
+  falls back to local (even if the daemon advertises the vendor). Fix
+  reattempts inherit the parent's placement.
+
+Delegate-time decision that *sets* placement:
+
+1. **Workspace-bound → local**: run-owned steps, `--cwd` / `use_worktree:false`,
+   launch-template free-form vendors (#195) unpinned, and local-only capability.
 2. **Hard pin** (`runner` set): only that executor; incapable → fail with
-   diagnosis; online → remote wait; offline capable → queue-with-reason.
+   diagnosis; online/offline capable → `remote` (wait + deadline).
 3. **Unpinned**: among capable executors, **online runners preferred over
-   local**; else local if capable; else capable-but-offline → wait; else fail.
-4. **Launch-template free-form vendors** (#195): unpinned always local.
+   local** → `remote`; else local if capable → `local`; else capable-but-offline
+   → `remote` wait; else fail before insert.
+4. The pin name `local` is rejected at delegate (reserved for the in-process
+   executor; omit `--runner` to run locally).
 
 No-origin repos (`repo_fetch_url` null) reject both hard pins and automatic
 remote decisions at delegate with a clear diagnosis.
+
+Legacy rows with `placement` null keep the old workspace-bound heuristics on
+re-dispatch only.
 
 ### Claim (pull)
 

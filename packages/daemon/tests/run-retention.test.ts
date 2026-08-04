@@ -1033,10 +1033,9 @@ describe("migration #244", () => {
     home = fs.mkdtempSync(path.join(os.tmpdir(), "parley-ret-mig-"));
 
     // Pre-#244 schema: every migration before the deliverables rebuild.
-    // Five migrations follow #244 (#240 inbox, #243 run eval, #249 base,
-    // #314 runners, #313 repo identity, #315 routing) so the snapshot is
-    // SCHEMA_VERSION - 8.
-    const prev = openDatabaseUpTo(homePaths(home), SCHEMA_VERSION - 8);
+    // Migrations after #244 (#240 inbox, #243 run eval, #249 base, #314
+    // runners, #313 repo identity, #315 routing + placement) → SCHEMA_VERSION - 9.
+    const prev = openDatabaseUpTo(homePaths(home), SCHEMA_VERSION - 9);
     const now = new Date().toISOString();
     prev
       .prepare(
