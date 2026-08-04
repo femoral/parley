@@ -152,7 +152,8 @@ function applyLayeredSettings(
   next.provenance = provenance;
 
   // #321: executors + host warnings are daemon truth — never re-probe the CLI host.
-  next.executors = config.executors;
+  // Tolerate older daemon bodies that predate the executors field.
+  next.executors = config.executors ?? [];
   if (config.warnings !== undefined) next.warnings = config.warnings;
   else delete next.warnings;
 

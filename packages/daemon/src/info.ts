@@ -807,10 +807,12 @@ export function renderInfoProse(config: InfoConfig): string {
   lines.push(
     "Vendor availability per executor host (daemon first, then registered runners). Detail: `parley runners show <name>`.",
   );
-  if (config.executors.length === 0) {
+  // Tolerate older daemon bodies that predate the executors field (#321).
+  const executors = config.executors ?? [];
+  if (executors.length === 0) {
     lines.push("(no executors)");
   } else {
-    for (const ex of config.executors) {
+    for (const ex of executors) {
       const vendorList =
         ex.vendors.length > 0 ? ex.vendors.join(", ") : "(none)";
       lines.push(`- \`${ex.name}\` (${ex.status}): ${vendorList}`);

@@ -520,6 +520,31 @@ describe("executors fleet (#321)", () => {
     expect(prose).toContain("parley runners show");
   });
 
+  it("tolerates older daemon body without executors field (version skew)", () => {
+    // Pre-#321 shape: no executors — must not throw on config.executors.length.
+    const paths = homePathsFromEnv({ PARLEY_HOME: home });
+    const adapters = createAdapterRegistrySync();
+    const modern = buildInfoConfig({
+      projectDir: project,
+      paths,
+      adapters,
+      env: { PATH: "" },
+      platform: "darwin",
+    });
+    const { executors: _drop, ...withoutExecutors } = modern;
+    void _drop;
+    const oldShape = withoutExecutors as unknown as Parameters<
+      typeof renderInfoProse
+    >[0];
+    let prose: string | undefined;
+    expect(() => {
+      prose = renderInfoProse(oldShape);
+    }).not.toThrow();
+    expect(prose).toBeDefined();
+    expect(prose!).toContain("### Executors");
+    expect(prose!).toContain("(no executors)");
+  });
+
   it("emits daemon-host bwrap warning when grok is fingerprinted on linux", () => {
     const paths = homePathsFromEnv({ PARLEY_HOME: home });
     const adapters = createAdapterRegistrySync();
