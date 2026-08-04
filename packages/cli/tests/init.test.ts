@@ -688,6 +688,136 @@ describe("parley init", () => {
     expect(isInteractiveInit({ stdinIsTTY: true, json: false, yes: true })).toBe(false);
   });
 
+  describe("invalid home config fails hard (#332)", () => {
+    it("exits non-zero and leaves parley.json untouched when validation fails", async () => {
+      // Invalid daemon.url plus an unrelated valid allowlist that must not be
+      // destroyed by a fallback-to-{} rewrite (the original defect).
+      const before = [
+        "{",
+        '  "daemon": { "url": "" },',
+        '  "vendors": {',
+        '    "fake": {',
+        '      "models": {',
+        '        "keep-me": { "efforts": ["low"], "default": "low" }',
+        "      }",
+        "    }",
+        "  }",
+        "}",
+        "",
+      ].join("\n");
+      const configPath = path.join(home, "parley.json");
+      fs.writeFileSync(configPath, before);
+
+      const res = await runCli(["init", "--scope", "global", "--layout", "agents", "--yes"], home, {
+        extraEnv: {
+          HOME: mkTemp("parley-init-invalid-val-"),
+          PATH: pathWithGitOnly(),
+          PARLEY_FAKE_VENDOR_BIN: FAKE_VENDOR_BIN,
+        },
+      });
+      expect(res.code).not.toBe(0);
+      expect(res.stderr).toMatch(/daemon\.url/);
+      expect(res.stderr).toMatch(/parley\.json/);
+      // Byte-for-byte: no rewrite from empty fallback.
+      expect(fs.readFileSync(configPath, "utf8")).toBe(before);
+    });
+
+    it("exits non-zero and leaves syntactically corrupt JSON untouched", async () => {
+      const before = '{ "daemon": { "url": "http://127.0.0.1:9" },\n';
+      const configPath = path.join(home, "parley.json");
+      fs.writeFileSync(configPath, before);
+
+      const res = await runCli(
+        ["init", "--scope", "global", "--layout", "agents", "--json", "--yes"],
+        home,
+        {
+          extraEnv: {
+            HOME: mkTemp("parley-init-corrupt-"),
+            PATH: pathWithGitOnly(),
+            PARLEY_FAKE_VENDOR_BIN: FAKE_VENDOR_BIN,
+          },
+        },
+      );
+      expect(res.code).not.toBe(0);
+      expect(res.stderr).toMatch(/invalid config|parley\.json/);
+      // No success JSON payload on --json failure.
+      expect(() => JSON.parse(res.stdout)).toThrow();
+      expect(fs.readFileSync(configPath, "utf8")).toBe(before);
+    });
+
+    it("succeeds and writes a fresh config when parley.json is missing", async () => {
+      const configPath = path.join(home, "parley.json");
+      expect(fs.existsSync(configPath)).toBe(false);
+
+      const res = await runCli(
+        ["init", "--scope", "global", "--layout", "agents", "--json", "--yes"],
+        home,
+        {
+          extraEnv: {
+            HOME: mkTemp("parley-init-missing-cfg-"),
+            PATH: pathWithGitOnly(),
+            PARLEY_FAKE_VENDOR_BIN: FAKE_VENDOR_BIN,
+          },
+        },
+      );
+      expect(res.code).toBe(0);
+      expect(fs.existsSync(configPath)).toBe(true);
+      const cfg = JSON.parse(fs.readFileSync(configPath, "utf8")) as Record<string, unknown>;
+      expect(cfg).toMatchObject({
+        vendors: {
+          fake: {
+            models: {
+              "fake-model": { efforts: ["low", "medium", "high"], default: "medium" },
+            },
+          },
+        },
+        defaults: { vendor: "fake" },
+      });
+    });
+
+    it("round-trips a valid existing config (populate merges; unknown keys preserved)", async () => {
+      const before = {
+        customTopLevel: "keep-me",
+        vendors: {
+          fake: {
+            models: {
+              "user-model": { efforts: ["low"], default: "low" as const },
+            },
+            customVendorKey: 42,
+          },
+        },
+      };
+      const configPath = path.join(home, "parley.json");
+      fs.writeFileSync(configPath, `${JSON.stringify(before, null, 2)}\n`);
+
+      const res = await runCli(
+        ["init", "--scope", "global", "--layout", "agents", "--json", "--yes"],
+        home,
+        {
+          extraEnv: {
+            HOME: mkTemp("parley-init-valid-rt-"),
+            PATH: pathWithGitOnly(),
+            PARLEY_FAKE_VENDOR_BIN: FAKE_VENDOR_BIN,
+          },
+        },
+      );
+      expect(res.code).toBe(0);
+      const after = JSON.parse(fs.readFileSync(configPath, "utf8")) as {
+        customTopLevel?: string;
+        vendors?: { fake?: { models?: Record<string, unknown>; customVendorKey?: number } };
+        defaults?: { vendor?: string };
+      };
+      // Pre-existing allowlist not replaced; unknown keys preserved.
+      expect(after.customTopLevel).toBe("keep-me");
+      expect(after.vendors?.fake?.models).toEqual({
+        "user-model": { efforts: ["low"], default: "low" },
+      });
+      expect(after.vendors?.fake?.customVendorKey).toBe(42);
+      // Populate may still seed defaults.vendor when missing.
+      expect(after.defaults?.vendor).toBe("fake");
+    });
+  });
+
   it("treats daemon.url as the remote-daemon signal (#328)", () => {
     expect(isRemoteDaemonConfig({})).toBe(false);
     expect(isRemoteDaemonConfig({ daemon: {} })).toBe(false);
