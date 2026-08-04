@@ -135,8 +135,16 @@ Pending (including routing waits) and concurrency-queued tasks survive.
 
 ## Related
 
-- ADR-0012 remote runners · ADR-0028 unified executor · ADR-0029 registration
-- ADR-0031 repo identity and managed mirrors (claim-time git codes)
+- ADR-0012 remote runners (pin + lease origin; claim is no longer name-pinned-only)
+- [ADR-0028](0028-unified-executor-model.md) unified executor handoff
+  (`dispatchClaim` / `InProcessExecutor`) — this ADR completes the deferred
+  capability-matched claim path over that model
+- [ADR-0029](0029-runner-registration-advertisement-wire.md) registration /
+  presence / `held_mirrors` inventory routing consumes
+- [ADR-0031](0031-repo-identity-and-managed-mirrors.md) claim-time git sequence
+  and codes that feed `unreachable_repos` / warm mirrors
 - `docs/agents/remote-runners.md`
 - Issues: [#315](https://github.com/femoral/parley/issues/315),
-  [#317](https://github.com/femoral/parley/issues/317)
+  [#317](https://github.com/femoral/parley/issues/317),
+  [#318](https://github.com/femoral/parley/issues/318), parent
+  [#311](https://github.com/femoral/parley/issues/311)

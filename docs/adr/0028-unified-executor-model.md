@@ -57,3 +57,12 @@ are later tickets; this ADR records the structural prefactor from #312.
 - No schema migration, wire change, CLI flag, or HTTP surface change in the
   implementing ticket. Runner package and `packages/core/src/lease.ts` stay
   out of scope for the prefactor.
+
+## Related
+
+- ADR-0012 remote runners (lease + affinity origin)
+- ADR-0029 registration / advertisement (fleet inventory for routing)
+- [ADR-0032](0032-capability-matched-routing.md) capability-matched routing —
+  completes the deferred claim path and prefers online runners over `local`
+  (#315 / #317 / #318)
+- Spec parent [#311](https://github.com/femoral/parley/issues/311)

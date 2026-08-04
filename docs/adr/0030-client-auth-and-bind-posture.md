@@ -88,8 +88,9 @@ child channel.
   `clients.*.token` and `runners.*.token` (values become `"<redacted>"`).
   Loopback `GET /config` is unredacted.
 - Config **writes** (`PUT /config`, `POST /config/set`, `POST /config/unset`)
-  are loopback / host-shell only. Remote model-allowlist editing arrives later
-  via dedicated routes in #322 — not via wholesale config push.
+  are loopback / host-shell only. Remote model-allowlist editing ships via
+  dedicated `/models` routes (#322) — client-class, scoped to
+  `vendors.<id>.models[.<modelId>]` only — not via wholesale config push.
 
 ### No native TLS
 
@@ -116,9 +117,21 @@ Parley speaks plain HTTP. Documented postures:
   loopback/host-shell operation only. A remote client may `GET /config` with
   secrets redacted; it cannot mint runners, revoke peers, or change
   `vendors.*.bin/args/env` over the wire. Dedicated remote allowlist edits
-  land later (#322).
-- **Browser UI is unreachable off-loopback** until UI work (#324): a browser
+  use the `/models` surface (#322), not config admin.
+- **Browser UI stays loopback-oriented.** Cove (#324) ships the executors panel
+  and task executor attribution against a local daemon, but a browser still
   cannot attach a bearer token to ordinary document navigation, so static
   bundle fetches and API calls from Cove fail auth when the peer is not
-  loopback. Local `parley ui` against loopback is unchanged.
+  loopback. Local `parley ui` against loopback is unchanged; remote browser
+  auth is a separate delivery problem, not solved by the executors surface.
 - No compatibility shims — greenfield wire/config change (pre-release).
+
+## Related
+
+- ADR-0010 settings / remote daemon URL · ADR-0012 remote runners
+- [ADR-0029](0029-runner-registration-advertisement-wire.md) runner bearer
+  tokens (`runners.<name>.token`) — same scheme, separate principal map from
+  `clients.<name>.token` so logs and revocation stay attributable
+- Spec parent [#311](https://github.com/femoral/parley/issues/311) · decision
+  [#323](https://github.com/femoral/parley/issues/323)
+- `docs/agents/remote-runners.md`
