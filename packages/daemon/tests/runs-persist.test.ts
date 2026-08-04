@@ -91,9 +91,9 @@ describe("migration (#233)", () => {
     // #240 (sessions.panicked / event_acks / run_seqs / event_deliveries),
     // #243 (run eval / metrics columns), #249 (base_ref / base_commit),
     // #314 (runners table), and #313 (repo_key / repo_fetch_url) — so the
-    // pre-runs snapshot is SCHEMA_VERSION - 8 (#315 routing + prior migrations).
+    // pre-runs snapshot is SCHEMA_VERSION - 9 (#315 routing durability + prior).
     // Keep this in step when appending further entries.
-    const prev = openDatabaseUpTo(homePaths(home), SCHEMA_VERSION - 8);
+    const prev = openDatabaseUpTo(homePaths(home), SCHEMA_VERSION - 9);
     const tablesBefore = prev
       .prepare(`SELECT name FROM sqlite_master WHERE type = 'table'`)
       .all()

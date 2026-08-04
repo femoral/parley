@@ -77,6 +77,7 @@ function row(partial: Partial<TaskRow> & { id: string }): TaskRow {
     iteration: null,
     slot: null,
     queue_reason: null,
+    routing_deadline_at: null,
     ...partial,
   };
 }

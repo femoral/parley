@@ -31,7 +31,6 @@ const sampleLease: RunnerLeaseSpec = {
   model: null,
   effort: null,
   profile: null,
-  affinity: null,
   sandbox: "workspace",
   network: true,
   answer_timeout_ms: 60_000,

@@ -1,19 +1,29 @@
 /**
- * #315 — capability-matched routing pure helpers + claim SELECT shape.
+ * #315 — capability-matched routing pure helpers + claim SELECT shape +
+ * durable deadline / workspace-binding / sweep review fixes.
  */
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { homePaths } from "@useparley/core";
+import { createAdapterRegistrySync } from "../src/adapters/index.js";
 import {
+  getTask,
   insertTask,
   listCapablePendingTasks,
   openDatabase,
   selectClaimablePendingTask,
+  sweepInterruptedTasks,
+  updateTask,
+  upsertRunner,
+  writeTaskState,
   type DatabaseHandle,
   type TaskRow,
 } from "../src/db.js";
+import { TaskEngine } from "../src/engine.js";
+import { detectHarnesses } from "../src/fingerprint.js";
 import {
   decideDispatch,
   formatCapabilityDiagnosis,
@@ -21,6 +31,8 @@ import {
   matchExecutors,
   type ExecutorCapability,
 } from "../src/routing.js";
+import { startServer, type DaemonServer } from "../src/server.js";
+import { withFakeAllowlist } from "./helpers.js";
 
 const homes: string[] = [];
 
@@ -34,6 +46,23 @@ function openDb(): DatabaseHandle {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), "parley-routing-"));
   homes.push(home);
   return openDatabase(homePaths(home));
+}
+
+function makeOriginRepo(): string {
+  const repo = fs.mkdtempSync(path.join(os.tmpdir(), "parley-repo-"));
+  homes.push(repo);
+  execFileSync("git", ["init", "-b", "main"], { cwd: repo, stdio: "ignore" });
+  execFileSync("git", ["-C", repo, "config", "user.email", "t@t"], { stdio: "ignore" });
+  execFileSync("git", ["-C", repo, "config", "user.name", "t"], { stdio: "ignore" });
+  execFileSync("git", ["-C", repo, "commit", "--allow-empty", "-m", "i"], {
+    stdio: "ignore",
+  });
+  execFileSync(
+    "git",
+    ["-C", repo, "remote", "add", "origin", "https://github.com/org/r.git"],
+    { stdio: "ignore" },
+  );
+  return repo;
 }
 
 function seedPending(
@@ -212,48 +241,52 @@ describe("capability-matched claim SELECT", () => {
     expect(claim?.id).toBe("t1"); // oldest
   });
 
-  it("warm executor prefers the peer with more recent completion", () => {
+  it("warm reservation: only preferred runner claims within window (F5)", () => {
     const db = openDb();
     seedPending(db, { id: "t1", vendor: "fake", runner: null });
+    const peers = [
+      {
+        name: "gpu",
+        vendorIds: ["fake"] as string[],
+        last_completed_at: "2026-08-03T12:00:00.000Z",
+      },
+      {
+        name: "cpu",
+        vendorIds: ["fake"] as string[],
+        last_completed_at: "2026-08-03T11:00:00.000Z",
+      },
+    ];
+    const created = Date.parse(getCreated(db, "t1"));
 
-    // gpu is warmer; cpu should not claim when gpu is online and preferred.
+    // Within reservation: cooler peer cannot claim.
     const forCpu = selectClaimablePendingTask(db, {
       executorName: "cpu",
       vendorIds: ["fake"],
-      onlinePeers: [
-        {
-          name: "gpu",
-          vendorIds: ["fake"],
-          last_completed_at: "2026-08-03T12:00:00.000Z",
-        },
-        {
-          name: "cpu",
-          vendorIds: ["fake"],
-          last_completed_at: "2026-08-03T11:00:00.000Z",
-        },
-      ],
+      onlinePeers: peers,
+      nowMs: created + 100,
+      reservationMs: 5_000,
     });
-    // Not preferred — falls back to first candidate so work does not starve
-    // if the warm peer never polls (claim still returns the task).
-    expect(forCpu?.id).toBe("t1");
+    expect(forCpu).toBeUndefined();
 
+    // Preferred peer can claim.
     const forGpu = selectClaimablePendingTask(db, {
       executorName: "gpu",
       vendorIds: ["fake"],
-      onlinePeers: [
-        {
-          name: "gpu",
-          vendorIds: ["fake"],
-          last_completed_at: "2026-08-03T12:00:00.000Z",
-        },
-        {
-          name: "cpu",
-          vendorIds: ["fake"],
-          last_completed_at: "2026-08-03T11:00:00.000Z",
-        },
-      ],
+      onlinePeers: peers,
+      nowMs: created + 100,
+      reservationMs: 5_000,
     });
     expect(forGpu?.id).toBe("t1");
+
+    // After reservation window: any capable claimer.
+    const forCpuLater = selectClaimablePendingTask(db, {
+      executorName: "cpu",
+      vendorIds: ["fake"],
+      onlinePeers: peers,
+      nowMs: created + 6_000,
+      reservationMs: 5_000,
+    });
+    expect(forCpuLater?.id).toBe("t1");
   });
 
   it("hard pin is only claimable by the named runner", () => {
@@ -269,5 +302,457 @@ describe("capability-matched claim SELECT", () => {
       vendorIds: ["fake"],
     });
     expect(forGpu.map((t) => t.id)).toEqual(["t1"]);
+  });
+});
+
+function getCreated(db: DatabaseHandle, id: string): string {
+  const row = db.prepare(`SELECT created_at FROM tasks WHERE id = ?`).get(id) as {
+    created_at: string;
+  };
+  return row.created_at;
+}
+
+// ─── Integration: durable deadline, workspace binding, sweep (#315 review) ─
+
+const FAKE_BIN = path.resolve(
+  path.dirname(new URL(import.meta.url).pathname),
+  "../../cli/tests/fake-vendor.mjs",
+);
+
+function writeConfig(home: string, body: Record<string, unknown> = {}): void {
+  fs.writeFileSync(
+    path.join(home, "parley.json"),
+    JSON.stringify(withFakeAllowlist(body)),
+  );
+}
+
+describe("durable routing deadline + restart (F1/F2)", () => {
+  let home: string;
+  let server: DaemonServer | null = null;
+
+  beforeEach(() => {
+    home = fs.mkdtempSync(path.join(os.tmpdir(), "parley-route-dur-"));
+    homes.push(home);
+    writeConfig(home, {
+      runners: { gpu: { token: "secret-gpu" } },
+      daemon: { routing: { queueTimeoutMs: 500 } },
+    });
+    process.env.PARLEY_FAKE_VENDOR_BIN = "";
+    process.env.PARLEY_ROUTING_QUEUE_TIMEOUT_MS = "400";
+    process.env.PARLEY_RUNNER_PRESENCE_GRACE_MS = "50";
+    process.env.PARLEY_LONG_POLL_MS = "200";
+  });
+
+  afterEach(async () => {
+    if (server) {
+      await server.close();
+      server = null;
+    }
+    delete process.env.PARLEY_FAKE_VENDOR_BIN;
+    delete process.env.PARLEY_ROUTING_QUEUE_TIMEOUT_MS;
+    delete process.env.PARLEY_RUNNER_PRESENCE_GRACE_MS;
+    delete process.env.PARLEY_LONG_POLL_MS;
+  });
+
+  async function boot(): Promise<string> {
+    server = await startServer(homePaths(home));
+    return `http://127.0.0.1:${server.port}`;
+  }
+
+  async function json(
+    base: string,
+    method: string,
+    route: string,
+    body?: unknown,
+    headers: Record<string, string> = {},
+  ): Promise<{ status: number; body: unknown }> {
+    const res = await fetch(`${base}${route}`, {
+      method,
+      headers: { "content-type": "application/json", ...headers },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+    const text = await res.text();
+    let parsed: unknown = text;
+    try {
+      parsed = text === "" ? null : JSON.parse(text);
+    } catch {
+      /* keep */
+    }
+    return { status: res.status, body: parsed };
+  }
+
+  it("online-at-create never polls → fails after durable timeout (M7/F2)", async () => {
+    const base = await boot();
+    // Register so runner is online (within grace), then never lease-poll.
+    const reg = await json(
+      base,
+      "POST",
+      "/runner/register",
+      {
+        runner: "gpu",
+        protocol_version: 1,
+        build_version: "t",
+        capabilities: { vendors: [{ id: "fake", models: [] }] },
+      },
+      { authorization: "Bearer secret-gpu" },
+    );
+    expect(reg.status).toBe(200);
+
+    const repo = makeOriginRepo();
+    const created = await json(base, "POST", "/tasks", {
+      prompt: "x",
+      vendor: "fake",
+      cwd: repo,
+      use_worktree: true,
+      orchestrator_session_id: "s",
+    });
+    expect(created.status).toBe(201);
+    const taskId = (created.body as { task_id: string }).task_id;
+
+    const mid = await json(base, "GET", `/tasks/${taskId}`);
+    const midRow = (mid.body as { row: { state: string; routing_deadline_at: string | null } })
+      .row;
+    expect(midRow.state).toBe("pending");
+    expect(midRow.routing_deadline_at).not.toBeNull();
+
+    // Wait for timeout.
+    const deadline = Date.now() + 5_000;
+    let state = "pending";
+    let error: string | null = null;
+    while (Date.now() < deadline) {
+      const st = await json(base, "GET", `/tasks/${taskId}`);
+      const row = (st.body as { row: { state: string; error: string | null } }).row;
+      state = row.state;
+      error = row.error;
+      if (state === "failed") break;
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    expect(state).toBe("failed");
+    expect(error).toMatch(/routing timed out|known executors/);
+  });
+
+  it("restart re-arms and expires durable deadline (M4/F1)", async () => {
+    const base = await boot();
+    const reg = await json(
+      base,
+      "POST",
+      "/runner/register",
+      {
+        runner: "gpu",
+        protocol_version: 1,
+        build_version: "t",
+        capabilities: { vendors: [{ id: "fake", models: [] }] },
+      },
+      { authorization: "Bearer secret-gpu" },
+    );
+    expect(reg.status).toBe(200);
+
+    // Force offline: wait past presence grace without poll.
+    await new Promise((r) => setTimeout(r, 120));
+
+    const repo = makeOriginRepo();
+
+    const created = await json(base, "POST", "/tasks", {
+      prompt: "x",
+      vendor: "fake",
+      cwd: repo,
+      use_worktree: true,
+      orchestrator_session_id: "s",
+    });
+    expect(created.status).toBe(201);
+    const taskId = (created.body as { task_id: string }).task_id;
+    const mid = await json(base, "GET", `/tasks/${taskId}`);
+    const midRow = (
+      mid.body as {
+        row: { queue_reason: string | null; routing_deadline_at: string | null };
+      }
+    ).row;
+    expect(midRow.queue_reason).toMatch(/waiting for capable runner/);
+    expect(midRow.routing_deadline_at).not.toBeNull();
+
+    // Close server (kill timers) and reopen — rearmRoutingDeadlines should
+    // fail the already-near-expired or re-arm and fail shortly.
+    await server!.close();
+    server = null;
+    // Backdate deadline so restart fails immediately.
+    const db = openDatabase(homePaths(home));
+    updateTask(db, taskId, {
+      routing_deadline_at: new Date(Date.now() - 1_000).toISOString(),
+    });
+    db.close();
+
+    server = await startServer(homePaths(home));
+    const base2 = `http://127.0.0.1:${server.port}`;
+    // Give construction a tick to run rearm.
+    await new Promise((r) => setTimeout(r, 50));
+    const after = await json(base2, "GET", `/tasks/${taskId}`);
+    const row = (after.body as { row: { state: string; error: string | null } }).row;
+    expect(row.state).toBe("failed");
+    expect(row.error).toMatch(/routing timed out|known executors/);
+  });
+
+  it("rejects register as reserved name local (F2)", async () => {
+    writeConfig(home, {
+      runners: { local: { token: "secret-local" } },
+    });
+    const base = await boot();
+    const reg = await json(
+      base,
+      "POST",
+      "/runner/register",
+      {
+        runner: "local",
+        protocol_version: 1,
+        build_version: "t",
+        capabilities: { vendors: [{ id: "fake", models: [] }] },
+      },
+      { authorization: "Bearer secret-local" },
+    );
+    expect(reg.status).toBe(400);
+    expect(JSON.stringify(reg.body)).toMatch(/reserved/);
+  });
+});
+
+describe("workspace-bound routing (F3)", () => {
+  let home: string;
+  let db: DatabaseHandle;
+
+  beforeEach(() => {
+    home = fs.mkdtempSync(path.join(os.tmpdir(), "parley-ws-bound-"));
+    homes.push(home);
+    writeConfig(home, {
+      runners: { gpu: { token: "secret-gpu" } },
+    });
+    process.env.PARLEY_FAKE_VENDOR_BIN = FAKE_BIN;
+    db = openDatabase(homePaths(home));
+  });
+
+  afterEach(() => {
+    try {
+      db.close();
+    } catch {
+      /* */
+    }
+    delete process.env.PARLEY_FAKE_VENDOR_BIN;
+  });
+
+  it("fix of local parent stays local even with capable online runner", () => {
+    // Seed a completed local parent with a worktree; insert a runner that
+    // advertises fake; fix must not set runner or leave for lease.
+    upsertRunner(db, {
+      name: "gpu",
+      capabilities: JSON.stringify({ vendors: [{ id: "fake", models: [] }] }),
+      protocol_version: 1,
+      build_version: "t",
+    });
+    const parent = insertTask(db, {
+      id: "t1",
+      name: null,
+      vendor: "fake",
+      model: "fake-model",
+      effort: "medium",
+      profile: null,
+      runner: null,
+      repo: home,
+      repo_key: "github.com/org/r",
+      repo_fetch_url: "https://github.com/org/r.git",
+      cwd: path.join(home, "wt"),
+      prompt: "parent",
+      orchestrator_session_id: "s",
+      worktree: path.join(home, "wt"),
+      branch: "parley/t1",
+      base_sha: "abc",
+      sandbox: "workspace",
+      network: true,
+      answer_timeout_ms: null,
+      report_schema: null,
+      size: null,
+      difficulty: null,
+      type: "other",
+    });
+    writeTaskState(db, parent.id, "completed", {
+      completed_at: new Date().toISOString(),
+      report: JSON.stringify({
+        summary: "ok",
+        outcome: "success",
+        files_changed: [],
+      }),
+    });
+
+    const engine = new TaskEngine(
+      db,
+      homePaths(home),
+      createAdapterRegistrySync(process.env),
+    );
+    engine.setRunnerOnlineProbe(() => true);
+
+    // isWorkspaceBoundLocal for a synthetic fix row with parent_task_id
+    const fixRow = insertTask(db, {
+      id: "t2",
+      name: null,
+      vendor: "fake",
+      model: "fake-model",
+      effort: "medium",
+      profile: null,
+      runner: null,
+      repo: home,
+      repo_key: "github.com/org/r",
+      repo_fetch_url: "https://github.com/org/r.git",
+      cwd: path.join(home, "wt2"),
+      prompt: "fix brief",
+      orchestrator_session_id: "s",
+      worktree: path.join(home, "wt2"),
+      branch: "parley/t2",
+      base_sha: "abc",
+      sandbox: "workspace",
+      network: true,
+      answer_timeout_ms: null,
+      report_schema: null,
+      size: null,
+      difficulty: null,
+      type: "other",
+      parent_task_id: "t1",
+      attempt: 2,
+    });
+    // Invoke private dispatch via public surface: offer path after insert
+    // by calling fix would need more setup — assert isWorkspaceBound via
+    // dispatchClaim side-effect: runner stays null and task is not pending
+    // for lease. Use engine.list after a manual dispatch via fix is heavy;
+    // instead check getTask after engine.delegate-style is not available.
+    // Direct: worktree-bound row → dispatchClaim keeps runner null.
+    (engine as unknown as { dispatchClaim: (t: typeof fixRow) => void }).dispatchClaim(
+      getTask(db, "t2")!,
+    );
+    const after = getTask(db, "t2")!;
+    // Either admitted/running/queued (local) or still pending without remote deadline.
+    expect(after.runner).toBeNull();
+    expect(after.routing_deadline_at).toBeNull();
+  });
+
+  it("run-owned step stays local", () => {
+    const row = insertTask(db, {
+      id: "t1",
+      name: null,
+      vendor: "fake",
+      model: "fake-model",
+      effort: "medium",
+      profile: null,
+      runner: null,
+      repo: home,
+      cwd: home,
+      prompt: "step",
+      orchestrator_session_id: "s",
+      worktree: null,
+      branch: null,
+      base_sha: null,
+      sandbox: "workspace",
+      network: true,
+      answer_timeout_ms: null,
+      report_schema: null,
+      size: null,
+      difficulty: null,
+      type: "other",
+      run_id: "r1",
+      node: "n1",
+      iteration: 1,
+      slot: null,
+    });
+    const engine = new TaskEngine(
+      db,
+      homePaths(home),
+      createAdapterRegistrySync(process.env),
+    );
+    engine.setRunnerOnlineProbe(() => true);
+    (engine as unknown as { dispatchClaim: (t: typeof row) => void }).dispatchClaim(row);
+    const after = getTask(db, "t1")!;
+    expect(after.runner).toBeNull();
+    expect(after.routing_deadline_at).toBeNull();
+  });
+});
+
+describe("crash sweep preserves routing-wait pending (F8)", () => {
+  it("pending routing-wait survives; local running is stalled", () => {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), "parley-sweep-"));
+    homes.push(home);
+    const db = openDatabase(homePaths(home));
+    insertTask(db, {
+      id: "t-wait",
+      name: null,
+      vendor: "fake",
+      model: null,
+      effort: null,
+      profile: null,
+      runner: null,
+      repo: home,
+      cwd: home,
+      prompt: "wait",
+      orchestrator_session_id: "s",
+      worktree: null,
+      branch: null,
+      base_sha: null,
+      sandbox: "workspace",
+      network: true,
+      answer_timeout_ms: null,
+      report_schema: null,
+      size: null,
+      difficulty: null,
+      type: "other",
+    });
+    updateTask(db, "t-wait", {
+      queue_reason: "waiting for capable runner: gpu (offline)",
+      routing_deadline_at: new Date(Date.now() + 60_000).toISOString(),
+    });
+    insertTask(db, {
+      id: "t-run",
+      name: null,
+      vendor: "fake",
+      model: null,
+      effort: null,
+      profile: null,
+      runner: null,
+      repo: home,
+      cwd: home,
+      prompt: "run",
+      orchestrator_session_id: "s",
+      worktree: path.join(home, "wt"),
+      branch: "b",
+      base_sha: "a",
+      sandbox: "workspace",
+      network: true,
+      answer_timeout_ms: null,
+      report_schema: null,
+      size: null,
+      difficulty: null,
+      type: "other",
+    });
+    writeTaskState(db, "t-run", "running", {
+      started_at: new Date().toISOString(),
+    });
+
+    const n = sweepInterruptedTasks(db);
+    expect(n).toBe(1);
+    expect(getTask(db, "t-wait")!.state).toBe("pending");
+    expect(getTask(db, "t-wait")!.queue_reason).toMatch(/waiting/);
+    expect(getTask(db, "t-run")!.state).toBe("stalled");
+    db.close();
+  });
+});
+
+describe("detectHarnesses env bin overrides (F9)", () => {
+  it("advertises a vendor when PARLEY_<VENDOR>_BIN points at an existing binary on empty PATH", () => {
+    const bin = fs.mkdtempSync(path.join(os.tmpdir(), "parley-bin-"));
+    homes.push(bin);
+    const fakePath = path.join(bin, "openhands-bin");
+    fs.writeFileSync(fakePath, "#!/bin/sh\necho ok\n", { mode: 0o755 });
+    const found = detectHarnesses(
+      {},
+      {
+        ...process.env,
+        PATH: "",
+        PARLEY_OPENHANDS_BIN: fakePath,
+        PARLEY_FAKE_VENDOR_BIN: undefined,
+      },
+    );
+    expect(found).toContain("openhands");
   });
 });

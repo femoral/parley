@@ -145,8 +145,8 @@ describe("migration #243", () => {
     home = fs.mkdtempSync(path.join(os.tmpdir(), "parley-run-eval-mig-"));
     // Pre-#243 schema: migrations after #243 are #249 (base_ref/base_commit),
     // #314 (runners table), and #313 (repo_key/repo_fetch_url), so the
-    // snapshot is SCHEMA_VERSION - 5 (#315 routing + prior migrations).
-    const prev = openDatabaseUpTo(homePaths(home), SCHEMA_VERSION - 5);
+    // snapshot is SCHEMA_VERSION - 6 (#315 routing durability + prior).
+    const prev = openDatabaseUpTo(homePaths(home), SCHEMA_VERSION - 6);
     const colsBefore = prev
       .prepare("PRAGMA table_info(runs)")
       .all()

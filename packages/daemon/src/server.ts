@@ -2549,6 +2549,15 @@ function createHandler(
             });
             return;
           }
+          // #315 F2: `local` is reserved for the daemon's in-process executor.
+          if (runnerName === "local" || body.runner === "local") {
+            sendJson(res, 400, {
+              error:
+                'runner name "local" is reserved for the daemon in-process executor',
+              code: "reserved_runner_name",
+            });
+            return;
+          }
           const row = upsertRunner(db, {
             name: runnerName,
             capabilities: JSON.stringify(body.capabilities),

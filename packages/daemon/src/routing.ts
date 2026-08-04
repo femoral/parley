@@ -138,6 +138,8 @@ export function formatWaitingReason(offlineCapable: readonly ExecutorCapability[
 /**
  * Among online capable runners (non-local), pick preferred order: warmest
  * (most recent completion) first, then name ASC. Empty when no online runners.
+ * Used by claim-time warm reservation (#315 F5) via the same ranking rule as
+ * `preferredWarmRunner` in db.ts.
  */
 export function rankOnlineRunners(
   onlineCapable: readonly ExecutorCapability[],

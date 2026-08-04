@@ -223,6 +223,12 @@ export interface TaskRow {
    * online (#315 / #304). Null when not waiting on routing.
    */
   queue_reason: string | null;
+  /**
+   * Absolute ISO-8601 deadline for a pending remote-routed task (#315).
+   * Set when the task is waiting for a runner claim (online or offline);
+   * cleared on claim / local start / terminal. Survives daemon restart.
+   */
+  routing_deadline_at: string | null;
 }
 
 /** Fields the daemon writes when creating a task. */
@@ -866,6 +872,9 @@ const MIGRATIONS: string[] = [
   // existing `runner` column (set at pin or on claim of an unpinned task).
   `ALTER TABLE tasks ADD COLUMN queue_reason TEXT;
    ALTER TABLE runners ADD COLUMN last_completed_at TEXT;`,
+  // #315 durability: absolute ISO deadline for pending remote-routed tasks so
+  // restart re-arms or fails on expiry (not an in-memory-only timer).
+  `ALTER TABLE tasks ADD COLUMN routing_deadline_at TEXT;`,
 ];
 
 /** How many schema migrations have been applied — equals `PRAGMA user_version` after open. */
@@ -950,7 +959,7 @@ const TASK_COLUMNS = `id, name, vendor, model, effort, profile, runner, repo, re
    launch_command, model_source, effort_source,
    orch_harness, orch_model, orch_effort,
    eval_session_id, eval_harness, eval_model, eval_effort, queued_at,
-   run_id, node, iteration, slot, queue_reason`;
+   run_id, node, iteration, slot, queue_reason, routing_deadline_at`;
 
 const RUN_COLUMNS = `id, workflow, version, type, workspace, repo, state, current_node, iteration,
    parent_run_id, attempt, orchestrator_session_id, created_at, updated_at,
@@ -1490,14 +1499,21 @@ export function listCapablePendingTasks(
 }
 
 /**
+ * Window after task create during which only the warm-preferred online runner
+ * may claim an unpinned task (#315). After the window any capable online
+ * claimer may take it. Hard pins always match immediately.
+ */
+export const WARM_CLAIM_RESERVATION_MS = 5_000;
+
+/**
  * Oldest pending task this executor may claim under capability matching
- * (#315 / #304). Warm-executor preference: when multiple online peers could
- * take an unpinned task, prefer the peer with the most recent completion;
- * this executor only claims unpinned tasks for which it is preferred (or the
- * sole capable online peer). Hard-affinity pins always match when capable.
+ * (#315 / #304).
  *
- * @deprecated name kept only as a private alias site — use
- * {@link selectClaimablePendingTask} via the engine.
+ * Hard-affinity pins always match when capable. Unpinned: within
+ * {@link WARM_CLAIM_RESERVATION_MS} of `created_at`, only the warm-preferred
+ * online peer (most recent completion, then name ASC) may claim; after the
+ * window any capable online claimer may take the task. When the preferred
+ * peer is not online, any capable claimer may take it immediately.
  */
 export function selectClaimablePendingTask(
   db: DatabaseHandle,
@@ -1505,14 +1521,18 @@ export function selectClaimablePendingTask(
     executorName: string;
     vendorIds: readonly string[];
     /**
-     * Online peers that also advertise overlapping vendors, for warm ranking.
-     * Omit or empty ⇒ this executor claims any candidate it can (sole online).
+     * Online peers (including self) advertising vendors, for warm ranking.
+     * Omit or empty ⇒ this executor claims any candidate it can.
      */
     onlinePeers?: ReadonlyArray<{
       name: string;
       vendorIds: readonly string[];
       last_completed_at: string | null;
     }>;
+    /** Override clock for tests (ms since epoch). */
+    nowMs?: number;
+    /** Override reservation window for tests. */
+    reservationMs?: number;
   },
 ): TaskRow | undefined {
   const candidates = listCapablePendingTasks(db, {
@@ -1521,55 +1541,58 @@ export function selectClaimablePendingTask(
   });
   if (candidates.length === 0) return undefined;
   const peers = opts.onlinePeers ?? [];
+  const now = opts.nowMs ?? Date.now();
+  const reservationMs = opts.reservationMs ?? WARM_CLAIM_RESERVATION_MS;
 
   for (const task of candidates) {
     const affinity = task.runner !== null && task.runner !== "" ? task.runner : null;
-    // Hard pin: only this executor may take it (already filtered by SQL).
     if (affinity !== null) return task;
 
     const vendor = task.vendor ?? "";
     if (vendor === "") continue;
 
-    // Unpinned: among online peers that advertise this vendor, prefer the
-    // warmest (most recent completion); name ASC breaks residual ties.
-    const capableOnline = peers.filter(
-      (p) => p.name !== opts.executorName && p.vendorIds.includes(vendor),
-    );
-    if (capableOnline.length === 0) return task;
+    const capableOnline = peers.filter((p) => p.vendorIds.includes(vendor));
+    if (capableOnline.length <= 1) return task;
 
-    const ranked = [
-      {
-        name: opts.executorName,
-        last_completed_at: peers.find((p) => p.name === opts.executorName)
-          ?.last_completed_at ?? null,
-      },
-      ...capableOnline.map((p) => ({
-        name: p.name,
-        last_completed_at: p.last_completed_at,
-      })),
-    ];
-    ranked.sort((a, b) => {
-      const at = a.last_completed_at ? Date.parse(a.last_completed_at) : 0;
-      const bt = b.last_completed_at ? Date.parse(b.last_completed_at) : 0;
-      if (at !== bt) return bt - at; // more recent first
-      return a.name.localeCompare(b.name);
-    });
-    if (ranked[0]?.name === opts.executorName) return task;
-    // Not preferred for this task — leave it for the warmer peer; try next.
+    const preferred = preferredWarmRunner(capableOnline);
+    if (preferred === null || preferred === opts.executorName) return task;
+
+    const created = Date.parse(task.created_at);
+    const age = Number.isFinite(created) ? now - created : reservationMs + 1;
+    // Reservation expired → any capable claimer.
+    if (age >= reservationMs) return task;
+    // Still reserved for a warmer online peer — leave it.
   }
-  // No preferred unpinned task, but we may still take hard-affinity or be the
-  // only one polling: fall back to first candidate so work does not starve.
-  return candidates[0];
+  return undefined;
 }
 
 /**
- * Pending tasks waiting on capable-but-offline routing (#315).
+ * Warm-preferred runner name among online peers: most recent completion first,
+ * then name ASC. Null when the list is empty.
+ */
+export function preferredWarmRunner(
+  peers: ReadonlyArray<{ name: string; last_completed_at: string | null }>,
+): string | null {
+  if (peers.length === 0) return null;
+  const ranked = [...peers].sort((a, b) => {
+    const at = a.last_completed_at ? Date.parse(a.last_completed_at) : 0;
+    const bt = b.last_completed_at ? Date.parse(b.last_completed_at) : 0;
+    if (at !== bt) return bt - at;
+    return a.name.localeCompare(b.name);
+  });
+  return ranked[0]?.name ?? null;
+}
+
+/**
+ * Pending tasks waiting on remote routing (#315): any with a durable deadline
+ * or a visible queue_reason (capable-but-offline).
  */
 export function listRoutingWaitTasks(db: DatabaseHandle): TaskRow[] {
   return db
     .prepare(
       `SELECT ${TASK_COLUMNS} FROM tasks
-       WHERE state = 'pending' AND queue_reason IS NOT NULL
+       WHERE state = 'pending'
+         AND (queue_reason IS NOT NULL OR routing_deadline_at IS NOT NULL)
        ORDER BY created_at ASC, id ASC`,
     )
     .all()
@@ -1659,6 +1682,7 @@ export type TaskDataPatch = Partial<
     | "eval_effort"
     | "queued_at"
     | "queue_reason"
+    | "routing_deadline_at"
     | "runner"
   >
 >;
@@ -2392,7 +2416,7 @@ const RUN_QUERY_TASK_COLUMNS = `id, name, vendor, model, effort, profile, runner
    launch_command, model_source, effort_source,
    orch_harness, orch_model, orch_effort,
    eval_session_id, eval_harness, eval_model, eval_effort, queued_at,
-   run_id, node, iteration, slot, queue_reason`;
+   run_id, node, iteration, slot, queue_reason, routing_deadline_at`;
 
 const RUN_QUERY_DELIVERABLE_COLUMNS = `id, run_id, node, port, iteration, slot, task_id, kind, value,
    created_at, purged_at`;

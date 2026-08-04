@@ -84,12 +84,6 @@ export interface RunnerLeaseSpec {
   model: string | null;
   effort: string | null;
   profile: string | null;
-  /**
-   * Hard affinity pin from `--runner`, when set at create time (#315).
-   * After claim of an unpinned task, the engine records the claimer on the
-   * task row; this field on the lease is the create-time pin (null when none).
-   */
-  affinity?: string | null;
   sandbox: SandboxMode;
   network: boolean;
   answer_timeout_ms: number;

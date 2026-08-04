@@ -546,6 +546,67 @@ describe("capability-matched routing (#315)", () => {
     expect(result.stderr).toMatch(/--runner requires a git remote/);
     expect(result.stderr).toMatch(/no origin/);
   });
+
+  it("no-origin + automatic remote path fails (F4)", async () => {
+    // Local incapable; capable runner online → would be remote, but no origin.
+    const daemonUrl = await bootDaemon({ PARLEY_FAKE_VENDOR_BIN: "" });
+    await registerViaHttp(daemonUrl, "gpu", "secret-gpu", ["fake"]);
+    const repo = makeGitRepo([]); // no origin
+    repos.push(repo);
+    const result = await runCli(
+      ["delegate", "-v", "fake", "x"],
+      home,
+      {
+        cwd: repo,
+        extraEnv: { PARLEY_FAKE_VENDOR_BIN: "" },
+      },
+    );
+    expect(result.code).toBe(2);
+    expect(result.stderr).toMatch(/remote routing requires a git remote/);
+    expect(result.stderr).not.toMatch(/Remove --runner/);
+  });
+
+  it("--cwd stays local even when a capable runner is online (F3)", async () => {
+    const daemonUrl = await bootDaemon();
+    await registerViaHttp(daemonUrl, "gpu", "secret-gpu", ["fake"]);
+    const repo = makeGitRepo([
+      { emit: { type: "session", session_id: "cwd-sess" } },
+      {
+        submit_report: {
+          summary: "cwd local",
+          outcome: "success",
+          files_changed: [],
+        },
+      },
+    ]);
+    repos.push(repo);
+
+    const result = await runCli(
+      ["delegate", "-v", "fake", "--cwd", repo, "-n", "cwd-job", "run here"],
+      home,
+    );
+    expect(result.stderr).toBe("");
+    expect(result.code).toBe(0);
+    const ack = JSON.parse(result.stdout) as { task_id: string };
+
+    const deadline = Date.now() + 15_000;
+    let body: { state: string; runner: string | null; worktree: string | null } | null =
+      null;
+    while (Date.now() < deadline) {
+      const status = await runCli(["status", ack.task_id, "--json"], home);
+      if (status.code === 0) {
+        body = JSON.parse(status.stdout) as {
+          state: string;
+          runner: string | null;
+          worktree: string | null;
+        };
+        if (body.state === "completed" || body.state === "failed") break;
+      }
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    expect(body?.state).toBe("completed");
+    expect(body?.runner).toBeNull();
+  });
 });
 
 describe("runner registration + parley runners list", () => {
