@@ -144,7 +144,7 @@ export function isRemoteDaemonConfig(config: ParleyConfig): boolean {
  */
 export const REMOTE_MODELS_NOTICE =
   "Model allowlists are owned by the remote daemon (daemon.url is set). " +
-  "Manage them with `parley models` (list, set, unset, --refresh); " +
+  "Manage them with `parley models` (bare list, set, unset, --refresh); " +
   "local catalog probe and vendors.*.models writes were skipped.";
 
 /**
