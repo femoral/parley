@@ -8,6 +8,8 @@ import { loadWorkflowDefinition } from "@useparley/core";
 import {
   EXAMPLE_WORKFLOW_IDS,
   isInteractiveInit,
+  isRemoteDaemonConfig,
+  REMOTE_MODELS_NOTICE,
   cliSelectionDefaultEffort,
   modelsWithCliSelection,
   populateInitConfig,
@@ -684,6 +686,98 @@ describe("parley init", () => {
     expect(isInteractiveInit({ stdinIsTTY: undefined, json: false, yes: false })).toBe(false);
     expect(isInteractiveInit({ stdinIsTTY: true, json: true, yes: false })).toBe(false);
     expect(isInteractiveInit({ stdinIsTTY: true, json: false, yes: true })).toBe(false);
+  });
+
+  it("treats daemon.url as the remote-daemon signal (#328)", () => {
+    expect(isRemoteDaemonConfig({})).toBe(false);
+    expect(isRemoteDaemonConfig({ daemon: {} })).toBe(false);
+    expect(isRemoteDaemonConfig({ daemon: { url: "" } })).toBe(false);
+    expect(isRemoteDaemonConfig({ daemon: { url: "http://127.0.0.1:57123" } })).toBe(true);
+    expect(REMOTE_MODELS_NOTICE).toMatch(/parley models/);
+  });
+
+  it("with daemon.url skips catalog probe and vendors.*.models writes (#328)", async () => {
+    // Config-key only — no live daemon. Pre-seed a local allowlist that must
+    // stay unmodified, and leave models.json absent so a local probe would
+    // create it (regression: remote path must not write either).
+    const beforeCfg = {
+      daemon: { url: "http://127.0.0.1:9" },
+      vendors: {
+        fake: {
+          models: {
+            "pre-existing": { efforts: ["low"], default: "low" as const },
+          },
+        },
+      },
+    };
+    fs.writeFileSync(path.join(home, "parley.json"), JSON.stringify(beforeCfg, null, 2));
+    expect(fs.existsSync(path.join(home, "models.json"))).toBe(false);
+
+    const repo = makeRepo();
+    const jsonRes = await runCli(["init", "--json", "--yes"], home, {
+      cwd: repo,
+      extraEnv: {
+        HOME: mkTemp("parley-init-remote-json-"),
+        PATH: pathWithGitOnly(),
+        PARLEY_FAKE_VENDOR_BIN: FAKE_VENDOR_BIN,
+      },
+    });
+    expect(jsonRes.code).toBe(0);
+    const out = JSON.parse(jsonRes.stdout) as {
+      harnesses: string[];
+      models: {
+        remote?: boolean;
+        skipped?: boolean;
+        notice?: string;
+        vendors: unknown[];
+        warnings: unknown[];
+      };
+    };
+    // Fake harness still detected (CLI-local PATH); models authoring skipped.
+    expect(out.harnesses).toEqual(["fake"]);
+    expect(out.models.remote).toBe(true);
+    expect(out.models.skipped).toBe(true);
+    expect(out.models.notice).toMatch(/parley models/);
+    expect(out.models.vendors).toEqual([]);
+    expect(jsonRes.stdout).toMatch(/parley models/);
+
+    const afterCfg = JSON.parse(fs.readFileSync(path.join(home, "parley.json"), "utf8")) as {
+      vendors?: { fake?: { models?: Record<string, unknown> } };
+      defaults?: unknown;
+    };
+    // No new allowlist keys; pre-existing entry untouched; no defaults.vendor seed.
+    expect(afterCfg.vendors?.fake?.models).toEqual({
+      "pre-existing": { efforts: ["low"], default: "low" },
+    });
+    expect(afterCfg.defaults).toBeUndefined();
+    // No local catalog probe/write.
+    expect(fs.existsSync(path.join(home, "models.json"))).toBe(false);
+
+    // Human non-interactive path also surfaces the pointer (#328).
+    const humanRes = await runCli(["init", "--scope", "global", "--layout", "agents", "--yes"], home, {
+      extraEnv: {
+        HOME: mkTemp("parley-init-remote-human-"),
+        PATH: pathWithGitOnly(),
+        PARLEY_FAKE_VENDOR_BIN: FAKE_VENDOR_BIN,
+      },
+    });
+    expect(humanRes.code).toBe(0);
+    expect(humanRes.stdout).toMatch(/## Models/);
+    expect(humanRes.stdout).toMatch(/parley models/);
+    expect(humanRes.stdout).toMatch(/daemon\.url|remote daemon/);
+    // Still no catalog / allowlist mutation after a second pass.
+    expect(JSON.parse(fs.readFileSync(path.join(home, "parley.json"), "utf8"))).toEqual(
+      expect.objectContaining({
+        vendors: {
+          fake: {
+            models: {
+              "pre-existing": { efforts: ["low"], default: "low" },
+            },
+          },
+        },
+      }),
+    );
+    expect(fs.existsSync(path.join(home, "models.json"))).toBe(false);
   });
 
   it("happy path: skills, config, models with fake harness on empty PATH", async () => {

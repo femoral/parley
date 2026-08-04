@@ -131,6 +131,23 @@ export function isInteractiveInit(opts: {
 }
 
 /**
+ * True when effective config targets a remote daemon via `daemon.url` (#328).
+ * Config key only — no network probe. Same signal the rest of the CLI uses.
+ */
+export function isRemoteDaemonConfig(config: ParleyConfig): boolean {
+  return typeof config.daemon?.url === "string" && config.daemon.url.length > 0;
+}
+
+/**
+ * Notice when init skips vendor-allowlist authoring against a remote daemon.
+ * Names `parley models` so the operator's next step is unambiguous.
+ */
+export const REMOTE_MODELS_NOTICE =
+  "Model allowlists are owned by the remote daemon (daemon.url is set). " +
+  "Manage them with `parley models` (list, set, unset, --refresh); " +
+  "local catalog probe and vendors.*.models writes were skipped.";
+
+/**
  * Ensure layered config files exist for the resolved scope.
  * Always creates home `parley.json` when missing; project scope also ensures
  * `<repo>/.parley/config.json`.
@@ -638,7 +655,14 @@ export async function runInit(ctx: CliContext, args: string[]): Promise<number> 
     ctx.stderr(`warning: ${err instanceof Error ? err.message : String(err)}\n`);
   }
 
+  // Remote daemon (#328): allowlist/catalog probe reflect the daemon host's
+  // vendor reality, not this CLI host. Skip local catalog probe + vendors.*.models
+  // writes; point the operator at `parley models` instead.
+  const remoteDaemon = isRemoteDaemonConfig(config);
+
   // --- Harnesses ---
+  // Still detect local harnesses (CLI-local PATH info); only models authoring
+  // is gated on remoteDaemon below.
   const harnesses = detectHarnesses(config, ctx.env);
 
   // --- Models ---
@@ -649,44 +673,53 @@ export async function runInit(ctx: CliContext, args: string[]): Promise<number> 
   // Shared with allowlist pre-fill so selected-model reads (#284) use the same
   // operator-home env as the catalog refresh.
   let adapters: Map<string, VendorAdapter> | undefined;
+  let populated: { config: ParleyConfig; changed: boolean; configuredVendors: string[] } = {
+    config,
+    changed: false,
+    configuredVendors: [],
+  };
 
-  if (harnesses.length > 0) {
-    adapters = await createAdapterRegistry(ctx.env, {
-      config,
-      parleyHome: ctx.paths.home,
-      log: (line) => {
-        if (!json) ctx.stderr(`${line}\n`);
-      },
-    });
-    const result = await refreshCatalog(catalog, harnesses, adapters);
-    catalog = result.catalog;
-    modelWarnings.push(...result.warnings);
-    writeCatalog(modelsFile, catalog);
-    for (const id of harnesses) {
-      modelResults.push(catalogEntrySummary(catalog, id));
+  if (remoteDaemon) {
+    // No createAdapterRegistry / refreshCatalog / writeCatalog / populateInitConfig.
+    // Leave existing local vendors.*.models and models.json untouched.
+  } else {
+    if (harnesses.length > 0) {
+      adapters = await createAdapterRegistry(ctx.env, {
+        config,
+        parleyHome: ctx.paths.home,
+        log: (line) => {
+          if (!json) ctx.stderr(`${line}\n`);
+        },
+      });
+      const result = await refreshCatalog(catalog, harnesses, adapters);
+      catalog = result.catalog;
+      modelWarnings.push(...result.warnings);
+      writeCatalog(modelsFile, catalog);
+      for (const id of harnesses) {
+        modelResults.push(catalogEntrySummary(catalog, id));
+      }
+    } else if (!fs.existsSync(modelsFile)) {
+      // Seed so the path we point users at always exists.
+      writeCatalog(modelsFile, catalog);
     }
-  } else if (!fs.existsSync(modelsFile)) {
-    // Seed so the path we point users at always exists.
-    writeCatalog(modelsFile, catalog);
-  }
 
-  // Authoritative delegation settings are daemon-owned and always live in the
-  // home config, regardless of the project-settings/skill install scope.
-  let populated;
-  try {
-    populated = await populateInitConfig({
-      config,
-      harnesses,
-      catalog,
-      interactive,
-      adapters,
-    });
-  } catch (err) {
-    if (err instanceof PromptCancelled) return 130;
-    throw err;
+    // Authoritative delegation settings are daemon-owned and always live in the
+    // home config, regardless of the project-settings/skill install scope.
+    try {
+      populated = await populateInitConfig({
+        config,
+        harnesses,
+        catalog,
+        interactive,
+        adapters,
+      });
+    } catch (err) {
+      if (err instanceof PromptCancelled) return 130;
+      throw err;
+    }
+    if (populated.changed) writeConfig(ctx.paths.config, populated.config);
+    config = populated.config;
   }
-  if (populated.changed) writeConfig(ctx.paths.config, populated.config);
-  config = populated.config;
 
   // Provenance-plugin setup is deliberately not part of init while the
   // plugins are still being validated; see setupBundledPlugins.
@@ -715,11 +748,20 @@ export async function runInit(ctx: CliContext, args: string[]): Promise<number> 
         })),
       },
       harnesses,
-      models: {
-        file: modelsFile,
-        vendors: modelResults,
-        warnings: modelWarnings,
-      },
+      models: remoteDaemon
+        ? {
+            remote: true,
+            skipped: true,
+            notice: REMOTE_MODELS_NOTICE,
+            file: modelsFile,
+            vendors: [] as HarnessModelResult[],
+            warnings: [] as string[],
+          }
+        : {
+            file: modelsFile,
+            vendors: modelResults,
+            warnings: modelWarnings,
+          },
     });
     return 0;
   }
@@ -761,12 +803,18 @@ export async function runInit(ctx: CliContext, args: string[]): Promise<number> 
     ctx.stdout(
       `  Built-in vendor ids: ${BUILTIN_VENDOR_IDS.filter((id) => id !== "fake").join(", ")}.\n`,
     );
-    ctx.stdout(
-      `  Install a harness CLI, set vendors.<id>.bin in ${ctx.paths.config}, then re-run \`parley init\` or \`parley models --refresh\`.\n`,
-    );
-    ctx.stdout(
-      `  Model catalog: ${modelsFile}. For interactive setup, use the /parley-wizard skill.\n`,
-    );
+    if (remoteDaemon) {
+      ctx.stdout(
+        `  Install a harness CLI on the daemon host, then manage models with \`parley models --refresh\`.\n`,
+      );
+    } else {
+      ctx.stdout(
+        `  Install a harness CLI, set vendors.<id>.bin in ${ctx.paths.config}, then re-run \`parley init\` or \`parley models --refresh\`.\n`,
+      );
+      ctx.stdout(
+        `  Model catalog: ${modelsFile}. For interactive setup, use the /parley-wizard skill.\n`,
+      );
+    }
   } else {
     for (const id of harnesses) {
       const bin =
@@ -778,7 +826,9 @@ export async function runInit(ctx: CliContext, args: string[]): Promise<number> 
   }
 
   ctx.stdout("\n## Models\n");
-  if (harnesses.length === 0) {
+  if (remoteDaemon) {
+    ctx.stdout(`  ${REMOTE_MODELS_NOTICE}\n`);
+  } else if (harnesses.length === 0) {
     ctx.stdout(`  Skipped refresh (no harnesses). Catalog: ${modelsFile}\n`);
     ctx.stdout("  Use /parley-wizard or edit the catalog / config to set models.\n");
   } else {
