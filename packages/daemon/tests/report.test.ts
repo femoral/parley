@@ -33,6 +33,27 @@ describe("validateReport — default schema", () => {
       expect(e).toMatch(/^.+: .+$/);
     }
   });
+
+  it("DEFAULT_REPORT_SCHEMA declares explicit type on every property (#335)", () => {
+    // Moonshot-flavoured providers reject tool schemas whose properties lack
+    // type (enum-only is not enough). Guard the default schema shape.
+    expect(DEFAULT_REPORT_SCHEMA).toMatchObject({ type: "object" });
+    const props =
+      typeof DEFAULT_REPORT_SCHEMA === "object" &&
+      DEFAULT_REPORT_SCHEMA !== null &&
+      "properties" in DEFAULT_REPORT_SCHEMA
+        ? (DEFAULT_REPORT_SCHEMA.properties as Record<string, Record<string, unknown>>)
+        : {};
+    expect(Object.keys(props).length).toBeGreaterThan(0);
+    for (const [name, prop] of Object.entries(props)) {
+      expect(prop, `property ${name} must declare type`).toHaveProperty("type");
+      expect(typeof prop.type).toBe("string");
+    }
+    expect(props.outcome).toEqual({
+      type: "string",
+      enum: ["success", "partial", "blocked"],
+    });
+  });
 });
 
 describe("validateReport — generated output-port schema", () => {

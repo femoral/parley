@@ -133,9 +133,16 @@ describe("MCP tools/list report schema advertisement (#270)", () => {
       const props = schema.properties as Record<string, Record<string, unknown>>;
       expect(props).toBeDefined();
       expect(props.summary?.type).toBe("string");
+      // Explicit type required — Moonshot rejects enum-only properties (#335).
+      expect(props.outcome?.type).toBe("string");
       expect(props.outcome?.enum).toEqual(["success", "partial", "blocked"]);
       expect(props.files_changed?.type).toBe("array");
       expect((props.files_changed?.items as { type?: string })?.type).toBe("string");
+      // Every advertised property carries an explicit type (vendor tool schemas).
+      for (const [name, prop] of Object.entries(props)) {
+        expect(prop, `property ${name} must declare type`).toHaveProperty("type");
+        expect(typeof prop.type).toBe("string");
+      }
       expect(schema.required).toEqual(
         expect.arrayContaining(["summary", "outcome", "files_changed"]),
       );

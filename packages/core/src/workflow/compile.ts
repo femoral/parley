@@ -89,6 +89,7 @@ function compileInner(
       };
     case "enum":
       return {
+        type: "string",
         enum: [...type.values],
       };
     case "schema": {

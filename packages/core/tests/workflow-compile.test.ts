@@ -59,6 +59,7 @@ describe("compilePortType — atoms", () => {
 
   it("compiles named enum", () => {
     expect(compile("verdict")).toEqual({
+      type: "string",
       enum: ["approve", "changes_requested"],
     });
   });
@@ -122,12 +123,29 @@ describe("compileOutputPorts — report_schema seam", () => {
     expect(schema).toEqual({
       type: "object",
       properties: {
-        verdict: { enum: ["approve", "changes_requested"] },
+        verdict: { type: "string", enum: ["approve", "changes_requested"] },
         notes: { type: "string", maxLength: 6000 },
       },
       required: ["verdict", "notes"],
       additionalProperties: false,
     });
+  });
+
+  it("emits explicit type on every property, including enum ports (#335)", () => {
+    // Moonshot-flavoured providers reject tool schemas with enum-only properties
+    // (no type keyword). Guard the compile seam so enum ports stay typed.
+    const schema = compileOutputPorts({
+      verdict: { type: parsePortType("verdict", named) },
+      status: { type: parsePortType("verdict", named) },
+      notes: { type: parsePortType("text", named) },
+    });
+    const props = schema.properties as Record<string, Record<string, unknown>>;
+    for (const [name, prop] of Object.entries(props)) {
+      expect(prop, `property ${name} must declare type`).toHaveProperty("type");
+      expect(typeof prop.type).toBe("string");
+    }
+    expect(props.verdict.type).toBe("string");
+    expect(props.verdict.enum).toEqual(["approve", "changes_requested"]);
   });
 });
 
