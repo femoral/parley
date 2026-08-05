@@ -20,6 +20,7 @@ import {
   listTasks,
   nextTaskId,
   openDatabase,
+  updateTask,
   writeTaskState,
   type DatabaseHandle,
 } from "../src/db.js";
@@ -157,6 +158,72 @@ describe("hub port before restart recovery (#333)", () => {
       expect(row.error ?? "").not.toMatch(HUB_PORT_ERROR);
       expect(row.state).not.toBe("queued");
     }
+
+    eng.killChildren();
+  });
+
+  /**
+   * #333 cascade: rearmRoutingDeadlines → fail expired routing wait → fail() →
+   * onSlotFreed → drainConcurrencyQueue → admitAndStart → hubFor throws while
+   * hubPort is still null. Gating pre-bind drains defers the queue admit until
+   * start(); failing the routing-wait task itself is fine.
+   */
+  it("expired routing wait on construct does not hub-port-fail a durable queued task", async () => {
+    const queuedId = nextTaskId(db);
+    seedQueuedTask(queuedId, "2026-01-01T00:00:01.000Z");
+
+    const waitId = nextTaskId(db);
+    insertTask(db, {
+      id: waitId,
+      name: null,
+      vendor: "fake",
+      model: "fake-model",
+      effort: "medium",
+      profile: null,
+      repo: null,
+      cwd,
+      prompt: "waiting on remote runner",
+      orchestrator_session_id: "orch-restart",
+      worktree: null,
+      branch: null,
+      base_sha: null,
+      sandbox: "workspace",
+      network: true,
+      answer_timeout_ms: null,
+      report_schema: null,
+      size: null,
+      difficulty: null,
+      type: "other",
+      placement: "remote",
+    });
+    // Pending + durable routing wait with deadline already expired (daemon was
+    // down past the remaining wait). rearmRoutingDeadlines fails this row.
+    updateTask(db, waitId, {
+      queue_reason: "waiting for capable runner",
+      routing_deadline_at: new Date(Date.now() - 60_000).toISOString(),
+    });
+
+    const eng = new TaskEngine(db, homePaths(home), createAdapterRegistrySync(process.env));
+    // Let any microtask from admitAndStart settle if the gate is missing.
+    await new Promise((r) => setTimeout(r, 30));
+
+    // Routing wait may already be failed (correct). Queued task must still be
+    // queued — not terminally failed via the hub-port cascade.
+    expect(getTask(db, waitId)!.state).toBe("failed");
+    expect(getTask(db, queuedId)!.state).toBe("queued");
+    expect(getTask(db, queuedId)!.error ?? "").not.toMatch(HUB_PORT_ERROR);
+
+    eng.setHubPort(9);
+    eng.start();
+
+    await waitFor(() => {
+      const row = getTask(db, queuedId);
+      return row !== undefined && row.state !== "queued" && row.state !== "pending";
+    });
+
+    const launched = getTask(db, queuedId)!;
+    expect(launched.error ?? "").not.toMatch(HUB_PORT_ERROR);
+    expect(launched.state).not.toBe("queued");
 
     eng.killChildren();
   });

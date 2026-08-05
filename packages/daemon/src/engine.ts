@@ -952,12 +952,15 @@ export class TaskEngine {
       }
     }
     // #315: re-arm or expire durable routing deadlines across restart.
-    // Safe before hub bind — only fails timed-out waits / arms timers, never
-    // launches vendor children (those go through start() after setHubPort).
+    // May fail() expired routing-wait tasks (fine pre-bind — they need no hub).
+    // fail() → onSlotFreed must NOT admit other tasks while hubPort is null
+    // (#333 cascade); drainConcurrencyQueue / drainRuns early-return until
+    // start() after setHubPort.
     this.rearmRoutingDeadlines();
     // #333: do NOT drain the concurrency queue or runs here. admitAndStart →
     // startAdmittedTask → hubFor() needs a bound hub port; setHubPort + start()
-    // run from the server's listen callback after bind.
+    // run from the server's listen callback after bind. Pre-bind onSlotFreed
+    // (e.g. from rearm above) is also gated inside the drain helpers.
   }
 
   /**
@@ -973,10 +976,13 @@ export class TaskEngine {
    *
    * Call only after {@link setHubPort}: drained queued tasks, in-flight run
    * advances, and fix reattempts all share startAdmittedTask → hubFor(), which
-   * throws while the port is still null. Production wiring is the listen
-   * callback in server.ts (`setHubPort` then `start`).
+   * throws while the port is still null. Also catches up any pre-bind
+   * onSlotFreed that was deferred by the hubPort gate on the drain helpers.
+   * Production wiring is the listen callback in server.ts (`setHubPort` then
+   * `start`).
    *
-   * Idempotent: a second call re-drains (no-op when nothing is waiting).
+   * Idempotent: a second call re-drains (no-op when nothing is waiting /
+   * already admitted — executor draining flag + admitted set).
    */
   start(): void {
     if (this.hubPort === null) {
@@ -5115,8 +5121,13 @@ export class TaskEngine {
    * caps (#171 / #312). Re-entrancy and the admit walk live on
    * {@link InProcessExecutor.drain} (#326); this wrapper is the engine entry
    * point used by onSlotFreed / restart.
+   *
+   * #333: no-op until {@link setHubPort} — admitting reaches hubFor() and must
+   * not run pre-bind (constructor rearm → fail → onSlotFreed, or an early
+   * routing-timeout timer). {@link start} catch-up drains after bind.
    */
   private drainConcurrencyQueue(): void {
+    if (this.hubPort === null) return;
     this.localExecutor.drain();
   }
 
@@ -5129,6 +5140,7 @@ export class TaskEngine {
    * - `onSlotFreed` → `drainConcurrencyQueue()` then `drainRuns()`
    * - `start()` (after setHubPort) → `drainRuns()` after the concurrency
    *   re-drain (restart recovery; never from the constructor — #333)
+   * - both drains no-op while hubPort is null (pre-bind onSlotFreed deferral)
    * - this method: re-entrancy guard + real host (loadDefinition / onEnter /
    *   onRetry / taskOutcome) + error logging
    * - `actionRun(verb)` public API for gate verbs
@@ -5139,6 +5151,9 @@ export class TaskEngine {
    * failures mark the run `failed` (nobody can advance it).
    */
   private drainRuns(): void {
+    // #333: onEnter/spawn from run advance also needs a bound hub; defer until
+    // start() the same way concurrency drain does.
+    if (this.hubPort === null) return;
     if (this.drainingRuns || this.shuttingDown) return;
     this.drainingRuns = true;
     try {

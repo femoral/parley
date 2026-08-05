@@ -36,6 +36,8 @@ const FAKE_VENDOR_BIN = fileURLToPath(
 let home: string;
 let db: DatabaseHandle;
 let cwd: string;
+/** Engines built this test — kill children before closing the DB (#333 hub port). */
+const liveEngines: TaskEngine[] = [];
 
 function writeParleyConfig(body: Record<string, unknown> = {}): void {
   fs.writeFileSync(path.join(home, "parley.json"), JSON.stringify(withFakeAllowlist(body)));
@@ -52,9 +54,18 @@ beforeEach(() => {
   db = openDatabase(homePaths(home));
   process.env.PARLEY_HOME = home;
   process.env.PARLEY_FAKE_VENDOR_BIN = FAKE_VENDOR_BIN;
+  liveEngines.length = 0;
 });
 
 afterEach(() => {
+  for (const eng of liveEngines) {
+    try {
+      eng.killChildren();
+    } catch {
+      /* ignore */
+    }
+  }
+  liveEngines.length = 0;
   try {
     db.close();
   } catch {
@@ -67,7 +78,12 @@ afterEach(() => {
 });
 
 function engine(): TaskEngine {
-  return new TaskEngine(db, homePaths(home), createAdapterRegistrySync(process.env));
+  const eng = new TaskEngine(db, homePaths(home), createAdapterRegistrySync(process.env));
+  // #333: drains (onSlotFreed / restart recovery) no-op until hubPort is set.
+  // Tests never bind a real server; a dummy port enables admit without listen.
+  eng.setHubPort(9);
+  liveEngines.push(eng);
+  return eng;
 }
 
 function baseRequest(
@@ -253,7 +269,6 @@ describe("concurrency queue (#171)", () => {
     insertRunningSlot();
 
     const eng = engine();
-    eng.setHubPort(9);
     eng.start();
     await new Promise((r) => setTimeout(r, 10));
     // Cap 1 with one running holder → nobody dequeued yet; original FIFO
