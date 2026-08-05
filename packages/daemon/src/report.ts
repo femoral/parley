@@ -28,7 +28,7 @@ export const DEFAULT_REPORT_SCHEMA: JsonSchema = {
   type: "object",
   properties: {
     summary: { type: "string", minLength: 1 },
-    outcome: { enum: ["success", "partial", "blocked"] },
+    outcome: { type: "string", enum: ["success", "partial", "blocked"] },
     files_changed: { type: "array", items: { type: "string" } },
   },
   required: ["summary", "outcome", "files_changed"],
