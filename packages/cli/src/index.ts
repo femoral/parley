@@ -111,8 +111,11 @@ Usage:
                             Print the captured vendor stream, coalescing
                             token-streamed chunks into readable lines
                             (--json: raw per-event JSONL, untouched)
-  parley clean <task>           Remove a finished task's worktree (keeps branch)
-  parley clean --all-terminal   Sweep worktrees of all terminal-state tasks
+  parley clean <task> [--force] Remove a finished task's worktree (keeps branch);
+                            refuses live-shared or dirty trees unless --force
+  parley clean --all-terminal [--force]
+                            Sweep worktrees of all terminal-state tasks;
+                            skips protected trees unless --force
   parley gc [--dry-run]         Purge expired terminal tasks (rows, logs,
                             worktrees; never branches). --dry-run lists only.
   parley models [--vendor <id>] [--json]

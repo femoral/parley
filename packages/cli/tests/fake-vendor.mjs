@@ -231,10 +231,20 @@ async function main() {
       fs.mkdirSync(path.dirname(target), { recursive: true });
       fs.writeFileSync(target, action.write_file.contents ?? "");
     } else if (action.git_commit !== undefined) {
-      execFileSync("git", ["add", "-A"], { cwd: process.cwd() });
-      execFileSync("git", ["commit", "-m", action.git_commit.message ?? "child commit"], {
-        cwd: process.cwd(),
-      });
+      // Explicit -c identity so bare-mirror worktrees (and host hooks that
+      // gate on user.*) still commit in fixtures (e.g. #318 clean reclaim).
+      const ident = [
+        "-c",
+        "user.email=test@parley.test",
+        "-c",
+        "user.name=parley test",
+      ];
+      execFileSync("git", [...ident, "add", "-A"], { cwd: process.cwd() });
+      execFileSync(
+        "git",
+        [...ident, "commit", "-m", action.git_commit.message ?? "child commit"],
+        { cwd: process.cwd() },
+      );
     }
     else if (action.submit_report !== undefined) await callTool("submit_report", action.submit_report);
     else if (action.submit_report_http !== undefined) {

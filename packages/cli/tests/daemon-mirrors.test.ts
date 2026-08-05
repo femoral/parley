@@ -547,10 +547,12 @@ describe("daemon mirror execution (#318)", () => {
       };
     }
 
-    // Completed with dirty tree so auto-remove keeps the worktree for clean.
+    // Completed with committed work: porcelain clean, HEAD diverged so
+    // auto-remove keeps the worktree for explicit clean (#318 / #336).
     const completed = await postMirrorTask("mirror-clean-ok", [
       { emit: { type: "session", session_id: "clean-ok-sess" } },
       { write_file: { path: "dirty-ok.txt", contents: "keep me" } },
+      { git_commit: { message: "completed mirror work" } },
       {
         submit_report: {
           summary: "completed mirror",
@@ -593,6 +595,7 @@ describe("daemon mirror execution (#318)", () => {
     expect(beforeList).toContain(completed.worktree);
     expect(beforeList).toContain(failed.worktree);
 
+    // Committed-clean mirrors reclaim without --force (#318 / #336 porcelain-only).
     const sweep = await runCli(["clean", "--all-terminal"], home);
     expect(sweep.code).toBe(0);
     expect(fs.existsSync(completed.worktree)).toBe(false);
