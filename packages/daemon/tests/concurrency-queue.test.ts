@@ -248,11 +248,13 @@ describe("concurrency queue (#171)", () => {
     expect(getTask(db, t3)!.state).toBe("queued");
 
     // After sweep the holder is stalled (not holding a slot). Re-insert a
-    // running holder so the new engine's constructor drain cannot empty the
-    // queue in one go.
+    // running holder so the post-bind start() drain cannot empty the queue
+    // in one go (#333: recovery runs after setHubPort, not in the constructor).
     insertRunningSlot();
 
     const eng = engine();
+    eng.setHubPort(9);
+    eng.start();
     await new Promise((r) => setTimeout(r, 10));
     // Cap 1 with one running holder → nobody dequeued yet; original FIFO
     // order is restored for observability (positions 1..3).
@@ -262,6 +264,7 @@ describe("concurrency queue (#171)", () => {
     expect(eng.queuePositionFor(getTask(db, t3)!)).toBe(3);
     // Head-of-line admission identity is pinned by the #326 drain tests below;
     // here we only pin restart durability + observable FIFO positions.
+    eng.killChildren();
   });
 
   it("profile + vendor caps both must have free slots", async () => {

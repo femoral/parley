@@ -951,17 +951,42 @@ export class TaskEngine {
         this.armRunnerHeartbeat(task.id);
       }
     }
+    // #315: re-arm or expire durable routing deadlines across restart.
+    // Safe before hub bind — only fails timed-out waits / arms timers, never
+    // launches vendor children (those go through start() after setHubPort).
+    this.rearmRoutingDeadlines();
+    // #333: do NOT drain the concurrency queue or runs here. admitAndStart →
+    // startAdmittedTask → hubFor() needs a bound hub port; setHubPort + start()
+    // run from the server's listen callback after bind.
+  }
+
+  /**
+   * Publish the MCP/HTTP hub port once the daemon has bound a TCP port.
+   * Must be called before {@link start} so restart recovery can launch work.
+   */
+  setHubPort(port: number): void {
+    this.hubPort = port;
+  }
+
+  /**
+   * Begin restart recovery after the hub has bound (#333 / #171 / #237).
+   *
+   * Call only after {@link setHubPort}: drained queued tasks, in-flight run
+   * advances, and fix reattempts all share startAdmittedTask → hubFor(), which
+   * throws while the port is still null. Production wiring is the listen
+   * callback in server.ts (`setHubPort` then `start`).
+   *
+   * Idempotent: a second call re-drains (no-op when nothing is waiting).
+   */
+  start(): void {
+    if (this.hubPort === null) {
+      throw new Error("task engine start requires hub port (call setHubPort first)");
+    }
     // #171: re-drain durable queued tasks in original FIFO order after restart.
     // Synchronous: only claims (async spawn is fire-and-forget via admitAndStart).
     this.drainConcurrencyQueue();
     // #237: resume advance for any run left mid-flight across a restart.
     this.drainRuns();
-    // #315: re-arm or expire durable routing deadlines across restart.
-    this.rearmRoutingDeadlines();
-  }
-
-  setHubPort(port: number): void {
-    this.hubPort = port;
   }
 
   /**
@@ -5102,7 +5127,8 @@ export class TaskEngine {
    *
    * Engine edit surface (keep small — later issues touch this file):
    * - `onSlotFreed` → `drainConcurrencyQueue()` then `drainRuns()`
-   * - constructor → `drainRuns()` after the concurrency re-drain (restart)
+   * - `start()` (after setHubPort) → `drainRuns()` after the concurrency
+   *   re-drain (restart recovery; never from the constructor — #333)
    * - this method: re-entrancy guard + real host (loadDefinition / onEnter /
    *   onRetry / taskOutcome) + error logging
    * - `actionRun(verb)` public API for gate verbs

@@ -82,7 +82,9 @@ beforeEach(() => {
   db = openDatabase(homePaths(home));
   engine = new TaskEngine(db, homePaths(home), createAdapterRegistrySync(process.env));
   // Hub URL is required to spawn; nothing listens — the hang-bin never connects.
+  // #333: setHubPort then start (same order as server listen callback).
   engine.setHubPort(9);
+  engine.start();
 });
 
 afterEach(() => {
