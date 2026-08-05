@@ -256,7 +256,8 @@ describe("parley gc (#153)", () => {
     const wt = worktreePath(home, "t1", src);
     expect(fs.existsSync(wt)).toBe(true);
 
-    const clean = await runCli(["clean", "t1"], home);
+    // Dirty worktree requires --force (#336); still only drops the worktree.
+    const clean = await runCli(["clean", "--force", "t1"], home);
     expect(clean.code).toBe(0);
     expect(fs.existsSync(wt)).toBe(false);
     // Branch kept.

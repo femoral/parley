@@ -593,7 +593,8 @@ describe("daemon mirror execution (#318)", () => {
     expect(beforeList).toContain(completed.worktree);
     expect(beforeList).toContain(failed.worktree);
 
-    const sweep = await runCli(["clean", "--all-terminal"], home);
+    // Dirty/modified worktrees require --force (#336); mirrors still reclaimed.
+    const sweep = await runCli(["clean", "--all-terminal", "--force"], home);
     expect(sweep.code).toBe(0);
     expect(fs.existsSync(completed.worktree)).toBe(false);
     expect(fs.existsSync(failed.worktree)).toBe(false);

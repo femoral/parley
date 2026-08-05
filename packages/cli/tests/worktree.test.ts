@@ -204,21 +204,44 @@ describe("worktree lifecycle on completion", () => {
 });
 
 describe("parley clean", () => {
-  it("removes a finished task's worktree but keeps its branch", async () => {
+  it("removes a terminal task's clean worktree but keeps its branch", async () => {
+    // Failed (not completed) so auto-remove does not reclaim a clean tree;
+    // identity case for #336: committed-clean, no live sharers, no --force.
     const src = repo([
-      { write_file: { path: "dirty.txt", contents: "x" } },
-      { submit_report: REPORT },
+      { emit: { type: "session", session_id: "s1" } },
+      { exit: 1 },
     ]);
     await runCli(["delegate", "-v", "fake", "-n", "keep", "x"], home, { cwd: src });
     const wt = worktreePath("t1", src);
-    await waitForState(home, "t1", "completed");
-    expect(fs.existsSync(wt)).toBe(true); // dirty → retained
+    await waitForState(home, "t1", "failed");
+    expect(fs.existsSync(wt)).toBe(true);
 
     const clean = await runCli(["clean", "t1"], home);
     expect(clean.code).toBe(0);
     expect(fs.existsSync(wt)).toBe(false);
     // Branch kept.
     expect(git(src, ["branch", "--list", "parley/t1-keep"])).toContain("parley/t1-keep");
+  });
+
+  it("refuses a dirty worktree without --force; --force removes it", async () => {
+    const src = repo([
+      { write_file: { path: "dirty.txt", contents: "x" } },
+      { submit_report: REPORT },
+    ]);
+    await runCli(["delegate", "-v", "fake", "-n", "dirty", "x"], home, { cwd: src });
+    const wt = worktreePath("t1", src);
+    await waitForState(home, "t1", "completed");
+    expect(fs.existsSync(wt)).toBe(true); // dirty → retained
+
+    const refused = await runCli(["clean", "t1"], home);
+    expect(refused.code).toBe(2);
+    expect(refused.stderr).toMatch(/uncommitted|untracked/i);
+    expect(fs.existsSync(wt)).toBe(true);
+
+    const forced = await runCli(["clean", "--force", "t1"], home);
+    expect(forced.code).toBe(0);
+    expect(fs.existsSync(wt)).toBe(false);
+    expect(git(src, ["branch", "--list", "parley/t1-dirty"])).toContain("parley/t1-dirty");
   });
 
   it("refuses to clean a task that is still running (exit 2)", async () => {
@@ -236,13 +259,13 @@ describe("parley clean", () => {
   });
 
   it("--all-terminal sweeps terminal tasks only, leaving running ones", async () => {
-    // A finished, retained (dirty) task.
+    // A finished clean-failed task (retained; not dirty so sweep does not skip).
     const doneRepo = repo([
-      { write_file: { path: "d.txt", contents: "x" } },
-      { submit_report: REPORT },
+      { emit: { type: "session", session_id: "s-done" } },
+      { exit: 1 },
     ]);
     await runCli(["delegate", "-v", "fake", "-n", "done", "x"], home, { cwd: doneRepo });
-    await waitForState(home, "t1", "completed");
+    await waitForState(home, "t1", "failed");
     const doneWt = worktreePath("t1", doneRepo);
     expect(fs.existsSync(doneWt)).toBe(true);
 

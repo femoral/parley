@@ -415,15 +415,25 @@ export function isWorktreeModified(wtPath: string, baseSha: string): boolean {
 
 /**
  * Remove a worktree, keeping its branch (parley never merges — the orchestrator
- * owns the branch's fate). Forced so parley plumbing and any base checkout are
- * removed without git refusing. A worktree whose directory already vanished
- * out-of-band is pruned rather than failed, so `parley clean` can always
- * converge on "gone".
+ * owns the branch's fate). `force` (default true) maps to `git worktree remove
+ * --force` so callers that already gate on a clean tree (or intentionally
+ * discard dirt) can strip plumbing without git refusing. Pass `force: false`
+ * when the caller has verified the tree is clean and wants a non-forced
+ * remove. A worktree whose directory already vanished out-of-band is pruned
+ * rather than failed, so `parley clean` can always converge on "gone".
  */
-export function removeWorktree(root: string, wtPath: string): void {
+export function removeWorktree(
+  root: string,
+  wtPath: string,
+  opts: { force?: boolean } = {},
+): void {
   if (!fs.existsSync(wtPath)) {
     git(["-C", root, "worktree", "prune"]);
     return;
   }
-  git(["-C", root, "worktree", "remove", "--force", wtPath]);
+  const force = opts.force !== false;
+  const args = ["-C", root, "worktree", "remove"];
+  if (force) args.push("--force");
+  args.push(wtPath);
+  git(args);
 }

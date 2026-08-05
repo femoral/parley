@@ -2115,10 +2115,17 @@ export class TaskEngine {
 
   /**
    * Remove a task's worktree (keeping its branch — parley never merges). Refuses
-   * tasks that are not in a terminal state. A `--cwd` task (no worktree) is a
-   * no-op. Throws `DelegateError` (→ exit 2) on refusal or an unknown ref.
+   * tasks that are not in a terminal state. Without `force`, also refuses when
+   * another non-terminal task shares the worktree path (e.g. a linked fix
+   * reattempt) or the tree has uncommitted/untracked changes (#336). A `--cwd`
+   * task (no worktree) is a no-op. Throws `DelegateError` (→ exit 2) on refusal
+   * or an unknown ref.
    */
-  clean(ref: string): { task_id: string; worktree: string | null; removed: boolean } {
+  clean(
+    ref: string,
+    opts: { force?: boolean } = {},
+  ): { task_id: string; worktree: string | null; removed: boolean } {
+    const force = opts.force === true;
     const task = resolveTask(this.db, ref);
     if (!task) throw new DelegateError(`no such task: ${ref}`);
     if (!isTerminalState(task.state)) {
@@ -2127,8 +2134,14 @@ export class TaskEngine {
       );
     }
     if (task.worktree === null) return { task_id: task.id, worktree: null, removed: false };
+    if (!force) {
+      const block = this.worktreeCleanBlockReason(task);
+      if (block !== null) {
+        throw new DelegateError(block);
+      }
+    }
     try {
-      this.removeTaskWorktree(task);
+      this.removeTaskWorktree(task, { force });
     } catch (err) {
       throw new DelegateError(`failed to remove worktree: ${errorMessage(err)}`);
     }
@@ -2137,24 +2150,83 @@ export class TaskEngine {
 
   /**
    * Sweep worktrees for every terminal-state task; running tasks are skipped.
-   * Removal failures are reported (not silently dropped) and retried next sweep.
+   * Without `force`, worktrees shared by a live task or with uncommitted
+   * changes are skipped (reported, not failed) so a bulk sweep never destroys
+   * in-use or dirty trees (#336). Removal failures are reported and retried
+   * next sweep.
    */
-  cleanAllTerminal(): {
+  cleanAllTerminal(opts: { force?: boolean } = {}): {
     cleaned: { task_id: string; worktree: string }[];
+    skipped: { task_id: string; worktree: string; reason: string }[];
     failed: { task_id: string; worktree: string; error: string }[];
   } {
+    const force = opts.force === true;
     const cleaned: { task_id: string; worktree: string }[] = [];
+    const skipped: { task_id: string; worktree: string; reason: string }[] = [];
     const failed: { task_id: string; worktree: string; error: string }[] = [];
     for (const task of listTasks(this.db)) {
       if (!isTerminalState(task.state) || task.worktree === null) continue;
+      if (!force) {
+        const block = this.worktreeCleanBlockReason(task);
+        if (block !== null) {
+          skipped.push({ task_id: task.id, worktree: task.worktree, reason: block });
+          continue;
+        }
+      }
       try {
-        this.removeTaskWorktree(task);
+        this.removeTaskWorktree(task, { force });
         cleaned.push({ task_id: task.id, worktree: task.worktree });
       } catch (err) {
         failed.push({ task_id: task.id, worktree: task.worktree, error: errorMessage(err) });
       }
     }
-    return { cleaned, failed };
+    return { cleaned, skipped, failed };
+  }
+
+  /**
+   * Why cleaning `task`'s worktree should be refused/skipped without `--force`
+   * (#336). Null when the worktree is safe to remove: no other non-terminal
+   * task shares the path, and the tree is unmodified relative to `base_sha`.
+   * Live-sharer check runs first so the refusal names the blocking task id.
+   */
+  private worktreeCleanBlockReason(task: TaskRow): string | null {
+    if (task.worktree === null) return null;
+    const live = this.findLiveWorktreeSharer(task.worktree, task.id);
+    if (live !== null) {
+      return (
+        `worktree is in use by non-terminal task ${live.id} (${live.state}); ` +
+        `refusing to clean (pass --force to override)`
+      );
+    }
+    if (
+      task.base_sha !== null &&
+      fs.existsSync(task.worktree) &&
+      isWorktreeModified(task.worktree, task.base_sha)
+    ) {
+      return (
+        `worktree has uncommitted or untracked changes; ` +
+        `refusing to clean (pass --force to override)`
+      );
+    }
+    return null;
+  }
+
+  /**
+   * First non-terminal task (other than `excludeTaskId`) whose `worktree`
+   * resolves to the same path — the live linked reattempt case for #336.
+   */
+  private findLiveWorktreeSharer(
+    worktreePath: string,
+    excludeTaskId: string,
+  ): TaskRow | null {
+    const target = path.resolve(worktreePath);
+    for (const other of listTasks(this.db)) {
+      if (other.id === excludeTaskId) continue;
+      if (isTerminalState(other.state)) continue;
+      if (other.worktree === null) continue;
+      if (path.resolve(other.worktree) === target) return other;
+    }
+    return null;
   }
 
   /**
@@ -2385,9 +2457,10 @@ export class TaskEngine {
    * (the branch is always kept). Clearing `cwd` distinguishes a cleaned
    * worktree from a user-supplied `--cwd` for later fix (#180). Throws on git
    * failure — callers choose whether that's fatal (clean), reported (sweep),
-   * or best-effort (auto-remove).
+   * or best-effort (auto-remove). `force` is threaded to `git worktree remove`
+   * (default true for auto-remove/gc; clean passes the operator's intent).
    */
-  private removeTaskWorktree(task: TaskRow): void {
+  private removeTaskWorktree(task: TaskRow, opts: { force?: boolean } = {}): void {
     if (task.worktree === null) return;
     // Mirror-executed tasks record the client-declared path in `task.repo`
     // (often absent on this host). The worktree belongs to the bare mirror —
@@ -2403,7 +2476,7 @@ export class TaskEngine {
       // corrupt row, and silently nulling the worktree would orphan the dir.
       throw new Error(`task ${task.id} has a worktree but no repo recorded`);
     }
-    removeWorktree(repoRoot, task.worktree);
+    removeWorktree(repoRoot, task.worktree, { force: opts.force !== false });
     // Null both so fix can tell "cleaned worktree" from "user --cwd still set".
     updateTask(this.db, task.id, { worktree: null, cwd: null });
   }
