@@ -783,6 +783,84 @@ describe("grok adapter — preflight permission probe (#186 / #247)", () => {
       ),
     ).rejects.toThrow(/sandbox posture "workspace"/);
   });
+
+  /**
+   * Fake `grok inspect` that mirrors the real profile-not-found failure mode:
+   * exit non-zero unless `.grok/sandbox.toml` already exists in cwd. Proves the
+   * probe runs *after* the adapter (or engine) has materialized the profile
+   * (#334). Neuter: with pre-fix ordering (probe before any write) this fails
+   * prepare under fail-closed sandboxed postures.
+   */
+  function inspectRequiresSandboxToml(): string {
+    return stubBin(
+      `if [ "$1" = "inspect" ]; then
+  if [ -f .grok/sandbox.toml ]; then
+    echo '{"permissions":{"loaded":0,"sources":[]}}'
+    exit 0
+  fi
+  echo "Custom sandbox profile 'parley-restricted' not found" >&2
+  exit 1
+fi`,
+    );
+  }
+
+  it("prepare: sandboxed probe in a fresh cwd sees .grok/sandbox.toml on disk (#334)", async () => {
+    const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "parley-grok-fresh-"));
+    scratch.push(cwd);
+    expect(fs.existsSync(path.join(cwd, ".grok", "sandbox.toml"))).toBe(false);
+
+    const bin = inspectRequiresSandboxToml();
+    const plan = await createGrokAdapter({ PARLEY_GROK_BIN: bin }).prepare(
+      spec({ cwd, sandbox: "workspace", network: true }),
+      HUB,
+    );
+
+    // Probe must have succeeded (profile present when inspect ran).
+    expect(plan.diagnostics).toEqual([]);
+    expect(fs.existsSync(path.join(cwd, ".grok", "sandbox.toml"))).toBe(true);
+    // plan.files stays authoritative for the engine's materialize + git-exclude.
+    expect(plan.files.map((f) => f.path)).toEqual(
+      expect.arrayContaining([".grok/config.toml", ".grok/sandbox.toml"]),
+    );
+    const onDisk = fs.readFileSync(path.join(cwd, ".grok", "sandbox.toml"), "utf8");
+    const declared = plan.files.find((f) => f.path === ".grok/sandbox.toml")!.contents;
+    expect(onDisk).toBe(declared);
+  });
+
+  it("resume: same on-disk ordering guarantee as prepare (#334)", async () => {
+    const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "parley-grok-resume-fresh-"));
+    scratch.push(cwd);
+    expect(fs.existsSync(path.join(cwd, ".grok", "sandbox.toml"))).toBe(false);
+
+    const bin = inspectRequiresSandboxToml();
+    const plan = await createGrokAdapter({ PARLEY_GROK_BIN: bin }).resume(
+      spec({ cwd, sandbox: "workspace", network: true, sessionId: "sess-1" }),
+      HUB,
+    );
+
+    expect(plan.diagnostics).toEqual([]);
+    expect(fs.existsSync(path.join(cwd, ".grok", "sandbox.toml"))).toBe(true);
+    expect(plan.files.map((f) => f.path)).toContain(".grok/sandbox.toml");
+  });
+
+  it("still fails closed when probe fails with the profile already present (#334)", async () => {
+    // Profile is written first; a genuine sandbox refusal must still be fatal.
+    const bin = inspectFailStub(
+      "error: this sandbox could not enforce its mount-namespace deny set on Linux " +
+        "(bubblewrap missing/unusable). Refusing to start with denied paths unprotected. " +
+        "(bwrap exec failed: No such file or directory (os error 2))",
+    );
+    const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "parley-grok-fail-closed-"));
+    scratch.push(cwd);
+    await expect(
+      createGrokAdapter({ PARLEY_GROK_BIN: bin }).prepare(
+        spec({ cwd, sandbox: "workspace" }),
+        HUB,
+      ),
+    ).rejects.toThrow(/sandbox posture "workspace".*sandbox: "full"/);
+    // Profile was materialized before the failing probe (ordering guarantee).
+    expect(fs.existsSync(path.join(cwd, ".grok", "sandbox.toml"))).toBe(true);
+  });
 });
 
 describe("grok adapter — golden JSONL fixtures (pins observed 0.2.93)", () => {
@@ -844,6 +922,46 @@ describe("grok adapter — worktree git-exclude seam (#19)", () => {
     const before = fs.readFileSync(excludeFile, "utf8");
     excludeMaterializedFiles(info.path, [".grok/config.toml", ".grok/sandbox.toml"]);
     expect(fs.readFileSync(excludeFile, "utf8")).toBe(before);
+  });
+
+  it("engine git-exclude of plan.files still hides adapter pre-written probe files (#334)", async () => {
+    // Adapter may write sandbox/config before the probe; the engine still
+    // git-excludes plan.files before spawn. Pre-write + exclude must leave
+    // status clean (child cannot stage the plumbing).
+    const src = makeGitRepo();
+    scratch.push(src);
+    const worktreesDir = fs.mkdtempSync(path.join(src, "..", "wt-"));
+    scratch.push(worktreesDir);
+    const info = createWorktree({
+      repoRoot: src,
+      worktreesDir,
+      taskId: "t334",
+      name: null,
+      baseRef: null,
+    });
+
+    const bin = happyGrokBin();
+    const plan = await createGrokAdapter({ PARLEY_GROK_BIN: bin }).prepare(
+      spec({ cwd: info.path, sandbox: "workspace", network: true }),
+      HUB,
+    );
+    // After prepare (#334), files already exist on disk.
+    expect(fs.existsSync(path.join(info.path, ".grok", "sandbox.toml"))).toBe(true);
+
+    // Engine path: exclude plan.files (then re-write — identical content).
+    excludeMaterializedFiles(
+      info.path,
+      plan.files.map((f) => f.path),
+    );
+    for (const file of plan.files) {
+      fs.mkdirSync(path.dirname(path.join(info.path, file.path)), { recursive: true });
+      fs.writeFileSync(path.join(info.path, file.path), file.contents);
+    }
+
+    const status = execFileSync("git", ["-C", info.path, "status", "--porcelain"], {
+      encoding: "utf8",
+    });
+    expect(status).toBe("");
   });
 
   it("excludes the exact file paths, not whole directories (child work stays visible)", () => {

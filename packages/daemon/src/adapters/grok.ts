@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import path from "node:path";
 import {
   collapseOperatorHomeInText,
@@ -21,6 +22,7 @@ import { VENDOR_DIAG_PREFIX, withPostureDiagnostics } from "./types.js";
 import { runProbe } from "./probe.js";
 import { readOperatorFileText } from "./read-operator-file.js";
 import { parseToml, tomlString, type TomlTable, type TomlValue } from "./toml.js";
+import { writeMaterializedFiles } from "../worktree.js";
 
 /**
  * The `grok` vendor adapter — real delegation to Grok Build (`grok` binary,
@@ -717,6 +719,10 @@ export function createGrokAdapter(env: NodeJS.ProcessEnv = process.env): VendorA
   /**
    * Files materialized pre-spawn: the MCP config, plus a custom sandbox profile
    * for every sandboxed posture (workspace / read-only).
+   *
+   * Declared on the plan for the engine (git-exclude + re-write before spawn).
+   * Also written eagerly before {@link permissionProbe} so inspect sees the
+   * same on-disk profile the child will run under (#334).
    */
   function files(task: TaskSpec, hub: HubInfo): MaterializedFile[] {
     const materialized: MaterializedFile[] = [
@@ -732,8 +738,30 @@ export function createGrokAdapter(env: NodeJS.ProcessEnv = process.env): VendorA
   }
 
   /**
+   * Write `declared` into `cwd` before the permission probe (#334).
+   *
+   * The engine still materializes `plan.files` later (idempotent double-write)
+   * and git-excludes those paths before spawn. Skip when `cwd` is not a real
+   * directory so golden unit tests with synthetic paths stay pure in-memory.
+   * Production always has a worktree / `--cwd` before prepare/resume.
+   */
+  function materializeFilesBeforeProbe(cwd: string, declared: MaterializedFile[]): void {
+    if (declared.length === 0) return;
+    try {
+      if (!fs.statSync(cwd).isDirectory()) return;
+    } catch {
+      return;
+    }
+    writeMaterializedFiles(cwd, declared);
+  }
+
+  /**
    * Preflight permission probe (#186 / #247): run `grok inspect --json` with
    * the child's exact cwd and env posture.
+   *
+   * Callers must materialize {@link files} into `task.cwd` first (#334) so a
+   * sandboxed inspect sees `.grok/sandbox.toml` (and project config) the same
+   * way the child will after the engine's pre-spawn write.
    *
    * Two jobs:
    * 1. Permission tripwire (#186): report Claude-settings permission rules that
@@ -825,10 +853,14 @@ export function createGrokAdapter(env: NodeJS.ProcessEnv = process.env): VendorA
       // Fresh single-turn run: `grok -p <prompt> …`. The session id is captured
       // from the terminal `end` event and persisted for resume.
       const env = baseEnv(task, hub);
+      const declared = files(task, hub);
+      // #334: write sandbox/config before inspect so the probe exercises the
+      // same on-disk profile the engine will re-materialize pre-spawn.
+      materializeFilesBeforeProbe(task.cwd, declared);
       return {
         argv: [bin, "-p", task.prompt, ...commonArgv(task)],
         env,
-        files: files(task, hub),
+        files: declared,
         cwd: task.cwd,
         diagnostics: await permissionProbe(task, env),
       };
@@ -851,10 +883,13 @@ export function createGrokAdapter(env: NodeJS.ProcessEnv = process.env): VendorA
         return Promise.reject(new Error(`grok resume for task ${task.id} has no session id`));
       }
       const env = baseEnv(task, hub);
+      const declared = files(task, hub);
+      // Same ordering as prepare (#334): probe must see on-disk sandbox.toml.
+      materializeFilesBeforeProbe(task.cwd, declared);
       return Promise.resolve(permissionProbe(task, env)).then((diagnostics) => ({
         argv: [bin, "-p", task.prompt, "-r", task.sessionId!, ...commonArgv(task)],
         env,
-        files: files(task, hub),
+        files: declared,
         cwd: task.cwd,
         diagnostics,
       }));
