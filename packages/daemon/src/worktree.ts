@@ -399,6 +399,20 @@ export function attachWorktree(opts: AttachWorktreeOptions): WorktreeInfo {
 }
 
 /**
+ * Whether the worktree has uncommitted or untracked files (parley plumbing is
+ * excluded via worktree-scoped excludes, so it never counts). Used by `parley
+ * clean` (#336): commits on the task branch are kept and are not loss risk.
+ * On any git error we report dirty, erring toward refusing clean.
+ */
+export function isWorktreePorcelainDirty(wtPath: string): boolean {
+  try {
+    return git(["-C", wtPath, "status", "--porcelain"]) !== "";
+  } catch {
+    return true;
+  }
+}
+
+/**
  * Whether the worktree has diverged from its baseline — any new commit or any
  * dirty/untracked file (parley plumbing is excluded, so it never counts).
  * Modified worktrees are retained; untouched ones are auto-removed. On any git
@@ -406,7 +420,7 @@ export function attachWorktree(opts: AttachWorktreeOptions): WorktreeInfo {
  */
 export function isWorktreeModified(wtPath: string, baseSha: string): boolean {
   try {
-    if (git(["-C", wtPath, "status", "--porcelain"]) !== "") return true;
+    if (isWorktreePorcelainDirty(wtPath)) return true;
     return git(["-C", wtPath, "rev-parse", "HEAD"]) !== baseSha;
   } catch {
     return true;

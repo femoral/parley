@@ -256,7 +256,8 @@ describe("parley gc (#153)", () => {
     const wt = worktreePath(home, "t1", src);
     expect(fs.existsSync(wt)).toBe(true);
 
-    // Dirty worktree requires --force (#336); still only drops the worktree.
+    // Untracked write (porcelain dirty) requires --force (#336); still only
+    // drops the worktree — task row stays for gc to purge later.
     const clean = await runCli(["clean", "--force", "t1"], home);
     expect(clean.code).toBe(0);
     expect(fs.existsSync(wt)).toBe(false);

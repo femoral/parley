@@ -205,22 +205,24 @@ describe("worktree lifecycle on completion", () => {
 
 describe("parley clean", () => {
   it("removes a terminal task's clean worktree but keeps its branch", async () => {
-    // Failed (not completed) so auto-remove does not reclaim a clean tree;
-    // identity case for #336: committed-clean, no live sharers, no --force.
+    // Committed work (porcelain empty, HEAD advanced) — auto-remove retains;
+    // clean must still remove without --force (#336 porcelain-only dirty).
     const src = repo([
-      { emit: { type: "session", session_id: "s1" } },
-      { exit: 1 },
+      { write_file: { path: "keep.txt", contents: "x" } },
+      { git_commit: { message: "child work" } },
+      { submit_report: REPORT },
     ]);
     await runCli(["delegate", "-v", "fake", "-n", "keep", "x"], home, { cwd: src });
     const wt = worktreePath("t1", src);
-    await waitForState(home, "t1", "failed");
+    await waitForState(home, "t1", "completed");
     expect(fs.existsSync(wt)).toBe(true);
 
     const clean = await runCli(["clean", "t1"], home);
     expect(clean.code).toBe(0);
     expect(fs.existsSync(wt)).toBe(false);
-    // Branch kept.
+    // Branch kept with the child's commit.
     expect(git(src, ["branch", "--list", "parley/t1-keep"])).toContain("parley/t1-keep");
+    expect(git(src, ["log", "--format=%s", "parley/t1-keep"]).split("\n")[0]).toBe("child work");
   });
 
   it("refuses a dirty worktree without --force; --force removes it", async () => {

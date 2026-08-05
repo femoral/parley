@@ -221,14 +221,20 @@ describe("parley clean guards (#336)", () => {
   });
 
   it("identity: clean committed worktree with no live sharers removes without --force", async () => {
+    // Real committed work: HEAD != base_sha, porcelain empty. Commits live on
+    // the kept branch — clean must not treat that as dirty (#336).
     const src = repo([
       { emit: { type: "session", session_id: "s-id" } },
-      { exit: 1 },
+      { write_file: { path: "done.txt", contents: "committed work" } },
+      { git_commit: { message: "child committed work" } },
+      { submit_report: REPORT },
     ]);
     await runCli(["delegate", "-v", "fake", "-n", "identity", "x"], home, { cwd: src });
-    await waitForState(home, "t1", "failed");
+    await waitForState(home, "t1", "completed");
     const wt = worktreePath("t1", src);
-    expect(fs.existsSync(wt)).toBe(true);
+    expect(fs.existsSync(wt)).toBe(true); // committed → auto-remove skipped
+    // Sanity: tree is porcelain-clean while branch advanced past base.
+    expect(git(wt, ["status", "--porcelain"])).toBe("");
 
     const clean = await runCli(["clean", "t1", "--json"], home);
     expect(clean.code).toBe(0);
@@ -237,5 +243,9 @@ describe("parley clean guards (#336)", () => {
     expect(body.status).toBe("removed");
     expect(fs.existsSync(wt)).toBe(false);
     expect(git(src, ["branch", "--list", "parley/t1-identity"])).toContain("parley/t1-identity");
+    // Branch still carries the child's commit.
+    expect(git(src, ["log", "--format=%s", "parley/t1-identity"]).split("\n")[0]).toBe(
+      "child committed work",
+    );
   });
 });

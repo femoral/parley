@@ -291,6 +291,7 @@ import {
   gitDir,
   isValidGitCheckout,
   isWorktreeModified,
+  isWorktreePorcelainDirty,
   removeWorktree,
   repoRoot,
   writeMaterializedFiles,
@@ -2186,8 +2187,10 @@ export class TaskEngine {
   /**
    * Why cleaning `task`'s worktree should be refused/skipped without `--force`
    * (#336). Null when the worktree is safe to remove: no other non-terminal
-   * task shares the path, and the tree is unmodified relative to `base_sha`.
-   * Live-sharer check runs first so the refusal names the blocking task id.
+   * task shares the path, and the tree has no uncommitted/untracked files.
+   * HEAD divergence from `base_sha` is not a block — commits live on the kept
+   * branch. Live-sharer check runs first so the refusal names the blocking
+   * task id. Auto-remove still uses the broader {@link isWorktreeModified}.
    */
   private worktreeCleanBlockReason(task: TaskRow): string | null {
     if (task.worktree === null) return null;
@@ -2198,11 +2201,7 @@ export class TaskEngine {
         `refusing to clean (pass --force to override)`
       );
     }
-    if (
-      task.base_sha !== null &&
-      fs.existsSync(task.worktree) &&
-      isWorktreeModified(task.worktree, task.base_sha)
-    ) {
+    if (fs.existsSync(task.worktree) && isWorktreePorcelainDirty(task.worktree)) {
       return (
         `worktree has uncommitted or untracked changes; ` +
         `refusing to clean (pass --force to override)`
