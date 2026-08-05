@@ -36,6 +36,8 @@ const FAKE_VENDOR_BIN = fileURLToPath(
 let home: string;
 let db: DatabaseHandle;
 let cwd: string;
+/** Engines built this test — kill children before closing the DB (#333 hub port). */
+const liveEngines: TaskEngine[] = [];
 
 function writeParleyConfig(body: Record<string, unknown> = {}): void {
   fs.writeFileSync(path.join(home, "parley.json"), JSON.stringify(withFakeAllowlist(body)));
@@ -52,9 +54,18 @@ beforeEach(() => {
   db = openDatabase(homePaths(home));
   process.env.PARLEY_HOME = home;
   process.env.PARLEY_FAKE_VENDOR_BIN = FAKE_VENDOR_BIN;
+  liveEngines.length = 0;
 });
 
 afterEach(() => {
+  for (const eng of liveEngines) {
+    try {
+      eng.killChildren();
+    } catch {
+      /* ignore */
+    }
+  }
+  liveEngines.length = 0;
   try {
     db.close();
   } catch {
@@ -67,7 +78,12 @@ afterEach(() => {
 });
 
 function engine(): TaskEngine {
-  return new TaskEngine(db, homePaths(home), createAdapterRegistrySync(process.env));
+  const eng = new TaskEngine(db, homePaths(home), createAdapterRegistrySync(process.env));
+  // #333: drains (onSlotFreed / restart recovery) no-op until hubPort is set.
+  // Tests never bind a real server; a dummy port enables admit without listen.
+  eng.setHubPort(9);
+  liveEngines.push(eng);
+  return eng;
 }
 
 function baseRequest(
@@ -248,11 +264,12 @@ describe("concurrency queue (#171)", () => {
     expect(getTask(db, t3)!.state).toBe("queued");
 
     // After sweep the holder is stalled (not holding a slot). Re-insert a
-    // running holder so the new engine's constructor drain cannot empty the
-    // queue in one go.
+    // running holder so the post-bind start() drain cannot empty the queue
+    // in one go (#333: recovery runs after setHubPort, not in the constructor).
     insertRunningSlot();
 
     const eng = engine();
+    eng.start();
     await new Promise((r) => setTimeout(r, 10));
     // Cap 1 with one running holder → nobody dequeued yet; original FIFO
     // order is restored for observability (positions 1..3).
@@ -262,6 +279,7 @@ describe("concurrency queue (#171)", () => {
     expect(eng.queuePositionFor(getTask(db, t3)!)).toBe(3);
     // Head-of-line admission identity is pinned by the #326 drain tests below;
     // here we only pin restart durability + observable FIFO positions.
+    eng.killChildren();
   });
 
   it("profile + vendor caps both must have free slots", async () => {

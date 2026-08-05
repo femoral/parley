@@ -4264,7 +4264,10 @@ export async function startServer(
         return;
       }
       const port = address.port;
+      // #333: hub port must be published before restart recovery drains the
+      // concurrency queue / runs — admitAndStart → hubFor() needs a bound port.
       engine.setHubPort(port);
+      engine.start();
       const close = () =>
         new Promise<void>((resolveClose, rejectClose) => {
           stopGc();
