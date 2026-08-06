@@ -38,7 +38,8 @@
     "verify:intercept": "node --import tsx verify/demos/intercept-error.mjs",
     "verify:reconnect": "node --import tsx verify/demos/reconnect.mjs",
     "verify:shell": "node --import tsx verify/demos/shell-chrome.mjs",
-    "verify:find": "node --import tsx verify/demos/find-honesty.mjs"
+    "verify:find": "node --import tsx verify/demos/find-honesty.mjs",
+    "verify:run": "node --import tsx verify/demos/run-detail.mjs"
   },
   "dependencies": {
     "@useparley/core": "workspace:*",
