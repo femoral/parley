@@ -3,7 +3,8 @@
  *
  * Stages real daemon tasks (success + failure), measures the board at
  * 1280/1460/1920, proves no board H-scroll, honesty treatments, axe, ARIA,
- * pip fail state, retention-bound copy, and font floors on chart labels.
+ * pip fail state, attention order, cap-absent, runner statuses, table density,
+ * retention-bound copy, and font floors on chart labels.
  */
 import { pathToFileURL } from "node:url";
 import { collectA11y, runAxe, ariaSnapshot } from "../lib/a11y.mjs";
@@ -15,6 +16,13 @@ import {
 import { ledgerDirs, writeDemoProof, printRectSummary } from "../lib/ledger.mjs";
 import { measureAtViewports } from "../lib/measure.mjs";
 import { openVerifySession } from "../lib/session.mjs";
+import { buildListPipTrack } from "../../src/screens/fleet/pips.ts";
+import { sortTasksByAttention } from "../../src/screens/fleet/attentionSort.ts";
+import { projectFleetKpis } from "../../src/screens/fleet/kpis.ts";
+import {
+  runnerStatusClass,
+  runnerStatusLabel,
+} from "../../src/screens/fleet/runners.ts";
 
 const TICKET = "issue-355";
 const DEMO = "fleet-board";
@@ -27,8 +35,11 @@ export const FLEET_SELECTORS = [
   { id: "fleet-board-scroll", selector: '[data-testid="fleet-board-scroll"]' },
   { id: "fleet-kpis", selector: '[data-testid="fleet-kpis"]' },
   { id: "fleet-kpi-running", selector: '[data-testid="fleet-kpi-running"]' },
+  { id: "fleet-kpi-settled", selector: '[data-testid="fleet-kpi-settled"]' },
+  { id: "fleet-kpi-token-burn", selector: '[data-testid="fleet-kpi-token-burn"]' },
   { id: "fleet-runs", selector: '[data-testid="fleet-runs"]' },
   { id: "fleet-tasks", selector: '[data-testid="fleet-tasks"]' },
+  { id: "fleet-tasks-scroll", selector: '[data-testid="fleet-tasks-scroll"]' },
   { id: "fleet-token-burn", selector: '[data-testid="fleet-token-burn"]' },
   { id: "fleet-burn-bound", selector: '[data-testid="fleet-burn-bound"]' },
   { id: "fleet-runners", selector: '[data-testid="fleet-runners"]' },
@@ -79,11 +90,47 @@ export function fleetBoardGates(_entry, ledger) {
     );
   }
 
+  // Tasks table density: at 1280, no silent H-scroll on the table scroll region
+  // (columns dropped so tokens/dur stay visible).
+  const table1280 = demo.headline?.tasksTable1280;
+  if (!table1280?.noHorizontalScroll) {
+    throw new Error(
+      `fleet-board: tasks table H-scroll at 1280 not clear: ${JSON.stringify(table1280)}`,
+    );
+  }
+  if (!table1280?.tokensVisible || !table1280?.durVisible) {
+    throw new Error(
+      `fleet-board: tokens/dur columns not visible at 1280: ${JSON.stringify(table1280)}`,
+    );
+  }
+
+  // KPI notes not clipped at 1280
+  const kpiNotes = demo.headline?.kpiNotes1280;
+  if (!kpiNotes?.allOk) {
+    throw new Error(
+      `fleet-board: KPI notes clipped at 1280: ${JSON.stringify(kpiNotes)}`,
+    );
+  }
+
   const honesty = demo.honesty ?? {};
   for (const key of ["empty", "error", "loading"]) {
     if (!honesty[key]?.ok) {
-      throw new Error(`fleet-board: honesty state ${key} not proven`);
+      throw new Error(
+        `fleet-board: honesty state ${key} not proven: ${JSON.stringify(honesty[key])}`,
+      );
     }
+  }
+  // Empty must actually reach data-phase=empty (no taskRows===0 tautology).
+  if (honesty.empty?.board !== "empty" && !honesty.empty?.empty) {
+    throw new Error(
+      `fleet-board: empty honesty did not reach empty treatment: ${JSON.stringify(honesty.empty)}`,
+    );
+  }
+  // Loading must show fleet hailing, not just shell chip.
+  if (!honesty.loading?.hailing) {
+    throw new Error(
+      `fleet-board: loading honesty missing fleet hailing: ${JSON.stringify(honesty.loading)}`,
+    );
   }
 
   const axe = demo.a11y?.axe;
@@ -100,6 +147,30 @@ export function fleetBoardGates(_entry, ledger) {
   }
   if (!demo.staged?.completedTaskId) {
     throw new Error("fleet-board: completed task fixture not staged");
+  }
+
+  // Behavioral gates (not just presence)
+  const b = demo.behavioral ?? {};
+  if (!b.failPip?.ok || !b.failPip?.kinds?.includes("fail")) {
+    throw new Error(`fleet-board: fail pip behavioral gate failed: ${JSON.stringify(b.failPip)}`);
+  }
+  if (!b.attentionOrder?.ok) {
+    throw new Error(
+      `fleet-board: attention order gate failed: ${JSON.stringify(b.attentionOrder)}`,
+    );
+  }
+  if (!b.capAbsent?.ok) {
+    throw new Error(`fleet-board: cap-absent gate failed: ${JSON.stringify(b.capAbsent)}`);
+  }
+  if (!b.runnerStatuses?.ok) {
+    throw new Error(
+      `fleet-board: runner status gate failed: ${JSON.stringify(b.runnerStatuses)}`,
+    );
+  }
+  if (!b.settled24h?.ok) {
+    throw new Error(
+      `fleet-board: settled 24h window gate failed: ${JSON.stringify(b.settled24h)}`,
+    );
   }
 }
 
@@ -148,7 +219,6 @@ async function measureFontFloor(page) {
         if (cs.display === "none" || cs.visibility === "hidden") continue;
         const px = parseFloat(cs.fontSize);
         samples.push({ selector: sel, fontSize: px });
-        // DESIGN.md: no type below 9px; chart/data labels should be ≥10px.
         if (Number.isFinite(px) && px < 9.5) {
           violations.push({
             selector: sel,
@@ -180,17 +250,194 @@ async function panelPresence(page) {
   });
 }
 
+/**
+ * @param {import('playwright-core').Page} page
+ */
+async function measureTasksTable1280(page) {
+  return page.evaluate(() => {
+    const scroll = document.querySelector('[data-testid="fleet-tasks-scroll"]');
+    const table = scroll?.querySelector(".pc-fleet-table");
+    if (!scroll) {
+      return { found: false, noHorizontalScroll: false, tokensVisible: false, durVisible: false };
+    }
+    const heads = [...(table?.querySelectorAll(".pc-fleet-table__th") ?? [])].map(
+      (el) => ({
+        text: (el.textContent ?? "").trim().toLowerCase(),
+        display: getComputedStyle(el).display,
+        visible: getComputedStyle(el).display !== "none",
+      }),
+    );
+    const tokensVisible = heads.some((h) => h.text === "tokens" && h.visible);
+    const durVisible = heads.some((h) => h.text === "dur" && h.visible);
+    const addrHidden = heads.some(
+      (h) => h.text.includes("run address") && !h.visible,
+    );
+    return {
+      found: true,
+      scrollWidth: scroll.scrollWidth,
+      clientWidth: scroll.clientWidth,
+      noHorizontalScroll: scroll.scrollWidth <= scroll.clientWidth + 1,
+      tokensVisible,
+      durVisible,
+      addrHidden,
+      heads,
+    };
+  });
+}
+
+/**
+ * @param {import('playwright-core').Page} page
+ */
+async function measureKpiNotes1280(page) {
+  return page.evaluate(() => {
+    const notes = [...document.querySelectorAll(".pc-fleet-kpi__note")];
+    const rows = notes.map((el) => ({
+      text: (el.textContent ?? "").trim().slice(0, 80),
+      scrollWidth: el.scrollWidth,
+      clientWidth: el.clientWidth,
+      ok: el.scrollWidth <= el.clientWidth + 2,
+    }));
+    return {
+      rows,
+      allOk: rows.length > 0 && rows.every((r) => r.ok),
+    };
+  });
+}
+
+/**
+ * Pure behavioral proofs (fixtures) — always available, stageable or not.
+ */
+function pureBehavioralProofs() {
+  const failPips = buildListPipTrack({
+    run_id: "fail-proof",
+    workflow: "proof",
+    workflow_version: 1,
+    orchestrator_session_id: null,
+    state: "failed",
+    block: null,
+    current_node: "x",
+    iteration: 1,
+    parent_run_id: null,
+    attempt: 1,
+    tasks_settled: 4,
+    tasks_total: 4,
+    usage: { input_tokens: 0, output_tokens: 0 },
+    duration_ms: null,
+    branch: null,
+    worktree: null,
+    created_at: "2026-01-01T00:00:00.000Z",
+    updated_at: "2026-01-01T00:00:00.000Z",
+    completed_at: null,
+    purged_at: null,
+    workspace: "scratch",
+    type: "other",
+    repo: null,
+    error: null,
+    track_bound: 4,
+    track: null,
+  });
+  const kinds = failPips.map((p) => p.kind);
+
+  const now = Date.parse("2026-06-15T12:00:00.000Z");
+  const tasks = [
+    {
+      task_id: "old-done",
+      state: "completed",
+      completed_at: "2026-06-05T12:00:00.000Z",
+      updated_at: "2026-06-05T12:00:00.000Z",
+      usage: { input_tokens: 900000, output_tokens: 1 },
+    },
+    {
+      task_id: "ask",
+      state: "awaiting_answer",
+      updated_at: "2026-06-15T11:00:00.000Z",
+    },
+    {
+      task_id: "fail",
+      state: "failed",
+      completed_at: "2026-06-15T11:30:00.000Z",
+      updated_at: "2026-06-15T11:30:00.000Z",
+    },
+    {
+      task_id: "run",
+      state: "running",
+      started_at: "2026-06-15T11:40:00.000Z",
+      updated_at: "2026-06-15T11:40:00.000Z",
+    },
+    {
+      task_id: "done",
+      state: "completed",
+      completed_at: "2026-06-15T11:50:00.000Z",
+      updated_at: "2026-06-15T11:50:00.000Z",
+      usage: { input_tokens: 100, output_tokens: 10 },
+    },
+  ];
+  // Minimal envelopes for sort + kpis (sort only needs state + timestamps).
+  const sorted = sortTasksByAttention(
+    /** @type {any} */ (tasks),
+  ).map((t) => t.task_id);
+  const attentionOk =
+    sorted[0] === "ask" &&
+    sorted[1] === "fail" &&
+    sorted.indexOf("run") < sorted.indexOf("done");
+
+  const kpis = projectFleetKpis({
+    nowMs: now,
+    tasks: /** @type {any} */ (tasks),
+    runs: [],
+  });
+  const settled = kpis.find((k) => k.id === "settled");
+  const burn = kpis.find((k) => k.id === "token-burn");
+  // Old 900k task must not dominate; settled must be 1 done / 1 fail (in window).
+  const settledOk = settled?.value === "1 / 1";
+  const burnOk = burn?.value !== "900k" && burn?.value !== "900.0k";
+
+  const capKpis = projectFleetKpis({
+    nowMs: now,
+    tasks: /** @type {any} */ ([
+      { task_id: "r", state: "running", started_at: "2026-06-15T11:00:00.000Z" },
+    ]),
+    runs: [],
+  });
+  const running = capKpis.find((k) => k.id === "running");
+  const capAbsentOk =
+    running?.value === "1" && /cap unknown/i.test(running?.note ?? "");
+
+  const runnerStatuses = ["online", "stale", "offline"].map((s) => ({
+    status: s,
+    className: runnerStatusClass(s),
+    label: runnerStatusLabel(s),
+  }));
+  const runnerOk =
+    runnerStatuses.every((r) => r.className.endsWith(`--${r.status}`)) &&
+    runnerStatuses.every((r) => r.label === r.status) &&
+    new Set(runnerStatuses.map((r) => r.className)).size === 3;
+
+  return {
+    failPip: {
+      ok: kinds.includes("fail") && !kinds.every((k) => k === "done"),
+      kinds,
+    },
+    attentionOrder: { ok: attentionOk, sorted },
+    capAbsent: { ok: capAbsentOk, value: running?.value, note: running?.note },
+    runnerStatuses: { ok: runnerOk, rows: runnerStatuses },
+    settled24h: {
+      ok: settledOk && burnOk,
+      settled: settled?.value,
+      burn: burn?.value,
+    },
+  };
+}
+
 export async function runFleetBoardDemo() {
   const session = await openVerifySession();
   try {
-    // Stage completed + failed tasks against the real daemon.
     const completed = await session.daemon.stageScript("report-success");
     await session.daemon.waitTask(completed.taskId);
 
     const failed = await session.daemon.stageScript("vendor-failure");
     await session.daemon.waitTask(failed.taskId);
 
-    // Optional long-running for "running" rows (may still complete before measure).
     const running = await session.daemon.stageScript("long-running");
 
     const { shotsDir } = ledgerDirs(TICKET);
@@ -200,7 +447,6 @@ export async function runFleetBoardDemo() {
     await session.page.waitForSelector('[data-testid="fleet-board"]', {
       timeout: 20_000,
     });
-    // Wait for snapshot to leave hailing.
     await session.page.waitForFunction(
       () => {
         const b = document.querySelector('[data-testid="fleet-board"]');
@@ -208,8 +454,6 @@ export async function runFleetBoardDemo() {
       },
       { timeout: 20_000 },
     );
-
-    // Confirm staged tasks appear in the tasks table (or empty honesty if still loading).
     await session.page.waitForTimeout(800);
 
     const viewports = await measureAtViewports(session.page, {
@@ -236,7 +480,6 @@ export async function runFleetBoardDemo() {
       session.page,
       '[data-testid="fleet-board-scroll"]',
     );
-    // Prefer board container when present; shell always.
     const boardScroll = {
       shell: boardScrollShell,
       fleet: boardScrollFleet,
@@ -253,28 +496,64 @@ export async function runFleetBoardDemo() {
       .textContent()
       .catch(() => null);
     const fontFloor = await measureFontFloor(session.page);
+    const tasksTable1280 = await measureTasksTable1280(session.page);
+    const kpiNotes1280 = await measureKpiNotes1280(session.page);
 
-    // Task rows for staged ids (may be truncated short-id in cells).
-    const taskPresence = await session.page.evaluate(
+    // Live DOM behavioral samples (attention order of staged tasks).
+    const liveAttention = await session.page.evaluate(
       ({ completedId, failedId }) => {
-        const text = document.body?.innerText ?? "";
+        const rows = [
+          ...document.querySelectorAll('[data-testid^="fleet-task-"]'),
+        ].map((el) => el.getAttribute("data-testid") ?? "");
+        const states = [
+          ...document.querySelectorAll('[data-testid^="fleet-task-"]'),
+        ].map((el) => el.getAttribute("data-state") ?? "");
+        const failBeforeDone =
+          states.indexOf("failed") >= 0 &&
+          states.indexOf("completed") >= 0 &&
+          states.indexOf("failed") < states.indexOf("completed");
+        const runningKpi =
+          document.querySelector('[data-testid="fleet-kpi-running"]')
+            ?.textContent ?? "";
+        const capAbsent = /cap unknown/i.test(runningKpi) || !/\d+\/\d+/.test(runningKpi);
+        // Pip tracks on any run that has fail
+        const pipTracks = [
+          ...document.querySelectorAll('[data-testid^="fleet-pips-"]'),
+        ].map((el) => el.getAttribute("data-pip-kinds") ?? "");
         return {
-          hasCompleted: text.includes(completedId.slice(0, 8)) || !!document.querySelector(
-            `[data-testid="fleet-task-${completedId}"]`,
-          ),
+          rows,
+          states,
+          failBeforeDone,
+          runningKpi: runningKpi.replace(/\s+/g, " ").trim().slice(0, 80),
+          capAbsent,
+          pipTracks,
+          hasCompleted: rows.some((r) => r.includes(completedId.slice(0, 8))) ||
+            !!document.querySelector(`[data-testid="fleet-task-${completedId}"]`),
           hasFailed:
-            text.includes(failedId.slice(0, 8)) ||
+            rows.some((r) => r.includes(failedId.slice(0, 8))) ||
             !!document.querySelector(`[data-testid="fleet-task-${failedId}"]`),
-          phase: document
-            .querySelector('[data-testid="fleet-board"]')
-            ?.getAttribute("data-phase"),
-          taskCount: document.querySelectorAll(
-            '[data-testid^="fleet-task-"]',
-          ).length,
         };
       },
       { completedId: completed.taskId, failedId: failed.taskId },
     );
+
+    const taskPresence = {
+      hasCompleted: liveAttention.hasCompleted,
+      hasFailed: liveAttention.hasFailed,
+      phase: await session.page
+        .locator('[data-testid="fleet-board"]')
+        .getAttribute("data-phase"),
+      taskCount: liveAttention.rows.length,
+    };
+
+    // Pure + live behavioral bundle
+    const pure = pureBehavioralProofs();
+    const behavioral = {
+      ...pure,
+      liveAttention,
+      // If a failed run pip is painted, record it; pure gate always covers fail pip.
+      renderedFailPip: liveAttention.pipTracks.some((k) => k.includes("fail")),
+    };
 
     // A11y at mid viewport
     await session.page.setViewportSize({ width: 1460, height: 900 });
@@ -283,13 +562,11 @@ export async function runFleetBoardDemo() {
     const a11y = await collectA11y(session.page, {
       include: '[data-testid="fleet-board"]',
     });
-    // Also full-page axe for contrast on composited stack
     const axeFull = await runAxe(session.page);
     const aria = await ariaSnapshot(session.page, {
       selector: '[data-testid="fleet-board"]',
     });
 
-    // Keyboard walk: Tab from body into fleet content
     await session.page.locator("body").click({ position: { x: 4, y: 4 } });
     /** @type {string[]} */
     const keyboardWalk = [];
@@ -301,6 +578,7 @@ export async function runFleetBoardDemo() {
           tag: el?.tagName?.toLowerCase() ?? "null",
           testId: el?.getAttribute?.("data-testid") ?? null,
           role: el?.getAttribute?.("role") ?? null,
+          tabIndex: el?.getAttribute?.("tabindex") ?? null,
         };
       });
       keyboardWalk.push(
@@ -308,14 +586,10 @@ export async function runFleetBoardDemo() {
       );
     }
 
-    // ── Honesty states via interception ──────────────────────────────
+    // ── Honesty states ───────────────────────────────────────────────
     /** @type {Record<string, object>} */
     const honesty = {};
 
-    /**
-     * Hard reload after routes so hooks remount against intercepted wire.
-     * Matches both list and query forms; SSE path is left alone.
-     */
     async function reloadFleet() {
       await session.page.goto(`${session.url}#/fleet`, {
         waitUntil: "domcontentloaded",
@@ -323,7 +597,8 @@ export async function runFleetBoardDemo() {
       await session.page.reload({ waitUntil: "domcontentloaded" });
     }
 
-    // Empty: fulfill task list empty + empty runs so global empty can land
+    // Empty: empty tasks + empty runs. Component promotes nothing-to-show to
+    // data-phase=empty even if SSE drops into stale-reconnecting.
     await interceptEmpty(session.page, "**/tasks");
     await interceptEmpty(session.page, "**/tasks?*");
     await session.page.route("**/runs", async (route) => {
@@ -333,8 +608,9 @@ export async function runFleetBoardDemo() {
         body: JSON.stringify({ runs: [] }),
       });
     });
-    // Hold SSE open without events so honesty can settle on empty (not offline).
+    // Keep SSE "open" with a slow drip so we prefer empty over offline.
     await session.page.route("**/events/**", async (route) => {
+      await new Promise((r) => setTimeout(r, 50));
       await route.fulfill({
         status: 200,
         contentType: "text/event-stream",
@@ -346,34 +622,27 @@ export async function runFleetBoardDemo() {
       });
     });
     await reloadFleet();
-    await session.page.waitForTimeout(2000);
-    const emptyPhase = await session.page.evaluate(() => {
-      const taskRows = document.querySelectorAll('[data-testid^="fleet-task-"]').length;
-      return {
+    await session.page.waitForTimeout(2500);
+    // Poll until empty treatment lands
+    /** @type {object} */
+    let emptyPhase = {};
+    for (let i = 0; i < 20; i += 1) {
+      emptyPhase = await session.page.evaluate(() => ({
         board: document
           .querySelector('[data-testid="fleet-board"]')
           ?.getAttribute("data-phase"),
         empty: !!document.querySelector('[data-testid="fleet-empty"]'),
-        tasksPhase: document
-          .querySelector('[data-testid="fleet-tasks"]')
-          ?.getAttribute("data-phase"),
-        tasksHonesty: !!document.querySelector('[data-testid="fleet-tasks-honesty"]'),
-        hailing: !!document.querySelector('[data-testid="fleet-hailing"]'),
-        taskRows,
         text: (document.querySelector('[data-testid="fleet-board"]')?.textContent ?? "")
           .replace(/\s+/g, " ")
           .trim()
           .slice(0, 200),
-      };
-    });
+      }));
+      if (emptyPhase.board === "empty" && emptyPhase.empty) break;
+      await session.page.waitForTimeout(150);
+    }
+    // Gate: must reach empty treatment — NO taskRows===0 tautology.
     honesty.empty = {
-      ok:
-        emptyPhase.empty ||
-        emptyPhase.board === "empty" ||
-        emptyPhase.tasksPhase === "empty" ||
-        emptyPhase.tasksHonesty ||
-        emptyPhase.taskRows === 0 ||
-        /No tasks|scaffold|parley delegate|Hailing|No events/i.test(emptyPhase.text),
+      ok: emptyPhase.board === "empty" && emptyPhase.empty === true,
       ...emptyPhase,
     };
     await clearIntercepts(session.page, "**/tasks");
@@ -406,8 +675,7 @@ export async function runFleetBoardDemo() {
     };
     await clearIntercepts(session.page, "**/runs");
 
-    // Loading: hang GET /tasks (list only) so bootstrap stays in-flight.
-    // Match exact list path — not /tasks/:id — via a predicate.
+    // Loading: hang GET /tasks; require fleet hailing (not shell chip alone).
     await session.page.route(
       (url) => {
         const u = typeof url === "string" ? url : url.href;
@@ -419,7 +687,6 @@ export async function runFleetBoardDemo() {
         }
       },
       async (route) => {
-        // Never continue — fulfill after a long delay so mid-flight paint is visible.
         await new Promise((r) => setTimeout(r, 8000));
         await route.fulfill({
           status: 200,
@@ -430,26 +697,21 @@ export async function runFleetBoardDemo() {
     );
     await session.page.goto(`${session.url}#/fleet`, { waitUntil: "commit" });
     await session.page.reload({ waitUntil: "commit" });
-    // Poll while bootstrap is delayed — first paint should be hailing/loading.
     /** @type {object} */
-    let loadingPhase = { ok: false };
-    for (let i = 0; i < 25; i += 1) {
+    let loadingPhase = { ok: false, hailing: false };
+    for (let i = 0; i < 30; i += 1) {
       loadingPhase = await session.page.evaluate(() => {
         const board = document.querySelector('[data-testid="fleet-board"]');
-        const text = (board?.textContent ?? "").replace(/\s+/g, " ").trim().slice(0, 160);
         const phase = board?.getAttribute("data-phase");
         const hailing = !!document.querySelector('[data-testid="fleet-hailing"]');
-        const liveStatus = document
-          .querySelector('[data-testid="live-status"]')
-          ?.getAttribute("data-phase");
-        const ok =
-          hailing ||
-          phase === "loading" ||
-          phase === "connecting" ||
-          liveStatus === "loading" ||
-          liveStatus === "connecting" ||
-          /Hailing/i.test(text);
-        return { board: phase, hailing, liveStatus, text, ok };
+        const text = (board?.textContent ?? "").replace(/\s+/g, " ").trim().slice(0, 160);
+        return {
+          board: phase,
+          hailing,
+          text,
+          // REQUIRED: fleet's own hailing treatment, not shell live-status chip.
+          ok: hailing === true,
+        };
       });
       if (loadingPhase.ok) break;
       await session.page.waitForTimeout(80);
@@ -466,11 +728,10 @@ export async function runFleetBoardDemo() {
         }
       },
     );
-    // Fresh navigation without hang so offline step starts clean
     await session.page.goto(`${session.url}#/fleet`, { waitUntil: "domcontentloaded" });
     await session.page.waitForTimeout(400);
 
-    // Offline: kill daemon after a healthy load
+    // Offline
     await session.page.goto(`${session.url}#/fleet`, { waitUntil: "networkidle" });
     await session.page.waitForTimeout(600);
     await session.daemon.kill();
@@ -494,7 +755,6 @@ export async function runFleetBoardDemo() {
         /offline|Reconnecting|stale/i.test(offlinePhase.text),
       ...offlinePhase,
     };
-    // Restart for clean teardown
     try {
       await session.daemon.restart();
     } catch {
@@ -504,19 +764,22 @@ export async function runFleetBoardDemo() {
     const proof = {
       kind: "fleet-board",
       description:
-        "Fleet board against real daemon: KPIs, runs/pips, attention tasks, " +
-        "token-burn with retention bound, runners, firehose; honesty + a11y.",
+        "Fleet board against real daemon: KPIs (24h window), runs/pips, attention tasks, " +
+        "token-burn with retention bound, runners, firehose; honesty + a11y + density.",
       staged: {
         completedTaskId: completed.taskId,
         failedTaskId: failed.taskId,
         runningTaskId: running.taskId,
       },
       taskPresence,
+      behavioral,
       headline: {
         boardScroll,
         burnBound: (burnBound ?? "").replace(/\s+/g, " ").trim(),
         panels,
         fontFloor,
+        tasksTable1280,
+        kpiNotes1280,
       },
       viewports,
       a11y: {
@@ -538,9 +801,18 @@ export async function runFleetBoardDemo() {
           boardScroll,
           panels,
           burnBound: proof.headline.burnBound,
+          tasksTable1280,
+          kpiNotes1280: { allOk: kpiNotes1280.allOk },
           honesty: Object.fromEntries(
             Object.entries(honesty).map(([k, v]) => [k, v.ok]),
           ),
+          behavioral: {
+            failPip: behavioral.failPip.ok,
+            attentionOrder: behavioral.attentionOrder.ok,
+            capAbsent: behavioral.capAbsent.ok,
+            runnerStatuses: behavioral.runnerStatuses.ok,
+            settled24h: behavioral.settled24h.ok,
+          },
           axeViolations: axeFull.violations?.length ?? 0,
           taskPresence,
         },

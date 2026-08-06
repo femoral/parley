@@ -5,7 +5,7 @@
   "demos": {
     "fleet-board": {
       "kind": "fleet-board",
-      "description": "Fleet board against real daemon: KPIs, runs/pips, attention tasks, token-burn with retention bound, runners, firehose; honesty + a11y.",
+      "description": "Fleet board against real daemon: KPIs (24h window), runs/pips, attention tasks, token-burn with retention bound, runners, firehose; honesty + a11y + density.",
       "staged": {
         "completedTaskId": "t1",
         "failedTaskId": "t2",
@@ -16,6 +16,76 @@
         "hasFailed": true,
         "phase": "live",
         "taskCount": 3
+      },
+      "behavioral": {
+        "failPip": {
+          "ok": true,
+          "kinds": [
+            "done",
+            "done",
+            "done",
+            "fail"
+          ]
+        },
+        "attentionOrder": {
+          "ok": true,
+          "sorted": [
+            "ask",
+            "fail",
+            "run",
+            "old-done",
+            "done"
+          ]
+        },
+        "capAbsent": {
+          "ok": true,
+          "value": "1",
+          "note": "cap unknown"
+        },
+        "runnerStatuses": {
+          "ok": true,
+          "rows": [
+            {
+              "status": "online",
+              "className": "pc-fleet-runner__status--online",
+              "label": "online"
+            },
+            {
+              "status": "stale",
+              "className": "pc-fleet-runner__status--stale",
+              "label": "stale"
+            },
+            {
+              "status": "offline",
+              "className": "pc-fleet-runner__status--offline",
+              "label": "offline"
+            }
+          ]
+        },
+        "settled24h": {
+          "ok": true,
+          "settled": "1 / 1",
+          "burn": "100"
+        },
+        "liveAttention": {
+          "rows": [
+            "fleet-task-t2",
+            "fleet-task-t3",
+            "fleet-task-t1"
+          ],
+          "states": [
+            "failed",
+            "running",
+            "completed"
+          ],
+          "failBeforeDone": true,
+          "runningKpi": "running1taskscap unknown",
+          "capAbsent": true,
+          "pipTracks": [],
+          "hasCompleted": true,
+          "hasFailed": true
+        },
+        "renderedFailPip": false
       },
       "headline": {
         "boardScroll": {
@@ -53,26 +123,6 @@
               "fontSize": 10
             },
             {
-              "selector": ".pc-fleet-burn__axis span",
-              "fontSize": 10
-            },
-            {
-              "selector": ".pc-fleet-burn__axis span",
-              "fontSize": 10
-            },
-            {
-              "selector": ".pc-fleet-burn__totals span",
-              "fontSize": 10
-            },
-            {
-              "selector": ".pc-fleet-burn__totals span",
-              "fontSize": 10
-            },
-            {
-              "selector": ".pc-fleet-burn__totals span",
-              "fontSize": 10
-            },
-            {
               "selector": ".pc-fleet-kpi__label",
               "fontSize": 10
             },
@@ -118,14 +168,6 @@
             },
             {
               "selector": ".pc-fleet-kpi__note",
-              "fontSize": 10
-            },
-            {
-              "selector": ".pc-fleet-table__th",
-              "fontSize": 10
-            },
-            {
-              "selector": ".pc-fleet-table__th",
               "fontSize": 10
             },
             {
@@ -182,6 +224,98 @@
             }
           ],
           "minOk": 9.5
+        },
+        "tasksTable1280": {
+          "found": true,
+          "scrollWidth": 398,
+          "clientWidth": 398,
+          "noHorizontalScroll": true,
+          "tokensVisible": true,
+          "durVisible": true,
+          "addrHidden": true,
+          "heads": [
+            {
+              "text": "state",
+              "display": "block",
+              "visible": true
+            },
+            {
+              "text": "task",
+              "display": "block",
+              "visible": true
+            },
+            {
+              "text": "harness",
+              "display": "block",
+              "visible": true
+            },
+            {
+              "text": "run address",
+              "display": "none",
+              "visible": false
+            },
+            {
+              "text": "branch",
+              "display": "none",
+              "visible": false
+            },
+            {
+              "text": "tokens",
+              "display": "block",
+              "visible": true
+            },
+            {
+              "text": "dur",
+              "display": "block",
+              "visible": true
+            },
+            {
+              "text": "age",
+              "display": "block",
+              "visible": true
+            }
+          ]
+        },
+        "kpiNotes1280": {
+          "rows": [
+            {
+              "text": "0 held · 0 asks · 0 stall · 1 fresh",
+              "scrollWidth": 195,
+              "clientWidth": 195,
+              "ok": true
+            },
+            {
+              "text": "cap unknown",
+              "scrollWidth": 195,
+              "clientWidth": 195,
+              "ok": true
+            },
+            {
+              "text": "no waiters",
+              "scrollWidth": 196,
+              "clientWidth": 196,
+              "ok": true
+            },
+            {
+              "text": "0 held · 0 advancing",
+              "scrollWidth": 195,
+              "clientWidth": 195,
+              "ok": true
+            },
+            {
+              "text": "success 0% · last 24h",
+              "scrollWidth": 195,
+              "clientWidth": 195,
+              "ok": true
+            },
+            {
+              "text": "cache 0% · p95 —",
+              "scrollWidth": 196,
+              "clientWidth": 196,
+              "ok": true
+            }
+          ],
+          "allOk": true
         }
       },
       "viewports": [
@@ -273,7 +407,7 @@
                 "overflow": "auto",
                 "opacity": "1"
               },
-              "text": "Fleet boardneeds orchestrator1items0 held gates · 0 asks · 0 stalled · 1 fresh failuresrunning1taskscap unknownqueued / pending0 / 0deny-by-default allowlist…"
+              "text": "Fleet boardneeds orchestrator1items0 held · 0 asks · 0 stall · 1 freshrunning1taskscap unknownqueued / pending0 / 0no waitersruns0total0 held · 0 advancingse…"
             },
             "fleet-board": {
               "selector": "[data-testid=\"fleet-board\"]",
@@ -315,7 +449,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "Fleet boardneeds orchestrator1items0 held gates · 0 asks · 0 stalled · 1 fresh failuresrunning1taskscap unknownqueued / pending0 / 0deny-by-default allowlist…"
+              "text": "Fleet boardneeds orchestrator1items0 held · 0 asks · 0 stall · 1 freshrunning1taskscap unknownqueued / pending0 / 0no waitersruns0total0 held · 0 advancingse…"
             },
             "fleet-board-scroll": {
               "selector": "[data-testid=\"fleet-board-scroll\"]",
@@ -357,7 +491,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "needs orchestrator1items0 held gates · 0 asks · 0 stalled · 1 fresh failuresrunning1taskscap unknownqueued / pending0 / 0deny-by-default allowlist gates spaw…"
+              "text": "needs orchestrator1items0 held · 0 asks · 0 stall · 1 freshrunning1taskscap unknownqueued / pending0 / 0no waitersruns0total0 held · 0 advancingsettled 24h0 …"
             },
             "fleet-kpis": {
               "selector": "[data-testid=\"fleet-kpis\"]",
@@ -366,13 +500,13 @@
                 "x": 284,
                 "y": 46,
                 "width": 648,
-                "height": 158.38
+                "height": 148.25
               },
               "styles": {
                 "display": "grid",
                 "position": "static",
                 "width": "648px",
-                "height": "158.375px",
+                "height": "148.25px",
                 "minWidth": "auto",
                 "minHeight": "auto",
                 "backgroundColor": "rgba(0, 0, 0, 0)",
@@ -391,30 +525,30 @@
                 "borderBottomColor": "rgb(35, 42, 48)",
                 "borderLeftColor": "rgb(227, 232, 236)",
                 "borderRightColor": "rgb(227, 232, 236)",
-                "gridTemplateRows": "85.25px 72.125px",
-                "gridTemplateColumns": "129.594px 129.594px 129.609px 129.594px 129.609px",
+                "gridTemplateRows": "80.125px 67.125px",
+                "gridTemplateColumns": "216px 216px 216px",
                 "gap": "normal",
                 "padding": "0px",
                 "margin": "0px",
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "needs orchestrator1items0 held gates · 0 asks · 0 stalled · 1 fresh failuresrunning1taskscap unknownqueued / pending0 / 0deny-by-default allowlist gates spaw…"
+              "text": "needs orchestrator1items0 held · 0 asks · 0 stall · 1 freshrunning1taskscap unknownqueued / pending0 / 0no waitersruns0total0 held · 0 advancingsettled 24h0 …"
             },
             "fleet-kpi-running": {
               "selector": "[data-testid=\"fleet-kpi-running\"]",
               "found": true,
               "box": {
-                "x": 413.59,
+                "x": 500,
                 "y": 46,
-                "width": 129.59,
-                "height": 85.25
+                "width": 216,
+                "height": 80.13
               },
               "styles": {
                 "display": "flex",
                 "position": "static",
-                "width": "129.594px",
-                "height": "85.25px",
+                "width": "216px",
+                "height": "80.125px",
                 "minWidth": "0px",
                 "minHeight": "auto",
                 "backgroundColor": "rgba(0, 0, 0, 0)",
@@ -426,37 +560,121 @@
                 "letterSpacing": "normal",
                 "textTransform": "none",
                 "borderTopWidth": "0px",
-                "borderBottomWidth": "0px",
+                "borderBottomWidth": "1px",
                 "borderLeftWidth": "0px",
                 "borderRightWidth": "1px",
                 "borderTopColor": "rgb(227, 232, 236)",
-                "borderBottomColor": "rgb(227, 232, 236)",
+                "borderBottomColor": "rgb(26, 32, 37)",
                 "borderLeftColor": "rgb(227, 232, 236)",
                 "borderRightColor": "rgb(26, 32, 37)",
                 "gridTemplateRows": "none",
                 "gridTemplateColumns": "none",
-                "gap": "5px",
-                "padding": "9px 12px",
+                "gap": "4px",
+                "padding": "7px 10px",
                 "margin": "0px",
                 "overflow": "visible",
                 "opacity": "1"
               },
               "text": "running1taskscap unknown"
             },
+            "fleet-kpi-settled": {
+              "selector": "[data-testid=\"fleet-kpi-settled\"]",
+              "found": true,
+              "box": {
+                "x": 500,
+                "y": 126.13,
+                "width": 216,
+                "height": 67.13
+              },
+              "styles": {
+                "display": "flex",
+                "position": "static",
+                "width": "216px",
+                "height": "67.125px",
+                "minWidth": "0px",
+                "minHeight": "auto",
+                "backgroundColor": "rgba(0, 0, 0, 0)",
+                "color": "rgb(227, 232, 236)",
+                "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
+                "fontSize": "16px",
+                "fontWeight": "400",
+                "fontFamily": "\"IBM Plex Sans\", system-ui, sans-serif",
+                "letterSpacing": "normal",
+                "textTransform": "none",
+                "borderTopWidth": "0px",
+                "borderBottomWidth": "1px",
+                "borderLeftWidth": "0px",
+                "borderRightWidth": "1px",
+                "borderTopColor": "rgb(227, 232, 236)",
+                "borderBottomColor": "rgb(26, 32, 37)",
+                "borderLeftColor": "rgb(227, 232, 236)",
+                "borderRightColor": "rgb(26, 32, 37)",
+                "gridTemplateRows": "none",
+                "gridTemplateColumns": "none",
+                "gap": "4px",
+                "padding": "7px 10px",
+                "margin": "0px",
+                "overflow": "visible",
+                "opacity": "1"
+              },
+              "text": "settled 24h0 / 0done / failedsuccess 0% · last 24h"
+            },
+            "fleet-kpi-token-burn": {
+              "selector": "[data-testid=\"fleet-kpi-token-burn\"]",
+              "found": true,
+              "box": {
+                "x": 716,
+                "y": 126.13,
+                "width": 216,
+                "height": 67.13
+              },
+              "styles": {
+                "display": "flex",
+                "position": "static",
+                "width": "216px",
+                "height": "67.125px",
+                "minWidth": "0px",
+                "minHeight": "auto",
+                "backgroundColor": "rgba(0, 0, 0, 0)",
+                "color": "rgb(227, 232, 236)",
+                "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
+                "fontSize": "16px",
+                "fontWeight": "400",
+                "fontFamily": "\"IBM Plex Sans\", system-ui, sans-serif",
+                "letterSpacing": "normal",
+                "textTransform": "none",
+                "borderTopWidth": "0px",
+                "borderBottomWidth": "1px",
+                "borderLeftWidth": "0px",
+                "borderRightWidth": "0px",
+                "borderTopColor": "rgb(227, 232, 236)",
+                "borderBottomColor": "rgb(26, 32, 37)",
+                "borderLeftColor": "rgb(227, 232, 236)",
+                "borderRightColor": "rgb(227, 232, 236)",
+                "gridTemplateRows": "none",
+                "gridTemplateColumns": "none",
+                "gap": "4px",
+                "padding": "7px 10px",
+                "margin": "0px",
+                "overflow": "visible",
+                "opacity": "1"
+              },
+              "text": "token burn0incache 0% · p95 —"
+            },
             "fleet-runs": {
               "selector": "[data-testid=\"fleet-runs\"]",
               "found": true,
               "box": {
                 "x": 284,
-                "y": 204.38,
+                "y": 194.25,
                 "width": 407,
-                "height": 184.38
+                "height": 187.17
               },
               "styles": {
                 "display": "flex",
                 "position": "relative",
                 "width": "407px",
-                "height": "184.375px",
+                "height": "187.172px",
                 "minWidth": "0px",
                 "minHeight": "0px",
                 "backgroundColor": "rgba(0, 0, 0, 0)",
@@ -483,22 +701,22 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "runsworkflow · node · iteration — 0 held at a gateNo runs"
+              "text": "runs0 held · track = nodes × loopNo runs"
             },
             "fleet-tasks": {
               "selector": "[data-testid=\"fleet-tasks\"]",
               "found": true,
               "box": {
                 "x": 284,
-                "y": 388.75,
+                "y": 381.42,
                 "width": 407,
-                "height": 485.25
+                "height": 492.58
               },
               "styles": {
                 "display": "flex",
                 "position": "relative",
                 "width": "407px",
-                "height": "485.25px",
+                "height": "492.578px",
                 "minWidth": "0px",
                 "minHeight": "0px",
                 "backgroundColor": "rgba(0, 0, 0, 0)",
@@ -525,22 +743,64 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "tasksall · sorted by attention, then age · 3 rowsstatetaskharness · modelrun addressbranchtokensdurageFAILEDt2t2fresh failurefake · fake-model———31ms1sRUNNIN…"
+              "text": "tasksattention · age · 3statetaskharnessrun addressbranchtokensdurageFAILEDt2t2fresh failurefake · fake-model———29ms0sRUNNINGt3t3fake · fake-model————0sDONEt…"
+            },
+            "fleet-tasks-scroll": {
+              "selector": "[data-testid=\"fleet-tasks-scroll\"]",
+              "found": true,
+              "box": {
+                "x": 284,
+                "y": 406.42,
+                "width": 407,
+                "height": 103
+              },
+              "styles": {
+                "display": "block",
+                "position": "relative",
+                "width": "407px",
+                "height": "103px",
+                "minWidth": "0px",
+                "minHeight": "0px",
+                "backgroundColor": "rgba(0, 0, 0, 0)",
+                "color": "rgb(227, 232, 236)",
+                "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
+                "fontSize": "16px",
+                "fontWeight": "400",
+                "fontFamily": "\"IBM Plex Sans\", system-ui, sans-serif",
+                "letterSpacing": "normal",
+                "textTransform": "none",
+                "borderTopWidth": "0px",
+                "borderBottomWidth": "0px",
+                "borderLeftWidth": "0px",
+                "borderRightWidth": "0px",
+                "borderTopColor": "rgb(227, 232, 236)",
+                "borderBottomColor": "rgb(227, 232, 236)",
+                "borderLeftColor": "rgb(227, 232, 236)",
+                "borderRightColor": "rgb(227, 232, 236)",
+                "gridTemplateRows": "none",
+                "gridTemplateColumns": "none",
+                "gap": "normal",
+                "padding": "0px",
+                "margin": "0px",
+                "overflow": "auto",
+                "opacity": "1"
+              },
+              "text": "statetaskharnessrun addressbranchtokensdurageFAILEDt2t2fresh failurefake · fake-model———29ms0sRUNNINGt3t3fake · fake-model————0sDONEt1t1fake · fake-model———1…"
             },
             "fleet-token-burn": {
               "selector": "[data-testid=\"fleet-token-burn\"]",
               "found": true,
               "box": {
                 "x": 692,
-                "y": 204.38,
+                "y": 194.25,
                 "width": 240,
-                "height": 131
+                "height": 97.78
               },
               "styles": {
                 "display": "flex",
                 "position": "static",
                 "width": "240px",
-                "height": "131px",
+                "height": "97.7812px",
                 "minWidth": "auto",
                 "minHeight": "auto",
                 "backgroundColor": "rgba(0, 0, 0, 0)",
@@ -567,14 +827,14 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "token burn · 24hlast 24h · sees tasks within retention (30d assumed)00in 0out 0cached 0"
+              "text": "token burn · 24hlast 24h · sees tasks within retention (30d assumed)No token activity in the last 24h (within retention)."
             },
             "fleet-burn-bound": {
               "selector": "[data-testid=\"fleet-burn-bound\"]",
               "found": true,
               "box": {
                 "x": 702,
-                "y": 228.38,
+                "y": 218.25,
                 "width": 220,
                 "height": 26
               },
@@ -616,7 +876,7 @@
               "found": true,
               "box": {
                 "x": 692,
-                "y": 335.38,
+                "y": 292.03,
                 "width": 240,
                 "height": 73.39
               },
@@ -658,15 +918,15 @@
               "found": true,
               "box": {
                 "x": 692,
-                "y": 408.77,
+                "y": 365.42,
                 "width": 240,
-                "height": 465.23
+                "height": 508.58
               },
               "styles": {
                 "display": "flex",
                 "position": "relative",
                 "width": "240px",
-                "height": "465.234px",
+                "height": "508.578px",
                 "minWidth": "0px",
                 "minHeight": "0px",
                 "backgroundColor": "rgba(0, 0, 0, 0)",
@@ -693,7 +953,7 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "firehosewatch — followNo events"
+              "text": "firehosewatch — followNo events since connect"
             }
           }
         },
@@ -785,7 +1045,7 @@
                 "overflow": "auto",
                 "opacity": "1"
               },
-              "text": "Fleet boardneeds orchestrator1items0 held gates · 0 asks · 0 stalled · 1 fresh failuresrunning1taskscap unknownqueued / pending0 / 0deny-by-default allowlist…"
+              "text": "Fleet boardneeds orchestrator1items0 held · 0 asks · 0 stall · 1 freshrunning1taskscap unknownqueued / pending0 / 0no waitersruns0total0 held · 0 advancingse…"
             },
             "fleet-board": {
               "selector": "[data-testid=\"fleet-board\"]",
@@ -827,7 +1087,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "Fleet boardneeds orchestrator1items0 held gates · 0 asks · 0 stalled · 1 fresh failuresrunning1taskscap unknownqueued / pending0 / 0deny-by-default allowlist…"
+              "text": "Fleet boardneeds orchestrator1items0 held · 0 asks · 0 stall · 1 freshrunning1taskscap unknownqueued / pending0 / 0no waitersruns0total0 held · 0 advancingse…"
             },
             "fleet-board-scroll": {
               "selector": "[data-testid=\"fleet-board-scroll\"]",
@@ -869,7 +1129,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "needs orchestrator1items0 held gates · 0 asks · 0 stalled · 1 fresh failuresrunning1taskscap unknownqueued / pending0 / 0deny-by-default allowlist gates spaw…"
+              "text": "needs orchestrator1items0 held · 0 asks · 0 stall · 1 freshrunning1taskscap unknownqueued / pending0 / 0no waitersruns0total0 held · 0 advancingsettled 24h0 …"
             },
             "fleet-kpis": {
               "selector": "[data-testid=\"fleet-kpis\"]",
@@ -878,13 +1138,13 @@
                 "x": 284,
                 "y": 46,
                 "width": 828,
-                "height": 158.38
+                "height": 135.25
               },
               "styles": {
                 "display": "grid",
                 "position": "static",
                 "width": "828px",
-                "height": "158.375px",
+                "height": "135.25px",
                 "minWidth": "auto",
                 "minHeight": "auto",
                 "backgroundColor": "rgba(0, 0, 0, 0)",
@@ -903,30 +1163,30 @@
                 "borderBottomColor": "rgb(35, 42, 48)",
                 "borderLeftColor": "rgb(227, 232, 236)",
                 "borderRightColor": "rgb(227, 232, 236)",
-                "gridTemplateRows": "85.25px 72.125px",
-                "gridTemplateColumns": "165.594px 165.594px 165.609px 165.594px 165.609px",
+                "gridTemplateRows": "67.125px 67.125px",
+                "gridTemplateColumns": "276px 276px 276px",
                 "gap": "normal",
                 "padding": "0px",
                 "margin": "0px",
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "needs orchestrator1items0 held gates · 0 asks · 0 stalled · 1 fresh failuresrunning1taskscap unknownqueued / pending0 / 0deny-by-default allowlist gates spaw…"
+              "text": "needs orchestrator1items0 held · 0 asks · 0 stall · 1 freshrunning1taskscap unknownqueued / pending0 / 0no waitersruns0total0 held · 0 advancingsettled 24h0 …"
             },
             "fleet-kpi-running": {
               "selector": "[data-testid=\"fleet-kpi-running\"]",
               "found": true,
               "box": {
-                "x": 449.59,
+                "x": 560,
                 "y": 46,
-                "width": 165.59,
-                "height": 85.25
+                "width": 276,
+                "height": 67.13
               },
               "styles": {
                 "display": "flex",
                 "position": "static",
-                "width": "165.594px",
-                "height": "85.25px",
+                "width": "276px",
+                "height": "67.125px",
                 "minWidth": "0px",
                 "minHeight": "auto",
                 "backgroundColor": "rgba(0, 0, 0, 0)",
@@ -938,37 +1198,121 @@
                 "letterSpacing": "normal",
                 "textTransform": "none",
                 "borderTopWidth": "0px",
-                "borderBottomWidth": "0px",
+                "borderBottomWidth": "1px",
                 "borderLeftWidth": "0px",
                 "borderRightWidth": "1px",
                 "borderTopColor": "rgb(227, 232, 236)",
-                "borderBottomColor": "rgb(227, 232, 236)",
+                "borderBottomColor": "rgb(26, 32, 37)",
                 "borderLeftColor": "rgb(227, 232, 236)",
                 "borderRightColor": "rgb(26, 32, 37)",
                 "gridTemplateRows": "none",
                 "gridTemplateColumns": "none",
-                "gap": "5px",
-                "padding": "9px 12px",
+                "gap": "4px",
+                "padding": "7px 10px",
                 "margin": "0px",
                 "overflow": "visible",
                 "opacity": "1"
               },
               "text": "running1taskscap unknown"
             },
+            "fleet-kpi-settled": {
+              "selector": "[data-testid=\"fleet-kpi-settled\"]",
+              "found": true,
+              "box": {
+                "x": 560,
+                "y": 113.13,
+                "width": 276,
+                "height": 67.13
+              },
+              "styles": {
+                "display": "flex",
+                "position": "static",
+                "width": "276px",
+                "height": "67.125px",
+                "minWidth": "0px",
+                "minHeight": "auto",
+                "backgroundColor": "rgba(0, 0, 0, 0)",
+                "color": "rgb(227, 232, 236)",
+                "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
+                "fontSize": "16px",
+                "fontWeight": "400",
+                "fontFamily": "\"IBM Plex Sans\", system-ui, sans-serif",
+                "letterSpacing": "normal",
+                "textTransform": "none",
+                "borderTopWidth": "0px",
+                "borderBottomWidth": "1px",
+                "borderLeftWidth": "0px",
+                "borderRightWidth": "1px",
+                "borderTopColor": "rgb(227, 232, 236)",
+                "borderBottomColor": "rgb(26, 32, 37)",
+                "borderLeftColor": "rgb(227, 232, 236)",
+                "borderRightColor": "rgb(26, 32, 37)",
+                "gridTemplateRows": "none",
+                "gridTemplateColumns": "none",
+                "gap": "4px",
+                "padding": "7px 10px",
+                "margin": "0px",
+                "overflow": "visible",
+                "opacity": "1"
+              },
+              "text": "settled 24h0 / 0done / failedsuccess 0% · last 24h"
+            },
+            "fleet-kpi-token-burn": {
+              "selector": "[data-testid=\"fleet-kpi-token-burn\"]",
+              "found": true,
+              "box": {
+                "x": 836,
+                "y": 113.13,
+                "width": 276,
+                "height": 67.13
+              },
+              "styles": {
+                "display": "flex",
+                "position": "static",
+                "width": "276px",
+                "height": "67.125px",
+                "minWidth": "0px",
+                "minHeight": "auto",
+                "backgroundColor": "rgba(0, 0, 0, 0)",
+                "color": "rgb(227, 232, 236)",
+                "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
+                "fontSize": "16px",
+                "fontWeight": "400",
+                "fontFamily": "\"IBM Plex Sans\", system-ui, sans-serif",
+                "letterSpacing": "normal",
+                "textTransform": "none",
+                "borderTopWidth": "0px",
+                "borderBottomWidth": "1px",
+                "borderLeftWidth": "0px",
+                "borderRightWidth": "0px",
+                "borderTopColor": "rgb(227, 232, 236)",
+                "borderBottomColor": "rgb(26, 32, 37)",
+                "borderLeftColor": "rgb(227, 232, 236)",
+                "borderRightColor": "rgb(227, 232, 236)",
+                "gridTemplateRows": "none",
+                "gridTemplateColumns": "none",
+                "gap": "4px",
+                "padding": "7px 10px",
+                "margin": "0px",
+                "overflow": "visible",
+                "opacity": "1"
+              },
+              "text": "token burn0incache 0% · p95 —"
+            },
             "fleet-runs": {
               "selector": "[data-testid=\"fleet-runs\"]",
               "found": true,
               "box": {
                 "x": 284,
-                "y": 204.38,
+                "y": 181.25,
                 "width": 547,
-                "height": 184.38
+                "height": 190.75
               },
               "styles": {
                 "display": "flex",
                 "position": "relative",
                 "width": "547px",
-                "height": "184.375px",
+                "height": "190.75px",
                 "minWidth": "0px",
                 "minHeight": "0px",
                 "backgroundColor": "rgba(0, 0, 0, 0)",
@@ -995,22 +1339,22 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "runsworkflow · node · iteration — 0 held at a gateNo runs"
+              "text": "runs0 held · track = nodes × loopNo runs"
             },
             "fleet-tasks": {
               "selector": "[data-testid=\"fleet-tasks\"]",
               "found": true,
               "box": {
                 "x": 284,
-                "y": 388.75,
+                "y": 372,
                 "width": 547,
-                "height": 485.25
+                "height": 502
               },
               "styles": {
                 "display": "flex",
                 "position": "relative",
                 "width": "547px",
-                "height": "485.25px",
+                "height": "502px",
                 "minWidth": "0px",
                 "minHeight": "0px",
                 "backgroundColor": "rgba(0, 0, 0, 0)",
@@ -1037,22 +1381,64 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "tasksall · sorted by attention, then age · 3 rowsstatetaskharness · modelrun addressbranchtokensdurageFAILEDt2t2fresh failurefake · fake-model———31ms1sRUNNIN…"
+              "text": "tasksattention · age · 3statetaskharnessrun addressbranchtokensdurageFAILEDt2t2fresh failurefake · fake-model———29ms0sRUNNINGt3t3fake · fake-model————0sDONEt…"
+            },
+            "fleet-tasks-scroll": {
+              "selector": "[data-testid=\"fleet-tasks-scroll\"]",
+              "found": true,
+              "box": {
+                "x": 284,
+                "y": 397,
+                "width": 547,
+                "height": 103
+              },
+              "styles": {
+                "display": "block",
+                "position": "relative",
+                "width": "547px",
+                "height": "103px",
+                "minWidth": "0px",
+                "minHeight": "0px",
+                "backgroundColor": "rgba(0, 0, 0, 0)",
+                "color": "rgb(227, 232, 236)",
+                "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
+                "fontSize": "16px",
+                "fontWeight": "400",
+                "fontFamily": "\"IBM Plex Sans\", system-ui, sans-serif",
+                "letterSpacing": "normal",
+                "textTransform": "none",
+                "borderTopWidth": "0px",
+                "borderBottomWidth": "0px",
+                "borderLeftWidth": "0px",
+                "borderRightWidth": "0px",
+                "borderTopColor": "rgb(227, 232, 236)",
+                "borderBottomColor": "rgb(227, 232, 236)",
+                "borderLeftColor": "rgb(227, 232, 236)",
+                "borderRightColor": "rgb(227, 232, 236)",
+                "gridTemplateRows": "none",
+                "gridTemplateColumns": "none",
+                "gap": "normal",
+                "padding": "0px",
+                "margin": "0px",
+                "overflow": "auto",
+                "opacity": "1"
+              },
+              "text": "statetaskharnessrun addressbranchtokensdurageFAILEDt2t2fresh failurefake · fake-model———29ms0sRUNNINGt3t3fake · fake-model————0sDONEt1t1fake · fake-model———1…"
             },
             "fleet-token-burn": {
               "selector": "[data-testid=\"fleet-token-burn\"]",
               "found": true,
               "box": {
                 "x": 832,
-                "y": 204.38,
+                "y": 181.25,
                 "width": 280,
-                "height": 131
+                "height": 82.39
               },
               "styles": {
                 "display": "flex",
                 "position": "static",
                 "width": "280px",
-                "height": "131px",
+                "height": "82.3906px",
                 "minWidth": "auto",
                 "minHeight": "auto",
                 "backgroundColor": "rgba(0, 0, 0, 0)",
@@ -1079,14 +1465,14 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "token burn · 24hlast 24h · sees tasks within retention (30d assumed)00in 0out 0cached 0"
+              "text": "token burn · 24hlast 24h · sees tasks within retention (30d assumed)No token activity in the last 24h (within retention)."
             },
             "fleet-burn-bound": {
               "selector": "[data-testid=\"fleet-burn-bound\"]",
               "found": true,
               "box": {
                 "x": 842,
-                "y": 228.38,
+                "y": 205.25,
                 "width": 260,
                 "height": 26
               },
@@ -1128,7 +1514,7 @@
               "found": true,
               "box": {
                 "x": 832,
-                "y": 335.38,
+                "y": 263.64,
                 "width": 280,
                 "height": 73.39
               },
@@ -1170,15 +1556,15 @@
               "found": true,
               "box": {
                 "x": 832,
-                "y": 408.77,
+                "y": 337.03,
                 "width": 280,
-                "height": 465.23
+                "height": 536.97
               },
               "styles": {
                 "display": "flex",
                 "position": "relative",
                 "width": "280px",
-                "height": "465.234px",
+                "height": "536.969px",
                 "minWidth": "0px",
                 "minHeight": "0px",
                 "backgroundColor": "rgba(0, 0, 0, 0)",
@@ -1205,7 +1591,7 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "firehosewatch — followNo events"
+              "text": "firehosewatch — followNo events since connect"
             }
           }
         },
@@ -1297,7 +1683,7 @@
                 "overflow": "auto",
                 "opacity": "1"
               },
-              "text": "Fleet boardneeds orchestrator1items0 held gates · 0 asks · 0 stalled · 1 fresh failuresrunning1taskscap unknownqueued / pending0 / 0deny-by-default allowlist…"
+              "text": "Fleet boardneeds orchestrator1items0 held · 0 asks · 0 stall · 1 freshrunning1taskscap unknownqueued / pending0 / 0no waitersruns0total0 held · 0 advancingse…"
             },
             "fleet-board": {
               "selector": "[data-testid=\"fleet-board\"]",
@@ -1339,7 +1725,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "Fleet boardneeds orchestrator1items0 held gates · 0 asks · 0 stalled · 1 fresh failuresrunning1taskscap unknownqueued / pending0 / 0deny-by-default allowlist…"
+              "text": "Fleet boardneeds orchestrator1items0 held · 0 asks · 0 stall · 1 freshrunning1taskscap unknownqueued / pending0 / 0no waitersruns0total0 held · 0 advancingse…"
             },
             "fleet-board-scroll": {
               "selector": "[data-testid=\"fleet-board-scroll\"]",
@@ -1381,7 +1767,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "needs orchestrator1items0 held gates · 0 asks · 0 stalled · 1 fresh failuresrunning1taskscap unknownqueued / pending0 / 0deny-by-default allowlist gates spaw…"
+              "text": "needs orchestrator1items0 held · 0 asks · 0 stall · 1 freshrunning1taskscap unknownqueued / pending0 / 0no waitersruns0total0 held · 0 advancingsettled 24h0 …"
             },
             "fleet-kpis": {
               "selector": "[data-testid=\"fleet-kpis\"]",
@@ -1390,13 +1776,13 @@
                 "x": 284,
                 "y": 46,
                 "width": 1288,
-                "height": 73.13
+                "height": 80.13
               },
               "styles": {
                 "display": "grid",
                 "position": "static",
                 "width": "1288px",
-                "height": "73.125px",
+                "height": "80.125px",
                 "minWidth": "auto",
                 "minHeight": "auto",
                 "backgroundColor": "rgba(0, 0, 0, 0)",
@@ -1415,15 +1801,15 @@
                 "borderBottomColor": "rgb(35, 42, 48)",
                 "borderLeftColor": "rgb(227, 232, 236)",
                 "borderRightColor": "rgb(227, 232, 236)",
-                "gridTemplateRows": "72.125px",
-                "gridTemplateColumns": "214.656px 214.672px 214.672px 214.656px 214.672px 214.672px 0px 0px",
+                "gridTemplateRows": "79.125px",
+                "gridTemplateColumns": "214.656px 214.672px 214.672px 214.656px 214.672px 214.672px",
                 "gap": "normal",
                 "padding": "0px",
                 "margin": "0px",
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "needs orchestrator1items0 held gates · 0 asks · 0 stalled · 1 fresh failuresrunning1taskscap unknownqueued / pending0 / 0deny-by-default allowlist gates spaw…"
+              "text": "needs orchestrator1items0 held · 0 asks · 0 stall · 1 freshrunning1taskscap unknownqueued / pending0 / 0no waitersruns0total0 held · 0 advancingsettled 24h0 …"
             },
             "fleet-kpi-running": {
               "selector": "[data-testid=\"fleet-kpi-running\"]",
@@ -1432,13 +1818,13 @@
                 "x": 498.66,
                 "y": 46,
                 "width": 214.67,
-                "height": 72.13
+                "height": 79.13
               },
               "styles": {
                 "display": "flex",
                 "position": "static",
                 "width": "214.672px",
-                "height": "72.125px",
+                "height": "79.125px",
                 "minWidth": "0px",
                 "minHeight": "auto",
                 "backgroundColor": "rgba(0, 0, 0, 0)",
@@ -1459,28 +1845,112 @@
                 "borderRightColor": "rgb(26, 32, 37)",
                 "gridTemplateRows": "none",
                 "gridTemplateColumns": "none",
-                "gap": "5px",
-                "padding": "9px 12px",
+                "gap": "4px",
+                "padding": "7px 10px",
                 "margin": "0px",
                 "overflow": "visible",
                 "opacity": "1"
               },
               "text": "running1taskscap unknown"
             },
+            "fleet-kpi-settled": {
+              "selector": "[data-testid=\"fleet-kpi-settled\"]",
+              "found": true,
+              "box": {
+                "x": 1142.66,
+                "y": 46,
+                "width": 214.67,
+                "height": 79.13
+              },
+              "styles": {
+                "display": "flex",
+                "position": "static",
+                "width": "214.672px",
+                "height": "79.125px",
+                "minWidth": "0px",
+                "minHeight": "auto",
+                "backgroundColor": "rgba(0, 0, 0, 0)",
+                "color": "rgb(227, 232, 236)",
+                "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
+                "fontSize": "16px",
+                "fontWeight": "400",
+                "fontFamily": "\"IBM Plex Sans\", system-ui, sans-serif",
+                "letterSpacing": "normal",
+                "textTransform": "none",
+                "borderTopWidth": "0px",
+                "borderBottomWidth": "0px",
+                "borderLeftWidth": "0px",
+                "borderRightWidth": "1px",
+                "borderTopColor": "rgb(227, 232, 236)",
+                "borderBottomColor": "rgb(227, 232, 236)",
+                "borderLeftColor": "rgb(227, 232, 236)",
+                "borderRightColor": "rgb(26, 32, 37)",
+                "gridTemplateRows": "none",
+                "gridTemplateColumns": "none",
+                "gap": "4px",
+                "padding": "7px 10px",
+                "margin": "0px",
+                "overflow": "visible",
+                "opacity": "1"
+              },
+              "text": "settled 24h0 / 0done / failedsuccess 0% · last 24h"
+            },
+            "fleet-kpi-token-burn": {
+              "selector": "[data-testid=\"fleet-kpi-token-burn\"]",
+              "found": true,
+              "box": {
+                "x": 1357.33,
+                "y": 46,
+                "width": 214.67,
+                "height": 79.13
+              },
+              "styles": {
+                "display": "flex",
+                "position": "static",
+                "width": "214.672px",
+                "height": "79.125px",
+                "minWidth": "0px",
+                "minHeight": "auto",
+                "backgroundColor": "rgba(0, 0, 0, 0)",
+                "color": "rgb(227, 232, 236)",
+                "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
+                "fontSize": "16px",
+                "fontWeight": "400",
+                "fontFamily": "\"IBM Plex Sans\", system-ui, sans-serif",
+                "letterSpacing": "normal",
+                "textTransform": "none",
+                "borderTopWidth": "0px",
+                "borderBottomWidth": "0px",
+                "borderLeftWidth": "0px",
+                "borderRightWidth": "0px",
+                "borderTopColor": "rgb(227, 232, 236)",
+                "borderBottomColor": "rgb(227, 232, 236)",
+                "borderLeftColor": "rgb(227, 232, 236)",
+                "borderRightColor": "rgb(227, 232, 236)",
+                "gridTemplateRows": "none",
+                "gridTemplateColumns": "none",
+                "gap": "4px",
+                "padding": "7px 10px",
+                "margin": "0px",
+                "overflow": "visible",
+                "opacity": "1"
+              },
+              "text": "token burn0incache 0% · p95 —"
+            },
             "fleet-runs": {
               "selector": "[data-testid=\"fleet-runs\"]",
               "found": true,
               "box": {
                 "x": 284,
-                "y": 119.13,
+                "y": 126.13,
                 "width": 1007,
-                "height": 207.86
+                "height": 205.92
               },
               "styles": {
                 "display": "flex",
                 "position": "relative",
                 "width": "1007px",
-                "height": "207.859px",
+                "height": "205.922px",
                 "minWidth": "0px",
                 "minHeight": "0px",
                 "backgroundColor": "rgba(0, 0, 0, 0)",
@@ -1507,22 +1977,22 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "runsworkflow · node · iteration — 0 held at a gateNo runs"
+              "text": "runs0 held · track = nodes × loopNo runs"
             },
             "fleet-tasks": {
               "selector": "[data-testid=\"fleet-tasks\"]",
               "found": true,
               "box": {
                 "x": 284,
-                "y": 326.98,
+                "y": 332.05,
                 "width": 1007,
-                "height": 547.02
+                "height": 541.95
               },
               "styles": {
                 "display": "flex",
                 "position": "relative",
                 "width": "1007px",
-                "height": "547.016px",
+                "height": "541.953px",
                 "minWidth": "0px",
                 "minHeight": "0px",
                 "backgroundColor": "rgba(0, 0, 0, 0)",
@@ -1549,22 +2019,64 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "tasksall · sorted by attention, then age · 3 rowsstatetaskharness · modelrun addressbranchtokensdurageFAILEDt2t2fresh failurefake · fake-model———31ms1sRUNNIN…"
+              "text": "tasksattention · age · 3statetaskharnessrun addressbranchtokensdurageFAILEDt2t2fresh failurefake · fake-model———29ms0sRUNNINGt3t3fake · fake-model————0sDONEt…"
+            },
+            "fleet-tasks-scroll": {
+              "selector": "[data-testid=\"fleet-tasks-scroll\"]",
+              "found": true,
+              "box": {
+                "x": 284,
+                "y": 357.05,
+                "width": 1007,
+                "height": 103
+              },
+              "styles": {
+                "display": "block",
+                "position": "relative",
+                "width": "1007px",
+                "height": "103px",
+                "minWidth": "0px",
+                "minHeight": "0px",
+                "backgroundColor": "rgba(0, 0, 0, 0)",
+                "color": "rgb(227, 232, 236)",
+                "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
+                "fontSize": "16px",
+                "fontWeight": "400",
+                "fontFamily": "\"IBM Plex Sans\", system-ui, sans-serif",
+                "letterSpacing": "normal",
+                "textTransform": "none",
+                "borderTopWidth": "0px",
+                "borderBottomWidth": "0px",
+                "borderLeftWidth": "0px",
+                "borderRightWidth": "0px",
+                "borderTopColor": "rgb(227, 232, 236)",
+                "borderBottomColor": "rgb(227, 232, 236)",
+                "borderLeftColor": "rgb(227, 232, 236)",
+                "borderRightColor": "rgb(227, 232, 236)",
+                "gridTemplateRows": "none",
+                "gridTemplateColumns": "none",
+                "gap": "normal",
+                "padding": "0px",
+                "margin": "0px",
+                "overflow": "auto",
+                "opacity": "1"
+              },
+              "text": "statetaskharnessrun addressbranchtokensdurageFAILEDt2t2fresh failurefake · fake-model———29ms0sRUNNINGt3t3fake · fake-model————0sDONEt1t1fake · fake-model———1…"
             },
             "fleet-token-burn": {
               "selector": "[data-testid=\"fleet-token-burn\"]",
               "found": true,
               "box": {
                 "x": 1292,
-                "y": 119.13,
+                "y": 126.13,
                 "width": 280,
-                "height": 131
+                "height": 82.39
               },
               "styles": {
                 "display": "flex",
                 "position": "static",
                 "width": "280px",
-                "height": "131px",
+                "height": "82.3906px",
                 "minWidth": "auto",
                 "minHeight": "auto",
                 "backgroundColor": "rgba(0, 0, 0, 0)",
@@ -1591,14 +2103,14 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "token burn · 24hlast 24h · sees tasks within retention (30d assumed)00in 0out 0cached 0"
+              "text": "token burn · 24hlast 24h · sees tasks within retention (30d assumed)No token activity in the last 24h (within retention)."
             },
             "fleet-burn-bound": {
               "selector": "[data-testid=\"fleet-burn-bound\"]",
               "found": true,
               "box": {
                 "x": 1302,
-                "y": 143.13,
+                "y": 150.13,
                 "width": 260,
                 "height": 26
               },
@@ -1640,7 +2152,7 @@
               "found": true,
               "box": {
                 "x": 1292,
-                "y": 250.13,
+                "y": 208.52,
                 "width": 280,
                 "height": 73.39
               },
@@ -1682,15 +2194,15 @@
               "found": true,
               "box": {
                 "x": 1292,
-                "y": 323.52,
+                "y": 281.91,
                 "width": 280,
-                "height": 550.48
+                "height": 592.09
               },
               "styles": {
                 "display": "flex",
                 "position": "relative",
                 "width": "280px",
-                "height": "550.484px",
+                "height": "592.094px",
                 "minWidth": "0px",
                 "minHeight": "0px",
                 "backgroundColor": "rgba(0, 0, 0, 0)",
@@ -1717,7 +2229,7 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "firehosewatch — followNo events"
+              "text": "firehosewatch — followNo events since connect"
             }
           }
         }
@@ -1726,14 +2238,14 @@
         "axe": {
           "url": "http://127.0.0.1:5173/#/fleet",
           "violations": [],
-          "passes": 48,
+          "passes": 47,
           "incomplete": 2,
-          "inapplicable": 41
+          "inapplicable": 42
         },
         "aria": {
           "api": "locator.ariaSnapshot",
           "selector": "[data-testid=\"fleet-board\"]",
-          "tree": "- heading \"Fleet board\" [level=1]\n- group \"Fleet KPIs\": needs orchestrator 1 items 0 held gates · 0 asks · 0 stalled · 1 fresh failures running 1 tasks cap unknown queued / pending 0 / 0 deny-by-default allowlist gates spawns runs 0 total 0 held at a gate · 0 advancing settled 24h 1 / 1 done / failed success 50% token burn 0 in cached 0% · p95 180ms\n- text: runs workflow · node · iteration — 0 held at a gate\n- paragraph: No runs\n- text: tasks all · sorted by attention, then age · 3 rows\n- table \"Tasks\":\n  - row \"state task harness · model run address branch tokens dur age\":\n    - columnheader \"state\"\n    - columnheader \"task\"\n    - columnheader \"harness · model\"\n    - columnheader \"run address\"\n    - columnheader \"branch\"\n    - columnheader \"tokens\"\n    - columnheader \"dur\"\n    - columnheader \"age\"\n  - row \"FAILED t2 t2 fresh failure fake · fake-model — — — 31ms 3s\":\n    - cell \"FAILED\"\n    - cell \"t2 t2 fresh failure\"\n    - cell \"fake · fake-model\"\n    - cell \"—\"\n    - cell \"—\"\n    - cell \"—\"\n    - cell \"31ms\"\n    - cell \"3s\"\n  - row \"RUNNING t3 t3 fake · fake-model — — — — 3s\":\n    - cell \"RUNNING\"\n    - cell \"t3 t3\"\n    - cell \"fake · fake-model\"\n    - cell \"—\"\n    - cell \"—\"\n    - cell \"—\"\n    - cell \"—\"\n    - cell \"3s\"\n  - row \"COMPLETED t1 t1 fake · fake-model — — — 180ms 3s\":\n    - cell \"COMPLETED\"\n    - cell \"t1 t1\"\n    - cell \"fake · fake-model\"\n    - cell \"—\"\n    - cell \"—\"\n    - cell \"—\"\n    - cell \"180ms\"\n    - cell \"3s\"\n- complementary:\n  - text: token burn · 24h last 24h · sees tasks within retention (30d assumed)\n  - img \"Token burn histogram, max 0 tokens per hour\"\n  - text: in 0 out 0 cached 0 executors 0 runners\n  - paragraph: No runners\n  - text: firehose watch — follow\n  - paragraph: No events"
+          "tree": "- heading \"Fleet board\" [level=1]\n- group \"Fleet KPIs\": needs orchestrator 1 items 0 held · 0 asks · 0 stall · 1 fresh running 1 tasks cap unknown queued / pending 0 / 0 no waiters runs 0 total 0 held · 0 advancing settled 24h 0 / 0 done / failed success 0% · last 24h token burn 0 in cache 0% · p95 —\n- text: runs 0 held · track = nodes × loop\n- paragraph: No runs\n- text: tasks attention · age · 3\n- grid \"Tasks\":\n  - row \"state task harness run address branch tokens dur age\":\n    - columnheader \"state\"\n    - columnheader \"task\"\n    - columnheader \"harness\"\n    - columnheader \"run address\"\n    - columnheader \"branch\"\n    - columnheader \"tokens\"\n    - columnheader \"dur\"\n    - columnheader \"age\"\n  - row \"FAILED t2 t2 fresh failure fake · fake-model — — — 29ms 0s\":\n    - gridcell \"FAILED\"\n    - gridcell \"t2 t2 fresh failure\"\n    - gridcell \"fake · fake-model\"\n    - gridcell \"—\"\n    - gridcell \"—\"\n    - gridcell \"—\"\n    - gridcell \"29ms\"\n    - gridcell \"0s\"\n  - row \"RUNNING t3 t3 fake · fake-model — — — — 0s\":\n    - gridcell \"RUNNING\"\n    - gridcell \"t3 t3\"\n    - gridcell \"fake · fake-model\"\n    - gridcell \"—\"\n    - gridcell \"—\"\n    - gridcell \"—\"\n    - gridcell \"—\"\n    - gridcell \"0s\"\n  - row \"DONE t1 t1 fake · fake-model — — — 177ms 0s\":\n    - gridcell \"DONE\"\n    - gridcell \"t1 t1\"\n    - gridcell \"fake · fake-model\"\n    - gridcell \"—\"\n    - gridcell \"—\"\n    - gridcell \"—\"\n    - gridcell \"177ms\"\n    - gridcell \"0s\"\n- complementary:\n  - text: token burn · 24h last 24h · sees tasks within retention (30d assumed)\n  - paragraph: No token activity in the last 24h (within retention).\n  - text: executors 0 runners\n  - paragraph: No runners\n  - text: firehose watch — follow\n  - paragraph: No events since connect"
         },
         "keyboardWalk": [
           "a",
@@ -1743,34 +2255,29 @@
           "button#settings-open",
           "input#find-input[combobox]",
           "div#fleet-task-t2[row]",
-          "div#fleet-task-t3[row]",
-          "div#fleet-task-t1[row]",
           "body",
           "a",
-          "a"
+          "a",
+          "a#skip-main",
+          "button#nav-fleet[tab]"
         ]
       },
       "honesty": {
         "empty": {
           "ok": true,
-          "board": "stale-reconnecting",
-          "empty": false,
-          "tasksPhase": "stale-reconnecting",
-          "tasksHonesty": false,
-          "hailing": false,
-          "taskRows": 0,
-          "text": "Fleet boardneeds orchestrator0items0 held gates · 0 asks · 0 stalled · 0 fresh failuresrunning0taskscap unknownqueued / pending0 / 0deny-by-default allowlist gates spawnsruns0total0 held at a gate · 0"
+          "board": "empty",
+          "empty": true,
+          "text": "Fleet boardNo tasks or runs yet. Copy a scaffold and hand it to the orchestrating agent.parley delegate"
         },
         "error": {
           "ok": true,
           "runsPhase": "error",
           "honesty": true,
-          "text": "runsworkflow · node · iteration — 0 held at a gateCould not load runs"
+          "text": "runs0 held · track = nodes × loopCould not load runs"
         },
         "loading": {
           "board": "connecting",
           "hailing": true,
-          "liveStatus": "connecting",
           "text": "Fleet boardHailing the fleet…",
           "ok": true
         },
@@ -1778,11 +2285,11 @@
           "ok": true,
           "board": "stale-reconnecting",
           "live": "stale-reconnecting",
-          "text": "Fleet boardneeds orchestrator1items0 held gates · 0 asks · 0 stalled · 1 fresh failuresrunning1taskscap unknownqueued / pending0 / 0deny-by-default allowlist ga"
+          "text": "Fleet boardneeds orchestrator1items0 held · 0 asks · 0 stall · 1 freshrunning1taskscap unknownqueued / pending0 / 0no waitersruns0total0 held · 0 advancingsettl"
         }
       },
-      "recordedAt": "2026-08-06T09:27:57.331Z"
+      "recordedAt": "2026-08-06T09:59:29.424Z"
     }
   },
-  "updatedAt": "2026-08-06T09:27:57.331Z"
+  "updatedAt": "2026-08-06T09:59:29.424Z"
 }

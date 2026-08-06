@@ -51,9 +51,12 @@ export function panelMessage(phase: PanelPhase, kind: string): string {
     case "error":
       return `Could not load ${kind}`;
     case "empty":
-      return kind === "fleet"
-        ? "No tasks yet. Copy a scaffold to start work."
-        : `No ${kind}`;
+      if (kind === "fleet") {
+        return "No tasks yet. Copy a scaffold to start work.";
+      }
+      // Seed-silent firehose is not "no events exist" — only none since connect.
+      if (kind === "events") return "No events since connect";
+      return `No ${kind}`;
     default:
       return "";
   }

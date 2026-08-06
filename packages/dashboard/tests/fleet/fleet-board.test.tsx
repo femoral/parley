@@ -22,6 +22,7 @@ describe("FleetBoard", () => {
             state: "completed",
             name: "done-task",
             updated_at: "2026-06-15T11:00:00.000Z",
+            completed_at: "2026-06-15T11:00:00.000Z",
             duration_ms: 12_000,
             usage: { input_tokens: 1500, output_tokens: 200 },
           }),
@@ -30,6 +31,7 @@ describe("FleetBoard", () => {
             state: "awaiting_answer",
             name: "needs-answer",
             updated_at: "2026-06-15T11:30:00.000Z",
+            started_at: "2026-06-15T11:20:00.000Z",
             question: "Ship it?",
           }),
           task({
@@ -48,6 +50,7 @@ describe("FleetBoard", () => {
             name: "in-flight",
             max_concurrent: 2,
             updated_at: "2026-06-15T11:59:00.000Z",
+            started_at: "2026-06-15T11:50:00.000Z",
             usage: { input_tokens: 50, output_tokens: 5 },
           }),
         ]}
@@ -75,7 +78,11 @@ describe("FleetBoard", () => {
             workflow: "held-flow",
           }),
         ]}
-        runners={[runner({ name: "local-1", status: "online", vendors: ["fake", "claude"] })]}
+        runners={[
+          runner({ name: "local-1", status: "online", vendors: ["fake", "claude"] }),
+          runner({ name: "stale-1", status: "stale", vendors: ["fake"] }),
+          runner({ name: "off-1", status: "offline", vendors: [] }),
+        ]}
         runnersStatus="online"
         runsStatus="online"
         runsError={null}
@@ -140,12 +147,25 @@ describe("FleetBoard", () => {
       /last 24h · sees tasks within retention \(30d assumed\)/,
     );
 
-    // Runners
-    expect(screen.getByTestId("fleet-runner-local-1").textContent).toMatch(/online/);
-    expect(screen.getByTestId("fleet-runner-local-1").textContent).toMatch(/fake/);
+    // Runners — class AND label per status (not frozen --online)
+    const onlineEl = screen.getByTestId("fleet-runner-local-1");
+    expect(onlineEl.querySelector(".pc-fleet-runner__status--online")).toBeTruthy();
+    expect(onlineEl.textContent).toMatch(/online/);
+    const staleEl = screen.getByTestId("fleet-runner-stale-1");
+    expect(staleEl.querySelector(".pc-fleet-runner__status--stale")).toBeTruthy();
+    expect(staleEl.textContent).toMatch(/stale/);
+    const offEl = screen.getByTestId("fleet-runner-off-1");
+    expect(offEl.querySelector(".pc-fleet-runner__status--offline")).toBeTruthy();
+    expect(offEl.textContent).toMatch(/offline/);
+    // Neuter: stale must not carry --online
+    expect(staleEl.querySelector(".pc-fleet-runner__status--online")).toBeNull();
 
     // Firehose
     expect(screen.getByTestId("fleet-hose-lines").textContent).toMatch(/task\.failed/);
+
+    // Roving tabindex: only one tab stop among task rows
+    const tabStops = taskRows.filter((r) => r.getAttribute("tabindex") === "0");
+    expect(tabStops.length).toBe(1);
 
     fireEvent.click(screen.getByTestId("fleet-task-t-ask"));
     expect(onSelectTask).toHaveBeenCalledWith("t-ask");
@@ -196,6 +216,60 @@ describe("FleetBoard", () => {
       />,
     );
     expect(screen.getByTestId("fleet-hailing").textContent).toMatch(/Hailing the fleet/);
+  });
+
+  it("empty firehose says no events since connect (not false 'no events')", () => {
+    render(
+      <FleetBoard
+        tasks={[
+          task({
+            task_id: "r1",
+            state: "running",
+            started_at: "2026-06-15T11:00:00.000Z",
+          }),
+        ]}
+        runs={[]}
+        runners={[]}
+        runnersStatus="online"
+        runsStatus="online"
+        runsError={null}
+        honestyPhase="live"
+        firehose={[]}
+        selectedTaskId={null}
+        selectedRunId={null}
+        onSelectTask={() => undefined}
+        onSelectRun={() => undefined}
+        nowMs={NOW}
+      />,
+    );
+    expect(screen.getByTestId("fleet-firehose").textContent).toMatch(
+      /No events since connect/i,
+    );
+    expect(screen.getByTestId("fleet-firehose").textContent).not.toMatch(
+      /^No events$/,
+    );
+  });
+
+  it("stale-reconnecting with zero tasks still shows empty fleet phase", () => {
+    render(
+      <FleetBoard
+        tasks={[]}
+        runs={[]}
+        runners={[]}
+        runnersStatus="online"
+        runsStatus="online"
+        runsError={null}
+        honestyPhase="stale-reconnecting"
+        firehose={[]}
+        selectedTaskId={null}
+        selectedRunId={null}
+        onSelectTask={() => undefined}
+        onSelectRun={() => undefined}
+        nowMs={NOW}
+      />,
+    );
+    expect(screen.getByTestId("fleet-board").getAttribute("data-phase")).toBe("empty");
+    expect(screen.getByTestId("fleet-empty")).toBeTruthy();
   });
 
   it("queued task surfaces queue context with max_concurrent denominator", () => {

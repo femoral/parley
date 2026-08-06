@@ -55,9 +55,16 @@ export function runStateLabel(summary: RunSummary): string {
   if (summary.state === "blocked" && isHeldGate(summary.block)) return "GATE HELD";
   if (summary.state === "blocked") {
     const r = summary.block?.reason;
-    if (r && r !== "unknown") return `BLOCKED · ${r.replace(/_/g, " ").toUpperCase()}`;
+    // Compact labels so the state column does not ellipsis mid-word.
+    if (r === "loop_exhausted") return "BLOCKED · LOOP";
+    if (r === "success_policy") return "BLOCKED · POLICY";
+    if (r === "spawn_error") return "BLOCKED · SPAWN";
+    if (r === "unfilled_inputs") return "BLOCKED · INPUTS";
+    if (r && r !== "unknown") return "BLOCKED";
     return "BLOCKED";
   }
+  if (summary.state === "completed") return "DONE";
+  if (summary.state === "cancelled") return "CANCEL";
   return summary.state.replace(/_/g, " ").toUpperCase();
 }
 

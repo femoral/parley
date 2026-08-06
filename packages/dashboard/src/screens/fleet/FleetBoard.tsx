@@ -1,7 +1,7 @@
 /**
  * Presentational fleet board — pure props so unit tests need no network.
  */
-import { useCallback, useMemo, useState, type KeyboardEvent } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { RunSummary, RunnerListEntry, TaskEnvelope } from "@useparley/core";
 import { normalizeUsage } from "@useparley/core";
 import {
@@ -41,7 +41,9 @@ import {
   PIP_VISIBLE_CAP,
 } from "./pips.js";
 import { runAtLine, runChipState, runStateLabel } from "./runAt.js";
+import { runnerView } from "./runners.js";
 import { StateChip } from "./StateChip.js";
+import { useRovingTabindex } from "./useRovingTabindex.js";
 
 export interface FleetBoardProps {
   tasks: readonly TaskEnvelope[];
@@ -59,6 +61,11 @@ export interface FleetBoardProps {
   nowMs?: number;
   /** Optional precomputed burn (tests); otherwise projected from tasks. */
   tokenBurn?: TokenBurnView;
+}
+
+/** Quantize wall-clock to the minute so KPI/burn memos are stable across polls. */
+export function quantizeNowMs(ms: number, quantumMs = 60_000): number {
+  return Math.floor(ms / quantumMs) * quantumMs;
 }
 
 function runAddress(t: TaskEnvelope): string {
@@ -125,8 +132,21 @@ function PipTrack({ run }: { run: RunSummary }) {
 }
 
 export function FleetBoard(props: FleetBoardProps) {
-  const nowMs = props.nowMs ?? Date.now();
   const global = props.honestyPhase;
+
+  // Stable now: tests pass explicit nowMs; live path quantizes to the minute
+  // and ticks once a minute so KPI/burn memos do not thrash every poll.
+  const [minuteTick, setMinuteTick] = useState(() =>
+    quantizeNowMs(Date.now()),
+  );
+  useEffect(() => {
+    if (props.nowMs != null) return;
+    const id = window.setInterval(() => {
+      setMinuteTick(quantizeNowMs(Date.now()));
+    }, 60_000);
+    return () => window.clearInterval(id);
+  }, [props.nowMs]);
+  const nowMs = props.nowMs != null ? props.nowMs : minuteTick;
 
   const kpis = useMemo(
     () =>
@@ -147,9 +167,10 @@ export function FleetBoard(props: FleetBoardProps) {
     [props.runs],
   );
 
-  const burn =
-    props.tokenBurn ??
-    projectTokenBurn(props.tasks, { nowMs });
+  const burn = useMemo(
+    () => props.tokenBurn ?? projectTokenBurn(props.tasks, { nowMs }),
+    [props.tokenBurn, props.tasks, nowMs],
+  );
 
   const maxBurn = useMemo(() => {
     let m = 0;
@@ -173,7 +194,6 @@ export function FleetBoard(props: FleetBoardProps) {
     null,
     global,
   );
-  // Burn + firehose follow the task snapshot stream.
   const burnPhase: PanelPhase =
     global === "loading" || global === "connecting"
       ? "loading"
@@ -199,15 +219,8 @@ export function FleetBoard(props: FleetBoardProps) {
     (r) => r.state === "blocked" && r.block?.reason === "gate",
   ).length;
 
-  const activateRow = useCallback(
-    (fn: () => void) => (e: KeyboardEvent) => {
-      if (e.key === "Enter" || e.key === " ") {
-        e.preventDefault();
-        fn();
-      }
-    },
-    [],
-  );
+  const taskRoving = useRovingTabindex(sortedTasks.length, "tasks");
+  const runRoving = useRovingTabindex(sortedRuns.length, "runs");
 
   const retentionNote =
     burn.retentionSource === "default-assumed"
@@ -241,7 +254,19 @@ export function FleetBoard(props: FleetBoardProps) {
     );
   }
 
-  if (global === "empty" || (tasksPhase === "empty" && runsPhase === "empty")) {
+  // Empty fleet: prefer empty over stale when there is nothing to show.
+  // Intercepted-empty + closed SSE often lands as stale-reconnecting with
+  // zero tasks; that is still an empty fleet, not "last known data".
+  const nothingToShow = props.tasks.length === 0 && props.runs.length === 0;
+  const emptyPhase =
+    global === "empty" ||
+    (nothingToShow &&
+      (global === "live" ||
+        global === "stale-reconnecting" ||
+        global === "panel-error" ||
+        (tasksPhase === "empty" && runsPhase === "empty")));
+
+  if (emptyPhase && nothingToShow) {
     return (
       <div className="pc-fleet" data-testid="fleet-board" data-phase="empty">
         <div className="pc-fleet__global-honesty" data-testid="fleet-empty">
@@ -284,239 +309,291 @@ export function FleetBoard(props: FleetBoardProps) {
           <div className="pc-fleet__main">
             <PanelShell
               title="runs"
-              meta={`workflow · node · iteration — ${heldCount} held at a gate`}
+              meta={`${heldCount} held · track = nodes × loop`}
               phase={runsPhase}
               kind="runs"
               testId="fleet-runs"
               className="pc-fleet-runs"
             >
-              <div className="pc-fleet-table" role="table" aria-label="Runs">
-                <div className="pc-fleet-table__head" role="row">
-                  <div className="pc-fleet-table__th" role="columnheader">
-                    state
-                  </div>
-                  <div className="pc-fleet-table__th" role="columnheader">
-                    run
-                  </div>
-                  <div className="pc-fleet-table__th" role="columnheader">
-                    track
-                  </div>
-                  <div className="pc-fleet-table__th" role="columnheader">
-                    at
-                  </div>
-                  <div className="pc-fleet-table__th" role="columnheader">
-                    branch
-                  </div>
-                  <div className="pc-fleet-table__th pc-fleet-table__th--num" role="columnheader">
-                    tasks
-                  </div>
-                  <div className="pc-fleet-table__th pc-fleet-table__th--num" role="columnheader">
-                    age
-                  </div>
-                </div>
-                {sortedRuns.map((run) => {
-                  const at = runAtLine(run);
-                  const chipState = runChipState(run);
-                  const selected = props.selectedRunId === run.run_id;
-                  return (
+              <div
+                className="pc-fleet-table-scroll"
+                data-testid="fleet-runs-scroll"
+              >
+                <div
+                  className="pc-fleet-table"
+                  role="grid"
+                  aria-label="Runs"
+                  aria-rowcount={sortedRuns.length + 1}
+                >
+                  <div className="pc-fleet-table__head" role="row">
+                    <div className="pc-fleet-table__th" role="columnheader">
+                      state
+                    </div>
+                    <div className="pc-fleet-table__th" role="columnheader">
+                      run
+                    </div>
+                    <div className="pc-fleet-table__th" role="columnheader">
+                      track
+                    </div>
+                    <div className="pc-fleet-table__th" role="columnheader">
+                      at
+                    </div>
                     <div
-                      key={run.run_id}
-                      role="row"
-                      tabIndex={0}
-                      className={`pc-fleet-table__row${selected ? " pc-fleet-table__row--selected" : ""}`}
-                      onClick={() => props.onSelectRun(run.run_id)}
-                      onKeyDown={activateRow(() => props.onSelectRun(run.run_id))}
-                      data-testid={`fleet-run-${run.run_id}`}
-                      aria-selected={selected}
-                      aria-describedby={`pip-${run.run_id}`}
+                      className="pc-fleet-table__th pc-fleet-col--branch"
+                      role="columnheader"
                     >
-                      <div className="pc-fleet-table__td" role="cell">
-                        <StateChip state={chipState} label={runStateLabel(run)} />
-                      </div>
-                      <div className="pc-fleet-table__td" role="cell">
-                        <div className="pc-fleet-table__stack">
-                          <span className="pc-fleet-table__primary" title={run.workflow}>
-                            {run.workflow}
+                      branch
+                    </div>
+                    <div className="pc-fleet-table__th pc-fleet-table__th--num" role="columnheader">
+                      tasks
+                    </div>
+                    <div className="pc-fleet-table__th pc-fleet-table__th--num" role="columnheader">
+                      age
+                    </div>
+                  </div>
+                  {sortedRuns.map((run, index) => {
+                    const at = runAtLine(run);
+                    const chipState = runChipState(run);
+                    const selected = props.selectedRunId === run.run_id;
+                    return (
+                      <div
+                        key={run.run_id}
+                        role="row"
+                        ref={(el) => runRoving.setRowRef(index, el)}
+                        tabIndex={runRoving.tabIndexFor(index)}
+                        className={`pc-fleet-table__row${selected ? " pc-fleet-table__row--selected" : ""}`}
+                        onClick={() => props.onSelectRun(run.run_id)}
+                        onKeyDown={runRoving.onRowKeyDown(index, () =>
+                          props.onSelectRun(run.run_id),
+                        )}
+                        data-testid={`fleet-run-${run.run_id}`}
+                        aria-selected={selected}
+                        aria-describedby={`pip-${run.run_id}`}
+                        aria-rowindex={index + 2}
+                      >
+                        <div className="pc-fleet-table__td" role="gridcell">
+                          <StateChip state={chipState} label={runStateLabel(run)} />
+                        </div>
+                        <div className="pc-fleet-table__td" role="gridcell">
+                          <div className="pc-fleet-table__stack">
+                            <span className="pc-fleet-table__primary" title={run.workflow}>
+                              {run.workflow}
+                            </span>
+                            <span className="pc-fleet-table__secondary">
+                              run {shortId(run.run_id)} · v{run.workflow_version}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="pc-fleet-table__td" role="gridcell">
+                          <PipTrack run={run} />
+                        </div>
+                        <div className="pc-fleet-table__td" role="gridcell">
+                          <span
+                            className="pc-fleet-table__data"
+                            style={
+                              at.held
+                                ? { color: "var(--state-awaiting)" }
+                                : undefined
+                            }
+                            title={at.text}
+                          >
+                            {at.text}
                           </span>
-                          <span className="pc-fleet-table__secondary">
-                            run {shortId(run.run_id)} · v{run.workflow_version}
+                        </div>
+                        <div
+                          className="pc-fleet-table__td pc-fleet-col--branch"
+                          role="gridcell"
+                        >
+                          <span
+                            className="pc-fleet-table__link"
+                            title={run.branch ?? "scratch workspace"}
+                          >
+                            {run.branch ?? "scratch workspace"}
+                          </span>
+                        </div>
+                        <div className="pc-fleet-table__td pc-fleet-table__td--num" role="gridcell">
+                          <span className="pc-fleet-table__data">
+                            {run.tasks_settled}/{run.tasks_total}
+                          </span>
+                        </div>
+                        <div className="pc-fleet-table__td pc-fleet-table__td--num" role="gridcell">
+                          <span className="pc-fleet-table__data">
+                            {formatAge(run.updated_at, nowMs)}
                           </span>
                         </div>
                       </div>
-                      <div className="pc-fleet-table__td" role="cell">
-                        <PipTrack run={run} />
-                      </div>
-                      <div className="pc-fleet-table__td" role="cell">
-                        <span
-                          className="pc-fleet-table__data"
-                          style={
-                            at.held
-                              ? { color: "var(--state-awaiting)" }
-                              : undefined
-                          }
-                          title={at.text}
-                        >
-                          {at.text}
-                        </span>
-                      </div>
-                      <div className="pc-fleet-table__td" role="cell">
-                        <span
-                          className="pc-fleet-table__link"
-                          title={run.branch ?? "scratch workspace"}
-                        >
-                          {run.branch ?? "scratch workspace"}
-                        </span>
-                      </div>
-                      <div className="pc-fleet-table__td pc-fleet-table__td--num" role="cell">
-                        <span className="pc-fleet-table__data">
-                          {run.tasks_settled}/{run.tasks_total}
-                        </span>
-                      </div>
-                      <div className="pc-fleet-table__td pc-fleet-table__td--num" role="cell">
-                        <span className="pc-fleet-table__data">
-                          {formatAge(run.updated_at, nowMs)}
-                        </span>
-                      </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
               </div>
             </PanelShell>
 
             <PanelShell
               title="tasks"
-              meta={`all · sorted by attention, then age · ${sortedTasks.length} rows`}
+              meta={`attention · age · ${sortedTasks.length}`}
               phase={tasksPhase}
               kind="tasks"
               testId="fleet-tasks"
               className="pc-fleet-tasks"
               emptyAction={<CopyScaffold command="parley delegate" />}
             >
-              <div className="pc-fleet-table" role="table" aria-label="Tasks">
-                <div className="pc-fleet-table__head" role="row">
-                  <div className="pc-fleet-table__th" role="columnheader">
-                    state
-                  </div>
-                  <div className="pc-fleet-table__th" role="columnheader">
-                    task
-                  </div>
-                  <div className="pc-fleet-table__th" role="columnheader">
-                    harness · model
-                  </div>
-                  <div className="pc-fleet-table__th" role="columnheader">
-                    run address
-                  </div>
-                  <div className="pc-fleet-table__th" role="columnheader">
-                    branch
-                  </div>
-                  <div className="pc-fleet-table__th pc-fleet-table__th--num" role="columnheader">
-                    tokens
-                  </div>
-                  <div className="pc-fleet-table__th pc-fleet-table__th--num" role="columnheader">
-                    dur
-                  </div>
-                  <div className="pc-fleet-table__th pc-fleet-table__th--num" role="columnheader">
-                    age
-                  </div>
-                </div>
-                {sortedTasks.map((t) => {
-                  const usage = t.usage ? normalizeUsage(t.usage) : null;
-                  const selected = props.selectedTaskId === t.task_id;
-                  const fresh = isFreshFailure(t, nowMs);
-                  const q = projectQueueContext(t);
-                  const note =
-                    fresh
-                      ? "fresh failure"
-                      : t.state === "queued" && q.label
-                        ? q.label
-                        : t.runner
-                          ? `on ${t.runner}`
-                          : "";
-                  return (
+              <div
+                className="pc-fleet-table-scroll"
+                data-testid="fleet-tasks-scroll"
+              >
+                <div
+                  className="pc-fleet-table"
+                  role="grid"
+                  aria-label="Tasks"
+                  aria-rowcount={sortedTasks.length + 1}
+                >
+                  <div className="pc-fleet-table__head" role="row">
+                    <div className="pc-fleet-table__th" role="columnheader">
+                      state
+                    </div>
+                    <div className="pc-fleet-table__th" role="columnheader">
+                      task
+                    </div>
+                    <div className="pc-fleet-table__th" role="columnheader">
+                      harness
+                    </div>
                     <div
-                      key={t.task_id}
-                      role="row"
-                      tabIndex={0}
-                      className={`pc-fleet-table__row${selected ? " pc-fleet-table__row--selected" : ""}`}
-                      onClick={() => props.onSelectTask(t.task_id)}
-                      onKeyDown={activateRow(() => props.onSelectTask(t.task_id))}
-                      data-testid={`fleet-task-${t.task_id}`}
-                      data-state={t.state}
-                      aria-selected={selected}
+                      className="pc-fleet-table__th pc-fleet-col--addr"
+                      role="columnheader"
                     >
-                      <div className="pc-fleet-table__td" role="cell">
-                        <StateChip state={t.state} />
-                      </div>
-                      <div className="pc-fleet-table__td" role="cell">
-                        <div className="pc-fleet-table__inline">
-                          <span
-                            className={`pc-fleet-table__primary${t.state === "cancelled" ? " pc-fleet-table__primary--muted" : ""}`}
-                            title={t.name ?? t.task_id}
-                          >
-                            {t.name ?? t.task_id}
-                          </span>
-                          <span className="pc-fleet-table__id">{shortId(t.task_id)}</span>
-                          {note ? (
-                            <span
-                              className={`pc-fleet-table__note${fresh ? " pc-fleet-table__note--fail" : ""}`}
-                              title={note}
-                            >
-                              {note}
-                            </span>
-                          ) : null}
+                      run address
+                    </div>
+                    <div
+                      className="pc-fleet-table__th pc-fleet-col--branch"
+                      role="columnheader"
+                    >
+                      branch
+                    </div>
+                    <div className="pc-fleet-table__th pc-fleet-table__th--num" role="columnheader">
+                      tokens
+                    </div>
+                    <div className="pc-fleet-table__th pc-fleet-table__th--num" role="columnheader">
+                      dur
+                    </div>
+                    <div className="pc-fleet-table__th pc-fleet-table__th--num" role="columnheader">
+                      age
+                    </div>
+                  </div>
+                  {sortedTasks.map((t, index) => {
+                    const usage = t.usage ? normalizeUsage(t.usage) : null;
+                    const selected = props.selectedTaskId === t.task_id;
+                    const fresh = isFreshFailure(t, nowMs);
+                    const q = projectQueueContext(t);
+                    const note =
+                      fresh
+                        ? "fresh failure"
+                        : t.state === "queued" && q.label
+                          ? q.label
+                          : t.runner
+                            ? `on ${t.runner}`
+                            : "";
+                    return (
+                      <div
+                        key={t.task_id}
+                        role="row"
+                        ref={(el) => taskRoving.setRowRef(index, el)}
+                        tabIndex={taskRoving.tabIndexFor(index)}
+                        className={`pc-fleet-table__row${selected ? " pc-fleet-table__row--selected" : ""}`}
+                        onClick={() => props.onSelectTask(t.task_id)}
+                        onKeyDown={taskRoving.onRowKeyDown(index, () =>
+                          props.onSelectTask(t.task_id),
+                        )}
+                        data-testid={`fleet-task-${t.task_id}`}
+                        data-state={t.state}
+                        aria-selected={selected}
+                        aria-rowindex={index + 2}
+                      >
+                        <div className="pc-fleet-table__td" role="gridcell">
+                          <StateChip state={t.state} />
                         </div>
-                      </div>
-                      <div className="pc-fleet-table__td" role="cell">
-                        <div className="pc-fleet-harness">
-                          <span
-                            className="pc-fleet-coat"
-                            style={{ background: coatVar(t.orch_harness ?? t.vendor) }}
-                            aria-hidden="true"
-                          />
+                        <div className="pc-fleet-table__td" role="gridcell">
+                          <div className="pc-fleet-table__inline">
+                            <span
+                              className={`pc-fleet-table__primary${t.state === "cancelled" ? " pc-fleet-table__primary--muted" : ""}`}
+                              title={t.name ?? t.task_id}
+                            >
+                              {t.name ?? t.task_id}
+                            </span>
+                            <span className="pc-fleet-table__id">{shortId(t.task_id)}</span>
+                            {note ? (
+                              <span
+                                className={`pc-fleet-table__note${fresh ? " pc-fleet-table__note--fail" : ""}`}
+                                title={note}
+                              >
+                                {note}
+                              </span>
+                            ) : null}
+                          </div>
+                        </div>
+                        <div className="pc-fleet-table__td" role="gridcell">
+                          <div className="pc-fleet-harness">
+                            <span
+                              className="pc-fleet-coat"
+                              style={{ background: coatVar(t.orch_harness ?? t.vendor) }}
+                              aria-hidden="true"
+                            />
+                            <span
+                              className="pc-fleet-table__data"
+                              title={harnessModelLine(
+                                t.orch_harness ?? t.vendor,
+                                t.orch_model ?? t.model,
+                              )}
+                            >
+                              {harnessModelLine(
+                                t.orch_harness ?? t.vendor,
+                                t.orch_model ?? t.model,
+                              )}
+                            </span>
+                          </div>
+                        </div>
+                        <div
+                          className="pc-fleet-table__td pc-fleet-col--addr"
+                          role="gridcell"
+                        >
                           <span
                             className="pc-fleet-table__data"
-                            title={harnessModelLine(t.orch_harness ?? t.vendor, t.orch_model ?? t.model)}
+                            title={runAddress(t)}
+                            style={
+                              t.run_id
+                                ? undefined
+                                : { color: "var(--text-time)" }
+                            }
                           >
-                            {harnessModelLine(t.orch_harness ?? t.vendor, t.orch_model ?? t.model)}
+                            {runAddress(t)}
+                          </span>
+                        </div>
+                        <div
+                          className="pc-fleet-table__td pc-fleet-col--branch"
+                          role="gridcell"
+                        >
+                          <span className="pc-fleet-table__link" title={t.branch ?? "—"}>
+                            {t.branch ?? "—"}
+                          </span>
+                        </div>
+                        <div className="pc-fleet-table__td pc-fleet-table__td--num" role="gridcell">
+                          <span className="pc-fleet-table__data">
+                            {formatTokenPair(usage?.input, usage?.output)}
+                          </span>
+                        </div>
+                        <div className="pc-fleet-table__td pc-fleet-table__td--num" role="gridcell">
+                          <span className="pc-fleet-table__data">
+                            {formatDur(t.duration_ms)}
+                          </span>
+                        </div>
+                        <div className="pc-fleet-table__td pc-fleet-table__td--num" role="gridcell">
+                          <span className="pc-fleet-table__data">
+                            {formatAge(t.updated_at, nowMs)}
                           </span>
                         </div>
                       </div>
-                      <div className="pc-fleet-table__td" role="cell">
-                        <span
-                          className="pc-fleet-table__data"
-                          title={runAddress(t)}
-                          style={
-                            t.run_id
-                              ? undefined
-                              : { color: "var(--text-time)" }
-                          }
-                        >
-                          {runAddress(t)}
-                        </span>
-                      </div>
-                      <div className="pc-fleet-table__td" role="cell">
-                        <span className="pc-fleet-table__link" title={t.branch ?? "—"}>
-                          {t.branch ?? "—"}
-                        </span>
-                      </div>
-                      <div className="pc-fleet-table__td pc-fleet-table__td--num" role="cell">
-                        <span className="pc-fleet-table__data">
-                          {formatTokenPair(usage?.input, usage?.output)}
-                        </span>
-                      </div>
-                      <div className="pc-fleet-table__td pc-fleet-table__td--num" role="cell">
-                        <span className="pc-fleet-table__data">
-                          {formatDur(t.duration_ms)}
-                        </span>
-                      </div>
-                      <div className="pc-fleet-table__td pc-fleet-table__td--num" role="cell">
-                        <span className="pc-fleet-table__data">
-                          {formatAge(t.updated_at, nowMs)}
-                        </span>
-                      </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
               </div>
             </PanelShell>
           </div>
@@ -536,10 +613,14 @@ export function FleetBoard(props: FleetBoardProps) {
               {burnPhase === "live" || burnPhase === "stale-reconnecting" ? (
                 <>
                   <div className="pc-fleet-burn__chart">
-                    <div className="pc-fleet-burn__axis" aria-hidden="true">
-                      <span>{formatTokens(maxBurn || 0)}</span>
-                      <span>0</span>
-                    </div>
+                    {maxBurn > 0 ? (
+                      <div className="pc-fleet-burn__axis" aria-hidden="true">
+                        <span>{formatTokens(maxBurn)}</span>
+                        <span>0</span>
+                      </div>
+                    ) : (
+                      <div className="pc-fleet-burn__axis" aria-hidden="true" />
+                    )}
                     <div
                       className="pc-fleet-burn__bars"
                       role="img"
@@ -548,7 +629,9 @@ export function FleetBoard(props: FleetBoardProps) {
                       {burn.buckets.map((b, i) => {
                         const total = b.input + b.output;
                         const pct =
-                          maxBurn > 0 ? Math.max(total > 0 ? 4 : 0, (total / maxBurn) * 100) : 0;
+                          maxBurn > 0
+                            ? Math.max(total > 0 ? 4 : 0, (total / maxBurn) * 100)
+                            : 0;
                         const recent = i >= burn.buckets.length - 3;
                         return (
                           <div
@@ -587,30 +670,31 @@ export function FleetBoard(props: FleetBoardProps) {
               className="pc-fleet-runners-panel"
             >
               <div className="pc-fleet-runners" data-testid="fleet-runners-list">
-                {props.runners.map((r) => (
-                  <div
-                    key={r.name}
-                    className="pc-fleet-runner"
-                    data-testid={`fleet-runner-${r.name}`}
-                    data-status={r.status}
-                  >
-                    <span className="pc-fleet-runner__name" title={r.name}>
-                      {r.name}
-                    </span>
-                    <span
-                      className={`pc-fleet-runner__status pc-fleet-runner__status--${r.status}`}
+                {props.runners.map((r) => {
+                  const view = runnerView(r);
+                  return (
+                    <div
+                      key={r.name}
+                      className="pc-fleet-runner"
+                      data-testid={`fleet-runner-${r.name}`}
+                      data-status={view.status}
                     >
-                      {r.status}
-                    </span>
-                    <span
-                      className="pc-fleet-runner__meta"
-                      title={r.vendors.join(", ") || "no vendors"}
-                    >
-                      {(r.vendors.length ? r.vendors.join(" · ") : "no vendors")} ·{" "}
-                      {formatAge(r.last_seen, nowMs)}
-                    </span>
-                  </div>
-                ))}
+                      <span className="pc-fleet-runner__name" title={r.name}>
+                        {r.name}
+                      </span>
+                      <span className={`pc-fleet-runner__status ${view.statusClass}`}>
+                        {view.statusLabel}
+                      </span>
+                      <span
+                        className="pc-fleet-runner__meta"
+                        title={r.vendors.join(", ") || "no vendors"}
+                      >
+                        {(r.vendors.length ? r.vendors.join(" · ") : "no vendors")} ·{" "}
+                        {formatAge(r.last_seen, nowMs)}
+                      </span>
+                    </div>
+                  );
+                })}
               </div>
             </PanelShell>
 

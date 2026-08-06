@@ -51,22 +51,42 @@
 
 .pc-fleet-kpis {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(148px, 1fr));
+  /* Stable 3×2 at the 1280/1460 floor; 6-up at wide boards. */
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   border-bottom: 1px solid var(--border);
   flex: 0 0 auto;
 }
 
+@media (min-width: 1600px) {
+  .pc-fleet-kpis {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+}
+
 .pc-fleet-kpi {
-  padding: 9px 12px;
+  padding: 7px 10px;
   border-right: 1px solid var(--hairline-strong);
+  border-bottom: 1px solid var(--hairline-strong);
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 4px;
   min-width: 0;
 }
 
-.pc-fleet-kpi:last-child {
+.pc-fleet-kpi:nth-child(3n) {
   border-right: 0;
+}
+
+@media (min-width: 1600px) {
+  .pc-fleet-kpi {
+    border-bottom: 0;
+  }
+  .pc-fleet-kpi:nth-child(3n) {
+    border-right: 1px solid var(--hairline-strong);
+  }
+  .pc-fleet-kpi:last-child {
+    border-right: 0;
+  }
 }
 
 .pc-fleet-kpi__label {
@@ -111,8 +131,12 @@
   font: 400 10px/1.3 var(--font-mono);
   color: var(--text-4);
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  /* Two-line clamp — no mid-glyph hard clip without a title tooltip. */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  white-space: normal;
+  word-break: break-word;
 }
 
 /* ── Main body: tables + side stack ─────────────────────────────────── */
@@ -148,8 +172,9 @@
   .pc-fleet__body {
     grid-template-columns: minmax(0, 1fr) minmax(200px, 240px);
   }
+  /* Keep stable 3×2 KPI grid at the floor (do not reintroduce auto-fit orphans). */
   .pc-fleet-kpis {
-    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 
@@ -257,7 +282,7 @@
 }
 
 .pc-fleet-table__th {
-  padding: 5px 8px;
+  padding: 4px 6px;
   font: 600 10px/1 var(--font-sans);
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -265,6 +290,39 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* In-region horizontal scroll cue (edge fade + scrollbar). */
+.pc-fleet-table-scroll {
+  min-height: 0;
+  overflow: auto;
+  position: relative;
+  /* Always-visible thin scrollbar so overflow is not silent. */
+  scrollbar-gutter: stable;
+}
+
+.pc-fleet-table-scroll::after {
+  content: "";
+  pointer-events: none;
+  position: sticky;
+  right: 0;
+  top: 0;
+  display: block;
+  float: right;
+  width: 18px;
+  height: 100%;
+  margin-left: -18px;
+  background: linear-gradient(
+    to left,
+    var(--ground) 0%,
+    transparent 100%
+  );
+  opacity: 0;
+}
+
+.pc-fleet-table-scroll[data-h-overflow="true"]::after,
+.pc-fleet-table-scroll:has(.pc-fleet-table:is([data-wide="true"]))::after {
+  opacity: 1;
 }
 
 .pc-fleet-table__th:first-child,
@@ -290,9 +348,18 @@
   text-align: left;
   color: inherit;
   width: 100%;
-  min-height: var(--row-height);
+  /* DESIGN.md density floor: rows 24–30px for single-line task rows. */
+  min-height: 26px;
+  height: 28px;
   border-left: var(--selection-rule) solid transparent;
   box-sizing: border-box;
+}
+
+/* Run rows carry a two-line stack (workflow + id) — justify in report if >30. */
+.pc-fleet-runs .pc-fleet-table__row {
+  height: auto;
+  min-height: 28px;
+  max-height: 34px;
 }
 
 .pc-fleet__heading {
@@ -312,11 +379,12 @@
 
 .pc-fleet-table__row--selected {
   background: var(--surface-soft);
-  border-left-color: var(--state-awaiting);
+  /* Neutral selection — amber is reserved for attention (optional #13). */
+  border-left-color: var(--border-strong);
 }
 
 .pc-fleet-table__td {
-  padding: 5px 8px;
+  padding: 3px 6px;
   min-width: 0;
   overflow: hidden;
 }
@@ -364,14 +432,15 @@
 .pc-fleet-table__stack {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 0;
   min-width: 0;
+  line-height: 1.2;
 }
 
 .pc-fleet-table__inline {
   display: flex;
   align-items: baseline;
-  gap: 8px;
+  gap: 6px;
   min-width: 0;
   overflow: hidden;
 }
@@ -392,20 +461,44 @@
   color: var(--state-failed);
 }
 
-/* Runs columns */
+/* Runs columns — full */
 .pc-fleet-runs .pc-fleet-table__head,
 .pc-fleet-runs .pc-fleet-table__row {
   grid-template-columns:
-    108px minmax(120px, 1.3fr) minmax(100px, 1.1fr) minmax(110px, 1.2fr)
-    minmax(90px, 1fr) 52px 52px;
+    100px minmax(110px, 1.3fr) minmax(90px, 1fr) minmax(90px, 1.1fr)
+    minmax(80px, 0.9fr) 48px 44px;
 }
 
-/* Tasks columns */
+/* Tasks columns — full (≥1361): keep tokens+dur (ticket headline columns) */
 .pc-fleet-tasks .pc-fleet-table__head,
 .pc-fleet-tasks .pc-fleet-table__row {
   grid-template-columns:
-    108px minmax(130px, 1.5fr) minmax(96px, 1fr) minmax(80px, 0.9fr)
-    minmax(90px, 1.1fr) 64px 52px 48px;
+    100px minmax(110px, 1.4fr) minmax(88px, 1fr) minmax(72px, 0.85fr)
+    minmax(80px, 1fr) 60px 48px 44px;
+}
+
+/*
+ * ≤1360 (1280 floor): drop branch + run address so tokens/dur/age stay visible
+ * without silent H-scroll. Priority: state, task, harness, tokens, dur, age.
+ */
+@media (max-width: 1360px) {
+  .pc-fleet-tasks .pc-fleet-col--addr,
+  .pc-fleet-tasks .pc-fleet-col--branch,
+  .pc-fleet-runs .pc-fleet-col--branch {
+    display: none;
+  }
+
+  .pc-fleet-tasks .pc-fleet-table__head,
+  .pc-fleet-tasks .pc-fleet-table__row {
+    grid-template-columns:
+      96px minmax(0, 1.5fr) minmax(72px, 1fr) 56px 44px 40px;
+  }
+
+  .pc-fleet-runs .pc-fleet-table__head,
+  .pc-fleet-runs .pc-fleet-table__row {
+    grid-template-columns:
+      96px minmax(0, 1.3fr) minmax(80px, 1fr) minmax(70px, 1fr) 44px 40px;
+  }
 }
 
 /* ── State chip ─────────────────────────────────────────────────────── */
@@ -661,12 +754,14 @@
 .pc-fleet-burn__bar {
   flex: 1 1 0;
   min-width: 2px;
-  background: var(--border-strong);
+  /* Non-status ink ≥3:1 on ground (WCAG 1.4.11); not border-strong (~1.5:1). */
+  background: var(--text-4);
   transition: none;
 }
 
 .pc-fleet-burn__bar--hot {
-  background: var(--state-running);
+  /* Emphasis without status ink (DESIGN.md: status reserved for state only). */
+  background: var(--text-2);
 }
 
 .pc-fleet-burn__totals {

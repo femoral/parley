@@ -1,8 +1,13 @@
 /**
  * Fleet KPI strip derivation — honest denominators, no invented caps.
+ * "settled 24h" and token-burn KPI share TOKEN_BURN_WINDOW_MS with the chart.
  */
 import type { RunSummary, TaskEnvelope } from "@useparley/core";
 import { normalizeUsage } from "@useparley/core";
+import {
+  taskBucketTimeMs,
+  TOKEN_BURN_WINDOW_MS,
+} from "../../data/projections/tokenBurn.js";
 import { isHeldGate } from "./pips.js";
 import { isFreshFailure } from "./attentionSort.js";
 import { formatDur, formatTokens } from "./format.js";
@@ -57,6 +62,47 @@ export function countRunning(tasks: readonly TaskEnvelope[]): number {
   return n;
 }
 
+/**
+ * True when the task falls inside the wall-clock 24h window used by
+ * {@link projectTokenBurn} (same bound: completed/started/created).
+ */
+export function inLast24h(
+  task: TaskEnvelope,
+  nowMs: number,
+  windowMs: number = TOKEN_BURN_WINDOW_MS,
+): boolean {
+  const t = taskBucketTimeMs(task);
+  if (t === null) return false;
+  return t >= nowMs - windowMs && t <= nowMs;
+}
+
+/**
+ * Settled (completed/failed) counts restricted to the last 24h.
+ * Prefer completed_at; fall back to the burn bucketing timestamp.
+ */
+export function countSettled24h(
+  tasks: readonly TaskEnvelope[],
+  nowMs: number,
+): { completed: number; failed: number } {
+  let completed = 0;
+  let failed = 0;
+  const windowStart = nowMs - TOKEN_BURN_WINDOW_MS;
+  for (const t of tasks) {
+    if (t.state !== "completed" && t.state !== "failed") continue;
+    const raw = t.completed_at ?? t.updated_at;
+    let ms = raw ? Date.parse(raw) : NaN;
+    if (!Number.isFinite(ms)) {
+      const bucket = taskBucketTimeMs(t);
+      if (bucket === null) continue;
+      ms = bucket;
+    }
+    if (ms < windowStart || ms > nowMs) continue;
+    if (t.state === "completed") completed += 1;
+    else failed += 1;
+  }
+  return { completed, failed };
+}
+
 export function projectFleetKpis(input: FleetKpiInput): FleetKpi[] {
   const nowMs = input.nowMs ?? Date.now();
   const counts = countByState(input.tasks);
@@ -76,21 +122,22 @@ export function projectFleetKpis(input: FleetKpiInput): FleetKpi[] {
     cap !== null ? `${running}/${cap}` : String(running);
   const runningNote =
     cap !== null
-      ? `cap ${cap} · ${queued} queued behind`
+      ? `cap ${cap} · ${queued} queued`
       : queued > 0
         ? `${queued} queued · cap unknown`
         : "cap unknown";
 
   const advancing = input.runs.filter((r) => r.state === "running").length;
-  const completed = counts.completed ?? 0;
-  const failed = counts.failed ?? 0;
-  const settledDenom = Math.max(1, completed + failed);
-  const successPct = Math.round((completed / settledDenom) * 100);
+  // Settled + token burn: same 24h wall-clock window as the burn chart.
+  const settled = countSettled24h(input.tasks, nowMs);
+  const settledDenom = Math.max(1, settled.completed + settled.failed);
+  const successPct = Math.round((settled.completed / settledDenom) * 100);
 
   let sumIn = 0;
   let sumCached = 0;
   const durs: number[] = [];
   for (const t of input.tasks) {
+    if (!inLast24h(t, nowMs)) continue;
     const u = t.usage ? normalizeUsage(t.usage) : null;
     sumIn += u?.input ?? 0;
     const cached =
@@ -112,7 +159,7 @@ export function projectFleetKpis(input: FleetKpiInput): FleetKpi[] {
       label: "needs orchestrator",
       value: String(needsOrch),
       unit: "items",
-      note: `${heldGates} held gate${heldGates === 1 ? "" : "s"} · ${asks} asks · ${stalled} stalled · ${freshFailed} fresh failures`,
+      note: `${heldGates} held · ${asks} asks · ${stalled} stall · ${freshFailed} fresh`,
       tone: "awaiting",
     },
     {
@@ -128,7 +175,7 @@ export function projectFleetKpis(input: FleetKpiInput): FleetKpi[] {
       label: "queued / pending",
       value: `${queued} / ${pending}`,
       unit: "",
-      note: "deny-by-default allowlist gates spawns",
+      note: queued > 0 ? `${queued} waiting on free slots` : "no waiters",
       tone: "queued",
     },
     {
@@ -136,15 +183,15 @@ export function projectFleetKpis(input: FleetKpiInput): FleetKpi[] {
       label: "runs",
       value: String(input.runs.length),
       unit: "total",
-      note: `${heldGates} held at a gate · ${advancing} advancing`,
+      note: `${heldGates} held · ${advancing} advancing`,
       tone: "neutral",
     },
     {
       id: "settled",
       label: "settled 24h",
-      value: `${completed} / ${failed}`,
+      value: `${settled.completed} / ${settled.failed}`,
       unit: "done / failed",
-      note: `success ${successPct}%`,
+      note: `success ${successPct}% · last 24h`,
       tone: "completed",
     },
     {
@@ -152,7 +199,7 @@ export function projectFleetKpis(input: FleetKpiInput): FleetKpi[] {
       label: "token burn",
       value: formatTokens(sumIn),
       unit: "in",
-      note: `cached ${cachedPct}% · p95 ${p95 != null ? formatDur(p95) : "—"}`,
+      note: `cache ${cachedPct}% · p95 ${p95 != null ? formatDur(p95) : "—"}`,
       tone: "neutral",
     },
   ];

@@ -1,9 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
+  countSettled24h,
   deriveConcurrencyCap,
+  inLast24h,
   projectFleetKpis,
 } from "../../src/screens/fleet/kpis.js";
 import { run, task } from "./fixtures.js";
+
+const NOW = Date.parse("2026-06-15T12:00:00.000Z");
 
 describe("deriveConcurrencyCap", () => {
   it("returns null when no task exposes max_concurrent (honest absence)", () => {
@@ -30,19 +34,104 @@ describe("deriveConcurrencyCap", () => {
   });
 });
 
+describe("24h window for settled + token-burn KPIs", () => {
+  it("excludes tasks older than 24h from settled 24h counts", () => {
+    const settled = countSettled24h(
+      [
+        task({
+          task_id: "old-done",
+          state: "completed",
+          completed_at: "2026-06-05T12:00:00.000Z",
+          updated_at: "2026-06-05T12:00:00.000Z",
+        }),
+        task({
+          task_id: "old-fail",
+          state: "failed",
+          completed_at: "2026-06-05T12:00:00.000Z",
+          updated_at: "2026-06-05T12:00:00.000Z",
+        }),
+        task({
+          task_id: "new-done",
+          state: "completed",
+          completed_at: "2026-06-15T11:00:00.000Z",
+          updated_at: "2026-06-15T11:00:00.000Z",
+        }),
+      ],
+      NOW,
+    );
+    expect(settled).toEqual({ completed: 1, failed: 0 });
+  });
+
+  it("settled 24h KPI ignores 10-day-old tasks (probe from merge validator)", () => {
+    const kpis = projectFleetKpis({
+      nowMs: NOW,
+      tasks: [
+        task({
+          task_id: "old-a",
+          state: "completed",
+          completed_at: "2026-06-05T12:00:00.000Z",
+          usage: { input_tokens: 900_000, output_tokens: 1 },
+        }),
+        task({
+          task_id: "old-b",
+          state: "failed",
+          completed_at: "2026-06-05T12:00:00.000Z",
+          usage: { input_tokens: 1, output_tokens: 1 },
+        }),
+      ],
+      runs: [],
+    });
+    const settled = kpis.find((k) => k.id === "settled");
+    expect(settled?.value).toBe("0 / 0");
+    const burn = kpis.find((k) => k.id === "token-burn");
+    // Must not report 900k from a 10-day-old task.
+    expect(burn?.value).toBe("0");
+  });
+
+  it("includes in-window completed usage in token-burn KPI", () => {
+    const kpis = projectFleetKpis({
+      nowMs: NOW,
+      tasks: [
+        task({
+          task_id: "fresh",
+          state: "completed",
+          completed_at: "2026-06-15T11:30:00.000Z",
+          usage: { input_tokens: 1500, output_tokens: 200 },
+        }),
+      ],
+      runs: [],
+    });
+    const settled = kpis.find((k) => k.id === "settled");
+    expect(settled?.value).toBe("1 / 0");
+    const burn = kpis.find((k) => k.id === "token-burn");
+    expect(burn?.value).toBe("1.5k");
+    expect(inLast24h(
+      task({
+        task_id: "fresh",
+        state: "completed",
+        completed_at: "2026-06-15T11:30:00.000Z",
+      }),
+      NOW,
+    )).toBe(true);
+  });
+});
+
 describe("projectFleetKpis", () => {
   it("shows running/cap when max_concurrent is known", () => {
     const kpis = projectFleetKpis({
+      nowMs: NOW,
       tasks: [
         task({
           task_id: "r1",
           state: "running",
           max_concurrent: 2,
+          started_at: "2026-06-15T11:00:00.000Z",
         }),
         task({
           task_id: "r2",
           state: "running",
           max_concurrent: 2,
+          started_at: "2026-06-15T11:00:00.000Z",
         }),
         task({
           task_id: "q1",
@@ -62,6 +151,7 @@ describe("projectFleetKpis", () => {
 
   it("does not invent a cap denominator when max_concurrent is absent", () => {
     const kpis = projectFleetKpis({
+      nowMs: NOW,
       tasks: [
         task({ task_id: "r1", state: "running" }),
         task({ task_id: "q1", state: "queued", queue_position: 3 }),
@@ -76,6 +166,7 @@ describe("projectFleetKpis", () => {
 
   it("counts held gates in needs-orchestrator", () => {
     const kpis = projectFleetKpis({
+      nowMs: NOW,
       tasks: [
         task({ task_id: "ask", state: "awaiting_answer" }),
       ],
@@ -95,6 +186,6 @@ describe("projectFleetKpis", () => {
     });
     const needs = kpis.find((k) => k.id === "needs-orch");
     expect(needs?.value).toBe("2");
-    expect(needs?.note).toMatch(/1 held gate/);
+    expect(needs?.note).toMatch(/1 held/);
   });
 });

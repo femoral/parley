@@ -1,6 +1,7 @@
-/** State chip — square dot + uppercase mono label (DESIGN.md). */
-
-const LIVE_STATES = new Set(["running", "awaiting_answer", "stalled"]);
+/**
+ * State chip — square dot + uppercase mono label (DESIGN.md).
+ * Pulse is reserved for running only (not awaiting/stalled).
+ */
 
 const LABEL: Record<string, string> = {
   pending: "PENDING",
@@ -8,9 +9,9 @@ const LABEL: Record<string, string> = {
   running: "RUNNING",
   awaiting_answer: "AWAITING",
   stalled: "STALLED",
-  completed: "COMPLETED",
+  completed: "DONE",
   failed: "FAILED",
-  cancelled: "CANCELLED",
+  cancelled: "CANCEL",
   purged: "PURGED",
 };
 
@@ -27,7 +28,8 @@ export function StateChip({
   label?: string;
   live?: boolean;
 }) {
-  const pulse = live || LIVE_STATES.has(state);
+  // DESIGN.md: animation only means live data — running-state dots, not all chips.
+  const pulse = live || state === "running";
   return (
     <span className={`pc-fleet-chip pc-fleet-chip--${state}`} data-state={state}>
       <span
