@@ -2,6 +2,9 @@
  * Effective-cap / queue context for a queued task envelope.
  * Display form: `QUEUED #3 · vendor:claude 2/2` when max_concurrent is known,
  * else `QUEUED #3 · vendor:claude`.
+ *
+ * Only labels when `state === "queued"` — stale queue fields on a running
+ * task (merge clear semantics) must not render a false QUEUED banner (MED-1).
  */
 import type { TaskEnvelope } from "@useparley/core";
 import type { QueueContextView } from "../types.js";
@@ -13,8 +16,22 @@ export interface QueueFields {
   max_concurrent?: number | null;
 }
 
+const EMPTY: QueueContextView = {
+  label: null,
+  position: null,
+  blockingCap: null,
+  maxConcurrent: null,
+  capLabel: null,
+};
+
 /** Project queue observability fields into a display view. */
 export function projectQueueContext(task: QueueFields | TaskEnvelope): QueueContextView {
+  // State is authoritative — never surface a QUEUED label on non-queued rows,
+  // even if position/cap fields are still present from a stale merge.
+  if (task.state !== "queued") {
+    return EMPTY;
+  }
+
   const position =
     typeof task.queue_position === "number" && Number.isFinite(task.queue_position)
       ? task.queue_position
@@ -27,17 +44,6 @@ export function projectQueueContext(task: QueueFields | TaskEnvelope): QueueCont
     typeof task.max_concurrent === "number" && Number.isFinite(task.max_concurrent)
       ? task.max_concurrent
       : null;
-
-  // Only meaningful while queued (wire sets nulls when not).
-  if (task.state !== "queued" && position === null && blockingCap === null) {
-    return {
-      label: null,
-      position: null,
-      blockingCap: null,
-      maxConcurrent: null,
-      capLabel: null,
-    };
-  }
 
   const capLabel =
     blockingCap !== null && maxConcurrent !== null

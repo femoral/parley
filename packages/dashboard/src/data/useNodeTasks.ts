@@ -2,19 +2,16 @@
  * Run-tasks panel data:
  * - `GET /runs/:ref/nodes/:node` for per-node rows
  * - client-side `run_id` filter over the live snapshot for the whole-run list
+ *
+ * Fetch effect is gated on runRef/node/query only — NOT snapshotTasks identity.
+ * useSnapshot flush() allocates a new array every rAF; depending on it re-issued
+ * GET /runs/:ref/nodes/:node up to ~60 req/s on a busy fleet (HIGH-1).
  */
 import { useEffect, useMemo, useState } from "react";
-import type { ParleyClient, TaskEnvelope } from "@useparley/core";
+import type { NodeDetailResponse, ParleyClient, TaskEnvelope } from "@useparley/core";
 import { fetchNodeDetail, type NodeDetailQuery } from "./clientExtras.js";
 import { filterTasksByRunId } from "./projections/runTasks.js";
-import type { NodeTasksView } from "./types.js";
-
-const INITIAL: NodeTasksView = {
-  status: "idle",
-  data: null,
-  runTasks: [],
-  error: null,
-};
+import type { NodeTasksView, PanelStatus } from "./types.js";
 
 export function useNodeTasks(
   client: ParleyClient,
@@ -28,9 +25,13 @@ export function useNodeTasks(
   },
 ): NodeTasksView {
   const { runRef, node, query, snapshotTasks, enabled = true } = options;
-  const [state, setState] = useState<NodeTasksView>(INITIAL);
+  const [status, setStatus] = useState<PanelStatus>("idle");
+  const [data, setData] = useState<NodeDetailResponse | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const queryKey = JSON.stringify(query ?? {});
 
+  // Client-side filter only — must recompute when snapshot identity changes,
+  // but must NOT trigger the network effect below.
   const runTasks = useMemo(
     () => filterTasksByRunId(snapshotTasks, runRef),
     [snapshotTasks, runRef],
@@ -38,54 +39,43 @@ export function useNodeTasks(
 
   useEffect(() => {
     if (!enabled || !runRef || !node) {
-      setState((prev) => ({
-        ...INITIAL,
-        runTasks: filterTasksByRunId(snapshotTasks, runRef),
-        status: !runRef || !node ? "idle" : prev.status,
-      }));
+      setStatus("idle");
+      setData(null);
+      setError(null);
       return;
     }
 
     let cancelled = false;
-    setState((prev) => ({
-      ...prev,
-      status: prev.data === null ? "loading" : prev.status,
-      error: null,
-      runTasks: filterTasksByRunId(snapshotTasks, runRef),
-    }));
+    setStatus((prev) => (prev === "ready" || prev === "empty" ? prev : "loading"));
+    setError(null);
 
     const parsed = JSON.parse(queryKey) as NodeDetailQuery;
     void fetchNodeDetail(client, runRef, node, parsed)
-      .then((data) => {
+      .then((next) => {
         if (cancelled) return;
-        setState({
-          status: data.tasks.length === 0 ? "empty" : "ready",
-          data,
-          runTasks: filterTasksByRunId(snapshotTasks, runRef),
-          error: null,
-        });
+        setData(next);
+        setStatus(next.tasks.length === 0 ? "empty" : "ready");
+        setError(null);
       })
       .catch((err: unknown) => {
         if (cancelled) return;
-        setState((prev) => ({
-          status: "error",
-          data: prev.data,
-          runTasks: filterTasksByRunId(snapshotTasks, runRef),
-          error: err instanceof Error ? err.message : "node detail failed",
-        }));
+        setStatus("error");
+        setError(err instanceof Error ? err.message : "node detail failed");
       });
 
     return () => {
       cancelled = true;
     };
-  }, [client, runRef, node, queryKey, enabled, snapshotTasks]);
+    // Intentionally omit snapshotTasks — see file header (HIGH-1).
+  }, [client, runRef, node, queryKey, enabled]);
 
-  // Keep runTasks fresh when only the snapshot changes.
   return useMemo(
     () => ({
-      ...state,
+      status,
+      data,
       runTasks,
+      error,
     }),
-    [state, runTasks],
+    [status, data, runTasks, error],
   );
 }

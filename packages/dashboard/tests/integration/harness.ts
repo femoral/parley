@@ -2,13 +2,12 @@
  * Real-daemon test harness for console data-layer integration tests.
  * Boots via startServer(homePaths(home)) — same pattern as
  * packages/daemon/tests/max-concurrent-wire.test.ts and report-file-churn.
- *
- * Runs under the vitest **node** environment (no happy-dom) so fetch to
- * localhost is not CORS-blocked.
  */
 import fs from "node:fs";
+import http from "node:http";
 import os from "node:os";
 import path from "node:path";
+import type { AddressInfo } from "node:net";
 import { homePaths, type EventSourceLike } from "@useparley/core";
 // Relative imports: dashboard must not declare a package.json dep on daemon
 // (lane constraint). Integration project externalizes node:sqlite.
@@ -129,8 +128,8 @@ export async function waitForTaskState(
 }
 
 /**
- * Fetch-backed EventSource for Node (browser global is absent). Mirrors
- * packages/cli/tests/events.test.ts.
+ * Fetch-backed EventSource for Node / happy-dom (browser global may be absent
+ * or CORS-hostile). Mirrors packages/cli/tests/events.test.ts.
  */
 export class FetchEventSource implements EventSourceLike {
   private readonly listeners = new Map<
@@ -138,8 +137,11 @@ export class FetchEventSource implements EventSourceLike {
     ((e: { data: string; lastEventId: string }) => void)[]
   >();
   private readonly controller = new AbortController();
+  /** Live instances for tests that need to force an error/close. */
+  static instances: FetchEventSource[] = [];
 
   constructor(url: string) {
+    FetchEventSource.instances.push(this);
     void this.run(url);
   }
 
@@ -154,6 +156,14 @@ export class FetchEventSource implements EventSourceLike {
 
   close(): void {
     this.controller.abort();
+    FetchEventSource.instances = FetchEventSource.instances.filter((i) => i !== this);
+  }
+
+  /** Fire the stream error listener (simulates SSE drop). */
+  emitError(event: unknown = {}): void {
+    for (const cb of this.listeners.get("error") ?? []) {
+      (cb as (e: unknown) => void)(event);
+    }
   }
 
   private async run(url: string): Promise<void> {
@@ -200,4 +210,80 @@ function parseSseFrame(
   }
   if (data.length === 0) return null;
   return { id, event, data: data.join("\n") };
+}
+
+/** Install FetchEventSource as the global EventSource for hook tests. */
+export function installFetchEventSource(): () => void {
+  const prev = (globalThis as { EventSource?: unknown }).EventSource;
+  (globalThis as { EventSource?: unknown }).EventSource = FetchEventSource;
+  FetchEventSource.instances = [];
+  return () => {
+    (globalThis as { EventSource?: unknown }).EventSource = prev;
+    for (const i of FetchEventSource.instances.splice(0)) {
+      try {
+        i.close();
+      } catch {
+        /* ignore */
+      }
+    }
+  };
+}
+
+/**
+ * Stable-URL reverse proxy so a client can survive daemon restart on a new
+ * ephemeral port (honesty kill/restart with the same ParleyClient baseUrl).
+ */
+export interface ForwardProxy {
+  url: string;
+  setTarget: (baseUrl: string) => void;
+  close: () => Promise<void>;
+}
+
+export async function createForwardProxy(initialTarget: string): Promise<ForwardProxy> {
+  let target = new URL(initialTarget);
+
+  const server = http.createServer((req, res) => {
+    const headers = { ...req.headers, host: `${target.hostname}:${target.port}` };
+    const upstream = http.request(
+      {
+        protocol: target.protocol,
+        hostname: target.hostname,
+        port: target.port,
+        path: req.url,
+        method: req.method,
+        headers,
+      },
+      (up) => {
+        res.writeHead(up.statusCode ?? 502, up.headers);
+        up.pipe(res);
+      },
+    );
+    upstream.on("error", () => {
+      if (!res.headersSent) {
+        res.statusCode = 502;
+        res.end("upstream down");
+      } else {
+        res.destroy();
+      }
+    });
+    req.pipe(upstream);
+  });
+
+  await new Promise<void>((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => resolve());
+  });
+  const addr = server.address() as AddressInfo;
+  const url = `http://127.0.0.1:${addr.port}`;
+
+  return {
+    url,
+    setTarget(baseUrl: string) {
+      target = new URL(baseUrl);
+    },
+    close: () =>
+      new Promise((resolve, reject) => {
+        server.close((err) => (err ? reject(err) : resolve()));
+      }),
+  };
 }

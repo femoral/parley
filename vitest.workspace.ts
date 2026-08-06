@@ -54,7 +54,9 @@ export default defineWorkspace([
       environmentOptions: {
         happyDOM: {
           settings: {
-            disableSameOriginPolicy: true,
+            fetch: {
+              disableSameOriginPolicy: true,
+            },
           },
         },
       },

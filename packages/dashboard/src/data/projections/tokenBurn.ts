@@ -4,10 +4,16 @@
  * Wire-verification §2B: every `/tasks` envelope carries raw `usage` +
  * `cached_input_tokens` and timestamps; the client buckets by hour. No
  * time-bucketed endpoint exists — the histogram only sees tasks still in
- * retention, which this projection exposes via {@link TokenBurnView.retentionDays}.
+ * retention. The retention bound is a client-side assumption unless the
+ * caller supplies it explicitly (no wire endpoint exposes effective
+ * `retention.days` — MED-2).
  */
 import { normalizeUsage, type TaskEnvelope } from "@useparley/core";
-import type { TokenBurnBucket, TokenBurnView } from "../types.js";
+import type {
+  RetentionBoundSource,
+  TokenBurnBucket,
+  TokenBurnView,
+} from "../types.js";
 
 /** Wall-clock window the histogram covers. */
 export const TOKEN_BURN_WINDOW_MS = 24 * 60 * 60 * 1000;
@@ -15,7 +21,8 @@ export const TOKEN_BURN_WINDOW_MS = 24 * 60 * 60 * 1000;
 /**
  * Default retention bound (days). Matches core `DEFAULT_RETENTION_DAYS`.
  * Not imported from `@useparley/core/config` — that module is host-only and
- * excluded from the browser barrel the dashboard resolves.
+ * excluded from the browser barrel the dashboard resolves. Presented with
+ * `retentionSource: "default-assumed"` so screens do not treat it as fact.
  */
 export const DEFAULT_RETENTION_DAYS = 30;
 
@@ -47,8 +54,8 @@ export interface ProjectTokenBurnOptions {
   /** Epoch ms "now"; defaults to `Date.now()`. */
   nowMs?: number;
   /**
-   * Retention window in days that bounds the daemon's task set. Exposed on
-   * the view so screens can disclose the bound (default 30).
+   * Retention window in days. When omitted, {@link DEFAULT_RETENTION_DAYS}
+   * is used and labeled `retentionSource: "default-assumed"`.
    */
   retentionDays?: number;
 }
@@ -64,7 +71,9 @@ export function projectTokenBurn(
   options: ProjectTokenBurnOptions = {},
 ): TokenBurnView {
   const nowMs = options.nowMs ?? Date.now();
-  const retentionDays = options.retentionDays ?? DEFAULT_RETENTION_DAYS;
+  const explicit = options.retentionDays !== undefined;
+  const retentionDays = explicit ? options.retentionDays! : DEFAULT_RETENTION_DAYS;
+  const retentionSource: RetentionBoundSource = explicit ? "explicit" : "default-assumed";
   const windowStart = nowMs - TOKEN_BURN_WINDOW_MS;
   const endHour = hourFloorMs(nowMs);
   const startHour = hourFloorMs(windowStart);
@@ -85,14 +94,12 @@ export function projectTokenBurn(
     const hour = hourFloorMs(t);
     let bucket = byHour.get(hour);
     if (!bucket) {
-      // Hour edge case just outside the pre-seeded range — still count totals.
       bucket = emptyBucket(hour);
       byHour.set(hour, bucket);
     }
     const usage = task.usage ? normalizeUsage(task.usage) : null;
     const input = usage?.input ?? 0;
     const output = usage?.output ?? 0;
-    // Prefer envelope cached_input_tokens when set; else normalized usage.
     const cached =
       typeof task.cached_input_tokens === "number" && Number.isFinite(task.cached_input_tokens)
         ? task.cached_input_tokens
@@ -118,6 +125,7 @@ export function projectTokenBurn(
       tasks: totalTasks,
     },
     retentionDays,
+    retentionSource,
     windowMs: TOKEN_BURN_WINDOW_MS,
     asOfMs: nowMs,
   };

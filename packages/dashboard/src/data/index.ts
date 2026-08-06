@@ -7,7 +7,13 @@
  * state machine. No imports from `packages/ui`.
  */
 
-export { useSnapshot, mergeEnvelope, evictTerminalOverflow, TERMINAL_TASK_CAP } from "./useSnapshot.js";
+export {
+  useSnapshot,
+  mergeEnvelope,
+  evictTerminalOverflow,
+  TERMINAL_TASK_CAP,
+  STREAM_RETRY_MS,
+} from "./useSnapshot.js";
 export { useHealth } from "./useHealth.js";
 export { useRuns } from "./useRuns.js";
 export { useRunners } from "./useRunners.js";
@@ -68,6 +74,7 @@ export type {
   NodeTasksView,
   TokenBurnView,
   TokenBurnBucket,
+  RetentionBoundSource,
   FileChangeView,
   ReportFilesView,
   QueueContextView,

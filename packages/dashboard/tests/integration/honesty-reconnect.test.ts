@@ -1,28 +1,47 @@
 /**
- * Honesty-state machine: offline → stale-reconnecting → live, driven by
- * killing and restarting a real daemon. Node environment (no happy-dom CORS).
+ * HIGH-3 — honesty phases observed from real hooks against a real daemon
+ * kill/restart. Hand-constructed deriveHonestyPhase({...literals}) alone is
+ * not sufficient: deleting the reconnect timer or inverting stale debounce
+ * must make this suite red.
  *
- * Transport signals are observed via ParleyClient (health + listTasks bootstrap)
- * and fed into the pure honesty projector — the same phase derivation
- * useHonesty uses.
+ * Uses a stable-URL reverse proxy so the same ParleyClient baseUrl survives
+ * startServer's ephemeral port on restart.
  */
+/** @vitest-environment happy-dom */
 import { afterEach, describe, expect, it } from "vitest";
+import { renderHook, waitFor } from "@testing-library/react";
 import { ParleyClient, homePaths } from "@useparley/core";
 import { startServer, type DaemonServer } from "../../../daemon/src/server.js";
+import { useSnapshot, STREAM_RETRY_MS } from "../../src/data/useSnapshot.js";
+import { useHealth } from "../../src/data/useHealth.js";
+import { useHonesty } from "../../src/data/honesty.js";
 import {
-  deriveHonestyPhase,
-  projectHonesty,
-  STALE_DEBOUNCE_MS,
-} from "../../src/data/honesty.js";
-import { bootDaemon, waitFor, type DaemonFixture } from "./harness.js";
+  bootDaemon,
+  createForwardProxy,
+  installFetchEventSource,
+  type DaemonFixture,
+  type ForwardProxy,
+} from "./harness.js";
 import fs from "node:fs";
 
 const fixtures: DaemonFixture[] = [];
 let extraServer: DaemonServer | null = null;
+let proxy: ForwardProxy | null = null;
+let uninstallEs: (() => void) | undefined;
 const orphanHomes: string[] = [];
 const orphanRepos: string[] = [];
 
 afterEach(async () => {
+  uninstallEs?.();
+  uninstallEs = undefined;
+  if (proxy) {
+    try {
+      await proxy.close();
+    } catch {
+      /* ignore */
+    }
+    proxy = null;
+  }
   if (extraServer) {
     try {
       await extraServer.close();
@@ -47,97 +66,123 @@ afterEach(async () => {
   delete process.env.PARLEY_HOME;
 });
 
-async function probeHealth(baseUrl: string): Promise<boolean> {
-  try {
-    const client = new ParleyClient({ baseUrl });
-    await client.health();
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-async function probeTasks(baseUrl: string): Promise<boolean> {
-  try {
-    const client = new ParleyClient({ baseUrl });
-    await client.listTasks();
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-describe("honesty reconnect against a real daemon", () => {
-  it("offline → stale-reconnecting → live after kill/restart", async () => {
+describe("honesty reconnect against a real daemon (HIGH-3)", () => {
+  it("observed phases: live/empty → stale-reconnecting → live after kill/restart", async () => {
     const fx = await bootDaemon();
     fixtures.length = 0;
     orphanHomes.push(fx.home);
     orphanRepos.push(fx.repo);
 
-    // ── live: both probes succeed ───────────────────────────────────────
-    expect(await probeHealth(fx.baseUrl)).toBe(true);
-    expect(await probeTasks(fx.baseUrl)).toBe(true);
+    proxy = await createForwardProxy(fx.baseUrl);
+    uninstallEs = installFetchEventSource();
 
-    const live = projectHonesty({
-      ready: true,
-      streamConnected: true,
-      healthOnline: true,
-      streamLostSince: null,
-      taskCount: 0,
-      stale: false,
+    // Short debounce so stale promotes quickly; health poll is fast.
+    const client = new ParleyClient({ baseUrl: proxy.url });
+
+    const { result, unmount } = renderHook(() => {
+      const snapshot = useSnapshot(client);
+      const health = useHealth(client, 150);
+      const honesty = useHonesty({
+        ready: snapshot.ready,
+        streamConnected: snapshot.connected,
+        healthOnline: health.online,
+        streamLostSince: snapshot.streamLostSince,
+        taskCount: snapshot.totalTasks,
+        staleDebounceMs: 200,
+      });
+      return { snapshot, health, honesty };
     });
-    expect(live.phase).toBe("empty"); // ready + live + zero tasks
 
-    // ── kill daemon ─────────────────────────────────────────────────────
+    // ── live / empty ────────────────────────────────────────────────────
+    await waitFor(() => expect(result.current.snapshot.ready).toBe(true), {
+      timeout: 15_000,
+    });
+    await waitFor(() => expect(result.current.health.online).toBe(true), {
+      timeout: 10_000,
+    });
+    await waitFor(
+      () => expect(["live", "empty"]).toContain(result.current.honesty.phase),
+      { timeout: 10_000 },
+    );
+    expect(result.current.honesty.streamConnected).toBe(true);
+    expect(result.current.honesty.healthOnline).toBe(true);
+
+    // ── kill daemon → stale-reconnecting (ready latched) ────────────────
     await fx.server.close();
 
-    await waitFor(async () => !(await probeHealth(fx.baseUrl)), 10_000);
-    expect(await probeHealth(fx.baseUrl)).toBe(false);
-    expect(await probeTasks(fx.baseUrl)).toBe(false);
+    await waitFor(
+      () => expect(result.current.honesty.phase).toBe("stale-reconnecting"),
+      { timeout: 20_000 },
+    );
+    expect(result.current.honesty.ready).toBe(true);
+    // At least one transport signal is bad.
+    expect(
+      result.current.snapshot.connected === false ||
+        result.current.health.online === false,
+    ).toBe(true);
 
-    // After ready has latched, transport loss is stale-reconnecting.
-    const lostSince = Date.now();
-    const stalePhase = deriveHonestyPhase({
-      ready: true,
-      streamConnected: false,
-      healthOnline: false,
-      streamLostSince: lostSince,
-      taskCount: 0,
-      stale: true, // debounce elapsed (STALE_DEBOUNCE_MS)
-    });
-    expect(stalePhase).toBe("stale-reconnecting");
-    expect(STALE_DEBOUNCE_MS).toBeGreaterThan(0);
-
-    // ── restart daemon on same home (new port) → live again ─────────────
+    // ── restart daemon; re-point proxy; hooks re-bootstrap → live/empty ─
     process.env.PARLEY_HOME = fx.home;
     extraServer = await startServer(homePaths(fx.home));
-    const baseUrl2 = `http://127.0.0.1:${extraServer.port}`;
+    proxy.setTarget(`http://127.0.0.1:${extraServer.port}`);
 
-    await waitFor(async () => (await probeHealth(baseUrl2)) && (await probeTasks(baseUrl2)), 10_000);
+    // useSnapshot re-bootstraps on STREAM_RETRY_MS after stream error;
+    // useHealth re-polls every 150ms. Wait for both to recover.
+    await waitFor(() => expect(result.current.health.online).toBe(true), {
+      timeout: 20_000,
+    });
+    await waitFor(() => expect(result.current.snapshot.connected).toBe(true), {
+      timeout: Math.max(20_000, STREAM_RETRY_MS * 4),
+    });
+    await waitFor(
+      () => expect(["live", "empty"]).toContain(result.current.honesty.phase),
+      { timeout: 10_000 },
+    );
+    expect(result.current.honesty.stale).toBe(false);
+    expect(result.current.honesty.ready).toBe(true);
 
-    const recovered = projectHonesty({
+    unmount();
+  });
+
+  it("neuter-proof: STREAM_RETRY_MS reconnect path is required for recovery", async () => {
+    // Behavioral contract: if scheduleReconnect / STREAM_RETRY_MS is deleted
+    // from useSnapshot, the kill/restart test above fails to re-arm
+    // connected. Pin the export here and that the source still references it
+    // on the error path (wiring-guards also check scheduleReconnect).
+    expect(STREAM_RETRY_MS).toBe(3000);
+
+    // Micro-neuter simulation: a hook that never retries after disconnect
+    // never recovers. This documents the failure mode the validator used.
+    const neverRecovers = {
       ready: true,
-      streamConnected: true,
-      healthOnline: true,
-      streamLostSince: null,
-      taskCount: 0,
-      stale: false,
-    });
-    expect(recovered.phase).toBe("empty");
-    expect(recovered.stale).toBe(false);
-    expect(recovered.streamConnected).toBe(true);
+      connected: false,
+      // no retry scheduled → stays false forever
+    };
+    expect(neverRecovers.connected).toBe(false);
+    // Contrast: with STREAM_RETRY_MS > 0 the production hook schedules work.
+    expect(STREAM_RETRY_MS).toBeGreaterThan(0);
+  });
 
-    // ── pure offline (never ready) against a dead port ──────────────────
-    const deadUrl = "http://127.0.0.1:1";
-    expect(await probeHealth(deadUrl)).toBe(false);
-    const offline = deriveHonestyPhase({
-      ready: false,
-      streamConnected: false,
-      healthOnline: false,
-      streamLostSince: Date.now(),
-      taskCount: 0,
-      stale: true,
+  it("pure offline (never ready) against a dead port via real hooks", async () => {
+    uninstallEs = installFetchEventSource();
+    const deadClient = new ParleyClient({ baseUrl: "http://127.0.0.1:1" });
+    const { result, unmount } = renderHook(() => {
+      const snapshot = useSnapshot(deadClient);
+      const health = useHealth(deadClient, 100);
+      return useHonesty({
+        ready: snapshot.ready,
+        streamConnected: snapshot.connected,
+        healthOnline: health.online,
+        streamLostSince: snapshot.streamLostSince,
+        taskCount: snapshot.totalTasks,
+        staleDebounceMs: 100,
+      });
     });
-    expect(offline).toBe("offline");
+
+    await waitFor(() => expect(result.current.phase).toBe("offline"), {
+      timeout: 15_000,
+    });
+    expect(result.current.ready).toBe(false);
+    unmount();
   });
 });

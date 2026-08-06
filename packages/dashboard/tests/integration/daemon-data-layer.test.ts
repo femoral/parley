@@ -77,6 +77,8 @@ describe("console data layer vs real daemon (fake-vendor)", () => {
 
     const client = new ParleyClient({ baseUrl: fx.baseUrl });
     const events: StreamEvent[] = [];
+    // Open the stream before creating a second task so the events array is
+    // not write-only (MED-3): we assert real SSE frames land.
     const { snapshot, stream } = await bootstrapTaskStream({
       client,
       EventSource: FetchEventSource,
@@ -97,6 +99,20 @@ describe("console data layer vs real daemon (fake-vendor)", () => {
       expect(touched.added).toBe(3);
       expect(touched.removed).toBe(0);
       expect(files.hasChurn).toBe(true);
+
+      // Second task while stream is open — assert SSE delivers envelopes.
+      const taskId2 = await createTask(fx.baseUrl, {
+        prompt: "second for sse",
+        vendor: "fake",
+        orchestrator_session_id: "orch-console",
+        cwd: fx.repo,
+        use_worktree: true,
+      });
+      await waitFor(() => events.some((e) => e.task.task_id === taskId2), 15_000);
+      const forT2 = events.filter((e) => e.task.task_id === taskId2);
+      expect(forT2.length).toBeGreaterThan(0);
+      expect(forT2.some((e) => e.event.startsWith("task."))).toBe(true);
+      expect(forT2.at(-1)!.task.task_id).toBe(taskId2);
     } finally {
       stream.close();
     }
@@ -194,6 +210,7 @@ describe("console data layer vs real daemon (fake-vendor)", () => {
     const list = await client.listTasks();
     const view = projectTokenBurn(list.tasks, { nowMs: Date.now() });
     expect(view.retentionDays).toBe(30);
+    expect(view.retentionSource).toBe("default-assumed");
     expect(view.windowMs).toBe(24 * 60 * 60 * 1000);
     expect(view.totals.tasks).toBeGreaterThanOrEqual(1);
   });

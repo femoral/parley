@@ -35,6 +35,8 @@ describe("projectTokenBurn", () => {
 
     const view = projectTokenBurn(tasks, { nowMs: now });
     expect(view.retentionDays).toBe(DEFAULT_RETENTION_DAYS);
+    // Default is a client-side assumption — not a daemon-reported fact (MED-2).
+    expect(view.retentionSource).toBe("default-assumed");
     expect(view.windowMs).toBe(TOKEN_BURN_WINDOW_MS);
     expect(view.asOfMs).toBe(now);
     expect(view.totals).toEqual({ input: 150, output: 30, cached: 8, tasks: 2 });
@@ -45,9 +47,10 @@ describe("projectTokenBurn", () => {
     expect(hour11).toMatchObject({ input: 150, output: 30, cached: 8, tasks: 2 });
   });
 
-  it("allows an explicit retentionDays override", () => {
+  it("labels explicit retentionDays overrides as explicit", () => {
     const view = projectTokenBurn([], { nowMs: now, retentionDays: 7 });
     expect(view.retentionDays).toBe(7);
+    expect(view.retentionSource).toBe("explicit");
     expect(view.totals.tasks).toBe(0);
   });
 });

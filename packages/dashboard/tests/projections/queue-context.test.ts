@@ -34,4 +34,18 @@ describe("projectQueueContext", () => {
     });
     expect(view.label).toBeNull();
   });
+
+  it("does not label QUEUED when state is running even with queue fields present", () => {
+    // Stale queue fields after state advanced (merge clear / partial wire).
+    const view = projectQueueContext({
+      state: "running",
+      queue_position: 3,
+      blocking_cap: "vendor:fake",
+      max_concurrent: 2,
+    });
+    expect(view.label).toBeNull();
+    expect(view.position).toBeNull();
+    expect(view.blockingCap).toBeNull();
+    expect(view.maxConcurrent).toBeNull();
+  });
 });

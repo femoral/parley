@@ -14,7 +14,12 @@ import {
 import type { SnapshotView } from "./types.js";
 
 const EMPTY_TASKS: TaskEnvelope[] = [];
-const RETRY_MS = 3000;
+
+/**
+ * Backoff before re-bootstrap after a bootstrap failure or SSE stream error.
+ * Exported so tests can assert the reconnect path (neuter-proof for HIGH-3/4).
+ */
+export const STREAM_RETRY_MS = 3000;
 
 /**
  * How many terminal tasks the live map retains. Active tasks are never
@@ -44,8 +49,18 @@ export function evictTerminalOverflow(
 }
 
 /**
- * Merge a live transition envelope onto the previously known task. Prefer
- * wire values; fill optional gaps from prior when a partial envelope omits them.
+ * Prefer an explicit next value (including `null`) over prior. Only fall back
+ * to `prev` when the wire omitted the field entirely (`undefined`).
+ * Prevents null-cleared fields from resurrecting stale values (MED-1).
+ */
+function pickDefined<T>(next: T | undefined, prev: T | undefined): T | undefined {
+  return next !== undefined ? next : prev;
+}
+
+/**
+ * Merge a live transition envelope onto the previously known task.
+ * Wire values win, including explicit `null` clears. Omitted (`undefined`)
+ * optional fields keep the prior value for older/partial envelopes.
  */
 export function mergeEnvelope(
   prev: TaskEnvelope | undefined,
@@ -56,29 +71,27 @@ export function mergeEnvelope(
   return {
     ...prev,
     ...next,
-    // Prefer wire; fall back to prior for optional fields older envelopes omit.
-    orch_harness: next.orch_harness ?? prev.orch_harness ?? null,
-    orch_model: next.orch_model ?? prev.orch_model ?? null,
-    orch_effort: next.orch_effort ?? prev.orch_effort ?? null,
+    // Explicit null-clear semantics (do not revive via ??).
+    orch_harness: pickDefined(next.orch_harness, prev.orch_harness) ?? null,
+    orch_model: pickDefined(next.orch_model, prev.orch_model) ?? null,
+    orch_effort: pickDefined(next.orch_effort, prev.orch_effort) ?? null,
     updated_at: next.updated_at || prev.updated_at,
-    completed_at: next.completed_at ?? prev.completed_at ?? null,
-    run_id: next.run_id !== undefined ? next.run_id : prev.run_id,
-    node: next.node !== undefined ? next.node : prev.node,
-    iteration: next.iteration !== undefined ? next.iteration : prev.iteration,
-    slot: next.slot !== undefined ? next.slot : prev.slot,
-    runner: next.runner !== undefined ? next.runner : prev.runner,
-    queue_position:
-      next.queue_position !== undefined ? next.queue_position : prev.queue_position,
-    blocking_cap: next.blocking_cap !== undefined ? next.blocking_cap : prev.blocking_cap,
-    max_concurrent:
-      next.max_concurrent !== undefined ? next.max_concurrent : prev.max_concurrent,
-    usage: next.usage ?? prev.usage,
-    duration_ms: next.duration_ms ?? prev.duration_ms,
-    report: next.report ?? prev.report,
-    cached_input_tokens:
-      next.cached_input_tokens !== undefined
-        ? next.cached_input_tokens
-        : prev.cached_input_tokens,
+    completed_at: pickDefined(next.completed_at, prev.completed_at) ?? null,
+    run_id: pickDefined(next.run_id, prev.run_id),
+    node: pickDefined(next.node, prev.node),
+    iteration: pickDefined(next.iteration, prev.iteration),
+    slot: pickDefined(next.slot, prev.slot),
+    runner: pickDefined(next.runner, prev.runner),
+    queue_position: pickDefined(next.queue_position, prev.queue_position),
+    blocking_cap: pickDefined(next.blocking_cap, prev.blocking_cap),
+    max_concurrent: pickDefined(next.max_concurrent, prev.max_concurrent),
+    usage: pickDefined(next.usage, prev.usage) ?? null,
+    duration_ms: pickDefined(next.duration_ms, prev.duration_ms) ?? null,
+    report: pickDefined(next.report, prev.report) ?? null,
+    cached_input_tokens: pickDefined(next.cached_input_tokens, prev.cached_input_tokens),
+    question: pickDefined(next.question, prev.question) ?? null,
+    question_id: pickDefined(next.question_id, prev.question_id) ?? null,
+    error: pickDefined(next.error, prev.error) ?? null,
   };
 }
 
@@ -92,7 +105,8 @@ function countActive(tasks: readonly TaskEnvelope[]): number {
 
 /**
  * Layer 4 — live task map from bootstrap + SSE. Retries bootstrap when the
- * daemon is unreachable so the console self-heals on restart.
+ * daemon is unreachable OR the stream drops (idle fleets never see a
+ * post-reconnect event that would re-arm `connected` — HIGH-4).
  */
 export function useSnapshot(client: ParleyClient): SnapshotView {
   const [tasks, setTasks] = useState<TaskEnvelope[]>(EMPTY_TASKS);
@@ -107,6 +121,8 @@ export function useSnapshot(client: ParleyClient): SnapshotView {
     let retry: ReturnType<typeof setTimeout> | undefined;
     let emitRafId: number | null = null;
     let emitTimeoutId: ReturnType<typeof setTimeout> | null = null;
+    /** Prevents overlapping connect() attempts from error + catch paths. */
+    let connecting = false;
     const taskMap = new Map<string, TaskEnvelope>();
 
     const flush = (): void => {
@@ -162,7 +178,25 @@ export function useSnapshot(client: ParleyClient): SnapshotView {
       setStreamLostSince((prev) => prev ?? Date.now());
     };
 
+    const scheduleReconnect = (): void => {
+      if (cancelled) return;
+      if (retry !== undefined) clearTimeout(retry);
+      // STREAM_RETRY_MS backoff — must stay on the stream-error path so idle
+      // fleets re-bootstrap without waiting for a task event (HIGH-4).
+      retry = setTimeout(() => {
+        retry = undefined;
+        void connect();
+      }, STREAM_RETRY_MS);
+    };
+
     const connect = async (): Promise<void> => {
+      if (cancelled || connecting) return;
+      connecting = true;
+      // Tear down any prior stream before opening a new one.
+      if (stream) {
+        stream.close();
+        stream = null;
+      }
       try {
         const { snapshot, stream: live } = await bootstrapTaskStream({
           client,
@@ -174,6 +208,9 @@ export function useSnapshot(client: ParleyClient): SnapshotView {
           },
           onError: () => {
             markDisconnected();
+            // Re-bootstrap on SSE drop. EventSource auto-reconnect alone does
+            // not re-arm `connected` on an idle fleet (no inbound task events).
+            scheduleReconnect();
           },
         });
         if (cancelled) {
@@ -185,12 +222,19 @@ export function useSnapshot(client: ParleyClient): SnapshotView {
         }
         stream = live;
         setSeq(snapshot.seq);
+        // Drop any pending reconnect scheduled by a prior stream error.
+        if (retry !== undefined) {
+          clearTimeout(retry);
+          retry = undefined;
+        }
         markConnected();
         if (!cancelled) setReady(true);
         emit({ immediate: true });
       } catch {
         markDisconnected();
-        if (!cancelled) retry = setTimeout(() => void connect(), RETRY_MS);
+        scheduleReconnect();
+      } finally {
+        connecting = false;
       }
     };
 
@@ -198,7 +242,7 @@ export function useSnapshot(client: ParleyClient): SnapshotView {
     return () => {
       cancelled = true;
       cancelScheduledFlush();
-      if (retry) clearTimeout(retry);
+      if (retry !== undefined) clearTimeout(retry);
       stream?.close();
     };
   }, [client]);

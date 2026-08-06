@@ -164,19 +164,32 @@ export interface TokenBurnBucket {
 }
 
 /**
+ * Where {@link TokenBurnView.retentionDays} came from. The wire does not
+ * expose the daemon's effective `retention.days`, so the default is a
+ * client-side assumption — never present a guess as a daemon fact (MED-2).
+ */
+export type RetentionBoundSource = "default-assumed" | "explicit";
+
+/**
  * Token burn over the last 24 wall-clock hours, bucketed client-side from
  * full task envelopes. The histogram only sees tasks still in daemon
- * retention — {@link retentionDays} exposes that bound so the UI never
- * pretends it has older data.
+ * retention — {@link retentionDays} + {@link retentionSource} disclose the
+ * bound and whether it is assumed vs caller-supplied.
  */
 export interface TokenBurnView {
   buckets: TokenBurnBucket[];
   totals: { input: number; output: number; cached: number; tasks: number };
   /**
-   * Retention window (days) that bounds which terminal tasks the daemon
-   * still serves. Default matches core `DEFAULT_RETENTION_DAYS` (30).
+   * Retention window (days) used for disclosure. When
+   * {@link retentionSource} is `"default-assumed"`, this is the client
+   * default (30) — not a value read from the daemon.
    */
   retentionDays: number;
+  /**
+   * `"default-assumed"` when using the client default; `"explicit"` when the
+   * caller passed `retentionDays` (e.g. after a future settings surface).
+   */
+  retentionSource: RetentionBoundSource;
   /** Wall-clock window the histogram covers (always 24h). */
   windowMs: number;
   /** Epoch ms of the newest bucket edge (exclusive end = now). */

@@ -23,6 +23,10 @@ describe("wiring guards (console data layer)", () => {
     // Must keep full envelopes, not a reduced DTO strip of usage/duration.
     expect(src).toMatch(/TaskEnvelope/);
     expect(src).toMatch(/onEvent/);
+    // HIGH-4: stream onError must schedule re-bootstrap with STREAM_RETRY_MS.
+    expect(src).toMatch(/\bSTREAM_RETRY_MS\b/);
+    expect(src).toMatch(/scheduleReconnect/);
+    expect(src).toMatch(/onError/);
   });
 
   it("useHealth polls client.health", () => {
@@ -64,6 +68,8 @@ describe("wiring guards (console data layer)", () => {
     const src = read("useNodeTasks.ts");
     expect(src).toMatch(/fetchNodeDetail/);
     expect(src).toMatch(/filterTasksByRunId/);
+    // HIGH-1: fetch effect must not depend on snapshotTasks identity.
+    expect(src).toMatch(/Intentionally omit snapshotTasks/);
     const extras = read("clientExtras.ts");
     expect(extras).toMatch(/\/runs\/\$\{encodeURIComponent\(runRef\)\}\/nodes\//);
   });
@@ -73,6 +79,9 @@ describe("wiring guards (console data layer)", () => {
     expect(src).toMatch(/\bretentionDays\b/);
     expect(src).toMatch(/\bTOKEN_BURN_WINDOW_MS\b/);
     expect(src).toMatch(/\bnormalizeUsage\b/);
+    // MED-2: must label the default as assumed, not a daemon fact.
+    expect(src).toMatch(/default-assumed/);
+    expect(src).toMatch(/retentionSource/);
   });
 
   it("files_changed handles string | object ReportFileEntry", () => {
@@ -88,6 +97,8 @@ describe("wiring guards (console data layer)", () => {
     expect(src).toMatch(/blocking_cap/);
     expect(src).toMatch(/queue_position/);
     expect(src).toMatch(/QUEUED/);
+    // MED-1: only label when state is actually queued.
+    expect(src).toMatch(/state !== "queued"/);
   });
 
   it("firehose joins run events to workflow from runs cache", () => {
