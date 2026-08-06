@@ -10,7 +10,12 @@ export const VIEWPORTS = [
   { name: "1920", width: 1920, height: 900 },
 ];
 
-/** Shell selectors measured on every proof (#354 chrome board). */
+/**
+ * Shell selectors measured on every proof (#354 chrome board).
+ * **Shell-owned** — screen tickets must NOT edit this list.
+ * Pass `opts.targets` to measureAtViewports / measureSelectors instead
+ * (see screens/SCREENS.md registration protocol).
+ */
 export const DEFAULT_SELECTORS = [
   { id: "shell", selector: '[data-testid="shell"]' },
   { id: "header", selector: ".pc-shell__header" },

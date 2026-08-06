@@ -1,7 +1,12 @@
 /**
- * Settings surface — follow logs + shortcuts opt-out (coverage audit must-add).
- * Opened from header control or `,` accelerator; Esc closes.
+ * Settings popover — follow logs + shortcuts opt-out (coverage audit must-add).
+ *
+ * Implemented as a **popover** (not a modal): no full-screen scrim, no
+ * aria-modal. Focus moves into the panel on open, restores to the trigger on
+ * close, and Esc dismisses. Board accelerators are suppressed while open
+ * (handled by useAccelerators). Tab is free to leave (popover, not trap).
  */
+import { useEffect, useId, useRef, type RefObject } from "react";
 import type { ConsoleSettings } from "./settings.js";
 
 export interface SettingsSurfaceProps {
@@ -9,25 +14,66 @@ export interface SettingsSurfaceProps {
   settings: ConsoleSettings;
   onChange: (next: ConsoleSettings) => void;
   onClose: () => void;
+  /** Element that opened the popover — restored on close. */
+  returnFocusRef?: RefObject<HTMLElement | null>;
 }
 
-export function SettingsSurface({ open, settings, onChange, onClose }: SettingsSurfaceProps) {
+export function SettingsSurface({
+  open,
+  settings,
+  onChange,
+  onClose,
+  returnFocusRef,
+}: SettingsSurfaceProps) {
+  const panelRef = useRef<HTMLDivElement>(null);
+  const closeBtnRef = useRef<HTMLButtonElement>(null);
+  const titleId = useId();
+
+  // Focus first control on open; restore trigger on close.
+  useEffect(() => {
+    if (!open) return;
+    const t = window.setTimeout(() => {
+      closeBtnRef.current?.focus();
+    }, 0);
+    return () => {
+      window.clearTimeout(t);
+      returnFocusRef?.current?.focus();
+    };
+  }, [open, returnFocusRef]);
+
+  // Esc inside the panel (in addition to accelerator handler).
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+        onClose();
+      }
+    };
+    const panel = panelRef.current;
+    panel?.addEventListener("keydown", onKey);
+    return () => panel?.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
+
   if (!open) return null;
 
   return (
-    <div
-      className="pc-settings"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="pc-settings-title"
-      data-testid="settings-surface"
-    >
-      <div className="pc-settings__panel">
+    <div className="pc-settings" data-testid="settings-surface">
+      <div
+        ref={panelRef}
+        className="pc-settings__panel"
+        role="dialog"
+        aria-modal="false"
+        aria-labelledby={titleId}
+        data-testid="settings-panel"
+      >
         <div className="pc-settings__head">
-          <h2 id="pc-settings-title" className="pc-settings__title">
+          <h2 id={titleId} className="pc-settings__title">
             Settings
           </h2>
           <button
+            ref={closeBtnRef}
             type="button"
             className="pc-settings__close"
             onClick={onClose}
@@ -72,12 +118,13 @@ export function SettingsSurface({ open, settings, onChange, onClose }: SettingsS
           </li>
         </ul>
 
-        <footer className="pc-settings__foot">
+        {/* Not <footer> — board footer already owns contentinfo. */}
+        <div className="pc-settings__foot">
           <span className="pc-settings__keys" aria-label="Accelerator legend">
             <kbd>/</kbd> find · <kbd>n</kbd>/<kbd>⇧N</kbd> attention · <kbd>m</kbd> metrics ·{" "}
             <kbd>,</kbd> settings · <kbd>Esc</kbd> close
           </span>
-        </footer>
+        </div>
       </div>
       <button
         type="button"
@@ -85,6 +132,7 @@ export function SettingsSurface({ open, settings, onChange, onClose }: SettingsS
         aria-label="Dismiss settings"
         onClick={onClose}
         data-testid="settings-backdrop"
+        tabIndex={-1}
       />
     </div>
   );

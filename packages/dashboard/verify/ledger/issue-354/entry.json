@@ -5,18 +5,18 @@
   "demos": {
     "shell-chrome": {
       "kind": "shell-chrome",
-      "description": "Shell chrome at 1280/1460/1920: geometry, no board H-scroll, WCAG AA contrast, axe + aria + keyboard walk (skip/nav/find/settings), combobox ARIA.",
+      "description": "Shell chrome merge proofs: geometry, axe×3 states, skip-main, settings popover, footer note, 1280 density, live-region boot+kill+recover.",
       "daemon": {
         "taskId": "t1",
-        "port": 35953
+        "port": 34963
       },
       "headline": {
         "headerHeight": 46,
         "nav": {
-          "x": 129,
-          "y": 4.75,
-          "width": 329.3,
-          "height": 35.5
+          "x": 125,
+          "y": 11,
+          "width": 218.22,
+          "height": 23
         },
         "find": {
           "x": 10,
@@ -42,10 +42,6 @@
             "scrollWidth": 1280,
             "clientWidth": 1280,
             "noHorizontalScroll": true
-          },
-          "documentElement": {
-            "scrollWidth": 1280,
-            "clientWidth": 1280
           }
         }
       },
@@ -144,7 +140,7 @@
           "ratio": 12.7,
           "largeText": false,
           "wcagAA": true,
-          "text": "03:54:34"
+          "text": "04:30:50"
         },
         "find-input": {
           "selector": ".pc-find__input",
@@ -248,135 +244,17 @@
         ],
         "allHaveLabels": true
       },
+      "streamCopy": {
+        "label": "stream",
+        "value": "live",
+        "concatenated": "streamlive"
+      },
       "comboboxAria": {
         "role": "combobox",
         "ariaExpanded": "false",
         "ariaAutocomplete": "list",
-        "ariaControls": "_r_0_",
+        "ariaControls": null,
         "ariaHaspopup": "listbox"
-      },
-      "keyboardExtended": {
-        "path": [
-          {
-            "step": 1,
-            "key": "Tab",
-            "tag": "button",
-            "role": "tab",
-            "testId": "nav-fleet",
-            "text": "Fleet1 tasks · 0 need action"
-          },
-          {
-            "step": 2,
-            "key": "Tab",
-            "tag": "button",
-            "role": null,
-            "testId": "settings-open",
-            "text": "Settings"
-          },
-          {
-            "step": 3,
-            "key": "Tab",
-            "tag": "input",
-            "role": "combobox",
-            "testId": "find-input",
-            "text": ""
-          },
-          {
-            "step": 4,
-            "key": "Tab",
-            "tag": "body",
-            "role": null,
-            "testId": null,
-            "text": ""
-          },
-          {
-            "step": 5,
-            "key": "Tab",
-            "tag": "a",
-            "role": null,
-            "testId": null,
-            "text": "Skip to navigation"
-          },
-          {
-            "step": 6,
-            "key": "Tab",
-            "tag": "a",
-            "role": null,
-            "testId": null,
-            "text": "Skip to find"
-          },
-          {
-            "step": 7,
-            "key": "Tab",
-            "tag": "a",
-            "role": null,
-            "testId": null,
-            "text": "Skip to main content"
-          },
-          {
-            "step": 8,
-            "key": "Tab",
-            "tag": "button",
-            "role": "tab",
-            "testId": "nav-fleet",
-            "text": "Fleet1 tasks · 0 need action"
-          },
-          {
-            "step": 9,
-            "key": "Tab",
-            "tag": "button",
-            "role": null,
-            "testId": "settings-open",
-            "text": "Settings"
-          },
-          {
-            "step": 10,
-            "key": "Tab",
-            "tag": "input",
-            "role": "combobox",
-            "testId": "find-input",
-            "text": ""
-          },
-          {
-            "step": 11,
-            "key": "Tab",
-            "tag": "body",
-            "role": null,
-            "testId": null,
-            "text": ""
-          },
-          {
-            "step": 12,
-            "key": "Tab",
-            "tag": "a",
-            "role": null,
-            "testId": null,
-            "text": "Skip to navigation"
-          },
-          {
-            "step": 13,
-            "key": "Tab",
-            "tag": "a",
-            "role": null,
-            "testId": null,
-            "text": "Skip to find"
-          },
-          {
-            "step": 14,
-            "key": "Tab",
-            "tag": "a",
-            "role": null,
-            "testId": null,
-            "text": "Skip to main content"
-          },
-          {
-            "step": 15,
-            "key": "Enter",
-            "tag": "button",
-            "testId": "settings-open",
-            "settingsOpen": true
-          }
-        ]
       },
       "viewports": [
         {
@@ -425,7 +303,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "Skip to navigationSkip to findSkip to main contentDaemon offlineparleyconsoleFleet1 tasks · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5173v…"
+              "text": "Skip to navigationSkip to findSkip to main contentparleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 149…"
             },
             "header": {
               "selector": ".pc-shell__header",
@@ -461,19 +339,19 @@
                 "borderRightColor": "rgb(227, 232, 236)",
                 "gridTemplateRows": "none",
                 "gridTemplateColumns": "none",
-                "gap": "18px",
-                "padding": "0px 14px",
+                "gap": "10px",
+                "padding": "0px 10px",
                 "margin": "0px",
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "parleyconsoleFleet1 tasks · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 1486573 · up 14sneeds orch0streamstream live03:54:32…"
+              "text": "parleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 1497676 · up 15sv0.0.4needs orch0streamlive04:30:48Se…"
             },
             "brand": {
               "selector": ".pc-shell__brand",
               "found": true,
               "box": {
-                "x": 14,
+                "x": 10,
                 "y": 11.5,
                 "width": 86,
                 "height": 22
@@ -515,16 +393,16 @@
               "selector": "[data-testid=\"shell-nav\"]",
               "found": true,
               "box": {
-                "x": 129,
-                "y": 4.75,
-                "width": 329.3,
-                "height": 35.5
+                "x": 125,
+                "y": 11,
+                "width": 218.22,
+                "height": 23
               },
               "styles": {
                 "display": "flex",
                 "position": "static",
-                "width": "329.297px",
-                "height": "35.5px",
+                "width": "218.219px",
+                "height": "23px",
                 "minWidth": "0px",
                 "minHeight": "auto",
                 "backgroundColor": "rgba(0, 0, 0, 0)",
@@ -551,21 +429,21 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "Fleet1 tasks · 0 need actionRunno runTaskt1Metricsall hands"
+              "text": "Fleet1 task · 0 need actionRunno runTaskt1Metricsall hands"
             },
             "status": {
               "selector": ".pc-shell__status",
               "found": true,
               "box": {
-                "x": 476.3,
+                "x": 813.03,
                 "y": 17,
-                "width": 317.33,
+                "width": 199.63,
                 "height": 11
               },
               "styles": {
                 "display": "flex",
                 "position": "static",
-                "width": "317.328px",
+                "width": "199.625px",
                 "height": "11px",
                 "minWidth": "0px",
                 "minHeight": "auto",
@@ -593,21 +471,21 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "daemon127.0.0.1:5173v0.0.4 · pid 1486573 · up 14s"
+              "text": "daemon127.0.0.1:5173v0.0.4 · pid 1497676 · up 15sv0.0.4"
             },
             "needs-orch": {
               "selector": "[data-testid=\"needs-orch\"]",
               "found": true,
               "box": {
-                "x": 826.63,
+                "x": 1033.66,
                 "y": 11.5,
-                "width": 106.42,
+                "width": 25.2,
                 "height": 22
               },
               "styles": {
                 "display": "flex",
                 "position": "static",
-                "width": "106.422px",
+                "width": "25.2031px",
                 "height": "22px",
                 "minWidth": "auto",
                 "minHeight": "auto",
@@ -641,15 +519,15 @@
               "selector": "[data-testid=\"live-status\"]",
               "found": true,
               "box": {
-                "x": 966.05,
+                "x": 1079.86,
                 "y": 17,
-                "width": 120.22,
+                "width": 26.41,
                 "height": 11
               },
               "styles": {
                 "display": "flex",
                 "position": "static",
-                "width": "120.219px",
+                "width": "26.4062px",
                 "height": "11px",
                 "minWidth": "auto",
                 "minHeight": "auto",
@@ -677,7 +555,7 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "streamstream live"
+              "text": "streamlive"
             },
             "find": {
               "selector": "[data-testid=\"find-combobox\"]",
@@ -971,7 +849,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "awaitingstalledfailedrunningqueuedpendingcompletedcancelledstate = what a task IS · 0 need orch · liveread-only · parley never merges"
+              "text": "awaitingstalledfailedrunningqueuedpendingcompletedcancelled0 need orch · liveread-only · parley never merges"
             }
           }
         },
@@ -1021,7 +899,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "Skip to navigationSkip to findSkip to main contentReconnecting to daemon streamparleyconsoleFleet1 tasks · 0 need actionRunno runTaskt1Metricsall handsdaemon…"
+              "text": "Skip to navigationSkip to findSkip to main contentparleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 149…"
             },
             "header": {
               "selector": ".pc-shell__header",
@@ -1063,7 +941,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "parleyconsoleFleet1 tasks · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 1486573 · up 15sneeds orch0streamstream live03:54:33…"
+              "text": "parleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 1497676 · up 16sv0.0.4needs orch0streamlive04:30:49Se…"
             },
             "brand": {
               "selector": ".pc-shell__brand",
@@ -1113,13 +991,13 @@
               "box": {
                 "x": 129,
                 "y": 4.75,
-                "width": 348.48,
+                "width": 342.78,
                 "height": 35.5
               },
               "styles": {
                 "display": "flex",
                 "position": "static",
-                "width": "348.484px",
+                "width": "342.781px",
                 "height": "35.5px",
                 "minWidth": "0px",
                 "minHeight": "auto",
@@ -1147,13 +1025,13 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "Fleet1 tasks · 0 need actionRunno runTaskt1Metricsall hands"
+              "text": "Fleet1 task · 0 need actionRunno runTaskt1Metricsall hands"
             },
             "status": {
               "selector": ".pc-shell__status",
               "found": true,
               "box": {
-                "x": 622.2,
+                "x": 668.41,
                 "y": 17,
                 "width": 351.42,
                 "height": 11
@@ -1189,13 +1067,13 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "daemon127.0.0.1:5173v0.0.4 · pid 1486573 · up 15s"
+              "text": "daemon127.0.0.1:5173v0.0.4 · pid 1497676 · up 16sv0.0.4"
             },
             "needs-orch": {
               "selector": "[data-testid=\"needs-orch\"]",
               "found": true,
               "box": {
-                "x": 1006.63,
+                "x": 1052.83,
                 "y": 11.5,
                 "width": 106.42,
                 "height": 22
@@ -1237,15 +1115,15 @@
               "selector": "[data-testid=\"live-status\"]",
               "found": true,
               "box": {
-                "x": 1146.05,
+                "x": 1192.25,
                 "y": 17,
-                "width": 120.22,
+                "width": 74.02,
                 "height": 11
               },
               "styles": {
                 "display": "flex",
                 "position": "static",
-                "width": "120.219px",
+                "width": "74.0156px",
                 "height": "11px",
                 "minWidth": "auto",
                 "minHeight": "auto",
@@ -1273,7 +1151,7 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "streamstream live"
+              "text": "streamlive"
             },
             "find": {
               "selector": "[data-testid=\"find-combobox\"]",
@@ -1567,7 +1445,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "awaitingstalledfailedrunningqueuedpendingcompletedcancelledstate = what a task IS · 0 need orch · liveread-only · parley never merges"
+              "text": "awaitingstalledfailedrunningqueuedpendingcompletedcancelled0 need orch · liveread-only · parley never merges"
             }
           }
         },
@@ -1617,7 +1495,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "Skip to navigationSkip to findSkip to main contentDaemon offlineparleyconsoleFleet1 tasks · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5173v…"
+              "text": "Skip to navigationSkip to findSkip to main contentparleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 149…"
             },
             "header": {
               "selector": ".pc-shell__header",
@@ -1659,7 +1537,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "parleyconsoleFleet1 tasks · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 1486573 · up 16sneeds orch0streamstream live03:54:33…"
+              "text": "parleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 1497676 · up 17sv0.0.4needs orch0streamlive04:30:49Se…"
             },
             "brand": {
               "selector": ".pc-shell__brand",
@@ -1709,13 +1587,13 @@
               "box": {
                 "x": 129,
                 "y": 4.75,
-                "width": 348.48,
+                "width": 342.78,
                 "height": 35.5
               },
               "styles": {
                 "display": "flex",
                 "position": "static",
-                "width": "348.484px",
+                "width": "342.781px",
                 "height": "35.5px",
                 "minWidth": "0px",
                 "minHeight": "auto",
@@ -1743,13 +1621,13 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "Fleet1 tasks · 0 need actionRunno runTaskt1Metricsall hands"
+              "text": "Fleet1 task · 0 need actionRunno runTaskt1Metricsall hands"
             },
             "status": {
               "selector": ".pc-shell__status",
               "found": true,
               "box": {
-                "x": 1082.2,
+                "x": 1128.41,
                 "y": 17,
                 "width": 351.42,
                 "height": 11
@@ -1785,13 +1663,13 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "daemon127.0.0.1:5173v0.0.4 · pid 1486573 · up 16s"
+              "text": "daemon127.0.0.1:5173v0.0.4 · pid 1497676 · up 17sv0.0.4"
             },
             "needs-orch": {
               "selector": "[data-testid=\"needs-orch\"]",
               "found": true,
               "box": {
-                "x": 1466.63,
+                "x": 1512.83,
                 "y": 11.5,
                 "width": 106.42,
                 "height": 22
@@ -1833,15 +1711,15 @@
               "selector": "[data-testid=\"live-status\"]",
               "found": true,
               "box": {
-                "x": 1606.05,
+                "x": 1652.25,
                 "y": 17,
-                "width": 120.22,
+                "width": 74.02,
                 "height": 11
               },
               "styles": {
                 "display": "flex",
                 "position": "static",
-                "width": "120.219px",
+                "width": "74.0156px",
                 "height": "11px",
                 "minWidth": "auto",
                 "minHeight": "auto",
@@ -1869,7 +1747,7 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "streamstream live"
+              "text": "streamlive"
             },
             "find": {
               "selector": "[data-testid=\"find-combobox\"]",
@@ -2163,7 +2041,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "awaitingstalledfailedrunningqueuedpendingcompletedcancelledstate = what a task IS · 0 need orch · liveread-only · parley never merges"
+              "text": "awaitingstalledfailedrunningqueuedpendingcompletedcancelled0 need orch · liveread-only · parley never merges"
             }
           }
         }
@@ -2173,13 +2051,13 @@
           "url": "http://127.0.0.1:5173/",
           "violations": [],
           "passes": 34,
-          "incomplete": 2,
+          "incomplete": 1,
           "inapplicable": 54
         },
         "aria": {
           "api": "locator.ariaSnapshot",
           "selector": "[data-testid=\"shell\"]",
-          "tree": "- link \"Skip to navigation\":\n  - /url: \"#shell-nav\"\n- link \"Skip to find\":\n  - /url: \"#find-input-target\"\n- link \"Skip to main content\":\n  - /url: \"#main-content\"\n- text: Reconnecting to daemon stream\n- banner:\n  - img \"Parley\"\n  - text: parley console\n  - navigation \"Screens\":\n    - tablist \"Console screens\":\n      - tab \"Fleet 1 tasks · 0 need action\" [selected]\n      - tab \"Run no run\"\n      - tab \"Task t1\"\n      - tab \"Metrics all hands\"\n  - text: daemon 127.0.0.1:5173 v0.0.4 · pid 1486573 · up 16s needs orch 0 stream stream live\n  - time: 03:54:35\n  - button \"Settings\"\n- complementary \"Left rail\":\n  - text: Find tasks and sessions\n  - combobox \"Find tasks and sessions\"\n  - text: navigator Scope, state filter, and list navigation land with each screen ticket.\n- main:\n  - tabpanel \"Fleet 1 tasks · 0 need action\":\n    - text: center screen\n    - heading \"Fleet board\" [level=1]\n    - paragraph: KPI strip, runs table, and tasks table land in the fleet ticket. Shell chrome (nav, find, settings, honesty) is live.\n- complementary \"Attention rail\": attention · firehose Attention queue and event firehose land with the fleet ticket.\n- contentinfo: awaiting stalled failed running queued pending completed cancelled state = what a task IS · 0 need orch · live read-only · parley never merges"
+          "tree": "- link \"Skip to navigation\":\n  - /url: \"#shell-nav\"\n- link \"Skip to find\":\n  - /url: \"#find-input-target\"\n- link \"Skip to main content\":\n  - /url: \"#main-content\"\n- banner:\n  - img \"Parley\"\n  - text: parley console\n  - navigation \"Screens\":\n    - tablist \"Console screens\":\n      - tab \"Fleet 1 task · 0 need action\" [selected]\n      - tab \"Run no run\"\n      - tab \"Task t1\"\n      - tab \"Metrics all hands\"\n  - text: daemon 127.0.0.1:5173 v0.0.4 · pid 1497676 · up 18s needs orch 0 stream live\n  - time: 04:30:52\n  - button \"Settings\"\n- complementary \"Left rail\":\n  - text: Find tasks and sessions\n  - combobox \"Find tasks and sessions\"\n  - text: navigator Scope, state filter, and list navigation land with each screen ticket.\n- main:\n  - tabpanel \"Fleet 1 task · 0 need action\":\n    - text: center screen\n    - heading \"Fleet board\" [level=1]\n    - paragraph: KPI strip, runs table, and tasks table land in the fleet ticket. Shell chrome (nav, find, settings, honesty) is live.\n- complementary \"Attention rail\": attention · firehose Attention queue and event firehose land with the fleet ticket.\n- contentinfo: awaiting stalled failed running queued pending completed cancelled 0 need orch · live read-only · parley never merges"
         },
         "keyboardWalk": {
           "focusableCount": 9,
@@ -2196,24 +2074,458 @@
             {
               "step": 1,
               "key": "Enter",
-              "tag": "body",
+              "tag": "nav",
               "role": null,
-              "testId": null,
-              "text": ""
+              "testId": "shell-nav",
+              "text": "Fleet1 task · 0 need actionRunno runTaskt1Metricsall hands"
             }
           ],
           "entered": true,
           "leftBody": true
         }
       },
-      "recordedAt": "2026-08-06T07:54:35.657Z"
+      "a11yByState": {
+        "resting": {
+          "axe": {
+            "url": "http://127.0.0.1:5173/",
+            "violations": [],
+            "passes": 34,
+            "incomplete": 1,
+            "inapplicable": 54
+          },
+          "aria": {
+            "api": "locator.ariaSnapshot",
+            "selector": "[data-testid=\"shell\"]",
+            "tree": "- link \"Skip to navigation\":\n  - /url: \"#shell-nav\"\n- link \"Skip to find\":\n  - /url: \"#find-input-target\"\n- link \"Skip to main content\":\n  - /url: \"#main-content\"\n- banner:\n  - img \"Parley\"\n  - text: parley console\n  - navigation \"Screens\":\n    - tablist \"Console screens\":\n      - tab \"Fleet 1 task · 0 need action\" [selected]\n      - tab \"Run no run\"\n      - tab \"Task t1\"\n      - tab \"Metrics all hands\"\n  - text: daemon 127.0.0.1:5173 v0.0.4 · pid 1497676 · up 18s needs orch 0 stream live\n  - time: 04:30:52\n  - button \"Settings\"\n- complementary \"Left rail\":\n  - text: Find tasks and sessions\n  - combobox \"Find tasks and sessions\"\n  - text: navigator Scope, state filter, and list navigation land with each screen ticket.\n- main:\n  - tabpanel \"Fleet 1 task · 0 need action\":\n    - text: center screen\n    - heading \"Fleet board\" [level=1]\n    - paragraph: KPI strip, runs table, and tasks table land in the fleet ticket. Shell chrome (nav, find, settings, honesty) is live.\n- complementary \"Attention rail\": attention · firehose Attention queue and event firehose land with the fleet ticket.\n- contentinfo: awaiting stalled failed running queued pending completed cancelled 0 need orch · live read-only · parley never merges"
+          }
+        },
+        "findPopup": {
+          "axe": {
+            "url": "http://127.0.0.1:5173/",
+            "violations": [],
+            "passes": 34,
+            "incomplete": 3,
+            "inapplicable": 54
+          },
+          "aria": {
+            "api": "locator.ariaSnapshot",
+            "selector": "[data-testid=\"shell\"]",
+            "tree": "- link \"Skip to navigation\":\n  - /url: \"#shell-nav\"\n- link \"Skip to find\":\n  - /url: \"#find-input-target\"\n- link \"Skip to main content\":\n  - /url: \"#main-content\"\n- banner:\n  - img \"Parley\"\n  - text: parley console\n  - navigation \"Screens\":\n    - tablist \"Console screens\":\n      - tab \"Fleet 1 task · 0 need action\" [selected]\n      - tab \"Run no run\"\n      - tab \"Task t1\"\n      - tab \"Metrics all hands\"\n  - text: daemon 127.0.0.1:5173 v0.0.4 · pid 1497676 · up 18s needs orch 0 stream live\n  - time: 04:30:53\n  - button \"Settings\"\n- complementary \"Left rail\":\n  - text: Find tasks and sessions\n  - combobox \"Find tasks and sessions\" [expanded]: zzz-axe-no-match-999\n  - status: No match for “zzz-axe-no-match-999”\n  - text: navigator Scope, state filter, and list navigation land with each screen ticket.\n- main:\n  - tabpanel \"Fleet 1 task · 0 need action\":\n    - text: center screen\n    - heading \"Fleet board\" [level=1]\n    - paragraph: KPI strip, runs table, and tasks table land in the fleet ticket. Shell chrome (nav, find, settings, honesty) is live.\n- complementary \"Attention rail\": attention · firehose Attention queue and event firehose land with the fleet ticket.\n- contentinfo: awaiting stalled failed running queued pending completed cancelled 0 need orch · live read-only · parley never merges"
+          }
+        },
+        "settingsOpen": {
+          "axe": {
+            "url": "http://127.0.0.1:5173/",
+            "violations": [],
+            "passes": 37,
+            "incomplete": 2,
+            "inapplicable": 51
+          }
+        }
+      },
+      "footerNoteScroll": [
+        {
+          "name": "1280",
+          "found": true,
+          "selector": ".pc-shell__footer-note",
+          "scrollWidth": 108,
+          "clientWidth": 108,
+          "ok": true,
+          "text": "0 need orch · live"
+        },
+        {
+          "name": "1460",
+          "found": true,
+          "selector": ".pc-shell__footer-note",
+          "scrollWidth": 108,
+          "clientWidth": 108,
+          "ok": true,
+          "text": "0 need orch · live"
+        },
+        {
+          "name": "1920",
+          "found": true,
+          "selector": ".pc-shell__footer-note",
+          "scrollWidth": 108,
+          "clientWidth": 108,
+          "ok": true,
+          "text": "0 need orch · live"
+        }
+      ],
+      "density1280": {
+        "allOk": true,
+        "hidden": {
+          "tabSubDisplay": "none",
+          "statusMetaFullDisplay": "none",
+          "tabSubHidden": true,
+          "statusMetaFullHidden": true
+        },
+        "parts": {
+          ".pc-shell__tab-label": {
+            "found": true,
+            "selector": ".pc-shell__tab-label",
+            "scrollWidth": 35,
+            "clientWidth": 35,
+            "ok": true,
+            "text": "Fleet"
+          },
+          ".pc-shell__status-value": {
+            "found": true,
+            "selector": ".pc-shell__status-value",
+            "scrollWidth": 92,
+            "clientWidth": 92,
+            "ok": true,
+            "text": "127.0.0.1:5173"
+          },
+          ".pc-shell__status-meta--compact": {
+            "found": true,
+            "selector": ".pc-shell__status-meta--compact",
+            "scrollWidth": 40,
+            "clientWidth": 40,
+            "ok": true,
+            "text": "v0.0.4"
+          },
+          ".pc-shell__live-status-value": {
+            "found": true,
+            "selector": ".pc-shell__live-status-value",
+            "scrollWidth": 26,
+            "clientWidth": 26,
+            "ok": true,
+            "text": "live"
+          },
+          ".pc-shell__attention-count": {
+            "found": true,
+            "selector": ".pc-shell__attention-count",
+            "scrollWidth": 23,
+            "clientWidth": 23,
+            "ok": true,
+            "text": "0"
+          },
+          ".pc-shell__clock": {
+            "found": true,
+            "selector": ".pc-shell__clock",
+            "scrollWidth": 62,
+            "clientWidth": 62,
+            "ok": true,
+            "text": "04:30:50"
+          },
+          ".pc-shell__footer-note": {
+            "found": true,
+            "selector": ".pc-shell__footer-note",
+            "scrollWidth": 108,
+            "clientWidth": 108,
+            "ok": true,
+            "text": "0 need orch · live"
+          },
+          ".pc-shell__footer-meta": {
+            "found": true,
+            "selector": ".pc-shell__footer-meta",
+            "scrollWidth": 186,
+            "clientWidth": 186,
+            "ok": true,
+            "text": "read-only · parley never merges"
+          }
+        }
+      },
+      "skipMain": {
+        "focusedId": "main-content",
+        "focusedTestId": null,
+        "afterTab": {
+          "tag": "a",
+          "id": null,
+          "testId": null,
+          "role": null,
+          "text": "Skip to navigation"
+        }
+      },
+      "settingsFocus": {
+        "ariaModal": "false",
+        "focusMovedIn": true,
+        "focusIn": {
+          "tag": "button",
+          "id": null,
+          "testId": "settings-close",
+          "role": null,
+          "text": "Close"
+        },
+        "focusRestored": true,
+        "focusAfterClose": {
+          "tag": "button",
+          "id": null,
+          "testId": "settings-open",
+          "role": null,
+          "text": "Settings"
+        },
+        "screenAfterDigit3": "fleet",
+        "digit3DidNotNavigate": true
+      },
+      "centerOutline": {
+        "outlineStyle": "none",
+        "outlineWidth": "3px"
+      },
+      "liveRegionTranscript": {
+        "bootSamples": [
+          {
+            "t": 83,
+            "text": "",
+            "phase": "live"
+          },
+          {
+            "t": 164,
+            "text": "",
+            "phase": "live"
+          },
+          {
+            "t": 244,
+            "text": "",
+            "phase": "live"
+          },
+          {
+            "t": 326,
+            "text": "",
+            "phase": "live"
+          },
+          {
+            "t": 409,
+            "text": "",
+            "phase": "live"
+          },
+          {
+            "t": 491,
+            "text": "",
+            "phase": "live"
+          },
+          {
+            "t": 574,
+            "text": "",
+            "phase": "live"
+          },
+          {
+            "t": 656,
+            "text": "",
+            "phase": "live"
+          },
+          {
+            "t": 737,
+            "text": "",
+            "phase": "live"
+          },
+          {
+            "t": 820,
+            "text": "",
+            "phase": "live"
+          },
+          {
+            "t": 903,
+            "text": "",
+            "phase": "live"
+          },
+          {
+            "t": 985,
+            "text": "",
+            "phase": "live"
+          }
+        ],
+        "recoverSamples": [
+          {
+            "t": 203,
+            "text": "",
+            "phase": "live"
+          },
+          {
+            "t": 404,
+            "text": "",
+            "phase": "live"
+          },
+          {
+            "t": 607,
+            "text": "",
+            "phase": "live"
+          },
+          {
+            "t": 810,
+            "text": "",
+            "phase": "live"
+          },
+          {
+            "t": 1013,
+            "text": "",
+            "phase": "live"
+          },
+          {
+            "t": 1215,
+            "text": "",
+            "phase": "live"
+          },
+          {
+            "t": 1418,
+            "text": "",
+            "phase": "live"
+          },
+          {
+            "t": 1621,
+            "text": "",
+            "phase": "live"
+          },
+          {
+            "t": 1824,
+            "text": "",
+            "phase": "live"
+          },
+          {
+            "t": 2027,
+            "text": "",
+            "phase": "live"
+          },
+          {
+            "t": 2230,
+            "text": "",
+            "phase": "live"
+          },
+          {
+            "t": 2433,
+            "text": "Reconnecting to daemon stream",
+            "phase": "stale-reconnecting"
+          },
+          {
+            "t": 2636,
+            "text": "Reconnecting to daemon stream",
+            "phase": "stale-reconnecting"
+          },
+          {
+            "t": 2838,
+            "text": "Reconnecting to daemon stream",
+            "phase": "stale-reconnecting"
+          },
+          {
+            "t": 3040,
+            "text": "Reconnecting to daemon stream",
+            "phase": "stale-reconnecting"
+          },
+          {
+            "t": 3244,
+            "text": "Reconnecting to daemon stream",
+            "phase": "stale-reconnecting"
+          },
+          {
+            "t": 3446,
+            "text": "Reconnecting to daemon stream",
+            "phase": "stale-reconnecting"
+          },
+          {
+            "t": 3649,
+            "text": "Reconnecting to daemon stream",
+            "phase": "stale-reconnecting"
+          },
+          {
+            "t": 3852,
+            "text": "Reconnecting to daemon stream",
+            "phase": "stale-reconnecting"
+          },
+          {
+            "t": 4055,
+            "text": "Reconnecting to daemon stream",
+            "phase": "stale-reconnecting"
+          },
+          {
+            "t": 4257,
+            "text": "Reconnecting to daemon stream",
+            "phase": "stale-reconnecting"
+          },
+          {
+            "t": 4459,
+            "text": "Reconnecting to daemon stream",
+            "phase": "stale-reconnecting"
+          },
+          {
+            "t": 4661,
+            "text": "Reconnecting to daemon stream",
+            "phase": "stale-reconnecting"
+          },
+          {
+            "t": 4865,
+            "text": "Reconnecting to daemon stream",
+            "phase": "stale-reconnecting"
+          },
+          {
+            "t": 5067,
+            "text": "Reconnecting to daemon stream",
+            "phase": "stale-reconnecting"
+          },
+          {
+            "t": 5271,
+            "text": "Reconnecting to daemon stream",
+            "phase": "stale-reconnecting"
+          },
+          {
+            "t": 5474,
+            "text": "Reconnecting to daemon stream",
+            "phase": "stale-reconnecting"
+          },
+          {
+            "t": 5675,
+            "text": "Reconnecting to daemon stream",
+            "phase": "stale-reconnecting"
+          },
+          {
+            "t": 5878,
+            "text": "Reconnecting to daemon stream",
+            "phase": "stale-reconnecting"
+          },
+          {
+            "t": 6081,
+            "text": "Reconnecting to daemon stream",
+            "phase": "stale-reconnecting"
+          },
+          {
+            "t": 6283,
+            "text": "Reconnecting to daemon stream",
+            "phase": "stale-reconnecting"
+          },
+          {
+            "t": 6485,
+            "text": "Reconnecting to daemon stream",
+            "phase": "stale-reconnecting"
+          },
+          {
+            "t": 6689,
+            "text": "Reconnecting to daemon stream",
+            "phase": "stale-reconnecting"
+          },
+          {
+            "t": 6892,
+            "text": "Reconnecting to daemon stream",
+            "phase": "stale-reconnecting"
+          },
+          {
+            "t": 7097,
+            "text": "Reconnecting to daemon stream",
+            "phase": "stale-reconnecting"
+          },
+          {
+            "t": 7299,
+            "text": "Reconnecting to daemon stream",
+            "phase": "stale-reconnecting"
+          },
+          {
+            "t": 7501,
+            "text": "Connection restored",
+            "phase": "live"
+          }
+        ],
+        "announcedOfflineOnHealthyBoot": false,
+        "offlineWhileLive": false,
+        "announcedOfflineAfterLive": true,
+        "announcedRestore": true
+      },
+      "recordedAt": "2026-08-06T08:31:01.333Z"
     },
     "find-honesty": {
       "kind": "find-honesty",
       "description": "Find combobox honesty: loading (delay), error (500), no-match (empty sessions), results — forced via route interception on /sessions.",
       "daemon": {
         "taskId": "t1",
-        "port": 38793
+        "port": 40285
       },
       "states": {
         "loading": {
@@ -2269,13 +2581,13 @@
               "x": 10,
               "y": 85,
               "width": 263,
-              "height": 36.84
+              "height": 32.84
             },
             "styles": {
               "display": "block",
               "position": "absolute",
               "width": "263px",
-              "height": "36.8438px",
+              "height": "32.8438px",
               "minWidth": "0px",
               "minHeight": "0px",
               "backgroundColor": "rgb(16, 19, 22)",
@@ -2363,13 +2675,13 @@
               "x": 10,
               "y": 85,
               "width": 263,
-              "height": 51.69
+              "height": 32.84
             },
             "styles": {
               "display": "block",
               "position": "absolute",
               "width": "263px",
-              "height": "51.6875px",
+              "height": "32.8438px",
               "minWidth": "0px",
               "minHeight": "0px",
               "backgroundColor": "rgb(16, 19, 22)",
@@ -2457,13 +2769,13 @@
               "x": 10,
               "y": 85,
               "width": 263,
-              "height": 36.84
+              "height": 32.84
             },
             "styles": {
               "display": "block",
               "position": "absolute",
               "width": "263px",
-              "height": "36.8438px",
+              "height": "32.8438px",
               "minWidth": "0px",
               "minHeight": "0px",
               "backgroundColor": "rgb(16, 19, 22)",
@@ -2551,13 +2863,13 @@
               "x": 10,
               "y": 85,
               "width": 263,
-              "height": 45.88
+              "height": 30
             },
             "styles": {
               "display": "block",
               "position": "absolute",
               "width": "263px",
-              "height": "45.875px",
+              "height": "30px",
               "minWidth": "0px",
               "minHeight": "0px",
               "backgroundColor": "rgb(16, 19, 22)",
@@ -2593,8 +2905,8 @@
           }
         }
       },
-      "recordedAt": "2026-08-06T07:54:42.772Z"
+      "recordedAt": "2026-08-06T08:31:08.418Z"
     }
   },
-  "updatedAt": "2026-08-06T07:54:42.772Z"
+  "updatedAt": "2026-08-06T08:31:08.418Z"
 }

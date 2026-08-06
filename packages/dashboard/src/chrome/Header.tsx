@@ -2,10 +2,12 @@
  * Chrome header — brand mark, screen tablist, daemon live status, needs-orch
  * pill, stream honesty slot (reframed "tail"), clock, settings.
  */
+import { forwardRef } from "react";
 import type { HonestyState, HealthView, SnapshotView } from "../data/types.js";
 import type { ScreenId } from "../screens/types.js";
 import { SCREEN_LABELS } from "../screens/types.js";
 import { formatClock, formatOrigin, formatUptime } from "./format.js";
+import { countNoun, countNeedVerb } from "./plural.js";
 
 export interface HeaderProps {
   screen: ScreenId;
@@ -17,30 +19,35 @@ export interface HeaderProps {
   clock: string;
   tabSubs: Record<ScreenId, string>;
   onOpenSettings: () => void;
+  settingsOpen?: boolean;
 }
 
-function honestyLabel(honesty: HonestyState): { label: string; live: boolean } {
+/**
+ * Value next to the "stream" label — never re-includes the word "stream"
+ * (avoids "streamstream live" concatenation in the accessibility tree).
+ */
+function honestyValue(honesty: HonestyState): { value: string; live: boolean } {
   switch (honesty.phase) {
     case "live":
-      return { label: honesty.streamConnected ? "stream live" : "live", live: true };
+      return { value: "live", live: true };
     case "loading":
-      return { label: "connecting", live: false };
     case "connecting":
-      return { label: "connecting", live: false };
+      return { value: "connecting", live: false };
     case "offline":
-      return { label: "offline", live: false };
+      return { value: "offline", live: false };
     case "stale-reconnecting":
-      return { label: "reconnecting", live: false };
+      return { value: "reconnecting", live: false };
     case "empty":
-      return { label: "stream live · empty", live: true };
+      return { value: "live · empty", live: true };
     case "panel-error":
-      return { label: "panel error", live: honesty.streamConnected };
+      return { value: "panel error", live: honesty.streamConnected };
     default:
-      return { label: honesty.phase, live: false };
+      return { value: honesty.phase, live: false };
   }
 }
 
-function daemonDetail(health: HealthView): string {
+/** Full detail for title tooltip (never clipped in the visible chip). */
+function daemonDetailFull(health: HealthView): string {
   if (!health.online) return "unreachable";
   const parts: string[] = [];
   if (health.version) parts.push(`v${health.version}`);
@@ -50,24 +57,68 @@ function daemonDetail(health: HealthView): string {
   return parts.length > 0 ? parts.join(" · ") : "online";
 }
 
+/**
+ * Compact visible meta at the 1280 floor — version only (uptime lives in title).
+ * Full string used at wider viewports via CSS show/hide.
+ */
+function daemonDetailCompact(health: HealthView): string {
+  if (!health.online) return "unreachable";
+  if (health.version) return `v${health.version}`;
+  return "online";
+}
+
 const TAB_ORDER: ScreenId[] = ["fleet", "run", "task", "metrics"];
 
-export function Header({
-  screen,
-  onNavigate,
-  health,
-  honesty,
-  snapshot,
-  attentionCount,
-  clock,
-  tabSubs,
-  onOpenSettings,
-}: HeaderProps) {
+export function buildTabSubs(input: {
+  totalTasks: number;
+  attentionCount: number;
+  selectedRunId: string | null;
+  selectedTaskId: string | null;
+  firstRunLabel: string | null;
+  firstTaskId: string | null;
+  honestyPhase: HonestyState["phase"];
+}): Record<ScreenId, string> {
+  const { totalTasks, attentionCount } = input;
+  const runLabel = input.selectedRunId
+    ? input.selectedRunId.slice(0, 8)
+    : (input.firstRunLabel ?? "no run");
+  const taskLabel = input.selectedTaskId ?? input.firstTaskId ?? "no task";
+  return {
+    fleet: `${countNoun(totalTasks, "task")} · ${countNeedVerb(attentionCount, "action")}`,
+    run: runLabel,
+    task: taskLabel,
+    metrics:
+      input.honestyPhase === "live" || input.honestyPhase === "empty"
+        ? "all hands"
+        : input.honestyPhase,
+  };
+}
+
+export const Header = forwardRef<HTMLButtonElement, HeaderProps>(function Header(
+  {
+    screen,
+    onNavigate,
+    health,
+    honesty,
+    snapshot,
+    attentionCount,
+    clock,
+    tabSubs,
+    onOpenSettings,
+    settingsOpen = false,
+  },
+  settingsBtnRef,
+) {
   const origin = formatOrigin();
-  const detail = daemonDetail(health);
-  const stream = honestyLabel(honesty);
+  const detailFull = daemonDetailFull(health);
+  const detailCompact = daemonDetailCompact(health);
+  const stream = honestyValue(honesty);
   const liveDot =
     health.online && (honesty.phase === "live" || honesty.phase === "empty");
+  const taskTitle =
+    snapshot.ready
+      ? `${countNoun(snapshot.totalTasks, "task")} · seq ${snapshot.seq}`
+      : "awaiting first snapshot";
 
   return (
     <header className="pc-shell__header" data-testid="shell-header">
@@ -93,6 +144,7 @@ export function Header({
           className="pc-shell__nav"
           aria-label="Screens"
           data-testid="shell-nav"
+          tabIndex={-1}
         >
           <div role="tablist" aria-label="Console screens" className="pc-shell__tablist">
             {TAB_ORDER.map((id) => {
@@ -111,6 +163,7 @@ export function Header({
                   }
                   onClick={() => onNavigate(id)}
                   data-testid={`nav-${id}`}
+                  title={tabSubs[id]}
                 >
                   <span className="pc-shell__tab-label">{SCREEN_LABELS[id]}</span>
                   <span className="pc-shell__tab-sub">{tabSubs[id]}</span>
@@ -125,7 +178,7 @@ export function Header({
         <div
           className="pc-shell__status"
           data-testid="daemon-status"
-          title={detail}
+          title={detailFull}
           data-online={health.online ? "true" : "false"}
         >
           <span
@@ -138,10 +191,13 @@ export function Header({
           />
           <span className="pc-shell__status-label">daemon</span>
           <span className="pc-shell__status-value">{origin}</span>
-          <span className="pc-shell__status-meta">{detail}</span>
+          <span className="pc-shell__status-meta pc-shell__status-meta--full">{detailFull}</span>
+          <span className="pc-shell__status-meta pc-shell__status-meta--compact">
+            {detailCompact}
+          </span>
         </div>
 
-        <div className="pc-shell__divider" aria-hidden="true" />
+        <div className="pc-shell__divider pc-shell__divider--meta" aria-hidden="true" />
 
         <div
           className="pc-shell__attention"
@@ -152,24 +208,19 @@ export function Header({
           <span
             className="pc-shell__attention-count"
             data-count={attentionCount}
-            aria-label={`${attentionCount} need orchestrator`}
+            aria-label={`${attentionCount} need the orchestrator`}
           >
             {attentionCount}
           </span>
         </div>
 
-        <div className="pc-shell__divider" aria-hidden="true" />
+        <div className="pc-shell__divider pc-shell__divider--meta" aria-hidden="true" />
 
-        {/* Live status slot — reframed mock "tail" (wire-verification §2B). */}
         <div
           className="pc-shell__live-status"
           data-testid="live-status"
           data-phase={honesty.phase}
-          title={
-            snapshot.ready
-              ? `${snapshot.totalTasks} tasks · seq ${snapshot.seq}`
-              : "awaiting first snapshot"
-          }
+          title={taskTitle}
         >
           <span className="pc-shell__live-status-label">stream</span>
           <span
@@ -179,21 +230,23 @@ export function Header({
                 : "pc-shell__live-status-value"
             }
           >
-            {stream.label}
+            {stream.value}
           </span>
         </div>
 
-        <div className="pc-shell__divider" aria-hidden="true" />
+        <div className="pc-shell__divider pc-shell__divider--meta" aria-hidden="true" />
 
         <time className="pc-shell__clock" dateTime={clock} aria-label="clock" data-testid="clock">
           {clock || formatClock()}
         </time>
 
         <button
+          ref={settingsBtnRef}
           type="button"
           className="pc-shell__settings-btn"
           onClick={onOpenSettings}
           aria-haspopup="dialog"
+          aria-expanded={settingsOpen}
           data-testid="settings-open"
           title="Settings (,)"
         >
@@ -202,4 +255,4 @@ export function Header({
       </div>
     </header>
   );
-}
+});

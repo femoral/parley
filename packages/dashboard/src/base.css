@@ -67,11 +67,11 @@ a:hover {
   background: var(--surface-sunken);
 }
 ::-webkit-scrollbar-thumb {
-  background: #242c33;
+  background: var(--scrollbar-thumb);
   border-radius: 0;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #333d46;
+  background: var(--scrollbar-thumb-hover);
 }
 
 /* Visually hidden utility for a11y labels */

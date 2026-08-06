@@ -1,44 +1,44 @@
 /**
- * Run acceptance demos for the verification harness.
- * #353 harness demos + #354 shell chrome proofs.
+ * Run all registered acceptance demos (see registry.mjs).
+ * Screen tickets append to the registry — no renumbering here.
  */
-import { runStagedDaemonDemo } from "./staged-daemon.mjs";
-import { runInterceptErrorDemo } from "./intercept-error.mjs";
-import { runReconnectDemo } from "./reconnect.mjs";
-import { runShellChromeDemo } from "./shell-chrome.mjs";
-import { runFindHonestyDemo } from "./find-honesty.mjs";
+import { DEMO_REGISTRY } from "./registry.mjs";
 import { readLedger } from "../lib/ledger.mjs";
 
 async function main() {
-  console.log("verify: demo 1/5 staged-daemon (#353)");
-  const staged = await runStagedDaemonDemo();
+  const total = DEMO_REGISTRY.length;
+  /** @type {Record<string, object>} */
+  const results = {};
 
-  console.log("\nverify: demo 2/5 intercept-error (#353)");
-  const intercept = await runInterceptErrorDemo();
+  for (let i = 0; i < total; i += 1) {
+    const demo = DEMO_REGISTRY[i];
+    console.log(`verify: demo ${i + 1}/${total} ${demo.id} (${demo.ticket})`);
+    results[demo.id] = await demo.run();
+  }
 
-  console.log("\nverify: demo 3/5 reconnect (#353)");
-  const reconnect = await runReconnectDemo();
+  /** @type {Record<string, string[]>} */
+  const byTicket = {};
+  for (const d of DEMO_REGISTRY) {
+    const ledger = readLedger(d.ticket);
+    byTicket[d.ticket] = Object.keys(ledger?.demos ?? {});
+  }
 
-  console.log("\nverify: demo 4/5 shell-chrome (#354)");
-  const chrome = await runShellChromeDemo();
+  const chrome = results["shell-chrome"];
+  const find = results["find-honesty"];
 
-  console.log("\nverify: demo 5/5 find-honesty (#354)");
-  const find = await runFindHonestyDemo();
-
-  const ledger353 = readLedger("issue-353");
-  const ledger354 = readLedger("issue-354");
   console.log("\nverify: all demos complete");
   console.log(
     JSON.stringify(
       {
-        issue353: Object.keys(ledger353?.demos ?? {}),
-        issue354: Object.keys(ledger354?.demos ?? {}),
-        stagedTask: staged.daemon?.taskId,
-        interceptProbe: intercept.intercept?.probe?.tasks?.status,
-        reconnectHealth: reconnect.daemon?.healthOkAfterRecover,
-        headerHeight: chrome.headline?.headerHeight,
-        noHScroll: chrome.headline?.boardScroll?.shell?.noHorizontalScroll,
-        findStates: Object.keys(find.states ?? {}),
+        ledgers: byTicket,
+        headerHeight: chrome?.headline?.headerHeight,
+        noHScroll: chrome?.headline?.boardScroll?.shell?.noHorizontalScroll,
+        axeRest: chrome?.a11yByState?.resting?.axe?.violations?.length,
+        axeFind: chrome?.a11yByState?.findPopup?.axe?.violations?.length,
+        axeSettings: chrome?.a11yByState?.settingsOpen?.axe?.violations?.length,
+        findStates: Object.keys(find?.states ?? {}),
+        footerNoteOk: chrome?.footerNoteScroll?.every?.((v) => v.ok),
+        density1280Ok: chrome?.density1280?.allOk,
       },
       null,
       2,

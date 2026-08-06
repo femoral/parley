@@ -40,6 +40,16 @@
   --text-time: #6d7d89;
   --link: #7fb2d9;
   --link-hover: #a8cde9;
+  /*
+   * Active-tab sublabel ink from the frozen mock (#b9c3cb). Not on the
+   * DESIGN.md text ramp (between --text-strong-2 and --text-2); kept as a
+   * named token so components never use the hex literal.
+   */
+  --text-tab-active: #b9c3cb;
+
+  /* Scrollbar track/thumb (base chrome) */
+  --scrollbar-thumb: #242c33;
+  --scrollbar-thumb-hover: #333d46;
 
   /* State (status only — reserved inks) */
   --state-pending: #8b96a2;

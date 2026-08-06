@@ -2,6 +2,7 @@
  * Keyboard accelerators — Cove-parity bar from the coverage audit:
  * `/` find, `n` / `⇧N` cycle attention, `m` metrics, `Esc` dismiss, `,` settings,
  * `1`–`4` screen tabs. Honors settings.shortcutsEnabled (Esc always works).
+ * Board navigation accelerators are suppressed while settings is open.
  */
 import { useEffect, useRef, type RefObject } from "react";
 import type { ScreenId } from "../screens/types.js";
@@ -43,13 +44,20 @@ export function useAccelerators(
 
       // Esc always dismisses overlays (even when shortcuts are off).
       if (e.key === "Escape") {
-        if (h.settingsOpen || document.activeElement === find?.current) {
+        if (h.settingsOpen) {
           e.preventDefault();
           h.closeOverlays();
+          return;
+        }
+        if (document.activeElement === find?.current) {
+          e.preventDefault();
           find?.current?.blur();
         }
         return;
       }
+
+      // While settings is open, suppress board navigators (popover contract).
+      if (h.settingsOpen) return;
 
       if (!settings.shortcutsEnabled) return;
 

@@ -17,7 +17,7 @@
             "README.md"
           ]
         },
-        "port": 42239
+        "port": 44879
       },
       "viewports": [
         {
@@ -66,7 +66,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "Skip to navigationSkip to findSkip to main contentReconnecting to daemon streamparleyconsoleFleet1 tasks · 0 need actionRunno runTaskt1Metricsall handsdaemon…"
+              "text": "Skip to navigationSkip to findSkip to main contentparleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 149…"
             },
             "header": {
               "selector": ".pc-shell__header",
@@ -102,19 +102,19 @@
                 "borderRightColor": "rgb(227, 232, 236)",
                 "gridTemplateRows": "none",
                 "gridTemplateColumns": "none",
-                "gap": "18px",
-                "padding": "0px 14px",
+                "gap": "10px",
+                "padding": "0px 10px",
                 "margin": "0px",
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "parleyconsoleFleet1 tasks · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 1486573 · up 1sneeds orch0streamstream live03:54:19S…"
+              "text": "parleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 1497676 · up 1sv0.0.4needs orch0streamlive04:30:34Set…"
             },
             "brand": {
               "selector": ".pc-shell__brand",
               "found": true,
               "box": {
-                "x": 14,
+                "x": 10,
                 "y": 11.5,
                 "width": 86,
                 "height": 22
@@ -156,16 +156,16 @@
               "selector": "[data-testid=\"shell-nav\"]",
               "found": true,
               "box": {
-                "x": 129,
-                "y": 4.75,
-                "width": 331.59,
-                "height": 35.5
+                "x": 125,
+                "y": 11,
+                "width": 218.22,
+                "height": 23
               },
               "styles": {
                 "display": "flex",
                 "position": "static",
-                "width": "331.594px",
-                "height": "35.5px",
+                "width": "218.219px",
+                "height": "23px",
                 "minWidth": "0px",
                 "minHeight": "auto",
                 "backgroundColor": "rgba(0, 0, 0, 0)",
@@ -192,21 +192,21 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "Fleet1 tasks · 0 need actionRunno runTaskt1Metricsall hands"
+              "text": "Fleet1 task · 0 need actionRunno runTaskt1Metricsall hands"
             },
             "status": {
               "selector": ".pc-shell__status",
               "found": true,
               "box": {
-                "x": 478.59,
+                "x": 813.03,
                 "y": 17,
-                "width": 315.03,
+                "width": 199.63,
                 "height": 11
               },
               "styles": {
                 "display": "flex",
                 "position": "static",
-                "width": "315.031px",
+                "width": "199.625px",
                 "height": "11px",
                 "minWidth": "0px",
                 "minHeight": "auto",
@@ -234,21 +234,21 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "daemon127.0.0.1:5173v0.0.4 · pid 1486573 · up 1s"
+              "text": "daemon127.0.0.1:5173v0.0.4 · pid 1497676 · up 1sv0.0.4"
             },
             "needs-orch": {
               "selector": "[data-testid=\"needs-orch\"]",
               "found": true,
               "box": {
-                "x": 826.63,
+                "x": 1033.66,
                 "y": 11.5,
-                "width": 106.42,
+                "width": 25.2,
                 "height": 22
               },
               "styles": {
                 "display": "flex",
                 "position": "static",
-                "width": "106.422px",
+                "width": "25.2031px",
                 "height": "22px",
                 "minWidth": "auto",
                 "minHeight": "auto",
@@ -282,15 +282,15 @@
               "selector": "[data-testid=\"live-status\"]",
               "found": true,
               "box": {
-                "x": 966.05,
+                "x": 1079.86,
                 "y": 17,
-                "width": 120.22,
+                "width": 26.41,
                 "height": 11
               },
               "styles": {
                 "display": "flex",
                 "position": "static",
-                "width": "120.219px",
+                "width": "26.4062px",
                 "height": "11px",
                 "minWidth": "auto",
                 "minHeight": "auto",
@@ -318,7 +318,7 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "streamstream live"
+              "text": "streamlive"
             },
             "find": {
               "selector": "[data-testid=\"find-combobox\"]",
@@ -612,7 +612,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "awaitingstalledfailedrunningqueuedpendingcompletedcancelledstate = what a task IS · 0 need orch · liveread-only · parley never merges"
+              "text": "awaitingstalledfailedrunningqueuedpendingcompletedcancelled0 need orch · liveread-only · parley never merges"
             }
           }
         },
@@ -662,7 +662,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "Skip to navigationSkip to findSkip to main contentReconnecting to daemon streamparleyconsoleFleet1 tasks · 0 need actionRunno runTaskt1Metricsall handsdaemon…"
+              "text": "Skip to navigationSkip to findSkip to main contentparleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 149…"
             },
             "header": {
               "selector": ".pc-shell__header",
@@ -704,7 +704,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "parleyconsoleFleet1 tasks · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 1486573 · up 2sneeds orch0streamstream live03:54:20S…"
+              "text": "parleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 1497676 · up 2sv0.0.4needs orch0streamlive04:30:35Set…"
             },
             "brand": {
               "selector": ".pc-shell__brand",
@@ -754,13 +754,13 @@
               "box": {
                 "x": 129,
                 "y": 4.75,
-                "width": 348.48,
+                "width": 342.78,
                 "height": 35.5
               },
               "styles": {
                 "display": "flex",
                 "position": "static",
-                "width": "348.484px",
+                "width": "342.781px",
                 "height": "35.5px",
                 "minWidth": "0px",
                 "minHeight": "auto",
@@ -788,13 +788,13 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "Fleet1 tasks · 0 need actionRunno runTaskt1Metricsall hands"
+              "text": "Fleet1 task · 0 need actionRunno runTaskt1Metricsall hands"
             },
             "status": {
               "selector": ".pc-shell__status",
               "found": true,
               "box": {
-                "x": 628.8,
+                "x": 675,
                 "y": 17,
                 "width": 344.83,
                 "height": 11
@@ -830,13 +830,13 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "daemon127.0.0.1:5173v0.0.4 · pid 1486573 · up 2s"
+              "text": "daemon127.0.0.1:5173v0.0.4 · pid 1497676 · up 2sv0.0.4"
             },
             "needs-orch": {
               "selector": "[data-testid=\"needs-orch\"]",
               "found": true,
               "box": {
-                "x": 1006.63,
+                "x": 1052.83,
                 "y": 11.5,
                 "width": 106.42,
                 "height": 22
@@ -878,15 +878,15 @@
               "selector": "[data-testid=\"live-status\"]",
               "found": true,
               "box": {
-                "x": 1146.05,
+                "x": 1192.25,
                 "y": 17,
-                "width": 120.22,
+                "width": 74.02,
                 "height": 11
               },
               "styles": {
                 "display": "flex",
                 "position": "static",
-                "width": "120.219px",
+                "width": "74.0156px",
                 "height": "11px",
                 "minWidth": "auto",
                 "minHeight": "auto",
@@ -914,7 +914,7 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "streamstream live"
+              "text": "streamlive"
             },
             "find": {
               "selector": "[data-testid=\"find-combobox\"]",
@@ -1208,7 +1208,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "awaitingstalledfailedrunningqueuedpendingcompletedcancelledstate = what a task IS · 0 need orch · liveread-only · parley never merges"
+              "text": "awaitingstalledfailedrunningqueuedpendingcompletedcancelled0 need orch · liveread-only · parley never merges"
             }
           }
         },
@@ -1258,7 +1258,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "Skip to navigationSkip to findSkip to main contentDaemon offlineparleyconsoleFleet1 tasks · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5173v…"
+              "text": "Skip to navigationSkip to findSkip to main contentparleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 149…"
             },
             "header": {
               "selector": ".pc-shell__header",
@@ -1300,7 +1300,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "parleyconsoleFleet1 tasks · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 1486573 · up 3sneeds orch0streamstream live03:54:20S…"
+              "text": "parleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 1497676 · up 3sv0.0.4needs orch0streamlive04:30:35Set…"
             },
             "brand": {
               "selector": ".pc-shell__brand",
@@ -1350,13 +1350,13 @@
               "box": {
                 "x": 129,
                 "y": 4.75,
-                "width": 348.48,
+                "width": 342.78,
                 "height": 35.5
               },
               "styles": {
                 "display": "flex",
                 "position": "static",
-                "width": "348.484px",
+                "width": "342.781px",
                 "height": "35.5px",
                 "minWidth": "0px",
                 "minHeight": "auto",
@@ -1384,13 +1384,13 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "Fleet1 tasks · 0 need actionRunno runTaskt1Metricsall hands"
+              "text": "Fleet1 task · 0 need actionRunno runTaskt1Metricsall hands"
             },
             "status": {
               "selector": ".pc-shell__status",
               "found": true,
               "box": {
-                "x": 1088.8,
+                "x": 1135,
                 "y": 17,
                 "width": 344.83,
                 "height": 11
@@ -1426,13 +1426,13 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "daemon127.0.0.1:5173v0.0.4 · pid 1486573 · up 3s"
+              "text": "daemon127.0.0.1:5173v0.0.4 · pid 1497676 · up 3sv0.0.4"
             },
             "needs-orch": {
               "selector": "[data-testid=\"needs-orch\"]",
               "found": true,
               "box": {
-                "x": 1466.63,
+                "x": 1512.83,
                 "y": 11.5,
                 "width": 106.42,
                 "height": 22
@@ -1474,15 +1474,15 @@
               "selector": "[data-testid=\"live-status\"]",
               "found": true,
               "box": {
-                "x": 1606.05,
+                "x": 1652.25,
                 "y": 17,
-                "width": 120.22,
+                "width": 74.02,
                 "height": 11
               },
               "styles": {
                 "display": "flex",
                 "position": "static",
-                "width": "120.219px",
+                "width": "74.0156px",
                 "height": "11px",
                 "minWidth": "auto",
                 "minHeight": "auto",
@@ -1510,7 +1510,7 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "streamstream live"
+              "text": "streamlive"
             },
             "find": {
               "selector": "[data-testid=\"find-combobox\"]",
@@ -1804,7 +1804,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "awaitingstalledfailedrunningqueuedpendingcompletedcancelledstate = what a task IS · 0 need orch · liveread-only · parley never merges"
+              "text": "awaitingstalledfailedrunningqueuedpendingcompletedcancelled0 need orch · liveread-only · parley never merges"
             }
           }
         }
@@ -1814,13 +1814,13 @@
           "url": "http://127.0.0.1:5173/",
           "violations": [],
           "passes": 34,
-          "incomplete": 2,
+          "incomplete": 1,
           "inapplicable": 54
         },
         "aria": {
           "api": "locator.ariaSnapshot",
           "selector": "[data-testid=\"shell\"]",
-          "tree": "- link \"Skip to navigation\":\n  - /url: \"#shell-nav\"\n- link \"Skip to find\":\n  - /url: \"#find-input-target\"\n- link \"Skip to main content\":\n  - /url: \"#main-content\"\n- text: Daemon offline\n- banner:\n  - img \"Parley\"\n  - text: parley console\n  - navigation \"Screens\":\n    - tablist \"Console screens\":\n      - tab \"Fleet 1 tasks · 0 need action\" [selected]\n      - tab \"Run no run\"\n      - tab \"Task t1\"\n      - tab \"Metrics all hands\"\n  - text: daemon 127.0.0.1:5173 v0.0.4 · pid 1486573 · up 3s needs orch 0 stream stream live\n  - time: 03:54:22\n  - button \"Settings\"\n- complementary \"Left rail\":\n  - text: Find tasks and sessions\n  - combobox \"Find tasks and sessions\"\n  - text: navigator Scope, state filter, and list navigation land with each screen ticket.\n- main:\n  - tabpanel \"Fleet 1 tasks · 0 need action\":\n    - text: center screen\n    - heading \"Fleet board\" [level=1]\n    - paragraph: KPI strip, runs table, and tasks table land in the fleet ticket. Shell chrome (nav, find, settings, honesty) is live.\n- complementary \"Attention rail\": attention · firehose Attention queue and event firehose land with the fleet ticket.\n- contentinfo: awaiting stalled failed running queued pending completed cancelled state = what a task IS · 0 need orch · live read-only · parley never merges"
+          "tree": "- link \"Skip to navigation\":\n  - /url: \"#shell-nav\"\n- link \"Skip to find\":\n  - /url: \"#find-input-target\"\n- link \"Skip to main content\":\n  - /url: \"#main-content\"\n- banner:\n  - img \"Parley\"\n  - text: parley console\n  - navigation \"Screens\":\n    - tablist \"Console screens\":\n      - tab \"Fleet 1 task · 0 need action\" [selected]\n      - tab \"Run no run\"\n      - tab \"Task t1\"\n      - tab \"Metrics all hands\"\n  - text: daemon 127.0.0.1:5173 v0.0.4 · pid 1497676 · up 4s needs orch 0 stream live\n  - time: 04:30:37\n  - button \"Settings\"\n- complementary \"Left rail\":\n  - text: Find tasks and sessions\n  - combobox \"Find tasks and sessions\"\n  - text: navigator Scope, state filter, and list navigation land with each screen ticket.\n- main:\n  - tabpanel \"Fleet 1 task · 0 need action\":\n    - text: center screen\n    - heading \"Fleet board\" [level=1]\n    - paragraph: KPI strip, runs table, and tasks table land in the fleet ticket. Shell chrome (nav, find, settings, honesty) is live.\n- complementary \"Attention rail\": attention · firehose Attention queue and event firehose land with the fleet ticket.\n- contentinfo: awaiting stalled failed running queued pending completed cancelled 0 need orch · live read-only · parley never merges"
         },
         "keyboardWalk": {
           "focusableCount": 9,
@@ -1837,17 +1837,17 @@
             {
               "step": 1,
               "key": "Enter",
-              "tag": "body",
+              "tag": "nav",
               "role": null,
-              "testId": null,
-              "text": ""
+              "testId": "shell-nav",
+              "text": "Fleet1 task · 0 need actionRunno runTaskt1Metricsall hands"
             }
           ],
           "entered": true,
           "leftBody": true
         }
       },
-      "recordedAt": "2026-08-06T07:54:22.667Z"
+      "recordedAt": "2026-08-06T08:30:37.500Z"
     },
     "intercept-error": {
       "kind": "intercept-error",
@@ -1934,7 +1934,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "Skip to navigationSkip to findSkip to main contentDaemon offlineparleyconsoleFleet0 tasks · 0 need actionRunno runTaskno taskMetricsofflinedaemon127.0.0.1:51…"
+              "text": "Skip to navigationSkip to findSkip to main contentparleyconsoleFleet0 tasks · 0 need actionRunno runTaskno taskMetricsofflinedaemon127.0.0.1:5173unreachableu…"
             },
             "header": {
               "selector": ".pc-shell__header",
@@ -1970,19 +1970,19 @@
                 "borderRightColor": "rgb(227, 232, 236)",
                 "gridTemplateRows": "none",
                 "gridTemplateColumns": "none",
-                "gap": "18px",
-                "padding": "0px 14px",
+                "gap": "10px",
+                "padding": "0px 10px",
                 "margin": "0px",
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "parleyconsoleFleet0 tasks · 0 need actionRunno runTaskno taskMetricsofflinedaemon127.0.0.1:5173unreachableneeds orch0streamoffline03:54:24Settings"
+              "text": "parleyconsoleFleet0 tasks · 0 need actionRunno runTaskno taskMetricsofflinedaemon127.0.0.1:5173unreachableunreachableneeds orch0streamoffline04:30:38Settings"
             },
             "brand": {
               "selector": ".pc-shell__brand",
               "found": true,
               "box": {
-                "x": 14,
+                "x": 10,
                 "y": 11.5,
                 "width": 86,
                 "height": 22
@@ -2024,16 +2024,16 @@
               "selector": "[data-testid=\"shell-nav\"]",
               "found": true,
               "box": {
-                "x": 129,
-                "y": 4.75,
-                "width": 359,
-                "height": 35.5
+                "x": 125,
+                "y": 11,
+                "width": 218.22,
+                "height": 23
               },
               "styles": {
                 "display": "flex",
                 "position": "static",
-                "width": "359px",
-                "height": "35.5px",
+                "width": "218.219px",
+                "height": "23px",
                 "minWidth": "0px",
                 "minHeight": "auto",
                 "backgroundColor": "rgba(0, 0, 0, 0)",
@@ -2066,7 +2066,7 @@
               "selector": ".pc-shell__status",
               "found": true,
               "box": {
-                "x": 587.41,
+                "x": 760.23,
                 "y": 17,
                 "width": 232.63,
                 "height": 11
@@ -2102,21 +2102,21 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "daemon127.0.0.1:5173unreachable"
+              "text": "daemon127.0.0.1:5173unreachableunreachable"
             },
             "needs-orch": {
               "selector": "[data-testid=\"needs-orch\"]",
               "found": true,
               "box": {
-                "x": 853.03,
+                "x": 1013.86,
                 "y": 11.5,
-                "width": 106.42,
+                "width": 25.2,
                 "height": 22
               },
               "styles": {
                 "display": "flex",
                 "position": "static",
-                "width": "106.422px",
+                "width": "25.2031px",
                 "height": "22px",
                 "minWidth": "auto",
                 "minHeight": "auto",
@@ -2150,15 +2150,15 @@
               "selector": "[data-testid=\"live-status\"]",
               "found": true,
               "box": {
-                "x": 992.45,
+                "x": 1060.06,
                 "y": 17,
-                "width": 93.81,
+                "width": 46.2,
                 "height": 11
               },
               "styles": {
                 "display": "flex",
                 "position": "static",
-                "width": "93.8125px",
+                "width": "46.2031px",
                 "height": "11px",
                 "minWidth": "auto",
                 "minHeight": "auto",
@@ -2480,7 +2480,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "awaitingstalledfailedrunningqueuedpendingcompletedcancelledstate = what a task IS · 0 need orch · offlineread-only · parley never merges"
+              "text": "awaitingstalledfailedrunningqueuedpendingcompletedcancelled0 need orch · offlineread-only · parley never merges"
             }
           }
         },
@@ -2530,7 +2530,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "Skip to navigationSkip to findSkip to main contentDaemon offlineparleyconsoleFleet0 tasks · 0 need actionRunno runTaskno taskMetricsofflinedaemon127.0.0.1:51…"
+              "text": "Skip to navigationSkip to findSkip to main contentparleyconsoleFleet0 tasks · 0 need actionRunno runTaskno taskMetricsofflinedaemon127.0.0.1:5173unreachableu…"
             },
             "header": {
               "selector": ".pc-shell__header",
@@ -2572,7 +2572,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "parleyconsoleFleet0 tasks · 0 need actionRunno runTaskno taskMetricsofflinedaemon127.0.0.1:5173unreachableneeds orch0streamoffline03:54:24Settings"
+              "text": "parleyconsoleFleet0 tasks · 0 need actionRunno runTaskno taskMetricsofflinedaemon127.0.0.1:5173unreachableunreachableneeds orch0streamoffline04:30:39Settings"
             },
             "brand": {
               "selector": ".pc-shell__brand",
@@ -2698,7 +2698,7 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "daemon127.0.0.1:5173unreachable"
+              "text": "daemon127.0.0.1:5173unreachableunreachable"
             },
             "needs-orch": {
               "selector": "[data-testid=\"needs-orch\"]",
@@ -3076,7 +3076,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "awaitingstalledfailedrunningqueuedpendingcompletedcancelledstate = what a task IS · 0 need orch · offlineread-only · parley never merges"
+              "text": "awaitingstalledfailedrunningqueuedpendingcompletedcancelled0 need orch · offlineread-only · parley never merges"
             }
           }
         },
@@ -3126,7 +3126,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "Skip to navigationSkip to findSkip to main contentDaemon offlineparleyconsoleFleet0 tasks · 0 need actionRunno runTaskno taskMetricsofflinedaemon127.0.0.1:51…"
+              "text": "Skip to navigationSkip to findSkip to main contentparleyconsoleFleet0 tasks · 0 need actionRunno runTaskno taskMetricsofflinedaemon127.0.0.1:5173unreachableu…"
             },
             "header": {
               "selector": ".pc-shell__header",
@@ -3168,7 +3168,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "parleyconsoleFleet0 tasks · 0 need actionRunno runTaskno taskMetricsofflinedaemon127.0.0.1:5173unreachableneeds orch0streamoffline03:54:25Settings"
+              "text": "parleyconsoleFleet0 tasks · 0 need actionRunno runTaskno taskMetricsofflinedaemon127.0.0.1:5173unreachableunreachableneeds orch0streamoffline04:30:40Settings"
             },
             "brand": {
               "selector": ".pc-shell__brand",
@@ -3294,7 +3294,7 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "daemon127.0.0.1:5173unreachable"
+              "text": "daemon127.0.0.1:5173unreachableunreachable"
             },
             "needs-orch": {
               "selector": "[data-testid=\"needs-orch\"]",
@@ -3672,7 +3672,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "awaitingstalledfailedrunningqueuedpendingcompletedcancelledstate = what a task IS · 0 need orch · offlineread-only · parley never merges"
+              "text": "awaitingstalledfailedrunningqueuedpendingcompletedcancelled0 need orch · offlineread-only · parley never merges"
             }
           }
         }
@@ -3682,13 +3682,13 @@
           "url": "http://127.0.0.1:5173/",
           "violations": [],
           "passes": 34,
-          "incomplete": 2,
+          "incomplete": 1,
           "inapplicable": 54
         },
         "aria": {
           "api": "locator.ariaSnapshot",
           "selector": "[data-testid=\"shell\"]",
-          "tree": "- link \"Skip to navigation\":\n  - /url: \"#shell-nav\"\n- link \"Skip to find\":\n  - /url: \"#find-input-target\"\n- link \"Skip to main content\":\n  - /url: \"#main-content\"\n- text: Daemon offline\n- banner:\n  - img \"Parley\"\n  - text: parley console\n  - navigation \"Screens\":\n    - tablist \"Console screens\":\n      - tab \"Fleet 0 tasks · 0 need action\" [selected]\n      - tab \"Run no run\"\n      - tab \"Task no task\"\n      - tab \"Metrics offline\"\n  - text: daemon 127.0.0.1:5173 unreachable needs orch 0 stream offline\n  - time: 03:54:27\n  - button \"Settings\"\n- complementary \"Left rail\":\n  - text: Find tasks and sessions\n  - combobox \"Find tasks and sessions\"\n  - text: navigator Scope, state filter, and list navigation land with each screen ticket.\n- main:\n  - tabpanel \"Fleet 0 tasks · 0 need action\":\n    - text: center screen\n    - heading \"Fleet board\" [level=1]\n    - paragraph: KPI strip, runs table, and tasks table land in the fleet ticket. Shell chrome (nav, find, settings, honesty) is live.\n- complementary \"Attention rail\": attention · firehose Attention queue and event firehose land with the fleet ticket.\n- contentinfo: awaiting stalled failed running queued pending completed cancelled state = what a task IS · 0 need orch · offline read-only · parley never merges"
+          "tree": "- link \"Skip to navigation\":\n  - /url: \"#shell-nav\"\n- link \"Skip to find\":\n  - /url: \"#find-input-target\"\n- link \"Skip to main content\":\n  - /url: \"#main-content\"\n- banner:\n  - img \"Parley\"\n  - text: parley console\n  - navigation \"Screens\":\n    - tablist \"Console screens\":\n      - tab \"Fleet 0 tasks · 0 need action\" [selected]\n      - tab \"Run no run\"\n      - tab \"Task no task\"\n      - tab \"Metrics offline\"\n  - text: daemon 127.0.0.1:5173 unreachable needs orch 0 stream offline\n  - time: 04:30:42\n  - button \"Settings\"\n- complementary \"Left rail\":\n  - text: Find tasks and sessions\n  - combobox \"Find tasks and sessions\"\n  - text: navigator Scope, state filter, and list navigation land with each screen ticket.\n- main:\n  - tabpanel \"Fleet 0 tasks · 0 need action\":\n    - text: center screen\n    - heading \"Fleet board\" [level=1]\n    - paragraph: KPI strip, runs table, and tasks table land in the fleet ticket. Shell chrome (nav, find, settings, honesty) is live.\n- complementary \"Attention rail\": attention · firehose Attention queue and event firehose land with the fleet ticket.\n- contentinfo: awaiting stalled failed running queued pending completed cancelled 0 need orch · offline read-only · parley never merges"
         },
         "keyboardWalk": {
           "focusableCount": 9,
@@ -3705,17 +3705,17 @@
             {
               "step": 1,
               "key": "Enter",
-              "tag": "body",
+              "tag": "nav",
               "role": null,
-              "testId": null,
-              "text": ""
+              "testId": "shell-nav",
+              "text": "Fleet0 tasks · 0 need actionRunno runTaskno taskMetricsoffline"
             }
           ],
           "entered": true,
           "leftBody": true
         }
       },
-      "recordedAt": "2026-08-06T07:54:27.343Z"
+      "recordedAt": "2026-08-06T08:30:42.181Z"
     },
     "reconnect": {
       "kind": "reconnect",
@@ -3773,7 +3773,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "Skip to navigationSkip to findSkip to main contentDaemon offlineparleyconsoleFleet1 tasks · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5173v…"
+                  "text": "Skip to navigationSkip to findSkip to main contentparleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 149…"
                 },
                 "header": {
                   "selector": ".pc-shell__header",
@@ -3809,19 +3809,19 @@
                     "borderRightColor": "rgb(227, 232, 236)",
                     "gridTemplateRows": "none",
                     "gridTemplateColumns": "none",
-                    "gap": "18px",
-                    "padding": "0px 14px",
+                    "gap": "10px",
+                    "padding": "0px 10px",
                     "margin": "0px",
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "parleyconsoleFleet1 tasks · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 1486573 · up 10sneeds orch0streamstream live03:54:28…"
+                  "text": "parleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 1497676 · up 10sv0.0.4needs orch0streamlive04:30:42Se…"
                 },
                 "brand": {
                   "selector": ".pc-shell__brand",
                   "found": true,
                   "box": {
-                    "x": 14,
+                    "x": 10,
                     "y": 11.5,
                     "width": 86,
                     "height": 22
@@ -3863,16 +3863,16 @@
                   "selector": "[data-testid=\"shell-nav\"]",
                   "found": true,
                   "box": {
-                    "x": 129,
-                    "y": 4.75,
-                    "width": 329.3,
-                    "height": 35.5
+                    "x": 125,
+                    "y": 11,
+                    "width": 218.22,
+                    "height": 23
                   },
                   "styles": {
                     "display": "flex",
                     "position": "static",
-                    "width": "329.297px",
-                    "height": "35.5px",
+                    "width": "218.219px",
+                    "height": "23px",
                     "minWidth": "0px",
                     "minHeight": "auto",
                     "backgroundColor": "rgba(0, 0, 0, 0)",
@@ -3899,21 +3899,21 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "Fleet1 tasks · 0 need actionRunno runTaskt1Metricsall hands"
+                  "text": "Fleet1 task · 0 need actionRunno runTaskt1Metricsall hands"
                 },
                 "status": {
                   "selector": ".pc-shell__status",
                   "found": true,
                   "box": {
-                    "x": 476.3,
+                    "x": 813.03,
                     "y": 17,
-                    "width": 317.33,
+                    "width": 199.63,
                     "height": 11
                   },
                   "styles": {
                     "display": "flex",
                     "position": "static",
-                    "width": "317.328px",
+                    "width": "199.625px",
                     "height": "11px",
                     "minWidth": "0px",
                     "minHeight": "auto",
@@ -3941,21 +3941,21 @@
                     "overflow": "visible",
                     "opacity": "1"
                   },
-                  "text": "daemon127.0.0.1:5173v0.0.4 · pid 1486573 · up 10s"
+                  "text": "daemon127.0.0.1:5173v0.0.4 · pid 1497676 · up 10sv0.0.4"
                 },
                 "needs-orch": {
                   "selector": "[data-testid=\"needs-orch\"]",
                   "found": true,
                   "box": {
-                    "x": 826.63,
+                    "x": 1033.66,
                     "y": 11.5,
-                    "width": 106.42,
+                    "width": 25.2,
                     "height": 22
                   },
                   "styles": {
                     "display": "flex",
                     "position": "static",
-                    "width": "106.422px",
+                    "width": "25.2031px",
                     "height": "22px",
                     "minWidth": "auto",
                     "minHeight": "auto",
@@ -3989,15 +3989,15 @@
                   "selector": "[data-testid=\"live-status\"]",
                   "found": true,
                   "box": {
-                    "x": 966.05,
+                    "x": 1079.86,
                     "y": 17,
-                    "width": 120.22,
+                    "width": 26.41,
                     "height": 11
                   },
                   "styles": {
                     "display": "flex",
                     "position": "static",
-                    "width": "120.219px",
+                    "width": "26.4062px",
                     "height": "11px",
                     "minWidth": "auto",
                     "minHeight": "auto",
@@ -4025,7 +4025,7 @@
                     "overflow": "visible",
                     "opacity": "1"
                   },
-                  "text": "streamstream live"
+                  "text": "streamlive"
                 },
                 "find": {
                   "selector": "[data-testid=\"find-combobox\"]",
@@ -4319,7 +4319,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "awaitingstalledfailedrunningqueuedpendingcompletedcancelledstate = what a task IS · 0 need orch · liveread-only · parley never merges"
+                  "text": "awaitingstalledfailedrunningqueuedpendingcompletedcancelled0 need orch · liveread-only · parley never merges"
                 }
               }
             },
@@ -4373,7 +4373,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "Skip to navigationSkip to findSkip to main contentDaemon offlineparleyconsoleFleet1 tasks · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5173v…"
+                  "text": "Skip to navigationSkip to findSkip to main contentparleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 149…"
                 },
                 "header": {
                   "selector": ".pc-shell__header",
@@ -4415,7 +4415,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "parleyconsoleFleet1 tasks · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 1486573 · up 10sneeds orch0streamstream live03:54:28…"
+                  "text": "parleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 1497676 · up 10sv0.0.4needs orch0streamlive04:30:43Se…"
                 },
                 "brand": {
                   "selector": ".pc-shell__brand",
@@ -4465,13 +4465,13 @@
                   "box": {
                     "x": 129,
                     "y": 4.75,
-                    "width": 348.48,
+                    "width": 342.78,
                     "height": 35.5
                   },
                   "styles": {
                     "display": "flex",
                     "position": "static",
-                    "width": "348.484px",
+                    "width": "342.781px",
                     "height": "35.5px",
                     "minWidth": "0px",
                     "minHeight": "auto",
@@ -4499,13 +4499,13 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "Fleet1 tasks · 0 need actionRunno runTaskt1Metricsall hands"
+                  "text": "Fleet1 task · 0 need actionRunno runTaskt1Metricsall hands"
                 },
                 "status": {
                   "selector": ".pc-shell__status",
                   "found": true,
                   "box": {
-                    "x": 622.2,
+                    "x": 668.41,
                     "y": 17,
                     "width": 351.42,
                     "height": 11
@@ -4541,13 +4541,13 @@
                     "overflow": "visible",
                     "opacity": "1"
                   },
-                  "text": "daemon127.0.0.1:5173v0.0.4 · pid 1486573 · up 10s"
+                  "text": "daemon127.0.0.1:5173v0.0.4 · pid 1497676 · up 10sv0.0.4"
                 },
                 "needs-orch": {
                   "selector": "[data-testid=\"needs-orch\"]",
                   "found": true,
                   "box": {
-                    "x": 1006.63,
+                    "x": 1052.83,
                     "y": 11.5,
                     "width": 106.42,
                     "height": 22
@@ -4589,15 +4589,15 @@
                   "selector": "[data-testid=\"live-status\"]",
                   "found": true,
                   "box": {
-                    "x": 1146.05,
+                    "x": 1192.25,
                     "y": 17,
-                    "width": 120.22,
+                    "width": 74.02,
                     "height": 11
                   },
                   "styles": {
                     "display": "flex",
                     "position": "static",
-                    "width": "120.219px",
+                    "width": "74.0156px",
                     "height": "11px",
                     "minWidth": "auto",
                     "minHeight": "auto",
@@ -4625,7 +4625,7 @@
                     "overflow": "visible",
                     "opacity": "1"
                   },
-                  "text": "streamstream live"
+                  "text": "streamlive"
                 },
                 "find": {
                   "selector": "[data-testid=\"find-combobox\"]",
@@ -4919,7 +4919,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "awaitingstalledfailedrunningqueuedpendingcompletedcancelledstate = what a task IS · 0 need orch · liveread-only · parley never merges"
+                  "text": "awaitingstalledfailedrunningqueuedpendingcompletedcancelled0 need orch · liveread-only · parley never merges"
                 }
               }
             },
@@ -4973,7 +4973,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "Skip to navigationSkip to findSkip to main contentDaemon offlineparleyconsoleFleet1 tasks · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5173v…"
+                  "text": "Skip to navigationSkip to findSkip to main contentparleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 149…"
                 },
                 "header": {
                   "selector": ".pc-shell__header",
@@ -5015,7 +5015,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "parleyconsoleFleet1 tasks · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 1486573 · up 10sneeds orch0streamstream live03:54:28…"
+                  "text": "parleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 1497676 · up 10sv0.0.4needs orch0streamlive04:30:43Se…"
                 },
                 "brand": {
                   "selector": ".pc-shell__brand",
@@ -5065,13 +5065,13 @@
                   "box": {
                     "x": 129,
                     "y": 4.75,
-                    "width": 348.48,
+                    "width": 342.78,
                     "height": 35.5
                   },
                   "styles": {
                     "display": "flex",
                     "position": "static",
-                    "width": "348.484px",
+                    "width": "342.781px",
                     "height": "35.5px",
                     "minWidth": "0px",
                     "minHeight": "auto",
@@ -5099,13 +5099,13 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "Fleet1 tasks · 0 need actionRunno runTaskt1Metricsall hands"
+                  "text": "Fleet1 task · 0 need actionRunno runTaskt1Metricsall hands"
                 },
                 "status": {
                   "selector": ".pc-shell__status",
                   "found": true,
                   "box": {
-                    "x": 1082.2,
+                    "x": 1128.41,
                     "y": 17,
                     "width": 351.42,
                     "height": 11
@@ -5141,13 +5141,13 @@
                     "overflow": "visible",
                     "opacity": "1"
                   },
-                  "text": "daemon127.0.0.1:5173v0.0.4 · pid 1486573 · up 10s"
+                  "text": "daemon127.0.0.1:5173v0.0.4 · pid 1497676 · up 10sv0.0.4"
                 },
                 "needs-orch": {
                   "selector": "[data-testid=\"needs-orch\"]",
                   "found": true,
                   "box": {
-                    "x": 1466.63,
+                    "x": 1512.83,
                     "y": 11.5,
                     "width": 106.42,
                     "height": 22
@@ -5189,15 +5189,15 @@
                   "selector": "[data-testid=\"live-status\"]",
                   "found": true,
                   "box": {
-                    "x": 1606.05,
+                    "x": 1652.25,
                     "y": 17,
-                    "width": 120.22,
+                    "width": 74.02,
                     "height": 11
                   },
                   "styles": {
                     "display": "flex",
                     "position": "static",
-                    "width": "120.219px",
+                    "width": "74.0156px",
                     "height": "11px",
                     "minWidth": "auto",
                     "minHeight": "auto",
@@ -5225,7 +5225,7 @@
                     "overflow": "visible",
                     "opacity": "1"
                   },
-                  "text": "streamstream live"
+                  "text": "streamlive"
                 },
                 "find": {
                   "selector": "[data-testid=\"find-combobox\"]",
@@ -5519,7 +5519,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "awaitingstalledfailedrunningqueuedpendingcompletedcancelledstate = what a task IS · 0 need orch · liveread-only · parley never merges"
+                  "text": "awaitingstalledfailedrunningqueuedpendingcompletedcancelled0 need orch · liveread-only · parley never merges"
                 }
               }
             }
@@ -5577,7 +5577,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "Skip to navigationSkip to findSkip to main contentDaemon offlineparleyconsoleFleet0 tasks · 0 need actionRunno runTaskno taskMetricsofflinedaemon127.0.0.1:51…"
+                  "text": "Skip to navigationSkip to findSkip to main contentparleyconsoleFleet0 tasks · 0 need actionRunno runTaskno taskMetricsofflinedaemon127.0.0.1:5173unreachableu…"
                 },
                 "header": {
                   "selector": ".pc-shell__header",
@@ -5613,19 +5613,19 @@
                     "borderRightColor": "rgb(227, 232, 236)",
                     "gridTemplateRows": "none",
                     "gridTemplateColumns": "none",
-                    "gap": "18px",
-                    "padding": "0px 14px",
+                    "gap": "10px",
+                    "padding": "0px 10px",
                     "margin": "0px",
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "parleyconsoleFleet0 tasks · 0 need actionRunno runTaskno taskMetricsofflinedaemon127.0.0.1:5173unreachableneeds orch0streamoffline03:54:28Settings"
+                  "text": "parleyconsoleFleet0 tasks · 0 need actionRunno runTaskno taskMetricsofflinedaemon127.0.0.1:5173unreachableunreachableneeds orch0streamoffline04:30:43Settings"
                 },
                 "brand": {
                   "selector": ".pc-shell__brand",
                   "found": true,
                   "box": {
-                    "x": 14,
+                    "x": 10,
                     "y": 11.5,
                     "width": 86,
                     "height": 22
@@ -5667,16 +5667,16 @@
                   "selector": "[data-testid=\"shell-nav\"]",
                   "found": true,
                   "box": {
-                    "x": 129,
-                    "y": 4.75,
-                    "width": 359,
-                    "height": 35.5
+                    "x": 125,
+                    "y": 11,
+                    "width": 218.22,
+                    "height": 23
                   },
                   "styles": {
                     "display": "flex",
                     "position": "static",
-                    "width": "359px",
-                    "height": "35.5px",
+                    "width": "218.219px",
+                    "height": "23px",
                     "minWidth": "0px",
                     "minHeight": "auto",
                     "backgroundColor": "rgba(0, 0, 0, 0)",
@@ -5709,7 +5709,7 @@
                   "selector": ".pc-shell__status",
                   "found": true,
                   "box": {
-                    "x": 587.41,
+                    "x": 760.23,
                     "y": 17,
                     "width": 232.63,
                     "height": 11
@@ -5745,21 +5745,21 @@
                     "overflow": "visible",
                     "opacity": "1"
                   },
-                  "text": "daemon127.0.0.1:5173unreachable"
+                  "text": "daemon127.0.0.1:5173unreachableunreachable"
                 },
                 "needs-orch": {
                   "selector": "[data-testid=\"needs-orch\"]",
                   "found": true,
                   "box": {
-                    "x": 853.03,
+                    "x": 1013.86,
                     "y": 11.5,
-                    "width": 106.42,
+                    "width": 25.2,
                     "height": 22
                   },
                   "styles": {
                     "display": "flex",
                     "position": "static",
-                    "width": "106.422px",
+                    "width": "25.2031px",
                     "height": "22px",
                     "minWidth": "auto",
                     "minHeight": "auto",
@@ -5793,15 +5793,15 @@
                   "selector": "[data-testid=\"live-status\"]",
                   "found": true,
                   "box": {
-                    "x": 992.45,
+                    "x": 1060.06,
                     "y": 17,
-                    "width": 93.81,
+                    "width": 46.2,
                     "height": 11
                   },
                   "styles": {
                     "display": "flex",
                     "position": "static",
-                    "width": "93.8125px",
+                    "width": "46.2031px",
                     "height": "11px",
                     "minWidth": "auto",
                     "minHeight": "auto",
@@ -6123,7 +6123,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "awaitingstalledfailedrunningqueuedpendingcompletedcancelledstate = what a task IS · 0 need orch · offlineread-only · parley never merges"
+                  "text": "awaitingstalledfailedrunningqueuedpendingcompletedcancelled0 need orch · offlineread-only · parley never merges"
                 }
               }
             },
@@ -6177,7 +6177,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "Skip to navigationSkip to findSkip to main contentDaemon offlineparleyconsoleFleet0 tasks · 0 need actionRunno runTaskno taskMetricsofflinedaemon127.0.0.1:51…"
+                  "text": "Skip to navigationSkip to findSkip to main contentparleyconsoleFleet0 tasks · 0 need actionRunno runTaskno taskMetricsofflinedaemon127.0.0.1:5173unreachableu…"
                 },
                 "header": {
                   "selector": ".pc-shell__header",
@@ -6219,7 +6219,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "parleyconsoleFleet0 tasks · 0 need actionRunno runTaskno taskMetricsofflinedaemon127.0.0.1:5173unreachableneeds orch0streamoffline03:54:28Settings"
+                  "text": "parleyconsoleFleet0 tasks · 0 need actionRunno runTaskno taskMetricsofflinedaemon127.0.0.1:5173unreachableunreachableneeds orch0streamoffline04:30:43Settings"
                 },
                 "brand": {
                   "selector": ".pc-shell__brand",
@@ -6345,7 +6345,7 @@
                     "overflow": "visible",
                     "opacity": "1"
                   },
-                  "text": "daemon127.0.0.1:5173unreachable"
+                  "text": "daemon127.0.0.1:5173unreachableunreachable"
                 },
                 "needs-orch": {
                   "selector": "[data-testid=\"needs-orch\"]",
@@ -6723,7 +6723,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "awaitingstalledfailedrunningqueuedpendingcompletedcancelledstate = what a task IS · 0 need orch · offlineread-only · parley never merges"
+                  "text": "awaitingstalledfailedrunningqueuedpendingcompletedcancelled0 need orch · offlineread-only · parley never merges"
                 }
               }
             },
@@ -6777,7 +6777,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "Skip to navigationSkip to findSkip to main contentDaemon offlineparleyconsoleFleet0 tasks · 0 need actionRunno runTaskno taskMetricsofflinedaemon127.0.0.1:51…"
+                  "text": "Skip to navigationSkip to findSkip to main contentparleyconsoleFleet0 tasks · 0 need actionRunno runTaskno taskMetricsofflinedaemon127.0.0.1:5173unreachableu…"
                 },
                 "header": {
                   "selector": ".pc-shell__header",
@@ -6819,7 +6819,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "parleyconsoleFleet0 tasks · 0 need actionRunno runTaskno taskMetricsofflinedaemon127.0.0.1:5173unreachableneeds orch0streamoffline03:54:28Settings"
+                  "text": "parleyconsoleFleet0 tasks · 0 need actionRunno runTaskno taskMetricsofflinedaemon127.0.0.1:5173unreachableunreachableneeds orch0streamoffline04:30:43Settings"
                 },
                 "brand": {
                   "selector": ".pc-shell__brand",
@@ -6945,7 +6945,7 @@
                     "overflow": "visible",
                     "opacity": "1"
                   },
-                  "text": "daemon127.0.0.1:5173unreachable"
+                  "text": "daemon127.0.0.1:5173unreachableunreachable"
                 },
                 "needs-orch": {
                   "selector": "[data-testid=\"needs-orch\"]",
@@ -7323,7 +7323,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "awaitingstalledfailedrunningqueuedpendingcompletedcancelledstate = what a task IS · 0 need orch · offlineread-only · parley never merges"
+                  "text": "awaitingstalledfailedrunningqueuedpendingcompletedcancelled0 need orch · offlineread-only · parley never merges"
                 }
               }
             }
@@ -7381,7 +7381,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "Skip to navigationSkip to findSkip to main contentDaemon offlineparleyconsoleFleet0 tasks · 0 need actionRunno runTaskno taskMetricsofflinedaemon127.0.0.1:51…"
+                  "text": "Skip to navigationSkip to findSkip to main contentparleyconsoleFleet0 tasks · 0 need actionRunno runTaskno taskMetricsofflinedaemon127.0.0.1:5173unreachableu…"
                 },
                 "header": {
                   "selector": ".pc-shell__header",
@@ -7417,19 +7417,19 @@
                     "borderRightColor": "rgb(227, 232, 236)",
                     "gridTemplateRows": "none",
                     "gridTemplateColumns": "none",
-                    "gap": "18px",
-                    "padding": "0px 14px",
+                    "gap": "10px",
+                    "padding": "0px 10px",
                     "margin": "0px",
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "parleyconsoleFleet0 tasks · 0 need actionRunno runTaskno taskMetricsofflinedaemon127.0.0.1:5173unreachableneeds orch0streamoffline03:54:29Settings"
+                  "text": "parleyconsoleFleet0 tasks · 0 need actionRunno runTaskno taskMetricsofflinedaemon127.0.0.1:5173unreachableunreachableneeds orch0streamoffline04:30:44Settings"
                 },
                 "brand": {
                   "selector": ".pc-shell__brand",
                   "found": true,
                   "box": {
-                    "x": 14,
+                    "x": 10,
                     "y": 11.5,
                     "width": 86,
                     "height": 22
@@ -7471,16 +7471,16 @@
                   "selector": "[data-testid=\"shell-nav\"]",
                   "found": true,
                   "box": {
-                    "x": 129,
-                    "y": 4.75,
-                    "width": 359,
-                    "height": 35.5
+                    "x": 125,
+                    "y": 11,
+                    "width": 218.22,
+                    "height": 23
                   },
                   "styles": {
                     "display": "flex",
                     "position": "static",
-                    "width": "359px",
-                    "height": "35.5px",
+                    "width": "218.219px",
+                    "height": "23px",
                     "minWidth": "0px",
                     "minHeight": "auto",
                     "backgroundColor": "rgba(0, 0, 0, 0)",
@@ -7513,7 +7513,7 @@
                   "selector": ".pc-shell__status",
                   "found": true,
                   "box": {
-                    "x": 587.41,
+                    "x": 760.23,
                     "y": 17,
                     "width": 232.63,
                     "height": 11
@@ -7549,21 +7549,21 @@
                     "overflow": "visible",
                     "opacity": "1"
                   },
-                  "text": "daemon127.0.0.1:5173unreachable"
+                  "text": "daemon127.0.0.1:5173unreachableunreachable"
                 },
                 "needs-orch": {
                   "selector": "[data-testid=\"needs-orch\"]",
                   "found": true,
                   "box": {
-                    "x": 853.03,
+                    "x": 1013.86,
                     "y": 11.5,
-                    "width": 106.42,
+                    "width": 25.2,
                     "height": 22
                   },
                   "styles": {
                     "display": "flex",
                     "position": "static",
-                    "width": "106.422px",
+                    "width": "25.2031px",
                     "height": "22px",
                     "minWidth": "auto",
                     "minHeight": "auto",
@@ -7597,15 +7597,15 @@
                   "selector": "[data-testid=\"live-status\"]",
                   "found": true,
                   "box": {
-                    "x": 992.45,
+                    "x": 1060.06,
                     "y": 17,
-                    "width": 93.81,
+                    "width": 46.2,
                     "height": 11
                   },
                   "styles": {
                     "display": "flex",
                     "position": "static",
-                    "width": "93.8125px",
+                    "width": "46.2031px",
                     "height": "11px",
                     "minWidth": "auto",
                     "minHeight": "auto",
@@ -7927,7 +7927,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "awaitingstalledfailedrunningqueuedpendingcompletedcancelledstate = what a task IS · 0 need orch · offlineread-only · parley never merges"
+                  "text": "awaitingstalledfailedrunningqueuedpendingcompletedcancelled0 need orch · offlineread-only · parley never merges"
                 }
               }
             },
@@ -7981,7 +7981,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "Skip to navigationSkip to findSkip to main contentDaemon offlineparleyconsoleFleet0 tasks · 0 need actionRunno runTaskno taskMetricsofflinedaemon127.0.0.1:51…"
+                  "text": "Skip to navigationSkip to findSkip to main contentparleyconsoleFleet0 tasks · 0 need actionRunno runTaskno taskMetricsofflinedaemon127.0.0.1:5173unreachableu…"
                 },
                 "header": {
                   "selector": ".pc-shell__header",
@@ -8023,7 +8023,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "parleyconsoleFleet0 tasks · 0 need actionRunno runTaskno taskMetricsofflinedaemon127.0.0.1:5173unreachableneeds orch0streamoffline03:54:29Settings"
+                  "text": "parleyconsoleFleet0 tasks · 0 need actionRunno runTaskno taskMetricsofflinedaemon127.0.0.1:5173unreachableunreachableneeds orch0streamoffline04:30:44Settings"
                 },
                 "brand": {
                   "selector": ".pc-shell__brand",
@@ -8149,7 +8149,7 @@
                     "overflow": "visible",
                     "opacity": "1"
                   },
-                  "text": "daemon127.0.0.1:5173unreachable"
+                  "text": "daemon127.0.0.1:5173unreachableunreachable"
                 },
                 "needs-orch": {
                   "selector": "[data-testid=\"needs-orch\"]",
@@ -8527,7 +8527,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "awaitingstalledfailedrunningqueuedpendingcompletedcancelledstate = what a task IS · 0 need orch · offlineread-only · parley never merges"
+                  "text": "awaitingstalledfailedrunningqueuedpendingcompletedcancelled0 need orch · offlineread-only · parley never merges"
                 }
               }
             },
@@ -8581,7 +8581,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "Skip to navigationSkip to findSkip to main contentDaemon offlineparleyconsoleFleet0 tasks · 0 need actionRunno runTaskno taskMetricsofflinedaemon127.0.0.1:51…"
+                  "text": "Skip to navigationSkip to findSkip to main contentparleyconsoleFleet0 tasks · 0 need actionRunno runTaskno taskMetricsofflinedaemon127.0.0.1:5173unreachableu…"
                 },
                 "header": {
                   "selector": ".pc-shell__header",
@@ -8623,7 +8623,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "parleyconsoleFleet0 tasks · 0 need actionRunno runTaskno taskMetricsofflinedaemon127.0.0.1:5173unreachableneeds orch0streamoffline03:54:29Settings"
+                  "text": "parleyconsoleFleet0 tasks · 0 need actionRunno runTaskno taskMetricsofflinedaemon127.0.0.1:5173unreachableunreachableneeds orch0streamoffline04:30:44Settings"
                 },
                 "brand": {
                   "selector": ".pc-shell__brand",
@@ -8749,7 +8749,7 @@
                     "overflow": "visible",
                     "opacity": "1"
                   },
-                  "text": "daemon127.0.0.1:5173unreachable"
+                  "text": "daemon127.0.0.1:5173unreachableunreachable"
                 },
                 "needs-orch": {
                   "selector": "[data-testid=\"needs-orch\"]",
@@ -9127,7 +9127,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "awaitingstalledfailedrunningqueuedpendingcompletedcancelledstate = what a task IS · 0 need orch · offlineread-only · parley never merges"
+                  "text": "awaitingstalledfailedrunningqueuedpendingcompletedcancelled0 need orch · offlineread-only · parley never merges"
                 }
               }
             }
@@ -9185,7 +9185,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "Skip to navigationSkip to findSkip to main contentDaemon offlineparleyconsoleFleet1 tasks · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5174v…"
+                  "text": "Skip to navigationSkip to findSkip to main contentparleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5174v0.0.4 · pid 149…"
                 },
                 "header": {
                   "selector": ".pc-shell__header",
@@ -9221,19 +9221,19 @@
                     "borderRightColor": "rgb(227, 232, 236)",
                     "gridTemplateRows": "none",
                     "gridTemplateColumns": "none",
-                    "gap": "18px",
-                    "padding": "0px 14px",
+                    "gap": "10px",
+                    "padding": "0px 10px",
                     "margin": "0px",
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "parleyconsoleFleet1 tasks · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5174v0.0.4 · pid 1486573 · up 12sneeds orch0streamstream live03:54:30…"
+                  "text": "parleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5174v0.0.4 · pid 1497676 · up 12sv0.0.4needs orch0streamlive04:30:44Se…"
                 },
                 "brand": {
                   "selector": ".pc-shell__brand",
                   "found": true,
                   "box": {
-                    "x": 14,
+                    "x": 10,
                     "y": 11.5,
                     "width": 86,
                     "height": 22
@@ -9275,16 +9275,16 @@
                   "selector": "[data-testid=\"shell-nav\"]",
                   "found": true,
                   "box": {
-                    "x": 129,
-                    "y": 4.75,
-                    "width": 329.3,
-                    "height": 35.5
+                    "x": 125,
+                    "y": 11,
+                    "width": 218.22,
+                    "height": 23
                   },
                   "styles": {
                     "display": "flex",
                     "position": "static",
-                    "width": "329.297px",
-                    "height": "35.5px",
+                    "width": "218.219px",
+                    "height": "23px",
                     "minWidth": "0px",
                     "minHeight": "auto",
                     "backgroundColor": "rgba(0, 0, 0, 0)",
@@ -9311,21 +9311,21 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "Fleet1 tasks · 0 need actionRunno runTaskt1Metricsall hands"
+                  "text": "Fleet1 task · 0 need actionRunno runTaskt1Metricsall hands"
                 },
                 "status": {
                   "selector": ".pc-shell__status",
                   "found": true,
                   "box": {
-                    "x": 476.3,
+                    "x": 813.03,
                     "y": 17,
-                    "width": 317.33,
+                    "width": 199.63,
                     "height": 11
                   },
                   "styles": {
                     "display": "flex",
                     "position": "static",
-                    "width": "317.328px",
+                    "width": "199.625px",
                     "height": "11px",
                     "minWidth": "0px",
                     "minHeight": "auto",
@@ -9353,21 +9353,21 @@
                     "overflow": "visible",
                     "opacity": "1"
                   },
-                  "text": "daemon127.0.0.1:5174v0.0.4 · pid 1486573 · up 12s"
+                  "text": "daemon127.0.0.1:5174v0.0.4 · pid 1497676 · up 12sv0.0.4"
                 },
                 "needs-orch": {
                   "selector": "[data-testid=\"needs-orch\"]",
                   "found": true,
                   "box": {
-                    "x": 826.63,
+                    "x": 1033.66,
                     "y": 11.5,
-                    "width": 106.42,
+                    "width": 25.2,
                     "height": 22
                   },
                   "styles": {
                     "display": "flex",
                     "position": "static",
-                    "width": "106.422px",
+                    "width": "25.2031px",
                     "height": "22px",
                     "minWidth": "auto",
                     "minHeight": "auto",
@@ -9401,15 +9401,15 @@
                   "selector": "[data-testid=\"live-status\"]",
                   "found": true,
                   "box": {
-                    "x": 966.05,
+                    "x": 1079.86,
                     "y": 17,
-                    "width": 120.22,
+                    "width": 26.41,
                     "height": 11
                   },
                   "styles": {
                     "display": "flex",
                     "position": "static",
-                    "width": "120.219px",
+                    "width": "26.4062px",
                     "height": "11px",
                     "minWidth": "auto",
                     "minHeight": "auto",
@@ -9437,7 +9437,7 @@
                     "overflow": "visible",
                     "opacity": "1"
                   },
-                  "text": "streamstream live"
+                  "text": "streamlive"
                 },
                 "find": {
                   "selector": "[data-testid=\"find-combobox\"]",
@@ -9731,7 +9731,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "awaitingstalledfailedrunningqueuedpendingcompletedcancelledstate = what a task IS · 0 need orch · liveread-only · parley never merges"
+                  "text": "awaitingstalledfailedrunningqueuedpendingcompletedcancelled0 need orch · liveread-only · parley never merges"
                 }
               }
             },
@@ -9785,7 +9785,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "Skip to navigationSkip to findSkip to main contentDaemon offlineparleyconsoleFleet1 tasks · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5174v…"
+                  "text": "Skip to navigationSkip to findSkip to main contentparleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5174v0.0.4 · pid 149…"
                 },
                 "header": {
                   "selector": ".pc-shell__header",
@@ -9827,7 +9827,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "parleyconsoleFleet1 tasks · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5174v0.0.4 · pid 1486573 · up 12sneeds orch0streamstream live03:54:30…"
+                  "text": "parleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5174v0.0.4 · pid 1497676 · up 12sv0.0.4needs orch0streamlive04:30:45Se…"
                 },
                 "brand": {
                   "selector": ".pc-shell__brand",
@@ -9877,13 +9877,13 @@
                   "box": {
                     "x": 129,
                     "y": 4.75,
-                    "width": 348.48,
+                    "width": 342.78,
                     "height": 35.5
                   },
                   "styles": {
                     "display": "flex",
                     "position": "static",
-                    "width": "348.484px",
+                    "width": "342.781px",
                     "height": "35.5px",
                     "minWidth": "0px",
                     "minHeight": "auto",
@@ -9911,13 +9911,13 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "Fleet1 tasks · 0 need actionRunno runTaskt1Metricsall hands"
+                  "text": "Fleet1 task · 0 need actionRunno runTaskt1Metricsall hands"
                 },
                 "status": {
                   "selector": ".pc-shell__status",
                   "found": true,
                   "box": {
-                    "x": 622.2,
+                    "x": 668.41,
                     "y": 17,
                     "width": 351.42,
                     "height": 11
@@ -9953,13 +9953,13 @@
                     "overflow": "visible",
                     "opacity": "1"
                   },
-                  "text": "daemon127.0.0.1:5174v0.0.4 · pid 1486573 · up 12s"
+                  "text": "daemon127.0.0.1:5174v0.0.4 · pid 1497676 · up 12sv0.0.4"
                 },
                 "needs-orch": {
                   "selector": "[data-testid=\"needs-orch\"]",
                   "found": true,
                   "box": {
-                    "x": 1006.63,
+                    "x": 1052.83,
                     "y": 11.5,
                     "width": 106.42,
                     "height": 22
@@ -10001,15 +10001,15 @@
                   "selector": "[data-testid=\"live-status\"]",
                   "found": true,
                   "box": {
-                    "x": 1146.05,
+                    "x": 1192.25,
                     "y": 17,
-                    "width": 120.22,
+                    "width": 74.02,
                     "height": 11
                   },
                   "styles": {
                     "display": "flex",
                     "position": "static",
-                    "width": "120.219px",
+                    "width": "74.0156px",
                     "height": "11px",
                     "minWidth": "auto",
                     "minHeight": "auto",
@@ -10037,7 +10037,7 @@
                     "overflow": "visible",
                     "opacity": "1"
                   },
-                  "text": "streamstream live"
+                  "text": "streamlive"
                 },
                 "find": {
                   "selector": "[data-testid=\"find-combobox\"]",
@@ -10331,7 +10331,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "awaitingstalledfailedrunningqueuedpendingcompletedcancelledstate = what a task IS · 0 need orch · liveread-only · parley never merges"
+                  "text": "awaitingstalledfailedrunningqueuedpendingcompletedcancelled0 need orch · liveread-only · parley never merges"
                 }
               }
             },
@@ -10385,7 +10385,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "Skip to navigationSkip to findSkip to main contentDaemon offlineparleyconsoleFleet1 tasks · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5174v…"
+                  "text": "Skip to navigationSkip to findSkip to main contentparleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5174v0.0.4 · pid 149…"
                 },
                 "header": {
                   "selector": ".pc-shell__header",
@@ -10427,7 +10427,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "parleyconsoleFleet1 tasks · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5174v0.0.4 · pid 1486573 · up 12sneeds orch0streamstream live03:54:30…"
+                  "text": "parleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5174v0.0.4 · pid 1497676 · up 12sv0.0.4needs orch0streamlive04:30:45Se…"
                 },
                 "brand": {
                   "selector": ".pc-shell__brand",
@@ -10477,13 +10477,13 @@
                   "box": {
                     "x": 129,
                     "y": 4.75,
-                    "width": 348.48,
+                    "width": 342.78,
                     "height": 35.5
                   },
                   "styles": {
                     "display": "flex",
                     "position": "static",
-                    "width": "348.484px",
+                    "width": "342.781px",
                     "height": "35.5px",
                     "minWidth": "0px",
                     "minHeight": "auto",
@@ -10511,13 +10511,13 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "Fleet1 tasks · 0 need actionRunno runTaskt1Metricsall hands"
+                  "text": "Fleet1 task · 0 need actionRunno runTaskt1Metricsall hands"
                 },
                 "status": {
                   "selector": ".pc-shell__status",
                   "found": true,
                   "box": {
-                    "x": 1082.2,
+                    "x": 1128.41,
                     "y": 17,
                     "width": 351.42,
                     "height": 11
@@ -10553,13 +10553,13 @@
                     "overflow": "visible",
                     "opacity": "1"
                   },
-                  "text": "daemon127.0.0.1:5174v0.0.4 · pid 1486573 · up 12s"
+                  "text": "daemon127.0.0.1:5174v0.0.4 · pid 1497676 · up 12sv0.0.4"
                 },
                 "needs-orch": {
                   "selector": "[data-testid=\"needs-orch\"]",
                   "found": true,
                   "box": {
-                    "x": 1466.63,
+                    "x": 1512.83,
                     "y": 11.5,
                     "width": 106.42,
                     "height": 22
@@ -10601,15 +10601,15 @@
                   "selector": "[data-testid=\"live-status\"]",
                   "found": true,
                   "box": {
-                    "x": 1606.05,
+                    "x": 1652.25,
                     "y": 17,
-                    "width": 120.22,
+                    "width": 74.02,
                     "height": 11
                   },
                   "styles": {
                     "display": "flex",
                     "position": "static",
-                    "width": "120.219px",
+                    "width": "74.0156px",
                     "height": "11px",
                     "minWidth": "auto",
                     "minHeight": "auto",
@@ -10637,7 +10637,7 @@
                     "overflow": "visible",
                     "opacity": "1"
                   },
-                  "text": "streamstream live"
+                  "text": "streamlive"
                 },
                 "find": {
                   "selector": "[data-testid=\"find-combobox\"]",
@@ -10931,7 +10931,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "awaitingstalledfailedrunningqueuedpendingcompletedcancelledstate = what a task IS · 0 need orch · liveread-only · parley never merges"
+                  "text": "awaitingstalledfailedrunningqueuedpendingcompletedcancelled0 need orch · liveread-only · parley never merges"
                 }
               }
             }
@@ -10993,7 +10993,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "Skip to navigationSkip to findSkip to main contentDaemon offlineparleyconsoleFleet1 tasks · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5174v…"
+              "text": "Skip to navigationSkip to findSkip to main contentparleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5174v0.0.4 · pid 149…"
             },
             "header": {
               "selector": ".pc-shell__header",
@@ -11029,19 +11029,19 @@
                 "borderRightColor": "rgb(227, 232, 236)",
                 "gridTemplateRows": "none",
                 "gridTemplateColumns": "none",
-                "gap": "18px",
-                "padding": "0px 14px",
+                "gap": "10px",
+                "padding": "0px 10px",
                 "margin": "0px",
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "parleyconsoleFleet1 tasks · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5174v0.0.4 · pid 1486573 · up 12sneeds orch0streamstream live03:54:30…"
+              "text": "parleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5174v0.0.4 · pid 1497676 · up 12sv0.0.4needs orch0streamlive04:30:44Se…"
             },
             "brand": {
               "selector": ".pc-shell__brand",
               "found": true,
               "box": {
-                "x": 14,
+                "x": 10,
                 "y": 11.5,
                 "width": 86,
                 "height": 22
@@ -11083,16 +11083,16 @@
               "selector": "[data-testid=\"shell-nav\"]",
               "found": true,
               "box": {
-                "x": 129,
-                "y": 4.75,
-                "width": 329.3,
-                "height": 35.5
+                "x": 125,
+                "y": 11,
+                "width": 218.22,
+                "height": 23
               },
               "styles": {
                 "display": "flex",
                 "position": "static",
-                "width": "329.297px",
-                "height": "35.5px",
+                "width": "218.219px",
+                "height": "23px",
                 "minWidth": "0px",
                 "minHeight": "auto",
                 "backgroundColor": "rgba(0, 0, 0, 0)",
@@ -11119,21 +11119,21 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "Fleet1 tasks · 0 need actionRunno runTaskt1Metricsall hands"
+              "text": "Fleet1 task · 0 need actionRunno runTaskt1Metricsall hands"
             },
             "status": {
               "selector": ".pc-shell__status",
               "found": true,
               "box": {
-                "x": 476.3,
+                "x": 813.03,
                 "y": 17,
-                "width": 317.33,
+                "width": 199.63,
                 "height": 11
               },
               "styles": {
                 "display": "flex",
                 "position": "static",
-                "width": "317.328px",
+                "width": "199.625px",
                 "height": "11px",
                 "minWidth": "0px",
                 "minHeight": "auto",
@@ -11161,21 +11161,21 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "daemon127.0.0.1:5174v0.0.4 · pid 1486573 · up 12s"
+              "text": "daemon127.0.0.1:5174v0.0.4 · pid 1497676 · up 12sv0.0.4"
             },
             "needs-orch": {
               "selector": "[data-testid=\"needs-orch\"]",
               "found": true,
               "box": {
-                "x": 826.63,
+                "x": 1033.66,
                 "y": 11.5,
-                "width": 106.42,
+                "width": 25.2,
                 "height": 22
               },
               "styles": {
                 "display": "flex",
                 "position": "static",
-                "width": "106.422px",
+                "width": "25.2031px",
                 "height": "22px",
                 "minWidth": "auto",
                 "minHeight": "auto",
@@ -11209,15 +11209,15 @@
               "selector": "[data-testid=\"live-status\"]",
               "found": true,
               "box": {
-                "x": 966.05,
+                "x": 1079.86,
                 "y": 17,
-                "width": 120.22,
+                "width": 26.41,
                 "height": 11
               },
               "styles": {
                 "display": "flex",
                 "position": "static",
-                "width": "120.219px",
+                "width": "26.4062px",
                 "height": "11px",
                 "minWidth": "auto",
                 "minHeight": "auto",
@@ -11245,7 +11245,7 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "streamstream live"
+              "text": "streamlive"
             },
             "find": {
               "selector": "[data-testid=\"find-combobox\"]",
@@ -11539,7 +11539,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "awaitingstalledfailedrunningqueuedpendingcompletedcancelledstate = what a task IS · 0 need orch · liveread-only · parley never merges"
+              "text": "awaitingstalledfailedrunningqueuedpendingcompletedcancelled0 need orch · liveread-only · parley never merges"
             }
           }
         },
@@ -11593,7 +11593,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "Skip to navigationSkip to findSkip to main contentDaemon offlineparleyconsoleFleet1 tasks · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5174v…"
+              "text": "Skip to navigationSkip to findSkip to main contentparleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5174v0.0.4 · pid 149…"
             },
             "header": {
               "selector": ".pc-shell__header",
@@ -11635,7 +11635,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "parleyconsoleFleet1 tasks · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5174v0.0.4 · pid 1486573 · up 12sneeds orch0streamstream live03:54:30…"
+              "text": "parleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5174v0.0.4 · pid 1497676 · up 12sv0.0.4needs orch0streamlive04:30:45Se…"
             },
             "brand": {
               "selector": ".pc-shell__brand",
@@ -11685,13 +11685,13 @@
               "box": {
                 "x": 129,
                 "y": 4.75,
-                "width": 348.48,
+                "width": 342.78,
                 "height": 35.5
               },
               "styles": {
                 "display": "flex",
                 "position": "static",
-                "width": "348.484px",
+                "width": "342.781px",
                 "height": "35.5px",
                 "minWidth": "0px",
                 "minHeight": "auto",
@@ -11719,13 +11719,13 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "Fleet1 tasks · 0 need actionRunno runTaskt1Metricsall hands"
+              "text": "Fleet1 task · 0 need actionRunno runTaskt1Metricsall hands"
             },
             "status": {
               "selector": ".pc-shell__status",
               "found": true,
               "box": {
-                "x": 622.2,
+                "x": 668.41,
                 "y": 17,
                 "width": 351.42,
                 "height": 11
@@ -11761,13 +11761,13 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "daemon127.0.0.1:5174v0.0.4 · pid 1486573 · up 12s"
+              "text": "daemon127.0.0.1:5174v0.0.4 · pid 1497676 · up 12sv0.0.4"
             },
             "needs-orch": {
               "selector": "[data-testid=\"needs-orch\"]",
               "found": true,
               "box": {
-                "x": 1006.63,
+                "x": 1052.83,
                 "y": 11.5,
                 "width": 106.42,
                 "height": 22
@@ -11809,15 +11809,15 @@
               "selector": "[data-testid=\"live-status\"]",
               "found": true,
               "box": {
-                "x": 1146.05,
+                "x": 1192.25,
                 "y": 17,
-                "width": 120.22,
+                "width": 74.02,
                 "height": 11
               },
               "styles": {
                 "display": "flex",
                 "position": "static",
-                "width": "120.219px",
+                "width": "74.0156px",
                 "height": "11px",
                 "minWidth": "auto",
                 "minHeight": "auto",
@@ -11845,7 +11845,7 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "streamstream live"
+              "text": "streamlive"
             },
             "find": {
               "selector": "[data-testid=\"find-combobox\"]",
@@ -12139,7 +12139,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "awaitingstalledfailedrunningqueuedpendingcompletedcancelledstate = what a task IS · 0 need orch · liveread-only · parley never merges"
+              "text": "awaitingstalledfailedrunningqueuedpendingcompletedcancelled0 need orch · liveread-only · parley never merges"
             }
           }
         },
@@ -12193,7 +12193,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "Skip to navigationSkip to findSkip to main contentDaemon offlineparleyconsoleFleet1 tasks · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5174v…"
+              "text": "Skip to navigationSkip to findSkip to main contentparleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5174v0.0.4 · pid 149…"
             },
             "header": {
               "selector": ".pc-shell__header",
@@ -12235,7 +12235,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "parleyconsoleFleet1 tasks · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5174v0.0.4 · pid 1486573 · up 12sneeds orch0streamstream live03:54:30…"
+              "text": "parleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5174v0.0.4 · pid 1497676 · up 12sv0.0.4needs orch0streamlive04:30:45Se…"
             },
             "brand": {
               "selector": ".pc-shell__brand",
@@ -12285,13 +12285,13 @@
               "box": {
                 "x": 129,
                 "y": 4.75,
-                "width": 348.48,
+                "width": 342.78,
                 "height": 35.5
               },
               "styles": {
                 "display": "flex",
                 "position": "static",
-                "width": "348.484px",
+                "width": "342.781px",
                 "height": "35.5px",
                 "minWidth": "0px",
                 "minHeight": "auto",
@@ -12319,13 +12319,13 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "Fleet1 tasks · 0 need actionRunno runTaskt1Metricsall hands"
+              "text": "Fleet1 task · 0 need actionRunno runTaskt1Metricsall hands"
             },
             "status": {
               "selector": ".pc-shell__status",
               "found": true,
               "box": {
-                "x": 1082.2,
+                "x": 1128.41,
                 "y": 17,
                 "width": 351.42,
                 "height": 11
@@ -12361,13 +12361,13 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "daemon127.0.0.1:5174v0.0.4 · pid 1486573 · up 12s"
+              "text": "daemon127.0.0.1:5174v0.0.4 · pid 1497676 · up 12sv0.0.4"
             },
             "needs-orch": {
               "selector": "[data-testid=\"needs-orch\"]",
               "found": true,
               "box": {
-                "x": 1466.63,
+                "x": 1512.83,
                 "y": 11.5,
                 "width": 106.42,
                 "height": 22
@@ -12409,15 +12409,15 @@
               "selector": "[data-testid=\"live-status\"]",
               "found": true,
               "box": {
-                "x": 1606.05,
+                "x": 1652.25,
                 "y": 17,
-                "width": 120.22,
+                "width": 74.02,
                 "height": 11
               },
               "styles": {
                 "display": "flex",
                 "position": "static",
-                "width": "120.219px",
+                "width": "74.0156px",
                 "height": "11px",
                 "minWidth": "auto",
                 "minHeight": "auto",
@@ -12445,7 +12445,7 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "streamstream live"
+              "text": "streamlive"
             },
             "find": {
               "selector": "[data-testid=\"find-combobox\"]",
@@ -12739,7 +12739,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "awaitingstalledfailedrunningqueuedpendingcompletedcancelledstate = what a task IS · 0 need orch · liveread-only · parley never merges"
+              "text": "awaitingstalledfailedrunningqueuedpendingcompletedcancelled0 need orch · liveread-only · parley never merges"
             }
           }
         }
@@ -12794,7 +12794,7 @@
               "overflow": "hidden",
               "opacity": "1"
             },
-            "text": "Skip to navigationSkip to findSkip to main contentDaemon offlineparleyconsoleFleet0 tasks · 0 need actionRunno runTaskno taskMetricsofflinedaemon127.0.0.1:51…"
+            "text": "Skip to navigationSkip to findSkip to main contentparleyconsoleFleet0 tasks · 0 need actionRunno runTaskno taskMetricsofflinedaemon127.0.0.1:5173unreachableu…"
           },
           "header": {
             "selector": ".pc-shell__header",
@@ -12836,7 +12836,7 @@
               "overflow": "hidden",
               "opacity": "1"
             },
-            "text": "parleyconsoleFleet0 tasks · 0 need actionRunno runTaskno taskMetricsofflinedaemon127.0.0.1:5173unreachableneeds orch0streamoffline03:54:28Settings"
+            "text": "parleyconsoleFleet0 tasks · 0 need actionRunno runTaskno taskMetricsofflinedaemon127.0.0.1:5173unreachableunreachableneeds orch0streamoffline04:30:43Settings"
           },
           "brand": {
             "selector": ".pc-shell__brand",
@@ -12962,7 +12962,7 @@
               "overflow": "visible",
               "opacity": "1"
             },
-            "text": "daemon127.0.0.1:5173unreachable"
+            "text": "daemon127.0.0.1:5173unreachableunreachable"
           },
           "needs-orch": {
             "selector": "[data-testid=\"needs-orch\"]",
@@ -13340,7 +13340,7 @@
               "overflow": "hidden",
               "opacity": "1"
             },
-            "text": "awaitingstalledfailedrunningqueuedpendingcompletedcancelledstate = what a task IS · 0 need orch · offlineread-only · parley never merges"
+            "text": "awaitingstalledfailedrunningqueuedpendingcompletedcancelled0 need orch · offlineread-only · parley never merges"
           }
         }
       },
@@ -13394,7 +13394,7 @@
               "overflow": "hidden",
               "opacity": "1"
             },
-            "text": "Skip to navigationSkip to findSkip to main contentDaemon offlineparleyconsoleFleet1 tasks · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5173v…"
+            "text": "Skip to navigationSkip to findSkip to main contentparleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 149…"
           },
           "header": {
             "selector": ".pc-shell__header",
@@ -13436,7 +13436,7 @@
               "overflow": "hidden",
               "opacity": "1"
             },
-            "text": "parleyconsoleFleet1 tasks · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 1486573 · up 10sneeds orch0streamstream live03:54:28…"
+            "text": "parleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 1497676 · up 10sv0.0.4needs orch0streamlive04:30:43Se…"
           },
           "brand": {
             "selector": ".pc-shell__brand",
@@ -13486,13 +13486,13 @@
             "box": {
               "x": 129,
               "y": 4.75,
-              "width": 348.48,
+              "width": 342.78,
               "height": 35.5
             },
             "styles": {
               "display": "flex",
               "position": "static",
-              "width": "348.484px",
+              "width": "342.781px",
               "height": "35.5px",
               "minWidth": "0px",
               "minHeight": "auto",
@@ -13520,13 +13520,13 @@
               "overflow": "hidden",
               "opacity": "1"
             },
-            "text": "Fleet1 tasks · 0 need actionRunno runTaskt1Metricsall hands"
+            "text": "Fleet1 task · 0 need actionRunno runTaskt1Metricsall hands"
           },
           "status": {
             "selector": ".pc-shell__status",
             "found": true,
             "box": {
-              "x": 622.2,
+              "x": 668.41,
               "y": 17,
               "width": 351.42,
               "height": 11
@@ -13562,13 +13562,13 @@
               "overflow": "visible",
               "opacity": "1"
             },
-            "text": "daemon127.0.0.1:5173v0.0.4 · pid 1486573 · up 10s"
+            "text": "daemon127.0.0.1:5173v0.0.4 · pid 1497676 · up 10sv0.0.4"
           },
           "needs-orch": {
             "selector": "[data-testid=\"needs-orch\"]",
             "found": true,
             "box": {
-              "x": 1006.63,
+              "x": 1052.83,
               "y": 11.5,
               "width": 106.42,
               "height": 22
@@ -13610,15 +13610,15 @@
             "selector": "[data-testid=\"live-status\"]",
             "found": true,
             "box": {
-              "x": 1146.05,
+              "x": 1192.25,
               "y": 17,
-              "width": 120.22,
+              "width": 74.02,
               "height": 11
             },
             "styles": {
               "display": "flex",
               "position": "static",
-              "width": "120.219px",
+              "width": "74.0156px",
               "height": "11px",
               "minWidth": "auto",
               "minHeight": "auto",
@@ -13646,7 +13646,7 @@
               "overflow": "visible",
               "opacity": "1"
             },
-            "text": "streamstream live"
+            "text": "streamlive"
           },
           "find": {
             "selector": "[data-testid=\"find-combobox\"]",
@@ -13940,7 +13940,7 @@
               "overflow": "hidden",
               "opacity": "1"
             },
-            "text": "awaitingstalledfailedrunningqueuedpendingcompletedcancelledstate = what a task IS · 0 need orch · liveread-only · parley never merges"
+            "text": "awaitingstalledfailedrunningqueuedpendingcompletedcancelled0 need orch · liveread-only · parley never merges"
           }
         }
       },
@@ -13949,13 +13949,13 @@
           "url": "http://127.0.0.1:5174/",
           "violations": [],
           "passes": 34,
-          "incomplete": 2,
+          "incomplete": 1,
           "inapplicable": 54
         },
         "aria": {
           "api": "locator.ariaSnapshot",
           "selector": "[data-testid=\"shell\"]",
-          "tree": "- link \"Skip to navigation\":\n  - /url: \"#shell-nav\"\n- link \"Skip to find\":\n  - /url: \"#find-input-target\"\n- link \"Skip to main content\":\n  - /url: \"#main-content\"\n- text: Reconnecting to daemon stream\n- banner:\n  - img \"Parley\"\n  - text: parley console\n  - navigation \"Screens\":\n    - tablist \"Console screens\":\n      - tab \"Fleet 1 tasks · 0 need action\" [selected]\n      - tab \"Run no run\"\n      - tab \"Task t1\"\n      - tab \"Metrics all hands\"\n  - text: daemon 127.0.0.1:5174 v0.0.4 · pid 1486573 · up 13s needs orch 0 stream stream live\n  - time: 03:54:31\n  - button \"Settings\"\n- complementary \"Left rail\":\n  - text: Find tasks and sessions\n  - combobox \"Find tasks and sessions\"\n  - text: navigator Scope, state filter, and list navigation land with each screen ticket.\n- main:\n  - tabpanel \"Fleet 1 tasks · 0 need action\":\n    - text: center screen\n    - heading \"Fleet board\" [level=1]\n    - paragraph: KPI strip, runs table, and tasks table land in the fleet ticket. Shell chrome (nav, find, settings, honesty) is live.\n- complementary \"Attention rail\": attention · firehose Attention queue and event firehose land with the fleet ticket.\n- contentinfo: awaiting stalled failed running queued pending completed cancelled state = what a task IS · 0 need orch · live read-only · parley never merges"
+          "tree": "- link \"Skip to navigation\":\n  - /url: \"#shell-nav\"\n- link \"Skip to find\":\n  - /url: \"#find-input-target\"\n- link \"Skip to main content\":\n  - /url: \"#main-content\"\n- banner:\n  - img \"Parley\"\n  - text: parley console\n  - navigation \"Screens\":\n    - tablist \"Console screens\":\n      - tab \"Fleet 1 task · 0 need action\" [selected]\n      - tab \"Run no run\"\n      - tab \"Task t1\"\n      - tab \"Metrics all hands\"\n  - text: daemon 127.0.0.1:5174 v0.0.4 · pid 1497676 · up 13s needs orch 0 stream live\n  - time: 04:30:46\n  - button \"Settings\"\n- complementary \"Left rail\":\n  - text: Find tasks and sessions\n  - combobox \"Find tasks and sessions\"\n  - text: navigator Scope, state filter, and list navigation land with each screen ticket.\n- main:\n  - tabpanel \"Fleet 1 task · 0 need action\":\n    - text: center screen\n    - heading \"Fleet board\" [level=1]\n    - paragraph: KPI strip, runs table, and tasks table land in the fleet ticket. Shell chrome (nav, find, settings, honesty) is live.\n- complementary \"Attention rail\": attention · firehose Attention queue and event firehose land with the fleet ticket.\n- contentinfo: awaiting stalled failed running queued pending completed cancelled 0 need orch · live read-only · parley never merges"
         },
         "keyboardWalk": {
           "focusableCount": 9,
@@ -13972,18 +13972,18 @@
             {
               "step": 1,
               "key": "Enter",
-              "tag": "body",
+              "tag": "nav",
               "role": null,
-              "testId": null,
-              "text": ""
+              "testId": "shell-nav",
+              "text": "Fleet1 task · 0 need actionRunno runTaskt1Metricsall hands"
             }
           ],
           "entered": true,
           "leftBody": true
         }
       },
-      "recordedAt": "2026-08-06T07:54:31.744Z"
+      "recordedAt": "2026-08-06T08:30:46.559Z"
     }
   },
-  "updatedAt": "2026-08-06T07:54:31.744Z"
+  "updatedAt": "2026-08-06T08:30:46.559Z"
 }

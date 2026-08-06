@@ -16,9 +16,11 @@ parallel; this file is the conflict fence.
 | `src/chrome/**` | #354 | Header, nav, find, settings, footer, accelerators. |
 | `src/data/**` | #352 | Extend via **new files only** if a projection is missing. |
 | `index.html` | #354 | SPA shell. |
+| `verify/lib/measure.mjs` `DEFAULT_SELECTORS` | #354 | Shell-owned. Screens **must not** edit it. |
+| `verify/lib/contrast.mjs` | #354 | Shared contrast helper; screens may import. |
 
-Screen tickets may **import** chrome types/hooks that are exported for them
-(e.g. `ScreenId`, settings, selected-entity props). They must not edit chrome
+Screen tickets may **import** chrome types that are exported for them
+(`ScreenId`, `ScreenMountProps`, settings helpers). They must not edit chrome
 source or global CSS.
 
 ## Mount points (one directory per screen)
@@ -33,11 +35,11 @@ source or global CSS.
 ### What each screen ticket **may** create/edit
 
 - Everything under its own directory: `src/screens/<name>/**`
-- Screen-local CSS modules or `*.css` **inside that directory only**
-  (class names must be prefixed `pc-<name>-` to avoid collisions)
+- Screen-local CSS **inside that directory only** (prefix classes `pc-<name>-`)
 - Unit/integration tests under `packages/dashboard/tests/` named for the screen
-- Verify ledger demos under `verify/ledger/issue-NNN/` and optional demo scripts
-  under `verify/demos/` (append-only; do not rewrite other tickets' demos)
+  (prefer own fixture files under `tests/<screen>/`; see fixtures rule below)
+- Verify demos under `verify/demos/` and ledger under `verify/ledger/issue-NNN/`
+  (via the registration protocol below)
 
 ### What each screen ticket **must not** touch
 
@@ -45,40 +47,126 @@ source or global CSS.
 - `src/chrome/**`, `src/Shell.tsx`, `src/App.tsx` (except importing exported types)
 - Another screen's directory
 - `src/data/**` except additive new projection files with a note in the PR
-- `packages/ui/**`, daemon/core source, package.json deps / lockfile
+- `packages/ui/**`, daemon/core source, package.json **dependencies** / lockfile
+- `verify/lib/measure.mjs` `DEFAULT_SELECTORS` (pass your own `targets` instead)
 
 ## Props contract (shell → screen)
 
 ```ts
 export type ScreenId = "fleet" | "run" | "task" | "metrics";
 
-export interface ScreenProps {
-  /** Active screen id (the mounted component matches this). */
+/** Real export name — use this, not ScreenProps. */
+export interface ScreenMountProps {
   screen: ScreenId;
-  /** Navigate to another screen; shell owns the tablist. */
   navigate: (screen: ScreenId) => void;
-  /** Selected task id (find combobox / attention / fleet row). */
   selectedTaskId: string | null;
   setSelectedTaskId: (id: string | null) => void;
-  /** Selected run id (run tab / find / fleet). */
   selectedRunId: string | null;
   setSelectedRunId: (id: string | null) => void;
-  /** Live task snapshot + honesty from #352 — do not re-bootstrap SSE. */
-  // Screens receive data via their own hooks using the shared client pattern,
-  // or via props when the shell already holds selection state.
 }
 ```
 
-Shell mounts exactly one screen in `.pc-shell__center` (`#main-content`).
-Left-rail filter/nav lists and the right-rail attention/firehose are **screen
-territory** once those tickets land; until then the shell leaves rail slots as
-named empty regions (`data-testid="rail-left"`, `data-testid="rail-right"`)
-so geometry proofs stay stable. Screen tickets that need rail content should
-coordinate through Shell composition only if a follow-up explicitly expands
-the mount API — default is center-only.
+### Data-flow rule (decided)
+
+**Screens fetch their own data.** Each screen constructs or receives a
+`ParleyClient` the same way shell does (`new ParleyClient({ baseUrl: "" })`)
+and calls `#352` hooks (`useSnapshot`, `useRuns`, `useTaskDetail`, …) itself.
+
+The shell passes **only selection + navigation state** via `ScreenMountProps`.
+It does **not** pass snapshot/health/honesty props. Screens must not re-open a
+second SSE if they can share the same client instance later; for v1 parallel
+tickets, same-origin `ParleyClient({ baseUrl: "" })` per screen is acceptable
+and keeps lane isolation.
+
+Shell mounts exactly one screen in `#main-content` (the center region).
+Left/right rail content is screen territory once those tickets land; until then
+shell leaves named empty slots for geometry proofs.
 
 ## Hash routing
 
-Shell syncs `location.hash` as `#/fleet` | `#/run` | `#/task` | `#/metrics`
-(optional `?task=` / `?run=` query on the hash path is reserved for later).
+Shell syncs `location.hash` as `#/fleet` | `#/run` | `#/task` | `#/metrics`.
 Screen tickets must not introduce a second router.
+
+---
+
+## Shared-file registration protocol
+
+These five files are **shared** across shell + screen tickets. Editing them
+without a protocol is how parallel agents collide. Rules:
+
+### 1. `verify/demos/registry.mjs` (source of truth for runners)
+
+Every demo registers here as one entry:
+
+```js
+{ ticket: "issue-355", id: "fleet-board", run: runFleetBoardDemo }
+```
+
+- **Shell-owned demos** (`issue-353`, `issue-354`) stay at the top.
+- **Screen tickets append only** their entries (do not reorder or delete others).
+- `run-all.mjs` and `check.mjs` **import this registry** — they do not hard-code
+  demo lists beyond reading the registry.
+
+### 2. `verify/check.mjs` `TICKETS` map
+
+Derived from the registry (group by `ticket` → list of demo `id`s). Screen
+tickets do not hand-edit a parallel map; they add a registry entry and the
+check picks it up. If you must patch check.mjs for a screen-specific gate,
+add a `gates` function on the registry entry instead of branching in check.
+
+### 3. `verify/demos/run-all.mjs`
+
+Runs `registry` entries in order. No manual renumbering of "demo 4/5".
+
+### 4. `package.json` `verify:*` scripts
+
+Screen tickets **may** add a script:
+
+```json
+"verify:fleet": "node --import tsx verify/demos/fleet-board.mjs"
+```
+
+Do not rename or remove existing `verify`, `verify:check`, `verify:shell`,
+`verify:find`, or #353 scripts. Do not change `dependencies` / lockfile.
+
+### 5. `verify/lib/measure.mjs` `DEFAULT_SELECTORS`
+
+**Shell-owned.** Screens pass their own selector list:
+
+```js
+await measureAtViewports(page, {
+  url,
+  shotDir,
+  shotPrefix: "fleet",
+  targets: MY_FLEET_SELECTORS, // not DEFAULT_SELECTORS
+});
+```
+
+The measure API already accepts `opts.targets`. If you need a shared helper for
+a screen-family selector set, put it in `verify/lib/selectors-<screen>.mjs` —
+never edit `DEFAULT_SELECTORS`.
+
+### 6. `tests/fixtures.ts`
+
+**Additive-only-at-end** for cross-cutting helpers. Prefer:
+
+```
+tests/fleet/fixtures.ts
+tests/run/fixtures.ts
+```
+
+Do not rewrite existing exports in `tests/fixtures.ts`. If you must extend a
+shared envelope helper, append new named exports only.
+
+---
+
+## Verify demo file naming
+
+| Ticket | Demo file | Ledger dir |
+| --- | --- | --- |
+| #353 harness | `staged-daemon.mjs`, `intercept-error.mjs`, `reconnect.mjs` | `issue-353` |
+| #354 shell | `shell-chrome.mjs`, `find-honesty.mjs` | `issue-354` |
+| #355 fleet | `fleet-board.mjs` (suggested) | `issue-355` |
+| #356 run | `run-detail.mjs` | `issue-356` |
+| #357 task | `task-inspector.mjs` | `issue-357` |
+| #358 metrics | `metrics-board.mjs` | `issue-358` |

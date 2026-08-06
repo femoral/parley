@@ -2,6 +2,8 @@
  * Find combobox — task hits local (snapshot), session hits GET /sessions?q=.
  * ARIA combobox pattern: role=combobox, aria-expanded, aria-activedescendant,
  * listbox popup. Honesty states: idle / loading / error / no-match / results.
+ *
+ * Status/alert content lives OUTSIDE role=listbox (aria-required-children).
  */
 import {
   useCallback,
@@ -14,6 +16,7 @@ import {
   type RefObject,
 } from "react";
 import type { OrchestratorSession, ParleyClient, TaskEnvelope } from "@useparley/core";
+import { countNoun } from "./plural.js";
 
 const DEBOUNCE_MS = 200;
 const MAX_TASK_HITS = 12;
@@ -37,6 +40,8 @@ export interface FindComboboxProps {
   onSelectSession: (sessionId: string) => void;
   /** Imperative focus handle for `/` accelerator. */
   inputRef?: RefObject<HTMLInputElement | null>;
+  /** Where to put focus after a hit is selected (default: main content). */
+  focusAfterSelect?: () => void;
 }
 
 function matchTasks(tasks: readonly TaskEnvelope[], q: string): FindHit[] {
@@ -64,7 +69,7 @@ function sessionHits(sessions: readonly OrchestratorSession[]): FindHit[] {
     kind: "session" as const,
     id: s.id,
     label: s.id,
-    meta: `${s.task_count} task${s.task_count === 1 ? "" : "s"} · ${s.last_activity_at}`,
+    meta: `${countNoun(s.task_count, "task")} · ${s.last_activity_at}`,
   }));
 }
 
@@ -74,8 +79,10 @@ export function FindCombobox({
   onSelectTask,
   onSelectSession,
   inputRef: externalRef,
+  focusAfterSelect,
 }: FindComboboxProps) {
   const listId = useId();
+  const statusId = `${listId}-status`;
   const internalRef = useRef<HTMLInputElement>(null);
   const inputRef = externalRef ?? internalRef;
 
@@ -146,8 +153,17 @@ export function FindCombobox({
     [hits, listId],
   );
 
+  const showPopup = expanded && debounced !== "";
+  const showListbox = showPopup && hits.length > 0;
+  const showStatus =
+    showPopup &&
+    (status === "loading" ||
+      status === "error" ||
+      status === "no-match" ||
+      (sessionStatus === "error" && taskHits.length > 0));
+
   const activeDescendant =
-    expanded && activeIndex >= 0 && activeIndex < optionIds.length
+    showListbox && activeIndex >= 0 && activeIndex < optionIds.length
       ? optionIds[activeIndex]
       : undefined;
 
@@ -159,9 +175,13 @@ export function FindCombobox({
       setDebounced("");
       setExpanded(false);
       setActiveIndex(-1);
-      inputRef.current?.blur();
+      // Move focus somewhere sensible (main content), not body.
+      window.setTimeout(() => {
+        if (focusAfterSelect) focusAfterSelect();
+        else document.getElementById("main-content")?.focus();
+      }, 0);
     },
-    [onSelectTask, onSelectSession, inputRef],
+    [onSelectTask, onSelectSession, focusAfterSelect],
   );
 
   const onKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
@@ -201,8 +221,6 @@ export function FindCombobox({
     }
   };
 
-  const showPopup = expanded && debounced !== "";
-
   return (
     <div className="pc-find" data-testid="find-combobox" data-status={status}>
       <label className="pc-sr-only" htmlFor={`${listId}-input`}>
@@ -222,9 +240,10 @@ export function FindCombobox({
           spellCheck={false}
           aria-autocomplete="list"
           aria-expanded={showPopup}
-          aria-controls={listId}
+          aria-controls={showListbox ? listId : showStatus ? statusId : undefined}
           aria-activedescendant={activeDescendant}
           aria-haspopup="listbox"
+          aria-describedby={showStatus ? statusId : undefined}
           placeholder="filter tasks, runs, branches"
           value={query}
           onChange={(e) => {
@@ -234,7 +253,6 @@ export function FindCombobox({
           }}
           onFocus={() => setExpanded(true)}
           onBlur={() => {
-            // Delay so option mousedown can fire.
             window.setTimeout(() => setExpanded(false), 120);
           }}
           onKeyDown={onKeyDown}
@@ -244,37 +262,61 @@ export function FindCombobox({
       </div>
 
       {showPopup ? (
-        <div
-          className="pc-find__popup"
-          id={listId}
-          role="listbox"
-          aria-label="Find results"
-          data-testid="find-popup"
-        >
+        <div className="pc-find__popup" data-testid="find-popup">
+          {/* Honesty states live outside listbox (aria-required-children). */}
           {status === "loading" ? (
-            <div className="pc-find__state" role="status" data-testid="find-loading">
+            <div
+              id={statusId}
+              className="pc-find__state"
+              role="status"
+              data-testid="find-loading"
+            >
               Searching sessions…
             </div>
           ) : null}
           {status === "error" ? (
-            <div className="pc-find__state pc-find__state--error" role="alert" data-testid="find-error">
+            <div
+              id={statusId}
+              className="pc-find__state pc-find__state--error"
+              role="alert"
+              data-testid="find-error"
+            >
               {sessionError ?? "Session search failed"}
             </div>
           ) : null}
           {status === "no-match" ? (
-            <div className="pc-find__state" role="status" data-testid="find-empty">
+            <div id={statusId} className="pc-find__state" role="status" data-testid="find-empty">
               No match for “{debounced}”
             </div>
           ) : null}
-          {status === "results" || (sessionStatus === "error" && taskHits.length > 0)
-            ? hits.map((hit, i) => (
+          {sessionStatus === "error" && taskHits.length > 0 ? (
+            <div
+              id={status === "results" ? statusId : undefined}
+              className="pc-find__state pc-find__state--error"
+              role="status"
+            >
+              Sessions unavailable — showing local task hits
+            </div>
+          ) : null}
+
+          {showListbox ? (
+            <div
+              className="pc-find__listbox"
+              id={listId}
+              role="listbox"
+              aria-label="Find results"
+              data-testid="find-listbox"
+            >
+              {hits.map((hit, i) => (
                 <div
                   key={`${hit.kind}-${hit.id}`}
                   id={optionIds[i]}
                   role="option"
                   aria-selected={i === activeIndex}
                   className={
-                    i === activeIndex ? "pc-find__option pc-find__option--active" : "pc-find__option"
+                    i === activeIndex
+                      ? "pc-find__option pc-find__option--active"
+                      : "pc-find__option"
                   }
                   onMouseDown={(e) => {
                     e.preventDefault();
@@ -286,11 +328,7 @@ export function FindCombobox({
                   <span className="pc-find__option-label">{hit.label}</span>
                   <span className="pc-find__option-meta">{hit.meta}</span>
                 </div>
-              ))
-            : null}
-          {sessionStatus === "error" && taskHits.length > 0 ? (
-            <div className="pc-find__state pc-find__state--error" role="status">
-              Sessions unavailable — showing local task hits
+              ))}
             </div>
           ) : null}
         </div>

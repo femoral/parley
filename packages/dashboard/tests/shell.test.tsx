@@ -6,6 +6,8 @@ import { countNeedsOrch, attentionTaskIds } from "../src/chrome/attention.js";
 import { envelope } from "./fixtures.js";
 import { parseScreenHash, screenHash } from "../src/screens/types.js";
 import { loadSettings, saveSettings, DEFAULT_SETTINGS } from "../src/chrome/settings.js";
+import { buildTabSubs } from "../src/chrome/Header.js";
+import { countNoun, countNeedVerb } from "../src/chrome/plural.js";
 
 afterEach(() => {
   cleanup();
@@ -30,12 +32,15 @@ describe("Shell frame", () => {
     expect(screen.getByText("failed")).toBeTruthy();
   });
 
-  it("exposes skip links and live region", () => {
+  it("exposes skip links and live region; main-content is focusable", () => {
     render(<Shell />);
     expect(screen.getByTestId("skip-links")).toBeTruthy();
     expect(screen.getByRole("link", { name: /skip to navigation/i })).toBeTruthy();
-    expect(screen.getByRole("link", { name: /skip to main content/i })).toBeTruthy();
+    expect(screen.getByTestId("skip-main")).toBeTruthy();
     expect(screen.getByTestId("live-region")).toBeTruthy();
+    const main = document.getElementById("main-content");
+    expect(main).toBeTruthy();
+    expect(main?.getAttribute("tabindex")).toBe("-1");
   });
 
   it("navigates between the four screen mounts via tabs", () => {
@@ -50,12 +55,14 @@ describe("Shell frame", () => {
     expect(screen.getByTestId("screen-fleet")).toBeTruthy();
   });
 
-  it("opens settings surface and toggles follow logs", () => {
+  it("opens settings popover (aria-modal=false) and toggles follow logs", () => {
     render(<Shell />);
     fireEvent.click(screen.getByTestId("settings-open"));
-    const panel = screen.getByTestId("settings-surface");
-    expect(panel).toBeTruthy();
-    const follow = within(panel).getByTestId("settings-follow-logs") as HTMLInputElement;
+    const panel = screen.getByTestId("settings-panel");
+    expect(panel.getAttribute("aria-modal")).toBe("false");
+    const follow = within(screen.getByTestId("settings-surface")).getByTestId(
+      "settings-follow-logs",
+    ) as HTMLInputElement;
     expect(follow.checked).toBe(true);
     fireEvent.click(follow);
     expect(follow.checked).toBe(false);
@@ -70,6 +77,27 @@ describe("Shell frame", () => {
     expect(input.getAttribute("aria-expanded")).toBe("false");
     expect(input.getAttribute("aria-autocomplete")).toBe("list");
     expect(input.getAttribute("aria-haspopup")).toBe("listbox");
+  });
+});
+
+describe("pluralization", () => {
+  it("never says 1 tasks", () => {
+    expect(countNoun(1, "task")).toBe("1 task");
+    expect(countNoun(0, "task")).toBe("0 tasks");
+    expect(countNoun(2, "task")).toBe("2 tasks");
+    expect(countNeedVerb(1, "action")).toBe("1 needs action");
+    expect(countNeedVerb(3, "action")).toBe("3 need action");
+    const subs = buildTabSubs({
+      totalTasks: 1,
+      attentionCount: 1,
+      selectedRunId: null,
+      selectedTaskId: null,
+      firstRunLabel: null,
+      firstTaskId: null,
+      honestyPhase: "live",
+    });
+    expect(subs.fleet).toBe("1 task · 1 needs action");
+    expect(subs.fleet).not.toMatch(/1 tasks/);
   });
 });
 

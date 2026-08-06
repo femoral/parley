@@ -99,7 +99,8 @@ export async function measureContrast(page, selector) {
     const cr = ratio(fg, bg);
     const fontSize = parseFloat(cs.fontSize) || 0;
     const fontWeight = parseInt(cs.fontWeight, 10) || 400;
-    const large = fontSize >= 18 || (fontSize >= 14 && fontWeight >= 700);
+    // WCAG large text is 18pt (~24px) or 14pt (~18.67px) bold — not CSS px@18.
+    const large = fontSize >= 24 || (fontSize >= 18.67 && fontWeight >= 700);
     const aa = large ? cr >= 3 : cr >= 4.5;
     return {
       selector: sel,

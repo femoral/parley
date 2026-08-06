@@ -10,11 +10,12 @@ import { attentionTaskIds, countNeedsOrch } from "./chrome/attention.js";
 import { FindCombobox } from "./chrome/FindCombobox.js";
 import { FooterLegend } from "./chrome/FooterLegend.js";
 import { formatClock } from "./chrome/format.js";
-import { Header } from "./chrome/Header.js";
+import { buildTabSubs, Header } from "./chrome/Header.js";
 import { SettingsSurface } from "./chrome/SettingsSurface.js";
 import { SkipLinks } from "./chrome/SkipLinks.js";
 import { loadSettings, saveSettings, type ConsoleSettings } from "./chrome/settings.js";
 import { useAccelerators } from "./chrome/useAccelerators.js";
+import { countNeedVerb } from "./chrome/plural.js";
 import { FleetScreen } from "./screens/fleet/FleetScreen.js";
 import { MetricsScreen } from "./screens/metrics/MetricsScreen.js";
 import { RunScreen } from "./screens/run/RunScreen.js";
@@ -25,9 +26,27 @@ import {
   type ScreenId,
   type ScreenMountProps,
 } from "./screens/types.js";
+import type { HonestyPhase } from "./data/types.js";
 
 function createClient(): ParleyClient {
   return new ParleyClient({ baseUrl: "" });
+}
+
+/**
+ * Announce into a polite live region with a clear→set pulse so identical
+ * messages re-fire on repeated outages.
+ */
+function useLiveAnnouncer() {
+  const [liveMessage, setLiveMessage] = useState("");
+  const pulse = useRef(0);
+  const announce = useCallback((msg: string) => {
+    // Clear first so SR re-reads even when text matches the prior announcement.
+    setLiveMessage("");
+    pulse.current += 1;
+    const token = pulse.current % 2 === 0 ? "\u200b" : "";
+    window.setTimeout(() => setLiveMessage(`${msg}${token}`), 40);
+  }, []);
+  return { liveMessage, announce };
 }
 
 export function Shell() {
@@ -51,9 +70,13 @@ export function Shell() {
   const [settings, setSettings] = useState<ConsoleSettings>(() => loadSettings());
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [clock, setClock] = useState(() => formatClock());
-  const [liveMessage, setLiveMessage] = useState("");
+  const { liveMessage, announce } = useLiveAnnouncer();
   const findRef = useRef<HTMLInputElement>(null);
+  const settingsBtnRef = useRef<HTMLButtonElement>(null);
+  const mainRef = useRef<HTMLDivElement>(null);
   const prevAttention = useRef<number | null>(null);
+  const prevPhase = useRef<HonestyPhase | null>(null);
+  const everLive = useRef(false);
 
   const attentionCount = useMemo(
     () => countNeedsOrch(snapshot.tasks, runs.summaries),
@@ -86,23 +109,45 @@ export function Shell() {
     const base = "Parley Console";
     document.title = attentionCount > 0 ? `(${attentionCount}) ${base}` : base;
     if (prevAttention.current !== null && prevAttention.current !== attentionCount) {
-      setLiveMessage(
+      announce(
         attentionCount === 0
           ? "No items need the orchestrator"
-          : `${attentionCount} need the orchestrator`,
+          : countNeedVerb(attentionCount, "the orchestrator"),
       );
     }
     prevAttention.current = attentionCount;
-  }, [attentionCount]);
+  }, [attentionCount, announce]);
 
-  // Honesty live announcements
+  // Honesty live announcements — both directions; skip bootstrap offline flash.
   useEffect(() => {
-    if (honesty.phase === "offline") {
-      setLiveMessage("Daemon offline");
-    } else if (honesty.phase === "stale-reconnecting") {
-      setLiveMessage("Reconnecting to daemon stream");
+    const phase = honesty.phase;
+    const prev = prevPhase.current;
+    const isLiveish = phase === "live" || phase === "empty";
+
+    if (isLiveish) {
+      if (!everLive.current) {
+        // First successful live — do not announce bootstrap offline→live.
+        everLive.current = true;
+        prevPhase.current = phase;
+        return;
+      }
+      if (prev === "offline" || prev === "stale-reconnecting") {
+        announce("Connection restored");
+      }
+      prevPhase.current = phase;
+      return;
     }
-  }, [honesty.phase]);
+
+    // Degradation: only after we have been live at least once.
+    if (everLive.current) {
+      if (phase === "offline" && prev !== "offline") {
+        announce("Daemon offline");
+      } else if (phase === "stale-reconnecting" && prev !== "stale-reconnecting") {
+        announce("Reconnecting to daemon stream");
+      }
+    }
+    prevPhase.current = phase;
+  }, [honesty.phase, announce]);
 
   const onSettingsChange = useCallback((next: ConsoleSettings) => {
     setSettings(next);
@@ -111,6 +156,10 @@ export function Shell() {
 
   const closeOverlays = useCallback(() => {
     setSettingsOpen(false);
+  }, []);
+
+  const focusMain = useCallback(() => {
+    mainRef.current?.focus();
   }, []);
 
   const cycleAttention = useCallback(
@@ -145,34 +194,29 @@ export function Shell() {
 
   useAccelerators(settings, accelHandlers, findRef);
 
-  const tabSubs = useMemo((): Record<ScreenId, string> => {
-    const tasks = snapshot.totalTasks;
-    const need = attentionCount;
-    const runLabel = selectedRunId
-      ? selectedRunId.slice(0, 8)
-      : runs.summaries[0]
-        ? `${runs.summaries[0].workflow} · ${runs.summaries[0].run_id.slice(0, 8)}`
-        : "no run";
-    const taskLabel = selectedTaskId
-      ? selectedTaskId
-      : snapshot.tasks[0]
-        ? snapshot.tasks[0]!.task_id
-        : "no task";
-    return {
-      fleet: `${tasks} tasks · ${need} need action`,
-      run: runLabel,
-      task: taskLabel,
-      metrics: honesty.phase === "live" || honesty.phase === "empty" ? "all hands" : honesty.phase,
-    };
-  }, [
-    snapshot.totalTasks,
-    snapshot.tasks,
-    attentionCount,
-    selectedRunId,
-    selectedTaskId,
-    runs.summaries,
-    honesty.phase,
-  ]);
+  const tabSubs = useMemo(
+    () =>
+      buildTabSubs({
+        totalTasks: snapshot.totalTasks,
+        attentionCount,
+        selectedRunId,
+        selectedTaskId,
+        firstRunLabel: runs.summaries[0]
+          ? `${runs.summaries[0].workflow} · ${runs.summaries[0].run_id.slice(0, 8)}`
+          : null,
+        firstTaskId: snapshot.tasks[0]?.task_id ?? null,
+        honestyPhase: honesty.phase,
+      }),
+    [
+      snapshot.totalTasks,
+      snapshot.tasks,
+      attentionCount,
+      selectedRunId,
+      selectedTaskId,
+      runs.summaries,
+      honesty.phase,
+    ],
+  );
 
   const mountProps: ScreenMountProps = {
     screen,
@@ -192,7 +236,8 @@ export function Shell() {
           ? MetricsScreen
           : FleetScreen;
 
-  const footerNote = `state = what a task IS · ${attentionCount} need orch · ${honesty.phase}`;
+  // Short note — must fit footer meta without clipping at 1280/1460/1920.
+  const footerNote = `${countNeedVerb(attentionCount, "orch")} · ${honesty.phase}`;
 
   return (
     <div className="pc-shell" data-testid="shell" data-screen={screen}>
@@ -203,6 +248,7 @@ export function Shell() {
       </div>
 
       <Header
+        ref={settingsBtnRef}
         screen={screen}
         onNavigate={navigate}
         health={health}
@@ -212,6 +258,7 @@ export function Shell() {
         clock={clock}
         tabSubs={tabSubs}
         onOpenSettings={() => setSettingsOpen(true)}
+        settingsOpen={settingsOpen}
       />
 
       <div className="pc-shell__body" data-testid="shell-body">
@@ -225,12 +272,12 @@ export function Shell() {
               client={client}
               tasks={snapshot.tasks}
               inputRef={findRef}
+              focusAfterSelect={focusMain}
               onSelectTask={(id) => {
                 setSelectedTaskId(id);
                 navigate("task");
               }}
               onSelectSession={(_id) => {
-                // Session scope is a fleet-screen concern; land on fleet for now.
                 navigate("fleet");
               }}
             />
@@ -243,12 +290,19 @@ export function Shell() {
           </div>
         </aside>
 
-        <main className="pc-shell__center" data-testid="shell-center" tabIndex={-1}>
+        {/*
+          <main> is the landmark; tabpanel+id+tabIndex live on an inner div so
+          axe aria-allowed-role is clean (role=tabpanel is not valid on <main>).
+          Skip-to-main targets #main-content (the focusable tabpanel).
+        */}
+        <main className="pc-shell__center" data-testid="shell-center">
           <div
+            ref={mainRef}
             id="main-content"
-            role="tabpanel"
-            aria-labelledby={`pc-tab-${screen}`}
             className="pc-shell__tabpanel"
+            role="tabpanel"
+            tabIndex={-1}
+            aria-labelledby={`pc-tab-${screen}`}
           >
             <Screen {...mountProps} />
           </div>
@@ -275,6 +329,7 @@ export function Shell() {
         settings={settings}
         onChange={onSettingsChange}
         onClose={closeOverlays}
+        returnFocusRef={settingsBtnRef}
       />
     </div>
   );
