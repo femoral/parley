@@ -68,17 +68,142 @@ const SCREENS = [
 
 /**
  * Compact axe summary for the consolidated a11y table.
- * @param {object | undefined} axe
+ * @param {object | undefined | null} axe
  */
 function axeSummary(axe) {
-  if (!axe) return { present: false };
-  const violations = axe.violations ?? [];
+  if (!axe || typeof axe !== "object") return { present: false };
+  // Accept either a full axe report or an already-compact summary.
+  if (typeof axe.violations === "number" && axe.present === true) {
+    return /** @type {{ present: true, violations: number, ids?: string[], passes?: number, incomplete?: number }} */ (
+      axe
+    );
+  }
+  if (!Array.isArray(axe.violations) && axe.violations !== undefined) {
+    // Not an axe-shaped object (e.g. bare honesty state).
+    if (!("passes" in axe) && !("incomplete" in axe) && !("id" in axe)) {
+      return { present: false };
+    }
+  }
+  const violations = Array.isArray(axe.violations) ? axe.violations : [];
   return {
     present: true,
     violations: violations.length,
-    ids: violations.map((v) => v.id),
+    ids: violations.map((v) => (typeof v === "string" ? v : v.id)).filter(Boolean),
     passes: axe.passes,
     incomplete: axe.incomplete,
+  };
+}
+
+/**
+ * keyboardWalk has two historical ledger shapes:
+ *   1. Object `{ leftBody, path, focusableCount, ... }` (current collectA11y)
+ *   2. Array of path steps — either strings (`"button#nav-fleet[tab]"`, `"body"`)
+ *      or objects `{ tag, key, ... }` (older fleet-board demos)
+ * @param {unknown} kw
+ * @returns {boolean | null}
+ */
+function keyboardLeftBody(kw) {
+  if (kw == null) return null;
+  if (typeof kw === "object" && !Array.isArray(kw)) {
+    const obj = /** @type {Record<string, unknown>} */ (kw);
+    if (typeof obj.leftBody === "boolean") return obj.leftBody;
+    if (Array.isArray(obj.path)) {
+      const fromPath = keyboardLeftBody(obj.path);
+      if (fromPath !== null) return fromPath;
+    }
+    return null;
+  }
+  if (!Array.isArray(kw) || kw.length === 0) return null;
+  return kw.some((step) => {
+    if (typeof step === "string") {
+      const s = step.trim().toLowerCase();
+      if (s === "" || s === "body" || s === "html") return false;
+      // Path tokens like "a#skip-main" / "button#nav-fleet[tab]" left body.
+      return true;
+    }
+    if (step && typeof step === "object") {
+      const tag = String(/** @type {{ tag?: string }} */ (step).tag ?? "").toLowerCase();
+      return tag !== "" && tag !== "body" && tag !== "html";
+    }
+    return false;
+  });
+}
+
+/**
+ * Best-effort violation count for a demo entry (top-level a11y, a11yByState, or
+ * find-honesty-style state map with nested axe if present).
+ * @param {object} demo
+ * @returns {{ violations: number | null, axePresent: boolean, keyboardLeftBody: boolean | null }}
+ */
+function demoA11yRollup(demo) {
+  const a11y = demo.a11y ?? null;
+  const byState = demo.a11yByState ?? null;
+  const states = demo.states ?? null;
+
+  /** @type {object | null} */
+  let axe = null;
+  if (a11y?.axe) axe = a11y.axe;
+  else if (a11y && Array.isArray(a11y.violations)) axe = a11y;
+
+  let violations = null;
+  let axePresent = false;
+  const top = axeSummary(axe);
+  if (top.present) {
+    axePresent = true;
+    violations = top.violations ?? 0;
+  }
+
+  if (byState && typeof byState === "object") {
+    let sum = 0;
+    let any = false;
+    for (const v of Object.values(byState)) {
+      const block = /** @type {{ axe?: object }} */ (v);
+      const s = axeSummary(block?.axe ?? block);
+      if (s.present) {
+        any = true;
+        sum += s.violations ?? 0;
+      }
+    }
+    if (any) {
+      axePresent = true;
+      // Prefer sum of per-state scans when top-level was missing.
+      if (violations === null) violations = sum;
+    }
+  }
+
+  // Older honesty demos may nest axe under states.<name>.axe (none today for
+  // find-honesty — it is ARIA-status only — but parse if present).
+  if (states && typeof states === "object" && violations === null) {
+    let sum = 0;
+    let any = false;
+    for (const v of Object.values(states)) {
+      if (!v || typeof v !== "object") continue;
+      const block = /** @type {{ axe?: object }} */ (v);
+      const s = axeSummary(block.axe);
+      if (s.present) {
+        any = true;
+        sum += s.violations ?? 0;
+      }
+    }
+    if (any) {
+      axePresent = true;
+      violations = sum;
+    }
+  }
+
+  const kw =
+    a11y?.keyboardWalk ??
+    (byState
+      ? Object.values(byState)
+          .map((s) => /** @type {{ keyboardWalk?: unknown }} */ (s)?.keyboardWalk)
+          .find((k) => k != null)
+      : null) ??
+    null;
+
+  return {
+    violations,
+    axePresent,
+    keyboardLeftBody: keyboardLeftBody(kw),
   };
 }
 
@@ -113,12 +238,13 @@ function consolidatePriorLedgers() {
       const a11y = demo.a11y ?? null;
       const byState = demo.a11yByState ?? null;
       const honesty = demo.honesty ?? demo.states ?? null;
+      const rollup = demoA11yRollup(demo);
       demos[demoId] = {
         kind: demo.kind,
         hasViewports: Array.isArray(demo.viewports) && demo.viewports.length >= 3,
         viewportNames: (demo.viewports ?? []).map((v) => v.name),
-        a11y: axeSummary(a11y?.axe ?? a11y),
-        keyboardLeftBody: a11y?.keyboardWalk?.leftBody ?? null,
+        a11y: axeSummary(a11y?.axe ?? (Array.isArray(a11y?.violations) ? a11y : null)),
+        keyboardLeftBody: rollup.keyboardLeftBody,
         a11yByState: byState
           ? Object.fromEntries(
               Object.entries(byState).map(([k, v]) => [
@@ -128,22 +254,19 @@ function consolidatePriorLedgers() {
             )
           : null,
         honestyKeys: honesty && typeof honesty === "object" ? Object.keys(honesty) : [],
+        axePresent: rollup.axePresent,
       };
       a11yRows.push({
         ticket: t,
         demo: demoId,
-        violations:
-          axeSummary(a11y?.axe ?? a11y).violations ??
-          (byState
-            ? Object.values(byState).reduce(
-                (n, s) =>
-                  n +
-                  (axeSummary(/** @type {{ axe?: object }} */ (s)?.axe ?? s)
-                    .violations ?? 0),
-                0,
-              )
-            : null),
-        keyboardLeftBody: a11y?.keyboardWalk?.leftBody ?? null,
+        violations: rollup.violations,
+        axePresent: rollup.axePresent,
+        keyboardLeftBody: rollup.keyboardLeftBody,
+        // find-honesty: no axe scan in that demo — honesty states only.
+        honestyStates:
+          demo.states && typeof demo.states === "object"
+            ? Object.keys(demo.states)
+            : undefined,
       });
     }
     byTicket[t] = { present: true, demos };

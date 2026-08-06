@@ -7,7 +7,7 @@
       "kind": "acceptance-sweep",
       "description": "Console v1 acceptance: multi-task fake-vendor daemon, all four screens + chrome measured at 1280/1460/1920, consolidated a11y sweep.",
       "daemon": {
-        "port": 33379,
+        "port": 44715,
         "taskCount": 4,
         "states": {
           "t4": "running",
@@ -114,7 +114,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "parleyconsoleFleet4 tasks · 2 need actionRunno runTaskt4Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 1691514 · up 2sv0.0.4needs orch2streamlive07:20:22Se…"
+                  "text": "parleyconsoleFleet4 tasks · 2 need actionRunno runTaskt4Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 1701941 · up 2sv0.0.4needs orch2streamlive07:39:46Se…"
                 },
                 "brand": {
                   "selector": ".pc-shell__brand",
@@ -240,7 +240,7 @@
                     "overflow": "visible",
                     "opacity": "1"
                   },
-                  "text": "daemon127.0.0.1:5173v0.0.4 · pid 1691514 · up 2sv0.0.4"
+                  "text": "daemon127.0.0.1:5173v0.0.4 · pid 1701941 · up 2sv0.0.4"
                 },
                 "needs-orch": {
                   "selector": "[data-testid=\"needs-orch\"]",
@@ -794,7 +794,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "parleyconsoleFleet4 tasks · 2 need actionRunno runTaskt4Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 1691514 · up 2sv0.0.4needs orch2streamlive07:20:23Se…"
+                  "text": "parleyconsoleFleet4 tasks · 2 need actionRunno runTaskt4Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 1701941 · up 2sv0.0.4needs orch2streamlive07:39:47Se…"
                 },
                 "brand": {
                   "selector": ".pc-shell__brand",
@@ -920,7 +920,7 @@
                     "overflow": "visible",
                     "opacity": "1"
                   },
-                  "text": "daemon127.0.0.1:5173v0.0.4 · pid 1691514 · up 2sv0.0.4"
+                  "text": "daemon127.0.0.1:5173v0.0.4 · pid 1701941 · up 2sv0.0.4"
                 },
                 "needs-orch": {
                   "selector": "[data-testid=\"needs-orch\"]",
@@ -1474,7 +1474,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "parleyconsoleFleet4 tasks · 2 need actionRunno runTaskt4Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 1691514 · up 2sv0.0.4needs orch2streamlive07:20:24Se…"
+                  "text": "parleyconsoleFleet4 tasks · 2 need actionRunno runTaskt4Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 1701941 · up 2sv0.0.4needs orch2streamlive07:39:48Se…"
                 },
                 "brand": {
                   "selector": ".pc-shell__brand",
@@ -1600,7 +1600,7 @@
                     "overflow": "visible",
                     "opacity": "1"
                   },
-                  "text": "daemon127.0.0.1:5173v0.0.4 · pid 1691514 · up 2sv0.0.4"
+                  "text": "daemon127.0.0.1:5173v0.0.4 · pid 1701941 · up 2sv0.0.4"
                 },
                 "needs-orch": {
                   "selector": "[data-testid=\"needs-orch\"]",
@@ -2189,7 +2189,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "parleyconsoleFleet4 tasks · 2 need actionRunno runTaskt4Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 1691514 · up 2sv0.0.4needs orch2streamlive07:20:26Se…"
+                  "text": "parleyconsoleFleet4 tasks · 2 need actionRunno runTaskt4Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 1701941 · up 2sv0.0.4needs orch2streamlive07:39:50Se…"
                 },
                 "brand": {
                   "selector": ".pc-shell__brand",
@@ -2315,7 +2315,7 @@
                     "overflow": "visible",
                     "opacity": "1"
                   },
-                  "text": "daemon127.0.0.1:5173v0.0.4 · pid 1691514 · up 2sv0.0.4"
+                  "text": "daemon127.0.0.1:5173v0.0.4 · pid 1701941 · up 2sv0.0.4"
                 },
                 "needs-orch": {
                   "selector": "[data-testid=\"needs-orch\"]",
@@ -2827,7 +2827,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "parleyconsoleFleet4 tasks · 2 need actionRunno runTaskt4Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 1691514 · up 2sv0.0.4needs orch2streamlive07:20:26Se…"
+                  "text": "parleyconsoleFleet4 tasks · 2 need actionRunno runTaskt4Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 1701941 · up 2sv0.0.4needs orch2streamlive07:39:50Se…"
                 },
                 "brand": {
                   "selector": ".pc-shell__brand",
@@ -2953,7 +2953,7 @@
                     "overflow": "visible",
                     "opacity": "1"
                   },
-                  "text": "daemon127.0.0.1:5173v0.0.4 · pid 1691514 · up 2sv0.0.4"
+                  "text": "daemon127.0.0.1:5173v0.0.4 · pid 1701941 · up 2sv0.0.4"
                 },
                 "needs-orch": {
                   "selector": "[data-testid=\"needs-orch\"]",
@@ -3465,7 +3465,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "parleyconsoleFleet4 tasks · 2 need actionRunno runTaskt4Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 1691514 · up 7sv0.0.4needs orch2streamlive07:20:27Se…"
+                  "text": "parleyconsoleFleet4 tasks · 2 need actionRunno runTaskt4Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 1701941 · up 7sv0.0.4needs orch2streamlive07:39:51Se…"
                 },
                 "brand": {
                   "selector": ".pc-shell__brand",
@@ -3591,7 +3591,7 @@
                     "overflow": "visible",
                     "opacity": "1"
                   },
-                  "text": "daemon127.0.0.1:5173v0.0.4 · pid 1691514 · up 7sv0.0.4"
+                  "text": "daemon127.0.0.1:5173v0.0.4 · pid 1701941 · up 7sv0.0.4"
                 },
                 "needs-orch": {
                   "selector": "[data-testid=\"needs-orch\"]",
@@ -4138,7 +4138,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "parleyconsoleFleet4 tasks · 2 need actionRunno runTaskt4Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 1691514 · up 7sv0.0.4needs orch2streamlive07:20:28Se…"
+                  "text": "parleyconsoleFleet4 tasks · 2 need actionRunno runTaskt4Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 1701941 · up 7sv0.0.4needs orch2streamlive07:39:52Se…"
                 },
                 "brand": {
                   "selector": ".pc-shell__brand",
@@ -4264,7 +4264,7 @@
                     "overflow": "visible",
                     "opacity": "1"
                   },
-                  "text": "daemon127.0.0.1:5173v0.0.4 · pid 1691514 · up 7sv0.0.4"
+                  "text": "daemon127.0.0.1:5173v0.0.4 · pid 1701941 · up 7sv0.0.4"
                 },
                 "needs-orch": {
                   "selector": "[data-testid=\"needs-orch\"]",
@@ -4776,7 +4776,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "parleyconsoleFleet4 tasks · 2 need actionRunno runTaskt4Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 1691514 · up 7sv0.0.4needs orch2streamlive07:20:29Se…"
+                  "text": "parleyconsoleFleet4 tasks · 2 need actionRunno runTaskt4Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 1701941 · up 7sv0.0.4needs orch2streamlive07:39:53Se…"
                 },
                 "brand": {
                   "selector": ".pc-shell__brand",
@@ -4902,7 +4902,7 @@
                     "overflow": "visible",
                     "opacity": "1"
                   },
-                  "text": "daemon127.0.0.1:5173v0.0.4 · pid 1691514 · up 7sv0.0.4"
+                  "text": "daemon127.0.0.1:5173v0.0.4 · pid 1701941 · up 7sv0.0.4"
                 },
                 "needs-orch": {
                   "selector": "[data-testid=\"needs-orch\"]",
@@ -5414,7 +5414,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "parleyconsoleFleet4 tasks · 2 need actionRunno runTaskt4Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 1691514 · up 7sv0.0.4needs orch2streamlive07:20:29Se…"
+                  "text": "parleyconsoleFleet4 tasks · 2 need actionRunno runTaskt4Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 1701941 · up 7sv0.0.4needs orch2streamlive07:39:53Se…"
                 },
                 "brand": {
                   "selector": ".pc-shell__brand",
@@ -5540,7 +5540,7 @@
                     "overflow": "visible",
                     "opacity": "1"
                   },
-                  "text": "daemon127.0.0.1:5173v0.0.4 · pid 1691514 · up 7sv0.0.4"
+                  "text": "daemon127.0.0.1:5173v0.0.4 · pid 1701941 · up 7sv0.0.4"
                 },
                 "needs-orch": {
                   "selector": "[data-testid=\"needs-orch\"]",
@@ -6087,7 +6087,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "parleyconsoleFleet4 tasks · 2 need actionRunno runTaskt4Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 1691514 · up 7sv0.0.4needs orch2streamlive07:20:31Se…"
+                  "text": "parleyconsoleFleet4 tasks · 2 need actionRunno runTaskt4Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 1701941 · up 7sv0.0.4needs orch2streamlive07:39:55Se…"
                 },
                 "brand": {
                   "selector": ".pc-shell__brand",
@@ -6213,7 +6213,7 @@
                     "overflow": "visible",
                     "opacity": "1"
                   },
-                  "text": "daemon127.0.0.1:5173v0.0.4 · pid 1691514 · up 7sv0.0.4"
+                  "text": "daemon127.0.0.1:5173v0.0.4 · pid 1701941 · up 7sv0.0.4"
                 },
                 "needs-orch": {
                   "selector": "[data-testid=\"needs-orch\"]",
@@ -6725,7 +6725,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "parleyconsoleFleet4 tasks · 2 need actionRunno runTaskt4Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 1691514 · up 7sv0.0.4needs orch2streamlive07:20:32Se…"
+                  "text": "parleyconsoleFleet4 tasks · 2 need actionRunno runTaskt4Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 1701941 · up 7sv0.0.4needs orch2streamlive07:39:55Se…"
                 },
                 "brand": {
                   "selector": ".pc-shell__brand",
@@ -6851,7 +6851,7 @@
                     "overflow": "visible",
                     "opacity": "1"
                   },
-                  "text": "daemon127.0.0.1:5173v0.0.4 · pid 1691514 · up 7sv0.0.4"
+                  "text": "daemon127.0.0.1:5173v0.0.4 · pid 1701941 · up 7sv0.0.4"
                 },
                 "needs-orch": {
                   "selector": "[data-testid=\"needs-orch\"]",
@@ -7363,7 +7363,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "parleyconsoleFleet4 tasks · 2 need actionRunno runTaskt4Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 1691514 · up 12sv0.0.4needs orch2streamlive07:20:32S…"
+                  "text": "parleyconsoleFleet4 tasks · 2 need actionRunno runTaskt4Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 1701941 · up 12sv0.0.4needs orch2streamlive07:39:56S…"
                 },
                 "brand": {
                   "selector": ".pc-shell__brand",
@@ -7489,7 +7489,7 @@
                     "overflow": "visible",
                     "opacity": "1"
                   },
-                  "text": "daemon127.0.0.1:5173v0.0.4 · pid 1691514 · up 12sv0.0.4"
+                  "text": "daemon127.0.0.1:5173v0.0.4 · pid 1701941 · up 12sv0.0.4"
                 },
                 "needs-orch": {
                   "selector": "[data-testid=\"needs-orch\"]",
@@ -8035,7 +8035,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "parleyconsoleFleet4 tasks · 2 need actionRunno runTaskt4Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 1691514 · up 12sv0.0.4needs orch2streamlive07:20:34S…"
+              "text": "parleyconsoleFleet4 tasks · 2 need actionRunno runTaskt4Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 1701941 · up 12sv0.0.4needs orch2streamlive07:39:58S…"
             },
             "brand": {
               "selector": ".pc-shell__brand",
@@ -8161,7 +8161,7 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "daemon127.0.0.1:5173v0.0.4 · pid 1691514 · up 12sv0.0.4"
+              "text": "daemon127.0.0.1:5173v0.0.4 · pid 1701941 · up 12sv0.0.4"
             },
             "needs-orch": {
               "selector": "[data-testid=\"needs-orch\"]",
@@ -8631,7 +8631,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "parleyconsoleFleet4 tasks · 2 need actionRunno runTaskt4Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 1691514 · up 12sv0.0.4needs orch2streamlive07:20:35S…"
+              "text": "parleyconsoleFleet4 tasks · 2 need actionRunno runTaskt4Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 1701941 · up 12sv0.0.4needs orch2streamlive07:39:59S…"
             },
             "brand": {
               "selector": ".pc-shell__brand",
@@ -8757,7 +8757,7 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "daemon127.0.0.1:5173v0.0.4 · pid 1691514 · up 12sv0.0.4"
+              "text": "daemon127.0.0.1:5173v0.0.4 · pid 1701941 · up 12sv0.0.4"
             },
             "needs-orch": {
               "selector": "[data-testid=\"needs-orch\"]",
@@ -9227,7 +9227,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "parleyconsoleFleet4 tasks · 2 need actionRunno runTaskt4Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 1691514 · up 12sv0.0.4needs orch2streamlive07:20:35S…"
+              "text": "parleyconsoleFleet4 tasks · 2 need actionRunno runTaskt4Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 1701941 · up 12sv0.0.4needs orch2streamlive07:39:59S…"
             },
             "brand": {
               "selector": ".pc-shell__brand",
@@ -9353,7 +9353,7 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "daemon127.0.0.1:5173v0.0.4 · pid 1691514 · up 12sv0.0.4"
+              "text": "daemon127.0.0.1:5173v0.0.4 · pid 1701941 · up 12sv0.0.4"
             },
             "needs-orch": {
               "selector": "[data-testid=\"needs-orch\"]",
@@ -9796,7 +9796,8 @@
                 },
                 "keyboardLeftBody": true,
                 "a11yByState": null,
-                "honestyKeys": []
+                "honestyKeys": [],
+                "axePresent": true
               },
               "intercept-error": {
                 "kind": "intercept-error",
@@ -9815,7 +9816,8 @@
                 },
                 "keyboardLeftBody": true,
                 "a11yByState": null,
-                "honestyKeys": []
+                "honestyKeys": [],
+                "axePresent": true
               },
               "reconnect": {
                 "kind": "reconnect",
@@ -9834,7 +9836,8 @@
                 },
                 "keyboardLeftBody": true,
                 "a11yByState": null,
-                "honestyKeys": []
+                "honestyKeys": [],
+                "axePresent": true
               }
             }
           },
@@ -9880,7 +9883,8 @@
                     "incomplete": 2
                   }
                 },
-                "honestyKeys": []
+                "honestyKeys": [],
+                "axePresent": true
               },
               "find-honesty": {
                 "kind": "find-honesty",
@@ -9896,7 +9900,8 @@
                   "error",
                   "noMatch",
                   "results"
-                ]
+                ],
+                "axePresent": false
               }
             }
           },
@@ -9918,14 +9923,15 @@
                   "passes": 47,
                   "incomplete": 2
                 },
-                "keyboardLeftBody": null,
+                "keyboardLeftBody": true,
                 "a11yByState": null,
                 "honestyKeys": [
                   "empty",
                   "error",
                   "loading",
                   "offline"
-                ]
+                ],
+                "axePresent": true
               }
             }
           },
@@ -9952,7 +9958,8 @@
                 "honestyKeys": [
                   "error",
                   "offline"
-                ]
+                ],
+                "axePresent": true
               }
             }
           },
@@ -9979,7 +9986,8 @@
                 "honestyKeys": [
                   "detailError",
                   "logUnreachable"
-                ]
+                ],
+                "axePresent": true
               }
             }
           },
@@ -10008,7 +10016,8 @@
                   "error",
                   "loading",
                   "realDaemonEmpty"
-                ]
+                ],
+                "axePresent": true
               }
             }
           }
@@ -10018,60 +10027,75 @@
             "ticket": "issue-353",
             "demo": "staged-daemon",
             "violations": 0,
+            "axePresent": true,
             "keyboardLeftBody": true
           },
           {
             "ticket": "issue-353",
             "demo": "intercept-error",
             "violations": 0,
+            "axePresent": true,
             "keyboardLeftBody": true
           },
           {
             "ticket": "issue-353",
             "demo": "reconnect",
             "violations": 0,
+            "axePresent": true,
             "keyboardLeftBody": true
           },
           {
             "ticket": "issue-354",
             "demo": "shell-chrome",
             "violations": 0,
+            "axePresent": true,
             "keyboardLeftBody": true
           },
           {
             "ticket": "issue-354",
             "demo": "find-honesty",
             "violations": null,
-            "keyboardLeftBody": null
+            "axePresent": false,
+            "keyboardLeftBody": null,
+            "honestyStates": [
+              "loading",
+              "error",
+              "noMatch",
+              "results"
+            ]
           },
           {
             "ticket": "issue-355",
             "demo": "fleet-board",
             "violations": 0,
-            "keyboardLeftBody": null
+            "axePresent": true,
+            "keyboardLeftBody": true
           },
           {
             "ticket": "issue-356",
             "demo": "run-detail",
             "violations": 0,
+            "axePresent": true,
             "keyboardLeftBody": true
           },
           {
             "ticket": "issue-357",
             "demo": "task-inspector",
             "violations": 0,
+            "axePresent": true,
             "keyboardLeftBody": true
           },
           {
             "ticket": "issue-358",
             "demo": "metrics-board",
             "violations": 0,
+            "axePresent": true,
             "keyboardLeftBody": true
           }
         ]
       },
-      "recordedAt": "2026-08-06T11:20:38.412Z"
+      "recordedAt": "2026-08-06T11:40:02.732Z"
     }
   },
-  "updatedAt": "2026-08-06T11:20:38.412Z"
+  "updatedAt": "2026-08-06T11:40:02.732Z"
 }

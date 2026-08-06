@@ -103,7 +103,9 @@ and sampled again in the acceptance sweep.
 
 **One-liner a11y fixes during this gate:** none required (prior demos already
 green). Structural defects: none found that blocked the gate; see coverage.md
-for daemon-side follow-ups.
+for remaining refinements (fleet-wide cap on empty fleet; richer firehose).
+Report file churn and per-task `max_concurrent` are **built** (#349 / #350) —
+not daemon gaps.
 
 ## Publish readiness
 
