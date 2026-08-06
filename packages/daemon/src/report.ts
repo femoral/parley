@@ -247,7 +247,11 @@ export function parseJsonColumn<T>(value: string | null): T | null {
 export function buildEnvelope(
   task: TaskRow,
   logsDir: string | null = null,
-  queue: { position: number | null; blockingCap: string | null } | null = null,
+  queue: {
+    position: number | null;
+    blockingCap: string | null;
+    maxConcurrent?: number | null;
+  } | null = null,
 ): TaskEnvelope {
   const start = task.started_at ?? task.created_at;
   const end = task.completed_at;
@@ -297,6 +301,7 @@ export function buildEnvelope(
     cached_input_tokens: task.cached_input_tokens,
     queue_position: queue?.position ?? null,
     blocking_cap: queue?.blockingCap ?? null,
+    max_concurrent: queue?.maxConcurrent ?? null,
     queue_reason: task.queue_reason ?? null,
   };
 }

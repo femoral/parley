@@ -2104,6 +2104,7 @@ function envelopeFor(
   const env = buildEnvelope(enriched, engine.logDir(row.id), {
     position: enriched.queue_position,
     blockingCap: enriched.blocking_cap,
+    maxConcurrent: enriched.max_concurrent,
   });
   // ADR-0019 / #240: run address on every task.* (and list) envelope.
   env.run_id = row.run_id;

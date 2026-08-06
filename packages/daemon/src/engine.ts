@@ -4859,6 +4859,26 @@ export class TaskEngine {
   }
 
   /**
+   * Effective `maxConcurrent` for the cap(s) named by {@link blockingCapFor}
+   * (#350). When multiple caps join with `+`, the tighter (min) value. Null
+   * when not queued or no numeric cap is configured.
+   */
+  maxConcurrentFor(task: TaskRow): number | null {
+    if (task.state !== "queued") return null;
+    const blocking = this.blockingCapFor(task);
+    if (blocking === null) return null;
+    const caps = this.capsFor(task);
+    let max: number | null = null;
+    for (const part of blocking.split("+")) {
+      let v: number | null = null;
+      if (part.startsWith("vendor:")) v = caps.vendorMax;
+      else if (part.startsWith("profile:")) v = caps.profileMax;
+      if (typeof v === "number") max = max === null ? v : Math.min(max, v);
+    }
+    return max;
+  }
+
+  /**
    * 1-based FIFO position among queued peers for the primary blocking cap
    * (#171). Null when not queued.
    */
@@ -4881,17 +4901,19 @@ export class TaskEngine {
   }
 
   /**
-   * Enrich a task row with computed queue observability fields (#171).
+   * Enrich a task row with computed queue observability fields (#171 / #350).
    * Safe for non-queued tasks (fields null).
    */
   withQueueInfo(task: TaskRow): TaskRow & {
     queue_position: number | null;
     blocking_cap: string | null;
+    max_concurrent: number | null;
   } {
     return {
       ...task,
       queue_position: this.queuePositionFor(task),
       blocking_cap: this.blockingCapFor(task),
+      max_concurrent: this.maxConcurrentFor(task),
     };
   }
 
