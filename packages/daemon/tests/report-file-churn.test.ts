@@ -104,6 +104,7 @@ describe("parseNumstat / decodeNumstatPath (#349)", () => {
     expect(decodeNumstatPath("{a => b}/file.ts")).toBe("b/file.ts");
     expect(decodeNumstatPath("p/{a => b}/s.ts")).toBe("p/b/s.ts");
 
+    // Default / decodeRenames: true — defensive raw numstat may contain renames.
     const map = parseNumstat(
       "-\t-\tpic.bin\n4\t0\told.ts => new.ts\n0\t0\tsrc/{old.ts => new.ts}\n",
     );
@@ -112,6 +113,32 @@ describe("parseNumstat / decodeNumstatPath (#349)", () => {
     expect(map.get("src/new.ts")).toEqual({ added: 0, removed: 0 });
     // Old bug: braced form left a trailing "}" on the key.
     expect(map.has("new.ts}")).toBe(false);
+  });
+
+  // #362: --no-renames churn path must not apply rename-arrow decode.
+  it("keeps literal paths with => when decodeRenames is false (both line orders)", () => {
+    // Measured repro: b.txt +1/−0 and a file literally named "zz => b.txt" 0/−4.
+    // With decode on, "zz => b.txt" becomes "b.txt" and overwrites (order-dependent).
+    const literal = { decodeRenames: false as const };
+    const arrowName = "zz => b.txt";
+
+    const orderA = parseNumstat(`1\t0\tb.txt\n0\t4\t${arrowName}\n`, literal);
+    expect(orderA.get("b.txt")).toEqual({ added: 1, removed: 0 });
+    expect(orderA.get(arrowName)).toEqual({ added: 0, removed: 4 });
+    expect(orderA.size).toBe(2);
+
+    const orderB = parseNumstat(`0\t4\t${arrowName}\n1\t0\tb.txt\n`, literal);
+    expect(orderB.get("b.txt")).toEqual({ added: 1, removed: 0 });
+    expect(orderB.get(arrowName)).toEqual({ added: 0, removed: 4 });
+    expect(orderB.size).toBe(2);
+  });
+
+  it("keeps braced-form literal filenames when decodeRenames is false", () => {
+    const braced = "a {x => y} b.txt";
+    const map = parseNumstat(`2\t1\t${braced}\n`, { decodeRenames: false });
+    expect(map.get(braced)).toEqual({ added: 2, removed: 1 });
+    // Would have decoded to "a y b.txt" under the rename path.
+    expect(map.has("a y b.txt")).toBe(false);
   });
 });
 
@@ -269,6 +296,33 @@ describe("computeFileChurn + enrichReportFilesChanged (#349)", () => {
     expect(churn.has("new.ts}")).toBe(false);
     expect(churn.get("src/old.ts")).toEqual({ added: 0, removed: 1 });
     expect(churn.get("src/new.ts")).toEqual({ added: 1, removed: 0 });
+  });
+
+  // #362: literal filenames that look like rename arrows must not collide.
+  it("keeps churn under literal names containing => (measured #362 repro)", () => {
+    const arrowName = "zz => b.txt";
+    const bracedName = "a {x => y} b.txt";
+    const repo = makeGitRepo({
+      "b.txt": "old\n",
+      [arrowName]: "1\n2\n3\n4\n",
+      [bracedName]: "keep\n",
+    });
+    scratch.push(repo);
+    const base = execFileSync("git", ["-C", repo, "rev-parse", "HEAD"], {
+      encoding: "utf8",
+    }).trim();
+
+    // b.txt: +1/−0; arrowName: delete all 4 lines; bracedName: +1/−0.
+    fs.writeFileSync(path.join(repo, "b.txt"), "old\nnew\n");
+    fs.writeFileSync(path.join(repo, arrowName), "");
+    fs.writeFileSync(path.join(repo, bracedName), "keep\nmore\n");
+
+    const churn = computeFileChurn(repo, base);
+    expect(churn.get("b.txt")).toEqual({ added: 1, removed: 0 });
+    expect(churn.get(arrowName)).toEqual({ added: 0, removed: 4 });
+    expect(churn.get(bracedName)).toEqual({ added: 1, removed: 0 });
+    // Decode would have collapsed arrowName → "b.txt" and braced → "a y b.txt".
+    expect(churn.has("a y b.txt")).toBe(false);
   });
 
   it("drops empty path strings even when no churn rewrite is needed", () => {

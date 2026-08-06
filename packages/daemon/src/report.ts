@@ -324,11 +324,32 @@ export function decodeNumstatPath(filePath: string): string {
 }
 
 /**
- * Parse `git diff --numstat <base>` output into path → {added, removed}.
- * Binary rows (`-  -  path`) are skipped (counts unknown). Rename lines
- * (flat or braced) map to the new path via {@link decodeNumstatPath}.
+ * Options for {@link parseNumstat}.
+ *
+ * `decodeRenames` controls whether path fields that look like git rename
+ * forms (`old => new`, braced `src/{a => b}`) are rewritten to the post-
+ * rename path via {@link decodeNumstatPath}. Default is `true` for
+ * defensive parsing of raw numstat that may legitimately contain renames.
+ * Callers whose git invocation uses `--no-renames` must pass `false` —
+ * every path field is then a literal filename (including ones that contain
+ * `" => "` or brace-arrow substrings).
  */
-export function parseNumstat(output: string): Map<string, { added: number; removed: number }> {
+export type ParseNumstatOptions = {
+  decodeRenames?: boolean;
+};
+
+/**
+ * Parse `git diff --numstat <base>` output into path → {added, removed}.
+ * Binary rows (`-  -  path`) are skipped (counts unknown). When
+ * `decodeRenames` is true (default), rename lines (flat or braced) map to
+ * the new path via {@link decodeNumstatPath}; when false, path fields are
+ * taken literally.
+ */
+export function parseNumstat(
+  output: string,
+  options?: ParseNumstatOptions,
+): Map<string, { added: number; removed: number }> {
+  const decodeRenames = options?.decodeRenames !== false;
   const map = new Map<string, { added: number; removed: number }>();
   for (const line of output.split("\n")) {
     if (line.trim() === "") continue;
@@ -338,7 +359,8 @@ export function parseNumstat(output: string): Map<string, { added: number; remov
     if (tab2 === -1) continue;
     const addedRaw = line.slice(0, tab1);
     const removedRaw = line.slice(tab1 + 1, tab2);
-    const filePath = decodeNumstatPath(line.slice(tab2 + 1));
+    const rawPath = line.slice(tab2 + 1);
+    const filePath = decodeRenames ? decodeNumstatPath(rawPath) : rawPath;
     if (addedRaw === "-" || removedRaw === "-") continue;
     const added = Number(addedRaw);
     const removed = Number(removedRaw);
@@ -401,7 +423,10 @@ export function computeFileChurn(
     cwd,
   );
   if (numstat !== null && numstat !== "") {
-    for (const [p, c] of parseNumstat(numstat)) map.set(p, c);
+    // Match --no-renames: path fields are always literal filenames.
+    for (const [p, c] of parseNumstat(numstat, { decodeRenames: false })) {
+      map.set(p, c);
+    }
   }
 
   const untracked = gitText(
