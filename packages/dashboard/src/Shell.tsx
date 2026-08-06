@@ -318,7 +318,7 @@ export function Shell() {
           <div className="pc-shell__rail-slot" data-testid="rail-right-slot">
             <span className="pc-shell__rail-slot-label">attention · firehose</span>
             <span className="pc-shell__rail-slot-note">
-              Attention queue and event firehose land with the fleet ticket.
+              Attention and the event firehose live on the fleet board screen.
             </span>
           </div>
         </aside>

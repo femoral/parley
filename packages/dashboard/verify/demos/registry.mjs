@@ -19,6 +19,7 @@ import { runReconnectDemo } from "./reconnect.mjs";
 import { runShellChromeDemo, shellChromeGates } from "./shell-chrome.mjs";
 import { runFindHonestyDemo } from "./find-honesty.mjs";
 import { runTaskInspectorDemo, taskInspectorGates } from "./task-inspector.mjs";
+import { runFleetBoardDemo, fleetBoardGates } from "./fleet-board.mjs";
 
 /**
  * @typedef {{
@@ -49,8 +50,14 @@ export const DEMO_REGISTRY = [
     run: runFindHonestyDemo,
     kind: "find-honesty",
   },
-  // Screen tickets append below, e.g.:
-  // { ticket: "issue-355", id: "fleet-board", run: runFleetBoardDemo, gates: fleetGates },
+  // #355 fleet board
+  {
+    ticket: "issue-355",
+    id: "fleet-board",
+    run: runFleetBoardDemo,
+    gates: fleetBoardGates,
+  },
+  // #357 task inspector
   {
     ticket: "issue-357",
     id: "task-inspector",
