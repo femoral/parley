@@ -1,0 +1,116 @@
+{
+  "kind": "e2e-bed-acceptance",
+  "ticket": "issue-359",
+  "recordedAt": "2026-08-06T11:11:28.699Z",
+  "e2eBed": "sibling parley-e2e (no commits in that repo)",
+  "host": {
+    "node": "v24.15.0",
+    "parley": "parley 0.0.5-dev.1"
+  },
+  "preflight": {
+    "summary": "ready with vendor-missing warnings (see acceptance.md)",
+    "lines": [
+      "toolchain",
+      "  ok   node v24.15.0",
+      "  ok   git 2.54.0",
+      "  ok   parley parley 0.0.5-dev.1",
+      "parley daemon",
+      "  ok   daemon reachable",
+      "project config (.parley)",
+      "  ok   parley lint clean",
+      "  ok   parley info resolves (eval/types/vendors)",
+      "host config (~/.parley/parley.json)",
+      "  ok   host config is valid JSON",
+      "  ok   example host config is valid JSON",
+      "vendor harness CLIs on PATH",
+      "  ok   fake (built-in stub; no CLI needed)",
+      "  ok   codex",
+      "  ok   claude",
+      "  ok   grok",
+      "  ok   agy",
+      "  ok   opencode",
+      "  warn goose not installed — its scenarios will be skipped",
+      "  ok   pi",
+      "  warn cline not installed — its scenarios will be skipped",
+      "  warn kilo not installed — its scenarios will be skipped",
+      "  warn openhands not installed — its scenarios will be skipped",
+      "  ok   hermes",
+      "  warn openclaw not installed — its scenarios will be skipped",
+      "  warn kimi not installed — its scenarios will be skipped",
+      "  ok   cursor-agent",
+      "repo baseline",
+      "  ok   npm run check (typecheck + tests) green",
+      "preflight: ready (6 warning(s) — usually just uninstalled vendors)"
+    ]
+  },
+  "scenarios": {
+    "inventory": "34 scenario issues (0001-0015 conformance + 0101-0119 features)",
+    "hermeticLabel": [
+      "0112  [open       ] fake:fake-model              remote-runner  — remote runner branch handoff (superseded pin path)",
+      "0115  [open       ] fake:fake-model              remote-daemon  — client → remote daemon managed-mirror execution",
+      "0116  [open       ] fake:fake-model              auto-route-runner  — client → daemon → runner auto-route + managed mirror",
+      "0117  [open       ] fake:fake-model              no-match  — no-match fail-fast names executors and vendors",
+      "0118  [open       ] fake:fake-model              capable-offline  — capable-but-offline queues then times out",
+      "0119  [open       ] fake:fake-model              client-auth  — client auth on/off-loopback"
+    ],
+    "fakeVendorIssues": [
+      "0001  [open       ] fake:fake-model              conformance  — Conformance — fake (fake-model)",
+      "0112  [open       ] fake:fake-model              remote-runner  — remote runner branch handoff (superseded pin path)",
+      "0115  [open       ] fake:fake-model              remote-daemon  — client → remote daemon managed-mirror execution",
+      "0116  [open       ] fake:fake-model              auto-route-runner  — client → daemon → runner auto-route + managed mirror",
+      "0117  [open       ] fake:fake-model              no-match  — no-match fail-fast names executors and vendors",
+      "0118  [open       ] fake:fake-model              capable-offline  — capable-but-offline queues then times out",
+      "0119  [open       ] fake:fake-model              client-auth  — client auth on/off-loopback"
+    ],
+    "ran": [
+      {
+        "layer": "verify-inner-loop",
+        "vendor": "fake",
+        "what": "All packages/dashboard verify demos + acceptance-sweep against real daemon + fake-vendor scripts",
+        "consoleSurfaces": [
+          "fleet",
+          "run",
+          "task",
+          "metrics",
+          "chrome"
+        ],
+        "viewports": [
+          1280,
+          1460,
+          1920
+        ]
+      },
+      {
+        "layer": "e2e-bed-baseline",
+        "vendor": "n/a",
+        "what": "scripts/preflight.sh + npm run check in parley-e2e (host)",
+        "consoleSurfaces": []
+      }
+    ],
+    "notRun": [
+      {
+        "layer": "e2e-bed-real-vendor-matrix",
+        "reason": "Full orchestrator x worker matrix requires docker/compose orchestrator container, mounted credentials, and multi-round watch-loop time; not simulated. Documented gap per issue 359 honesty rule.",
+        "vendorsPresentOnHost": [
+          "codex",
+          "claude",
+          "grok",
+          "agy",
+          "opencode",
+          "pi",
+          "hermes",
+          "cursor-agent",
+          "fake"
+        ],
+        "vendorsMissingOnHost": [
+          "goose",
+          "cline",
+          "kilo",
+          "openhands",
+          "openclaw",
+          "kimi"
+        ]
+      }
+    ]
+  }
+}

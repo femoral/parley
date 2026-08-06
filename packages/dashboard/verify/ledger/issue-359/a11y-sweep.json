@@ -1,0 +1,136 @@
+{
+  "ticket": "issue-359",
+  "recordedAt": "2026-08-06T11:20:38.416Z",
+  "populated": {
+    "fleet": {
+      "axe": {
+        "present": true,
+        "violations": 0,
+        "ids": [],
+        "passes": 37,
+        "incomplete": 2
+      },
+      "screenAxe": {
+        "present": true,
+        "violations": 0,
+        "ids": [],
+        "passes": 21,
+        "incomplete": 1
+      },
+      "keyboardLeftBody": true,
+      "phase": "live"
+    },
+    "run": {
+      "axe": {
+        "present": true,
+        "violations": 0,
+        "ids": [],
+        "passes": 35,
+        "incomplete": 1
+      },
+      "screenAxe": {
+        "present": true,
+        "violations": 0,
+        "ids": [],
+        "passes": 3,
+        "incomplete": 0
+      },
+      "keyboardLeftBody": true,
+      "phase": null
+    },
+    "task": {
+      "axe": {
+        "present": true,
+        "violations": 0,
+        "ids": [],
+        "passes": 35,
+        "incomplete": 1
+      },
+      "screenAxe": {
+        "present": true,
+        "violations": 0,
+        "ids": [],
+        "passes": 10,
+        "incomplete": 0
+      },
+      "keyboardLeftBody": true,
+      "phase": null
+    },
+    "metrics": {
+      "axe": {
+        "present": true,
+        "violations": 0,
+        "ids": [],
+        "passes": 41,
+        "incomplete": 2
+      },
+      "screenAxe": {
+        "present": true,
+        "violations": 0,
+        "ids": [],
+        "passes": 30,
+        "incomplete": 1
+      },
+      "keyboardLeftBody": true,
+      "phase": null
+    }
+  },
+  "prior": [
+    {
+      "ticket": "issue-353",
+      "demo": "staged-daemon",
+      "violations": 0,
+      "keyboardLeftBody": true
+    },
+    {
+      "ticket": "issue-353",
+      "demo": "intercept-error",
+      "violations": 0,
+      "keyboardLeftBody": true
+    },
+    {
+      "ticket": "issue-353",
+      "demo": "reconnect",
+      "violations": 0,
+      "keyboardLeftBody": true
+    },
+    {
+      "ticket": "issue-354",
+      "demo": "shell-chrome",
+      "violations": 0,
+      "keyboardLeftBody": true
+    },
+    {
+      "ticket": "issue-354",
+      "demo": "find-honesty",
+      "violations": null,
+      "keyboardLeftBody": null
+    },
+    {
+      "ticket": "issue-355",
+      "demo": "fleet-board",
+      "violations": 0,
+      "keyboardLeftBody": null
+    },
+    {
+      "ticket": "issue-356",
+      "demo": "run-detail",
+      "violations": 0,
+      "keyboardLeftBody": true
+    },
+    {
+      "ticket": "issue-357",
+      "demo": "task-inspector",
+      "violations": 0,
+      "keyboardLeftBody": true
+    },
+    {
+      "ticket": "issue-358",
+      "demo": "metrics-board",
+      "violations": 0,
+      "keyboardLeftBody": true
+    }
+  ],
+  "totalAxeViolations": 0,
+  "allGreen": true
+}
