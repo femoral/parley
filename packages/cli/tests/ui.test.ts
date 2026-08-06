@@ -239,6 +239,9 @@ describe("parley ui (#87)", () => {
     expect(res.code).toBe(1);
     expect(res.stdout).toBe("");
     expect(res.stderr).toContain("No Parley UI is installed");
+    // ADR-0033 / #359: lead with Console; Cove remains the alternate register.
+    expect(res.stderr).toContain("@useparley/dashboard");
     expect(res.stderr).toContain("@useparley/ui");
+    expect(res.stderr).toContain("config.ui.package");
   });
 });

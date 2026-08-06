@@ -92,6 +92,12 @@ pnpm --filter @useparley/dashboard verify:check -- --ledger-only
 pnpm --filter @useparley/dashboard verify:staged
 pnpm --filter @useparley/dashboard verify:intercept
 pnpm --filter @useparley/dashboard verify:reconnect
+
+# Console v1 acceptance (#359) — multi-screen sweep + consolidated a11y
+pnpm --filter @useparley/dashboard verify:acceptance
+
+# Offline packed-install publish readiness (#359) — no registry
+pnpm --filter @useparley/dashboard verify:packed
 ```
 
 ### Chromium

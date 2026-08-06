@@ -35,12 +35,26 @@ flowchart LR
 ## Install
 
 ```bash
-npm install -g @useparley/cli   # the CLI (daemon auto-spawns on first use)
-npm install -g @useparley/ui    # optional: the web cockpit (parley ui)
+npm install -g @useparley/cli         # the CLI (daemon auto-spawns on first use)
+npm install -g @useparley/dashboard   # optional: Parley Console — the default web UI (parley ui)
 ```
 
 Requires Node ≥ 24 and git. Each vendor CLI you delegate to must be installed
 and authenticated on the machine that runs it.
+
+**Web UI.** `@useparley/dashboard` (Parley Console) is the config-less default
+when installed: `parley ui` opens it with no extra config. The alternate
+register, Parley Cove (`@useparley/ui`), is still supported — install it and
+pin it with `config.ui.package` (in `~/.parley/parley.json` or the project
+config):
+
+```json
+{ "ui": { "package": "@useparley/ui" } }
+```
+
+Discovery order (first hit wins): explicit `config.ui.path` →
+`config.ui.package` → `@useparley/dashboard` → `@useparley/ui`. See
+[ADR-0033](docs/adr/0033-ordered-probe-ui-default.md).
 
 ## Set up: `parley init`
 
@@ -213,9 +227,11 @@ Three transports, one contract (`submit_report`, `ask_orchestrator`):
 
 ## The cockpit
 
-`parley ui` opens **Parley Cove** — a live view of every task: state,
-transcript tail, Q&A history, usage, and metrics. Optional install; the
-daemon serves it when present.
+`parley ui` opens **Parley Console** (`@useparley/dashboard`) when it is
+installed — fleet board, run detail, task inspector, and metrics against the
+live daemon. Optional install; the daemon discovers and serves it via the
+`parley.ui` package marker with zero config. Prefer Cove's register instead
+by installing `@useparley/ui` and setting `config.ui.package` (see Install).
 
 ## Experimental
 

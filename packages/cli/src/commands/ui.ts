@@ -28,7 +28,10 @@ export async function runUi(ctx: CliContext, args: string[]): Promise<number> {
   const discovery = await ensureDaemon(ctx.paths, ctx.env);
   const health = await daemonGet<HealthResponse>(discovery, "/health");
   if (!health.ui_available) {
-    ctx.stderr("No Parley UI is installed. Install one with: npm install @useparley/ui\n");
+    ctx.stderr(
+      "No Parley UI is installed. Install the console with: npm install @useparley/dashboard\n" +
+        "(or the Cove register: npm install @useparley/ui, then set config.ui.package)\n",
+    );
     return 1;
   }
 

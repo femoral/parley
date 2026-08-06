@@ -1,0 +1,39 @@
+{
+  "kind": "packed-install",
+  "offline": true,
+  "steps": {
+    "build": {
+      "wwwIndex": "packages/dashboard/www/index.html"
+    },
+    "pack": {
+      "tarball": "useparley-dashboard-0.0.1.tgz"
+    },
+    "inspect": {
+      "name": "@useparley/dashboard",
+      "version": "0.0.1",
+      "daemonVersion": "0.0.4",
+      "parleyUi": "www",
+      "files": [
+        "www"
+      ],
+      "publishConfigAccess": "public",
+      "versionIndependent": true,
+      "daemonDoesNotDepend": true
+    },
+    "tarball": {
+      "entryCount": 11,
+      "hasWwwIndex": true,
+      "banned": 0
+    },
+    "serve": {
+      "port": 33837,
+      "ui_available": true,
+      "rootStatus": 200,
+      "spaStatus": 200,
+      "tasksStatus": 200,
+      "bodyBytes": 834
+    }
+  },
+  "ok": true,
+  "recordedAt": "2026-08-06T11:13:12.655Z"
+}
