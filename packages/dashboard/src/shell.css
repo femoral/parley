@@ -89,7 +89,7 @@
 .pc-shell__mark {
   width: 22px;
   height: 22px;
-  background: var(--text);
+  /* No plate behind the mark: the SVG is white-ink on transparent. */
   object-fit: contain;
   flex: none;
   /* Zero radius — mock had a 3px exception; DESIGN.md says zero. */

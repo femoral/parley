@@ -126,7 +126,7 @@ export const Header = forwardRef<HTMLButtonElement, HeaderProps>(function Header
         <div className="pc-shell__brand">
           <img
             className="pc-shell__mark"
-            src="/assets/parleylogo.png"
+            src="/assets/parleylogo.svg"
             alt="Parley"
             width={22}
             height={22}
