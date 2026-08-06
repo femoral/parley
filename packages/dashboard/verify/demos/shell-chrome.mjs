@@ -6,9 +6,12 @@
  * - axe in resting + find-popup-open + settings-open
  * - skip-to-main focus + Tab into content
  * - settings popover focus in/out, aria-modal=false
- * - footer note scrollWidth at 3 widths
+ * - footer doctrine note scrollWidth + text at 3 widths
  * - 1280 chrome density (no silent clip)
  * - live-region transcript (no bootstrap offline; restore after recover)
+ *
+ * `shellChromeGates` is the registry entry's gates() — screen tickets add
+ * their own gates on their entries without editing check.mjs.
  */
 import { pathToFileURL } from "node:url";
 import { collectA11y, runAxe, ariaSnapshot } from "../lib/a11y.mjs";
@@ -19,6 +22,119 @@ import { openVerifySession } from "../lib/session.mjs";
 
 const TICKET = "issue-354";
 const DEMO = "shell-chrome";
+
+/**
+ * Issue-354 merge gates for shell-chrome ledger proofs.
+ * Registered on the DEMO_REGISTRY entry so screen tickets can add gates
+ * without editing check.mjs.
+ *
+ * @param {object} _entry registry entry
+ * @param {object} ledger full ledger entry.json for the ticket
+ */
+export function shellChromeGates(_entry, ledger) {
+  const chrome = ledger.demos?.["shell-chrome"];
+  if (!chrome) throw new Error("shell-chrome: missing demo in ledger");
+
+  if (!chrome.headline?.boardScroll?.shell?.noHorizontalScroll) {
+    throw new Error("shell-chrome: board horizontal scroll at 1280 not proven clear");
+  }
+  if (chrome.headline?.headerHeight !== 46) {
+    throw new Error(
+      `shell-chrome: expected header height 46, got ${chrome.headline?.headerHeight}`,
+    );
+  }
+  if (!chrome.comboboxAria || chrome.comboboxAria.role !== "combobox") {
+    throw new Error("shell-chrome: combobox ARIA role missing");
+  }
+  if (!chrome.a11y?.keyboardWalk?.leftBody) {
+    throw new Error("shell-chrome: keyboard walk did not leave body");
+  }
+
+  // Axe in all three chrome states (resting, find popup, settings open).
+  const byState = chrome.a11yByState ?? {};
+  for (const state of ["resting", "findPopup", "settingsOpen"]) {
+    const block = byState[state];
+    if (!block?.axe) throw new Error(`shell-chrome: missing a11yByState.${state}`);
+    const v = block.axe.violations ?? [];
+    if (v.length > 0) {
+      throw new Error(
+        `shell-chrome: axe violations in ${state}: ${v.map((x) => x.id).join(", ")}`,
+      );
+    }
+  }
+
+  const contrast = chrome.contrast ?? {};
+  for (const [cid, m] of Object.entries(contrast)) {
+    if (m && m.found && m.wcagAA === false) {
+      throw new Error(`shell-chrome: contrast fail ${cid} ratio=${m.ratio}`);
+    }
+  }
+  if (!chrome.stateEncoding?.allHaveLabels) {
+    throw new Error("shell-chrome: legend missing text labels (hue-only state)");
+  }
+
+  // Footer doctrine note legible at all three widths — protects the
+  // state-vs-quality vocabulary, not its deletion.
+  const footer = chrome.footerNoteScroll;
+  if (!Array.isArray(footer) || footer.length < 3) {
+    throw new Error("shell-chrome: missing footerNoteScroll proofs");
+  }
+  for (const row of footer) {
+    if (!row.ok) {
+      throw new Error(
+        `shell-chrome: footer note clipped at ${row.name}: ` +
+          `scrollWidth=${row.scrollWidth} clientWidth=${row.clientWidth}`,
+      );
+    }
+    const text = row.text ?? "";
+    const fullDoctrine =
+      text.includes("what a task IS") && text.includes("how good work WAS");
+    const compactDoctrine = text.includes("state=IS") && text.includes("quality=WAS");
+    if (!fullDoctrine && !compactDoctrine) {
+      throw new Error(
+        `shell-chrome: footer note missing state-vs-quality doctrine at ${row.name}: "${text}"`,
+      );
+    }
+  }
+
+  // 1280 density: no silent ellipsis amputation on measured chrome bits.
+  if (!chrome.density1280?.allOk) {
+    throw new Error(
+      `shell-chrome: 1280 density clipping: ${JSON.stringify(chrome.density1280)}`,
+    );
+  }
+
+  // Skip-to-main must land focus on #main-content.
+  if (chrome.skipMain?.focusedId !== "main-content") {
+    throw new Error(
+      `shell-chrome: skip-main focus expected main-content, got ${chrome.skipMain?.focusedId}`,
+    );
+  }
+
+  // Settings popover: focus moves in, restores to trigger, no aria-modal.
+  if (chrome.settingsFocus?.ariaModal !== "false") {
+    throw new Error("shell-chrome: settings must be popover (aria-modal=false)");
+  }
+  if (!chrome.settingsFocus?.focusMovedIn) {
+    throw new Error("shell-chrome: settings did not move focus into panel");
+  }
+  if (!chrome.settingsFocus?.focusRestored) {
+    throw new Error("shell-chrome: settings did not restore focus to trigger");
+  }
+
+  // Live region: no bootstrap offline flash; restore announced after recover.
+  const live = chrome.liveRegionTranscript;
+  if (!live) throw new Error("shell-chrome: missing liveRegionTranscript");
+  if (live.announcedOfflineOnHealthyBoot || live.offlineWhileLive) {
+    throw new Error("shell-chrome: live region announced offline on healthy boot");
+  }
+  if (!live.announcedOfflineAfterLive) {
+    throw new Error("shell-chrome: live region never announced offline after forced drop");
+  }
+  if (!live.announcedRestore) {
+    throw new Error("shell-chrome: live region never announced connection restored");
+  }
+}
 
 function describeFocus() {
   return {
@@ -37,7 +153,13 @@ function describeFocus() {
  */
 async function scrollMetrics(page, selector) {
   return page.evaluate((sel) => {
-    const el = document.querySelector(sel);
+    // Prefer the visible match (footer has full + compact doctrine notes).
+    const all = [...document.querySelectorAll(sel)];
+    const el =
+      all.find((e) => {
+        const cs = getComputedStyle(e);
+        return cs.display !== "none" && cs.visibility !== "hidden";
+      }) ?? all[0];
     if (!el) return { found: false, selector: sel };
     return {
       found: true,
@@ -45,7 +167,7 @@ async function scrollMetrics(page, selector) {
       scrollWidth: el.scrollWidth,
       clientWidth: el.clientWidth,
       ok: el.scrollWidth <= el.clientWidth + 1,
-      text: (el.textContent ?? "").replace(/\s+/g, " ").trim().slice(0, 80),
+      text: (el.textContent ?? "").replace(/\s+/g, " ").trim().slice(0, 120),
     };
   }, selector);
 }
@@ -421,6 +543,7 @@ export async function runShellChromeDemo() {
           axeFind: axeFind.violations?.length,
           axeSettings: axeSettings.violations?.length,
           footerOk: footerNoteScroll.every((r) => r.ok),
+          footerTexts: footerNoteScroll.map((r) => ({ name: r.name, text: r.text })),
           densityOk: densityAllOk,
           skipFocus: afterSkip.id,
           settingsAriaModal,

@@ -30,6 +30,11 @@ describe("Shell frame", () => {
     // State never by hue alone — legend labels present
     expect(screen.getByText("awaiting")).toBeTruthy();
     expect(screen.getByText("failed")).toBeTruthy();
+    // Footer doctrine (state-vs-quality vocabulary) present in full + compact
+    expect(screen.getByTestId("footer-note-full").textContent).toMatch(/what a task IS/);
+    expect(screen.getByTestId("footer-note-full").textContent).toMatch(/how good work WAS/);
+    expect(screen.getByTestId("footer-note-compact").textContent).toMatch(/state=IS/);
+    expect(screen.getByTestId("footer-note-compact").textContent).toMatch(/quality=WAS/);
   });
 
   it("exposes skip links and live region; main-content is focusable", () => {

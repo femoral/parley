@@ -236,8 +236,10 @@ export function Shell() {
           ? MetricsScreen
           : FleetScreen;
 
-  // Short note — must fit footer meta without clipping at 1280/1460/1920.
-  const footerNote = `${countNeedVerb(attentionCount, "orch")} · ${honesty.phase}`;
+  // Footer doctrine (mock: "state = what a task IS · quality = how good work WAS · N unacked").
+  // Full form ≥1460; compact form at 1280 floor keeps the state-vs-quality lesson visible.
+  const footerNote = `state = what a task IS · quality = how good work WAS · ${attentionCount} unacked events · ${honesty.phase}`;
+  const footerNoteCompact = `state=IS · quality=WAS · ${attentionCount} unacked · ${honesty.phase}`;
 
   return (
     <div className="pc-shell" data-testid="shell" data-screen={screen}>
@@ -322,7 +324,7 @@ export function Shell() {
         </aside>
       </div>
 
-      <FooterLegend note={footerNote} />
+      <FooterLegend note={footerNote} noteCompact={footerNoteCompact} />
 
       <SettingsSurface
         open={settingsOpen}

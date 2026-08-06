@@ -89,6 +89,39 @@ Screen tickets must not introduce a second router.
 
 ---
 
+## 1280 density decisions (shell chrome)
+
+These are intentional floor-viewport tradeoffs, not accidents. Screens consume
+the same breakpoints (`max-width: 1360px` media in `shell.css`) and must not
+reintroduce the dropped chrome tokens without a new density plan.
+
+### Attention chip label
+
+At `max-width: 1360px`, `.pc-shell__attention-label` ("needs orch") is
+`display: none`. Only the amber count remains visible.
+
+**Decision: keep hiding.** Rationale:
+
+- The count element carries `aria-label` (`N need the orchestrator`) and the
+  chip container has `title="Tasks and gates that need the orchestrator"` —
+  AT and hover still get the full meaning.
+- Visible pixels at the 1280 floor are reserved for the number (primary
+  signal) and the live/stream value; the label is secondary chrome.
+- Same pattern as `.pc-shell__live-status-label` and tab-sub.
+
+### Footer doctrine note
+
+Mock copy: `state = what a task IS · quality = how good work WAS · N unacked events`.
+
+- **≥1460**: full doctrine string + live unacked count + honesty phase.
+- **≤1360 (1280 floor)**: compact `state=IS · quality=WAS · N unacked · {phase}`
+  so the state-vs-quality vocabulary lesson survives at every width.
+- Footer flex: legend is `flex: 1 1 auto; min-width: 0` (shrinks first);
+  note+meta row is `flex: 0 0 auto` (never shrinks). Gate proves
+  `scrollWidth <= clientWidth` **with** the doctrine text present.
+
+---
+
 ## Shared-file registration protocol
 
 These five files are **shared** across shell + screen tickets. Editing them
@@ -107,12 +140,27 @@ Every demo registers here as one entry:
 - `run-all.mjs` and `check.mjs` **import this registry** — they do not hard-code
   demo lists beyond reading the registry.
 
-### 2. `verify/check.mjs` `TICKETS` map
+### 2. `verify/check.mjs` `TICKETS` map + `gates`
 
 Derived from the registry (group by `ticket` → list of demo `id`s). Screen
 tickets do not hand-edit a parallel map; they add a registry entry and the
-check picks it up. If you must patch check.mjs for a screen-specific gate,
-add a `gates` function on the registry entry instead of branching in check.
+check picks it up.
+
+Ticket-specific merge gates live on the registry entry, not in `check.mjs`:
+
+```js
+{
+  ticket: "issue-355",
+  id: "fleet-board",
+  run: runFleetBoardDemo,
+  gates: (entry, ledgerEntry) => {
+    // throw if ledger proofs fail screen-specific invariants
+  },
+}
+```
+
+`check.mjs` calls `entry.gates(entry, ledgerEntry)` when present. Do **not**
+add `if (ticket === "issue-NNN")` branches in check.mjs.
 
 ### 3. `verify/demos/run-all.mjs`
 

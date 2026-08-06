@@ -586,10 +586,17 @@
   overflow: hidden;
 }
 
+/*
+ * Footer flex doctrine: legend shrinks first; note+meta never shrink.
+ * (Previously flex-shrink:0 on note + flex:none on legend meant neither
+ * yielded — the 1280 density pass deleted the doctrine string instead.
+ * Legend is flex:1 1 auto + min-width:0 + overflow:hidden so it yields.)
+ */
 .pc-shell__legend {
   display: flex;
   align-items: center;
   gap: 14px;
+  flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
 }
@@ -618,19 +625,23 @@
   display: flex;
   align-items: center;
   gap: 14px;
-  flex: 0 1 auto;
+  /* Never shrink — doctrine note must stay fully legible (scrollWidth<=clientWidth). */
+  flex: 0 0 auto;
   min-width: 0;
-  /* Prefer shrinking legend before clipping note — note must stay fully legible. */
-  flex-shrink: 0;
 }
 
 .pc-shell__footer-note {
   font: 400 10px/1 var(--font-mono);
   color: var(--text-4);
   white-space: nowrap;
-  /* No ellipsis — copy is short by construction; prove scrollWidth<=clientWidth. */
+  /* No ellipsis — prove scrollWidth<=clientWidth with doctrine copy present. */
   overflow: visible;
   flex: none;
+}
+
+/* Full doctrine at ≥1460; compact form at 1280 floor (media below). */
+.pc-shell__footer-note--compact {
+  display: none;
 }
 
 .pc-shell__footer-meta {
@@ -792,12 +803,26 @@
     display: inline;
   }
 
+  /*
+   * Attention chip label: intentionally hidden at the 1280 floor.
+   * Count keeps aria-label + chip title ("needs orch" meaning for AT/hover);
+   * visible pixels reserved for the amber number (primary signal). Same
+   * pattern as live-status-label. Decision recorded in SCREENS.md.
+   */
   .pc-shell__attention-label {
     display: none;
   }
 
   .pc-shell__live-status-label {
     display: none;
+  }
+
+  /* Compact footer doctrine at floor; full form restored ≥1460. */
+  .pc-shell__footer-note--full {
+    display: none;
+  }
+  .pc-shell__footer-note--compact {
+    display: inline;
   }
 
   .pc-shell__divider--meta {

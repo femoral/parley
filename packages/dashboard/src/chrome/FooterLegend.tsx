@@ -15,10 +15,13 @@ const LEGEND: ReadonlyArray<{ state: string; label: string; cssVar: string }> = 
 ];
 
 export interface FooterLegendProps {
+  /** Full doctrine note (≥1460). Mock: "state = what a task IS · quality = how good work WAS · …" */
   note?: string;
+  /** Compact doctrine note (≤1360 / 1280 floor). Must keep state=IS · quality=WAS lesson. */
+  noteCompact?: string;
 }
 
-export function FooterLegend({ note }: FooterLegendProps) {
+export function FooterLegend({ note, noteCompact }: FooterLegendProps) {
   return (
     <footer className="pc-shell__footer" data-testid="shell-footer">
       <div className="pc-shell__legend" aria-label="Task state legend">
@@ -34,7 +37,19 @@ export function FooterLegend({ note }: FooterLegendProps) {
         ))}
       </div>
       <div className="pc-shell__footer-meta-row">
-        {note ? <span className="pc-shell__footer-note">{note}</span> : null}
+        {note ? (
+          <span className="pc-shell__footer-note pc-shell__footer-note--full" data-testid="footer-note-full">
+            {note}
+          </span>
+        ) : null}
+        {noteCompact || note ? (
+          <span
+            className="pc-shell__footer-note pc-shell__footer-note--compact"
+            data-testid="footer-note-compact"
+          >
+            {noteCompact ?? note}
+          </span>
+        ) : null}
         <span className="pc-shell__footer-meta">read-only · parley never merges</span>
       </div>
     </footer>

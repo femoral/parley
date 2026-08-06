@@ -9,21 +9,39 @@
  *   id      — demo key inside entry.json demos
  *   run     — async () => proof
  *   kind    — optional; "find-honesty" skips viewport triple check in check.mjs
+ *   gates   — optional; (entry, ledgerEntry) => void | throws — ticket-specific
+ *             merge gates. check.mjs calls this when present so screen tickets
+ *             never need to hard-branch in check.mjs.
  */
 import { runStagedDaemonDemo } from "./staged-daemon.mjs";
 import { runInterceptErrorDemo } from "./intercept-error.mjs";
 import { runReconnectDemo } from "./reconnect.mjs";
-import { runShellChromeDemo } from "./shell-chrome.mjs";
+import { runShellChromeDemo, shellChromeGates } from "./shell-chrome.mjs";
 import { runFindHonestyDemo } from "./find-honesty.mjs";
 
-/** @type {Array<{ ticket: string, id: string, run: () => Promise<object>, kind?: string }>} */
+/**
+ * @typedef {{
+ *   ticket: string,
+ *   id: string,
+ *   run: () => Promise<object>,
+ *   kind?: string,
+ *   gates?: (entry: object, ledgerEntry: object) => void,
+ * }} DemoRegistryEntry
+ */
+
+/** @type {DemoRegistryEntry[]} */
 export const DEMO_REGISTRY = [
   // #353 harness
   { ticket: "issue-353", id: "staged-daemon", run: runStagedDaemonDemo },
   { ticket: "issue-353", id: "intercept-error", run: runInterceptErrorDemo },
   { ticket: "issue-353", id: "reconnect", run: runReconnectDemo },
   // #354 shell chrome
-  { ticket: "issue-354", id: "shell-chrome", run: runShellChromeDemo },
+  {
+    ticket: "issue-354",
+    id: "shell-chrome",
+    run: runShellChromeDemo,
+    gates: shellChromeGates,
+  },
   {
     ticket: "issue-354",
     id: "find-honesty",
@@ -31,7 +49,7 @@ export const DEMO_REGISTRY = [
     kind: "find-honesty",
   },
   // Screen tickets append below, e.g.:
-  // { ticket: "issue-355", id: "fleet-board", run: runFleetBoardDemo },
+  // { ticket: "issue-355", id: "fleet-board", run: runFleetBoardDemo, gates: fleetGates },
 ];
 
 /** Group registry into TICKETS map: { "issue-354": ["shell-chrome", ...] } */

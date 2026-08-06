@@ -58,97 +58,12 @@ async function main() {
       }
     }
 
-    // #354-specific gates
-    if (ticket === "issue-354") {
-      const chrome = ledger.demos["shell-chrome"];
-      if (!chrome.headline?.boardScroll?.shell?.noHorizontalScroll) {
-        throw new Error("shell-chrome: board horizontal scroll at 1280 not proven clear");
-      }
-      if (chrome.headline?.headerHeight !== 46) {
-        throw new Error(
-          `shell-chrome: expected header height 46, got ${chrome.headline?.headerHeight}`,
-        );
-      }
-      if (!chrome.comboboxAria || chrome.comboboxAria.role !== "combobox") {
-        throw new Error("shell-chrome: combobox ARIA role missing");
-      }
-      if (!chrome.a11y?.keyboardWalk?.leftBody) {
-        throw new Error("shell-chrome: keyboard walk did not leave body");
-      }
-
-      // Axe in all three chrome states (resting, find popup, settings open).
-      const byState = chrome.a11yByState ?? {};
-      for (const state of ["resting", "findPopup", "settingsOpen"]) {
-        const block = byState[state];
-        if (!block?.axe) throw new Error(`shell-chrome: missing a11yByState.${state}`);
-        const v = block.axe.violations ?? [];
-        if (v.length > 0) {
-          throw new Error(
-            `shell-chrome: axe violations in ${state}: ${v.map((x) => x.id).join(", ")}`,
-          );
-        }
-      }
-
-      const contrast = chrome.contrast ?? {};
-      for (const [cid, m] of Object.entries(contrast)) {
-        if (m && m.found && m.wcagAA === false) {
-          throw new Error(`shell-chrome: contrast fail ${cid} ratio=${m.ratio}`);
-        }
-      }
-      if (!chrome.stateEncoding?.allHaveLabels) {
-        throw new Error("shell-chrome: legend missing text labels (hue-only state)");
-      }
-
-      // Footer note legible at all three widths.
-      const footer = chrome.footerNoteScroll;
-      if (!Array.isArray(footer) || footer.length < 3) {
-        throw new Error("shell-chrome: missing footerNoteScroll proofs");
-      }
-      for (const row of footer) {
-        if (!row.ok) {
-          throw new Error(
-            `shell-chrome: footer note clipped at ${row.name}: ` +
-              `scrollWidth=${row.scrollWidth} clientWidth=${row.clientWidth}`,
-          );
-        }
-      }
-
-      // 1280 density: no silent ellipsis amputation on measured chrome bits.
-      if (!chrome.density1280?.allOk) {
-        throw new Error(
-          `shell-chrome: 1280 density clipping: ${JSON.stringify(chrome.density1280)}`,
-        );
-      }
-
-      // Skip-to-main must land focus on #main-content.
-      if (chrome.skipMain?.focusedId !== "main-content") {
-        throw new Error(
-          `shell-chrome: skip-main focus expected main-content, got ${chrome.skipMain?.focusedId}`,
-        );
-      }
-
-      // Settings popover: focus moves in, restores to trigger, no aria-modal.
-      if (chrome.settingsFocus?.ariaModal !== "false") {
-        throw new Error("shell-chrome: settings must be popover (aria-modal=false)");
-      }
-      if (!chrome.settingsFocus?.focusMovedIn) {
-        throw new Error("shell-chrome: settings did not move focus into panel");
-      }
-      if (!chrome.settingsFocus?.focusRestored) {
-        throw new Error("shell-chrome: settings did not restore focus to trigger");
-      }
-
-      // Live region: no bootstrap offline flash; restore announced after recover.
-      const live = chrome.liveRegionTranscript;
-      if (!live) throw new Error("shell-chrome: missing liveRegionTranscript");
-      if (live.announcedOfflineOnHealthyBoot || live.offlineWhileLive) {
-        throw new Error("shell-chrome: live region announced offline on healthy boot");
-      }
-      if (!live.announcedOfflineAfterLive) {
-        throw new Error("shell-chrome: live region never announced offline after forced drop");
-      }
-      if (!live.announcedRestore) {
-        throw new Error("shell-chrome: live region never announced connection restored");
+    // Per-entry gates (registry.gates) — screen tickets add gates without
+    // hard-branching here. See SCREENS.md § registration protocol.
+    for (const id of required) {
+      const reg = DEMO_REGISTRY.find((d) => d.ticket === ticket && d.id === id);
+      if (typeof reg?.gates === "function") {
+        reg.gates(reg, ledger);
       }
     }
 
