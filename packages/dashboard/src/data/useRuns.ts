@@ -57,7 +57,21 @@ export function useRuns(
         }
       } catch (err) {
         if (!cancelled) {
-          setStatus("offline");
+          // HTTP errors (daemon answered with 4xx/5xx) → online + error so the
+          // screen can render panel-error. Network/unreachable → offline so
+          // cold-load against a dead daemon shows "Daemon offline" (N3).
+          const httpStatus =
+            err &&
+            typeof err === "object" &&
+            "status" in err &&
+            typeof (err as { status: unknown }).status === "number"
+              ? (err as { status: number }).status
+              : null;
+          if (httpStatus != null && httpStatus >= 400) {
+            setStatus("online");
+          } else {
+            setStatus("offline");
+          }
           setError(err instanceof Error ? err.message : "runs list failed");
         }
       }

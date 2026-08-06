@@ -7,7 +7,6 @@
  */
 import { pathToFileURL } from "node:url";
 import { collectA11y, runAxe, ariaSnapshot, keyboardWalk } from "../lib/a11y.mjs";
-import { interceptError, clearIntercepts } from "../lib/honesty.mjs";
 import { ledgerDirs, writeDemoProof, printRectSummary } from "../lib/ledger.mjs";
 import { measureAtViewports, measureElement } from "../lib/measure.mjs";
 import { openVerifySession } from "../lib/session.mjs";
@@ -163,6 +162,24 @@ export function runDetailGates(_entry, ledger) {
   // Outputs present outside view switch
   if (!demo.outputsAlways?.ok) {
     throw new Error("run-detail: run outputs not proven outside view switch");
+  }
+
+  // Pipeline wrap honesty (MED N1): full rows except last; cue says "wrapped"
+  const wrap = demo.pipelineWrap ?? {};
+  if (!wrap.ok) {
+    throw new Error(
+      `run-detail: pipeline wrap not honest (got ${JSON.stringify(wrap)})`,
+    );
+  }
+
+  // Fork STATE column names INHERITED/SKIPPED (MED N2)
+  if (!forkUi.stateNamed) {
+    throw new Error(
+      `run-detail: fork state labels missing (got ${JSON.stringify({
+        table: forkUi.tableStateLabels,
+        grid: forkUi.gridStateLabels,
+      })})`,
+    );
   }
 
   // No mutating routes in screen source
@@ -458,13 +475,21 @@ export async function runRunDetailDemo() {
         .locator('[data-testid="screen-run"]')
         .getAttribute("data-run-id");
 
-      // Table
+      // Table — measure fork markers + STATE labels while view is mounted (MED N2)
       await page.click('[data-testid="run-view-table"]');
       await page.waitForSelector('[data-testid="run-node-table"]', { timeout: 5_000 });
       const table = page.locator('[data-testid="run-node-table"]');
       const tableInh = await table.locator('[data-fork="inherited"]').count();
       const tableSkip = await table.locator('[data-fork="skipped"]').count();
       const tableText = ((await table.textContent()) ?? "").slice(0, 500);
+      const tableStateLabels = await table.evaluate((el) => {
+        const rows = [...el.querySelectorAll("[data-fork]")];
+        return rows.map((r) => ({
+          fork: r.getAttribute("data-fork"),
+          stateLabel: r.querySelector(".pc-run__state-label")?.textContent?.trim() ?? null,
+          hasBadge: !!r.querySelector(".pc-run__fork-badge"),
+        }));
+      });
 
       // Pipeline
       await page.click('[data-testid="run-view-pipeline"]');
@@ -473,13 +498,26 @@ export async function runRunDetailDemo() {
       const pipeInh = await pipe.locator('[data-fork="inherited"]').count();
       const pipeSkip = await pipe.locator('[data-fork="skipped"]').count();
 
-      // Grid — REQUIRED #3 (must include iter 0)
+      // Grid — REQUIRED #3 (must include iter 0) + STATE names (MED N2)
       await page.click('[data-testid="run-view-grid"]');
       await page.waitForSelector('[data-testid="run-iteration-grid"]', { timeout: 5_000 });
       const grid = page.locator('[data-testid="run-iteration-grid"]');
       const gridInh = await grid.locator('[data-fork="inherited"]').count();
       const gridSkip = await grid.locator('[data-fork="skipped"]').count();
       const gridText = ((await grid.textContent()) ?? "").slice(0, 400);
+      const gridStateLabels = await grid.evaluate((el) => {
+        const cells = [...el.querySelectorAll("[data-fork]")];
+        return cells.map((c) => ({
+          fork: c.getAttribute("data-fork"),
+          stateLabel: c.querySelector(".pc-run__state-label")?.textContent?.trim() ?? null,
+        }));
+      });
+
+      const stateNamed =
+        tableStateLabels.some((r) => r.fork === "inherited" && /INHERITED/i.test(r.stateLabel ?? "")) &&
+        tableStateLabels.some((r) => r.fork === "skipped" && /SKIPPED/i.test(r.stateLabel ?? "")) &&
+        gridStateLabels.some((r) => r.fork === "inherited" && /INHERITED/i.test(r.stateLabel ?? "")) &&
+        gridStateLabels.some((r) => r.fork === "skipped" && /SKIPPED/i.test(r.stateLabel ?? ""));
 
       forkRender = {
         boundRunId: boundId,
@@ -488,10 +526,160 @@ export async function runRunDetailDemo() {
         skippedFound: tableSkip + pipeSkip > 0,
         gridInheritedFound: gridInh > 0,
         gridSkippedFound: gridSkip > 0,
+        stateNamed,
+        tableStateLabels,
+        gridStateLabels,
         gridTextSample: gridText,
         textSample: tableText,
       };
       await page.screenshot({ path: path.join(shotsDir, `${DEMO}-forked-1460.png`) });
+    }
+
+    // ── Pipeline wrap honesty (MED N1) ────────────────────────────────
+    // Inject a 20-node detail so we can measure full-row histogram at
+    // 1280/1920; natural flex-wrap must fill rows (last may be short).
+    let pipelineWrap = { ok: false };
+    {
+      const wrapRunId = staged.gateHeld?.runId ?? staged.fanOut?.runId;
+      if (wrapRunId) {
+        await clearRunRoutes(page);
+        // Single handler for list + detail (**/runs** matches both — see honesty).
+        await page.route("**/runs**", async (route) => {
+          try {
+            const u = route.request().url();
+            const pathName = new URL(u).pathname;
+            const isList = pathName === "/runs" || pathName.endsWith("/runs");
+            if (isList) {
+              const res = await fetch(`${session.daemon.baseUrl}/runs`);
+              const body = await res.json();
+              const runs = (body.runs ?? []).filter((r) => r.run_id === wrapRunId);
+              await route.fulfill({
+                status: 200,
+                contentType: "application/json",
+                body: JSON.stringify({ ...body, runs }),
+              });
+              return;
+            }
+            // Bare detail only — not /nodes/ or /deliverables.
+            const detailSuffix = `/runs/${wrapRunId}`;
+            if (
+              pathName.endsWith(detailSuffix) ||
+              pathName.endsWith(`/runs/${encodeURIComponent(wrapRunId)}`)
+            ) {
+              const res = await fetch(`${session.daemon.baseUrl}/runs/${wrapRunId}`);
+              const body = await res.json();
+              const template = body.nodes?.[0] ?? {
+                node: "n",
+                kind: "step",
+                state: "completed",
+                iteration: 1,
+                tasks_settled: 1,
+                tasks_total: 1,
+                gist: "wrap",
+                duration_ms: 0,
+              };
+              body.nodes = Array.from({ length: 20 }, (_, i) => ({
+                ...template,
+                node: `n${i}`,
+                kind: "step",
+                state: "completed",
+                iteration: 1,
+                tasks_settled: 1,
+                tasks_total: 1,
+                gist: `node ${i}`,
+                fanout: null,
+                on_reject: null,
+              }));
+              await route.fulfill({
+                status: 200,
+                contentType: "application/json",
+                body: JSON.stringify(body),
+              });
+              return;
+            }
+            await route.continue();
+          } catch {
+            await route.continue().catch(() => undefined);
+          }
+        });
+        await page.goto(`${url}#/run`, { waitUntil: "networkidle" });
+        await page.waitForSelector('[data-testid="shell"]');
+        await page
+          .waitForSelector(`[data-testid="screen-run"][data-run-id="${wrapRunId}"]`, {
+            timeout: 15_000,
+          })
+          .catch(() => undefined);
+        await page
+          .waitForSelector('[data-testid="run-pipeline"]', { timeout: 15_000 })
+          .catch(() => undefined);
+        // Ensure pipeline view + 20 cards.
+        await page.click('[data-testid="run-view-pipeline"]').catch(() => undefined);
+        await page
+          .waitForFunction(
+            () =>
+              document.querySelectorAll(
+                '[data-testid="run-pipeline"] .pc-run__node-card',
+              ).length >= 20,
+            { timeout: 12_000 },
+          )
+          .catch(() => undefined);
+
+        const histAt = async (width) => {
+          await page.setViewportSize({ width, height: 900 });
+          await page.waitForTimeout(250);
+          return page.evaluate(() => {
+            const track = document.querySelector(".pc-run__pipeline-track");
+            const cue = document.querySelector('[data-testid="pipeline-scroll-cue"]');
+            if (!track) return { found: false };
+            const cards = [...track.querySelectorAll(".pc-run__node-card")];
+            const tops = cards.map((c) => Math.round(c.getBoundingClientRect().top));
+            const groups = new Map();
+            for (const t of tops) {
+              let key = t;
+              for (const k of groups.keys()) {
+                if (Math.abs(k - t) <= 2) {
+                  key = k;
+                  break;
+                }
+              }
+              groups.set(key, (groups.get(key) ?? 0) + 1);
+            }
+            const histogram = [...groups.entries()]
+              .sort((a, b) => a[0] - b[0])
+              .map(([, n]) => n);
+            const cueText = cue?.textContent?.trim() ?? null;
+            return {
+              found: true,
+              nodeCount: cards.length,
+              histogram,
+              cueText,
+              cueHonest: cueText != null && /wrapped/.test(cueText) && !/rows of/.test(cueText),
+              rowsUniform:
+                histogram.length > 0 &&
+                histogram.slice(0, -1).every((n) => n === histogram[0]) &&
+                histogram[histogram.length - 1] <= histogram[0] &&
+                !histogram.slice(0, -1).some((n) => n === 1 && histogram[0] > 1),
+            };
+          });
+        };
+
+        const at1280 = await histAt(1280);
+        const at1920 = await histAt(1920);
+        pipelineWrap = {
+          ok:
+            at1280.found &&
+            at1920.found &&
+            at1280.nodeCount === 20 &&
+            at1920.nodeCount === 20 &&
+            at1280.cueHonest &&
+            at1920.cueHonest &&
+            at1280.rowsUniform &&
+            at1920.rowsUniform,
+          at1280,
+          at1920,
+        };
+        await clearRunRoutes(page);
+      }
     }
 
     // Outputs always present across views — REQUIRED #10
@@ -780,7 +968,7 @@ export async function runRunDetailDemo() {
     // Wait for long name to appear
     await page
       .waitForFunction(
-        (name) => {
+        (_name) => {
           const el = document.querySelector(".pc-run__workflow");
           return el && (el.textContent ?? "").length > 40;
         },
@@ -862,6 +1050,7 @@ export async function runRunDetailDemo() {
       failedRender,
       wireVerbs,
       outputsAlways,
+      pipelineWrap,
       gateNoticeStyles,
       a11yByView,
       gateUi: {

@@ -190,7 +190,9 @@ export function RunScreen(props: ScreenMountProps) {
 
   // Panel error: list or detail fetch failed — never masquerade as empty.
   if (runs.error || runs.status === "offline") {
-    const isOffline = runs.status === "offline" && !runs.error;
+    // useRuns sets offline only for network/unreachable failures; HTTP
+    // errors stay online + error → panel-error. Prefer status here.
+    const isOffline = runs.status === "offline";
     // If we still have detail from a prior poll, fall through to render it
     // with a stale/error band. Only full-shell when we have nothing to show.
     if (!detail) {

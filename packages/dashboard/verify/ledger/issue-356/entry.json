@@ -23,7 +23,7 @@
               "finish"
             ]
           },
-          "workspace": "/tmp/parley-verify-home-fCCZkk/worktrees/parley-run-repo-5PSdSV/r1",
+          "workspace": "/tmp/parley-verify-home-uWkOm6/worktrees/parley-run-repo-CiOdUT/r1",
           "nodeCount": 2
         },
         "fanOut": {
@@ -93,8 +93,31 @@
         "skippedFound": true,
         "gridInheritedFound": true,
         "gridSkippedFound": true,
-        "gridTextSample": "nodefork · 0iteration 1planstepinherited—approvegateskipped ⊘—donestep—FAILED !—",
-        "textSample": "statenodestatetasksgistdurationplan inherited————approve skipped ⊘——on_reject → finish—done .1FAILED !1—0s"
+        "stateNamed": true,
+        "tableStateLabels": [
+          {
+            "fork": "inherited",
+            "stateLabel": "INHERITED",
+            "hasBadge": true
+          },
+          {
+            "fork": "skipped",
+            "stateLabel": "SKIPPED ⊘ fork",
+            "hasBadge": true
+          }
+        ],
+        "gridStateLabels": [
+          {
+            "fork": "inherited",
+            "stateLabel": "INHERITED"
+          },
+          {
+            "fork": "skipped",
+            "stateLabel": "SKIPPED ⊘ fork"
+          }
+        ],
+        "gridTextSample": "nodefork · 0iteration 1planstepINHERITED—approvegateSKIPPED ⊘ fork—donestep—FAILED !—",
+        "textSample": "statenodestatetasksgistdurationplan inheritedINHERITED———approve skipped ⊘SKIPPED ⊘ fork—on_reject → finish—done .1FAILED !1—0s"
       },
       "forkNotes": [
         "step failure observed as run.state=blocked block.reason=unknown verbs=[\"redirect\",\"finish\"] with node STATE=failed (run.state=failed only on phase-2 start errors / definition unparseable)"
@@ -122,6 +145,38 @@
           "pipeline": true,
           "grid": true,
           "table": true
+        }
+      },
+      "pipelineWrap": {
+        "ok": true,
+        "at1280": {
+          "found": true,
+          "nodeCount": 20,
+          "histogram": [
+            3,
+            3,
+            3,
+            3,
+            3,
+            3,
+            2
+          ],
+          "cueText": "20 nodes · wrapped",
+          "cueHonest": true,
+          "rowsUniform": true
+        },
+        "at1920": {
+          "found": true,
+          "nodeCount": 20,
+          "histogram": [
+            6,
+            6,
+            6,
+            2
+          ],
+          "cueText": "20 nodes · wrapped",
+          "cueHonest": true,
+          "rowsUniform": true
         }
       },
       "gateNoticeStyles": {
@@ -153,7 +208,7 @@
       "a11yByView": {
         "pipeline": {
           "axe": {
-            "url": "http://127.0.0.1:5176/#/run",
+            "url": "http://127.0.0.1:5174/#/run",
             "violations": [],
             "passes": 21,
             "incomplete": 0,
@@ -162,7 +217,7 @@
         },
         "grid": {
           "axe": {
-            "url": "http://127.0.0.1:5176/#/run",
+            "url": "http://127.0.0.1:5174/#/run",
             "violations": [],
             "passes": 23,
             "incomplete": 1,
@@ -171,7 +226,7 @@
         },
         "table": {
           "axe": {
-            "url": "http://127.0.0.1:5176/#/run",
+            "url": "http://127.0.0.1:5174/#/run",
             "violations": [],
             "passes": 22,
             "incomplete": 0,
@@ -180,7 +235,7 @@
         },
         "error": {
           "axe": {
-            "url": "http://127.0.0.1:5176/#/run",
+            "url": "http://127.0.0.1:5174/#/run",
             "violations": [],
             "passes": 22,
             "incomplete": 0,
@@ -189,7 +244,7 @@
         },
         "empty": {
           "axe": {
-            "url": "http://127.0.0.1:5176/#/run",
+            "url": "http://127.0.0.1:5174/#/run",
             "violations": [],
             "passes": 22,
             "incomplete": 0,
@@ -421,7 +476,7 @@
                 "overflow": "auto",
                 "opacity": "1"
               },
-              "text": "console-gaterun r1 · v1 · repo workspace · otherapprove.1 · 1/1 tasks · 0 ▸ 0 · 1s…/tmp/parley-verify-home-fCCZkk/worktrees/parley-run-repo-5PSdSV/r1BLOCKED …"
+              "text": "console-gaterun r1 · v1 · repo workspace · otherapprove.1 · 1/1 tasks · 0 ▸ 0 · 1s…/tmp/parley-verify-home-uWkOm6/worktrees/parley-run-repo-CiOdUT/r1BLOCKED …"
             },
             "screen-run": {
               "selector": "[data-testid=\"screen-run\"]",
@@ -463,7 +518,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "console-gaterun r1 · v1 · repo workspace · otherapprove.1 · 1/1 tasks · 0 ▸ 0 · 1s…/tmp/parley-verify-home-fCCZkk/worktrees/parley-run-repo-5PSdSV/r1BLOCKED …"
+              "text": "console-gaterun r1 · v1 · repo workspace · otherapprove.1 · 1/1 tasks · 0 ▸ 0 · 1s…/tmp/parley-verify-home-uWkOm6/worktrees/parley-run-repo-CiOdUT/r1BLOCKED …"
             },
             "run-header": {
               "selector": "[data-testid=\"run-header\"]",
@@ -505,7 +560,7 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "console-gaterun r1 · v1 · repo workspace · otherapprove.1 · 1/1 tasks · 0 ▸ 0 · 1s…/tmp/parley-verify-home-fCCZkk/worktrees/parley-run-repo-5PSdSV/r1BLOCKED …"
+              "text": "console-gaterun r1 · v1 · repo workspace · otherapprove.1 · 1/1 tasks · 0 ▸ 0 · 1s…/tmp/parley-verify-home-uWkOm6/worktrees/parley-run-repo-CiOdUT/r1BLOCKED …"
             },
             "run-view-switch": {
               "selector": "[data-testid=\"run-view-switch\"]",
@@ -799,7 +854,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "/tmp/parley-verify-home-fCCZkk/worktrees/parley-run-repo-5PSdSV/r1"
+              "text": "/tmp/parley-verify-home-uWkOm6/worktrees/parley-run-repo-CiOdUT/r1"
             },
             "run-block": {
               "selector": "[data-testid=\"run-block\"]",
@@ -933,7 +988,7 @@
                 "overflow": "auto",
                 "opacity": "1"
               },
-              "text": "console-gaterun r1 · v1 · repo workspace · otherapprove.1 · 1/1 tasks · 0 ▸ 0 · 1s…/tmp/parley-verify-home-fCCZkk/worktrees/parley-run-repo-5PSdSV/r1BLOCKED …"
+              "text": "console-gaterun r1 · v1 · repo workspace · otherapprove.1 · 1/1 tasks · 0 ▸ 0 · 1s…/tmp/parley-verify-home-uWkOm6/worktrees/parley-run-repo-CiOdUT/r1BLOCKED …"
             },
             "screen-run": {
               "selector": "[data-testid=\"screen-run\"]",
@@ -975,7 +1030,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "console-gaterun r1 · v1 · repo workspace · otherapprove.1 · 1/1 tasks · 0 ▸ 0 · 1s…/tmp/parley-verify-home-fCCZkk/worktrees/parley-run-repo-5PSdSV/r1BLOCKED …"
+              "text": "console-gaterun r1 · v1 · repo workspace · otherapprove.1 · 1/1 tasks · 0 ▸ 0 · 1s…/tmp/parley-verify-home-uWkOm6/worktrees/parley-run-repo-CiOdUT/r1BLOCKED …"
             },
             "run-header": {
               "selector": "[data-testid=\"run-header\"]",
@@ -1017,7 +1072,7 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "console-gaterun r1 · v1 · repo workspace · otherapprove.1 · 1/1 tasks · 0 ▸ 0 · 1s…/tmp/parley-verify-home-fCCZkk/worktrees/parley-run-repo-5PSdSV/r1BLOCKED …"
+              "text": "console-gaterun r1 · v1 · repo workspace · otherapprove.1 · 1/1 tasks · 0 ▸ 0 · 1s…/tmp/parley-verify-home-uWkOm6/worktrees/parley-run-repo-CiOdUT/r1BLOCKED …"
             },
             "run-view-switch": {
               "selector": "[data-testid=\"run-view-switch\"]",
@@ -1311,7 +1366,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "/tmp/parley-verify-home-fCCZkk/worktrees/parley-run-repo-5PSdSV/r1"
+              "text": "/tmp/parley-verify-home-uWkOm6/worktrees/parley-run-repo-CiOdUT/r1"
             },
             "run-block": {
               "selector": "[data-testid=\"run-block\"]",
@@ -1445,7 +1500,7 @@
                 "overflow": "auto",
                 "opacity": "1"
               },
-              "text": "console-gaterun r1 · v1 · repo workspace · otherapprove.1 · 1/1 tasks · 0 ▸ 0 · 1s…/tmp/parley-verify-home-fCCZkk/worktrees/parley-run-repo-5PSdSV/r1BLOCKED …"
+              "text": "console-gaterun r1 · v1 · repo workspace · otherapprove.1 · 1/1 tasks · 0 ▸ 0 · 1s…/tmp/parley-verify-home-uWkOm6/worktrees/parley-run-repo-CiOdUT/r1BLOCKED …"
             },
             "screen-run": {
               "selector": "[data-testid=\"screen-run\"]",
@@ -1487,7 +1542,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "console-gaterun r1 · v1 · repo workspace · otherapprove.1 · 1/1 tasks · 0 ▸ 0 · 1s…/tmp/parley-verify-home-fCCZkk/worktrees/parley-run-repo-5PSdSV/r1BLOCKED …"
+              "text": "console-gaterun r1 · v1 · repo workspace · otherapprove.1 · 1/1 tasks · 0 ▸ 0 · 1s…/tmp/parley-verify-home-uWkOm6/worktrees/parley-run-repo-CiOdUT/r1BLOCKED …"
             },
             "run-header": {
               "selector": "[data-testid=\"run-header\"]",
@@ -1529,7 +1584,7 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "console-gaterun r1 · v1 · repo workspace · otherapprove.1 · 1/1 tasks · 0 ▸ 0 · 1s…/tmp/parley-verify-home-fCCZkk/worktrees/parley-run-repo-5PSdSV/r1BLOCKED …"
+              "text": "console-gaterun r1 · v1 · repo workspace · otherapprove.1 · 1/1 tasks · 0 ▸ 0 · 1s…/tmp/parley-verify-home-uWkOm6/worktrees/parley-run-repo-CiOdUT/r1BLOCKED …"
             },
             "run-view-switch": {
               "selector": "[data-testid=\"run-view-switch\"]",
@@ -1823,7 +1878,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "/tmp/parley-verify-home-fCCZkk/worktrees/parley-run-repo-5PSdSV/r1"
+              "text": "/tmp/parley-verify-home-uWkOm6/worktrees/parley-run-repo-CiOdUT/r1"
             },
             "run-block": {
               "selector": "[data-testid=\"run-block\"]",
@@ -1893,7 +1948,7 @@
         "offline": {
           "phase": "stale-reconnecting",
           "liveStatus": "streamreconnecting",
-          "text": "console-gaterun r1 · v1 · repo workspace · otherapprove.1 · 1/1 tasks · 0 ▸ 0 · 18s…/tmp/parley-verify-home-fCCZkk/worktrees/parley-run-repo-5PSdSV/r1BLOCKED · GATE HELDcopy r1blockedgate · approveverbs: approve · reject · redirect · finish (orchestrating agent only)viewpipelineiteration gridnode ta"
+          "text": "console-gaterun r1 · v1 · repo workspace · otherapprove.1 · 1/1 tasks · 0 ▸ 0 · 34s…/tmp/parley-verify-home-uWkOm6/worktrees/parley-run-repo-CiOdUT/r1BLOCKED · GATE HELDcopy r1blockedgate · approveverbs: approve · reject · redirect · finish (orchestrating agent only)viewpipelineiteration gridnode ta"
         }
       },
       "neuter": {
@@ -1921,7 +1976,7 @@
       },
       "a11y": {
         "axe": {
-          "url": "http://127.0.0.1:5176/#/run",
+          "url": "http://127.0.0.1:5174/#/run",
           "violations": [],
           "passes": 21,
           "incomplete": 0,
@@ -1930,7 +1985,7 @@
         "aria": {
           "api": "locator.ariaSnapshot",
           "selector": "[data-testid=\"screen-run\"]",
-          "tree": "- heading \"console-gate\" [level=1]\n- text: run r1 · v1 · repo workspace · other approve.1 · 1/1 tasks · 0 ▸ 0 · 35s… /tmp/parley-verify-home-fCCZkk/worktrees/parley-run-repo-5PSdSV/r1 BLOCKED · GATE HELD\n- button \"copy r1\"\n- text: \"blocked gate · approve verbs: approve · reject · redirect · finish (orchestrating agent only)\"\n- group \"Run views\":\n  - text: view\n  - button \"pipeline\"\n  - button \"iteration grid\"\n  - button \"node table\" [pressed]\n  - text: gate verbs (approve · reject · redirect · finish) belong to the orchestrating agent — this surface is read-only\n- text: run outputs held — awaiting advance\n- table \"Node table\":\n  - row \"state node state tasks gist duration\":\n    - columnheader \"state\"\n    - columnheader \"node\"\n    - columnheader \"state\"\n    - columnheader \"tasks\"\n    - columnheader \"gist\"\n    - columnheader \"duration\"\n  - row \"plan .1 COMPLETED 1 — 0s\" [selected]:\n    - cell\n    - cell \"plan .1\"\n    - cell \"COMPLETED\"\n    - cell \"1\"\n    - cell \"—\"\n    - cell \"0s\"\n  - row \"approve .1 HELD — \\\"Approve this plan?\\\" · on_reject → finish —\":\n    - cell\n    - cell \"approve .1\"\n    - cell \"HELD\"\n    - cell \"—\"\n    - cell \"\\\"Approve this plan?\\\" · on_reject → finish\"\n    - cell \"—\"\n- region \"Deliverables\": deliverables ready · 1 row plan.1/plan INLINE Ship the console run detail screen. inline · 35 B\n- region \"Run tasks\":\n  - text: run tasks 1 on run · 1 on plan\n  - button \"COMPLETED plan.1 · t1 fake · fake-model 0s\"\n  - text: node plan.1 1 row COMPLETED t1 - 0s"
+          "tree": "- heading \"console-gate\" [level=1]\n- text: run r1 · v1 · repo workspace · other approve.1 · 1/1 tasks · 0 ▸ 0 · 51s… /tmp/parley-verify-home-uWkOm6/worktrees/parley-run-repo-CiOdUT/r1 BLOCKED · GATE HELD\n- button \"copy r1\"\n- text: \"blocked gate · approve verbs: approve · reject · redirect · finish (orchestrating agent only)\"\n- group \"Run views\":\n  - text: view\n  - button \"pipeline\"\n  - button \"iteration grid\"\n  - button \"node table\" [pressed]\n  - text: gate verbs (approve · reject · redirect · finish) belong to the orchestrating agent — this surface is read-only\n- text: run outputs held — awaiting advance\n- table \"Node table\":\n  - row \"state node state tasks gist duration\":\n    - columnheader \"state\"\n    - columnheader \"node\"\n    - columnheader \"state\"\n    - columnheader \"tasks\"\n    - columnheader \"gist\"\n    - columnheader \"duration\"\n  - row \"plan .1 COMPLETED 1 — 0s\" [selected]:\n    - cell\n    - cell \"plan .1\"\n    - cell \"COMPLETED\"\n    - cell \"1\"\n    - cell \"—\"\n    - cell \"0s\"\n  - row \"approve .1 HELD — \\\"Approve this plan?\\\" · on_reject → finish —\":\n    - cell\n    - cell \"approve .1\"\n    - cell \"HELD\"\n    - cell \"—\"\n    - cell \"\\\"Approve this plan?\\\" · on_reject → finish\"\n    - cell \"—\"\n- region \"Deliverables\": deliverables ready · 1 row plan.1/plan INLINE Ship the console run detail screen. inline · 35 B\n- region \"Run tasks\":\n  - text: run tasks 1 on run · 1 on plan\n  - button \"COMPLETED plan.1 · t1 fake · fake-model 0s\"\n  - text: node plan.1 1 row COMPLETED t1 - 0s"
         },
         "keyboardWalk": {
           "focusableCount": 16,
@@ -1965,8 +2020,8 @@
         "purged": "not staged — requires retention purge timing",
         "missing-worktree": "not staged — requires path deliverable + worktree removal"
       },
-      "recordedAt": "2026-08-06T10:07:16.265Z"
+      "recordedAt": "2026-08-06T10:30:12.729Z"
     }
   },
-  "updatedAt": "2026-08-06T10:07:16.265Z"
+  "updatedAt": "2026-08-06T10:30:12.729Z"
 }

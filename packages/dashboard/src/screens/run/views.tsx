@@ -70,8 +70,8 @@ export function RunOutputsCard({ detail }: { detail: RunDetailResponse }) {
 export function PipelineView({ detail }: { detail: RunDetailResponse }) {
   const nodes = detail.nodes;
   const loopNote = buildLoopNote(detail);
-  // Cap visible width of the strip: wrap into rows of cards, not one endless line.
-  const WRAP_AT = 6;
+  // Natural flex-wrap fills rows (≈3 cards at 1280, more at wider). No
+  // flex-basis:100% breaker — that left every Nth card alone on a line.
 
   return (
     <div className="pc-run__pipeline" data-testid="run-pipeline">
@@ -92,21 +92,16 @@ export function PipelineView({ detail }: { detail: RunDetailResponse }) {
                   ? "pc-run__node-card--pending"
                   : "";
           const forkMod = disp.forkKind === "inherited" ? " pc-run__node-card--inherited" : "";
-          const wrapBreak = i > 0 && i % WRAP_AT === 0;
           return (
-            <div
-              key={`${n.node}.${n.iteration}`}
-              className={`pc-run__pipe-item${wrapBreak ? " pc-run__pipe-item--wrap" : ""}`}
-              role="listitem"
-            >
-              {i > 0 && !wrapBreak ? (
-                <div
-                  className={`pc-run__pipe-leg${disp.quiet ? " pc-run__pipe-leg--dim" : ""}`}
-                  aria-hidden="true"
-                >
-                  <div className="pc-run__pipe-leg-line" />
-                </div>
-              ) : null}
+            <div key={`${n.node}.${n.iteration}`} className="pc-run__pipe-item" role="listitem">
+              {/* Always reserve leg width so every card is equal-width and
+                  natural flex-wrap fills rows uniformly (MED N1). */}
+              <div
+                className={`pc-run__pipe-leg${disp.quiet ? " pc-run__pipe-leg--dim" : ""}`}
+                aria-hidden="true"
+              >
+                {i > 0 ? <div className="pc-run__pipe-leg-line" /> : null}
+              </div>
               <div
                 className={`pc-run__node-card ${cardMod}${forkMod}`.trim()}
                 data-node={n.node}
@@ -194,9 +189,9 @@ export function PipelineView({ detail }: { detail: RunDetailResponse }) {
           );
         })}
       </div>
-      {nodes.length > WRAP_AT ? (
+      {nodes.length > 3 ? (
         <div className="pc-run__scroll-cue" data-testid="pipeline-scroll-cue">
-          {nodes.length} nodes · wrapped in rows of {WRAP_AT}
+          {nodes.length} nodes · wrapped
         </div>
       ) : null}
       {loopNote ? (
@@ -314,27 +309,12 @@ export function IterationGridView({ detail }: { detail: RunDetailResponse }) {
                         className={`pc-run__dot ${bgClass(disp.token)}${disp.live ? " pc-run__dot--live" : ""}`}
                         aria-hidden="true"
                       />
-                      {disp.forkKind ? (
-                        <span
-                          className={`pc-run__fork-badge pc-run__fork-badge--${disp.forkKind}`}
-                          title={
-                            disp.forkKind === "inherited"
-                              ? "Inherited from parent run"
-                              : "Skipped on fork re-entry"
-                          }
-                        >
-                          {disp.forkKind === "skipped" ? "skipped ⊘" : "inherited"}
-                        </span>
-                      ) : (
-                        <>
-                          <span className={`pc-run__state-label ${tokenClass(disp.token)}`}>
-                            {disp.label}
-                          </span>
-                          {disp.cue ? (
-                            <span className="pc-run__state-cue">{disp.cue}</span>
-                          ) : null}
-                        </>
-                      )}
+                      {/* STATE names the wire state (INHERITED / SKIPPED); fork
+                          shape stays on data-fork + cell class, not a second badge. */}
+                      <span className={`pc-run__state-label ${tokenClass(disp.token)}`}>
+                        {disp.label}
+                        {disp.cue ?? ""}
+                      </span>
                     </div>
                     {!disp.forkKind ? (
                       <span className="pc-run__gist" title={n.gist}>
@@ -464,14 +444,12 @@ export function NodeTableView({
               ) : null}
             </div>
             <div className="pc-run__table-cell" role="cell">
-              {disp.forkKind ? (
-                <span className="pc-run__tasks-meta">—</span>
-              ) : (
-                <span className={`pc-run__state-label ${tokenClass(disp.token)}`}>
-                  {disp.label}
-                  {disp.cue ?? ""}
-                </span>
-              )}
+              {/* STATE column always names the state (INHERITED / SKIPPED for
+                  forks). Badge stays in the NODE column only. */}
+              <span className={`pc-run__state-label ${tokenClass(disp.token)}`}>
+                {disp.label}
+                {disp.cue ?? ""}
+              </span>
             </div>
             <div className="pc-run__table-cell" role="cell">
               {tasksCell}

@@ -327,9 +327,16 @@ describe("RunScreen", () => {
     expect(skipped).toBeTruthy();
     expect(inherited?.textContent).toMatch(/inherited/i);
     expect(skipped?.textContent).toMatch(/skipped/i);
+    // STATE column names the state (not the no-data glyph) — MED N2
+    expect(inherited?.querySelector(".pc-run__state-label")?.textContent).toMatch(
+      /INHERITED/,
+    );
+    expect(skipped?.querySelector(".pc-run__state-label")?.textContent).toMatch(
+      /SKIPPED/,
+    );
     // Struck name on inherited
     expect(inherited?.querySelector(".pc-run__node-name--struck")).toBeTruthy();
-    // Loud badge on skipped (not hue-only)
+    // Loud badge on skipped in NODE column (not hue-only)
     expect(skipped?.querySelector(".pc-run__fork-badge--skipped")).toBeTruthy();
   });
 
@@ -428,6 +435,41 @@ describe("RunScreen", () => {
     expect(grid.querySelectorAll('[data-fork="inherited"]').length).toBeGreaterThan(0);
     expect(grid.querySelectorAll('[data-fork="skipped"]').length).toBeGreaterThan(0);
     expect(grid.textContent).toMatch(/fork · 0|fork/);
+    // Grid cells name the state (INHERITED / SKIPPED) — MED N2
+    expect(
+      grid.querySelector('[data-fork="inherited"] .pc-run__state-label')?.textContent,
+    ).toMatch(/INHERITED/);
+    expect(
+      grid.querySelector('[data-fork="skipped"] .pc-run__state-label')?.textContent,
+    ).toMatch(/SKIPPED/);
+  });
+
+  it("pipeline cue says wrapped without claiming a fixed row size (MED N1)", () => {
+    const nodes = Array.from({ length: 8 }, (_, i) =>
+      makeNode({ node: `step-${i}`, state: "completed" }),
+    );
+    mockState.detail = {
+      run: makeRun({ state: "running", block: null }),
+      block: null,
+      nodes,
+    };
+    mockState.summaries = [mockState.detail.run];
+    mount();
+    const cue = screen.getByTestId("pipeline-scroll-cue");
+    expect(cue.textContent).toMatch(/8 nodes · wrapped/);
+    expect(cue.textContent).not.toMatch(/rows of/);
+  });
+
+  it("offline status shows Daemon offline even when error is set (N3)", () => {
+    mockState.detail = null;
+    mockState.summaries = [];
+    mockState.tasks = [];
+    mockState.runsError = "fetch failed";
+    mockState.runsStatus = "offline";
+    mount(null);
+    const root = screen.getByTestId("screen-run");
+    expect(root.getAttribute("data-honesty")).toBe("offline");
+    expect(screen.getByTestId("run-error-shell").textContent).toMatch(/Daemon offline/);
   });
 
   it("keeps run outputs outside the view switch (REQUIRED #10)", () => {

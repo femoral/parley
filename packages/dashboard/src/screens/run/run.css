@@ -377,11 +377,6 @@
   max-width: 100%;
 }
 
-.pc-run__pipe-item--wrap {
-  flex-basis: 100%;
-  margin-top: 4px;
-}
-
 .pc-run__pipe-leg {
   width: 20px;
   flex: 0 0 20px;
