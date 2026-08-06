@@ -1,136 +1,100 @@
-# parley
+<div align="center">
 
-**Give your agent a crew: one orchestrating agent, many coding agents, every
-branch reviewed before it lands.**
+<img src="website/public/logo.png" alt="Parley" width="120" />
 
-Parley is built for agent-to-agent delegation. The agent you already work in —
-Claude Code or any other harness — uses the `parley` CLI to spawn child coding
-agents (Codex, Grok, and more) in isolated git worktrees, coordinated by one
-local daemon. The orchestrator writes the brief, answers the child's questions,
-reviews the branch, and decides what merges. Parley never merges; judgment
-stays with the orchestrator.
+# Parley
 
-```mermaid
-flowchart LR
-    O["🧭 Orchestrating agent<br/>(your main harness)"] -- "delegate · watch · answer" --> D["parley daemon<br/>(local, sqlite state)"]
-    D --> C1["Codex child<br/>worktree 1"]
-    D --> C2["Grok child<br/>worktree 2"]
-    D --> C3["…any harness<br/>worktree N"]
-    C1 -. "questions · reports" .-> D
-    C2 -. "questions · reports" .-> D
-    C3 -. "questions · reports" .-> D
-    D -- "attention-inbox events" --> O
-```
+**Give your agent a crew.**
 
-- **Fan-out**: ten briefs, ten worktrees, ten agents in parallel — no stepping
-  on each other, every branch reviewable on its own.
-- **One wait primitive**: `parley watch` delivers exactly the events that need
-  the orchestrator (question, stall, failure, completion), with at-least-once
-  redelivery until acked. No polling loops.
-- **Vendor-agnostic**: one interface over the supported harnesses, plus a
-  public adapter contract for your own.
-- **Accountable**: every task records tokens, duration, profile, and
-  classification — sliceable by vendor, model, or profile with `parley metrics`.
+One orchestrating agent, many coding agents, every branch reviewed before it lands.
+
+[![npm](https://img.shields.io/npm/v/%40useparley%2Fcli?label=%40useparley%2Fcli&color=43b98c)](https://www.npmjs.com/package/@useparley/cli)
+[![license](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+[![docs](https://img.shields.io/badge/docs-femoral.github.io%2Fparley-0b0d0f)](https://femoral.github.io/parley/)
+
+<img src="website/public/hero-console.png" alt="Parley Console: the fleet board with a run held at its gate, an awaiting child question, and tasks across codex, grok, and claude" />
+
+</div>
+
+Parley turns the coding agent you already work with (Claude Code or any other
+harness) into an orchestrator of other coding agents. You describe the work in
+plain language. Your agent writes the briefs, delegates them to child agents
+in isolated git worktrees, answers their questions while they work, and
+reviews every branch that comes back. One local daemon coordinates the crew;
+you install it, point your agent at it, and judge the results.
+
+## Why
+
+- **Fan out real work.** Ten briefs, ten worktrees, ten agents in parallel.
+  Nothing shares a working copy, so nobody steps on anybody, and every branch
+  is reviewable on its own.
+- **Block on exactly what matters.** `parley watch` is the single wait
+  primitive: it delivers the events that need the orchestrator (question,
+  stall, failure, completion) with at-least-once redelivery until acked. No
+  polling loops, no missed events.
+- **The branch always comes back to you.** Parley never merges. Every task
+  ends as a branch the orchestrator reviews, merges, or sends back with
+  `parley fix`. Judgment stays with the orchestrator, and ultimately with you.
+- **Accountable by default.** Every task records tokens, duration, profile,
+  and classification. Slice it by vendor, model, or profile with
+  `parley metrics` or the web Console.
 
 ## Install
 
 ```bash
-npm install -g @useparley/cli         # the CLI (daemon auto-spawns on first use)
-npm install -g @useparley/dashboard   # optional: Parley Console — the default web UI (parley ui)
+npm install -g @useparley/cli         # the CLI; the daemon auto-spawns on first use
+npm install -g @useparley/dashboard   # optional: Parley Console, the web cockpit
 ```
 
-Requires Node ≥ 24 and git. Each vendor CLI you delegate to must be installed
+Requires Node 24+ and git. Each vendor CLI you delegate to must be installed
 and authenticated on the machine that runs it.
 
-**Web UI.** `@useparley/dashboard` (Parley Console) is the config-less default
-when installed: `parley ui` opens it with no extra config. The alternate
-register, Parley Cove (`@useparley/ui`), is still supported — install it and
-pin it with `config.ui.package` (in `~/.parley/parley.json` or the project
-config):
-
-```json
-{ "ui": { "package": "@useparley/ui" } }
-```
-
-Discovery order (first hit wins): explicit `config.ui.path` →
-`config.ui.package` → `@useparley/dashboard` → `@useparley/ui`. See
-[ADR-0033](docs/adr/0033-ordered-probe-ui-default.md).
-
-## Set up: `parley init`
-
-One command, run in your repo:
+## Quick start
 
 ```bash
-parley init
+cd your-repo
+parley init     # installs orchestrator skills, detects harnesses, walks you through vendor/model allowlists
+parley ui       # opens the Console, if installed
 ```
 
-It installs the orchestrator skills, detects which harness CLIs are on your
-PATH, refreshes the model catalog, and walks you through an opt-in picker:
-which vendors to configure, which models to allow, which efforts, and the
-defaults. Everything is skippable — submit an empty selection to move on.
+Then hand the keys to your agent. In your harness session:
 
-| Skill | Purpose |
-| ----- | ------- |
-| `parley-delegate` | the orchestrator loop: brief → delegate → watch → answer → review |
-| `parley-wizard` | conversational setup: profiles, task types, project config |
+```text
+/parley-delegate
 
-Both skills ship with model invocation **disabled by default** — they load only
-when invoked explicitly (`/parley-delegate`, `/parley-wizard`), since that is
-how they are used most of the time. Re-enable auto-triggering by removing
-`disable-model-invocation: true` from a skill's frontmatter.
+Split the API error-handling refactor into independent tasks and farm them
+out. Review every branch before you merge anything.
+```
 
-## Usage: the delegation loop (What the orchestrator runs)
+The agent runs the loop from there: it registers its session, delegates each
+brief into an isolated worktree, blocks on `parley watch`, answers child
+questions, and reviews every finished branch. You answer the occasional
+escalated question and judge the final diffs:
 
 ```bash
-parley info                       # prints instructions based on your configuration
-parley session                    # register the orchestrating session once
-
-# 1. Delegate (returns immediately with a pending task)
-parley delegate -v codex -m gpt-5.6-sol --effort low -n fix-flaky \
-  "Fix the flaky retry test in packages/api. Done when 'pnpm test' is green."
-
-# 2. Wait — the only wait primitive. Exit codes tell you what happened:
-parley watch --json
-#   3 = child asked a question  → parley answer <task> "…"
-#   4 = stalled                 → parley answer resumes it
-#   5 = failed                  → triage, then watch --ack <seq>
-#   6 = completed               → review the branch, merge if it holds up,
-#                                 then watch --ack <seq>
-#   0 = all done, inbox empty
-
-# 3. Review & integrate — the branch is yours to judge
 git diff main..parley/t1-fix-flaky
-parley clean t1                   # removes the worktree, keeps the branch
 ```
 
-Every event that needs attention flows back through the same loop — questions
-mid-task, stalls, failures, and the final report:
+The delegation commands themselves (`delegate`, `watch`, `answer`, `fix`) are
+an agent-facing surface; you will rarely type them. They are documented in
+[How the orchestrator works](https://femoral.github.io/parley/explainer/how-the-orchestrator-works)
+and the [CLI reference](https://femoral.github.io/parley/reference/cli).
 
-```mermaid
-sequenceDiagram
-    participant O as Orchestrating agent
-    participant P as parley CLI
-    participant D as daemon
-    participant C as child harness
+## Documentation
 
-    O->>P: delegate -v codex … "brief"
-    D->>C: spawn in isolated worktree
-    O->>P: watch (blocks)
-    C-->>D: ask_orchestrator("which retry policy?")
-    D-->>O: task.question (exit 3)
-    O->>P: answer t1 "exponential, cap 30s"
-    O->>P: watch (blocks)
-    C-->>D: submit_report + commits on branch
-    D-->>O: task.completed (exit 6)
-    O->>O: review diff, merge or reject
-    O->>P: watch --ack <seq>
-    P-->>O: exit 0 — inbox empty
-```
+The full documentation lives at
+**[femoral.github.io/parley](https://femoral.github.io/parley/)**:
 
-`parley fix <task> "<brief>"` opens a linked reattempt when a review finds
-gaps; `parley status`, `parley logs`, and `parley metrics` cover inspection
-and aggregates. `parley info` prints the effective project configuration as
-orchestrator-readable prose.
+- [What is Parley](https://femoral.github.io/parley/guide/what-is-parley) and
+  [Getting started](https://femoral.github.io/parley/guide/getting-started)
+- [The Console](https://femoral.github.io/parley/guide/console),
+  [Configuration and profiles](https://femoral.github.io/parley/guide/configuration),
+  [Workflow runs](https://femoral.github.io/parley/guide/workflows)
+- [Vendors and sandboxing](https://femoral.github.io/parley/guide/vendors),
+  [Remote runners](https://femoral.github.io/parley/guide/remote-runners),
+  [Evaluation](https://femoral.github.io/parley/guide/evaluation)
+- [Writing an adapter](https://femoral.github.io/parley/reference/adapter-authoring)
+  and [Troubleshooting](https://femoral.github.io/parley/reference/troubleshooting)
 
 ## Vendors
 
@@ -151,16 +115,19 @@ orchestrator-readable prose.
 | `openclaw` | OpenClaw | 🧪 under testing |
 | `kimi` | Kimi Code CLI | 🧪 under testing |
 
-Every adapter accepts the same posture **flags** — `--sandbox
-read-only|workspace|full` and `--no-network` — and passes model and reasoning
-effort through opaquely (`-m`, `--effort`). **Enforcement is not portable**:
-several vendors only approximate isolation (or accept the flag and do nothing).
-See the matrix below (sourced from each adapter's `enforcement` declaration;
-`parley info` prints the same table). Cells marked `approximate` or `none` mean
-the flag is accepted but **not** OS-enforced — prepare writes a one-line
-`PARLEY-DIAG` warning to the task's `diag.log`. The `full` column is always
-`enforced` (unrestricted access is what full asks for) and never produces a
-sandbox-dimension diagnostic.
+Every adapter accepts the same posture flags (`--sandbox
+read-only|workspace|full`, `--no-network`) and passes model and reasoning
+effort through opaquely (`-m`, `--effort`). Enforcement is **not** portable:
+some vendors enforce postures at the OS level, some approximate them, some
+accept the flag and do nothing. Each adapter declares what each posture
+actually gets, the matrix below is contract-tested against those
+declarations, and weak postures write a `PARLEY-DIAG` warning into the
+task's `diag.log`. See
+[Vendors and sandboxing](https://femoral.github.io/parley/guide/vendors) for
+the full story.
+
+<details>
+<summary><b>Sandbox enforcement matrix</b> (per adapter declaration; <code>parley info</code> prints the same table)</summary>
 
 <!-- enforcement-matrix:start -->
 | Vendor | read-only | workspace | full | network:false |
@@ -181,25 +148,26 @@ sandbox-dimension diagnostic.
 | `pi` | approximate (--tools read-only allowlist) | none (default tools; no write sandbox) | enforced (default tools; unrestricted as requested) | refused (prepare refuses (#107)) |
 <!-- enforcement-matrix:end -->
 
-**Write your own**: adapters are a public contract in `@useparley/core`. Point
-`vendors.<id>.plugin` at your module and the daemon loads it at startup — see
-[docs/agents/adapter-authoring.md](docs/agents/adapter-authoring.md). Declare
-`enforcement` for every posture dimension so `parley info` and the matrix stay
-honest.
+</details>
 
-> **Note:** adapter support exists for all vendors listed, but only `codex`
-> and `grok` have been exercised in sustained real-world orchestration so far.
-> The rest are implemented and pass their suites, and are still being tested.
+> Adapter support exists for all vendors listed, but only `codex` and `grok`
+> have been exercised in sustained real-world orchestration so far. The rest
+> are implemented, pass their suites, and are still being tested.
 
-## Settings & profiles
+**Write your own**: adapters are a public contract in `@useparley/core`.
+Point `vendors.<id>.plugin` at your module and the daemon loads it at
+startup. See
+[Writing an adapter](https://femoral.github.io/parley/reference/adapter-authoring).
 
-`~/.parley/parley.json` (all optional, validated loudly):
+## Configuration in one glance
+
+`~/.parley/parley.json`, all optional, validated loudly:
 
 ```json
 {
   "vendors": {
-    "grok":  { "env": { "XAI_API_KEY": "…" } },
-    "mycli": { "plugin": "parley-adapter-mycli" }
+    "grok":  { "env": { "XAI_API_KEY": "your-key-here" } },
+    "codex": { "models": { "gpt-5.6-sol": { "efforts": ["low", "high"], "default": "low" } } }
   },
   "profiles": {
     "heavy": { "vendor": "grok",  "model": "grok-4.5", "effort": "high" },
@@ -208,76 +176,24 @@ honest.
 }
 ```
 
-`parley delegate --profile heavy …` replaces the vendor/model/effort flags;
-the profile is recorded on the task, so metrics can compare profiles
-head-to-head. Vendor `bin`/`args`/`env` apply to every spawn of that vendor;
-explicit flags always win.
+Model allowlists are deny-by-default and enforced by the daemon; profiles are
+named launch templates the agent can compare head-to-head in metrics. Details
+in [Configuration and profiles](https://femoral.github.io/parley/guide/configuration).
 
-## How children talk back
+## Beyond one-shot tasks
 
-Three transports, one contract (`submit_report`, `ask_orchestrator`):
+- **Workflow runs**: multi-step pipelines (plan, gate, implement, review xN)
+  written down as files, executed by the daemon, with human-actioned gates
+  and one-line-per-node status. See
+  [Workflow runs](https://femoral.github.io/parley/guide/workflows).
+- **Remote runners** (experimental): run children on other machines with one
+  daemon and one inbox. Outbound-only runners, parley-managed git mirrors,
+  branches pushed back to your remote. See
+  [Remote runners](https://femoral.github.io/parley/guide/remote-runners).
+- **Evaluation** (experimental): rubric-based scoring per task, so vendor and
+  profile choices become measurable. See
+  [Evaluation](https://femoral.github.io/parley/guide/evaluation).
 
-- **MCP** — injected per-vendor; the default.
-- **HTTP** — `curl`-able: `POST /child/report`, `POST /child/ask` (long-poll),
-  `GET /child/task`, correlated by the `x-parley-task` header. Every child
-  gets `PARLEY_HUB_URL` / `PARLEY_TASK_ID` in env and `.parley/child.json`
-  in its workspace.
-- **CLI** — `parley child report|ask|task` wraps the HTTP surface for shell
-  scripts and MCP-less harnesses.
+## License
 
-## The cockpit
-
-`parley ui` opens **Parley Console** (`@useparley/dashboard`) when it is
-installed — fleet board, run detail, task inspector, and metrics against the
-live daemon. Optional install; the daemon discovers and serves it via the
-`parley.ui` package marker with zero config. Prefer Cove's register instead
-by installing `@useparley/ui` and setting `config.ui.package` (see Install).
-
-## Experimental
-
-These features work but have not been thoroughly tested yet — expect rough
-edges.
-
-### Remote runners & remote daemon
-
-Run children on other machines while keeping one daemon and one inbox. Runners
-register capabilities (vendors + held mirrors); the daemon routes unpinned work
-to a capable online executor automatically (`--runner` remains a hard pin).
-Repos sync via parley-managed mirrors with the host's git credentials — no
-pre-provisioned clones required.
-
-```bash
-# on the remote host
-npm install -g @useparley/runner    # give it the daemon URL + a token
-
-# in ~/.parley/parley.json on the *client* host
-# "daemon":  { "url": "http://build-box:7777", "client": "laptop", "token": "fake-client-token-example" },
-# on the *daemon* host, also register that client + the runner:
-# "clients": { "laptop": { "token": "fake-client-token-example" } },
-# "runners": { "gpu-box": { "token": "fake-runner-token-example" } },
-# "daemon":  { "bind": "0.0.0.0" }
-
-parley delegate -v codex …          # auto-routes when a capable runner is online
-parley delegate --runner gpu-box …  # hard pin
-```
-
-The runner leases capability-matched tasks, executes them with the same
-adapters and worktree semantics, streams logs and heartbeats back, and pushes
-the finished branch to your git remote for review. Outbound-only from the
-runner — no reach-in credentials. Details:
-[docs/agents/remote-runners.md](docs/agents/remote-runners.md).
-
-### Evaluation flow
-
-Structured, rubric-based scoring of every delegated task:
-
-```bash
-parley eval t42 --answers '{"tests-pass": true, "brief-followed": true}' \
-  --feedback "clean fix, good regression test"
-parley delegate --size M --difficulty hard …   # classify at delegate time
-```
-
-Set it up with `/parley-wizard`, which interviews you into project eval
-settings, task types, versioned rubrics, and classification guidance under
-`.parley/` — the daemon computes scores and baselines from your boolean
-answers, and `parley metrics` (and the cockpit) render the aggregates.
+[MIT](LICENSE)

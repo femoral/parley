@@ -1,0 +1,157 @@
+/*
+ * Console-adjacent dark register for the docs site.
+ * Independent surface: palette is inspired by Parley Console's ground and
+ * state inks but shares no code or tokens with either UI package.
+ */
+
+:root {
+  --vp-font-family-base: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --vp-font-family-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, monospace;
+}
+
+.dark {
+  /* Ground and surfaces */
+  --vp-c-bg: #0b0d0f;
+  --vp-c-bg-alt: #080a0c;
+  --vp-c-bg-soft: #101316;
+  --vp-c-bg-elv: #0e1114;
+
+  /* Lines */
+  --vp-c-divider: #1a2025;
+  --vp-c-border: #232a30;
+  --vp-c-gutter: #14181c;
+
+  /* Text */
+  --vp-c-text-1: #e3e8ec;
+  --vp-c-text-2: #93a0ab;
+  --vp-c-text-3: #7c8b98;
+
+  /* Brand: the running-state green */
+  --vp-c-brand-1: #43b98c;
+  --vp-c-brand-2: #5fcda2;
+  --vp-c-brand-3: #2e9a72;
+  --vp-c-brand-soft: rgba(67, 185, 140, 0.14);
+
+  /* State inks, used sparingly for custom blocks */
+  --parley-awaiting: #e0a02e;
+  --parley-completed: #5d8ca8;
+  --parley-link-blue: #7fb2d9;
+
+  /* Code */
+  --vp-code-block-bg: #080a0c;
+  --vp-code-color: #cfd6dc;
+
+  /* Custom blocks */
+  --vp-custom-block-tip-border: rgba(67, 185, 140, 0.35);
+  --vp-custom-block-tip-bg: rgba(67, 185, 140, 0.08);
+  --vp-custom-block-tip-text: #cfd6dc;
+  --vp-custom-block-warning-border: rgba(224, 160, 46, 0.35);
+  --vp-custom-block-warning-bg: rgba(224, 160, 46, 0.08);
+  --vp-custom-block-warning-text: #cfd6dc;
+  --vp-custom-block-info-bg: #101316;
+  --vp-custom-block-info-border: #232a30;
+
+  /* Home hero */
+  --vp-home-hero-name-color: transparent;
+  --vp-home-hero-name-background: linear-gradient(115deg, #e3e8ec 30%, #43b98c);
+
+  --vp-button-brand-bg: #2e9a72;
+  --vp-button-brand-hover-bg: #43b98c;
+  --vp-button-brand-active-bg: #2a8a66;
+}
+
+/* Slightly tighter, more product-like chrome */
+.dark .VPNav,
+.dark .VPSidebar {
+  background-color: rgba(11, 13, 15, 0.92);
+  backdrop-filter: blur(8px);
+}
+
+.dark .VPNavBar:not(.home) {
+  border-bottom: 1px solid var(--vp-c-divider);
+}
+
+/* Tables read like the Console's data surfaces */
+.vp-doc table {
+  font-size: 0.85rem;
+}
+.vp-doc th {
+  color: var(--vp-c-text-2);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  font-size: 0.72rem;
+}
+.vp-doc tr {
+  background-color: transparent;
+}
+.vp-doc tr:nth-child(2n) {
+  background-color: #0d1013;
+}
+
+/* Inline code chips */
+.vp-doc :not(pre) > code {
+  background-color: #14181c;
+  border: 1px solid #1a2025;
+  color: #cfd6dc;
+}
+
+/* Framed product screenshot (home + guide pages) */
+.parley-shot {
+  margin: 2.5rem auto 0;
+  max-width: 1080px;
+  border: 1px solid var(--vp-c-border);
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.6),
+    0 24px 64px rgba(0, 0, 0, 0.55),
+    0 0 120px rgba(67, 185, 140, 0.07);
+}
+.parley-shot img {
+  display: block;
+  width: 100%;
+}
+
+/* Inline SVG diagrams inherit page fonts and palette */
+.parley-diagram {
+  margin: 1.75rem 0;
+  display: flex;
+  justify-content: center;
+}
+.parley-diagram svg {
+  max-width: 100%;
+  height: auto;
+  font-family: var(--vp-font-family-base);
+}
+.parley-diagram .d-box {
+  fill: #101316;
+  stroke: #2c343b;
+}
+.parley-diagram .d-box-accent {
+  fill: rgba(67, 185, 140, 0.1);
+  stroke: #43b98c;
+}
+.parley-diagram .d-label {
+  fill: #e3e8ec;
+  font-size: 13px;
+  font-weight: 600;
+}
+.parley-diagram .d-sub {
+  fill: #93a0ab;
+  font-size: 11px;
+}
+.parley-diagram .d-edge {
+  stroke: #2c343b;
+  fill: none;
+}
+.parley-diagram .d-edge-soft {
+  stroke: #43b98c;
+  stroke-dasharray: 4 4;
+  fill: none;
+  opacity: 0.8;
+}
+.parley-diagram .d-edge-label {
+  fill: #7c8b98;
+  font-size: 10.5px;
+}
