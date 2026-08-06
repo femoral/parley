@@ -151,6 +151,13 @@ export interface TaskEnvelope {
    */
   blocking_cap?: string | null;
   /**
+   * Effective `maxConcurrent` for the blocking cap(s) from daemon config
+   * (#350). When multiple caps join with `+`, the tighter (min) value.
+   * Null when not `queued` or no numeric cap is configured. Optional for
+   * older clients.
+   */
+  max_concurrent?: number | null;
+  /**
    * Visible routing wait reason when capable executors exist but none is
    * online (#315 / #304). Null when not waiting on routing. Optional for
    * older clients.
@@ -328,6 +335,12 @@ export interface TaskRow {
    * Computed at response time.
    */
   blocking_cap?: string | null;
+  /**
+   * Effective `maxConcurrent` for the blocking cap(s) from daemon config
+   * (#350). When multiple caps join with `+`, the tighter (min) value.
+   * Null when not `queued`. Computed at response time.
+   */
+  max_concurrent?: number | null;
   /**
    * Owning run id when this task is run-owned (ADR-0018 / #233). Null for
    * ordinary tasks. Optional on the wire so older fixtures remain assignable.
