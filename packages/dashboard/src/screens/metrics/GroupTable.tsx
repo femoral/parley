@@ -8,6 +8,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { GroupRow } from "./project.js";
 import { HonestyPanel, LoadingSkeleton } from "./Honesty.js";
+import { Panel } from "../../components/index.js";
 
 /**
  * Columns dropped via CSS at max-width 1360 (must match metrics.css).
@@ -68,16 +69,15 @@ export function GroupTable({
   }, [rows, workflow, status]);
 
   return (
-    <section
+    <Panel
       className="pc-metrics__panel"
-      data-testid="metrics-group-table"
+      testId="metrics-group-table"
       aria-labelledby="metrics-table-title"
-    >
-      <div className="pc-metrics__panel-head">
-        <h2 id="metrics-table-title" className="pc-metrics__panel-title">
-          by {dimLabel}
-        </h2>
-        <span className="pc-metrics__panel-meta" data-testid="metrics-table-meta">
+      titleId="metrics-table-title"
+      titleTag="h2"
+      title={<>by {dimLabel}</>}
+      meta={
+        <span data-testid="metrics-table-meta">
           {status === "ready" ? (
             <>
               {`${rows.length} group${rows.length === 1 ? "" : "s"}`}
@@ -92,8 +92,8 @@ export function GroupTable({
             status
           )}
         </span>
-      </div>
-      <div className="pc-metrics__panel-body">
+      }
+    >
         {status === "loading" || status === "idle" ? (
           <LoadingSkeleton rows={6} />
         ) : status === "error" ? (
@@ -243,7 +243,6 @@ export function GroupTable({
             />
           </div>
         )}
-      </div>
-    </section>
+    </Panel>
   );
 }

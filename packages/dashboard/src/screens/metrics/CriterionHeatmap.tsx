@@ -7,6 +7,7 @@
 import type { HeatmapModel } from "./project.js";
 import { HonestyPanel, LoadingSkeleton } from "./Honesty.js";
 import { plural, truncateLabel } from "./format.js";
+import { Panel } from "../../components/index.js";
 
 export interface CriterionHeatmapProps {
   model: HeatmapModel;
@@ -34,24 +35,26 @@ export function CriterionHeatmap({
   })();
 
   return (
-    <section
+    <Panel
       className="pc-metrics__panel"
-      data-testid="metrics-heatmap"
+      testId="metrics-heatmap"
       aria-labelledby="metrics-heat-title"
-    >
-      <div className="pc-metrics__panel-head">
-        <h2 id="metrics-heat-title" className="pc-metrics__panel-title">
-          criterion failure rate
-        </h2>
-        <span className="pc-metrics__panel-meta" data-testid="metrics-heat-meta" title={
-          model.truncated
-            ? `Columns: ${model.selectionRule}. ${model.totalCols - model.shownCols} groups (${model.sampleTotal - model.sampleShown} samples) not shown.`
-            : undefined
-        }>
+      titleId="metrics-heat-title"
+      titleTag="h2"
+      title="criterion failure rate"
+      meta={
+        <span
+          data-testid="metrics-heat-meta"
+          title={
+            model.truncated
+              ? `Columns: ${model.selectionRule}. ${model.totalCols - model.shownCols} groups (${model.sampleTotal - model.sampleShown} samples) not shown.`
+              : undefined
+          }
+        >
           {meta}
         </span>
-      </div>
-      <div className="pc-metrics__panel-body">
+      }
+    >
         {status === "loading" || status === "idle" ? (
           <LoadingSkeleton rows={6} />
         ) : status === "error" ? (
@@ -189,7 +192,6 @@ export function CriterionHeatmap({
             </div>
           </div>
         )}
-      </div>
-    </section>
+    </Panel>
   );
 }

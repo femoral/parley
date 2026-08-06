@@ -6,6 +6,7 @@
 import type { DistributionBar } from "./project.js";
 import { HonestyPanel, LoadingSkeleton } from "./Honesty.js";
 import { formatScore } from "./format.js";
+import { Panel } from "../../components/index.js";
 
 export interface ScoreDistributionProps {
   bars: readonly DistributionBar[];
@@ -25,20 +26,15 @@ export function ScoreDistribution({
   const hasData = bars.length > 0 && status === "ready";
 
   return (
-    <section
+    <Panel
       className="pc-metrics__panel"
-      data-testid="metrics-distribution"
+      testId="metrics-distribution"
       aria-labelledby="metrics-dist-title"
+      titleId="metrics-dist-title"
+      titleTag="h2"
+      title="score vs baseline"
+      meta={hasData ? "0 — 10" : undefined}
     >
-      <div className="pc-metrics__panel-head">
-        <h2 id="metrics-dist-title" className="pc-metrics__panel-title">
-          score vs baseline
-        </h2>
-        {hasData ? (
-          <span className="pc-metrics__panel-meta">0 — 10</span>
-        ) : null}
-      </div>
-      <div className="pc-metrics__panel-body">
         {status === "loading" || status === "idle" ? (
           <LoadingSkeleton rows={5} />
         ) : status === "error" ? (
@@ -163,7 +159,6 @@ export function ScoreDistribution({
             </div>
           </div>
         )}
-      </div>
-    </section>
+    </Panel>
   );
 }

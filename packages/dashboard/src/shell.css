@@ -41,7 +41,7 @@
   background: var(--surface-raised);
   color: var(--text);
   border: 1px solid var(--border-strong);
-  font: 500 12px/1 var(--font-sans);
+  font: var(--type-sans-500-12-1);
   padding: 8px 12px;
   white-space: nowrap;
 }
@@ -103,14 +103,14 @@
 }
 
 .pc-shell__brand-name {
-  font: 600 12px/1 var(--font-sans);
+  font: var(--type-sans-600-12-1);
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--text);
 }
 
 .pc-shell__brand-sub {
-  font: 400 9px/1 var(--font-mono);
+  font: var(--type-mono-400-9-1);
   letter-spacing: 0.1em;
   color: var(--text-3);
 }
@@ -238,19 +238,19 @@
 }
 
 .pc-shell__status-label {
-  font: 500 11px/1 var(--font-mono);
+  font: var(--type-mono-500-11-1);
   color: var(--text-2);
   flex: none;
 }
 
 .pc-shell__status-value {
-  font: 400 11px/1 var(--font-mono);
+  font: var(--type-mono-400-11-1);
   color: var(--text);
   flex: none;
 }
 
 .pc-shell__status-meta {
-  font: 400 11px/1 var(--font-mono);
+  font: var(--type-mono-400-11-1);
   color: var(--text-3);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -275,7 +275,7 @@
 }
 
 .pc-shell__attention-label {
-  font: 500 10px/1 var(--font-sans);
+  font: var(--type-sans-500-10-1);
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--text-3);
@@ -285,7 +285,7 @@
   padding: 4px 8px;
   border: 1px solid var(--attention-border);
   background: var(--attention-ground);
-  font: 600 12px/1 var(--font-mono);
+  font: var(--type-mono-600-12-1);
   color: var(--state-awaiting);
 }
 
@@ -298,12 +298,12 @@
 }
 
 .pc-shell__live-status-label {
-  font: 400 11px/1 var(--font-mono);
+  font: var(--type-mono-400-11-1);
   color: var(--text-3);
 }
 
 .pc-shell__live-status-value {
-  font: 500 11px/1 var(--font-mono);
+  font: var(--type-mono-500-11-1);
   color: var(--text-2);
 }
 
@@ -312,13 +312,13 @@
 }
 
 .pc-shell__clock {
-  font: 500 13px/1 var(--font-mono);
+  font: var(--type-mono-500-13-1);
   color: var(--text-strong-2);
   flex: none;
 }
 
 .pc-shell__settings-btn {
-  font: 500 10px/1 var(--font-sans);
+  font: var(--type-sans-500-10-1);
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--text-3);
@@ -383,7 +383,7 @@
 
 .pc-shell__rail-slot-note {
   /* English prose → Sans (DESIGN.md: Sans names things, Mono states data). */
-  font: 400 11px/1.4 var(--font-sans);
+  font: var(--type-body-sm);
   color: var(--text-4);
   max-width: 32ch;
 }
@@ -428,7 +428,7 @@
 }
 
 .pc-find__affordance {
-  font: 400 11px/1 var(--font-mono);
+  font: var(--type-mono-400-11-1);
   color: var(--text-4);
   flex: none;
 }
@@ -436,7 +436,7 @@
 .pc-find__input {
   flex: 1 1 auto;
   min-width: 0;
-  font: 400 11px/1 var(--font-mono);
+  font: var(--type-mono-400-11-1);
   color: var(--text);
   background: transparent;
   border: 0;
@@ -478,7 +478,7 @@
 
 .pc-find__state {
   padding: 8px 10px;
-  font: 400 11px/1.35 var(--font-sans);
+  font: var(--type-sans-400-11-1p35);
   color: var(--text-3);
 }
 
@@ -511,14 +511,14 @@
 }
 
 .pc-find__option-kind {
-  font: 600 9px/1 var(--font-mono);
+  font: var(--type-mono-600-9-1);
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--text-4);
 }
 
 .pc-find__option-label {
-  font: 500 11.5px/1 var(--font-sans);
+  font: var(--type-sans-500-11p5-1);
   color: var(--text);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -527,7 +527,7 @@
 }
 
 .pc-find__option-meta {
-  font: 400 10px/1 var(--font-mono);
+  font: var(--type-meta);
   color: var(--text-3);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -567,7 +567,7 @@
 
 .pc-screen__note {
   /* English prose → Sans */
-  font: 400 12px/1.45 var(--font-sans);
+  font: var(--type-sans-400-12-1p45);
   color: var(--text-4);
   margin: 0;
   max-width: 48ch;
@@ -616,7 +616,7 @@
 }
 
 .pc-shell__legend-label {
-  font: 400 10px/1 var(--font-mono);
+  font: var(--type-meta);
   letter-spacing: 0.06em;
   color: var(--text-3);
 }
@@ -631,7 +631,7 @@
 }
 
 .pc-shell__footer-note {
-  font: 400 10px/1 var(--font-mono);
+  font: var(--type-meta);
   color: var(--text-4);
   white-space: nowrap;
   /* No ellipsis — prove scrollWidth<=clientWidth with doctrine copy present. */
@@ -645,7 +645,7 @@
 }
 
 .pc-shell__footer-meta {
-  font: 400 10px/1 var(--font-mono);
+  font: var(--type-meta);
   color: var(--text-3);
   flex: none;
   white-space: nowrap;
@@ -702,7 +702,7 @@
 }
 
 .pc-settings__close {
-  font: 500 10px/1 var(--font-sans);
+  font: var(--type-sans-500-10-1);
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-3);
@@ -735,12 +735,12 @@
 }
 
 .pc-settings__name {
-  font: 500 12px/1.2 var(--font-sans);
+  font: var(--type-sans-500-12-1p2);
   color: var(--text);
 }
 
 .pc-settings__hint {
-  font: 400 10px/1.35 var(--font-mono);
+  font: var(--type-mono-400-10-1p35);
   color: var(--text-4);
 }
 
@@ -758,12 +758,12 @@
 }
 
 .pc-settings__keys {
-  font: 400 10px/1.4 var(--font-mono);
+  font: var(--type-mono-400-10-1p4);
   color: var(--text-4);
 }
 
 .pc-settings__keys kbd {
-  font: 500 10px/1 var(--font-mono);
+  font: var(--type-mono-500-10-1);
   color: var(--text-2);
   border: 1px solid var(--border);
   background: var(--surface-hover);

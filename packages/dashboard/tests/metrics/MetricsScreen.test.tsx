@@ -3,16 +3,8 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MetricsScreen } from "../../src/screens/metrics/MetricsScreen.js";
 import { mockClient, populatedMetrics, populatedRunMetrics, emptyMetrics } from "./fixtures.js";
-
-vi.mock("@useparley/core", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@useparley/core")>();
-  return {
-    ...actual,
-    ParleyClient: vi.fn(),
-  };
-});
-
-import { ParleyClient } from "@useparley/core";
+import { withConsoleData } from "../helpers/consoleData.js";
+import type { ParleyClient } from "@useparley/core";
 
 const mountProps = {
   screen: "metrics" as const,
@@ -23,8 +15,12 @@ const mountProps = {
   setSelectedRunId: () => undefined,
 };
 
-function installClient(impl: ReturnType<typeof mockClient>) {
-  vi.mocked(ParleyClient).mockImplementation(() => impl as unknown as ParleyClient);
+function renderMetrics(impl: ReturnType<typeof mockClient>) {
+  return render(
+    withConsoleData(<MetricsScreen {...mountProps} />, {
+      client: impl as unknown as ParleyClient,
+    }),
+  );
 }
 
 afterEach(() => {
@@ -34,8 +30,7 @@ afterEach(() => {
 
 describe("MetricsScreen", () => {
   it("renders empty honesty when metrics have no groups (eval-off default)", async () => {
-    installClient(mockClient({ metrics: emptyMetrics() }));
-    render(<MetricsScreen {...mountProps} />);
+    renderMetrics(mockClient({ metrics: emptyMetrics() }));
     await waitFor(() => {
       expect(screen.getByTestId("metrics-table-empty")).toBeTruthy();
     });
@@ -46,8 +41,7 @@ describe("MetricsScreen", () => {
   });
 
   it("renders group table, distribution, and heatmap from populated metrics", async () => {
-    installClient(mockClient({ metrics: populatedMetrics() }));
-    render(<MetricsScreen {...mountProps} />);
+    renderMetrics(mockClient({ metrics: populatedMetrics() }));
     await waitFor(() => {
       expect(screen.getByTestId("metrics-table")).toBeTruthy();
     });
@@ -62,13 +56,12 @@ describe("MetricsScreen", () => {
   });
 
   it("switches to workflow tab and shows cost-per-completed-run", async () => {
-    installClient(
+    renderMetrics(
       mockClient({
         metrics: emptyMetrics(),
         runMetrics: populatedRunMetrics(),
       }),
     );
-    render(<MetricsScreen {...mountProps} />);
     fireEvent.click(screen.getByTestId("metrics-dim-workflow"));
     await waitFor(() => {
       expect(screen.getByTestId("metrics-table")).toBeTruthy();
@@ -78,8 +71,7 @@ describe("MetricsScreen", () => {
   });
 
   it("session is a scope select, not a group_by tab", async () => {
-    installClient(mockClient({ metrics: emptyMetrics() }));
-    render(<MetricsScreen {...mountProps} />);
+    renderMetrics(mockClient({ metrics: emptyMetrics() }));
     await waitFor(() => expect(screen.getByTestId("metrics-session-select")).toBeTruthy());
     expect(screen.queryByTestId("metrics-dim-session")).toBeNull();
     const tabs = screen.getByTestId("metrics-dim-tabs");
@@ -87,8 +79,7 @@ describe("MetricsScreen", () => {
   });
 
   it("comparison view shows first-attempt vs fix split", async () => {
-    installClient(mockClient({ metrics: populatedMetrics() }));
-    render(<MetricsScreen {...mountProps} />);
+    renderMetrics(mockClient({ metrics: populatedMetrics() }));
     await waitFor(() => expect(screen.getByTestId("metrics-table")).toBeTruthy());
     fireEvent.click(screen.getByTestId("metrics-view-comparison"));
     await waitFor(() => expect(screen.getByTestId("metrics-compare-body")).toBeTruthy());
@@ -97,8 +88,7 @@ describe("MetricsScreen", () => {
   });
 
   it("shows error honesty when metrics fetch fails", async () => {
-    installClient(mockClient({ metricsError: "daemon down" }));
-    render(<MetricsScreen {...mountProps} />);
+    renderMetrics(mockClient({ metricsError: "daemon down" }));
     await waitFor(() => {
       expect(screen.getByTestId("metrics-error-banner")).toBeTruthy();
     });
@@ -106,8 +96,7 @@ describe("MetricsScreen", () => {
   });
 
   it("filter clear is disabled until a filter is set", async () => {
-    installClient(mockClient({ metrics: populatedMetrics() }));
-    render(<MetricsScreen {...mountProps} />);
+    renderMetrics(mockClient({ metrics: populatedMetrics() }));
     await waitFor(() => expect(screen.getByTestId("metrics-filter-clear")).toBeTruthy());
     const clear = screen.getByTestId("metrics-filter-clear") as HTMLButtonElement;
     expect(clear.disabled).toBe(true);

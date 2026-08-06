@@ -2,6 +2,7 @@
  * Soundings-parity filter bar — Console register treatment.
  * Text fields + boolean toggles; clear resets to empty.
  */
+import { Field } from "../../components/index.js";
 import {
   FILTER_LABELS,
   filterFieldsForDim,
@@ -45,18 +46,14 @@ export function FilterBar({ dim, filters, onChange, onClear }: FilterBarProps) {
       aria-label="Metrics filters"
     >
       {TEXT_KEYS.filter((k) => fields.has(k)).map((key) => (
-        <label key={key} className="pc-metrics__filter-field">
-          <span className="pc-metrics__filter-label">{FILTER_LABELS[key]}</span>
-          <input
-            className="pc-metrics__input"
-            type="text"
-            value={filters[key] as string}
-            onChange={(e) => onChange({ ...filters, [key]: e.target.value })}
-            data-testid={`metrics-filter-${key}`}
-            autoComplete="off"
-            spellCheck={false}
-          />
-        </label>
+        <Field
+          key={key}
+          className="pc-metrics__filter-field"
+          label={FILTER_LABELS[key]}
+          value={filters[key] as string}
+          onChange={(v) => onChange({ ...filters, [key]: v })}
+          testId={`metrics-filter-${key}`}
+        />
       ))}
 
       <div className="pc-metrics__filter-toggles">

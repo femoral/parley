@@ -11,7 +11,7 @@ import {
   ReportPanel,
   WhyFailedWell,
 } from "../../src/screens/task/panels.js";
-import { CopyScaffold } from "../../src/screens/task/CopyScaffold.js";
+import { CopyScaffold } from "../../src/components/index.js";
 import {
   attemptChain,
   awaitingTask,

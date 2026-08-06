@@ -7,13 +7,18 @@
  * - Soundings-parity filter bar + comparison + size/difficulty buckets
  * - Full per-panel honesty (loading / empty / error / stale)
  */
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  ParleyClient,
   type MetricsGroupBy,
   type OrchestratorSession,
 } from "@useparley/core";
-import { useMetrics, useRunMetrics } from "../../data/index.js";
+import { Select } from "../../components/index.js";
+import {
+  useConsoleData,
+  useMetrics,
+  usePolling,
+  useRunMetrics,
+} from "../../data/index.js";
 import type { ScreenMountProps } from "../types.js";
 import { Buckets } from "./Buckets.js";
 import { ComparisonPanel } from "./ComparisonPanel.js";
@@ -49,16 +54,13 @@ import {
 import { ScoreDistribution } from "./ScoreDistribution.js";
 import "./metrics.css";
 
-function createClient(): ParleyClient {
-  return new ParleyClient({ baseUrl: "" });
-}
 
 const OVERFLOW_DIMS = TASK_DIMS.filter(
   (d) => !PRIMARY_DIMS.includes(d as MetricsDim),
 );
 
 export function MetricsScreen(_props: ScreenMountProps) {
-  const client = useMemo(createClient, []);
+  const { client } = useConsoleData();
 
   const [dim, setDim] = useState<MetricsDim>("vendor");
   const [session, setSession] = useState("all");
@@ -67,11 +69,13 @@ export function MetricsScreen(_props: ScreenMountProps) {
   const [sessions, setSessions] = useState<OrchestratorSession[]>([]);
   const [refreshKey, setRefreshKey] = useState(0);
 
-  // Light refresh when returning to the tab / every 30s while mounted.
-  useEffect(() => {
-    const id = window.setInterval(() => setRefreshKey((k) => k + 1), 30_000);
-    return () => window.clearInterval(id);
-  }, []);
+  // Light refresh every 30s while visible; usePolling gates on document.hidden.
+  usePolling(
+    useCallback(() => {
+      setRefreshKey((k) => k + 1);
+    }, []),
+    { intervalMs: 30_000, immediate: false },
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -195,35 +199,33 @@ export function MetricsScreen(_props: ScreenMountProps) {
             </button>
           ))}
         </div>
-        <label className="pc-metrics__scope">
-          <span className="pc-metrics__scope-label">more</span>
-          <select
-            className="pc-metrics__select"
-            value={overflowValue}
-            onChange={(e) => {
-              const v = e.target.value as MetricsDim | "";
-              if (v) setDim(v);
-            }}
-            data-testid="metrics-dim-more"
-            aria-label="Additional group-by dimensions"
-          >
-            <option value="">…</option>
-            {OVERFLOW_DIMS.map((d) => (
-              <option key={d} value={d}>
-                {DIM_LABELS[d]}
-              </option>
-            ))}
-          </select>
-        </label>
+        <Select
+          label="more"
+          layout="inline"
+          className="pc-metrics__scope"
+          value={overflowValue}
+          onChange={(v) => {
+            if (v) setDim(v as MetricsDim);
+          }}
+          testId="metrics-dim-more"
+          aria-label="Additional group-by dimensions"
+        >
+          <option value="">…</option>
+          {OVERFLOW_DIMS.map((d) => (
+            <option key={d} value={d}>
+              {DIM_LABELS[d]}
+            </option>
+          ))}
+        </Select>
 
         {/* Session = scope filter, not a group_by tab (#344) */}
         <div className="pc-metrics__scope" data-testid="metrics-session-scope">
-          <span className="pc-metrics__scope-label">session</span>
-          <select
-            className="pc-metrics__select"
+          <Select
+            label="session"
+            layout="inline"
             value={session}
-            onChange={(e) => setSession(e.target.value)}
-            data-testid="metrics-session-select"
+            onChange={setSession}
+            testId="metrics-session-select"
             aria-label="Session scope filter"
           >
             <option value="all">all sessions</option>
@@ -232,7 +234,7 @@ export function MetricsScreen(_props: ScreenMountProps) {
                 {s.id}
               </option>
             ))}
-          </select>
+          </Select>
         </div>
 
         <div className="pc-metrics__view-switch" role="group" aria-label="Metrics view">

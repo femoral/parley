@@ -6,13 +6,12 @@
  * Observation-only: no mutating run/gate routes.
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ParleyClient, type DeliverableRef, type NodeProjection } from "@useparley/core";
+import type { DeliverableRef, NodeProjection } from "@useparley/core";
+import { Panel, StateChip } from "../../components/index.js";
 import {
-  useHealth,
+  useConsoleData,
   useHonesty,
   useNodeTasks,
-  useRuns,
-  useSnapshot,
 } from "../../data/index.js";
 import type { ScreenMountProps } from "../types.js";
 import { useDeliverableValues } from "./useDeliverableValues.js";
@@ -23,7 +22,6 @@ import {
   projectRunStateLabel,
   projectTaskStateChip,
   verbsForDisplay,
-  type StateToken,
 } from "./state.js";
 import {
   IterationGridView,
@@ -35,9 +33,6 @@ import "./run.css";
 
 export type RunViewId = "pipeline" | "grid" | "table";
 
-function createClient(): ParleyClient {
-  return new ParleyClient({ baseUrl: "" });
-}
 
 function collectDeliverableRefs(nodes: readonly NodeProjection[]): DeliverableRef[] {
   // Id-only stubs: kind is not invented as "inline" — projection uses "unknown".
@@ -66,13 +61,7 @@ function collectDeliverableRefs(nodes: readonly NodeProjection[]): DeliverableRe
 }
 
 export function RunScreen(props: ScreenMountProps) {
-  const client = useMemo(createClient, []);
-  const snapshot = useSnapshot(client);
-  const health = useHealth(client);
-  const runs = useRuns(client, {
-    selectedRunId: props.selectedRunId,
-    enabled: true,
-  });
+  const { client, snapshot, health, runs } = useConsoleData();
   const honesty = useHonesty({
     ready: snapshot.ready,
     streamConnected: snapshot.connected,
@@ -370,7 +359,7 @@ export function RunScreen(props: ScreenMountProps) {
           ) : null}
         </div>
         <div className="pc-run__header-actions">
-          <StateChip token={stateChip.token} label={stateChip.label} live={stateChip.live} />
+          <StateChip state={stateChip.token} label={stateChip.label} live={stateChip.live} testId="run-state-chip" />
           <button
             type="button"
             className="pc-run__copy"
@@ -462,210 +451,172 @@ export function RunScreen(props: ScreenMountProps) {
         ) : null}
 
         <div className="pc-run__panels">
-          <section
-            className="pc-run__panel"
-            data-testid="run-deliverables"
+          <Panel
+            title="deliverables"
+            meta={
+              <span data-testid="run-deliverables-status">{deliv.panelLabel}</span>
+            }
+            testId="run-deliverables"
             aria-label="Deliverables"
+            className="pc-run__panel"
           >
-            <div className="pc-run__panel-head">
-              <span className="pc-run__panel-title">deliverables</span>
-              <span
-                className="pc-run__panel-meta"
-                data-testid="run-deliverables-status"
-              >
-                {deliv.panelLabel}
-              </span>
-            </div>
-            <div className="pc-run__panel-body">
-              {deliv.rows.length === 0 ? (
-                <div className="pc-run__panel-empty" data-fetch-state="none">
-                  {deliv.loading
-                    ? "Fetching deliverables…"
-                    : deliverableRefs.length === 0
-                      ? "No deliverables on this run yet."
-                      : "No deliverable rows."}
-                </div>
-              ) : (
-                deliv.rows.map((row) => (
-                  <div
-                    key={row.ref.deliverable_id}
-                    className="pc-run__deliv-row"
-                    data-fetch-state={row.fetchState}
-                    data-kind={row.kindDisplay}
-                  >
-                    <span className="pc-run__deliv-addr" title={row.address}>
-                      {row.address || row.ref.deliverable_id}
-                    </span>
-                    <span
-                      className={`pc-run__deliv-kind pc-run__deliv-kind--${
-                        row.fetchState === "purged"
-                          ? "purged"
-                          : row.fetchState === "missing-worktree"
-                            ? "missing"
-                            : row.fetchState === "error"
-                              ? "error"
-                              : row.kindDisplay
-                      }`}
-                    >
-                      {row.fetchState === "purged"
-                        ? "PURGED"
+            {deliv.rows.length === 0 ? (
+              <div className="pc-run__panel-empty" data-fetch-state="none">
+                {deliv.loading
+                  ? "Fetching deliverables…"
+                  : deliverableRefs.length === 0
+                    ? "No deliverables on this run yet."
+                    : "No deliverable rows."}
+              </div>
+            ) : (
+              deliv.rows.map((row) => (
+                <div
+                  key={row.ref.deliverable_id}
+                  className="pc-run__deliv-row"
+                  data-fetch-state={row.fetchState}
+                  data-kind={row.kindDisplay}
+                >
+                  <span className="pc-run__deliv-addr" title={row.address}>
+                    {row.address || row.ref.deliverable_id}
+                  </span>
+                  <span
+                    className={`pc-run__deliv-kind pc-run__deliv-kind--${
+                      row.fetchState === "purged"
+                        ? "purged"
                         : row.fetchState === "missing-worktree"
-                          ? "MISSING"
+                          ? "missing"
                           : row.fetchState === "error"
-                            ? "ERROR"
-                            : row.kindDisplay.toUpperCase()}
-                    </span>
-                    <span
-                      className="pc-run__deliv-body"
-                      data-state={row.fetchState}
-                    >
-                      {row.body}
-                    </span>
-                    <span className="pc-run__deliv-meta">{row.meta}</span>
-                  </div>
-                ))
-              )}
-            </div>
-          </section>
-
-          <section className="pc-run__panel" data-testid="run-tasks" aria-label="Run tasks">
-            <div className="pc-run__panel-head">
-              <span className="pc-run__panel-title">run tasks</span>
-              <span className="pc-run__panel-meta">
-                {nodeTasks.status === "error"
-                  ? `node error · ${nodeTasks.error}`
-                  : nodeTasks.status === "loading"
-                    ? "loading node…"
-                    : `${nodeTasks.runTasks.length} on run${
-                        nodeTasks.data
-                          ? ` · ${nodeTasks.data.tasks.length} on ${selectedNode?.node ?? "node"}`
-                          : ""
-                      }`}
-              </span>
-            </div>
-            <div className="pc-run__panel-body">
-              {nodeTasks.status === "error" ? (
-                <div className="pc-run__panel-empty" data-status="error">
-                  Node tasks failed: {nodeTasks.error}
+                            ? "error"
+                            : row.kindDisplay
+                    }`}
+                  >
+                    {row.fetchState === "purged"
+                      ? "PURGED"
+                      : row.fetchState === "missing-worktree"
+                        ? "MISSING"
+                        : row.fetchState === "error"
+                          ? "ERROR"
+                          : row.kindDisplay.toUpperCase()}
+                  </span>
+                  <span className="pc-run__deliv-body" data-state={row.fetchState}>
+                    {row.body}
+                  </span>
+                  <span className="pc-run__deliv-meta">{row.meta}</span>
                 </div>
-              ) : null}
-              {nodeTasks.runTasks.length === 0 && nodeTasks.status !== "loading" ? (
-                <div className="pc-run__panel-empty">No tasks on this run yet.</div>
-              ) : (
-                nodeTasks.runTasks.map((t) => {
-                  const chip = projectTaskStateChip(t.state);
-                  const addr = [
-                    t.node ?? "node",
-                    t.iteration != null ? `.${t.iteration}` : "",
-                    t.slot ? `[${t.slot}]` : "",
-                    " · ",
-                    shortId(t.task_id, 8),
-                  ].join("");
-                  return (
-                    <div
-                      key={t.task_id}
-                      className="pc-run__task-row pc-run__task-row--interactive"
-                      data-task-id={t.task_id}
-                      data-state={t.state}
-                      tabIndex={0}
-                      role="button"
-                      onClick={() => {
+              ))
+            )}
+          </Panel>
+
+          <Panel
+            title="run tasks"
+            meta={
+              nodeTasks.status === "error"
+                ? `node error · ${nodeTasks.error}`
+                : nodeTasks.status === "loading"
+                  ? "loading node…"
+                  : `${nodeTasks.runTasks.length} on run${
+                      nodeTasks.data
+                        ? ` · ${nodeTasks.data.tasks.length} on ${selectedNode?.node ?? "node"}`
+                        : ""
+                    }`
+            }
+            testId="run-tasks"
+            aria-label="Run tasks"
+            className="pc-run__panel"
+          >
+            {nodeTasks.status === "error" ? (
+              <div className="pc-run__panel-empty" data-status="error">
+                Node tasks failed: {nodeTasks.error}
+              </div>
+            ) : null}
+            {nodeTasks.runTasks.length === 0 && nodeTasks.status !== "loading" ? (
+              <div className="pc-run__panel-empty">No tasks on this run yet.</div>
+            ) : (
+              nodeTasks.runTasks.map((t) => {
+                const chip = projectTaskStateChip(t.state);
+                const addr = [
+                  t.node ?? "node",
+                  t.iteration != null ? `.${t.iteration}` : "",
+                  t.slot ? `[${t.slot}]` : "",
+                  " · ",
+                  shortId(t.task_id, 8),
+                ].join("");
+                return (
+                  <div
+                    key={t.task_id}
+                    className="pc-run__task-row pc-run__task-row--interactive"
+                    data-task-id={t.task_id}
+                    data-state={t.state}
+                    tabIndex={0}
+                    role="button"
+                    onClick={() => {
+                      props.setSelectedTaskId(t.task_id);
+                      props.navigate("task");
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
                         props.setSelectedTaskId(t.task_id);
                         props.navigate("task");
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" || e.key === " ") {
-                          e.preventDefault();
-                          props.setSelectedTaskId(t.task_id);
-                          props.navigate("task");
-                        }
-                      }}
+                      }
+                    }}
+                  >
+                    <StateChip state={chip.token} label={chip.label} live={chip.live} />
+                    <span className="pc-run__task-addr" title={addr}>
+                      {addr}
+                    </span>
+                    <span className="pc-run__task-harness">
+                      {t.vendor}
+                      {t.model ? ` · ${t.model}` : ""}
+                    </span>
+                    <span className="pc-run__task-dur">
+                      {formatDuration(t.duration_ms, t.state === "running")}
+                    </span>
+                  </div>
+                );
+              })
+            )}
+            {nodeTasks.data && nodeTasks.data.tasks.length > 0 ? (
+              <>
+                <div className="pc-panel__head pc-run__panel-head--sub">
+                  <span className="pc-panel__title">
+                    node {selectedNode?.node}
+                    {selectedNode ? `.${selectedNode.iteration}` : ""}
+                  </span>
+                  <span className="pc-panel__meta">
+                    {nodeTasks.data.tasks.length} row
+                    {nodeTasks.data.tasks.length === 1 ? "" : "s"}
+                  </span>
+                </div>
+                {nodeTasks.data.tasks.map((row) => {
+                  const chip = projectTaskStateChip(row.state);
+                  return (
+                    <div
+                      key={row.task_id}
+                      className="pc-run__task-row"
+                      data-task-id={row.task_id}
+                      data-slot={row.slot ?? undefined}
+                      data-node-task="true"
                     >
-                      <span className={`pc-run__task-state pc-run__ink--${chip.token}`}>
-                        {chip.label}
+                      <StateChip state={chip.token} label={chip.label} live={chip.live} />
+                      <span className="pc-run__task-addr" title={row.gist || row.task_id}>
+                        {row.slot ? `[${row.slot}] · ` : ""}
+                        {shortId(row.task_id, 8)}
+                        {row.summary ? ` · ${row.summary}` : ""}
                       </span>
-                      <span className="pc-run__task-addr" title={addr}>
-                        {addr}
-                      </span>
-                      <span className="pc-run__task-harness">
-                        {t.vendor}
-                        {t.model ? ` · ${t.model}` : ""}
-                      </span>
+                      <span className="pc-run__task-harness">{row.gist || "—"}</span>
                       <span className="pc-run__task-dur">
-                        {formatDuration(t.duration_ms, t.state === "running")}
+                        {formatDuration(row.duration_ms, row.state === "running")}
                       </span>
                     </div>
                   );
-                })
-              )}
-              {nodeTasks.data && nodeTasks.data.tasks.length > 0 ? (
-                <>
-                  <div className="pc-run__panel-head pc-run__panel-head--sub">
-                    <span className="pc-run__panel-title">
-                      node {selectedNode?.node}
-                      {selectedNode ? `.${selectedNode.iteration}` : ""}
-                    </span>
-                    <span className="pc-run__panel-meta">
-                      {nodeTasks.data.tasks.length} row
-                      {nodeTasks.data.tasks.length === 1 ? "" : "s"}
-                    </span>
-                  </div>
-                  {nodeTasks.data.tasks.map((row) => {
-                    const chip = projectTaskStateChip(row.state);
-                    return (
-                      <div
-                        key={row.task_id}
-                        className="pc-run__task-row"
-                        data-task-id={row.task_id}
-                        data-slot={row.slot ?? undefined}
-                        data-node-task="true"
-                      >
-                        <span className={`pc-run__task-state pc-run__ink--${chip.token}`}>
-                          {chip.label}
-                        </span>
-                        <span
-                          className="pc-run__task-addr"
-                          title={row.gist || row.task_id}
-                        >
-                          {row.slot ? `[${row.slot}] · ` : ""}
-                          {shortId(row.task_id, 8)}
-                          {row.summary ? ` · ${row.summary}` : ""}
-                        </span>
-                        <span className="pc-run__task-harness">{row.gist || "—"}</span>
-                        <span className="pc-run__task-dur">
-                          {formatDuration(row.duration_ms, row.state === "running")}
-                        </span>
-                      </div>
-                    );
-                  })}
-                </>
-              ) : null}
-            </div>
-          </section>
+                })}
+              </>
+            ) : null}
+          </Panel>
         </div>
       </div>
     </div>
-  );
-}
-
-function StateChip({
-  token,
-  label,
-  live,
-}: {
-  token: StateToken;
-  label: string;
-  live: boolean;
-}) {
-  return (
-    <span
-      className={`pc-run__chip pc-run__chip--${token}${live ? " pc-run__chip--live" : ""}`}
-      data-testid="run-state-chip"
-      data-state-token={token}
-    >
-      <span className="pc-run__chip-dot" aria-hidden="true" />
-      <span className="pc-run__chip-label">{label}</span>
-    </span>
   );
 }
 

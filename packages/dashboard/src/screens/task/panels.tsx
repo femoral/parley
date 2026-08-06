@@ -7,7 +7,6 @@ import {
   useEffect,
   useId,
   useRef,
-  type CSSProperties,
   type ReactNode,
   type ToggleEvent,
 } from "react";
@@ -27,7 +26,7 @@ import {
   type LogTailStatus,
   type PanelStatus,
 } from "../../data/index.js";
-import { CopyScaffold } from "./CopyScaffold.js";
+import { CopyScaffold, Panel, StateChip } from "../../components/index.js";
 import {
   coatVar,
   evalScoreColor,
@@ -66,34 +65,6 @@ export function BreakablePath({ path }: { path: string }): ReactNode {
   ));
 }
 
-export function PanelShell({
-  title,
-  meta,
-  children,
-  testId,
-  className = "",
-}: {
-  title: string;
-  meta?: ReactNode;
-  children: ReactNode;
-  testId?: string;
-  className?: string;
-}) {
-  return (
-    <section
-      className={`pc-task-panel ${className}`.trim()}
-      data-testid={testId}
-      aria-label={title}
-    >
-      <header className="pc-task-panel__head">
-        <h2 className="pc-task-panel__title">{title}</h2>
-        {meta != null ? <div className="pc-task-panel__meta">{meta}</div> : null}
-      </header>
-      <div className="pc-task-panel__body">{children}</div>
-    </section>
-  );
-}
-
 export function HonestyNote({
   phase,
   message,
@@ -125,7 +96,6 @@ export function TaskHeader({
   onCopyBranch: () => void;
   branchCopied: boolean;
 }) {
-  const color = stateColor(task.state);
   const name = task.name || task.task_id;
   return (
     <header className="pc-task-header" data-testid="task-header">
@@ -142,24 +112,11 @@ export function TaskHeader({
         </span>
       </div>
       <div className="pc-task-header__actions">
-        <span
-          className="pc-task-statechip"
-          style={
-            {
-              "--pc-task-state": color,
-            } as CSSProperties
-          }
-          data-testid="task-state-chip"
-          data-state={task.state}
-        >
-          <span
-            className={`pc-task-statechip__dot${
-              task.state === "running" ? " pc-task-statechip__dot--live" : ""
-            }`}
-            aria-hidden="true"
-          />
-          <span className="pc-task-statechip__label">{stateLabel(task.state)}</span>
-        </span>
+        <StateChip
+          state={task.state}
+          label={stateLabel(task.state)}
+          testId="task-state-chip"
+        />
         {task.branch ? (
           <button
             type="button"
@@ -199,27 +156,27 @@ export function BriefPanel({
 
   if (status === "loading" && !task) {
     return (
-      <PanelShell title="brief" testId="task-brief">
+      <Panel title="brief" testId="task-brief">
         <HonestyNote phase="loading" message="Loading brief…" testId="task-brief-loading" />
-      </PanelShell>
+      </Panel>
     );
   }
   if (status === "error" && !task) {
     return (
-      <PanelShell title="brief" testId="task-brief">
+      <Panel title="brief" testId="task-brief">
         <HonestyNote
           phase="error"
           message={error ?? "Brief unavailable."}
           testId="task-brief-error"
         />
-      </PanelShell>
+      </Panel>
     );
   }
   if (!task) {
     return (
-      <PanelShell title="brief" testId="task-brief">
+      <Panel title="brief" testId="task-brief">
         <HonestyNote phase="empty" message="No task selected." testId="task-brief-empty" />
-      </PanelShell>
+      </Panel>
     );
   }
 
@@ -300,7 +257,7 @@ export function BriefPanel({
   ];
 
   return (
-    <PanelShell title="brief" testId="task-brief">
+    <Panel title="brief" testId="task-brief">
       {status === "error" && error ? (
         <HonestyNote phase="error" message={`Stale brief — ${error}`} testId="task-brief-stale" />
       ) : null}
@@ -356,7 +313,7 @@ export function BriefPanel({
           </div>
         ))}
       </dl>
-    </PanelShell>
+    </Panel>
   );
 }
 
@@ -395,31 +352,31 @@ export function EvalFeedback({
 }) {
   if (status === "error" && !detail) {
     return (
-      <PanelShell title="eval" testId="task-eval" meta={<span>unavailable</span>}>
+      <Panel title="eval" testId="task-eval" meta={<span>unavailable</span>}>
         <HonestyNote
           phase="error"
           message="Eval unavailable — task detail failed to load."
           testId="task-eval-error"
         />
-      </PanelShell>
+      </Panel>
     );
   }
   if (status === "loading" && !detail) {
     return (
-      <PanelShell title="eval" testId="task-eval">
+      <Panel title="eval" testId="task-eval">
         <HonestyNote phase="loading" message="Loading eval…" />
-      </PanelShell>
+      </Panel>
     );
   }
   if (!detail) {
     return (
-      <PanelShell title="eval" testId="task-eval" meta={<span>absent</span>}>
+      <Panel title="eval" testId="task-eval" meta={<span>absent</span>}>
         <HonestyNote
           phase="empty"
           message="No eval on file — this task has never been scored."
           testId="task-eval-empty"
         />
-      </PanelShell>
+      </Panel>
     );
   }
 
@@ -431,7 +388,7 @@ export function EvalFeedback({
       : null;
 
   return (
-    <PanelShell
+    <Panel
       title="eval"
       testId="task-eval"
       meta={
@@ -478,7 +435,7 @@ export function EvalFeedback({
           ))}
         </ul>
       ) : null}
-    </PanelShell>
+    </Panel>
   );
 }
 
@@ -495,38 +452,38 @@ export function AttemptChain({
 }) {
   if (status === "loading" && attempts.length === 0) {
     return (
-      <PanelShell title="attempt chain" meta={<span>parley fix</span>} testId="task-attempts">
+      <Panel title="attempt chain" meta={<span>parley fix</span>} testId="task-attempts">
         <HonestyNote phase="loading" message="Loading attempts…" />
-      </PanelShell>
+      </Panel>
     );
   }
 
   if (status === "error" && attempts.length === 0) {
     return (
-      <PanelShell title="attempt chain" meta={<span>unavailable</span>} testId="task-attempts">
+      <Panel title="attempt chain" meta={<span>unavailable</span>} testId="task-attempts">
         <HonestyNote
           phase="error"
           message="Attempt chain unavailable — task detail failed to load."
           testId="task-attempts-error"
         />
-      </PanelShell>
+      </Panel>
     );
   }
 
   if (attempts.length === 0) {
     return (
-      <PanelShell title="attempt chain" meta={<span>parley fix</span>} testId="task-attempts">
+      <Panel title="attempt chain" meta={<span>parley fix</span>} testId="task-attempts">
         <HonestyNote
           phase="empty"
           message="No attempts yet — task not in a fix chain."
           testId="task-attempts-empty"
         />
-      </PanelShell>
+      </Panel>
     );
   }
 
   return (
-    <PanelShell
+    <Panel
       title="attempt chain"
       meta={<span>parley fix · {attempts.length}</span>}
       testId="task-attempts"
@@ -567,7 +524,7 @@ export function AttemptChain({
           );
         })}
       </ol>
-    </PanelShell>
+    </Panel>
   );
 }
 
@@ -706,7 +663,7 @@ export function QaPanel({
         : `${qa.length} turn${qa.length === 1 ? "" : "s"}`;
 
   return (
-    <PanelShell title="q&a — orchestrator answers" meta={<span>{meta}</span>} testId="task-qa">
+    <Panel title="q&a — orchestrator answers" meta={<span>{meta}</span>} testId="task-qa">
       {status === "loading" && qa.length === 0 ? (
         <HonestyNote phase="loading" message="Loading Q&A…" />
       ) : null}
@@ -774,7 +731,7 @@ export function QaPanel({
           })}
         </ul>
       ) : null}
-    </PanelShell>
+    </Panel>
   );
 }
 
@@ -796,7 +753,7 @@ export function ReportPanel({
   const longSummary = summary.length > 180;
 
   return (
-    <PanelShell
+    <Panel
       title="report"
       testId="task-report"
       meta={
@@ -899,7 +856,7 @@ export function ReportPanel({
           ) : null}
         </>
       ) : null}
-    </PanelShell>
+    </Panel>
   );
 }
 
@@ -973,7 +930,7 @@ export function DeliverablesPanel({
                   : `${items.length}`;
 
   return (
-    <PanelShell
+    <Panel
       title="deliverables"
       testId="task-deliverables"
       meta={
@@ -1052,6 +1009,6 @@ export function DeliverablesPanel({
           })}
         </ul>
       )}
-    </PanelShell>
+    </Panel>
   );
 }

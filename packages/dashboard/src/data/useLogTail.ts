@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { ParleyClient } from "@useparley/core";
 import { LogAccumulator } from "./logClassify.js";
 import type { LogLine, LogTailStatus, LogsView } from "./types.js";
+import { isDocumentHidden } from "./usePolling.js";
 
 const DEFAULT_POLL_MS = 1000;
 const MAX_IDLE_POLL_MS = 4000;
@@ -65,12 +66,12 @@ export function useLogTail(
     let pollAfterFlight = false;
 
     const schedule = (delay: number) => {
-      if (cancelled || (typeof document !== "undefined" && document.hidden)) return;
+      if (cancelled || isDocumentHidden()) return;
       timer = setTimeout(() => void tick(), delay);
     };
 
     const tick = async (): Promise<void> => {
-      if (cancelled || (typeof document !== "undefined" && document.hidden)) return;
+      if (cancelled || isDocumentHidden()) return;
       if (inFlight) {
         pollAfterFlight = true;
         return;
@@ -104,7 +105,7 @@ export function useLogTail(
         schedule(pollMs);
       } finally {
         inFlight = false;
-        if (pollAfterFlight && !cancelled && !(typeof document !== "undefined" && document.hidden)) {
+        if (pollAfterFlight && !cancelled && !isDocumentHidden()) {
           pollAfterFlight = false;
           if (timer !== undefined) clearTimeout(timer);
           timer = undefined;
@@ -116,7 +117,7 @@ export function useLogTail(
     const visibilityChanged = () => {
       if (timer !== undefined) clearTimeout(timer);
       timer = undefined;
-      if (typeof document === "undefined" || !document.hidden) {
+      if (!isDocumentHidden()) {
         idlePollMs = pollMs;
         void tick();
       }

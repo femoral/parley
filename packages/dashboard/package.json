@@ -31,6 +31,7 @@
     "dev": "vite",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
+    "lint:tokens": "node scripts/lint-tokens.mjs",
     "prepublishOnly": "npm run build",
     "verify": "node --import tsx verify/demos/run-all.mjs",
     "verify:check": "node --import tsx verify/check.mjs",

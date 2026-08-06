@@ -2,6 +2,7 @@
  * Eval-by-size / eval-by-difficulty chips — Soundings parity.
  */
 import type { BucketChip } from "./project.js";
+import { Panel } from "../../components/index.js";
 
 export interface BucketsProps {
   bySize: readonly BucketChip[];
@@ -12,15 +13,14 @@ export function Buckets({ bySize, byDifficulty }: BucketsProps) {
   if (bySize.length === 0 && byDifficulty.length === 0) return null;
 
   return (
-    <section
+    <Panel
       className="pc-metrics__panel"
-      data-testid="metrics-buckets"
+      testId="metrics-buckets"
       aria-label="Eval buckets by size and difficulty"
+      titleTag="h2"
+      title="eval buckets"
+      meta="size · difficulty"
     >
-      <div className="pc-metrics__panel-head">
-        <h2 className="pc-metrics__panel-title">eval buckets</h2>
-        <span className="pc-metrics__panel-meta">size · difficulty</span>
-      </div>
       <div className="pc-metrics__buckets">
         {bySize.length > 0 ? (
           <div className="pc-metrics__bucket-group">
@@ -61,6 +61,6 @@ export function Buckets({ bySize, byDifficulty }: BucketsProps) {
           </div>
         ) : null}
       </div>
-    </section>
+    </Panel>
   );
 }

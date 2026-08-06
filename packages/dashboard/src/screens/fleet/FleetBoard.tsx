@@ -1,12 +1,14 @@
 /**
  * Presentational fleet board — pure props so unit tests need no network.
  */
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import type { RunSummary, RunnerListEntry, TaskEnvelope } from "@useparley/core";
 import { normalizeUsage } from "@useparley/core";
+import { CopyScaffold, Panel, StateChip } from "../../components/index.js";
 import {
   projectQueueContext,
   projectTokenBurn,
+  usePolling,
   type FirehoseLine,
   type HonestyPhase,
   type TokenBurnView,
@@ -33,7 +35,6 @@ import {
   panelPhaseFromTransport,
   type PanelPhase,
 } from "./panelHonesty.js";
-import { PanelShell } from "./PanelShell.js";
 import {
   describePipTrack,
   pipsForRun,
@@ -42,7 +43,6 @@ import {
 } from "./pips.js";
 import { runAtLine, runChipState, runStateLabel } from "./runAt.js";
 import { runnerView } from "./runners.js";
-import { StateChip } from "./StateChip.js";
 import { useRovingTabindex } from "./useRovingTabindex.js";
 
 export interface FleetBoardProps {
@@ -75,30 +75,6 @@ function runAddress(t: TaskEnvelope): string {
   const iter = t.iteration != null ? `.${t.iteration}` : "";
   const slot = t.slot ? `[${t.slot}]` : "";
   return `${id} · ${node}${iter}${slot}`;
-}
-
-function CopyScaffold({ command }: { command: string }) {
-  const [copied, setCopied] = useState(false);
-  const onCopy = useCallback(async () => {
-    try {
-      await navigator.clipboard.writeText(command);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 1600);
-    } catch {
-      /* clipboard may be denied in headless — leave label unchanged */
-    }
-  }, [command]);
-  return (
-    <button
-      type="button"
-      className="pc-fleet-scaffold"
-      onClick={() => void onCopy()}
-      data-testid="fleet-delegate-scaffold"
-      title="Copy to clipboard"
-    >
-      {copied ? "copied" : command}
-    </button>
-  );
 }
 
 function PipTrack({ run }: { run: RunSummary }) {
@@ -139,13 +115,12 @@ export function FleetBoard(props: FleetBoardProps) {
   const [minuteTick, setMinuteTick] = useState(() =>
     quantizeNowMs(Date.now()),
   );
-  useEffect(() => {
-    if (props.nowMs != null) return;
-    const id = window.setInterval(() => {
+  usePolling(
+    useCallback(() => {
       setMinuteTick(quantizeNowMs(Date.now()));
-    }, 60_000);
-    return () => window.clearInterval(id);
-  }, [props.nowMs]);
+    }, []),
+    { intervalMs: 60_000, enabled: props.nowMs == null, immediate: false },
+  );
   const nowMs = props.nowMs != null ? props.nowMs : minuteTick;
 
   const kpis = useMemo(
@@ -272,7 +247,7 @@ export function FleetBoard(props: FleetBoardProps) {
         <div className="pc-fleet__global-honesty" data-testid="fleet-empty">
           <h1 className="pc-fleet__heading">Fleet board</h1>
           <p>No tasks or runs yet. Copy a scaffold and hand it to the orchestrating agent.</p>
-          <CopyScaffold command="parley delegate" />
+          <CopyScaffold text="parley delegate" testId="fleet-delegate-scaffold" />
         </div>
       </div>
     );
@@ -307,11 +282,11 @@ export function FleetBoard(props: FleetBoardProps) {
 
         <div className="pc-fleet__body">
           <div className="pc-fleet__main">
-            <PanelShell
+            <Panel
               title="runs"
               meta={`${heldCount} held · track = nodes × loop`}
               phase={runsPhase}
-              kind="runs"
+              honestyKind="runs"
               testId="fleet-runs"
               className="pc-fleet-runs"
             >
@@ -426,16 +401,18 @@ export function FleetBoard(props: FleetBoardProps) {
                   })}
                 </div>
               </div>
-            </PanelShell>
+            </Panel>
 
-            <PanelShell
+            <Panel
               title="tasks"
               meta={`attention · age · ${sortedTasks.length}`}
               phase={tasksPhase}
-              kind="tasks"
+              honestyKind="tasks"
               testId="fleet-tasks"
               className="pc-fleet-tasks"
-              emptyAction={<CopyScaffold command="parley delegate" />}
+              emptyAction={
+                <CopyScaffold text="parley delegate" testId="fleet-delegate-scaffold" />
+              }
             >
               <div
                 className="pc-fleet-table-scroll"
@@ -595,7 +572,7 @@ export function FleetBoard(props: FleetBoardProps) {
                   })}
                 </div>
               </div>
-            </PanelShell>
+            </Panel>
           </div>
 
           <aside className="pc-fleet__side" data-testid="fleet-side">
@@ -651,7 +628,7 @@ export function FleetBoard(props: FleetBoardProps) {
                   </div>
                 </>
               ) : (
-                <p className="pc-fleet-panel__honesty-msg">
+                <p className="pc-panel__honesty-msg">
                   {burnPhase === "empty"
                     ? "No token activity in the last 24h (within retention)."
                     : burnPhase === "loading"
@@ -661,11 +638,11 @@ export function FleetBoard(props: FleetBoardProps) {
               )}
             </div>
 
-            <PanelShell
+            <Panel
               title="executors"
               meta={`${props.runners.length} runners`}
               phase={runnersPhase}
-              kind="runners"
+              honestyKind="runners"
               testId="fleet-runners"
               className="pc-fleet-runners-panel"
             >
@@ -702,13 +679,13 @@ export function FleetBoard(props: FleetBoardProps) {
                   );
                 })}
               </div>
-            </PanelShell>
+            </Panel>
 
-            <PanelShell
+            <Panel
               title="firehose"
               meta="watch — follow"
               phase={hosePhase}
-              kind="events"
+              honestyKind="events"
               testId="fleet-firehose"
               className="pc-fleet-firehose-panel"
             >
@@ -734,7 +711,7 @@ export function FleetBoard(props: FleetBoardProps) {
                   );
                 })}
               </div>
-            </PanelShell>
+            </Panel>
           </aside>
         </div>
       </div>

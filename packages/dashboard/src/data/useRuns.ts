@@ -1,9 +1,10 @@
 /**
  * Poll `GET /runs`; fetch `GET /runs/:ref` for the selected run only.
  */
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ParleyClient, RunDetailResponse, RunSummary } from "@useparley/core";
 import type { RunsView, TransportStatus } from "./types.js";
+import { usePolling } from "./usePolling.js";
 
 const DEFAULT_POLL_MS = 3000;
 const EMPTY_DETAILS: ReadonlyMap<string, RunDetailResponse> = new Map();
@@ -26,64 +27,65 @@ export function useRuns(
   const [error, setError] = useState<string | null>(null);
   const detailsRef = useRef(details);
   detailsRef.current = details;
+  const selectedRef = useRef(selectedRunId);
+  selectedRef.current = selectedRunId;
 
-  useEffect(() => {
-    if (!enabled) return;
-    let cancelled = false;
-    let timer: ReturnType<typeof setTimeout> | undefined;
+  const tick = useCallback(async (): Promise<void> => {
+    const selected = selectedRef.current;
+    try {
+      const list = await client.listRuns();
+      setSummaries(list.runs);
+      setStatus("online");
+      setError(null);
 
-    const tick = async (): Promise<void> => {
-      try {
-        const list = await client.listRuns();
-        if (cancelled) return;
-        setSummaries(list.runs);
-        setStatus("online");
-        setError(null);
-
-        if (selectedRunId) {
-          const prior = detailsRef.current;
-          try {
-            const detail = await client.getRun(selectedRunId);
-            if (!cancelled) setDetails(new Map([[selectedRunId, detail]]));
-          } catch (err) {
-            const kept = prior.get(selectedRunId);
-            if (!cancelled) {
-              setDetails(kept ? new Map([[selectedRunId, kept]]) : new Map());
-              setError(err instanceof Error ? err.message : "run detail failed");
-            }
-          }
-        } else if (!cancelled) {
-          setDetails(new Map());
+      if (selected) {
+        const prior = detailsRef.current;
+        try {
+          const detail = await client.getRun(selected);
+          setDetails(new Map([[selected, detail]]));
+        } catch (err) {
+          const kept = prior.get(selected);
+          setDetails(kept ? new Map([[selected, kept]]) : new Map());
+          setError(err instanceof Error ? err.message : "run detail failed");
         }
-      } catch (err) {
-        if (!cancelled) {
-          // HTTP errors (daemon answered with 4xx/5xx) → online + error so the
-          // screen can render panel-error. Network/unreachable → offline so
-          // cold-load against a dead daemon shows "Daemon offline" (N3).
-          const httpStatus =
-            err &&
-            typeof err === "object" &&
-            "status" in err &&
-            typeof (err as { status: unknown }).status === "number"
-              ? (err as { status: number }).status
-              : null;
-          if (httpStatus != null && httpStatus >= 400) {
-            setStatus("online");
-          } else {
-            setStatus("offline");
-          }
-          setError(err instanceof Error ? err.message : "runs list failed");
-        }
+      } else {
+        setDetails(new Map());
       }
-      if (!cancelled) timer = setTimeout(() => void tick(), pollMs);
-    };
+    } catch (err) {
+      const httpStatus =
+        err &&
+        typeof err === "object" &&
+        "status" in err &&
+        typeof (err as { status: unknown }).status === "number"
+          ? (err as { status: number }).status
+          : null;
+      if (httpStatus != null && httpStatus >= 400) {
+        setStatus("online");
+      } else {
+        setStatus("offline");
+      }
+      setError(err instanceof Error ? err.message : "runs list failed");
+    }
+  }, [client]);
 
-    void tick();
+  usePolling(tick, { intervalMs: pollMs, enabled });
+
+  // When selection changes, fetch detail promptly without waiting for the next poll.
+  useEffect(() => {
+    if (!enabled || !selectedRunId) return;
+    let cancelled = false;
+    void client
+      .getRun(selectedRunId)
+      .then((detail) => {
+        if (!cancelled) setDetails(new Map([[selectedRunId, detail]]));
+      })
+      .catch(() => {
+        /* next poll will surface error */
+      });
     return () => {
       cancelled = true;
-      if (timer) clearTimeout(timer);
     };
-  }, [client, enabled, pollMs, selectedRunId]);
+  }, [client, enabled, selectedRunId]);
 
   return useMemo(
     () => ({

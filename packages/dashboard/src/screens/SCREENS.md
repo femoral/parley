@@ -1,27 +1,59 @@
 # Screen lane contract — Parley Console
 
-Owned by **#354 (app shell & chrome)**. The four center-screen tickets build in
-parallel; this file is the conflict fence.
+Owned by **#354 (app shell & chrome)**; shared component layer by **#367**.
+The four center screens share one client and one component kit.
 
-## Global ownership (shell ticket — do not touch from screen tickets)
+## Global ownership (shell + shared layer)
 
 | Path | Owner | Notes |
 | --- | --- | --- |
-| `src/tokens.css` | #354 | Global tokens. Screens **consume** via `var(--*)` only. |
+| `src/tokens.css` | #354 / #367 | Global tokens. Screens **consume** via `var(--*)` only. Hex and literal `font:` shorthands are banned outside this file (CI: `scripts/lint-tokens.mjs`). |
 | `src/base.css` | #354 | Reset, focus, scrollbar. |
 | `src/fonts.css` | #354 / #347 | Self-hosted faces. |
 | `src/shell.css` | #354 | Board geometry, chrome, find, settings, skip links. |
-| `src/Shell.tsx` | #354 | Frame composition. |
+| `src/Shell.tsx` | #354 / #367 | Frame composition; **sole** `new ParleyClient` site. |
 | `src/App.tsx`, `src/main.tsx` | #354 | Root + client bootstrap. |
 | `src/chrome/**` | #354 | Header, nav, find, settings, footer, accelerators. |
-| `src/data/**` | #352 | Extend via **new files only** if a projection is missing. |
+| `src/components/**` | #367 | Shared Panel, StateChip, CopyScaffold, Field/Select. |
+| `src/data/**` | #352 / #367 | Data hooks + `ConsoleDataProvider` + `usePolling`. Extend via **new files only** if a projection is missing. |
 | `index.html` | #354 | SPA shell. |
 | `verify/lib/measure.mjs` `DEFAULT_SELECTORS` | #354 | Shell-owned. Screens **must not** edit it. |
 | `verify/lib/contrast.mjs` | #354 | Shared contrast helper; screens may import. |
 
-Screen tickets may **import** chrome types that are exported for them
-(`ScreenId`, `ScreenMountProps`, settings helpers). They must not edit chrome
-source or global CSS.
+Screen tickets may **import** chrome types and shared components. They must not
+edit chrome source, global CSS (except via the token-promotion path below), or
+re-implement shared components.
+
+## Shared component layer (#367)
+
+Registered owned territory under `src/components/`:
+
+| Component | Role |
+| --- | --- |
+| `Panel` | Header strip (uppercase label + faint meta) + body; optional honesty phase |
+| `StateChip` | 7px square dot + uppercase mono label; one visual for a given state on every screen |
+| `CopyScaffold` | Bordered mono copy control (the console's only "verb") |
+| `Field` / `Select` | Register-styled controls (≥24px height; no `appearance: auto`) |
+
+### Extension path
+
+1. Add or extend a component under `src/components/` (plus styles in
+   `components.css`).
+2. Export it from `src/components/index.ts`.
+3. Prefer new CSS custom properties in `src/tokens.css` over literals.
+4. Screens **import** the shared export — they do not copy the implementation
+   into `src/screens/<name>/`.
+5. Unit tests live under `packages/dashboard/tests/components/`.
+
+`AttentionCard` and rail content are **not** in this layer yet — they land with
+#363 on top of these primitives.
+
+### Token / type lint
+
+- Zero literal `font:` shorthands and zero hard-coded hex colors outside
+  `tokens.css` in screen/chrome CSS.
+- Enforced by `packages/dashboard/scripts/lint-tokens.mjs` (root `pnpm lint` and
+  the unit suite).
 
 ## Mount points (one directory per screen)
 
@@ -34,8 +66,8 @@ source or global CSS.
 
 ### What each screen ticket **may** create/edit
 
-- Everything under its own directory: `src/screens/<name>/**`
-- Screen-local CSS **inside that directory only** (prefix classes `pc-<name>-`)
+- Everything under its own directory: `src/screens/<name>/**` (presentational
+  logic, screen-local layout CSS with class prefix `pc-<name>-`)
 - Unit/integration tests under `packages/dashboard/tests/` named for the screen
   (prefer own fixture files under `tests/<screen>/`; see fixtures rule below)
 - Verify demos under `verify/demos/` and ledger under `verify/ledger/issue-NNN/`
@@ -43,12 +75,15 @@ source or global CSS.
 
 ### What each screen ticket **must not** touch
 
-- `src/tokens.css`, `src/base.css`, `src/shell.css`, `src/fonts.css`
+- `src/tokens.css`, `src/base.css`, `src/shell.css`, `src/fonts.css` except
+  additive token promotions coordinated with #367 rules
 - `src/chrome/**`, `src/Shell.tsx`, `src/App.tsx` (except importing exported types)
+- `src/components/**` without following the extension path above
 - Another screen's directory
 - `src/data/**` except additive new projection files with a note in the PR
 - `packages/ui/**`, daemon/core source, package.json **dependencies** / lockfile
 - `verify/lib/measure.mjs` `DEFAULT_SELECTORS` (pass your own `targets` instead)
+- Constructing a second `ParleyClient` or re-opening a second SSE/snapshot
 
 ## Props contract (shell → screen)
 
@@ -66,17 +101,20 @@ export interface ScreenMountProps {
 }
 ```
 
-### Data-flow rule (decided)
+### Data-flow rule (decided — #367)
 
-**Screens fetch their own data.** Each screen constructs or receives a
-`ParleyClient` the same way shell does (`new ParleyClient({ baseUrl: "" })`)
-and calls `#352` hooks (`useSnapshot`, `useRuns`, `useTaskDetail`, …) itself.
+**The shell owns the single `ParleyClient` and the shared snapshot / health /
+runs poll.** It constructs the client once (`new ParleyClient({ baseUrl: "" })`),
+runs `useSnapshot` / `useHealth` / `useRuns`, and provides them via
+`ConsoleDataProvider`.
 
-The shell passes **only selection + navigation state** via `ScreenMountProps`.
-It does **not** pass snapshot/health/honesty props. Screens must not re-open a
-second SSE if they can share the same client instance later; for v1 parallel
-tickets, same-origin `ParleyClient({ baseUrl: "" })` per screen is acceptable
-and keeps lane isolation.
+Screens call `useConsoleData()` / `useParleyClient()` and may run
+**screen-specific** hooks (`useTaskDetail`, `useLogTail`, `useMetrics`,
+`useRunners`, …) against that client. Screens must **not** construct a client or
+a second snapshot SSE.
+
+All interval polling goes through `usePolling` (or the same visibility pattern)
+so nothing polls while `document.hidden` is true.
 
 Shell mounts exactly one screen in `#main-content` (the center region).
 Left/right rail content is screen territory once those tickets land; until then
@@ -205,16 +243,3 @@ tests/run/fixtures.ts
 
 Do not rewrite existing exports in `tests/fixtures.ts`. If you must extend a
 shared envelope helper, append new named exports only.
-
----
-
-## Verify demo file naming
-
-| Ticket | Demo file | Ledger dir |
-| --- | --- | --- |
-| #353 harness | `staged-daemon.mjs`, `intercept-error.mjs`, `reconnect.mjs` | `issue-353` |
-| #354 shell | `shell-chrome.mjs`, `find-honesty.mjs` | `issue-354` |
-| #355 fleet | `fleet-board.mjs` (suggested) | `issue-355` |
-| #356 run | `run-detail.mjs` | `issue-356` |
-| #357 task | `task-inspector.mjs` | `issue-357` |
-| #358 metrics | `metrics-board.mjs` | `issue-358` |
