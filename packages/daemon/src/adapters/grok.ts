@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import path from "node:path";
 import {
   collapseOperatorHomeInText,
@@ -21,6 +22,7 @@ import { VENDOR_DIAG_PREFIX, withPostureDiagnostics } from "./types.js";
 import { runProbe } from "./probe.js";
 import { readOperatorFileText } from "./read-operator-file.js";
 import { parseToml, tomlString, type TomlTable, type TomlValue } from "./toml.js";
+import { writeMaterializedFiles } from "../worktree.js";
 
 /**
  * The `grok` vendor adapter — real delegation to Grok Build (`grok` binary,
@@ -717,6 +719,10 @@ export function createGrokAdapter(env: NodeJS.ProcessEnv = process.env): VendorA
   /**
    * Files materialized pre-spawn: the MCP config, plus a custom sandbox profile
    * for every sandboxed posture (workspace / read-only).
+   *
+   * Declared on the plan for the engine (git-exclude + re-write before spawn).
+   * Also written eagerly before {@link permissionProbe} so inspect sees the
+   * same on-disk profile the child will run under (#334).
    */
   function files(task: TaskSpec, hub: HubInfo): MaterializedFile[] {
     const materialized: MaterializedFile[] = [
@@ -732,8 +738,152 @@ export function createGrokAdapter(env: NodeJS.ProcessEnv = process.env): VendorA
   }
 
   /**
+   * On-disk bookkeeping for a pre-probe materialization (#334).
+   *
+   * When the probe is fatal, prepare/resume throw before the engine can
+   * git-exclude or re-write — so we must undo only what *we* created, leaving
+   * pre-existing `.grok/` content byte-identical (reused worktrees / `--cwd`).
+   */
+  type ProbePreWrite = {
+    /** Absolute file paths that did not exist before the write — unlink on fatal. */
+    createdFiles: string[];
+    /**
+     * Absolute dirs created for the write (shallowest first). Removed deepest-
+     * first on fatal when empty.
+     */
+    createdDirs: string[];
+    /** Pre-existing files we overwrote — restore original bytes on fatal. */
+    backups: { abs: string; contents: Buffer }[];
+  };
+
+  /**
+   * Ensure `absDir` exists, recording every newly created ancestor under `cwd`
+   * into `createdDirs` (shallowest first, no duplicates).
+   */
+  function ensureDirTracked(absDir: string, createdDirs: string[], seen: Set<string>): void {
+    const missing: string[] = [];
+    let cur = absDir;
+    for (;;) {
+      try {
+        if (fs.statSync(cur).isDirectory()) break;
+      } catch {
+        /* missing — keep walking up */
+      }
+      if (seen.has(cur)) {
+        // A sibling path already scheduled/created this ancestor.
+        break;
+      }
+      missing.push(cur);
+      const parent = path.dirname(cur);
+      if (parent === cur) break;
+      cur = parent;
+    }
+    for (const d of missing.reverse()) {
+      if (seen.has(d)) continue;
+      if (!fs.existsSync(d)) {
+        fs.mkdirSync(d);
+        createdDirs.push(d);
+      }
+      seen.add(d);
+    }
+  }
+
+  /**
+   * Write `declared` into `cwd` before the permission probe (#334).
+   *
+   * Returns rollback state so a fatal probe can restore the pre-write tree
+   * (develop-clean failure path). The engine still materializes `plan.files`
+   * later on success (idempotent double-write) and git-excludes those paths
+   * before spawn. Skip when `cwd` is not a real directory so golden unit tests
+   * with synthetic paths stay pure in-memory.
+   */
+  function materializeFilesBeforeProbe(
+    cwd: string,
+    declared: MaterializedFile[],
+  ): ProbePreWrite | null {
+    if (declared.length === 0) return null;
+    try {
+      if (!fs.statSync(cwd).isDirectory()) return null;
+    } catch {
+      return null;
+    }
+
+    const createdFiles: string[] = [];
+    const createdDirs: string[] = [];
+    const backups: { abs: string; contents: Buffer }[] = [];
+    const seenDirs = new Set<string>();
+
+    for (const file of declared) {
+      const abs = path.join(cwd, file.path);
+      ensureDirTracked(path.dirname(abs), createdDirs, seenDirs);
+      if (fs.existsSync(abs)) {
+        backups.push({ abs, contents: fs.readFileSync(abs) });
+      } else {
+        createdFiles.push(abs);
+      }
+    }
+
+    writeMaterializedFiles(cwd, declared);
+    return { createdFiles, createdDirs, backups };
+  }
+
+  /**
+   * Undo {@link materializeFilesBeforeProbe} after a fatal probe: remove files
+   * and dirs we created; restore pre-existing files we overwrote. Best-effort
+   * — a cleanup failure must not mask the original prepare error.
+   */
+  function rollbackProbePreWrite(preWrite: ProbePreWrite): void {
+    for (const abs of preWrite.createdFiles) {
+      try {
+        fs.unlinkSync(abs);
+      } catch {
+        /* best-effort */
+      }
+    }
+    for (const { abs, contents } of preWrite.backups) {
+      try {
+        fs.writeFileSync(abs, contents);
+      } catch {
+        /* best-effort */
+      }
+    }
+    for (const dir of [...preWrite.createdDirs].reverse()) {
+      try {
+        fs.rmdirSync(dir);
+      } catch {
+        /* non-empty or gone — leave it */
+      }
+    }
+  }
+
+  /**
+   * Materialize, run the permission probe, roll back the pre-write if the probe
+   * throws (fatal fail-closed). Success leaves files for the engine's exclude
+   * + re-write path.
+   */
+  async function probeWithMaterializedFiles(
+    task: TaskSpec,
+    hub: HubInfo,
+    childEnv: Record<string, string>,
+  ): Promise<{ declared: MaterializedFile[]; diagnostics: string[] }> {
+    const declared = files(task, hub);
+    const preWrite = materializeFilesBeforeProbe(task.cwd, declared);
+    try {
+      const diagnostics = await permissionProbe(task, childEnv);
+      return { declared, diagnostics };
+    } catch (err) {
+      if (preWrite !== null) rollbackProbePreWrite(preWrite);
+      throw err;
+    }
+  }
+
+  /**
    * Preflight permission probe (#186 / #247): run `grok inspect --json` with
    * the child's exact cwd and env posture.
+   *
+   * Callers must materialize {@link files} into `task.cwd` first (#334) so a
+   * sandboxed inspect sees `.grok/sandbox.toml` (and project config) the same
+   * way the child will after the engine's pre-spawn write.
    *
    * Two jobs:
    * 1. Permission tripwire (#186): report Claude-settings permission rules that
@@ -825,16 +975,19 @@ export function createGrokAdapter(env: NodeJS.ProcessEnv = process.env): VendorA
       // Fresh single-turn run: `grok -p <prompt> …`. The session id is captured
       // from the terminal `end` event and persisted for resume.
       const env = baseEnv(task, hub);
+      // #334: write sandbox/config before inspect; roll back if the probe is fatal
+      // so we never leave un-excluded `.grok/` in a worktree or operator `--cwd`.
+      const { declared, diagnostics } = await probeWithMaterializedFiles(task, hub, env);
       return {
         argv: [bin, "-p", task.prompt, ...commonArgv(task)],
         env,
-        files: files(task, hub),
+        files: declared,
         cwd: task.cwd,
-        diagnostics: await permissionProbe(task, env),
+        diagnostics,
       };
     },
 
-    resume(task, hub): Promise<SpawnPlan> {
+    async resume(task, hub): Promise<SpawnPlan> {
       // Spawn-per-turn resume (ADR-0004): `-r <session-id>` resumes the persisted
       // grok session; `task.prompt` is the orchestrator's answer, delivered as
       // the conversation's continuation. The config is re-materialized so the hub
@@ -848,16 +1001,18 @@ export function createGrokAdapter(env: NodeJS.ProcessEnv = process.env): VendorA
         // Without `-r` grok would start a brand-new session, silently delivering
         // the answer to an agent with no conversation context. Fail loudly
         // instead — the engine reruns session-less stalled tasks via prepare().
-        return Promise.reject(new Error(`grok resume for task ${task.id} has no session id`));
+        throw new Error(`grok resume for task ${task.id} has no session id`);
       }
       const env = baseEnv(task, hub);
-      return Promise.resolve(permissionProbe(task, env)).then((diagnostics) => ({
-        argv: [bin, "-p", task.prompt, "-r", task.sessionId!, ...commonArgv(task)],
+      // Same ordering + fatal rollback as prepare (#334).
+      const { declared, diagnostics } = await probeWithMaterializedFiles(task, hub, env);
+      return {
+        argv: [bin, "-p", task.prompt, "-r", task.sessionId, ...commonArgv(task)],
         env,
-        files: files(task, hub),
+        files: declared,
         cwd: task.cwd,
         diagnostics,
-      }));
+      };
     },
 
     parseEvent(line: string): VendorEvent[] {
