@@ -21,6 +21,8 @@ export default defineWorkspace([
       include: [
         "packages/ui/tests/**/*.test.ts",
         "packages/ui/tests/**/*.test.tsx",
+        "packages/dashboard/tests/**/*.test.ts",
+        "packages/dashboard/tests/**/*.test.tsx",
         "packages/core/tests/**/*.test.ts",
         "packages/plugins/*/tests/**/*.test.ts",
         "scripts/tests/**/*.test.ts",
