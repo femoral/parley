@@ -165,6 +165,9 @@ distribution, heatmap).
 - Design every honesty state (connecting, empty, stale, error, partial) with the
   same rigor as data states.
 - Keep the two-register wall: no Cove vocabulary, tokens, or assets anywhere.
+  One exception: the parley brand mark (the pirate-skull logo,
+  `uploads/parleylogo.png`) is shared product identity across registers and
+  appears in the console header unchanged.
 - Verify claims on rendered pixels at 1280 / 1460 / 1920.
 
 ### Don't
