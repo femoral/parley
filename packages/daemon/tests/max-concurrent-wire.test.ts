@@ -3,7 +3,8 @@
  *
  * A queued task's envelope must carry blocking_cap, queue_position, and
  * max_concurrent consistent with daemon config (vendors.*.maxConcurrent /
- * profiles.*.maxConcurrent).
+ * profiles.*.maxConcurrent). Includes a real HTTP surface test so the
+ * envelopeFor hookup in server.ts cannot regress undetected.
  */
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import fs from "node:fs";
@@ -22,6 +23,7 @@ import {
 } from "../src/db.js";
 import { TaskEngine } from "../src/engine.js";
 import { buildEnvelope } from "../src/report.js";
+import { startServer, type DaemonServer } from "../src/server.js";
 import { withFakeAllowlist } from "./helpers.js";
 
 const FAKE_VENDOR_BIN = fileURLToPath(
@@ -32,6 +34,7 @@ let home: string;
 let db: DatabaseHandle;
 let cwd: string;
 const liveEngines: TaskEngine[] = [];
+let server: DaemonServer | null = null;
 
 function writeParleyConfig(body: Record<string, unknown> = {}): void {
   fs.writeFileSync(path.join(home, "parley.json"), JSON.stringify(withFakeAllowlist(body)));
@@ -48,9 +51,14 @@ beforeEach(() => {
   process.env.PARLEY_HOME = home;
   process.env.PARLEY_FAKE_VENDOR_BIN = FAKE_VENDOR_BIN;
   liveEngines.length = 0;
+  server = null;
 });
 
-afterEach(() => {
+afterEach(async () => {
+  if (server) {
+    await server.close();
+    server = null;
+  }
   for (const eng of liveEngines) {
     try {
       eng.killChildren();
@@ -138,13 +146,13 @@ function insertRunningSlot(opts: {
 }
 
 async function waitFor(
-  predicate: () => boolean,
+  predicate: () => boolean | Promise<boolean>,
   timeoutMs = 3_000,
   intervalMs = 20,
 ): Promise<void> {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
-    if (predicate()) return;
+    if (await predicate()) return;
     await new Promise((r) => setTimeout(r, intervalMs));
   }
   throw new Error("waitFor timed out");
@@ -229,5 +237,99 @@ describe("max_concurrent on the wire (#350)", () => {
       maxConcurrent: enriched.max_concurrent,
     });
     expect(env.max_concurrent).toBeNull();
+  });
+
+  /**
+   * Real HTTP surface: exercises envelopeFor in server.ts. Hand-passing queue
+   * args into buildEnvelope alone leaves the server hookup unguarded.
+   */
+  it("GET /tasks/:id envelope carries max_concurrent via real server", async () => {
+    writeParleyConfig({ vendors: { fake: { maxConcurrent: 2 } } });
+    // startServer opens its own DB handle; release ours first.
+    db.close();
+    server = await startServer(homePaths(home));
+    const base = `http://127.0.0.1:${server.port}`;
+
+    // Startup sweep marks pre-existing running tasks interrupted — insert
+    // slot holders AFTER boot so they still occupy the vendor cap.
+    const side = openDatabase(homePaths(home));
+    try {
+      for (let i = 0; i < 2; i++) {
+        const id = nextTaskId(side);
+        insertTask(side, {
+          id,
+          name: null,
+          vendor: "fake",
+          model: null,
+          effort: null,
+          profile: null,
+          repo: null,
+          cwd,
+          prompt: "holder",
+          orchestrator_session_id: "orch",
+          worktree: null,
+          branch: null,
+          base_sha: null,
+          sandbox: "workspace",
+          network: true,
+          answer_timeout_ms: null,
+          report_schema: null,
+          size: null,
+          difficulty: null,
+          type: "other",
+        });
+        writeTaskState(side, id, "running", {
+          started_at: new Date().toISOString(),
+        });
+      }
+    } finally {
+      side.close();
+    }
+
+    const created = await fetch(`${base}/tasks`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        prompt: "queue me",
+        vendor: "fake",
+        cwd,
+        orchestrator_session_id: "orch",
+      }),
+    });
+    expect(created.status).toBe(201);
+    const taskId = ((await created.json()) as { task_id: string }).task_id;
+
+    // Poll until the third task is durable-queued under the full cap.
+    let env: {
+      state: string;
+      queue_position: number | null;
+      blocking_cap: string | null;
+      max_concurrent: number | null;
+    } | null = null;
+    await waitFor(async () => {
+      const res = await fetch(`${base}/tasks/${taskId}`);
+      if (res.status !== 200) return false;
+      const body = (await res.json()) as {
+        task: {
+          state: string;
+          queue_position: number | null;
+          blocking_cap: string | null;
+          max_concurrent: number | null;
+        };
+      };
+      env = body.task;
+      return body.task.state === "queued";
+    });
+
+    expect(env).not.toBeNull();
+    expect(env!.state).toBe("queued");
+    expect(env!.blocking_cap).toBe("vendor:fake");
+    expect(env!.queue_position).toBe(1);
+    // Assert on the envelope (`task`), not storage `row` — only the envelope
+    // path goes through envelopeFor's maxConcurrent wiring.
+    expect(env!.max_concurrent).toBe(2);
+
+    // Restore a db handle so afterEach can close cleanly.
+    db = openDatabase(homePaths(home));
   });
 });
