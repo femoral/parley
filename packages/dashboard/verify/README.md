@@ -34,9 +34,11 @@ verify/ledger/<ticket-id>/
 
 | Artifact | Commit? | Why |
 | --- | --- | --- |
-| `entry.json` | **yes** | Small JSON: measured rects, computed styles, probe results |
-| `shots/*.png` | **no** | Bulky; regenerate with `pnpm verify` |
+| `entry.json` | **yes** | Measured rects, computed styles, probes, a11y (YAML ARIA trees). Issue #353 baseline is ~400KB — not "small"; still text and diffs usefully. |
+| `shots/*.png` | **no** | Bulky binary; regenerate with `pnpm verify` |
 | absolute `/home/…` paths | **never** | Ledger uses paths relative to the ticket dir / repo root |
+
+**Size policy for future screens:** keep full rects + styles at the three board widths; prefer compact a11y (axe summary + `locator.ariaSnapshot()` YAML, not DOM dumps). If a ticket's `entry.json` grows past ~1MB, split per-demo files under `ledger/<ticket>/` or drop redundant intermediate-phase style dumps — never commit PNGs to shrink JSON.
 
 Screenshots are ignored by `verify/.gitignore`. Re-run demos to refresh PNGs locally.
 
@@ -142,15 +144,16 @@ Named scripts in `scripts/library.mjs`:
 | Goal | Mechanism |
 | --- | --- |
 | Per-panel error / empty / delay | `lib/honesty.mjs` — `page.route` on daemon API paths |
-| Offline → stale → reconnect | `daemon.kill()` / `daemon.restart()` (real process lifecycle) |
+| Offline → stale → reconnect | `daemon.kill()` / `daemon.restart()` — **real server lifecycle, in-process** (`startServer` + `server.close()`, same process; no child pid). Socket-level offline is real (proxied `/health` → 502). |
 
 No UI test hooks.
 
 ## A11y
 
 - `runAxe(page)` — `@axe-core/playwright`
-- `ariaSnapshot(page)` — accessibility tree
-- `keyboardWalk(page)` — Tab path recording for skip-link / tablist walkthroughs later
+- `ariaSnapshot(page)` — Playwright `locator.ariaSnapshot()` YAML tree (not a DOM walk; `page.accessibility` is undefined on playwright-core 1.62)
+- `keyboardWalk(page)` — counts focusables; if zero, records `focusableCount: 0` + placeholder note; if focusables exist, Tabs/Enters and **fails** when focus never leaves `body`
+- `collectA11y(page)` — all three for a ledger demo entry
 
 ## Viewports
 

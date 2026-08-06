@@ -6,6 +6,7 @@
  * today while the intercept is active (honest: shell is still static scaffold).
  */
 import { pathToFileURL } from "node:url";
+import { collectA11y } from "../lib/a11y.mjs";
 import { interceptError } from "../lib/honesty.mjs";
 import { ledgerDirs, writeDemoProof, printRectSummary } from "../lib/ledger.mjs";
 import { measureAtViewports } from "../lib/measure.mjs";
@@ -82,6 +83,12 @@ export async function runInterceptErrorDemo() {
       },
     });
 
+    // A11y under forced error routes (shell still scaffold; scan is still real).
+    await session.page.setViewportSize({ width: 1460, height: 900 });
+    await session.page.goto(session.url, { waitUntil: "networkidle" });
+    await session.page.waitForSelector('[data-testid="shell"]');
+    const a11y = await collectA11y(session.page);
+
     const proof = {
       kind: "intercept-error",
       description:
@@ -100,6 +107,7 @@ export async function runInterceptErrorDemo() {
         note: "daemon wire remains healthy; failure is client-intercept only",
       },
       viewports,
+      a11y,
     };
     const entryPath = writeDemoProof(TICKET, DEMO, proof);
     printRectSummary(DEMO, viewports);

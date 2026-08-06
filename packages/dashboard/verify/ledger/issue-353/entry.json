@@ -17,7 +17,7 @@
             "README.md"
           ]
         },
-        "port": 46299
+        "port": 38079
       },
       "viewports": [
         {
@@ -1314,193 +1314,19 @@
           "inapplicable": 69
         },
         "aria": {
-          "role": "div",
-          "name": "PARLEY\nconsole\ndaemon\n—\nscaffold\n—\nCENTER SCREEN\nParley Console\n\nShell frame sca",
-          "children": [
-            {
-              "role": "header",
-              "name": "PARLEY\nconsole\ndaemon\n—\nscaffold\n—",
-              "children": [
-                {
-                  "role": "div",
-                  "name": "PARLEY\nconsole",
-                  "children": [
-                    {
-                      "role": "img",
-                      "name": ""
-                    },
-                    {
-                      "role": "div",
-                      "name": "PARLEY\nconsole",
-                      "children": [
-                        {
-                          "role": "span",
-                          "name": "PARLEY"
-                        },
-                        {
-                          "role": "span",
-                          "name": "console"
-                        }
-                      ]
-                    }
-                  ]
-                },
-                {
-                  "role": "div",
-                  "name": ""
-                },
-                {
-                  "role": "div",
-                  "name": "daemon\n—\nscaffold\n—",
-                  "children": [
-                    {
-                      "role": "div",
-                      "name": "daemon\n—\nscaffold",
-                      "children": [
-                        {
-                          "role": "span",
-                          "name": ""
-                        },
-                        {
-                          "role": "span",
-                          "name": "daemon"
-                        },
-                        {
-                          "role": "span",
-                          "name": "—"
-                        },
-                        {
-                          "role": "span",
-                          "name": "scaffold"
-                        }
-                      ]
-                    },
-                    {
-                      "role": "div",
-                      "name": ""
-                    },
-                    {
-                      "role": "span",
-                      "name": "clock"
-                    }
-                  ]
-                }
-              ]
-            },
-            {
-              "role": "div",
-              "name": "CENTER SCREEN\nParley Console\n\nShell frame scaffold. Fleet, Run, Task, and Metric",
-              "children": [
-                {
-                  "role": "aside",
-                  "name": "Left rail"
-                },
-                {
-                  "role": "main",
-                  "name": "CENTER SCREEN\nParley Console\n\nShell frame scaffold. Fleet, Run, Task, and Metric",
-                  "children": [
-                    {
-                      "role": "div",
-                      "name": "CENTER SCREEN\nParley Console\n\nShell frame scaffold. Fleet, Run, Task, and Metric",
-                      "children": [
-                        {
-                          "role": "span",
-                          "name": "CENTER SCREEN"
-                        },
-                        {
-                          "role": "h1",
-                          "name": "Parley Console"
-                        },
-                        {
-                          "role": "p",
-                          "name": "Shell frame scaffold. Fleet, Run, Task, and Metrics screens land in later ticket"
-                        }
-                      ]
-                    }
-                  ]
-                },
-                {
-                  "role": "aside",
-                  "name": "Right rail"
-                }
-              ]
-            },
-            {
-              "role": "footer",
-              "name": "LEGEND\n@useparley/dashboard",
-              "children": [
-                {
-                  "role": "span",
-                  "name": "LEGEND"
-                },
-                {
-                  "role": "span",
-                  "name": "@useparley/dashboard"
-                }
-              ]
-            }
-          ]
+          "api": "locator.ariaSnapshot",
+          "selector": "[data-testid=\"shell\"]",
+          "tree": "- banner:\n  - img \"Parley\"\n  - text: parley console daemon — scaffold —\n- complementary \"Left rail\"\n- main:\n  - text: center screen\n  - heading \"Parley Console\" [level=1]\n  - paragraph: Shell frame scaffold. Fleet, Run, Task, and Metrics screens land in later tickets.\n- complementary \"Right rail\"\n- contentinfo: legend @useparley/dashboard"
         },
-        "keyboardWalk": [
-          {
-            "step": 1,
-            "tag": "body",
-            "role": null,
-            "testId": null,
-            "text": ""
-          },
-          {
-            "step": 2,
-            "tag": "body",
-            "role": null,
-            "testId": null,
-            "text": ""
-          },
-          {
-            "step": 3,
-            "tag": "body",
-            "role": null,
-            "testId": null,
-            "text": ""
-          },
-          {
-            "step": 4,
-            "tag": "body",
-            "role": null,
-            "testId": null,
-            "text": ""
-          },
-          {
-            "step": 5,
-            "tag": "body",
-            "role": null,
-            "testId": null,
-            "text": ""
-          },
-          {
-            "step": 6,
-            "tag": "body",
-            "role": null,
-            "testId": null,
-            "text": ""
-          },
-          {
-            "step": 7,
-            "tag": "body",
-            "role": null,
-            "testId": null,
-            "text": ""
-          },
-          {
-            "step": 8,
-            "tag": "body",
-            "role": null,
-            "testId": null,
-            "text": ""
-          }
-        ]
+        "keyboardWalk": {
+          "focusableCount": 0,
+          "note": "no keyboard surface yet (placeholder shell)",
+          "path": [],
+          "entered": false,
+          "leftBody": false
+        }
       },
-      "recordedAt": "2026-08-06T06:51:43.432Z"
+      "recordedAt": "2026-08-06T07:05:39.461Z"
     },
     "intercept-error": {
       "kind": "intercept-error",
@@ -2826,11 +2652,32 @@
           }
         }
       ],
-      "recordedAt": "2026-08-06T06:51:46.740Z"
+      "a11y": {
+        "axe": {
+          "url": "http://127.0.0.1:5173/",
+          "violations": [],
+          "passes": 19,
+          "incomplete": 1,
+          "inapplicable": 69
+        },
+        "aria": {
+          "api": "locator.ariaSnapshot",
+          "selector": "[data-testid=\"shell\"]",
+          "tree": "- banner:\n  - img \"Parley\"\n  - text: parley console daemon — scaffold —\n- complementary \"Left rail\"\n- main:\n  - text: center screen\n  - heading \"Parley Console\" [level=1]\n  - paragraph: Shell frame scaffold. Fleet, Run, Task, and Metrics screens land in later tickets.\n- complementary \"Right rail\"\n- contentinfo: legend @useparley/dashboard"
+        },
+        "keyboardWalk": {
+          "focusableCount": 0,
+          "note": "no keyboard surface yet (placeholder shell)",
+          "path": [],
+          "entered": false,
+          "leftBody": false
+        }
+      },
+      "recordedAt": "2026-08-06T07:05:43.779Z"
     },
     "reconnect": {
       "kind": "reconnect",
-      "description": "Real daemon kill → offline/stale browser samples → daemon restart + vite rebind → recovered. Shell is still scaffold (status shows '— scaffold'); measurements are honest.",
+      "description": "Real daemon kill → offline/stale browser samples → daemon restart + vite rebind → recovered. Shell is still scaffold (status shows '— scaffold'); measurements are honest. Server lifecycle is in-process (startServer/close), real at the socket.",
       "phases": {
         "online": {
           "viewports": [
@@ -10199,8 +10046,29 @@
           }
         }
       },
-      "recordedAt": "2026-08-06T06:51:49.356Z"
+      "a11y": {
+        "axe": {
+          "url": "http://127.0.0.1:5174/",
+          "violations": [],
+          "passes": 19,
+          "incomplete": 1,
+          "inapplicable": 69
+        },
+        "aria": {
+          "api": "locator.ariaSnapshot",
+          "selector": "[data-testid=\"shell\"]",
+          "tree": "- banner:\n  - img \"Parley\"\n  - text: parley console daemon — scaffold —\n- complementary \"Left rail\"\n- main:\n  - text: center screen\n  - heading \"Parley Console\" [level=1]\n  - paragraph: Shell frame scaffold. Fleet, Run, Task, and Metrics screens land in later tickets.\n- complementary \"Right rail\"\n- contentinfo: legend @useparley/dashboard"
+        },
+        "keyboardWalk": {
+          "focusableCount": 0,
+          "note": "no keyboard surface yet (placeholder shell)",
+          "path": [],
+          "entered": false,
+          "leftBody": false
+        }
+      },
+      "recordedAt": "2026-08-06T07:05:47.379Z"
     }
   },
-  "updatedAt": "2026-08-06T06:51:49.356Z"
+  "updatedAt": "2026-08-06T07:05:47.379Z"
 }

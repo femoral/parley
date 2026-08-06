@@ -7,7 +7,7 @@
  * capture rendered geometry honestly.
  */
 import { pathToFileURL } from "node:url";
-import { runAxe, ariaSnapshot, keyboardWalk } from "../lib/a11y.mjs";
+import { collectA11y } from "../lib/a11y.mjs";
 import { ledgerDirs, writeDemoProof, printRectSummary } from "../lib/ledger.mjs";
 import { measureAtViewports } from "../lib/measure.mjs";
 import { openVerifySession } from "../lib/session.mjs";
@@ -47,10 +47,7 @@ export async function runStagedDaemonDemo() {
     await session.page.setViewportSize({ width: 1460, height: 900 });
     await session.page.goto(session.url, { waitUntil: "networkidle" });
     await session.page.waitForSelector('[data-testid="shell"]');
-    await session.page.evaluate(() => document.fonts.ready);
-    const axe = await runAxe(session.page, { include: '[data-testid="shell"]' });
-    const aria = await ariaSnapshot(session.page);
-    const keys = await keyboardWalk(session.page, 8);
+    const a11y = await collectA11y(session.page);
 
     const proof = {
       kind: "staged-daemon",
@@ -64,7 +61,7 @@ export async function runStagedDaemonDemo() {
         port: session.daemon.port,
       },
       viewports,
-      a11y: { axe, aria, keyboardWalk: keys },
+      a11y,
     };
     const entryPath = writeDemoProof(TICKET, DEMO, proof);
     printRectSummary(DEMO, viewports);

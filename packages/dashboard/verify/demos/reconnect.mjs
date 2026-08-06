@@ -7,6 +7,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import { collectA11y } from "../lib/a11y.mjs";
 import { ledgerDirs, writeDemoProof, printRectSummary } from "../lib/ledger.mjs";
 import { measureSelectors, VIEWPORTS } from "../lib/measure.mjs";
 import { openVerifySession } from "../lib/session.mjs";
@@ -104,11 +105,19 @@ export async function runReconnectDemo() {
     const healthRes = await fetch(`${session.daemon.baseUrl}/health`);
     const healthOk = healthRes.ok;
 
+    // A11y on the recovered shell (mid viewport already last measured at 1920 —
+    // re-settle at 1460 for a stable a11y sample).
+    await session.page.setViewportSize({ width: 1460, height: 900 });
+    await session.page.goto(session.url, { waitUntil: "networkidle" });
+    await session.page.waitForSelector('[data-testid="shell"]');
+    const a11y = await collectA11y(session.page);
+
     const proof = {
       kind: "reconnect",
       description:
         "Real daemon kill → offline/stale browser samples → daemon restart + vite rebind → recovered. " +
-        "Shell is still scaffold (status shows '— scaffold'); measurements are honest.",
+        "Shell is still scaffold (status shows '— scaffold'); measurements are honest. " +
+        "Server lifecycle is in-process (startServer/close), real at the socket.",
       phases: {
         online: { viewports: online },
         offline: { viewports: offline },
@@ -124,6 +133,7 @@ export async function runReconnectDemo() {
       viewports: recovered,
       offlineSample: offline.find((v) => v.name === "1460") ?? offline[0],
       onlineSample: online.find((v) => v.name === "1460") ?? online[0],
+      a11y,
     };
 
     const entryPath = writeDemoProof(TICKET, DEMO, proof);

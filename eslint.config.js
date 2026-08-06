@@ -111,4 +111,12 @@ export default tseslint.config(
       globals: { ...globals.node, ...globals.browser },
     },
   },
+  {
+    // Console verification harness (#353): Node driver scripts evaluate browser
+    // snippets via Playwright (document, getComputedStyle, HTMLElement, …).
+    files: ["packages/dashboard/verify/**/*.mjs"],
+    languageOptions: {
+      globals: { ...globals.node, ...globals.browser },
+    },
+  },
 );
