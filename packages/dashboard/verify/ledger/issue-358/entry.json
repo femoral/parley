@@ -511,40 +511,348 @@
         }
       ],
       "tableCue": {
+        "dropPresent": true,
+        "dropVisible": true,
+        "dropText": "· 3 columns hidden at this width — widen to 1361px+",
+        "droppedCount": 3,
         "fadePresent": true,
-        "fadeOpacity": "0",
-        "scrollbar": "thin",
-        "headers": [
-          {
-            "text": "vendor",
-            "display": "table-cell"
-          },
-          {
-            "text": "tasks",
-            "display": "table-cell"
-          },
-          {
-            "text": "success",
-            "display": "table-cell"
-          },
-          {
-            "text": "eval avg",
-            "display": "table-cell"
-          },
-          {
-            "text": "tokens in ▸ out ▸ cached",
-            "display": "none"
-          },
-          {
-            "text": "avg · p95",
-            "display": "none"
-          },
-          {
-            "text": "below base",
-            "display": "none"
-          }
+        "fadeOpacity": 0,
+        "fadeDataOverflow": "0",
+        "fadeOnWhenOverflow": true,
+        "wrap": {
+          "clientWidth": 622,
+          "scrollWidth": 622,
+          "overflowX": false,
+          "dataOverflow": "0"
+        },
+        "visibleHeaders": [
+          "vendor",
+          "tasks",
+          "success",
+          "eval avg"
         ],
-        "primaryVisible": "vendor tasks success eval avg"
+        "hiddenHeaders": [
+          "tokens in ▸ out ▸ cached",
+          "avg · p95",
+          "below base"
+        ],
+        "isWorkflow": false,
+        "rowHeightPx": 27,
+        "rowInBand": true,
+        "primaryVisible": "vendor tasks success eval avg",
+        "scrollbar": "thin"
+      },
+      "tableDensity": {
+        "vendor": {
+          "1280": {
+            "dropPresent": true,
+            "dropVisible": true,
+            "dropText": "· 3 columns hidden at this width — widen to 1361px+",
+            "droppedCount": 3,
+            "fadePresent": true,
+            "fadeOpacity": 0,
+            "fadeDataOverflow": "0",
+            "fadeOnWhenOverflow": true,
+            "wrap": {
+              "clientWidth": 622,
+              "scrollWidth": 622,
+              "overflowX": false,
+              "dataOverflow": "0"
+            },
+            "visibleHeaders": [
+              "vendor",
+              "tasks",
+              "success",
+              "eval avg"
+            ],
+            "hiddenHeaders": [
+              "tokens in ▸ out ▸ cached",
+              "avg · p95",
+              "below base"
+            ],
+            "isWorkflow": false,
+            "rowHeightPx": 27,
+            "rowInBand": true
+          },
+          "1361": {
+            "dropPresent": true,
+            "dropVisible": false,
+            "dropText": "· 3 columns hidden at this width — widen to 1361px+",
+            "droppedCount": 3,
+            "fadePresent": true,
+            "fadeOpacity": 0,
+            "fadeDataOverflow": "0",
+            "fadeOnWhenOverflow": true,
+            "wrap": {
+              "clientWidth": 703,
+              "scrollWidth": 703,
+              "overflowX": false,
+              "dataOverflow": "0"
+            },
+            "visibleHeaders": [
+              "vendor",
+              "tasks",
+              "success",
+              "eval avg",
+              "tokens in ▸ out ▸ cached",
+              "avg · p95",
+              "below base"
+            ],
+            "hiddenHeaders": [],
+            "isWorkflow": false,
+            "rowHeightPx": 27,
+            "rowInBand": true
+          },
+          "1380": {
+            "dropPresent": true,
+            "dropVisible": false,
+            "dropText": "· 3 columns hidden at this width — widen to 1361px+",
+            "droppedCount": 3,
+            "fadePresent": true,
+            "fadeOpacity": 0,
+            "fadeDataOverflow": "0",
+            "fadeOnWhenOverflow": true,
+            "wrap": {
+              "clientWidth": 722,
+              "scrollWidth": 722,
+              "overflowX": false,
+              "dataOverflow": "0"
+            },
+            "visibleHeaders": [
+              "vendor",
+              "tasks",
+              "success",
+              "eval avg",
+              "tokens in ▸ out ▸ cached",
+              "avg · p95",
+              "below base"
+            ],
+            "hiddenHeaders": [],
+            "isWorkflow": false,
+            "rowHeightPx": 27,
+            "rowInBand": true
+          },
+          "1400": {
+            "dropPresent": true,
+            "dropVisible": false,
+            "dropText": "· 3 columns hidden at this width — widen to 1361px+",
+            "droppedCount": 3,
+            "fadePresent": true,
+            "fadeOpacity": 0,
+            "fadeDataOverflow": "0",
+            "fadeOnWhenOverflow": true,
+            "wrap": {
+              "clientWidth": 742,
+              "scrollWidth": 742,
+              "overflowX": false,
+              "dataOverflow": "0"
+            },
+            "visibleHeaders": [
+              "vendor",
+              "tasks",
+              "success",
+              "eval avg",
+              "tokens in ▸ out ▸ cached",
+              "avg · p95",
+              "below base"
+            ],
+            "hiddenHeaders": [],
+            "isWorkflow": false,
+            "rowHeightPx": 27,
+            "rowInBand": true
+          },
+          "1461": {
+            "dropPresent": true,
+            "dropVisible": false,
+            "dropText": "· 3 columns hidden at this width — widen to 1361px+",
+            "droppedCount": 3,
+            "fadePresent": true,
+            "fadeOpacity": 0,
+            "fadeDataOverflow": "0",
+            "fadeOnWhenOverflow": true,
+            "wrap": {
+              "clientWidth": 803,
+              "scrollWidth": 803,
+              "overflowX": false,
+              "dataOverflow": "0"
+            },
+            "visibleHeaders": [
+              "vendor",
+              "tasks",
+              "success",
+              "eval avg",
+              "tokens in ▸ out ▸ cached",
+              "avg · p95",
+              "below base"
+            ],
+            "hiddenHeaders": [],
+            "isWorkflow": false,
+            "rowHeightPx": 27,
+            "rowInBand": true
+          }
+        },
+        "workflow": {
+          "1280": {
+            "dropPresent": true,
+            "dropVisible": true,
+            "dropText": "· 4 columns hidden at this width — widen to 1361px+",
+            "droppedCount": 4,
+            "fadePresent": true,
+            "fadeOpacity": 0,
+            "fadeDataOverflow": "0",
+            "fadeOnWhenOverflow": true,
+            "wrap": {
+              "clientWidth": 622,
+              "scrollWidth": 622,
+              "overflowX": false,
+              "dataOverflow": "0"
+            },
+            "visibleHeaders": [
+              "workflow",
+              "runs",
+              "success",
+              "eval avg"
+            ],
+            "hiddenHeaders": [
+              "tokens in ▸ out ▸ cached",
+              "avg · p95",
+              "below base",
+              "cost / done"
+            ],
+            "isWorkflow": true,
+            "rowHeightPx": 27,
+            "rowInBand": true
+          },
+          "1361": {
+            "dropPresent": true,
+            "dropVisible": false,
+            "dropText": "· 4 columns hidden at this width — widen to 1361px+",
+            "droppedCount": 4,
+            "fadePresent": true,
+            "fadeOpacity": 0,
+            "fadeDataOverflow": "0",
+            "fadeOnWhenOverflow": true,
+            "wrap": {
+              "clientWidth": 703,
+              "scrollWidth": 703,
+              "overflowX": false,
+              "dataOverflow": "0"
+            },
+            "visibleHeaders": [
+              "workflow",
+              "runs",
+              "success",
+              "eval avg",
+              "tokens in ▸ out ▸ cached",
+              "avg · p95",
+              "below base",
+              "cost / done"
+            ],
+            "hiddenHeaders": [],
+            "isWorkflow": true,
+            "rowHeightPx": 27,
+            "rowInBand": true
+          },
+          "1380": {
+            "dropPresent": true,
+            "dropVisible": false,
+            "dropText": "· 4 columns hidden at this width — widen to 1361px+",
+            "droppedCount": 4,
+            "fadePresent": true,
+            "fadeOpacity": 0,
+            "fadeDataOverflow": "0",
+            "fadeOnWhenOverflow": true,
+            "wrap": {
+              "clientWidth": 722,
+              "scrollWidth": 722,
+              "overflowX": false,
+              "dataOverflow": "0"
+            },
+            "visibleHeaders": [
+              "workflow",
+              "runs",
+              "success",
+              "eval avg",
+              "tokens in ▸ out ▸ cached",
+              "avg · p95",
+              "below base",
+              "cost / done"
+            ],
+            "hiddenHeaders": [],
+            "isWorkflow": true,
+            "rowHeightPx": 27,
+            "rowInBand": true
+          },
+          "1400": {
+            "dropPresent": true,
+            "dropVisible": false,
+            "dropText": "· 4 columns hidden at this width — widen to 1361px+",
+            "droppedCount": 4,
+            "fadePresent": true,
+            "fadeOpacity": 0,
+            "fadeDataOverflow": "0",
+            "fadeOnWhenOverflow": true,
+            "wrap": {
+              "clientWidth": 742,
+              "scrollWidth": 742,
+              "overflowX": false,
+              "dataOverflow": "0"
+            },
+            "visibleHeaders": [
+              "workflow",
+              "runs",
+              "success",
+              "eval avg",
+              "tokens in ▸ out ▸ cached",
+              "avg · p95",
+              "below base",
+              "cost / done"
+            ],
+            "hiddenHeaders": [],
+            "isWorkflow": true,
+            "rowHeightPx": 27,
+            "rowInBand": true
+          },
+          "1461": {
+            "dropPresent": true,
+            "dropVisible": false,
+            "dropText": "· 4 columns hidden at this width — widen to 1361px+",
+            "droppedCount": 4,
+            "fadePresent": true,
+            "fadeOpacity": 0,
+            "fadeDataOverflow": "0",
+            "fadeOnWhenOverflow": true,
+            "wrap": {
+              "clientWidth": 803,
+              "scrollWidth": 803,
+              "overflowX": false,
+              "dataOverflow": "0"
+            },
+            "visibleHeaders": [
+              "workflow",
+              "runs",
+              "success",
+              "eval avg",
+              "tokens in ▸ out ▸ cached",
+              "avg · p95",
+              "below base",
+              "cost / done"
+            ],
+            "hiddenHeaders": [],
+            "isWorkflow": true,
+            "rowHeightPx": 27,
+            "rowInBand": true
+          }
+        },
+        "summary": {
+          "disclosureAt1280Vendor": true,
+          "disclosureAt1280Workflow": true,
+          "disclosureAbsentAt1461Vendor": true,
+          "disclosureAbsentAt1461Workflow": true,
+          "noOverflow1361to1400Workflow": true,
+          "fadeMatchesOverflow": true,
+          "rowInBand1280": true
+        }
       },
       "heatmapTruncation": {
         "disclosed": true,
@@ -668,7 +976,7 @@
       "workflow": {
         "hasCostColumn": true,
         "hasWorkflowRow": true,
-        "head": "workflowrunssuccesseval avgtokens in ▸ out ▸ cachedavg · p95below basecost / done"
+        "head": "workflow runs success eval avg tokens in ▸ out ▸ cached avg · p95 below base cost / done"
       },
       "truncation": {
         "found": true,
@@ -734,7 +1042,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "Skip to navigationSkip to findSkip to main contentparleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 159…"
+              "text": "Skip to navigationSkip to findSkip to main contentparleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 162…"
             },
             "center": {
               "selector": ".pc-shell__center",
@@ -911,13 +1219,13 @@
                 "x": 296,
                 "y": 293.38,
                 "width": 624,
-                "height": 157.59
+                "height": 141.59
               },
               "styles": {
                 "display": "block",
                 "position": "static",
                 "width": "624px",
-                "height": "157.594px",
+                "height": "141.594px",
                 "minWidth": "0px",
                 "minHeight": "auto",
                 "backgroundColor": "rgb(11, 13, 15)",
@@ -944,14 +1252,14 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "by vendor3 groupsvendortaskssuccesseval avgtokens in ▸ out ▸ cachedavg · p95below basefake1283%7.4 · n=848k ▸ 12k ▸ 4k1m · 2m 20s15%claude650%4.1 · n=522k ▸ …"
+              "text": "by vendor3 groups · 3 columns hidden at this width — widen to 1361px+vendortaskssuccesseval avgtokens in ▸ out ▸ cachedavg · p95below basefake1283%7.4 · n=84…"
             },
             "distribution": {
               "selector": "[data-testid=\"metrics-distribution\"]",
               "found": true,
               "box": {
                 "x": 296,
-                "y": 462.97,
+                "y": 446.97,
                 "width": 624,
                 "height": 137.59
               },
@@ -993,7 +1301,7 @@
               "found": true,
               "box": {
                 "x": 296,
-                "y": 612.56,
+                "y": 596.56,
                 "width": 624,
                 "height": 241.16
               },
@@ -1035,7 +1343,7 @@
               "found": true,
               "box": {
                 "x": 297,
-                "y": 503.56,
+                "y": 487.56,
                 "width": 622,
                 "height": 96
               },
@@ -1077,7 +1385,7 @@
               "found": true,
               "box": {
                 "x": 307,
-                "y": 573.56,
+                "y": 557.56,
                 "width": 602,
                 "height": 18
               },
@@ -1119,7 +1427,7 @@
               "found": true,
               "box": {
                 "x": 307,
-                "y": 808.34,
+                "y": 792.34,
                 "width": 602,
                 "height": 34.38
               },
@@ -1161,7 +1469,7 @@
               "found": true,
               "box": {
                 "x": 307,
-                "y": 663.16,
+                "y": 647.16,
                 "width": 602,
                 "height": 137.19
               },
@@ -1246,7 +1554,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "Skip to navigationSkip to findSkip to main contentparleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 159…"
+              "text": "Skip to navigationSkip to findSkip to main contentparleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 162…"
             },
             "center": {
               "selector": ".pc-shell__center",
@@ -1322,7 +1630,7 @@
                 "borderBottomColor": "rgb(227, 232, 236)",
                 "borderLeftColor": "rgb(227, 232, 236)",
                 "borderRightColor": "rgb(227, 232, 236)",
-                "gridTemplateRows": "79px 653.719px 95.2812px",
+                "gridTemplateRows": "79px 637.719px 111.281px",
                 "gridTemplateColumns": "828px",
                 "gap": "normal",
                 "padding": "0px",
@@ -1423,13 +1731,13 @@
                 "x": 296,
                 "y": 247.38,
                 "width": 804,
-                "height": 157.59
+                "height": 141.59
               },
               "styles": {
                 "display": "block",
                 "position": "static",
                 "width": "804px",
-                "height": "157.594px",
+                "height": "141.594px",
                 "minWidth": "0px",
                 "minHeight": "auto",
                 "backgroundColor": "rgb(11, 13, 15)",
@@ -1456,14 +1764,14 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "by vendor3 groupsvendortaskssuccesseval avgtokens in ▸ out ▸ cachedavg · p95below basefake1283%7.4 · n=848k ▸ 12k ▸ 4k1m · 2m 20s15%claude650%4.1 · n=522k ▸ …"
+              "text": "by vendor3 groups · 3 columns hidden at this width — widen to 1361px+vendortaskssuccesseval avgtokens in ▸ out ▸ cachedavg · p95below basefake1283%7.4 · n=84…"
             },
             "distribution": {
               "selector": "[data-testid=\"metrics-distribution\"]",
               "found": true,
               "box": {
                 "x": 296,
-                "y": 416.97,
+                "y": 400.97,
                 "width": 396,
                 "height": 137.59
               },
@@ -1505,7 +1813,7 @@
               "found": true,
               "box": {
                 "x": 704,
-                "y": 416.97,
+                "y": 400.97,
                 "width": 396,
                 "height": 241.16
               },
@@ -1547,7 +1855,7 @@
               "found": true,
               "box": {
                 "x": 297,
-                "y": 457.56,
+                "y": 441.56,
                 "width": 394,
                 "height": 96
               },
@@ -1589,7 +1897,7 @@
               "found": true,
               "box": {
                 "x": 307,
-                "y": 527.56,
+                "y": 511.56,
                 "width": 374,
                 "height": 18
               },
@@ -1631,7 +1939,7 @@
               "found": true,
               "box": {
                 "x": 715,
-                "y": 612.75,
+                "y": 596.75,
                 "width": 374,
                 "height": 34.38
               },
@@ -1673,7 +1981,7 @@
               "found": true,
               "box": {
                 "x": 715,
-                "y": 467.56,
+                "y": 451.56,
                 "width": 374,
                 "height": 137.19
               },
@@ -1758,7 +2066,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "Skip to navigationSkip to findSkip to main contentparleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 159…"
+              "text": "Skip to navigationSkip to findSkip to main contentparleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 162…"
             },
             "center": {
               "selector": ".pc-shell__center",
@@ -1834,7 +2142,7 @@
                 "borderBottomColor": "rgb(227, 232, 236)",
                 "borderLeftColor": "rgb(227, 232, 236)",
                 "borderRightColor": "rgb(227, 232, 236)",
-                "gridTemplateRows": "64px 639.531px 124.469px",
+                "gridTemplateRows": "64px 623.531px 140.469px",
                 "gridTemplateColumns": "1288px",
                 "gap": "normal",
                 "padding": "0px",
@@ -1935,13 +2243,13 @@
                 "x": 296,
                 "y": 218.19,
                 "width": 1264,
-                "height": 157.59
+                "height": 141.59
               },
               "styles": {
                 "display": "block",
                 "position": "static",
                 "width": "1264px",
-                "height": "157.594px",
+                "height": "141.594px",
                 "minWidth": "0px",
                 "minHeight": "auto",
                 "backgroundColor": "rgb(11, 13, 15)",
@@ -1968,14 +2276,14 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "by vendor3 groupsvendortaskssuccesseval avgtokens in ▸ out ▸ cachedavg · p95below basefake1283%7.4 · n=848k ▸ 12k ▸ 4k1m · 2m 20s15%claude650%4.1 · n=522k ▸ …"
+              "text": "by vendor3 groups · 3 columns hidden at this width — widen to 1361px+vendortaskssuccesseval avgtokens in ▸ out ▸ cachedavg · p95below basefake1283%7.4 · n=84…"
             },
             "distribution": {
               "selector": "[data-testid=\"metrics-distribution\"]",
               "found": true,
               "box": {
                 "x": 296,
-                "y": 387.78,
+                "y": 371.78,
                 "width": 626,
                 "height": 137.59
               },
@@ -2017,7 +2325,7 @@
               "found": true,
               "box": {
                 "x": 934,
-                "y": 387.78,
+                "y": 371.78,
                 "width": 626,
                 "height": 241.16
               },
@@ -2059,7 +2367,7 @@
               "found": true,
               "box": {
                 "x": 297,
-                "y": 428.38,
+                "y": 412.38,
                 "width": 624,
                 "height": 96
               },
@@ -2101,7 +2409,7 @@
               "found": true,
               "box": {
                 "x": 307,
-                "y": 498.38,
+                "y": 482.38,
                 "width": 604,
                 "height": 18
               },
@@ -2143,7 +2451,7 @@
               "found": true,
               "box": {
                 "x": 945,
-                "y": 583.56,
+                "y": 567.56,
                 "width": 604,
                 "height": 34.38
               },
@@ -2185,7 +2493,7 @@
               "found": true,
               "box": {
                 "x": 945,
-                "y": 438.38,
+                "y": 422.38,
                 "width": 604,
                 "height": 137.19
               },
@@ -2236,7 +2544,7 @@
         "aria": {
           "api": "locator.ariaSnapshot",
           "selector": "[data-testid=\"screen-metrics\"]",
-          "tree": "- text: metrics group by\n- tablist \"Group-by dimension\":\n  - tab \"vendor\" [selected]\n  - tab \"model\"\n  - tab \"type\"\n  - tab \"size\"\n  - tab \"difficulty\"\n  - tab \"workflow\"\n- text: more\n- combobox \"Additional group-by dimensions\":\n  - option \"…\" [selected]\n  - option \"profile\"\n  - option \"orch harness\"\n  - option \"orch model\"\n  - option \"orch effort\"\n  - option \"judge harness\"\n  - option \"judge model\"\n  - option \"judge effort\"\n  - option \"rubric\"\n- text: session\n- combobox \"Session scope filter\":\n  - option \"all sessions\" [selected]\n  - option \"verify-orch\"\n- group \"Metrics view\":\n  - button \"overview\" [pressed]\n  - button \"comparison\"\n- text: all sessions · 22 decided · 13 scored · 06:03\n- search \"Metrics filters\":\n  - text: type\n  - textbox \"type\"\n  - text: vendor\n  - textbox \"vendor\"\n  - text: model\n  - textbox \"model\"\n  - text: profile\n  - textbox \"profile\"\n  - text: size\n  - textbox \"size\"\n  - text: difficulty\n  - textbox \"difficulty\"\n  - text: orch harness\n  - textbox \"orch harness\"\n  - text: orch model\n  - textbox \"orch model\"\n  - text: orch effort\n  - textbox \"orch effort\"\n  - text: judge harness\n  - textbox \"judge harness\"\n  - text: judge model\n  - textbox \"judge model\"\n  - text: judge effort\n  - textbox \"judge effort\"\n  - text: rubric\n  - textbox \"rubric\"\n  - button \"first attempt only\"\n  - button \"below baseline only\"\n  - button \"clear\" [disabled]\n- region \"by vendor\":\n  - heading \"by vendor\" [level=2]\n  - text: 3 groups\n  - table:\n    - rowgroup:\n      - row \"vendor tasks success eval avg tokens in ▸ out ▸ cached avg · p95 below base\":\n        - columnheader \"vendor\"\n        - columnheader \"tasks\"\n        - columnheader \"success\"\n        - columnheader \"eval avg\"\n        - columnheader \"tokens in ▸ out ▸ cached\"\n        - columnheader \"avg · p95\"\n        - columnheader \"below base\"\n    - rowgroup:\n      - row \"fake 12 83% 7.4 · n=8 48k ▸ 12k ▸ 4k 1m · 2m 20s 15%\":\n        - cell \"fake\"\n        - cell \"12\"\n        - cell \"83%\"\n        - cell \"7.4 · n=8\"\n        - cell \"48k ▸ 12k ▸ 4k\"\n        - cell \"1m · 2m 20s\"\n        - cell \"15%\"\n      - row \"claude 6 50% 4.1 · n=5 22k ▸ 8k ▸ 500 1m 30s · 2m 40s 80%\":\n        - cell \"claude\"\n        - cell \"6\"\n        - cell \"50%\"\n        - cell \"4.1 · n=5\"\n        - cell \"22k ▸ 8k ▸ 500\"\n        - cell \"1m 30s · 2m 40s\"\n        - cell \"80%\"\n      - row \"codex 4 100% — · n=4 9k ▸ 3k ▸ 100 50s · 1m 10s —\":\n        - cell \"codex\"\n        - cell \"4\"\n        - cell \"100%\"\n        - cell \"— · n=4\"\n        - cell \"9k ▸ 3k ▸ 100\"\n        - cell \"50s · 1m 10s\"\n        - cell \"—\"\n- region \"score vs baseline\":\n  - heading \"score vs baseline\" [level=2]\n  - text: 0 — 10\n  - table \"Score versus baseline by group (scale 0 to 10)\":\n    - caption: Score versus baseline by group (scale 0 to 10)\n    - rowgroup:\n      - row \"group score baseline delta\":\n        - columnheader \"group\"\n        - columnheader \"score\"\n        - columnheader \"baseline\"\n        - columnheader \"delta\"\n    - rowgroup:\n      - row \"fake 7.4 5.0 +2.4\":\n        - rowheader \"fake\"\n        - cell \"7.4\"\n        - cell \"5.0\"\n        - cell \"+2.4\"\n      - row \"claude 4.1 5.0 −0.9\":\n        - rowheader \"claude\"\n        - cell \"4.1\"\n        - cell \"5.0\"\n        - cell \"−0.9\"\n  - list \"Score versus baseline tracks\":\n    - listitem: fake +2.4\n    - listitem: claude −0.9\n- region \"criterion failure rate\":\n  - heading \"criterion failure rate\" [level=2]\n  - text: 13 rubric samples\n  - table \"Criterion failure rate by group\":\n    - caption: Criterion failure rate by group\n    - rowgroup:\n      - row \"criterion fake claude\":\n        - columnheader \"criterion\"\n        - columnheader \"fake\"\n        - columnheader \"claude\"\n    - rowgroup:\n      - row \"brief-implemented 13% 80%\":\n        - rowheader \"brief-implemented\"\n        - cell \"13%\"\n        - cell \"80%\"\n      - row \"change-verified 38% no sample\":\n        - rowheader \"change-verified\"\n        - cell \"38%\"\n        - cell \"no sample\"\n      - row \"minimal-diff 0% 50% n=2 low sample\":\n        - rowheader \"minimal-diff\"\n        - cell \"0%\"\n        - cell \"50% n=2 low sample\"\n      - row \"suite-green 25% 100%! all failed\":\n        - rowheader \"suite-green\"\n        - cell \"25%\"\n        - cell \"100%! all failed\"\n  - group \"Criterion failure rate by group\": fake claude brief-implemented 13% 80% change-verified 38% — minimal-diff 0% 50% n=2 suite-green 25% 100%!\n  - text: bar = failure rate 0–100% — no sample n=<3 low sample (ink + n= in cell) 100%! all failed\n- region \"Eval buckets by size and difficulty\":\n  - heading \"eval buckets\" [level=2]\n  - text: size · difficulty by size\n  - strong: M\n  - text: n=5 avg 7.6\n  - strong: S\n  - text: n=3 avg 7.0 by difficulty\n  - strong: medium\n  - text: n=6 avg 7.1"
+          "tree": "- text: metrics group by\n- tablist \"Group-by dimension\":\n  - tab \"vendor\" [selected]\n  - tab \"model\"\n  - tab \"type\"\n  - tab \"size\"\n  - tab \"difficulty\"\n  - tab \"workflow\"\n- text: more\n- combobox \"Additional group-by dimensions\":\n  - option \"…\" [selected]\n  - option \"profile\"\n  - option \"orch harness\"\n  - option \"orch model\"\n  - option \"orch effort\"\n  - option \"judge harness\"\n  - option \"judge model\"\n  - option \"judge effort\"\n  - option \"rubric\"\n- text: session\n- combobox \"Session scope filter\":\n  - option \"all sessions\" [selected]\n  - option \"verify-orch\"\n- group \"Metrics view\":\n  - button \"overview\" [pressed]\n  - button \"comparison\"\n- text: all sessions · 22 decided · 13 scored · 06:20\n- search \"Metrics filters\":\n  - text: type\n  - textbox \"type\"\n  - text: vendor\n  - textbox \"vendor\"\n  - text: model\n  - textbox \"model\"\n  - text: profile\n  - textbox \"profile\"\n  - text: size\n  - textbox \"size\"\n  - text: difficulty\n  - textbox \"difficulty\"\n  - text: orch harness\n  - textbox \"orch harness\"\n  - text: orch model\n  - textbox \"orch model\"\n  - text: orch effort\n  - textbox \"orch effort\"\n  - text: judge harness\n  - textbox \"judge harness\"\n  - text: judge model\n  - textbox \"judge model\"\n  - text: judge effort\n  - textbox \"judge effort\"\n  - text: rubric\n  - textbox \"rubric\"\n  - button \"first attempt only\"\n  - button \"below baseline only\"\n  - button \"clear\" [disabled]\n- region \"by vendor\":\n  - heading \"by vendor\" [level=2]\n  - text: 3 groups\n  - table:\n    - rowgroup:\n      - row \"vendor tasks success eval avg tokens in ▸ out ▸ cached avg · p95 below base\":\n        - columnheader \"vendor\"\n        - columnheader \"tasks\"\n        - columnheader \"success\"\n        - columnheader \"eval avg\"\n        - columnheader \"tokens in ▸ out ▸ cached\"\n        - columnheader \"avg · p95\"\n        - columnheader \"below base\"\n    - rowgroup:\n      - row \"fake 12 83% 7.4 · n=8 48k ▸ 12k ▸ 4k 1m · 2m 20s 15%\":\n        - cell \"fake\"\n        - cell \"12\"\n        - cell \"83%\"\n        - cell \"7.4 · n=8\"\n        - cell \"48k ▸ 12k ▸ 4k\"\n        - cell \"1m · 2m 20s\"\n        - cell \"15%\"\n      - row \"claude 6 50% 4.1 · n=5 22k ▸ 8k ▸ 500 1m 30s · 2m 40s 80%\":\n        - cell \"claude\"\n        - cell \"6\"\n        - cell \"50%\"\n        - cell \"4.1 · n=5\"\n        - cell \"22k ▸ 8k ▸ 500\"\n        - cell \"1m 30s · 2m 40s\"\n        - cell \"80%\"\n      - row \"codex 4 100% no rubric · n=4 9k ▸ 3k ▸ 100 50s · 1m 10s —\":\n        - cell \"codex\"\n        - cell \"4\"\n        - cell \"100%\"\n        - cell \"no rubric · n=4\"\n        - cell \"9k ▸ 3k ▸ 100\"\n        - cell \"50s · 1m 10s\"\n        - cell \"—\"\n- region \"score vs baseline\":\n  - heading \"score vs baseline\" [level=2]\n  - text: 0 — 10\n  - table \"Score versus baseline by group (scale 0 to 10)\":\n    - caption: Score versus baseline by group (scale 0 to 10)\n    - rowgroup:\n      - row \"group score baseline delta\":\n        - columnheader \"group\"\n        - columnheader \"score\"\n        - columnheader \"baseline\"\n        - columnheader \"delta\"\n    - rowgroup:\n      - row \"fake 7.4 5.0 +2.4\":\n        - rowheader \"fake\"\n        - cell \"7.4\"\n        - cell \"5.0\"\n        - cell \"+2.4\"\n      - row \"claude 4.1 5.0 −0.9\":\n        - rowheader \"claude\"\n        - cell \"4.1\"\n        - cell \"5.0\"\n        - cell \"−0.9\"\n  - list \"Score versus baseline tracks\":\n    - listitem: fake +2.4\n    - listitem: claude −0.9\n- region \"criterion failure rate\":\n  - heading \"criterion failure rate\" [level=2]\n  - text: 13 rubric samples\n  - table \"Criterion failure rate by group\":\n    - caption: Criterion failure rate by group\n    - rowgroup:\n      - row \"criterion fake claude\":\n        - columnheader \"criterion\"\n        - columnheader \"fake\"\n        - columnheader \"claude\"\n    - rowgroup:\n      - row \"brief-implemented 13% 80%\":\n        - rowheader \"brief-implemented\"\n        - cell \"13%\"\n        - cell \"80%\"\n      - row \"change-verified 38% no sample\":\n        - rowheader \"change-verified\"\n        - cell \"38%\"\n        - cell \"no sample\"\n      - row \"minimal-diff 0% 50% n=2 low sample\":\n        - rowheader \"minimal-diff\"\n        - cell \"0%\"\n        - cell \"50% n=2 low sample\"\n      - row \"suite-green 25% 100%! all failed\":\n        - rowheader \"suite-green\"\n        - cell \"25%\"\n        - cell \"100%! all failed\"\n  - group \"Criterion failure rate by group\": fake claude brief-implemented 13% 80% change-verified 38% — minimal-diff 0% 50% n=2 suite-green 25% 100%!\n  - text: bar = failure rate 0–100% — no sample n=<3 low sample (ink + n= in cell) 100%! all failed\n- region \"Eval buckets by size and difficulty\":\n  - heading \"eval buckets\" [level=2]\n  - text: size · difficulty by size\n  - strong: M\n  - text: n=5 avg 7.6\n  - strong: S\n  - text: n=3 avg 7.0 by difficulty\n  - strong: medium\n  - text: n=6 avg 7.1"
         },
         "keyboardWalk": {
           "focusableCount": 34,
@@ -2272,11 +2580,11 @@
         "ariaMetrics": {
           "api": "locator.ariaSnapshot",
           "selector": "[data-testid=\"screen-metrics\"]",
-          "tree": "- text: metrics group by\n- tablist \"Group-by dimension\":\n  - tab \"vendor\" [selected]\n  - tab \"model\"\n  - tab \"type\"\n  - tab \"size\"\n  - tab \"difficulty\"\n  - tab \"workflow\"\n- text: more\n- combobox \"Additional group-by dimensions\":\n  - option \"…\" [selected]\n  - option \"profile\"\n  - option \"orch harness\"\n  - option \"orch model\"\n  - option \"orch effort\"\n  - option \"judge harness\"\n  - option \"judge model\"\n  - option \"judge effort\"\n  - option \"rubric\"\n- text: session\n- combobox \"Session scope filter\":\n  - option \"all sessions\" [selected]\n  - option \"verify-orch\"\n- group \"Metrics view\":\n  - button \"overview\" [pressed]\n  - button \"comparison\"\n- text: all sessions · 22 decided · 13 scored · 06:03\n- search \"Metrics filters\":\n  - text: type\n  - textbox \"type\"\n  - text: vendor\n  - textbox \"vendor\"\n  - text: model\n  - textbox \"model\"\n  - text: profile\n  - textbox \"profile\"\n  - text: size\n  - textbox \"size\"\n  - text: difficulty\n  - textbox \"difficulty\"\n  - text: orch harness\n  - textbox \"orch harness\"\n  - text: orch model\n  - textbox \"orch model\"\n  - text: orch effort\n  - textbox \"orch effort\"\n  - text: judge harness\n  - textbox \"judge harness\"\n  - text: judge model\n  - textbox \"judge model\"\n  - text: judge effort\n  - textbox \"judge effort\"\n  - text: rubric\n  - textbox \"rubric\"\n  - button \"first attempt only\"\n  - button \"below baseline only\"\n  - button \"clear\" [disabled]\n- region \"by vendor\":\n  - heading \"by vendor\" [level=2]\n  - text: 3 groups\n  - table:\n    - rowgroup:\n      - row \"vendor tasks success eval avg tokens in ▸ out ▸ cached avg · p95 below base\":\n        - columnheader \"vendor\"\n        - columnheader \"tasks\"\n        - columnheader \"success\"\n        - columnheader \"eval avg\"\n        - columnheader \"tokens in ▸ out ▸ cached\"\n        - columnheader \"avg · p95\"\n        - columnheader \"below base\"\n    - rowgroup:\n      - row \"fake 12 83% 7.4 · n=8 48k ▸ 12k ▸ 4k 1m · 2m 20s 15%\":\n        - cell \"fake\"\n        - cell \"12\"\n        - cell \"83%\"\n        - cell \"7.4 · n=8\"\n        - cell \"48k ▸ 12k ▸ 4k\"\n        - cell \"1m · 2m 20s\"\n        - cell \"15%\"\n      - row \"claude 6 50% 4.1 · n=5 22k ▸ 8k ▸ 500 1m 30s · 2m 40s 80%\":\n        - cell \"claude\"\n        - cell \"6\"\n        - cell \"50%\"\n        - cell \"4.1 · n=5\"\n        - cell \"22k ▸ 8k ▸ 500\"\n        - cell \"1m 30s · 2m 40s\"\n        - cell \"80%\"\n      - row \"codex 4 100% — · n=4 9k ▸ 3k ▸ 100 50s · 1m 10s —\":\n        - cell \"codex\"\n        - cell \"4\"\n        - cell \"100%\"\n        - cell \"— · n=4\"\n        - cell \"9k ▸ 3k ▸ 100\"\n        - cell \"50s · 1m 10s\"\n        - cell \"—\"\n- region \"score vs baseline\":\n  - heading \"score vs baseline\" [level=2]\n  - text: 0 — 10\n  - table \"Score versus baseline by group (scale 0 to 10)\":\n    - caption: Score versus baseline by group (scale 0 to 10)\n    - rowgroup:\n      - row \"group score baseline delta\":\n        - columnheader \"group\"\n        - columnheader \"score\"\n        - columnheader \"baseline\"\n        - columnheader \"delta\"\n    - rowgroup:\n      - row \"fake 7.4 5.0 +2.4\":\n        - rowheader \"fake\"\n        - cell \"7.4\"\n        - cell \"5.0\"\n        - cell \"+2.4\"\n      - row \"claude 4.1 5.0 −0.9\":\n        - rowheader \"claude\"\n        - cell \"4.1\"\n        - cell \"5.0\"\n        - cell \"−0.9\"\n  - list \"Score versus baseline tracks\":\n    - listitem: fake +2.4\n    - listitem: claude −0.9\n- region \"criterion failure rate\":\n  - heading \"criterion failure rate\" [level=2]\n  - text: 13 rubric samples\n  - table \"Criterion failure rate by group\":\n    - caption: Criterion failure rate by group\n    - rowgroup:\n      - row \"criterion fake claude\":\n        - columnheader \"criterion\"\n        - columnheader \"fake\"\n        - columnheader \"claude\"\n    - rowgroup:\n      - row \"brief-implemented 13% 80%\":\n        - rowheader \"brief-implemented\"\n        - cell \"13%\"\n        - cell \"80%\"\n      - row \"change-verified 38% no sample\":\n        - rowheader \"change-verified\"\n        - cell \"38%\"\n        - cell \"no sample\"\n      - row \"minimal-diff 0% 50% n=2 low sample\":\n        - rowheader \"minimal-diff\"\n        - cell \"0%\"\n        - cell \"50% n=2 low sample\"\n      - row \"suite-green 25% 100%! all failed\":\n        - rowheader \"suite-green\"\n        - cell \"25%\"\n        - cell \"100%! all failed\"\n  - group \"Criterion failure rate by group\": fake claude brief-implemented 13% 80% change-verified 38% — minimal-diff 0% 50% n=2 suite-green 25% 100%!\n  - text: bar = failure rate 0–100% — no sample n=<3 low sample (ink + n= in cell) 100%! all failed\n- region \"Eval buckets by size and difficulty\":\n  - heading \"eval buckets\" [level=2]\n  - text: size · difficulty by size\n  - strong: M\n  - text: n=5 avg 7.6\n  - strong: S\n  - text: n=3 avg 7.0 by difficulty\n  - strong: medium\n  - text: n=6 avg 7.1"
+          "tree": "- text: metrics group by\n- tablist \"Group-by dimension\":\n  - tab \"vendor\" [selected]\n  - tab \"model\"\n  - tab \"type\"\n  - tab \"size\"\n  - tab \"difficulty\"\n  - tab \"workflow\"\n- text: more\n- combobox \"Additional group-by dimensions\":\n  - option \"…\" [selected]\n  - option \"profile\"\n  - option \"orch harness\"\n  - option \"orch model\"\n  - option \"orch effort\"\n  - option \"judge harness\"\n  - option \"judge model\"\n  - option \"judge effort\"\n  - option \"rubric\"\n- text: session\n- combobox \"Session scope filter\":\n  - option \"all sessions\" [selected]\n  - option \"verify-orch\"\n- group \"Metrics view\":\n  - button \"overview\" [pressed]\n  - button \"comparison\"\n- text: all sessions · 22 decided · 13 scored · 06:20\n- search \"Metrics filters\":\n  - text: type\n  - textbox \"type\"\n  - text: vendor\n  - textbox \"vendor\"\n  - text: model\n  - textbox \"model\"\n  - text: profile\n  - textbox \"profile\"\n  - text: size\n  - textbox \"size\"\n  - text: difficulty\n  - textbox \"difficulty\"\n  - text: orch harness\n  - textbox \"orch harness\"\n  - text: orch model\n  - textbox \"orch model\"\n  - text: orch effort\n  - textbox \"orch effort\"\n  - text: judge harness\n  - textbox \"judge harness\"\n  - text: judge model\n  - textbox \"judge model\"\n  - text: judge effort\n  - textbox \"judge effort\"\n  - text: rubric\n  - textbox \"rubric\"\n  - button \"first attempt only\"\n  - button \"below baseline only\"\n  - button \"clear\" [disabled]\n- region \"by vendor\":\n  - heading \"by vendor\" [level=2]\n  - text: 3 groups\n  - table:\n    - rowgroup:\n      - row \"vendor tasks success eval avg tokens in ▸ out ▸ cached avg · p95 below base\":\n        - columnheader \"vendor\"\n        - columnheader \"tasks\"\n        - columnheader \"success\"\n        - columnheader \"eval avg\"\n        - columnheader \"tokens in ▸ out ▸ cached\"\n        - columnheader \"avg · p95\"\n        - columnheader \"below base\"\n    - rowgroup:\n      - row \"fake 12 83% 7.4 · n=8 48k ▸ 12k ▸ 4k 1m · 2m 20s 15%\":\n        - cell \"fake\"\n        - cell \"12\"\n        - cell \"83%\"\n        - cell \"7.4 · n=8\"\n        - cell \"48k ▸ 12k ▸ 4k\"\n        - cell \"1m · 2m 20s\"\n        - cell \"15%\"\n      - row \"claude 6 50% 4.1 · n=5 22k ▸ 8k ▸ 500 1m 30s · 2m 40s 80%\":\n        - cell \"claude\"\n        - cell \"6\"\n        - cell \"50%\"\n        - cell \"4.1 · n=5\"\n        - cell \"22k ▸ 8k ▸ 500\"\n        - cell \"1m 30s · 2m 40s\"\n        - cell \"80%\"\n      - row \"codex 4 100% no rubric · n=4 9k ▸ 3k ▸ 100 50s · 1m 10s —\":\n        - cell \"codex\"\n        - cell \"4\"\n        - cell \"100%\"\n        - cell \"no rubric · n=4\"\n        - cell \"9k ▸ 3k ▸ 100\"\n        - cell \"50s · 1m 10s\"\n        - cell \"—\"\n- region \"score vs baseline\":\n  - heading \"score vs baseline\" [level=2]\n  - text: 0 — 10\n  - table \"Score versus baseline by group (scale 0 to 10)\":\n    - caption: Score versus baseline by group (scale 0 to 10)\n    - rowgroup:\n      - row \"group score baseline delta\":\n        - columnheader \"group\"\n        - columnheader \"score\"\n        - columnheader \"baseline\"\n        - columnheader \"delta\"\n    - rowgroup:\n      - row \"fake 7.4 5.0 +2.4\":\n        - rowheader \"fake\"\n        - cell \"7.4\"\n        - cell \"5.0\"\n        - cell \"+2.4\"\n      - row \"claude 4.1 5.0 −0.9\":\n        - rowheader \"claude\"\n        - cell \"4.1\"\n        - cell \"5.0\"\n        - cell \"−0.9\"\n  - list \"Score versus baseline tracks\":\n    - listitem: fake +2.4\n    - listitem: claude −0.9\n- region \"criterion failure rate\":\n  - heading \"criterion failure rate\" [level=2]\n  - text: 13 rubric samples\n  - table \"Criterion failure rate by group\":\n    - caption: Criterion failure rate by group\n    - rowgroup:\n      - row \"criterion fake claude\":\n        - columnheader \"criterion\"\n        - columnheader \"fake\"\n        - columnheader \"claude\"\n    - rowgroup:\n      - row \"brief-implemented 13% 80%\":\n        - rowheader \"brief-implemented\"\n        - cell \"13%\"\n        - cell \"80%\"\n      - row \"change-verified 38% no sample\":\n        - rowheader \"change-verified\"\n        - cell \"38%\"\n        - cell \"no sample\"\n      - row \"minimal-diff 0% 50% n=2 low sample\":\n        - rowheader \"minimal-diff\"\n        - cell \"0%\"\n        - cell \"50% n=2 low sample\"\n      - row \"suite-green 25% 100%! all failed\":\n        - rowheader \"suite-green\"\n        - cell \"25%\"\n        - cell \"100%! all failed\"\n  - group \"Criterion failure rate by group\": fake claude brief-implemented 13% 80% change-verified 38% — minimal-diff 0% 50% n=2 suite-green 25% 100%!\n  - text: bar = failure rate 0–100% — no sample n=<3 low sample (ink + n= in cell) 100%! all failed\n- region \"Eval buckets by size and difficulty\":\n  - heading \"eval buckets\" [level=2]\n  - text: size · difficulty by size\n  - strong: M\n  - text: n=5 avg 7.6\n  - strong: S\n  - text: n=3 avg 7.0 by difficulty\n  - strong: medium\n  - text: n=6 avg 7.1"
         }
       },
-      "recordedAt": "2026-08-06T10:03:17.703Z"
+      "recordedAt": "2026-08-06T10:20:41.330Z"
     }
   },
-  "updatedAt": "2026-08-06T10:03:17.703Z"
+  "updatedAt": "2026-08-06T10:20:41.330Z"
 }

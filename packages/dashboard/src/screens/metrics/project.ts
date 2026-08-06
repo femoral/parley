@@ -150,11 +150,12 @@ function projectEvals(
   const delta = evals?.avg_delta ?? null;
   const below = evals?.below_baseline_rate ?? null;
   const n = count > 0 ? count : decidedHint;
-  // Compact cell text; full explanation rides on title (avoids mid-note clip).
+  // Visible "no rubric" cue (fits at ≥1361 and at ≤1360 after column drop).
+  // Full explanation still rides on title.
   const evalLabel =
     avg == null
       ? n > 0
-        ? `— · n=${n}`
+        ? `no rubric · n=${n}`
         : "—"
       : `${formatScore(avg)} · n=${count}`;
   const evalTitle =

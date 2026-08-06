@@ -291,7 +291,9 @@
   background: var(--surface-sunken);
 }
 
-/* Edge fade — cue that columns continue to the right */
+/* Edge fade — only when wrap genuinely overflows (JS sets data-overflow=1).
+ * Never gated on a breakpoint alone; a prior CSS pair set then reset opacity
+ * to 0 inside the same max-width block, leaving a dead cue. */
 .pc-metrics__table-fade {
   pointer-events: none;
   position: absolute;
@@ -303,25 +305,25 @@
   opacity: 0;
 }
 
-@media (max-width: 1360px) {
-  .pc-metrics__table-fade {
-    opacity: 1;
-  }
+.pc-metrics__table-fade[data-overflow="1"] {
+  opacity: 1;
 }
 
+/* Full-width fixed layout; no elevated min-width (workflow used to force
+ * 720px and clip "cost / done" in the 1361–1395 band with no cue). */
 .pc-metrics__table {
   width: 100%;
   border-collapse: collapse;
   table-layout: fixed;
-  min-width: 640px;
+  min-width: 0;
 }
 
 .pc-metrics__table--workflow {
-  min-width: 720px;
+  min-width: 0;
 }
 
 .pc-metrics__table th {
-  padding: 6px 8px;
+  padding: 4px 8px;
   text-align: left;
   font: 600 10px/1 var(--font-sans);
   letter-spacing: 0.12em;
@@ -339,8 +341,14 @@
   white-space: nowrap;
 }
 
+/* Column-drop disclosure — only at the density where CSS hides columns */
+.pc-metrics__col-drop {
+  display: none;
+}
+
 /* ≤1360: drop lowest-priority columns so nothing mid-clips without cue.
- * Priority kept: name, count, success, eval. Dropped: tokens, dur, below, cost. */
+ * Priority kept: name, count, success, eval. Dropped: tokens, dur, below, cost.
+ * Disclosure in panel meta names the count (see GroupTable). */
 @media (max-width: 1360px) {
   .pc-metrics__table {
     min-width: 0;
@@ -358,9 +366,29 @@
     display: none;
   }
 
-  .pc-metrics__table-fade {
-    /* Columns dropped — no need for fade at this density */
-    opacity: 0;
+  .pc-metrics__col-drop {
+    display: inline;
+  }
+
+  /* Redistribute the four surviving columns (name/count/success/eval) */
+  .pc-metrics__th-name,
+  .pc-metrics__td-name {
+    width: 26%;
+  }
+
+  .pc-metrics__th-count,
+  .pc-metrics__td-count {
+    width: 10%;
+  }
+
+  .pc-metrics__th-success,
+  .pc-metrics__td-success {
+    width: 36%;
+  }
+
+  .pc-metrics__th-eval,
+  .pc-metrics__td-eval {
+    width: 28%;
   }
 }
 
@@ -369,14 +397,15 @@
   text-align: right;
 }
 
+/* Body rows target the 24–30px density band */
 .pc-metrics__table td {
-  padding: 5px 8px;
+  padding: 3px 8px;
   border-bottom: 1px solid var(--hairline);
   vertical-align: middle;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  height: 28px;
+  height: 26px;
   box-sizing: border-box;
 }
 

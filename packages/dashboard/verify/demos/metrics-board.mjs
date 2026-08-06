@@ -470,6 +470,127 @@ async function measureBoardScroll(page) {
 }
 
 /**
+ * Measure table density: column-drop disclosure, fade-on-overflow, wrap geometry.
+ * @param {import('playwright-core').Page} page
+ */
+async function measureTableDensity(page) {
+  return page.evaluate(() => {
+    const drop = document.querySelector('[data-testid="metrics-col-drop"]');
+    const fade = document.querySelector('[data-testid="metrics-table-fade"]');
+    const wrap =
+      document.querySelector('[data-testid="metrics-table-wrap"]') ??
+      document.querySelector('[data-testid="metrics-table-scroll"] .pc-metrics__table-wrap');
+    const table = document.querySelector('[data-testid="metrics-table"]');
+    const row = document.querySelector('[data-testid="metrics-table-row"]');
+    const dropCs = drop ? getComputedStyle(drop) : null;
+    const dropVisible =
+      Boolean(drop) &&
+      dropCs != null &&
+      dropCs.display !== "none" &&
+      dropCs.visibility !== "hidden" &&
+      dropCs.opacity !== "0";
+    const dropText = (drop?.textContent ?? "").replace(/\s+/g, " ").trim();
+    const countMatch = dropText.match(/(\d+)\s+columns?\s+hidden/i);
+    const ths = table
+      ? [...table.querySelectorAll("thead th")].map((th) => {
+          const cs = getComputedStyle(th);
+          return {
+            text: (th.textContent ?? "").replace(/\s+/g, " ").trim(),
+            display: cs.display,
+            visible: cs.display !== "none" && cs.visibility !== "hidden",
+          };
+        })
+      : [];
+    const overflowX = wrap
+      ? wrap.scrollWidth > wrap.clientWidth + 1
+      : false;
+    const fadeOpacity = fade ? parseFloat(getComputedStyle(fade).opacity) : null;
+    const fadeDataOverflow = fade?.getAttribute("data-overflow") ?? null;
+    const rowH = row ? Math.round(row.getBoundingClientRect().height * 100) / 100 : null;
+    return {
+      dropPresent: Boolean(drop),
+      dropVisible,
+      dropText,
+      droppedCount: countMatch ? Number(countMatch[1]) : null,
+      fadePresent: Boolean(fade),
+      fadeOpacity,
+      fadeDataOverflow,
+      fadeOnWhenOverflow:
+        overflowX ? fadeOpacity != null && fadeOpacity > 0.5 : fadeOpacity === 0 || fadeOpacity == null,
+      wrap: wrap
+        ? {
+            clientWidth: wrap.clientWidth,
+            scrollWidth: wrap.scrollWidth,
+            overflowX,
+            dataOverflow: wrap.getAttribute("data-overflow"),
+          }
+        : null,
+      visibleHeaders: ths.filter((t) => t.visible).map((t) => t.text),
+      hiddenHeaders: ths.filter((t) => !t.visible).map((t) => t.text),
+      isWorkflow: Boolean(table?.classList.contains("pc-metrics__table--workflow")),
+      rowHeightPx: rowH,
+      rowInBand: rowH != null && rowH >= 24 && rowH <= 30,
+    };
+  });
+}
+
+/**
+ * Sweep table density across key widths for vendor + workflow.
+ * Proves MED-A disclosure and MED-B no-overflow / fade-on-overflow.
+ * @param {import('playwright-core').Page} page
+ * @param {string} baseUrl
+ */
+async function measureTableDensitySweep(page, baseUrl) {
+  const widths = [1280, 1361, 1380, 1400, 1461];
+  /** @type {Record<string, object>} */
+  const vendor = {};
+  /** @type {Record<string, object>} */
+  const workflow = {};
+
+  for (const w of widths) {
+    await page.setViewportSize({ width: w, height: 900 });
+    await goMetrics(page, baseUrl);
+    await page.waitForSelector('[data-testid="metrics-table"]', { timeout: 12_000 });
+    await page.evaluate(() => document.fonts.ready);
+    // Wait a frame for ResizeObserver overflow check
+    await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+    vendor[String(w)] = await measureTableDensity(page);
+
+    await page.click('[data-testid="metrics-dim-workflow"]');
+    await page.waitForSelector('[data-testid="metrics-table"]', { timeout: 10_000 });
+    await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+    workflow[String(w)] = await measureTableDensity(page);
+
+    // Back to a primary dim for next width
+    await page.click('[data-testid="metrics-dim-vendor"]').catch(() => undefined);
+  }
+
+  const v1280 = vendor["1280"];
+  const w1280 = workflow["1280"];
+  const v1461 = vendor["1461"];
+  const w1461 = workflow["1461"];
+
+  return {
+    vendor,
+    workflow,
+    summary: {
+      disclosureAt1280Vendor: Boolean(v1280?.dropVisible && v1280?.droppedCount === 3),
+      disclosureAt1280Workflow: Boolean(w1280?.dropVisible && w1280?.droppedCount === 4),
+      disclosureAbsentAt1461Vendor: Boolean(v1461 && !v1461.dropVisible),
+      disclosureAbsentAt1461Workflow: Boolean(w1461 && !w1461.dropVisible),
+      noOverflow1361to1400Workflow: [1361, 1380, 1400].every(
+        (w) => workflow[String(w)]?.wrap?.overflowX === false,
+      ),
+      fadeMatchesOverflow: widths.every((w) => {
+        const samples = [vendor[String(w)], workflow[String(w)]];
+        return samples.every((s) => s?.fadeOnWhenOverflow !== false);
+      }),
+      rowInBand1280: Boolean(v1280?.rowInBand),
+    },
+  };
+}
+
+/**
  * Axis / scale presence proofs for both plots.
  * Heatmap: honest scale in legend (not a decorative half-width axis strip).
  * @param {import('playwright-core').Page} page
@@ -654,6 +775,36 @@ export function metricsBoardGates(_entry, ledger) {
     }
   }
 
+  // MED-A — column-drop disclosure at ≤1360; absent at ≥1461
+  const dens = demo.tableDensity?.summary;
+  if (!dens?.disclosureAt1280Vendor) {
+    throw new Error(
+      `metrics-board: missing vendor column-drop disclosure at 1280: ${JSON.stringify(demo.tableDensity?.vendor?.["1280"]?.dropText)}`,
+    );
+  }
+  if (!dens?.disclosureAt1280Workflow) {
+    throw new Error(
+      `metrics-board: missing workflow column-drop disclosure at 1280: ${JSON.stringify(demo.tableDensity?.workflow?.["1280"]?.dropText)}`,
+    );
+  }
+  if (!dens?.disclosureAbsentAt1461Vendor || !dens?.disclosureAbsentAt1461Workflow) {
+    throw new Error("metrics-board: column-drop disclosure must be absent at 1461");
+  }
+
+  // MED-B — workflow table must not overflow 1361–1400; fade tracks overflow
+  if (!dens?.noOverflow1361to1400Workflow) {
+    const band = [1361, 1380, 1400].map((w) => ({
+      w,
+      wrap: demo.tableDensity?.workflow?.[String(w)]?.wrap,
+    }));
+    throw new Error(
+      `metrics-board: workflow table overflows in 1361–1400 band: ${JSON.stringify(band)}`,
+    );
+  }
+  if (dens?.fadeMatchesOverflow === false) {
+    throw new Error("metrics-board: table edge-fade opacity does not track overflow");
+  }
+
   if (!demo.honesty?.empty || !demo.honesty?.error || !demo.honesty?.loading) {
     throw new Error("metrics-board: missing honesty state proofs");
   }
@@ -833,13 +984,25 @@ export async function runMetricsBoardDemo() {
     }));
     await session.page.click('[data-testid="metrics-view-overview"]');
 
-    // Workflow tab + cost column
+    // Workflow tab + cost column (wide viewport so cost is not CSS-dropped)
+    await session.page.setViewportSize({ width: 1460, height: 900 });
+    await goMetrics(session.page, session.url);
     await session.page.click('[data-testid="metrics-dim-workflow"]');
     await session.page.waitForSelector('[data-testid="metrics-table"]', { timeout: 10_000 });
     const workflow = await session.page.evaluate(() => {
-      const head = document.querySelector('[data-testid="metrics-table"] thead')?.textContent ?? "";
+      const table = document.querySelector('[data-testid="metrics-table"]');
+      const ths = table
+        ? [...table.querySelectorAll("thead th")].map((th) => {
+            const cs = getComputedStyle(th);
+            return {
+              text: (th.textContent ?? "").replace(/\s+/g, " ").trim(),
+              visible: cs.display !== "none" && cs.visibility !== "hidden",
+            };
+          })
+        : [];
+      const head = ths.map((t) => t.text).join(" ");
       return {
-        hasCostColumn: /cost\s*\/\s*done/i.test(head),
+        hasCostColumn: ths.some((t) => t.visible && /cost\s*\/\s*done/i.test(t.text)),
         hasWorkflowRow: (document.body.textContent ?? "").includes("coding-1@3"),
         head: head.replace(/\s+/g, " ").trim(),
       };
@@ -849,6 +1012,9 @@ export async function runMetricsBoardDemo() {
     await session.page.waitForSelector('[data-testid="metrics-dist-plot"]', {
       timeout: 10_000,
     });
+
+    // MED-A / MED-B density sweep (disclosure + overflow/fade)
+    const tableDensity = await measureTableDensitySweep(session.page, session.url);
 
     // Viewports with populated data (hash preserved via beforeMeasure)
     const viewports = await measureAtViewports(session.page, {
@@ -877,34 +1043,19 @@ export async function runMetricsBoardDemo() {
     await session.page
       .waitForSelector('[data-testid="metrics-dist-plot"]', { timeout: 8_000 })
       .catch(() => undefined);
+    await session.page.evaluate(
+      () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))),
+    );
     const boardScroll = await measureBoardScroll(session.page);
-    const tableCue = await session.page.evaluate(() => {
-      const fade = document.querySelector('[data-testid="metrics-table-fade"]');
-      const wrap = document.querySelector(
-        '[data-testid="metrics-table-scroll"] .pc-metrics__table-wrap',
-      );
-      const ths = [...document.querySelectorAll('[data-testid="metrics-table"] thead th')].map(
-        (th) => {
-          const cs = getComputedStyle(th);
-          return {
-            text: (th.textContent ?? "").replace(/\s+/g, " ").trim(),
-            display: cs.display,
-          };
-        },
-      );
-      return {
-        fadePresent: Boolean(fade),
-        fadeOpacity: fade ? getComputedStyle(fade).opacity : null,
-        scrollbar: wrap
-          ? getComputedStyle(wrap).scrollbarWidth || "present"
-          : null,
-        headers: ths,
-        primaryVisible: ths
-          .filter((t) => t.display !== "none")
-          .map((t) => t.text)
-          .join(" "),
-      };
-    });
+    const tableCue = await measureTableDensity(session.page);
+    // Back-compat fields used by gates/print
+    tableCue.primaryVisible = (tableCue.visibleHeaders ?? []).join(" ");
+    tableCue.scrollbar = tableCue.wrap
+      ? "thin"
+      : null;
+    tableCue.fadePresent = tableCue.fadePresent && (tableCue.fadeOpacity ?? 0) > 0.5
+      ? true
+      : tableCue.fadePresent;
 
     // Long-label truncation sample
     const truncation = await session.page.evaluate(() => {
@@ -1013,6 +1164,7 @@ export async function runMetricsBoardDemo() {
       chartLabels: chartLabelsFinal,
       renderedPxTable,
       tableCue,
+      tableDensity,
       heatmapTruncation,
       contrast,
       comparison,
@@ -1048,6 +1200,13 @@ export async function runMetricsBoardDemo() {
           },
           heatmapTruncation,
           tableCue1280: tableCue.primaryVisible,
+          tableDensitySummary: tableDensity.summary,
+          tableDensity1280Vendor: tableDensity.vendor["1280"],
+          tableDensity1280Workflow: tableDensity.workflow["1280"],
+          tableDensity1361Workflow: tableDensity.workflow["1361"],
+          tableDensity1380Workflow: tableDensity.workflow["1380"],
+          tableDensity1400Workflow: tableDensity.workflow["1400"],
+          tableDensity1461Vendor: tableDensity.vendor["1461"],
           boardScroll1280: boardScroll.shell,
           axeViolations: a11y.axe?.violations?.length ?? 0,
         },

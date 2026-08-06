@@ -1,11 +1,23 @@
 /**
  * Group metrics table — tasks/runs, success, eval, tokens, duration, below base.
  * Workflow mode adds cost-per-completed-run.
- * At ≤1360, lower-priority columns drop so no silent mid-header clip.
- * Horizontal scroll (when needed) uses a visible edge fade + always-on scrollbar.
+ * At ≤1360, lower-priority columns drop so no silent mid-header clip;
+ * panel meta discloses the hidden count (sighted + a11y).
+ * Edge fade appears only when the wrap genuinely overflows.
  */
+import { useEffect, useRef, useState } from "react";
 import type { GroupRow } from "./project.js";
 import { HonestyPanel, LoadingSkeleton } from "./Honesty.js";
+
+/**
+ * Columns dropped via CSS at max-width 1360 (must match metrics.css).
+ * Vendor: tokens, avg·p95, below base.
+ * Workflow: those three + cost / done.
+ */
+const DROPPED_AT_NARROW = {
+  vendor: 3,
+  workflow: 4,
+} as const;
 
 export interface GroupTableProps {
   rows: readonly GroupRow[];
@@ -24,6 +36,37 @@ export function GroupTable({
   error,
   filterActive,
 }: GroupTableProps) {
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const [overflows, setOverflows] = useState(false);
+  const droppedCount = workflow
+    ? DROPPED_AT_NARROW.workflow
+    : DROPPED_AT_NARROW.vendor;
+
+  useEffect(() => {
+    if (status !== "ready" || rows.length === 0) {
+      setOverflows(false);
+      return;
+    }
+    const el = wrapRef.current;
+    if (!el) {
+      setOverflows(false);
+      return;
+    }
+    const check = () => {
+      setOverflows(el.scrollWidth > el.clientWidth + 1);
+    };
+    check();
+    const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(check) : null;
+    ro?.observe(el);
+    const table = el.querySelector("table");
+    if (table) ro?.observe(table);
+    window.addEventListener("resize", check);
+    return () => {
+      ro?.disconnect();
+      window.removeEventListener("resize", check);
+    };
+  }, [rows, workflow, status]);
+
   return (
     <section
       className="pc-metrics__panel"
@@ -34,10 +77,20 @@ export function GroupTable({
         <h2 id="metrics-table-title" className="pc-metrics__panel-title">
           by {dimLabel}
         </h2>
-        <span className="pc-metrics__panel-meta">
-          {status === "ready"
-            ? `${rows.length} group${rows.length === 1 ? "" : "s"}`
-            : status}
+        <span className="pc-metrics__panel-meta" data-testid="metrics-table-meta">
+          {status === "ready" ? (
+            <>
+              {`${rows.length} group${rows.length === 1 ? "" : "s"}`}
+              <span
+                className="pc-metrics__col-drop"
+                data-testid="metrics-col-drop"
+              >
+                {` · ${droppedCount} columns hidden at this width — widen to 1361px+`}
+              </span>
+            </>
+          ) : (
+            status
+          )}
         </span>
       </div>
       <div className="pc-metrics__panel-body">
@@ -64,7 +117,12 @@ export function GroupTable({
           />
         ) : (
           <div className="pc-metrics__table-scroll" data-testid="metrics-table-scroll">
-            <div className="pc-metrics__table-wrap">
+            <div
+              ref={wrapRef}
+              className="pc-metrics__table-wrap"
+              data-overflow={overflows ? "1" : "0"}
+              data-testid="metrics-table-wrap"
+            >
               <table
                 className={`pc-metrics__table${workflow ? " pc-metrics__table--workflow" : ""}`}
                 data-testid="metrics-table"
@@ -179,6 +237,7 @@ export function GroupTable({
             </div>
             <div
               className="pc-metrics__table-fade"
+              data-overflow={overflows ? "1" : "0"}
               aria-hidden="true"
               data-testid="metrics-table-fade"
             />
