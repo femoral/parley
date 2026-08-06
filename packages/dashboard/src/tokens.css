@@ -1,0 +1,51 @@
+/*
+ * Layer 0 — tokens from docs/design/parley-console/DESIGN.md.
+ * Components must use these custom properties, not hex literals.
+ */
+:root {
+  /* Ground and surfaces */
+  --ground: #0b0d0f;
+  --well: #080a0c;
+  --surface-sunken: #0d1013;
+  --surface: #0e1114;
+  --surface-raised: #101316;
+  --surface-hover: #14181c;
+
+  /* Lines */
+  --hairline: #14181c;
+  --hairline-strong: #1a2025;
+  --border: #232a30;
+  --border-strong: #2c343b;
+
+  /* Text */
+  --text: #e3e8ec;
+  --text-strong-2: #cfd6dc;
+  --text-2: #93a0ab;
+  --text-3: #8b98a4;
+  --text-4: #7c8b98;
+  --text-time: #6d7d89;
+  --link: #7fb2d9;
+  --link-hover: #a8cde9;
+
+  /* State (status only) */
+  --state-pending: #8b96a2;
+  --state-queued: #7b8894;
+  --state-running: #43b98c;
+  --state-awaiting: #e0a02e;
+  --state-stalled: #7f9bb0;
+  --state-completed: #5d8ca8;
+  --state-failed: #d9534a;
+  --state-cancelled: #7f8790;
+  --state-eval-good: #3ea99c;
+  --state-eval-poor: #c4707f;
+
+  /* Type */
+  --font-sans: "IBM Plex Sans", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+
+  /* Chrome geometry (DESIGN.md Layout) */
+  --chrome-header: 46px;
+  --chrome-footer: 26px;
+  --rail-left: 280px;
+  --rail-right: 300px;
+}
