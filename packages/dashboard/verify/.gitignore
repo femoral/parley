@@ -1,0 +1,10 @@
+# Bulky rendered proofs — regenerate locally with `pnpm verify`.
+# Measurement JSON (entry.json) is committed; PNGs are not.
+ledger/**/shots/
+*.png
+*.jpg
+*.webp
+
+# Scratch from ad-hoc runs
+.tmp/
+artifacts/
