@@ -247,8 +247,10 @@ export function parseJsonColumn<T>(value: string | null): T | null {
 
 /**
  * Normalize one `files_changed` entry from storage or a child payload into a
- * {@link ReportFileChange}. Strings become path-only objects; objects keep
- * optional `added`/`removed` when they are non-negative integers.
+ * {@link ReportFileChange}. Strings become path-only objects; object entries
+ * keep optional `added`/`removed` when they are non-negative integers and
+ * **preserve every other key** so custom `--report-schema` fields on file
+ * objects (e.g. `reason`, `reviewer`) survive enrichment (#349 review).
  */
 export function normalizeFileChangeEntry(raw: unknown): ReportFileChange | null {
   if (typeof raw === "string") {
@@ -257,9 +259,12 @@ export function normalizeFileChangeEntry(raw: unknown): ReportFileChange | null 
   if (!isRecord(raw) || typeof raw.path !== "string" || raw.path === "") {
     return null;
   }
-  const entry: ReportFileChange = { path: raw.path };
+  // Spread first so unknown keys survive; then reassert path + sanitize counts.
+  const entry = { ...raw, path: raw.path } as ReportFileChange & Record<string, unknown>;
   if (typeof raw.added === "number" && Number.isInteger(raw.added) && raw.added >= 0) {
     entry.added = raw.added;
+  } else {
+    delete entry.added;
   }
   if (
     typeof raw.removed === "number" &&
@@ -267,11 +272,13 @@ export function normalizeFileChangeEntry(raw: unknown): ReportFileChange | null 
     raw.removed >= 0
   ) {
     entry.removed = raw.removed;
+  } else {
+    delete entry.removed;
   }
   return entry;
 }
 
-/** Normalize a `files_changed` array; non-path entries are dropped. */
+/** Normalize a `files_changed` array; empty paths and non-entries are dropped. */
 export function normalizeFilesChanged(raw: unknown): ReportFileChange[] {
   if (!Array.isArray(raw)) return [];
   const out: ReportFileChange[] = [];
@@ -293,9 +300,33 @@ export function normalizeStoredReport(raw: unknown): Report | null {
 }
 
 /**
+ * Resolve the post-rename path from a git numstat path field.
+ * Handles flat (`old => new`) and braced (`src/{old.ts => new.ts}`,
+ * `{a => b}/x`, `p/{a => b}/s`) forms. Production churn uses `--no-renames`
+ * so these rarely appear; kept for defensive parsing of raw numstat text.
+ */
+export function decodeNumstatPath(filePath: string): string {
+  const arrow = filePath.indexOf(" => ");
+  if (arrow === -1) return filePath;
+  const braceOpen = filePath.lastIndexOf("{", arrow);
+  if (braceOpen === -1) {
+    // Flat rename: everything after " => " is the new path.
+    return filePath.slice(arrow + 4);
+  }
+  const braceClose = filePath.indexOf("}", arrow);
+  if (braceClose === -1) {
+    return filePath.slice(arrow + 4);
+  }
+  const prefix = filePath.slice(0, braceOpen);
+  const newPart = filePath.slice(arrow + 4, braceClose);
+  const suffix = filePath.slice(braceClose + 1);
+  return prefix + newPart + suffix;
+}
+
+/**
  * Parse `git diff --numstat <base>` output into path → {added, removed}.
  * Binary rows (`-  -  path`) are skipped (counts unknown). Rename lines
- * (`old => new`) use the new path.
+ * (flat or braced) map to the new path via {@link decodeNumstatPath}.
  */
 export function parseNumstat(output: string): Map<string, { added: number; removed: number }> {
   const map = new Map<string, { added: number; removed: number }>();
@@ -307,10 +338,7 @@ export function parseNumstat(output: string): Map<string, { added: number; remov
     if (tab2 === -1) continue;
     const addedRaw = line.slice(0, tab1);
     const removedRaw = line.slice(tab1 + 1, tab2);
-    let filePath = line.slice(tab2 + 1);
-    // Rename: "old => new" (git may also quote paths; keep simple).
-    const rename = filePath.indexOf(" => ");
-    if (rename !== -1) filePath = filePath.slice(rename + 4);
+    const filePath = decodeNumstatPath(line.slice(tab2 + 1));
     if (addedRaw === "-" || removedRaw === "-") continue;
     const added = Number(addedRaw);
     const removed = Number(removedRaw);
@@ -366,13 +394,18 @@ export function computeFileChurn(
   const map = new Map<string, { added: number; removed: number }>();
   if (baseSha === "" || !fs.existsSync(cwd)) return map;
 
-  const numstat = gitText(["diff", "--numstat", baseSha], cwd);
+  // quotePath=false: non-ASCII paths as real UTF-8, not C-quoted octal.
+  // --no-renames: renames become delete+add rows (no `old => new` / brace form).
+  const numstat = gitText(
+    ["-c", "core.quotePath=false", "diff", "--numstat", "--no-renames", baseSha],
+    cwd,
+  );
   if (numstat !== null && numstat !== "") {
     for (const [p, c] of parseNumstat(numstat)) map.set(p, c);
   }
 
   const untracked = gitText(
-    ["ls-files", "--others", "--exclude-standard", "-z"],
+    ["-c", "core.quotePath=false", "ls-files", "--others", "--exclude-standard", "-z"],
     cwd,
   );
   if (untracked !== null && untracked !== "") {
@@ -432,12 +465,23 @@ export function enrichReportFilesChanged(
 
   // Only rewrite storage when at least one listed path gets counts (or the
   // child already sent object entries). Otherwise keep path strings so
-  // --cwd / no-match reports stay byte-compatible with legacy fixtures.
+  // --cwd / no-match reports stay byte-compatible with legacy fixtures —
+  // but still drop empty/invalid string entries so malformed handling does
+  // not depend on whether churn was found (optional #349 review fix).
   const hadObjects = payload.files_changed.some((item) => typeof item !== "string");
   const anyListedHasChurn =
     churn !== null && entries.some((e) => churn.has(e.path));
   if (!hadObjects && !anyListedHasChurn) {
-    return payload;
+    if (entries.length === payload.files_changed.length) {
+      // All strings were well-formed paths (normalize only dropped nothing).
+      // Keep the original string[] identity.
+      return payload;
+    }
+    // Dropped empty/non-path entries only — stay as path strings.
+    return {
+      ...payload,
+      files_changed: entries.map((e) => e.path),
+    };
   }
 
   const files_changed: ReportFileChange[] = entries.map((entry) => {
@@ -449,7 +493,9 @@ export function enrichReportFilesChanged(
       // Path-only object when a sibling entry carried/gained counts.
       return entry;
     }
+    // Spread so custom-schema keys on the entry survive count attachment.
     return {
+      ...entry,
       path: entry.path,
       added: entry.added ?? c.added,
       removed: entry.removed ?? c.removed,

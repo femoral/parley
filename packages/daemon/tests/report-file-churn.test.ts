@@ -15,7 +15,9 @@ import type { Report, TaskEnvelope } from "@useparley/core";
 import { homePaths } from "@useparley/core";
 import {
   computeFileChurn,
+  decodeNumstatPath,
   enrichReportFilesChanged,
+  normalizeFileChangeEntry,
   normalizeFilesChanged,
   normalizeStoredReport,
   parseNumstat,
@@ -51,6 +53,22 @@ describe("normalizeFilesChanged / normalizeStoredReport (#349)", () => {
     ]);
   });
 
+  it("preserves non-churn keys on custom-schema object entries", () => {
+    // Operator --report-schema may put reason/reviewer/etc. on each file object.
+    const entry = normalizeFileChangeEntry({
+      path: "a.txt",
+      reason: "refactor",
+      reviewer: "kim",
+      added: 7,
+    });
+    expect(entry).toEqual({
+      path: "a.txt",
+      reason: "refactor",
+      reviewer: "kim",
+      added: 7,
+    });
+  });
+
   it("drops empty paths and non-entries", () => {
     expect(normalizeFilesChanged(["", 42, { path: "" }, null])).toEqual([]);
   });
@@ -71,17 +89,29 @@ describe("normalizeFilesChanged / normalizeStoredReport (#349)", () => {
   });
 });
 
-describe("parseNumstat (#349)", () => {
+describe("parseNumstat / decodeNumstatPath (#349)", () => {
   it("parses added/removed/path rows", () => {
     const map = parseNumstat("10\t3\tsrc/a.ts\n0\t2\tsrc/b.ts\n");
     expect(map.get("src/a.ts")).toEqual({ added: 10, removed: 3 });
     expect(map.get("src/b.ts")).toEqual({ added: 0, removed: 2 });
   });
 
-  it("skips binary rows and uses rename targets", () => {
-    const map = parseNumstat("-\t-\tpic.bin\n4\t0\told.ts => new.ts\n");
+  it("skips binary rows and resolves flat + braced rename targets", () => {
+    expect(decodeNumstatPath("old.ts => new.ts")).toBe("new.ts");
+    // Git's default braced form when old/new share a prefix — old parser
+    // keyed on "new.ts}" and missed the real path.
+    expect(decodeNumstatPath("src/{old.ts => new.ts}")).toBe("src/new.ts");
+    expect(decodeNumstatPath("{a => b}/file.ts")).toBe("b/file.ts");
+    expect(decodeNumstatPath("p/{a => b}/s.ts")).toBe("p/b/s.ts");
+
+    const map = parseNumstat(
+      "-\t-\tpic.bin\n4\t0\told.ts => new.ts\n0\t0\tsrc/{old.ts => new.ts}\n",
+    );
     expect(map.has("pic.bin")).toBe(false);
     expect(map.get("new.ts")).toEqual({ added: 4, removed: 0 });
+    expect(map.get("src/new.ts")).toEqual({ added: 0, removed: 0 });
+    // Old bug: braced form left a trailing "}" on the key.
+    expect(map.has("new.ts}")).toBe(false);
   });
 });
 
@@ -158,6 +188,100 @@ describe("computeFileChurn + enrichReportFilesChanged (#349)", () => {
     expect(enriched.files_changed).toEqual([
       { path: "a.ts", added: 9, removed: 4 },
     ]);
+  });
+
+  it("preserves custom-schema keys when attaching churn counts", () => {
+    const repo = makeGitRepo({ "a.txt": "old\n", "b.txt": "same\n" });
+    scratch.push(repo);
+    const base = execFileSync("git", ["-C", repo, "rev-parse", "HEAD"], {
+      encoding: "utf8",
+    }).trim();
+    // a.txt gains one line → +1 −0; b.txt listed but unchanged.
+    fs.writeFileSync(path.join(repo, "a.txt"), "old\nnew\n");
+
+    const enriched = enrichReportFilesChanged(
+      {
+        summary: "review notes",
+        outcome: "success",
+        files_changed: [
+          { path: "a.txt", reason: "refactor", reviewer: "kim", added: 7 },
+          { path: "b.txt", reason: "untouched but listed" },
+        ],
+      },
+      { cwd: repo, baseSha: base },
+    ) as {
+      files_changed: Array<Record<string, unknown>>;
+    };
+
+    // Measured defect: reason/reviewer were stripped. Both must survive.
+    expect(enriched.files_changed).toEqual([
+      {
+        path: "a.txt",
+        reason: "refactor",
+        reviewer: "kim",
+        // Child-supplied added is kept (not overwritten by git's 1).
+        added: 7,
+        // Git fills missing removed.
+        removed: 0,
+      },
+      {
+        path: "b.txt",
+        reason: "untouched but listed",
+      },
+    ]);
+  });
+
+  it("counts churn for non-ASCII paths (quotePath=false)", () => {
+    const name = "ünï cøde.txt";
+    const repo = makeGitRepo({ [name]: "one\n" });
+    scratch.push(repo);
+    const base = execFileSync("git", ["-C", repo, "rev-parse", "HEAD"], {
+      encoding: "utf8",
+    }).trim();
+    fs.writeFileSync(path.join(repo, name), "one\ntwo\n");
+
+    const churn = computeFileChurn(repo, base);
+    expect(churn.get(name)).toEqual({ added: 1, removed: 0 });
+
+    const enriched = enrichReportFilesChanged(
+      { summary: "unicode", outcome: "success", files_changed: [name] },
+      { cwd: repo, baseSha: base },
+    ) as Report;
+    expect(enriched.files_changed).toEqual([
+      { path: name, added: 1, removed: 0 },
+    ]);
+  });
+
+  it("splits renames via --no-renames so braced arrow form never keys churn", () => {
+    const repo = makeGitRepo({ "src/old.ts": "body\n" });
+    scratch.push(repo);
+    const base = execFileSync("git", ["-C", repo, "rev-parse", "HEAD"], {
+      encoding: "utf8",
+    }).trim();
+    // Rename in the worktree (git detects similarity).
+    execFileSync("git", ["-C", repo, "mv", "src/old.ts", "src/new.ts"], {
+      stdio: "ignore",
+    });
+
+    const churn = computeFileChurn(repo, base);
+    // --no-renames → delete of old + add of new, not "src/{old.ts => new.ts}".
+    expect(churn.has("src/{old.ts => new.ts}")).toBe(false);
+    expect(churn.has("new.ts}")).toBe(false);
+    expect(churn.get("src/old.ts")).toEqual({ added: 0, removed: 1 });
+    expect(churn.get("src/new.ts")).toEqual({ added: 1, removed: 0 });
+  });
+
+  it("drops empty path strings even when no churn rewrite is needed", () => {
+    const enriched = enrichReportFilesChanged(
+      {
+        summary: "ok",
+        outcome: "success",
+        files_changed: ["a.txt", "", "a.txt", "z.txt"],
+      },
+      { cwd: null, baseSha: null },
+    ) as Report;
+    // Malformed-entry handling is independent of whether counts were attached.
+    expect(enriched.files_changed).toEqual(["a.txt", "a.txt", "z.txt"]);
   });
 });
 
