@@ -32,8 +32,12 @@ export function isReservedPath(firstSegment: string | undefined): boolean {
   return firstSegment !== undefined && RESERVED_PREFIXES.has(firstSegment);
 }
 
-/** The default UI package name, tried when config sets neither `ui.path` nor `ui.package`. */
-const DEFAULT_UI_PACKAGE = "@useparley/ui";
+/**
+ * Config-less default probe order (#348 / ADR-0033): try the console first,
+ * then Cove. First package with a usable `parley.ui` marker wins. Neither is
+ * a daemon dependency — optional installs only.
+ */
+const DEFAULT_UI_PACKAGES = ["@useparley/dashboard", "@useparley/ui"] as const;
 
 /**
  * Locate a package's `package.json` starting from `base` (spec: "resolved via
@@ -68,12 +72,20 @@ function resolvePackageJson(pkgName: string, base: string): string | null {
 }
 
 /**
- * Read a package's `parley.ui` marker (spec §"Package marker") and resolve it
- * to an absolute bundle directory, trying each `base` in order. Returns null
- * if the package isn't resolvable from any base, or resolves but carries no
- * (or an empty) marker.
+ * Outcome of resolving one package name against the discovery bases.
+ * Distinguishes "not installed" (probe the next default) from "installed
+ * without a marker" (configuration mistake — stop, do not fall through).
  */
-function resolvePackageBundleDir(pkgName: string, bases: string[]): string | null {
+type PackageBundleResult =
+  | { kind: "hit"; dir: string }
+  | { kind: "not_found" }
+  | { kind: "marker_less" };
+
+/**
+ * Read a package's `parley.ui` marker (spec §"Package marker") and resolve it
+ * to an absolute bundle directory, trying each `base` in order.
+ */
+function resolvePackageBundle(pkgName: string, bases: string[]): PackageBundleResult {
   for (const base of bases) {
     const pkgJsonPath = resolvePackageJson(pkgName, base);
     if (pkgJsonPath === null) continue;
@@ -88,12 +100,35 @@ function resolvePackageBundleDir(pkgName: string, bases: string[]): string | nul
         ? (pkgJson as { parley?: { ui?: unknown } }).parley?.ui
         : undefined;
     if (typeof marker === "string" && marker !== "") {
-      return path.resolve(path.dirname(pkgJsonPath), marker);
+      return { kind: "hit", dir: path.resolve(path.dirname(pkgJsonPath), marker) };
     }
     // Resolved but no usable marker — not a UI-serving package. Don't fall
     // through to the next base for the *same* package name; a package that
     // exists without the marker is a configuration mistake, not "not found".
-    return null;
+    return { kind: "marker_less" };
+  }
+  return { kind: "not_found" };
+}
+
+/**
+ * Resolve a package to its bundle dir, or null when the package is missing or
+ * marker-less (caller treats both as "no UI from this name").
+ */
+function resolvePackageBundleDir(pkgName: string, bases: string[]): string | null {
+  const result = resolvePackageBundle(pkgName, bases);
+  return result.kind === "hit" ? result.dir : null;
+}
+
+/**
+ * Config-less default: probe {@link DEFAULT_UI_PACKAGES} in order. A
+ * marker-less hit on any probed name stops the chain (config mistake per
+ * name); only `not_found` advances to the next default.
+ */
+function resolveDefaultUiBundle(bases: string[]): string | null {
+  for (const pkg of DEFAULT_UI_PACKAGES) {
+    const result = resolvePackageBundle(pkg, bases);
+    if (result.kind === "hit") return result.dir;
+    if (result.kind === "marker_less") return null;
   }
   return null;
 }
@@ -108,21 +143,27 @@ function hasIndex(dir: string): boolean {
 }
 
 /**
- * Discover the UI bundle directory to serve at `/`, per the spec's three-tier
- * order (first hit wins): explicit config path, config package name, then the
- * `@useparley/ui` default. Package names resolve from the parley home dir
- * first, then from this daemon package's own location (so a sibling install
- * next to the daemon is also found). Returns null when nothing hits — the
- * daemon must then behave exactly as it does with no UI installed.
+ * Discover the UI bundle directory to serve at `/`, per the ordered
+ * discovery chain (first hit wins): explicit config path, config package
+ * name, then the config-less defaults `@useparley/dashboard` →
+ * `@useparley/ui` (#348 / ADR-0033). Package names resolve from the parley
+ * home dir first, then from this daemon package's own location (so a sibling
+ * install next to the daemon is also found). Returns null when nothing hits
+ * — the daemon must then behave exactly as it does with no UI installed.
  */
 export function discoverUiBundle(paths: HomePaths): string | null {
   const config = readConfig(paths.config);
   const daemonBase = path.dirname(fileURLToPath(import.meta.url));
   const bases = [paths.home, daemonBase];
 
-  const dir = config.ui?.path
-    ? path.resolve(paths.home, config.ui.path)
-    : resolvePackageBundleDir(config.ui?.package ?? DEFAULT_UI_PACKAGE, bases);
+  let dir: string | null;
+  if (config.ui?.path) {
+    dir = path.resolve(paths.home, config.ui.path);
+  } else if (config.ui?.package) {
+    dir = resolvePackageBundleDir(config.ui.package, bases);
+  } else {
+    dir = resolveDefaultUiBundle(bases);
+  }
   return dir !== null && hasIndex(dir) ? dir : null;
 }
 
