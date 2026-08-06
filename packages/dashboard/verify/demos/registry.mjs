@@ -18,6 +18,7 @@ import { runInterceptErrorDemo } from "./intercept-error.mjs";
 import { runReconnectDemo } from "./reconnect.mjs";
 import { runShellChromeDemo, shellChromeGates } from "./shell-chrome.mjs";
 import { runFindHonestyDemo } from "./find-honesty.mjs";
+import { runFleetBoardDemo, fleetBoardGates } from "./fleet-board.mjs";
 
 /**
  * @typedef {{
@@ -48,8 +49,13 @@ export const DEMO_REGISTRY = [
     run: runFindHonestyDemo,
     kind: "find-honesty",
   },
-  // Screen tickets append below, e.g.:
-  // { ticket: "issue-355", id: "fleet-board", run: runFleetBoardDemo, gates: fleetGates },
+  // #355 fleet board
+  {
+    ticket: "issue-355",
+    id: "fleet-board",
+    run: runFleetBoardDemo,
+    gates: fleetBoardGates,
+  },
 ];
 
 /** Group registry into TICKETS map: { "issue-354": ["shell-chrome", ...] } */
