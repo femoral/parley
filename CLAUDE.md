@@ -21,10 +21,11 @@ logs. See `docs/agents/troubleshooting.md`.
 
 ## Design Context
 
-The web cockpit (`packages/ui`, "Parley Cove") has captured design context for
-agents doing UI work:
+Each UI package owns its design register. When working under a package, read that
+package's nested `CLAUDE.md` for its design docs and isolation rules:
 
-- `packages/ui/PRODUCT.md` — strategic: register (product), users, positioning
-  ("agent work you want to watch"), personality, anti-references, principles.
-- `packages/ui/DESIGN.md` — visual system (tokens, typography, components).
-- `docs/design/design-manifest.md` — the source design export the UI implements.
+- `packages/dashboard/CLAUDE.md`
+- `packages/ui/CLAUDE.md`
+
+Do not load either package's design docs unless the work is in that package.
+See ADR-0034 for the per-package design-context scheme.

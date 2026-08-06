@@ -10,6 +10,8 @@ export default tseslint.config(
       "**/coverage",
       "packages/ui/www",
       "packages/dashboard/www",
+      // Frozen design export (mock HTML/JS), not product code (#351).
+      "packages/dashboard/docs/design",
     ],
   },
   js.configs.recommended,

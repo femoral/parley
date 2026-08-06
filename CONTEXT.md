@@ -209,8 +209,9 @@ human/agent driving parley is the **orchestrator**.
   `cwd` already means something else for a single task)
 - "`--base`" for the base ref (the flag is `--base-ref` everywhere, matching
   `delegate`; the short form appears only in prose that predates the surface)
-- "voyage" for a run — with one carve-out: Cove's **flavour-serif** copy
-  (chart marginalia, taglines) may say *voyage*, *hands*, *route*, *seal*. No
+- "voyage" for a run — with one carve-out: decorative UI **flavour** copy
+  (marginalia, taglines) may say *voyage*, *hands*, *route*, *seal*. No
   label, column header, state string, empty-state guidance or error copy may;
   those stay `run` / `node` / `task`. Flavour is allowed to be decorative;
-  status never is (ADR-0021, `packages/ui/PRODUCT.md`).
+  status never is (ADR-0021). Package design docs own register-specific
+  flavour rules — see each UI package's `CLAUDE.md`.
