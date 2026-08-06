@@ -4,6 +4,7 @@ import http from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { readConfig, type HomePaths } from "@useparley/core";
+import { appendDaemonDiag } from "./diag.js";
 
 /**
  * Optional UI bundle serving and discovery (`docs/spec/ui-interface-contract.md`
@@ -99,13 +100,17 @@ function hasIndex(dir: string): boolean {
 /**
  * One loud startup line when discovery stops on a resolved package (or path)
  * rather than serving a UI. Names package, reason, and the path inspected so
- * "why is there no UI" is answerable from the daemon log (#361).
+ * "why is there no UI" is answerable from stderr and from diag.log (#361) —
+ * the latter survives detached spawn (stdio ignore).
  */
-function logUiDiscoveryStop(args: {
-  package?: string;
-  reason: "marker_less" | "unbuilt" | "unparseable" | "path_unbuilt";
-  path: string;
-}): void {
+function logUiDiscoveryStop(
+  paths: HomePaths,
+  args: {
+    package?: string;
+    reason: "marker_less" | "unbuilt" | "unparseable" | "path_unbuilt";
+    path: string;
+  },
+): void {
   const reasons: Record<typeof args.reason, string> = {
     marker_less: "no usable parley.ui marker",
     unbuilt: "marker present but bundle has no index.html",
@@ -113,9 +118,9 @@ function logUiDiscoveryStop(args: {
     path_unbuilt: "config.ui.path has no index.html",
   };
   const pkg = args.package !== undefined ? `package ${args.package}` : "config.ui.path";
-  process.stderr.write(
-    `parley daemon: UI discovery stopped: ${pkg}: ${reasons[args.reason]} (inspected ${args.path})\n`,
-  );
+  const line = `parley daemon: UI discovery stopped: ${pkg}: ${reasons[args.reason]} (inspected ${args.path})`;
+  process.stderr.write(`${line}\n`);
+  appendDaemonDiag(paths, line);
 }
 
 /**
@@ -157,12 +162,12 @@ function resolvePackageBundle(pkgName: string, bases: string[]): PackageBundleRe
 
 /**
  * Apply a per-name package result: hit → dir; not_found → null without log;
- * any stop kind → one log line and null.
+ * any stop kind → one log line (stderr + diag.log) and null.
  */
-function finishPackageResult(result: PackageBundleResult): string | null {
+function finishPackageResult(paths: HomePaths, result: PackageBundleResult): string | null {
   if (result.kind === "hit") return result.dir;
   if (result.kind === "not_found") return null;
-  logUiDiscoveryStop({
+  logUiDiscoveryStop(paths, {
     package: result.package,
     reason: result.kind,
     path: result.path,
@@ -175,12 +180,12 @@ function finishPackageResult(result: PackageBundleResult): string | null {
  * outcome on any probed name ends the chain (config mistake per name); only
  * `not_found` advances to the next default (#361 / ADR-0033).
  */
-function resolveDefaultUiBundle(bases: string[]): string | null {
+function resolveDefaultUiBundle(paths: HomePaths, bases: string[]): string | null {
   for (const pkg of DEFAULT_UI_PACKAGES) {
     const result = resolvePackageBundle(pkg, bases);
     if (result.kind === "hit") return result.dir;
     if (result.kind === "not_found") continue;
-    return finishPackageResult(result);
+    return finishPackageResult(paths, result);
   }
   return null;
 }
@@ -194,9 +199,9 @@ function resolveDefaultUiBundle(bases: string[]): string | null {
  * install next to the daemon is also found). Returns null when nothing hits
  * — the daemon must then behave exactly as it does with no UI installed.
  *
- * Stop cases (marker-less, unbuilt, unparseable) emit one stderr line naming
- * the package, reason, and inspected path (#361). Genuine not-found is silent
- * and advances the default probe.
+ * Stop cases (marker-less, unbuilt, unparseable) emit one line naming the
+ * package, reason, and inspected path to both stderr and diag.log (#361).
+ * Genuine not-found is silent and advances the default probe.
  */
 export function discoverUiBundle(paths: HomePaths): string | null {
   const config = readConfig(paths.config);
@@ -206,13 +211,13 @@ export function discoverUiBundle(paths: HomePaths): string | null {
   if (config.ui?.path) {
     const dir = path.resolve(paths.home, config.ui.path);
     if (hasIndex(dir)) return dir;
-    logUiDiscoveryStop({ reason: "path_unbuilt", path: dir });
+    logUiDiscoveryStop(paths, { reason: "path_unbuilt", path: dir });
     return null;
   }
   if (config.ui?.package) {
-    return finishPackageResult(resolvePackageBundle(config.ui.package, bases));
+    return finishPackageResult(paths, resolvePackageBundle(config.ui.package, bases));
   }
-  return resolveDefaultUiBundle(bases);
+  return resolveDefaultUiBundle(paths, bases);
 }
 
 const CONTENT_TYPES: Record<string, string> = {

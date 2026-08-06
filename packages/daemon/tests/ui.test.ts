@@ -119,6 +119,37 @@ function discoveryLogLines(): string[] {
   return stderrChunks.filter((s) => s.includes("UI discovery"));
 }
 
+/** Lines in `$PARLEY_HOME/diag.log` that mention UI discovery (durable channel). */
+function discoveryDiagLines(): string[] {
+  const diagPath = path.join(home, "diag.log");
+  if (!fs.existsSync(diagPath)) return [];
+  return fs
+    .readFileSync(diagPath, "utf8")
+    .split("\n")
+    .filter((s) => s.includes("UI discovery"));
+}
+
+/** Assert exactly one stop line on both stderr and diag.log (same message body). */
+function expectOneStopOnBothChannels(matchers: RegExp[]): void {
+  const stderr = discoveryLogLines();
+  const diag = discoveryDiagLines();
+  expect(stderr).toHaveLength(1);
+  expect(diag).toHaveLength(1);
+  for (const re of matchers) {
+    expect(stderr[0]).toMatch(re);
+    expect(diag[0]).toMatch(re);
+  }
+  // diag.log is timestamp-prefixed; body after the first space matches stderr (minus trailing newline).
+  const stderrBody = stderr[0]!.replace(/\n$/, "");
+  expect(diag[0]).toContain(stderrBody);
+}
+
+/** No discovery stop on either channel (happy path / not-found advance). */
+function expectNoDiscoveryStop(): void {
+  expect(discoveryLogLines()).toHaveLength(0);
+  expect(discoveryDiagLines()).toHaveLength(0);
+}
+
 describe("discoverUiBundle ordered probe (#348)", () => {
   it("Cove-only install with no config.ui still serves Cove (no regression)", () => {
     installPackage("@useparley/ui", buildMarkerPackage("@useparley/ui", "<html>cove</html>"));
@@ -126,7 +157,7 @@ describe("discoverUiBundle ordered probe (#348)", () => {
     const dir = discoverUiBundle(homePaths(home));
     expect(dir).not.toBeNull();
     expect(bundleIndex(dir!)).toBe("<html>cove</html>");
-    expect(discoveryLogLines()).toHaveLength(0);
+    expectNoDiscoveryStop();
   });
 
   it("both installed with no config.ui → console wins (probe order)", () => {
@@ -139,7 +170,7 @@ describe("discoverUiBundle ordered probe (#348)", () => {
     const dir = discoverUiBundle(homePaths(home));
     expect(dir).not.toBeNull();
     expect(bundleIndex(dir!)).toBe("<html>console</html>");
-    expect(discoveryLogLines()).toHaveLength(0);
+    expectNoDiscoveryStop();
   });
 
   it('config.ui.package = "@useparley/ui" selects Cove even when dashboard is installed', () => {
@@ -162,11 +193,11 @@ describe("discoverUiBundle ordered probe (#348)", () => {
     writeConfig({ ui: { package: "@useparley/broken-ui" } });
 
     expect(discoverUiBundle(homePaths(home))).toBeNull();
-    const logs = discoveryLogLines();
-    expect(logs).toHaveLength(1);
-    expect(logs[0]).toContain("@useparley/broken-ui");
-    expect(logs[0]).toMatch(/no usable parley\.ui marker/);
-    expect(logs[0]).toMatch(/inspected /);
+    expectOneStopOnBothChannels([
+      /@useparley\/broken-ui/,
+      /no usable parley\.ui marker/,
+      /inspected /,
+    ]);
   });
 
   it("marker-less first default stops the probe (does not fall through to Cove)", () => {
@@ -177,16 +208,16 @@ describe("discoverUiBundle ordered probe (#348)", () => {
     installPackage("@useparley/ui", buildMarkerPackage("@useparley/ui", "<html>cove</html>"));
 
     expect(discoverUiBundle(homePaths(home))).toBeNull();
-    const logs = discoveryLogLines();
-    expect(logs).toHaveLength(1);
-    expect(logs[0]).toContain("@useparley/dashboard");
-    expect(logs[0]).toMatch(/no usable parley\.ui marker/);
-    expect(logs[0]).toMatch(/inspected /);
+    expectOneStopOnBothChannels([
+      /@useparley\/dashboard/,
+      /no usable parley\.ui marker/,
+      /inspected /,
+    ]);
   });
 
   it("nothing installed → null (daemon serves no UI)", () => {
     expect(discoverUiBundle(homePaths(home))).toBeNull();
-    expect(discoveryLogLines()).toHaveLength(0);
+    expectNoDiscoveryStop();
   });
 
   it("console-only install serves console", () => {
@@ -207,13 +238,12 @@ describe("discoverUiBundle probe stop cases (#361)", () => {
     installPackage("@useparley/ui", buildMarkerPackage("@useparley/ui", "<html>cove</html>"));
 
     expect(discoverUiBundle(homePaths(home))).toBeNull();
-    const logs = discoveryLogLines();
-    expect(logs).toHaveLength(1);
-    expect(logs[0]).toContain("@useparley/dashboard");
-    expect(logs[0]).toMatch(/marker present but bundle has no index\.html/);
-    expect(logs[0]).toMatch(/inspected /);
-    // Inspected path is the bundle dir (dist), not package.json.
-    expect(logs[0]).toMatch(/dist/);
+    expectOneStopOnBothChannels([
+      /@useparley\/dashboard/,
+      /marker present but bundle has no index\.html/,
+      /inspected /,
+      /dist/, // inspected path is the bundle dir, not package.json
+    ]);
   });
 
   it("marker-less first default stops the probe (pinned alongside unbuilt)", () => {
@@ -224,10 +254,10 @@ describe("discoverUiBundle probe stop cases (#361)", () => {
     installPackage("@useparley/ui", buildMarkerPackage("@useparley/ui", "<html>cove</html>"));
 
     expect(discoverUiBundle(homePaths(home))).toBeNull();
-    const logs = discoveryLogLines();
-    expect(logs).toHaveLength(1);
-    expect(logs[0]).toContain("@useparley/dashboard");
-    expect(logs[0]).toMatch(/no usable parley\.ui marker/);
+    expectOneStopOnBothChannels([
+      /@useparley\/dashboard/,
+      /no usable parley\.ui marker/,
+    ]);
   });
 
   it("unparseable package.json for a probed name → stop, no probe advance", () => {
@@ -238,12 +268,12 @@ describe("discoverUiBundle probe stop cases (#361)", () => {
     installPackage("@useparley/ui", buildMarkerPackage("@useparley/ui", "<html>cove</html>"));
 
     expect(discoverUiBundle(homePaths(home))).toBeNull();
-    const logs = discoveryLogLines();
-    expect(logs).toHaveLength(1);
-    expect(logs[0]).toContain("@useparley/dashboard");
-    expect(logs[0]).toMatch(/unparseable package\.json/);
-    expect(logs[0]).toMatch(/inspected /);
-    expect(logs[0]).toMatch(/package\.json/);
+    expectOneStopOnBothChannels([
+      /@useparley\/dashboard/,
+      /unparseable package\.json/,
+      /inspected /,
+      /package\.json/,
+    ]);
   });
 
   it("genuine not-found on the first default → probe advances and second default serves", () => {
@@ -253,8 +283,8 @@ describe("discoverUiBundle probe stop cases (#361)", () => {
     const dir = discoverUiBundle(homePaths(home));
     expect(dir).not.toBeNull();
     expect(bundleIndex(dir!)).toBe("<html>cove</html>");
-    // Not-found advance is silent — no discovery stop line.
-    expect(discoveryLogLines()).toHaveLength(0);
+    // Not-found advance is silent on stderr and diag.log.
+    expectNoDiscoveryStop();
   });
 
   it("config.ui.path without index.html → no UI and one stop log", () => {
@@ -264,10 +294,10 @@ describe("discoverUiBundle probe stop cases (#361)", () => {
     installPackage("@useparley/ui", buildMarkerPackage("@useparley/ui", "<html>cove</html>"));
 
     expect(discoverUiBundle(homePaths(home))).toBeNull();
-    const logs = discoveryLogLines();
-    expect(logs).toHaveLength(1);
-    expect(logs[0]).toMatch(/config\.ui\.path has no index\.html/);
-    expect(logs[0]).toMatch(/inspected /);
+    expectOneStopOnBothChannels([
+      /config\.ui\.path has no index\.html/,
+      /inspected /,
+    ]);
   });
 
   it("unparseable explicit config.ui.package → stop, no fall-through to defaults", () => {
@@ -276,9 +306,9 @@ describe("discoverUiBundle probe stop cases (#361)", () => {
     writeConfig({ ui: { package: "@useparley/broken-ui" } });
 
     expect(discoverUiBundle(homePaths(home))).toBeNull();
-    const logs = discoveryLogLines();
-    expect(logs).toHaveLength(1);
-    expect(logs[0]).toContain("@useparley/broken-ui");
-    expect(logs[0]).toMatch(/unparseable package\.json/);
+    expectOneStopOnBothChannels([
+      /@useparley\/broken-ui/,
+      /unparseable package\.json/,
+    ]);
   });
 });

@@ -26,7 +26,9 @@ Replace the single default package with an ordered list. Full discovery order
 3. `@useparley/dashboard` (Console)
 4. `@useparley/ui` (Cove)
 
-First package with a usable non-empty `parley.ui` marker wins. Package
+First package with a usable non-empty `parley.ui` marker wins probe selection,
+but the install must also be built (`index.html` present) to serve — an
+unbuilt marker stops rather than falling through (see stop rule below). Package
 resolution still prefers the parley home dir, then the daemon package's own
 location (sibling install).
 
