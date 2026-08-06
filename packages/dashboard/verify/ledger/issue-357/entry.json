@@ -5,9 +5,9 @@
   "demos": {
     "task-inspector": {
       "kind": "task-inspector",
-      "description": "Task inspector (#357): staged awaiting/failed/completed/stalled; viewports 1280/1460/1920; honesty detail-error + log-unreachable; boundary long brief/paths; axe + keyboard.",
+      "description": "Task inspector (#357) fix-pass: panel error honesty, no fabricated log clocks, log well focusable + axe@1280 overflow, mixed churn — cue, follow settings, log col 1fr, deliverable states, boundary scaffold, keyboard→scaffold, 1280 two-col.",
       "daemon": {
-        "port": 43861
+        "port": 37351
       },
       "staged": {
         "completed": {
@@ -207,8 +207,8 @@
                 "borderBottomColor": "rgb(227, 232, 236)",
                 "borderLeftColor": "rgb(227, 232, 236)",
                 "borderRightColor": "rgb(227, 232, 236)",
-                "gridTemplateRows": "753.25px",
-                "gridTemplateColumns": "194px 240px 214px",
+                "gridTemplateRows": "376.625px 376.625px",
+                "gridTemplateColumns": "420px 228px",
                 "gap": "normal",
                 "padding": "0px",
                 "margin": "0px",
@@ -263,16 +263,16 @@
               "selector": "[data-testid=\"task-brief\"]",
               "found": true,
               "box": {
-                "x": 284,
+                "x": 704,
                 "y": 120.75,
-                "width": 193,
-                "height": 413.94
+                "width": 228,
+                "height": 353.06
               },
               "styles": {
                 "display": "block",
                 "position": "static",
-                "width": "193px",
-                "height": "413.938px",
+                "width": "228px",
+                "height": "353.062px",
                 "minWidth": "0px",
                 "minHeight": "0px",
                 "backgroundColor": "rgba(0, 0, 0, 0)",
@@ -305,15 +305,15 @@
               "selector": "[data-testid=\"task-log\"]",
               "found": true,
               "box": {
-                "x": 478,
+                "x": 284,
                 "y": 120.75,
-                "width": 239,
+                "width": 419,
                 "height": 753.25
               },
               "styles": {
                 "display": "grid",
                 "position": "static",
-                "width": "239px",
+                "width": "419px",
                 "height": "753.25px",
                 "minWidth": "auto",
                 "minHeight": "0px",
@@ -333,29 +333,71 @@
                 "borderBottomColor": "rgb(227, 232, 236)",
                 "borderLeftColor": "rgb(227, 232, 236)",
                 "borderRightColor": "rgb(227, 232, 236)",
-                "gridTemplateRows": "33px 720.25px",
-                "gridTemplateColumns": "239px",
+                "gridTemplateRows": "26px 727.25px",
+                "gridTemplateColumns": "419px",
                 "gap": "normal",
                 "padding": "0px",
                 "margin": "0px",
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "log tailended · nothing left to followfollow05:23:50fallback {\"type\":\"hello\",\"model\":\"fake-model\",\"effort\":\"medium\",\"prompt\":\"# Parley protocol\\n\\nYou are an…"
+              "text": "log tailended · nothing left to followfollow01fallback {\"type\":\"hello\",\"model\":\"fake-model\",\"effort\":\"medium\",\"prompt\":\"# Parley protocol\\n\\nYou are an agent…"
+            },
+            "task-log-well": {
+              "selector": "[data-testid=\"task-log-well\"]",
+              "found": true,
+              "box": {
+                "x": 284,
+                "y": 146.75,
+                "width": 419,
+                "height": 727.25
+              },
+              "styles": {
+                "display": "block",
+                "position": "static",
+                "width": "419px",
+                "height": "727.25px",
+                "minWidth": "auto",
+                "minHeight": "0px",
+                "backgroundColor": "rgb(8, 10, 12)",
+                "color": "rgb(227, 232, 236)",
+                "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
+                "fontSize": "16px",
+                "fontWeight": "400",
+                "fontFamily": "\"IBM Plex Sans\", system-ui, sans-serif",
+                "letterSpacing": "normal",
+                "textTransform": "none",
+                "borderTopWidth": "0px",
+                "borderBottomWidth": "0px",
+                "borderLeftWidth": "0px",
+                "borderRightWidth": "0px",
+                "borderTopColor": "rgb(227, 232, 236)",
+                "borderBottomColor": "rgb(227, 232, 236)",
+                "borderLeftColor": "rgb(227, 232, 236)",
+                "borderRightColor": "rgb(227, 232, 236)",
+                "gridTemplateRows": "none",
+                "gridTemplateColumns": "none",
+                "gap": "normal",
+                "padding": "8px 10px",
+                "margin": "0px",
+                "overflow": "auto",
+                "opacity": "1"
+              },
+              "text": "01fallback {\"type\":\"hello\",\"model\":\"fake-model\",\"effort\":\"medium\",\"prompt\":\"# Parley protocol\\n\\nYou are an agent working on a task delegated through parley.…"
             },
             "task-qa": {
               "selector": "[data-testid=\"task-qa\"]",
               "found": true,
               "box": {
-                "x": 718,
-                "y": 120.75,
-                "width": 214,
+                "x": 704,
+                "y": 497.38,
+                "width": 228,
                 "height": 84.88
               },
               "styles": {
                 "display": "block",
                 "position": "static",
-                "width": "214px",
+                "width": "228px",
                 "height": "84.875px",
                 "minWidth": "0px",
                 "minHeight": "0px",
@@ -389,16 +431,16 @@
               "selector": "[data-testid=\"task-report\"]",
               "found": true,
               "box": {
-                "x": 718,
-                "y": 205.63,
-                "width": 214,
-                "height": 141.64
+                "x": 704,
+                "y": 582.25,
+                "width": 228,
+                "height": 125.14
               },
               "styles": {
                 "display": "block",
                 "position": "static",
-                "width": "214px",
-                "height": "141.641px",
+                "width": "228px",
+                "height": "125.141px",
                 "minWidth": "0px",
                 "minHeight": "0px",
                 "backgroundColor": "rgba(0, 0, 0, 0)",
@@ -431,16 +473,16 @@
               "selector": "[data-testid=\"task-attempts\"]",
               "found": true,
               "box": {
-                "x": 284,
-                "y": 534.69,
-                "width": 193,
-                "height": 58.5
+                "x": 704,
+                "y": 473.81,
+                "width": 228,
+                "height": 48.5
               },
               "styles": {
                 "display": "block",
                 "position": "static",
-                "width": "193px",
-                "height": "58.5px",
+                "width": "228px",
+                "height": "48.5px",
                 "minWidth": "0px",
                 "minHeight": "0px",
                 "backgroundColor": "rgba(0, 0, 0, 0)",
@@ -473,15 +515,15 @@
               "selector": "[data-testid=\"task-eval\"]",
               "found": true,
               "box": {
-                "x": 284,
-                "y": 593.19,
-                "width": 193,
+                "x": 704,
+                "y": 522.31,
+                "width": 228,
                 "height": 74.88
               },
               "styles": {
                 "display": "block",
                 "position": "static",
-                "width": "193px",
+                "width": "228px",
                 "height": "74.875px",
                 "minWidth": "0px",
                 "minHeight": "0px",
@@ -515,15 +557,15 @@
               "selector": "[data-testid=\"task-deliverables\"]",
               "found": true,
               "box": {
-                "x": 284,
-                "y": 668.06,
-                "width": 193,
+                "x": 704,
+                "y": 597.19,
+                "width": 228,
                 "height": 58.94
               },
               "styles": {
                 "display": "block",
                 "position": "static",
-                "width": "193px",
+                "width": "228px",
                 "height": "58.9375px",
                 "minWidth": "0px",
                 "minHeight": "0px",
@@ -552,6 +594,48 @@
                 "opacity": "1"
               },
               "text": "deliverablesnoneSolo task — no run deliverables."
+            },
+            "task-col-log": {
+              "selector": "[data-testid=\"task-col-log\"]",
+              "found": true,
+              "box": {
+                "x": 284,
+                "y": 120.75,
+                "width": 420,
+                "height": 753.25
+              },
+              "styles": {
+                "display": "flex",
+                "position": "static",
+                "width": "420px",
+                "height": "753.25px",
+                "minWidth": "0px",
+                "minHeight": "0px",
+                "backgroundColor": "rgba(0, 0, 0, 0)",
+                "color": "rgb(227, 232, 236)",
+                "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
+                "fontSize": "16px",
+                "fontWeight": "400",
+                "fontFamily": "\"IBM Plex Sans\", system-ui, sans-serif",
+                "letterSpacing": "normal",
+                "textTransform": "none",
+                "borderTopWidth": "0px",
+                "borderBottomWidth": "0px",
+                "borderLeftWidth": "0px",
+                "borderRightWidth": "1px",
+                "borderTopColor": "rgb(227, 232, 236)",
+                "borderBottomColor": "rgb(227, 232, 236)",
+                "borderLeftColor": "rgb(227, 232, 236)",
+                "borderRightColor": "rgb(35, 42, 48)",
+                "gridTemplateRows": "none",
+                "gridTemplateColumns": "none",
+                "gap": "normal",
+                "padding": "0px",
+                "margin": "0px",
+                "overflow": "hidden",
+                "opacity": "1"
+              },
+              "text": "log tailended · nothing left to followfollow01fallback {\"type\":\"hello\",\"model\":\"fake-model\",\"effort\":\"medium\",\"prompt\":\"# Parley protocol\\n\\nYou are an agent…"
             }
           }
         },
@@ -720,7 +804,7 @@
                 "borderLeftColor": "rgb(227, 232, 236)",
                 "borderRightColor": "rgb(227, 232, 236)",
                 "gridTemplateRows": "753.25px",
-                "gridTemplateColumns": "262px 280px 286px",
+                "gridTemplateColumns": "200px 420px 212px",
                 "gap": "normal",
                 "padding": "0px",
                 "margin": "0px",
@@ -777,14 +861,14 @@
               "box": {
                 "x": 284,
                 "y": 120.75,
-                "width": 261,
-                "height": 337.84
+                "width": 199,
+                "height": 413.94
               },
               "styles": {
                 "display": "block",
                 "position": "static",
-                "width": "261px",
-                "height": "337.844px",
+                "width": "199px",
+                "height": "413.938px",
                 "minWidth": "0px",
                 "minHeight": "0px",
                 "backgroundColor": "rgba(0, 0, 0, 0)",
@@ -817,15 +901,15 @@
               "selector": "[data-testid=\"task-log\"]",
               "found": true,
               "box": {
-                "x": 546,
+                "x": 484,
                 "y": 120.75,
-                "width": 279,
+                "width": 419,
                 "height": 753.25
               },
               "styles": {
                 "display": "grid",
                 "position": "static",
-                "width": "279px",
+                "width": "419px",
                 "height": "753.25px",
                 "minWidth": "auto",
                 "minHeight": "0px",
@@ -845,30 +929,72 @@
                 "borderBottomColor": "rgb(227, 232, 236)",
                 "borderLeftColor": "rgb(227, 232, 236)",
                 "borderRightColor": "rgb(227, 232, 236)",
-                "gridTemplateRows": "33px 720.25px",
-                "gridTemplateColumns": "279px",
+                "gridTemplateRows": "26px 727.25px",
+                "gridTemplateColumns": "419px",
                 "gap": "normal",
                 "padding": "0px",
                 "margin": "0px",
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "log tailended · nothing left to followfollow05:23:51fallback {\"type\":\"hello\",\"model\":\"fake-model\",\"effort\":\"medium\",\"prompt\":\"# Parley protocol\\n\\nYou are an…"
+              "text": "log tailended · nothing left to followfollow01fallback {\"type\":\"hello\",\"model\":\"fake-model\",\"effort\":\"medium\",\"prompt\":\"# Parley protocol\\n\\nYou are an agent…"
+            },
+            "task-log-well": {
+              "selector": "[data-testid=\"task-log-well\"]",
+              "found": true,
+              "box": {
+                "x": 484,
+                "y": 146.75,
+                "width": 419,
+                "height": 727.25
+              },
+              "styles": {
+                "display": "block",
+                "position": "static",
+                "width": "419px",
+                "height": "727.25px",
+                "minWidth": "auto",
+                "minHeight": "0px",
+                "backgroundColor": "rgb(8, 10, 12)",
+                "color": "rgb(227, 232, 236)",
+                "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
+                "fontSize": "16px",
+                "fontWeight": "400",
+                "fontFamily": "\"IBM Plex Sans\", system-ui, sans-serif",
+                "letterSpacing": "normal",
+                "textTransform": "none",
+                "borderTopWidth": "0px",
+                "borderBottomWidth": "0px",
+                "borderLeftWidth": "0px",
+                "borderRightWidth": "0px",
+                "borderTopColor": "rgb(227, 232, 236)",
+                "borderBottomColor": "rgb(227, 232, 236)",
+                "borderLeftColor": "rgb(227, 232, 236)",
+                "borderRightColor": "rgb(227, 232, 236)",
+                "gridTemplateRows": "none",
+                "gridTemplateColumns": "none",
+                "gap": "normal",
+                "padding": "8px 10px",
+                "margin": "0px",
+                "overflow": "auto",
+                "opacity": "1"
+              },
+              "text": "01fallback {\"type\":\"hello\",\"model\":\"fake-model\",\"effort\":\"medium\",\"prompt\":\"# Parley protocol\\n\\nYou are an agent working on a task delegated through parley.…"
             },
             "task-qa": {
               "selector": "[data-testid=\"task-qa\"]",
               "found": true,
               "box": {
-                "x": 826,
+                "x": 904,
                 "y": 120.75,
-                "width": 286,
-                "height": 58.94
+                "width": 212,
+                "height": 84.88
               },
               "styles": {
                 "display": "block",
                 "position": "static",
-                "width": "286px",
-                "height": "58.9375px",
+                "width": "212px",
+                "height": "84.875px",
                 "minWidth": "0px",
                 "minHeight": "0px",
                 "backgroundColor": "rgba(0, 0, 0, 0)",
@@ -901,16 +1027,16 @@
               "selector": "[data-testid=\"task-report\"]",
               "found": true,
               "box": {
-                "x": 826,
-                "y": 179.69,
-                "width": 286,
-                "height": 125.14
+                "x": 904,
+                "y": 205.63,
+                "width": 212,
+                "height": 141.64
               },
               "styles": {
                 "display": "block",
                 "position": "static",
-                "width": "286px",
-                "height": "125.141px",
+                "width": "212px",
+                "height": "141.641px",
                 "minWidth": "0px",
                 "minHeight": "0px",
                 "backgroundColor": "rgba(0, 0, 0, 0)",
@@ -944,15 +1070,15 @@
               "found": true,
               "box": {
                 "x": 284,
-                "y": 458.59,
-                "width": 261,
-                "height": 48.5
+                "y": 534.69,
+                "width": 199,
+                "height": 58.5
               },
               "styles": {
                 "display": "block",
                 "position": "static",
-                "width": "261px",
-                "height": "48.5px",
+                "width": "199px",
+                "height": "58.5px",
                 "minWidth": "0px",
                 "minHeight": "0px",
                 "backgroundColor": "rgba(0, 0, 0, 0)",
@@ -986,14 +1112,14 @@
               "found": true,
               "box": {
                 "x": 284,
-                "y": 507.09,
-                "width": 261,
+                "y": 593.19,
+                "width": 199,
                 "height": 74.88
               },
               "styles": {
                 "display": "block",
                 "position": "static",
-                "width": "261px",
+                "width": "199px",
                 "height": "74.875px",
                 "minWidth": "0px",
                 "minHeight": "0px",
@@ -1028,14 +1154,14 @@
               "found": true,
               "box": {
                 "x": 284,
-                "y": 581.97,
-                "width": 261,
+                "y": 668.06,
+                "width": 199,
                 "height": 58.94
               },
               "styles": {
                 "display": "block",
                 "position": "static",
-                "width": "261px",
+                "width": "199px",
                 "height": "58.9375px",
                 "minWidth": "0px",
                 "minHeight": "0px",
@@ -1064,6 +1190,48 @@
                 "opacity": "1"
               },
               "text": "deliverablesnoneSolo task — no run deliverables."
+            },
+            "task-col-log": {
+              "selector": "[data-testid=\"task-col-log\"]",
+              "found": true,
+              "box": {
+                "x": 484,
+                "y": 120.75,
+                "width": 420,
+                "height": 753.25
+              },
+              "styles": {
+                "display": "flex",
+                "position": "static",
+                "width": "420px",
+                "height": "753.25px",
+                "minWidth": "0px",
+                "minHeight": "0px",
+                "backgroundColor": "rgba(0, 0, 0, 0)",
+                "color": "rgb(227, 232, 236)",
+                "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
+                "fontSize": "16px",
+                "fontWeight": "400",
+                "fontFamily": "\"IBM Plex Sans\", system-ui, sans-serif",
+                "letterSpacing": "normal",
+                "textTransform": "none",
+                "borderTopWidth": "0px",
+                "borderBottomWidth": "0px",
+                "borderLeftWidth": "0px",
+                "borderRightWidth": "1px",
+                "borderTopColor": "rgb(227, 232, 236)",
+                "borderBottomColor": "rgb(227, 232, 236)",
+                "borderLeftColor": "rgb(227, 232, 236)",
+                "borderRightColor": "rgb(35, 42, 48)",
+                "gridTemplateRows": "none",
+                "gridTemplateColumns": "none",
+                "gap": "normal",
+                "padding": "0px",
+                "margin": "0px",
+                "overflow": "hidden",
+                "opacity": "1"
+              },
+              "text": "log tailended · nothing left to followfollow01fallback {\"type\":\"hello\",\"model\":\"fake-model\",\"effort\":\"medium\",\"prompt\":\"# Parley protocol\\n\\nYou are an agent…"
             }
           }
         },
@@ -1332,13 +1500,13 @@
                 "x": 546,
                 "y": 120.75,
                 "width": 735,
-                "height": 315.75
+                "height": 753.25
               },
               "styles": {
                 "display": "grid",
                 "position": "static",
                 "width": "735px",
-                "height": "315.75px",
+                "height": "753.25px",
                 "minWidth": "auto",
                 "minHeight": "0px",
                 "backgroundColor": "rgba(0, 0, 0, 0)",
@@ -1357,7 +1525,7 @@
                 "borderBottomColor": "rgb(227, 232, 236)",
                 "borderLeftColor": "rgb(227, 232, 236)",
                 "borderRightColor": "rgb(227, 232, 236)",
-                "gridTemplateRows": "26px 289.75px",
+                "gridTemplateRows": "26px 727.25px",
                 "gridTemplateColumns": "735px",
                 "gap": "normal",
                 "padding": "0px",
@@ -1365,7 +1533,49 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "log tailended · nothing left to followfollow05:23:52fallback {\"type\":\"hello\",\"model\":\"fake-model\",\"effort\":\"medium\",\"prompt\":\"# Parley protocol\\n\\nYou are an…"
+              "text": "log tailended · nothing left to followfollow01fallback {\"type\":\"hello\",\"model\":\"fake-model\",\"effort\":\"medium\",\"prompt\":\"# Parley protocol\\n\\nYou are an agent…"
+            },
+            "task-log-well": {
+              "selector": "[data-testid=\"task-log-well\"]",
+              "found": true,
+              "box": {
+                "x": 546,
+                "y": 146.75,
+                "width": 735,
+                "height": 727.25
+              },
+              "styles": {
+                "display": "block",
+                "position": "static",
+                "width": "735px",
+                "height": "727.25px",
+                "minWidth": "auto",
+                "minHeight": "0px",
+                "backgroundColor": "rgb(8, 10, 12)",
+                "color": "rgb(227, 232, 236)",
+                "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
+                "fontSize": "16px",
+                "fontWeight": "400",
+                "fontFamily": "\"IBM Plex Sans\", system-ui, sans-serif",
+                "letterSpacing": "normal",
+                "textTransform": "none",
+                "borderTopWidth": "0px",
+                "borderBottomWidth": "0px",
+                "borderLeftWidth": "0px",
+                "borderRightWidth": "0px",
+                "borderTopColor": "rgb(227, 232, 236)",
+                "borderBottomColor": "rgb(227, 232, 236)",
+                "borderLeftColor": "rgb(227, 232, 236)",
+                "borderRightColor": "rgb(227, 232, 236)",
+                "gridTemplateRows": "none",
+                "gridTemplateColumns": "none",
+                "gap": "normal",
+                "padding": "8px 10px",
+                "margin": "0px",
+                "overflow": "auto",
+                "opacity": "1"
+              },
+              "text": "01fallback {\"type\":\"hello\",\"model\":\"fake-model\",\"effort\":\"medium\",\"prompt\":\"# Parley protocol\\n\\nYou are an agent working on a task delegated through parley.…"
             },
             "task-qa": {
               "selector": "[data-testid=\"task-qa\"]",
@@ -1576,6 +1786,48 @@
                 "opacity": "1"
               },
               "text": "deliverablesnoneSolo task — no run deliverables."
+            },
+            "task-col-log": {
+              "selector": "[data-testid=\"task-col-log\"]",
+              "found": true,
+              "box": {
+                "x": 546,
+                "y": 120.75,
+                "width": 736,
+                "height": 753.25
+              },
+              "styles": {
+                "display": "flex",
+                "position": "static",
+                "width": "736px",
+                "height": "753.25px",
+                "minWidth": "0px",
+                "minHeight": "0px",
+                "backgroundColor": "rgba(0, 0, 0, 0)",
+                "color": "rgb(227, 232, 236)",
+                "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
+                "fontSize": "16px",
+                "fontWeight": "400",
+                "fontFamily": "\"IBM Plex Sans\", system-ui, sans-serif",
+                "letterSpacing": "normal",
+                "textTransform": "none",
+                "borderTopWidth": "0px",
+                "borderBottomWidth": "0px",
+                "borderLeftWidth": "0px",
+                "borderRightWidth": "1px",
+                "borderTopColor": "rgb(227, 232, 236)",
+                "borderBottomColor": "rgb(227, 232, 236)",
+                "borderLeftColor": "rgb(227, 232, 236)",
+                "borderRightColor": "rgb(35, 42, 48)",
+                "gridTemplateRows": "none",
+                "gridTemplateColumns": "none",
+                "gap": "normal",
+                "padding": "0px",
+                "margin": "0px",
+                "overflow": "hidden",
+                "opacity": "1"
+              },
+              "text": "log tailended · nothing left to followfollow01fallback {\"type\":\"hello\",\"model\":\"fake-model\",\"effort\":\"medium\",\"prompt\":\"# Parley protocol\\n\\nYou are an agent…"
             }
           }
         }
@@ -1586,6 +1838,19 @@
           "scrollWidth": 1280,
           "clientWidth": 1280,
           "noHorizontalScroll": true
+        },
+        "layout1280": {
+          "found": true,
+          "gridTemplateColumns": "420px 228px",
+          "gridTemplateAreas": "\"log left\" \"log right\"",
+          "logWidth": 420,
+          "logHeight": 753,
+          "logMinOk": true,
+          "leftTop": 121,
+          "rightTop": 497,
+          "stackedSide": true,
+          "wellTabIndex": "0",
+          "wellAria": "Vendor log output"
         },
         "emptySelection": {
           "screenshot": "shots/empty-no-selection.png",
@@ -1601,14 +1866,14 @@
             "box": {
               "x": 284,
               "y": 103.63,
-              "width": 648,
-              "height": 27.84
+              "width": 828,
+              "height": 218.38
             },
             "styles": {
               "display": "block",
               "position": "static",
-              "width": "648px",
-              "height": "27.8438px",
+              "width": "828px",
+              "height": "218.375px",
               "minWidth": "auto",
               "minHeight": "auto",
               "backgroundColor": "rgb(16, 19, 22)",
@@ -1642,14 +1907,14 @@
             "found": true,
             "box": {
               "x": 284,
-              "y": 154.47,
-              "width": 193,
+              "y": 345,
+              "width": 199,
               "height": 51.88
             },
             "styles": {
               "display": "block",
               "position": "static",
-              "width": "193px",
+              "width": "199px",
               "height": "51.875px",
               "minWidth": "0px",
               "minHeight": "0px",
@@ -1680,9 +1945,12 @@
             "text": "forced task detail error (verify harness)"
           },
           "detailStatus": "error",
-          "staleBand": {
-            "selector": "[data-testid=\"task-band-stale\"]",
-            "found": false
+          "panels": {
+            "report": "reportnoneReport unavailable — task detail failed to load.",
+            "eval": "evalunavailableEval unavailable — task detail failed to load.",
+            "attempts": "attempt chainunavailableAttempt chain unavailable — task detail failed to load.",
+            "deliverables": "deliverablesunavailableDeliverables unavailable — forced task detail error (verify harness)",
+            "qa": "q&a — orchestrator answersnoneQ&A unavailable."
           }
         },
         "logUnreachable": {
@@ -1734,15 +2002,15 @@
             "selector": "[data-testid=\"task-log-unreachable\"]",
             "found": true,
             "box": {
-              "x": 488,
-              "y": -342.41,
-              "width": 219,
+              "x": 294,
+              "y": -2201.41,
+              "width": 399,
               "height": 51.88
             },
             "styles": {
               "display": "block",
               "position": "static",
-              "width": "219px",
+              "width": "399px",
               "height": "51.875px",
               "minWidth": "0px",
               "minHeight": "0px",
@@ -1771,21 +2039,48 @@
               "opacity": "1"
             },
             "text": "Log stream unreachable — daemon may be down. Last lines kept when present."
-          }
+          },
+          "axeViolations": []
+        }
+      },
+      "logGutter": {
+        "sample": "01reasoning overflow line 20 overflow line 20 overflow line 20 overflow line 20 overflow line 20 overflow line 20 02reasoning overflow line 21 overflow line 21 overflow line 21 overflow line 21 overfl",
+        "hasFabricatedClock": false,
+        "overflows": true
+      },
+      "a11y1280": {
+        "axe": {
+          "url": "http://127.0.0.1:5173/#/task",
+          "violations": [],
+          "passes": 27,
+          "incomplete": 2,
+          "inapplicable": 61
+        },
+        "screenshot": "shots/a11y-1280-overflow-log.png",
+        "logWellFocusable": true,
+        "wellOverflow": {
+          "scrollHeight": 3031,
+          "clientHeight": 727,
+          "overflows": true,
+          "tabIndex": "0",
+          "ariaLabel": "Vendor log output",
+          "sampleText": "01reasoning overflow line 20 overflow line 20 overflow line 20 overflow line 20 overflow line 20 overflow line 20 02reasoning overflow line 21 overflow line 21 overflow line 21 overflow line 21 overfl",
+          "hasClock": false
         }
       },
       "boundary": {
-        "scaffold": null,
-        "filePath": {
-          "width": 146,
-          "height": 82,
-          "scrollWidth": 146,
-          "clientWidth": 146,
+        "scaffold": {
+          "width": 206,
+          "height": 59,
+          "scrollWidth": 206,
+          "clientWidth": 206,
           "overflow": "visible",
-          "overflowWrap": "anywhere",
+          "overflowWrap": "normal",
           "textOverflow": "clip",
-          "whiteSpace": "normal"
+          "whiteSpace": "normal",
+          "text": "parley answer t1 \"...\"copy"
         },
+        "filePath": null,
         "body": {
           "width": 648,
           "height": 753,
@@ -1794,20 +2089,23 @@
           "overflow": "hidden",
           "overflowWrap": "normal",
           "textOverflow": "clip",
-          "whiteSpace": "normal"
+          "whiteSpace": "normal",
+          "text": "briefgoalLONG BRIEF zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
         },
         "report": {
-          "width": 214,
-          "height": 378,
-          "scrollWidth": 214,
-          "clientWidth": 214,
+          "width": 228,
+          "height": 75,
+          "scrollWidth": 228,
+          "clientWidth": 228,
           "overflow": "visible",
           "overflowWrap": "normal",
           "textOverflow": "clip",
-          "whiteSpace": "normal"
+          "whiteSpace": "normal",
+          "text": "reportnoneNo report yet — the task has not submitted one."
         },
         "bodyNoHScroll": true,
-        "screenshot": "shots/boundary-long.png"
+        "screenshot": "shots/boundary-scaffold.png",
+        "mixedChurnScreenshot": "shots/boundary-mixed-churn.png"
       },
       "churn": {
         "live": {
@@ -1816,65 +2114,122 @@
           "hasNote": true,
           "summary": "Touched a file and reported churn paths."
         },
-        "boundary": {
+        "mixed": {
           "rows": [
             {
               "hasChurn": "true",
-              "path": "packages/dashboard/src/screens/task/very/deeply/nested/path/for/boundary/sweep/and/truncation/proof/TaskScreen.boundary.ts",
-              "churn": "+42 −7"
+              "churn": "+12345 −6789"
             },
             {
               "hasChurn": "false",
-              "path": "short.ts",
-              "churn": ""
+              "churn": "—"
             },
             {
               "hasChurn": "false",
-              "path": "packages/dashboard/src/screens/task/very/deeply/nested/path/for/boundary/sweep/and/truncation/proof/TaskScreen.boundary.ts.path-only",
-              "churn": ""
+              "churn": "—"
             }
           ],
-          "hasPathOnlyTreatment": true,
-          "hasPlusCounts": true
+          "pathOnlyCue": "—",
+          "hasPlusCounts": true,
+          "hasWholeReportNote": false
         },
         "hasPathOnlyTreatment": true
       },
+      "deliverables": {
+        "states": {
+          "loading": {
+            "state": "loading",
+            "screenshot": "shots/dlv-loading.png"
+          },
+          "not_fetched": {
+            "state": "loading",
+            "note": "idle→loading captured via delayed node detail; not_fetched is the idle phase before fetch",
+            "screenshot": "shots/dlv-loading.png"
+          },
+          "ready": {
+            "state": "ready",
+            "screenshot": "shots/dlv-ready.png",
+            "rowCount": 1
+          },
+          "error": {
+            "state": "error",
+            "screenshot": "shots/dlv-error.png",
+            "text": "deliverableserrorforced node detail error (verify harness)",
+            "hasErrorNote": true
+          }
+        },
+        "notes": {
+          "unitCoverage": "purged and missing-worktree states are covered by unit tests in packages/dashboard/tests/task/panels.test.tsx (DeliverablesPanel fetch states); demo stages not_fetched/loading→ready and error via route-injected run ownership."
+        }
+      },
       "a11y": {
         "axe": {
-          "url": "http://127.0.0.1:5174/#/task",
+          "url": "http://127.0.0.1:5173/#/task",
           "violations": [],
-          "passes": 20,
-          "incomplete": 0,
-          "inapplicable": 68
+          "passes": 27,
+          "incomplete": 1,
+          "inapplicable": 61
         },
         "aria": {
           "api": "locator.ariaSnapshot",
           "selector": "[data-testid=\"screen-task\"]",
-          "tree": "- heading \"t3\" [level=1]\n- text: detail unavailable\n- alert: \"Task detail failed: daemon request /tasks/t3 failed with status 502\"\n- region \"brief\":\n  - heading \"brief\" [level=2]\n  - alert: daemon request /tasks/t3 failed with status 502\n- region \"attempt chain\":\n  - heading \"attempt chain\" [level=2]\n  - text: parley fix\n  - status: No attempts yet — task not in a fix chain.\n- region \"eval\":\n  - heading \"eval\" [level=2]\n  - text: absent\n  - status: No eval on file — this task has never been scored.\n- region \"deliverables\":\n  - heading \"deliverables\" [level=2]\n  - text: none\n  - status: Solo task — no run deliverables.\n- region \"Log tail\":\n  - heading \"log tail\" [level=2]\n  - text: unreachable · stream dropped\n  - checkbox \"follow\" [checked]\n  - text: follow\n  - log:\n    - alert: Log stream unreachable — daemon may be down. Last lines kept when present.\n- region \"q&a — orchestrator answers\":\n  - heading \"q&a — orchestrator answers\" [level=2]\n  - text: none\n  - alert: Q&A unavailable.\n- region \"report\":\n  - heading \"report\" [level=2]\n  - text: none\n  - status: No report yet — the task has not submitted one."
+          "tree": "- heading \"t1\" [level=1]\n- text: t1 · solo task (no run) fake · fake-model · medium AWAITING\n- 'button \"Copy: t1\"': t1\n- region \"brief\":\n  - heading \"brief\" [level=2]\n  - term: goal\n  - definition:\n    - text: LONG BRIEF zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz\n    - button \"read full\"\n  - term: state\n  - definition: AWAITING\n  - term: branch\n  - definition: — none\n  - term: worktree\n  - definition: — none\n  - term: harness\n  - definition: fake · fake-model · effort medium\n  - term: posture\n  - definition: \"--sandbox workspace · network on\"\n  - term: address\n  - definition: solo task (no run)\n  - term: duration\n  - definition: —\n  - term: usage\n  - definition: —\n- region \"attempt chain\":\n  - heading \"attempt chain\" [level=2]\n  - text: parley fix · 1\n  - list:\n    - listitem: \"#1 AWAITING — unscored\"\n- region \"eval\":\n  - heading \"eval\" [level=2]\n  - text: absent\n  - status: No eval on file — this task has never been scored.\n- region \"deliverables\":\n  - heading \"deliverables\" [level=2]\n  - text: none\n  - status: Solo task — no run deliverables.\n- region \"Log tail\":\n  - heading \"log tail\" [level=2]\n  - text: tailing · follow on\n  - checkbox \"follow\" [checked]\n  - text: follow\n  - log \"Vendor log output\": \"fallback {\\\"type\\\":\\\"hello\\\",\\\"model\\\":\\\"fake-model\\\",\\\"effort\\\":\\\"medium\\\",\\\"prompt\\\":\\\"# Parley protocol\\\\n\\\\nYou are an agent working on a task delegated through parley. Read these rules before you begin.\\\\n\\\\n## Where things are\\\\nYou are working directly in `/tmp/parley-verify-task-BHM5G5` (no dedicated branch).\\\\n- Your task brief is on disk at `.parley/TASK.md` — read it first.\\\\n- Supporting context files are under `.parley/context/`:\\\\n- (none)\\\\n\\\\n## Tools available to you\\\\n- `ask_orchestrator({ question })` — ask the orchestrator a blocking question when you are genuinely stuck or need a decision only they can make. It blocks until an answer arrives; a question left unanswered for 30 minutes stalls the task (it can be resumed later). Do not use it for anything you can resolve yourself.\\\\n- `submit_report({ ... })` — you MUST finish by calling this exactly once. The task only completes when you submit a report that satisfies the schema below; exiting without one is a failure.\\\\n\\\\n## Report schema\\\\nCall `submit_report` with an object:\\\\n- `summary`: string; minLength 1 (required)\\\\n- `outcome`: one of \\\\\\\"success\\\\\\\", \\\\\\\"partial\\\\\\\", \\\\\\\"blocked\\\\\\\" (required)\\\\n- `files_changed`: array of string (required)\\\\n\\\\nThe task itself follows below (and in `.parley/TASK.md`); everything above is protocol, not the task.\\\\n\\\\n---\\\\n\\\\nBoundary brief: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb decide scaffold vs origin.\\\",\\\"cwd\\\":\\\"/tmp/parley-verify-task-BHM5G5\\\",\\\"sandbox\\\":\\\"workspace\\\",\\\"network\\\":true,\\\"pid\\\":1591174,\\\"parley_hub_url\\\":\\\"http://127.0.0.1:40567\\\",\\\"parley_task_id\\\":\\\"t1\\\",\\\"child_json\\\":{\\\"url\\\":\\\"http://127.0.0.1:40567\\\",\\\"task_id\\\":\\\"t1\\\"}} reasoning need a decision\"\n- region \"q&a — orchestrator answers\":\n  - heading \"q&a — orchestrator answers\" [level=2]\n  - text: 1 outstanding\n  - list \"Q&A transcript\":\n    - listitem:\n      - text: \"ASK Boundary question for scaffold layout: qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq OUTSTANDING waiting on the orchestrating agent — humans do not answer here asked 5s ago · event pending ·\"\n      - time: 05:53\n      - code: parley answer t1 \"...\"\n      - 'button \"Copy: parley answer t1 \\\"...\\\"\"': copy\n- region \"report\":\n  - heading \"report\" [level=2]\n  - text: none\n  - status: No report yet — the task has not submitted one."
         },
         "keyboardWalk": {
-          "focusableCount": 10,
+          "focusableCount": 14,
           "note": null,
           "path": [
             {
               "step": 1,
-              "key": "Tab",
-              "tag": "input",
-              "role": null,
-              "testId": "task-log-follow",
-              "text": ""
+              "tag": "div",
+              "testId": "task-col-left",
+              "text": "briefgoalLONG BRIEF zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz",
+              "inScaffold": false
             },
             {
-              "step": 1,
-              "key": "Enter",
+              "step": 2,
+              "tag": "button",
+              "testId": "task-brief",
+              "text": "read full",
+              "inScaffold": false
+            },
+            {
+              "step": 3,
               "tag": "input",
-              "role": null,
               "testId": "task-log-follow",
-              "text": ""
+              "text": "",
+              "inScaffold": false
+            },
+            {
+              "step": 4,
+              "tag": "div",
+              "testId": "task-log-well",
+              "text": "01fallback {\"type\":\"hello\",\"model\":\"fake-model\",\"effort\":\"medium\",\"prompt\":\"# Pa",
+              "inScaffold": false
+            },
+            {
+              "step": 5,
+              "tag": "div",
+              "testId": "task-col-right",
+              "text": "q&a — orchestrator answers1 outstandingASKBoundary question for scaffold layout:",
+              "inScaffold": false
+            },
+            {
+              "step": 6,
+              "tag": "button",
+              "testId": "task-answer-scaffold",
+              "text": "copy",
+              "inScaffold": true
+            },
+            {
+              "step": 6,
+              "key": "Enter",
+              "activated": true
             }
           ],
           "entered": true,
-          "leftBody": true
+          "leftBody": true,
+          "reachedScaffold": true
         }
       },
       "contrast": {
@@ -1936,7 +2291,7 @@
           "ratio": 15.11,
           "largeText": false,
           "wcagAA": true,
-          "text": "127.0.0.1:5174"
+          "text": "127.0.0.1:5173"
         },
         "attention-label": {
           "selector": ".pc-shell__attention-label",
@@ -1972,7 +2327,7 @@
           "ratio": 12.7,
           "largeText": false,
           "wcagAA": true,
-          "text": "05:24:30"
+          "text": "05:53:18"
         },
         "find-input": {
           "selector": ".pc-find__input",
@@ -2015,8 +2370,8 @@
           "found": false
         }
       },
-      "recordedAt": "2026-08-06T09:24:31.218Z"
+      "recordedAt": "2026-08-06T09:53:37.194Z"
     }
   },
-  "updatedAt": "2026-08-06T09:24:31.218Z"
+  "updatedAt": "2026-08-06T09:53:37.194Z"
 }

@@ -40,6 +40,15 @@ describe("task format helpers", () => {
     expect(tailStatusLabel("paused-by-setting", false)).toMatch(/follow off/);
     expect(tailStatusLabel("unreachable", true)).toMatch(/stream dropped/);
   });
+
+  it("log gutter is line numbers — never invents wall clocks", async () => {
+    const { formatLogLineNo } = await import("../../src/screens/task/format.js");
+    expect(formatLogLineNo(0)).toBe("01");
+    expect(formatLogLineNo(9)).toBe("10");
+    // formatLogClock must not exist (fabricated timestamps removed).
+    const mod = await import("../../src/screens/task/format.js");
+    expect("formatLogClock" in mod).toBe(false);
+  });
 });
 
 describe("copy scaffolds", () => {

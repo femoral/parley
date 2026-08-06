@@ -12,7 +12,7 @@ import {
   useTaskDetail,
   type PanelStatus,
 } from "../../data/index.js";
-import { loadSettings } from "../../chrome/settings.js";
+import { loadSettings, saveSettings } from "../../chrome/settings.js";
 import type { ScreenMountProps } from "../types.js";
 import { CopyScaffold } from "./CopyScaffold.js";
 import {
@@ -30,8 +30,22 @@ import {
 import { delegateScaffold } from "./scaffolds.js";
 import "./task.css";
 
+/** Same-tab settings sync (storage events only fire cross-tab). */
+export const SETTINGS_SYNC_EVENT = "parley-console-settings";
+
 function createClient(): ParleyClient {
   return new ParleyClient({ baseUrl: "" });
+}
+
+function persistFollow(next: boolean): void {
+  const cur = loadSettings();
+  if (cur.followLogs === next) return;
+  saveSettings({ ...cur, followLogs: next });
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(
+      new CustomEvent(SETTINGS_SYNC_EVENT, { detail: { followLogs: next } }),
+    );
+  }
 }
 
 export function TaskScreen(props: ScreenMountProps) {
@@ -41,20 +55,36 @@ export function TaskScreen(props: ScreenMountProps) {
   const [follow, setFollow] = useState(() => loadSettings().followLogs);
   const [branchCopied, setBranchCopied] = useState(false);
 
-  // Keep follow in sync when settings change in another tab / shell.
+  // Keep follow in sync: cross-tab storage, same-tab custom event, settings checkbox.
   useEffect(() => {
+    const syncFromStore = (): void => {
+      setFollow(loadSettings().followLogs);
+    };
     const onStorage = (e: StorageEvent) => {
-      if (e.key === "parley-console.settings.v1" && e.newValue) {
-        try {
-          const parsed = JSON.parse(e.newValue) as { followLogs?: boolean };
-          if (typeof parsed.followLogs === "boolean") setFollow(parsed.followLogs);
-        } catch {
-          /* ignore */
-        }
+      if (e.key === "parley-console.settings.v1") syncFromStore();
+    };
+    const onCustom = (e: Event) => {
+      const detail = (e as CustomEvent<{ followLogs?: boolean }>).detail;
+      if (typeof detail?.followLogs === "boolean") setFollow(detail.followLogs);
+      else syncFromStore();
+    };
+    // Shell settings checkbox writes via React onChange → saveSettings; capture
+    // the DOM change so same-tab updates reach the inspector without a storage event.
+    const onDocChange = (e: Event) => {
+      const t = e.target;
+      if (!(t instanceof HTMLInputElement)) return;
+      if (t.getAttribute("data-testid") === "settings-follow-logs") {
+        window.setTimeout(syncFromStore, 0);
       }
     };
     window.addEventListener("storage", onStorage);
-    return () => window.removeEventListener("storage", onStorage);
+    window.addEventListener(SETTINGS_SYNC_EVENT, onCustom);
+    document.addEventListener("change", onDocChange, true);
+    return () => {
+      window.removeEventListener("storage", onStorage);
+      window.removeEventListener(SETTINGS_SYNC_EVENT, onCustom);
+      document.removeEventListener("change", onDocChange, true);
+    };
   }, []);
 
   const detail = useTaskDetail(client, selectedTaskId);
@@ -87,40 +117,60 @@ export function TaskScreen(props: ScreenMountProps) {
   }, [detail.data?.row]);
 
   const panelStatus: PanelStatus = detail.status;
+  const detailUnavailable = detail.status === "error" && !detail.data;
 
   const deliverableState = useMemo((): {
     fetchState: DeliverableFetchState;
     error: string | null;
+    /** null = unknown (detail fetch failed); true/false when known. */
+    hasRun: boolean | null;
   } => {
+    if (detailUnavailable) {
+      return {
+        fetchState: "error",
+        error: detail.error
+          ? `Deliverables unavailable — ${detail.error}`
+          : "Deliverables unavailable — task detail failed to load.",
+        hasRun: null,
+      };
+    }
     if (!runRef || !node) {
-      return { fetchState: "none", error: null };
+      return { fetchState: "none", error: null, hasRun: false };
     }
     if (nodeTasks.status === "idle") {
-      return { fetchState: "not_fetched", error: null };
+      return { fetchState: "not_fetched", error: null, hasRun: true };
     }
     if (nodeTasks.status === "loading") {
-      return { fetchState: "loading", error: null };
+      return { fetchState: "loading", error: null, hasRun: true };
     }
     if (nodeTasks.status === "error") {
       const msg = nodeTasks.error ?? "";
       if (/worktree|workspace removed|missing/i.test(msg)) {
-        return { fetchState: "missing-worktree", error: msg };
+        return { fetchState: "missing-worktree", error: msg, hasRun: true };
       }
-      return { fetchState: "error", error: msg || "deliverable fetch failed" };
+      return {
+        fetchState: "error",
+        error: msg || "deliverable fetch failed",
+        hasRun: true,
+      };
     }
     const items = nodeTasks.data?.deliverables ?? [];
     if (items.length === 0) {
-      return { fetchState: "none", error: null };
+      return { fetchState: "none", error: null, hasRun: true };
     }
     if (items.every((d) => d.purged_at != null)) {
-      return { fetchState: "purged", error: null };
+      return { fetchState: "purged", error: null, hasRun: true };
     }
-    if (items.some((d) => d.purged_at != null)) {
-      // Mixed: still ready, rows mark purged individually.
-      return { fetchState: "ready", error: null };
-    }
-    return { fetchState: "ready", error: null };
-  }, [runRef, node, nodeTasks.status, nodeTasks.error, nodeTasks.data]);
+    return { fetchState: "ready", error: null, hasRun: true };
+  }, [
+    detailUnavailable,
+    detail.error,
+    runRef,
+    node,
+    nodeTasks.status,
+    nodeTasks.error,
+    nodeTasks.data,
+  ]);
 
   const onCopyBranch = useCallback(() => {
     const branch = task?.branch;
@@ -137,8 +187,9 @@ export function TaskScreen(props: ScreenMountProps) {
   }, [task?.branch]);
 
   const onFollowChange = useCallback((next: boolean) => {
-    // Local follow only — does not wipe log cursor (useLogTail preserves on follow toggle).
+    // Persist both directions; useLogTail keeps its cursor across follow toggles.
     setFollow(next);
+    persistFollow(next);
   }, []);
 
   // ── Empty: no task selected ──────────────────────────────────────────
@@ -161,8 +212,7 @@ export function TaskScreen(props: ScreenMountProps) {
     );
   }
 
-  const showFailedWell =
-    Boolean(task?.error) && (task?.state === "failed" || Boolean(task?.error));
+  const showFailedWell = Boolean(task?.error);
 
   const connectionBand =
     detail.status === "error" && !detail.data ? (
@@ -206,7 +256,12 @@ export function TaskScreen(props: ScreenMountProps) {
       )}
       {connectionBand}
       <div className="pc-task-body" data-testid="task-body">
-        <div className="pc-task-col pc-task-col--left" data-testid="task-col-left">
+        <div
+          className="pc-task-col pc-task-col--left"
+          data-testid="task-col-left"
+          tabIndex={0}
+          aria-label="Task brief and attempts"
+        >
           {showFailedWell && task ? (
             <WhyFailedWell taskId={task.task_id} error={task.error} />
           ) : null}
@@ -221,16 +276,23 @@ export function TaskScreen(props: ScreenMountProps) {
             currentId={task?.task_id ?? selectedTaskId}
             status={panelStatus}
           />
-          <EvalFeedback detail={detail.data?.eval_detail ?? null} />
+          <EvalFeedback
+            detail={detail.data?.eval_detail ?? null}
+            status={panelStatus}
+          />
           <DeliverablesPanel
             fetchState={deliverableState.fetchState}
             items={nodeTasks.data?.deliverables ?? []}
             error={deliverableState.error}
-            hasRun={Boolean(runRef)}
+            hasRun={deliverableState.hasRun}
           />
         </div>
 
-        <div className="pc-task-col pc-task-col--log" data-testid="task-col-log">
+        <div
+          className="pc-task-col pc-task-col--log"
+          data-testid="task-col-log"
+          // Log well owns scroll focus; column is a layout track only.
+        >
           <LogTailPanel
             lines={logs.lines}
             status={logs.status}
@@ -240,7 +302,12 @@ export function TaskScreen(props: ScreenMountProps) {
           />
         </div>
 
-        <div className="pc-task-col pc-task-col--right" data-testid="task-col-right">
+        <div
+          className="pc-task-col pc-task-col--right"
+          data-testid="task-col-right"
+          tabIndex={0}
+          aria-label="Task Q and A and report"
+        >
           <QaPanel
             taskId={selectedTaskId}
             qa={detail.data?.qa ?? []}

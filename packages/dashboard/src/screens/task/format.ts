@@ -91,15 +91,12 @@ export function formatAge(iso: string | null | undefined, nowMs = Date.now()): s
   return `${d}d`;
 }
 
-/** HH:MM:SS local wall clock for log lines (no wire timestamp — sequential). */
-export function formatLogClock(index: number, total: number, now = new Date()): string {
-  // Synthetic gutter times counting backward from now so the well feels live.
-  const offsetSec = Math.max(0, total - 1 - index) * 3;
-  const d = new Date(now.getTime() - offsetSec * 1000);
-  const h = String(d.getHours()).padStart(2, "0");
-  const m = String(d.getMinutes()).padStart(2, "0");
-  const s = String(d.getSeconds()).padStart(2, "0");
-  return `${h}:${m}:${s}`;
+/**
+ * Line number for the log gutter. The wire carries no timestamps on log
+ * chunks — never invent wall-clock times from Date.now().
+ */
+export function formatLogLineNo(index: number): string {
+  return String(index + 1).padStart(2, "0");
 }
 
 export function formatQaClock(iso: string): string {

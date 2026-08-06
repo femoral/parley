@@ -35,7 +35,7 @@ import {
   formatAge,
   formatDuration,
   formatEvalScore,
-  formatLogClock,
+  formatLogLineNo,
   formatPosture,
   formatQaClock,
   formatUsage,
@@ -386,7 +386,31 @@ export function WhyFailedWell({
 
 // ── Eval feedback ───────────────────────────────────────────────────────
 
-export function EvalFeedback({ detail }: { detail: EvalDetail | null }) {
+export function EvalFeedback({
+  detail,
+  status = "ready",
+}: {
+  detail: EvalDetail | null;
+  status?: PanelStatus;
+}) {
+  if (status === "error" && !detail) {
+    return (
+      <PanelShell title="eval" testId="task-eval" meta={<span>unavailable</span>}>
+        <HonestyNote
+          phase="error"
+          message="Eval unavailable — task detail failed to load."
+          testId="task-eval-error"
+        />
+      </PanelShell>
+    );
+  }
+  if (status === "loading" && !detail) {
+    return (
+      <PanelShell title="eval" testId="task-eval">
+        <HonestyNote phase="loading" message="Loading eval…" />
+      </PanelShell>
+    );
+  }
   if (!detail) {
     return (
       <PanelShell title="eval" testId="task-eval" meta={<span>absent</span>}>
@@ -473,6 +497,18 @@ export function AttemptChain({
     return (
       <PanelShell title="attempt chain" meta={<span>parley fix</span>} testId="task-attempts">
         <HonestyNote phase="loading" message="Loading attempts…" />
+      </PanelShell>
+    );
+  }
+
+  if (status === "error" && attempts.length === 0) {
+    return (
+      <PanelShell title="attempt chain" meta={<span>unavailable</span>} testId="task-attempts">
+        <HonestyNote
+          phase="error"
+          message="Attempt chain unavailable — task detail failed to load."
+          testId="task-attempts-error"
+        />
       </PanelShell>
     );
   }
@@ -605,6 +641,8 @@ export function LogTailPanel({
         data-testid="task-log-well"
         onScroll={onScroll}
         role="log"
+        tabIndex={0}
+        aria-label="Vendor log output"
         aria-live={live ? "polite" : "off"}
         aria-relevant="additions"
       >
@@ -632,7 +670,9 @@ export function LogTailPanel({
         ) : null}
         {lines.map((line, i) => (
           <div className="pc-task-log__line" key={`${i}-${line.raw.slice(0, 24)}`} data-kind={line.kind}>
-            <span className="pc-task-log__time">{formatLogClock(i, lines.length)}</span>
+            <span className="pc-task-log__ln" aria-hidden="true">
+              {formatLogLineNo(i)}
+            </span>
             <span className="pc-task-log__text" style={{ color: logTextColor(line.kind) }}>
               <span className="pc-task-log__kind" style={{ color: logKindColor(line.kind) }}>
                 {line.kind}
@@ -751,6 +791,9 @@ export function ReportPanel({
 }) {
   const filesView = projectReportFiles(report);
   const outcome = report?.outcome ?? null;
+  const summaryId = useId();
+  const summary = report?.summary?.trim() ?? "";
+  const longSummary = summary.length > 180;
 
   return (
     <PanelShell
@@ -773,7 +816,14 @@ export function ReportPanel({
       {status === "loading" && !report ? (
         <HonestyNote phase="loading" message="Loading report…" />
       ) : null}
-      {!report ? (
+      {status === "error" && !report ? (
+        <HonestyNote
+          phase="error"
+          message="Report unavailable — task detail failed to load."
+          testId="task-report-error"
+        />
+      ) : null}
+      {!report && status !== "error" && status !== "loading" ? (
         <HonestyNote
           phase="empty"
           message={
@@ -783,11 +833,52 @@ export function ReportPanel({
           }
           testId="task-report-empty"
         />
-      ) : (
+      ) : null}
+      {report ? (
         <>
-          <p className="pc-task-report__summary" data-testid="task-report-summary">
-            {report.summary?.trim() ? report.summary : "— empty summary"}
-          </p>
+          <div className="pc-task-report__summary-wrap" data-testid="task-report-summary">
+            <p
+              className={`pc-task-report__summary${longSummary ? " pc-task-report__summary--clamp" : ""}`}
+            >
+              {summary || "— empty summary"}
+            </p>
+            {longSummary ? (
+              <>
+                <button
+                  type="button"
+                  className="pc-task-brief__readfull"
+                  popoverTarget={summaryId}
+                >
+                  read full
+                </button>
+                <div
+                  id={summaryId}
+                  popover="auto"
+                  className="pc-task-popover"
+                  tabIndex={-1}
+                  onToggle={(e: ToggleEvent<HTMLDivElement>) => {
+                    if (e.newState === "open") e.currentTarget.focus();
+                  }}
+                >
+                  <div className="pc-task-popover__head">
+                    <span>Full report</span>
+                    <button
+                      type="button"
+                      className="pc-task-popover__close"
+                      popoverTarget={summaryId}
+                      popoverTargetAction="hide"
+                      aria-label="Close full report"
+                    >
+                      close
+                    </button>
+                  </div>
+                  <p className="pc-task-popover__body" role="region" aria-label="Full report">
+                    {summary}
+                  </p>
+                </div>
+              </>
+            ) : null}
+          </div>
           {filesView.files.length === 0 ? (
             <HonestyNote
               phase="empty"
@@ -797,7 +888,7 @@ export function ReportPanel({
           ) : (
             <ul className="pc-task-files" data-testid="task-report-files" aria-label="Files changed">
               {filesView.files.map((f) => (
-                <FileRow key={f.path} file={f} />
+                <FileRow key={f.path} file={f} reportHasChurn={filesView.hasChurn} />
               ))}
             </ul>
           )}
@@ -807,14 +898,23 @@ export function ReportPanel({
             </p>
           ) : null}
         </>
-      )}
+      ) : null}
     </PanelShell>
   );
 }
 
-function FileRow({ file }: { file: FileChangeView }) {
+function FileRow({
+  file,
+  reportHasChurn,
+}: {
+  file: FileChangeView;
+  reportHasChurn: boolean;
+}) {
   const churn = formatChurn(file);
   const hasCounts = file.added !== null || file.removed !== null;
+  // Mixed report: path-only siblings show an explicit absence cue (not blank, not 0/0).
+  // All-path-only reports keep a blank cell + whole-report note instead.
+  const absentCue = reportHasChurn && !hasCounts ? "—" : "";
   return (
     <li className="pc-task-files__row" data-testid="task-file-row" data-has-churn={hasCounts}>
       <span className="pc-task-files__path" title={file.path}>
@@ -825,7 +925,7 @@ function FileRow({ file }: { file: FileChangeView }) {
         data-testid="task-file-churn"
         aria-label={hasCounts ? `churn ${churn}` : "churn unknown"}
       >
-        {hasCounts ? churn : ""}
+        {hasCounts ? churn : absentCue}
       </span>
     </li>
   );
@@ -851,30 +951,43 @@ export function DeliverablesPanel({
   fetchState: DeliverableFetchState;
   items: DeliverableRef[];
   error: string | null;
-  hasRun: boolean;
+  /** true = run-owned; false = solo; null = unknown (detail failed). */
+  hasRun: boolean | null;
 }) {
   const metaLabel =
-    fetchState === "not_fetched"
-      ? "not_fetched"
-      : fetchState === "loading"
-        ? "loading"
-        : fetchState === "error"
-          ? "error"
-          : fetchState === "none"
-            ? "none"
-            : fetchState === "missing-worktree"
-              ? "missing-worktree"
-              : fetchState === "purged"
-                ? "purged"
-                : `${items.length}`;
+    hasRun === null
+      ? "unavailable"
+      : fetchState === "not_fetched"
+        ? "not_fetched"
+        : fetchState === "loading"
+          ? "loading"
+          : fetchState === "error"
+            ? "error"
+            : fetchState === "none"
+              ? "none"
+              : fetchState === "missing-worktree"
+                ? "missing-worktree"
+                : fetchState === "purged"
+                  ? "purged"
+                  : `${items.length}`;
 
   return (
     <PanelShell
       title="deliverables"
       testId="task-deliverables"
-      meta={<span data-testid="task-dlv-state" data-state={fetchState}>{metaLabel}</span>}
+      meta={
+        <span data-testid="task-dlv-state" data-state={hasRun === null ? "unavailable" : fetchState}>
+          {metaLabel}
+        </span>
+      }
     >
-      {!hasRun ? (
+      {hasRun === null ? (
+        <HonestyNote
+          phase="error"
+          message={error ?? "Deliverables unavailable — task detail failed to load."}
+          testId="task-dlv-unavailable"
+        />
+      ) : hasRun === false ? (
         <HonestyNote
           phase="empty"
           message="Solo task — no run deliverables."

@@ -45,7 +45,7 @@ describe("WhyFailedWell + fix scaffold", () => {
 });
 
 describe("ReportPanel file churn", () => {
-  it("shows +N/−N when present and empty churn cell for path-only", () => {
+  it("shows +N/−N when present and — cue on path-only siblings in mixed reports", () => {
     render(<ReportPanel report={churnReport()} status="ready" taskState="completed" />);
     expect(screen.getByTestId("task-report-outcome").textContent).toMatch(/SUCCESS/);
     const rows = screen.getAllByTestId("task-file-row");
@@ -55,7 +55,9 @@ describe("ReportPanel file churn", () => {
     expect(within(withChurn!).getByTestId("task-file-churn").textContent).toMatch(/\+120/);
     const pathOnly = rows.find((r) => r.getAttribute("data-has-churn") === "false");
     expect(pathOnly).toBeTruthy();
-    expect(within(pathOnly!).getByTestId("task-file-churn").textContent).toBe("");
+    // Mixed report: explicit absence cue, not blank and not 0/0.
+    expect(within(pathOnly!).getByTestId("task-file-churn").textContent).toBe("—");
+    expect(screen.queryByTestId("task-report-nochurn")).toBeNull();
   });
 
   it("notes honest absence for pre-churn path-only reports", () => {
@@ -69,6 +71,12 @@ describe("ReportPanel file churn", () => {
   it("empty report is honest", () => {
     render(<ReportPanel report={null} status="ready" taskState="running" />);
     expect(screen.getByTestId("task-report-empty").textContent).toMatch(/No report yet/);
+  });
+
+  it("detail error is unavailable, not fabricated empty", () => {
+    render(<ReportPanel report={null} status="error" taskState={null} />);
+    expect(screen.getByTestId("task-report-error").textContent).toMatch(/unavailable/i);
+    expect(screen.queryByTestId("task-report-empty")).toBeNull();
   });
 });
 
@@ -101,16 +109,28 @@ describe("AttemptChain", () => {
     expect(items[0]!.textContent).toMatch(/FAILED/);
     expect(items[0]!.textContent).toMatch(/4\.0\/5\.2/);
   });
+
+  it("error is unavailable, not empty chain", () => {
+    render(<AttemptChain attempts={[]} currentId="x" status="error" />);
+    expect(screen.getByTestId("task-attempts-error").textContent).toMatch(/unavailable/i);
+    expect(screen.queryByTestId("task-attempts-empty")).toBeNull();
+  });
 });
 
 describe("EvalFeedback honest empty", () => {
   it("absent eval", () => {
-    render(<EvalFeedback detail={null} />);
+    render(<EvalFeedback detail={null} status="ready" />);
     expect(screen.getByTestId("task-eval-empty").textContent).toMatch(/never been scored/);
   });
 
+  it("error is unavailable, not never-scored", () => {
+    render(<EvalFeedback detail={null} status="error" />);
+    expect(screen.getByTestId("task-eval-error").textContent).toMatch(/unavailable/i);
+    expect(screen.queryByTestId("task-eval-empty")).toBeNull();
+  });
+
   it("renders score + feedback", () => {
-    render(<EvalFeedback detail={evalDetail()} />);
+    render(<EvalFeedback detail={evalDetail()} status="ready" />);
     expect(screen.getByTestId("task-eval-score").textContent).toMatch(/7\.5/);
     expect(screen.getByTestId("task-eval-feedback").textContent).toMatch(/Solid coverage/);
   });
@@ -145,6 +165,29 @@ describe("LogTailPanel follow + health", () => {
     );
     expect(screen.getByTestId("task-log-unreachable").textContent).toMatch(/unreachable/i);
   });
+
+  it("log well is keyboard-focusable; gutter is line numbers not clocks", () => {
+    render(
+      <LogTailPanel
+        lines={[
+          { kind: "stdout", text: "a", raw: "a" },
+          { kind: "stdout", text: "b", raw: "b" },
+        ]}
+        status="tailing"
+        follow={true}
+        onFollowChange={() => {}}
+        taskId="t1"
+      />,
+    );
+    const well = screen.getByTestId("task-log-well");
+    expect(well.getAttribute("tabindex")).toBe("0");
+    expect(well.getAttribute("aria-label")).toMatch(/log/i);
+    const text = well.textContent ?? "";
+    // No HH:MM:SS fabrications.
+    expect(text).not.toMatch(/\d{2}:\d{2}:\d{2}/);
+    expect(text).toMatch(/01/);
+    expect(text).toMatch(/02/);
+  });
 });
 
 describe("BriefPanel + long goal", () => {
@@ -173,7 +216,20 @@ describe("DeliverablesPanel fetch states", () => {
     expect(screen.getByTestId("task-dlv-state").getAttribute("data-state")).toBe("none");
   });
 
-  it("error / missing-worktree / purged labels", () => {
+  it("unknown hasRun (detail failed) is unavailable, not solo", () => {
+    render(
+      <DeliverablesPanel
+        fetchState="error"
+        items={[]}
+        error="Task detail unavailable."
+        hasRun={null}
+      />,
+    );
+    expect(screen.getByTestId("task-dlv-unavailable").textContent).toMatch(/unavailable/i);
+    expect(screen.queryByTestId("task-dlv-solo")).toBeNull();
+  });
+
+  it("error / missing-worktree / purged labels (unit coverage for states demos cannot stage)", () => {
     const { rerender } = render(
       <DeliverablesPanel fetchState="error" items={[]} error="boom" hasRun={true} />,
     );

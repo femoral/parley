@@ -1,9 +1,10 @@
 /** @vitest-environment happy-dom */
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ParleyClient } from "@useparley/core";
-import { TaskScreen } from "../../src/screens/task/TaskScreen.js";
+import { TaskScreen, SETTINGS_SYNC_EVENT } from "../../src/screens/task/TaskScreen.js";
 import type { ScreenMountProps } from "../../src/screens/types.js";
+import { loadSettings, saveSettings, DEFAULT_SETTINGS } from "../../src/chrome/settings.js";
 import {
   churnReport,
   detailResponse,
@@ -73,6 +74,8 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  localStorage.clear();
+  saveSettings({ ...DEFAULT_SETTINGS });
 });
 
 describe("TaskScreen", () => {
@@ -196,5 +199,65 @@ describe("TaskScreen", () => {
 
     render(<TaskScreen {...mountProps({ selectedTaskId: "t-err" })} />);
     expect(screen.getByTestId("task-band-error").textContent).toMatch(/forced panel error/);
+  });
+
+  it("detail 500 never fabricates empty facts on report/eval/attempts/deliverables/qa", () => {
+    // Forced detail error on a task that HAD a report — all five panels must
+    // say unavailable, not invent "no report yet" / "never scored" / solo / empty chain.
+    mockDetail.mockReturnValue({
+      status: "error",
+      data: null,
+      error: "forced 500",
+    });
+    mockLogs.mockReturnValue({ lines: [], status: "ended" });
+
+    render(<TaskScreen {...mountProps({ selectedTaskId: "t-had-report" })} />);
+
+    expect(screen.getByTestId("task-report-error").textContent).toMatch(/unavailable/i);
+    expect(screen.queryByTestId("task-report-empty")).toBeNull();
+    expect(screen.getByTestId("task-report").textContent).not.toMatch(/No report yet/);
+
+    expect(screen.getByTestId("task-eval-error").textContent).toMatch(/unavailable/i);
+    expect(screen.queryByTestId("task-eval-empty")).toBeNull();
+    expect(screen.getByTestId("task-eval").textContent).not.toMatch(/never been scored/);
+
+    expect(screen.getByTestId("task-attempts-error").textContent).toMatch(/unavailable/i);
+    expect(screen.queryByTestId("task-attempts-empty")).toBeNull();
+    expect(screen.getByTestId("task-attempts").textContent).not.toMatch(/not in a fix chain/);
+
+    expect(screen.getByTestId("task-dlv-unavailable").textContent).toMatch(/unavailable/i);
+    expect(screen.queryByTestId("task-dlv-solo")).toBeNull();
+    expect(screen.getByTestId("task-deliverables").textContent).not.toMatch(/Solo task/);
+
+    expect(screen.getByTestId("task-qa-error").textContent).toMatch(/unavailable/i);
+  });
+
+  it("follow checkbox persists to settings and re-syncs same-tab", async () => {
+    saveSettings({ ...DEFAULT_SETTINGS, followLogs: true });
+    mockDetail.mockReturnValue({
+      status: "ready",
+      data: detailResponse({
+        task: taskEnvelope({ task_id: "t1", state: "running" }),
+      }),
+      error: null,
+    });
+    mockLogs.mockReturnValue({ lines: [], status: "tailing" });
+
+    render(<TaskScreen {...mountProps({ selectedTaskId: "t1" })} />);
+    const box = screen.getByTestId("task-log-follow") as HTMLInputElement;
+    expect(box.checked).toBe(true);
+    fireEvent.click(box);
+    expect(loadSettings().followLogs).toBe(false);
+
+    // Same-tab settings write via custom event.
+    saveSettings({ ...DEFAULT_SETTINGS, followLogs: true });
+    window.dispatchEvent(
+      new CustomEvent(SETTINGS_SYNC_EVENT, { detail: { followLogs: true } }),
+    );
+    await waitFor(() => {
+      expect((screen.getByTestId("task-log-follow") as HTMLInputElement).checked).toBe(
+        true,
+      );
+    });
   });
 });
