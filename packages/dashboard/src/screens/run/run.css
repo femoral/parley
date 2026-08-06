@@ -1,0 +1,1153 @@
+/*
+ * Run detail screen (#356) — class prefix pc-run-
+ * Tokens only from packages/dashboard tokens.css (no hex in components).
+ * Layout adapts 1460 mock → 1280 floor without board-level H-scroll.
+ */
+
+.pc-run {
+  display: grid;
+  /* header · optional block · toolbar · scroll body */
+  grid-template-rows: auto auto auto minmax(0, 1fr);
+  min-height: 0;
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+  background: var(--ground);
+}
+
+/* ── Empty / honesty shells ─────────────────────────────────────────── */
+
+.pc-run__empty,
+.pc-run__honesty {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 28px 32px;
+  min-height: 100%;
+}
+
+.pc-run__empty-title,
+.pc-run__honesty-title {
+  font: var(--type-screen-title);
+  color: var(--text);
+  margin: 0;
+}
+
+.pc-run__empty-note,
+.pc-run__honesty-note {
+  font: 400 12px/1.45 var(--font-sans);
+  color: var(--text-4);
+  margin: 0;
+  max-width: 52ch;
+}
+
+.pc-run__honesty[data-phase="offline"] .pc-run__honesty-title,
+.pc-run__honesty[data-phase="panel-error"] .pc-run__honesty-title {
+  color: var(--state-failed);
+}
+
+.pc-run__honesty[data-phase="stale-reconnecting"] .pc-run__honesty-title {
+  color: var(--state-stalled);
+}
+
+/* ── Header ─────────────────────────────────────────────────────────── */
+
+.pc-run__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  min-width: 0;
+}
+
+.pc-run__header-main {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.pc-run__title-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.pc-run__workflow {
+  font: var(--type-screen-title);
+  color: var(--text);
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pc-run__id-meta {
+  font: var(--type-data);
+  color: var(--text-3);
+  white-space: nowrap;
+}
+
+.pc-run__meta-line {
+  font: var(--type-data);
+  color: var(--text-2);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pc-run__meta-line a,
+.pc-run__workspace {
+  color: var(--link);
+  font: var(--type-data);
+}
+
+.pc-run__header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 0 0 auto;
+}
+
+/* State chip */
+.pc-run__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 9px;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+
+.pc-run__chip-dot {
+  width: 8px;
+  height: 8px;
+  flex-shrink: 0;
+}
+
+.pc-run__chip-label {
+  font: 600 10.5px/1 var(--font-mono);
+  letter-spacing: 0.08em;
+}
+
+.pc-run__chip--live .pc-run__chip-dot {
+  animation: pcPulse var(--pulse-duration) ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pc-run__chip--live .pc-run__chip-dot,
+  .pc-run__dot--live {
+    animation: none;
+    opacity: 1;
+  }
+}
+
+/* Per-token chip inks */
+.pc-run__chip--pending {
+  border-color: color-mix(in srgb, var(--state-pending) 27%, transparent);
+  background: color-mix(in srgb, var(--state-pending) 8%, transparent);
+}
+.pc-run__chip--pending .pc-run__chip-dot {
+  background: var(--state-pending);
+}
+.pc-run__chip--pending .pc-run__chip-label {
+  color: var(--state-pending);
+}
+
+.pc-run__chip--queued {
+  border-color: color-mix(in srgb, var(--state-queued) 27%, transparent);
+  background: color-mix(in srgb, var(--state-queued) 8%, transparent);
+}
+.pc-run__chip--queued .pc-run__chip-dot {
+  background: var(--state-queued);
+}
+.pc-run__chip--queued .pc-run__chip-label {
+  color: var(--state-queued);
+}
+
+.pc-run__chip--running {
+  border-color: color-mix(in srgb, var(--state-running) 27%, transparent);
+  background: color-mix(in srgb, var(--state-running) 8%, transparent);
+}
+.pc-run__chip--running .pc-run__chip-dot {
+  background: var(--state-running);
+}
+.pc-run__chip--running .pc-run__chip-label {
+  color: var(--state-running);
+}
+
+.pc-run__chip--awaiting {
+  border-color: color-mix(in srgb, var(--state-awaiting) 27%, transparent);
+  background: color-mix(in srgb, var(--state-awaiting) 8%, transparent);
+}
+.pc-run__chip--awaiting .pc-run__chip-dot {
+  background: var(--state-awaiting);
+}
+.pc-run__chip--awaiting .pc-run__chip-label {
+  color: var(--state-awaiting);
+}
+
+.pc-run__chip--stalled {
+  border-color: color-mix(in srgb, var(--state-stalled) 27%, transparent);
+  background: color-mix(in srgb, var(--state-stalled) 8%, transparent);
+}
+.pc-run__chip--stalled .pc-run__chip-dot {
+  background: var(--state-stalled);
+}
+.pc-run__chip--stalled .pc-run__chip-label {
+  color: var(--state-stalled);
+}
+
+.pc-run__chip--completed {
+  border-color: color-mix(in srgb, var(--state-completed) 27%, transparent);
+  background: color-mix(in srgb, var(--state-completed) 8%, transparent);
+}
+.pc-run__chip--completed .pc-run__chip-dot {
+  background: var(--state-completed);
+}
+.pc-run__chip--completed .pc-run__chip-label {
+  color: var(--state-completed);
+}
+
+.pc-run__chip--failed {
+  border-color: color-mix(in srgb, var(--state-failed) 27%, transparent);
+  background: color-mix(in srgb, var(--state-failed) 8%, transparent);
+}
+.pc-run__chip--failed .pc-run__chip-dot {
+  background: var(--state-failed);
+}
+.pc-run__chip--failed .pc-run__chip-label {
+  color: var(--state-failed);
+}
+
+.pc-run__chip--cancelled {
+  border-color: color-mix(in srgb, var(--state-cancelled) 27%, transparent);
+  background: color-mix(in srgb, var(--state-cancelled) 8%, transparent);
+}
+.pc-run__chip--cancelled .pc-run__chip-dot {
+  background: var(--state-cancelled);
+}
+.pc-run__chip--cancelled .pc-run__chip-label {
+  color: var(--state-cancelled);
+}
+
+/* Copy scaffold — console's only verb */
+.pc-run__copy {
+  padding: 6px 10px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface-hover);
+  color: var(--text-strong-2);
+  font: 500 10.5px/1 var(--font-mono);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.pc-run__copy:hover {
+  background: var(--surface-active);
+}
+
+.pc-run__copy:focus-visible {
+  outline: var(--focus-ring) solid var(--state-awaiting);
+  outline-offset: 2px;
+}
+
+/* ── View switch ────────────────────────────────────────────────────── */
+
+.pc-run__toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 14px;
+  border-bottom: 1px solid var(--hairline-strong);
+  background: var(--surface-sunken);
+  min-width: 0;
+  flex-wrap: wrap;
+  flex: 0 0 auto;
+  max-height: none;
+}
+
+.pc-run__toolbar-label {
+  font: var(--type-section);
+  letter-spacing: var(--ls-section);
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.pc-run__view-btn {
+  padding: 5px 10px;
+  border: 1px solid var(--border);
+  background: var(--surface-tab-off);
+  color: var(--text-strong-2);
+  font: 500 10.5px/1 var(--font-mono);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.pc-run__view-btn:hover {
+  background: var(--surface-active);
+}
+
+.pc-run__view-btn[aria-pressed="true"] {
+  background: var(--surface-active);
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+
+.pc-run__view-btn:focus-visible {
+  outline: var(--focus-ring) solid var(--state-awaiting);
+  outline-offset: 2px;
+}
+
+.pc-run__gate-notice {
+  margin-left: 8px;
+  font: 400 10px/1.3 var(--font-mono);
+  color: var(--text-4);
+  min-width: 0;
+  flex: 1 1 12ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Compact notice is hidden by default; shown only ≤1360 (REQUIRED #2).
+ * Base rule MUST come before the media block so the media rule wins. */
+.pc-run__gate-notice--compact {
+  display: none;
+}
+
+/* ── Body scroll ────────────────────────────────────────────────────── */
+
+.pc-run__body {
+  min-height: 0;
+  overflow: auto;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.pc-run__panel-honesty {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  background: var(--surface-sunken);
+  font: var(--type-data);
+  color: var(--text-3);
+}
+
+.pc-run__panel-honesty[data-status="error"] {
+  color: var(--state-failed);
+  border-color: color-mix(in srgb, var(--state-failed) 40%, var(--border));
+}
+
+.pc-run__panel-honesty[data-status="stale"],
+.pc-run__panel-honesty[data-status="offline"] {
+  color: var(--state-stalled);
+}
+
+/* ── Pipeline ───────────────────────────────────────────────────────── */
+
+.pc-run__pipeline {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+/* Wrap into rows so 20+ nodes never form an unbounded H-strip (REQUIRED #10). */
+.pc-run__pipeline-track {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 10px 0;
+  padding-bottom: 6px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.pc-run__pipe-item {
+  display: flex;
+  align-items: stretch;
+  max-width: 100%;
+}
+
+.pc-run__pipe-leg {
+  width: 20px;
+  flex: 0 0 20px;
+  display: flex;
+  align-items: center;
+}
+
+.pc-run__scroll-cue {
+  font: 400 10px/1 var(--font-mono);
+  color: var(--text-4);
+  padding: 4px 0;
+  letter-spacing: 0.04em;
+}
+
+/* Fixed-home outputs (outside view switch) */
+.pc-run__outputs-home {
+  padding: 8px 10px;
+  border: 1px dashed var(--border-strong);
+  background: var(--surface-sunken);
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.pc-run__pipe-leg-line {
+  width: 100%;
+  height: 1px;
+  background: var(--border-strong);
+}
+
+.pc-run__pipe-leg--dim .pc-run__pipe-leg-line {
+  background: var(--border);
+}
+
+.pc-run__node-card {
+  width: 188px;
+  flex: 0 0 188px;
+  border: 1px solid var(--border);
+  background: var(--surface-raised);
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.pc-run__node-card--held {
+  border-color: var(--attention-border);
+  background: #171208;
+}
+
+.pc-run__node-card--failed {
+  border-color: color-mix(in srgb, var(--state-failed) 45%, var(--border));
+}
+
+.pc-run__node-card--pending {
+  background: #0c0f11;
+}
+
+.pc-run__node-card--inherited {
+  opacity: 0.72;
+}
+
+.pc-run__node-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--hairline-strong);
+  background: var(--surface-sunken);
+  gap: 6px;
+}
+
+.pc-run__node-kind {
+  font: var(--type-micro);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.pc-run__node-addr {
+  font: 400 10px/1 var(--font-mono);
+  color: var(--text-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pc-run__node-card-body {
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  min-width: 0;
+}
+
+.pc-run__node-name {
+  font: 500 12.5px/1.2 var(--font-sans);
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pc-run__node-name--struck {
+  text-decoration: line-through;
+  color: var(--text-4);
+  font-weight: 400;
+}
+
+.pc-run__node-name--quiet {
+  color: var(--text-4);
+}
+
+.pc-run__state-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.pc-run__dot {
+  width: 7px;
+  height: 7px;
+  flex-shrink: 0;
+}
+
+.pc-run__dot--live {
+  animation: pcPulse var(--pulse-duration) ease-in-out infinite;
+}
+
+.pc-run__state-label {
+  font: 600 10px/1 var(--font-mono);
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+}
+
+.pc-run__state-cue {
+  font: 600 10px/1 var(--font-mono);
+  letter-spacing: 0.04em;
+  color: var(--text);
+  /* Skipped: weight + glyph, not hue alone */
+  border-bottom: 1px solid currentColor;
+}
+
+.pc-run__tasks-meta {
+  font: 400 10px/1 var(--font-mono);
+  color: var(--text-3);
+  white-space: nowrap;
+}
+
+.pc-run__slot-track {
+  display: flex;
+  gap: 2px;
+  height: 5px;
+}
+
+.pc-run__slot-bar {
+  flex: 1;
+  height: 5px;
+  background: var(--border);
+  min-width: 4px;
+}
+
+.pc-run__gist {
+  font: 400 10px/1.35 var(--font-mono);
+  color: var(--text-2);
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+}
+
+.pc-run__node-foot {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font: 400 10px/1 var(--font-mono);
+  color: var(--text-4);
+}
+
+.pc-run__outputs-label {
+  font: var(--type-micro);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  flex: 0 0 auto;
+}
+
+.pc-run__outputs-body {
+  font: 400 10.5px/1.3 var(--font-mono);
+  color: var(--text-2);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pc-run__loop-note {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface-sunken);
+  font: 400 10.5px/1.3 var(--font-mono);
+  color: var(--text-2);
+}
+
+.pc-run__loop-label {
+  font: var(--type-micro);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+/* ── Iteration grid ─────────────────────────────────────────────────── */
+
+.pc-run__grid-wrap {
+  position: relative;
+  min-width: 0;
+  border: 1px solid var(--border);
+}
+
+.pc-run__grid {
+  overflow-x: auto;
+  min-width: 0;
+  /* visible H-scroll cue */
+  background:
+    linear-gradient(to right, var(--surface) 30%, transparent) left center / 24px 100% no-repeat,
+    linear-gradient(to left, var(--surface) 30%, transparent) right center / 24px 100% no-repeat;
+  background-attachment: local, local;
+}
+
+.pc-run__grid-wrap > .pc-run__scroll-cue {
+  position: absolute;
+  right: 6px;
+  bottom: 4px;
+  pointer-events: none;
+  opacity: 0.7;
+  background: var(--surface);
+  padding: 2px 6px;
+  border: 1px solid var(--border);
+}
+
+.pc-run__grid-row {
+  display: grid;
+  /* Cap iteration columns so a 1-col grid does not stretch to 462px (OPTIONAL #18). */
+  grid-template-columns: minmax(120px, 160px) repeat(
+      var(--pc-run-iters, 4),
+      minmax(100px, 160px)
+    );
+  border-bottom: 1px solid var(--hairline);
+  width: max-content;
+  min-width: 100%;
+}
+
+.pc-run__grid-row:last-child {
+  border-bottom: none;
+}
+
+.pc-run__grid-head {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+
+.pc-run__grid-head .pc-run__grid-cell,
+.pc-run__grid-head .pc-run__grid-node--head {
+  font: var(--type-section);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  padding: 6px 9px;
+}
+
+.pc-run__grid-cell {
+  padding: 6px 9px;
+  border-left: 1px solid var(--hairline);
+  min-height: 28px; /* 24–30px band (OPTIONAL #19) */
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.pc-run__grid-cell:first-child {
+  border-left: none;
+}
+
+/* Sticky node column with solid ground so content never bleeds under (REQUIRED #9). */
+.pc-run__grid-node {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 6px 9px;
+  min-width: 0;
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: var(--surface);
+  border-right: 1px solid var(--hairline-strong);
+  box-shadow: 2px 0 0 var(--hairline);
+}
+
+.pc-run__grid-head .pc-run__grid-node {
+  z-index: 3;
+  background: var(--surface);
+}
+
+.pc-run__grid-node-name {
+  font: var(--type-row);
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pc-run__grid-node-meta {
+  font: 400 10px/1 var(--font-mono);
+  color: var(--text-3);
+}
+
+.pc-run__grid-cell--held {
+  background: #171208;
+}
+
+.pc-run__grid-cell--failed {
+  background: #170f0e;
+}
+
+.pc-run__grid-cell--inherited {
+  background: #0c0f11;
+}
+
+.pc-run__grid-cell--empty {
+  color: var(--text-time);
+  font: var(--type-data);
+  justify-content: center;
+}
+
+.pc-run__grid-cell--empty {
+  color: var(--text-time);
+  font: var(--type-data);
+}
+
+/* ── Node table ─────────────────────────────────────────────────────── */
+
+.pc-run__table {
+  border: 1px solid var(--border);
+  overflow-x: auto;
+  min-width: 0;
+}
+
+.pc-run__table-row {
+  display: grid;
+  grid-template-columns: 24px minmax(100px, 1.1fr) minmax(110px, 0.9fr) 56px minmax(140px, 2fr) 72px;
+  align-items: center;
+  border-bottom: 1px solid var(--hairline);
+  min-width: 0;
+}
+
+.pc-run__table-row:last-child {
+  border-bottom: none;
+}
+
+.pc-run__table-head {
+  background: var(--surface-raised);
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.pc-run__table-head .pc-run__table-cell {
+  font: var(--type-section);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  padding: 6px 8px;
+}
+
+.pc-run__table-cell {
+  padding: 6px 8px;
+  min-width: 0;
+  font: var(--type-data);
+  color: var(--text-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pc-run__table-cell--dot {
+  text-align: center;
+  padding: 6px 0;
+}
+
+.pc-run__table-cell--num {
+  text-align: right;
+  padding-right: 10px;
+  color: var(--text-3);
+}
+
+.pc-run__table-row--held {
+  background: #1b160b;
+}
+
+.pc-run__table-row--selected {
+  box-shadow: inset 2px 0 0 var(--state-awaiting);
+  background: var(--surface-soft);
+}
+
+.pc-run__table-row--interactive {
+  cursor: pointer;
+}
+
+.pc-run__table-row--interactive:hover {
+  background: var(--surface-hover);
+}
+
+.pc-run__table-row--interactive:focus-visible {
+  outline: var(--focus-ring) solid var(--state-awaiting);
+  outline-offset: -2px;
+}
+
+.pc-run__fork-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font: 600 9px/1 var(--font-mono);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 2px 5px;
+  border: 1px solid var(--border-strong);
+  color: var(--text-3);
+  margin-left: 6px;
+  vertical-align: middle;
+}
+
+.pc-run__fork-badge--inherited {
+  /* Quiet: thin weight, dashed border, struck name carries the cue */
+  font-weight: 400;
+  border-style: dashed;
+  color: var(--text-4);
+}
+
+.pc-run__fork-badge--skipped {
+  /* Loud: heavy weight, solid border, full-ink text — not hue alone */
+  font-weight: 600;
+  border-style: solid;
+  border-width: 1px;
+  color: var(--text);
+  background: var(--surface-hover);
+}
+
+/* ── Lower panels (deliverables + run tasks) ────────────────────────── */
+
+.pc-run__panels {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  min-width: 0;
+}
+
+.pc-run__panel {
+  border: 1px solid var(--border);
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  max-height: 280px;
+}
+
+.pc-run__panel-head {
+  padding: 6px 10px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--hairline-strong);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.pc-run__panel-title {
+  font: var(--type-section);
+  letter-spacing: var(--ls-section);
+  text-transform: uppercase;
+  color: var(--text-strong-2);
+}
+
+.pc-run__panel-meta {
+  font: 400 10px/1 var(--font-mono);
+  color: var(--text-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pc-run__panel-body {
+  overflow: auto;
+  min-height: 0;
+  flex: 1 1 auto;
+}
+
+.pc-run__panel-empty {
+  padding: 12px 10px;
+  font: 400 11px/1.4 var(--font-sans);
+  color: var(--text-4);
+}
+
+.pc-run__deliv-row {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--hairline);
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 3px 10px;
+  min-width: 0;
+}
+
+.pc-run__deliv-row:last-child {
+  border-bottom: none;
+}
+
+.pc-run__deliv-addr {
+  font: 500 10.5px/1.2 var(--font-mono);
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pc-run__deliv-kind {
+  font: 600 9px/1 var(--font-mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.pc-run__deliv-kind--inline {
+  color: var(--state-eval-good);
+}
+.pc-run__deliv-kind--file {
+  color: var(--link);
+}
+.pc-run__deliv-kind--dir {
+  color: var(--state-awaiting);
+}
+.pc-run__deliv-kind--purged,
+.pc-run__deliv-kind--error,
+.pc-run__deliv-kind--missing {
+  color: var(--state-eval-poor);
+}
+
+.pc-run__deliv-body {
+  font: 400 10px/1.35 var(--font-mono);
+  color: var(--text-2);
+  white-space: pre-wrap;
+  overflow: hidden;
+  max-height: 4.5em;
+  grid-column: 1 / -1;
+}
+
+.pc-run__deliv-body[data-state="purged"],
+.pc-run__deliv-body[data-state="missing-worktree"],
+.pc-run__deliv-body[data-state="error"] {
+  color: var(--state-eval-poor);
+}
+
+.pc-run__deliv-meta {
+  font: 400 10px/1.2 var(--font-mono);
+  color: var(--text-4);
+  grid-column: 1 / -1;
+}
+
+.pc-run__task-row {
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--hairline);
+  display: grid;
+  grid-template-columns: 88px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.pc-run__task-row:last-child {
+  border-bottom: none;
+}
+
+.pc-run__task-row--interactive {
+  cursor: pointer;
+}
+
+.pc-run__task-row--interactive:hover {
+  background: var(--surface-hover);
+}
+
+.pc-run__task-row--interactive:focus-visible {
+  outline: var(--focus-ring) solid var(--state-awaiting);
+  outline-offset: -2px;
+}
+
+.pc-run__task-state {
+  font: 600 10px/1 var(--font-mono);
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+}
+
+.pc-run__task-addr {
+  font: 400 10.5px/1.2 var(--font-mono);
+  color: var(--text-strong-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.pc-run__task-harness {
+  font: 400 10px/1.2 var(--font-mono);
+  color: var(--text-3);
+  white-space: nowrap;
+}
+
+.pc-run__task-dur {
+  font: 400 10px/1.2 var(--font-mono);
+  color: var(--text-4);
+  white-space: nowrap;
+}
+
+/* Token color helpers for mono labels */
+.pc-run__ink--pending {
+  color: var(--state-pending);
+}
+.pc-run__ink--queued {
+  color: var(--state-queued);
+}
+.pc-run__ink--running {
+  color: var(--state-running);
+}
+.pc-run__ink--awaiting {
+  color: var(--state-awaiting);
+}
+.pc-run__ink--stalled {
+  color: var(--state-stalled);
+}
+.pc-run__ink--completed {
+  color: var(--state-completed);
+}
+.pc-run__ink--failed {
+  color: var(--state-failed);
+}
+.pc-run__ink--cancelled {
+  color: var(--state-cancelled);
+}
+
+.pc-run__bg--pending {
+  background: var(--state-pending);
+}
+.pc-run__bg--queued {
+  background: var(--state-queued);
+}
+.pc-run__bg--running {
+  background: var(--state-running);
+}
+.pc-run__bg--awaiting {
+  background: var(--state-awaiting);
+}
+.pc-run__bg--stalled {
+  background: var(--state-stalled);
+}
+.pc-run__bg--completed {
+  background: var(--state-completed);
+}
+.pc-run__bg--failed {
+  background: var(--state-failed);
+}
+.pc-run__bg--cancelled {
+  background: var(--state-cancelled);
+}
+
+/* 1280 density: stack lower panels, shrink pipe cards slightly.
+ * Compact gate notice shown here; base .pc-run__gate-notice--compact is
+ * display:none above (REQUIRED #2 cascade order). */
+@media (max-width: 1360px) {
+  .pc-run__panels {
+    grid-template-columns: 1fr;
+  }
+
+  .pc-run__node-card {
+    width: 168px;
+    flex-basis: 168px;
+  }
+
+  .pc-run__gate-notice {
+    display: none;
+  }
+
+  .pc-run__gate-notice--compact {
+    display: block;
+    margin-left: 0;
+    flex-basis: 100%;
+    white-space: normal;
+  }
+
+  .pc-run__header {
+    gap: 10px;
+    padding: 8px 12px;
+  }
+
+  .pc-run__body {
+    padding: 10px 12px;
+  }
+}
+
+/* Block / failure banner under header */
+.pc-run__block {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px 14px;
+  padding: 7px 14px;
+  border-bottom: 1px solid var(--attention-border);
+  background: var(--attention-ground);
+  font: 400 10.5px/1.3 var(--font-mono);
+  color: var(--state-awaiting);
+}
+
+.pc-run__block--failed {
+  border-bottom-color: color-mix(in srgb, var(--state-failed) 50%, var(--border));
+  background: color-mix(in srgb, var(--state-failed) 10%, var(--surface));
+  color: var(--state-failed);
+}
+
+.pc-run__block-label {
+  font: 600 9px/1 var(--font-mono);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.pc-run__block-detail {
+  color: var(--text-2);
+}
+
+.pc-run__block--failed .pc-run__block-detail {
+  color: var(--text-2);
+}
+
+.pc-run__block-verbs {
+  color: var(--text-4);
+}
+
+.pc-run__panel-head--sub {
+  border-top: 1px solid var(--hairline-strong);
+}
+
+.pc-run__node-name {
+  font: var(--type-row);
+}
+
+.pc-run__deliv-kind--unknown {
+  color: var(--text-4);
+}
+
+/* Screen-reader only */
+.pc-run__sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}

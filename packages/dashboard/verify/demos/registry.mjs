@@ -21,6 +21,7 @@ import { runFindHonestyDemo } from "./find-honesty.mjs";
 import { runTaskInspectorDemo, taskInspectorGates } from "./task-inspector.mjs";
 import { runFleetBoardDemo, fleetBoardGates } from "./fleet-board.mjs";
 import { runMetricsBoardDemo, metricsBoardGates } from "./metrics-board.mjs";
+import { runRunDetailDemo, runDetailGates } from "./run-detail.mjs";
 
 /**
  * @typedef {{
@@ -71,6 +72,13 @@ export const DEMO_REGISTRY = [
     id: "metrics-board",
     run: runMetricsBoardDemo,
     gates: metricsBoardGates,
+  },
+  // #356 run detail
+  {
+    ticket: "issue-356",
+    id: "run-detail",
+    run: runRunDetailDemo,
+    gates: runDetailGates,
   },
 ];
 

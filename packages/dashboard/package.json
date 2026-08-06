@@ -41,7 +41,8 @@
     "verify:find": "node --import tsx verify/demos/find-honesty.mjs",
     "verify:task": "node --import tsx verify/demos/task-inspector.mjs",
     "verify:fleet": "node --import tsx verify/demos/fleet-board.mjs",
-    "verify:metrics": "node --import tsx verify/demos/metrics-board.mjs"
+    "verify:metrics": "node --import tsx verify/demos/metrics-board.mjs",
+    "verify:run": "node --import tsx verify/demos/run-detail.mjs"
   },
   "dependencies": {
     "@useparley/core": "workspace:*",
