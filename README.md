@@ -186,8 +186,8 @@ in [Configuration and profiles](https://femoral.github.io/parley/guide/configura
 ## Beyond one-shot tasks
 
 - **Workflow runs**: multi-step pipelines (plan, gate, implement, review xN)
-  written down as files, executed by the daemon, with human-actioned gates
-  and one-line-per-node status. See
+  written down as files, executed by the daemon, with orchestrator-actioned
+  gates and one-line-per-node status. See
   [Workflow runs](https://femoral.github.io/parley/guide/workflows).
 - **Remote runners** (experimental): run children on other machines with one
   daemon and one inbox. Outbound-only runners, parley-managed git mirrors,

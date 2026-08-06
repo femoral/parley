@@ -37,12 +37,12 @@ parley run start coding-1 --base-ref origin/main
 Scalar ports bind with repeatable `--input name=value`; container and
 named-schema ports bind through an `--inputs` JSON file. Unbound or unknown
 ports are usage errors that name the port. In practice your orchestrating
-agent starts runs for you; gates are where you come back in.
+agent starts runs for you.
 
-## Gates: where humans decide
+## Gates: where the run stops for judgment
 
 A gate blocks the run and lands in the attention inbox (and in the Console)
-until someone actions it:
+until the orchestrator actions it:
 
 ```bash
 parley run approve <run>              # continue past the gate
@@ -50,6 +50,10 @@ parley run reject <run>               # follow the gate's declared on-reject pat
 parley run redirect <run> --to <node> # send a live blocked run elsewhere
 parley run finish <run>               # complete the run at its current node
 ```
+
+Today these commands are run by the orchestrating agent, which reads the
+gate's exhibits and decides (escalating to you in conversation when the call
+is yours to make). The Console shows held gates but does not action them.
 
 A terminal run (finished or cancelled) can be forked to try again from any
 node without losing the parent's history:
