@@ -20,6 +20,7 @@ import { runShellChromeDemo, shellChromeGates } from "./shell-chrome.mjs";
 import { runFindHonestyDemo } from "./find-honesty.mjs";
 import { runTaskInspectorDemo, taskInspectorGates } from "./task-inspector.mjs";
 import { runFleetBoardDemo, fleetBoardGates } from "./fleet-board.mjs";
+import { runMetricsBoardDemo, metricsBoardGates } from "./metrics-board.mjs";
 
 /**
  * @typedef {{
@@ -63,6 +64,13 @@ export const DEMO_REGISTRY = [
     id: "task-inspector",
     run: runTaskInspectorDemo,
     gates: taskInspectorGates,
+  },
+  // #358 metrics board
+  {
+    ticket: "issue-358",
+    id: "metrics-board",
+    run: runMetricsBoardDemo,
+    gates: metricsBoardGates,
   },
 ];
 

@@ -40,7 +40,8 @@
     "verify:shell": "node --import tsx verify/demos/shell-chrome.mjs",
     "verify:find": "node --import tsx verify/demos/find-honesty.mjs",
     "verify:task": "node --import tsx verify/demos/task-inspector.mjs",
-    "verify:fleet": "node --import tsx verify/demos/fleet-board.mjs"
+    "verify:fleet": "node --import tsx verify/demos/fleet-board.mjs",
+    "verify:metrics": "node --import tsx verify/demos/metrics-board.mjs"
   },
   "dependencies": {
     "@useparley/core": "workspace:*",

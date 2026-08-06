@@ -1,0 +1,2590 @@
+{
+  "ticket": "issue-358",
+  "package": "@useparley/dashboard",
+  "harness": "packages/dashboard/verify",
+  "demos": {
+    "metrics-board": {
+      "kind": "metrics-board",
+      "description": "Metrics screen: HTML distribution (no SVG scale), heatmap truncation disclosure, honest legend scale, zero bars, a11y tables, 1280 column density, rendered-px labels ≥11 across 1280–1920.",
+      "headline": {
+        "boardScroll": {
+          "shell": {
+            "name": "shell",
+            "scrollWidth": 1280,
+            "clientWidth": 1280,
+            "noHorizontalScroll": true
+          },
+          "center": {
+            "name": "center",
+            "scrollWidth": 648,
+            "clientWidth": 648,
+            "noHorizontalScroll": true
+          },
+          "screen": {
+            "name": "screen",
+            "scrollWidth": 648,
+            "clientWidth": 648,
+            "noHorizontalScroll": true
+          }
+        },
+        "minRenderedPx": 11,
+        "minDeclaredPx": 11,
+        "chartLabelsAtLeast11": true,
+        "distRowsInBand": true,
+        "distRowHeights": [
+          28,
+          28
+        ],
+        "distributionHasAxis": true,
+        "heatmapHonestScale": true,
+        "tickLabels": [
+          "0",
+          "2.5",
+          "5",
+          "7.5",
+          "10"
+        ],
+        "renderedPxByViewport": [
+          {
+            "name": "1280",
+            "width": 1280,
+            "minRenderedPx": 11,
+            "allRenderedAtLeast11": true,
+            "distRowsInBand": true
+          },
+          {
+            "name": "1361",
+            "width": 1361,
+            "minRenderedPx": 11,
+            "allRenderedAtLeast11": true,
+            "distRowsInBand": true
+          },
+          {
+            "name": "1366",
+            "width": 1366,
+            "minRenderedPx": 11,
+            "allRenderedAtLeast11": true,
+            "distRowsInBand": true
+          },
+          {
+            "name": "1460",
+            "width": 1460,
+            "minRenderedPx": 11,
+            "allRenderedAtLeast11": true,
+            "distRowsInBand": true
+          },
+          {
+            "name": "1700",
+            "width": 1700,
+            "minRenderedPx": 11,
+            "allRenderedAtLeast11": true,
+            "distRowsInBand": true
+          },
+          {
+            "name": "1920",
+            "width": 1920,
+            "minRenderedPx": 11,
+            "allRenderedAtLeast11": true,
+            "distRowsInBand": true
+          }
+        ]
+      },
+      "emptyHonesty": {
+        "chartEmpty": true,
+        "tableEmpty": false,
+        "distEmpty": true,
+        "heatEmpty": true,
+        "tableReady": true,
+        "hasFilterBar": true,
+        "hasSessionScope": true
+      },
+      "sessionScope": {
+        "isFilterNotTab": true,
+        "hasSessionSelect": true,
+        "hasSessionTab": false
+      },
+      "honesty": {
+        "empty": {
+          "tableEmpty": true,
+          "distEmpty": true
+        },
+        "error": {
+          "banner": true,
+          "tableError": true,
+          "distError": true
+        },
+        "loading": {
+          "loading": true,
+          "tableLoading": true
+        },
+        "realDaemonEmpty": {
+          "chartEmpty": true,
+          "tableEmpty": false,
+          "distEmpty": true,
+          "heatEmpty": true,
+          "tableReady": true,
+          "hasFilterBar": true,
+          "hasSessionScope": true
+        }
+      },
+      "axes": {
+        "distribution": {
+          "found": true,
+          "tickLabels": [
+            "0",
+            "2.5",
+            "5",
+            "7.5",
+            "10"
+          ],
+          "hasValueAxis": true,
+          "a11yTable": true
+        },
+        "heatmap": {
+          "legendFound": true,
+          "legendText": "bar = failure rate 0–100%— no samplen=<3 low sample (ink + n= in cell)100%! all failed",
+          "hasHonestScale": true,
+          "truncText": "13 rubric samples",
+          "a11yTable": true,
+          "zeroBarsOk": true,
+          "lowCellCount": 1,
+          "lowInkDistinct": {
+            "checked": true,
+            "lowColor": "rgb(184, 150, 156)",
+            "noneColor": "rgb(139, 152, 164)",
+            "distinct": true
+          }
+        }
+      },
+      "chartLabels": {
+        "samples": [
+          {
+            "sel": ".pc-metrics__dist-label",
+            "tag": "span",
+            "declaredPx": 11,
+            "renderedPx": 11,
+            "text": "fake"
+          },
+          {
+            "sel": ".pc-metrics__dist-label",
+            "tag": "span",
+            "declaredPx": 11,
+            "renderedPx": 11,
+            "text": "claude"
+          },
+          {
+            "sel": ".pc-metrics__dist-delta",
+            "tag": "span",
+            "declaredPx": 11,
+            "renderedPx": 11,
+            "text": "+2.4"
+          },
+          {
+            "sel": ".pc-metrics__dist-delta",
+            "tag": "span",
+            "declaredPx": 11,
+            "renderedPx": 11,
+            "text": "−0.9"
+          },
+          {
+            "sel": ".pc-metrics__dist-tick-label",
+            "tag": "span",
+            "declaredPx": 11,
+            "renderedPx": 11,
+            "text": "0"
+          },
+          {
+            "sel": ".pc-metrics__dist-tick-label",
+            "tag": "span",
+            "declaredPx": 11,
+            "renderedPx": 11,
+            "text": "2.5"
+          },
+          {
+            "sel": ".pc-metrics__dist-tick-label",
+            "tag": "span",
+            "declaredPx": 11,
+            "renderedPx": 11,
+            "text": "5"
+          },
+          {
+            "sel": ".pc-metrics__dist-tick-label",
+            "tag": "span",
+            "declaredPx": 11,
+            "renderedPx": 11,
+            "text": "7.5"
+          },
+          {
+            "sel": ".pc-metrics__dist-tick-label",
+            "tag": "span",
+            "declaredPx": 11,
+            "renderedPx": 11,
+            "text": "10"
+          },
+          {
+            "sel": ".pc-metrics__heat-col",
+            "tag": "div",
+            "declaredPx": 11,
+            "renderedPx": 11,
+            "text": "fake"
+          },
+          {
+            "sel": ".pc-metrics__heat-col",
+            "tag": "div",
+            "declaredPx": 11,
+            "renderedPx": 11,
+            "text": "claude"
+          },
+          {
+            "sel": ".pc-metrics__heat-row-label",
+            "tag": "div",
+            "declaredPx": 11,
+            "renderedPx": 11,
+            "text": "brief-implemented"
+          },
+          {
+            "sel": ".pc-metrics__heat-row-label",
+            "tag": "div",
+            "declaredPx": 11,
+            "renderedPx": 11,
+            "text": "change-verified"
+          },
+          {
+            "sel": ".pc-metrics__heat-row-label",
+            "tag": "div",
+            "declaredPx": 11,
+            "renderedPx": 11,
+            "text": "minimal-diff"
+          },
+          {
+            "sel": ".pc-metrics__heat-row-label",
+            "tag": "div",
+            "declaredPx": 11,
+            "renderedPx": 11,
+            "text": "suite-green"
+          },
+          {
+            "sel": ".pc-metrics__heat-cell-label",
+            "tag": "span",
+            "declaredPx": 11,
+            "renderedPx": 11,
+            "text": "13%"
+          },
+          {
+            "sel": ".pc-metrics__heat-cell-label",
+            "tag": "span",
+            "declaredPx": 11,
+            "renderedPx": 11,
+            "text": "80%"
+          },
+          {
+            "sel": ".pc-metrics__heat-cell-label",
+            "tag": "span",
+            "declaredPx": 11,
+            "renderedPx": 11,
+            "text": "38%"
+          },
+          {
+            "sel": ".pc-metrics__heat-cell-label",
+            "tag": "span",
+            "declaredPx": 11,
+            "renderedPx": 11,
+            "text": "—"
+          },
+          {
+            "sel": ".pc-metrics__heat-cell-label",
+            "tag": "span",
+            "declaredPx": 11,
+            "renderedPx": 11,
+            "text": "0%"
+          },
+          {
+            "sel": ".pc-metrics__heat-cell-label",
+            "tag": "span",
+            "declaredPx": 11,
+            "renderedPx": 11,
+            "text": "50% n=2"
+          },
+          {
+            "sel": ".pc-metrics__heat-cell-label",
+            "tag": "span",
+            "declaredPx": 11,
+            "renderedPx": 11,
+            "text": "25%"
+          },
+          {
+            "sel": ".pc-metrics__heat-cell-label",
+            "tag": "span",
+            "declaredPx": 11,
+            "renderedPx": 11,
+            "text": "100%!"
+          }
+        ],
+        "minDeclaredPx": 11,
+        "minRenderedPx": 11,
+        "count": 23,
+        "allRenderedAtLeast9": true,
+        "allRenderedAtLeast11": true,
+        "allAtLeast11": true,
+        "minFontSize": 11,
+        "distRowHeights": [
+          28,
+          28
+        ],
+        "distRowsInBand": true
+      },
+      "renderedPxTable": [
+        {
+          "name": "1280",
+          "width": 1280,
+          "minRenderedPx": 11,
+          "minDeclaredPx": 11,
+          "allRenderedAtLeast11": true,
+          "allRenderedAtLeast9": true,
+          "distRowHeights": [
+            28,
+            28
+          ],
+          "distRowsInBand": true,
+          "table": {
+            "found": true,
+            "scrollWidth": 622,
+            "clientWidth": 622,
+            "overflowX": false,
+            "visibleHeaders": [
+              "vendor",
+              "tasks",
+              "success",
+              "eval avg"
+            ],
+            "hiddenHeaders": [
+              "tokens in ▸ out ▸ cached",
+              "avg · p95",
+              "below base"
+            ]
+          }
+        },
+        {
+          "name": "1361",
+          "width": 1361,
+          "minRenderedPx": 11,
+          "minDeclaredPx": 11,
+          "allRenderedAtLeast11": true,
+          "allRenderedAtLeast9": true,
+          "distRowHeights": [
+            28,
+            28
+          ],
+          "distRowsInBand": true,
+          "table": {
+            "found": true,
+            "scrollWidth": 703,
+            "clientWidth": 703,
+            "overflowX": false,
+            "visibleHeaders": [
+              "vendor",
+              "tasks",
+              "success",
+              "eval avg",
+              "tokens in ▸ out ▸ cached",
+              "avg · p95",
+              "below base"
+            ],
+            "hiddenHeaders": []
+          }
+        },
+        {
+          "name": "1366",
+          "width": 1366,
+          "minRenderedPx": 11,
+          "minDeclaredPx": 11,
+          "allRenderedAtLeast11": true,
+          "allRenderedAtLeast9": true,
+          "distRowHeights": [
+            28,
+            28
+          ],
+          "distRowsInBand": true,
+          "table": {
+            "found": true,
+            "scrollWidth": 708,
+            "clientWidth": 708,
+            "overflowX": false,
+            "visibleHeaders": [
+              "vendor",
+              "tasks",
+              "success",
+              "eval avg",
+              "tokens in ▸ out ▸ cached",
+              "avg · p95",
+              "below base"
+            ],
+            "hiddenHeaders": []
+          }
+        },
+        {
+          "name": "1460",
+          "width": 1460,
+          "minRenderedPx": 11,
+          "minDeclaredPx": 11,
+          "allRenderedAtLeast11": true,
+          "allRenderedAtLeast9": true,
+          "distRowHeights": [
+            28,
+            28
+          ],
+          "distRowsInBand": true,
+          "table": {
+            "found": true,
+            "scrollWidth": 802,
+            "clientWidth": 802,
+            "overflowX": false,
+            "visibleHeaders": [
+              "vendor",
+              "tasks",
+              "success",
+              "eval avg",
+              "tokens in ▸ out ▸ cached",
+              "avg · p95",
+              "below base"
+            ],
+            "hiddenHeaders": []
+          }
+        },
+        {
+          "name": "1700",
+          "width": 1700,
+          "minRenderedPx": 11,
+          "minDeclaredPx": 11,
+          "allRenderedAtLeast11": true,
+          "allRenderedAtLeast9": true,
+          "distRowHeights": [
+            28,
+            28
+          ],
+          "distRowsInBand": true,
+          "table": {
+            "found": true,
+            "scrollWidth": 1042,
+            "clientWidth": 1042,
+            "overflowX": false,
+            "visibleHeaders": [
+              "vendor",
+              "tasks",
+              "success",
+              "eval avg",
+              "tokens in ▸ out ▸ cached",
+              "avg · p95",
+              "below base"
+            ],
+            "hiddenHeaders": []
+          }
+        },
+        {
+          "name": "1920",
+          "width": 1920,
+          "minRenderedPx": 11,
+          "minDeclaredPx": 11,
+          "allRenderedAtLeast11": true,
+          "allRenderedAtLeast9": true,
+          "distRowHeights": [
+            28,
+            28
+          ],
+          "distRowsInBand": true,
+          "table": {
+            "found": true,
+            "scrollWidth": 1262,
+            "clientWidth": 1262,
+            "overflowX": false,
+            "visibleHeaders": [
+              "vendor",
+              "tasks",
+              "success",
+              "eval avg",
+              "tokens in ▸ out ▸ cached",
+              "avg · p95",
+              "below base"
+            ],
+            "hiddenHeaders": []
+          }
+        }
+      ],
+      "tableCue": {
+        "dropPresent": true,
+        "dropVisible": true,
+        "dropText": "· 3 columns hidden at this width — widen to 1361px+",
+        "droppedCount": 3,
+        "fadePresent": true,
+        "fadeOpacity": 0,
+        "fadeDataOverflow": "0",
+        "fadeOnWhenOverflow": true,
+        "wrap": {
+          "clientWidth": 622,
+          "scrollWidth": 622,
+          "overflowX": false,
+          "dataOverflow": "0"
+        },
+        "visibleHeaders": [
+          "vendor",
+          "tasks",
+          "success",
+          "eval avg"
+        ],
+        "hiddenHeaders": [
+          "tokens in ▸ out ▸ cached",
+          "avg · p95",
+          "below base"
+        ],
+        "isWorkflow": false,
+        "rowHeightPx": 27,
+        "rowInBand": true,
+        "primaryVisible": "vendor tasks success eval avg",
+        "scrollbar": "thin"
+      },
+      "tableDensity": {
+        "vendor": {
+          "1280": {
+            "dropPresent": true,
+            "dropVisible": true,
+            "dropText": "· 3 columns hidden at this width — widen to 1361px+",
+            "droppedCount": 3,
+            "fadePresent": true,
+            "fadeOpacity": 0,
+            "fadeDataOverflow": "0",
+            "fadeOnWhenOverflow": true,
+            "wrap": {
+              "clientWidth": 622,
+              "scrollWidth": 622,
+              "overflowX": false,
+              "dataOverflow": "0"
+            },
+            "visibleHeaders": [
+              "vendor",
+              "tasks",
+              "success",
+              "eval avg"
+            ],
+            "hiddenHeaders": [
+              "tokens in ▸ out ▸ cached",
+              "avg · p95",
+              "below base"
+            ],
+            "isWorkflow": false,
+            "rowHeightPx": 27,
+            "rowInBand": true
+          },
+          "1361": {
+            "dropPresent": true,
+            "dropVisible": false,
+            "dropText": "· 3 columns hidden at this width — widen to 1361px+",
+            "droppedCount": 3,
+            "fadePresent": true,
+            "fadeOpacity": 0,
+            "fadeDataOverflow": "0",
+            "fadeOnWhenOverflow": true,
+            "wrap": {
+              "clientWidth": 703,
+              "scrollWidth": 703,
+              "overflowX": false,
+              "dataOverflow": "0"
+            },
+            "visibleHeaders": [
+              "vendor",
+              "tasks",
+              "success",
+              "eval avg",
+              "tokens in ▸ out ▸ cached",
+              "avg · p95",
+              "below base"
+            ],
+            "hiddenHeaders": [],
+            "isWorkflow": false,
+            "rowHeightPx": 27,
+            "rowInBand": true
+          },
+          "1380": {
+            "dropPresent": true,
+            "dropVisible": false,
+            "dropText": "· 3 columns hidden at this width — widen to 1361px+",
+            "droppedCount": 3,
+            "fadePresent": true,
+            "fadeOpacity": 0,
+            "fadeDataOverflow": "0",
+            "fadeOnWhenOverflow": true,
+            "wrap": {
+              "clientWidth": 722,
+              "scrollWidth": 722,
+              "overflowX": false,
+              "dataOverflow": "0"
+            },
+            "visibleHeaders": [
+              "vendor",
+              "tasks",
+              "success",
+              "eval avg",
+              "tokens in ▸ out ▸ cached",
+              "avg · p95",
+              "below base"
+            ],
+            "hiddenHeaders": [],
+            "isWorkflow": false,
+            "rowHeightPx": 27,
+            "rowInBand": true
+          },
+          "1400": {
+            "dropPresent": true,
+            "dropVisible": false,
+            "dropText": "· 3 columns hidden at this width — widen to 1361px+",
+            "droppedCount": 3,
+            "fadePresent": true,
+            "fadeOpacity": 0,
+            "fadeDataOverflow": "0",
+            "fadeOnWhenOverflow": true,
+            "wrap": {
+              "clientWidth": 742,
+              "scrollWidth": 742,
+              "overflowX": false,
+              "dataOverflow": "0"
+            },
+            "visibleHeaders": [
+              "vendor",
+              "tasks",
+              "success",
+              "eval avg",
+              "tokens in ▸ out ▸ cached",
+              "avg · p95",
+              "below base"
+            ],
+            "hiddenHeaders": [],
+            "isWorkflow": false,
+            "rowHeightPx": 27,
+            "rowInBand": true
+          },
+          "1461": {
+            "dropPresent": true,
+            "dropVisible": false,
+            "dropText": "· 3 columns hidden at this width — widen to 1361px+",
+            "droppedCount": 3,
+            "fadePresent": true,
+            "fadeOpacity": 0,
+            "fadeDataOverflow": "0",
+            "fadeOnWhenOverflow": true,
+            "wrap": {
+              "clientWidth": 803,
+              "scrollWidth": 803,
+              "overflowX": false,
+              "dataOverflow": "0"
+            },
+            "visibleHeaders": [
+              "vendor",
+              "tasks",
+              "success",
+              "eval avg",
+              "tokens in ▸ out ▸ cached",
+              "avg · p95",
+              "below base"
+            ],
+            "hiddenHeaders": [],
+            "isWorkflow": false,
+            "rowHeightPx": 27,
+            "rowInBand": true
+          }
+        },
+        "workflow": {
+          "1280": {
+            "dropPresent": true,
+            "dropVisible": true,
+            "dropText": "· 4 columns hidden at this width — widen to 1361px+",
+            "droppedCount": 4,
+            "fadePresent": true,
+            "fadeOpacity": 0,
+            "fadeDataOverflow": "0",
+            "fadeOnWhenOverflow": true,
+            "wrap": {
+              "clientWidth": 622,
+              "scrollWidth": 622,
+              "overflowX": false,
+              "dataOverflow": "0"
+            },
+            "visibleHeaders": [
+              "workflow",
+              "runs",
+              "success",
+              "eval avg"
+            ],
+            "hiddenHeaders": [
+              "tokens in ▸ out ▸ cached",
+              "avg · p95",
+              "below base",
+              "cost / done"
+            ],
+            "isWorkflow": true,
+            "rowHeightPx": 27,
+            "rowInBand": true
+          },
+          "1361": {
+            "dropPresent": true,
+            "dropVisible": false,
+            "dropText": "· 4 columns hidden at this width — widen to 1361px+",
+            "droppedCount": 4,
+            "fadePresent": true,
+            "fadeOpacity": 0,
+            "fadeDataOverflow": "0",
+            "fadeOnWhenOverflow": true,
+            "wrap": {
+              "clientWidth": 703,
+              "scrollWidth": 703,
+              "overflowX": false,
+              "dataOverflow": "0"
+            },
+            "visibleHeaders": [
+              "workflow",
+              "runs",
+              "success",
+              "eval avg",
+              "tokens in ▸ out ▸ cached",
+              "avg · p95",
+              "below base",
+              "cost / done"
+            ],
+            "hiddenHeaders": [],
+            "isWorkflow": true,
+            "rowHeightPx": 27,
+            "rowInBand": true
+          },
+          "1380": {
+            "dropPresent": true,
+            "dropVisible": false,
+            "dropText": "· 4 columns hidden at this width — widen to 1361px+",
+            "droppedCount": 4,
+            "fadePresent": true,
+            "fadeOpacity": 0,
+            "fadeDataOverflow": "0",
+            "fadeOnWhenOverflow": true,
+            "wrap": {
+              "clientWidth": 722,
+              "scrollWidth": 722,
+              "overflowX": false,
+              "dataOverflow": "0"
+            },
+            "visibleHeaders": [
+              "workflow",
+              "runs",
+              "success",
+              "eval avg",
+              "tokens in ▸ out ▸ cached",
+              "avg · p95",
+              "below base",
+              "cost / done"
+            ],
+            "hiddenHeaders": [],
+            "isWorkflow": true,
+            "rowHeightPx": 27,
+            "rowInBand": true
+          },
+          "1400": {
+            "dropPresent": true,
+            "dropVisible": false,
+            "dropText": "· 4 columns hidden at this width — widen to 1361px+",
+            "droppedCount": 4,
+            "fadePresent": true,
+            "fadeOpacity": 0,
+            "fadeDataOverflow": "0",
+            "fadeOnWhenOverflow": true,
+            "wrap": {
+              "clientWidth": 742,
+              "scrollWidth": 742,
+              "overflowX": false,
+              "dataOverflow": "0"
+            },
+            "visibleHeaders": [
+              "workflow",
+              "runs",
+              "success",
+              "eval avg",
+              "tokens in ▸ out ▸ cached",
+              "avg · p95",
+              "below base",
+              "cost / done"
+            ],
+            "hiddenHeaders": [],
+            "isWorkflow": true,
+            "rowHeightPx": 27,
+            "rowInBand": true
+          },
+          "1461": {
+            "dropPresent": true,
+            "dropVisible": false,
+            "dropText": "· 4 columns hidden at this width — widen to 1361px+",
+            "droppedCount": 4,
+            "fadePresent": true,
+            "fadeOpacity": 0,
+            "fadeDataOverflow": "0",
+            "fadeOnWhenOverflow": true,
+            "wrap": {
+              "clientWidth": 803,
+              "scrollWidth": 803,
+              "overflowX": false,
+              "dataOverflow": "0"
+            },
+            "visibleHeaders": [
+              "workflow",
+              "runs",
+              "success",
+              "eval avg",
+              "tokens in ▸ out ▸ cached",
+              "avg · p95",
+              "below base",
+              "cost / done"
+            ],
+            "hiddenHeaders": [],
+            "isWorkflow": true,
+            "rowHeightPx": 27,
+            "rowInBand": true
+          }
+        },
+        "summary": {
+          "disclosureAt1280Vendor": true,
+          "disclosureAt1280Workflow": true,
+          "disclosureAbsentAt1461Vendor": true,
+          "disclosureAbsentAt1461Workflow": true,
+          "noOverflow1361to1400Workflow": true,
+          "fadeMatchesOverflow": true,
+          "rowInBand1280": true
+        }
+      },
+      "heatmapTruncation": {
+        "disclosed": true,
+        "text": "Showing 6 of 14 groups (45 of 109 rubric samples) — first groups with rubric evals, in table order (by task/run volume). showing 6 of 14 groups · 45 rubric samples of 109"
+      },
+      "contrast": {
+        "distLabel": {
+          "selector": ".pc-metrics__dist-label",
+          "found": true,
+          "color": "rgb(207, 214, 220)",
+          "background": "rgb(11, 13, 15)",
+          "fontSize": "11px",
+          "fontWeight": "400",
+          "ratio": 13.26,
+          "largeText": false,
+          "wcagAA": true,
+          "text": "fake"
+        },
+        "distDelta": {
+          "selector": ".pc-metrics__dist-delta",
+          "found": true,
+          "color": "rgb(62, 169, 156)",
+          "background": "rgb(11, 13, 15)",
+          "fontSize": "11px",
+          "fontWeight": "500",
+          "ratio": 6.82,
+          "largeText": false,
+          "wcagAA": true,
+          "text": "+2.4"
+        },
+        "distTick": {
+          "selector": ".pc-metrics__dist-tick-label",
+          "found": true,
+          "color": "rgb(139, 152, 164)",
+          "background": "rgb(11, 13, 15)",
+          "fontSize": "11px",
+          "fontWeight": "400",
+          "ratio": 6.61,
+          "largeText": false,
+          "wcagAA": true,
+          "text": "0"
+        },
+        "heatCol": {
+          "selector": ".pc-metrics__heat-col",
+          "found": true,
+          "color": "rgb(139, 152, 164)",
+          "background": "rgb(11, 13, 15)",
+          "fontSize": "11px",
+          "fontWeight": "400",
+          "ratio": 6.61,
+          "largeText": false,
+          "wcagAA": true,
+          "text": "fake"
+        },
+        "heatRow": {
+          "selector": ".pc-metrics__heat-row-label",
+          "found": true,
+          "color": "rgb(147, 160, 171)",
+          "background": "rgb(11, 13, 15)",
+          "fontSize": "11px",
+          "fontWeight": "400",
+          "ratio": 7.28,
+          "largeText": false,
+          "wcagAA": true,
+          "text": "brief-implemented"
+        },
+        "heatCell": {
+          "selector": ".pc-metrics__heat-cell-label",
+          "found": true,
+          "color": "rgb(200, 179, 184)",
+          "background": "rgb(13, 16, 19)",
+          "fontSize": "11px",
+          "fontWeight": "400",
+          "ratio": 9.63,
+          "largeText": false,
+          "wcagAA": true,
+          "text": "13%"
+        },
+        "heatLow": {
+          "selector": ".pc-metrics__heat-cell--low .pc-metrics__heat-cell-label, .pc-metrics__heat-cell--low-suspect .pc-metrics__heat-cell-label",
+          "found": true,
+          "color": "rgb(184, 150, 156)",
+          "background": "rgb(13, 16, 19)",
+          "fontSize": "11px",
+          "fontWeight": "500",
+          "ratio": 7.16,
+          "largeText": false,
+          "wcagAA": true,
+          "text": "50% n=2"
+        },
+        "panelTitle": {
+          "selector": ".pc-metrics__panel-title",
+          "found": true,
+          "color": "rgb(207, 214, 220)",
+          "background": "rgb(14, 17, 20)",
+          "fontSize": "10px",
+          "fontWeight": "600",
+          "ratio": 12.9,
+          "largeText": false,
+          "wcagAA": true,
+          "text": "by vendor"
+        },
+        "tableName": {
+          "selector": ".pc-metrics__cell-name",
+          "found": true,
+          "color": "rgb(227, 232, 236)",
+          "background": "rgb(11, 13, 15)",
+          "fontSize": "11.5px",
+          "fontWeight": "500",
+          "ratio": 15.78,
+          "largeText": false,
+          "wcagAA": true,
+          "text": "fake"
+        }
+      },
+      "comparison": {
+        "found": true,
+        "sides": 2,
+        "text": "comparisonfirst attempt vs fixfirst attemptsamples9avg score5.5avg delta+0.5below base56%avg Δ+2.2fixsamples4avg score7.7avg delta+2.7below base0%"
+      },
+      "workflow": {
+        "hasCostColumn": true,
+        "hasWorkflowRow": true,
+        "head": "workflow runs success eval avg tokens in ▸ out ▸ cached avg · p95 below base cost / done"
+      },
+      "truncation": {
+        "found": true,
+        "textOverflow": "clip",
+        "overflow": "visible",
+        "whiteSpace": "nowrap",
+        "title": "fake",
+        "text": "fake"
+      },
+      "neuter": {
+        "broken": {
+          "error": true
+        },
+        "restored": {
+          "ready": true,
+          "error": false
+        }
+      },
+      "viewports": [
+        {
+          "name": "1280",
+          "width": 1280,
+          "height": 900,
+          "screenshot": "shots/metrics-board-1280.png",
+          "elements": {
+            "shell": {
+              "selector": "[data-testid=\"shell\"]",
+              "found": true,
+              "box": {
+                "x": 0,
+                "y": 0,
+                "width": 1280,
+                "height": 900
+              },
+              "styles": {
+                "display": "grid",
+                "position": "relative",
+                "width": "1280px",
+                "height": "900px",
+                "minWidth": "1280px",
+                "minHeight": "700px",
+                "backgroundColor": "rgb(11, 13, 15)",
+                "color": "rgb(227, 232, 236)",
+                "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
+                "fontSize": "16px",
+                "fontWeight": "400",
+                "fontFamily": "\"IBM Plex Sans\", system-ui, sans-serif",
+                "letterSpacing": "normal",
+                "textTransform": "none",
+                "borderTopWidth": "0px",
+                "borderBottomWidth": "0px",
+                "borderLeftWidth": "0px",
+                "borderRightWidth": "0px",
+                "borderTopColor": "rgb(227, 232, 236)",
+                "borderBottomColor": "rgb(227, 232, 236)",
+                "borderLeftColor": "rgb(227, 232, 236)",
+                "borderRightColor": "rgb(227, 232, 236)",
+                "gridTemplateRows": "46px 828px 26px",
+                "gridTemplateColumns": "1280px",
+                "gap": "normal",
+                "padding": "0px",
+                "margin": "0px",
+                "overflow": "hidden",
+                "opacity": "1"
+              },
+              "text": "Skip to navigationSkip to findSkip to main contentparleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 162…"
+            },
+            "center": {
+              "selector": ".pc-shell__center",
+              "found": true,
+              "box": {
+                "x": 284,
+                "y": 46,
+                "width": 648,
+                "height": 828
+              },
+              "styles": {
+                "display": "flex",
+                "position": "static",
+                "width": "648px",
+                "height": "828px",
+                "minWidth": "auto",
+                "minHeight": "0px",
+                "backgroundColor": "rgb(11, 13, 15)",
+                "color": "rgb(227, 232, 236)",
+                "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
+                "fontSize": "16px",
+                "fontWeight": "400",
+                "fontFamily": "\"IBM Plex Sans\", system-ui, sans-serif",
+                "letterSpacing": "normal",
+                "textTransform": "none",
+                "borderTopWidth": "0px",
+                "borderBottomWidth": "0px",
+                "borderLeftWidth": "0px",
+                "borderRightWidth": "0px",
+                "borderTopColor": "rgb(227, 232, 236)",
+                "borderBottomColor": "rgb(227, 232, 236)",
+                "borderLeftColor": "rgb(227, 232, 236)",
+                "borderRightColor": "rgb(227, 232, 236)",
+                "gridTemplateRows": "none",
+                "gridTemplateColumns": "none",
+                "gap": "normal",
+                "padding": "0px",
+                "margin": "0px",
+                "overflow": "auto",
+                "opacity": "1"
+              },
+              "text": "metricsgroup byvendormodeltypesizedifficultyworkflowmore…profileorch harnessorch modelorch effortjudge harnessjudge modeljudge effortrubricsessionall session…"
+            },
+            "screen": {
+              "selector": "[data-testid=\"screen-metrics\"]",
+              "found": true,
+              "box": {
+                "x": 284,
+                "y": 46,
+                "width": 648,
+                "height": 828
+              },
+              "styles": {
+                "display": "grid",
+                "position": "static",
+                "width": "648px",
+                "height": "828px",
+                "minWidth": "auto",
+                "minHeight": "0px",
+                "backgroundColor": "rgb(11, 13, 15)",
+                "color": "rgb(227, 232, 236)",
+                "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
+                "fontSize": "16px",
+                "fontWeight": "400",
+                "fontFamily": "\"IBM Plex Sans\", system-ui, sans-serif",
+                "letterSpacing": "normal",
+                "textTransform": "none",
+                "borderTopWidth": "0px",
+                "borderBottomWidth": "0px",
+                "borderLeftWidth": "0px",
+                "borderRightWidth": "0px",
+                "borderTopColor": "rgb(227, 232, 236)",
+                "borderBottomColor": "rgb(227, 232, 236)",
+                "borderLeftColor": "rgb(227, 232, 236)",
+                "borderRightColor": "rgb(227, 232, 236)",
+                "gridTemplateRows": "95px 733px 0px",
+                "gridTemplateColumns": "648px",
+                "gap": "normal",
+                "padding": "0px",
+                "margin": "0px",
+                "overflow": "visible",
+                "opacity": "1"
+              },
+              "text": "metricsgroup byvendormodeltypesizedifficultyworkflowmore…profileorch harnessorch modelorch effortjudge harnessjudge modeljudge effortrubricsessionall session…"
+            },
+            "filter-bar": {
+              "selector": "[data-testid=\"metrics-filter-bar\"]",
+              "found": true,
+              "box": {
+                "x": 296,
+                "y": 153,
+                "width": 624,
+                "height": 128.38
+              },
+              "styles": {
+                "display": "flex",
+                "position": "static",
+                "width": "624px",
+                "height": "128.375px",
+                "minWidth": "auto",
+                "minHeight": "auto",
+                "backgroundColor": "rgb(14, 17, 20)",
+                "color": "rgb(227, 232, 236)",
+                "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
+                "fontSize": "16px",
+                "fontWeight": "400",
+                "fontFamily": "\"IBM Plex Sans\", system-ui, sans-serif",
+                "letterSpacing": "normal",
+                "textTransform": "none",
+                "borderTopWidth": "1px",
+                "borderBottomWidth": "1px",
+                "borderLeftWidth": "1px",
+                "borderRightWidth": "1px",
+                "borderTopColor": "rgb(35, 42, 48)",
+                "borderBottomColor": "rgb(35, 42, 48)",
+                "borderLeftColor": "rgb(35, 42, 48)",
+                "borderRightColor": "rgb(35, 42, 48)",
+                "gridTemplateRows": "none",
+                "gridTemplateColumns": "none",
+                "gap": "8px 10px",
+                "padding": "8px 10px",
+                "margin": "0px",
+                "overflow": "visible",
+                "opacity": "1"
+              },
+              "text": "typevendormodelprofilesizedifficultyorch harnessorch modelorch effortjudge harnessjudge modeljudge effortrubricfirst attempt onlybelow baseline onlyclear"
+            },
+            "session-scope": {
+              "selector": "[data-testid=\"metrics-session-scope\"]",
+              "found": true,
+              "box": {
+                "x": 444,
+                "y": 85,
+                "width": 157.8,
+                "height": 26
+              },
+              "styles": {
+                "display": "flex",
+                "position": "static",
+                "width": "157.797px",
+                "height": "26px",
+                "minWidth": "auto",
+                "minHeight": "auto",
+                "backgroundColor": "rgba(0, 0, 0, 0)",
+                "color": "rgb(227, 232, 236)",
+                "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
+                "fontSize": "16px",
+                "fontWeight": "400",
+                "fontFamily": "\"IBM Plex Sans\", system-ui, sans-serif",
+                "letterSpacing": "normal",
+                "textTransform": "none",
+                "borderTopWidth": "0px",
+                "borderBottomWidth": "0px",
+                "borderLeftWidth": "0px",
+                "borderRightWidth": "0px",
+                "borderTopColor": "rgb(227, 232, 236)",
+                "borderBottomColor": "rgb(227, 232, 236)",
+                "borderLeftColor": "rgb(227, 232, 236)",
+                "borderRightColor": "rgb(227, 232, 236)",
+                "gridTemplateRows": "none",
+                "gridTemplateColumns": "none",
+                "gap": "6px",
+                "padding": "0px",
+                "margin": "0px",
+                "overflow": "visible",
+                "opacity": "1"
+              },
+              "text": "sessionall sessionsverify-orch"
+            },
+            "group-table": {
+              "selector": "[data-testid=\"metrics-group-table\"]",
+              "found": true,
+              "box": {
+                "x": 296,
+                "y": 293.38,
+                "width": 624,
+                "height": 141.59
+              },
+              "styles": {
+                "display": "block",
+                "position": "static",
+                "width": "624px",
+                "height": "141.594px",
+                "minWidth": "0px",
+                "minHeight": "auto",
+                "backgroundColor": "rgb(11, 13, 15)",
+                "color": "rgb(227, 232, 236)",
+                "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
+                "fontSize": "16px",
+                "fontWeight": "400",
+                "fontFamily": "\"IBM Plex Sans\", system-ui, sans-serif",
+                "letterSpacing": "normal",
+                "textTransform": "none",
+                "borderTopWidth": "1px",
+                "borderBottomWidth": "1px",
+                "borderLeftWidth": "1px",
+                "borderRightWidth": "1px",
+                "borderTopColor": "rgb(35, 42, 48)",
+                "borderBottomColor": "rgb(35, 42, 48)",
+                "borderLeftColor": "rgb(35, 42, 48)",
+                "borderRightColor": "rgb(35, 42, 48)",
+                "gridTemplateRows": "none",
+                "gridTemplateColumns": "none",
+                "gap": "normal",
+                "padding": "0px",
+                "margin": "0px",
+                "overflow": "visible",
+                "opacity": "1"
+              },
+              "text": "by vendor3 groups · 3 columns hidden at this width — widen to 1361px+vendortaskssuccesseval avgtokens in ▸ out ▸ cachedavg · p95below basefake1283%7.4 · n=84…"
+            },
+            "distribution": {
+              "selector": "[data-testid=\"metrics-distribution\"]",
+              "found": true,
+              "box": {
+                "x": 296,
+                "y": 446.97,
+                "width": 624,
+                "height": 137.59
+              },
+              "styles": {
+                "display": "block",
+                "position": "static",
+                "width": "624px",
+                "height": "137.594px",
+                "minWidth": "0px",
+                "minHeight": "auto",
+                "backgroundColor": "rgb(11, 13, 15)",
+                "color": "rgb(227, 232, 236)",
+                "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
+                "fontSize": "16px",
+                "fontWeight": "400",
+                "fontFamily": "\"IBM Plex Sans\", system-ui, sans-serif",
+                "letterSpacing": "normal",
+                "textTransform": "none",
+                "borderTopWidth": "1px",
+                "borderBottomWidth": "1px",
+                "borderLeftWidth": "1px",
+                "borderRightWidth": "1px",
+                "borderTopColor": "rgb(35, 42, 48)",
+                "borderBottomColor": "rgb(35, 42, 48)",
+                "borderLeftColor": "rgb(35, 42, 48)",
+                "borderRightColor": "rgb(35, 42, 48)",
+                "gridTemplateRows": "none",
+                "gridTemplateColumns": "none",
+                "gap": "normal",
+                "padding": "0px",
+                "margin": "0px",
+                "overflow": "visible",
+                "opacity": "1"
+              },
+              "text": "score vs baseline0 — 10Score versus baseline by group (scale 0 to 10)groupscorebaselinedeltafake7.45.0+2.4claude4.15.0−0.9fake+2.4claude−0.902.557.510"
+            },
+            "heatmap": {
+              "selector": "[data-testid=\"metrics-heatmap\"]",
+              "found": true,
+              "box": {
+                "x": 296,
+                "y": 596.56,
+                "width": 624,
+                "height": 241.16
+              },
+              "styles": {
+                "display": "block",
+                "position": "static",
+                "width": "624px",
+                "height": "241.156px",
+                "minWidth": "0px",
+                "minHeight": "auto",
+                "backgroundColor": "rgb(11, 13, 15)",
+                "color": "rgb(227, 232, 236)",
+                "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
+                "fontSize": "16px",
+                "fontWeight": "400",
+                "fontFamily": "\"IBM Plex Sans\", system-ui, sans-serif",
+                "letterSpacing": "normal",
+                "textTransform": "none",
+                "borderTopWidth": "1px",
+                "borderBottomWidth": "1px",
+                "borderLeftWidth": "1px",
+                "borderRightWidth": "1px",
+                "borderTopColor": "rgb(35, 42, 48)",
+                "borderBottomColor": "rgb(35, 42, 48)",
+                "borderLeftColor": "rgb(35, 42, 48)",
+                "borderRightColor": "rgb(35, 42, 48)",
+                "gridTemplateRows": "none",
+                "gridTemplateColumns": "none",
+                "gap": "normal",
+                "padding": "0px",
+                "margin": "0px",
+                "overflow": "visible",
+                "opacity": "1"
+              },
+              "text": "criterion failure rate13 rubric samplesCriterion failure rate by groupcriterionfakeclaudebrief-implemented13%80%change-verified38%no sampleminimal-diff0%50% …"
+            },
+            "dist-plot": {
+              "selector": "[data-testid=\"metrics-dist-plot\"]",
+              "found": true,
+              "box": {
+                "x": 297,
+                "y": 487.56,
+                "width": 622,
+                "height": 96
+              },
+              "styles": {
+                "display": "block",
+                "position": "static",
+                "width": "622px",
+                "height": "96px",
+                "minWidth": "0px",
+                "minHeight": "0px",
+                "backgroundColor": "rgba(0, 0, 0, 0)",
+                "color": "rgb(227, 232, 236)",
+                "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
+                "fontSize": "16px",
+                "fontWeight": "400",
+                "fontFamily": "\"IBM Plex Sans\", system-ui, sans-serif",
+                "letterSpacing": "normal",
+                "textTransform": "none",
+                "borderTopWidth": "0px",
+                "borderBottomWidth": "0px",
+                "borderLeftWidth": "0px",
+                "borderRightWidth": "0px",
+                "borderTopColor": "rgb(227, 232, 236)",
+                "borderBottomColor": "rgb(227, 232, 236)",
+                "borderLeftColor": "rgb(227, 232, 236)",
+                "borderRightColor": "rgb(227, 232, 236)",
+                "gridTemplateRows": "none",
+                "gridTemplateColumns": "none",
+                "gap": "normal",
+                "padding": "10px 10px 8px",
+                "margin": "0px",
+                "overflow": "visible",
+                "opacity": "1"
+              },
+              "text": "Score versus baseline by group (scale 0 to 10)groupscorebaselinedeltafake7.45.0+2.4claude4.15.0−0.9fake+2.4claude−0.902.557.510"
+            },
+            "dist-axis": {
+              "selector": "[data-testid=\"metrics-dist-axis\"]",
+              "found": true,
+              "box": {
+                "x": 307,
+                "y": 557.56,
+                "width": 602,
+                "height": 18
+              },
+              "styles": {
+                "display": "grid",
+                "position": "static",
+                "width": "602px",
+                "height": "18px",
+                "minWidth": "0px",
+                "minHeight": "0px",
+                "backgroundColor": "rgba(0, 0, 0, 0)",
+                "color": "rgb(227, 232, 236)",
+                "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
+                "fontSize": "16px",
+                "fontWeight": "400",
+                "fontFamily": "\"IBM Plex Sans\", system-ui, sans-serif",
+                "letterSpacing": "normal",
+                "textTransform": "none",
+                "borderTopWidth": "0px",
+                "borderBottomWidth": "0px",
+                "borderLeftWidth": "0px",
+                "borderRightWidth": "0px",
+                "borderTopColor": "rgb(227, 232, 236)",
+                "borderBottomColor": "rgb(227, 232, 236)",
+                "borderLeftColor": "rgb(227, 232, 236)",
+                "borderRightColor": "rgb(227, 232, 236)",
+                "gridTemplateRows": "16px",
+                "gridTemplateColumns": "120px 384px 78px",
+                "gap": "10px",
+                "padding": "0px 0px 2px",
+                "margin": "4px 0px 0px",
+                "overflow": "visible",
+                "opacity": "1"
+              },
+              "text": "02.557.510"
+            },
+            "heat-legend": {
+              "selector": "[data-testid=\"metrics-heat-legend\"]",
+              "found": true,
+              "box": {
+                "x": 307,
+                "y": 792.34,
+                "width": 602,
+                "height": 34.38
+              },
+              "styles": {
+                "display": "flex",
+                "position": "static",
+                "width": "602px",
+                "height": "34.375px",
+                "minWidth": "0px",
+                "minHeight": "0px",
+                "backgroundColor": "rgba(0, 0, 0, 0)",
+                "color": "rgb(139, 152, 164)",
+                "font": "11px / 13.2px \"IBM Plex Mono\", ui-monospace, monospace",
+                "fontSize": "11px",
+                "fontWeight": "400",
+                "fontFamily": "\"IBM Plex Mono\", ui-monospace, monospace",
+                "letterSpacing": "normal",
+                "textTransform": "none",
+                "borderTopWidth": "0px",
+                "borderBottomWidth": "0px",
+                "borderLeftWidth": "0px",
+                "borderRightWidth": "0px",
+                "borderTopColor": "rgb(139, 152, 164)",
+                "borderBottomColor": "rgb(139, 152, 164)",
+                "borderLeftColor": "rgb(139, 152, 164)",
+                "borderRightColor": "rgb(139, 152, 164)",
+                "gridTemplateRows": "none",
+                "gridTemplateColumns": "none",
+                "gap": "8px 14px",
+                "padding": "0px",
+                "margin": "8px 0px 0px",
+                "overflow": "visible",
+                "opacity": "1"
+              },
+              "text": "bar = failure rate 0–100%— no samplen=<3 low sample (ink + n= in cell)100%! all failed"
+            },
+            "heat-grid": {
+              "selector": "[data-testid=\"metrics-heat-grid\"]",
+              "found": true,
+              "box": {
+                "x": 307,
+                "y": 647.16,
+                "width": 602,
+                "height": 137.19
+              },
+              "styles": {
+                "display": "grid",
+                "position": "static",
+                "width": "602px",
+                "height": "137.188px",
+                "minWidth": "min-content",
+                "minHeight": "0px",
+                "backgroundColor": "rgba(0, 0, 0, 0)",
+                "color": "rgb(227, 232, 236)",
+                "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
+                "fontSize": "16px",
+                "fontWeight": "400",
+                "fontFamily": "\"IBM Plex Sans\", system-ui, sans-serif",
+                "letterSpacing": "normal",
+                "textTransform": "none",
+                "borderTopWidth": "0px",
+                "borderBottomWidth": "0px",
+                "borderLeftWidth": "0px",
+                "borderRightWidth": "0px",
+                "borderTopColor": "rgb(227, 232, 236)",
+                "borderBottomColor": "rgb(227, 232, 236)",
+                "borderLeftColor": "rgb(227, 232, 236)",
+                "borderRightColor": "rgb(227, 232, 236)",
+                "gridTemplateRows": "17.1875px 28px 28px 28px 28px",
+                "gridTemplateColumns": "150px 224px 224px",
+                "gap": "2px",
+                "padding": "0px",
+                "margin": "0px",
+                "overflow": "visible",
+                "opacity": "1"
+              },
+              "text": "fakeclaudebrief-implemented13%80%change-verified38%—minimal-diff0%50% n=2suite-green25%100%!"
+            }
+          }
+        },
+        {
+          "name": "1460",
+          "width": 1460,
+          "height": 900,
+          "screenshot": "shots/metrics-board-1460.png",
+          "elements": {
+            "shell": {
+              "selector": "[data-testid=\"shell\"]",
+              "found": true,
+              "box": {
+                "x": 0,
+                "y": 0,
+                "width": 1460,
+                "height": 900
+              },
+              "styles": {
+                "display": "grid",
+                "position": "relative",
+                "width": "1460px",
+                "height": "900px",
+                "minWidth": "1280px",
+                "minHeight": "700px",
+                "backgroundColor": "rgb(11, 13, 15)",
+                "color": "rgb(227, 232, 236)",
+                "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
+                "fontSize": "16px",
+                "fontWeight": "400",
+                "fontFamily": "\"IBM Plex Sans\", system-ui, sans-serif",
+                "letterSpacing": "normal",
+                "textTransform": "none",
+                "borderTopWidth": "0px",
+                "borderBottomWidth": "0px",
+                "borderLeftWidth": "0px",
+                "borderRightWidth": "0px",
+                "borderTopColor": "rgb(227, 232, 236)",
+                "borderBottomColor": "rgb(227, 232, 236)",
+                "borderLeftColor": "rgb(227, 232, 236)",
+                "borderRightColor": "rgb(227, 232, 236)",
+                "gridTemplateRows": "46px 828px 26px",
+                "gridTemplateColumns": "1460px",
+                "gap": "normal",
+                "padding": "0px",
+                "margin": "0px",
+                "overflow": "hidden",
+                "opacity": "1"
+              },
+              "text": "Skip to navigationSkip to findSkip to main contentparleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 162…"
+            },
+            "center": {
+              "selector": ".pc-shell__center",
+              "found": true,
+              "box": {
+                "x": 284,
+                "y": 46,
+                "width": 828,
+                "height": 828
+              },
+              "styles": {
+                "display": "flex",
+                "position": "static",
+                "width": "828px",
+                "height": "828px",
+                "minWidth": "auto",
+                "minHeight": "0px",
+                "backgroundColor": "rgb(11, 13, 15)",
+                "color": "rgb(227, 232, 236)",
+                "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
+                "fontSize": "16px",
+                "fontWeight": "400",
+                "fontFamily": "\"IBM Plex Sans\", system-ui, sans-serif",
+                "letterSpacing": "normal",
+                "textTransform": "none",
+                "borderTopWidth": "0px",
+                "borderBottomWidth": "0px",
+                "borderLeftWidth": "0px",
+                "borderRightWidth": "0px",
+                "borderTopColor": "rgb(227, 232, 236)",
+                "borderBottomColor": "rgb(227, 232, 236)",
+                "borderLeftColor": "rgb(227, 232, 236)",
+                "borderRightColor": "rgb(227, 232, 236)",
+                "gridTemplateRows": "none",
+                "gridTemplateColumns": "none",
+                "gap": "normal",
+                "padding": "0px",
+                "margin": "0px",
+                "overflow": "auto",
+                "opacity": "1"
+              },
+              "text": "metricsgroup byvendormodeltypesizedifficultyworkflowmore…profileorch harnessorch modelorch effortjudge harnessjudge modeljudge effortrubricsessionall session…"
+            },
+            "screen": {
+              "selector": "[data-testid=\"screen-metrics\"]",
+              "found": true,
+              "box": {
+                "x": 284,
+                "y": 46,
+                "width": 828,
+                "height": 828
+              },
+              "styles": {
+                "display": "grid",
+                "position": "static",
+                "width": "828px",
+                "height": "828px",
+                "minWidth": "auto",
+                "minHeight": "0px",
+                "backgroundColor": "rgb(11, 13, 15)",
+                "color": "rgb(227, 232, 236)",
+                "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
+                "fontSize": "16px",
+                "fontWeight": "400",
+                "fontFamily": "\"IBM Plex Sans\", system-ui, sans-serif",
+                "letterSpacing": "normal",
+                "textTransform": "none",
+                "borderTopWidth": "0px",
+                "borderBottomWidth": "0px",
+                "borderLeftWidth": "0px",
+                "borderRightWidth": "0px",
+                "borderTopColor": "rgb(227, 232, 236)",
+                "borderBottomColor": "rgb(227, 232, 236)",
+                "borderLeftColor": "rgb(227, 232, 236)",
+                "borderRightColor": "rgb(227, 232, 236)",
+                "gridTemplateRows": "79px 637.719px 111.281px",
+                "gridTemplateColumns": "828px",
+                "gap": "normal",
+                "padding": "0px",
+                "margin": "0px",
+                "overflow": "visible",
+                "opacity": "1"
+              },
+              "text": "metricsgroup byvendormodeltypesizedifficultyworkflowmore…profileorch harnessorch modelorch effortjudge harnessjudge modeljudge effortrubricsessionall session…"
+            },
+            "filter-bar": {
+              "selector": "[data-testid=\"metrics-filter-bar\"]",
+              "found": true,
+              "box": {
+                "x": 296,
+                "y": 137,
+                "width": 804,
+                "height": 98.38
+              },
+              "styles": {
+                "display": "flex",
+                "position": "static",
+                "width": "804px",
+                "height": "98.375px",
+                "minWidth": "auto",
+                "minHeight": "auto",
+                "backgroundColor": "rgb(14, 17, 20)",
+                "color": "rgb(227, 232, 236)",
+                "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
+                "fontSize": "16px",
+                "fontWeight": "400",
+                "fontFamily": "\"IBM Plex Sans\", system-ui, sans-serif",
+                "letterSpacing": "normal",
+                "textTransform": "none",
+                "borderTopWidth": "1px",
+                "borderBottomWidth": "1px",
+                "borderLeftWidth": "1px",
+                "borderRightWidth": "1px",
+                "borderTopColor": "rgb(35, 42, 48)",
+                "borderBottomColor": "rgb(35, 42, 48)",
+                "borderLeftColor": "rgb(35, 42, 48)",
+                "borderRightColor": "rgb(35, 42, 48)",
+                "gridTemplateRows": "none",
+                "gridTemplateColumns": "none",
+                "gap": "8px 10px",
+                "padding": "8px 10px",
+                "margin": "0px",
+                "overflow": "visible",
+                "opacity": "1"
+              },
+              "text": "typevendormodelprofilesizedifficultyorch harnessorch modelorch effortjudge harnessjudge modeljudge effortrubricfirst attempt onlybelow baseline onlyclear"
+            },
+            "session-scope": {
+              "selector": "[data-testid=\"metrics-session-scope\"]",
+              "found": true,
+              "box": {
+                "x": 296,
+                "y": 90,
+                "width": 157.8,
+                "height": 26
+              },
+              "styles": {
+                "display": "flex",
+                "position": "static",
+                "width": "157.797px",
+                "height": "26px",
+                "minWidth": "auto",
+                "minHeight": "auto",
+                "backgroundColor": "rgba(0, 0, 0, 0)",
+                "color": "rgb(227, 232, 236)",
+                "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
+                "fontSize": "16px",
+                "fontWeight": "400",
+                "fontFamily": "\"IBM Plex Sans\", system-ui, sans-serif",
+                "letterSpacing": "normal",
+                "textTransform": "none",
+                "borderTopWidth": "0px",
+                "borderBottomWidth": "0px",
+                "borderLeftWidth": "0px",
+                "borderRightWidth": "0px",
+                "borderTopColor": "rgb(227, 232, 236)",
+                "borderBottomColor": "rgb(227, 232, 236)",
+                "borderLeftColor": "rgb(227, 232, 236)",
+                "borderRightColor": "rgb(227, 232, 236)",
+                "gridTemplateRows": "none",
+                "gridTemplateColumns": "none",
+                "gap": "6px",
+                "padding": "0px",
+                "margin": "0px",
+                "overflow": "visible",
+                "opacity": "1"
+              },
+              "text": "sessionall sessionsverify-orch"
+            },
+            "group-table": {
+              "selector": "[data-testid=\"metrics-group-table\"]",
+              "found": true,
+              "box": {
+                "x": 296,
+                "y": 247.38,
+                "width": 804,
+                "height": 141.59
+              },
+              "styles": {
+                "display": "block",
+                "position": "static",
+                "width": "804px",
+                "height": "141.594px",
+                "minWidth": "0px",
+                "minHeight": "auto",
+                "backgroundColor": "rgb(11, 13, 15)",
+                "color": "rgb(227, 232, 236)",
+                "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
+                "fontSize": "16px",
+                "fontWeight": "400",
+                "fontFamily": "\"IBM Plex Sans\", system-ui, sans-serif",
+                "letterSpacing": "normal",
+                "textTransform": "none",
+                "borderTopWidth": "1px",
+                "borderBottomWidth": "1px",
+                "borderLeftWidth": "1px",
+                "borderRightWidth": "1px",
+                "borderTopColor": "rgb(35, 42, 48)",
+                "borderBottomColor": "rgb(35, 42, 48)",
+                "borderLeftColor": "rgb(35, 42, 48)",
+                "borderRightColor": "rgb(35, 42, 48)",
+                "gridTemplateRows": "none",
+                "gridTemplateColumns": "none",
+                "gap": "normal",
+                "padding": "0px",
+                "margin": "0px",
+                "overflow": "visible",
+                "opacity": "1"
+              },
+              "text": "by vendor3 groups · 3 columns hidden at this width — widen to 1361px+vendortaskssuccesseval avgtokens in ▸ out ▸ cachedavg · p95below basefake1283%7.4 · n=84…"
+            },
+            "distribution": {
+              "selector": "[data-testid=\"metrics-distribution\"]",
+              "found": true,
+              "box": {
+                "x": 296,
+                "y": 400.97,
+                "width": 396,
+                "height": 137.59
+              },
+              "styles": {
+                "display": "block",
+                "position": "static",
+                "width": "396px",
+                "height": "137.594px",
+                "minWidth": "0px",
+                "minHeight": "auto",
+                "backgroundColor": "rgb(11, 13, 15)",
+                "color": "rgb(227, 232, 236)",
+                "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
+                "fontSize": "16px",
+                "fontWeight": "400",
+                "fontFamily": "\"IBM Plex Sans\", system-ui, sans-serif",
+                "letterSpacing": "normal",
+                "textTransform": "none",
+                "borderTopWidth": "1px",
+                "borderBottomWidth": "1px",
+                "borderLeftWidth": "1px",
+                "borderRightWidth": "1px",
+                "borderTopColor": "rgb(35, 42, 48)",
+                "borderBottomColor": "rgb(35, 42, 48)",
+                "borderLeftColor": "rgb(35, 42, 48)",
+                "borderRightColor": "rgb(35, 42, 48)",
+                "gridTemplateRows": "none",
+                "gridTemplateColumns": "none",
+                "gap": "normal",
+                "padding": "0px",
+                "margin": "0px",
+                "overflow": "visible",
+                "opacity": "1"
+              },
+              "text": "score vs baseline0 — 10Score versus baseline by group (scale 0 to 10)groupscorebaselinedeltafake7.45.0+2.4claude4.15.0−0.9fake+2.4claude−0.902.557.510"
+            },
+            "heatmap": {
+              "selector": "[data-testid=\"metrics-heatmap\"]",
+              "found": true,
+              "box": {
+                "x": 704,
+                "y": 400.97,
+                "width": 396,
+                "height": 241.16
+              },
+              "styles": {
+                "display": "block",
+                "position": "static",
+                "width": "396px",
+                "height": "241.156px",
+                "minWidth": "0px",
+                "minHeight": "auto",
+                "backgroundColor": "rgb(11, 13, 15)",
+                "color": "rgb(227, 232, 236)",
+                "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
+                "fontSize": "16px",
+                "fontWeight": "400",
+                "fontFamily": "\"IBM Plex Sans\", system-ui, sans-serif",
+                "letterSpacing": "normal",
+                "textTransform": "none",
+                "borderTopWidth": "1px",
+                "borderBottomWidth": "1px",
+                "borderLeftWidth": "1px",
+                "borderRightWidth": "1px",
+                "borderTopColor": "rgb(35, 42, 48)",
+                "borderBottomColor": "rgb(35, 42, 48)",
+                "borderLeftColor": "rgb(35, 42, 48)",
+                "borderRightColor": "rgb(35, 42, 48)",
+                "gridTemplateRows": "none",
+                "gridTemplateColumns": "none",
+                "gap": "normal",
+                "padding": "0px",
+                "margin": "0px",
+                "overflow": "visible",
+                "opacity": "1"
+              },
+              "text": "criterion failure rate13 rubric samplesCriterion failure rate by groupcriterionfakeclaudebrief-implemented13%80%change-verified38%no sampleminimal-diff0%50% …"
+            },
+            "dist-plot": {
+              "selector": "[data-testid=\"metrics-dist-plot\"]",
+              "found": true,
+              "box": {
+                "x": 297,
+                "y": 441.56,
+                "width": 394,
+                "height": 96
+              },
+              "styles": {
+                "display": "block",
+                "position": "static",
+                "width": "394px",
+                "height": "96px",
+                "minWidth": "0px",
+                "minHeight": "0px",
+                "backgroundColor": "rgba(0, 0, 0, 0)",
+                "color": "rgb(227, 232, 236)",
+                "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
+                "fontSize": "16px",
+                "fontWeight": "400",
+                "fontFamily": "\"IBM Plex Sans\", system-ui, sans-serif",
+                "letterSpacing": "normal",
+                "textTransform": "none",
+                "borderTopWidth": "0px",
+                "borderBottomWidth": "0px",
+                "borderLeftWidth": "0px",
+                "borderRightWidth": "0px",
+                "borderTopColor": "rgb(227, 232, 236)",
+                "borderBottomColor": "rgb(227, 232, 236)",
+                "borderLeftColor": "rgb(227, 232, 236)",
+                "borderRightColor": "rgb(227, 232, 236)",
+                "gridTemplateRows": "none",
+                "gridTemplateColumns": "none",
+                "gap": "normal",
+                "padding": "10px 10px 8px",
+                "margin": "0px",
+                "overflow": "visible",
+                "opacity": "1"
+              },
+              "text": "Score versus baseline by group (scale 0 to 10)groupscorebaselinedeltafake7.45.0+2.4claude4.15.0−0.9fake+2.4claude−0.902.557.510"
+            },
+            "dist-axis": {
+              "selector": "[data-testid=\"metrics-dist-axis\"]",
+              "found": true,
+              "box": {
+                "x": 307,
+                "y": 511.56,
+                "width": 374,
+                "height": 18
+              },
+              "styles": {
+                "display": "grid",
+                "position": "static",
+                "width": "374px",
+                "height": "18px",
+                "minWidth": "0px",
+                "minHeight": "0px",
+                "backgroundColor": "rgba(0, 0, 0, 0)",
+                "color": "rgb(227, 232, 236)",
+                "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
+                "fontSize": "16px",
+                "fontWeight": "400",
+                "fontFamily": "\"IBM Plex Sans\", system-ui, sans-serif",
+                "letterSpacing": "normal",
+                "textTransform": "none",
+                "borderTopWidth": "0px",
+                "borderBottomWidth": "0px",
+                "borderLeftWidth": "0px",
+                "borderRightWidth": "0px",
+                "borderTopColor": "rgb(227, 232, 236)",
+                "borderBottomColor": "rgb(227, 232, 236)",
+                "borderLeftColor": "rgb(227, 232, 236)",
+                "borderRightColor": "rgb(227, 232, 236)",
+                "gridTemplateRows": "16px",
+                "gridTemplateColumns": "120px 156px 78px",
+                "gap": "10px",
+                "padding": "0px 0px 2px",
+                "margin": "4px 0px 0px",
+                "overflow": "visible",
+                "opacity": "1"
+              },
+              "text": "02.557.510"
+            },
+            "heat-legend": {
+              "selector": "[data-testid=\"metrics-heat-legend\"]",
+              "found": true,
+              "box": {
+                "x": 715,
+                "y": 596.75,
+                "width": 374,
+                "height": 34.38
+              },
+              "styles": {
+                "display": "flex",
+                "position": "static",
+                "width": "374px",
+                "height": "34.375px",
+                "minWidth": "0px",
+                "minHeight": "0px",
+                "backgroundColor": "rgba(0, 0, 0, 0)",
+                "color": "rgb(139, 152, 164)",
+                "font": "11px / 13.2px \"IBM Plex Mono\", ui-monospace, monospace",
+                "fontSize": "11px",
+                "fontWeight": "400",
+                "fontFamily": "\"IBM Plex Mono\", ui-monospace, monospace",
+                "letterSpacing": "normal",
+                "textTransform": "none",
+                "borderTopWidth": "0px",
+                "borderBottomWidth": "0px",
+                "borderLeftWidth": "0px",
+                "borderRightWidth": "0px",
+                "borderTopColor": "rgb(139, 152, 164)",
+                "borderBottomColor": "rgb(139, 152, 164)",
+                "borderLeftColor": "rgb(139, 152, 164)",
+                "borderRightColor": "rgb(139, 152, 164)",
+                "gridTemplateRows": "none",
+                "gridTemplateColumns": "none",
+                "gap": "8px 14px",
+                "padding": "0px",
+                "margin": "8px 0px 0px",
+                "overflow": "visible",
+                "opacity": "1"
+              },
+              "text": "bar = failure rate 0–100%— no samplen=<3 low sample (ink + n= in cell)100%! all failed"
+            },
+            "heat-grid": {
+              "selector": "[data-testid=\"metrics-heat-grid\"]",
+              "found": true,
+              "box": {
+                "x": 715,
+                "y": 451.56,
+                "width": 374,
+                "height": 137.19
+              },
+              "styles": {
+                "display": "grid",
+                "position": "static",
+                "width": "374px",
+                "height": "137.188px",
+                "minWidth": "min-content",
+                "minHeight": "0px",
+                "backgroundColor": "rgba(0, 0, 0, 0)",
+                "color": "rgb(227, 232, 236)",
+                "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
+                "fontSize": "16px",
+                "fontWeight": "400",
+                "fontFamily": "\"IBM Plex Sans\", system-ui, sans-serif",
+                "letterSpacing": "normal",
+                "textTransform": "none",
+                "borderTopWidth": "0px",
+                "borderBottomWidth": "0px",
+                "borderLeftWidth": "0px",
+                "borderRightWidth": "0px",
+                "borderTopColor": "rgb(227, 232, 236)",
+                "borderBottomColor": "rgb(227, 232, 236)",
+                "borderLeftColor": "rgb(227, 232, 236)",
+                "borderRightColor": "rgb(227, 232, 236)",
+                "gridTemplateRows": "17.1875px 28px 28px 28px 28px",
+                "gridTemplateColumns": "150px 110px 110px",
+                "gap": "2px",
+                "padding": "0px",
+                "margin": "0px",
+                "overflow": "visible",
+                "opacity": "1"
+              },
+              "text": "fakeclaudebrief-implemented13%80%change-verified38%—minimal-diff0%50% n=2suite-green25%100%!"
+            }
+          }
+        },
+        {
+          "name": "1920",
+          "width": 1920,
+          "height": 900,
+          "screenshot": "shots/metrics-board-1920.png",
+          "elements": {
+            "shell": {
+              "selector": "[data-testid=\"shell\"]",
+              "found": true,
+              "box": {
+                "x": 0,
+                "y": 0,
+                "width": 1920,
+                "height": 900
+              },
+              "styles": {
+                "display": "grid",
+                "position": "relative",
+                "width": "1920px",
+                "height": "900px",
+                "minWidth": "1280px",
+                "minHeight": "700px",
+                "backgroundColor": "rgb(11, 13, 15)",
+                "color": "rgb(227, 232, 236)",
+                "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
+                "fontSize": "16px",
+                "fontWeight": "400",
+                "fontFamily": "\"IBM Plex Sans\", system-ui, sans-serif",
+                "letterSpacing": "normal",
+                "textTransform": "none",
+                "borderTopWidth": "0px",
+                "borderBottomWidth": "0px",
+                "borderLeftWidth": "0px",
+                "borderRightWidth": "0px",
+                "borderTopColor": "rgb(227, 232, 236)",
+                "borderBottomColor": "rgb(227, 232, 236)",
+                "borderLeftColor": "rgb(227, 232, 236)",
+                "borderRightColor": "rgb(227, 232, 236)",
+                "gridTemplateRows": "46px 828px 26px",
+                "gridTemplateColumns": "1920px",
+                "gap": "normal",
+                "padding": "0px",
+                "margin": "0px",
+                "overflow": "hidden",
+                "opacity": "1"
+              },
+              "text": "Skip to navigationSkip to findSkip to main contentparleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 162…"
+            },
+            "center": {
+              "selector": ".pc-shell__center",
+              "found": true,
+              "box": {
+                "x": 284,
+                "y": 46,
+                "width": 1288,
+                "height": 828
+              },
+              "styles": {
+                "display": "flex",
+                "position": "static",
+                "width": "1288px",
+                "height": "828px",
+                "minWidth": "auto",
+                "minHeight": "0px",
+                "backgroundColor": "rgb(11, 13, 15)",
+                "color": "rgb(227, 232, 236)",
+                "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
+                "fontSize": "16px",
+                "fontWeight": "400",
+                "fontFamily": "\"IBM Plex Sans\", system-ui, sans-serif",
+                "letterSpacing": "normal",
+                "textTransform": "none",
+                "borderTopWidth": "0px",
+                "borderBottomWidth": "0px",
+                "borderLeftWidth": "0px",
+                "borderRightWidth": "0px",
+                "borderTopColor": "rgb(227, 232, 236)",
+                "borderBottomColor": "rgb(227, 232, 236)",
+                "borderLeftColor": "rgb(227, 232, 236)",
+                "borderRightColor": "rgb(227, 232, 236)",
+                "gridTemplateRows": "none",
+                "gridTemplateColumns": "none",
+                "gap": "normal",
+                "padding": "0px",
+                "margin": "0px",
+                "overflow": "auto",
+                "opacity": "1"
+              },
+              "text": "metricsgroup byvendormodeltypesizedifficultyworkflowmore…profileorch harnessorch modelorch effortjudge harnessjudge modeljudge effortrubricsessionall session…"
+            },
+            "screen": {
+              "selector": "[data-testid=\"screen-metrics\"]",
+              "found": true,
+              "box": {
+                "x": 284,
+                "y": 46,
+                "width": 1288,
+                "height": 828
+              },
+              "styles": {
+                "display": "grid",
+                "position": "static",
+                "width": "1288px",
+                "height": "828px",
+                "minWidth": "auto",
+                "minHeight": "0px",
+                "backgroundColor": "rgb(11, 13, 15)",
+                "color": "rgb(227, 232, 236)",
+                "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
+                "fontSize": "16px",
+                "fontWeight": "400",
+                "fontFamily": "\"IBM Plex Sans\", system-ui, sans-serif",
+                "letterSpacing": "normal",
+                "textTransform": "none",
+                "borderTopWidth": "0px",
+                "borderBottomWidth": "0px",
+                "borderLeftWidth": "0px",
+                "borderRightWidth": "0px",
+                "borderTopColor": "rgb(227, 232, 236)",
+                "borderBottomColor": "rgb(227, 232, 236)",
+                "borderLeftColor": "rgb(227, 232, 236)",
+                "borderRightColor": "rgb(227, 232, 236)",
+                "gridTemplateRows": "64px 623.531px 140.469px",
+                "gridTemplateColumns": "1288px",
+                "gap": "normal",
+                "padding": "0px",
+                "margin": "0px",
+                "overflow": "visible",
+                "opacity": "1"
+              },
+              "text": "metricsgroup byvendormodeltypesizedifficultyworkflowmore…profileorch harnessorch modelorch effortjudge harnessjudge modeljudge effortrubricsessionall session…"
+            },
+            "filter-bar": {
+              "selector": "[data-testid=\"metrics-filter-bar\"]",
+              "found": true,
+              "box": {
+                "x": 296,
+                "y": 122,
+                "width": 1264,
+                "height": 84.19
+              },
+              "styles": {
+                "display": "flex",
+                "position": "static",
+                "width": "1264px",
+                "height": "84.1875px",
+                "minWidth": "auto",
+                "minHeight": "auto",
+                "backgroundColor": "rgb(14, 17, 20)",
+                "color": "rgb(227, 232, 236)",
+                "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
+                "fontSize": "16px",
+                "fontWeight": "400",
+                "fontFamily": "\"IBM Plex Sans\", system-ui, sans-serif",
+                "letterSpacing": "normal",
+                "textTransform": "none",
+                "borderTopWidth": "1px",
+                "borderBottomWidth": "1px",
+                "borderLeftWidth": "1px",
+                "borderRightWidth": "1px",
+                "borderTopColor": "rgb(35, 42, 48)",
+                "borderBottomColor": "rgb(35, 42, 48)",
+                "borderLeftColor": "rgb(35, 42, 48)",
+                "borderRightColor": "rgb(35, 42, 48)",
+                "gridTemplateRows": "none",
+                "gridTemplateColumns": "none",
+                "gap": "8px 10px",
+                "padding": "8px 10px",
+                "margin": "0px",
+                "overflow": "visible",
+                "opacity": "1"
+              },
+              "text": "typevendormodelprofilesizedifficultyorch harnessorch modelorch effortjudge harnessjudge modeljudge effortrubricfirst attempt onlybelow baseline onlyclear"
+            },
+            "session-scope": {
+              "selector": "[data-testid=\"metrics-session-scope\"]",
+              "found": true,
+              "box": {
+                "x": 1231.39,
+                "y": 54,
+                "width": 157.8,
+                "height": 26
+              },
+              "styles": {
+                "display": "flex",
+                "position": "static",
+                "width": "157.797px",
+                "height": "26px",
+                "minWidth": "auto",
+                "minHeight": "auto",
+                "backgroundColor": "rgba(0, 0, 0, 0)",
+                "color": "rgb(227, 232, 236)",
+                "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
+                "fontSize": "16px",
+                "fontWeight": "400",
+                "fontFamily": "\"IBM Plex Sans\", system-ui, sans-serif",
+                "letterSpacing": "normal",
+                "textTransform": "none",
+                "borderTopWidth": "0px",
+                "borderBottomWidth": "0px",
+                "borderLeftWidth": "0px",
+                "borderRightWidth": "0px",
+                "borderTopColor": "rgb(227, 232, 236)",
+                "borderBottomColor": "rgb(227, 232, 236)",
+                "borderLeftColor": "rgb(227, 232, 236)",
+                "borderRightColor": "rgb(227, 232, 236)",
+                "gridTemplateRows": "none",
+                "gridTemplateColumns": "none",
+                "gap": "6px",
+                "padding": "0px",
+                "margin": "0px",
+                "overflow": "visible",
+                "opacity": "1"
+              },
+              "text": "sessionall sessionsverify-orch"
+            },
+            "group-table": {
+              "selector": "[data-testid=\"metrics-group-table\"]",
+              "found": true,
+              "box": {
+                "x": 296,
+                "y": 218.19,
+                "width": 1264,
+                "height": 141.59
+              },
+              "styles": {
+                "display": "block",
+                "position": "static",
+                "width": "1264px",
+                "height": "141.594px",
+                "minWidth": "0px",
+                "minHeight": "auto",
+                "backgroundColor": "rgb(11, 13, 15)",
+                "color": "rgb(227, 232, 236)",
+                "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
+                "fontSize": "16px",
+                "fontWeight": "400",
+                "fontFamily": "\"IBM Plex Sans\", system-ui, sans-serif",
+                "letterSpacing": "normal",
+                "textTransform": "none",
+                "borderTopWidth": "1px",
+                "borderBottomWidth": "1px",
+                "borderLeftWidth": "1px",
+                "borderRightWidth": "1px",
+                "borderTopColor": "rgb(35, 42, 48)",
+                "borderBottomColor": "rgb(35, 42, 48)",
+                "borderLeftColor": "rgb(35, 42, 48)",
+                "borderRightColor": "rgb(35, 42, 48)",
+                "gridTemplateRows": "none",
+                "gridTemplateColumns": "none",
+                "gap": "normal",
+                "padding": "0px",
+                "margin": "0px",
+                "overflow": "visible",
+                "opacity": "1"
+              },
+              "text": "by vendor3 groups · 3 columns hidden at this width — widen to 1361px+vendortaskssuccesseval avgtokens in ▸ out ▸ cachedavg · p95below basefake1283%7.4 · n=84…"
+            },
+            "distribution": {
+              "selector": "[data-testid=\"metrics-distribution\"]",
+              "found": true,
+              "box": {
+                "x": 296,
+                "y": 371.78,
+                "width": 626,
+                "height": 137.59
+              },
+              "styles": {
+                "display": "block",
+                "position": "static",
+                "width": "626px",
+                "height": "137.594px",
+                "minWidth": "0px",
+                "minHeight": "auto",
+                "backgroundColor": "rgb(11, 13, 15)",
+                "color": "rgb(227, 232, 236)",
+                "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
+                "fontSize": "16px",
+                "fontWeight": "400",
+                "fontFamily": "\"IBM Plex Sans\", system-ui, sans-serif",
+                "letterSpacing": "normal",
+                "textTransform": "none",
+                "borderTopWidth": "1px",
+                "borderBottomWidth": "1px",
+                "borderLeftWidth": "1px",
+                "borderRightWidth": "1px",
+                "borderTopColor": "rgb(35, 42, 48)",
+                "borderBottomColor": "rgb(35, 42, 48)",
+                "borderLeftColor": "rgb(35, 42, 48)",
+                "borderRightColor": "rgb(35, 42, 48)",
+                "gridTemplateRows": "none",
+                "gridTemplateColumns": "none",
+                "gap": "normal",
+                "padding": "0px",
+                "margin": "0px",
+                "overflow": "visible",
+                "opacity": "1"
+              },
+              "text": "score vs baseline0 — 10Score versus baseline by group (scale 0 to 10)groupscorebaselinedeltafake7.45.0+2.4claude4.15.0−0.9fake+2.4claude−0.902.557.510"
+            },
+            "heatmap": {
+              "selector": "[data-testid=\"metrics-heatmap\"]",
+              "found": true,
+              "box": {
+                "x": 934,
+                "y": 371.78,
+                "width": 626,
+                "height": 241.16
+              },
+              "styles": {
+                "display": "block",
+                "position": "static",
+                "width": "626px",
+                "height": "241.156px",
+                "minWidth": "0px",
+                "minHeight": "auto",
+                "backgroundColor": "rgb(11, 13, 15)",
+                "color": "rgb(227, 232, 236)",
+                "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
+                "fontSize": "16px",
+                "fontWeight": "400",
+                "fontFamily": "\"IBM Plex Sans\", system-ui, sans-serif",
+                "letterSpacing": "normal",
+                "textTransform": "none",
+                "borderTopWidth": "1px",
+                "borderBottomWidth": "1px",
+                "borderLeftWidth": "1px",
+                "borderRightWidth": "1px",
+                "borderTopColor": "rgb(35, 42, 48)",
+                "borderBottomColor": "rgb(35, 42, 48)",
+                "borderLeftColor": "rgb(35, 42, 48)",
+                "borderRightColor": "rgb(35, 42, 48)",
+                "gridTemplateRows": "none",
+                "gridTemplateColumns": "none",
+                "gap": "normal",
+                "padding": "0px",
+                "margin": "0px",
+                "overflow": "visible",
+                "opacity": "1"
+              },
+              "text": "criterion failure rate13 rubric samplesCriterion failure rate by groupcriterionfakeclaudebrief-implemented13%80%change-verified38%no sampleminimal-diff0%50% …"
+            },
+            "dist-plot": {
+              "selector": "[data-testid=\"metrics-dist-plot\"]",
+              "found": true,
+              "box": {
+                "x": 297,
+                "y": 412.38,
+                "width": 624,
+                "height": 96
+              },
+              "styles": {
+                "display": "block",
+                "position": "static",
+                "width": "624px",
+                "height": "96px",
+                "minWidth": "0px",
+                "minHeight": "0px",
+                "backgroundColor": "rgba(0, 0, 0, 0)",
+                "color": "rgb(227, 232, 236)",
+                "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
+                "fontSize": "16px",
+                "fontWeight": "400",
+                "fontFamily": "\"IBM Plex Sans\", system-ui, sans-serif",
+                "letterSpacing": "normal",
+                "textTransform": "none",
+                "borderTopWidth": "0px",
+                "borderBottomWidth": "0px",
+                "borderLeftWidth": "0px",
+                "borderRightWidth": "0px",
+                "borderTopColor": "rgb(227, 232, 236)",
+                "borderBottomColor": "rgb(227, 232, 236)",
+                "borderLeftColor": "rgb(227, 232, 236)",
+                "borderRightColor": "rgb(227, 232, 236)",
+                "gridTemplateRows": "none",
+                "gridTemplateColumns": "none",
+                "gap": "normal",
+                "padding": "10px 10px 8px",
+                "margin": "0px",
+                "overflow": "visible",
+                "opacity": "1"
+              },
+              "text": "Score versus baseline by group (scale 0 to 10)groupscorebaselinedeltafake7.45.0+2.4claude4.15.0−0.9fake+2.4claude−0.902.557.510"
+            },
+            "dist-axis": {
+              "selector": "[data-testid=\"metrics-dist-axis\"]",
+              "found": true,
+              "box": {
+                "x": 307,
+                "y": 482.38,
+                "width": 604,
+                "height": 18
+              },
+              "styles": {
+                "display": "grid",
+                "position": "static",
+                "width": "604px",
+                "height": "18px",
+                "minWidth": "0px",
+                "minHeight": "0px",
+                "backgroundColor": "rgba(0, 0, 0, 0)",
+                "color": "rgb(227, 232, 236)",
+                "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
+                "fontSize": "16px",
+                "fontWeight": "400",
+                "fontFamily": "\"IBM Plex Sans\", system-ui, sans-serif",
+                "letterSpacing": "normal",
+                "textTransform": "none",
+                "borderTopWidth": "0px",
+                "borderBottomWidth": "0px",
+                "borderLeftWidth": "0px",
+                "borderRightWidth": "0px",
+                "borderTopColor": "rgb(227, 232, 236)",
+                "borderBottomColor": "rgb(227, 232, 236)",
+                "borderLeftColor": "rgb(227, 232, 236)",
+                "borderRightColor": "rgb(227, 232, 236)",
+                "gridTemplateRows": "16px",
+                "gridTemplateColumns": "120px 386px 78px",
+                "gap": "10px",
+                "padding": "0px 0px 2px",
+                "margin": "4px 0px 0px",
+                "overflow": "visible",
+                "opacity": "1"
+              },
+              "text": "02.557.510"
+            },
+            "heat-legend": {
+              "selector": "[data-testid=\"metrics-heat-legend\"]",
+              "found": true,
+              "box": {
+                "x": 945,
+                "y": 567.56,
+                "width": 604,
+                "height": 34.38
+              },
+              "styles": {
+                "display": "flex",
+                "position": "static",
+                "width": "604px",
+                "height": "34.375px",
+                "minWidth": "0px",
+                "minHeight": "0px",
+                "backgroundColor": "rgba(0, 0, 0, 0)",
+                "color": "rgb(139, 152, 164)",
+                "font": "11px / 13.2px \"IBM Plex Mono\", ui-monospace, monospace",
+                "fontSize": "11px",
+                "fontWeight": "400",
+                "fontFamily": "\"IBM Plex Mono\", ui-monospace, monospace",
+                "letterSpacing": "normal",
+                "textTransform": "none",
+                "borderTopWidth": "0px",
+                "borderBottomWidth": "0px",
+                "borderLeftWidth": "0px",
+                "borderRightWidth": "0px",
+                "borderTopColor": "rgb(139, 152, 164)",
+                "borderBottomColor": "rgb(139, 152, 164)",
+                "borderLeftColor": "rgb(139, 152, 164)",
+                "borderRightColor": "rgb(139, 152, 164)",
+                "gridTemplateRows": "none",
+                "gridTemplateColumns": "none",
+                "gap": "8px 14px",
+                "padding": "0px",
+                "margin": "8px 0px 0px",
+                "overflow": "visible",
+                "opacity": "1"
+              },
+              "text": "bar = failure rate 0–100%— no samplen=<3 low sample (ink + n= in cell)100%! all failed"
+            },
+            "heat-grid": {
+              "selector": "[data-testid=\"metrics-heat-grid\"]",
+              "found": true,
+              "box": {
+                "x": 945,
+                "y": 422.38,
+                "width": 604,
+                "height": 137.19
+              },
+              "styles": {
+                "display": "grid",
+                "position": "static",
+                "width": "604px",
+                "height": "137.188px",
+                "minWidth": "min-content",
+                "minHeight": "0px",
+                "backgroundColor": "rgba(0, 0, 0, 0)",
+                "color": "rgb(227, 232, 236)",
+                "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
+                "fontSize": "16px",
+                "fontWeight": "400",
+                "fontFamily": "\"IBM Plex Sans\", system-ui, sans-serif",
+                "letterSpacing": "normal",
+                "textTransform": "none",
+                "borderTopWidth": "0px",
+                "borderBottomWidth": "0px",
+                "borderLeftWidth": "0px",
+                "borderRightWidth": "0px",
+                "borderTopColor": "rgb(227, 232, 236)",
+                "borderBottomColor": "rgb(227, 232, 236)",
+                "borderLeftColor": "rgb(227, 232, 236)",
+                "borderRightColor": "rgb(227, 232, 236)",
+                "gridTemplateRows": "17.1875px 28px 28px 28px 28px",
+                "gridTemplateColumns": "150px 225px 225px",
+                "gap": "2px",
+                "padding": "0px",
+                "margin": "0px",
+                "overflow": "visible",
+                "opacity": "1"
+              },
+              "text": "fakeclaudebrief-implemented13%80%change-verified38%—minimal-diff0%50% n=2suite-green25%100%!"
+            }
+          }
+        }
+      ],
+      "a11y": {
+        "axe": {
+          "url": "http://127.0.0.1:5173/#/metrics",
+          "violations": [],
+          "passes": 30,
+          "incomplete": 1,
+          "inapplicable": 58
+        },
+        "aria": {
+          "api": "locator.ariaSnapshot",
+          "selector": "[data-testid=\"screen-metrics\"]",
+          "tree": "- text: metrics group by\n- tablist \"Group-by dimension\":\n  - tab \"vendor\" [selected]\n  - tab \"model\"\n  - tab \"type\"\n  - tab \"size\"\n  - tab \"difficulty\"\n  - tab \"workflow\"\n- text: more\n- combobox \"Additional group-by dimensions\":\n  - option \"…\" [selected]\n  - option \"profile\"\n  - option \"orch harness\"\n  - option \"orch model\"\n  - option \"orch effort\"\n  - option \"judge harness\"\n  - option \"judge model\"\n  - option \"judge effort\"\n  - option \"rubric\"\n- text: session\n- combobox \"Session scope filter\":\n  - option \"all sessions\" [selected]\n  - option \"verify-orch\"\n- group \"Metrics view\":\n  - button \"overview\" [pressed]\n  - button \"comparison\"\n- text: all sessions · 22 decided · 13 scored · 06:20\n- search \"Metrics filters\":\n  - text: type\n  - textbox \"type\"\n  - text: vendor\n  - textbox \"vendor\"\n  - text: model\n  - textbox \"model\"\n  - text: profile\n  - textbox \"profile\"\n  - text: size\n  - textbox \"size\"\n  - text: difficulty\n  - textbox \"difficulty\"\n  - text: orch harness\n  - textbox \"orch harness\"\n  - text: orch model\n  - textbox \"orch model\"\n  - text: orch effort\n  - textbox \"orch effort\"\n  - text: judge harness\n  - textbox \"judge harness\"\n  - text: judge model\n  - textbox \"judge model\"\n  - text: judge effort\n  - textbox \"judge effort\"\n  - text: rubric\n  - textbox \"rubric\"\n  - button \"first attempt only\"\n  - button \"below baseline only\"\n  - button \"clear\" [disabled]\n- region \"by vendor\":\n  - heading \"by vendor\" [level=2]\n  - text: 3 groups\n  - table:\n    - rowgroup:\n      - row \"vendor tasks success eval avg tokens in ▸ out ▸ cached avg · p95 below base\":\n        - columnheader \"vendor\"\n        - columnheader \"tasks\"\n        - columnheader \"success\"\n        - columnheader \"eval avg\"\n        - columnheader \"tokens in ▸ out ▸ cached\"\n        - columnheader \"avg · p95\"\n        - columnheader \"below base\"\n    - rowgroup:\n      - row \"fake 12 83% 7.4 · n=8 48k ▸ 12k ▸ 4k 1m · 2m 20s 15%\":\n        - cell \"fake\"\n        - cell \"12\"\n        - cell \"83%\"\n        - cell \"7.4 · n=8\"\n        - cell \"48k ▸ 12k ▸ 4k\"\n        - cell \"1m · 2m 20s\"\n        - cell \"15%\"\n      - row \"claude 6 50% 4.1 · n=5 22k ▸ 8k ▸ 500 1m 30s · 2m 40s 80%\":\n        - cell \"claude\"\n        - cell \"6\"\n        - cell \"50%\"\n        - cell \"4.1 · n=5\"\n        - cell \"22k ▸ 8k ▸ 500\"\n        - cell \"1m 30s · 2m 40s\"\n        - cell \"80%\"\n      - row \"codex 4 100% no rubric · n=4 9k ▸ 3k ▸ 100 50s · 1m 10s —\":\n        - cell \"codex\"\n        - cell \"4\"\n        - cell \"100%\"\n        - cell \"no rubric · n=4\"\n        - cell \"9k ▸ 3k ▸ 100\"\n        - cell \"50s · 1m 10s\"\n        - cell \"—\"\n- region \"score vs baseline\":\n  - heading \"score vs baseline\" [level=2]\n  - text: 0 — 10\n  - table \"Score versus baseline by group (scale 0 to 10)\":\n    - caption: Score versus baseline by group (scale 0 to 10)\n    - rowgroup:\n      - row \"group score baseline delta\":\n        - columnheader \"group\"\n        - columnheader \"score\"\n        - columnheader \"baseline\"\n        - columnheader \"delta\"\n    - rowgroup:\n      - row \"fake 7.4 5.0 +2.4\":\n        - rowheader \"fake\"\n        - cell \"7.4\"\n        - cell \"5.0\"\n        - cell \"+2.4\"\n      - row \"claude 4.1 5.0 −0.9\":\n        - rowheader \"claude\"\n        - cell \"4.1\"\n        - cell \"5.0\"\n        - cell \"−0.9\"\n  - list \"Score versus baseline tracks\":\n    - listitem: fake +2.4\n    - listitem: claude −0.9\n- region \"criterion failure rate\":\n  - heading \"criterion failure rate\" [level=2]\n  - text: 13 rubric samples\n  - table \"Criterion failure rate by group\":\n    - caption: Criterion failure rate by group\n    - rowgroup:\n      - row \"criterion fake claude\":\n        - columnheader \"criterion\"\n        - columnheader \"fake\"\n        - columnheader \"claude\"\n    - rowgroup:\n      - row \"brief-implemented 13% 80%\":\n        - rowheader \"brief-implemented\"\n        - cell \"13%\"\n        - cell \"80%\"\n      - row \"change-verified 38% no sample\":\n        - rowheader \"change-verified\"\n        - cell \"38%\"\n        - cell \"no sample\"\n      - row \"minimal-diff 0% 50% n=2 low sample\":\n        - rowheader \"minimal-diff\"\n        - cell \"0%\"\n        - cell \"50% n=2 low sample\"\n      - row \"suite-green 25% 100%! all failed\":\n        - rowheader \"suite-green\"\n        - cell \"25%\"\n        - cell \"100%! all failed\"\n  - group \"Criterion failure rate by group\": fake claude brief-implemented 13% 80% change-verified 38% — minimal-diff 0% 50% n=2 suite-green 25% 100%!\n  - text: bar = failure rate 0–100% — no sample n=<3 low sample (ink + n= in cell) 100%! all failed\n- region \"Eval buckets by size and difficulty\":\n  - heading \"eval buckets\" [level=2]\n  - text: size · difficulty by size\n  - strong: M\n  - text: n=5 avg 7.6\n  - strong: S\n  - text: n=3 avg 7.0 by difficulty\n  - strong: medium\n  - text: n=6 avg 7.1"
+        },
+        "keyboardWalk": {
+          "focusableCount": 34,
+          "note": null,
+          "path": [
+            {
+              "step": 1,
+              "key": "Tab",
+              "tag": "a",
+              "role": null,
+              "testId": null,
+              "text": "Skip to navigation"
+            },
+            {
+              "step": 1,
+              "key": "Enter",
+              "tag": "nav",
+              "role": null,
+              "testId": "shell-nav",
+              "text": "Fleet1 task · 0 need actionRunno runTaskt1Metricsall hands"
+            }
+          ],
+          "entered": true,
+          "leftBody": true
+        },
+        "axeShell": {
+          "url": "http://127.0.0.1:5173/#/metrics",
+          "violations": [],
+          "passes": 41,
+          "incomplete": 2,
+          "inapplicable": 47
+        },
+        "ariaMetrics": {
+          "api": "locator.ariaSnapshot",
+          "selector": "[data-testid=\"screen-metrics\"]",
+          "tree": "- text: metrics group by\n- tablist \"Group-by dimension\":\n  - tab \"vendor\" [selected]\n  - tab \"model\"\n  - tab \"type\"\n  - tab \"size\"\n  - tab \"difficulty\"\n  - tab \"workflow\"\n- text: more\n- combobox \"Additional group-by dimensions\":\n  - option \"…\" [selected]\n  - option \"profile\"\n  - option \"orch harness\"\n  - option \"orch model\"\n  - option \"orch effort\"\n  - option \"judge harness\"\n  - option \"judge model\"\n  - option \"judge effort\"\n  - option \"rubric\"\n- text: session\n- combobox \"Session scope filter\":\n  - option \"all sessions\" [selected]\n  - option \"verify-orch\"\n- group \"Metrics view\":\n  - button \"overview\" [pressed]\n  - button \"comparison\"\n- text: all sessions · 22 decided · 13 scored · 06:20\n- search \"Metrics filters\":\n  - text: type\n  - textbox \"type\"\n  - text: vendor\n  - textbox \"vendor\"\n  - text: model\n  - textbox \"model\"\n  - text: profile\n  - textbox \"profile\"\n  - text: size\n  - textbox \"size\"\n  - text: difficulty\n  - textbox \"difficulty\"\n  - text: orch harness\n  - textbox \"orch harness\"\n  - text: orch model\n  - textbox \"orch model\"\n  - text: orch effort\n  - textbox \"orch effort\"\n  - text: judge harness\n  - textbox \"judge harness\"\n  - text: judge model\n  - textbox \"judge model\"\n  - text: judge effort\n  - textbox \"judge effort\"\n  - text: rubric\n  - textbox \"rubric\"\n  - button \"first attempt only\"\n  - button \"below baseline only\"\n  - button \"clear\" [disabled]\n- region \"by vendor\":\n  - heading \"by vendor\" [level=2]\n  - text: 3 groups\n  - table:\n    - rowgroup:\n      - row \"vendor tasks success eval avg tokens in ▸ out ▸ cached avg · p95 below base\":\n        - columnheader \"vendor\"\n        - columnheader \"tasks\"\n        - columnheader \"success\"\n        - columnheader \"eval avg\"\n        - columnheader \"tokens in ▸ out ▸ cached\"\n        - columnheader \"avg · p95\"\n        - columnheader \"below base\"\n    - rowgroup:\n      - row \"fake 12 83% 7.4 · n=8 48k ▸ 12k ▸ 4k 1m · 2m 20s 15%\":\n        - cell \"fake\"\n        - cell \"12\"\n        - cell \"83%\"\n        - cell \"7.4 · n=8\"\n        - cell \"48k ▸ 12k ▸ 4k\"\n        - cell \"1m · 2m 20s\"\n        - cell \"15%\"\n      - row \"claude 6 50% 4.1 · n=5 22k ▸ 8k ▸ 500 1m 30s · 2m 40s 80%\":\n        - cell \"claude\"\n        - cell \"6\"\n        - cell \"50%\"\n        - cell \"4.1 · n=5\"\n        - cell \"22k ▸ 8k ▸ 500\"\n        - cell \"1m 30s · 2m 40s\"\n        - cell \"80%\"\n      - row \"codex 4 100% no rubric · n=4 9k ▸ 3k ▸ 100 50s · 1m 10s —\":\n        - cell \"codex\"\n        - cell \"4\"\n        - cell \"100%\"\n        - cell \"no rubric · n=4\"\n        - cell \"9k ▸ 3k ▸ 100\"\n        - cell \"50s · 1m 10s\"\n        - cell \"—\"\n- region \"score vs baseline\":\n  - heading \"score vs baseline\" [level=2]\n  - text: 0 — 10\n  - table \"Score versus baseline by group (scale 0 to 10)\":\n    - caption: Score versus baseline by group (scale 0 to 10)\n    - rowgroup:\n      - row \"group score baseline delta\":\n        - columnheader \"group\"\n        - columnheader \"score\"\n        - columnheader \"baseline\"\n        - columnheader \"delta\"\n    - rowgroup:\n      - row \"fake 7.4 5.0 +2.4\":\n        - rowheader \"fake\"\n        - cell \"7.4\"\n        - cell \"5.0\"\n        - cell \"+2.4\"\n      - row \"claude 4.1 5.0 −0.9\":\n        - rowheader \"claude\"\n        - cell \"4.1\"\n        - cell \"5.0\"\n        - cell \"−0.9\"\n  - list \"Score versus baseline tracks\":\n    - listitem: fake +2.4\n    - listitem: claude −0.9\n- region \"criterion failure rate\":\n  - heading \"criterion failure rate\" [level=2]\n  - text: 13 rubric samples\n  - table \"Criterion failure rate by group\":\n    - caption: Criterion failure rate by group\n    - rowgroup:\n      - row \"criterion fake claude\":\n        - columnheader \"criterion\"\n        - columnheader \"fake\"\n        - columnheader \"claude\"\n    - rowgroup:\n      - row \"brief-implemented 13% 80%\":\n        - rowheader \"brief-implemented\"\n        - cell \"13%\"\n        - cell \"80%\"\n      - row \"change-verified 38% no sample\":\n        - rowheader \"change-verified\"\n        - cell \"38%\"\n        - cell \"no sample\"\n      - row \"minimal-diff 0% 50% n=2 low sample\":\n        - rowheader \"minimal-diff\"\n        - cell \"0%\"\n        - cell \"50% n=2 low sample\"\n      - row \"suite-green 25% 100%! all failed\":\n        - rowheader \"suite-green\"\n        - cell \"25%\"\n        - cell \"100%! all failed\"\n  - group \"Criterion failure rate by group\": fake claude brief-implemented 13% 80% change-verified 38% — minimal-diff 0% 50% n=2 suite-green 25% 100%!\n  - text: bar = failure rate 0–100% — no sample n=<3 low sample (ink + n= in cell) 100%! all failed\n- region \"Eval buckets by size and difficulty\":\n  - heading \"eval buckets\" [level=2]\n  - text: size · difficulty by size\n  - strong: M\n  - text: n=5 avg 7.6\n  - strong: S\n  - text: n=3 avg 7.0 by difficulty\n  - strong: medium\n  - text: n=6 avg 7.1"
+        }
+      },
+      "recordedAt": "2026-08-06T10:20:41.330Z"
+    }
+  },
+  "updatedAt": "2026-08-06T10:20:41.330Z"
+}
