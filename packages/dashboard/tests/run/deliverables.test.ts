@@ -80,4 +80,32 @@ describe("deliverable fetch-state honesty", () => {
     });
     expect(p.status).toBe("none");
   });
+
+  it("id-stub refs use unknown kind, not INLINE (OPTIONAL #15)", () => {
+    const stub = ref({
+      deliverable_id: "d-stub",
+      node: "",
+      port: "",
+      kind: "inline",
+    });
+    const row = projectDeliverableRow(stub, undefined);
+    expect(row.kindDisplay).toBe("unknown");
+  });
+
+  it("panel label leads with dominant state, not ready for zero ready (REQUIRED #13)", () => {
+    const purgedRef = ref({
+      deliverable_id: "d-p",
+      purged_at: "2026-07-28T00:00:00.000Z",
+      kind: "dir",
+    });
+    const purgedRow = projectDeliverableRow(purgedRef, undefined);
+    const p = projectDeliverablesPanelState({
+      refs: [purgedRef],
+      rows: [purgedRow],
+      loading: false,
+      listError: null,
+    });
+    expect(p.label.startsWith("ready")).toBe(false);
+    expect(p.label).toMatch(/purged/);
+  });
 });

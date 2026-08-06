@@ -64,54 +64,108 @@ export function runDetailGates(_entry, ledger) {
     throw new Error(`run-detail: fanOut width expected ≥2, got ${staged.fanOut?.fanWidth}`);
   }
 
-  // Fork: prefer live proof; allow note if wire could not project yet.
-  if (!staged.forked?.runId && !(demo.forkNotes || "").length) {
-    throw new Error("run-detail: missing forked run and no staging note");
+  // Fork UI required in both table and grid (REQUIRED #3).
+  if (!staged.forked?.runId) {
+    throw new Error("run-detail: missing forked run");
   }
-  if (staged.forked?.runId) {
-    const forkUi = demo.forkRender ?? {};
-    const hasWire =
-      (staged.forked.inherited?.length ?? 0) > 0 ||
-      (staged.forked.skipped?.length ?? 0) > 0;
-    if (!forkUi.inheritedFound && !forkUi.skippedFound && !hasWire) {
-      throw new Error(
-        "run-detail: forked run has neither UI nor wire inherited/skipped markers",
-      );
+  const forkUi = demo.forkRender ?? {};
+  if (!forkUi.inheritedFound || !forkUi.skippedFound) {
+    throw new Error(
+      `run-detail: fork table markers missing inherited=${forkUi.inheritedFound} skipped=${forkUi.skippedFound}`,
+    );
+  }
+  if (!forkUi.gridInheritedFound || !forkUi.gridSkippedFound) {
+    throw new Error(
+      `run-detail: fork GRID markers missing inherited=${forkUi.gridInheritedFound} skipped=${forkUi.gridSkippedFound}`,
+    );
+  }
+
+  // Wire verbs rendered (REQUIRED #4)
+  if (!demo.wireVerbs?.ok) {
+    throw new Error(
+      `run-detail: wire verbs not proven (got ${JSON.stringify(demo.wireVerbs)})`,
+    );
+  }
+
+  // Gate notice visibility at 1280 (REQUIRED #2)
+  const gn = demo.gateNoticeStyles ?? {};
+  for (const w of [1280, 1360]) {
+    const row = gn[String(w)];
+    if (!row?.compactVisible) {
+      throw new Error(`run-detail: compact gate notice not visible at ${w}`);
     }
-    // Prefer UI proof; wire-only is acceptable when focus race is noted.
-    if (!forkUi.inheritedFound && !forkUi.skippedFound && hasWire) {
-      if (!demo.forkRender?.wireOnlyOk && !demo.forkNotes?.length) {
-        // Require the demo to record that UI missed it.
-        throw new Error(
-          "run-detail: wire has fork markers but UI proof missing and no note",
-        );
-      }
+    if (row.fullVisible) {
+      throw new Error(`run-detail: full gate notice should hide at ${w}`);
+    }
+  }
+  for (const w of [1361, 1460]) {
+    const row = gn[String(w)];
+    if (!row?.fullVisible) {
+      throw new Error(`run-detail: full gate notice not visible at ${w}`);
     }
   }
 
-  const axe = demo.a11y?.axe;
-  if (!axe) throw new Error("run-detail: missing axe");
-  const viol = axe.violations ?? [];
-  if (viol.length > 0) {
-    throw new Error(
-      `run-detail: axe violations: ${viol.map((v) => v.id).join(", ")}`,
-    );
+  // Axe across all three views (REQUIRED #6)
+  const axeByView = demo.a11yByView ?? {};
+  for (const v of ["pipeline", "grid", "table"]) {
+    const block = axeByView[v];
+    if (!block?.axe) throw new Error(`run-detail: missing axe for view ${v}`);
+    const viol = block.axe.violations ?? [];
+    if (viol.length > 0) {
+      throw new Error(
+        `run-detail: axe violations in ${v}: ${viol.map((x) => x.id).join(", ")}`,
+      );
+    }
+  }
+  // Empty + error shells
+  for (const s of ["empty", "error"]) {
+    const block = axeByView[s];
+    if (!block?.axe) throw new Error(`run-detail: missing axe for shell ${s}`);
+    const viol = block.axe.violations ?? [];
+    if (viol.length > 0) {
+      throw new Error(
+        `run-detail: axe violations in ${s}: ${viol.map((x) => x.id).join(", ")}`,
+      );
+    }
   }
 
   if (!demo.views?.pipeline || !demo.views?.grid || !demo.views?.table) {
     throw new Error("run-detail: missing view proofs");
   }
 
-  if (!demo.honesty?.error?.found) {
-    throw new Error("run-detail: missing honesty error proof");
+  // Honesty error: phase MUST be panel-error (REQUIRED #5)
+  if (demo.honesty?.error?.phase !== "panel-error") {
+    throw new Error(
+      `run-detail: honesty.error phase expected panel-error, got ${demo.honesty?.error?.phase}`,
+    );
+  }
+  if (!demo.honesty?.error?.hasErrorShell) {
+    throw new Error("run-detail: honesty.error missing run-error-shell");
   }
 
-  // Neuter proof required.
+  // Copy sweep: truncated must be true (REQUIRED #5)
+  if (demo.copySweep?.truncated !== true) {
+    throw new Error(
+      `run-detail: copySweep truncated expected true, got ${JSON.stringify(demo.copySweep)}`,
+    );
+  }
+
+  // Neuter: only genuine broken treatment (REQUIRED #5)
   if (!demo.neuter?.broke || !demo.neuter?.restored) {
     throw new Error("run-detail: missing neuter proof");
   }
+  if (demo.neuter.brokePhase !== "panel-error") {
+    throw new Error(
+      `run-detail: neuter brokePhase expected panel-error, got ${demo.neuter.brokePhase}`,
+    );
+  }
 
-  // No mutating routes in screen source — checked at demo time and stored.
+  // Outputs present outside view switch
+  if (!demo.outputsAlways?.ok) {
+    throw new Error("run-detail: run outputs not proven outside view switch");
+  }
+
+  // No mutating routes in screen source
   if (demo.mutateGrep && demo.mutateGrep.hits > 0) {
     throw new Error(
       `run-detail: mutating run/gate routes found in screen source: ${JSON.stringify(demo.mutateGrep.matches)}`,
@@ -373,6 +427,28 @@ export async function runRunDetailDemo() {
       skippedFound: false,
       textSample: "",
     };
+    // Wire verbs on parked-failed (r3) — REQUIRED #4
+    let wireVerbs = { ok: false };
+    if (staged.failed?.runId) {
+      await clearRunRoutes(page);
+      await focusRun(page, session.daemon.baseUrl, staged.failed.runId);
+      await openRun(page, url, staged.failed.runId);
+      await page.waitForTimeout(800);
+      const verbsText =
+        (await page.locator('[data-testid="run-block-verbs"]').textContent().catch(() => null)) ??
+        (await page.locator('[data-testid="run-view-switch"]').textContent());
+      const wire = staged.failed.block?.verbs ?? [];
+      wireVerbs = {
+        ok:
+          wire.length > 0
+            ? wire.every((v) => (verbsText ?? "").includes(v)) &&
+              !(wire.length < 4 && (verbsText ?? "").includes("approve"))
+            : true,
+        wire,
+        rendered: (verbsText ?? "").slice(0, 200),
+      };
+    }
+
     if (staged.forked?.runId) {
       await clearRunRoutes(page);
       await focusRun(page, session.daemon.baseUrl, staged.forked.runId);
@@ -381,131 +457,176 @@ export async function runRunDetailDemo() {
       const boundId = await page
         .locator('[data-testid="screen-run"]')
         .getAttribute("data-run-id");
+
+      // Table
       await page.click('[data-testid="run-view-table"]');
       await page.waitForSelector('[data-testid="run-node-table"]', { timeout: 5_000 });
       const table = page.locator('[data-testid="run-node-table"]');
-      // Also scan pipeline for fork attrs if table misses.
-      await page.click('[data-testid="run-view-pipeline"]').catch(() => undefined);
+      const tableInh = await table.locator('[data-fork="inherited"]').count();
+      const tableSkip = await table.locator('[data-fork="skipped"]').count();
+      const tableText = ((await table.textContent()) ?? "").slice(0, 500);
+
+      // Pipeline
+      await page.click('[data-testid="run-view-pipeline"]');
+      await page.waitForSelector('[data-testid="run-pipeline"]', { timeout: 5_000 });
       const pipe = page.locator('[data-testid="run-pipeline"]');
-      const inheritedCount =
-        (await table.locator('[data-fork="inherited"]').count()) +
-        (await pipe.locator('[data-fork="inherited"]').count());
-      const skippedCount =
-        (await table.locator('[data-fork="skipped"]').count()) +
-        (await pipe.locator('[data-fork="skipped"]').count());
-      await page.click('[data-testid="run-view-table"]').catch(() => undefined);
+      const pipeInh = await pipe.locator('[data-fork="inherited"]').count();
+      const pipeSkip = await pipe.locator('[data-fork="skipped"]').count();
+
+      // Grid — REQUIRED #3 (must include iter 0)
+      await page.click('[data-testid="run-view-grid"]');
+      await page.waitForSelector('[data-testid="run-iteration-grid"]', { timeout: 5_000 });
+      const grid = page.locator('[data-testid="run-iteration-grid"]');
+      const gridInh = await grid.locator('[data-fork="inherited"]').count();
+      const gridSkip = await grid.locator('[data-fork="skipped"]').count();
+      const gridText = ((await grid.textContent()) ?? "").slice(0, 400);
+
       forkRender = {
         boundRunId: boundId,
         expectedRunId: staged.forked.runId,
-        inheritedFound: inheritedCount > 0,
-        skippedFound: skippedCount > 0,
-        textSample: ((await table.textContent()) ?? "").slice(0, 500),
-        wireOnlyOk:
-          inheritedCount === 0 &&
-          skippedCount === 0 &&
-          ((staged.forked.inherited?.length ?? 0) > 0 ||
-            (staged.forked.skipped?.length ?? 0) > 0),
+        inheritedFound: tableInh + pipeInh > 0,
+        skippedFound: tableSkip + pipeSkip > 0,
+        gridInheritedFound: gridInh > 0,
+        gridSkippedFound: gridSkip > 0,
+        gridTextSample: gridText,
+        textSample: tableText,
       };
-      if (forkRender.wireOnlyOk) {
-        staged.notes.push(
-          `fork UI markers not found on bound run ${boundId}; wire has inherited=${JSON.stringify(staged.forked.inherited)} skipped=${JSON.stringify(staged.forked.skipped)}`,
-        );
-      }
       await page.screenshot({ path: path.join(shotsDir, `${DEMO}-forked-1460.png`) });
     }
 
-    // ── Honesty: force /runs error ────────────────────────────────────
-    await focusRun(page, session.daemon.baseUrl, staged.gateHeld.runId);
-    await interceptError(page, {
-      url: "**/runs",
-      status: 500,
-      body: { error: "forced run panel error" },
+    // Outputs always present across views — REQUIRED #10
+    let outputsAlways = { ok: false, views: {} };
+    if (staged.gateHeld?.runId) {
+      await clearRunRoutes(page);
+      await focusRun(page, session.daemon.baseUrl, staged.gateHeld.runId);
+      await openRun(page, url, staged.gateHeld.runId);
+      for (const [btn, name] of [
+        ["run-view-pipeline", "pipeline"],
+        ["run-view-grid", "grid"],
+        ["run-view-table", "table"],
+      ]) {
+        await page.click(`[data-testid="${btn}"]`);
+        await page.waitForTimeout(200);
+        outputsAlways.views[name] =
+          (await page.locator('[data-testid="run-outputs"]').count()) > 0;
+      }
+      outputsAlways.ok = Object.values(outputsAlways.views).every(Boolean);
+    }
+
+    // Gate notice computed styles at 1280/1360/1361/1460 — REQUIRED #2
+    const gateNoticeStyles = {};
+    for (const width of [1280, 1360, 1361, 1460]) {
+      await page.setViewportSize({ width, height: 900 });
+      await page.waitForTimeout(100);
+      gateNoticeStyles[String(width)] = await page.evaluate(() => {
+        const full = document.querySelector('[data-testid="run-gate-notice"]');
+        const compact = document.querySelector('[data-testid="run-gate-notice-compact"]');
+        const vis = (el) => {
+          if (!el) return false;
+          const cs = getComputedStyle(el);
+          return cs.display !== "none" && cs.visibility !== "hidden" && cs.opacity !== "0";
+        };
+        return {
+          fullVisible: vis(full),
+          compactVisible: vis(compact),
+          fullDisplay: full ? getComputedStyle(full).display : null,
+          compactDisplay: compact ? getComputedStyle(compact).display : null,
+        };
+      });
+    }
+
+    // ── Honesty: force /runs error → panel-error (REQUIRED #1/#5) ─────
+    // Cold load so React has no retained detail/summaries (useRuns keeps last
+    // good detail on fetch failure — intercept must be active before first paint).
+    await clearRunRoutes(page);
+    await page.route("**/runs**", async (route) => {
+      await route.fulfill({
+        status: 500,
+        contentType: "application/json",
+        body: JSON.stringify({ error: "forced run panel error" }),
+      });
     });
-    // Only list — careful: our focusRun also routes /runs. Clear and re-add error.
-    await page.unroute("**/runs").catch(() => undefined);
-    await page.unroute("**/runs/**").catch(() => undefined);
-    await interceptError(page, {
-      url: "**/runs**",
-      status: 500,
-      body: { error: "forced run panel error" },
-    });
+    await page.goto(`${url}#/fleet`, { waitUntil: "networkidle" });
+    await page.reload({ waitUntil: "networkidle" });
     await page.goto(`${url}#/run`, { waitUntil: "networkidle" });
-    await page.waitForTimeout(1500);
+    await page.waitForTimeout(2500);
+    const honestyPhase = await page
+      .locator('[data-testid="screen-run"]')
+      .getAttribute("data-honesty");
+    const honestyText =
+      (await page.locator('[data-testid="screen-run"]').textContent()) ?? "";
+    const hasErrorShell =
+      (await page.locator('[data-testid="run-error-shell"]').count()) > 0;
     const honestyError = {
-      found: true,
-      text: (await page.locator('[data-testid="screen-run"]').textContent()) ?? "",
-      phase: await page.locator('[data-testid="screen-run"]').getAttribute("data-honesty"),
+      phase: honestyPhase,
+      hasErrorShell,
+      text: honestyText.slice(0, 240),
+      // Strict: phase must be panel-error; do not regex-match "failed" in node text.
+      found: honestyPhase === "panel-error" && hasErrorShell,
     };
-    honestyError.found =
-      /error|failed|offline|forced/i.test(honestyError.text) ||
-      honestyError.phase === "panel-error" ||
-      honestyError.phase === "offline";
     await page.screenshot({
       path: path.join(shotsDir, `${DEMO}-honesty-error-1460.png`),
     });
-    await clearIntercepts(page, "**/runs**");
+    await page.unroute("**/runs**").catch(() => undefined);
+    await clearRunRoutes(page);
 
     // ── Honesty: daemon kill (offline/stale) ──────────────────────────
-    await clearRunRoutes(page);
     await focusRun(page, session.daemon.baseUrl, staged.gateHeld.runId);
     await openRun(page, url, staged.gateHeld.runId);
-    await page.waitForSelector('[data-testid="run-header"]', { timeout: 15_000 }).catch(() => undefined);
-    // Drop routes before kill so handlers never fetch a dead port uncaught.
+    await page
+      .waitForSelector('[data-testid="run-header"]', { timeout: 15_000 })
+      .catch(() => undefined);
     await clearRunRoutes(page);
     await session.daemon.kill();
     await page.waitForTimeout(5_000);
     const honestyOffline = {
       phase: await page.locator('[data-testid="screen-run"]').getAttribute("data-honesty"),
-      liveStatus: await page.locator('[data-testid="live-status"]').textContent().catch(() => null),
-      text: ((await page.locator('[data-testid="screen-run"]').textContent()) ?? "").slice(0, 300),
+      liveStatus: await page
+        .locator('[data-testid="live-status"]')
+        .textContent()
+        .catch(() => null),
+      text: ((await page.locator('[data-testid="screen-run"]').textContent()) ?? "").slice(
+        0,
+        300,
+      ),
     };
     await page.screenshot({
       path: path.join(shotsDir, `${DEMO}-honesty-offline-1460.png`),
     });
     await session.daemon.restart();
-    // Re-install global workflows after restart (home persists; workflows dir stays).
     await session.rebindVite(session.daemon.baseUrl);
     await page.waitForTimeout(1500);
 
-    // ── Neuter proof: break wiring via intercept, show red, restore ───
+    // ── Neuter: break → panel-error only, restore (REQUIRED #5) ───────
     await clearRunRoutes(page);
-    // Break the selected-run detail path specifically (list may still be empty
-    // honesty — either panel-error or empty/offline counts as "broke").
-    await interceptError(page, {
-      url: "**/runs/**",
-      status: 500,
-      body: { error: "neuter break" },
+    await page.route("**/runs**", async (route) => {
+      await route.fulfill({
+        status: 500,
+        contentType: "application/json",
+        body: JSON.stringify({ error: "neuter break" }),
+      });
     });
-    await interceptError(page, {
-      url: "**/runs",
-      status: 500,
-      body: { error: "neuter break" },
-    });
-    if (staged.gateHeld?.runId) {
-      // Keep selection on a known id so detail fetch is attempted.
-      await page.evaluate((id) => {
-        // Best-effort: hash only; selection is React state — force via reload
-        // after setting a query the screen ignores; actual id comes from list.
-        void id;
-      }, staged.gateHeld.runId);
-    }
+    // Cold reload under intercept so no retained detail paints as live.
+    await page.goto(`${session.url}#/fleet`, { waitUntil: "networkidle" });
+    await page.reload({ waitUntil: "networkidle" });
     await page.goto(`${session.url}#/run`, { waitUntil: "networkidle" });
-    await page.waitForTimeout(1500);
+    await page.waitForTimeout(2500);
+    const neuterPhase = await page
+      .locator('[data-testid="screen-run"]')
+      .getAttribute("data-honesty");
     const neuterBroke = {
-      text: ((await page.locator('[data-testid="screen-run"]').textContent()) ?? "").slice(0, 200),
-      phase: await page.locator('[data-testid="screen-run"]').getAttribute("data-honesty"),
-      hasHeader: (await page.locator('[data-testid="run-header"]').count()) > 0,
+      text: ((await page.locator('[data-testid="screen-run"]').textContent()) ?? "").slice(
+        0,
+        200,
+      ),
+      phase: neuterPhase,
+      hasErrorShell:
+        (await page.locator('[data-testid="run-error-shell"]').count()) > 0,
     };
-    const broke =
-      /error|neuter|failed|offline|No runs|Loading|Connecting/i.test(neuterBroke.text) ||
-      ["panel-error", "offline", "empty", "loading", "connecting"].includes(
-        neuterBroke.phase ?? "",
-      ) ||
-      !neuterBroke.hasHeader;
-    await clearIntercepts(page, "**/runs/**");
-    await clearIntercepts(page, "**/runs");
+    // Accept ONLY panel-error as genuine broken treatment.
+    const broke = neuterPhase === "panel-error" && neuterBroke.hasErrorShell;
+    await page.unroute("**/runs**").catch(() => undefined);
     await clearRunRoutes(page);
-    // Restage focus + reload
     if (staged.gateHeld?.runId) {
       await focusRun(page, session.daemon.baseUrl, staged.gateHeld.runId);
       await openRun(page, session.url, staged.gateHeld.runId);
@@ -516,21 +637,73 @@ export async function runRunDetailDemo() {
     const restoredHeader = await page.locator('[data-testid="run-header"]').count();
     const neuter = {
       broke,
+      brokePhase: neuterPhase,
       brokeSample: neuterBroke,
       restored: restoredHeader > 0,
     };
 
-    // ── A11y on healthy gate-held ─────────────────────────────────────
+    // ── A11y across pipeline / grid / table + empty + error (REQUIRED #6)
+    const a11yByView = {};
+    if (staged.gateHeld?.runId) {
+      await clearRunRoutes(page);
+      await focusRun(page, session.daemon.baseUrl, staged.gateHeld.runId);
+      await openRun(page, session.url, staged.gateHeld.runId);
+      await page.setViewportSize({ width: 1460, height: 900 });
+      for (const [btn, name] of [
+        ["run-view-pipeline", "pipeline"],
+        ["run-view-grid", "grid"],
+        ["run-view-table", "table"],
+      ]) {
+        await page.click(`[data-testid="${btn}"]`);
+        await page.waitForTimeout(300);
+        a11yByView[name] = {
+          axe: await runAxe(page, { include: '[data-testid="screen-run"]' }),
+        };
+      }
+    }
+    // Error shell axe
+    await clearRunRoutes(page);
+    await page.route("**/runs**", async (route) => {
+      await route.fulfill({
+        status: 500,
+        contentType: "application/json",
+        body: JSON.stringify({ error: "axe error shell" }),
+      });
+    });
+    await page.goto(`${session.url}#/run`, { waitUntil: "networkidle" });
+    await page.waitForTimeout(1500);
+    a11yByView.error = {
+      axe: await runAxe(page, { include: '[data-testid="screen-run"]' }),
+    };
+    await page.unroute("**/runs**").catch(() => undefined);
+    // Empty shell axe — empty list
+    await page.route("**/runs", async (route) => {
+      const pathName = new URL(route.request().url()).pathname;
+      if (pathName === "/runs" || pathName.endsWith("/runs")) {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ runs: [], seq: 0 }),
+        });
+        return;
+      }
+      await route.continue();
+    });
+    await page.goto(`${session.url}#/run`, { waitUntil: "networkidle" });
+    await page.waitForTimeout(1500);
+    a11yByView.empty = {
+      axe: await runAxe(page, { include: '[data-testid="screen-run"]' }),
+    };
+    await page.unroute("**/runs").catch(() => undefined);
+    await clearRunRoutes(page);
+
+    // Restore gate-held for remaining proofs
     if (staged.gateHeld?.runId) {
       await focusRun(page, session.daemon.baseUrl, staged.gateHeld.runId);
+      await openRun(page, session.url, staged.gateHeld.runId);
     }
-    await page.setViewportSize({ width: 1460, height: 900 });
-    await page.goto(`${session.url}#/run`, { waitUntil: "networkidle" });
-    await page.waitForSelector('[data-testid="screen-run"]', { timeout: 15_000 });
-    await page.waitForSelector('[data-testid="run-header"]', { timeout: 15_000 }).catch(() => undefined);
     const a11y = await collectA11y(page, { include: '[data-testid="screen-run"]' });
-    // Also full-page axe (chrome + screen)
-    const axeFull = await runAxe(page);
+    const axeFull = a11yByView.pipeline?.axe ?? (await runAxe(page));
     const aria = await ariaSnapshot(page, { selector: '[data-testid="screen-run"]' });
     let kb;
     try {
@@ -539,16 +712,21 @@ export async function runRunDetailDemo() {
       kb = { error: String(err) };
     }
 
-    // Long-name copy sweep: inject long workflow via route rewrite on detail
-    let copySweep = { note: "not staged — would require synthetic detail intercept" };
-    await page.route("**/runs/*", async (route) => {
+    // Long-name copy sweep — force a name that MUST overflow (REQUIRED #5)
+    let copySweep = { truncated: false };
+    await clearRunRoutes(page);
+    if (staged.gateHeld?.runId) {
+      await focusRun(page, session.daemon.baseUrl, staged.gateHeld.runId);
+    }
+    const longName =
+      "very-long-workflow-name-that-should-truncate-with-ellipsis-without-mid-glyph-clip-" +
+      "and-still-carry-full-value-on-title-attribute-for-operators-xxxxxxxxxxxxxxxxxxxx";
+    await page.route("**/runs/**", async (route) => {
       try {
         const res = await route.fetch();
         const body = await res.json().catch(() => null);
         if (body?.run) {
-          body.run.workflow =
-            "very-long-workflow-name-that-should-truncate-with-ellipsis-without-mid-glyph-clip-" +
-            "and-still-carry-full-value-on-title-attribute-for-operators";
+          body.run.workflow = longName;
           body.run.worktree =
             "/tmp/very/deep/path/to/a/run/workspace/that/must/ellipsis/" +
             "parley/runs/abcd/node.1-slot-name-extra-long";
@@ -572,24 +750,62 @@ export async function runRunDetailDemo() {
         }
       }
     });
+    // Also rewrite list so auto-select keeps the run
+    await page.route("**/runs", async (route) => {
+      try {
+        const pathName = new URL(route.request().url()).pathname;
+        if (pathName === "/runs" || pathName.endsWith("/runs")) {
+          const res = await route.fetch();
+          const body = await res.json();
+          if (Array.isArray(body.runs)) {
+            body.runs = body.runs.map((r) =>
+              r.run_id === staged.gateHeld?.runId ? { ...r, workflow: longName } : r,
+            );
+          }
+          await route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify(body),
+          });
+          return;
+        }
+      } catch {
+        /* fall through */
+      }
+      await route.continue().catch(() => undefined);
+    });
+    await page.setViewportSize({ width: 1280, height: 900 });
     await page.goto(`${session.url}#/run`, { waitUntil: "networkidle" });
-    await page.waitForTimeout(800);
+    await page.waitForTimeout(1500);
+    // Wait for long name to appear
+    await page
+      .waitForFunction(
+        (name) => {
+          const el = document.querySelector(".pc-run__workflow");
+          return el && (el.textContent ?? "").length > 40;
+        },
+        longName,
+        { timeout: 8_000 },
+      )
+      .catch(() => undefined);
     const titleEl = page.locator(".pc-run__workflow");
     if ((await titleEl.count()) > 0) {
       copySweep = await titleEl.evaluate((el) => {
         const cs = getComputedStyle(el);
         return {
-          text: el.textContent,
+          text: (el.textContent ?? "").slice(0, 80),
           title: el.getAttribute("title"),
           overflow: cs.overflow,
           textOverflow: cs.textOverflow,
           scrollWidth: el.scrollWidth,
           clientWidth: el.clientWidth,
-          truncated: el.scrollWidth > el.clientWidth,
+          truncated: el.scrollWidth > el.clientWidth + 1,
         };
       });
     }
-    await page.unroute("**/runs/*").catch(() => undefined);
+    await page.unroute("**/runs/**").catch(() => undefined);
+    await page.unroute("**/runs").catch(() => undefined);
+    await clearRunRoutes(page);
 
     const mutateGrep = await grepMutatingRoutes();
 
@@ -644,6 +860,10 @@ export async function runRunDetailDemo() {
       forkNotes: staged.notes,
       fanRender,
       failedRender,
+      wireVerbs,
+      outputsAlways,
+      gateNoticeStyles,
+      a11yByView,
       gateUi: {
         blockFound: gateUi.block?.found ?? false,
         chipText: gateUi.chip?.text ?? null,

@@ -33,20 +33,6 @@ export function shortId(id: string, n = 8): string {
   return id.length <= n ? id : id.slice(0, n);
 }
 
-export function formatDeliverableSize(
-  size: { bytes?: number; elements?: number; keys?: number } | null | undefined,
-): string | null {
-  if (!size) return null;
-  if (typeof size.bytes === "number") {
-    if (size.bytes < 1024) return `${size.bytes} B`;
-    if (size.bytes < 1024 * 1024) return `${(size.bytes / 1024).toFixed(1)} kB`;
-    return `${(size.bytes / (1024 * 1024)).toFixed(1)} MB`;
-  }
-  if (typeof size.elements === "number") return `${size.elements} elements`;
-  if (typeof size.keys === "number") return `${size.keys} keys`;
-  return null;
-}
-
 /** Fan-out width label: `×N`, never N marks (coverage audit). */
 export function fanWidthLabel(width: number | null | undefined): string | null {
   if (width == null || width < 2) return null;

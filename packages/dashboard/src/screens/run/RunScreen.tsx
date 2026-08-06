@@ -18,14 +18,19 @@ import type { ScreenMountProps } from "../types.js";
 import { useDeliverableValues } from "./useDeliverableValues.js";
 import { formatDuration, formatUsage, shortId } from "./format.js";
 import {
-  formatBlockParenthetical,
-  GATE_READONLY_NOTICE,
-  GATE_VERBS,
+  formatBlockDetail,
+  gateReadonlyNotice,
   projectRunStateLabel,
   projectTaskStateChip,
+  verbsForDisplay,
   type StateToken,
 } from "./state.js";
-import { IterationGridView, NodeTableView, PipelineView } from "./views.js";
+import {
+  IterationGridView,
+  NodeTableView,
+  PipelineView,
+  RunOutputsCard,
+} from "./views.js";
 import "./run.css";
 
 export type RunViewId = "pipeline" | "grid" | "table";
@@ -35,9 +40,7 @@ function createClient(): ParleyClient {
 }
 
 function collectDeliverableRefs(nodes: readonly NodeProjection[]): DeliverableRef[] {
-  // Detail response only carries deliverable *ids* on nodes; full refs arrive
-  // via node-detail zoom. For the panel we still list ids from the detail
-  // projection as stubs when node-detail has not loaded yet.
+  // Id-only stubs: kind is not invented as "inline" — projection uses "unknown".
   const ids: string[] = [];
   for (const n of nodes) {
     for (const id of n.deliverables) {
@@ -53,7 +56,7 @@ function collectDeliverableRefs(nodes: readonly NodeProjection[]): DeliverableRe
       iteration: 0,
       slot: null,
       task_id: null,
-      kind: "inline",
+      kind: "inline", // wire field required; kindDisplay projects as "unknown" for stubs
       type: null,
       size: null,
       created_at: "",
@@ -86,8 +89,6 @@ export function RunScreen(props: ScreenMountProps) {
     iteration: number;
   } | null>(null);
 
-  // Auto-select first run when none selected, or when the current selection
-  // is absent from the live list (e.g. verify focus-filter, or purged run).
   useEffect(() => {
     const first = runs.summaries[0];
     if (!first) return;
@@ -104,7 +105,6 @@ export function RunScreen(props: ScreenMountProps) {
     ? (runs.details.get(props.selectedRunId) ?? null)
     : null;
 
-  // Default selected node → current_node or first waiting/running.
   useEffect(() => {
     if (!detail) {
       setSelectedNode(null);
@@ -122,7 +122,9 @@ export function RunScreen(props: ScreenMountProps) {
         ? detail.nodes.find(
             (n) =>
               n.node === cur &&
-              (n.state === "waiting" || n.state === "running" || n.iteration === detail.run.iteration),
+              (n.state === "waiting" ||
+                n.state === "running" ||
+                n.iteration === detail.run.iteration),
           )
         : null) ??
       detail.nodes.find((n) => n.state === "waiting" || n.state === "running") ??
@@ -139,7 +141,6 @@ export function RunScreen(props: ScreenMountProps) {
     enabled: Boolean(props.selectedRunId && selectedNode),
   });
 
-  // Prefer full DeliverableRefs from node-detail; fall back to id stubs.
   const deliverableRefs: DeliverableRef[] = useMemo(() => {
     if (nodeTasks.data?.deliverables && nodeTasks.data.deliverables.length > 0) {
       return nodeTasks.data.deliverables;
@@ -148,8 +149,6 @@ export function RunScreen(props: ScreenMountProps) {
     return [];
   }, [nodeTasks.data, detail]);
 
-  // Also collect refs across all nodes by fetching each unique node once when
-  // we only have id stubs — for the panel we fetch values by id regardless.
   const deliv = useDeliverableValues(client, deliverableRefs, {
     enabled: Boolean(detail),
   });
@@ -161,7 +160,6 @@ export function RunScreen(props: ScreenMountProps) {
       setCopied(true);
       window.setTimeout(() => setCopied(false), 1500);
     } catch {
-      /* clipboard may be denied in headless */
       setCopied(true);
       window.setTimeout(() => setCopied(false), 1500);
     }
@@ -171,7 +169,7 @@ export function RunScreen(props: ScreenMountProps) {
     setSelectedNode({ node: n.node, iteration: n.iteration });
   }, []);
 
-  // ── Honesty shells ──────────────────────────────────────────────────
+  // ── Honesty shells — error/offline BEFORE empty (REQUIRED #1) ───────
   if (honesty.phase === "loading" || honesty.phase === "connecting") {
     return (
       <div
@@ -188,6 +186,38 @@ export function RunScreen(props: ScreenMountProps) {
         </div>
       </div>
     );
+  }
+
+  // Panel error: list or detail fetch failed — never masquerade as empty.
+  if (runs.error || runs.status === "offline") {
+    const isOffline = runs.status === "offline" && !runs.error;
+    // If we still have detail from a prior poll, fall through to render it
+    // with a stale/error band. Only full-shell when we have nothing to show.
+    if (!detail) {
+      return (
+        <div
+          className="pc-run"
+          data-testid="screen-run"
+          data-screen="run"
+          data-honesty={isOffline ? "offline" : "panel-error"}
+        >
+          <div
+            className="pc-run__honesty"
+            data-phase={isOffline ? "offline" : "panel-error"}
+            data-testid="run-error-shell"
+          >
+            <h1 className="pc-run__honesty-title">
+              {isOffline ? "Daemon offline" : "Run detail error"}
+            </h1>
+            <p className="pc-run__honesty-note">
+              {isOffline
+                ? "No run data is available. Restore the daemon connection to inspect runs."
+                : runs.error ?? "Failed to load runs."}
+            </p>
+          </div>
+        </div>
+      );
+    }
   }
 
   if (honesty.phase === "offline" && !detail) {
@@ -208,30 +238,32 @@ export function RunScreen(props: ScreenMountProps) {
     );
   }
 
-  if (!props.selectedRunId || (!detail && runs.status === "online")) {
-    // Empty: no selection and no runs, or selection missing.
-    if (runs.summaries.length === 0) {
-      return (
-        <div
-          className="pc-run"
-          data-testid="screen-run"
-          data-screen="run"
-          data-honesty="empty"
-        >
-          <div className="pc-run__empty">
-            <h1 className="pc-run__empty-title">No runs</h1>
-            <p className="pc-run__empty-note">
-              Start a workflow with <code>parley run start</code>. This surface is
-              observation-only — gate verbs stay with the orchestrating agent.
-            </p>
-          </div>
+  // Genuine empty: online, no error, no runs.
+  if (
+    !runs.error &&
+    runs.status === "online" &&
+    runs.summaries.length === 0 &&
+    !detail
+  ) {
+    return (
+      <div
+        className="pc-run"
+        data-testid="screen-run"
+        data-screen="run"
+        data-honesty="empty"
+      >
+        <div className="pc-run__empty">
+          <h1 className="pc-run__empty-title">No runs</h1>
+          <p className="pc-run__empty-note">
+            Start a workflow with <code>parley run start</code>. This surface is
+            observation-only — gate verbs stay with the orchestrating agent.
+          </p>
         </div>
-      );
-    }
+      </div>
+    );
   }
 
   if (!detail) {
-    const loading = runs.status === "connecting" || (props.selectedRunId && !runs.error);
     return (
       <div
         className="pc-run"
@@ -239,14 +271,17 @@ export function RunScreen(props: ScreenMountProps) {
         data-screen="run"
         data-honesty={runs.error ? "panel-error" : "loading"}
       >
-        <div className="pc-run__honesty" data-phase={runs.error ? "panel-error" : "loading"}>
+        <div
+          className="pc-run__honesty"
+          data-phase={runs.error ? "panel-error" : "loading"}
+        >
           <h1 className="pc-run__honesty-title">
             {runs.error ? "Run detail error" : "Loading run"}
           </h1>
           <p className="pc-run__honesty-note">
             {runs.error ??
-              (loading
-                ? `Fetching ${props.selectedRunId ?? "run"}…`
+              (props.selectedRunId
+                ? `Fetching ${props.selectedRunId}…`
                 : "Select a run from the fleet board.")}
           </p>
         </div>
@@ -257,20 +292,27 @@ export function RunScreen(props: ScreenMountProps) {
   const run = detail.run;
   const block = detail.block ?? run.block;
   const stateChip = projectRunStateLabel(run, block);
-  const workspace = run.worktree ?? (run.workspace === "scratch" ? `scratch · ${run.run_id}` : null);
+  const workspace =
+    run.worktree ?? (run.workspace === "scratch" ? `scratch · ${run.run_id}` : null);
+  const wireVerbs = verbsForDisplay(block);
+  const notice = gateReadonlyNotice(wireVerbs);
+
+  // Meta line: no workspace here — dedicated row only (REQUIRED #12).
   const metaParts = [
     run.current_node
       ? `${run.current_node}.${run.iteration}`
       : "no current node",
     `${run.tasks_settled}/${run.tasks_total} tasks`,
     formatUsage(run.usage),
-    formatDuration(run.duration_ms, run.state === "running" || run.state === "blocked"),
+    formatDuration(
+      run.duration_ms,
+      run.state === "running" || run.state === "blocked",
+    ),
   ];
   if (run.parent_run_id) {
-    metaParts.unshift(`fork of ${shortId(run.parent_run_id)} · attempt ${run.attempt}`);
-  }
-  if (workspace) {
-    metaParts.push(workspace);
+    metaParts.unshift(
+      `fork of ${shortId(run.parent_run_id)} · attempt ${run.attempt}`,
+    );
   }
 
   const selectedKey = selectedNode
@@ -286,6 +328,10 @@ export function RunScreen(props: ScreenMountProps) {
           ? "offline"
           : "live";
 
+  const showBlock = Boolean(block);
+  const showFailed =
+    !block && run.state === "failed" && Boolean(run.error || true);
+
   return (
     <div
       className="pc-run"
@@ -293,7 +339,7 @@ export function RunScreen(props: ScreenMountProps) {
       data-screen="run"
       data-run-id={run.run_id}
       data-run-state={run.state}
-      data-honesty={honesty.phase}
+      data-honesty={honesty.phase === "panel-error" ? "panel-error" : honesty.phase}
       data-view={view}
     >
       <header className="pc-run__header" data-testid="run-header">
@@ -303,7 +349,8 @@ export function RunScreen(props: ScreenMountProps) {
               {run.workflow}
             </h1>
             <span className="pc-run__id-meta">
-              run {shortId(run.run_id)} · v{run.workflow_version} · {run.workspace} workspace
+              run {shortId(run.run_id)} · v{run.workflow_version} · {run.workspace}{" "}
+              workspace
               {run.type ? ` · ${run.type}` : ""}
             </span>
           </div>
@@ -311,7 +358,11 @@ export function RunScreen(props: ScreenMountProps) {
             {metaParts.join(" · ")}
           </div>
           {workspace ? (
-            <div className="pc-run__meta-line" data-testid="run-workspace" title={workspace}>
+            <div
+              className="pc-run__meta-line"
+              data-testid="run-workspace"
+              title={workspace}
+            >
               <span className="pc-run__workspace">{workspace}</span>
             </div>
           ) : null}
@@ -330,30 +381,53 @@ export function RunScreen(props: ScreenMountProps) {
         </div>
       </header>
 
-      {block ? (
-        <div className="pc-run__block" data-testid="run-block" data-reason={block.reason}>
+      {showBlock && block ? (
+        <div
+          className="pc-run__block"
+          data-testid="run-block"
+          data-reason={block.reason}
+        >
           <span className="pc-run__block-label">blocked</span>
-          <span className="pc-run__block-detail">
-            {formatBlockParenthetical(block)}
-            {block.detail ? ` — ${block.detail}` : ""}
-            {block.node ? ` · ${block.node}` : ""}
-          </span>
-          <span className="pc-run__block-verbs" title={GATE_READONLY_NOTICE}>
-            verbs: {GATE_VERBS.join(" · ")} (orchestrating agent only)
+          <span className="pc-run__block-detail">{formatBlockDetail(block)}</span>
+          <span className="pc-run__block-verbs" title={notice} data-testid="run-block-verbs">
+            verbs: {wireVerbs.join(" · ")} (orchestrating agent only)
           </span>
         </div>
       ) : null}
 
-      <div className="pc-run__toolbar" data-testid="run-view-switch" role="toolbar" aria-label="Run views">
+      {showFailed ? (
+        <div
+          className="pc-run__block pc-run__block--failed"
+          data-testid="run-failed"
+          data-reason="failed"
+        >
+          <span className="pc-run__block-label">failed</span>
+          <span className="pc-run__block-detail">
+            {run.error ?? "run ended in failure"}
+          </span>
+        </div>
+      ) : null}
+
+      {/* role=group not toolbar — no arrow-key contract claimed (REQUIRED #7) */}
+      <div
+        className="pc-run__toolbar"
+        data-testid="run-view-switch"
+        role="group"
+        aria-label="Run views"
+      >
         <span className="pc-run__toolbar-label">view</span>
         <ViewButton id="pipeline" current={view} onSelect={setView} label="pipeline" />
         <ViewButton id="grid" current={view} onSelect={setView} label="iteration grid" />
         <ViewButton id="table" current={view} onSelect={setView} label="node table" />
-        <span className="pc-run__gate-notice" title={GATE_READONLY_NOTICE}>
-          {GATE_READONLY_NOTICE}
+        <span className="pc-run__gate-notice" title={notice} data-testid="run-gate-notice">
+          {notice}
         </span>
-        <span className="pc-run__gate-notice pc-run__gate-notice--compact" title={GATE_READONLY_NOTICE}>
-          read-only · {GATE_VERBS.join(" · ")}
+        <span
+          className="pc-run__gate-notice pc-run__gate-notice--compact"
+          title={notice}
+          data-testid="run-gate-notice-compact"
+        >
+          read-only · {wireVerbs.join(" · ")}
         </span>
       </div>
 
@@ -372,6 +446,9 @@ export function RunScreen(props: ScreenMountProps) {
           </div>
         ) : null}
 
+        {/* Run outputs — fixed home outside view switch (REQUIRED #10) */}
+        <RunOutputsCard detail={detail} />
+
         {view === "pipeline" ? <PipelineView detail={detail} /> : null}
         {view === "grid" ? <IterationGridView detail={detail} /> : null}
         {view === "table" ? (
@@ -383,10 +460,17 @@ export function RunScreen(props: ScreenMountProps) {
         ) : null}
 
         <div className="pc-run__panels">
-          <section className="pc-run__panel" data-testid="run-deliverables" aria-label="Deliverables">
+          <section
+            className="pc-run__panel"
+            data-testid="run-deliverables"
+            aria-label="Deliverables"
+          >
             <div className="pc-run__panel-head">
               <span className="pc-run__panel-title">deliverables</span>
-              <span className="pc-run__panel-meta" data-testid="run-deliverables-status">
+              <span
+                className="pc-run__panel-meta"
+                data-testid="run-deliverables-status"
+              >
                 {deliv.panelLabel}
               </span>
             </div>
@@ -405,7 +489,7 @@ export function RunScreen(props: ScreenMountProps) {
                     key={row.ref.deliverable_id}
                     className="pc-run__deliv-row"
                     data-fetch-state={row.fetchState}
-                    data-kind={row.ref.kind}
+                    data-kind={row.kindDisplay}
                   >
                     <span className="pc-run__deliv-addr" title={row.address}>
                       {row.address || row.ref.deliverable_id}
@@ -418,7 +502,7 @@ export function RunScreen(props: ScreenMountProps) {
                             ? "missing"
                             : row.fetchState === "error"
                               ? "error"
-                              : row.ref.kind
+                              : row.kindDisplay
                       }`}
                     >
                       {row.fetchState === "purged"
@@ -427,9 +511,12 @@ export function RunScreen(props: ScreenMountProps) {
                           ? "MISSING"
                           : row.fetchState === "error"
                             ? "ERROR"
-                            : row.ref.kind.toUpperCase()}
+                            : row.kindDisplay.toUpperCase()}
                     </span>
-                    <span className="pc-run__deliv-body" data-state={row.fetchState}>
+                    <span
+                      className="pc-run__deliv-body"
+                      data-state={row.fetchState}
+                    >
                       {row.body}
                     </span>
                     <span className="pc-run__deliv-meta">{row.meta}</span>
@@ -460,7 +547,6 @@ export function RunScreen(props: ScreenMountProps) {
                   Node tasks failed: {nodeTasks.error}
                 </div>
               ) : null}
-              {/* Whole-run list via client-side run_id filter */}
               {nodeTasks.runTasks.length === 0 && nodeTasks.status !== "loading" ? (
                 <div className="pc-run__panel-empty">No tasks on this run yet.</div>
               ) : (
@@ -510,10 +596,9 @@ export function RunScreen(props: ScreenMountProps) {
                   );
                 })
               )}
-              {/* Per-node rows from GET /runs/:ref/nodes/:node */}
               {nodeTasks.data && nodeTasks.data.tasks.length > 0 ? (
                 <>
-                  <div className="pc-run__panel-head" style={{ borderTop: "1px solid var(--hairline-strong)" }}>
+                  <div className="pc-run__panel-head pc-run__panel-head--sub">
                     <span className="pc-run__panel-title">
                       node {selectedNode?.node}
                       {selectedNode ? `.${selectedNode.iteration}` : ""}
@@ -536,7 +621,10 @@ export function RunScreen(props: ScreenMountProps) {
                         <span className={`pc-run__task-state pc-run__ink--${chip.token}`}>
                           {chip.label}
                         </span>
-                        <span className="pc-run__task-addr" title={row.gist || row.task_id}>
+                        <span
+                          className="pc-run__task-addr"
+                          title={row.gist || row.task_id}
+                        >
                           {row.slot ? `[${row.slot}] · ` : ""}
                           {shortId(row.task_id, 8)}
                           {row.summary ? ` · ${row.summary}` : ""}

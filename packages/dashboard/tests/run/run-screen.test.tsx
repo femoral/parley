@@ -179,6 +179,7 @@ function failedDetail(): RunDetailResponse {
       block: null,
       current_node: "plan",
       error: "synthetic failure",
+      worktree: null,
     }),
     block: null,
     nodes: [
@@ -324,8 +325,8 @@ describe("RunScreen", () => {
     const skipped = table.querySelector('[data-fork="skipped"]');
     expect(inherited).toBeTruthy();
     expect(skipped).toBeTruthy();
-    expect(inherited?.textContent).toMatch(/INHERITED|inherited/i);
-    expect(skipped?.textContent).toMatch(/SKIPPED|skipped/i);
+    expect(inherited?.textContent).toMatch(/inherited/i);
+    expect(skipped?.textContent).toMatch(/skipped/i);
     // Struck name on inherited
     expect(inherited?.querySelector(".pc-run__node-name--struck")).toBeTruthy();
     // Loud badge on skipped (not hue-only)
@@ -359,9 +360,93 @@ describe("RunScreen", () => {
     mockState.detail = null;
     mockState.summaries = [];
     mockState.tasks = [];
+    mockState.runsError = null;
+    mockState.runsStatus = "online";
     mount(null);
     expect(screen.getByTestId("screen-run").getAttribute("data-honesty")).toBe("empty");
     expect(screen.getByText(/No runs/i)).toBeTruthy();
+  });
+
+  it("GET /runs error is panel-error, never the No-runs empty shell (REQUIRED #1)", () => {
+    mockState.detail = null;
+    mockState.summaries = [];
+    mockState.tasks = [];
+    mockState.runsError = "GET /runs failed with status 500";
+    mockState.runsStatus = "online";
+    mount(null);
+    const root = screen.getByTestId("screen-run");
+    expect(root.getAttribute("data-honesty")).toBe("panel-error");
+    expect(screen.getByTestId("run-error-shell")).toBeTruthy();
+    expect(screen.getByTestId("run-error-shell").textContent).toMatch(
+      /Run detail error/,
+    );
+    expect(screen.getByTestId("run-error-shell").textContent).toMatch(
+      /GET \/runs failed/,
+    );
+    // Must NOT be byte-identical to empty.
+    expect(screen.queryByText(/^No runs$/i)).toBeNull();
+    expect(root.textContent).not.toMatch(/Start a workflow with/);
+  });
+
+  it("renders wire block.verbs, not the static full GATE_VERBS list (REQUIRED #4)", () => {
+    const d = failedDetail();
+    // Simulate parked failed-as-blocked with only redirect/finish (like r3).
+    d.run.state = "blocked";
+    d.run.block = {
+      reason: "unknown",
+      node: "plan",
+      iteration: 1,
+      detail: "blocked (all — NOT MET, 0 of 1)",
+      verbs: ["redirect", "finish"],
+    };
+    d.block = d.run.block;
+    mockState.detail = d;
+    mockState.summaries = [d.run];
+    mount();
+    const verbs = screen.getByTestId("run-block-verbs").textContent ?? "";
+    expect(verbs).toMatch(/redirect/);
+    expect(verbs).toMatch(/finish/);
+    expect(verbs).not.toMatch(/approve/);
+    expect(verbs).not.toMatch(/reject/);
+  });
+
+  it("renders run.error for a failed run (REQUIRED #14)", () => {
+    const d = failedDetail();
+    d.run.error = "synthetic vendor failure (verify)";
+    mockState.detail = d;
+    mockState.summaries = [d.run];
+    mount();
+    expect(screen.getByTestId("run-failed").textContent).toMatch(/synthetic vendor failure/);
+  });
+
+  it("shows fork markers in iteration grid including iter 0 (REQUIRED #3)", () => {
+    mockState.detail = forkedDetail();
+    mockState.summaries = [forkedDetail().run];
+    mount();
+    fireEvent.click(screen.getByTestId("run-view-grid"));
+    const grid = screen.getByTestId("run-iteration-grid");
+    expect(grid.querySelectorAll('[data-fork="inherited"]').length).toBeGreaterThan(0);
+    expect(grid.querySelectorAll('[data-fork="skipped"]').length).toBeGreaterThan(0);
+    expect(grid.textContent).toMatch(/fork · 0|fork/);
+  });
+
+  it("keeps run outputs outside the view switch (REQUIRED #10)", () => {
+    mockState.detail = gateHeldDetail();
+    mockState.summaries = [makeRun()];
+    mount();
+    expect(screen.getByTestId("run-outputs")).toBeTruthy();
+    fireEvent.click(screen.getByTestId("run-view-grid"));
+    expect(screen.getByTestId("run-outputs")).toBeTruthy();
+    fireEvent.click(screen.getByTestId("run-view-table"));
+    expect(screen.getByTestId("run-outputs")).toBeTruthy();
+  });
+
+  it("workspace path appears once (REQUIRED #12)", () => {
+    mockState.detail = gateHeldDetail();
+    mockState.summaries = [makeRun()];
+    mount();
+    const ws = screen.getAllByTestId("run-workspace");
+    expect(ws).toHaveLength(1);
   });
 
   it("neuter: breaking detail wiring surfaces error, restore recovers", () => {

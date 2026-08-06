@@ -1,5 +1,6 @@
 /**
  * Three run visualizations: pipeline, iteration grid, node table.
+ * Run outputs live outside this module (always-visible home in RunScreen).
  */
 import type { NodeProjection, RunDetailResponse } from "@useparley/core";
 import { fanWidthLabel, formatDuration, nodeAddress } from "./format.js";
@@ -38,7 +39,7 @@ function extraLine(n: NodeProjection): string {
 function slotColors(n: NodeProjection, disp: ReturnType<typeof projectNodeDisplay>): string[] {
   const width = n.fanout?.width ?? 1;
   const failed = new Set(n.fanout?.failed ?? []);
-  return Array.from({ length: Math.max(1, width) }, (_, i) => {
+  return Array.from({ length: Math.max(1, Math.min(width, 12)) }, (_, i) => {
     if (disp.emphasis === "held") return "var(--state-awaiting)";
     if (disp.token === "failed" || failed.has(String(i))) return "var(--state-failed)";
     if (disp.token === "completed") return "var(--state-completed)";
@@ -47,26 +48,39 @@ function slotColors(n: NodeProjection, disp: ReturnType<typeof projectNodeDispla
   });
 }
 
-export function PipelineView({
-  detail,
-}: {
-  detail: RunDetailResponse;
-}) {
-  const nodes = detail.nodes;
-  const outputs =
-    detail.run.state === "completed"
-      ? "sealed"
-      : detail.run.state === "failed"
-        ? "failed — incomplete"
-        : detail.block
-          ? "held — awaiting advance"
-          : "in progress";
+/** Shared run-outputs summary text. */
+export function projectRunOutputs(detail: RunDetailResponse): string {
+  if (detail.run.state === "completed") return "sealed";
+  if (detail.run.state === "failed") {
+    return detail.run.error ? `failed — ${detail.run.error}` : "failed — incomplete";
+  }
+  if (detail.block ?? detail.run.block) return "held — awaiting advance";
+  return "in progress";
+}
 
+export function RunOutputsCard({ detail }: { detail: RunDetailResponse }) {
+  return (
+    <div className="pc-run__outputs-home" data-testid="run-outputs">
+      <span className="pc-run__outputs-label">run outputs</span>
+      <span className="pc-run__outputs-body">{projectRunOutputs(detail)}</span>
+    </div>
+  );
+}
+
+export function PipelineView({ detail }: { detail: RunDetailResponse }) {
+  const nodes = detail.nodes;
   const loopNote = buildLoopNote(detail);
+  // Cap visible width of the strip: wrap into rows of cards, not one endless line.
+  const WRAP_AT = 6;
 
   return (
     <div className="pc-run__pipeline" data-testid="run-pipeline">
-      <div className="pc-run__pipeline-track" role="list" aria-label="Pipeline nodes">
+      <div
+        className="pc-run__pipeline-track"
+        role="list"
+        aria-label="Pipeline nodes"
+        data-node-count={nodes.length}
+      >
         {nodes.map((n, i) => {
           const disp = projectNodeDisplay(n);
           const cardMod =
@@ -78,9 +92,14 @@ export function PipelineView({
                   ? "pc-run__node-card--pending"
                   : "";
           const forkMod = disp.forkKind === "inherited" ? " pc-run__node-card--inherited" : "";
+          const wrapBreak = i > 0 && i % WRAP_AT === 0;
           return (
-            <div key={`${n.node}.${n.iteration}`} className="pc-run__pipe-item" style={{ display: "flex" }} role="listitem">
-              {i > 0 ? (
+            <div
+              key={`${n.node}.${n.iteration}`}
+              className={`pc-run__pipe-item${wrapBreak ? " pc-run__pipe-item--wrap" : ""}`}
+              role="listitem"
+            >
+              {i > 0 && !wrapBreak ? (
                 <div
                   className={`pc-run__pipe-leg${disp.quiet ? " pc-run__pipe-leg--dim" : ""}`}
                   aria-hidden="true"
@@ -96,7 +115,10 @@ export function PipelineView({
               >
                 <div className="pc-run__node-card-head">
                   <span className={`pc-run__node-kind ${tokenClass(disp.token)}`}>{n.kind}</span>
-                  <span className="pc-run__node-addr" title={nodeAddress(n.node, n.iteration, { fan: n.fanout?.width })}>
+                  <span
+                    className="pc-run__node-addr"
+                    title={nodeAddress(n.node, n.iteration, { fan: n.fanout?.width })}
+                  >
                     {n.iteration > 0 ? `${n.node}.${n.iteration}` : n.node}
                   </span>
                 </div>
@@ -118,18 +140,44 @@ export function PipelineView({
                       className={`pc-run__dot ${bgClass(disp.token)}${disp.live ? " pc-run__dot--live" : ""}`}
                       aria-hidden="true"
                     />
-                    <span className={`pc-run__state-label ${tokenClass(disp.token)}`}>{disp.label}</span>
-                    {disp.cue ? <span className="pc-run__state-cue">{disp.cue}</span> : null}
+                    {/* Fork: badge alone carries the vocabulary — omit cue/label double. */}
+                    {disp.forkKind ? (
+                      <span
+                        className={`pc-run__fork-badge pc-run__fork-badge--${disp.forkKind}`}
+                        title={
+                          disp.forkKind === "inherited"
+                            ? "Inherited from parent run"
+                            : "Skipped on fork re-entry"
+                        }
+                      >
+                        {disp.forkKind === "skipped" ? "skipped ⊘" : "inherited"}
+                      </span>
+                    ) : (
+                      <>
+                        <span className={`pc-run__state-label ${tokenClass(disp.token)}`}>
+                          {disp.label}
+                        </span>
+                        {disp.cue ? <span className="pc-run__state-cue">{disp.cue}</span> : null}
+                      </>
+                    )}
                     <span className="pc-run__tasks-meta">{tasksLabel(n)}</span>
                   </div>
                   <div className="pc-run__slot-track" aria-hidden="true">
                     {slotColors(n, disp).map((c, si) => (
-                      <span key={si} className="pc-run__slot-bar" style={{ background: c }} />
+                      <span
+                        key={si}
+                        className="pc-run__slot-bar"
+                        style={{ background: c }}
+                      />
                     ))}
                   </div>
                   <span className="pc-run__gist" title={n.gist}>
-                    {n.gist || "—"}
-                    {n.on_reject ? `  ·  on_reject → ${n.on_reject}` : ""}
+                    {disp.forkKind
+                      ? n.on_reject
+                        ? `on_reject → ${n.on_reject}`
+                        : "—"
+                      : n.gist || "—"}
+                    {!disp.forkKind && n.on_reject ? `  ·  on_reject → ${n.on_reject}` : ""}
                   </span>
                   <div className="pc-run__node-foot">
                     <span>{extraLine(n)}</span>
@@ -145,16 +193,12 @@ export function PipelineView({
             </div>
           );
         })}
-        <div className="pc-run__outputs" role="listitem">
-          <div className="pc-run__pipe-leg" aria-hidden="true">
-            <div className="pc-run__pipe-leg-line" />
-          </div>
-          <div className="pc-run__outputs-card" data-testid="run-outputs">
-            <span className="pc-run__outputs-label">run outputs</span>
-            <span className="pc-run__outputs-body">{outputs}</span>
-          </div>
-        </div>
       </div>
+      {nodes.length > WRAP_AT ? (
+        <div className="pc-run__scroll-cue" data-testid="pipeline-scroll-cue">
+          {nodes.length} nodes · wrapped in rows of {WRAP_AT}
+        </div>
+      ) : null}
       {loopNote ? (
         <div className="pc-run__loop-note" data-testid="run-loop-note">
           <span className="pc-run__loop-label">loop</span>
@@ -175,12 +219,24 @@ function buildLoopNote(detail: RunDetailResponse): string | null {
   return `iteration ${detail.run.iteration} · highest node pass ${maxIter}`;
 }
 
+/**
+ * Iteration columns: include 0 when any node has iteration 0 (fork markers).
+ * Live iterations remain 1..maxIter.
+ */
+export function iterationColumns(nodes: readonly NodeProjection[], runIteration: number): number[] {
+  const maxIter = Math.max(1, runIteration, ...nodes.map((n) => n.iteration));
+  const hasZero = nodes.some((n) => n.iteration === 0);
+  const cols: number[] = [];
+  if (hasZero) cols.push(0);
+  for (let i = 1; i <= maxIter; i++) cols.push(i);
+  return cols;
+}
+
 export function IterationGridView({ detail }: { detail: RunDetailResponse }) {
   const nodes = detail.nodes;
-  const maxIter = Math.max(1, detail.run.iteration, ...nodes.map((n) => n.iteration));
-  const iters = Array.from({ length: maxIter }, (_, i) => i + 1);
+  const iters = iterationColumns(nodes, detail.run.iteration);
+  const colCount = iters.length;
 
-  // Unique node ids in first-seen order (definition order from projections).
   const laneIds: string[] = [];
   const kindByNode = new Map<string, string>();
   const fanByNode = new Map<string, number>();
@@ -191,79 +247,110 @@ export function IterationGridView({ detail }: { detail: RunDetailResponse }) {
   }
 
   return (
-    <div
-      className="pc-run__grid"
-      data-testid="run-iteration-grid"
-      style={{ ["--pc-run-iters" as string]: String(maxIter) }}
-      role="table"
-      aria-label="Iteration grid"
-    >
-      <div className="pc-run__grid-row pc-run__grid-head" role="row">
-        <div className="pc-run__grid-cell" role="columnheader">
-          node
-        </div>
-        {iters.map((it) => (
-          <div key={it} className="pc-run__grid-cell" role="columnheader">
-            iteration {it}
+    <div className="pc-run__grid-wrap" data-testid="run-iteration-grid-wrap">
+      <div
+        className="pc-run__grid"
+        data-testid="run-iteration-grid"
+        style={{ ["--pc-run-iters" as string]: String(colCount) }}
+        role="table"
+        aria-label="Iteration grid"
+      >
+        <div className="pc-run__grid-row pc-run__grid-head" role="row">
+          <div className="pc-run__grid-node pc-run__grid-node--head" role="columnheader">
+            node
           </div>
-        ))}
-      </div>
-      {laneIds.map((nodeId) => {
-        const fan = fanByNode.get(nodeId);
-        const fanLabel = fanWidthLabel(fan);
-        return (
-          <div key={nodeId} className="pc-run__grid-row" role="row">
-            <div className="pc-run__grid-node" role="rowheader">
-              <span className="pc-run__grid-node-name">{nodeId}</span>
-              <span className="pc-run__grid-node-meta">
-                {kindByNode.get(nodeId) ?? "step"}
-                {fanLabel ? ` · fan-out ${fanLabel}` : ""}
-              </span>
+          {iters.map((it) => (
+            <div key={it} className="pc-run__grid-cell" role="columnheader">
+              {it === 0 ? "fork · 0" : `iteration ${it}`}
             </div>
-            {iters.map((it) => {
-              const n = nodes.find((x) => x.node === nodeId && x.iteration === it);
-              if (!n) {
+          ))}
+        </div>
+        {laneIds.map((nodeId) => {
+          const fan = fanByNode.get(nodeId);
+          const fanLabel = fanWidthLabel(fan);
+          return (
+            <div key={nodeId} className="pc-run__grid-row" role="row">
+              <div className="pc-run__grid-node" role="rowheader">
+                <span className="pc-run__grid-node-name" title={nodeId}>
+                  {nodeId}
+                </span>
+                <span className="pc-run__grid-node-meta">
+                  {kindByNode.get(nodeId) ?? "step"}
+                  {fanLabel ? ` · fan-out ${fanLabel}` : ""}
+                </span>
+              </div>
+              {iters.map((it) => {
+                const n = nodes.find((x) => x.node === nodeId && x.iteration === it);
+                if (!n) {
+                  return (
+                    <div
+                      key={it}
+                      className="pc-run__grid-cell pc-run__grid-cell--empty"
+                      role="cell"
+                    >
+                      —
+                    </div>
+                  );
+                }
+                const disp = projectNodeDisplay(n);
+                const cellMod =
+                  disp.emphasis === "held"
+                    ? "pc-run__grid-cell--held"
+                    : disp.emphasis === "failed"
+                      ? "pc-run__grid-cell--failed"
+                      : disp.forkKind === "inherited"
+                        ? "pc-run__grid-cell--inherited"
+                        : "";
                 return (
-                  <div key={it} className="pc-run__grid-cell pc-run__grid-cell--empty" role="cell">
-                    —
+                  <div
+                    key={it}
+                    className={`pc-run__grid-cell ${cellMod}`.trim()}
+                    role="cell"
+                    data-state={n.state}
+                    data-fork={disp.forkKind ?? undefined}
+                  >
+                    <div className="pc-run__state-row">
+                      <span
+                        className={`pc-run__dot ${bgClass(disp.token)}${disp.live ? " pc-run__dot--live" : ""}`}
+                        aria-hidden="true"
+                      />
+                      {disp.forkKind ? (
+                        <span
+                          className={`pc-run__fork-badge pc-run__fork-badge--${disp.forkKind}`}
+                          title={
+                            disp.forkKind === "inherited"
+                              ? "Inherited from parent run"
+                              : "Skipped on fork re-entry"
+                          }
+                        >
+                          {disp.forkKind === "skipped" ? "skipped ⊘" : "inherited"}
+                        </span>
+                      ) : (
+                        <>
+                          <span className={`pc-run__state-label ${tokenClass(disp.token)}`}>
+                            {disp.label}
+                          </span>
+                          {disp.cue ? (
+                            <span className="pc-run__state-cue">{disp.cue}</span>
+                          ) : null}
+                        </>
+                      )}
+                    </div>
+                    {!disp.forkKind ? (
+                      <span className="pc-run__gist" title={n.gist}>
+                        {n.gist || "—"}
+                      </span>
+                    ) : null}
                   </div>
                 );
-              }
-              const disp = projectNodeDisplay(n);
-              const cellMod =
-                disp.emphasis === "held"
-                  ? "pc-run__grid-cell--held"
-                  : disp.emphasis === "failed"
-                    ? "pc-run__grid-cell--failed"
-                    : "";
-              return (
-                <div
-                  key={it}
-                  className={`pc-run__grid-cell ${cellMod}`.trim()}
-                  role="cell"
-                  data-state={n.state}
-                  data-fork={disp.forkKind ?? undefined}
-                >
-                  <div className="pc-run__state-row">
-                    <span
-                      className={`pc-run__dot ${bgClass(disp.token)}${disp.live ? " pc-run__dot--live" : ""}`}
-                      aria-hidden="true"
-                    />
-                    <span className={`pc-run__state-label ${tokenClass(disp.token)}`}>{disp.label}</span>
-                    {disp.cue ? <span className="pc-run__state-cue">{disp.cue}</span> : null}
-                    <span className="pc-run__tasks-meta">
-                      {formatDuration(n.duration_ms, n.state === "running" || n.state === "waiting")}
-                    </span>
-                  </div>
-                  <span className="pc-run__gist" title={n.gist}>
-                    {n.gist || "—"}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-        );
-      })}
+              })}
+            </div>
+          );
+        })}
+      </div>
+      <div className="pc-run__scroll-cue" data-testid="grid-scroll-cue" aria-hidden="true">
+        scroll →
+      </div>
     </div>
   );
 }
@@ -280,7 +367,13 @@ export function NodeTableView({
   return (
     <div className="pc-run__table" data-testid="run-node-table" role="table" aria-label="Node table">
       <div className="pc-run__table-row pc-run__table-head" role="row">
-        <div className="pc-run__table-cell pc-run__table-cell--dot" role="columnheader" />
+        <div
+          className="pc-run__table-cell pc-run__table-cell--dot"
+          role="columnheader"
+          aria-label="state"
+        >
+          <span className="pc-run__sr-only">state</span>
+        </div>
         <div className="pc-run__table-cell" role="columnheader">
           node
         </div>
@@ -352,34 +445,44 @@ export function NodeTableView({
                 ]
                   .filter(Boolean)
                   .join(" ")}
-                style={{ font: "var(--type-row)" }}
+                title={n.node}
               >
                 {n.node}
               </span>
               <span className="pc-run__tasks-meta"> {addrSuffix}</span>
-              {disp.forkKind === "inherited" ? (
-                <span className="pc-run__fork-badge pc-run__fork-badge--inherited" title="Inherited from parent run">
-                  inherited
-                </span>
-              ) : null}
-              {disp.forkKind === "skipped" ? (
-                <span className="pc-run__fork-badge pc-run__fork-badge--skipped" title="Skipped on fork re-entry">
-                  skipped ⊘
+              {disp.forkKind ? (
+                <span
+                  className={`pc-run__fork-badge pc-run__fork-badge--${disp.forkKind}`}
+                  title={
+                    disp.forkKind === "inherited"
+                      ? "Inherited from parent run"
+                      : "Skipped on fork re-entry"
+                  }
+                >
+                  {disp.forkKind === "skipped" ? "skipped ⊘" : "inherited"}
                 </span>
               ) : null}
             </div>
             <div className="pc-run__table-cell" role="cell">
-              <span className={`pc-run__state-label ${tokenClass(disp.token)}`}>
-                {disp.label}
-                {disp.cue ?? ""}
-              </span>
+              {disp.forkKind ? (
+                <span className="pc-run__tasks-meta">—</span>
+              ) : (
+                <span className={`pc-run__state-label ${tokenClass(disp.token)}`}>
+                  {disp.label}
+                  {disp.cue ?? ""}
+                </span>
+              )}
             </div>
             <div className="pc-run__table-cell" role="cell">
               {tasksCell}
             </div>
             <div className="pc-run__table-cell" role="cell" title={n.gist}>
-              {n.gist || "—"}
-              {n.on_reject ? `  ·  on_reject → ${n.on_reject}` : ""}
+              {disp.forkKind
+                ? n.on_reject
+                  ? `on_reject → ${n.on_reject}`
+                  : "—"
+                : n.gist || "—"}
+              {!disp.forkKind && n.on_reject ? `  ·  on_reject → ${n.on_reject}` : ""}
             </div>
             <div className="pc-run__table-cell pc-run__table-cell--num" role="cell">
               {formatDuration(n.duration_ms, n.state === "running" || n.state === "waiting")}

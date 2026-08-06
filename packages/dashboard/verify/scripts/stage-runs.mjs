@@ -352,9 +352,10 @@ export async function stageRequiredRuns(baseUrl, opts) {
   }
 
   // ── Failed ───────────────────────────────────────────────────────────
-  // Daemon parks step-failure under success_policy as `blocked` with the node
-  // STATE=`failed` (never auto-fails the run — orchestrator verbs finish it).
-  // We stage that honest wire shape and prove FAILED on the node + block banner.
+  // Observed wire: step fatal leaves the run `blocked` with reason often
+  // `unknown` (inferBlockReasonFromError does not match the success-policy
+  // detail string) and node STATE=`failed`. Verbs typically redirect/finish.
+  // Run-level `state: failed` only appears on phase-2 start / definition errors.
   {
     const script = JSON.stringify(
       [
@@ -402,8 +403,9 @@ export async function stageRequiredRuns(baseUrl, opts) {
       );
     } else if (detail.run.state !== "failed") {
       staged.notes.push(
-        "daemon parks step failure as blocked(success_policy) with node STATE=failed " +
-          "(run.state=failed only on phase-2 start errors / definition unparseable)",
+        `step failure observed as run.state=${detail.run.state} block.reason=${detail.run.block?.reason ?? "null"} ` +
+          `verbs=${JSON.stringify(detail.run.block?.verbs ?? [])} with node STATE=failed ` +
+          `(run.state=failed only on phase-2 start errors / definition unparseable)`,
       );
     }
   }

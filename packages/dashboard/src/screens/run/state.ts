@@ -3,11 +3,12 @@
  * tokens, and fork cues. State is never hue-only (DESIGN.md / PRODUCT.md).
  *
  * Gate verbs (approve · reject · redirect · finish) belong to the orchestrating
- * agent — this module only labels; it never posts.
+ * agent — this module only labels; it never posts. Prefer wire `block.verbs`
+ * when present; {@link GATE_VERBS} is the type source / fallback.
  */
 import type { NodeProjection, RunBlock, RunBlockReason, RunSummary } from "@useparley/core";
 
-/** Exact gate verb list from the design register (read-only surface). */
+/** Exact gate verb list from the design register (type source + fallback). */
 export const GATE_VERBS = ["approve", "reject", "redirect", "finish"] as const;
 export type GateVerb = (typeof GATE_VERBS)[number];
 
@@ -18,7 +19,7 @@ export const BLOCK_REASON_LABELS: Record<RunBlockReason, string> = {
   success_policy: "slots",
   spawn_error: "spawn",
   unfilled_inputs: "inputs",
-  unknown: "blocked",
+  unknown: "held",
 };
 
 /** CSS custom-property token for a task/run lifecycle state. */
@@ -148,7 +149,6 @@ export function projectNodeDisplay(node: NodeProjection): NodeDisplayState {
     case "awaiting_answer":
       return base("AWAITING", "awaiting", true);
     case "waiting":
-      // Non-gate blocked (e.g. loop budget).
       return {
         label: "BLOCKED",
         token: "stalled",
@@ -186,8 +186,15 @@ export function projectRunStateLabel(
 ): { label: string; token: StateToken; live: boolean } {
   if (run.state === "blocked" && block) {
     const paren = formatBlockParenthetical(block);
+    // Avoid "BLOCKED · BLOCKED" when paren would stutter.
+    if (paren === "gate") {
+      return { label: "BLOCKED · GATE HELD", token: "awaiting", live: true };
+    }
+    if (paren === "held" || paren === "blocked") {
+      return { label: "BLOCKED", token: "stalled", live: true };
+    }
     return {
-      label: paren === "gate" ? "BLOCKED · GATE HELD" : `BLOCKED · ${paren.toUpperCase()}`,
+      label: `BLOCKED · ${paren.toUpperCase()}`,
       token: block.reason === "gate" ? "awaiting" : "stalled",
       live: true,
     };
@@ -208,7 +215,11 @@ export function projectRunStateLabel(
   }
 }
 
-/** Block reason → list/header parenthetical (matches daemon formatBlockParenthetical). */
+/**
+ * Block reason → short parenthetical for chips.
+ * `unknown` maps to "held" (not "blocked") so the chip never stutters
+ * "BLOCKED · BLOCKED".
+ */
 export function formatBlockParenthetical(block: RunBlock): string {
   switch (block.reason) {
     case "gate":
@@ -222,20 +233,66 @@ export function formatBlockParenthetical(block: RunBlock): string {
       const detail = block.detail ?? "";
       const m = detail.match(/(\d+)\s*\/\s*(\d+)\s*slots/i);
       if (m) return `${m[1]}/${m[2]} slots`;
+      // Also catch "all — NOT MET" style success-policy detail.
+      if (/not met|slots/i.test(detail)) return "slots";
       return "slots";
     }
     case "spawn_error":
       return "spawn";
     case "unfilled_inputs":
       return "inputs";
+    case "unknown":
+      return "held";
     default:
-      return BLOCK_REASON_LABELS[block.reason] ?? "blocked";
+      return BLOCK_REASON_LABELS[block.reason] ?? "held";
   }
 }
 
-/** Helm notice copy — exact verb list, observation-only. */
-export const GATE_READONLY_NOTICE =
-  "gate verbs (approve · reject · redirect · finish) belong to the orchestrating agent — this surface is read-only";
+/**
+ * Banner detail line — strip a leading "blocked (" wrapper from wire detail
+ * so we do not print "blocked — blocked (…)" .
+ */
+export function formatBlockDetail(block: RunBlock): string {
+  const paren = formatBlockParenthetical(block);
+  let detail = (block.detail ?? "").trim();
+  // Strip redundant "blocked (…)" envelope the daemon often embeds.
+  const m = detail.match(/^blocked\s*\((.*)\)\s*$/i);
+  if (m?.[1] !== undefined) detail = m[1].trim();
+  if (detail.toLowerCase().startsWith("blocked")) {
+    detail = detail.replace(/^blocked\s*[·:—-]?\s*/i, "").trim();
+  }
+  const parts: string[] = [];
+  // Prefer a useful paren; skip when it duplicates the detail opener.
+  if (paren && paren !== "held") {
+    parts.push(paren);
+  }
+  if (detail && !parts.some((p) => detail.toLowerCase().includes(p.toLowerCase()))) {
+    parts.push(detail);
+  } else if (detail && parts.length === 0) {
+    parts.push(detail);
+  }
+  if (block.node) parts.push(block.node);
+  return parts.join(" · ") || paren || "held";
+}
+
+/**
+ * Verbs to show on the block banner / notice.
+ * Prefer wire `block.verbs`; fall back to full design-register list only when
+ * the array is absent (null/undefined), not when it is empty.
+ */
+export function verbsForDisplay(block: RunBlock | null | undefined): readonly string[] {
+  if (block && Array.isArray(block.verbs) && block.verbs.length > 0) {
+    return block.verbs;
+  }
+  return GATE_VERBS;
+}
+
+/** Helm notice copy — observation-only. */
+export function gateReadonlyNotice(verbs: readonly string[] = GATE_VERBS): string {
+  return `gate verbs (${verbs.join(" · ")}) belong to the orchestrating agent — this surface is read-only`;
+}
+
+export const GATE_READONLY_NOTICE = gateReadonlyNotice();
 
 /** Task lifecycle state → chip label/token (run-tasks panel). */
 export function projectTaskStateChip(state: string): {

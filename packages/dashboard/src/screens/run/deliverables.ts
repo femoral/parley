@@ -14,6 +14,8 @@ export type DeliverableFetchState =
   | "purged"
   | "missing-worktree";
 
+export type DeliverableKindDisplay = "inline" | "file" | "dir" | "unknown";
+
 export interface DeliverableRow {
   ref: DeliverableRef;
   /** Per-row honesty after optional value fetch. */
@@ -25,6 +27,8 @@ export interface DeliverableRow {
   /** Secondary meta (kind · size · presence). */
   meta: string;
   address: string;
+  /** Display kind — "unknown" for id-only stubs that never invent INLINE. */
+  kindDisplay: DeliverableKindDisplay;
 }
 
 export function deliverableAddress(ref: DeliverableRef): string {
@@ -50,6 +54,14 @@ export function projectDeliverableRow(
         ? deliverableAddress(ref)
         : (value?.deliverable_id ?? ref.deliverable_id);
 
+  // Id-only stubs (empty node) must not claim kind:"inline".
+  const kindDisplay: DeliverableKindDisplay =
+    value && value.kind
+      ? value.kind
+      : ref.node
+        ? ref.kind
+        : "unknown";
+
   if (error) {
     return {
       ref,
@@ -57,12 +69,12 @@ export function projectDeliverableRow(
       value: null,
       error,
       body: error,
-      meta: `${ref.kind} · error`,
+      meta: `${kindDisplay} · error`,
       address,
+      kindDisplay,
     };
   }
 
-  // Ref itself can carry purge even without a value fetch.
   if (ref.purged_at) {
     return {
       ref,
@@ -72,6 +84,7 @@ export function projectDeliverableRow(
       body: value?.path ?? value?.absolute_path ?? "purged",
       meta: `purged · ${ref.purged_at.slice(0, 10)} · retention`,
       address,
+      kindDisplay,
     };
   }
 
@@ -82,8 +95,9 @@ export function projectDeliverableRow(
       value: null,
       error: null,
       body: "not fetched",
-      meta: `${ref.kind} · list only`,
+      meta: `${kindDisplay} · list only`,
       address,
+      kindDisplay,
     };
   }
 
@@ -94,8 +108,9 @@ export function projectDeliverableRow(
       value: null,
       error: "missing value",
       body: "missing value",
-      meta: `${ref.kind} · error`,
+      meta: `${kindDisplay} · error`,
       address,
+      kindDisplay,
     };
   }
 
@@ -108,14 +123,11 @@ export function projectDeliverableRow(
       body: value.path ?? value.absolute_path ?? "purged",
       meta: `purged · ${value.purged_at.slice(0, 10)} · retention`,
       address,
+      kindDisplay: value.kind,
     };
   }
 
-  // Path kinds with exists === false → missing worktree / path.
-  if (
-    (value.kind === "file" || value.kind === "dir") &&
-    value.exists === false
-  ) {
+  if ((value.kind === "file" || value.kind === "dir") && value.exists === false) {
     const note = value.note ?? "path missing (worktree gone or not materialised)";
     return {
       ref,
@@ -125,10 +137,10 @@ export function projectDeliverableRow(
       body: value.path ?? value.absolute_path ?? note,
       meta: `${value.kind} · missing · ${note}`,
       address,
+      kindDisplay: value.kind,
     };
   }
 
-  // Ready — inline value or present path.
   if (value.kind === "inline") {
     const body =
       value.value === null || value.value === undefined
@@ -145,12 +157,14 @@ export function projectDeliverableRow(
       body,
       meta: size ? `inline · ${size}` : "inline",
       address,
+      kindDisplay: "inline",
     };
   }
 
   const path = value.path ?? value.absolute_path ?? "—";
   const size = sizeMeta(value);
-  const presence = value.exists === true ? "present" : value.exists === false ? "absent" : "unknown";
+  const presence =
+    value.exists === true ? "present" : value.exists === false ? "absent" : "unknown";
   return {
     ref,
     fetchState: "ready",
@@ -159,6 +173,7 @@ export function projectDeliverableRow(
     body: path,
     meta: [value.kind, size, presence].filter(Boolean).join(" · "),
     address,
+    kindDisplay: value.kind,
   };
 }
 
@@ -175,7 +190,7 @@ function sizeMeta(value: DeliverableValue): string | null {
   return null;
 }
 
-/** Panel-level status from a set of rows + loading flag. */
+/** Panel-level status — lead with the dominant state, never "ready" for zero ready. */
 export function projectDeliverablesPanelState(input: {
   refs: readonly DeliverableRef[];
   rows: readonly DeliverableRow[];
@@ -194,18 +209,65 @@ export function projectDeliverablesPanelState(input: {
   if (input.refs.length === 0) {
     return { status: "none", label: "none" };
   }
-  const states = new Set(input.rows.map((r) => r.fetchState));
-  if (states.has("error") && states.size === 1) {
-    return { status: "error", label: "error" };
-  }
-  if (states.has("not_fetched") && !states.has("ready") && !states.has("purged")) {
-    return { status: "not_fetched", label: `not fetched · ${input.refs.length} refs` };
-  }
+
   const ready = input.rows.filter((r) => r.fetchState === "ready").length;
   const purged = input.rows.filter((r) => r.fetchState === "purged").length;
   const missing = input.rows.filter((r) => r.fetchState === "missing-worktree").length;
-  const parts = [`ready · ${ready} row${ready === 1 ? "" : "s"}`];
+  const errored = input.rows.filter((r) => r.fetchState === "error").length;
+  const notFetched = input.rows.filter((r) => r.fetchState === "not_fetched").length;
+
+  // Dominant state by count (priority: error > purged > missing > not_fetched > ready).
+  type Count = { key: DeliverableFetchState; n: number; priority: number };
+  const counts: Count[] = [
+    { key: "error", n: errored, priority: 0 },
+    { key: "purged", n: purged, priority: 1 },
+    { key: "missing-worktree", n: missing, priority: 2 },
+    { key: "not_fetched", n: notFetched, priority: 3 },
+    { key: "ready", n: ready, priority: 4 },
+  ].filter((c) => c.n > 0) as Count[];
+
+  counts.sort((a, b) => b.n - a.n || a.priority - b.priority);
+  const dominant = counts[0]?.key ?? "none";
+
+  if (dominant === "error" && ready === 0 && purged === 0 && missing === 0) {
+    return { status: "error", label: `error · ${errored}` };
+  }
+  if (dominant === "not_fetched" && ready === 0 && purged === 0) {
+    return {
+      status: "not_fetched",
+      label: `not fetched · ${input.refs.length} ref${input.refs.length === 1 ? "" : "s"}`,
+    };
+  }
+
+  const parts: string[] = [];
+  // Lead with dominant.
+  if (dominant === "purged") {
+    parts.push(`${purged} purged`);
+    if (ready) parts.push(`${ready} ready`);
+    if (missing) parts.push(`${missing} missing`);
+    if (errored) parts.push(`${errored} error`);
+    return { status: "purged", label: parts.join(" · ") };
+  }
+  if (dominant === "missing-worktree") {
+    parts.push(`${missing} missing`);
+    if (ready) parts.push(`${ready} ready`);
+    if (purged) parts.push(`${purged} purged`);
+    return { status: "missing-worktree", label: parts.join(" · ") };
+  }
+  if (dominant === "error") {
+    parts.push(`error · ${errored}`);
+    if (ready) parts.push(`${ready} ready`);
+    if (purged) parts.push(`${purged} purged`);
+    return { status: "error", label: parts.join(" · ") };
+  }
+
+  // Ready (or mixed with ready leading).
+  parts.push(`${ready} row${ready === 1 ? "" : "s"}`);
   if (purged) parts.push(`${purged} purged`);
   if (missing) parts.push(`${missing} missing`);
-  return { status: "ready", label: parts.join(" · ") };
+  if (errored) parts.push(`${errored} error`);
+  return {
+    status: ready > 0 ? "ready" : "none",
+    label: ready > 0 ? `ready · ${parts.join(" · ")}` : parts.join(" · ") || "none",
+  };
 }
