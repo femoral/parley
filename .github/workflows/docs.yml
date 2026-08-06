@@ -1,12 +1,12 @@
 name: Docs
 
 # Builds the VitePress site in website/ and deploys it to GitHub Pages.
-# Deploys from develop so the published docs track the full feature set.
-# The vendors page embeds the README enforcement matrix at build time, so
-# README changes rebuild the site too.
+# Deploys from main: that is where the latest live release sits; develop
+# carries -dev versions used for testing. The vendors page embeds the README
+# enforcement matrix at build time, so README changes rebuild the site too.
 on:
   push:
-    branches: [develop]
+    branches: [main]
     paths:
       - "website/**"
       - "README.md"
