@@ -1,0 +1,2912 @@
+{
+  "ticket": "issue-354",
+  "package": "@useparley/dashboard",
+  "harness": "packages/dashboard/verify",
+  "demos": {
+    "shell-chrome": {
+      "kind": "shell-chrome",
+      "description": "Shell chrome merge proofs: geometry, axe×3 states, skip-main, settings popover, footer note, 1280 density, live-region boot+kill+recover.",
+      "daemon": {
+        "taskId": "t1",
+        "port": 38979
+      },
+      "headline": {
+        "headerHeight": 46,
+        "nav": {
+          "x": 125,
+          "y": 11,
+          "width": 218.22,
+          "height": 23
+        },
+        "find": {
+          "x": 10,
+          "y": 55,
+          "width": 263,
+          "height": 28
+        },
+        "findInput": {
+          "x": 33.61,
+          "y": 62,
+          "width": 230.39,
+          "height": 14
+        },
+        "railLeft": 284,
+        "railRight": 348,
+        "boardScroll": {
+          "shell": {
+            "scrollWidth": 1280,
+            "clientWidth": 1280,
+            "noHorizontalScroll": true
+          },
+          "body": {
+            "scrollWidth": 1280,
+            "clientWidth": 1280,
+            "noHorizontalScroll": true
+          }
+        }
+      },
+      "contrast": {
+        "brand-name": {
+          "selector": ".pc-shell__brand-name",
+          "found": true,
+          "color": "rgb(227, 232, 236)",
+          "background": "rgb(16, 19, 22)",
+          "fontSize": "12px",
+          "fontWeight": "600",
+          "ratio": 15.11,
+          "largeText": false,
+          "wcagAA": true,
+          "text": "parley"
+        },
+        "brand-sub": {
+          "selector": ".pc-shell__brand-sub",
+          "found": true,
+          "color": "rgb(139, 152, 164)",
+          "background": "rgb(16, 19, 22)",
+          "fontSize": "9px",
+          "fontWeight": "400",
+          "ratio": 6.32,
+          "largeText": false,
+          "wcagAA": true,
+          "text": "console"
+        },
+        "tab-label": {
+          "selector": ".pc-shell__tab-label",
+          "found": true,
+          "color": "rgb(227, 232, 236)",
+          "background": "rgb(31, 38, 44)",
+          "fontSize": "11px",
+          "fontWeight": "500",
+          "ratio": 12.41,
+          "largeText": false,
+          "wcagAA": true,
+          "text": "Fleet"
+        },
+        "status-label": {
+          "selector": ".pc-shell__status-label",
+          "found": true,
+          "color": "rgb(147, 160, 171)",
+          "background": "rgb(16, 19, 22)",
+          "fontSize": "11px",
+          "fontWeight": "500",
+          "ratio": 6.97,
+          "largeText": false,
+          "wcagAA": true,
+          "text": "daemon"
+        },
+        "status-value": {
+          "selector": ".pc-shell__status-value",
+          "found": true,
+          "color": "rgb(227, 232, 236)",
+          "background": "rgb(16, 19, 22)",
+          "fontSize": "11px",
+          "fontWeight": "400",
+          "ratio": 15.11,
+          "largeText": false,
+          "wcagAA": true,
+          "text": "127.0.0.1:5173"
+        },
+        "attention-label": {
+          "selector": ".pc-shell__attention-label",
+          "found": true,
+          "color": "rgb(139, 152, 164)",
+          "background": "rgb(16, 19, 22)",
+          "fontSize": "10px",
+          "fontWeight": "500",
+          "ratio": 6.32,
+          "largeText": false,
+          "wcagAA": true,
+          "text": "needs orch"
+        },
+        "attention-count": {
+          "selector": ".pc-shell__attention-count",
+          "found": true,
+          "color": "rgb(224, 160, 46)",
+          "background": "rgb(36, 27, 8)",
+          "fontSize": "12px",
+          "fontWeight": "600",
+          "ratio": 7.48,
+          "largeText": false,
+          "wcagAA": true,
+          "text": "0"
+        },
+        "clock": {
+          "selector": ".pc-shell__clock",
+          "found": true,
+          "color": "rgb(207, 214, 220)",
+          "background": "rgb(16, 19, 22)",
+          "fontSize": "13px",
+          "fontWeight": "500",
+          "ratio": 12.7,
+          "largeText": false,
+          "wcagAA": true,
+          "text": "04:50:04"
+        },
+        "find-input": {
+          "selector": ".pc-find__input",
+          "found": true,
+          "color": "rgb(227, 232, 236)",
+          "background": "rgb(11, 13, 15)",
+          "fontSize": "11px",
+          "fontWeight": "400",
+          "ratio": 15.78,
+          "largeText": false,
+          "wcagAA": true,
+          "text": ""
+        },
+        "legend-label": {
+          "selector": ".pc-shell__legend-label",
+          "found": true,
+          "color": "rgb(139, 152, 164)",
+          "background": "rgb(16, 19, 22)",
+          "fontSize": "10px",
+          "fontWeight": "400",
+          "ratio": 6.32,
+          "largeText": false,
+          "wcagAA": true,
+          "text": "awaiting"
+        },
+        "footer-meta": {
+          "selector": ".pc-shell__footer-meta",
+          "found": true,
+          "color": "rgb(139, 152, 164)",
+          "background": "rgb(16, 19, 22)",
+          "fontSize": "10px",
+          "fontWeight": "400",
+          "ratio": 6.32,
+          "largeText": false,
+          "wcagAA": true,
+          "text": "read-only · parley never merges"
+        },
+        "screen-title": {
+          "selector": ".pc-screen__title",
+          "found": true,
+          "color": "rgb(227, 232, 236)",
+          "background": "rgb(11, 13, 15)",
+          "fontSize": "15px",
+          "fontWeight": "600",
+          "ratio": 15.78,
+          "largeText": false,
+          "wcagAA": true,
+          "text": "Fleet board"
+        }
+      },
+      "stateEncoding": {
+        "legendItems": [
+          {
+            "state": "awaiting_answer",
+            "label": "awaiting",
+            "dotBorderRadius": "0px",
+            "hasLabel": true
+          },
+          {
+            "state": "stalled",
+            "label": "stalled",
+            "dotBorderRadius": "0px",
+            "hasLabel": true
+          },
+          {
+            "state": "failed",
+            "label": "failed",
+            "dotBorderRadius": "0px",
+            "hasLabel": true
+          },
+          {
+            "state": "running",
+            "label": "running",
+            "dotBorderRadius": "0px",
+            "hasLabel": true
+          },
+          {
+            "state": "queued",
+            "label": "queued",
+            "dotBorderRadius": "0px",
+            "hasLabel": true
+          },
+          {
+            "state": "pending",
+            "label": "pending",
+            "dotBorderRadius": "0px",
+            "hasLabel": true
+          },
+          {
+            "state": "completed",
+            "label": "completed",
+            "dotBorderRadius": "0px",
+            "hasLabel": true
+          },
+          {
+            "state": "cancelled",
+            "label": "cancelled",
+            "dotBorderRadius": "0px",
+            "hasLabel": true
+          }
+        ],
+        "allHaveLabels": true
+      },
+      "streamCopy": {
+        "label": "stream",
+        "value": "live",
+        "concatenated": "streamlive"
+      },
+      "comboboxAria": {
+        "role": "combobox",
+        "ariaExpanded": "false",
+        "ariaAutocomplete": "list",
+        "ariaControls": null,
+        "ariaHaspopup": "listbox"
+      },
+      "viewports": [
+        {
+          "name": "1280",
+          "width": 1280,
+          "height": 900,
+          "screenshot": "shots/shell-chrome-1280.png",
+          "elements": {
+            "shell": {
+              "selector": "[data-testid=\"shell\"]",
+              "found": true,
+              "box": {
+                "x": 0,
+                "y": 0,
+                "width": 1280,
+                "height": 900
+              },
+              "styles": {
+                "display": "grid",
+                "position": "relative",
+                "width": "1280px",
+                "height": "900px",
+                "minWidth": "1280px",
+                "minHeight": "700px",
+                "backgroundColor": "rgb(11, 13, 15)",
+                "color": "rgb(227, 232, 236)",
+                "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
+                "fontSize": "16px",
+                "fontWeight": "400",
+                "fontFamily": "\"IBM Plex Sans\", system-ui, sans-serif",
+                "letterSpacing": "normal",
+                "textTransform": "none",
+                "borderTopWidth": "0px",
+                "borderBottomWidth": "0px",
+                "borderLeftWidth": "0px",
+                "borderRightWidth": "0px",
+                "borderTopColor": "rgb(227, 232, 236)",
+                "borderBottomColor": "rgb(227, 232, 236)",
+                "borderLeftColor": "rgb(227, 232, 236)",
+                "borderRightColor": "rgb(227, 232, 236)",
+                "gridTemplateRows": "46px 828px 26px",
+                "gridTemplateColumns": "1280px",
+                "gap": "normal",
+                "padding": "0px",
+                "margin": "0px",
+                "overflow": "hidden",
+                "opacity": "1"
+              },
+              "text": "Skip to navigationSkip to findSkip to main contentparleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 150…"
+            },
+            "header": {
+              "selector": ".pc-shell__header",
+              "found": true,
+              "box": {
+                "x": 0,
+                "y": 0,
+                "width": 1280,
+                "height": 46
+              },
+              "styles": {
+                "display": "flex",
+                "position": "static",
+                "width": "1280px",
+                "height": "46px",
+                "minWidth": "0px",
+                "minHeight": "auto",
+                "backgroundColor": "rgb(16, 19, 22)",
+                "color": "rgb(227, 232, 236)",
+                "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
+                "fontSize": "16px",
+                "fontWeight": "400",
+                "fontFamily": "\"IBM Plex Sans\", system-ui, sans-serif",
+                "letterSpacing": "normal",
+                "textTransform": "none",
+                "borderTopWidth": "0px",
+                "borderBottomWidth": "1px",
+                "borderLeftWidth": "0px",
+                "borderRightWidth": "0px",
+                "borderTopColor": "rgb(227, 232, 236)",
+                "borderBottomColor": "rgb(35, 42, 48)",
+                "borderLeftColor": "rgb(227, 232, 236)",
+                "borderRightColor": "rgb(227, 232, 236)",
+                "gridTemplateRows": "none",
+                "gridTemplateColumns": "none",
+                "gap": "10px",
+                "padding": "0px 10px",
+                "margin": "0px",
+                "overflow": "hidden",
+                "opacity": "1"
+              },
+              "text": "parleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 1509433 · up 16sv0.0.4needs orch0streamlive04:50:02Se…"
+            },
+            "brand": {
+              "selector": ".pc-shell__brand",
+              "found": true,
+              "box": {
+                "x": 10,
+                "y": 11.5,
+                "width": 86,
+                "height": 22
+              },
+              "styles": {
+                "display": "flex",
+                "position": "static",
+                "width": "86px",
+                "height": "22px",
+                "minWidth": "0px",
+                "minHeight": "auto",
+                "backgroundColor": "rgba(0, 0, 0, 0)",
+                "color": "rgb(227, 232, 236)",
+                "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
+                "fontSize": "16px",
+                "fontWeight": "400",
+                "fontFamily": "\"IBM Plex Sans\", system-ui, sans-serif",
+                "letterSpacing": "normal",
+                "textTransform": "none",
+                "borderTopWidth": "0px",
+                "borderBottomWidth": "0px",
+                "borderLeftWidth": "0px",
+                "borderRightWidth": "0px",
+                "borderTopColor": "rgb(227, 232, 236)",
+                "borderBottomColor": "rgb(227, 232, 236)",
+                "borderLeftColor": "rgb(227, 232, 236)",
+                "borderRightColor": "rgb(227, 232, 236)",
+                "gridTemplateRows": "none",
+                "gridTemplateColumns": "none",
+                "gap": "10px",
+                "padding": "0px",
+                "margin": "0px",
+                "overflow": "visible",
+                "opacity": "1"
+              },
+              "text": "parleyconsole"
+            },
+            "nav": {
+              "selector": "[data-testid=\"shell-nav\"]",
+              "found": true,
+              "box": {
+                "x": 125,
+                "y": 11,
+                "width": 218.22,
+                "height": 23
+              },
+              "styles": {
+                "display": "flex",
+                "position": "static",
+                "width": "218.219px",
+                "height": "23px",
+                "minWidth": "0px",
+                "minHeight": "auto",
+                "backgroundColor": "rgba(0, 0, 0, 0)",
+                "color": "rgb(227, 232, 236)",
+                "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
+                "fontSize": "16px",
+                "fontWeight": "400",
+                "fontFamily": "\"IBM Plex Sans\", system-ui, sans-serif",
+                "letterSpacing": "normal",
+                "textTransform": "none",
+                "borderTopWidth": "0px",
+                "borderBottomWidth": "0px",
+                "borderLeftWidth": "0px",
+                "borderRightWidth": "0px",
+                "borderTopColor": "rgb(227, 232, 236)",
+                "borderBottomColor": "rgb(227, 232, 236)",
+                "borderLeftColor": "rgb(227, 232, 236)",
+                "borderRightColor": "rgb(227, 232, 236)",
+                "gridTemplateRows": "none",
+                "gridTemplateColumns": "none",
+                "gap": "normal",
+                "padding": "0px",
+                "margin": "0px",
+                "overflow": "hidden",
+                "opacity": "1"
+              },
+              "text": "Fleet1 task · 0 need actionRunno runTaskt1Metricsall hands"
+            },
+            "status": {
+              "selector": ".pc-shell__status",
+              "found": true,
+              "box": {
+                "x": 813.03,
+                "y": 17,
+                "width": 199.63,
+                "height": 11
+              },
+              "styles": {
+                "display": "flex",
+                "position": "static",
+                "width": "199.625px",
+                "height": "11px",
+                "minWidth": "0px",
+                "minHeight": "auto",
+                "backgroundColor": "rgba(0, 0, 0, 0)",
+                "color": "rgb(227, 232, 236)",
+                "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
+                "fontSize": "16px",
+                "fontWeight": "400",
+                "fontFamily": "\"IBM Plex Sans\", system-ui, sans-serif",
+                "letterSpacing": "normal",
+                "textTransform": "none",
+                "borderTopWidth": "0px",
+                "borderBottomWidth": "0px",
+                "borderLeftWidth": "0px",
+                "borderRightWidth": "0px",
+                "borderTopColor": "rgb(227, 232, 236)",
+                "borderBottomColor": "rgb(227, 232, 236)",
+                "borderLeftColor": "rgb(227, 232, 236)",
+                "borderRightColor": "rgb(227, 232, 236)",
+                "gridTemplateRows": "none",
+                "gridTemplateColumns": "none",
+                "gap": "7px",
+                "padding": "0px",
+                "margin": "0px",
+                "overflow": "visible",
+                "opacity": "1"
+              },
+              "text": "daemon127.0.0.1:5173v0.0.4 · pid 1509433 · up 16sv0.0.4"
+            },
+            "needs-orch": {
+              "selector": "[data-testid=\"needs-orch\"]",
+              "found": true,
+              "box": {
+                "x": 1033.66,
+                "y": 11.5,
+                "width": 25.2,
+                "height": 22
+              },
+              "styles": {
+                "display": "flex",
+                "position": "static",
+                "width": "25.2031px",
+                "height": "22px",
+                "minWidth": "auto",
+                "minHeight": "auto",
+                "backgroundColor": "rgba(0, 0, 0, 0)",
+                "color": "rgb(227, 232, 236)",
+                "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
+                "fontSize": "16px",
+                "fontWeight": "400",
+                "fontFamily": "\"IBM Plex Sans\", system-ui, sans-serif",
+                "letterSpacing": "normal",
+                "textTransform": "none",
+                "borderTopWidth": "0px",
+                "borderBottomWidth": "0px",
+                "borderLeftWidth": "0px",
+                "borderRightWidth": "0px",
+                "borderTopColor": "rgb(227, 232, 236)",
+                "borderBottomColor": "rgb(227, 232, 236)",
+                "borderLeftColor": "rgb(227, 232, 236)",
+                "borderRightColor": "rgb(227, 232, 236)",
+                "gridTemplateRows": "none",
+                "gridTemplateColumns": "none",
+                "gap": "10px",
+                "padding": "0px",
+                "margin": "0px",
+                "overflow": "visible",
+                "opacity": "1"
+              },
+              "text": "needs orch0"
+            },
+            "live-status": {
+              "selector": "[data-testid=\"live-status\"]",
+              "found": true,
+              "box": {
+                "x": 1079.86,
+                "y": 17,
+                "width": 26.41,
+                "height": 11
+              },
+              "styles": {
+                "display": "flex",
+                "position": "static",
+                "width": "26.4062px",
+                "height": "11px",
+                "minWidth": "auto",
+                "minHeight": "auto",
+                "backgroundColor": "rgba(0, 0, 0, 0)",
+                "color": "rgb(227, 232, 236)",
+                "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
+                "fontSize": "16px",
+                "fontWeight": "400",
+                "fontFamily": "\"IBM Plex Sans\", system-ui, sans-serif",
+                "letterSpacing": "normal",
+                "textTransform": "none",
+                "borderTopWidth": "0px",
+                "borderBottomWidth": "0px",
+                "borderLeftWidth": "0px",
+                "borderRightWidth": "0px",
+                "borderTopColor": "rgb(227, 232, 236)",
+                "borderBottomColor": "rgb(227, 232, 236)",
+                "borderLeftColor": "rgb(227, 232, 236)",
+                "borderRightColor": "rgb(227, 232, 236)",
+                "gridTemplateRows": "none",
+                "gridTemplateColumns": "none",
+                "gap": "8px",
+                "padding": "0px",
+                "margin": "0px",
+                "overflow": "visible",
+                "opacity": "1"
+              },
+              "text": "streamlive"
+            },
+            "find": {
+              "selector": "[data-testid=\"find-combobox\"]",
+              "found": true,
+              "box": {
+                "x": 10,
+                "y": 55,
+                "width": 263,
+                "height": 28
+              },
+              "styles": {
+                "display": "block",
+                "position": "relative",
+                "width": "263px",
+                "height": "28px",
+                "minWidth": "0px",
+                "minHeight": "0px",
+                "backgroundColor": "rgba(0, 0, 0, 0)",
+                "color": "rgb(227, 232, 236)",
+                "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
+                "fontSize": "16px",
+                "fontWeight": "400",
+                "fontFamily": "\"IBM Plex Sans\", system-ui, sans-serif",
+                "letterSpacing": "normal",
+                "textTransform": "none",
+                "borderTopWidth": "0px",
+                "borderBottomWidth": "0px",
+                "borderLeftWidth": "0px",
+                "borderRightWidth": "0px",
+                "borderTopColor": "rgb(227, 232, 236)",
+                "borderBottomColor": "rgb(227, 232, 236)",
+                "borderLeftColor": "rgb(227, 232, 236)",
+                "borderRightColor": "rgb(227, 232, 236)",
+                "gridTemplateRows": "none",
+                "gridTemplateColumns": "none",
+                "gap": "normal",
+                "padding": "0px",
+                "margin": "0px",
+                "overflow": "visible",
+                "opacity": "1"
+              },
+              "text": "Find tasks and sessions/"
+            },
+            "find-input": {
+              "selector": "[data-testid=\"find-input\"]",
+              "found": true,
+              "box": {
+                "x": 33.61,
+                "y": 62,
+                "width": 230.39,
+                "height": 14
+              },
+              "styles": {
+                "display": "block",
+                "position": "static",
+                "width": "230.391px",
+                "height": "14px",
+                "minWidth": "0px",
+                "minHeight": "auto",
+                "backgroundColor": "rgba(0, 0, 0, 0)",
+                "color": "rgb(227, 232, 236)",
+                "font": "11px / 11px \"IBM Plex Mono\", ui-monospace, monospace",
+                "fontSize": "11px",
+                "fontWeight": "400",
+                "fontFamily": "\"IBM Plex Mono\", ui-monospace, monospace",
+                "letterSpacing": "normal",
+                "textTransform": "none",
+                "borderTopWidth": "0px",
+                "borderBottomWidth": "0px",
+                "borderLeftWidth": "0px",
+                "borderRightWidth": "0px",
+                "borderTopColor": "rgb(227, 232, 236)",
+                "borderBottomColor": "rgb(227, 232, 236)",
+                "borderLeftColor": "rgb(227, 232, 236)",
+                "borderRightColor": "rgb(227, 232, 236)",
+                "gridTemplateRows": "none",
+                "gridTemplateColumns": "none",
+                "gap": "normal",
+                "padding": "0px",
+                "margin": "0px",
+                "overflow": "clip",
+                "opacity": "1"
+              },
+              "text": ""
+            },
+            "body": {
+              "selector": ".pc-shell__body",
+              "found": true,
+              "box": {
+                "x": 0,
+                "y": 46,
+                "width": 1280,
+                "height": 828
+              },
+              "styles": {
+                "display": "grid",
+                "position": "static",
+                "width": "1280px",
+                "height": "828px",
+                "minWidth": "auto",
+                "minHeight": "0px",
+                "backgroundColor": "rgba(0, 0, 0, 0)",
+                "color": "rgb(227, 232, 236)",
+                "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
+                "fontSize": "16px",
+                "fontWeight": "400",
+                "fontFamily": "\"IBM Plex Sans\", system-ui, sans-serif",
+                "letterSpacing": "normal",
+                "textTransform": "none",
+                "borderTopWidth": "0px",
+                "borderBottomWidth": "0px",
+                "borderLeftWidth": "0px",
+                "borderRightWidth": "0px",
+                "borderTopColor": "rgb(227, 232, 236)",
+                "borderBottomColor": "rgb(227, 232, 236)",
+                "borderLeftColor": "rgb(227, 232, 236)",
+                "borderRightColor": "rgb(227, 232, 236)",
+                "gridTemplateRows": "828px",
+                "gridTemplateColumns": "284px 648px 348px",
+                "gap": "normal",
+                "padding": "0px",
+                "margin": "0px",
+                "overflow": "hidden",
+                "opacity": "1"
+              },
+              "text": "Find tasks and sessions/navigatorScope, state filter, and list navigation land with each screen ticket.center screenFleet boardKPI strip, runs table, and tas…"
+            },
+            "rail-left": {
+              "selector": ".pc-shell__rail--left",
+              "found": true,
+              "box": {
+                "x": 0,
+                "y": 46,
+                "width": 284,
+                "height": 828
+              },
+              "styles": {
+                "display": "flex",
+                "position": "static",
+                "width": "284px",
+                "height": "828px",
+                "minWidth": "auto",
+                "minHeight": "0px",
+                "backgroundColor": "rgb(14, 17, 20)",
+                "color": "rgb(227, 232, 236)",
+                "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
+                "fontSize": "16px",
+                "fontWeight": "400",
+                "fontFamily": "\"IBM Plex Sans\", system-ui, sans-serif",
+                "letterSpacing": "normal",
+                "textTransform": "none",
+                "borderTopWidth": "0px",
+                "borderBottomWidth": "0px",
+                "borderLeftWidth": "0px",
+                "borderRightWidth": "1px",
+                "borderTopColor": "rgb(227, 232, 236)",
+                "borderBottomColor": "rgb(227, 232, 236)",
+                "borderLeftColor": "rgb(227, 232, 236)",
+                "borderRightColor": "rgb(35, 42, 48)",
+                "gridTemplateRows": "none",
+                "gridTemplateColumns": "none",
+                "gap": "normal",
+                "padding": "0px",
+                "margin": "0px",
+                "overflow": "auto",
+                "opacity": "1"
+              },
+              "text": "Find tasks and sessions/navigatorScope, state filter, and list navigation land with each screen ticket."
+            },
+            "center": {
+              "selector": ".pc-shell__center",
+              "found": true,
+              "box": {
+                "x": 284,
+                "y": 46,
+                "width": 648,
+                "height": 828
+              },
+              "styles": {
+                "display": "flex",
+                "position": "static",
+                "width": "648px",
+                "height": "828px",
+                "minWidth": "auto",
+                "minHeight": "0px",
+                "backgroundColor": "rgb(11, 13, 15)",
+                "color": "rgb(227, 232, 236)",
+                "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
+                "fontSize": "16px",
+                "fontWeight": "400",
+                "fontFamily": "\"IBM Plex Sans\", system-ui, sans-serif",
+                "letterSpacing": "normal",
+                "textTransform": "none",
+                "borderTopWidth": "0px",
+                "borderBottomWidth": "0px",
+                "borderLeftWidth": "0px",
+                "borderRightWidth": "0px",
+                "borderTopColor": "rgb(227, 232, 236)",
+                "borderBottomColor": "rgb(227, 232, 236)",
+                "borderLeftColor": "rgb(227, 232, 236)",
+                "borderRightColor": "rgb(227, 232, 236)",
+                "gridTemplateRows": "none",
+                "gridTemplateColumns": "none",
+                "gap": "normal",
+                "padding": "0px",
+                "margin": "0px",
+                "overflow": "auto",
+                "opacity": "1"
+              },
+              "text": "center screenFleet boardKPI strip, runs table, and tasks table land in the fleet ticket. Shell chrome (nav, find, settings, honesty) is live."
+            },
+            "rail-right": {
+              "selector": ".pc-shell__rail--right",
+              "found": true,
+              "box": {
+                "x": 932,
+                "y": 46,
+                "width": 348,
+                "height": 828
+              },
+              "styles": {
+                "display": "flex",
+                "position": "static",
+                "width": "348px",
+                "height": "828px",
+                "minWidth": "auto",
+                "minHeight": "0px",
+                "backgroundColor": "rgb(14, 17, 20)",
+                "color": "rgb(227, 232, 236)",
+                "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
+                "fontSize": "16px",
+                "fontWeight": "400",
+                "fontFamily": "\"IBM Plex Sans\", system-ui, sans-serif",
+                "letterSpacing": "normal",
+                "textTransform": "none",
+                "borderTopWidth": "0px",
+                "borderBottomWidth": "0px",
+                "borderLeftWidth": "1px",
+                "borderRightWidth": "0px",
+                "borderTopColor": "rgb(227, 232, 236)",
+                "borderBottomColor": "rgb(227, 232, 236)",
+                "borderLeftColor": "rgb(35, 42, 48)",
+                "borderRightColor": "rgb(227, 232, 236)",
+                "gridTemplateRows": "none",
+                "gridTemplateColumns": "none",
+                "gap": "normal",
+                "padding": "0px",
+                "margin": "0px",
+                "overflow": "auto",
+                "opacity": "1"
+              },
+              "text": "attention · firehoseAttention queue and event firehose land with the fleet ticket."
+            },
+            "footer": {
+              "selector": ".pc-shell__footer",
+              "found": true,
+              "box": {
+                "x": 0,
+                "y": 874,
+                "width": 1280,
+                "height": 26
+              },
+              "styles": {
+                "display": "flex",
+                "position": "static",
+                "width": "1280px",
+                "height": "26px",
+                "minWidth": "auto",
+                "minHeight": "auto",
+                "backgroundColor": "rgb(16, 19, 22)",
+                "color": "rgb(227, 232, 236)",
+                "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
+                "fontSize": "16px",
+                "fontWeight": "400",
+                "fontFamily": "\"IBM Plex Sans\", system-ui, sans-serif",
+                "letterSpacing": "normal",
+                "textTransform": "none",
+                "borderTopWidth": "1px",
+                "borderBottomWidth": "0px",
+                "borderLeftWidth": "0px",
+                "borderRightWidth": "0px",
+                "borderTopColor": "rgb(35, 42, 48)",
+                "borderBottomColor": "rgb(227, 232, 236)",
+                "borderLeftColor": "rgb(227, 232, 236)",
+                "borderRightColor": "rgb(227, 232, 236)",
+                "gridTemplateRows": "none",
+                "gridTemplateColumns": "none",
+                "gap": "18px",
+                "padding": "0px 14px",
+                "margin": "0px",
+                "overflow": "hidden",
+                "opacity": "1"
+              },
+              "text": "awaitingstalledfailedrunningqueuedpendingcompletedcancelledstate = what a task IS · quality = how good work WAS · 0 unacked events · livestate=IS · quality=W…"
+            }
+          }
+        },
+        {
+          "name": "1460",
+          "width": 1460,
+          "height": 900,
+          "screenshot": "shots/shell-chrome-1460.png",
+          "elements": {
+            "shell": {
+              "selector": "[data-testid=\"shell\"]",
+              "found": true,
+              "box": {
+                "x": 0,
+                "y": 0,
+                "width": 1460,
+                "height": 900
+              },
+              "styles": {
+                "display": "grid",
+                "position": "relative",
+                "width": "1460px",
+                "height": "900px",
+                "minWidth": "1280px",
+                "minHeight": "700px",
+                "backgroundColor": "rgb(11, 13, 15)",
+                "color": "rgb(227, 232, 236)",
+                "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
+                "fontSize": "16px",
+                "fontWeight": "400",
+                "fontFamily": "\"IBM Plex Sans\", system-ui, sans-serif",
+                "letterSpacing": "normal",
+                "textTransform": "none",
+                "borderTopWidth": "0px",
+                "borderBottomWidth": "0px",
+                "borderLeftWidth": "0px",
+                "borderRightWidth": "0px",
+                "borderTopColor": "rgb(227, 232, 236)",
+                "borderBottomColor": "rgb(227, 232, 236)",
+                "borderLeftColor": "rgb(227, 232, 236)",
+                "borderRightColor": "rgb(227, 232, 236)",
+                "gridTemplateRows": "46px 828px 26px",
+                "gridTemplateColumns": "1460px",
+                "gap": "normal",
+                "padding": "0px",
+                "margin": "0px",
+                "overflow": "hidden",
+                "opacity": "1"
+              },
+              "text": "Skip to navigationSkip to findSkip to main contentparleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 150…"
+            },
+            "header": {
+              "selector": ".pc-shell__header",
+              "found": true,
+              "box": {
+                "x": 0,
+                "y": 0,
+                "width": 1460,
+                "height": 46
+              },
+              "styles": {
+                "display": "flex",
+                "position": "static",
+                "width": "1460px",
+                "height": "46px",
+                "minWidth": "0px",
+                "minHeight": "auto",
+                "backgroundColor": "rgb(16, 19, 22)",
+                "color": "rgb(227, 232, 236)",
+                "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
+                "fontSize": "16px",
+                "fontWeight": "400",
+                "fontFamily": "\"IBM Plex Sans\", system-ui, sans-serif",
+                "letterSpacing": "normal",
+                "textTransform": "none",
+                "borderTopWidth": "0px",
+                "borderBottomWidth": "1px",
+                "borderLeftWidth": "0px",
+                "borderRightWidth": "0px",
+                "borderTopColor": "rgb(227, 232, 236)",
+                "borderBottomColor": "rgb(35, 42, 48)",
+                "borderLeftColor": "rgb(227, 232, 236)",
+                "borderRightColor": "rgb(227, 232, 236)",
+                "gridTemplateRows": "none",
+                "gridTemplateColumns": "none",
+                "gap": "18px",
+                "padding": "0px 14px",
+                "margin": "0px",
+                "overflow": "hidden",
+                "opacity": "1"
+              },
+              "text": "parleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 1509433 · up 16sv0.0.4needs orch0streamlive04:50:03Se…"
+            },
+            "brand": {
+              "selector": ".pc-shell__brand",
+              "found": true,
+              "box": {
+                "x": 14,
+                "y": 11.5,
+                "width": 86,
+                "height": 22
+              },
+              "styles": {
+                "display": "flex",
+                "position": "static",
+                "width": "86px",
+                "height": "22px",
+                "minWidth": "0px",
+                "minHeight": "auto",
+                "backgroundColor": "rgba(0, 0, 0, 0)",
+                "color": "rgb(227, 232, 236)",
+                "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
+                "fontSize": "16px",
+                "fontWeight": "400",
+                "fontFamily": "\"IBM Plex Sans\", system-ui, sans-serif",
+                "letterSpacing": "normal",
+                "textTransform": "none",
+                "borderTopWidth": "0px",
+                "borderBottomWidth": "0px",
+                "borderLeftWidth": "0px",
+                "borderRightWidth": "0px",
+                "borderTopColor": "rgb(227, 232, 236)",
+                "borderBottomColor": "rgb(227, 232, 236)",
+                "borderLeftColor": "rgb(227, 232, 236)",
+                "borderRightColor": "rgb(227, 232, 236)",
+                "gridTemplateRows": "none",
+                "gridTemplateColumns": "none",
+                "gap": "10px",
+                "padding": "0px",
+                "margin": "0px",
+                "overflow": "visible",
+                "opacity": "1"
+              },
+              "text": "parleyconsole"
+            },
+            "nav": {
+              "selector": "[data-testid=\"shell-nav\"]",
+              "found": true,
+              "box": {
+                "x": 129,
+                "y": 4.75,
+                "width": 342.78,
+                "height": 35.5
+              },
+              "styles": {
+                "display": "flex",
+                "position": "static",
+                "width": "342.781px",
+                "height": "35.5px",
+                "minWidth": "0px",
+                "minHeight": "auto",
+                "backgroundColor": "rgba(0, 0, 0, 0)",
+                "color": "rgb(227, 232, 236)",
+                "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
+                "fontSize": "16px",
+                "fontWeight": "400",
+                "fontFamily": "\"IBM Plex Sans\", system-ui, sans-serif",
+                "letterSpacing": "normal",
+                "textTransform": "none",
+                "borderTopWidth": "0px",
+                "borderBottomWidth": "0px",
+                "borderLeftWidth": "0px",
+                "borderRightWidth": "0px",
+                "borderTopColor": "rgb(227, 232, 236)",
+                "borderBottomColor": "rgb(227, 232, 236)",
+                "borderLeftColor": "rgb(227, 232, 236)",
+                "borderRightColor": "rgb(227, 232, 236)",
+                "gridTemplateRows": "none",
+                "gridTemplateColumns": "none",
+                "gap": "normal",
+                "padding": "0px",
+                "margin": "0px",
+                "overflow": "hidden",
+                "opacity": "1"
+              },
+              "text": "Fleet1 task · 0 need actionRunno runTaskt1Metricsall hands"
+            },
+            "status": {
+              "selector": ".pc-shell__status",
+              "found": true,
+              "box": {
+                "x": 668.41,
+                "y": 17,
+                "width": 351.42,
+                "height": 11
+              },
+              "styles": {
+                "display": "flex",
+                "position": "static",
+                "width": "351.422px",
+                "height": "11px",
+                "minWidth": "0px",
+                "minHeight": "auto",
+                "backgroundColor": "rgba(0, 0, 0, 0)",
+                "color": "rgb(227, 232, 236)",
+                "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
+                "fontSize": "16px",
+                "fontWeight": "400",
+                "fontFamily": "\"IBM Plex Sans\", system-ui, sans-serif",
+                "letterSpacing": "normal",
+                "textTransform": "none",
+                "borderTopWidth": "0px",
+                "borderBottomWidth": "0px",
+                "borderLeftWidth": "0px",
+                "borderRightWidth": "0px",
+                "borderTopColor": "rgb(227, 232, 236)",
+                "borderBottomColor": "rgb(227, 232, 236)",
+                "borderLeftColor": "rgb(227, 232, 236)",
+                "borderRightColor": "rgb(227, 232, 236)",
+                "gridTemplateRows": "none",
+                "gridTemplateColumns": "none",
+                "gap": "7px",
+                "padding": "0px",
+                "margin": "0px",
+                "overflow": "visible",
+                "opacity": "1"
+              },
+              "text": "daemon127.0.0.1:5173v0.0.4 · pid 1509433 · up 16sv0.0.4"
+            },
+            "needs-orch": {
+              "selector": "[data-testid=\"needs-orch\"]",
+              "found": true,
+              "box": {
+                "x": 1052.83,
+                "y": 11.5,
+                "width": 106.42,
+                "height": 22
+              },
+              "styles": {
+                "display": "flex",
+                "position": "static",
+                "width": "106.422px",
+                "height": "22px",
+                "minWidth": "auto",
+                "minHeight": "auto",
+                "backgroundColor": "rgba(0, 0, 0, 0)",
+                "color": "rgb(227, 232, 236)",
+                "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
+                "fontSize": "16px",
+                "fontWeight": "400",
+                "fontFamily": "\"IBM Plex Sans\", system-ui, sans-serif",
+                "letterSpacing": "normal",
+                "textTransform": "none",
+                "borderTopWidth": "0px",
+                "borderBottomWidth": "0px",
+                "borderLeftWidth": "0px",
+                "borderRightWidth": "0px",
+                "borderTopColor": "rgb(227, 232, 236)",
+                "borderBottomColor": "rgb(227, 232, 236)",
+                "borderLeftColor": "rgb(227, 232, 236)",
+                "borderRightColor": "rgb(227, 232, 236)",
+                "gridTemplateRows": "none",
+                "gridTemplateColumns": "none",
+                "gap": "10px",
+                "padding": "0px",
+                "margin": "0px",
+                "overflow": "visible",
+                "opacity": "1"
+              },
+              "text": "needs orch0"
+            },
+            "live-status": {
+              "selector": "[data-testid=\"live-status\"]",
+              "found": true,
+              "box": {
+                "x": 1192.25,
+                "y": 17,
+                "width": 74.02,
+                "height": 11
+              },
+              "styles": {
+                "display": "flex",
+                "position": "static",
+                "width": "74.0156px",
+                "height": "11px",
+                "minWidth": "auto",
+                "minHeight": "auto",
+                "backgroundColor": "rgba(0, 0, 0, 0)",
+                "color": "rgb(227, 232, 236)",
+                "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
+                "fontSize": "16px",
+                "fontWeight": "400",
+                "fontFamily": "\"IBM Plex Sans\", system-ui, sans-serif",
+                "letterSpacing": "normal",
+                "textTransform": "none",
+                "borderTopWidth": "0px",
+                "borderBottomWidth": "0px",
+                "borderLeftWidth": "0px",
+                "borderRightWidth": "0px",
+                "borderTopColor": "rgb(227, 232, 236)",
+                "borderBottomColor": "rgb(227, 232, 236)",
+                "borderLeftColor": "rgb(227, 232, 236)",
+                "borderRightColor": "rgb(227, 232, 236)",
+                "gridTemplateRows": "none",
+                "gridTemplateColumns": "none",
+                "gap": "8px",
+                "padding": "0px",
+                "margin": "0px",
+                "overflow": "visible",
+                "opacity": "1"
+              },
+              "text": "streamlive"
+            },
+            "find": {
+              "selector": "[data-testid=\"find-combobox\"]",
+              "found": true,
+              "box": {
+                "x": 10,
+                "y": 55,
+                "width": 263,
+                "height": 28
+              },
+              "styles": {
+                "display": "block",
+                "position": "relative",
+                "width": "263px",
+                "height": "28px",
+                "minWidth": "0px",
+                "minHeight": "0px",
+                "backgroundColor": "rgba(0, 0, 0, 0)",
+                "color": "rgb(227, 232, 236)",
+                "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
+                "fontSize": "16px",
+                "fontWeight": "400",
+                "fontFamily": "\"IBM Plex Sans\", system-ui, sans-serif",
+                "letterSpacing": "normal",
+                "textTransform": "none",
+                "borderTopWidth": "0px",
+                "borderBottomWidth": "0px",
+                "borderLeftWidth": "0px",
+                "borderRightWidth": "0px",
+                "borderTopColor": "rgb(227, 232, 236)",
+                "borderBottomColor": "rgb(227, 232, 236)",
+                "borderLeftColor": "rgb(227, 232, 236)",
+                "borderRightColor": "rgb(227, 232, 236)",
+                "gridTemplateRows": "none",
+                "gridTemplateColumns": "none",
+                "gap": "normal",
+                "padding": "0px",
+                "margin": "0px",
+                "overflow": "visible",
+                "opacity": "1"
+              },
+              "text": "Find tasks and sessions/"
+            },
+            "find-input": {
+              "selector": "[data-testid=\"find-input\"]",
+              "found": true,
+              "box": {
+                "x": 33.61,
+                "y": 62,
+                "width": 230.39,
+                "height": 14
+              },
+              "styles": {
+                "display": "block",
+                "position": "static",
+                "width": "230.391px",
+                "height": "14px",
+                "minWidth": "0px",
+                "minHeight": "auto",
+                "backgroundColor": "rgba(0, 0, 0, 0)",
+                "color": "rgb(227, 232, 236)",
+                "font": "11px / 11px \"IBM Plex Mono\", ui-monospace, monospace",
+                "fontSize": "11px",
+                "fontWeight": "400",
+                "fontFamily": "\"IBM Plex Mono\", ui-monospace, monospace",
+                "letterSpacing": "normal",
+                "textTransform": "none",
+                "borderTopWidth": "0px",
+                "borderBottomWidth": "0px",
+                "borderLeftWidth": "0px",
+                "borderRightWidth": "0px",
+                "borderTopColor": "rgb(227, 232, 236)",
+                "borderBottomColor": "rgb(227, 232, 236)",
+                "borderLeftColor": "rgb(227, 232, 236)",
+                "borderRightColor": "rgb(227, 232, 236)",
+                "gridTemplateRows": "none",
+                "gridTemplateColumns": "none",
+                "gap": "normal",
+                "padding": "0px",
+                "margin": "0px",
+                "overflow": "clip",
+                "opacity": "1"
+              },
+              "text": ""
+            },
+            "body": {
+              "selector": ".pc-shell__body",
+              "found": true,
+              "box": {
+                "x": 0,
+                "y": 46,
+                "width": 1460,
+                "height": 828
+              },
+              "styles": {
+                "display": "grid",
+                "position": "static",
+                "width": "1460px",
+                "height": "828px",
+                "minWidth": "auto",
+                "minHeight": "0px",
+                "backgroundColor": "rgba(0, 0, 0, 0)",
+                "color": "rgb(227, 232, 236)",
+                "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
+                "fontSize": "16px",
+                "fontWeight": "400",
+                "fontFamily": "\"IBM Plex Sans\", system-ui, sans-serif",
+                "letterSpacing": "normal",
+                "textTransform": "none",
+                "borderTopWidth": "0px",
+                "borderBottomWidth": "0px",
+                "borderLeftWidth": "0px",
+                "borderRightWidth": "0px",
+                "borderTopColor": "rgb(227, 232, 236)",
+                "borderBottomColor": "rgb(227, 232, 236)",
+                "borderLeftColor": "rgb(227, 232, 236)",
+                "borderRightColor": "rgb(227, 232, 236)",
+                "gridTemplateRows": "828px",
+                "gridTemplateColumns": "284px 828px 348px",
+                "gap": "normal",
+                "padding": "0px",
+                "margin": "0px",
+                "overflow": "hidden",
+                "opacity": "1"
+              },
+              "text": "Find tasks and sessions/navigatorScope, state filter, and list navigation land with each screen ticket.center screenFleet boardKPI strip, runs table, and tas…"
+            },
+            "rail-left": {
+              "selector": ".pc-shell__rail--left",
+              "found": true,
+              "box": {
+                "x": 0,
+                "y": 46,
+                "width": 284,
+                "height": 828
+              },
+              "styles": {
+                "display": "flex",
+                "position": "static",
+                "width": "284px",
+                "height": "828px",
+                "minWidth": "auto",
+                "minHeight": "0px",
+                "backgroundColor": "rgb(14, 17, 20)",
+                "color": "rgb(227, 232, 236)",
+                "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
+                "fontSize": "16px",
+                "fontWeight": "400",
+                "fontFamily": "\"IBM Plex Sans\", system-ui, sans-serif",
+                "letterSpacing": "normal",
+                "textTransform": "none",
+                "borderTopWidth": "0px",
+                "borderBottomWidth": "0px",
+                "borderLeftWidth": "0px",
+                "borderRightWidth": "1px",
+                "borderTopColor": "rgb(227, 232, 236)",
+                "borderBottomColor": "rgb(227, 232, 236)",
+                "borderLeftColor": "rgb(227, 232, 236)",
+                "borderRightColor": "rgb(35, 42, 48)",
+                "gridTemplateRows": "none",
+                "gridTemplateColumns": "none",
+                "gap": "normal",
+                "padding": "0px",
+                "margin": "0px",
+                "overflow": "auto",
+                "opacity": "1"
+              },
+              "text": "Find tasks and sessions/navigatorScope, state filter, and list navigation land with each screen ticket."
+            },
+            "center": {
+              "selector": ".pc-shell__center",
+              "found": true,
+              "box": {
+                "x": 284,
+                "y": 46,
+                "width": 828,
+                "height": 828
+              },
+              "styles": {
+                "display": "flex",
+                "position": "static",
+                "width": "828px",
+                "height": "828px",
+                "minWidth": "auto",
+                "minHeight": "0px",
+                "backgroundColor": "rgb(11, 13, 15)",
+                "color": "rgb(227, 232, 236)",
+                "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
+                "fontSize": "16px",
+                "fontWeight": "400",
+                "fontFamily": "\"IBM Plex Sans\", system-ui, sans-serif",
+                "letterSpacing": "normal",
+                "textTransform": "none",
+                "borderTopWidth": "0px",
+                "borderBottomWidth": "0px",
+                "borderLeftWidth": "0px",
+                "borderRightWidth": "0px",
+                "borderTopColor": "rgb(227, 232, 236)",
+                "borderBottomColor": "rgb(227, 232, 236)",
+                "borderLeftColor": "rgb(227, 232, 236)",
+                "borderRightColor": "rgb(227, 232, 236)",
+                "gridTemplateRows": "none",
+                "gridTemplateColumns": "none",
+                "gap": "normal",
+                "padding": "0px",
+                "margin": "0px",
+                "overflow": "auto",
+                "opacity": "1"
+              },
+              "text": "center screenFleet boardKPI strip, runs table, and tasks table land in the fleet ticket. Shell chrome (nav, find, settings, honesty) is live."
+            },
+            "rail-right": {
+              "selector": ".pc-shell__rail--right",
+              "found": true,
+              "box": {
+                "x": 1112,
+                "y": 46,
+                "width": 348,
+                "height": 828
+              },
+              "styles": {
+                "display": "flex",
+                "position": "static",
+                "width": "348px",
+                "height": "828px",
+                "minWidth": "auto",
+                "minHeight": "0px",
+                "backgroundColor": "rgb(14, 17, 20)",
+                "color": "rgb(227, 232, 236)",
+                "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
+                "fontSize": "16px",
+                "fontWeight": "400",
+                "fontFamily": "\"IBM Plex Sans\", system-ui, sans-serif",
+                "letterSpacing": "normal",
+                "textTransform": "none",
+                "borderTopWidth": "0px",
+                "borderBottomWidth": "0px",
+                "borderLeftWidth": "1px",
+                "borderRightWidth": "0px",
+                "borderTopColor": "rgb(227, 232, 236)",
+                "borderBottomColor": "rgb(227, 232, 236)",
+                "borderLeftColor": "rgb(35, 42, 48)",
+                "borderRightColor": "rgb(227, 232, 236)",
+                "gridTemplateRows": "none",
+                "gridTemplateColumns": "none",
+                "gap": "normal",
+                "padding": "0px",
+                "margin": "0px",
+                "overflow": "auto",
+                "opacity": "1"
+              },
+              "text": "attention · firehoseAttention queue and event firehose land with the fleet ticket."
+            },
+            "footer": {
+              "selector": ".pc-shell__footer",
+              "found": true,
+              "box": {
+                "x": 0,
+                "y": 874,
+                "width": 1460,
+                "height": 26
+              },
+              "styles": {
+                "display": "flex",
+                "position": "static",
+                "width": "1460px",
+                "height": "26px",
+                "minWidth": "auto",
+                "minHeight": "auto",
+                "backgroundColor": "rgb(16, 19, 22)",
+                "color": "rgb(227, 232, 236)",
+                "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
+                "fontSize": "16px",
+                "fontWeight": "400",
+                "fontFamily": "\"IBM Plex Sans\", system-ui, sans-serif",
+                "letterSpacing": "normal",
+                "textTransform": "none",
+                "borderTopWidth": "1px",
+                "borderBottomWidth": "0px",
+                "borderLeftWidth": "0px",
+                "borderRightWidth": "0px",
+                "borderTopColor": "rgb(35, 42, 48)",
+                "borderBottomColor": "rgb(227, 232, 236)",
+                "borderLeftColor": "rgb(227, 232, 236)",
+                "borderRightColor": "rgb(227, 232, 236)",
+                "gridTemplateRows": "none",
+                "gridTemplateColumns": "none",
+                "gap": "18px",
+                "padding": "0px 14px",
+                "margin": "0px",
+                "overflow": "hidden",
+                "opacity": "1"
+              },
+              "text": "awaitingstalledfailedrunningqueuedpendingcompletedcancelledstate = what a task IS · quality = how good work WAS · 0 unacked events · livestate=IS · quality=W…"
+            }
+          }
+        },
+        {
+          "name": "1920",
+          "width": 1920,
+          "height": 900,
+          "screenshot": "shots/shell-chrome-1920.png",
+          "elements": {
+            "shell": {
+              "selector": "[data-testid=\"shell\"]",
+              "found": true,
+              "box": {
+                "x": 0,
+                "y": 0,
+                "width": 1920,
+                "height": 900
+              },
+              "styles": {
+                "display": "grid",
+                "position": "relative",
+                "width": "1920px",
+                "height": "900px",
+                "minWidth": "1280px",
+                "minHeight": "700px",
+                "backgroundColor": "rgb(11, 13, 15)",
+                "color": "rgb(227, 232, 236)",
+                "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
+                "fontSize": "16px",
+                "fontWeight": "400",
+                "fontFamily": "\"IBM Plex Sans\", system-ui, sans-serif",
+                "letterSpacing": "normal",
+                "textTransform": "none",
+                "borderTopWidth": "0px",
+                "borderBottomWidth": "0px",
+                "borderLeftWidth": "0px",
+                "borderRightWidth": "0px",
+                "borderTopColor": "rgb(227, 232, 236)",
+                "borderBottomColor": "rgb(227, 232, 236)",
+                "borderLeftColor": "rgb(227, 232, 236)",
+                "borderRightColor": "rgb(227, 232, 236)",
+                "gridTemplateRows": "46px 828px 26px",
+                "gridTemplateColumns": "1920px",
+                "gap": "normal",
+                "padding": "0px",
+                "margin": "0px",
+                "overflow": "hidden",
+                "opacity": "1"
+              },
+              "text": "Skip to navigationSkip to findSkip to main contentparleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 150…"
+            },
+            "header": {
+              "selector": ".pc-shell__header",
+              "found": true,
+              "box": {
+                "x": 0,
+                "y": 0,
+                "width": 1920,
+                "height": 46
+              },
+              "styles": {
+                "display": "flex",
+                "position": "static",
+                "width": "1920px",
+                "height": "46px",
+                "minWidth": "0px",
+                "minHeight": "auto",
+                "backgroundColor": "rgb(16, 19, 22)",
+                "color": "rgb(227, 232, 236)",
+                "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
+                "fontSize": "16px",
+                "fontWeight": "400",
+                "fontFamily": "\"IBM Plex Sans\", system-ui, sans-serif",
+                "letterSpacing": "normal",
+                "textTransform": "none",
+                "borderTopWidth": "0px",
+                "borderBottomWidth": "1px",
+                "borderLeftWidth": "0px",
+                "borderRightWidth": "0px",
+                "borderTopColor": "rgb(227, 232, 236)",
+                "borderBottomColor": "rgb(35, 42, 48)",
+                "borderLeftColor": "rgb(227, 232, 236)",
+                "borderRightColor": "rgb(227, 232, 236)",
+                "gridTemplateRows": "none",
+                "gridTemplateColumns": "none",
+                "gap": "18px",
+                "padding": "0px 14px",
+                "margin": "0px",
+                "overflow": "hidden",
+                "opacity": "1"
+              },
+              "text": "parleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 1509433 · up 17sv0.0.4needs orch0streamlive04:50:03Se…"
+            },
+            "brand": {
+              "selector": ".pc-shell__brand",
+              "found": true,
+              "box": {
+                "x": 14,
+                "y": 11.5,
+                "width": 86,
+                "height": 22
+              },
+              "styles": {
+                "display": "flex",
+                "position": "static",
+                "width": "86px",
+                "height": "22px",
+                "minWidth": "0px",
+                "minHeight": "auto",
+                "backgroundColor": "rgba(0, 0, 0, 0)",
+                "color": "rgb(227, 232, 236)",
+                "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
+                "fontSize": "16px",
+                "fontWeight": "400",
+                "fontFamily": "\"IBM Plex Sans\", system-ui, sans-serif",
+                "letterSpacing": "normal",
+                "textTransform": "none",
+                "borderTopWidth": "0px",
+                "borderBottomWidth": "0px",
+                "borderLeftWidth": "0px",
+                "borderRightWidth": "0px",
+                "borderTopColor": "rgb(227, 232, 236)",
+                "borderBottomColor": "rgb(227, 232, 236)",
+                "borderLeftColor": "rgb(227, 232, 236)",
+                "borderRightColor": "rgb(227, 232, 236)",
+                "gridTemplateRows": "none",
+                "gridTemplateColumns": "none",
+                "gap": "10px",
+                "padding": "0px",
+                "margin": "0px",
+                "overflow": "visible",
+                "opacity": "1"
+              },
+              "text": "parleyconsole"
+            },
+            "nav": {
+              "selector": "[data-testid=\"shell-nav\"]",
+              "found": true,
+              "box": {
+                "x": 129,
+                "y": 4.75,
+                "width": 342.78,
+                "height": 35.5
+              },
+              "styles": {
+                "display": "flex",
+                "position": "static",
+                "width": "342.781px",
+                "height": "35.5px",
+                "minWidth": "0px",
+                "minHeight": "auto",
+                "backgroundColor": "rgba(0, 0, 0, 0)",
+                "color": "rgb(227, 232, 236)",
+                "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
+                "fontSize": "16px",
+                "fontWeight": "400",
+                "fontFamily": "\"IBM Plex Sans\", system-ui, sans-serif",
+                "letterSpacing": "normal",
+                "textTransform": "none",
+                "borderTopWidth": "0px",
+                "borderBottomWidth": "0px",
+                "borderLeftWidth": "0px",
+                "borderRightWidth": "0px",
+                "borderTopColor": "rgb(227, 232, 236)",
+                "borderBottomColor": "rgb(227, 232, 236)",
+                "borderLeftColor": "rgb(227, 232, 236)",
+                "borderRightColor": "rgb(227, 232, 236)",
+                "gridTemplateRows": "none",
+                "gridTemplateColumns": "none",
+                "gap": "normal",
+                "padding": "0px",
+                "margin": "0px",
+                "overflow": "hidden",
+                "opacity": "1"
+              },
+              "text": "Fleet1 task · 0 need actionRunno runTaskt1Metricsall hands"
+            },
+            "status": {
+              "selector": ".pc-shell__status",
+              "found": true,
+              "box": {
+                "x": 1128.41,
+                "y": 17,
+                "width": 351.42,
+                "height": 11
+              },
+              "styles": {
+                "display": "flex",
+                "position": "static",
+                "width": "351.422px",
+                "height": "11px",
+                "minWidth": "0px",
+                "minHeight": "auto",
+                "backgroundColor": "rgba(0, 0, 0, 0)",
+                "color": "rgb(227, 232, 236)",
+                "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
+                "fontSize": "16px",
+                "fontWeight": "400",
+                "fontFamily": "\"IBM Plex Sans\", system-ui, sans-serif",
+                "letterSpacing": "normal",
+                "textTransform": "none",
+                "borderTopWidth": "0px",
+                "borderBottomWidth": "0px",
+                "borderLeftWidth": "0px",
+                "borderRightWidth": "0px",
+                "borderTopColor": "rgb(227, 232, 236)",
+                "borderBottomColor": "rgb(227, 232, 236)",
+                "borderLeftColor": "rgb(227, 232, 236)",
+                "borderRightColor": "rgb(227, 232, 236)",
+                "gridTemplateRows": "none",
+                "gridTemplateColumns": "none",
+                "gap": "7px",
+                "padding": "0px",
+                "margin": "0px",
+                "overflow": "visible",
+                "opacity": "1"
+              },
+              "text": "daemon127.0.0.1:5173v0.0.4 · pid 1509433 · up 17sv0.0.4"
+            },
+            "needs-orch": {
+              "selector": "[data-testid=\"needs-orch\"]",
+              "found": true,
+              "box": {
+                "x": 1512.83,
+                "y": 11.5,
+                "width": 106.42,
+                "height": 22
+              },
+              "styles": {
+                "display": "flex",
+                "position": "static",
+                "width": "106.422px",
+                "height": "22px",
+                "minWidth": "auto",
+                "minHeight": "auto",
+                "backgroundColor": "rgba(0, 0, 0, 0)",
+                "color": "rgb(227, 232, 236)",
+                "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
+                "fontSize": "16px",
+                "fontWeight": "400",
+                "fontFamily": "\"IBM Plex Sans\", system-ui, sans-serif",
+                "letterSpacing": "normal",
+                "textTransform": "none",
+                "borderTopWidth": "0px",
+                "borderBottomWidth": "0px",
+                "borderLeftWidth": "0px",
+                "borderRightWidth": "0px",
+                "borderTopColor": "rgb(227, 232, 236)",
+                "borderBottomColor": "rgb(227, 232, 236)",
+                "borderLeftColor": "rgb(227, 232, 236)",
+                "borderRightColor": "rgb(227, 232, 236)",
+                "gridTemplateRows": "none",
+                "gridTemplateColumns": "none",
+                "gap": "10px",
+                "padding": "0px",
+                "margin": "0px",
+                "overflow": "visible",
+                "opacity": "1"
+              },
+              "text": "needs orch0"
+            },
+            "live-status": {
+              "selector": "[data-testid=\"live-status\"]",
+              "found": true,
+              "box": {
+                "x": 1652.25,
+                "y": 17,
+                "width": 74.02,
+                "height": 11
+              },
+              "styles": {
+                "display": "flex",
+                "position": "static",
+                "width": "74.0156px",
+                "height": "11px",
+                "minWidth": "auto",
+                "minHeight": "auto",
+                "backgroundColor": "rgba(0, 0, 0, 0)",
+                "color": "rgb(227, 232, 236)",
+                "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
+                "fontSize": "16px",
+                "fontWeight": "400",
+                "fontFamily": "\"IBM Plex Sans\", system-ui, sans-serif",
+                "letterSpacing": "normal",
+                "textTransform": "none",
+                "borderTopWidth": "0px",
+                "borderBottomWidth": "0px",
+                "borderLeftWidth": "0px",
+                "borderRightWidth": "0px",
+                "borderTopColor": "rgb(227, 232, 236)",
+                "borderBottomColor": "rgb(227, 232, 236)",
+                "borderLeftColor": "rgb(227, 232, 236)",
+                "borderRightColor": "rgb(227, 232, 236)",
+                "gridTemplateRows": "none",
+                "gridTemplateColumns": "none",
+                "gap": "8px",
+                "padding": "0px",
+                "margin": "0px",
+                "overflow": "visible",
+                "opacity": "1"
+              },
+              "text": "streamlive"
+            },
+            "find": {
+              "selector": "[data-testid=\"find-combobox\"]",
+              "found": true,
+              "box": {
+                "x": 10,
+                "y": 55,
+                "width": 263,
+                "height": 28
+              },
+              "styles": {
+                "display": "block",
+                "position": "relative",
+                "width": "263px",
+                "height": "28px",
+                "minWidth": "0px",
+                "minHeight": "0px",
+                "backgroundColor": "rgba(0, 0, 0, 0)",
+                "color": "rgb(227, 232, 236)",
+                "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
+                "fontSize": "16px",
+                "fontWeight": "400",
+                "fontFamily": "\"IBM Plex Sans\", system-ui, sans-serif",
+                "letterSpacing": "normal",
+                "textTransform": "none",
+                "borderTopWidth": "0px",
+                "borderBottomWidth": "0px",
+                "borderLeftWidth": "0px",
+                "borderRightWidth": "0px",
+                "borderTopColor": "rgb(227, 232, 236)",
+                "borderBottomColor": "rgb(227, 232, 236)",
+                "borderLeftColor": "rgb(227, 232, 236)",
+                "borderRightColor": "rgb(227, 232, 236)",
+                "gridTemplateRows": "none",
+                "gridTemplateColumns": "none",
+                "gap": "normal",
+                "padding": "0px",
+                "margin": "0px",
+                "overflow": "visible",
+                "opacity": "1"
+              },
+              "text": "Find tasks and sessions/"
+            },
+            "find-input": {
+              "selector": "[data-testid=\"find-input\"]",
+              "found": true,
+              "box": {
+                "x": 33.61,
+                "y": 62,
+                "width": 230.39,
+                "height": 14
+              },
+              "styles": {
+                "display": "block",
+                "position": "static",
+                "width": "230.391px",
+                "height": "14px",
+                "minWidth": "0px",
+                "minHeight": "auto",
+                "backgroundColor": "rgba(0, 0, 0, 0)",
+                "color": "rgb(227, 232, 236)",
+                "font": "11px / 11px \"IBM Plex Mono\", ui-monospace, monospace",
+                "fontSize": "11px",
+                "fontWeight": "400",
+                "fontFamily": "\"IBM Plex Mono\", ui-monospace, monospace",
+                "letterSpacing": "normal",
+                "textTransform": "none",
+                "borderTopWidth": "0px",
+                "borderBottomWidth": "0px",
+                "borderLeftWidth": "0px",
+                "borderRightWidth": "0px",
+                "borderTopColor": "rgb(227, 232, 236)",
+                "borderBottomColor": "rgb(227, 232, 236)",
+                "borderLeftColor": "rgb(227, 232, 236)",
+                "borderRightColor": "rgb(227, 232, 236)",
+                "gridTemplateRows": "none",
+                "gridTemplateColumns": "none",
+                "gap": "normal",
+                "padding": "0px",
+                "margin": "0px",
+                "overflow": "clip",
+                "opacity": "1"
+              },
+              "text": ""
+            },
+            "body": {
+              "selector": ".pc-shell__body",
+              "found": true,
+              "box": {
+                "x": 0,
+                "y": 46,
+                "width": 1920,
+                "height": 828
+              },
+              "styles": {
+                "display": "grid",
+                "position": "static",
+                "width": "1920px",
+                "height": "828px",
+                "minWidth": "auto",
+                "minHeight": "0px",
+                "backgroundColor": "rgba(0, 0, 0, 0)",
+                "color": "rgb(227, 232, 236)",
+                "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
+                "fontSize": "16px",
+                "fontWeight": "400",
+                "fontFamily": "\"IBM Plex Sans\", system-ui, sans-serif",
+                "letterSpacing": "normal",
+                "textTransform": "none",
+                "borderTopWidth": "0px",
+                "borderBottomWidth": "0px",
+                "borderLeftWidth": "0px",
+                "borderRightWidth": "0px",
+                "borderTopColor": "rgb(227, 232, 236)",
+                "borderBottomColor": "rgb(227, 232, 236)",
+                "borderLeftColor": "rgb(227, 232, 236)",
+                "borderRightColor": "rgb(227, 232, 236)",
+                "gridTemplateRows": "828px",
+                "gridTemplateColumns": "284px 1288px 348px",
+                "gap": "normal",
+                "padding": "0px",
+                "margin": "0px",
+                "overflow": "hidden",
+                "opacity": "1"
+              },
+              "text": "Find tasks and sessions/navigatorScope, state filter, and list navigation land with each screen ticket.center screenFleet boardKPI strip, runs table, and tas…"
+            },
+            "rail-left": {
+              "selector": ".pc-shell__rail--left",
+              "found": true,
+              "box": {
+                "x": 0,
+                "y": 46,
+                "width": 284,
+                "height": 828
+              },
+              "styles": {
+                "display": "flex",
+                "position": "static",
+                "width": "284px",
+                "height": "828px",
+                "minWidth": "auto",
+                "minHeight": "0px",
+                "backgroundColor": "rgb(14, 17, 20)",
+                "color": "rgb(227, 232, 236)",
+                "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
+                "fontSize": "16px",
+                "fontWeight": "400",
+                "fontFamily": "\"IBM Plex Sans\", system-ui, sans-serif",
+                "letterSpacing": "normal",
+                "textTransform": "none",
+                "borderTopWidth": "0px",
+                "borderBottomWidth": "0px",
+                "borderLeftWidth": "0px",
+                "borderRightWidth": "1px",
+                "borderTopColor": "rgb(227, 232, 236)",
+                "borderBottomColor": "rgb(227, 232, 236)",
+                "borderLeftColor": "rgb(227, 232, 236)",
+                "borderRightColor": "rgb(35, 42, 48)",
+                "gridTemplateRows": "none",
+                "gridTemplateColumns": "none",
+                "gap": "normal",
+                "padding": "0px",
+                "margin": "0px",
+                "overflow": "auto",
+                "opacity": "1"
+              },
+              "text": "Find tasks and sessions/navigatorScope, state filter, and list navigation land with each screen ticket."
+            },
+            "center": {
+              "selector": ".pc-shell__center",
+              "found": true,
+              "box": {
+                "x": 284,
+                "y": 46,
+                "width": 1288,
+                "height": 828
+              },
+              "styles": {
+                "display": "flex",
+                "position": "static",
+                "width": "1288px",
+                "height": "828px",
+                "minWidth": "auto",
+                "minHeight": "0px",
+                "backgroundColor": "rgb(11, 13, 15)",
+                "color": "rgb(227, 232, 236)",
+                "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
+                "fontSize": "16px",
+                "fontWeight": "400",
+                "fontFamily": "\"IBM Plex Sans\", system-ui, sans-serif",
+                "letterSpacing": "normal",
+                "textTransform": "none",
+                "borderTopWidth": "0px",
+                "borderBottomWidth": "0px",
+                "borderLeftWidth": "0px",
+                "borderRightWidth": "0px",
+                "borderTopColor": "rgb(227, 232, 236)",
+                "borderBottomColor": "rgb(227, 232, 236)",
+                "borderLeftColor": "rgb(227, 232, 236)",
+                "borderRightColor": "rgb(227, 232, 236)",
+                "gridTemplateRows": "none",
+                "gridTemplateColumns": "none",
+                "gap": "normal",
+                "padding": "0px",
+                "margin": "0px",
+                "overflow": "auto",
+                "opacity": "1"
+              },
+              "text": "center screenFleet boardKPI strip, runs table, and tasks table land in the fleet ticket. Shell chrome (nav, find, settings, honesty) is live."
+            },
+            "rail-right": {
+              "selector": ".pc-shell__rail--right",
+              "found": true,
+              "box": {
+                "x": 1572,
+                "y": 46,
+                "width": 348,
+                "height": 828
+              },
+              "styles": {
+                "display": "flex",
+                "position": "static",
+                "width": "348px",
+                "height": "828px",
+                "minWidth": "auto",
+                "minHeight": "0px",
+                "backgroundColor": "rgb(14, 17, 20)",
+                "color": "rgb(227, 232, 236)",
+                "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
+                "fontSize": "16px",
+                "fontWeight": "400",
+                "fontFamily": "\"IBM Plex Sans\", system-ui, sans-serif",
+                "letterSpacing": "normal",
+                "textTransform": "none",
+                "borderTopWidth": "0px",
+                "borderBottomWidth": "0px",
+                "borderLeftWidth": "1px",
+                "borderRightWidth": "0px",
+                "borderTopColor": "rgb(227, 232, 236)",
+                "borderBottomColor": "rgb(227, 232, 236)",
+                "borderLeftColor": "rgb(35, 42, 48)",
+                "borderRightColor": "rgb(227, 232, 236)",
+                "gridTemplateRows": "none",
+                "gridTemplateColumns": "none",
+                "gap": "normal",
+                "padding": "0px",
+                "margin": "0px",
+                "overflow": "auto",
+                "opacity": "1"
+              },
+              "text": "attention · firehoseAttention queue and event firehose land with the fleet ticket."
+            },
+            "footer": {
+              "selector": ".pc-shell__footer",
+              "found": true,
+              "box": {
+                "x": 0,
+                "y": 874,
+                "width": 1920,
+                "height": 26
+              },
+              "styles": {
+                "display": "flex",
+                "position": "static",
+                "width": "1920px",
+                "height": "26px",
+                "minWidth": "auto",
+                "minHeight": "auto",
+                "backgroundColor": "rgb(16, 19, 22)",
+                "color": "rgb(227, 232, 236)",
+                "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
+                "fontSize": "16px",
+                "fontWeight": "400",
+                "fontFamily": "\"IBM Plex Sans\", system-ui, sans-serif",
+                "letterSpacing": "normal",
+                "textTransform": "none",
+                "borderTopWidth": "1px",
+                "borderBottomWidth": "0px",
+                "borderLeftWidth": "0px",
+                "borderRightWidth": "0px",
+                "borderTopColor": "rgb(35, 42, 48)",
+                "borderBottomColor": "rgb(227, 232, 236)",
+                "borderLeftColor": "rgb(227, 232, 236)",
+                "borderRightColor": "rgb(227, 232, 236)",
+                "gridTemplateRows": "none",
+                "gridTemplateColumns": "none",
+                "gap": "18px",
+                "padding": "0px 14px",
+                "margin": "0px",
+                "overflow": "hidden",
+                "opacity": "1"
+              },
+              "text": "awaitingstalledfailedrunningqueuedpendingcompletedcancelledstate = what a task IS · quality = how good work WAS · 0 unacked events · livestate=IS · quality=W…"
+            }
+          }
+        }
+      ],
+      "a11y": {
+        "axe": {
+          "url": "http://127.0.0.1:5173/",
+          "violations": [],
+          "passes": 34,
+          "incomplete": 1,
+          "inapplicable": 54
+        },
+        "aria": {
+          "api": "locator.ariaSnapshot",
+          "selector": "[data-testid=\"shell\"]",
+          "tree": "- link \"Skip to navigation\":\n  - /url: \"#shell-nav\"\n- link \"Skip to find\":\n  - /url: \"#find-input-target\"\n- link \"Skip to main content\":\n  - /url: \"#main-content\"\n- banner:\n  - img \"Parley\"\n  - text: parley console\n  - navigation \"Screens\":\n    - tablist \"Console screens\":\n      - tab \"Fleet 1 task · 0 need action\" [selected]\n      - tab \"Run no run\"\n      - tab \"Task t1\"\n      - tab \"Metrics all hands\"\n  - text: daemon 127.0.0.1:5173 v0.0.4 · pid 1509433 · up 18s needs orch 0 stream live\n  - time: 04:50:06\n  - button \"Settings\"\n- complementary \"Left rail\":\n  - text: Find tasks and sessions\n  - combobox \"Find tasks and sessions\"\n  - text: navigator Scope, state filter, and list navigation land with each screen ticket.\n- main:\n  - tabpanel \"Fleet 1 task · 0 need action\":\n    - text: center screen\n    - heading \"Fleet board\" [level=1]\n    - paragraph: KPI strip, runs table, and tasks table land in the fleet ticket. Shell chrome (nav, find, settings, honesty) is live.\n- complementary \"Attention rail\": attention · firehose Attention queue and event firehose land with the fleet ticket.\n- contentinfo: awaiting stalled failed running queued pending completed cancelled state = what a task IS · quality = how good work WAS · 0 unacked events · live read-only · parley never merges"
+        },
+        "keyboardWalk": {
+          "focusableCount": 9,
+          "note": null,
+          "path": [
+            {
+              "step": 1,
+              "key": "Tab",
+              "tag": "a",
+              "role": null,
+              "testId": null,
+              "text": "Skip to navigation"
+            },
+            {
+              "step": 1,
+              "key": "Enter",
+              "tag": "nav",
+              "role": null,
+              "testId": "shell-nav",
+              "text": "Fleet1 task · 0 need actionRunno runTaskt1Metricsall hands"
+            }
+          ],
+          "entered": true,
+          "leftBody": true
+        }
+      },
+      "a11yByState": {
+        "resting": {
+          "axe": {
+            "url": "http://127.0.0.1:5173/",
+            "violations": [],
+            "passes": 34,
+            "incomplete": 1,
+            "inapplicable": 54
+          },
+          "aria": {
+            "api": "locator.ariaSnapshot",
+            "selector": "[data-testid=\"shell\"]",
+            "tree": "- link \"Skip to navigation\":\n  - /url: \"#shell-nav\"\n- link \"Skip to find\":\n  - /url: \"#find-input-target\"\n- link \"Skip to main content\":\n  - /url: \"#main-content\"\n- banner:\n  - img \"Parley\"\n  - text: parley console\n  - navigation \"Screens\":\n    - tablist \"Console screens\":\n      - tab \"Fleet 1 task · 0 need action\" [selected]\n      - tab \"Run no run\"\n      - tab \"Task t1\"\n      - tab \"Metrics all hands\"\n  - text: daemon 127.0.0.1:5173 v0.0.4 · pid 1509433 · up 18s needs orch 0 stream live\n  - time: 04:50:06\n  - button \"Settings\"\n- complementary \"Left rail\":\n  - text: Find tasks and sessions\n  - combobox \"Find tasks and sessions\"\n  - text: navigator Scope, state filter, and list navigation land with each screen ticket.\n- main:\n  - tabpanel \"Fleet 1 task · 0 need action\":\n    - text: center screen\n    - heading \"Fleet board\" [level=1]\n    - paragraph: KPI strip, runs table, and tasks table land in the fleet ticket. Shell chrome (nav, find, settings, honesty) is live.\n- complementary \"Attention rail\": attention · firehose Attention queue and event firehose land with the fleet ticket.\n- contentinfo: awaiting stalled failed running queued pending completed cancelled state = what a task IS · quality = how good work WAS · 0 unacked events · live read-only · parley never merges"
+          }
+        },
+        "findPopup": {
+          "axe": {
+            "url": "http://127.0.0.1:5173/",
+            "violations": [],
+            "passes": 34,
+            "incomplete": 3,
+            "inapplicable": 54
+          },
+          "aria": {
+            "api": "locator.ariaSnapshot",
+            "selector": "[data-testid=\"shell\"]",
+            "tree": "- link \"Skip to navigation\":\n  - /url: \"#shell-nav\"\n- link \"Skip to find\":\n  - /url: \"#find-input-target\"\n- link \"Skip to main content\":\n  - /url: \"#main-content\"\n- banner:\n  - img \"Parley\"\n  - text: parley console\n  - navigation \"Screens\":\n    - tablist \"Console screens\":\n      - tab \"Fleet 1 task · 0 need action\" [selected]\n      - tab \"Run no run\"\n      - tab \"Task t1\"\n      - tab \"Metrics all hands\"\n  - text: daemon 127.0.0.1:5173 v0.0.4 · pid 1509433 · up 18s needs orch 0 stream live\n  - time: 04:50:07\n  - button \"Settings\"\n- complementary \"Left rail\":\n  - text: Find tasks and sessions\n  - combobox \"Find tasks and sessions\" [expanded]: zzz-axe-no-match-999\n  - status: No match for “zzz-axe-no-match-999”\n  - text: navigator Scope, state filter, and list navigation land with each screen ticket.\n- main:\n  - tabpanel \"Fleet 1 task · 0 need action\":\n    - text: center screen\n    - heading \"Fleet board\" [level=1]\n    - paragraph: KPI strip, runs table, and tasks table land in the fleet ticket. Shell chrome (nav, find, settings, honesty) is live.\n- complementary \"Attention rail\": attention · firehose Attention queue and event firehose land with the fleet ticket.\n- contentinfo: awaiting stalled failed running queued pending completed cancelled state = what a task IS · quality = how good work WAS · 0 unacked events · live read-only · parley never merges"
+          }
+        },
+        "settingsOpen": {
+          "axe": {
+            "url": "http://127.0.0.1:5173/",
+            "violations": [],
+            "passes": 37,
+            "incomplete": 2,
+            "inapplicable": 51
+          }
+        }
+      },
+      "footerNoteScroll": [
+        {
+          "name": "1280",
+          "found": true,
+          "selector": ".pc-shell__footer-note",
+          "scrollWidth": 246,
+          "clientWidth": 246,
+          "ok": true,
+          "text": "state=IS · quality=WAS · 0 unacked · live"
+        },
+        {
+          "name": "1460",
+          "found": true,
+          "selector": ".pc-shell__footer-note",
+          "scrollWidth": 468,
+          "clientWidth": 468,
+          "ok": true,
+          "text": "state = what a task IS · quality = how good work WAS · 0 unacked events · live"
+        },
+        {
+          "name": "1920",
+          "found": true,
+          "selector": ".pc-shell__footer-note",
+          "scrollWidth": 468,
+          "clientWidth": 468,
+          "ok": true,
+          "text": "state = what a task IS · quality = how good work WAS · 0 unacked events · live"
+        }
+      ],
+      "density1280": {
+        "allOk": true,
+        "hidden": {
+          "tabSubDisplay": "none",
+          "statusMetaFullDisplay": "none",
+          "tabSubHidden": true,
+          "statusMetaFullHidden": true
+        },
+        "parts": {
+          ".pc-shell__tab-label": {
+            "found": true,
+            "selector": ".pc-shell__tab-label",
+            "scrollWidth": 35,
+            "clientWidth": 35,
+            "ok": true,
+            "text": "Fleet"
+          },
+          ".pc-shell__status-value": {
+            "found": true,
+            "selector": ".pc-shell__status-value",
+            "scrollWidth": 92,
+            "clientWidth": 92,
+            "ok": true,
+            "text": "127.0.0.1:5173"
+          },
+          ".pc-shell__status-meta--compact": {
+            "found": true,
+            "selector": ".pc-shell__status-meta--compact",
+            "scrollWidth": 40,
+            "clientWidth": 40,
+            "ok": true,
+            "text": "v0.0.4"
+          },
+          ".pc-shell__live-status-value": {
+            "found": true,
+            "selector": ".pc-shell__live-status-value",
+            "scrollWidth": 26,
+            "clientWidth": 26,
+            "ok": true,
+            "text": "live"
+          },
+          ".pc-shell__attention-count": {
+            "found": true,
+            "selector": ".pc-shell__attention-count",
+            "scrollWidth": 23,
+            "clientWidth": 23,
+            "ok": true,
+            "text": "0"
+          },
+          ".pc-shell__clock": {
+            "found": true,
+            "selector": ".pc-shell__clock",
+            "scrollWidth": 62,
+            "clientWidth": 62,
+            "ok": true,
+            "text": "04:50:04"
+          },
+          ".pc-shell__footer-note": {
+            "found": true,
+            "selector": ".pc-shell__footer-note",
+            "scrollWidth": 246,
+            "clientWidth": 246,
+            "ok": true,
+            "text": "state=IS · quality=WAS · 0 unacked · live"
+          },
+          ".pc-shell__footer-meta": {
+            "found": true,
+            "selector": ".pc-shell__footer-meta",
+            "scrollWidth": 186,
+            "clientWidth": 186,
+            "ok": true,
+            "text": "read-only · parley never merges"
+          }
+        }
+      },
+      "skipMain": {
+        "focusedId": "main-content",
+        "focusedTestId": null,
+        "afterTab": {
+          "tag": "a",
+          "id": null,
+          "testId": null,
+          "role": null,
+          "text": "Skip to navigation"
+        }
+      },
+      "settingsFocus": {
+        "ariaModal": "false",
+        "focusMovedIn": true,
+        "focusIn": {
+          "tag": "button",
+          "id": null,
+          "testId": "settings-close",
+          "role": null,
+          "text": "Close"
+        },
+        "focusRestored": true,
+        "focusAfterClose": {
+          "tag": "button",
+          "id": null,
+          "testId": "settings-open",
+          "role": null,
+          "text": "Settings"
+        },
+        "screenAfterDigit3": "fleet",
+        "digit3DidNotNavigate": true
+      },
+      "centerOutline": {
+        "outlineStyle": "none",
+        "outlineWidth": "3px"
+      },
+      "liveRegionTranscript": {
+        "bootSamples": [
+          {
+            "t": 83,
+            "text": "",
+            "phase": "live"
+          },
+          {
+            "t": 164,
+            "text": "",
+            "phase": "live"
+          },
+          {
+            "t": 244,
+            "text": "",
+            "phase": "live"
+          },
+          {
+            "t": 326,
+            "text": "",
+            "phase": "live"
+          },
+          {
+            "t": 407,
+            "text": "",
+            "phase": "live"
+          },
+          {
+            "t": 490,
+            "text": "",
+            "phase": "live"
+          },
+          {
+            "t": 572,
+            "text": "",
+            "phase": "live"
+          },
+          {
+            "t": 655,
+            "text": "",
+            "phase": "live"
+          },
+          {
+            "t": 737,
+            "text": "",
+            "phase": "live"
+          },
+          {
+            "t": 820,
+            "text": "",
+            "phase": "live"
+          },
+          {
+            "t": 902,
+            "text": "",
+            "phase": "live"
+          },
+          {
+            "t": 985,
+            "text": "",
+            "phase": "live"
+          }
+        ],
+        "recoverSamples": [
+          {
+            "t": 204,
+            "text": "",
+            "phase": "live"
+          },
+          {
+            "t": 407,
+            "text": "",
+            "phase": "live"
+          },
+          {
+            "t": 611,
+            "text": "",
+            "phase": "live"
+          },
+          {
+            "t": 814,
+            "text": "",
+            "phase": "live"
+          },
+          {
+            "t": 1015,
+            "text": "",
+            "phase": "live"
+          },
+          {
+            "t": 1218,
+            "text": "",
+            "phase": "live"
+          },
+          {
+            "t": 1421,
+            "text": "",
+            "phase": "live"
+          },
+          {
+            "t": 1624,
+            "text": "",
+            "phase": "live"
+          },
+          {
+            "t": 1827,
+            "text": "",
+            "phase": "live"
+          },
+          {
+            "t": 2029,
+            "text": "",
+            "phase": "live"
+          },
+          {
+            "t": 2232,
+            "text": "",
+            "phase": "live"
+          },
+          {
+            "t": 2434,
+            "text": "Reconnecting to daemon stream",
+            "phase": "stale-reconnecting"
+          },
+          {
+            "t": 2638,
+            "text": "Reconnecting to daemon stream",
+            "phase": "stale-reconnecting"
+          },
+          {
+            "t": 2840,
+            "text": "Reconnecting to daemon stream",
+            "phase": "stale-reconnecting"
+          },
+          {
+            "t": 3042,
+            "text": "Reconnecting to daemon stream",
+            "phase": "stale-reconnecting"
+          },
+          {
+            "t": 3245,
+            "text": "Reconnecting to daemon stream",
+            "phase": "stale-reconnecting"
+          },
+          {
+            "t": 3448,
+            "text": "Reconnecting to daemon stream",
+            "phase": "stale-reconnecting"
+          },
+          {
+            "t": 3651,
+            "text": "Reconnecting to daemon stream",
+            "phase": "stale-reconnecting"
+          },
+          {
+            "t": 3854,
+            "text": "Reconnecting to daemon stream",
+            "phase": "stale-reconnecting"
+          },
+          {
+            "t": 4055,
+            "text": "Reconnecting to daemon stream",
+            "phase": "stale-reconnecting"
+          },
+          {
+            "t": 4257,
+            "text": "Reconnecting to daemon stream",
+            "phase": "stale-reconnecting"
+          },
+          {
+            "t": 4460,
+            "text": "Reconnecting to daemon stream",
+            "phase": "stale-reconnecting"
+          },
+          {
+            "t": 4664,
+            "text": "Reconnecting to daemon stream",
+            "phase": "stale-reconnecting"
+          },
+          {
+            "t": 4866,
+            "text": "Reconnecting to daemon stream",
+            "phase": "stale-reconnecting"
+          },
+          {
+            "t": 5069,
+            "text": "Reconnecting to daemon stream",
+            "phase": "stale-reconnecting"
+          },
+          {
+            "t": 5272,
+            "text": "Reconnecting to daemon stream",
+            "phase": "stale-reconnecting"
+          },
+          {
+            "t": 5474,
+            "text": "Reconnecting to daemon stream",
+            "phase": "stale-reconnecting"
+          },
+          {
+            "t": 5677,
+            "text": "Reconnecting to daemon stream",
+            "phase": "stale-reconnecting"
+          },
+          {
+            "t": 5880,
+            "text": "Reconnecting to daemon stream",
+            "phase": "stale-reconnecting"
+          },
+          {
+            "t": 6084,
+            "text": "Reconnecting to daemon stream",
+            "phase": "stale-reconnecting"
+          },
+          {
+            "t": 6286,
+            "text": "Reconnecting to daemon stream",
+            "phase": "stale-reconnecting"
+          },
+          {
+            "t": 6489,
+            "text": "Reconnecting to daemon stream",
+            "phase": "stale-reconnecting"
+          },
+          {
+            "t": 6692,
+            "text": "Reconnecting to daemon stream",
+            "phase": "stale-reconnecting"
+          },
+          {
+            "t": 6894,
+            "text": "Reconnecting to daemon stream",
+            "phase": "stale-reconnecting"
+          },
+          {
+            "t": 7096,
+            "text": "Reconnecting to daemon stream",
+            "phase": "stale-reconnecting"
+          },
+          {
+            "t": 7300,
+            "text": "Reconnecting to daemon stream",
+            "phase": "stale-reconnecting"
+          },
+          {
+            "t": 7503,
+            "text": "Connection restored",
+            "phase": "live"
+          }
+        ],
+        "announcedOfflineOnHealthyBoot": false,
+        "offlineWhileLive": false,
+        "announcedOfflineAfterLive": true,
+        "announcedRestore": true
+      },
+      "recordedAt": "2026-08-06T08:50:15.506Z"
+    },
+    "find-honesty": {
+      "kind": "find-honesty",
+      "description": "Find combobox honesty: loading (delay), error (500), no-match (empty sessions), results — forced via route interception on /sessions.",
+      "daemon": {
+        "taskId": "t1",
+        "port": 42137
+      },
+      "states": {
+        "loading": {
+          "name": "loading",
+          "status": "loading",
+          "screenshot": "shots/find-loading.png",
+          "combobox": {
+            "selector": "[data-testid=\"find-combobox\"]",
+            "found": true,
+            "box": {
+              "x": 10,
+              "y": 55,
+              "width": 263,
+              "height": 28
+            },
+            "styles": {
+              "display": "block",
+              "position": "relative",
+              "width": "263px",
+              "height": "28px",
+              "minWidth": "0px",
+              "minHeight": "0px",
+              "backgroundColor": "rgba(0, 0, 0, 0)",
+              "color": "rgb(227, 232, 236)",
+              "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
+              "fontSize": "16px",
+              "fontWeight": "400",
+              "fontFamily": "\"IBM Plex Sans\", system-ui, sans-serif",
+              "letterSpacing": "normal",
+              "textTransform": "none",
+              "borderTopWidth": "0px",
+              "borderBottomWidth": "0px",
+              "borderLeftWidth": "0px",
+              "borderRightWidth": "0px",
+              "borderTopColor": "rgb(227, 232, 236)",
+              "borderBottomColor": "rgb(227, 232, 236)",
+              "borderLeftColor": "rgb(227, 232, 236)",
+              "borderRightColor": "rgb(227, 232, 236)",
+              "gridTemplateRows": "none",
+              "gridTemplateColumns": "none",
+              "gap": "normal",
+              "padding": "0px",
+              "margin": "0px",
+              "overflow": "visible",
+              "opacity": "1"
+            },
+            "text": "Find tasks and sessions/Searching sessions…"
+          },
+          "popup": {
+            "selector": "[data-testid=\"find-popup\"]",
+            "found": true,
+            "box": {
+              "x": 10,
+              "y": 85,
+              "width": 263,
+              "height": 32.84
+            },
+            "styles": {
+              "display": "block",
+              "position": "absolute",
+              "width": "263px",
+              "height": "32.8438px",
+              "minWidth": "0px",
+              "minHeight": "0px",
+              "backgroundColor": "rgb(16, 19, 22)",
+              "color": "rgb(227, 232, 236)",
+              "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
+              "fontSize": "16px",
+              "fontWeight": "400",
+              "fontFamily": "\"IBM Plex Sans\", system-ui, sans-serif",
+              "letterSpacing": "normal",
+              "textTransform": "none",
+              "borderTopWidth": "1px",
+              "borderBottomWidth": "1px",
+              "borderLeftWidth": "1px",
+              "borderRightWidth": "1px",
+              "borderTopColor": "rgb(35, 42, 48)",
+              "borderBottomColor": "rgb(35, 42, 48)",
+              "borderLeftColor": "rgb(35, 42, 48)",
+              "borderRightColor": "rgb(35, 42, 48)",
+              "gridTemplateRows": "none",
+              "gridTemplateColumns": "none",
+              "gap": "normal",
+              "padding": "0px",
+              "margin": "0px",
+              "overflow": "auto",
+              "opacity": "1"
+            },
+            "text": "Searching sessions…"
+          },
+          "aria": {
+            "role": "combobox",
+            "ariaExpanded": "true",
+            "ariaActivedescendant": null
+          }
+        },
+        "error": {
+          "name": "error",
+          "status": "error",
+          "screenshot": "shots/find-error.png",
+          "combobox": {
+            "selector": "[data-testid=\"find-combobox\"]",
+            "found": true,
+            "box": {
+              "x": 10,
+              "y": 55,
+              "width": 263,
+              "height": 28
+            },
+            "styles": {
+              "display": "block",
+              "position": "relative",
+              "width": "263px",
+              "height": "28px",
+              "minWidth": "0px",
+              "minHeight": "0px",
+              "backgroundColor": "rgba(0, 0, 0, 0)",
+              "color": "rgb(227, 232, 236)",
+              "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
+              "fontSize": "16px",
+              "fontWeight": "400",
+              "fontFamily": "\"IBM Plex Sans\", system-ui, sans-serif",
+              "letterSpacing": "normal",
+              "textTransform": "none",
+              "borderTopWidth": "0px",
+              "borderBottomWidth": "0px",
+              "borderLeftWidth": "0px",
+              "borderRightWidth": "0px",
+              "borderTopColor": "rgb(227, 232, 236)",
+              "borderBottomColor": "rgb(227, 232, 236)",
+              "borderLeftColor": "rgb(227, 232, 236)",
+              "borderRightColor": "rgb(227, 232, 236)",
+              "gridTemplateRows": "none",
+              "gridTemplateColumns": "none",
+              "gap": "normal",
+              "padding": "0px",
+              "margin": "0px",
+              "overflow": "visible",
+              "opacity": "1"
+            },
+            "text": "Find tasks and sessions/forced sessions error (verify harness)"
+          },
+          "popup": {
+            "selector": "[data-testid=\"find-popup\"]",
+            "found": true,
+            "box": {
+              "x": 10,
+              "y": 85,
+              "width": 263,
+              "height": 32.84
+            },
+            "styles": {
+              "display": "block",
+              "position": "absolute",
+              "width": "263px",
+              "height": "32.8438px",
+              "minWidth": "0px",
+              "minHeight": "0px",
+              "backgroundColor": "rgb(16, 19, 22)",
+              "color": "rgb(227, 232, 236)",
+              "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
+              "fontSize": "16px",
+              "fontWeight": "400",
+              "fontFamily": "\"IBM Plex Sans\", system-ui, sans-serif",
+              "letterSpacing": "normal",
+              "textTransform": "none",
+              "borderTopWidth": "1px",
+              "borderBottomWidth": "1px",
+              "borderLeftWidth": "1px",
+              "borderRightWidth": "1px",
+              "borderTopColor": "rgb(35, 42, 48)",
+              "borderBottomColor": "rgb(35, 42, 48)",
+              "borderLeftColor": "rgb(35, 42, 48)",
+              "borderRightColor": "rgb(35, 42, 48)",
+              "gridTemplateRows": "none",
+              "gridTemplateColumns": "none",
+              "gap": "normal",
+              "padding": "0px",
+              "margin": "0px",
+              "overflow": "auto",
+              "opacity": "1"
+            },
+            "text": "forced sessions error (verify harness)"
+          },
+          "aria": {
+            "role": "combobox",
+            "ariaExpanded": "true",
+            "ariaActivedescendant": null
+          }
+        },
+        "noMatch": {
+          "name": "no-match",
+          "status": "no-match",
+          "screenshot": "shots/find-no-match.png",
+          "combobox": {
+            "selector": "[data-testid=\"find-combobox\"]",
+            "found": true,
+            "box": {
+              "x": 10,
+              "y": 55,
+              "width": 263,
+              "height": 28
+            },
+            "styles": {
+              "display": "block",
+              "position": "relative",
+              "width": "263px",
+              "height": "28px",
+              "minWidth": "0px",
+              "minHeight": "0px",
+              "backgroundColor": "rgba(0, 0, 0, 0)",
+              "color": "rgb(227, 232, 236)",
+              "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
+              "fontSize": "16px",
+              "fontWeight": "400",
+              "fontFamily": "\"IBM Plex Sans\", system-ui, sans-serif",
+              "letterSpacing": "normal",
+              "textTransform": "none",
+              "borderTopWidth": "0px",
+              "borderBottomWidth": "0px",
+              "borderLeftWidth": "0px",
+              "borderRightWidth": "0px",
+              "borderTopColor": "rgb(227, 232, 236)",
+              "borderBottomColor": "rgb(227, 232, 236)",
+              "borderLeftColor": "rgb(227, 232, 236)",
+              "borderRightColor": "rgb(227, 232, 236)",
+              "gridTemplateRows": "none",
+              "gridTemplateColumns": "none",
+              "gap": "normal",
+              "padding": "0px",
+              "margin": "0px",
+              "overflow": "visible",
+              "opacity": "1"
+            },
+            "text": "Find tasks and sessions/No match for “zzz-no-match-xyz-999”"
+          },
+          "popup": {
+            "selector": "[data-testid=\"find-popup\"]",
+            "found": true,
+            "box": {
+              "x": 10,
+              "y": 85,
+              "width": 263,
+              "height": 32.84
+            },
+            "styles": {
+              "display": "block",
+              "position": "absolute",
+              "width": "263px",
+              "height": "32.8438px",
+              "minWidth": "0px",
+              "minHeight": "0px",
+              "backgroundColor": "rgb(16, 19, 22)",
+              "color": "rgb(227, 232, 236)",
+              "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
+              "fontSize": "16px",
+              "fontWeight": "400",
+              "fontFamily": "\"IBM Plex Sans\", system-ui, sans-serif",
+              "letterSpacing": "normal",
+              "textTransform": "none",
+              "borderTopWidth": "1px",
+              "borderBottomWidth": "1px",
+              "borderLeftWidth": "1px",
+              "borderRightWidth": "1px",
+              "borderTopColor": "rgb(35, 42, 48)",
+              "borderBottomColor": "rgb(35, 42, 48)",
+              "borderLeftColor": "rgb(35, 42, 48)",
+              "borderRightColor": "rgb(35, 42, 48)",
+              "gridTemplateRows": "none",
+              "gridTemplateColumns": "none",
+              "gap": "normal",
+              "padding": "0px",
+              "margin": "0px",
+              "overflow": "auto",
+              "opacity": "1"
+            },
+            "text": "No match for “zzz-no-match-xyz-999”"
+          },
+          "aria": {
+            "role": "combobox",
+            "ariaExpanded": "true",
+            "ariaActivedescendant": null
+          }
+        },
+        "results": {
+          "name": "results",
+          "status": "results",
+          "screenshot": "shots/find-results.png",
+          "combobox": {
+            "selector": "[data-testid=\"find-combobox\"]",
+            "found": true,
+            "box": {
+              "x": 10,
+              "y": 55,
+              "width": 263,
+              "height": 28
+            },
+            "styles": {
+              "display": "block",
+              "position": "relative",
+              "width": "263px",
+              "height": "28px",
+              "minWidth": "0px",
+              "minHeight": "0px",
+              "backgroundColor": "rgba(0, 0, 0, 0)",
+              "color": "rgb(227, 232, 236)",
+              "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
+              "fontSize": "16px",
+              "fontWeight": "400",
+              "fontFamily": "\"IBM Plex Sans\", system-ui, sans-serif",
+              "letterSpacing": "normal",
+              "textTransform": "none",
+              "borderTopWidth": "0px",
+              "borderBottomWidth": "0px",
+              "borderLeftWidth": "0px",
+              "borderRightWidth": "0px",
+              "borderTopColor": "rgb(227, 232, 236)",
+              "borderBottomColor": "rgb(227, 232, 236)",
+              "borderLeftColor": "rgb(227, 232, 236)",
+              "borderRightColor": "rgb(227, 232, 236)",
+              "gridTemplateRows": "none",
+              "gridTemplateColumns": "none",
+              "gap": "normal",
+              "padding": "0px",
+              "margin": "0px",
+              "overflow": "visible",
+              "opacity": "1"
+            },
+            "text": "Find tasks and sessions/taskt1t1 · completed"
+          },
+          "popup": {
+            "selector": "[data-testid=\"find-popup\"]",
+            "found": true,
+            "box": {
+              "x": 10,
+              "y": 85,
+              "width": 263,
+              "height": 30
+            },
+            "styles": {
+              "display": "block",
+              "position": "absolute",
+              "width": "263px",
+              "height": "30px",
+              "minWidth": "0px",
+              "minHeight": "0px",
+              "backgroundColor": "rgb(16, 19, 22)",
+              "color": "rgb(227, 232, 236)",
+              "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
+              "fontSize": "16px",
+              "fontWeight": "400",
+              "fontFamily": "\"IBM Plex Sans\", system-ui, sans-serif",
+              "letterSpacing": "normal",
+              "textTransform": "none",
+              "borderTopWidth": "1px",
+              "borderBottomWidth": "1px",
+              "borderLeftWidth": "1px",
+              "borderRightWidth": "1px",
+              "borderTopColor": "rgb(35, 42, 48)",
+              "borderBottomColor": "rgb(35, 42, 48)",
+              "borderLeftColor": "rgb(35, 42, 48)",
+              "borderRightColor": "rgb(35, 42, 48)",
+              "gridTemplateRows": "none",
+              "gridTemplateColumns": "none",
+              "gap": "normal",
+              "padding": "0px",
+              "margin": "0px",
+              "overflow": "auto",
+              "opacity": "1"
+            },
+            "text": "taskt1t1 · completed"
+          },
+          "aria": {
+            "role": "combobox",
+            "ariaExpanded": "true",
+            "ariaActivedescendant": "_r_0_-opt-task-0"
+          }
+        }
+      },
+      "recordedAt": "2026-08-06T08:50:22.606Z"
+    }
+  },
+  "updatedAt": "2026-08-06T08:50:22.606Z"
+}

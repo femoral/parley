@@ -1,30 +1,44 @@
 /**
- * Run the three acceptance demos for the verification harness (#353).
+ * Run all registered acceptance demos (see registry.mjs).
+ * Screen tickets append to the registry — no renumbering here.
  */
-import { runStagedDaemonDemo } from "./staged-daemon.mjs";
-import { runInterceptErrorDemo } from "./intercept-error.mjs";
-import { runReconnectDemo } from "./reconnect.mjs";
+import { DEMO_REGISTRY } from "./registry.mjs";
 import { readLedger } from "../lib/ledger.mjs";
 
 async function main() {
-  console.log("verify: demo 1/3 staged-daemon");
-  const staged = await runStagedDaemonDemo();
+  const total = DEMO_REGISTRY.length;
+  /** @type {Record<string, object>} */
+  const results = {};
 
-  console.log("\nverify: demo 2/3 intercept-error");
-  const intercept = await runInterceptErrorDemo();
+  for (let i = 0; i < total; i += 1) {
+    const demo = DEMO_REGISTRY[i];
+    console.log(`verify: demo ${i + 1}/${total} ${demo.id} (${demo.ticket})`);
+    results[demo.id] = await demo.run();
+  }
 
-  console.log("\nverify: demo 3/3 reconnect");
-  const reconnect = await runReconnectDemo();
+  /** @type {Record<string, string[]>} */
+  const byTicket = {};
+  for (const d of DEMO_REGISTRY) {
+    const ledger = readLedger(d.ticket);
+    byTicket[d.ticket] = Object.keys(ledger?.demos ?? {});
+  }
 
-  const ledger = readLedger("issue-353");
+  const chrome = results["shell-chrome"];
+  const find = results["find-honesty"];
+
   console.log("\nverify: all demos complete");
   console.log(
     JSON.stringify(
       {
-        demos: Object.keys(ledger?.demos ?? {}),
-        stagedTask: staged.daemon?.taskId,
-        interceptProbe: intercept.intercept?.probe?.tasks?.status,
-        reconnectHealth: reconnect.daemon?.healthOkAfterRecover,
+        ledgers: byTicket,
+        headerHeight: chrome?.headline?.headerHeight,
+        noHScroll: chrome?.headline?.boardScroll?.shell?.noHorizontalScroll,
+        axeRest: chrome?.a11yByState?.resting?.axe?.violations?.length,
+        axeFind: chrome?.a11yByState?.findPopup?.axe?.violations?.length,
+        axeSettings: chrome?.a11yByState?.settingsOpen?.axe?.violations?.length,
+        findStates: Object.keys(find?.states ?? {}),
+        footerNoteOk: chrome?.footerNoteScroll?.every?.((v) => v.ok),
+        density1280Ok: chrome?.density1280?.allOk,
       },
       null,
       2,

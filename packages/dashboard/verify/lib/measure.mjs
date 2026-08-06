@@ -10,17 +10,26 @@ export const VIEWPORTS = [
   { name: "1920", width: 1920, height: 900 },
 ];
 
-/** Shell selectors measured on every proof (placeholder board #347). */
+/**
+ * Shell selectors measured on every proof (#354 chrome board).
+ * **Shell-owned** — screen tickets must NOT edit this list.
+ * Pass `opts.targets` to measureAtViewports / measureSelectors instead
+ * (see screens/SCREENS.md registration protocol).
+ */
 export const DEFAULT_SELECTORS = [
   { id: "shell", selector: '[data-testid="shell"]' },
   { id: "header", selector: ".pc-shell__header" },
   { id: "brand", selector: ".pc-shell__brand" },
+  { id: "nav", selector: '[data-testid="shell-nav"]' },
   { id: "status", selector: ".pc-shell__status" },
+  { id: "needs-orch", selector: '[data-testid="needs-orch"]' },
+  { id: "live-status", selector: '[data-testid="live-status"]' },
+  { id: "find", selector: '[data-testid="find-combobox"]' },
+  { id: "find-input", selector: '[data-testid="find-input"]' },
   { id: "body", selector: ".pc-shell__body" },
   { id: "rail-left", selector: ".pc-shell__rail--left" },
   { id: "center", selector: ".pc-shell__center" },
   { id: "rail-right", selector: ".pc-shell__rail--right" },
-  { id: "placeholder", selector: ".pc-shell__placeholder" },
   { id: "footer", selector: ".pc-shell__footer" },
 ];
 

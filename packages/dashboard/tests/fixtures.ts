@@ -81,3 +81,5 @@ export function envelope(
     ...overrides,
   };
 }
+
+// Screen tickets: additive-only-at-end. Prefer tests/<screen>/fixtures.ts (see screens/SCREENS.md).
