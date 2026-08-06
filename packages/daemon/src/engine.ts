@@ -261,6 +261,7 @@ import {
 import {
   assertValidSchema,
   DEFAULT_REPORT_SCHEMA,
+  enrichReportFilesChanged,
   parseJsonColumn,
   resolveReportSchema,
   validateReport,
@@ -2539,11 +2540,18 @@ export class TaskEngine {
     // A misbehaving child may report over its own outstanding question —
     // settle the parked call so its timer cannot stall the eventual completion.
     this.settlePending(taskId, { error: `task ${taskId} completed` });
+    // Normalize files_changed and attach per-file +/− counts when the checkout
+    // is readable (#349). Children still submit path strings; the wire carries
+    // ReportFileChange objects when churn is known. Drop this call to neuter.
+    const enriched = enrichReportFilesChanged(payload, {
+      cwd: task.worktree ?? task.cwd,
+      baseSha: task.base_sha,
+    });
     // Store the report only. Stay `running` (or return from `awaiting_answer`
     // to `running`) — completion waits for stream close / fallback.
     const wasAwaiting = task.state === "awaiting_answer";
     const reportFields = {
-      report: JSON.stringify(payload as Report),
+      report: JSON.stringify(enriched as Report),
       question_id: null,
       question: null,
     };

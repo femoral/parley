@@ -1,8 +1,12 @@
+import { execFileSync } from "node:child_process";
+import fs from "node:fs";
+import path from "node:path";
 import Ajv, { type ValidateFunction } from "ajv";
 import type {
   JsonSchema as CoreJsonSchema,
   QaTurn as WireQaTurn,
   Report as CoreReport,
+  ReportFileChange,
   TaskEnvelope,
   TaskRow as WireTaskRow,
 } from "@useparley/core";
@@ -19,10 +23,12 @@ export type JsonSchema = CoreJsonSchema;
  *
  *   { summary: markdown, outcome: success|partial|blocked, files_changed: [str] }
  *
- * Workflow step tasks use a different schema: the daemon generates it from the
- * node's output ports via `compileOutputPorts` (ADR-0016 / #236) and stores it
- * on the same `report_schema` column — still one `submit_report` call, no new
- * child verb.
+ * Children still submit path strings; the daemon normalizes to
+ * {@link ReportFileChange} objects and attaches optional +/− line counts at
+ * ingestion (#349). Workflow step tasks use a different schema generated from
+ * the node's output ports via `compileOutputPorts` (ADR-0016 / #236) and store
+ * it on the same `report_schema` column — still one `submit_report` call, no
+ * new child verb.
  */
 export const DEFAULT_REPORT_SCHEMA: JsonSchema = {
   type: "object",
@@ -240,6 +246,220 @@ export function parseJsonColumn<T>(value: string | null): T | null {
 }
 
 /**
+ * Normalize one `files_changed` entry from storage or a child payload into a
+ * {@link ReportFileChange}. Strings become path-only objects; objects keep
+ * optional `added`/`removed` when they are non-negative integers.
+ */
+export function normalizeFileChangeEntry(raw: unknown): ReportFileChange | null {
+  if (typeof raw === "string") {
+    return raw === "" ? null : { path: raw };
+  }
+  if (!isRecord(raw) || typeof raw.path !== "string" || raw.path === "") {
+    return null;
+  }
+  const entry: ReportFileChange = { path: raw.path };
+  if (typeof raw.added === "number" && Number.isInteger(raw.added) && raw.added >= 0) {
+    entry.added = raw.added;
+  }
+  if (
+    typeof raw.removed === "number" &&
+    Number.isInteger(raw.removed) &&
+    raw.removed >= 0
+  ) {
+    entry.removed = raw.removed;
+  }
+  return entry;
+}
+
+/** Normalize a `files_changed` array; non-path entries are dropped. */
+export function normalizeFilesChanged(raw: unknown): ReportFileChange[] {
+  if (!Array.isArray(raw)) return [];
+  const out: ReportFileChange[] = [];
+  for (const item of raw) {
+    const entry = normalizeFileChangeEntry(item);
+    if (entry !== null) out.push(entry);
+  }
+  return out;
+}
+
+/**
+ * Parse a stored report JSON column for the envelope. Path strings and
+ * {@link ReportFileChange} objects both pass through (#349); custom/port
+ * schemas without a path-list `files_changed` are returned as-is.
+ */
+export function normalizeStoredReport(raw: unknown): Report | null {
+  if (!isRecord(raw)) return null;
+  return raw as unknown as Report;
+}
+
+/**
+ * Parse `git diff --numstat <base>` output into path → {added, removed}.
+ * Binary rows (`-  -  path`) are skipped (counts unknown). Rename lines
+ * (`old => new`) use the new path.
+ */
+export function parseNumstat(output: string): Map<string, { added: number; removed: number }> {
+  const map = new Map<string, { added: number; removed: number }>();
+  for (const line of output.split("\n")) {
+    if (line.trim() === "") continue;
+    const tab1 = line.indexOf("\t");
+    if (tab1 === -1) continue;
+    const tab2 = line.indexOf("\t", tab1 + 1);
+    if (tab2 === -1) continue;
+    const addedRaw = line.slice(0, tab1);
+    const removedRaw = line.slice(tab1 + 1, tab2);
+    let filePath = line.slice(tab2 + 1);
+    // Rename: "old => new" (git may also quote paths; keep simple).
+    const rename = filePath.indexOf(" => ");
+    if (rename !== -1) filePath = filePath.slice(rename + 4);
+    if (addedRaw === "-" || removedRaw === "-") continue;
+    const added = Number(addedRaw);
+    const removed = Number(removedRaw);
+    if (!Number.isInteger(added) || !Number.isInteger(removed)) continue;
+    if (filePath === "") continue;
+    map.set(filePath, { added, removed });
+  }
+  return map;
+}
+
+function gitText(args: string[], cwd: string): string | null {
+  try {
+    return execFileSync("git", args, {
+      cwd,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+    }).trim();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Count lines in an untracked (or otherwise un-diffable) text file. Returns
+ * null for missing/binary-ish content so callers can omit churn rather than
+ * invent numbers.
+ */
+function countFileLines(absPath: string): number | null {
+  try {
+    const buf = fs.readFileSync(absPath);
+    // Heuristic: if there's a NUL, treat as binary — counts unknown.
+    if (buf.includes(0)) return null;
+    const text = buf.toString("utf8");
+    if (text === "") return 0;
+    // Match common line-count: trailing newline does not add an extra line.
+    return text.endsWith("\n")
+      ? text.slice(0, -1).split("\n").length
+      : text.split("\n").length;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Best-effort map of path → line churn for a checkout vs `baseSha`.
+ * Includes tracked diffs (`git diff --numstat`) and untracked files (all
+ * lines as added). Never throws — empty map on any git/fs failure.
+ */
+export function computeFileChurn(
+  cwd: string,
+  baseSha: string,
+): Map<string, { added: number; removed: number }> {
+  const map = new Map<string, { added: number; removed: number }>();
+  if (baseSha === "" || !fs.existsSync(cwd)) return map;
+
+  const numstat = gitText(["diff", "--numstat", baseSha], cwd);
+  if (numstat !== null && numstat !== "") {
+    for (const [p, c] of parseNumstat(numstat)) map.set(p, c);
+  }
+
+  const untracked = gitText(
+    ["ls-files", "--others", "--exclude-standard", "-z"],
+    cwd,
+  );
+  if (untracked !== null && untracked !== "") {
+    for (const rel of untracked.split("\0")) {
+      if (rel === "" || map.has(rel)) continue;
+      const lines = countFileLines(path.join(cwd, rel));
+      if (lines === null) continue;
+      map.set(rel, { added: lines, removed: 0 });
+    }
+  }
+  return map;
+}
+
+/**
+ * Options for report-ingestion enrichment (#349): where to look for git
+ * diffs and which baseline to compare against.
+ */
+export interface EnrichReportChurnOptions {
+  /** Task worktree or `--cwd` path; null skips git. */
+  cwd: string | null;
+  /** Task `base_sha`; null/empty skips git. */
+  baseSha: string | null;
+}
+
+/**
+ * Attach per-file +/− counts to `files_changed` when computable (or already
+ * carried on object entries). The "ingestion wiring" for #349 — called from
+ * `submitReport` after schema validation, before storage.
+ *
+ * When git context is missing and the child submitted plain path strings, the
+ * payload is left unchanged (string[] remains string[]) so legacy consumers
+ * and fixtures keep working. When any churn is known, entries are upgraded to
+ * {@link ReportFileChange} objects. Never throws.
+ */
+export function enrichReportFilesChanged(
+  payload: unknown,
+  opts: EnrichReportChurnOptions,
+): unknown {
+  if (!isRecord(payload) || !Array.isArray(payload.files_changed)) {
+    return payload;
+  }
+  // Only rewrite when every element looks like a path string or file-change
+  // object — leave custom schemas that repurpose the key alone.
+  for (const item of payload.files_changed) {
+    if (typeof item === "string") continue;
+    if (isRecord(item) && typeof item.path === "string") continue;
+    return payload;
+  }
+
+  const entries = normalizeFilesChanged(payload.files_changed);
+  const canCompute =
+    opts.cwd !== null &&
+    opts.cwd !== "" &&
+    opts.baseSha !== null &&
+    opts.baseSha !== "";
+  const churn = canCompute ? computeFileChurn(opts.cwd!, opts.baseSha!) : null;
+
+  // Only rewrite storage when at least one listed path gets counts (or the
+  // child already sent object entries). Otherwise keep path strings so
+  // --cwd / no-match reports stay byte-compatible with legacy fixtures.
+  const hadObjects = payload.files_changed.some((item) => typeof item !== "string");
+  const anyListedHasChurn =
+    churn !== null && entries.some((e) => churn.has(e.path));
+  if (!hadObjects && !anyListedHasChurn) {
+    return payload;
+  }
+
+  const files_changed: ReportFileChange[] = entries.map((entry) => {
+    if (entry.added !== undefined && entry.removed !== undefined) {
+      return entry;
+    }
+    const c = churn?.get(entry.path);
+    if (c === undefined) {
+      // Path-only object when a sibling entry carried/gained counts.
+      return entry;
+    }
+    return {
+      path: entry.path,
+      added: entry.added ?? c.added,
+      removed: entry.removed ?? c.removed,
+    };
+  });
+
+  return { ...payload, files_changed };
+}
+
+/**
  * Map one storage row (+ optional queue enrichment) to the public wire
  * envelope. Daemon-internal only — the HTTP/SSE seam is the sole caller.
  * `logsDir` is the task's captured output directory; pass null when unknown.
@@ -279,7 +499,7 @@ export function buildEnvelope(
     usage: parseJsonColumn<Record<string, number>>(task.usage),
     duration_ms: duration,
     state: task.state,
-    report: parseJsonColumn<Report>(task.report),
+    report: normalizeStoredReport(parseJsonColumn(task.report)),
     report_schema: parseJsonColumn<JsonSchema>(task.report_schema) ?? DEFAULT_REPORT_SCHEMA,
     error: task.error,
     error_category: parseErrorCategory(task.error_category ?? null),
