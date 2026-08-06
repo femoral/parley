@@ -1,6 +1,9 @@
 <div align="center">
 
-<img src="website/public/logo.png" alt="Parley" width="120" />
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="website/public/logo.svg" />
+  <img src="website/public/logo-light.svg" alt="Parley" width="120" />
+</picture>
 
 # Parley
 

@@ -53,7 +53,7 @@ export default defineConfig({
   },
 
   themeConfig: {
-    logo: "/logo.png",
+    logo: "/logo.svg",
     siteTitle: "Parley",
 
     nav: [

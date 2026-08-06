@@ -6,7 +6,7 @@ hero:
   text: Give your agent a crew
   tagline: One orchestrating agent, many coding agents, every branch reviewed before it lands.
   image:
-    src: /logo.png
+    src: /logo.svg
     alt: Parley
   actions:
     - theme: brand
