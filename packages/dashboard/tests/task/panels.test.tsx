@@ -64,7 +64,7 @@ describe("ReportPanel file churn", () => {
     render(<ReportPanel report={pathOnlyReport()} status="ready" taskState="completed" />);
     expect(screen.getByTestId("task-report-nochurn").textContent).toMatch(/Path list only/);
     for (const cell of screen.getAllByTestId("task-file-churn")) {
-      expect(cell.textContent).toBe("");
+      expect(cell.textContent).toBe("—");
     }
   });
 

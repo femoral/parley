@@ -912,9 +912,10 @@ function FileRow({
 }) {
   const churn = formatChurn(file);
   const hasCounts = file.added !== null || file.removed !== null;
-  // Mixed report: path-only siblings show an explicit absence cue (not blank, not 0/0).
-  // All-path-only reports keep a blank cell + whole-report note instead.
-  const absentCue = reportHasChurn && !hasCounts ? "—" : "";
+  // Path-only rows always show an explicit absence cue (not blank, not 0/0):
+  // an empty generic span may not carry aria-label (aria-prohibited-attr).
+  void reportHasChurn;
+  const absentCue = "—";
   return (
     <li className="pc-task-files__row" data-testid="task-file-row" data-has-churn={hasCounts}>
       <span className="pc-task-files__path" title={file.path}>
