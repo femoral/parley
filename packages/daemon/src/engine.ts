@@ -37,6 +37,7 @@ import {
   scoreRubric,
   expandLaunchTemplate,
   formatStepAddress,
+  RUN_GATE_VERB_EVENT,
   stripFetchUrlCredentials,
   TASK_HEADER,
   validateAnswers,
@@ -5449,6 +5450,10 @@ export class TaskEngine {
    * Gate / block verbs (ADR-0017 / #238): approve, reject, redirect, finish.
    * Only legal on a `blocked` run. Returns the updated run or throws
    * {@link DelegateError} on unknown id / illegal verb.
+   *
+   * On success, emits `run.verb` **before** the consequent state-transition
+   * events from {@link syncRunTransitions} (#360) — cause then effect, with
+   * monotonic seq. Invalid verbs emit nothing.
    */
   actionRun(
     runId: string,
@@ -5458,13 +5463,30 @@ export class TaskEngine {
     if (existing === undefined) {
       throw new DelegateError(`no such run: ${runId}`);
     }
+    // Capture hold site before mutation — verb event names the node/iteration
+    // the verb applied to, not the post-verb cursor.
+    const holdNode = existing.current_node;
+    const holdIteration = existing.iteration;
+    const holdState = existing.state;
+    const orchSession = existing.orchestrator_session_id;
     const result = actionRunVerb(this.db, runId, this.buildRunDrainHost(), request);
     if (result === null) {
       throw new DelegateError(`no such run: ${runId}`);
     }
     if (result.decision.kind === "error") {
+      // Validation failure — no stream event (#360).
       throw new DelegateError(result.decision.message);
     }
+    // #360: verb event first (cause), then state edges (effect).
+    this.runTransitions.record(runId, {
+      event: RUN_GATE_VERB_EVENT,
+      state: holdState,
+      node: holdNode,
+      iteration: holdIteration,
+      verb: request.verb,
+      orchestrator_session_id: orchSession,
+      cause: "run_gate",
+    });
     // Gate actioned → emit run.* edges + new event-id seq (supersedes the gate
     // inbox event without an ack — ADR-0019).
     this.syncRunTransitions();

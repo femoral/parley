@@ -16,6 +16,7 @@ import {
   parseRunMetricsFilters,
   parseTaskMetricsFilters,
   resolveWorkflow,
+  RUN_GATE_VERB_EVENT,
   RUN_METRICS_GROUP_BY,
   isRunnerWirePhase,
   RUNNER_PROTOCOL_VERSION,
@@ -27,6 +28,8 @@ import {
   writeConfig,
   type HomePaths,
   type ParleyConfig,
+  type RunBlockVerb,
+  type RunGateVerbEvent,
   readConfig,
   type RunnerCapabilities,
   type RunnerListEntry,
@@ -2329,8 +2332,11 @@ async function handleWatchEvents(
     return;
   }
   if (transition.kind === "run") {
+    const event = transition.event ?? `run.${transition.state}`;
+    // #360: gate-verb edges carry verb + orch session on the run face so
+    // follow consumers see the same fields as SSE without a new envelope shape.
     sendJson(res, 200, {
-      event: transition.event ?? `run.${transition.state}`,
+      event,
       seq: transition.seq,
       subject: "run",
       task: null,
@@ -2341,8 +2347,9 @@ async function handleWatchEvents(
         current_node: transition.node ?? null,
         iteration: transition.iteration ?? 0,
         error: null,
-        orchestrator_session_id: null,
+        orchestrator_session_id: transition.orchestrator_session_id ?? null,
         seq: transition.seq,
+        ...(transition.verb !== undefined ? { verb: transition.verb } : {}),
       },
     });
     return;
@@ -2410,9 +2417,25 @@ function sseMessageFor(
     node?: string | null;
     iteration?: number | null;
     slot?: string | null;
+    verb?: RunBlockVerb;
+    orchestrator_session_id?: string | null;
   },
 ): string | null {
   if (transition.kind === "run") {
+    const event = transition.event ?? `run.${transition.state}`;
+    // #360: `run.verb` carries the gate-verb payload; other run edges keep
+    // the thin lifecycle shape so existing consumers stay unchanged.
+    if (event === RUN_GATE_VERB_EVENT && transition.verb !== undefined) {
+      const payload: RunGateVerbEvent = {
+        verb: transition.verb,
+        run_id: transition.run_id ?? "",
+        node: transition.node ?? null,
+        iteration: transition.iteration ?? 0,
+        orchestrator_session_id: transition.orchestrator_session_id ?? null,
+        seq: transition.seq,
+      };
+      return `id: ${transition.seq}\nevent: ${event}\ndata: ${JSON.stringify(payload)}\n\n`;
+    }
     const data = JSON.stringify({
       run_id: transition.run_id,
       state: transition.state,
@@ -2420,7 +2443,6 @@ function sseMessageFor(
       iteration: transition.iteration ?? 0,
       seq: transition.seq,
     });
-    const event = transition.event ?? `run.${transition.state}`;
     return `id: ${transition.seq}\nevent: ${event}\ndata: ${data}\n\n`;
   }
   const taskId = transition.task_id;
