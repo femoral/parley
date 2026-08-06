@@ -8,6 +8,7 @@
  */
 import {
   isTerminalState,
+  type RunBlockVerb,
   type TaskState,
 } from "@useparley/core";
 import {
@@ -28,8 +29,8 @@ import {
  * so `watch --follow` can attribute events without a second lookup.
  *
  * Run transitions set `kind: "run"` and an explicit `event` name (`run.blocked`,
- * `run.node_entered`, …). A gate is otherwise invisible on the stream except
- * via these run.* events (it spawns no tasks).
+ * `run.node_entered`, `run.verb`, …). A gate is otherwise invisible on the stream
+ * except via these run.* events (it spawns no tasks).
  */
 export interface Transition {
   seq: number;
@@ -42,7 +43,7 @@ export interface Transition {
   /**
    * Explicit wire event name. Task transitions leave this unset and the wire
    * layer maps `state` via `eventNameForState`. Run transitions set it
-   * (`run.node_entered`, `run.blocked`, …).
+   * (`run.node_entered`, `run.blocked`, `run.verb`, …).
    */
   event?: string;
   /** Owning / subject run id when known. */
@@ -50,6 +51,16 @@ export interface Transition {
   node?: string | null;
   iteration?: number | null;
   slot?: string | null;
+  /**
+   * Gate verb on `run.verb` events (#360). Absent on all other transitions.
+   */
+  verb?: RunBlockVerb;
+  /**
+   * Orchestrator session bound to the run at verb time (#360). Present on
+   * `run.verb`; other run transitions leave this unset (wire layer may still
+   * join from the row).
+   */
+  orchestrator_session_id?: string | null;
 }
 
 /**
@@ -137,13 +148,17 @@ export interface RunTransitions {
   record(
     runId: string,
     opts: {
-      /** Wire event name, e.g. `run.node_entered`, `run.blocked`. */
+      /** Wire event name, e.g. `run.node_entered`, `run.blocked`, `run.verb`. */
       event: string;
       /** Run lifecycle state at the edge (`running` / `blocked` / …). */
       state: string;
       node?: string | null;
       iteration?: number | null;
       cause?: TransitionCause;
+      /** Gate verb for `run.verb` events (#360). */
+      verb?: RunBlockVerb;
+      /** Orchestrator session at verb time (#360). */
+      orchestrator_session_id?: string | null;
     },
   ): Transition;
 }
@@ -252,6 +267,10 @@ export function createRunTransitions(
         node: opts.node ?? null,
         iteration: opts.iteration ?? null,
         slot: null,
+        ...(opts.verb !== undefined ? { verb: opts.verb } : {}),
+        ...(opts.orchestrator_session_id !== undefined
+          ? { orchestrator_session_id: opts.orchestrator_session_id }
+          : {}),
       };
       hooks.append(transition);
       hooks.wake();

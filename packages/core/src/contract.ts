@@ -7,6 +7,7 @@
  */
 import type { Posture } from "./adapter.js";
 import type { TaskErrorCategory } from "./lease.js";
+import type { RunBlockVerb } from "./run-query.js";
 
 /** A JSON Schema — an object of keywords, or a boolean schema. */
 export type JsonSchema = Record<string, unknown> | boolean;
@@ -432,6 +433,42 @@ export interface RunEnvelope {
   current_node: string | null;
   iteration: number;
   error: string | null;
+  orchestrator_session_id: string | null;
+  seq: number;
+  /**
+   * Gate verb when the watch event is `run.verb` (#360). Absent on all other
+   * run faces. Prefer {@link RunGateVerbEvent} for the dedicated SSE payload.
+   */
+  verb?: RunBlockVerb;
+}
+
+/**
+ * Wire event name for a successful gate verb on a held run (#360).
+ * Payload shape is {@link RunGateVerbEvent}.
+ */
+export const RUN_GATE_VERB_EVENT = "run.verb" as const;
+
+/**
+ * SSE / follow payload when an orchestrator executes approve / reject /
+ * redirect / finish on a held run (#360).
+ *
+ * Additive: existing run envelope fields and event names are unchanged.
+ * Consumers that do not recognize `run.verb` ignore it.
+ *
+ * **Order:** the verb event is recorded **before** the consequent
+ * state-transition events (`run.running`, `run.completed`, `run.node_entered`,
+ * `run.blocked`, …) produced by the same verb, with monotonic `seq`. Cause
+ * then effect — never ambiguous.
+ *
+ * `node` / `iteration` are the hold site the verb applied to (pre-mutation),
+ * not the post-verb cursor.
+ */
+export interface RunGateVerbEvent {
+  verb: RunBlockVerb;
+  run_id: string;
+  /** Node the verb applied to (the held gate / block site). */
+  node: string | null;
+  iteration: number;
   orchestrator_session_id: string | null;
   seq: number;
 }
