@@ -6,5 +6,9 @@
     "jsx": "react-jsx",
     "customConditions": ["browser"]
   },
-  "include": ["src", "tests", "vite.config.ts"]
+  "include": ["src", "tests", "vite.config.ts"],
+  // Integration tests import @useparley/daemon + host-only core (homePaths)
+  // via relative paths; they run under the vitest integration project without
+  // the browser condition. Excluded here so `pnpm typecheck` stays green.
+  "exclude": ["tests/integration"]
 }
