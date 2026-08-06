@@ -14,11 +14,38 @@ export type JsonSchema = Record<string, unknown> | boolean;
 /** The outcome enum of a report accepted against parley's default schema. */
 export type ReportOutcome = "success" | "partial" | "blocked";
 
-/** The body of a report accepted against parley's default schema (spec §4). */
+/**
+ * One file on a report's `files_changed` list with optional per-file line
+ * churn (#349). Present when the daemon computed or carried +/− counts at
+ * ingestion; omitted fields mean unknown. Consumers treat `added`/`removed`
+ * as optional.
+ */
+export interface ReportFileChange {
+  path: string;
+  /** Lines added relative to the task base; omitted when churn is unknown. */
+  added?: number;
+  /** Lines removed relative to the task base; omitted when churn is unknown. */
+  removed?: number;
+}
+
+/**
+ * One `files_changed` entry on the wire (#349): a bare path string (legacy /
+ * no churn data) or a {@link ReportFileChange} object. Reports without churn
+ * remain valid; consumers treat the object form / counts as optional.
+ */
+export type ReportFileEntry = string | ReportFileChange;
+
+/**
+ * The body of a report accepted against parley's default schema (spec §4).
+ *
+ * Children submit `files_changed` as path strings (default report schema). At
+ * ingestion the daemon may upgrade entries to {@link ReportFileChange} objects
+ * when per-file +/− counts are known (#349); otherwise path strings are kept.
+ */
 export interface Report {
   summary: string;
   outcome: ReportOutcome;
-  files_changed: string[];
+  files_changed: ReportFileEntry[];
 }
 
 // Posture is defined once in adapter.ts (SandboxMode-typed) and reused on the

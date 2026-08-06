@@ -41,7 +41,10 @@ function projectReport(detail: TaskDetailResponse): ReportView | null {
   return {
     outcome: report.outcome,
     summary: report.summary,
-    files: report.files_changed.map((path) => ({ path })),
+    // Wire entries are path strings or { path, added?, removed? } (#349).
+    files: report.files_changed.map((f) =>
+      typeof f === "string" ? { path: f } : { path: f.path },
+    ),
   };
 }
 

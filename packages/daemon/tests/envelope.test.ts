@@ -119,6 +119,7 @@ describe("buildEnvelope (#208)", () => {
         resumed: 1,
       }),
     );
+    // Path strings pass through when no churn was attached (#349).
     expect(env.report).toEqual(report);
     expect(env.duration_ms).toBe(10_000);
     expect(env.posture.network).toBe(false);
