@@ -1,5 +1,5 @@
 /*
- * Layer 0 — tokens from docs/design/parley-console/DESIGN.md.
+ * Layer 0 — tokens from docs/design/DESIGN.md (package-relative).
  * Components must use these custom properties, not hex literals.
  */
 :root {
