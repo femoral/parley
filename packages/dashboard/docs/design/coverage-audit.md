@@ -2,7 +2,7 @@
 
 Asset for the wayfinder ticket "Feature coverage audit: Parley Console mock vs what the daemon exposes on develop" (femoral/parley#338, map #337).
 
-Compares the Parley Console mock (`Parley Console.dc.html`, this directory) against the full
+Compares the Parley Console mock (the design-tool export, since removed from the repo) against the full
 feature/data surface the daemon exposes on `develop` and that Parley Cove (`packages/ui`)
 renders today. Four verdicts:
 
@@ -148,6 +148,6 @@ Scene/world (islands, ships, wake/wreck/fog/flare effects, camera framing, edge-
 
 ## 3. Reference
 
-- Mock: `Parley Console.dc.html` + `support.js` (this directory); sync notes in `github.md`.
+- Mock: the design-tool export this audit was taken against has been removed from the repo; this document and `wire-verification.md` are the surviving record.
 - Cove-side inventory sources: `packages/ui/src/hud/types.ts`, `hud/*`, `hud/Inspector/*`, `chart/`, `scene/`, `app/hooks/*`, `tokens/*`; daemon surface `packages/daemon/src/server.ts` routes + `packages/core/src/sdk.ts` client.
 - Both surfaces are strictly read-only; mutating daemon routes exist but no UI calls them.

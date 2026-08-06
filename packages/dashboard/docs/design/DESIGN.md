@@ -2,8 +2,9 @@
 
 Direction contract for `@useparley/dashboard` (wayfinder map #337, ticket #342).
 Lives with the Console design register under `packages/dashboard/docs/design/`.
-Token values are taken from the source mock (`Parley Console.dc.html`); the build
-must express them as CSS custom properties, not hex literals in components.
+Token values below are authoritative (originally lifted from the approved design
+mock, whose export has since been removed from the repo); the build must express
+them as CSS custom properties, not hex literals in components.
 
 ## Overview
 
@@ -165,9 +166,9 @@ distribution, heatmap).
 - Design every honesty state (connecting, empty, stale, error, partial) with the
   same rigor as data states.
 - Keep the two-register wall: no Cove vocabulary, tokens, or assets anywhere.
-  One exception: the parley brand mark (the pirate-skull logo,
-  `uploads/parleylogo.png`) is shared product identity across registers and
-  appears in the console header unchanged.
+  One exception: the parley brand mark (the pirate-skull logo, shipped at
+  `public/assets/parleylogo.svg`) is shared product identity across registers
+  and appears in the console header unchanged.
 - Verify claims on rendered pixels at 1280 / 1460 / 1920.
 
 ### Don't

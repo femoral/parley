@@ -14,7 +14,9 @@ Read these when doing Console UI work:
 - `docs/design/DESIGN.md` — visual system (tokens, type, layout, chrome)
 - `docs/design/coverage-audit.md` — mock vs daemon surface matrix
 - `docs/design/wire-verification.md` — invented mock elements vs wire
-- `docs/design/Parley Console.dc.html` (+ `support.js`, `uploads/`) — frozen design export
+
+The original design-tool mock export was removed from the repo; DESIGN.md is the
+authoritative design contract, and the verify ledger holds rendered proofs.
 
 Design ADRs for this package, if any, live under `docs/adr/` inside this package
 (not root `docs/adr/`).

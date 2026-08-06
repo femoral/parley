@@ -1,6 +1,6 @@
 /** Layer 1 — a single corner flourish glyph (design-manifest §2.11). Purely
  * decorative; the Plate mirrors it into all four corners. Paths are lifted
- * verbatim from the original Claude Design prototype (`Parley Cove HUD.dc.html`):
+ * verbatim from the original approved design mock (export not kept in-repo):
  * an L-bracket hugging the corner edges, an inner spiral curl, and a bright dot. */
 export type FlourishCorner = "tl" | "tr" | "bl" | "br";
 
