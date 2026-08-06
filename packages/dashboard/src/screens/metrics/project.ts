@@ -10,7 +10,6 @@ import type {
   RunMetricsGroup,
 } from "@useparley/core";
 import {
-  baselineLeft,
   formatDelta,
   formatDurationMs,
   formatGroupKey,
@@ -18,7 +17,6 @@ import {
   formatScore,
   formatTokens,
   rateWidth,
-  scoreWidth,
 } from "./format.js";
 
 export type MetricsDim =
@@ -102,6 +100,8 @@ export interface GroupRow {
   evalBaseline: number | null;
   evalDelta: number | null;
   evalLabel: string;
+  /** Full explanation for title (e.g. "no rubric · n=4"). */
+  evalTitle: string;
   evalTone: "good" | "poor" | "none";
   belowBaselineRate: number | null;
   belowLabel: string;
@@ -137,6 +137,7 @@ function projectEvals(
   | "evalBaseline"
   | "evalDelta"
   | "evalLabel"
+  | "evalTitle"
   | "evalTone"
   | "belowBaselineRate"
   | "belowLabel"
@@ -149,17 +150,25 @@ function projectEvals(
   const delta = evals?.avg_delta ?? null;
   const below = evals?.below_baseline_rate ?? null;
   const n = count > 0 ? count : decidedHint;
+  // Compact cell text; full explanation rides on title (avoids mid-note clip).
   const evalLabel =
     avg == null
       ? n > 0
-        ? `— · n=${n} no rubric`
-        : "— · no eval"
+        ? `— · n=${n}`
+        : "—"
       : `${formatScore(avg)} · n=${count}`;
+  const evalTitle =
+    avg == null
+      ? n > 0
+        ? `no rubric · n=${n} decided`
+        : "no eval"
+      : `avg ${formatScore(avg)} · baseline ${formatScore(baseline)} · n=${count}`;
   return {
     evalAvg: avg,
     evalBaseline: baseline,
     evalDelta: delta,
     evalLabel,
+    evalTitle,
     evalTone: evalTone(avg, baseline),
     belowBaselineRate: below,
     belowLabel: formatRate(below),
@@ -221,8 +230,6 @@ export interface DistributionBar {
   score: number;
   baseline: number;
   delta: number;
-  scoreW: string;
-  baseX: string;
   deltaLabel: string;
   tone: "good" | "poor";
 }
@@ -240,8 +247,6 @@ export function projectDistribution(rows: readonly GroupRow[]): DistributionBar[
         score,
         baseline,
         delta,
-        scoreW: scoreWidth(score),
-        baseX: baselineLeft(baseline),
         deltaLabel: formatDelta(delta),
         tone: score >= baseline ? "good" : "poor",
       };
@@ -249,12 +254,15 @@ export function projectDistribution(rows: readonly GroupRow[]): DistributionBar[
 }
 
 export interface HeatCell {
-  /** Display label: "—" | "12%" | "100%!" */
+  /** Display label: "—" | "12%" | "100%!" · optional n= for low sample */
   label: string;
   rate: number | null;
-  /** failures sample size */
+  /** Rubric evals that answered this criterion */
   count: number;
-  kind: "none" | "low" | "ok" | "suspect";
+  /** Primary visual kind for class hooks */
+  kind: "none" | "low" | "ok" | "suspect" | "low-suspect";
+  low: boolean;
+  suspect: boolean;
   barW: string;
 }
 
@@ -266,55 +274,97 @@ export interface HeatRow {
 export interface HeatmapModel {
   columns: { key: string | null; label: string }[];
   rows: HeatRow[];
-  /** Total rubric samples across shown groups. */
+  /** Rubric samples across *shown* columns. */
+  sampleShown: number;
+  /** Rubric samples across *all* groups with evals (before column cap). */
   sampleTotal: number;
+  /** Groups with evals that are shown. */
+  shownCols: number;
+  /** Groups with evals available (may exceed shownCols). */
+  totalCols: number;
+  /**
+   * Column selection rule (disclosed when truncated):
+   * first N groups that have rubric evals, in table row order (volume sort).
+   */
+  selectionRule: string;
+  truncated: boolean;
 }
 
+export const HEATMAP_MAX_COLS = 6;
 const LOW_SAMPLE = 3;
 
-function heatCell(stat: MetricsCriterionFailureStats | undefined): HeatCell {
+export function heatCell(stat: MetricsCriterionFailureStats | undefined): HeatCell {
   if (!stat || stat.count === 0 || stat.rate == null) {
-    return { label: "—", rate: null, count: 0, kind: "none", barW: "0%" };
+    return {
+      label: "—",
+      rate: null,
+      count: 0,
+      kind: "none",
+      low: false,
+      suspect: false,
+      barW: "0%",
+    };
   }
   const pct = Math.round(stat.rate * 100);
   const suspect = stat.rate >= 1 && stat.count >= 1;
   const low = stat.count < LOW_SAMPLE;
-  const kind: HeatCell["kind"] = suspect ? "suspect" : low ? "low" : "ok";
-  const label = suspect ? `${pct}%!` : `${pct}%`;
+  // Zero rate → zero bar (no floor).
+  const barW = stat.rate === 0 ? "0%" : rateWidth(stat.rate);
+  let kind: HeatCell["kind"] = "ok";
+  if (low && suspect) kind = "low-suspect";
+  else if (suspect) kind = "suspect";
+  else if (low) kind = "low";
+  // Low sample: put n= in the cell so "50%" on n=2 is never read as no-data.
+  let label = suspect ? `${pct}%!` : `${pct}%`;
+  if (low) label = `${label} n=${stat.count}`;
   return {
     label,
     rate: stat.rate,
     count: stat.count,
     kind,
-    barW: rateWidth(Math.max(0.06, stat.rate)),
+    low,
+    suspect,
+    barW,
   };
 }
 
-/** Build criterion × group heatmap from the first N groups with evals. */
+/**
+ * Criterion × group heatmap.
+ * Columns: first {@link HEATMAP_MAX_COLS} groups that have rubric evals,
+ * preserving group-table order (volume-sorted upstream). Truncation is
+ * disclosed via shownCols/totalCols/sampleShown/sampleTotal.
+ */
 export function projectHeatmap(
   rows: readonly GroupRow[],
-  maxCols = 6,
+  maxCols = HEATMAP_MAX_COLS,
 ): HeatmapModel {
-  const withEvals = rows.filter((r) => r.evals && r.evals.count > 0).slice(0, maxCols);
+  const allWithEvals = rows.filter((r) => r.evals && r.evals.count > 0);
+  const shown = allWithEvals.slice(0, maxCols);
   const criterionIds = new Set<string>();
-  for (const r of withEvals) {
+  for (const r of shown) {
     for (const id of Object.keys(r.evals?.criterion_failures ?? {})) {
       criterionIds.add(id);
     }
   }
   const criteria = [...criterionIds].sort();
+  let sampleShown = 0;
+  for (const r of shown) sampleShown += r.evals?.count ?? 0;
   let sampleTotal = 0;
-  for (const r of withEvals) sampleTotal += r.evals?.count ?? 0;
+  for (const r of allWithEvals) sampleTotal += r.evals?.count ?? 0;
 
   return {
-    columns: withEvals.map((r) => ({ key: r.key, label: r.label })),
+    columns: shown.map((r) => ({ key: r.key, label: r.label })),
     rows: criteria.map((criterion) => ({
       criterion,
-      cells: withEvals.map((r) =>
-        heatCell(r.evals?.criterion_failures?.[criterion]),
-      ),
+      cells: shown.map((r) => heatCell(r.evals?.criterion_failures?.[criterion])),
     })),
+    sampleShown,
     sampleTotal,
+    shownCols: shown.length,
+    totalCols: allWithEvals.length,
+    selectionRule:
+      "first groups with rubric evals, in table order (by task/run volume)",
+    truncated: allWithEvals.length > shown.length,
   };
 }
 

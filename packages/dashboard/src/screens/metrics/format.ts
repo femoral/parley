@@ -36,11 +36,17 @@ export function formatScore(score: number | null | undefined): string {
   return score.toFixed(1);
 }
 
-/** Signed delta: +1.2 / −0.4 / —. */
+/** Signed delta: +1.2 / −0.4 (U+2212) / —. */
 export function formatDelta(delta: number | null | undefined): string {
   if (delta == null || !Number.isFinite(delta)) return "—";
-  const sign = delta > 0 ? "+" : "";
-  return `${sign}${delta.toFixed(1)}`;
+  if (delta > 0) return `+${delta.toFixed(1)}`;
+  if (delta < 0) return `\u2212${Math.abs(delta).toFixed(1)}`;
+  return "0.0";
+}
+
+/** English plural for count + unit. */
+export function plural(n: number, singular: string, pluralForm?: string): string {
+  return n === 1 ? `${n} ${singular}` : `${n} ${pluralForm ?? `${singular}s`}`;
 }
 
 /** Group key null → structural "(unset)". */
@@ -63,20 +69,8 @@ export function truncateLabel(label: string, max = 18): string {
   return `${label.slice(0, Math.max(1, max - 1))}…`;
 }
 
-/** Percent width string for 0–1 rates. */
+/** Percent width string for 0–1 rates. Zero rate → "0%" (no floor). */
 export function rateWidth(rate: number | null | undefined): string {
-  if (rate == null || !Number.isFinite(rate)) return "0%";
+  if (rate == null || !Number.isFinite(rate) || rate <= 0) return "0%";
   return `${Math.max(0, Math.min(100, rate * 100)).toFixed(0)}%`;
-}
-
-/** Score 0–10 → percent of track. */
-export function scoreWidth(score: number | null | undefined): string {
-  if (score == null || !Number.isFinite(score)) return "0%";
-  return `${Math.max(0, Math.min(100, score * 10)).toFixed(0)}%`;
-}
-
-/** Baseline 0–10 → percent of track for the mark. */
-export function baselineLeft(baseline: number | null | undefined): string {
-  if (baseline == null || !Number.isFinite(baseline)) return "50%";
-  return `${Math.max(0, Math.min(100, baseline * 10)).toFixed(0)}%`;
 }

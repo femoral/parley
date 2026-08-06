@@ -52,10 +52,12 @@ describe("MetricsScreen", () => {
       expect(screen.getByTestId("metrics-table")).toBeTruthy();
     });
     expect(screen.getAllByTestId("metrics-table-row").length).toBe(3);
-    expect(screen.getByTestId("metrics-dist-svg")).toBeTruthy();
+    expect(screen.getByTestId("metrics-dist-plot")).toBeTruthy();
     expect(screen.getByTestId("metrics-dist-axis")).toBeTruthy();
+    expect(screen.getByTestId("metrics-dist-a11y")).toBeTruthy();
     expect(screen.getByTestId("metrics-heat-grid")).toBeTruthy();
-    expect(screen.getByTestId("metrics-heat-axis")).toBeTruthy();
+    expect(screen.getByTestId("metrics-heat-a11y")).toBeTruthy();
+    expect(screen.getByTestId("metrics-heat-legend")).toBeTruthy();
     expect(screen.getByTestId("metrics-buckets")).toBeTruthy();
   });
 

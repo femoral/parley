@@ -9,6 +9,7 @@ import {
   formatTokens,
 } from "../../src/screens/metrics/format.js";
 import {
+  heatCell,
   projectBuckets,
   projectComparison,
   projectDistribution,
@@ -47,7 +48,7 @@ describe("metrics formatters", () => {
     expect(formatRate(null)).toBe("—");
     expect(formatScore(7.25)).toBe("7.3");
     expect(formatDelta(1.2)).toBe("+1.2");
-    expect(formatDelta(-0.4)).toBe("-0.4");
+    expect(formatDelta(-0.4)).toBe("\u22120.4"); // real U+2212 minus
     expect(formatGroupKey(null)).toBe("(unset)");
   });
 });
@@ -86,14 +87,56 @@ describe("metrics projections", () => {
     expect(dist.some((d) => d.tone === "poor")).toBe(true);
   });
 
-  it("builds heatmap with low/suspect/none kinds", () => {
+  it("builds heatmap with low/suspect/none kinds and zero bar", () => {
     const rows = populatedMetrics().groups.map(projectTaskGroup);
     const heat = projectHeatmap(rows);
     expect(heat.columns.length).toBe(2);
     expect(heat.rows.length).toBeGreaterThan(0);
+    expect(heat.sampleShown).toBe(heat.sampleTotal);
+    expect(heat.truncated).toBe(false);
     const cells = heat.rows.flatMap((r) => r.cells);
-    expect(cells.some((c) => c.kind === "suspect")).toBe(true);
+    expect(cells.some((c) => c.kind === "suspect" || c.kind === "low-suspect")).toBe(true);
     expect(cells.some((c) => c.kind === "ok" || c.kind === "low")).toBe(true);
+    // Zero rate must not floor the bar
+    const zero = cells.find((c) => c.rate === 0);
+    if (zero) expect(zero.barW).toBe("0%");
+  });
+
+  it("discloses heatmap column truncation", () => {
+    const many = Array.from({ length: 10 }, (_, i) =>
+      projectTaskGroup(
+        makeTaskGroup(`g${i}`, {
+          evals: makeEvalStats({
+            count: 4,
+            avg: 6,
+            avg_baseline: 5,
+            avg_delta: 1,
+            criterion_failures: {
+              "brief-implemented": { failures: 1, count: 4, rate: 0.25 },
+            },
+          }),
+        }),
+      ),
+    );
+    const heat = projectHeatmap(many, 6);
+    expect(heat.shownCols).toBe(6);
+    expect(heat.totalCols).toBe(10);
+    expect(heat.truncated).toBe(true);
+    expect(heat.sampleShown).toBe(24);
+    expect(heat.sampleTotal).toBe(40);
+    expect(heat.selectionRule.length).toBeGreaterThan(0);
+  });
+
+  it("marks low+suspect together and puts n= in low labels", () => {
+    const cell = heatCell({ failures: 1, count: 1, rate: 1 });
+    expect(cell.low).toBe(true);
+    expect(cell.suspect).toBe(true);
+    expect(cell.kind).toBe("low-suspect");
+    expect(cell.label).toMatch(/n=1/);
+    expect(cell.barW).toBe("100%");
+    const zero = heatCell({ failures: 0, count: 5, rate: 0 });
+    expect(zero.barW).toBe("0%");
+    expect(zero.label).toBe("0%");
   });
 
   it("aggregates first-attempt vs fix comparison", () => {

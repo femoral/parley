@@ -1,9 +1,11 @@
 /**
- * Score vs baseline distribution — SVG with an explicit 0–10 value axis.
- * Chart labels are ≥11px (verification floor for plot claims).
+ * Score vs baseline distribution — HTML track (mock shape), not SVG.
+ * Labels stay at declared CSS px (no viewBox scale); rows 24–30px.
+ * Visually-hidden data table for AT (DESIGN.md pip-track precedent).
  */
 import type { DistributionBar } from "./project.js";
 import { HonestyPanel, LoadingSkeleton } from "./Honesty.js";
+import { formatScore } from "./format.js";
 
 export interface ScoreDistributionProps {
   bars: readonly DistributionBar[];
@@ -12,13 +14,7 @@ export interface ScoreDistributionProps {
   filterActive?: boolean;
 }
 
-const PAD_L = 118;
-const PAD_R = 56;
-const PAD_T = 8;
-const AXIS_H = 28;
-const ROW_H = 28;
-const TRACK_H = 12;
-const SCORE_MAX = 10;
+const TICKS = [0, 2.5, 5, 7.5, 10] as const;
 
 export function ScoreDistribution({
   bars,
@@ -26,11 +22,7 @@ export function ScoreDistribution({
   error,
   filterActive,
 }: ScoreDistributionProps) {
-  const plotW = 320;
-  const innerW = plotW;
-  const rowsH = Math.max(bars.length, 1) * ROW_H;
-  const height = PAD_T + rowsH + AXIS_H;
-  const width = PAD_L + innerW + PAD_R;
+  const hasData = bars.length > 0 && status === "ready";
 
   return (
     <section
@@ -42,7 +34,9 @@ export function ScoreDistribution({
         <h2 id="metrics-dist-title" className="pc-metrics__panel-title">
           score vs baseline
         </h2>
-        <span className="pc-metrics__panel-meta">0 — 10</span>
+        {hasData ? (
+          <span className="pc-metrics__panel-meta">0 — 10</span>
+        ) : null}
       </div>
       <div className="pc-metrics__panel-body">
         {status === "loading" || status === "idle" ? (
@@ -65,104 +59,108 @@ export function ScoreDistribution({
             testId="metrics-dist-empty"
           />
         ) : (
-          <div className="pc-metrics__dist">
-            <svg
-              className="pc-metrics__dist-svg"
-              viewBox={`0 0 ${width} ${height}`}
-              role="img"
-              aria-label="Score versus baseline distribution, scale zero to ten"
-              data-testid="metrics-dist-svg"
-            >
-              {/* Value axis (x) — required on every plot */}
-              <line
-                className="pc-metrics__dist-axis-line"
-                x1={PAD_L}
-                y1={PAD_T + rowsH}
-                x2={PAD_L + innerW}
-                y2={PAD_T + rowsH}
-                data-testid="metrics-dist-axis"
-              />
-              {[0, 2.5, 5, 7.5, 10].map((tick) => {
-                const x = PAD_L + (tick / SCORE_MAX) * innerW;
-                return (
-                  <g key={tick}>
-                    <line
-                      className="pc-metrics__dist-tick"
-                      x1={x}
-                      y1={PAD_T + rowsH}
-                      x2={x}
-                      y2={PAD_T + rowsH + 4}
-                    />
-                    <text
-                      className="pc-metrics__dist-axis"
-                      x={x}
-                      y={PAD_T + rowsH + 18}
-                      textAnchor="middle"
-                      data-testid="metrics-dist-tick-label"
-                    >
-                      {tick === 2.5 || tick === 7.5 ? tick.toFixed(1) : String(tick)}
-                    </text>
-                  </g>
-                );
-              })}
+          <div className="pc-metrics__dist" data-testid="metrics-dist-plot">
+            {/* Visually-hidden data table — deltas exist nowhere else for AT */}
+            <table className="pc-sr-only" data-testid="metrics-dist-a11y">
+              <caption>Score versus baseline by group (scale 0 to 10)</caption>
+              <thead>
+                <tr>
+                  <th scope="col">group</th>
+                  <th scope="col">score</th>
+                  <th scope="col">baseline</th>
+                  <th scope="col">delta</th>
+                </tr>
+              </thead>
+              <tbody>
+                {bars.map((bar) => (
+                  <tr key={bar.key ?? bar.label}>
+                    <th scope="row">{bar.label}</th>
+                    <td>{formatScore(bar.score)}</td>
+                    <td>{formatScore(bar.baseline)}</td>
+                    <td>{bar.deltaLabel}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
 
-              {bars.map((bar, i) => {
-                const y = PAD_T + i * ROW_H + (ROW_H - TRACK_H) / 2;
-                const scorePx = (bar.score / SCORE_MAX) * innerW;
-                const basePx = (bar.baseline / SCORE_MAX) * innerW;
+            <div
+              className="pc-metrics__dist-rows"
+              role="list"
+              aria-label="Score versus baseline tracks"
+              data-testid="metrics-dist-rows"
+            >
+              {bars.map((bar) => {
                 const poor = bar.tone === "poor";
+                const scorePct = Math.max(0, Math.min(100, bar.score * 10));
+                const basePct = Math.max(0, Math.min(100, bar.baseline * 10));
                 return (
-                  <g key={`${bar.key ?? "null"}-${i}`} data-testid="metrics-dist-row">
-                    <text
+                  <div
+                    key={bar.key ?? bar.label}
+                    className="pc-metrics__dist-row"
+                    role="listitem"
+                    data-testid="metrics-dist-row"
+                  >
+                    <span
                       className="pc-metrics__dist-label"
-                      x={PAD_L - 8}
-                      y={y + TRACK_H / 2 + 4}
-                      textAnchor="end"
+                      title={bar.label}
+                      data-testid="metrics-dist-label"
                     >
-                      {bar.label.length > 14 ? `${bar.label.slice(0, 13)}…` : bar.label}
-                    </text>
-                    <title>{bar.label}</title>
-                    <rect
+                      {bar.label}
+                    </span>
+                    <div
                       className="pc-metrics__dist-track"
-                      x={PAD_L}
-                      y={y}
-                      width={innerW}
-                      height={TRACK_H}
-                    />
-                    <rect
-                      className={
-                        poor
-                          ? "pc-metrics__dist-score pc-metrics__dist-score--poor"
-                          : "pc-metrics__dist-score"
-                      }
-                      x={PAD_L}
-                      y={y}
-                      width={Math.max(0, scorePx)}
-                      height={TRACK_H}
-                    />
-                    <line
-                      className="pc-metrics__dist-baseline"
-                      x1={PAD_L + basePx}
-                      y1={y - 2}
-                      x2={PAD_L + basePx}
-                      y2={y + TRACK_H + 2}
-                    />
-                    <text
+                      data-testid="metrics-dist-track"
+                    >
+                      <div
+                        className={
+                          poor
+                            ? "pc-metrics__dist-score pc-metrics__dist-score--poor"
+                            : "pc-metrics__dist-score"
+                        }
+                        style={{ width: `${scorePct}%` }}
+                      />
+                      <div
+                        className="pc-metrics__dist-baseline"
+                        style={{ left: `${basePct}%` }}
+                        title={`baseline ${formatScore(bar.baseline)}`}
+                      />
+                    </div>
+                    <span
                       className={
                         poor
                           ? "pc-metrics__dist-delta pc-metrics__dist-delta--poor"
                           : "pc-metrics__dist-delta pc-metrics__dist-delta--good"
                       }
-                      x={PAD_L + innerW + 8}
-                      y={y + TRACK_H / 2 + 4}
-                      textAnchor="start"
+                      data-testid="metrics-dist-delta"
                     >
                       {bar.deltaLabel}
-                    </text>
-                  </g>
+                    </span>
+                  </div>
                 );
               })}
-            </svg>
+            </div>
+
+            {/* Value axis — HTML labels at declared 11px, aligned to track column */}
+            <div
+              className="pc-metrics__dist-axis"
+              data-testid="metrics-dist-axis"
+              aria-hidden="true"
+            >
+              <span className="pc-metrics__dist-axis-gutter" />
+              <div className="pc-metrics__dist-axis-track">
+                {TICKS.map((tick) => (
+                  <span
+                    key={tick}
+                    className="pc-metrics__dist-tick-label"
+                    style={{ left: `${tick * 10}%` }}
+                    data-testid="metrics-dist-tick-label"
+                  >
+                    {tick === 2.5 || tick === 7.5 ? tick.toFixed(1) : String(tick)}
+                  </span>
+                ))}
+              </div>
+              <span className="pc-metrics__dist-axis-end" />
+            </div>
           </div>
         )}
       </div>

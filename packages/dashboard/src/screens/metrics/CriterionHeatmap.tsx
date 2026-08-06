@@ -1,11 +1,12 @@
 /**
  * Criterion-failure heatmap — criteria × groups.
- * Low-sample cue, no-sample tiles, suspect 100%! cap.
- * Labels ≥11px; value axis legend for failure rate 0–100%.
+ * Low-sample / no-sample / suspect cues; zero rate → zero bar.
+ * Truncation disclosed; scale lives in the legend (not a fake axis strip).
+ * Visually-hidden data table for AT.
  */
 import type { HeatmapModel } from "./project.js";
 import { HonestyPanel, LoadingSkeleton } from "./Honesty.js";
-import { truncateLabel } from "./format.js";
+import { plural, truncateLabel } from "./format.js";
 
 export interface CriterionHeatmapProps {
   model: HeatmapModel;
@@ -23,6 +24,15 @@ export function CriterionHeatmap({
   const cols = Math.max(model.columns.length, 1);
   const gridCols = `minmax(120px, 150px) repeat(${cols}, minmax(44px, 1fr))`;
 
+  const meta = (() => {
+    if (model.sampleTotal === 0) return "no samples";
+    const samples = plural(model.sampleShown, "rubric sample");
+    if (model.truncated) {
+      return `showing ${model.shownCols} of ${model.totalCols} groups · ${samples} of ${model.sampleTotal}`;
+    }
+    return samples;
+  })();
+
   return (
     <section
       className="pc-metrics__panel"
@@ -33,10 +43,12 @@ export function CriterionHeatmap({
         <h2 id="metrics-heat-title" className="pc-metrics__panel-title">
           criterion failure rate
         </h2>
-        <span className="pc-metrics__panel-meta">
-          {model.sampleTotal > 0
-            ? `${model.sampleTotal} rubric samples · n<3 low`
-            : "no samples"}
+        <span className="pc-metrics__panel-meta" data-testid="metrics-heat-meta" title={
+          model.truncated
+            ? `Columns: ${model.selectionRule}. ${model.totalCols - model.shownCols} groups (${model.sampleTotal - model.sampleShown} samples) not shown.`
+            : undefined
+        }>
+          {meta}
         </span>
       </div>
       <div className="pc-metrics__panel-body">
@@ -61,6 +73,48 @@ export function CriterionHeatmap({
           />
         ) : (
           <div className="pc-metrics__heat">
+            {model.truncated ? (
+              <p className="pc-metrics__heat-trunc" data-testid="metrics-heat-trunc">
+                Showing {model.shownCols} of {model.totalCols} groups (
+                {model.sampleShown} of {model.sampleTotal} rubric samples) —{" "}
+                {model.selectionRule}.
+              </p>
+            ) : null}
+
+            {/* Visually-hidden data table for AT */}
+            <table className="pc-sr-only" data-testid="metrics-heat-a11y">
+              <caption>
+                Criterion failure rate by group
+                {model.truncated
+                  ? ` (showing ${model.shownCols} of ${model.totalCols} groups)`
+                  : ""}
+              </caption>
+              <thead>
+                <tr>
+                  <th scope="col">criterion</th>
+                  {model.columns.map((c) => (
+                    <th key={c.key ?? "null"} scope="col">
+                      {c.label}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {model.rows.map((row) => (
+                  <tr key={row.criterion}>
+                    <th scope="row">{row.criterion}</th>
+                    {row.cells.map((cell, i) => (
+                      <td key={`${row.criterion}-${model.columns[i]?.key ?? i}`}>
+                        {cell.kind === "none"
+                          ? "no sample"
+                          : `${cell.label}${cell.low ? " low sample" : ""}${cell.suspect ? " all failed" : ""}`}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+
             <div
               className="pc-metrics__heat-grid"
               style={{ gridTemplateColumns: gridCols }}
@@ -79,10 +133,7 @@ export function CriterionHeatmap({
                 </div>
               ))}
               {model.rows.map((row) => (
-                <div
-                  key={row.criterion}
-                  style={{ display: "contents" }}
-                >
+                <div key={row.criterion} style={{ display: "contents" }}>
                   <div
                     className="pc-metrics__heat-row-label"
                     title={row.criterion}
@@ -96,15 +147,19 @@ export function CriterionHeatmap({
                       title={
                         cell.kind === "none"
                           ? `${row.criterion} · ${model.columns[i]?.label ?? ""} · no sample`
-                          : `${row.criterion} · ${model.columns[i]?.label ?? ""} · ${cell.label} · n=${cell.count}${cell.kind === "low" ? " · low sample" : ""}${cell.kind === "suspect" ? " · all failed" : ""}`
+                          : `${row.criterion} · ${model.columns[i]?.label ?? ""} · ${cell.label}${cell.low ? " · low sample" : ""}${cell.suspect ? " · all failed" : ""}`
                       }
                       data-testid="metrics-heat-cell"
                       data-kind={cell.kind}
+                      data-low={cell.low ? "1" : "0"}
+                      data-suspect={cell.suspect ? "1" : "0"}
+                      data-bar={cell.barW}
                     >
                       <span className="pc-metrics__heat-cell-label">{cell.label}</span>
                       <span
                         className="pc-metrics__heat-cell-bar"
                         style={{ width: cell.barW }}
+                        data-testid="metrics-heat-bar"
                       />
                     </div>
                   ))}
@@ -112,27 +167,25 @@ export function CriterionHeatmap({
               ))}
             </div>
 
-            {/* Value axis for failure rate */}
+            {/* Honest scale in the legend — not a decorative half-width axis strip */}
             <div
-              className="pc-metrics__heat-axis"
-              data-testid="metrics-heat-axis"
-              aria-hidden="true"
+              className="pc-metrics__heat-legend"
+              data-testid="metrics-heat-legend"
             >
-              <span>0%</span>
-              <span>failure rate</span>
-              <span>100%</span>
-            </div>
-            <div className="pc-metrics__heat-legend">
-              <span className="pc-metrics__heat-legend-item">
-                <span className="pc-metrics__heat-swatch" />
-                no sample
-              </span>
               <span className="pc-metrics__heat-legend-item">
                 <span className="pc-metrics__heat-swatch pc-metrics__heat-swatch--rate" />
-                rate (bar)
+                bar = failure rate 0–100%
               </span>
-              <span className="pc-metrics__heat-legend-item">n&lt;3 low sample</span>
-              <span className="pc-metrics__heat-legend-item">100%! all failed</span>
+              <span className="pc-metrics__heat-legend-item">
+                <span className="pc-metrics__heat-swatch" />
+                — no sample
+              </span>
+              <span className="pc-metrics__heat-legend-item pc-metrics__heat-legend-item--low">
+                n=&lt;3 low sample (ink + n= in cell)
+              </span>
+              <span className="pc-metrics__heat-legend-item pc-metrics__heat-legend-item--suspect">
+                100%! all failed
+              </span>
             </div>
           </div>
         )}

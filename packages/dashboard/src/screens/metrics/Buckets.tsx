@@ -35,7 +35,7 @@ export function Buckets({ bySize, byDifficulty }: BucketsProps) {
                 >
                   <strong>{b.id}</strong>
                   <span>n={b.count}</span>
-                  <span>{b.avgLabel}</span>
+                  <span>avg {b.avgLabel}</span>
                 </span>
               ))}
             </div>
@@ -54,7 +54,7 @@ export function Buckets({ bySize, byDifficulty }: BucketsProps) {
                 >
                   <strong>{b.id}</strong>
                   <span>n={b.count}</span>
-                  <span>{b.avgLabel}</span>
+                  <span>avg {b.avgLabel}</span>
                 </span>
               ))}
             </div>

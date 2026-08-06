@@ -5,7 +5,7 @@
   "demos": {
     "metrics-board": {
       "kind": "metrics-board",
-      "description": "Metrics screen: empty default, populated charts via intercept, honesty states, workflow cost column, session scope filter, measured chart axes/labels/contrast at board widths.",
+      "description": "Metrics screen: HTML distribution (no SVG scale), heatmap truncation disclosure, honest legend scale, zero bars, a11y tables, 1280 column density, rendered-px labels ≥11 across 1280–1920.",
       "headline": {
         "boardScroll": {
           "shell": {
@@ -27,16 +27,66 @@
             "noHorizontalScroll": true
           }
         },
-        "minChartFontPx": 11,
+        "minRenderedPx": 11,
+        "minDeclaredPx": 11,
         "chartLabelsAtLeast11": true,
+        "distRowsInBand": true,
+        "distRowHeights": [
+          28,
+          28
+        ],
         "distributionHasAxis": true,
-        "heatmapHasAxis": true,
+        "heatmapHonestScale": true,
         "tickLabels": [
           "0",
           "2.5",
           "5",
           "7.5",
           "10"
+        ],
+        "renderedPxByViewport": [
+          {
+            "name": "1280",
+            "width": 1280,
+            "minRenderedPx": 11,
+            "allRenderedAtLeast11": true,
+            "distRowsInBand": true
+          },
+          {
+            "name": "1361",
+            "width": 1361,
+            "minRenderedPx": 11,
+            "allRenderedAtLeast11": true,
+            "distRowsInBand": true
+          },
+          {
+            "name": "1366",
+            "width": 1366,
+            "minRenderedPx": 11,
+            "allRenderedAtLeast11": true,
+            "distRowsInBand": true
+          },
+          {
+            "name": "1460",
+            "width": 1460,
+            "minRenderedPx": 11,
+            "allRenderedAtLeast11": true,
+            "distRowsInBand": true
+          },
+          {
+            "name": "1700",
+            "width": 1700,
+            "minRenderedPx": 11,
+            "allRenderedAtLeast11": true,
+            "distRowsInBand": true
+          },
+          {
+            "name": "1920",
+            "width": 1920,
+            "minRenderedPx": 11,
+            "allRenderedAtLeast11": true,
+            "distRowsInBand": true
+          }
         ]
       },
       "emptyHonesty": {
@@ -87,178 +137,420 @@
             "7.5",
             "10"
           ],
-          "hasValueAxis": true
+          "hasValueAxis": true,
+          "a11yTable": true
         },
         "heatmap": {
-          "found": true,
-          "text": "0%failure rate100%",
-          "hasValueAxis": true
+          "legendFound": true,
+          "legendText": "bar = failure rate 0–100%— no samplen=<3 low sample (ink + n= in cell)100%! all failed",
+          "hasHonestScale": true,
+          "truncText": "13 rubric samples",
+          "a11yTable": true,
+          "zeroBarsOk": true,
+          "lowCellCount": 1,
+          "lowInkDistinct": {
+            "checked": true,
+            "lowColor": "rgb(184, 150, 156)",
+            "noneColor": "rgb(139, 152, 164)",
+            "distinct": true
+          }
         }
       },
       "chartLabels": {
         "samples": [
           {
-            "sel": {},
-            "tag": "text",
-            "fontSize": 11,
-            "text": "0"
-          },
-          {
-            "sel": {},
-            "tag": "text",
-            "fontSize": 11,
-            "text": "2.5"
-          },
-          {
-            "sel": {},
-            "tag": "text",
-            "fontSize": 11,
-            "text": "5"
-          },
-          {
-            "sel": {},
-            "tag": "text",
-            "fontSize": 11,
-            "text": "7.5"
-          },
-          {
-            "sel": {},
-            "tag": "text",
-            "fontSize": 11,
-            "text": "10"
-          },
-          {
-            "sel": {},
-            "tag": "text",
-            "fontSize": 11,
+            "sel": ".pc-metrics__dist-label",
+            "tag": "span",
+            "declaredPx": 11,
+            "renderedPx": 11,
             "text": "fake"
           },
           {
-            "sel": {},
-            "tag": "text",
-            "fontSize": 11,
+            "sel": ".pc-metrics__dist-label",
+            "tag": "span",
+            "declaredPx": 11,
+            "renderedPx": 11,
+            "text": "claude"
+          },
+          {
+            "sel": ".pc-metrics__dist-delta",
+            "tag": "span",
+            "declaredPx": 11,
+            "renderedPx": 11,
             "text": "+2.4"
           },
           {
-            "sel": {},
-            "tag": "text",
-            "fontSize": 11,
-            "text": "claude"
+            "sel": ".pc-metrics__dist-delta",
+            "tag": "span",
+            "declaredPx": 11,
+            "renderedPx": 11,
+            "text": "−0.9"
           },
           {
-            "sel": {},
-            "tag": "text",
-            "fontSize": 11,
-            "text": "-0.9"
+            "sel": ".pc-metrics__dist-tick-label",
+            "tag": "span",
+            "declaredPx": 11,
+            "renderedPx": 11,
+            "text": "0"
           },
           {
-            "sel": "pc-metrics__heat-col",
+            "sel": ".pc-metrics__dist-tick-label",
+            "tag": "span",
+            "declaredPx": 11,
+            "renderedPx": 11,
+            "text": "2.5"
+          },
+          {
+            "sel": ".pc-metrics__dist-tick-label",
+            "tag": "span",
+            "declaredPx": 11,
+            "renderedPx": 11,
+            "text": "5"
+          },
+          {
+            "sel": ".pc-metrics__dist-tick-label",
+            "tag": "span",
+            "declaredPx": 11,
+            "renderedPx": 11,
+            "text": "7.5"
+          },
+          {
+            "sel": ".pc-metrics__dist-tick-label",
+            "tag": "span",
+            "declaredPx": 11,
+            "renderedPx": 11,
+            "text": "10"
+          },
+          {
+            "sel": ".pc-metrics__heat-col",
             "tag": "div",
-            "fontSize": 11,
+            "declaredPx": 11,
+            "renderedPx": 11,
             "text": "fake"
           },
           {
-            "sel": "pc-metrics__heat-col",
+            "sel": ".pc-metrics__heat-col",
             "tag": "div",
-            "fontSize": 11,
+            "declaredPx": 11,
+            "renderedPx": 11,
             "text": "claude"
           },
           {
-            "sel": "pc-metrics__heat-row-label",
+            "sel": ".pc-metrics__heat-row-label",
             "tag": "div",
-            "fontSize": 11,
+            "declaredPx": 11,
+            "renderedPx": 11,
             "text": "brief-implemented"
           },
           {
-            "sel": "pc-metrics__heat-cell-label",
-            "tag": "span",
-            "fontSize": 11,
-            "text": "13%"
-          },
-          {
-            "sel": "pc-metrics__heat-cell-label",
-            "tag": "span",
-            "fontSize": 11,
-            "text": "80%"
-          },
-          {
-            "sel": "pc-metrics__heat-row-label",
+            "sel": ".pc-metrics__heat-row-label",
             "tag": "div",
-            "fontSize": 11,
+            "declaredPx": 11,
+            "renderedPx": 11,
             "text": "change-verified"
           },
           {
-            "sel": "pc-metrics__heat-cell-label",
-            "tag": "span",
-            "fontSize": 11,
-            "text": "38%"
-          },
-          {
-            "sel": "pc-metrics__heat-cell-label",
-            "tag": "span",
-            "fontSize": 11,
-            "text": "—"
-          },
-          {
-            "sel": "pc-metrics__heat-row-label",
+            "sel": ".pc-metrics__heat-row-label",
             "tag": "div",
-            "fontSize": 11,
+            "declaredPx": 11,
+            "renderedPx": 11,
             "text": "minimal-diff"
           },
           {
-            "sel": "pc-metrics__heat-cell-label",
-            "tag": "span",
-            "fontSize": 11,
-            "text": "0%"
-          },
-          {
-            "sel": "pc-metrics__heat-cell-label",
-            "tag": "span",
-            "fontSize": 11,
-            "text": "50%"
-          },
-          {
-            "sel": "pc-metrics__heat-row-label",
+            "sel": ".pc-metrics__heat-row-label",
             "tag": "div",
-            "fontSize": 11,
+            "declaredPx": 11,
+            "renderedPx": 11,
             "text": "suite-green"
           },
           {
-            "sel": "pc-metrics__heat-cell-label",
+            "sel": ".pc-metrics__heat-cell-label",
             "tag": "span",
-            "fontSize": 11,
+            "declaredPx": 11,
+            "renderedPx": 11,
+            "text": "13%"
+          },
+          {
+            "sel": ".pc-metrics__heat-cell-label",
+            "tag": "span",
+            "declaredPx": 11,
+            "renderedPx": 11,
+            "text": "80%"
+          },
+          {
+            "sel": ".pc-metrics__heat-cell-label",
+            "tag": "span",
+            "declaredPx": 11,
+            "renderedPx": 11,
+            "text": "38%"
+          },
+          {
+            "sel": ".pc-metrics__heat-cell-label",
+            "tag": "span",
+            "declaredPx": 11,
+            "renderedPx": 11,
+            "text": "—"
+          },
+          {
+            "sel": ".pc-metrics__heat-cell-label",
+            "tag": "span",
+            "declaredPx": 11,
+            "renderedPx": 11,
+            "text": "0%"
+          },
+          {
+            "sel": ".pc-metrics__heat-cell-label",
+            "tag": "span",
+            "declaredPx": 11,
+            "renderedPx": 11,
+            "text": "50% n=2"
+          },
+          {
+            "sel": ".pc-metrics__heat-cell-label",
+            "tag": "span",
+            "declaredPx": 11,
+            "renderedPx": 11,
             "text": "25%"
           },
           {
-            "sel": "pc-metrics__heat-cell-label",
+            "sel": ".pc-metrics__heat-cell-label",
             "tag": "span",
-            "fontSize": 11,
+            "declaredPx": 11,
+            "renderedPx": 11,
             "text": "100%!"
-          },
-          {
-            "sel": "pc-metrics__heat-axis",
-            "tag": "div",
-            "fontSize": 11,
-            "text": "0%failure rate100%"
           }
         ],
+        "minDeclaredPx": 11,
+        "minRenderedPx": 11,
+        "count": 23,
+        "allRenderedAtLeast9": true,
+        "allRenderedAtLeast11": true,
+        "allAtLeast11": true,
         "minFontSize": 11,
-        "count": 24,
-        "allAtLeast11": true
+        "distRowHeights": [
+          28,
+          28
+        ],
+        "distRowsInBand": true
+      },
+      "renderedPxTable": [
+        {
+          "name": "1280",
+          "width": 1280,
+          "minRenderedPx": 11,
+          "minDeclaredPx": 11,
+          "allRenderedAtLeast11": true,
+          "allRenderedAtLeast9": true,
+          "distRowHeights": [
+            28,
+            28
+          ],
+          "distRowsInBand": true,
+          "table": {
+            "found": true,
+            "scrollWidth": 622,
+            "clientWidth": 622,
+            "overflowX": false,
+            "visibleHeaders": [
+              "vendor",
+              "tasks",
+              "success",
+              "eval avg"
+            ],
+            "hiddenHeaders": [
+              "tokens in ▸ out ▸ cached",
+              "avg · p95",
+              "below base"
+            ]
+          }
+        },
+        {
+          "name": "1361",
+          "width": 1361,
+          "minRenderedPx": 11,
+          "minDeclaredPx": 11,
+          "allRenderedAtLeast11": true,
+          "allRenderedAtLeast9": true,
+          "distRowHeights": [
+            28,
+            28
+          ],
+          "distRowsInBand": true,
+          "table": {
+            "found": true,
+            "scrollWidth": 703,
+            "clientWidth": 703,
+            "overflowX": false,
+            "visibleHeaders": [
+              "vendor",
+              "tasks",
+              "success",
+              "eval avg",
+              "tokens in ▸ out ▸ cached",
+              "avg · p95",
+              "below base"
+            ],
+            "hiddenHeaders": []
+          }
+        },
+        {
+          "name": "1366",
+          "width": 1366,
+          "minRenderedPx": 11,
+          "minDeclaredPx": 11,
+          "allRenderedAtLeast11": true,
+          "allRenderedAtLeast9": true,
+          "distRowHeights": [
+            28,
+            28
+          ],
+          "distRowsInBand": true,
+          "table": {
+            "found": true,
+            "scrollWidth": 708,
+            "clientWidth": 708,
+            "overflowX": false,
+            "visibleHeaders": [
+              "vendor",
+              "tasks",
+              "success",
+              "eval avg",
+              "tokens in ▸ out ▸ cached",
+              "avg · p95",
+              "below base"
+            ],
+            "hiddenHeaders": []
+          }
+        },
+        {
+          "name": "1460",
+          "width": 1460,
+          "minRenderedPx": 11,
+          "minDeclaredPx": 11,
+          "allRenderedAtLeast11": true,
+          "allRenderedAtLeast9": true,
+          "distRowHeights": [
+            28,
+            28
+          ],
+          "distRowsInBand": true,
+          "table": {
+            "found": true,
+            "scrollWidth": 802,
+            "clientWidth": 802,
+            "overflowX": false,
+            "visibleHeaders": [
+              "vendor",
+              "tasks",
+              "success",
+              "eval avg",
+              "tokens in ▸ out ▸ cached",
+              "avg · p95",
+              "below base"
+            ],
+            "hiddenHeaders": []
+          }
+        },
+        {
+          "name": "1700",
+          "width": 1700,
+          "minRenderedPx": 11,
+          "minDeclaredPx": 11,
+          "allRenderedAtLeast11": true,
+          "allRenderedAtLeast9": true,
+          "distRowHeights": [
+            28,
+            28
+          ],
+          "distRowsInBand": true,
+          "table": {
+            "found": true,
+            "scrollWidth": 1042,
+            "clientWidth": 1042,
+            "overflowX": false,
+            "visibleHeaders": [
+              "vendor",
+              "tasks",
+              "success",
+              "eval avg",
+              "tokens in ▸ out ▸ cached",
+              "avg · p95",
+              "below base"
+            ],
+            "hiddenHeaders": []
+          }
+        },
+        {
+          "name": "1920",
+          "width": 1920,
+          "minRenderedPx": 11,
+          "minDeclaredPx": 11,
+          "allRenderedAtLeast11": true,
+          "allRenderedAtLeast9": true,
+          "distRowHeights": [
+            28,
+            28
+          ],
+          "distRowsInBand": true,
+          "table": {
+            "found": true,
+            "scrollWidth": 1262,
+            "clientWidth": 1262,
+            "overflowX": false,
+            "visibleHeaders": [
+              "vendor",
+              "tasks",
+              "success",
+              "eval avg",
+              "tokens in ▸ out ▸ cached",
+              "avg · p95",
+              "below base"
+            ],
+            "hiddenHeaders": []
+          }
+        }
+      ],
+      "tableCue": {
+        "fadePresent": true,
+        "fadeOpacity": "0",
+        "scrollbar": "thin",
+        "headers": [
+          {
+            "text": "vendor",
+            "display": "table-cell"
+          },
+          {
+            "text": "tasks",
+            "display": "table-cell"
+          },
+          {
+            "text": "success",
+            "display": "table-cell"
+          },
+          {
+            "text": "eval avg",
+            "display": "table-cell"
+          },
+          {
+            "text": "tokens in ▸ out ▸ cached",
+            "display": "none"
+          },
+          {
+            "text": "avg · p95",
+            "display": "none"
+          },
+          {
+            "text": "below base",
+            "display": "none"
+          }
+        ],
+        "primaryVisible": "vendor tasks success eval avg"
+      },
+      "heatmapTruncation": {
+        "disclosed": true,
+        "text": "Showing 6 of 14 groups (45 of 109 rubric samples) — first groups with rubric evals, in table order (by task/run volume). showing 6 of 14 groups · 45 rubric samples of 109"
       },
       "contrast": {
-        "distAxis": {
-          "selector": ".pc-metrics__dist-axis",
-          "found": true,
-          "color": "rgb(139, 152, 164)",
-          "background": "rgb(11, 13, 15)",
-          "fontSize": "11px",
-          "fontWeight": "400",
-          "ratio": 6.61,
-          "largeText": false,
-          "wcagAA": true,
-          "text": "0"
-        },
         "distLabel": {
           "selector": ".pc-metrics__dist-label",
           "found": true,
@@ -270,6 +562,30 @@
           "largeText": false,
           "wcagAA": true,
           "text": "fake"
+        },
+        "distDelta": {
+          "selector": ".pc-metrics__dist-delta",
+          "found": true,
+          "color": "rgb(62, 169, 156)",
+          "background": "rgb(11, 13, 15)",
+          "fontSize": "11px",
+          "fontWeight": "500",
+          "ratio": 6.82,
+          "largeText": false,
+          "wcagAA": true,
+          "text": "+2.4"
+        },
+        "distTick": {
+          "selector": ".pc-metrics__dist-tick-label",
+          "found": true,
+          "color": "rgb(139, 152, 164)",
+          "background": "rgb(11, 13, 15)",
+          "fontSize": "11px",
+          "fontWeight": "400",
+          "ratio": 6.61,
+          "largeText": false,
+          "wcagAA": true,
+          "text": "0"
         },
         "heatCol": {
           "selector": ".pc-metrics__heat-col",
@@ -306,6 +622,18 @@
           "largeText": false,
           "wcagAA": true,
           "text": "13%"
+        },
+        "heatLow": {
+          "selector": ".pc-metrics__heat-cell--low .pc-metrics__heat-cell-label, .pc-metrics__heat-cell--low-suspect .pc-metrics__heat-cell-label",
+          "found": true,
+          "color": "rgb(184, 150, 156)",
+          "background": "rgb(13, 16, 19)",
+          "fontSize": "11px",
+          "fontWeight": "500",
+          "ratio": 7.16,
+          "largeText": false,
+          "wcagAA": true,
+          "text": "50% n=2"
         },
         "panelTitle": {
           "selector": ".pc-metrics__panel-title",
@@ -406,7 +734,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "Skip to navigationSkip to findSkip to main contentparleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5174v0.0.4 · pid 156…"
+              "text": "Skip to navigationSkip to findSkip to main contentparleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 159…"
             },
             "center": {
               "selector": ".pc-shell__center",
@@ -583,13 +911,13 @@
                 "x": 296,
                 "y": 293.38,
                 "width": 624,
-                "height": 179.59
+                "height": 157.59
               },
               "styles": {
                 "display": "block",
                 "position": "static",
                 "width": "624px",
-                "height": "179.594px",
+                "height": "157.594px",
                 "minWidth": "0px",
                 "minHeight": "auto",
                 "backgroundColor": "rgb(11, 13, 15)",
@@ -623,15 +951,15 @@
               "found": true,
               "box": {
                 "x": 296,
-                "y": 484.97,
+                "y": 462.97,
                 "width": 624,
-                "height": 171.7
+                "height": 137.59
               },
               "styles": {
                 "display": "block",
                 "position": "static",
                 "width": "624px",
-                "height": "171.703px",
+                "height": "137.594px",
                 "minWidth": "0px",
                 "minHeight": "auto",
                 "backgroundColor": "rgb(11, 13, 15)",
@@ -658,22 +986,22 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "score vs baseline0 — 1002.557.510fakefake+2.4claudeclaude-0.9"
+              "text": "score vs baseline0 — 10Score versus baseline by group (scale 0 to 10)groupscorebaselinedeltafake7.45.0+2.4claude4.15.0−0.9fake+2.4claude−0.902.557.510"
             },
             "heatmap": {
               "selector": "[data-testid=\"metrics-heatmap\"]",
               "found": true,
               "box": {
                 "x": 296,
-                "y": 668.67,
+                "y": 612.56,
                 "width": 624,
-                "height": 236.97
+                "height": 241.16
               },
               "styles": {
                 "display": "block",
                 "position": "static",
                 "width": "624px",
-                "height": "236.969px",
+                "height": "241.156px",
                 "minWidth": "0px",
                 "minHeight": "auto",
                 "backgroundColor": "rgb(11, 13, 15)",
@@ -700,22 +1028,22 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "criterion failure rate13 rubric samples · n<3 lowfakeclaudebrief-implemented13%80%change-verified38%—minimal-diff0%50%suite-green25%100%!0%failure rate100%no…"
+              "text": "criterion failure rate13 rubric samplesCriterion failure rate by groupcriterionfakeclaudebrief-implemented13%80%change-verified38%no sampleminimal-diff0%50% …"
             },
-            "dist-svg": {
-              "selector": "[data-testid=\"metrics-dist-svg\"]",
+            "dist-plot": {
+              "selector": "[data-testid=\"metrics-dist-plot\"]",
               "found": true,
               "box": {
-                "x": 307,
-                "y": 535.56,
-                "width": 602,
-                "height": 112.11
+                "x": 297,
+                "y": 503.56,
+                "width": 622,
+                "height": 96
               },
               "styles": {
                 "display": "block",
                 "position": "static",
-                "width": "602px",
-                "height": "112.109px",
+                "width": "622px",
+                "height": "96px",
                 "minWidth": "0px",
                 "minHeight": "0px",
                 "backgroundColor": "rgba(0, 0, 0, 0)",
@@ -737,27 +1065,27 @@
                 "gridTemplateRows": "none",
                 "gridTemplateColumns": "none",
                 "gap": "normal",
-                "padding": "0px",
+                "padding": "10px 10px 8px",
                 "margin": "0px",
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "02.557.510fakefake+2.4claudeclaude-0.9"
+              "text": "Score versus baseline by group (scale 0 to 10)groupscorebaselinedeltafake7.45.0+2.4claude4.15.0−0.9fake+2.4claude−0.902.557.510"
             },
             "dist-axis": {
               "selector": "[data-testid=\"metrics-dist-axis\"]",
               "found": true,
               "box": {
-                "x": 450.19,
-                "y": 612.94,
-                "width": 391.16,
-                "height": 1.22
+                "x": 307,
+                "y": 573.56,
+                "width": 602,
+                "height": 18
               },
               "styles": {
-                "display": "inline",
+                "display": "grid",
                 "position": "static",
-                "width": "auto",
-                "height": "auto",
+                "width": "602px",
+                "height": "18px",
                 "minWidth": "0px",
                 "minHeight": "0px",
                 "backgroundColor": "rgba(0, 0, 0, 0)",
@@ -776,35 +1104,35 @@
                 "borderBottomColor": "rgb(227, 232, 236)",
                 "borderLeftColor": "rgb(227, 232, 236)",
                 "borderRightColor": "rgb(227, 232, 236)",
-                "gridTemplateRows": "none",
-                "gridTemplateColumns": "none",
-                "gap": "normal",
-                "padding": "0px",
-                "margin": "0px",
+                "gridTemplateRows": "16px",
+                "gridTemplateColumns": "120px 384px 78px",
+                "gap": "10px",
+                "padding": "0px 0px 2px",
+                "margin": "4px 0px 0px",
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": ""
+              "text": "02.557.510"
             },
-            "heat-axis": {
-              "selector": "[data-testid=\"metrics-heat-axis\"]",
+            "heat-legend": {
+              "selector": "[data-testid=\"metrics-heat-legend\"]",
               "found": true,
               "box": {
                 "x": 307,
-                "y": 862.45,
-                "width": 220,
-                "height": 11
+                "y": 808.34,
+                "width": 602,
+                "height": 34.38
               },
               "styles": {
                 "display": "flex",
                 "position": "static",
-                "width": "220px",
-                "height": "11px",
+                "width": "602px",
+                "height": "34.375px",
                 "minWidth": "0px",
                 "minHeight": "0px",
                 "backgroundColor": "rgba(0, 0, 0, 0)",
                 "color": "rgb(139, 152, 164)",
-                "font": "11px / 11px \"IBM Plex Mono\", ui-monospace, monospace",
+                "font": "11px / 13.2px \"IBM Plex Mono\", ui-monospace, monospace",
                 "fontSize": "11px",
                 "fontWeight": "400",
                 "fontFamily": "\"IBM Plex Mono\", ui-monospace, monospace",
@@ -820,20 +1148,20 @@
                 "borderRightColor": "rgb(139, 152, 164)",
                 "gridTemplateRows": "none",
                 "gridTemplateColumns": "none",
-                "gap": "normal",
+                "gap": "8px 14px",
                 "padding": "0px",
-                "margin": "6px 0px 0px",
+                "margin": "8px 0px 0px",
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "0%failure rate100%"
+              "text": "bar = failure rate 0–100%— no samplen=<3 low sample (ink + n= in cell)100%! all failed"
             },
             "heat-grid": {
               "selector": "[data-testid=\"metrics-heat-grid\"]",
               "found": true,
               "box": {
                 "x": 307,
-                "y": 719.27,
+                "y": 663.16,
                 "width": 602,
                 "height": 137.19
               },
@@ -868,7 +1196,7 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "fakeclaudebrief-implemented13%80%change-verified38%—minimal-diff0%50%suite-green25%100%!"
+              "text": "fakeclaudebrief-implemented13%80%change-verified38%—minimal-diff0%50% n=2suite-green25%100%!"
             }
           }
         },
@@ -918,7 +1246,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "Skip to navigationSkip to findSkip to main contentparleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5174v0.0.4 · pid 156…"
+              "text": "Skip to navigationSkip to findSkip to main contentparleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 159…"
             },
             "center": {
               "selector": ".pc-shell__center",
@@ -994,7 +1322,7 @@
                 "borderBottomColor": "rgb(227, 232, 236)",
                 "borderLeftColor": "rgb(227, 232, 236)",
                 "borderRightColor": "rgb(227, 232, 236)",
-                "gridTemplateRows": "79px 694.719px 54.2812px",
+                "gridTemplateRows": "79px 653.719px 95.2812px",
                 "gridTemplateColumns": "828px",
                 "gap": "normal",
                 "padding": "0px",
@@ -1095,13 +1423,13 @@
                 "x": 296,
                 "y": 247.38,
                 "width": 804,
-                "height": 179.59
+                "height": 157.59
               },
               "styles": {
                 "display": "block",
                 "position": "static",
                 "width": "804px",
-                "height": "179.594px",
+                "height": "157.594px",
                 "minWidth": "0px",
                 "minHeight": "auto",
                 "backgroundColor": "rgb(11, 13, 15)",
@@ -1135,15 +1463,15 @@
               "found": true,
               "box": {
                 "x": 296,
-                "y": 438.97,
+                "y": 416.97,
                 "width": 396,
-                "height": 260.16
+                "height": 137.59
               },
               "styles": {
                 "display": "block",
                 "position": "static",
                 "width": "396px",
-                "height": "260.156px",
+                "height": "137.594px",
                 "minWidth": "0px",
                 "minHeight": "auto",
                 "backgroundColor": "rgb(11, 13, 15)",
@@ -1170,22 +1498,22 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "score vs baseline0 — 1002.557.510fakefake+2.4claudeclaude-0.9"
+              "text": "score vs baseline0 — 10Score versus baseline by group (scale 0 to 10)groupscorebaselinedeltafake7.45.0+2.4claude4.15.0−0.9fake+2.4claude−0.902.557.510"
             },
             "heatmap": {
               "selector": "[data-testid=\"metrics-heatmap\"]",
               "found": true,
               "box": {
                 "x": 704,
-                "y": 438.97,
+                "y": 416.97,
                 "width": 396,
-                "height": 260.16
+                "height": 241.16
               },
               "styles": {
                 "display": "block",
                 "position": "static",
                 "width": "396px",
-                "height": "260.156px",
+                "height": "241.156px",
                 "minWidth": "0px",
                 "minHeight": "auto",
                 "backgroundColor": "rgb(11, 13, 15)",
@@ -1212,22 +1540,22 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "criterion failure rate13 rubric samples · n<3 lowfakeclaudebrief-implemented13%80%change-verified38%—minimal-diff0%50%suite-green25%100%!0%failure rate100%no…"
+              "text": "criterion failure rate13 rubric samplesCriterion failure rate by groupcriterionfakeclaudebrief-implemented13%80%change-verified38%no sampleminimal-diff0%50% …"
             },
-            "dist-svg": {
-              "selector": "[data-testid=\"metrics-dist-svg\"]",
+            "dist-plot": {
+              "selector": "[data-testid=\"metrics-dist-plot\"]",
               "found": true,
               "box": {
-                "x": 307,
-                "y": 489.56,
-                "width": 374,
-                "height": 69.64
+                "x": 297,
+                "y": 457.56,
+                "width": 394,
+                "height": 96
               },
               "styles": {
                 "display": "block",
                 "position": "static",
-                "width": "374px",
-                "height": "69.6406px",
+                "width": "394px",
+                "height": "96px",
                 "minWidth": "0px",
                 "minHeight": "0px",
                 "backgroundColor": "rgba(0, 0, 0, 0)",
@@ -1249,27 +1577,27 @@
                 "gridTemplateRows": "none",
                 "gridTemplateColumns": "none",
                 "gap": "normal",
-                "padding": "0px",
+                "padding": "10px 10px 8px",
                 "margin": "0px",
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "02.557.510fakefake+2.4claudeclaude-0.9"
+              "text": "Score versus baseline by group (scale 0 to 10)groupscorebaselinedeltafake7.45.0+2.4claude4.15.0−0.9fake+2.4claude−0.902.557.510"
             },
             "dist-axis": {
               "selector": "[data-testid=\"metrics-dist-axis\"]",
               "found": true,
               "box": {
-                "x": 395.97,
-                "y": 537.63,
-                "width": 242.99,
-                "height": 0.76
+                "x": 307,
+                "y": 527.56,
+                "width": 374,
+                "height": 18
               },
               "styles": {
-                "display": "inline",
+                "display": "grid",
                 "position": "static",
-                "width": "auto",
-                "height": "auto",
+                "width": "374px",
+                "height": "18px",
                 "minWidth": "0px",
                 "minHeight": "0px",
                 "backgroundColor": "rgba(0, 0, 0, 0)",
@@ -1288,35 +1616,35 @@
                 "borderBottomColor": "rgb(227, 232, 236)",
                 "borderLeftColor": "rgb(227, 232, 236)",
                 "borderRightColor": "rgb(227, 232, 236)",
-                "gridTemplateRows": "none",
-                "gridTemplateColumns": "none",
-                "gap": "normal",
-                "padding": "0px",
-                "margin": "0px",
+                "gridTemplateRows": "16px",
+                "gridTemplateColumns": "120px 156px 78px",
+                "gap": "10px",
+                "padding": "0px 0px 2px",
+                "margin": "4px 0px 0px",
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": ""
+              "text": "02.557.510"
             },
-            "heat-axis": {
-              "selector": "[data-testid=\"metrics-heat-axis\"]",
+            "heat-legend": {
+              "selector": "[data-testid=\"metrics-heat-legend\"]",
               "found": true,
               "box": {
                 "x": 715,
-                "y": 632.75,
-                "width": 220,
-                "height": 11
+                "y": 612.75,
+                "width": 374,
+                "height": 34.38
               },
               "styles": {
                 "display": "flex",
                 "position": "static",
-                "width": "220px",
-                "height": "11px",
+                "width": "374px",
+                "height": "34.375px",
                 "minWidth": "0px",
                 "minHeight": "0px",
                 "backgroundColor": "rgba(0, 0, 0, 0)",
                 "color": "rgb(139, 152, 164)",
-                "font": "11px / 11px \"IBM Plex Mono\", ui-monospace, monospace",
+                "font": "11px / 13.2px \"IBM Plex Mono\", ui-monospace, monospace",
                 "fontSize": "11px",
                 "fontWeight": "400",
                 "fontFamily": "\"IBM Plex Mono\", ui-monospace, monospace",
@@ -1332,20 +1660,20 @@
                 "borderRightColor": "rgb(139, 152, 164)",
                 "gridTemplateRows": "none",
                 "gridTemplateColumns": "none",
-                "gap": "normal",
+                "gap": "8px 14px",
                 "padding": "0px",
-                "margin": "6px 0px 0px",
+                "margin": "8px 0px 0px",
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "0%failure rate100%"
+              "text": "bar = failure rate 0–100%— no samplen=<3 low sample (ink + n= in cell)100%! all failed"
             },
             "heat-grid": {
               "selector": "[data-testid=\"metrics-heat-grid\"]",
               "found": true,
               "box": {
                 "x": 715,
-                "y": 489.56,
+                "y": 467.56,
                 "width": 374,
                 "height": 137.19
               },
@@ -1380,7 +1708,7 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "fakeclaudebrief-implemented13%80%change-verified38%—minimal-diff0%50%suite-green25%100%!"
+              "text": "fakeclaudebrief-implemented13%80%change-verified38%—minimal-diff0%50% n=2suite-green25%100%!"
             }
           }
         },
@@ -1430,7 +1758,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "Skip to navigationSkip to findSkip to main contentparleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5174v0.0.4 · pid 156…"
+              "text": "Skip to navigationSkip to findSkip to main contentparleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 159…"
             },
             "center": {
               "selector": ".pc-shell__center",
@@ -1506,7 +1834,7 @@
                 "borderBottomColor": "rgb(227, 232, 236)",
                 "borderLeftColor": "rgb(227, 232, 236)",
                 "borderRightColor": "rgb(227, 232, 236)",
-                "gridTemplateRows": "64px 647.344px 116.656px",
+                "gridTemplateRows": "64px 639.531px 124.469px",
                 "gridTemplateColumns": "1288px",
                 "gap": "normal",
                 "padding": "0px",
@@ -1607,13 +1935,13 @@
                 "x": 296,
                 "y": 218.19,
                 "width": 1264,
-                "height": 169.59
+                "height": 157.59
               },
               "styles": {
                 "display": "block",
                 "position": "static",
                 "width": "1264px",
-                "height": "169.594px",
+                "height": "157.594px",
                 "minWidth": "0px",
                 "minHeight": "auto",
                 "backgroundColor": "rgb(11, 13, 15)",
@@ -1647,15 +1975,15 @@
               "found": true,
               "box": {
                 "x": 296,
-                "y": 399.78,
+                "y": 387.78,
                 "width": 626,
-                "height": 236.97
+                "height": 137.59
               },
               "styles": {
                 "display": "block",
                 "position": "static",
                 "width": "626px",
-                "height": "236.969px",
+                "height": "137.594px",
                 "minWidth": "0px",
                 "minHeight": "auto",
                 "backgroundColor": "rgb(11, 13, 15)",
@@ -1682,22 +2010,22 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "score vs baseline0 — 1002.557.510fakefake+2.4claudeclaude-0.9"
+              "text": "score vs baseline0 — 10Score versus baseline by group (scale 0 to 10)groupscorebaselinedeltafake7.45.0+2.4claude4.15.0−0.9fake+2.4claude−0.902.557.510"
             },
             "heatmap": {
               "selector": "[data-testid=\"metrics-heatmap\"]",
               "found": true,
               "box": {
                 "x": 934,
-                "y": 399.78,
+                "y": 387.78,
                 "width": 626,
-                "height": 236.97
+                "height": 241.16
               },
               "styles": {
                 "display": "block",
                 "position": "static",
                 "width": "626px",
-                "height": "236.969px",
+                "height": "241.156px",
                 "minWidth": "0px",
                 "minHeight": "auto",
                 "backgroundColor": "rgb(11, 13, 15)",
@@ -1724,22 +2052,22 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "criterion failure rate13 rubric samples · n<3 lowfakeclaudebrief-implemented13%80%change-verified38%—minimal-diff0%50%suite-green25%100%!0%failure rate100%no…"
+              "text": "criterion failure rate13 rubric samplesCriterion failure rate by groupcriterionfakeclaudebrief-implemented13%80%change-verified38%no sampleminimal-diff0%50% …"
             },
-            "dist-svg": {
-              "selector": "[data-testid=\"metrics-dist-svg\"]",
+            "dist-plot": {
+              "selector": "[data-testid=\"metrics-dist-plot\"]",
               "found": true,
               "box": {
-                "x": 307,
-                "y": 450.38,
-                "width": 604,
-                "height": 112.48
+                "x": 297,
+                "y": 428.38,
+                "width": 624,
+                "height": 96
               },
               "styles": {
                 "display": "block",
                 "position": "static",
-                "width": "604px",
-                "height": "112.484px",
+                "width": "624px",
+                "height": "96px",
                 "minWidth": "0px",
                 "minHeight": "0px",
                 "backgroundColor": "rgba(0, 0, 0, 0)",
@@ -1761,27 +2089,27 @@
                 "gridTemplateRows": "none",
                 "gridTemplateColumns": "none",
                 "gap": "normal",
-                "padding": "0px",
+                "padding": "10px 10px 8px",
                 "margin": "0px",
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "02.557.510fakefake+2.4claudeclaude-0.9"
+              "text": "Score versus baseline by group (scale 0 to 10)groupscorebaselinedeltafake7.45.0+2.4claude4.15.0−0.9fake+2.4claude−0.902.557.510"
             },
             "dist-axis": {
               "selector": "[data-testid=\"metrics-dist-axis\"]",
               "found": true,
               "box": {
-                "x": 450.67,
-                "y": 528.01,
-                "width": 392.47,
-                "height": 1.22
+                "x": 307,
+                "y": 498.38,
+                "width": 604,
+                "height": 18
               },
               "styles": {
-                "display": "inline",
+                "display": "grid",
                 "position": "static",
-                "width": "auto",
-                "height": "auto",
+                "width": "604px",
+                "height": "18px",
                 "minWidth": "0px",
                 "minHeight": "0px",
                 "backgroundColor": "rgba(0, 0, 0, 0)",
@@ -1800,35 +2128,35 @@
                 "borderBottomColor": "rgb(227, 232, 236)",
                 "borderLeftColor": "rgb(227, 232, 236)",
                 "borderRightColor": "rgb(227, 232, 236)",
-                "gridTemplateRows": "none",
-                "gridTemplateColumns": "none",
-                "gap": "normal",
-                "padding": "0px",
-                "margin": "0px",
+                "gridTemplateRows": "16px",
+                "gridTemplateColumns": "120px 386px 78px",
+                "gap": "10px",
+                "padding": "0px 0px 2px",
+                "margin": "4px 0px 0px",
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": ""
+              "text": "02.557.510"
             },
-            "heat-axis": {
-              "selector": "[data-testid=\"metrics-heat-axis\"]",
+            "heat-legend": {
+              "selector": "[data-testid=\"metrics-heat-legend\"]",
               "found": true,
               "box": {
                 "x": 945,
-                "y": 593.56,
-                "width": 220,
-                "height": 11
+                "y": 583.56,
+                "width": 604,
+                "height": 34.38
               },
               "styles": {
                 "display": "flex",
                 "position": "static",
-                "width": "220px",
-                "height": "11px",
+                "width": "604px",
+                "height": "34.375px",
                 "minWidth": "0px",
                 "minHeight": "0px",
                 "backgroundColor": "rgba(0, 0, 0, 0)",
                 "color": "rgb(139, 152, 164)",
-                "font": "11px / 11px \"IBM Plex Mono\", ui-monospace, monospace",
+                "font": "11px / 13.2px \"IBM Plex Mono\", ui-monospace, monospace",
                 "fontSize": "11px",
                 "fontWeight": "400",
                 "fontFamily": "\"IBM Plex Mono\", ui-monospace, monospace",
@@ -1844,20 +2172,20 @@
                 "borderRightColor": "rgb(139, 152, 164)",
                 "gridTemplateRows": "none",
                 "gridTemplateColumns": "none",
-                "gap": "normal",
+                "gap": "8px 14px",
                 "padding": "0px",
-                "margin": "6px 0px 0px",
+                "margin": "8px 0px 0px",
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "0%failure rate100%"
+              "text": "bar = failure rate 0–100%— no samplen=<3 low sample (ink + n= in cell)100%! all failed"
             },
             "heat-grid": {
               "selector": "[data-testid=\"metrics-heat-grid\"]",
               "found": true,
               "box": {
                 "x": 945,
-                "y": 450.38,
+                "y": 438.38,
                 "width": 604,
                 "height": 137.19
               },
@@ -1892,23 +2220,23 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "fakeclaudebrief-implemented13%80%change-verified38%—minimal-diff0%50%suite-green25%100%!"
+              "text": "fakeclaudebrief-implemented13%80%change-verified38%—minimal-diff0%50% n=2suite-green25%100%!"
             }
           }
         }
       ],
       "a11y": {
         "axe": {
-          "url": "http://127.0.0.1:5174/#/metrics",
+          "url": "http://127.0.0.1:5173/#/metrics",
           "violations": [],
-          "passes": 31,
+          "passes": 30,
           "incomplete": 1,
-          "inapplicable": 57
+          "inapplicable": 58
         },
         "aria": {
           "api": "locator.ariaSnapshot",
           "selector": "[data-testid=\"screen-metrics\"]",
-          "tree": "- text: metrics group by\n- tablist \"Group-by dimension\":\n  - tab \"vendor\" [selected]\n  - tab \"model\"\n  - tab \"type\"\n  - tab \"size\"\n  - tab \"difficulty\"\n  - tab \"workflow\"\n- text: more\n- combobox \"Additional group-by dimensions\":\n  - option \"…\" [selected]\n  - option \"profile\"\n  - option \"orch harness\"\n  - option \"orch model\"\n  - option \"orch effort\"\n  - option \"judge harness\"\n  - option \"judge model\"\n  - option \"judge effort\"\n  - option \"rubric\"\n- text: session\n- combobox \"Session scope filter\":\n  - option \"all sessions\" [selected]\n  - option \"verify-orch\"\n- group \"Metrics view\":\n  - button \"overview\" [pressed]\n  - button \"comparison\"\n- text: all sessions · 22 decided · 13 scored · 05:33\n- search \"Metrics filters\":\n  - text: type\n  - textbox \"type\"\n  - text: vendor\n  - textbox \"vendor\"\n  - text: model\n  - textbox \"model\"\n  - text: profile\n  - textbox \"profile\"\n  - text: size\n  - textbox \"size\"\n  - text: difficulty\n  - textbox \"difficulty\"\n  - text: orch harness\n  - textbox \"orch harness\"\n  - text: orch model\n  - textbox \"orch model\"\n  - text: orch effort\n  - textbox \"orch effort\"\n  - text: judge harness\n  - textbox \"judge harness\"\n  - text: judge model\n  - textbox \"judge model\"\n  - text: judge effort\n  - textbox \"judge effort\"\n  - text: rubric\n  - textbox \"rubric\"\n  - button \"first attempt only\"\n  - button \"below baseline only\"\n  - button \"clear\" [disabled]\n- region \"by vendor\":\n  - heading \"by vendor\" [level=2]\n  - text: 3 groups\n  - table:\n    - rowgroup:\n      - row \"vendor tasks success eval avg tokens in ▸ out ▸ cached avg · p95 below base\":\n        - columnheader \"vendor\"\n        - columnheader \"tasks\"\n        - columnheader \"success\"\n        - columnheader \"eval avg\"\n        - columnheader \"tokens in ▸ out ▸ cached\"\n        - columnheader \"avg · p95\"\n        - columnheader \"below base\"\n    - rowgroup:\n      - row \"fake 12 83% 7.4 · n=8 48k ▸ 12k ▸ 4k 1m · 2m 20s 15%\":\n        - cell \"fake\"\n        - cell \"12\"\n        - cell \"83%\"\n        - cell \"7.4 · n=8\"\n        - cell \"48k ▸ 12k ▸ 4k\"\n        - cell \"1m · 2m 20s\"\n        - cell \"15%\"\n      - row \"claude 6 50% 4.1 · n=5 22k ▸ 8k ▸ 500 1m 30s · 2m 40s 80%\":\n        - cell \"claude\"\n        - cell \"6\"\n        - cell \"50%\"\n        - cell \"4.1 · n=5\"\n        - cell \"22k ▸ 8k ▸ 500\"\n        - cell \"1m 30s · 2m 40s\"\n        - cell \"80%\"\n      - row \"codex 4 100% — · n=4 no rubric 9k ▸ 3k ▸ 100 50s · 1m 10s —\":\n        - cell \"codex\"\n        - cell \"4\"\n        - cell \"100%\"\n        - cell \"— · n=4 no rubric\"\n        - cell \"9k ▸ 3k ▸ 100\"\n        - cell \"50s · 1m 10s\"\n        - cell \"—\"\n- region \"score vs baseline\":\n  - heading \"score vs baseline\" [level=2]\n  - text: 0 — 10\n  - img \"Score versus baseline distribution, scale zero to ten\": 0 2.5 5 7.5 10 fake +2.4 claude -0.9\n- region \"criterion failure rate\":\n  - heading \"criterion failure rate\" [level=2]\n  - text: 13 rubric samples · n<3 low\n  - group \"Criterion failure rate by group\": fake claude brief-implemented 13% 80% change-verified 38% — minimal-diff 0% 50% suite-green 25% 100%!\n  - text: no sample rate (bar) n<3 low sample 100%! all failed\n- region \"Eval buckets by size and difficulty\":\n  - heading \"eval buckets\" [level=2]\n  - text: size · difficulty by size\n  - strong: M\n  - text: n=5 7.6\n  - strong: S\n  - text: n=3 7.0 by difficulty\n  - strong: medium\n  - text: n=6 7.1"
+          "tree": "- text: metrics group by\n- tablist \"Group-by dimension\":\n  - tab \"vendor\" [selected]\n  - tab \"model\"\n  - tab \"type\"\n  - tab \"size\"\n  - tab \"difficulty\"\n  - tab \"workflow\"\n- text: more\n- combobox \"Additional group-by dimensions\":\n  - option \"…\" [selected]\n  - option \"profile\"\n  - option \"orch harness\"\n  - option \"orch model\"\n  - option \"orch effort\"\n  - option \"judge harness\"\n  - option \"judge model\"\n  - option \"judge effort\"\n  - option \"rubric\"\n- text: session\n- combobox \"Session scope filter\":\n  - option \"all sessions\" [selected]\n  - option \"verify-orch\"\n- group \"Metrics view\":\n  - button \"overview\" [pressed]\n  - button \"comparison\"\n- text: all sessions · 22 decided · 13 scored · 06:03\n- search \"Metrics filters\":\n  - text: type\n  - textbox \"type\"\n  - text: vendor\n  - textbox \"vendor\"\n  - text: model\n  - textbox \"model\"\n  - text: profile\n  - textbox \"profile\"\n  - text: size\n  - textbox \"size\"\n  - text: difficulty\n  - textbox \"difficulty\"\n  - text: orch harness\n  - textbox \"orch harness\"\n  - text: orch model\n  - textbox \"orch model\"\n  - text: orch effort\n  - textbox \"orch effort\"\n  - text: judge harness\n  - textbox \"judge harness\"\n  - text: judge model\n  - textbox \"judge model\"\n  - text: judge effort\n  - textbox \"judge effort\"\n  - text: rubric\n  - textbox \"rubric\"\n  - button \"first attempt only\"\n  - button \"below baseline only\"\n  - button \"clear\" [disabled]\n- region \"by vendor\":\n  - heading \"by vendor\" [level=2]\n  - text: 3 groups\n  - table:\n    - rowgroup:\n      - row \"vendor tasks success eval avg tokens in ▸ out ▸ cached avg · p95 below base\":\n        - columnheader \"vendor\"\n        - columnheader \"tasks\"\n        - columnheader \"success\"\n        - columnheader \"eval avg\"\n        - columnheader \"tokens in ▸ out ▸ cached\"\n        - columnheader \"avg · p95\"\n        - columnheader \"below base\"\n    - rowgroup:\n      - row \"fake 12 83% 7.4 · n=8 48k ▸ 12k ▸ 4k 1m · 2m 20s 15%\":\n        - cell \"fake\"\n        - cell \"12\"\n        - cell \"83%\"\n        - cell \"7.4 · n=8\"\n        - cell \"48k ▸ 12k ▸ 4k\"\n        - cell \"1m · 2m 20s\"\n        - cell \"15%\"\n      - row \"claude 6 50% 4.1 · n=5 22k ▸ 8k ▸ 500 1m 30s · 2m 40s 80%\":\n        - cell \"claude\"\n        - cell \"6\"\n        - cell \"50%\"\n        - cell \"4.1 · n=5\"\n        - cell \"22k ▸ 8k ▸ 500\"\n        - cell \"1m 30s · 2m 40s\"\n        - cell \"80%\"\n      - row \"codex 4 100% — · n=4 9k ▸ 3k ▸ 100 50s · 1m 10s —\":\n        - cell \"codex\"\n        - cell \"4\"\n        - cell \"100%\"\n        - cell \"— · n=4\"\n        - cell \"9k ▸ 3k ▸ 100\"\n        - cell \"50s · 1m 10s\"\n        - cell \"—\"\n- region \"score vs baseline\":\n  - heading \"score vs baseline\" [level=2]\n  - text: 0 — 10\n  - table \"Score versus baseline by group (scale 0 to 10)\":\n    - caption: Score versus baseline by group (scale 0 to 10)\n    - rowgroup:\n      - row \"group score baseline delta\":\n        - columnheader \"group\"\n        - columnheader \"score\"\n        - columnheader \"baseline\"\n        - columnheader \"delta\"\n    - rowgroup:\n      - row \"fake 7.4 5.0 +2.4\":\n        - rowheader \"fake\"\n        - cell \"7.4\"\n        - cell \"5.0\"\n        - cell \"+2.4\"\n      - row \"claude 4.1 5.0 −0.9\":\n        - rowheader \"claude\"\n        - cell \"4.1\"\n        - cell \"5.0\"\n        - cell \"−0.9\"\n  - list \"Score versus baseline tracks\":\n    - listitem: fake +2.4\n    - listitem: claude −0.9\n- region \"criterion failure rate\":\n  - heading \"criterion failure rate\" [level=2]\n  - text: 13 rubric samples\n  - table \"Criterion failure rate by group\":\n    - caption: Criterion failure rate by group\n    - rowgroup:\n      - row \"criterion fake claude\":\n        - columnheader \"criterion\"\n        - columnheader \"fake\"\n        - columnheader \"claude\"\n    - rowgroup:\n      - row \"brief-implemented 13% 80%\":\n        - rowheader \"brief-implemented\"\n        - cell \"13%\"\n        - cell \"80%\"\n      - row \"change-verified 38% no sample\":\n        - rowheader \"change-verified\"\n        - cell \"38%\"\n        - cell \"no sample\"\n      - row \"minimal-diff 0% 50% n=2 low sample\":\n        - rowheader \"minimal-diff\"\n        - cell \"0%\"\n        - cell \"50% n=2 low sample\"\n      - row \"suite-green 25% 100%! all failed\":\n        - rowheader \"suite-green\"\n        - cell \"25%\"\n        - cell \"100%! all failed\"\n  - group \"Criterion failure rate by group\": fake claude brief-implemented 13% 80% change-verified 38% — minimal-diff 0% 50% n=2 suite-green 25% 100%!\n  - text: bar = failure rate 0–100% — no sample n=<3 low sample (ink + n= in cell) 100%! all failed\n- region \"Eval buckets by size and difficulty\":\n  - heading \"eval buckets\" [level=2]\n  - text: size · difficulty by size\n  - strong: M\n  - text: n=5 avg 7.6\n  - strong: S\n  - text: n=3 avg 7.0 by difficulty\n  - strong: medium\n  - text: n=6 avg 7.1"
         },
         "keyboardWalk": {
           "focusableCount": 34,
@@ -1935,20 +2263,20 @@
           "leftBody": true
         },
         "axeShell": {
-          "url": "http://127.0.0.1:5174/#/metrics",
+          "url": "http://127.0.0.1:5173/#/metrics",
           "violations": [],
-          "passes": 42,
+          "passes": 41,
           "incomplete": 2,
-          "inapplicable": 46
+          "inapplicable": 47
         },
         "ariaMetrics": {
           "api": "locator.ariaSnapshot",
           "selector": "[data-testid=\"screen-metrics\"]",
-          "tree": "- text: metrics group by\n- tablist \"Group-by dimension\":\n  - tab \"vendor\" [selected]\n  - tab \"model\"\n  - tab \"type\"\n  - tab \"size\"\n  - tab \"difficulty\"\n  - tab \"workflow\"\n- text: more\n- combobox \"Additional group-by dimensions\":\n  - option \"…\" [selected]\n  - option \"profile\"\n  - option \"orch harness\"\n  - option \"orch model\"\n  - option \"orch effort\"\n  - option \"judge harness\"\n  - option \"judge model\"\n  - option \"judge effort\"\n  - option \"rubric\"\n- text: session\n- combobox \"Session scope filter\":\n  - option \"all sessions\" [selected]\n  - option \"verify-orch\"\n- group \"Metrics view\":\n  - button \"overview\" [pressed]\n  - button \"comparison\"\n- text: all sessions · 22 decided · 13 scored · 05:33\n- search \"Metrics filters\":\n  - text: type\n  - textbox \"type\"\n  - text: vendor\n  - textbox \"vendor\"\n  - text: model\n  - textbox \"model\"\n  - text: profile\n  - textbox \"profile\"\n  - text: size\n  - textbox \"size\"\n  - text: difficulty\n  - textbox \"difficulty\"\n  - text: orch harness\n  - textbox \"orch harness\"\n  - text: orch model\n  - textbox \"orch model\"\n  - text: orch effort\n  - textbox \"orch effort\"\n  - text: judge harness\n  - textbox \"judge harness\"\n  - text: judge model\n  - textbox \"judge model\"\n  - text: judge effort\n  - textbox \"judge effort\"\n  - text: rubric\n  - textbox \"rubric\"\n  - button \"first attempt only\"\n  - button \"below baseline only\"\n  - button \"clear\" [disabled]\n- region \"by vendor\":\n  - heading \"by vendor\" [level=2]\n  - text: 3 groups\n  - table:\n    - rowgroup:\n      - row \"vendor tasks success eval avg tokens in ▸ out ▸ cached avg · p95 below base\":\n        - columnheader \"vendor\"\n        - columnheader \"tasks\"\n        - columnheader \"success\"\n        - columnheader \"eval avg\"\n        - columnheader \"tokens in ▸ out ▸ cached\"\n        - columnheader \"avg · p95\"\n        - columnheader \"below base\"\n    - rowgroup:\n      - row \"fake 12 83% 7.4 · n=8 48k ▸ 12k ▸ 4k 1m · 2m 20s 15%\":\n        - cell \"fake\"\n        - cell \"12\"\n        - cell \"83%\"\n        - cell \"7.4 · n=8\"\n        - cell \"48k ▸ 12k ▸ 4k\"\n        - cell \"1m · 2m 20s\"\n        - cell \"15%\"\n      - row \"claude 6 50% 4.1 · n=5 22k ▸ 8k ▸ 500 1m 30s · 2m 40s 80%\":\n        - cell \"claude\"\n        - cell \"6\"\n        - cell \"50%\"\n        - cell \"4.1 · n=5\"\n        - cell \"22k ▸ 8k ▸ 500\"\n        - cell \"1m 30s · 2m 40s\"\n        - cell \"80%\"\n      - row \"codex 4 100% — · n=4 no rubric 9k ▸ 3k ▸ 100 50s · 1m 10s —\":\n        - cell \"codex\"\n        - cell \"4\"\n        - cell \"100%\"\n        - cell \"— · n=4 no rubric\"\n        - cell \"9k ▸ 3k ▸ 100\"\n        - cell \"50s · 1m 10s\"\n        - cell \"—\"\n- region \"score vs baseline\":\n  - heading \"score vs baseline\" [level=2]\n  - text: 0 — 10\n  - img \"Score versus baseline distribution, scale zero to ten\": 0 2.5 5 7.5 10 fake +2.4 claude -0.9\n- region \"criterion failure rate\":\n  - heading \"criterion failure rate\" [level=2]\n  - text: 13 rubric samples · n<3 low\n  - group \"Criterion failure rate by group\": fake claude brief-implemented 13% 80% change-verified 38% — minimal-diff 0% 50% suite-green 25% 100%!\n  - text: no sample rate (bar) n<3 low sample 100%! all failed\n- region \"Eval buckets by size and difficulty\":\n  - heading \"eval buckets\" [level=2]\n  - text: size · difficulty by size\n  - strong: M\n  - text: n=5 7.6\n  - strong: S\n  - text: n=3 7.0 by difficulty\n  - strong: medium\n  - text: n=6 7.1"
+          "tree": "- text: metrics group by\n- tablist \"Group-by dimension\":\n  - tab \"vendor\" [selected]\n  - tab \"model\"\n  - tab \"type\"\n  - tab \"size\"\n  - tab \"difficulty\"\n  - tab \"workflow\"\n- text: more\n- combobox \"Additional group-by dimensions\":\n  - option \"…\" [selected]\n  - option \"profile\"\n  - option \"orch harness\"\n  - option \"orch model\"\n  - option \"orch effort\"\n  - option \"judge harness\"\n  - option \"judge model\"\n  - option \"judge effort\"\n  - option \"rubric\"\n- text: session\n- combobox \"Session scope filter\":\n  - option \"all sessions\" [selected]\n  - option \"verify-orch\"\n- group \"Metrics view\":\n  - button \"overview\" [pressed]\n  - button \"comparison\"\n- text: all sessions · 22 decided · 13 scored · 06:03\n- search \"Metrics filters\":\n  - text: type\n  - textbox \"type\"\n  - text: vendor\n  - textbox \"vendor\"\n  - text: model\n  - textbox \"model\"\n  - text: profile\n  - textbox \"profile\"\n  - text: size\n  - textbox \"size\"\n  - text: difficulty\n  - textbox \"difficulty\"\n  - text: orch harness\n  - textbox \"orch harness\"\n  - text: orch model\n  - textbox \"orch model\"\n  - text: orch effort\n  - textbox \"orch effort\"\n  - text: judge harness\n  - textbox \"judge harness\"\n  - text: judge model\n  - textbox \"judge model\"\n  - text: judge effort\n  - textbox \"judge effort\"\n  - text: rubric\n  - textbox \"rubric\"\n  - button \"first attempt only\"\n  - button \"below baseline only\"\n  - button \"clear\" [disabled]\n- region \"by vendor\":\n  - heading \"by vendor\" [level=2]\n  - text: 3 groups\n  - table:\n    - rowgroup:\n      - row \"vendor tasks success eval avg tokens in ▸ out ▸ cached avg · p95 below base\":\n        - columnheader \"vendor\"\n        - columnheader \"tasks\"\n        - columnheader \"success\"\n        - columnheader \"eval avg\"\n        - columnheader \"tokens in ▸ out ▸ cached\"\n        - columnheader \"avg · p95\"\n        - columnheader \"below base\"\n    - rowgroup:\n      - row \"fake 12 83% 7.4 · n=8 48k ▸ 12k ▸ 4k 1m · 2m 20s 15%\":\n        - cell \"fake\"\n        - cell \"12\"\n        - cell \"83%\"\n        - cell \"7.4 · n=8\"\n        - cell \"48k ▸ 12k ▸ 4k\"\n        - cell \"1m · 2m 20s\"\n        - cell \"15%\"\n      - row \"claude 6 50% 4.1 · n=5 22k ▸ 8k ▸ 500 1m 30s · 2m 40s 80%\":\n        - cell \"claude\"\n        - cell \"6\"\n        - cell \"50%\"\n        - cell \"4.1 · n=5\"\n        - cell \"22k ▸ 8k ▸ 500\"\n        - cell \"1m 30s · 2m 40s\"\n        - cell \"80%\"\n      - row \"codex 4 100% — · n=4 9k ▸ 3k ▸ 100 50s · 1m 10s —\":\n        - cell \"codex\"\n        - cell \"4\"\n        - cell \"100%\"\n        - cell \"— · n=4\"\n        - cell \"9k ▸ 3k ▸ 100\"\n        - cell \"50s · 1m 10s\"\n        - cell \"—\"\n- region \"score vs baseline\":\n  - heading \"score vs baseline\" [level=2]\n  - text: 0 — 10\n  - table \"Score versus baseline by group (scale 0 to 10)\":\n    - caption: Score versus baseline by group (scale 0 to 10)\n    - rowgroup:\n      - row \"group score baseline delta\":\n        - columnheader \"group\"\n        - columnheader \"score\"\n        - columnheader \"baseline\"\n        - columnheader \"delta\"\n    - rowgroup:\n      - row \"fake 7.4 5.0 +2.4\":\n        - rowheader \"fake\"\n        - cell \"7.4\"\n        - cell \"5.0\"\n        - cell \"+2.4\"\n      - row \"claude 4.1 5.0 −0.9\":\n        - rowheader \"claude\"\n        - cell \"4.1\"\n        - cell \"5.0\"\n        - cell \"−0.9\"\n  - list \"Score versus baseline tracks\":\n    - listitem: fake +2.4\n    - listitem: claude −0.9\n- region \"criterion failure rate\":\n  - heading \"criterion failure rate\" [level=2]\n  - text: 13 rubric samples\n  - table \"Criterion failure rate by group\":\n    - caption: Criterion failure rate by group\n    - rowgroup:\n      - row \"criterion fake claude\":\n        - columnheader \"criterion\"\n        - columnheader \"fake\"\n        - columnheader \"claude\"\n    - rowgroup:\n      - row \"brief-implemented 13% 80%\":\n        - rowheader \"brief-implemented\"\n        - cell \"13%\"\n        - cell \"80%\"\n      - row \"change-verified 38% no sample\":\n        - rowheader \"change-verified\"\n        - cell \"38%\"\n        - cell \"no sample\"\n      - row \"minimal-diff 0% 50% n=2 low sample\":\n        - rowheader \"minimal-diff\"\n        - cell \"0%\"\n        - cell \"50% n=2 low sample\"\n      - row \"suite-green 25% 100%! all failed\":\n        - rowheader \"suite-green\"\n        - cell \"25%\"\n        - cell \"100%! all failed\"\n  - group \"Criterion failure rate by group\": fake claude brief-implemented 13% 80% change-verified 38% — minimal-diff 0% 50% n=2 suite-green 25% 100%!\n  - text: bar = failure rate 0–100% — no sample n=<3 low sample (ink + n= in cell) 100%! all failed\n- region \"Eval buckets by size and difficulty\":\n  - heading \"eval buckets\" [level=2]\n  - text: size · difficulty by size\n  - strong: M\n  - text: n=5 avg 7.6\n  - strong: S\n  - text: n=3 avg 7.0 by difficulty\n  - strong: medium\n  - text: n=6 avg 7.1"
         }
       },
-      "recordedAt": "2026-08-06T09:33:32.870Z"
+      "recordedAt": "2026-08-06T10:03:17.703Z"
     }
   },
-  "updatedAt": "2026-08-06T09:33:32.870Z"
+  "updatedAt": "2026-08-06T10:03:17.703Z"
 }

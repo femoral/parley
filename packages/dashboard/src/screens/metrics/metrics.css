@@ -266,20 +266,58 @@
 
 /* ── Group table ────────────────────────────────────────────────────── */
 
+.pc-metrics__table-scroll {
+  position: relative;
+  min-width: 0;
+}
+
 .pc-metrics__table-wrap {
   overflow-x: auto;
   min-width: 0;
+  /* Always-visible scrollbar cue when content overflows */
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) var(--surface-sunken);
+}
+
+.pc-metrics__table-wrap::-webkit-scrollbar {
+  height: 8px;
+}
+
+.pc-metrics__table-wrap::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+}
+
+.pc-metrics__table-wrap::-webkit-scrollbar-track {
+  background: var(--surface-sunken);
+}
+
+/* Edge fade — cue that columns continue to the right */
+.pc-metrics__table-fade {
+  pointer-events: none;
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 28px;
+  background: linear-gradient(to right, transparent, var(--ground));
+  opacity: 0;
+}
+
+@media (max-width: 1360px) {
+  .pc-metrics__table-fade {
+    opacity: 1;
+  }
 }
 
 .pc-metrics__table {
   width: 100%;
   border-collapse: collapse;
   table-layout: fixed;
-  min-width: 720px;
+  min-width: 640px;
 }
 
 .pc-metrics__table--workflow {
-  min-width: 800px;
+  min-width: 720px;
 }
 
 .pc-metrics__table th {
@@ -294,6 +332,36 @@
   position: sticky;
   top: 0;
   z-index: 1;
+  white-space: nowrap;
+}
+
+.pc-metrics__th-tokens {
+  white-space: nowrap;
+}
+
+/* ≤1360: drop lowest-priority columns so nothing mid-clips without cue.
+ * Priority kept: name, count, success, eval. Dropped: tokens, dur, below, cost. */
+@media (max-width: 1360px) {
+  .pc-metrics__table {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .pc-metrics__th-tokens,
+  .pc-metrics__td-tokens,
+  .pc-metrics__th-dur,
+  .pc-metrics__td-dur,
+  .pc-metrics__th-below,
+  .pc-metrics__td-below,
+  .pc-metrics__th-cost,
+  .pc-metrics__td-cost {
+    display: none;
+  }
+
+  .pc-metrics__table-fade {
+    /* Columns dropped — no need for fade at this density */
+    opacity: 0;
+  }
 }
 
 .pc-metrics__table th[data-align="right"],
@@ -302,12 +370,14 @@
 }
 
 .pc-metrics__table td {
-  padding: 7px 8px;
+  padding: 5px 8px;
   border-bottom: 1px solid var(--hairline);
   vertical-align: middle;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  height: 28px;
+  box-sizing: border-box;
 }
 
 .pc-metrics__table tbody tr:hover td {
@@ -385,6 +455,7 @@
   grid-template-columns: 1fr 1fr;
   gap: 12px;
   min-width: 0;
+  align-items: start; /* don't stretch panels to the taller sibling */
 }
 
 @media (max-width: 1360px) {
@@ -393,78 +464,111 @@
   }
 }
 
-/* ── Score distribution (SVG) ───────────────────────────────────────── */
+/* ── Score distribution (HTML — mock shape; text never scales) ─────── */
 
 .pc-metrics__dist {
   padding: 10px 10px 8px;
 }
 
-.pc-metrics__dist-svg {
-  display: block;
-  width: 100%;
-  height: auto;
-  overflow: visible;
+.pc-metrics__dist-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
 }
 
-.pc-metrics__dist-axis {
-  fill: var(--text-3);
-  color: var(--text-3);
-  font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: 400;
+/* Row height band 24–30px (DESIGN.md density) */
+.pc-metrics__dist-row {
+  display: grid;
+  grid-template-columns: minmax(72px, 120px) 1fr minmax(48px, 78px);
+  align-items: center;
+  gap: 10px;
+  min-height: 26px;
+  height: 28px;
+  padding: 0;
+  border-bottom: 1px solid var(--hairline);
+  box-sizing: border-box;
 }
 
 .pc-metrics__dist-label {
-  fill: var(--text-strong-2);
+  font: 400 11px/1.2 var(--font-mono);
   color: var(--text-strong-2);
-  font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: 400;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.pc-metrics__dist-track {
+  position: relative;
+  height: 12px;
+  background: var(--surface-sunken);
+  border: 1px solid var(--border);
+  min-width: 0;
+}
+
+.pc-metrics__dist-score {
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  background: color-mix(in srgb, var(--state-eval-good) 35%, transparent);
+}
+
+.pc-metrics__dist-score--poor {
+  background: color-mix(in srgb, var(--state-eval-poor) 35%, transparent);
+}
+
+.pc-metrics__dist-baseline {
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  width: 2px;
+  margin-left: -1px;
+  background: var(--text-2);
 }
 
 .pc-metrics__dist-delta {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: 500;
+  font: 500 11px/1.2 var(--font-mono);
+  text-align: right;
+  white-space: nowrap;
 }
 
 .pc-metrics__dist-delta--good {
-  fill: var(--state-eval-good);
   color: var(--state-eval-good);
 }
 
 .pc-metrics__dist-delta--poor {
-  fill: var(--state-eval-poor);
   color: var(--state-eval-poor);
 }
 
-.pc-metrics__dist-track {
-  fill: var(--surface-sunken);
-  stroke: var(--border);
-  stroke-width: 1;
+/* Value axis under tracks — same 3-col grid so ticks align to track */
+.pc-metrics__dist-axis {
+  display: grid;
+  grid-template-columns: minmax(72px, 120px) 1fr minmax(48px, 78px);
+  gap: 10px;
+  align-items: start;
+  margin-top: 4px;
+  padding-bottom: 2px;
 }
 
-.pc-metrics__dist-score {
-  fill: color-mix(in srgb, var(--state-eval-good) 35%, transparent);
+.pc-metrics__dist-axis-gutter,
+.pc-metrics__dist-axis-end {
+  /* spacer columns matching label / delta */
 }
 
-.pc-metrics__dist-score--poor {
-  fill: color-mix(in srgb, var(--state-eval-poor) 35%, transparent);
+.pc-metrics__dist-axis-track {
+  position: relative;
+  height: 16px;
+  border-top: 1px solid var(--border);
 }
 
-.pc-metrics__dist-baseline {
-  stroke: var(--text-2);
-  stroke-width: 2;
-}
-
-.pc-metrics__dist-axis-line {
-  stroke: var(--border);
-  stroke-width: 1;
-}
-
-.pc-metrics__dist-tick {
-  stroke: var(--border);
-  stroke-width: 1;
+.pc-metrics__dist-tick-label {
+  position: absolute;
+  top: 4px;
+  transform: translateX(-50%);
+  font: 400 11px/1 var(--font-mono);
+  color: var(--text-3);
+  white-space: nowrap;
 }
 
 /* ── Heatmap ────────────────────────────────────────────────────────── */
@@ -474,10 +578,17 @@
   overflow-x: auto;
 }
 
+.pc-metrics__heat-trunc {
+  margin: 0 0 8px;
+  font: 400 11px/1.35 var(--font-mono);
+  color: var(--text-3);
+}
+
 .pc-metrics__heat-grid {
   display: grid;
   gap: 2px;
   min-width: min-content;
+  width: 100%;
 }
 
 .pc-metrics__heat-corner {
@@ -506,7 +617,7 @@
 
 .pc-metrics__heat-cell {
   height: 28px;
-  min-width: 44px;
+  min-width: 48px;
   background: var(--surface-sunken);
   border: 1px solid var(--hairline-strong);
   display: flex;
@@ -524,37 +635,54 @@
   font: 400 11px/1 var(--font-mono);
   color: var(--text-3);
   z-index: 1;
+  padding: 0 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
+/* ok: rate on dark tile */
 .pc-metrics__heat-cell--ok .pc-metrics__heat-cell-label {
   color: #c8b3b8;
 }
 
-.pc-metrics__heat-cell--low .pc-metrics__heat-cell-label {
-  color: var(--text-3);
+/* low sample: distinct ink from no-sample (text-3) — warmer muted rose */
+.pc-metrics__heat-cell--low .pc-metrics__heat-cell-label,
+.pc-metrics__heat-cell--low-suspect .pc-metrics__heat-cell-label {
+  color: #b8969c;
+  font-weight: 500;
 }
 
-.pc-metrics__heat-cell--suspect .pc-metrics__heat-cell-label {
+/* suspect 100%: loud rose */
+.pc-metrics__heat-cell--suspect .pc-metrics__heat-cell-label,
+.pc-metrics__heat-cell--low-suspect .pc-metrics__heat-cell-label {
   color: #eaa7b2;
   font-weight: 500;
+}
+
+.pc-metrics__heat-cell--low-suspect {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--state-eval-poor) 40%, transparent);
 }
 
 .pc-metrics__heat-cell-bar {
   height: 4px;
   flex: none;
   background: transparent;
+  max-width: 100%;
 }
 
 .pc-metrics__heat-cell--ok .pc-metrics__heat-cell-bar,
 .pc-metrics__heat-cell--low .pc-metrics__heat-cell-bar,
-.pc-metrics__heat-cell--suspect .pc-metrics__heat-cell-bar {
+.pc-metrics__heat-cell--suspect .pc-metrics__heat-cell-bar,
+.pc-metrics__heat-cell--low-suspect .pc-metrics__heat-cell-bar {
   background: color-mix(in srgb, var(--state-eval-poor) 70%, transparent);
 }
 
+/* Consolidated legend (scale + cues in one band) */
 .pc-metrics__heat-legend {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px 14px;
+  gap: 8px 14px;
   margin-top: 8px;
   font: 400 11px/1.2 var(--font-mono);
   color: var(--text-3);
@@ -564,6 +692,14 @@
   display: inline-flex;
   align-items: center;
   gap: 5px;
+}
+
+.pc-metrics__heat-legend-item--low {
+  color: #b8969c;
+}
+
+.pc-metrics__heat-legend-item--suspect {
+  color: #eaa7b2;
 }
 
 .pc-metrics__heat-swatch {
@@ -576,15 +712,6 @@
 
 .pc-metrics__heat-swatch--rate {
   background: color-mix(in srgb, var(--state-eval-poor) 55%, var(--surface-sunken));
-}
-
-.pc-metrics__heat-axis {
-  display: flex;
-  justify-content: space-between;
-  margin-top: 6px;
-  font: 400 11px/1 var(--font-mono);
-  color: var(--text-3);
-  max-width: 220px;
 }
 
 /* ── Comparison ─────────────────────────────────────────────────────── */

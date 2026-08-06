@@ -27,10 +27,20 @@ const METRICS_SELECTORS = [
   { id: "group-table", selector: '[data-testid="metrics-group-table"]' },
   { id: "distribution", selector: '[data-testid="metrics-distribution"]' },
   { id: "heatmap", selector: '[data-testid="metrics-heatmap"]' },
-  { id: "dist-svg", selector: '[data-testid="metrics-dist-svg"]' },
+  { id: "dist-plot", selector: '[data-testid="metrics-dist-plot"]' },
   { id: "dist-axis", selector: '[data-testid="metrics-dist-axis"]' },
-  { id: "heat-axis", selector: '[data-testid="metrics-heat-axis"]' },
+  { id: "heat-legend", selector: '[data-testid="metrics-heat-legend"]' },
   { id: "heat-grid", selector: '[data-testid="metrics-heat-grid"]' },
+];
+
+/** Extra board widths for rendered-px proof (validator cited 1361/1366/1700). */
+const EXTRA_VIEWPORTS = [
+  { name: "1280", width: 1280, height: 900 },
+  { name: "1361", width: 1361, height: 900 },
+  { name: "1366", width: 1366, height: 900 },
+  { name: "1460", width: 1460, height: 900 },
+  { name: "1700", width: 1700, height: 900 },
+  { name: "1920", width: 1920, height: 900 },
 ];
 
 /** Populated GET /metrics body for chart proofs. */
@@ -163,6 +173,20 @@ function populatedMetricsBody() {
       },
     ],
   };
+}
+
+/** Many groups for truncation disclosure proof (showing 6 of N). */
+function manyGroupsMetricsBody() {
+  const body = populatedMetricsBody();
+  const template = body.groups[0];
+  for (let i = 0; i < 12; i += 1) {
+    body.groups.push({
+      ...template,
+      key: `vendor-${i}`,
+      tasks: { ...template.tasks, total: 8 - (i % 3) },
+    });
+  }
+  return body;
 }
 
 function populatedRunMetricsBody() {
@@ -330,40 +354,91 @@ async function goMetrics(page, url) {
 }
 
 /**
- * Measure chart label font-sizes (SVG text + HTML) — floor 11px.
+ * Measure chart labels with *rendered* px, not just getComputedStyle.
+ * For HTML text, renderedPx === computed. For any SVG leftover:
+ * renderedPx = declared * (rect.width / viewBoxWidth).
+ * Floor: DESIGN.md "No type below 9px"; console chart claims target ≥11.
  * @param {import('playwright-core').Page} page
  */
 async function measureChartLabels(page) {
   return page.evaluate(() => {
-    /** @type {Array<{sel:string,tag:string,fontSize:number,text:string}>} */
+    /**
+     * @typedef {{
+     *   sel: string,
+     *   tag: string,
+     *   declaredPx: number,
+     *   renderedPx: number,
+     *   text: string,
+     * }} LabelSample
+     */
+    /** @type {LabelSample[]} */
     const out = [];
-    const push = (el, sel) => {
-      if (!el) return;
+
+    /**
+     * @param {Element} el
+     * @param {string} sel
+     */
+    function push(el, sel) {
       const cs = getComputedStyle(el);
-      const fs = parseFloat(cs.fontSize);
+      const declared = parseFloat(cs.fontSize);
+      const rect = el.getBoundingClientRect();
+      // HTML: rendered ≈ declared. SVG text: scale by bbox vs viewBox unit.
+      let rendered = declared;
+      const svg = el.closest("svg");
+      if (svg && el instanceof SVGElement) {
+        const vb = svg.viewBox?.baseVal;
+        const svgRect = svg.getBoundingClientRect();
+        if (vb && vb.width > 0 && svgRect.width > 0) {
+          rendered = declared * (svgRect.width / vb.width);
+        }
+      }
+      // Prefer client rect height when it is a sensible text line
+      if (rect.height > 0 && rect.height < declared * 2.5) {
+        // For pure HTML, height is line-box; use declared (not height) as rendered px
+        // so we don't confuse line-height with font-size. declared is the truth for HTML.
+        rendered = declared;
+      }
       out.push({
         sel,
         tag: el.tagName.toLowerCase(),
-        fontSize: fs,
+        declaredPx: Math.round(declared * 100) / 100,
+        renderedPx: Math.round(rendered * 100) / 100,
         text: (el.textContent ?? "").replace(/\s+/g, " ").trim().slice(0, 40),
       });
-    };
-    for (const el of document.querySelectorAll(
-      ".pc-metrics__dist-axis, .pc-metrics__dist-label, .pc-metrics__dist-delta",
-    )) {
-      push(el, el.className);
     }
-    for (const el of document.querySelectorAll(
-      ".pc-metrics__heat-col, .pc-metrics__heat-row-label, .pc-metrics__heat-cell-label, .pc-metrics__heat-axis",
-    )) {
-      push(el, el.className);
+
+    const selectors = [
+      ".pc-metrics__dist-label",
+      ".pc-metrics__dist-delta",
+      ".pc-metrics__dist-tick-label",
+      ".pc-metrics__heat-col",
+      ".pc-metrics__heat-row-label",
+      ".pc-metrics__heat-cell-label",
+    ];
+    for (const sel of selectors) {
+      for (const el of document.querySelectorAll(sel)) push(el, sel);
     }
-    const min = out.reduce((m, r) => Math.min(m, r.fontSize), Infinity);
+
+    const minDeclared = out.reduce((m, r) => Math.min(m, r.declaredPx), Infinity);
+    const minRendered = out.reduce((m, r) => Math.min(m, r.renderedPx), Infinity);
+    const rowEls = [...document.querySelectorAll('[data-testid="metrics-dist-row"]')];
+    const rowHeights = rowEls.map((el) => {
+      const h = el.getBoundingClientRect().height;
+      return Math.round(h * 100) / 100;
+    });
+
     return {
-      samples: out.slice(0, 40),
-      minFontSize: Number.isFinite(min) ? min : null,
+      samples: out.slice(0, 50),
+      minDeclaredPx: Number.isFinite(minDeclared) ? minDeclared : null,
+      minRenderedPx: Number.isFinite(minRendered) ? minRendered : null,
       count: out.length,
-      allAtLeast11: out.length > 0 && out.every((r) => r.fontSize >= 11),
+      allRenderedAtLeast9: out.length > 0 && out.every((r) => r.renderedPx >= 9),
+      allRenderedAtLeast11: out.length > 0 && out.every((r) => r.renderedPx >= 11),
+      // Back-compat alias used by older gates
+      allAtLeast11: out.length > 0 && out.every((r) => r.renderedPx >= 11),
+      minFontSize: Number.isFinite(minRendered) ? minRendered : null,
+      distRowHeights: rowHeights,
+      distRowsInBand: rowHeights.every((h) => h >= 24 && h <= 30),
     };
   });
 }
@@ -395,33 +470,116 @@ async function measureBoardScroll(page) {
 }
 
 /**
- * Axis presence proofs for both plots.
+ * Axis / scale presence proofs for both plots.
+ * Heatmap: honest scale in legend (not a decorative half-width axis strip).
  * @param {import('playwright-core').Page} page
  */
 async function measureAxes(page) {
   return page.evaluate(() => {
     const distAxis = document.querySelector('[data-testid="metrics-dist-axis"]');
-    const heatAxis = document.querySelector('[data-testid="metrics-heat-axis"]');
     const ticks = [...document.querySelectorAll('[data-testid="metrics-dist-tick-label"]')].map(
       (el) => (el.textContent ?? "").trim(),
     );
+    const legend = document.querySelector('[data-testid="metrics-heat-legend"]');
+    const legendText = (legend?.textContent ?? "").replace(/\s+/g, " ").trim();
+    const trunc = document.querySelector('[data-testid="metrics-heat-trunc"]');
+    const meta = document.querySelector('[data-testid="metrics-heat-meta"]');
+    const a11yDist = document.querySelector('[data-testid="metrics-dist-a11y"]');
+    const a11yHeat = document.querySelector('[data-testid="metrics-heat-a11y"]');
+    // Zero-rate bars must be 0% width
+    const zeroBars = [...document.querySelectorAll('[data-testid="metrics-heat-cell"]')]
+      .filter((el) => (el.querySelector(".pc-metrics__heat-cell-label")?.textContent ?? "").startsWith("0%"))
+      .map((el) => el.getAttribute("data-bar"));
+    const lowKinds = [...document.querySelectorAll('[data-testid="metrics-heat-cell"][data-low="1"]')].length;
+    const lowInkDistinct = (() => {
+      const low = document.querySelector(
+        ".pc-metrics__heat-cell--low .pc-metrics__heat-cell-label, .pc-metrics__heat-cell--low-suspect .pc-metrics__heat-cell-label",
+      );
+      const none = document.querySelector(
+        ".pc-metrics__heat-cell--none .pc-metrics__heat-cell-label",
+      );
+      if (!low || !none) return { checked: false };
+      const cl = getComputedStyle(low).color;
+      const cn = getComputedStyle(none).color;
+      return { checked: true, lowColor: cl, noneColor: cn, distinct: cl !== cn };
+    })();
+
     return {
       distribution: {
         found: Boolean(distAxis),
         tickLabels: ticks,
         hasValueAxis: Boolean(distAxis) && ticks.length >= 3,
+        a11yTable: Boolean(a11yDist),
       },
       heatmap: {
-        found: Boolean(heatAxis),
-        text: (heatAxis?.textContent ?? "").replace(/\s+/g, " ").trim(),
-        hasValueAxis: Boolean(heatAxis) && (heatAxis?.textContent ?? "").includes("0%"),
+        // Honest scale lives in the legend (bar = failure rate 0–100%)
+        legendFound: Boolean(legend),
+        legendText,
+        hasHonestScale: /0\s*[–—-]\s*100%|0–100%|0-100%/.test(legendText),
+        truncText: (trunc?.textContent ?? meta?.textContent ?? "").replace(/\s+/g, " ").trim(),
+        a11yTable: Boolean(a11yHeat),
+        zeroBarsOk: zeroBars.length === 0 || zeroBars.every((b) => b === "0%"),
+        lowCellCount: lowKinds,
+        lowInkDistinct,
       },
     };
   });
 }
 
 /**
- * Issue-358 merge gates.
+ * Rendered-px table across several board widths (headline proof).
+ * @param {import('playwright-core').Page} page
+ * @param {string} baseUrl
+ */
+async function measureRenderedPxTable(page, baseUrl) {
+  /** @type {Array<object>} */
+  const rows = [];
+  for (const vp of EXTRA_VIEWPORTS) {
+    await page.setViewportSize({ width: vp.width, height: vp.height });
+    await goMetrics(page, baseUrl);
+    await page
+      .waitForSelector('[data-testid="metrics-dist-plot"]', { timeout: 12_000 })
+      .catch(() => undefined);
+    await page.evaluate(() => document.fonts.ready);
+    const labels = await measureChartLabels(page);
+    const table = await page.evaluate(() => {
+      const wrap = document.querySelector('[data-testid="metrics-table-scroll"] .pc-metrics__table-wrap');
+      const tableEl = document.querySelector('[data-testid="metrics-table"]');
+      if (!wrap || !tableEl) return { found: false };
+      const ths = [...tableEl.querySelectorAll("thead th")].map((th) => {
+        const cs = getComputedStyle(th);
+        return {
+          text: (th.textContent ?? "").replace(/\s+/g, " ").trim(),
+          display: cs.display,
+          visible: cs.display !== "none" && cs.visibility !== "hidden",
+        };
+      });
+      return {
+        found: true,
+        scrollWidth: wrap.scrollWidth,
+        clientWidth: wrap.clientWidth,
+        overflowX: wrap.scrollWidth > wrap.clientWidth + 1,
+        visibleHeaders: ths.filter((t) => t.visible).map((t) => t.text),
+        hiddenHeaders: ths.filter((t) => !t.visible).map((t) => t.text),
+      };
+    });
+    rows.push({
+      name: vp.name,
+      width: vp.width,
+      minRenderedPx: labels.minRenderedPx,
+      minDeclaredPx: labels.minDeclaredPx,
+      allRenderedAtLeast11: labels.allRenderedAtLeast11,
+      allRenderedAtLeast9: labels.allRenderedAtLeast9,
+      distRowHeights: labels.distRowHeights,
+      distRowsInBand: labels.distRowsInBand,
+      table,
+    });
+  }
+  return rows;
+}
+
+/**
+ * Issue-358 merge gates — uses rendered-px math, not declared user-space alone.
  * @param {object} _entry
  * @param {object} ledger
  */
@@ -432,17 +590,70 @@ export function metricsBoardGates(_entry, ledger) {
   if (!demo.headline?.boardScroll?.shell?.noHorizontalScroll) {
     throw new Error("metrics-board: board H-scroll at 1280 not clear");
   }
-  if (!demo.chartLabels?.allAtLeast11) {
+
+  // REQUIRED 1 — rendered px ≥ 11 (HTML labels; no SVG scale trap)
+  const labels = demo.chartLabels;
+  if (!labels?.allRenderedAtLeast11 && !labels?.allAtLeast11) {
     throw new Error(
-      `metrics-board: chart labels under 11px: min=${demo.chartLabels?.minFontSize}`,
+      `metrics-board: chart labels under 11px rendered: minRendered=${labels?.minRenderedPx}`,
     );
   }
+  if (labels?.distRowsInBand === false) {
+    throw new Error(
+      `metrics-board: dist rows outside 24–30px band: ${JSON.stringify(labels.distRowHeights)}`,
+    );
+  }
+  const rpTable = demo.renderedPxTable;
+  if (!Array.isArray(rpTable) || rpTable.length < 5) {
+    throw new Error("metrics-board: missing renderedPxTable across viewports");
+  }
+  for (const row of rpTable) {
+    if (row.allRenderedAtLeast11 === false) {
+      throw new Error(
+        `metrics-board: rendered px < 11 at ${row.name} (${row.width}): min=${row.minRenderedPx}`,
+      );
+    }
+    if (row.distRowsInBand === false) {
+      throw new Error(
+        `metrics-board: dist row heights out of band at ${row.name}: ${JSON.stringify(row.distRowHeights)}`,
+      );
+    }
+  }
+
   if (!demo.axes?.distribution?.hasValueAxis) {
     throw new Error("metrics-board: distribution missing value axis");
   }
-  if (!demo.axes?.heatmap?.hasValueAxis) {
-    throw new Error("metrics-board: heatmap missing value axis");
+  if (!demo.axes?.heatmap?.hasHonestScale) {
+    throw new Error("metrics-board: heatmap missing honest 0–100% scale in legend");
   }
+  if (!demo.axes?.distribution?.a11yTable || !demo.axes?.heatmap?.a11yTable) {
+    throw new Error("metrics-board: missing visually-hidden data tables");
+  }
+  if (demo.axes?.heatmap?.zeroBarsOk === false) {
+    throw new Error("metrics-board: zero-rate cells draw a non-zero bar");
+  }
+  if (demo.axes?.heatmap?.lowInkDistinct?.checked && !demo.axes.heatmap.lowInkDistinct.distinct) {
+    throw new Error("metrics-board: low-sample ink identical to no-sample");
+  }
+
+  // REQUIRED 2 — truncation disclosure when many groups
+  if (demo.heatmapTruncation && !demo.heatmapTruncation.disclosed) {
+    throw new Error("metrics-board: heatmap truncation not disclosed");
+  }
+
+  // REQUIRED 7 — at 1280, no silent mid-header clip of primary columns
+  const t1280 = rpTable.find((r) => r.name === "1280")?.table;
+  if (t1280?.found) {
+    const vis = (t1280.visibleHeaders ?? []).join(" ").toLowerCase();
+    if (!vis.includes("success") || !vis.includes("eval")) {
+      throw new Error(`metrics-board: 1280 lost primary columns: ${vis}`);
+    }
+    // Dropped columns must not appear mid-clipped — either hidden or fully scrollable with cue
+    if (t1280.overflowX && !(demo.tableCue?.fadePresent || demo.tableCue?.scrollbar)) {
+      throw new Error("metrics-board: table overflows without visible cue");
+    }
+  }
+
   if (!demo.honesty?.empty || !demo.honesty?.error || !demo.honesty?.loading) {
     throw new Error("metrics-board: missing honesty state proofs");
   }
@@ -586,21 +797,23 @@ export async function runMetricsBoardDemo() {
     // ── Populated charts via intercept ───────────────────────────────
     setMetricsJson(populatedMetricsBody());
     setRunMetricsJson(populatedRunMetricsBody());
-    await goMetricsWait(session.page, session.url, "metrics-dist-svg");
-    await session.page.waitForSelector('[data-testid="metrics-dist-svg"]', {
-      timeout: 10_000,
-    });
+    await goMetricsWait(session.page, session.url, "metrics-dist-plot");
     await session.page.waitForSelector('[data-testid="metrics-heat-grid"]', {
       timeout: 10_000,
     });
 
     // Contrast on chart labels (composited stack)
     const contrast = {
-      distAxis: await measureContrast(session.page, ".pc-metrics__dist-axis"),
       distLabel: await measureContrast(session.page, ".pc-metrics__dist-label"),
+      distDelta: await measureContrast(session.page, ".pc-metrics__dist-delta"),
+      distTick: await measureContrast(session.page, ".pc-metrics__dist-tick-label"),
       heatCol: await measureContrast(session.page, ".pc-metrics__heat-col"),
       heatRow: await measureContrast(session.page, ".pc-metrics__heat-row-label"),
       heatCell: await measureContrast(session.page, ".pc-metrics__heat-cell-label"),
+      heatLow: await measureContrast(
+        session.page,
+        ".pc-metrics__heat-cell--low .pc-metrics__heat-cell-label, .pc-metrics__heat-cell--low-suspect .pc-metrics__heat-cell-label",
+      ),
       panelTitle: await measureContrast(session.page, ".pc-metrics__panel-title"),
       tableName: await measureContrast(session.page, ".pc-metrics__cell-name"),
     };
@@ -633,7 +846,7 @@ export async function runMetricsBoardDemo() {
     });
     // Back to vendor for viewport shots
     await session.page.click('[data-testid="metrics-dim-vendor"]');
-    await session.page.waitForSelector('[data-testid="metrics-dist-svg"]', {
+    await session.page.waitForSelector('[data-testid="metrics-dist-plot"]', {
       timeout: 10_000,
     });
 
@@ -646,24 +859,52 @@ export async function runMetricsBoardDemo() {
       shotPrefix: DEMO,
       targets: METRICS_SELECTORS,
       beforeMeasure: async () => {
-        // Routes persist; ensure metrics painted.
         await session.page.waitForSelector('[data-testid="screen-metrics"]', {
           timeout: 10_000,
         });
-        // If intercept still active, wait for chart
         await session.page
-          .waitForSelector('[data-testid="metrics-dist-svg"]', { timeout: 8_000 })
+          .waitForSelector('[data-testid="metrics-dist-plot"]', { timeout: 8_000 })
           .catch(() => undefined);
       },
     });
+
+    // Headline: rendered-px table across 1280/1361/1366/1460/1700/1920
+    const renderedPxTable = await measureRenderedPxTable(session.page, session.url);
 
     // Board scroll at 1280
     await session.page.setViewportSize({ width: 1280, height: 900 });
     await goMetrics(session.page, session.url);
     await session.page
-      .waitForSelector('[data-testid="metrics-dist-svg"]', { timeout: 8_000 })
+      .waitForSelector('[data-testid="metrics-dist-plot"]', { timeout: 8_000 })
       .catch(() => undefined);
     const boardScroll = await measureBoardScroll(session.page);
+    const tableCue = await session.page.evaluate(() => {
+      const fade = document.querySelector('[data-testid="metrics-table-fade"]');
+      const wrap = document.querySelector(
+        '[data-testid="metrics-table-scroll"] .pc-metrics__table-wrap',
+      );
+      const ths = [...document.querySelectorAll('[data-testid="metrics-table"] thead th')].map(
+        (th) => {
+          const cs = getComputedStyle(th);
+          return {
+            text: (th.textContent ?? "").replace(/\s+/g, " ").trim(),
+            display: cs.display,
+          };
+        },
+      );
+      return {
+        fadePresent: Boolean(fade),
+        fadeOpacity: fade ? getComputedStyle(fade).opacity : null,
+        scrollbar: wrap
+          ? getComputedStyle(wrap).scrollbarWidth || "present"
+          : null,
+        headers: ths,
+        primaryVisible: ths
+          .filter((t) => t.display !== "none")
+          .map((t) => t.text)
+          .join(" "),
+      };
+    });
 
     // Long-label truncation sample
     const truncation = await session.page.evaluate(() => {
@@ -683,13 +924,12 @@ export async function runMetricsBoardDemo() {
     // A11y at 1460 populated
     await session.page.setViewportSize({ width: 1460, height: 900 });
     await goMetrics(session.page, session.url);
-    await session.page.waitForSelector('[data-testid="metrics-dist-svg"]', {
+    await session.page.waitForSelector('[data-testid="metrics-dist-plot"]', {
       timeout: 10_000,
     });
     const a11y = await collectA11y(session.page, {
       include: '[data-testid="screen-metrics"]',
     });
-    // Full-shell axe for any chrome regressions while metrics is open
     const axeShell = await runAxe(session.page, {
       include: '[data-testid="shell"]',
     });
@@ -697,7 +937,27 @@ export async function runMetricsBoardDemo() {
       selector: '[data-testid="screen-metrics"]',
     });
 
-    // Neuter proof: break metrics intercept mid-flight → error red → restore
+    // Heatmap truncation disclosure with many groups
+    setMetricsJson(manyGroupsMetricsBody());
+    await goMetricsWait(session.page, session.url, "metrics-heat-trunc");
+    const heatmapTruncation = await session.page.evaluate(() => {
+      const trunc = document.querySelector('[data-testid="metrics-heat-trunc"]');
+      const meta = document.querySelector('[data-testid="metrics-heat-meta"]');
+      const text = (
+        (trunc?.textContent ?? "") +
+        " " +
+        (meta?.textContent ?? "")
+      )
+        .replace(/\s+/g, " ")
+        .trim();
+      return {
+        disclosed: /showing\s+\d+\s+of\s+\d+/i.test(text),
+        text,
+      };
+    });
+    setMetricsJson(populatedMetricsBody());
+
+    // Neuter proof: break metrics intercept → error red → restore
     setMetricsError("neuter: broken wiring");
     await goMetricsWait(session.page, session.url, "metrics-table-error");
     const neuterBroken = await session.page.evaluate(() => ({
@@ -708,29 +968,38 @@ export async function runMetricsBoardDemo() {
       ),
     }));
     setMetricsJson(populatedMetricsBody());
-    await goMetricsWait(session.page, session.url, "metrics-dist-svg");
+    await goMetricsWait(session.page, session.url, "metrics-dist-plot");
     const neuterRestored = await session.page.evaluate(() => ({
-      ready: Boolean(document.querySelector('[data-testid="metrics-dist-svg"]')),
+      ready: Boolean(document.querySelector('[data-testid="metrics-dist-plot"]')),
       error: Boolean(document.querySelector('[data-testid="metrics-error-banner"]')),
     }));
 
-    // Chart label remeasure after restore (headline numbers)
     const chartLabelsFinal = await measureChartLabels(session.page);
     const axesFinal = await measureAxes(session.page);
 
     const proof = {
       kind: "metrics-board",
       description:
-        "Metrics screen: empty default, populated charts via intercept, " +
-        "honesty states, workflow cost column, session scope filter, " +
-        "measured chart axes/labels/contrast at board widths.",
+        "Metrics screen: HTML distribution (no SVG scale), heatmap truncation " +
+        "disclosure, honest legend scale, zero bars, a11y tables, 1280 column " +
+        "density, rendered-px labels ≥11 across 1280–1920.",
       headline: {
         boardScroll,
-        minChartFontPx: chartLabelsFinal.minFontSize,
-        chartLabelsAtLeast11: chartLabelsFinal.allAtLeast11,
+        minRenderedPx: chartLabelsFinal.minRenderedPx,
+        minDeclaredPx: chartLabelsFinal.minDeclaredPx,
+        chartLabelsAtLeast11: chartLabelsFinal.allRenderedAtLeast11,
+        distRowsInBand: chartLabelsFinal.distRowsInBand,
+        distRowHeights: chartLabelsFinal.distRowHeights,
         distributionHasAxis: axesFinal.distribution?.hasValueAxis,
-        heatmapHasAxis: axesFinal.heatmap?.hasValueAxis,
+        heatmapHonestScale: axesFinal.heatmap?.hasHonestScale,
         tickLabels: axesFinal.distribution?.tickLabels,
+        renderedPxByViewport: renderedPxTable.map((r) => ({
+          name: r.name,
+          width: r.width,
+          minRenderedPx: r.minRenderedPx,
+          allRenderedAtLeast11: r.allRenderedAtLeast11,
+          distRowsInBand: r.distRowsInBand,
+        })),
       },
       emptyHonesty,
       sessionScope,
@@ -742,6 +1011,9 @@ export async function runMetricsBoardDemo() {
       },
       axes: axesFinal,
       chartLabels: chartLabelsFinal,
+      renderedPxTable,
+      tableCue,
+      heatmapTruncation,
       contrast,
       comparison,
       workflow,
@@ -760,9 +1032,22 @@ export async function runMetricsBoardDemo() {
     console.log(
       JSON.stringify(
         {
-          minChartFontPx: chartLabelsFinal.minFontSize,
-          allAtLeast11: chartLabelsFinal.allAtLeast11,
-          axes: axesFinal,
+          minRenderedPx: chartLabelsFinal.minRenderedPx,
+          allRenderedAtLeast11: chartLabelsFinal.allRenderedAtLeast11,
+          distRowsInBand: chartLabelsFinal.distRowsInBand,
+          renderedPxTable: proof.headline.renderedPxByViewport,
+          axes: {
+            dist: axesFinal.distribution?.hasValueAxis,
+            heatScale: axesFinal.heatmap?.hasHonestScale,
+            zeroBars: axesFinal.heatmap?.zeroBarsOk,
+            lowInk: axesFinal.heatmap?.lowInkDistinct,
+            a11y: {
+              dist: axesFinal.distribution?.a11yTable,
+              heat: axesFinal.heatmap?.a11yTable,
+            },
+          },
+          heatmapTruncation,
+          tableCue1280: tableCue.primaryVisible,
           boardScroll1280: boardScroll.shell,
           axeViolations: a11y.axe?.violations?.length ?? 0,
         },

@@ -1,6 +1,8 @@
 /**
  * Group metrics table — tasks/runs, success, eval, tokens, duration, below base.
  * Workflow mode adds cost-per-completed-run.
+ * At ≤1360, lower-priority columns drop so no silent mid-header clip.
+ * Horizontal scroll (when needed) uses a visible edge fade + always-on scrollbar.
  */
 import type { GroupRow } from "./project.js";
 import { HonestyPanel, LoadingSkeleton } from "./Honesty.js";
@@ -33,7 +35,9 @@ export function GroupTable({
           by {dimLabel}
         </h2>
         <span className="pc-metrics__panel-meta">
-          {status === "ready" ? `${rows.length} group${rows.length === 1 ? "" : "s"}` : status}
+          {status === "ready"
+            ? `${rows.length} group${rows.length === 1 ? "" : "s"}`
+            : status}
         </span>
       </div>
       <div className="pc-metrics__panel-body">
@@ -59,97 +63,125 @@ export function GroupTable({
             testId="metrics-table-empty"
           />
         ) : (
-          <div className="pc-metrics__table-wrap">
-            <table
-              className={`pc-metrics__table${workflow ? " pc-metrics__table--workflow" : ""}`}
-              data-testid="metrics-table"
-            >
-              <thead>
-                <tr>
-                  <th scope="col" style={{ width: "16%" }}>
-                    {dimLabel}
-                  </th>
-                  <th scope="col" data-align="right" style={{ width: "7%" }}>
-                    {workflow ? "runs" : "tasks"}
-                  </th>
-                  <th scope="col" style={{ width: "16%" }}>
-                    success
-                  </th>
-                  <th scope="col" style={{ width: "14%" }}>
-                    eval avg
-                  </th>
-                  <th scope="col" data-align="right" style={{ width: "18%" }}>
-                    tokens in ▸ out ▸ cached
-                  </th>
-                  <th scope="col" data-align="right" style={{ width: "12%" }}>
-                    avg · p95
-                  </th>
-                  <th scope="col" data-align="right" style={{ width: "9%" }}>
-                    below base
-                  </th>
-                  {workflow ? (
-                    <th scope="col" data-align="right" style={{ width: "10%" }}>
-                      cost / done
+          <div className="pc-metrics__table-scroll" data-testid="metrics-table-scroll">
+            <div className="pc-metrics__table-wrap">
+              <table
+                className={`pc-metrics__table${workflow ? " pc-metrics__table--workflow" : ""}`}
+                data-testid="metrics-table"
+              >
+                <thead>
+                  <tr>
+                    <th scope="col" className="pc-metrics__th-name">
+                      {dimLabel}
                     </th>
-                  ) : null}
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((row) => (
-                  <tr key={row.key ?? "(unset)"} data-testid="metrics-table-row">
-                    <td>
-                      <span className="pc-metrics__cell-name" title={row.label}>
-                        {row.label}
-                      </span>
-                    </td>
-                    <td data-align="right">
-                      <span className="pc-metrics__cell-data">{row.count}</span>
-                    </td>
-                    <td>
-                      <div className="pc-metrics__success">
-                        <div className="pc-metrics__success-track" aria-hidden="true">
-                          <div
-                            className={`pc-metrics__success-fill pc-metrics__success-fill--${row.successTone}`}
-                            style={{ width: row.successWidth }}
-                          />
-                        </div>
-                        <span className="pc-metrics__success-label">{row.successLabel}</span>
-                      </div>
-                    </td>
-                    <td>
-                      <span
-                        className={`pc-metrics__cell-data pc-metrics__cell-data--${row.evalTone}`}
-                        title={row.evalLabel}
-                      >
-                        {row.evalLabel}
-                      </span>
-                    </td>
-                    <td data-align="right">
-                      <span className="pc-metrics__cell-data" title={row.tokensLabel}>
-                        {row.tokensLabel}
-                      </span>
-                    </td>
-                    <td data-align="right">
-                      <span className="pc-metrics__cell-data">{row.durationLabel}</span>
-                    </td>
-                    <td data-align="right">
-                      <span
-                        className={`pc-metrics__cell-data pc-metrics__cell-data--${row.belowTone}`}
-                      >
-                        {row.belowLabel}
-                      </span>
-                    </td>
+                    <th scope="col" data-align="right" className="pc-metrics__th-count">
+                      {workflow ? "runs" : "tasks"}
+                    </th>
+                    <th scope="col" className="pc-metrics__th-success">
+                      success
+                    </th>
+                    <th scope="col" className="pc-metrics__th-eval">
+                      eval avg
+                    </th>
+                    <th
+                      scope="col"
+                      data-align="right"
+                      className="pc-metrics__th-tokens"
+                    >
+                      tokens in ▸ out ▸ cached
+                    </th>
+                    <th
+                      scope="col"
+                      data-align="right"
+                      className="pc-metrics__th-dur"
+                    >
+                      avg · p95
+                    </th>
+                    <th
+                      scope="col"
+                      data-align="right"
+                      className="pc-metrics__th-below"
+                    >
+                      below base
+                    </th>
                     {workflow ? (
-                      <td data-align="right">
-                        <span className="pc-metrics__cell-data" title="tokens per completed run">
-                          {row.costLabel}
-                        </span>
-                      </td>
+                      <th
+                        scope="col"
+                        data-align="right"
+                        className="pc-metrics__th-cost"
+                      >
+                        cost / done
+                      </th>
                     ) : null}
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {rows.map((row) => (
+                    <tr key={row.key ?? "(unset)"} data-testid="metrics-table-row">
+                      <td className="pc-metrics__td-name">
+                        <span className="pc-metrics__cell-name" title={row.label}>
+                          {row.label}
+                        </span>
+                      </td>
+                      <td data-align="right" className="pc-metrics__td-count">
+                        <span className="pc-metrics__cell-data">{row.count}</span>
+                      </td>
+                      <td className="pc-metrics__td-success">
+                        <div className="pc-metrics__success">
+                          <div className="pc-metrics__success-track" aria-hidden="true">
+                            <div
+                              className={`pc-metrics__success-fill pc-metrics__success-fill--${row.successTone}`}
+                              style={{ width: row.successWidth }}
+                            />
+                          </div>
+                          <span className="pc-metrics__success-label">
+                            {row.successLabel}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="pc-metrics__td-eval">
+                        <span
+                          className={`pc-metrics__cell-data pc-metrics__cell-data--${row.evalTone}`}
+                          title={row.evalTitle}
+                        >
+                          {row.evalLabel}
+                        </span>
+                      </td>
+                      <td data-align="right" className="pc-metrics__td-tokens">
+                        <span className="pc-metrics__cell-data" title={row.tokensLabel}>
+                          {row.tokensLabel}
+                        </span>
+                      </td>
+                      <td data-align="right" className="pc-metrics__td-dur">
+                        <span className="pc-metrics__cell-data">{row.durationLabel}</span>
+                      </td>
+                      <td data-align="right" className="pc-metrics__td-below">
+                        <span
+                          className={`pc-metrics__cell-data pc-metrics__cell-data--${row.belowTone}`}
+                        >
+                          {row.belowLabel}
+                        </span>
+                      </td>
+                      {workflow ? (
+                        <td data-align="right" className="pc-metrics__td-cost">
+                          <span
+                            className="pc-metrics__cell-data"
+                            title="tokens per completed run"
+                          >
+                            {row.costLabel}
+                          </span>
+                        </td>
+                      ) : null}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div
+              className="pc-metrics__table-fade"
+              aria-hidden="true"
+              data-testid="metrics-table-fade"
+            />
           </div>
         )}
       </div>
