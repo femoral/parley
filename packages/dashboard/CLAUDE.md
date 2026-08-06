@@ -1,12 +1,29 @@
-# @useparley/dashboard — isolation guard
+# @useparley/dashboard — Parley Console
 
 This package is **Parley Console** (product register). It must never import from
 `packages/ui` (@useparley/ui / Parley Cove) and Cove must never import from here.
 
 The two-register wall is mechanical: ESLint `no-restricted-imports` bans both
-directions. Full design-context text (PRODUCT.md, DESIGN.md, agent notes) lands
-with the design-context move ticket; until then design source of truth is
-`docs/design/parley-console/`.
+directions.
+
+## Design context (this package only)
+
+Read these when doing Console UI work:
+
+- `docs/design/PRODUCT.md` — register, users, positioning, principles, quality bar
+- `docs/design/DESIGN.md` — visual system (tokens, type, layout, chrome)
+- `docs/design/coverage-audit.md` — mock vs daemon surface matrix
+- `docs/design/wire-verification.md` — invented mock elements vs wire
+- `docs/design/Parley Console.dc.html` (+ `support.js`, `uploads/`) — frozen design export
+
+Design ADRs for this package, if any, live under `docs/adr/` inside this package
+(not root `docs/adr/`).
+
+## Isolation
+
+**Do not read** `packages/ui` design docs (`PRODUCT.md`, `DESIGN.md`, or any
+Cove design context). Contamination of tone, vocabulary, or visual system across
+registers is a defect.
 
 Do not:
 

@@ -1,9 +1,9 @@
 # Design System: Parley Console
 
-Draft direction contract for `@useparley/dashboard` (wayfinder map #337, ticket #342).
-Moves to `packages/dashboard/DESIGN.md` when the package skeleton lands. Token values
-are taken from the source mock (`Parley Console.dc.html`); the build must express them
-as CSS custom properties, not hex literals in components.
+Direction contract for `@useparley/dashboard` (wayfinder map #337, ticket #342).
+Lives with the Console design register under `packages/dashboard/docs/design/`.
+Token values are taken from the source mock (`Parley Console.dc.html`); the build
+must express them as CSS custom properties, not hex literals in components.
 
 ## Overview
 

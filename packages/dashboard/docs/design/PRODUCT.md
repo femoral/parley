@@ -1,7 +1,7 @@
 # Product
 
-Draft direction contract for `@useparley/dashboard` (wayfinder map #337, ticket #342).
-Moves to `packages/dashboard/PRODUCT.md` when the package skeleton lands.
+Direction contract for `@useparley/dashboard` (wayfinder map #337, ticket #342).
+Lives with the Console design register under `packages/dashboard/docs/design/`.
 
 ## Register
 
