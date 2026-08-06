@@ -28,6 +28,9 @@ export default tseslint.config(
   {
     // Two-register wall (#341 / #347): Console must never import Cove and
     // Cove must never import Console. Enforced mechanically both directions.
+    // Patterns match the import SPECIFIER string (not the resolved path), so
+    // relative walks like `../../ui/src/main.js` need `**/ui/**`-style globs
+    // in addition to bare `@useparley/*` / `**/packages/*` forms.
     files: ["packages/dashboard/**/*.{ts,tsx,js,jsx,mjs,cjs}"],
     rules: {
       "no-restricted-imports": [
@@ -43,7 +46,17 @@ export default tseslint.config(
           ],
           patterns: [
             {
-              group: ["**/packages/ui/**", "**/packages/ui", "@useparley/ui/*"],
+              group: [
+                "@useparley/ui/*",
+                "**/packages/ui",
+                "**/packages/ui/**",
+                // Relative: ../../ui/src/main.js, ../ui/x, etc.
+                "**/ui",
+                "**/ui/**",
+                "*../ui",
+                "*../ui/*",
+                "*../ui/**",
+              ],
               message:
                 "Parley Console must not import from packages/ui. " +
                 "The two-register wall is absolute.",
@@ -70,9 +83,15 @@ export default tseslint.config(
           patterns: [
             {
               group: [
-                "**/packages/dashboard/**",
-                "**/packages/dashboard",
                 "@useparley/dashboard/*",
+                "**/packages/dashboard",
+                "**/packages/dashboard/**",
+                // Relative: ../../dashboard/src/Shell.js, ../dashboard/x, etc.
+                "**/dashboard",
+                "**/dashboard/**",
+                "*../dashboard",
+                "*../dashboard/*",
+                "*../dashboard/**",
               ],
               message:
                 "Parley Cove must not import from packages/dashboard. " +
