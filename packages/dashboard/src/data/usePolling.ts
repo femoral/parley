@@ -19,6 +19,12 @@ export interface UsePollingOptions {
    * Default true (matches health/runners cadence).
    */
   immediate?: boolean;
+  /**
+   * When this changes while enabled, the poll chain restarts (immediate tick
+   * if `immediate` is true). Use for identity switches (task id, etc.) that
+   * must not wait for the next interval.
+   */
+  resetKey?: string | number | boolean | null;
 }
 
 /**
@@ -29,7 +35,7 @@ export function usePolling(
   tick: () => void | Promise<void>,
   options: UsePollingOptions,
 ): void {
-  const { intervalMs, enabled = true, immediate = true } = options;
+  const { intervalMs, enabled = true, immediate = true, resetKey } = options;
   const tickRef = useRef(tick);
   tickRef.current = tick;
 
@@ -56,8 +62,11 @@ export function usePolling(
       if (!isDocumentHidden()) void poll();
     };
 
-    if (immediate) void poll();
-    else if (!isDocumentHidden()) {
+    // Same visibility guard as the delayed branch — catch-up happens on
+    // visibilitychange when the tab was hidden at mount / reset.
+    if (immediate) {
+      if (!isDocumentHidden()) void poll();
+    } else if (!isDocumentHidden()) {
       timer = setTimeout(() => void poll(), intervalMs);
     }
 
@@ -72,5 +81,5 @@ export function usePolling(
         document.removeEventListener("visibilitychange", onVisibility);
       }
     };
-  }, [intervalMs, enabled, immediate]);
+  }, [intervalMs, enabled, immediate, resetKey]);
 }

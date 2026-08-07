@@ -20,11 +20,6 @@ export function stateColor(state: string): string {
   return STATE_COLOR[state] ?? "var(--text-3)";
 }
 
-export function stateLabel(state: string): string {
-  if (state === "awaiting_answer") return "AWAITING";
-  return state.replace(/_/g, " ").toUpperCase();
-}
-
 /** Harness coat token by vendor name. */
 export function coatVar(vendor: string | null | undefined): string {
   const v = (vendor ?? "").toLowerCase();

@@ -26,7 +26,7 @@ import {
   type LogTailStatus,
   type PanelStatus,
 } from "../../data/index.js";
-import { CopyScaffold, Panel, StateChip } from "../../components/index.js";
+import { CopyScaffold, Panel, StateChip, stateLabel } from "../../components/index.js";
 import {
   coatVar,
   evalScoreColor,
@@ -44,7 +44,6 @@ import {
   logTextColor,
   outcomeColor,
   stateColor,
-  stateLabel,
   tailStatusColor,
   tailStatusLabel,
 } from "./format.js";

@@ -1,6 +1,9 @@
 /**
  * Fetch `GET /tasks/:ref` for the task screen (qa/eval/attempts companions).
  * Polls while live; stops at terminal. Visibility-gated via usePolling.
+ *
+ * Task-id changes always restart the poll chain (resetKey) so a live→live
+ * switch does not sit on status "loading" until the previous interval elapses.
  */
 import { useCallback, useEffect, useState } from "react";
 import { isTerminalState, type ParleyClient } from "@useparley/core";
@@ -50,7 +53,13 @@ export function useTaskDetail(
     }
   }, [client, taskId]);
 
-  usePolling(tick, { intervalMs: pollMs, enabled: pollEnabled && Boolean(taskId) });
+  // resetKey: taskId — restarts the chain on identity change even when
+  // enabled was already true (non-terminal → non-terminal switch).
+  usePolling(tick, {
+    intervalMs: pollMs,
+    enabled: pollEnabled && Boolean(taskId),
+    resetKey: taskId,
+  });
 
   return state;
 }

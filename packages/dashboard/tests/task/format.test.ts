@@ -1,10 +1,10 @@
 /** @vitest-environment happy-dom */
 import { describe, expect, it } from "vitest";
+import { stateLabel } from "../../src/components/index.js";
 import {
   formatDuration,
   formatEvalScore,
   formatUsage,
-  stateLabel,
   tailStatusLabel,
 } from "../../src/screens/task/format.js";
 import {
@@ -16,9 +16,11 @@ import { formatChurn, projectReportFiles } from "../../src/data/index.js";
 import { churnReport, pathOnlyReport } from "./fixtures.js";
 
 describe("task format helpers", () => {
-  it("labels awaiting_answer as AWAITING", () => {
+  it("shared stateLabel matches fleet chip labels (DONE / CANCEL)", () => {
     expect(stateLabel("awaiting_answer")).toBe("AWAITING");
     expect(stateLabel("failed")).toBe("FAILED");
+    expect(stateLabel("completed")).toBe("DONE");
+    expect(stateLabel("cancelled")).toBe("CANCEL");
   });
 
   it("formats duration and usage", () => {

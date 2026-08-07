@@ -1,12 +1,17 @@
 /**
  * Dependency-free CSS token lint for Parley Console (#367).
  *
- * Fails when screen/chrome CSS under packages/dashboard/src contains:
+ * Fails when screen/chrome CSS under a source root contains:
  *   - literal `font:` shorthands (must be `font: var(--type-*)`)
  *   - hard-coded hex colors (must live only in tokens.css)
  *
  * tokens.css is the only file allowed to declare hex color values.
- * Usage: node packages/dashboard/scripts/lint-tokens.mjs
+ *
+ * Usage:
+ *   node packages/dashboard/scripts/lint-tokens.mjs
+ *   node packages/dashboard/scripts/lint-tokens.mjs --root /path/to/src
+ *   LINT_TOKENS_ROOT=/path/to/src node …/lint-tokens.mjs
+ *
  * Exit 0 = clean; exit 1 = violations listed on stderr.
  */
 import fs from "node:fs";
@@ -14,12 +19,23 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const srcRoot = path.resolve(__dirname, "../src");
+const defaultRoot = path.resolve(__dirname, "../src");
 const tokensName = "tokens.css";
 
 /** font: property whose value is not a single var(--…) token. */
 const FONT_DECL = /(^|[{;\s])font\s*:\s*([^;]+)/g;
 const HEX = /#[0-9a-fA-F]{3,8}\b/g;
+
+function resolveRoot(argv = process.argv.slice(2), env = process.env) {
+  const flagIdx = argv.indexOf("--root");
+  if (flagIdx !== -1 && argv[flagIdx + 1]) {
+    return path.resolve(argv[flagIdx + 1]);
+  }
+  const eq = argv.find((a) => a.startsWith("--root="));
+  if (eq) return path.resolve(eq.slice("--root=".length));
+  if (env.LINT_TOKENS_ROOT) return path.resolve(env.LINT_TOKENS_ROOT);
+  return defaultRoot;
+}
 
 function walk(dir, out = []) {
   for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -38,7 +54,7 @@ function stripComments(src) {
   });
 }
 
-function lintFile(file) {
+function lintFile(file, srcRoot) {
   const rel = path.relative(srcRoot, file);
   if (path.basename(file) === tokensName) return [];
 
@@ -78,17 +94,32 @@ function lintFile(file) {
   return hits;
 }
 
-const files = walk(srcRoot);
-const violations = files.flatMap(lintFile);
-
-if (violations.length > 0) {
-  console.error(
-    `lint-tokens: ${violations.length} violation(s) — use tokens.css vars only outside tokens.css\n`,
-  );
-  for (const v of violations) {
-    console.error(`  ${v.file}:${v.line} [${v.kind}] ${v.text}`);
+export function lintTokens(srcRoot) {
+  if (!fs.existsSync(srcRoot)) {
+    return { files: 0, violations: [{ file: srcRoot, line: 0, kind: "missing-root", text: "source root does not exist" }] };
   }
-  process.exit(1);
+  const files = walk(srcRoot);
+  const violations = files.flatMap((f) => lintFile(f, srcRoot));
+  return { files: files.length, violations };
 }
 
-console.log(`lint-tokens: ok (${files.length} css files scanned)`);
+const isMain =
+  process.argv[1] &&
+  path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+
+if (isMain) {
+  const srcRoot = resolveRoot();
+  const { files, violations } = lintTokens(srcRoot);
+
+  if (violations.length > 0) {
+    console.error(
+      `lint-tokens: ${violations.length} violation(s) — use tokens.css vars only outside tokens.css\n`,
+    );
+    for (const v of violations) {
+      console.error(`  ${v.file}:${v.line} [${v.kind}] ${v.text}`);
+    }
+    process.exit(1);
+  }
+
+  console.log(`lint-tokens: ok (${files} css files scanned)`);
+}
