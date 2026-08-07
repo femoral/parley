@@ -52,10 +52,10 @@ system's job is to make density legible and attention unmissable.
 | State | Hex | | State | Hex |
 | --- | --- | --- | --- | --- |
 | pending | `#8b96a2` | | stalled | `#7f9bb0` |
-| queued | `#7b8894` | | completed | `#5d8ca8` |
-| running | `#43b98c` | | failed | `#d9534a` |
-| awaiting_answer / gate | `#e0a02e` | | cancelled | `#7f8790` |
-| eval-good | `#3ea99c` | | eval-poor | `#c4707f` |
+| queued | `#828e99` | | completed | `#6592ac` |
+| running | `#43b98c` | | failed | `#e4726a` |
+| awaiting_answer / gate | `#e0a02e` | | cancelled | `#858d96` |
+| eval-good | `#3ea99c` | | eval-poor | `#d08898` |
 
 State chip pattern: square 7px dot + uppercase mono label, border `<state>44`,
 ground `<state>14`. Attention order (sorting, legend): awaiting_answer, stalled,

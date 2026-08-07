@@ -1,7 +1,13 @@
 /**
  * WCAG 2.1 contrast against the *composited* stack (not token hex alone).
  * Samples getComputedStyle color + walks ancestors for opaque backgrounds.
+ *
+ * Also hosts the pure token-pair contrast gate (#364): every state ink on every
+ * surface-ladder ground (incl. hover/selected/raised) must clear 4.5:1.
  */
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 /**
  * @param {string} color css color (rgb/rgba)
@@ -14,6 +20,26 @@ export function parseCssColor(color) {
   );
   if (!m) return null;
   return [Number(m[1]), Number(m[2]), Number(m[3]), m[4] !== undefined ? Number(m[4]) : 1];
+}
+
+/** Parse #rgb / #rrggbb into [r,g,b]. */
+export function parseHex(hex) {
+  const h = hex.replace(/^#/, "").trim();
+  if (h.length === 3) {
+    return [
+      parseInt(h[0] + h[0], 16),
+      parseInt(h[1] + h[1], 16),
+      parseInt(h[2] + h[2], 16),
+    ];
+  }
+  if (h.length === 6 || h.length === 8) {
+    return [
+      parseInt(h.slice(0, 2), 16),
+      parseInt(h.slice(2, 4), 16),
+      parseInt(h.slice(4, 6), 16),
+    ];
+  }
+  return null;
 }
 
 /** Relative luminance (sRGB). */
@@ -31,6 +57,158 @@ export function contrastRatio(fg, bg) {
   const lighter = Math.max(L1, L2);
   const darker = Math.min(L1, L2);
   return (lighter + 0.05) / (darker + 0.05);
+}
+
+/** Surface ladder grounds that status inks sit on (incl. hover/selected/raised). */
+export const CONTRAST_GROUNDS = {
+  ground: "--ground",
+  well: "--well",
+  "surface-sunken": "--surface-sunken",
+  surface: "--surface",
+  "surface-raised": "--surface-raised",
+  "surface-hover": "--surface-hover",
+  "surface-soft": "--surface-soft",
+  "surface-active": "--surface-active",
+};
+
+/** Status inks that must clear AA on every ground (#364). */
+export const CONTRAST_STATE_INKS = {
+  pending: "--state-pending",
+  queued: "--state-queued",
+  running: "--state-running",
+  awaiting: "--state-awaiting",
+  stalled: "--state-stalled",
+  completed: "--state-completed",
+  failed: "--state-failed",
+  cancelled: "--state-cancelled",
+  "eval-good": "--state-eval-good",
+  "eval-poor": "--state-eval-poor",
+};
+
+/**
+ * Read a custom property hex from tokens.css (source of truth).
+ * @param {string} [tokensPath]
+ * @returns {Record<string, string>} varName → #hex
+ */
+export function readTokenHexMap(tokensPath) {
+  const resolved =
+    tokensPath ??
+    path.resolve(
+      path.dirname(fileURLToPath(import.meta.url)),
+      "../../src/tokens.css",
+    );
+  const src = fs.readFileSync(resolved, "utf8");
+  /** @type {Record<string, string>} */
+  const map = {};
+  const re = /(--[\w-]+)\s*:\s*(#[0-9a-fA-F]{3,8})\b/g;
+  let m;
+  while ((m = re.exec(src)) !== null) {
+    map[m[1]] = m[2].toLowerCase();
+  }
+  return map;
+}
+
+/**
+ * Compute every state-ink × ground pairing ratio.
+ * @param {Record<string, string>} [tokenMap]
+ * @returns {Array<{ ink: string, ground: string, inkHex: string, groundHex: string, ratio: number, ok: boolean }>}
+ */
+export function measureStateInkGroundPairings(tokenMap) {
+  const tokens = tokenMap ?? readTokenHexMap();
+  /** @type {Array<{ ink: string, ground: string, inkHex: string, groundHex: string, ratio: number, ok: boolean }>} */
+  const rows = [];
+  for (const [inkName, inkVar] of Object.entries(CONTRAST_STATE_INKS)) {
+    const inkHex = tokens[inkVar];
+    if (!inkHex) {
+      rows.push({
+        ink: inkName,
+        ground: "?",
+        inkHex: "",
+        groundHex: "",
+        ratio: 0,
+        ok: false,
+      });
+      continue;
+    }
+    const fg = parseHex(inkHex);
+    if (!fg) {
+      rows.push({
+        ink: inkName,
+        ground: "?",
+        inkHex,
+        groundHex: "",
+        ratio: 0,
+        ok: false,
+      });
+      continue;
+    }
+    for (const [groundName, groundVar] of Object.entries(CONTRAST_GROUNDS)) {
+      const groundHex = tokens[groundVar];
+      if (!groundHex) {
+        rows.push({
+          ink: inkName,
+          ground: groundName,
+          inkHex,
+          groundHex: "",
+          ratio: 0,
+          ok: false,
+        });
+        continue;
+      }
+      const bg = parseHex(groundHex);
+      if (!bg) {
+        rows.push({
+          ink: inkName,
+          ground: groundName,
+          inkHex,
+          groundHex,
+          ratio: 0,
+          ok: false,
+        });
+        continue;
+      }
+      const ratio = contrastRatio(fg, bg);
+      rows.push({
+        ink: inkName,
+        ground: groundName,
+        inkHex,
+        groundHex,
+        ratio: Math.round(ratio * 100) / 100,
+        ok: ratio >= 4.5,
+      });
+    }
+  }
+  return rows;
+}
+
+/**
+ * Gate: every state-ink/ground pairing ≥ 4.5:1.
+ * Throws with the failing pairs listed — demonstrably fails if tokens regress
+ * (neuter: set --state-failed back to #d9534a; fails on surface-soft / surface-active).
+ * @param {object} [opts]
+ * @param {string} [opts.tokensPath]
+ * @param {number} [opts.minRatio]
+ * @returns {{ ok: true, pairings: number, worst: object }}
+ */
+export function assertStateInkGroundContrast(opts = {}) {
+  const minRatio = opts.minRatio ?? 4.5;
+  const rows = measureStateInkGroundPairings(
+    opts.tokensPath ? readTokenHexMap(opts.tokensPath) : undefined,
+  );
+  const fails = rows.filter((r) => !r.ok || r.ratio < minRatio);
+  if (fails.length > 0) {
+    const detail = fails
+      .map(
+        (f) =>
+          `${f.ink}(${f.inkHex}) on ${f.ground}(${f.groundHex}) = ${f.ratio}:1`,
+      )
+      .join("; ");
+    throw new Error(
+      `state-ink contrast gate: ${fails.length} pairing(s) below ${minRatio}:1 — ${detail}`,
+    );
+  }
+  const worst = rows.reduce((a, b) => (a.ratio <= b.ratio ? a : b), rows[0]);
+  return { ok: true, pairings: rows.length, worst };
 }
 
 /**

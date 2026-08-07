@@ -27,17 +27,25 @@
   top: 0;
   left: 0;
   display: flex;
+  flex-wrap: wrap;
   gap: 4px;
   padding: 4px;
+  /* Do not clip focused skip-link labels (#364). */
+  overflow: visible;
+  max-width: none;
 }
 
 .pc-skip__link {
   position: absolute;
+  /* Off-screen until focused — keep full intrinsic size so focus expand is reliable. */
   left: -10000px;
   top: auto;
-  width: 1px;
-  height: 1px;
+  width: auto;
+  height: auto;
+  max-width: none;
   overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  clip-path: inset(50%);
   background: var(--surface-raised);
   color: var(--text);
   border: 1px solid var(--border-strong);
@@ -46,14 +54,27 @@
   white-space: nowrap;
 }
 
-.pc-skip__link:focus {
-  position: static;
-  left: auto;
+.pc-skip__link:focus,
+.pc-skip__link:focus-visible {
+  /* Overlay chrome; never re-enter the grid flow (static would reflow the board). */
+  position: absolute;
+  left: 4px;
+  top: 4px;
+  z-index: 200;
   width: auto;
   height: auto;
+  max-width: none;
   overflow: visible;
+  clip: auto;
+  clip-path: none;
   outline: var(--focus-ring-width) solid var(--focus-ring);
   outline-offset: 2px;
+}
+
+/* Stack subsequent focused skip links so multi-Tab walk stays readable. */
+.pc-skip__link:focus + .pc-skip__link:focus,
+.pc-skip__link:focus-visible + .pc-skip__link:focus-visible {
+  left: 4px;
 }
 
 /* ── Header ─────────────────────────────────────────────────────────── */

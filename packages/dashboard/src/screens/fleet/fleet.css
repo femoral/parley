@@ -230,36 +230,48 @@
   text-overflow: ellipsis;
 }
 
-/* In-region horizontal scroll cue (edge fade + scrollbar). */
+/* In-region horizontal scroll cue (solid edge + scrollbar; no gradients — DESIGN.md).
+ * data-h-overflow is set by ResizeObserver in FleetBoard (#364). */
 .pc-fleet-table-scroll {
   min-height: 0;
   overflow: auto;
   position: relative;
   /* Always-visible thin scrollbar so overflow is not silent. */
   scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) var(--surface-sunken);
 }
 
+.pc-fleet-table-scroll::-webkit-scrollbar {
+  height: 8px;
+}
+
+.pc-fleet-table-scroll::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+}
+
+.pc-fleet-table-scroll::-webkit-scrollbar-track {
+  background: var(--surface-sunken);
+}
+
+/* Solid overflow cue — design-system-legal (no linear-gradient). */
 .pc-fleet-table-scroll::after {
   content: "";
   pointer-events: none;
-  position: sticky;
-  right: 0;
+  position: absolute;
   top: 0;
-  display: block;
-  float: right;
-  width: 18px;
-  height: 100%;
-  margin-left: -18px;
-  background: linear-gradient(
-    to left,
-    var(--ground) 0%,
-    transparent 100%
-  );
+  right: 0;
+  bottom: 0;
+  width: 0;
+  background: var(--surface-raised);
+  border-left: 0 solid var(--border-strong);
   opacity: 0;
+  transition: none;
 }
 
-.pc-fleet-table-scroll[data-h-overflow="true"]::after,
-.pc-fleet-table-scroll:has(.pc-fleet-table:is([data-wide="true"]))::after {
+.pc-fleet-table-scroll[data-h-overflow="true"]::after {
+  width: 12px;
+  border-left-width: 1px;
   opacity: 1;
 }
 
@@ -325,6 +337,13 @@
   padding: 3px 6px;
   min-width: 0;
   overflow: hidden;
+}
+
+/* STATE column sizes to the chip — never clip the sole non-hue state carrier (#364). */
+.pc-fleet-table__td:first-child,
+.pc-fleet-table__th:first-child {
+  overflow: visible;
+  min-width: max-content;
 }
 
 .pc-fleet-table__primary {
@@ -399,27 +418,33 @@
   color: var(--state-failed);
 }
 
-/* Runs columns — full */
+/*
+ * STATE column uses max-content so the widest chip label ("BLOCKED · GATE HELD"
+ * / fleet "BLOCKED · POLICY") never truncates (#364). Other columns flex.
+ */
+/* Runs columns — full (≥1520) */
 .pc-fleet-runs .pc-fleet-table__head,
 .pc-fleet-runs .pc-fleet-table__row {
   grid-template-columns:
-    100px minmax(110px, 1.3fr) minmax(90px, 1fr) minmax(90px, 1.1fr)
+    max-content minmax(110px, 1.3fr) minmax(90px, 1fr) minmax(90px, 1.1fr)
     minmax(80px, 0.9fr) 48px 44px;
 }
 
-/* Tasks columns — full (≥1361): keep tokens+dur (ticket headline columns) */
+/* Tasks columns — full (≥1520): keep tokens+dur (ticket headline columns) */
 .pc-fleet-tasks .pc-fleet-table__head,
 .pc-fleet-tasks .pc-fleet-table__row {
   grid-template-columns:
-    100px minmax(110px, 1.4fr) minmax(88px, 1fr) minmax(72px, 0.85fr)
+    max-content minmax(110px, 1.4fr) minmax(88px, 1fr) minmax(72px, 0.85fr)
     minmax(80px, 1fr) 60px 48px 44px;
 }
 
 /*
- * ≤1360 (1280 floor): drop branch + run address so tokens/dur/age stay visible
- * without silent H-scroll. Priority: state, task, harness, tokens, dur, age.
+ * <1520: drop branch + run address so tokens/dur/age stay visible without silent
+ * H-scroll. Column restore at ~1520 so the 1361–1460 band is not silently lossy
+ * under the prior full-column layout (#364). Priority: state, task, harness,
+ * tokens, dur, age.
  */
-@media (max-width: 1360px) {
+@media (max-width: 1519px) {
   .pc-fleet-tasks .pc-fleet-col--addr,
   .pc-fleet-tasks .pc-fleet-col--branch,
   .pc-fleet-runs .pc-fleet-col--branch {
@@ -429,13 +454,13 @@
   .pc-fleet-tasks .pc-fleet-table__head,
   .pc-fleet-tasks .pc-fleet-table__row {
     grid-template-columns:
-      96px minmax(0, 1.5fr) minmax(72px, 1fr) 56px 44px 40px;
+      max-content minmax(0, 1.5fr) minmax(72px, 1fr) 56px 44px 40px;
   }
 
   .pc-fleet-runs .pc-fleet-table__head,
   .pc-fleet-runs .pc-fleet-table__row {
     grid-template-columns:
-      96px minmax(0, 1.3fr) minmax(80px, 1fr) minmax(70px, 1fr) 44px 40px;
+      max-content minmax(0, 1.3fr) minmax(80px, 1fr) minmax(70px, 1fr) 44px 40px;
   }
 }
 

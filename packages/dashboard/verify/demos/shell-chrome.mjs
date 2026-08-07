@@ -111,6 +111,19 @@ export function shellChromeGates(_entry, ledger) {
     );
   }
 
+  // #364 — focused skip links show complete labels
+  const skipLabels = chrome.skipLinkLabels ?? [];
+  if (skipLabels.length < 1) {
+    throw new Error("shell-chrome: missing skipLinkLabels proof");
+  }
+  for (const row of skipLabels) {
+    if (!row.fullLabel) {
+      throw new Error(
+        `shell-chrome: skip link label clipped: ${JSON.stringify(row)}`,
+      );
+    }
+  }
+
   // Settings popover: focus moves in, restores to trigger, no aria-modal.
   if (chrome.settingsFocus?.ariaModal !== "false") {
     throw new Error("shell-chrome: settings must be popover (aria-modal=false)");
@@ -382,6 +395,25 @@ export async function runShellChromeDemo() {
     const skipMain = session.page.locator('[data-testid="skip-main"]');
     // Make skip link visible/focusable via Tab or direct focus+Enter.
     await skipMain.focus();
+    // #364 — focused skip links must show complete labels (no clip).
+    const skipLinkLabels = await session.page.evaluate(() => {
+      const links = [...document.querySelectorAll(".pc-skip__link")];
+      return links.map((el) => {
+        const text = (el.textContent ?? "").replace(/\s+/g, " ").trim();
+        el.focus();
+        const full =
+          el.scrollWidth <= el.clientWidth + 1 &&
+          el.clientWidth >= 40 &&
+          text.length > 0;
+        return {
+          text,
+          clientWidth: Math.round(el.clientWidth),
+          scrollWidth: Math.round(el.scrollWidth),
+          fullLabel: full,
+        };
+      });
+    });
+    await skipMain.focus();
     await session.page.keyboard.press("Enter");
     await session.page.waitForTimeout(30);
     const afterSkip = await session.page.evaluate(describeFocus);
@@ -503,6 +535,7 @@ export async function runShellChromeDemo() {
         focusedTestId: afterSkip.testId,
         afterTab: afterSkipTab,
       },
+      skipLinkLabels,
       settingsFocus: {
         ariaModal: settingsAriaModal,
         focusMovedIn:
