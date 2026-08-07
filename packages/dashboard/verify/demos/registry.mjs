@@ -22,6 +22,7 @@ import { runTaskInspectorDemo, taskInspectorGates } from "./task-inspector.mjs";
 import { runFleetBoardDemo, fleetBoardGates } from "./fleet-board.mjs";
 import { runMetricsBoardDemo, metricsBoardGates } from "./metrics-board.mjs";
 import { runRunDetailDemo, runDetailGates } from "./run-detail.mjs";
+import { runConsoleRailsDemo, consoleRailsGates } from "./console-rails.mjs";
 
 /**
  * @typedef {{
@@ -79,6 +80,13 @@ export const DEMO_REGISTRY = [
     id: "run-detail",
     run: runRunDetailDemo,
     gates: runDetailGates,
+  },
+  // #363 console rails + AttentionCard
+  {
+    ticket: "issue-363",
+    id: "console-rails",
+    run: runConsoleRailsDemo,
+    gates: consoleRailsGates,
   },
 ];
 

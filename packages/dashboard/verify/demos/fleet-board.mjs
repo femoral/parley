@@ -40,10 +40,12 @@ export const FLEET_SELECTORS = [
   { id: "fleet-runs", selector: '[data-testid="fleet-runs"]' },
   { id: "fleet-tasks", selector: '[data-testid="fleet-tasks"]' },
   { id: "fleet-tasks-scroll", selector: '[data-testid="fleet-tasks-scroll"]' },
-  { id: "fleet-token-burn", selector: '[data-testid="fleet-token-burn"]' },
-  { id: "fleet-burn-bound", selector: '[data-testid="fleet-burn-bound"]' },
   { id: "fleet-runners", selector: '[data-testid="fleet-runners"]' },
-  { id: "fleet-firehose", selector: '[data-testid="fleet-firehose"]' },
+  // #363: burn + firehose moved to shell rails
+  { id: "rail-token-burn", selector: '[data-testid="rail-token-burn"]' },
+  { id: "rail-burn-bound", selector: '[data-testid="rail-burn-bound"]' },
+  { id: "rail-firehose", selector: '[data-testid="rail-firehose"]' },
+  { id: "rail-attention", selector: '[data-testid="rail-attention"]' },
 ];
 
 /**
@@ -73,11 +75,15 @@ export function fleetBoardGates(_entry, ledger) {
   if (!demo.headline?.panels?.runs) {
     throw new Error("fleet-board: runs panel not proven present");
   }
+  // #363: burn + firehose live on shell rails, not fleet center
   if (!demo.headline?.panels?.tokenBurn) {
-    throw new Error("fleet-board: token burn not proven present");
+    throw new Error("fleet-board: token burn (left rail) not proven present");
   }
   if (!demo.headline?.panels?.firehose) {
-    throw new Error("fleet-board: firehose not proven present");
+    throw new Error("fleet-board: firehose (right rail) not proven present");
+  }
+  if (demo.headline?.panels?.fleetFirehose) {
+    throw new Error("fleet-board: firehose must not remain on fleet center");
   }
   if (!demo.headline?.panels?.runners) {
     throw new Error("fleet-board: runners not proven present");
@@ -198,16 +204,19 @@ async function scrollOk(page, selector) {
 async function measureFontFloor(page) {
   return page.evaluate(() => {
     const sels = [
-      '[data-testid="fleet-burn-bound"]',
-      ".pc-fleet-burn__axis span",
-      ".pc-fleet-burn__totals span",
+      '[data-testid="rail-burn-bound"]',
+      ".pc-rail-burn__axis span",
+      ".pc-rail-burn__totals span",
       ".pc-fleet-kpi__label",
       ".pc-fleet-kpi__note",
       ".pc-fleet-table__th",
       ".pc-fleet-chip__label",
       ".pc-fleet-panel__title",
-      ".pc-fleet-hose__time",
-      ".pc-fleet-hose__text",
+      ".pc-rail-hose__time",
+      ".pc-rail-hose__text",
+      ".pc-attn__age",
+      ".pc-attn__meta",
+      ".pc-attn__reason",
     ];
     /** @type {Array<{selector:string,fontSize:number,text:string}>} */
     const violations = [];
@@ -242,8 +251,10 @@ async function panelPresence(page) {
       kpis: has('[data-testid="fleet-kpis"]'),
       runs: has('[data-testid="fleet-runs"]'),
       tasks: has('[data-testid="fleet-tasks"]'),
-      tokenBurn: has('[data-testid="fleet-token-burn"]'),
-      firehose: has('[data-testid="fleet-firehose"]'),
+      tokenBurn: has('[data-testid="rail-token-burn"]'),
+      firehose: has('[data-testid="rail-firehose"]'),
+      fleetFirehose: has('[data-testid="fleet-firehose"]'),
+      attention: has('[data-testid="rail-attention"]'),
       runners: has('[data-testid="fleet-runners"]'),
       board: has('[data-testid="fleet-board"]'),
     };
@@ -492,7 +503,7 @@ export async function runFleetBoardDemo() {
 
     const panels = await panelPresence(session.page);
     const burnBound = await session.page
-      .locator('[data-testid="fleet-burn-bound"]')
+      .locator('[data-testid="rail-burn-bound"]')
       .textContent()
       .catch(() => null);
     const fontFloor = await measureFontFloor(session.page);

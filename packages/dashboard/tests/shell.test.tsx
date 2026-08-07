@@ -27,14 +27,35 @@ describe("Shell frame", () => {
     expect(screen.getByTestId("rail-right")).toBeTruthy();
     expect(screen.getByTestId("shell-footer")).toBeTruthy();
     expect(screen.getByTestId("screen-fleet")).toBeTruthy();
-    // State never by hue alone — legend labels present
-    expect(screen.getByText("awaiting")).toBeTruthy();
-    expect(screen.getByText("failed")).toBeTruthy();
+    // State never by hue alone — footer legend labels present
+    const legend = screen.getByTestId("shell-footer");
+    expect(legend.textContent).toMatch(/awaiting/);
+    expect(legend.textContent).toMatch(/failed/);
     // Footer doctrine (state-vs-quality vocabulary) present in full + compact
     expect(screen.getByTestId("footer-note-full").textContent).toMatch(/what a task IS/);
     expect(screen.getByTestId("footer-note-full").textContent).toMatch(/how good work WAS/);
     expect(screen.getByTestId("footer-note-compact").textContent).toMatch(/state=IS/);
     expect(screen.getByTestId("footer-note-compact").textContent).toMatch(/quality=WAS/);
+  });
+
+  it("rails show real content with no placeholder implementation notes", () => {
+    render(<Shell />);
+    const body = document.body.textContent ?? "";
+    expect(body).not.toMatch(
+      /Scope, state filter, and list navigation land with each screen ticket/,
+    );
+    expect(body).not.toMatch(
+      /Attention and the event firehose live on the fleet board screen/,
+    );
+    expect(screen.getByTestId("rail-left-content")).toBeTruthy();
+    expect(screen.getByTestId("rail-scope")).toBeTruthy();
+    expect(screen.getByTestId("rail-state-filter")).toBeTruthy();
+    expect(screen.getByTestId("rail-token-burn")).toBeTruthy();
+    expect(screen.getByTestId("rail-right-content")).toBeTruthy();
+    expect(screen.getByTestId("rail-attention")).toBeTruthy();
+    expect(screen.getByTestId("rail-firehose")).toBeTruthy();
+    // Fleet center no longer owns the firehose
+    expect(screen.queryByTestId("fleet-firehose")).toBeNull();
   });
 
   it("exposes skip links and live region; main-content is focusable", () => {

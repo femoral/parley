@@ -388,3 +388,139 @@
   width: auto;
   min-width: 8ch;
 }
+
+/* ── Attention card (#363) ──────────────────────────────────────────── */
+/*
+ * DESIGN.md: 2px state-color left rule, badge + age, title, reason, meta;
+ * rows variant is a single line. Appended last so rail tickets do not
+ * interleave with Panel/chip/scaffold styles.
+ */
+
+.pc-attn {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  padding: 8px 10px 8px 12px;
+  border-bottom: 1px solid var(--hairline);
+  border-left: var(--selection-rule) solid var(--text-4);
+  background: var(--ground);
+  position: relative;
+}
+
+.pc-attn--interactive {
+  cursor: pointer;
+}
+
+.pc-attn--interactive:hover {
+  background: var(--surface-hover);
+}
+
+.pc-attn--selected {
+  background: var(--surface-active);
+}
+
+.pc-attn--interactive:focus-visible {
+  outline: var(--focus-ring) solid var(--link);
+  outline-offset: -2px;
+}
+
+.pc-attn--awaiting_answer {
+  border-left-color: var(--state-awaiting);
+}
+.pc-attn--stalled {
+  border-left-color: var(--state-stalled);
+}
+.pc-attn--failed {
+  border-left-color: var(--state-failed);
+}
+.pc-attn--running {
+  border-left-color: var(--state-running);
+}
+.pc-attn--queued {
+  border-left-color: var(--state-queued);
+}
+.pc-attn--pending {
+  border-left-color: var(--state-pending);
+}
+.pc-attn--completed {
+  border-left-color: var(--state-completed);
+}
+.pc-attn--cancelled,
+.pc-attn--purged {
+  border-left-color: var(--state-cancelled);
+}
+
+.pc-attn__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.pc-attn__badge {
+  min-width: 0;
+}
+
+.pc-attn__age {
+  flex: none;
+  font: var(--type-meta);
+  color: var(--text-time);
+  white-space: nowrap;
+}
+
+.pc-attn__title {
+  font: var(--type-row);
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.pc-attn__reason {
+  font: var(--type-mono-400-10-1p3);
+  color: var(--text-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.pc-attn__meta {
+  font: var(--type-meta);
+  color: var(--text-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+/* Rows: single dense line — badge · title · age */
+.pc-attn--rows {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px 8px;
+  padding: 5px 8px 5px 10px;
+}
+
+.pc-attn--rows .pc-attn__head {
+  display: contents;
+}
+
+.pc-attn--rows .pc-attn__title {
+  font: var(--type-sans-500-11p5-1);
+  order: 0;
+}
+
+.pc-attn--rows .pc-attn__reason,
+.pc-attn--rows .pc-attn__meta {
+  display: none;
+}
+
+.pc-attn--rows .pc-attn__age {
+  grid-column: 3;
+}
+

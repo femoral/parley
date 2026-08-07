@@ -62,6 +62,24 @@ export {
   type FirehoseInput,
   type RunStreamPayload,
 } from "./projections/firehose.js";
+export {
+  FIREHOSE_CAP,
+  emptyFirehoseCursor,
+  advanceFirehose,
+  firehoseTone,
+  type FirehoseCursor,
+} from "./projections/firehoseFeed.js";
+export {
+  ATTENTION_RANK,
+  FRESH_FAILURE_MS,
+  ATTENTION_TASK_STATES,
+  attentionRank,
+  isFreshFailure,
+  sortTasksByAttention,
+  runAttentionRank,
+  sortRunsByAttention,
+  isHeldGate,
+} from "./attentionRank.js";
 
 export type {
   HonestyPhase,
