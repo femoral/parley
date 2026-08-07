@@ -51,7 +51,7 @@
   --scrollbar-thumb: #242c33;
   --scrollbar-thumb-hover: #333d46;
 
-  /* State (status only — reserved inks) */
+  /* State (status only — reserved inks; never focus/selection/accent) */
   --state-pending: #8b96a2;
   --state-queued: #7b8894;
   --state-running: #43b98c;
@@ -62,6 +62,23 @@
   --state-cancelled: #7f8790;
   --state-eval-good: #3ea99c;
   --state-eval-poor: #c4707f;
+
+  /*
+   * Interaction neutrals (#366) — focus ring + selection rule.
+   * Not status: never use --state-* for focus, tabs, checkboxes, or selection.
+   * Ratios vs --ground #0b0d0f: focus-ring 8.01:1, selection-ink 6.61:1.
+   */
+  --focus-ring: #9aa8b5;
+  --selection-ink: #8b98a4;
+
+  /*
+   * Success-rate bar ramp (#366) — completion rate, not eval score.
+   * Distinct tokens so success rate never borrows --state-eval-*.
+   * Ratios vs --ground: good 5.88:1, mid 7.25:1, poor 6.11:1.
+   */
+  --success-bar-good: #5a9a7a;
+  --success-bar-mid: #b79a63;
+  --success-bar-poor: #a88890;
 
   /* Attention pill (awaiting ground/border — mock needs-orch chip) */
   --attention-border: #6d4f14;
@@ -150,11 +167,10 @@
   --selection-rule: 2px;
   --state-dot: 7px;
   --coat-swatch: 12px;
-  --focus-ring: 2px;
+  --focus-ring-width: 2px;
 
 
-  /* Metrics rose/gold + run grounds promoted from screen CSS (#367) */
-  --metrics-mid: #b79a63;
+  /* Metrics rose + run grounds promoted from screen CSS (#367) */
   --metrics-rose-muted: #c8b3b8;
   --metrics-rose: #b8969c;
   --metrics-rose-hot: #eaa7b2;

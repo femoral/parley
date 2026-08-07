@@ -61,6 +61,31 @@ State chip pattern: square 7px dot + uppercase mono label, border `<state>44`,
 ground `<state>14`. Attention order (sorting, legend): awaiting_answer, stalled,
 failed, running, queued, pending, completed, cancelled.
 
+Chip and footer legend share **one label table** (`stateLabels.ts`): the same
+uppercase vocabulary (e.g. DONE, CANCEL, AWAITING) renders in both places.
+
+### Interaction neutrals (not status)
+
+| Token | Hex | Use |
+| --- | --- | --- |
+| focus-ring | `#9aa8b5` | `:focus-visible` outline color (width is `--focus-ring-width`) |
+| selection-ink | `#8b98a4` | 2px left selection rule, active-tab underline, checkbox `accent-color` |
+
+These are cool neutrals on the text ramp — never amber, never a state ink.
+Measured vs ground `#0b0d0f`: focus-ring **8.01:1**, selection-ink **6.61:1**.
+
+### Success-rate bar ramp (not eval)
+
+| Token | Hex | Band |
+| --- | --- | --- |
+| success-bar-good | `#5a9a7a` | high completion rate |
+| success-bar-mid | `#b79a63` | mid completion rate |
+| success-bar-poor | `#a88890` | low completion rate |
+
+Success rate and eval score are different measures — the metrics success bar must
+not use `--state-eval-*`. Ratios vs ground: good **5.88:1**, mid **7.25:1**,
+poor **6.11:1**.
+
 ### Harness coats (identity, from wire data)
 
 codex `#18A886` · grok `#59616F` · claude `#D1784C` · gemini `#4D8CE8` ·
@@ -69,8 +94,12 @@ text. Coats are identity, never status.
 
 ### Named Rules
 
-- **Status ink is reserved.** State colors appear only where they state a state.
-  Never as accent, link, chart flourish, or emphasis.
+- **Status ink is reserved.** State colors appear only where they state a state
+  (chips, dots, attention, legend, status-colored rules on status surfaces).
+  Never as focus ring, selection, active tab, checkbox accent, link, chart
+  flourish, or generic emphasis.
+- **Interaction uses neutrals.** Focus and selection use `--focus-ring` and
+  `--selection-ink` only — tabbing a quiet board must not light amber.
 - **Three inks per cell.** A table cell uses at most primary text, one secondary
   tone, and (if stateful) one state color.
 - **Amber means "needs the orchestrator."** `#e0a02e` is shared by asks and gates
@@ -116,8 +145,8 @@ distribution, heatmap).
 - **Tables are the medium.** Sticky heads on `surface-raised`, hairline row
   separators, uppercase Sans column labels, right-aligned numerics, ellipsis
   truncation with full value on `title`.
-- **Selection is a 2px left rule** in the selecting color; hover is
-  `surface-hover`. Never a fill swap that fights state chips.
+- **Selection is a 2px left rule** in `--selection-ink` (neutral); hover is
+  `surface-hover`. Never a fill swap that fights state chips. Never amber.
 - **Density floor, legibility law.** Rows 24–30px; the viewport floor is 1280
   with no horizontal scroll at board level (wide tables scroll within their
   region, with a visible cue).

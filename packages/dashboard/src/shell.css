@@ -52,7 +52,7 @@
   width: auto;
   height: auto;
   overflow: visible;
-  outline: var(--focus-ring) solid var(--state-awaiting);
+  outline: var(--focus-ring-width) solid var(--focus-ring);
   outline-offset: 2px;
 }
 
@@ -165,7 +165,7 @@
 
 .pc-shell__tab--active {
   background: var(--surface-active);
-  border-bottom-color: var(--state-awaiting);
+  border-bottom-color: var(--selection-ink);
 }
 
 .pc-shell__tab-label {
@@ -454,7 +454,7 @@
 
 .pc-find__field:focus-within {
   border-color: var(--border-strong);
-  outline: var(--focus-ring) solid var(--state-awaiting);
+  outline: var(--focus-ring-width) solid var(--focus-ring);
   outline-offset: 1px;
 }
 
@@ -507,7 +507,7 @@
 .pc-find__option--active,
 .pc-find__option:hover {
   background: var(--surface-hover);
-  border-left-color: var(--state-awaiting);
+  border-left-color: var(--selection-ink);
 }
 
 .pc-find__option-kind {
@@ -749,7 +749,7 @@
   height: 14px;
   margin-top: 2px;
   flex: none;
-  accent-color: var(--state-awaiting);
+  accent-color: var(--selection-ink);
 }
 
 .pc-settings__foot {
