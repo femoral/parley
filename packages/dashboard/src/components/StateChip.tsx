@@ -1,31 +1,13 @@
 /**
  * State chip — square 7px dot + uppercase mono label (DESIGN.md).
  * One canonical implementation for fleet, run, task, and metrics (#367).
+ * Labels come from the shared stateLabels table (#366).
  * Pulse is reserved for running (or explicit live) — animation only means live.
  */
 
-const LABEL: Record<string, string> = {
-  pending: "PENDING",
-  queued: "QUEUED",
-  running: "RUNNING",
-  awaiting_answer: "AWAITING",
-  awaiting: "AWAITING",
-  stalled: "STALLED",
-  completed: "DONE",
-  failed: "FAILED",
-  cancelled: "CANCEL",
-  purged: "PURGED",
-};
+import { chipStateKey, stateLabel } from "./stateLabels.js";
 
-/** Normalize wire/token aliases onto the CSS modifier set. */
-export function chipStateKey(state: string): string {
-  if (state === "awaiting") return "awaiting_answer";
-  return state;
-}
-
-export function stateLabel(state: string): string {
-  return LABEL[state] ?? state.replace(/_/g, " ").toUpperCase();
-}
+export { chipStateKey, stateLabel } from "./stateLabels.js";
 
 export interface StateChipProps {
   /** Wire state or run StateToken (e.g. awaiting_answer or awaiting). */

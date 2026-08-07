@@ -48,13 +48,13 @@ a:hover {
   color: var(--link-hover);
 }
 
-/* Visible focus — amber, never hue-only status ink on interactive chrome */
+/* Visible focus — neutral ring; amber is reserved for status (#366) */
 :focus {
   outline: none;
 }
 
 :focus-visible {
-  outline: var(--focus-ring) solid var(--state-awaiting);
+  outline: var(--focus-ring-width) solid var(--focus-ring);
   outline-offset: 2px;
 }
 

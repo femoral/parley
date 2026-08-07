@@ -135,7 +135,7 @@
 }
 
 .pc-run__copy:focus-visible {
-  outline: var(--focus-ring) solid var(--state-awaiting);
+  outline: var(--focus-ring-width) solid var(--focus-ring);
   outline-offset: 2px;
 }
 
@@ -182,7 +182,7 @@
 }
 
 .pc-run__view-btn:focus-visible {
-  outline: var(--focus-ring) solid var(--state-awaiting);
+  outline: var(--focus-ring-width) solid var(--focus-ring);
   outline-offset: 2px;
 }
 
@@ -667,7 +667,8 @@
 }
 
 .pc-run__table-row--selected {
-  box-shadow: inset 2px 0 0 var(--state-awaiting);
+  /* Neutral 2px left rule — matches fleet; amber reserved for status (#366) */
+  box-shadow: inset var(--selection-rule) 0 0 var(--selection-ink);
   background: var(--surface-soft);
 }
 
@@ -680,7 +681,7 @@
 }
 
 .pc-run__table-row--interactive:focus-visible {
-  outline: var(--focus-ring) solid var(--state-awaiting);
+  outline: var(--focus-ring-width) solid var(--focus-ring);
   outline-offset: -2px;
 }
 
@@ -824,7 +825,7 @@
 }
 
 .pc-run__task-row--interactive:focus-visible {
-  outline: var(--focus-ring) solid var(--state-awaiting);
+  outline: var(--focus-ring-width) solid var(--focus-ring);
   outline-offset: -2px;
 }
 

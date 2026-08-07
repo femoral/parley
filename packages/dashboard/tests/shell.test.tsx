@@ -27,9 +27,9 @@ describe("Shell frame", () => {
     expect(screen.getByTestId("rail-right")).toBeTruthy();
     expect(screen.getByTestId("shell-footer")).toBeTruthy();
     expect(screen.getByTestId("screen-fleet")).toBeTruthy();
-    // State never by hue alone — legend labels present
-    expect(screen.getByText("awaiting")).toBeTruthy();
-    expect(screen.getByText("failed")).toBeTruthy();
+    // State never by hue alone — legend shares chip vocabulary (#366)
+    expect(screen.getByText("AWAITING")).toBeTruthy();
+    expect(screen.getByText("FAILED")).toBeTruthy();
     // Footer doctrine (state-vs-quality vocabulary) present in full + compact
     expect(screen.getByTestId("footer-note-full").textContent).toMatch(/what a task IS/);
     expect(screen.getByTestId("footer-note-full").textContent).toMatch(/how good work WAS/);
