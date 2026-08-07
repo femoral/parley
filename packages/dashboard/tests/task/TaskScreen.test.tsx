@@ -128,7 +128,7 @@ describe("TaskScreen", () => {
     expect(screen.getByTestId("task-fix-scaffold")).toBeTruthy();
   });
 
-  it("renders awaiting answer with answer scaffold", () => {
+  it("renders awaiting answer as full-width ask band with scaffold", () => {
     const task = taskEnvelope({
       task_id: "t-ask",
       state: "awaiting_answer",
@@ -146,12 +146,56 @@ describe("TaskScreen", () => {
     });
 
     render(<TaskScreen {...mountProps({ selectedTaskId: "t-ask" })} />);
+    const band = screen.getByTestId("task-ask-band");
+    expect(band).toBeTruthy();
+    expect(screen.getByTestId("task-ask-band-question").textContent).toMatch(
+      /Should the scaffold|Which one/,
+    );
     expect(screen.getByTestId("task-answer-scaffold").textContent).toMatch(
       /parley answer t-ask/,
     );
     expect(screen.getByTestId("task-state-chip").getAttribute("data-state")).toBe(
       "awaiting_answer",
     );
+  });
+
+  it("no-selection → selection does not throw (hooks order regression)", () => {
+    // Mount empty first — the useMemo for outstandingTurn must already be on
+    // the empty path so selecting a task never adds hooks mid-tree.
+    mockDetail.mockReturnValue({ status: "idle", data: null, error: null });
+    mockLogs.mockReturnValue({ lines: [], status: "ended" });
+
+    const setSelectedTaskId = vi.fn();
+    const { rerender } = render(
+      <TaskScreen {...mountProps({ selectedTaskId: null, setSelectedTaskId })} />,
+    );
+    expect(screen.getByTestId("screen-task").textContent).toMatch(/No task selected/);
+
+    const task = taskEnvelope({
+      task_id: "t-later",
+      state: "running",
+    });
+    mockDetail.mockReturnValue({
+      status: "ready",
+      data: detailResponse({ task }),
+      error: null,
+    });
+    mockLogs.mockReturnValue({
+      lines: [{ kind: "stdout", text: "go", raw: "go" }],
+      status: "tailing",
+    });
+
+    expect(() => {
+      rerender(
+        <TaskScreen
+          {...mountProps({ selectedTaskId: "t-later", setSelectedTaskId })}
+        />,
+      );
+    }).not.toThrow();
+    expect(screen.getByTestId("screen-task").getAttribute("data-task-id")).toBe(
+      "t-later",
+    );
+    expect(screen.getByTestId("task-header")).toBeTruthy();
   });
 
   it("passes follow into useLogTail and preserves hook ownership", () => {

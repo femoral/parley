@@ -179,7 +179,7 @@ describe("FleetBoard", () => {
     );
   });
 
-  it("loading state shows hailing copy", () => {
+  it("loading state shows fleet loading copy", () => {
     render(
       <FleetBoard
         tasks={[]}
@@ -196,7 +196,7 @@ describe("FleetBoard", () => {
         nowMs={NOW}
       />,
     );
-    expect(screen.getByTestId("fleet-hailing").textContent).toMatch(/Hailing the fleet/);
+    expect(screen.getByTestId("fleet-loading").textContent).toMatch(/Loading the fleet/);
   });
 
   it("stale-reconnecting with zero tasks still shows empty fleet phase", () => {

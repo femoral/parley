@@ -91,7 +91,11 @@ export function RunScreen(props: ScreenMountProps) {
     ) {
       return;
     }
+    // No selected (or missing) run: pick first and put its id in the hash.
     props.setSelectedRunId(first.run_id);
+    if (props.screen === "run") {
+      props.navigate("run", first.run_id);
+    }
   }, [props, runs.summaries]);
 
   const detail = props.selectedRunId
@@ -254,6 +258,7 @@ export function RunScreen(props: ScreenMountProps) {
             observation-only — gate verbs stay with the orchestrating agent.
           </p>
         </div>
+        <div className="pc-run__end" data-testid="run-end" aria-hidden="true" />
       </div>
     );
   }
@@ -495,7 +500,7 @@ export function RunScreen(props: ScreenMountProps) {
             {deliv.rows.length === 0 ? (
               <div className="pc-run__panel-empty" data-fetch-state="none">
                 {deliv.loading
-                  ? "Fetching deliverables…"
+                  ? "Loading deliverables…"
                   : deliverableRefs.length === 0
                     ? "No deliverables on this run yet."
                     : "No deliverable rows."}
@@ -583,13 +588,13 @@ export function RunScreen(props: ScreenMountProps) {
                     role="button"
                     onClick={() => {
                       props.setSelectedTaskId(t.task_id);
-                      props.navigate("task");
+                      props.navigate("task", t.task_id);
                     }}
                     onKeyDown={(e) => {
                       if (e.key === "Enter" || e.key === " ") {
                         e.preventDefault();
                         props.setSelectedTaskId(t.task_id);
-                        props.navigate("task");
+                        props.navigate("task", t.task_id);
                       }
                     }}
                   >
@@ -647,6 +652,8 @@ export function RunScreen(props: ScreenMountProps) {
             ) : null}
           </Panel>
         </div>
+        {/* Intentional content termination — no dead void at wide viewports. */}
+        <div className="pc-run__end" data-testid="run-end" aria-hidden="true" />
       </div>
     </div>
   );

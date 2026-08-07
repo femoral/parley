@@ -8,6 +8,7 @@ import {
   taskBucketTimeMs,
   TOKEN_BURN_WINDOW_MS,
 } from "../../data/projections/tokenBurn.js";
+import { countNoun } from "../../chrome/plural.js";
 import { isHeldGate } from "./pips.js";
 import { isFreshFailure } from "./attentionSort.js";
 import { formatDur, formatTokens } from "./format.js";
@@ -130,8 +131,12 @@ export function projectFleetKpis(input: FleetKpiInput): FleetKpi[] {
   const advancing = input.runs.filter((r) => r.state === "running").length;
   // Settled + token burn: same 24h wall-clock window as the burn chart.
   const settled = countSettled24h(input.tasks, nowMs);
-  const settledDenom = Math.max(1, settled.completed + settled.failed);
-  const successPct = Math.round((settled.completed / settledDenom) * 100);
+  const settledTotal = settled.completed + settled.failed;
+  // Zero samples → "—", never invent a percent from Math.max(1, …).
+  const successNote =
+    settledTotal === 0
+      ? "success — · last 24h"
+      : `success ${Math.round((settled.completed / settledTotal) * 100)}% · last 24h`;
 
   let sumIn = 0;
   let sumCached = 0;
@@ -151,7 +156,8 @@ export function projectFleetKpis(input: FleetKpiInput): FleetKpi[] {
   }
   durs.sort((a, b) => a - b);
   const p95 = durs.length ? durs[Math.floor(durs.length * 0.95)] ?? durs[durs.length - 1] : null;
-  const cachedPct = sumIn > 0 ? Math.round((sumCached / sumIn) * 100) : 0;
+  const cacheNote =
+    sumIn > 0 ? `cache ${Math.round((sumCached / sumIn) * 100)}%` : "cache —";
 
   return [
     {
@@ -159,7 +165,7 @@ export function projectFleetKpis(input: FleetKpiInput): FleetKpi[] {
       label: "needs orchestrator",
       value: String(needsOrch),
       unit: "items",
-      note: `${heldGates} held · ${asks} asks · ${stalled} stall · ${freshFailed} fresh`,
+      note: `${heldGates} held · ${countNoun(asks, "ask")} · ${stalled} stall · ${freshFailed} fresh`,
       tone: "awaiting",
     },
     {
@@ -191,7 +197,7 @@ export function projectFleetKpis(input: FleetKpiInput): FleetKpi[] {
       label: "settled 24h",
       value: `${settled.completed} / ${settled.failed}`,
       unit: "done / failed",
-      note: `success ${successPct}% · last 24h`,
+      note: successNote,
       tone: "completed",
     },
     {
@@ -199,7 +205,7 @@ export function projectFleetKpis(input: FleetKpiInput): FleetKpi[] {
       label: "token burn",
       value: formatTokens(sumIn),
       unit: "in",
-      note: `cache ${cachedPct}% · p95 ${p95 != null ? formatDur(p95) : "—"}`,
+      note: `${cacheNote} · p95 ${p95 != null ? formatDur(p95) : "—"}`,
       tone: "neutral",
     },
   ];

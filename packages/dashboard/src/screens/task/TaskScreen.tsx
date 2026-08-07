@@ -15,6 +15,7 @@ import { CopyScaffold } from "../../components/index.js";
 import { loadSettings, saveSettings } from "../../chrome/settings.js";
 import type { ScreenMountProps } from "../types.js";
 import {
+  AskBand,
   AttemptChain,
   BriefPanel,
   DeliverablesPanel,
@@ -187,6 +188,18 @@ export function TaskScreen(props: ScreenMountProps) {
     persistFollow(next);
   }, []);
 
+  // Outstanding ask: full-width band outranks hello envelope and all panels.
+  // MUST sit above any early return — no-selection → selection must not change hook count.
+  const outstandingTurn = useMemo(() => {
+    const qa = detail.data?.qa ?? [];
+    return qa.find((t) => t.answer == null) ?? null;
+  }, [detail.data?.qa]);
+  const askQuestion =
+    outstandingTurn?.question?.trim() ||
+    (task?.state === "awaiting_answer" ? task.question?.trim() : null) ||
+    null;
+  const showAskBand = Boolean(selectedTaskId && askQuestion);
+
   // ── Empty: no task selected ──────────────────────────────────────────
   if (!selectedTaskId) {
     return (
@@ -236,6 +249,7 @@ export function TaskScreen(props: ScreenMountProps) {
       data-task-id={selectedTaskId}
       data-detail-status={detail.status}
       data-log-status={logs.status}
+      data-ask={showAskBand ? "true" : "false"}
     >
       {task ? (
         <TaskHeader task={task} onCopyBranch={onCopyBranch} branchCopied={branchCopied} />
@@ -250,6 +264,9 @@ export function TaskScreen(props: ScreenMountProps) {
         </header>
       )}
       {connectionBand}
+      {showAskBand && selectedTaskId && askQuestion ? (
+        <AskBand taskId={selectedTaskId} question={askQuestion} />
+      ) : null}
       <div className="pc-task-body" data-testid="task-body">
         <div
           className="pc-task-col pc-task-col--left"
@@ -307,6 +324,7 @@ export function TaskScreen(props: ScreenMountProps) {
             taskId={selectedTaskId}
             qa={detail.data?.qa ?? []}
             status={panelStatus}
+            scaffoldInBand={showAskBand}
           />
           <ReportPanel
             report={task?.report ?? null}

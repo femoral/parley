@@ -8,7 +8,7 @@
       "description": "Shell chrome merge proofs: geometry, axe×3 states, skip-main, settings popover, footer note, 1280 density, live-region boot+kill+recover.",
       "daemon": {
         "taskId": "t1",
-        "port": 38933
+        "port": 41897
       },
       "headline": {
         "headerHeight": 46,
@@ -140,7 +140,7 @@
           "ratio": 12.7,
           "largeText": false,
           "wcagAA": true,
-          "text": "22:00:44"
+          "text": "23:17:22"
         },
         "find-input": {
           "selector": ".pc-find__input",
@@ -295,7 +295,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "Skip to navigationSkip to findSkip to main contentparleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 242…"
+              "text": "Skip to navigationSkip to findSkip to main contentparleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall sessionsdaemon127.0.0.1:5173v0.0.4 · pid …"
             },
             "header": {
               "selector": ".pc-shell__header",
@@ -337,7 +337,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "parleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 2425886 · up 3sv0.0.4needs orch0streamlive22:00:41Set…"
+              "text": "parleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall sessionsdaemon127.0.0.1:5173v0.0.4 · pid 2568177 · up 20sv0.0.4needs orch0streamlive23:17:2…"
             },
             "brand": {
               "selector": ".pc-shell__brand",
@@ -421,7 +421,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "Fleet1 task · 0 need actionRunno runTaskt1Metricsall hands"
+              "text": "Fleet1 task · 0 need actionRunno runTaskt1Metricsall sessions"
             },
             "status": {
               "selector": ".pc-shell__status",
@@ -463,7 +463,7 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "daemon127.0.0.1:5173v0.0.4 · pid 2425886 · up 3sv0.0.4"
+              "text": "daemon127.0.0.1:5173v0.0.4 · pid 2568177 · up 20sv0.0.4"
             },
             "needs-orch": {
               "selector": "[data-testid=\"needs-orch\"]",
@@ -799,7 +799,7 @@
                 "overflow": "auto",
                 "opacity": "1"
               },
-              "text": "attention0 · rank · agecardsrowsNothing needs the orchestratorfirehosewatch — followNo events since connect"
+              "text": "attention0 · rank · agecardsrowsNothing needs the orchestratorfirehosewatch — followNo events counted since this console connected"
             },
             "footer": {
               "selector": ".pc-shell__footer",
@@ -891,7 +891,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "Skip to navigationSkip to findSkip to main contentparleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 242…"
+              "text": "Skip to navigationSkip to findSkip to main contentparleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall sessionsdaemon127.0.0.1:5173v0.0.4 · pid …"
             },
             "header": {
               "selector": ".pc-shell__header",
@@ -933,7 +933,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "parleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 2425886 · up 3sv0.0.4needs orch0streamlive22:00:42Set…"
+              "text": "parleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall sessionsdaemon127.0.0.1:5173v0.0.4 · pid 2568177 · up 21sv0.0.4needs orch0streamlive23:17:2…"
             },
             "brand": {
               "selector": ".pc-shell__brand",
@@ -983,13 +983,13 @@
               "box": {
                 "x": 129,
                 "y": 4.75,
-                "width": 342.78,
+                "width": 359.41,
                 "height": 35.5
               },
               "styles": {
                 "display": "flex",
                 "position": "static",
-                "width": "342.781px",
+                "width": "359.406px",
                 "height": "35.5px",
                 "minWidth": "0px",
                 "minHeight": "auto",
@@ -1017,21 +1017,21 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "Fleet1 task · 0 need actionRunno runTaskt1Metricsall hands"
+              "text": "Fleet1 task · 0 need actionRunno runTaskt1Metricsall sessions"
             },
             "status": {
               "selector": ".pc-shell__status",
               "found": true,
               "box": {
-                "x": 675,
+                "x": 668.41,
                 "y": 17,
-                "width": 344.83,
+                "width": 351.42,
                 "height": 11
               },
               "styles": {
                 "display": "flex",
                 "position": "static",
-                "width": "344.828px",
+                "width": "351.422px",
                 "height": "11px",
                 "minWidth": "0px",
                 "minHeight": "auto",
@@ -1059,7 +1059,7 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "daemon127.0.0.1:5173v0.0.4 · pid 2425886 · up 3sv0.0.4"
+              "text": "daemon127.0.0.1:5173v0.0.4 · pid 2568177 · up 21sv0.0.4"
             },
             "needs-orch": {
               "selector": "[data-testid=\"needs-orch\"]",
@@ -1395,7 +1395,7 @@
                 "overflow": "auto",
                 "opacity": "1"
               },
-              "text": "attention0 · rank · agecardsrowsNothing needs the orchestratorfirehosewatch — followNo events since connect"
+              "text": "attention0 · rank · agecardsrowsNothing needs the orchestratorfirehosewatch — followNo events counted since this console connected"
             },
             "footer": {
               "selector": ".pc-shell__footer",
@@ -1487,7 +1487,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "Skip to navigationSkip to findSkip to main contentparleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 242…"
+              "text": "Skip to navigationSkip to findSkip to main contentparleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall sessionsdaemon127.0.0.1:5173v0.0.4 · pid …"
             },
             "header": {
               "selector": ".pc-shell__header",
@@ -1529,7 +1529,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "parleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 2425886 · up 4sv0.0.4needs orch0streamlive22:00:43Set…"
+              "text": "parleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall sessionsdaemon127.0.0.1:5173v0.0.4 · pid 2568177 · up 22sv0.0.4needs orch0streamlive23:17:2…"
             },
             "brand": {
               "selector": ".pc-shell__brand",
@@ -1579,13 +1579,13 @@
               "box": {
                 "x": 129,
                 "y": 4.75,
-                "width": 342.78,
+                "width": 359.41,
                 "height": 35.5
               },
               "styles": {
                 "display": "flex",
                 "position": "static",
-                "width": "342.781px",
+                "width": "359.406px",
                 "height": "35.5px",
                 "minWidth": "0px",
                 "minHeight": "auto",
@@ -1613,21 +1613,21 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "Fleet1 task · 0 need actionRunno runTaskt1Metricsall hands"
+              "text": "Fleet1 task · 0 need actionRunno runTaskt1Metricsall sessions"
             },
             "status": {
               "selector": ".pc-shell__status",
               "found": true,
               "box": {
-                "x": 1135,
+                "x": 1128.41,
                 "y": 17,
-                "width": 344.83,
+                "width": 351.42,
                 "height": 11
               },
               "styles": {
                 "display": "flex",
                 "position": "static",
-                "width": "344.828px",
+                "width": "351.422px",
                 "height": "11px",
                 "minWidth": "0px",
                 "minHeight": "auto",
@@ -1655,7 +1655,7 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "daemon127.0.0.1:5173v0.0.4 · pid 2425886 · up 4sv0.0.4"
+              "text": "daemon127.0.0.1:5173v0.0.4 · pid 2568177 · up 22sv0.0.4"
             },
             "needs-orch": {
               "selector": "[data-testid=\"needs-orch\"]",
@@ -1991,7 +1991,7 @@
                 "overflow": "auto",
                 "opacity": "1"
               },
-              "text": "attention0 · rank · agecardsrowsNothing needs the orchestratorfirehosewatch — followNo events since connect"
+              "text": "attention0 · rank · agecardsrowsNothing needs the orchestratorfirehosewatch — followNo events counted since this console connected"
             },
             "footer": {
               "selector": ".pc-shell__footer",
@@ -2049,7 +2049,7 @@
         "aria": {
           "api": "locator.ariaSnapshot",
           "selector": "[data-testid=\"shell\"]",
-          "tree": "- link \"Skip to navigation\":\n  - /url: \"#shell-nav\"\n- link \"Skip to find\":\n  - /url: \"#find-input-target\"\n- link \"Skip to main content\":\n  - /url: \"#main-content\"\n- banner:\n  - img \"Parley\"\n  - text: parley console\n  - navigation \"Screens\":\n    - tablist \"Console screens\":\n      - tab \"Fleet 1 task · 0 need action\" [selected]\n      - tab \"Run no run\"\n      - tab \"Task t1\"\n      - tab \"Metrics all hands\"\n  - text: daemon 127.0.0.1:5173 v0.0.4 · pid 2425886 · up 6s needs orch 0 stream live\n  - time: 22:00:45\n  - button \"Settings\"\n- complementary \"Left rail\":\n  - text: Find tasks and sessions\n  - combobox \"Find tasks and sessions\"\n  - region \"scope\":\n    - heading \"scope\" [level=2]\n    - text: orchestrator session session\n    - combobox \"Orchestrator session scope\":\n      - option \"All sessions\" [selected]\n      - option \"verify-orch · 1\"\n  - region \"state filter\":\n    - heading \"state filter\" [level=2]\n    - text: 1 tasks\n    - group \"Filter by state\":\n      - button \"all 1\" [pressed]\n      - button \"awaiting 0\"\n      - button \"stalled 0\"\n      - button \"failed 0\"\n      - button \"gate\"\n      - button \"running 0\"\n      - button \"queued 0\"\n  - region \"token burn · 24h\":\n    - heading \"token burn · 24h\" [level=2]\n    - text: last 24h · sees tasks within retention (30d assumed)\n    - paragraph: No token activity in the last 24h (within retention).\n- main:\n  - tabpanel \"Fleet 1 task · 0 need action\":\n    - heading \"Fleet board\" [level=1]\n    - group \"Fleet KPIs\": needs orchestrator 0 items 0 held · 0 asks · 0 stall · 0 fresh running 0 tasks cap unknown queued / pending 0 / 0 no waiters runs 0 total 0 held · 0 advancing settled 24h 0 / 0 done / failed success 0% · last 24h token burn 0 in cache 0% · p95 —\n    - text: runs 0 held · track = nodes × loop\n    - paragraph: No runs\n    - text: tasks attention · age · 1\n    - grid \"Tasks\":\n      - row \"state task harness tokens dur age\":\n        - columnheader \"state\"\n        - columnheader \"task\"\n        - columnheader \"harness\"\n        - columnheader \"tokens\"\n        - columnheader \"dur\"\n        - columnheader \"age\"\n      - row \"DONE t1 t1 fake · fake-model — 181ms 0s\":\n        - gridcell \"DONE\"\n        - gridcell \"t1 t1\"\n        - gridcell \"fake · fake-model\"\n        - gridcell \"—\"\n        - gridcell \"181ms\"\n        - gridcell \"0s\"\n    - complementary:\n      - text: executors 0 runners\n      - paragraph: No runners\n- complementary \"Attention rail\":\n  - heading \"attention\" [level=2]\n  - text: 0 · rank · age\n  - group \"Attention density\":\n    - button \"cards\" [pressed]\n    - button \"rows\"\n  - paragraph: Nothing needs the orchestrator\n  - heading \"firehose\" [level=2]\n  - text: watch — follow\n  - paragraph: No events since connect\n- contentinfo: AWAITING STALLED FAILED RUNNING QUEUED PENDING DONE CANCEL state = what a task IS · quality = how good work WAS · 0 unacked events · live read-only · parley never merges"
+          "tree": "- link \"Skip to navigation\":\n  - /url: \"#shell-nav\"\n- link \"Skip to find\":\n  - /url: \"#find-input-target\"\n- link \"Skip to main content\":\n  - /url: \"#main-content\"\n- banner:\n  - img \"Parley\"\n  - text: parley console\n  - navigation \"Screens\":\n    - tablist \"Console screens\":\n      - tab \"Fleet 1 task · 0 need action\" [selected]\n      - tab \"Run no run\"\n      - tab \"Task t1\"\n      - tab \"Metrics all sessions\"\n  - text: daemon 127.0.0.1:5173 v0.0.4 · pid 2568177 · up 23s needs orch 0 stream live\n  - time: 23:17:24\n  - button \"Settings\"\n- complementary \"Left rail\":\n  - text: Find tasks and sessions\n  - combobox \"Find tasks and sessions\"\n  - region \"scope\":\n    - heading \"scope\" [level=2]\n    - text: orchestrator session session\n    - combobox \"Orchestrator session scope\":\n      - option \"All sessions\" [selected]\n      - option \"verify-orch · 1\"\n  - region \"state filter\":\n    - heading \"state filter\" [level=2]\n    - text: 1 tasks\n    - group \"Filter by state\":\n      - button \"all 1\" [pressed]\n      - button \"awaiting 0\"\n      - button \"stalled 0\"\n      - button \"failed 0\"\n      - button \"gate\"\n      - button \"running 0\"\n      - button \"queued 0\"\n  - region \"token burn · 24h\":\n    - heading \"token burn · 24h\" [level=2]\n    - text: last 24h · sees tasks within retention (30d assumed)\n    - paragraph: No token activity in the last 24h (within retention).\n- main:\n  - tabpanel \"Fleet 1 task · 0 need action\":\n    - heading \"Fleet board\" [level=1]\n    - group \"Fleet KPIs\": needs orchestrator 0 items 0 held · 0 asks · 0 stall · 0 fresh running 0 tasks cap unknown queued / pending 0 / 0 no waiters runs 0 total 0 held · 0 advancing settled 24h 0 / 0 done / failed success — · last 24h token burn 0 in cache — · p95 —\n    - text: runs 0 held · track = nodes × loop\n    - paragraph: No runs\n    - text: tasks attention · age · 1\n    - grid \"Tasks\":\n      - row \"state task harness tokens dur age\":\n        - columnheader \"state\"\n        - columnheader \"task\"\n        - columnheader \"harness\"\n        - columnheader \"tokens\"\n        - columnheader \"dur\"\n        - columnheader \"age\"\n      - row \"DONE t1 t1 fake · fake-model — 181ms 0s\":\n        - gridcell \"DONE\"\n        - gridcell \"t1 t1\"\n        - gridcell \"fake · fake-model\"\n        - gridcell \"—\"\n        - gridcell \"181ms\"\n        - gridcell \"0s\"\n    - complementary:\n      - text: executors none registered\n      - paragraph: No runners\n- complementary \"Attention rail\":\n  - heading \"attention\" [level=2]\n  - text: 0 · rank · age\n  - group \"Attention density\":\n    - button \"cards\" [pressed]\n    - button \"rows\"\n  - paragraph: Nothing needs the orchestrator\n  - heading \"firehose\" [level=2]\n  - text: watch — follow\n  - paragraph: No events counted since this console connected\n- contentinfo: AWAITING STALLED FAILED RUNNING QUEUED PENDING DONE CANCEL state = what a task IS · quality = how good work WAS · 0 unacked events · live read-only · parley never merges"
         },
         "keyboardWalk": {
           "focusableCount": 20,
@@ -2069,7 +2069,7 @@
               "tag": "nav",
               "role": null,
               "testId": "shell-nav",
-              "text": "Fleet1 task · 0 need actionRunno runTaskt1Metricsall hands"
+              "text": "Fleet1 task · 0 need actionRunno runTaskt1Metricsall sessions"
             }
           ],
           "entered": true,
@@ -2088,7 +2088,7 @@
           "aria": {
             "api": "locator.ariaSnapshot",
             "selector": "[data-testid=\"shell\"]",
-            "tree": "- link \"Skip to navigation\":\n  - /url: \"#shell-nav\"\n- link \"Skip to find\":\n  - /url: \"#find-input-target\"\n- link \"Skip to main content\":\n  - /url: \"#main-content\"\n- banner:\n  - img \"Parley\"\n  - text: parley console\n  - navigation \"Screens\":\n    - tablist \"Console screens\":\n      - tab \"Fleet 1 task · 0 need action\" [selected]\n      - tab \"Run no run\"\n      - tab \"Task t1\"\n      - tab \"Metrics all hands\"\n  - text: daemon 127.0.0.1:5173 v0.0.4 · pid 2425886 · up 6s needs orch 0 stream live\n  - time: 22:00:45\n  - button \"Settings\"\n- complementary \"Left rail\":\n  - text: Find tasks and sessions\n  - combobox \"Find tasks and sessions\"\n  - region \"scope\":\n    - heading \"scope\" [level=2]\n    - text: orchestrator session session\n    - combobox \"Orchestrator session scope\":\n      - option \"All sessions\" [selected]\n      - option \"verify-orch · 1\"\n  - region \"state filter\":\n    - heading \"state filter\" [level=2]\n    - text: 1 tasks\n    - group \"Filter by state\":\n      - button \"all 1\" [pressed]\n      - button \"awaiting 0\"\n      - button \"stalled 0\"\n      - button \"failed 0\"\n      - button \"gate\"\n      - button \"running 0\"\n      - button \"queued 0\"\n  - region \"token burn · 24h\":\n    - heading \"token burn · 24h\" [level=2]\n    - text: last 24h · sees tasks within retention (30d assumed)\n    - paragraph: No token activity in the last 24h (within retention).\n- main:\n  - tabpanel \"Fleet 1 task · 0 need action\":\n    - heading \"Fleet board\" [level=1]\n    - group \"Fleet KPIs\": needs orchestrator 0 items 0 held · 0 asks · 0 stall · 0 fresh running 0 tasks cap unknown queued / pending 0 / 0 no waiters runs 0 total 0 held · 0 advancing settled 24h 0 / 0 done / failed success 0% · last 24h token burn 0 in cache 0% · p95 —\n    - text: runs 0 held · track = nodes × loop\n    - paragraph: No runs\n    - text: tasks attention · age · 1\n    - grid \"Tasks\":\n      - row \"state task harness tokens dur age\":\n        - columnheader \"state\"\n        - columnheader \"task\"\n        - columnheader \"harness\"\n        - columnheader \"tokens\"\n        - columnheader \"dur\"\n        - columnheader \"age\"\n      - row \"DONE t1 t1 fake · fake-model — 181ms 0s\":\n        - gridcell \"DONE\"\n        - gridcell \"t1 t1\"\n        - gridcell \"fake · fake-model\"\n        - gridcell \"—\"\n        - gridcell \"181ms\"\n        - gridcell \"0s\"\n    - complementary:\n      - text: executors 0 runners\n      - paragraph: No runners\n- complementary \"Attention rail\":\n  - heading \"attention\" [level=2]\n  - text: 0 · rank · age\n  - group \"Attention density\":\n    - button \"cards\" [pressed]\n    - button \"rows\"\n  - paragraph: Nothing needs the orchestrator\n  - heading \"firehose\" [level=2]\n  - text: watch — follow\n  - paragraph: No events since connect\n- contentinfo: AWAITING STALLED FAILED RUNNING QUEUED PENDING DONE CANCEL state = what a task IS · quality = how good work WAS · 0 unacked events · live read-only · parley never merges"
+            "tree": "- link \"Skip to navigation\":\n  - /url: \"#shell-nav\"\n- link \"Skip to find\":\n  - /url: \"#find-input-target\"\n- link \"Skip to main content\":\n  - /url: \"#main-content\"\n- banner:\n  - img \"Parley\"\n  - text: parley console\n  - navigation \"Screens\":\n    - tablist \"Console screens\":\n      - tab \"Fleet 1 task · 0 need action\" [selected]\n      - tab \"Run no run\"\n      - tab \"Task t1\"\n      - tab \"Metrics all sessions\"\n  - text: daemon 127.0.0.1:5173 v0.0.4 · pid 2568177 · up 23s needs orch 0 stream live\n  - time: 23:17:24\n  - button \"Settings\"\n- complementary \"Left rail\":\n  - text: Find tasks and sessions\n  - combobox \"Find tasks and sessions\"\n  - region \"scope\":\n    - heading \"scope\" [level=2]\n    - text: orchestrator session session\n    - combobox \"Orchestrator session scope\":\n      - option \"All sessions\" [selected]\n      - option \"verify-orch · 1\"\n  - region \"state filter\":\n    - heading \"state filter\" [level=2]\n    - text: 1 tasks\n    - group \"Filter by state\":\n      - button \"all 1\" [pressed]\n      - button \"awaiting 0\"\n      - button \"stalled 0\"\n      - button \"failed 0\"\n      - button \"gate\"\n      - button \"running 0\"\n      - button \"queued 0\"\n  - region \"token burn · 24h\":\n    - heading \"token burn · 24h\" [level=2]\n    - text: last 24h · sees tasks within retention (30d assumed)\n    - paragraph: No token activity in the last 24h (within retention).\n- main:\n  - tabpanel \"Fleet 1 task · 0 need action\":\n    - heading \"Fleet board\" [level=1]\n    - group \"Fleet KPIs\": needs orchestrator 0 items 0 held · 0 asks · 0 stall · 0 fresh running 0 tasks cap unknown queued / pending 0 / 0 no waiters runs 0 total 0 held · 0 advancing settled 24h 0 / 0 done / failed success — · last 24h token burn 0 in cache — · p95 —\n    - text: runs 0 held · track = nodes × loop\n    - paragraph: No runs\n    - text: tasks attention · age · 1\n    - grid \"Tasks\":\n      - row \"state task harness tokens dur age\":\n        - columnheader \"state\"\n        - columnheader \"task\"\n        - columnheader \"harness\"\n        - columnheader \"tokens\"\n        - columnheader \"dur\"\n        - columnheader \"age\"\n      - row \"DONE t1 t1 fake · fake-model — 181ms 0s\":\n        - gridcell \"DONE\"\n        - gridcell \"t1 t1\"\n        - gridcell \"fake · fake-model\"\n        - gridcell \"—\"\n        - gridcell \"181ms\"\n        - gridcell \"0s\"\n    - complementary:\n      - text: executors none registered\n      - paragraph: No runners\n- complementary \"Attention rail\":\n  - heading \"attention\" [level=2]\n  - text: 0 · rank · age\n  - group \"Attention density\":\n    - button \"cards\" [pressed]\n    - button \"rows\"\n  - paragraph: Nothing needs the orchestrator\n  - heading \"firehose\" [level=2]\n  - text: watch — follow\n  - paragraph: No events counted since this console connected\n- contentinfo: AWAITING STALLED FAILED RUNNING QUEUED PENDING DONE CANCEL state = what a task IS · quality = how good work WAS · 0 unacked events · live read-only · parley never merges"
           }
         },
         "findPopup": {
@@ -2102,16 +2102,16 @@
           "aria": {
             "api": "locator.ariaSnapshot",
             "selector": "[data-testid=\"shell\"]",
-            "tree": "- link \"Skip to navigation\":\n  - /url: \"#shell-nav\"\n- link \"Skip to find\":\n  - /url: \"#find-input-target\"\n- link \"Skip to main content\":\n  - /url: \"#main-content\"\n- banner:\n  - img \"Parley\"\n  - text: parley console\n  - navigation \"Screens\":\n    - tablist \"Console screens\":\n      - tab \"Fleet 1 task · 0 need action\" [selected]\n      - tab \"Run no run\"\n      - tab \"Task t1\"\n      - tab \"Metrics all hands\"\n  - text: daemon 127.0.0.1:5173 v0.0.4 · pid 2425886 · up 6s needs orch 0 stream live\n  - time: 22:00:46\n  - button \"Settings\"\n- complementary \"Left rail\":\n  - text: Find tasks and sessions\n  - combobox \"Find tasks and sessions\" [expanded]: zzz-axe-no-match-999\n  - status: No match for “zzz-axe-no-match-999”\n  - region \"scope\":\n    - heading \"scope\" [level=2]\n    - text: orchestrator session session\n    - combobox \"Orchestrator session scope\":\n      - option \"All sessions\" [selected]\n      - option \"verify-orch · 1\"\n  - region \"state filter\":\n    - heading \"state filter\" [level=2]\n    - text: 1 tasks\n    - group \"Filter by state\":\n      - button \"all 1\" [pressed]\n      - button \"awaiting 0\"\n      - button \"stalled 0\"\n      - button \"failed 0\"\n      - button \"gate\"\n      - button \"running 0\"\n      - button \"queued 0\"\n  - region \"token burn · 24h\":\n    - heading \"token burn · 24h\" [level=2]\n    - text: last 24h · sees tasks within retention (30d assumed)\n    - paragraph: No token activity in the last 24h (within retention).\n- main:\n  - tabpanel \"Fleet 1 task · 0 need action\":\n    - heading \"Fleet board\" [level=1]\n    - group \"Fleet KPIs\": needs orchestrator 0 items 0 held · 0 asks · 0 stall · 0 fresh running 0 tasks cap unknown queued / pending 0 / 0 no waiters runs 0 total 0 held · 0 advancing settled 24h 0 / 0 done / failed success 0% · last 24h token burn 0 in cache 0% · p95 —\n    - text: runs 0 held · track = nodes × loop\n    - paragraph: No runs\n    - text: tasks attention · age · 1\n    - grid \"Tasks\":\n      - row \"state task harness tokens dur age\":\n        - columnheader \"state\"\n        - columnheader \"task\"\n        - columnheader \"harness\"\n        - columnheader \"tokens\"\n        - columnheader \"dur\"\n        - columnheader \"age\"\n      - row \"DONE t1 t1 fake · fake-model — 181ms 0s\":\n        - gridcell \"DONE\"\n        - gridcell \"t1 t1\"\n        - gridcell \"fake · fake-model\"\n        - gridcell \"—\"\n        - gridcell \"181ms\"\n        - gridcell \"0s\"\n    - complementary:\n      - text: executors 0 runners\n      - paragraph: No runners\n- complementary \"Attention rail\":\n  - heading \"attention\" [level=2]\n  - text: 0 · rank · age\n  - group \"Attention density\":\n    - button \"cards\" [pressed]\n    - button \"rows\"\n  - paragraph: Nothing needs the orchestrator\n  - heading \"firehose\" [level=2]\n  - text: watch — follow\n  - paragraph: No events since connect\n- contentinfo: AWAITING STALLED FAILED RUNNING QUEUED PENDING DONE CANCEL state = what a task IS · quality = how good work WAS · 0 unacked events · live read-only · parley never merges"
+            "tree": "- link \"Skip to navigation\":\n  - /url: \"#shell-nav\"\n- link \"Skip to find\":\n  - /url: \"#find-input-target\"\n- link \"Skip to main content\":\n  - /url: \"#main-content\"\n- banner:\n  - img \"Parley\"\n  - text: parley console\n  - navigation \"Screens\":\n    - tablist \"Console screens\":\n      - tab \"Fleet 1 task · 0 need action\" [selected]\n      - tab \"Run no run\"\n      - tab \"Task t1\"\n      - tab \"Metrics all sessions\"\n  - text: daemon 127.0.0.1:5173 v0.0.4 · pid 2568177 · up 23s needs orch 0 stream live\n  - time: 23:17:25\n  - button \"Settings\"\n- complementary \"Left rail\":\n  - text: Find tasks and sessions\n  - combobox \"Find tasks and sessions\" [expanded]: zzz-axe-no-match-999\n  - status: No match for “zzz-axe-no-match-999”\n  - region \"scope\":\n    - heading \"scope\" [level=2]\n    - text: orchestrator session session\n    - combobox \"Orchestrator session scope\":\n      - option \"All sessions\" [selected]\n      - option \"verify-orch · 1\"\n  - region \"state filter\":\n    - heading \"state filter\" [level=2]\n    - text: 1 tasks\n    - group \"Filter by state\":\n      - button \"all 1\" [pressed]\n      - button \"awaiting 0\"\n      - button \"stalled 0\"\n      - button \"failed 0\"\n      - button \"gate\"\n      - button \"running 0\"\n      - button \"queued 0\"\n  - region \"token burn · 24h\":\n    - heading \"token burn · 24h\" [level=2]\n    - text: last 24h · sees tasks within retention (30d assumed)\n    - paragraph: No token activity in the last 24h (within retention).\n- main:\n  - tabpanel \"Fleet 1 task · 0 need action\":\n    - heading \"Fleet board\" [level=1]\n    - group \"Fleet KPIs\": needs orchestrator 0 items 0 held · 0 asks · 0 stall · 0 fresh running 0 tasks cap unknown queued / pending 0 / 0 no waiters runs 0 total 0 held · 0 advancing settled 24h 0 / 0 done / failed success — · last 24h token burn 0 in cache — · p95 —\n    - text: runs 0 held · track = nodes × loop\n    - paragraph: No runs\n    - text: tasks attention · age · 1\n    - grid \"Tasks\":\n      - row \"state task harness tokens dur age\":\n        - columnheader \"state\"\n        - columnheader \"task\"\n        - columnheader \"harness\"\n        - columnheader \"tokens\"\n        - columnheader \"dur\"\n        - columnheader \"age\"\n      - row \"DONE t1 t1 fake · fake-model — 181ms 0s\":\n        - gridcell \"DONE\"\n        - gridcell \"t1 t1\"\n        - gridcell \"fake · fake-model\"\n        - gridcell \"—\"\n        - gridcell \"181ms\"\n        - gridcell \"0s\"\n    - complementary:\n      - text: executors none registered\n      - paragraph: No runners\n- complementary \"Attention rail\":\n  - heading \"attention\" [level=2]\n  - text: 0 · rank · age\n  - group \"Attention density\":\n    - button \"cards\" [pressed]\n    - button \"rows\"\n  - paragraph: Nothing needs the orchestrator\n  - heading \"firehose\" [level=2]\n  - text: watch — follow\n  - paragraph: No events counted since this console connected\n- contentinfo: AWAITING STALLED FAILED RUNNING QUEUED PENDING DONE CANCEL state = what a task IS · quality = how good work WAS · 0 unacked events · live read-only · parley never merges"
           }
         },
         "settingsOpen": {
           "axe": {
             "url": "http://127.0.0.1:5173/",
             "violations": [],
-            "passes": 39,
-            "incomplete": 2,
-            "inapplicable": 49
+            "passes": 23,
+            "incomplete": 1,
+            "inapplicable": 65
           }
         }
       },
@@ -2199,7 +2199,7 @@
             "scrollWidth": 62,
             "clientWidth": 62,
             "ok": true,
-            "text": "22:00:44"
+            "text": "23:17:22"
           },
           ".pc-shell__footer-note": {
             "found": true,
@@ -2251,7 +2251,8 @@
         }
       ],
       "settingsFocus": {
-        "ariaModal": "false",
+        "ariaModal": "true",
+        "tabStopsBehind": 0,
         "focusMovedIn": true,
         "focusIn": {
           "tag": "button",
@@ -2278,62 +2279,62 @@
       "liveRegionTranscript": {
         "bootSamples": [
           {
-            "t": 94,
-            "text": "",
-            "phase": "offline"
-          },
-          {
-            "t": 176,
+            "t": 114,
             "text": "",
             "phase": "live"
           },
           {
-            "t": 259,
+            "t": 196,
             "text": "",
             "phase": "live"
           },
           {
-            "t": 341,
+            "t": 278,
             "text": "",
             "phase": "live"
           },
           {
-            "t": 423,
+            "t": 360,
             "text": "",
             "phase": "live"
           },
           {
-            "t": 505,
+            "t": 442,
             "text": "",
             "phase": "live"
           },
           {
-            "t": 586,
+            "t": 523,
             "text": "",
             "phase": "live"
           },
           {
-            "t": 667,
+            "t": 604,
             "text": "",
             "phase": "live"
           },
           {
-            "t": 749,
+            "t": 686,
             "text": "",
             "phase": "live"
           },
           {
-            "t": 831,
+            "t": 766,
             "text": "",
             "phase": "live"
           },
           {
-            "t": 912,
+            "t": 848,
             "text": "",
             "phase": "live"
           },
           {
-            "t": 993,
+            "t": 929,
+            "text": "",
+            "phase": "live"
+          },
+          {
+            "t": 1010,
             "text": "",
             "phase": "live"
           }
@@ -2355,37 +2356,37 @@
             "phase": "live"
           },
           {
-            "t": 812,
+            "t": 811,
             "text": "",
             "phase": "live"
           },
           {
-            "t": 1014,
+            "t": 1013,
             "text": "",
             "phase": "live"
           },
           {
-            "t": 1217,
+            "t": 1216,
             "text": "",
             "phase": "live"
           },
           {
-            "t": 1419,
+            "t": 1418,
             "text": "",
             "phase": "live"
           },
           {
             "t": 1621,
+            "text": "",
+            "phase": "live"
+          },
+          {
+            "t": 1823,
             "text": "Reconnecting to daemon stream",
             "phase": "stale-reconnecting"
           },
           {
-            "t": 1825,
-            "text": "Reconnecting to daemon stream",
-            "phase": "stale-reconnecting"
-          },
-          {
-            "t": 2027,
+            "t": 2028,
             "text": "Reconnecting to daemon stream",
             "phase": "stale-reconnecting"
           },
@@ -2395,7 +2396,7 @@
             "phase": "stale-reconnecting"
           },
           {
-            "t": 2432,
+            "t": 2431,
             "text": "Reconnecting to daemon stream",
             "phase": "stale-reconnecting"
           },
@@ -2405,7 +2406,7 @@
             "phase": "stale-reconnecting"
           },
           {
-            "t": 2837,
+            "t": 2836,
             "text": "Reconnecting to daemon stream",
             "phase": "stale-reconnecting"
           },
@@ -2415,92 +2416,97 @@
             "phase": "stale-reconnecting"
           },
           {
-            "t": 3242,
+            "t": 3240,
             "text": "Reconnecting to daemon stream",
             "phase": "stale-reconnecting"
           },
           {
-            "t": 3445,
+            "t": 3442,
             "text": "Reconnecting to daemon stream",
             "phase": "stale-reconnecting"
           },
           {
-            "t": 3646,
+            "t": 3644,
             "text": "Reconnecting to daemon stream",
             "phase": "stale-reconnecting"
           },
           {
-            "t": 3849,
+            "t": 3846,
             "text": "Reconnecting to daemon stream",
             "phase": "stale-reconnecting"
           },
           {
-            "t": 4051,
+            "t": 4048,
             "text": "Reconnecting to daemon stream",
             "phase": "stale-reconnecting"
           },
           {
-            "t": 4253,
+            "t": 4250,
             "text": "Reconnecting to daemon stream",
             "phase": "stale-reconnecting"
           },
           {
-            "t": 4455,
+            "t": 4453,
             "text": "Reconnecting to daemon stream",
             "phase": "stale-reconnecting"
           },
           {
-            "t": 4658,
+            "t": 4655,
             "text": "Reconnecting to daemon stream",
             "phase": "stale-reconnecting"
           },
           {
-            "t": 4860,
+            "t": 4857,
             "text": "Reconnecting to daemon stream",
             "phase": "stale-reconnecting"
           },
           {
-            "t": 5062,
+            "t": 5059,
             "text": "Reconnecting to daemon stream",
             "phase": "stale-reconnecting"
           },
           {
-            "t": 5265,
+            "t": 5261,
             "text": "Reconnecting to daemon stream",
             "phase": "stale-reconnecting"
           },
           {
-            "t": 5467,
+            "t": 5463,
             "text": "Reconnecting to daemon stream",
             "phase": "stale-reconnecting"
           },
           {
-            "t": 5669,
+            "t": 5665,
             "text": "Reconnecting to daemon stream",
             "phase": "stale-reconnecting"
           },
           {
-            "t": 5871,
+            "t": 5867,
             "text": "Reconnecting to daemon stream",
             "phase": "stale-reconnecting"
           },
           {
-            "t": 6074,
+            "t": 6068,
             "text": "Reconnecting to daemon stream",
             "phase": "stale-reconnecting"
           },
           {
-            "t": 6275,
+            "t": 6269,
             "text": "Reconnecting to daemon stream",
             "phase": "stale-reconnecting"
           },
           {
-            "t": 6484,
+            "t": 6472,
             "text": "Reconnecting to daemon stream",
             "phase": "stale-reconnecting"
           },
           {
-            "t": 6686,
+            "t": 6674,
+            "text": "Reconnecting to daemon stream",
+            "phase": "stale-reconnecting"
+          },
+          {
+            "t": 6876,
             "text": "Connection restored",
             "phase": "live"
           }
@@ -2510,14 +2516,14 @@
         "announcedOfflineAfterLive": true,
         "announcedRestore": true
       },
-      "recordedAt": "2026-08-07T02:00:55.212Z"
+      "recordedAt": "2026-08-07T03:17:33.651Z"
     },
     "find-honesty": {
       "kind": "find-honesty",
       "description": "Find combobox honesty: loading (delay), error (500), no-match (empty sessions), results — forced via route interception on /sessions.",
       "daemon": {
         "taskId": "t1",
-        "port": 42137
+        "port": 40767
       },
       "states": {
         "loading": {
@@ -2846,7 +2852,7 @@
               "overflow": "visible",
               "opacity": "1"
             },
-            "text": "Find tasks and sessions/taskt1t1 · completed"
+            "text": "Find tasks and sessions/taskt1t1DONE"
           },
           "popup": {
             "selector": "[data-testid=\"find-popup\"]",
@@ -2888,7 +2894,7 @@
               "overflow": "auto",
               "opacity": "1"
             },
-            "text": "taskt1t1 · completed"
+            "text": "taskt1t1DONE"
           },
           "aria": {
             "role": "combobox",
@@ -2897,8 +2903,8 @@
           }
         }
       },
-      "recordedAt": "2026-08-06T08:50:22.606Z"
+      "recordedAt": "2026-08-07T03:17:41.090Z"
     }
   },
-  "updatedAt": "2026-08-07T02:00:55.212Z"
+  "updatedAt": "2026-08-07T03:17:41.090Z"
 }

@@ -43,7 +43,7 @@ export function panelPhaseFromSnapshot(
 export function panelMessage(phase: PanelPhase, kind: string): string {
   switch (phase) {
     case "loading":
-      return `Hailing the ${kind}…`;
+      return `Loading ${kind}…`;
     case "offline":
       return `Daemon offline — ${kind} unavailable`;
     case "stale-reconnecting":
@@ -54,8 +54,10 @@ export function panelMessage(phase: PanelPhase, kind: string): string {
       if (kind === "fleet") {
         return "No tasks yet. Copy a scaffold to start work.";
       }
-      // Seed-silent firehose is not "no events exist" — only none since connect.
-      if (kind === "events") return "No events since connect";
+      // Seed-silent firehose: count is since this console connected, not all-time.
+      if (kind === "events") {
+        return "No events counted since this console connected";
+      }
       return `No ${kind}`;
     default:
       return "";

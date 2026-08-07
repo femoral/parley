@@ -7,6 +7,7 @@ import {
   useEffect,
   useId,
   useRef,
+  useState,
   type ReactNode,
   type ToggleEvent,
 } from "react";
@@ -26,6 +27,7 @@ import {
   type LogTailStatus,
   type PanelStatus,
 } from "../../data/index.js";
+import { isHelloLogLine } from "../../data/logClassify.js";
 import { CopyScaffold, Panel, StateChip, stateLabel } from "../../components/index.js";
 import {
   coatVar,
@@ -529,6 +531,71 @@ export function AttemptChain({
 
 // ── Log tail ────────────────────────────────────────────────────────────
 
+function LogLineRow({ line, index }: { line: LogLine; index: number }) {
+  const hello = isHelloLogLine(line);
+  const [expanded, setExpanded] = useState(false);
+  const kindColor = logKindColor(line.kind);
+  const textColor = logTextColor(line.kind);
+
+  if (hello) {
+    return (
+      <div
+        className="pc-task-log__line pc-task-log__line--hello"
+        data-kind={line.kind}
+        data-hello="true"
+        data-testid="task-log-hello"
+      >
+        <span className="pc-task-log__ln" aria-hidden="true">
+          {formatLogLineNo(index)}
+        </span>
+        <div className="pc-task-log__hello">
+          <button
+            type="button"
+            className="pc-task-log__hello-toggle"
+            aria-expanded={expanded}
+            onClick={() => setExpanded((v) => !v)}
+            data-testid="task-log-hello-toggle"
+          >
+            <span className="pc-task-log__kind" style={{ color: "var(--text-4)" }}>
+              hello
+            </span>{" "}
+            <span className="pc-task-log__hello-summary">
+              {line.text.startsWith("session hello")
+                ? line.text
+                : "session hello · expand for envelope"}
+            </span>
+            <span className="pc-task-log__hello-cue" aria-hidden="true">
+              {expanded ? "▾" : "▸"}
+            </span>
+          </button>
+          {expanded ? (
+            <pre className="pc-task-log__hello-body" data-testid="task-log-hello-body">
+              {line.raw}
+            </pre>
+          ) : null}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className={`pc-task-log__line${line.kind === "error" ? " pc-task-log__line--error" : ""}`}
+      data-kind={line.kind}
+    >
+      <span className="pc-task-log__ln" aria-hidden="true">
+        {formatLogLineNo(index)}
+      </span>
+      <span className="pc-task-log__text" style={{ color: textColor }}>
+        <span className="pc-task-log__kind" style={{ color: kindColor }}>
+          {line.kind === "error" ? "error" : line.kind}
+        </span>{" "}
+        {line.text}
+      </span>
+    </div>
+  );
+}
+
 export function LogTailPanel({
   lines,
   status,
@@ -625,19 +692,45 @@ export function LogTailPanel({
           />
         ) : null}
         {lines.map((line, i) => (
-          <div className="pc-task-log__line" key={`${i}-${line.raw.slice(0, 24)}`} data-kind={line.kind}>
-            <span className="pc-task-log__ln" aria-hidden="true">
-              {formatLogLineNo(i)}
-            </span>
-            <span className="pc-task-log__text" style={{ color: logTextColor(line.kind) }}>
-              <span className="pc-task-log__kind" style={{ color: logKindColor(line.kind) }}>
-                {line.kind}
-              </span>{" "}
-              {line.text}
-            </span>
-          </div>
+          <LogLineRow key={`${i}-${line.raw.slice(0, 24)}`} line={line} index={i} />
         ))}
       </div>
+    </section>
+  );
+}
+
+// ── Outstanding ask band (full-width, hierarchy #1) ──────────────────
+
+/**
+ * Full-width outstanding-question band — largest text block on the task
+ * screen when a question is pending. Answer scaffold rides here.
+ */
+export function AskBand({
+  taskId,
+  question,
+}: {
+  taskId: string;
+  question: string;
+}) {
+  return (
+    <section
+      className="pc-task-ask-band"
+      data-testid="task-ask-band"
+      aria-label="Outstanding question"
+    >
+      <div className="pc-task-ask-band__head">
+        <span className="pc-task-ask-band__tag">OUTSTANDING ASK</span>
+        <span className="pc-task-ask-band__cue">needs the orchestrating agent</span>
+      </div>
+      <p className="pc-task-ask-band__question" data-testid="task-ask-band-question">
+        {question}
+      </p>
+      <CopyScaffold
+        text={answerScaffold(taskId)}
+        variant="block"
+        label="copy"
+        testId="task-answer-scaffold"
+      />
     </section>
   );
 }
@@ -648,10 +741,13 @@ export function QaPanel({
   taskId,
   qa,
   status,
+  /** When true, the outstanding scaffold already lives in the full-width ask band. */
+  scaffoldInBand = false,
 }: {
   taskId: string | null;
   qa: QaTurn[];
   status: PanelStatus;
+  scaffoldInBand?: boolean;
 }) {
   const outstanding = qa.filter((t) => t.answer == null).length;
   const meta =
@@ -705,7 +801,9 @@ export function QaPanel({
                     className={`pc-task-qa__answer${pending ? " pc-task-qa__answer--pending" : ""}`}
                   >
                     {pending
-                      ? "waiting on the orchestrating agent — humans do not answer here"
+                      ? scaffoldInBand
+                        ? "see ask band above — waiting on the orchestrating agent"
+                        : "waiting on the orchestrating agent — humans do not answer here"
                       : turn.answer}
                   </span>
                 </div>
@@ -717,7 +815,7 @@ export function QaPanel({
                   {" · "}
                   <time dateTime={turn.asked_at}>{formatQaClock(turn.asked_at)}</time>
                 </div>
-                {pending && taskId ? (
+                {pending && taskId && !scaffoldInBand ? (
                   <CopyScaffold
                     text={answerScaffold(taskId)}
                     variant="block"

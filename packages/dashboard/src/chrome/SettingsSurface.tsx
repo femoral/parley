@@ -1,10 +1,7 @@
 /**
- * Settings popover — follow logs + shortcuts opt-out (coverage audit must-add).
- *
- * Implemented as a **popover** (not a modal): no full-screen scrim, no
- * aria-modal. Focus moves into the panel on open, restores to the trigger on
- * close, and Esc dismisses. Board accelerators are suppressed while open
- * (handled by useAccelerators). Tab is free to leave (popover, not trap).
+ * Settings dialog — genuinely modal: aria-modal=true, focus trapped, Esc
+ * dismisses. Focus moves into the panel on open, restores to the trigger on
+ * close. Board accelerators are suppressed while open (useAccelerators).
  */
 import { useEffect, useId, useRef, type RefObject } from "react";
 import type { ConsoleSettings } from "./settings.js";
@@ -14,9 +11,12 @@ export interface SettingsSurfaceProps {
   settings: ConsoleSettings;
   onChange: (next: ConsoleSettings) => void;
   onClose: () => void;
-  /** Element that opened the popover — restored on close. */
+  /** Element that opened the dialog — restored on close. */
   returnFocusRef?: RefObject<HTMLElement | null>;
 }
+
+const FOCUSABLE =
+  'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 export function SettingsSurface({
   open,
@@ -30,6 +30,9 @@ export function SettingsSurface({
   const titleId = useId();
 
   // Focus first control on open; restore trigger on close.
+  // Defer restore one frame so Shell's inert-removal layout effect has run
+  // (parent layout effects clear inert before this useEffect cleanup; rAF is
+  // belt-and-suspenders if timing ever flips).
   useEffect(() => {
     if (!open) return;
     const t = window.setTimeout(() => {
@@ -37,11 +40,15 @@ export function SettingsSurface({
     }, 0);
     return () => {
       window.clearTimeout(t);
-      returnFocusRef?.current?.focus();
+      const el = returnFocusRef?.current;
+      if (!el) return;
+      requestAnimationFrame(() => {
+        el.focus();
+      });
     };
   }, [open, returnFocusRef]);
 
-  // Esc inside the panel (in addition to accelerator handler).
+  // Esc + Tab trap (modal: focus cannot leave the panel).
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
@@ -49,11 +56,33 @@ export function SettingsSurface({
         e.preventDefault();
         e.stopPropagation();
         onClose();
+        return;
+      }
+      if (e.key !== "Tab") return;
+      const panel = panelRef.current;
+      if (!panel) return;
+      const nodes = Array.from(panel.querySelectorAll<HTMLElement>(FOCUSABLE)).filter(
+        (el) => !el.hasAttribute("disabled") && el.tabIndex !== -1,
+      );
+      if (nodes.length === 0) {
+        e.preventDefault();
+        return;
+      }
+      const first = nodes[0]!;
+      const last = nodes[nodes.length - 1]!;
+      const active = document.activeElement as HTMLElement | null;
+      if (e.shiftKey) {
+        if (active === first || !panel.contains(active)) {
+          e.preventDefault();
+          last.focus();
+        }
+      } else if (active === last || !panel.contains(active)) {
+        e.preventDefault();
+        first.focus();
       }
     };
-    const panel = panelRef.current;
-    panel?.addEventListener("keydown", onKey);
-    return () => panel?.removeEventListener("keydown", onKey);
+    document.addEventListener("keydown", onKey, true);
+    return () => document.removeEventListener("keydown", onKey, true);
   }, [open, onClose]);
 
   if (!open) return null;
@@ -64,7 +93,7 @@ export function SettingsSurface({
         ref={panelRef}
         className="pc-settings__panel"
         role="dialog"
-        aria-modal="false"
+        aria-modal="true"
         aria-labelledby={titleId}
         data-testid="settings-panel"
       >

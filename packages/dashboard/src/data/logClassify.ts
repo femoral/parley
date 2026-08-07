@@ -32,10 +32,11 @@ export function classifyLogLine(raw: string): { kind: LogLineKind; text: string 
   const item = asObj(obj.item);
   const type = asStr(obj.type) ?? asStr(obj.kind) ?? "";
   const itemType = item ? (asStr(item.type) ?? "") : "";
-  const haystack = `${type} ${itemType}`.toLowerCase();
 
   const errorObj = asObj(obj.error);
-  const text =
+  // Extracted display fields only — never treat the raw JSON blob as message text
+  // for keyword classification (that misclassifies hello prompts and ordinary lines).
+  const extractedMessage =
     (item && asStr(item.text)) ||
     (item && asStr(item.command)) ||
     asStr(obj.message) ||
@@ -43,20 +44,90 @@ export function classifyLogLine(raw: string): { kind: LogLineKind; text: string 
     asStr(obj.note) ||
     asStr(obj.error) ||
     (errorObj && asStr(errorObj.message)) ||
+    undefined;
+  const text =
+    extractedMessage ||
     (asStr(obj.tool) && `${type || "tool_result"}: ${asStr(obj.tool)}`) ||
     trimmed;
 
+  // Kind routing uses type/itemType only (round-1 contract). Message text is not
+  // haystack-scanned — bare includes("ask") matches "task", "fail" matches
+  // "no failures detected", and hello prompts always contain ask/fail/error.
+  const typeHay = `${type} ${itemType}`.toLowerCase();
+
   const hasError = errorObj !== undefined || typeof obj.error === "string";
-  if (hasError || haystack.includes("error") || haystack.includes("fail")) {
+  // Narrow fatal: anchored on extracted message only, never the raw JSON envelope.
+  const messageFatal =
+    extractedMessage !== undefined && /^\s*fatal[:\s]/i.test(extractedMessage);
+
+  if (
+    hasError ||
+    messageFatal ||
+    typeHay.includes("error") ||
+    typeHay.includes("fail") ||
+    typeHay.includes("fatal")
+  ) {
     return { kind: "error", text };
   }
-  if (haystack.includes("question") || haystack.includes("ask")) return { kind: "question", text };
-  if (haystack.includes("command") || haystack.includes("shell")) return { kind: "shell", text };
-  if (haystack.includes("tool") || haystack.includes("function_call")) return { kind: "tool", text };
-  if (haystack.includes("message") || haystack.includes("reasoning")) {
+  if (typeHay.includes("question") || typeHay.includes("ask")) {
+    return { kind: "question", text };
+  }
+  if (typeHay.includes("command") || typeHay.includes("shell")) {
+    return { kind: "shell", text };
+  }
+  if (typeHay.includes("tool") || typeHay.includes("function_call")) {
+    return { kind: "tool", text };
+  }
+  if (
+    typeHay.includes("message") ||
+    typeHay.includes("reasoning")
+  ) {
     return { kind: "reasoning", text };
   }
+  // Session hello envelope (cwd/pid/hub boilerplate) — collapsed in the log UI.
+  if (isHelloEnvelope(obj, raw)) {
+    return { kind: "fallback", text: summarizeHello(obj, text) };
+  }
   return { kind: "fallback", text };
+}
+
+/** Vendor session-start JSON: cwd + pid + hub URL boilerplate. */
+function isHelloEnvelope(obj: Obj, raw: string): boolean {
+  const keys = Object.keys(obj).map((k) => k.toLowerCase());
+  const has = (n: string) => keys.some((k) => k === n || k.includes(n));
+  const score =
+    (has("cwd") || has("workdir") || has("work_dir") ? 1 : 0) +
+    (has("pid") ? 1 : 0) +
+    (has("hub") || has("url") ? 1 : 0) +
+    (has("session") ? 1 : 0);
+  if (score >= 2) return true;
+  // Long JSON dump with path-like cwd is almost always hello boilerplate.
+  return raw.length > 200 && (has("cwd") || has("pid"));
+}
+
+function summarizeHello(obj: Obj, fallback: string): string {
+  const cwd =
+    asStr(obj.cwd) ??
+    asStr(obj.workdir) ??
+    asStr(obj.work_dir) ??
+    asStr(asObj(obj.session)?.cwd);
+  const pid = obj.pid != null ? String(obj.pid) : asStr(obj.pid);
+  const bits = ["session hello"];
+  if (cwd) bits.push(cwd.length > 48 ? `…${cwd.slice(-48)}` : cwd);
+  if (pid) bits.push(`pid ${pid}`);
+  return bits.length > 1 ? bits.join(" · ") : fallback.slice(0, 80);
+}
+
+/** True when a classified line is collapsed session-hello boilerplate. */
+export function isHelloLogLine(line: Pick<LogLine, "kind" | "text" | "raw">): boolean {
+  if (line.kind !== "fallback") return false;
+  if (line.text.startsWith("session hello")) return true;
+  try {
+    const obj = asObj(JSON.parse(line.raw));
+    return obj ? isHelloEnvelope(obj, line.raw) : false;
+  } catch {
+    return false;
+  }
 }
 
 /** The log-tail window cap (last N classified lines). */

@@ -4,6 +4,8 @@
  * listbox popup. Honesty states: idle / loading / error / no-match / results.
  *
  * Status/alert content lives OUTSIDE role=listbox (aria-required-children).
+ * Task hits are ordered by canonical attention rank so an awaiting task cannot
+ * be omitted by the hit cap while lower-rank matches show (#368).
  */
 import {
   useCallback,
@@ -16,6 +18,8 @@ import {
   type RefObject,
 } from "react";
 import type { OrchestratorSession, ParleyClient, TaskEnvelope } from "@useparley/core";
+import { sortTasksByAttention } from "../data/attentionRank.js";
+import { StateChip } from "../components/StateChip.js";
 import { countNoun } from "./plural.js";
 
 const DEBOUNCE_MS = 200;
@@ -29,6 +33,8 @@ export interface FindHit {
   id: string;
   label: string;
   meta: string;
+  /** Wire state for tasks; empty for sessions. */
+  state: string;
 }
 
 export type FindStatus = "idle" | "loading" | "error" | "no-match" | "results";
@@ -44,10 +50,17 @@ export interface FindComboboxProps {
   focusAfterSelect?: () => void;
 }
 
-function matchTasks(tasks: readonly TaskEnvelope[], q: string): FindHit[] {
+/**
+ * Match tasks against the query, ordered by attention rank then age.
+ * Cap is applied after ranking so a single awaiting hit is never dropped
+ * behind lower-rank matches that share the needle.
+ */
+export function matchTasks(tasks: readonly TaskEnvelope[], q: string): FindHit[] {
   const needle = q.toLowerCase();
+  if (!needle) return [];
+  const ranked = sortTasksByAttention(tasks);
   const hits: FindHit[] = [];
-  for (const t of tasks) {
+  for (const t of ranked) {
     const name = t.name ?? "";
     const branch = t.branch ?? "";
     const id = t.task_id;
@@ -57,7 +70,8 @@ function matchTasks(tasks: readonly TaskEnvelope[], q: string): FindHit[] {
       kind: "task",
       id,
       label: name || id,
-      meta: [id, branch, t.state].filter(Boolean).join(" · "),
+      meta: [id, branch].filter(Boolean).join(" · "),
+      state: t.state,
     });
     if (hits.length >= MAX_TASK_HITS) break;
   }
@@ -70,6 +84,7 @@ function sessionHits(sessions: readonly OrchestratorSession[]): FindHit[] {
     id: s.id,
     label: s.id,
     meta: `${countNoun(s.task_count, "task")} · ${s.last_activity_at}`,
+    state: "",
   }));
 }
 
@@ -244,7 +259,7 @@ export function FindCombobox({
           aria-activedescendant={activeDescendant}
           aria-haspopup="listbox"
           aria-describedby={showStatus ? statusId : undefined}
-          placeholder="filter tasks, runs, branches"
+          placeholder="filter tasks and sessions"
           value={query}
           onChange={(e) => {
             setQuery(e.target.value);
@@ -323,10 +338,27 @@ export function FindCombobox({
                     selectHit(hit);
                   }}
                   data-testid={`find-option-${hit.kind}`}
+                  data-state={hit.state || undefined}
                 >
                   <span className="pc-find__option-kind">{hit.kind}</span>
-                  <span className="pc-find__option-label">{hit.label}</span>
-                  <span className="pc-find__option-meta">{hit.meta}</span>
+                  <span className="pc-find__option-main">
+                    <span className="pc-find__option-label">{hit.label}</span>
+                    {hit.meta ? (
+                      <span className="pc-find__option-id" title={hit.meta}>
+                        {hit.meta}
+                      </span>
+                    ) : null}
+                  </span>
+                  <span className="pc-find__option-meta">
+                    {hit.kind === "task" && hit.state ? (
+                      <StateChip state={hit.state} className="pc-find__option-chip" />
+                    ) : (
+                      <span className="pc-find__option-session-dot" data-kind="session">
+                        <span className="pc-find__option-session-pip" aria-hidden="true" />
+                        <span className="pc-find__option-session-label">session</span>
+                      </span>
+                    )}
+                  </span>
                 </div>
               ))}
             </div>

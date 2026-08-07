@@ -176,7 +176,7 @@ export function MetricsScreen(_props: ScreenMountProps) {
       data-session={session}
     >
       <div className="pc-metrics__toolbar">
-        <span className="pc-metrics__title">metrics</span>
+        <h1 className="pc-metrics__title">metrics</h1>
         <span className="pc-metrics__group-label">group by</span>
 
         <div
@@ -315,6 +315,8 @@ export function MetricsScreen(_props: ScreenMountProps) {
             filterActive={filterOn}
           />
         )}
+        {/* Intentional content termination — no dead void at wide viewports. */}
+        <div className="pc-metrics__end" data-testid="metrics-end" aria-hidden="true" />
       </div>
     </div>
   );

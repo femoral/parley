@@ -179,7 +179,7 @@ export function LeftRail({
         )}
         {sessionsStatus === "loading" ? (
           <p className="pc-rail-honesty pc-rail-honesty--quiet">
-            Hailing sessions…
+            Loading sessions…
           </p>
         ) : null}
       </section>
@@ -288,7 +288,7 @@ export function LeftRail({
             {phase === "empty"
               ? "No token activity in the last 24h (within retention)."
               : phase === "loading"
-                ? "Hailing token burn…"
+                ? "Loading token burn…"
                 : "Token burn unavailable"}
           </p>
         )}
