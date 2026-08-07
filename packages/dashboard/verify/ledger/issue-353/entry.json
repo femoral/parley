@@ -17,7 +17,7 @@
             "README.md"
           ]
         },
-        "port": 38895
+        "port": 39459
       },
       "viewports": [
         {
@@ -66,7 +66,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "Skip to navigationSkip to findSkip to main contentparleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 150…"
+              "text": "Skip to navigationSkip to findSkip to main contentparleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall sessionsdaemon127.0.0.1:5173v0.0.4 · pid …"
             },
             "header": {
               "selector": ".pc-shell__header",
@@ -108,7 +108,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "parleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 1509433 · up 2sv0.0.4needs orch0streamlive04:49:48Set…"
+              "text": "parleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall sessionsdaemon127.0.0.1:5173v0.0.4 · pid 2568177 · up 2sv0.0.4needs orch0streamlive23:17:02…"
             },
             "brand": {
               "selector": ".pc-shell__brand",
@@ -192,7 +192,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "Fleet1 task · 0 need actionRunno runTaskt1Metricsall hands"
+              "text": "Fleet1 task · 0 need actionRunno runTaskt1Metricsall sessions"
             },
             "status": {
               "selector": ".pc-shell__status",
@@ -234,7 +234,7 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "daemon127.0.0.1:5173v0.0.4 · pid 1509433 · up 2sv0.0.4"
+              "text": "daemon127.0.0.1:5173v0.0.4 · pid 2568177 · up 2sv0.0.4"
             },
             "needs-orch": {
               "selector": "[data-testid=\"needs-orch\"]",
@@ -444,7 +444,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "Find tasks and sessions/navigatorScope, state filter, and list navigation land with each screen ticket.center screenFleet boardKPI strip, runs table, and tas…"
+              "text": "Find tasks and sessions/scopeorchestrator sessionsessionAll sessionsverify-orch · 1state filter1 tasksall1awaiting0stalled0failed0gaterunning0queued0token bu…"
             },
             "rail-left": {
               "selector": ".pc-shell__rail--left",
@@ -486,7 +486,7 @@
                 "overflow": "auto",
                 "opacity": "1"
               },
-              "text": "Find tasks and sessions/navigatorScope, state filter, and list navigation land with each screen ticket."
+              "text": "Find tasks and sessions/scopeorchestrator sessionsessionAll sessionsverify-orch · 1state filter1 tasksall1awaiting0stalled0failed0gaterunning0queued0token bu…"
             },
             "center": {
               "selector": ".pc-shell__center",
@@ -528,7 +528,7 @@
                 "overflow": "auto",
                 "opacity": "1"
               },
-              "text": "center screenFleet boardKPI strip, runs table, and tasks table land in the fleet ticket. Shell chrome (nav, find, settings, honesty) is live."
+              "text": "Fleet boardneeds orchestrator0items0 held · 0 asks · 0 stall · 0 freshrunning0taskscap unknownqueued / pending0 / 0no waitersruns0total0 held · 0 advancingse…"
             },
             "rail-right": {
               "selector": ".pc-shell__rail--right",
@@ -570,7 +570,7 @@
                 "overflow": "auto",
                 "opacity": "1"
               },
-              "text": "attention · firehoseAttention queue and event firehose land with the fleet ticket."
+              "text": "attention0 · rank · agecardsrowsNothing needs the orchestratorfirehosewatch — followNo events counted since this console connected"
             },
             "footer": {
               "selector": ".pc-shell__footer",
@@ -612,7 +612,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "awaitingstalledfailedrunningqueuedpendingcompletedcancelledstate = what a task IS · quality = how good work WAS · 0 unacked events · livestate=IS · quality=W…"
+              "text": "AWAITINGSTALLEDFAILEDRUNNINGQUEUEDPENDINGDONECANCELstate = what a task IS · quality = how good work WAS · 0 unacked events · livestate=IS · quality=WAS · 0 u…"
             }
           }
         },
@@ -662,7 +662,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "Skip to navigationSkip to findSkip to main contentparleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 150…"
+              "text": "Skip to navigationSkip to findSkip to main contentparleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall sessionsdaemon127.0.0.1:5173v0.0.4 · pid …"
             },
             "header": {
               "selector": ".pc-shell__header",
@@ -704,7 +704,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "parleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 1509433 · up 2sv0.0.4needs orch0streamlive04:49:49Set…"
+              "text": "parleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall sessionsdaemon127.0.0.1:5173v0.0.4 · pid 2568177 · up 3sv0.0.4needs orch0streamlive23:17:03…"
             },
             "brand": {
               "selector": ".pc-shell__brand",
@@ -754,13 +754,13 @@
               "box": {
                 "x": 129,
                 "y": 4.75,
-                "width": 342.78,
+                "width": 359.41,
                 "height": 35.5
               },
               "styles": {
                 "display": "flex",
                 "position": "static",
-                "width": "342.781px",
+                "width": "359.406px",
                 "height": "35.5px",
                 "minWidth": "0px",
                 "minHeight": "auto",
@@ -788,7 +788,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "Fleet1 task · 0 need actionRunno runTaskt1Metricsall hands"
+              "text": "Fleet1 task · 0 need actionRunno runTaskt1Metricsall sessions"
             },
             "status": {
               "selector": ".pc-shell__status",
@@ -830,7 +830,7 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "daemon127.0.0.1:5173v0.0.4 · pid 1509433 · up 2sv0.0.4"
+              "text": "daemon127.0.0.1:5173v0.0.4 · pid 2568177 · up 3sv0.0.4"
             },
             "needs-orch": {
               "selector": "[data-testid=\"needs-orch\"]",
@@ -1040,7 +1040,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "Find tasks and sessions/navigatorScope, state filter, and list navigation land with each screen ticket.center screenFleet boardKPI strip, runs table, and tas…"
+              "text": "Find tasks and sessions/scopeorchestrator sessionsessionAll sessionsverify-orch · 1state filter1 tasksall1awaiting0stalled0failed0gaterunning0queued0token bu…"
             },
             "rail-left": {
               "selector": ".pc-shell__rail--left",
@@ -1082,7 +1082,7 @@
                 "overflow": "auto",
                 "opacity": "1"
               },
-              "text": "Find tasks and sessions/navigatorScope, state filter, and list navigation land with each screen ticket."
+              "text": "Find tasks and sessions/scopeorchestrator sessionsessionAll sessionsverify-orch · 1state filter1 tasksall1awaiting0stalled0failed0gaterunning0queued0token bu…"
             },
             "center": {
               "selector": ".pc-shell__center",
@@ -1124,7 +1124,7 @@
                 "overflow": "auto",
                 "opacity": "1"
               },
-              "text": "center screenFleet boardKPI strip, runs table, and tasks table land in the fleet ticket. Shell chrome (nav, find, settings, honesty) is live."
+              "text": "Fleet boardneeds orchestrator0items0 held · 0 asks · 0 stall · 0 freshrunning0taskscap unknownqueued / pending0 / 0no waitersruns0total0 held · 0 advancingse…"
             },
             "rail-right": {
               "selector": ".pc-shell__rail--right",
@@ -1166,7 +1166,7 @@
                 "overflow": "auto",
                 "opacity": "1"
               },
-              "text": "attention · firehoseAttention queue and event firehose land with the fleet ticket."
+              "text": "attention0 · rank · agecardsrowsNothing needs the orchestratorfirehosewatch — followNo events counted since this console connected"
             },
             "footer": {
               "selector": ".pc-shell__footer",
@@ -1208,7 +1208,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "awaitingstalledfailedrunningqueuedpendingcompletedcancelledstate = what a task IS · quality = how good work WAS · 0 unacked events · livestate=IS · quality=W…"
+              "text": "AWAITINGSTALLEDFAILEDRUNNINGQUEUEDPENDINGDONECANCELstate = what a task IS · quality = how good work WAS · 0 unacked events · livestate=IS · quality=WAS · 0 u…"
             }
           }
         },
@@ -1258,7 +1258,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "Skip to navigationSkip to findSkip to main contentparleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 150…"
+              "text": "Skip to navigationSkip to findSkip to main contentparleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall sessionsdaemon127.0.0.1:5173v0.0.4 · pid …"
             },
             "header": {
               "selector": ".pc-shell__header",
@@ -1300,7 +1300,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "parleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 1509433 · up 3sv0.0.4needs orch0streamlive04:49:49Set…"
+              "text": "parleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall sessionsdaemon127.0.0.1:5173v0.0.4 · pid 2568177 · up 4sv0.0.4needs orch0streamlive23:17:04…"
             },
             "brand": {
               "selector": ".pc-shell__brand",
@@ -1350,13 +1350,13 @@
               "box": {
                 "x": 129,
                 "y": 4.75,
-                "width": 342.78,
+                "width": 359.41,
                 "height": 35.5
               },
               "styles": {
                 "display": "flex",
                 "position": "static",
-                "width": "342.781px",
+                "width": "359.406px",
                 "height": "35.5px",
                 "minWidth": "0px",
                 "minHeight": "auto",
@@ -1384,7 +1384,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "Fleet1 task · 0 need actionRunno runTaskt1Metricsall hands"
+              "text": "Fleet1 task · 0 need actionRunno runTaskt1Metricsall sessions"
             },
             "status": {
               "selector": ".pc-shell__status",
@@ -1426,7 +1426,7 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "daemon127.0.0.1:5173v0.0.4 · pid 1509433 · up 3sv0.0.4"
+              "text": "daemon127.0.0.1:5173v0.0.4 · pid 2568177 · up 4sv0.0.4"
             },
             "needs-orch": {
               "selector": "[data-testid=\"needs-orch\"]",
@@ -1636,7 +1636,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "Find tasks and sessions/navigatorScope, state filter, and list navigation land with each screen ticket.center screenFleet boardKPI strip, runs table, and tas…"
+              "text": "Find tasks and sessions/scopeorchestrator sessionsessionAll sessionsverify-orch · 1state filter1 tasksall1awaiting0stalled0failed0gaterunning0queued0token bu…"
             },
             "rail-left": {
               "selector": ".pc-shell__rail--left",
@@ -1678,7 +1678,7 @@
                 "overflow": "auto",
                 "opacity": "1"
               },
-              "text": "Find tasks and sessions/navigatorScope, state filter, and list navigation land with each screen ticket."
+              "text": "Find tasks and sessions/scopeorchestrator sessionsessionAll sessionsverify-orch · 1state filter1 tasksall1awaiting0stalled0failed0gaterunning0queued0token bu…"
             },
             "center": {
               "selector": ".pc-shell__center",
@@ -1720,7 +1720,7 @@
                 "overflow": "auto",
                 "opacity": "1"
               },
-              "text": "center screenFleet boardKPI strip, runs table, and tasks table land in the fleet ticket. Shell chrome (nav, find, settings, honesty) is live."
+              "text": "Fleet boardneeds orchestrator0items0 held · 0 asks · 0 stall · 0 freshrunning0taskscap unknownqueued / pending0 / 0no waitersruns0total0 held · 0 advancingse…"
             },
             "rail-right": {
               "selector": ".pc-shell__rail--right",
@@ -1762,7 +1762,7 @@
                 "overflow": "auto",
                 "opacity": "1"
               },
-              "text": "attention · firehoseAttention queue and event firehose land with the fleet ticket."
+              "text": "attention0 · rank · agecardsrowsNothing needs the orchestratorfirehosewatch — followNo events counted since this console connected"
             },
             "footer": {
               "selector": ".pc-shell__footer",
@@ -1804,7 +1804,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "awaitingstalledfailedrunningqueuedpendingcompletedcancelledstate = what a task IS · quality = how good work WAS · 0 unacked events · livestate=IS · quality=W…"
+              "text": "AWAITINGSTALLEDFAILEDRUNNINGQUEUEDPENDINGDONECANCELstate = what a task IS · quality = how good work WAS · 0 unacked events · livestate=IS · quality=WAS · 0 u…"
             }
           }
         }
@@ -1813,17 +1813,17 @@
         "axe": {
           "url": "http://127.0.0.1:5173/",
           "violations": [],
-          "passes": 34,
+          "passes": 36,
           "incomplete": 1,
-          "inapplicable": 54
+          "inapplicable": 52
         },
         "aria": {
           "api": "locator.ariaSnapshot",
           "selector": "[data-testid=\"shell\"]",
-          "tree": "- link \"Skip to navigation\":\n  - /url: \"#shell-nav\"\n- link \"Skip to find\":\n  - /url: \"#find-input-target\"\n- link \"Skip to main content\":\n  - /url: \"#main-content\"\n- banner:\n  - img \"Parley\"\n  - text: parley console\n  - navigation \"Screens\":\n    - tablist \"Console screens\":\n      - tab \"Fleet 1 task · 0 need action\" [selected]\n      - tab \"Run no run\"\n      - tab \"Task t1\"\n      - tab \"Metrics all hands\"\n  - text: daemon 127.0.0.1:5173 v0.0.4 · pid 1509433 · up 4s needs orch 0 stream live\n  - time: 04:49:51\n  - button \"Settings\"\n- complementary \"Left rail\":\n  - text: Find tasks and sessions\n  - combobox \"Find tasks and sessions\"\n  - text: navigator Scope, state filter, and list navigation land with each screen ticket.\n- main:\n  - tabpanel \"Fleet 1 task · 0 need action\":\n    - text: center screen\n    - heading \"Fleet board\" [level=1]\n    - paragraph: KPI strip, runs table, and tasks table land in the fleet ticket. Shell chrome (nav, find, settings, honesty) is live.\n- complementary \"Attention rail\": attention · firehose Attention queue and event firehose land with the fleet ticket.\n- contentinfo: awaiting stalled failed running queued pending completed cancelled state = what a task IS · quality = how good work WAS · 0 unacked events · live read-only · parley never merges"
+          "tree": "- link \"Skip to navigation\":\n  - /url: \"#shell-nav\"\n- link \"Skip to find\":\n  - /url: \"#find-input-target\"\n- link \"Skip to main content\":\n  - /url: \"#main-content\"\n- banner:\n  - img \"Parley\"\n  - text: parley console\n  - navigation \"Screens\":\n    - tablist \"Console screens\":\n      - tab \"Fleet 1 task · 0 need action\" [selected]\n      - tab \"Run no run\"\n      - tab \"Task t1\"\n      - tab \"Metrics all sessions\"\n  - text: daemon 127.0.0.1:5173 v0.0.4 · pid 2568177 · up 5s needs orch 0 stream live\n  - time: 23:17:06\n  - button \"Settings\"\n- complementary \"Left rail\":\n  - text: Find tasks and sessions\n  - combobox \"Find tasks and sessions\"\n  - region \"scope\":\n    - heading \"scope\" [level=2]\n    - text: orchestrator session session\n    - combobox \"Orchestrator session scope\":\n      - option \"All sessions\" [selected]\n      - option \"verify-orch · 1\"\n  - region \"state filter\":\n    - heading \"state filter\" [level=2]\n    - text: 1 tasks\n    - group \"Filter by state\":\n      - button \"all 1\" [pressed]\n      - button \"awaiting 0\"\n      - button \"stalled 0\"\n      - button \"failed 0\"\n      - button \"gate\"\n      - button \"running 0\"\n      - button \"queued 0\"\n  - region \"token burn · 24h\":\n    - heading \"token burn · 24h\" [level=2]\n    - text: last 24h · sees tasks within retention (30d assumed)\n    - paragraph: No token activity in the last 24h (within retention).\n- main:\n  - tabpanel \"Fleet 1 task · 0 need action\":\n    - heading \"Fleet board\" [level=1]\n    - group \"Fleet KPIs\": needs orchestrator 0 items 0 held · 0 asks · 0 stall · 0 fresh running 0 tasks cap unknown queued / pending 0 / 0 no waiters runs 0 total 0 held · 0 advancing settled 24h 0 / 0 done / failed success — · last 24h token burn 0 in cache — · p95 —\n    - text: runs 0 held · track = nodes × loop\n    - paragraph: No runs\n    - text: tasks attention · age · 1\n    - grid \"Tasks\":\n      - row \"state task harness tokens dur age\":\n        - columnheader \"state\"\n        - columnheader \"task\"\n        - columnheader \"harness\"\n        - columnheader \"tokens\"\n        - columnheader \"dur\"\n        - columnheader \"age\"\n      - row \"DONE t1 t1 fake · fake-model — 231ms 0s\":\n        - gridcell \"DONE\"\n        - gridcell \"t1 t1\"\n        - gridcell \"fake · fake-model\"\n        - gridcell \"—\"\n        - gridcell \"231ms\"\n        - gridcell \"0s\"\n    - complementary:\n      - text: executors none registered\n      - paragraph: No runners\n- complementary \"Attention rail\":\n  - heading \"attention\" [level=2]\n  - text: 0 · rank · age\n  - group \"Attention density\":\n    - button \"cards\" [pressed]\n    - button \"rows\"\n  - paragraph: Nothing needs the orchestrator\n  - heading \"firehose\" [level=2]\n  - text: watch — follow\n  - paragraph: No events counted since this console connected\n- contentinfo: AWAITING STALLED FAILED RUNNING QUEUED PENDING DONE CANCEL state = what a task IS · quality = how good work WAS · 0 unacked events · live read-only · parley never merges"
         },
         "keyboardWalk": {
-          "focusableCount": 9,
+          "focusableCount": 20,
           "note": null,
           "path": [
             {
@@ -1840,14 +1840,14 @@
               "tag": "nav",
               "role": null,
               "testId": "shell-nav",
-              "text": "Fleet1 task · 0 need actionRunno runTaskt1Metricsall hands"
+              "text": "Fleet1 task · 0 need actionRunno runTaskt1Metricsall sessions"
             }
           ],
           "entered": true,
           "leftBody": true
         }
       },
-      "recordedAt": "2026-08-06T08:49:51.603Z"
+      "recordedAt": "2026-08-07T03:17:06.683Z"
     },
     "intercept-error": {
       "kind": "intercept-error",
@@ -1976,7 +1976,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "parleyconsoleFleet0 tasks · 0 need actionRunno runTaskno taskMetricsofflinedaemon127.0.0.1:5173unreachableunreachableneeds orch0streamoffline04:49:53Settings"
+              "text": "parleyconsoleFleet0 tasks · 0 need actionRunno runTaskno taskMetricsofflinedaemon127.0.0.1:5173unreachableunreachableneeds orch0streamoffline23:17:08Settings"
             },
             "brand": {
               "selector": ".pc-shell__brand",
@@ -2312,7 +2312,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "Find tasks and sessions/navigatorScope, state filter, and list navigation land with each screen ticket.center screenFleet boardKPI strip, runs table, and tas…"
+              "text": "Find tasks and sessions/scopeorchestrator sessionsessionAll sessionsverify-orch · 1state filter0 tasksall0awaiting0stalled0failed0gaterunning0queued0token bu…"
             },
             "rail-left": {
               "selector": ".pc-shell__rail--left",
@@ -2354,7 +2354,7 @@
                 "overflow": "auto",
                 "opacity": "1"
               },
-              "text": "Find tasks and sessions/navigatorScope, state filter, and list navigation land with each screen ticket."
+              "text": "Find tasks and sessions/scopeorchestrator sessionsessionAll sessionsverify-orch · 1state filter0 tasksall0awaiting0stalled0failed0gaterunning0queued0token bu…"
             },
             "center": {
               "selector": ".pc-shell__center",
@@ -2396,7 +2396,7 @@
                 "overflow": "auto",
                 "opacity": "1"
               },
-              "text": "center screenFleet boardKPI strip, runs table, and tasks table land in the fleet ticket. Shell chrome (nav, find, settings, honesty) is live."
+              "text": "Fleet boardDaemon offline. Last contact lost — reconnect when the daemon is back."
             },
             "rail-right": {
               "selector": ".pc-shell__rail--right",
@@ -2438,7 +2438,7 @@
                 "overflow": "auto",
                 "opacity": "1"
               },
-              "text": "attention · firehoseAttention queue and event firehose land with the fleet ticket."
+              "text": "attention0 · rank · agecardsrowsDaemon offline — attention items unavailablefirehosewatch — followDaemon offline — events unavailable"
             },
             "footer": {
               "selector": ".pc-shell__footer",
@@ -2480,7 +2480,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "awaitingstalledfailedrunningqueuedpendingcompletedcancelledstate = what a task IS · quality = how good work WAS · 0 unacked events · offlinestate=IS · qualit…"
+              "text": "AWAITINGSTALLEDFAILEDRUNNINGQUEUEDPENDINGDONECANCELstate = what a task IS · quality = how good work WAS · 0 unacked events · offlinestate=IS · quality=WAS · …"
             }
           }
         },
@@ -2572,7 +2572,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "parleyconsoleFleet0 tasks · 0 need actionRunno runTaskno taskMetricsofflinedaemon127.0.0.1:5173unreachableunreachableneeds orch0streamoffline04:49:53Settings"
+              "text": "parleyconsoleFleet0 tasks · 0 need actionRunno runTaskno taskMetricsofflinedaemon127.0.0.1:5173unreachableunreachableneeds orch0streamoffline23:17:09Settings"
             },
             "brand": {
               "selector": ".pc-shell__brand",
@@ -2908,7 +2908,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "Find tasks and sessions/navigatorScope, state filter, and list navigation land with each screen ticket.center screenFleet boardKPI strip, runs table, and tas…"
+              "text": "Find tasks and sessions/scopeorchestrator sessionsessionAll sessionsverify-orch · 1state filter0 tasksall0awaiting0stalled0failed0gaterunning0queued0token bu…"
             },
             "rail-left": {
               "selector": ".pc-shell__rail--left",
@@ -2950,7 +2950,7 @@
                 "overflow": "auto",
                 "opacity": "1"
               },
-              "text": "Find tasks and sessions/navigatorScope, state filter, and list navigation land with each screen ticket."
+              "text": "Find tasks and sessions/scopeorchestrator sessionsessionAll sessionsverify-orch · 1state filter0 tasksall0awaiting0stalled0failed0gaterunning0queued0token bu…"
             },
             "center": {
               "selector": ".pc-shell__center",
@@ -2992,7 +2992,7 @@
                 "overflow": "auto",
                 "opacity": "1"
               },
-              "text": "center screenFleet boardKPI strip, runs table, and tasks table land in the fleet ticket. Shell chrome (nav, find, settings, honesty) is live."
+              "text": "Fleet boardDaemon offline. Last contact lost — reconnect when the daemon is back."
             },
             "rail-right": {
               "selector": ".pc-shell__rail--right",
@@ -3034,7 +3034,7 @@
                 "overflow": "auto",
                 "opacity": "1"
               },
-              "text": "attention · firehoseAttention queue and event firehose land with the fleet ticket."
+              "text": "attention0 · rank · agecardsrowsDaemon offline — attention items unavailablefirehosewatch — followDaemon offline — events unavailable"
             },
             "footer": {
               "selector": ".pc-shell__footer",
@@ -3076,7 +3076,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "awaitingstalledfailedrunningqueuedpendingcompletedcancelledstate = what a task IS · quality = how good work WAS · 0 unacked events · offlinestate=IS · qualit…"
+              "text": "AWAITINGSTALLEDFAILEDRUNNINGQUEUEDPENDINGDONECANCELstate = what a task IS · quality = how good work WAS · 0 unacked events · offlinestate=IS · quality=WAS · …"
             }
           }
         },
@@ -3168,7 +3168,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "parleyconsoleFleet0 tasks · 0 need actionRunno runTaskno taskMetricsofflinedaemon127.0.0.1:5173unreachableunreachableneeds orch0streamoffline04:49:54Settings"
+              "text": "parleyconsoleFleet0 tasks · 0 need actionRunno runTaskno taskMetricsofflinedaemon127.0.0.1:5173unreachableunreachableneeds orch0streamoffline23:17:10Settings"
             },
             "brand": {
               "selector": ".pc-shell__brand",
@@ -3504,7 +3504,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "Find tasks and sessions/navigatorScope, state filter, and list navigation land with each screen ticket.center screenFleet boardKPI strip, runs table, and tas…"
+              "text": "Find tasks and sessions/scopeorchestrator sessionsessionAll sessionsverify-orch · 1state filter0 tasksall0awaiting0stalled0failed0gaterunning0queued0token bu…"
             },
             "rail-left": {
               "selector": ".pc-shell__rail--left",
@@ -3546,7 +3546,7 @@
                 "overflow": "auto",
                 "opacity": "1"
               },
-              "text": "Find tasks and sessions/navigatorScope, state filter, and list navigation land with each screen ticket."
+              "text": "Find tasks and sessions/scopeorchestrator sessionsessionAll sessionsverify-orch · 1state filter0 tasksall0awaiting0stalled0failed0gaterunning0queued0token bu…"
             },
             "center": {
               "selector": ".pc-shell__center",
@@ -3588,7 +3588,7 @@
                 "overflow": "auto",
                 "opacity": "1"
               },
-              "text": "center screenFleet boardKPI strip, runs table, and tasks table land in the fleet ticket. Shell chrome (nav, find, settings, honesty) is live."
+              "text": "Fleet boardDaemon offline. Last contact lost — reconnect when the daemon is back."
             },
             "rail-right": {
               "selector": ".pc-shell__rail--right",
@@ -3630,7 +3630,7 @@
                 "overflow": "auto",
                 "opacity": "1"
               },
-              "text": "attention · firehoseAttention queue and event firehose land with the fleet ticket."
+              "text": "attention0 · rank · agecardsrowsDaemon offline — attention items unavailablefirehosewatch — followDaemon offline — events unavailable"
             },
             "footer": {
               "selector": ".pc-shell__footer",
@@ -3672,7 +3672,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "awaitingstalledfailedrunningqueuedpendingcompletedcancelledstate = what a task IS · quality = how good work WAS · 0 unacked events · offlinestate=IS · qualit…"
+              "text": "AWAITINGSTALLEDFAILEDRUNNINGQUEUEDPENDINGDONECANCELstate = what a task IS · quality = how good work WAS · 0 unacked events · offlinestate=IS · quality=WAS · …"
             }
           }
         }
@@ -3681,17 +3681,17 @@
         "axe": {
           "url": "http://127.0.0.1:5173/",
           "violations": [],
-          "passes": 34,
+          "passes": 35,
           "incomplete": 1,
-          "inapplicable": 54
+          "inapplicable": 53
         },
         "aria": {
           "api": "locator.ariaSnapshot",
           "selector": "[data-testid=\"shell\"]",
-          "tree": "- link \"Skip to navigation\":\n  - /url: \"#shell-nav\"\n- link \"Skip to find\":\n  - /url: \"#find-input-target\"\n- link \"Skip to main content\":\n  - /url: \"#main-content\"\n- banner:\n  - img \"Parley\"\n  - text: parley console\n  - navigation \"Screens\":\n    - tablist \"Console screens\":\n      - tab \"Fleet 0 tasks · 0 need action\" [selected]\n      - tab \"Run no run\"\n      - tab \"Task no task\"\n      - tab \"Metrics offline\"\n  - text: daemon 127.0.0.1:5173 unreachable needs orch 0 stream offline\n  - time: 04:49:56\n  - button \"Settings\"\n- complementary \"Left rail\":\n  - text: Find tasks and sessions\n  - combobox \"Find tasks and sessions\"\n  - text: navigator Scope, state filter, and list navigation land with each screen ticket.\n- main:\n  - tabpanel \"Fleet 0 tasks · 0 need action\":\n    - text: center screen\n    - heading \"Fleet board\" [level=1]\n    - paragraph: KPI strip, runs table, and tasks table land in the fleet ticket. Shell chrome (nav, find, settings, honesty) is live.\n- complementary \"Attention rail\": attention · firehose Attention queue and event firehose land with the fleet ticket.\n- contentinfo: awaiting stalled failed running queued pending completed cancelled state = what a task IS · quality = how good work WAS · 0 unacked events · offline read-only · parley never merges"
+          "tree": "- link \"Skip to navigation\":\n  - /url: \"#shell-nav\"\n- link \"Skip to find\":\n  - /url: \"#find-input-target\"\n- link \"Skip to main content\":\n  - /url: \"#main-content\"\n- banner:\n  - img \"Parley\"\n  - text: parley console\n  - navigation \"Screens\":\n    - tablist \"Console screens\":\n      - tab \"Fleet 0 tasks · 0 need action\" [selected]\n      - tab \"Run no run\"\n      - tab \"Task no task\"\n      - tab \"Metrics offline\"\n  - text: daemon 127.0.0.1:5173 unreachable needs orch 0 stream offline\n  - time: 23:17:12\n  - button \"Settings\"\n- complementary \"Left rail\":\n  - text: Find tasks and sessions\n  - combobox \"Find tasks and sessions\"\n  - region \"scope\":\n    - heading \"scope\" [level=2]\n    - text: orchestrator session session\n    - combobox \"Orchestrator session scope\":\n      - option \"All sessions\" [selected]\n      - option \"verify-orch · 1\"\n  - region \"state filter\":\n    - heading \"state filter\" [level=2]\n    - text: 0 tasks\n    - group \"Filter by state\":\n      - button \"all 0\" [pressed]\n      - button \"awaiting 0\"\n      - button \"stalled 0\"\n      - button \"failed 0\"\n      - button \"gate\"\n      - button \"running 0\"\n      - button \"queued 0\"\n  - region \"token burn · 24h\":\n    - heading \"token burn · 24h\" [level=2]\n    - text: last 24h · sees tasks within retention (30d assumed)\n    - paragraph: Token burn unavailable\n- main:\n  - tabpanel \"Fleet 0 tasks · 0 need action\":\n    - heading \"Fleet board\" [level=1]\n    - paragraph: Daemon offline. Last contact lost — reconnect when the daemon is back.\n- complementary \"Attention rail\":\n  - heading \"attention\" [level=2]\n  - text: 0 · rank · age\n  - group \"Attention density\":\n    - button \"cards\" [pressed]\n    - button \"rows\"\n  - paragraph: Daemon offline — attention items unavailable\n  - heading \"firehose\" [level=2]\n  - text: watch — follow\n  - paragraph: Daemon offline — events unavailable\n- contentinfo: AWAITING STALLED FAILED RUNNING QUEUED PENDING DONE CANCEL state = what a task IS · quality = how good work WAS · 0 unacked events · offline read-only · parley never merges"
         },
         "keyboardWalk": {
-          "focusableCount": 9,
+          "focusableCount": 19,
           "note": null,
           "path": [
             {
@@ -3715,7 +3715,7 @@
           "leftBody": true
         }
       },
-      "recordedAt": "2026-08-06T08:49:56.298Z"
+      "recordedAt": "2026-08-07T03:17:12.294Z"
     },
     "reconnect": {
       "kind": "reconnect",
@@ -3773,7 +3773,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "Skip to navigationSkip to findSkip to main contentparleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 150…"
+                  "text": "Skip to navigationSkip to findSkip to main contentparleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall sessionsdaemon127.0.0.1:5173v0.0.4 · pid …"
                 },
                 "header": {
                   "selector": ".pc-shell__header",
@@ -3815,7 +3815,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "parleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 1509433 · up 10sv0.0.4needs orch0streamlive04:49:57Se…"
+                  "text": "parleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall sessionsdaemon127.0.0.1:5173v0.0.4 · pid 2568177 · up 13sv0.0.4needs orch0streamlive23:17:1…"
                 },
                 "brand": {
                   "selector": ".pc-shell__brand",
@@ -3899,7 +3899,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "Fleet1 task · 0 need actionRunno runTaskt1Metricsall hands"
+                  "text": "Fleet1 task · 0 need actionRunno runTaskt1Metricsall sessions"
                 },
                 "status": {
                   "selector": ".pc-shell__status",
@@ -3941,7 +3941,7 @@
                     "overflow": "visible",
                     "opacity": "1"
                   },
-                  "text": "daemon127.0.0.1:5173v0.0.4 · pid 1509433 · up 10sv0.0.4"
+                  "text": "daemon127.0.0.1:5173v0.0.4 · pid 2568177 · up 13sv0.0.4"
                 },
                 "needs-orch": {
                   "selector": "[data-testid=\"needs-orch\"]",
@@ -4151,7 +4151,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "Find tasks and sessions/navigatorScope, state filter, and list navigation land with each screen ticket.center screenFleet boardKPI strip, runs table, and tas…"
+                  "text": "Find tasks and sessions/scopeorchestrator sessionsessionAll sessionsverify-orch · 1state filter1 tasksall1awaiting0stalled0failed0gaterunning0queued0token bu…"
                 },
                 "rail-left": {
                   "selector": ".pc-shell__rail--left",
@@ -4193,7 +4193,7 @@
                     "overflow": "auto",
                     "opacity": "1"
                   },
-                  "text": "Find tasks and sessions/navigatorScope, state filter, and list navigation land with each screen ticket."
+                  "text": "Find tasks and sessions/scopeorchestrator sessionsessionAll sessionsverify-orch · 1state filter1 tasksall1awaiting0stalled0failed0gaterunning0queued0token bu…"
                 },
                 "center": {
                   "selector": ".pc-shell__center",
@@ -4235,7 +4235,7 @@
                     "overflow": "auto",
                     "opacity": "1"
                   },
-                  "text": "center screenFleet boardKPI strip, runs table, and tasks table land in the fleet ticket. Shell chrome (nav, find, settings, honesty) is live."
+                  "text": "Fleet boardneeds orchestrator0items0 held · 0 asks · 0 stall · 0 freshrunning0taskscap unknownqueued / pending0 / 0no waitersruns0total0 held · 0 advancingse…"
                 },
                 "rail-right": {
                   "selector": ".pc-shell__rail--right",
@@ -4277,7 +4277,7 @@
                     "overflow": "auto",
                     "opacity": "1"
                   },
-                  "text": "attention · firehoseAttention queue and event firehose land with the fleet ticket."
+                  "text": "attention0 · rank · agecardsrowsNothing needs the orchestratorfirehosewatch — followNo events counted since this console connected"
                 },
                 "footer": {
                   "selector": ".pc-shell__footer",
@@ -4319,7 +4319,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "awaitingstalledfailedrunningqueuedpendingcompletedcancelledstate = what a task IS · quality = how good work WAS · 0 unacked events · livestate=IS · quality=W…"
+                  "text": "AWAITINGSTALLEDFAILEDRUNNINGQUEUEDPENDINGDONECANCELstate = what a task IS · quality = how good work WAS · 0 unacked events · livestate=IS · quality=WAS · 0 u…"
                 }
               }
             },
@@ -4373,7 +4373,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "Skip to navigationSkip to findSkip to main contentparleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 150…"
+                  "text": "Skip to navigationSkip to findSkip to main contentparleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall sessionsdaemon127.0.0.1:5173v0.0.4 · pid …"
                 },
                 "header": {
                   "selector": ".pc-shell__header",
@@ -4415,7 +4415,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "parleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 1509433 · up 10sv0.0.4needs orch0streamlive04:49:57Se…"
+                  "text": "parleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall sessionsdaemon127.0.0.1:5173v0.0.4 · pid 2568177 · up 13sv0.0.4needs orch0streamlive23:17:1…"
                 },
                 "brand": {
                   "selector": ".pc-shell__brand",
@@ -4465,13 +4465,13 @@
                   "box": {
                     "x": 129,
                     "y": 4.75,
-                    "width": 342.78,
+                    "width": 359.41,
                     "height": 35.5
                   },
                   "styles": {
                     "display": "flex",
                     "position": "static",
-                    "width": "342.781px",
+                    "width": "359.406px",
                     "height": "35.5px",
                     "minWidth": "0px",
                     "minHeight": "auto",
@@ -4499,7 +4499,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "Fleet1 task · 0 need actionRunno runTaskt1Metricsall hands"
+                  "text": "Fleet1 task · 0 need actionRunno runTaskt1Metricsall sessions"
                 },
                 "status": {
                   "selector": ".pc-shell__status",
@@ -4541,7 +4541,7 @@
                     "overflow": "visible",
                     "opacity": "1"
                   },
-                  "text": "daemon127.0.0.1:5173v0.0.4 · pid 1509433 · up 10sv0.0.4"
+                  "text": "daemon127.0.0.1:5173v0.0.4 · pid 2568177 · up 13sv0.0.4"
                 },
                 "needs-orch": {
                   "selector": "[data-testid=\"needs-orch\"]",
@@ -4751,7 +4751,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "Find tasks and sessions/navigatorScope, state filter, and list navigation land with each screen ticket.center screenFleet boardKPI strip, runs table, and tas…"
+                  "text": "Find tasks and sessions/scopeorchestrator sessionsessionAll sessionsverify-orch · 1state filter1 tasksall1awaiting0stalled0failed0gaterunning0queued0token bu…"
                 },
                 "rail-left": {
                   "selector": ".pc-shell__rail--left",
@@ -4793,7 +4793,7 @@
                     "overflow": "auto",
                     "opacity": "1"
                   },
-                  "text": "Find tasks and sessions/navigatorScope, state filter, and list navigation land with each screen ticket."
+                  "text": "Find tasks and sessions/scopeorchestrator sessionsessionAll sessionsverify-orch · 1state filter1 tasksall1awaiting0stalled0failed0gaterunning0queued0token bu…"
                 },
                 "center": {
                   "selector": ".pc-shell__center",
@@ -4835,7 +4835,7 @@
                     "overflow": "auto",
                     "opacity": "1"
                   },
-                  "text": "center screenFleet boardKPI strip, runs table, and tasks table land in the fleet ticket. Shell chrome (nav, find, settings, honesty) is live."
+                  "text": "Fleet boardneeds orchestrator0items0 held · 0 asks · 0 stall · 0 freshrunning0taskscap unknownqueued / pending0 / 0no waitersruns0total0 held · 0 advancingse…"
                 },
                 "rail-right": {
                   "selector": ".pc-shell__rail--right",
@@ -4877,7 +4877,7 @@
                     "overflow": "auto",
                     "opacity": "1"
                   },
-                  "text": "attention · firehoseAttention queue and event firehose land with the fleet ticket."
+                  "text": "attention0 · rank · agecardsrowsNothing needs the orchestratorfirehosewatch — followNo events counted since this console connected"
                 },
                 "footer": {
                   "selector": ".pc-shell__footer",
@@ -4919,7 +4919,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "awaitingstalledfailedrunningqueuedpendingcompletedcancelledstate = what a task IS · quality = how good work WAS · 0 unacked events · livestate=IS · quality=W…"
+                  "text": "AWAITINGSTALLEDFAILEDRUNNINGQUEUEDPENDINGDONECANCELstate = what a task IS · quality = how good work WAS · 0 unacked events · livestate=IS · quality=WAS · 0 u…"
                 }
               }
             },
@@ -4973,7 +4973,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "Skip to navigationSkip to findSkip to main contentparleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 150…"
+                  "text": "Skip to navigationSkip to findSkip to main contentparleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall sessionsdaemon127.0.0.1:5173v0.0.4 · pid …"
                 },
                 "header": {
                   "selector": ".pc-shell__header",
@@ -5015,7 +5015,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "parleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 1509433 · up 11sv0.0.4needs orch0streamlive04:49:57Se…"
+                  "text": "parleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall sessionsdaemon127.0.0.1:5173v0.0.4 · pid 2568177 · up 14sv0.0.4needs orch0streamlive23:17:1…"
                 },
                 "brand": {
                   "selector": ".pc-shell__brand",
@@ -5065,13 +5065,13 @@
                   "box": {
                     "x": 129,
                     "y": 4.75,
-                    "width": 342.78,
+                    "width": 359.41,
                     "height": 35.5
                   },
                   "styles": {
                     "display": "flex",
                     "position": "static",
-                    "width": "342.781px",
+                    "width": "359.406px",
                     "height": "35.5px",
                     "minWidth": "0px",
                     "minHeight": "auto",
@@ -5099,7 +5099,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "Fleet1 task · 0 need actionRunno runTaskt1Metricsall hands"
+                  "text": "Fleet1 task · 0 need actionRunno runTaskt1Metricsall sessions"
                 },
                 "status": {
                   "selector": ".pc-shell__status",
@@ -5141,7 +5141,7 @@
                     "overflow": "visible",
                     "opacity": "1"
                   },
-                  "text": "daemon127.0.0.1:5173v0.0.4 · pid 1509433 · up 11sv0.0.4"
+                  "text": "daemon127.0.0.1:5173v0.0.4 · pid 2568177 · up 14sv0.0.4"
                 },
                 "needs-orch": {
                   "selector": "[data-testid=\"needs-orch\"]",
@@ -5351,7 +5351,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "Find tasks and sessions/navigatorScope, state filter, and list navigation land with each screen ticket.center screenFleet boardKPI strip, runs table, and tas…"
+                  "text": "Find tasks and sessions/scopeorchestrator sessionsessionAll sessionsverify-orch · 1state filter1 tasksall1awaiting0stalled0failed0gaterunning0queued0token bu…"
                 },
                 "rail-left": {
                   "selector": ".pc-shell__rail--left",
@@ -5393,7 +5393,7 @@
                     "overflow": "auto",
                     "opacity": "1"
                   },
-                  "text": "Find tasks and sessions/navigatorScope, state filter, and list navigation land with each screen ticket."
+                  "text": "Find tasks and sessions/scopeorchestrator sessionsessionAll sessionsverify-orch · 1state filter1 tasksall1awaiting0stalled0failed0gaterunning0queued0token bu…"
                 },
                 "center": {
                   "selector": ".pc-shell__center",
@@ -5435,7 +5435,7 @@
                     "overflow": "auto",
                     "opacity": "1"
                   },
-                  "text": "center screenFleet boardKPI strip, runs table, and tasks table land in the fleet ticket. Shell chrome (nav, find, settings, honesty) is live."
+                  "text": "Fleet boardneeds orchestrator0items0 held · 0 asks · 0 stall · 0 freshrunning0taskscap unknownqueued / pending0 / 0no waitersruns0total0 held · 0 advancingse…"
                 },
                 "rail-right": {
                   "selector": ".pc-shell__rail--right",
@@ -5477,7 +5477,7 @@
                     "overflow": "auto",
                     "opacity": "1"
                   },
-                  "text": "attention · firehoseAttention queue and event firehose land with the fleet ticket."
+                  "text": "attention0 · rank · agecardsrowsNothing needs the orchestratorfirehosewatch — followNo events counted since this console connected"
                 },
                 "footer": {
                   "selector": ".pc-shell__footer",
@@ -5519,7 +5519,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "awaitingstalledfailedrunningqueuedpendingcompletedcancelledstate = what a task IS · quality = how good work WAS · 0 unacked events · livestate=IS · quality=W…"
+                  "text": "AWAITINGSTALLEDFAILEDRUNNINGQUEUEDPENDINGDONECANCELstate = what a task IS · quality = how good work WAS · 0 unacked events · livestate=IS · quality=WAS · 0 u…"
                 }
               }
             }
@@ -5619,7 +5619,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "parleyconsoleFleet0 tasks · 0 need actionRunno runTaskno taskMetricsofflinedaemon127.0.0.1:5173unreachableunreachableneeds orch0streamoffline04:49:57Settings"
+                  "text": "parleyconsoleFleet0 tasks · 0 need actionRunno runTaskno taskMetricsofflinedaemon127.0.0.1:5173unreachableunreachableneeds orch0streamoffline23:17:14Settings"
                 },
                 "brand": {
                   "selector": ".pc-shell__brand",
@@ -5955,7 +5955,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "Find tasks and sessions/navigatorScope, state filter, and list navigation land with each screen ticket.center screenFleet boardKPI strip, runs table, and tas…"
+                  "text": "Find tasks and sessions/scopeorchestrator sessionCould not load sessionsstate filter0 tasksall0awaiting0stalled0failed0gaterunning0queued0token burn · 24hlas…"
                 },
                 "rail-left": {
                   "selector": ".pc-shell__rail--left",
@@ -5997,7 +5997,7 @@
                     "overflow": "auto",
                     "opacity": "1"
                   },
-                  "text": "Find tasks and sessions/navigatorScope, state filter, and list navigation land with each screen ticket."
+                  "text": "Find tasks and sessions/scopeorchestrator sessionCould not load sessionsstate filter0 tasksall0awaiting0stalled0failed0gaterunning0queued0token burn · 24hlas…"
                 },
                 "center": {
                   "selector": ".pc-shell__center",
@@ -6039,7 +6039,7 @@
                     "overflow": "auto",
                     "opacity": "1"
                   },
-                  "text": "center screenFleet boardKPI strip, runs table, and tasks table land in the fleet ticket. Shell chrome (nav, find, settings, honesty) is live."
+                  "text": "Fleet boardDaemon offline. Last contact lost — reconnect when the daemon is back."
                 },
                 "rail-right": {
                   "selector": ".pc-shell__rail--right",
@@ -6081,7 +6081,7 @@
                     "overflow": "auto",
                     "opacity": "1"
                   },
-                  "text": "attention · firehoseAttention queue and event firehose land with the fleet ticket."
+                  "text": "attention0 · rank · agecardsrowsDaemon offline — attention items unavailablefirehosewatch — followDaemon offline — events unavailable"
                 },
                 "footer": {
                   "selector": ".pc-shell__footer",
@@ -6123,7 +6123,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "awaitingstalledfailedrunningqueuedpendingcompletedcancelledstate = what a task IS · quality = how good work WAS · 0 unacked events · offlinestate=IS · qualit…"
+                  "text": "AWAITINGSTALLEDFAILEDRUNNINGQUEUEDPENDINGDONECANCELstate = what a task IS · quality = how good work WAS · 0 unacked events · offlinestate=IS · quality=WAS · …"
                 }
               }
             },
@@ -6219,7 +6219,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "parleyconsoleFleet0 tasks · 0 need actionRunno runTaskno taskMetricsofflinedaemon127.0.0.1:5173unreachableunreachableneeds orch0streamoffline04:49:57Settings"
+                  "text": "parleyconsoleFleet0 tasks · 0 need actionRunno runTaskno taskMetricsofflinedaemon127.0.0.1:5173unreachableunreachableneeds orch0streamoffline23:17:14Settings"
                 },
                 "brand": {
                   "selector": ".pc-shell__brand",
@@ -6555,7 +6555,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "Find tasks and sessions/navigatorScope, state filter, and list navigation land with each screen ticket.center screenFleet boardKPI strip, runs table, and tas…"
+                  "text": "Find tasks and sessions/scopeorchestrator sessionCould not load sessionsstate filter0 tasksall0awaiting0stalled0failed0gaterunning0queued0token burn · 24hlas…"
                 },
                 "rail-left": {
                   "selector": ".pc-shell__rail--left",
@@ -6597,7 +6597,7 @@
                     "overflow": "auto",
                     "opacity": "1"
                   },
-                  "text": "Find tasks and sessions/navigatorScope, state filter, and list navigation land with each screen ticket."
+                  "text": "Find tasks and sessions/scopeorchestrator sessionCould not load sessionsstate filter0 tasksall0awaiting0stalled0failed0gaterunning0queued0token burn · 24hlas…"
                 },
                 "center": {
                   "selector": ".pc-shell__center",
@@ -6639,7 +6639,7 @@
                     "overflow": "auto",
                     "opacity": "1"
                   },
-                  "text": "center screenFleet boardKPI strip, runs table, and tasks table land in the fleet ticket. Shell chrome (nav, find, settings, honesty) is live."
+                  "text": "Fleet boardDaemon offline. Last contact lost — reconnect when the daemon is back."
                 },
                 "rail-right": {
                   "selector": ".pc-shell__rail--right",
@@ -6681,7 +6681,7 @@
                     "overflow": "auto",
                     "opacity": "1"
                   },
-                  "text": "attention · firehoseAttention queue and event firehose land with the fleet ticket."
+                  "text": "attention0 · rank · agecardsrowsDaemon offline — attention items unavailablefirehosewatch — followDaemon offline — events unavailable"
                 },
                 "footer": {
                   "selector": ".pc-shell__footer",
@@ -6723,7 +6723,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "awaitingstalledfailedrunningqueuedpendingcompletedcancelledstate = what a task IS · quality = how good work WAS · 0 unacked events · offlinestate=IS · qualit…"
+                  "text": "AWAITINGSTALLEDFAILEDRUNNINGQUEUEDPENDINGDONECANCELstate = what a task IS · quality = how good work WAS · 0 unacked events · offlinestate=IS · quality=WAS · …"
                 }
               }
             },
@@ -6819,7 +6819,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "parleyconsoleFleet0 tasks · 0 need actionRunno runTaskno taskMetricsofflinedaemon127.0.0.1:5173unreachableunreachableneeds orch0streamoffline04:49:57Settings"
+                  "text": "parleyconsoleFleet0 tasks · 0 need actionRunno runTaskno taskMetricsofflinedaemon127.0.0.1:5173unreachableunreachableneeds orch0streamoffline23:17:14Settings"
                 },
                 "brand": {
                   "selector": ".pc-shell__brand",
@@ -7155,7 +7155,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "Find tasks and sessions/navigatorScope, state filter, and list navigation land with each screen ticket.center screenFleet boardKPI strip, runs table, and tas…"
+                  "text": "Find tasks and sessions/scopeorchestrator sessionCould not load sessionsstate filter0 tasksall0awaiting0stalled0failed0gaterunning0queued0token burn · 24hlas…"
                 },
                 "rail-left": {
                   "selector": ".pc-shell__rail--left",
@@ -7197,7 +7197,7 @@
                     "overflow": "auto",
                     "opacity": "1"
                   },
-                  "text": "Find tasks and sessions/navigatorScope, state filter, and list navigation land with each screen ticket."
+                  "text": "Find tasks and sessions/scopeorchestrator sessionCould not load sessionsstate filter0 tasksall0awaiting0stalled0failed0gaterunning0queued0token burn · 24hlas…"
                 },
                 "center": {
                   "selector": ".pc-shell__center",
@@ -7239,7 +7239,7 @@
                     "overflow": "auto",
                     "opacity": "1"
                   },
-                  "text": "center screenFleet boardKPI strip, runs table, and tasks table land in the fleet ticket. Shell chrome (nav, find, settings, honesty) is live."
+                  "text": "Fleet boardDaemon offline. Last contact lost — reconnect when the daemon is back."
                 },
                 "rail-right": {
                   "selector": ".pc-shell__rail--right",
@@ -7281,7 +7281,7 @@
                     "overflow": "auto",
                     "opacity": "1"
                   },
-                  "text": "attention · firehoseAttention queue and event firehose land with the fleet ticket."
+                  "text": "attention0 · rank · agecardsrowsDaemon offline — attention items unavailablefirehosewatch — followDaemon offline — events unavailable"
                 },
                 "footer": {
                   "selector": ".pc-shell__footer",
@@ -7323,7 +7323,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "awaitingstalledfailedrunningqueuedpendingcompletedcancelledstate = what a task IS · quality = how good work WAS · 0 unacked events · offlinestate=IS · qualit…"
+                  "text": "AWAITINGSTALLEDFAILEDRUNNINGQUEUEDPENDINGDONECANCELstate = what a task IS · quality = how good work WAS · 0 unacked events · offlinestate=IS · quality=WAS · …"
                 }
               }
             }
@@ -7423,7 +7423,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "parleyconsoleFleet0 tasks · 0 need actionRunno runTaskno taskMetricsofflinedaemon127.0.0.1:5173unreachableunreachableneeds orch0streamoffline04:49:58Settings"
+                  "text": "parleyconsoleFleet0 tasks · 0 need actionRunno runTaskno taskMetricsofflinedaemon127.0.0.1:5173unreachableunreachableneeds orch0streamoffline23:17:15Settings"
                 },
                 "brand": {
                   "selector": ".pc-shell__brand",
@@ -7759,7 +7759,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "Find tasks and sessions/navigatorScope, state filter, and list navigation land with each screen ticket.center screenFleet boardKPI strip, runs table, and tas…"
+                  "text": "Find tasks and sessions/scopeorchestrator sessionCould not load sessionsstate filter0 tasksall0awaiting0stalled0failed0gaterunning0queued0token burn · 24hlas…"
                 },
                 "rail-left": {
                   "selector": ".pc-shell__rail--left",
@@ -7801,7 +7801,7 @@
                     "overflow": "auto",
                     "opacity": "1"
                   },
-                  "text": "Find tasks and sessions/navigatorScope, state filter, and list navigation land with each screen ticket."
+                  "text": "Find tasks and sessions/scopeorchestrator sessionCould not load sessionsstate filter0 tasksall0awaiting0stalled0failed0gaterunning0queued0token burn · 24hlas…"
                 },
                 "center": {
                   "selector": ".pc-shell__center",
@@ -7843,7 +7843,7 @@
                     "overflow": "auto",
                     "opacity": "1"
                   },
-                  "text": "center screenFleet boardKPI strip, runs table, and tasks table land in the fleet ticket. Shell chrome (nav, find, settings, honesty) is live."
+                  "text": "Fleet boardDaemon offline. Last contact lost — reconnect when the daemon is back."
                 },
                 "rail-right": {
                   "selector": ".pc-shell__rail--right",
@@ -7885,7 +7885,7 @@
                     "overflow": "auto",
                     "opacity": "1"
                   },
-                  "text": "attention · firehoseAttention queue and event firehose land with the fleet ticket."
+                  "text": "attention0 · rank · agecardsrowsDaemon offline — attention items unavailablefirehosewatch — followDaemon offline — events unavailable"
                 },
                 "footer": {
                   "selector": ".pc-shell__footer",
@@ -7927,7 +7927,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "awaitingstalledfailedrunningqueuedpendingcompletedcancelledstate = what a task IS · quality = how good work WAS · 0 unacked events · offlinestate=IS · qualit…"
+                  "text": "AWAITINGSTALLEDFAILEDRUNNINGQUEUEDPENDINGDONECANCELstate = what a task IS · quality = how good work WAS · 0 unacked events · offlinestate=IS · quality=WAS · …"
                 }
               }
             },
@@ -8023,7 +8023,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "parleyconsoleFleet0 tasks · 0 need actionRunno runTaskno taskMetricsofflinedaemon127.0.0.1:5173unreachableunreachableneeds orch0streamoffline04:49:58Settings"
+                  "text": "parleyconsoleFleet0 tasks · 0 need actionRunno runTaskno taskMetricsofflinedaemon127.0.0.1:5173unreachableunreachableneeds orch0streamoffline23:17:15Settings"
                 },
                 "brand": {
                   "selector": ".pc-shell__brand",
@@ -8359,7 +8359,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "Find tasks and sessions/navigatorScope, state filter, and list navigation land with each screen ticket.center screenFleet boardKPI strip, runs table, and tas…"
+                  "text": "Find tasks and sessions/scopeorchestrator sessionCould not load sessionsstate filter0 tasksall0awaiting0stalled0failed0gaterunning0queued0token burn · 24hlas…"
                 },
                 "rail-left": {
                   "selector": ".pc-shell__rail--left",
@@ -8401,7 +8401,7 @@
                     "overflow": "auto",
                     "opacity": "1"
                   },
-                  "text": "Find tasks and sessions/navigatorScope, state filter, and list navigation land with each screen ticket."
+                  "text": "Find tasks and sessions/scopeorchestrator sessionCould not load sessionsstate filter0 tasksall0awaiting0stalled0failed0gaterunning0queued0token burn · 24hlas…"
                 },
                 "center": {
                   "selector": ".pc-shell__center",
@@ -8443,7 +8443,7 @@
                     "overflow": "auto",
                     "opacity": "1"
                   },
-                  "text": "center screenFleet boardKPI strip, runs table, and tasks table land in the fleet ticket. Shell chrome (nav, find, settings, honesty) is live."
+                  "text": "Fleet boardDaemon offline. Last contact lost — reconnect when the daemon is back."
                 },
                 "rail-right": {
                   "selector": ".pc-shell__rail--right",
@@ -8485,7 +8485,7 @@
                     "overflow": "auto",
                     "opacity": "1"
                   },
-                  "text": "attention · firehoseAttention queue and event firehose land with the fleet ticket."
+                  "text": "attention0 · rank · agecardsrowsDaemon offline — attention items unavailablefirehosewatch — followDaemon offline — events unavailable"
                 },
                 "footer": {
                   "selector": ".pc-shell__footer",
@@ -8527,7 +8527,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "awaitingstalledfailedrunningqueuedpendingcompletedcancelledstate = what a task IS · quality = how good work WAS · 0 unacked events · offlinestate=IS · qualit…"
+                  "text": "AWAITINGSTALLEDFAILEDRUNNINGQUEUEDPENDINGDONECANCELstate = what a task IS · quality = how good work WAS · 0 unacked events · offlinestate=IS · quality=WAS · …"
                 }
               }
             },
@@ -8623,7 +8623,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "parleyconsoleFleet0 tasks · 0 need actionRunno runTaskno taskMetricsofflinedaemon127.0.0.1:5173unreachableunreachableneeds orch0streamoffline04:49:58Settings"
+                  "text": "parleyconsoleFleet0 tasks · 0 need actionRunno runTaskno taskMetricsofflinedaemon127.0.0.1:5173unreachableunreachableneeds orch0streamoffline23:17:15Settings"
                 },
                 "brand": {
                   "selector": ".pc-shell__brand",
@@ -8959,7 +8959,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "Find tasks and sessions/navigatorScope, state filter, and list navigation land with each screen ticket.center screenFleet boardKPI strip, runs table, and tas…"
+                  "text": "Find tasks and sessions/scopeorchestrator sessionCould not load sessionsstate filter0 tasksall0awaiting0stalled0failed0gaterunning0queued0token burn · 24hlas…"
                 },
                 "rail-left": {
                   "selector": ".pc-shell__rail--left",
@@ -9001,7 +9001,7 @@
                     "overflow": "auto",
                     "opacity": "1"
                   },
-                  "text": "Find tasks and sessions/navigatorScope, state filter, and list navigation land with each screen ticket."
+                  "text": "Find tasks and sessions/scopeorchestrator sessionCould not load sessionsstate filter0 tasksall0awaiting0stalled0failed0gaterunning0queued0token burn · 24hlas…"
                 },
                 "center": {
                   "selector": ".pc-shell__center",
@@ -9043,7 +9043,7 @@
                     "overflow": "auto",
                     "opacity": "1"
                   },
-                  "text": "center screenFleet boardKPI strip, runs table, and tasks table land in the fleet ticket. Shell chrome (nav, find, settings, honesty) is live."
+                  "text": "Fleet boardDaemon offline. Last contact lost — reconnect when the daemon is back."
                 },
                 "rail-right": {
                   "selector": ".pc-shell__rail--right",
@@ -9085,7 +9085,7 @@
                     "overflow": "auto",
                     "opacity": "1"
                   },
-                  "text": "attention · firehoseAttention queue and event firehose land with the fleet ticket."
+                  "text": "attention0 · rank · agecardsrowsDaemon offline — attention items unavailablefirehosewatch — followDaemon offline — events unavailable"
                 },
                 "footer": {
                   "selector": ".pc-shell__footer",
@@ -9127,7 +9127,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "awaitingstalledfailedrunningqueuedpendingcompletedcancelledstate = what a task IS · quality = how good work WAS · 0 unacked events · offlinestate=IS · qualit…"
+                  "text": "AWAITINGSTALLEDFAILEDRUNNINGQUEUEDPENDINGDONECANCELstate = what a task IS · quality = how good work WAS · 0 unacked events · offlinestate=IS · quality=WAS · …"
                 }
               }
             }
@@ -9185,7 +9185,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "Skip to navigationSkip to findSkip to main contentparleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5174v0.0.4 · pid 150…"
+                  "text": "Skip to navigationSkip to findSkip to main contentparleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall sessionsdaemon127.0.0.1:5174v0.0.4 · pid …"
                 },
                 "header": {
                   "selector": ".pc-shell__header",
@@ -9227,7 +9227,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "parleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5174v0.0.4 · pid 1509433 · up 12sv0.0.4needs orch0streamlive04:49:59Se…"
+                  "text": "parleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall sessionsdaemon127.0.0.1:5174v0.0.4 · pid 2568177 · up 16sv0.0.4needs orch0streamlive23:17:1…"
                 },
                 "brand": {
                   "selector": ".pc-shell__brand",
@@ -9311,7 +9311,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "Fleet1 task · 0 need actionRunno runTaskt1Metricsall hands"
+                  "text": "Fleet1 task · 0 need actionRunno runTaskt1Metricsall sessions"
                 },
                 "status": {
                   "selector": ".pc-shell__status",
@@ -9353,7 +9353,7 @@
                     "overflow": "visible",
                     "opacity": "1"
                   },
-                  "text": "daemon127.0.0.1:5174v0.0.4 · pid 1509433 · up 12sv0.0.4"
+                  "text": "daemon127.0.0.1:5174v0.0.4 · pid 2568177 · up 16sv0.0.4"
                 },
                 "needs-orch": {
                   "selector": "[data-testid=\"needs-orch\"]",
@@ -9563,7 +9563,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "Find tasks and sessions/navigatorScope, state filter, and list navigation land with each screen ticket.center screenFleet boardKPI strip, runs table, and tas…"
+                  "text": "Find tasks and sessions/scopeorchestrator sessionsessionAll sessionsverify-orch · 1state filter1 tasksall1awaiting0stalled0failed0gaterunning0queued0token bu…"
                 },
                 "rail-left": {
                   "selector": ".pc-shell__rail--left",
@@ -9605,7 +9605,7 @@
                     "overflow": "auto",
                     "opacity": "1"
                   },
-                  "text": "Find tasks and sessions/navigatorScope, state filter, and list navigation land with each screen ticket."
+                  "text": "Find tasks and sessions/scopeorchestrator sessionsessionAll sessionsverify-orch · 1state filter1 tasksall1awaiting0stalled0failed0gaterunning0queued0token bu…"
                 },
                 "center": {
                   "selector": ".pc-shell__center",
@@ -9647,7 +9647,7 @@
                     "overflow": "auto",
                     "opacity": "1"
                   },
-                  "text": "center screenFleet boardKPI strip, runs table, and tasks table land in the fleet ticket. Shell chrome (nav, find, settings, honesty) is live."
+                  "text": "Fleet boardneeds orchestrator0items0 held · 0 asks · 0 stall · 0 freshrunning0taskscap unknownqueued / pending0 / 0no waitersruns0total0 held · 0 advancingse…"
                 },
                 "rail-right": {
                   "selector": ".pc-shell__rail--right",
@@ -9689,7 +9689,7 @@
                     "overflow": "auto",
                     "opacity": "1"
                   },
-                  "text": "attention · firehoseAttention queue and event firehose land with the fleet ticket."
+                  "text": "attention0 · rank · agecardsrowsNothing needs the orchestratorfirehosewatch — followNo events counted since this console connected"
                 },
                 "footer": {
                   "selector": ".pc-shell__footer",
@@ -9731,7 +9731,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "awaitingstalledfailedrunningqueuedpendingcompletedcancelledstate = what a task IS · quality = how good work WAS · 0 unacked events · livestate=IS · quality=W…"
+                  "text": "AWAITINGSTALLEDFAILEDRUNNINGQUEUEDPENDINGDONECANCELstate = what a task IS · quality = how good work WAS · 0 unacked events · livestate=IS · quality=WAS · 0 u…"
                 }
               }
             },
@@ -9785,7 +9785,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "Skip to navigationSkip to findSkip to main contentparleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5174v0.0.4 · pid 150…"
+                  "text": "Skip to navigationSkip to findSkip to main contentparleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall sessionsdaemon127.0.0.1:5174v0.0.4 · pid …"
                 },
                 "header": {
                   "selector": ".pc-shell__header",
@@ -9827,7 +9827,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "parleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5174v0.0.4 · pid 1509433 · up 12sv0.0.4needs orch0streamlive04:49:59Se…"
+                  "text": "parleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall sessionsdaemon127.0.0.1:5174v0.0.4 · pid 2568177 · up 16sv0.0.4needs orch0streamlive23:17:1…"
                 },
                 "brand": {
                   "selector": ".pc-shell__brand",
@@ -9877,13 +9877,13 @@
                   "box": {
                     "x": 129,
                     "y": 4.75,
-                    "width": 342.78,
+                    "width": 359.41,
                     "height": 35.5
                   },
                   "styles": {
                     "display": "flex",
                     "position": "static",
-                    "width": "342.781px",
+                    "width": "359.406px",
                     "height": "35.5px",
                     "minWidth": "0px",
                     "minHeight": "auto",
@@ -9911,7 +9911,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "Fleet1 task · 0 need actionRunno runTaskt1Metricsall hands"
+                  "text": "Fleet1 task · 0 need actionRunno runTaskt1Metricsall sessions"
                 },
                 "status": {
                   "selector": ".pc-shell__status",
@@ -9953,7 +9953,7 @@
                     "overflow": "visible",
                     "opacity": "1"
                   },
-                  "text": "daemon127.0.0.1:5174v0.0.4 · pid 1509433 · up 12sv0.0.4"
+                  "text": "daemon127.0.0.1:5174v0.0.4 · pid 2568177 · up 16sv0.0.4"
                 },
                 "needs-orch": {
                   "selector": "[data-testid=\"needs-orch\"]",
@@ -10163,7 +10163,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "Find tasks and sessions/navigatorScope, state filter, and list navigation land with each screen ticket.center screenFleet boardKPI strip, runs table, and tas…"
+                  "text": "Find tasks and sessions/scopeorchestrator sessionsessionAll sessionsverify-orch · 1state filter1 tasksall1awaiting0stalled0failed0gaterunning0queued0token bu…"
                 },
                 "rail-left": {
                   "selector": ".pc-shell__rail--left",
@@ -10205,7 +10205,7 @@
                     "overflow": "auto",
                     "opacity": "1"
                   },
-                  "text": "Find tasks and sessions/navigatorScope, state filter, and list navigation land with each screen ticket."
+                  "text": "Find tasks and sessions/scopeorchestrator sessionsessionAll sessionsverify-orch · 1state filter1 tasksall1awaiting0stalled0failed0gaterunning0queued0token bu…"
                 },
                 "center": {
                   "selector": ".pc-shell__center",
@@ -10247,7 +10247,7 @@
                     "overflow": "auto",
                     "opacity": "1"
                   },
-                  "text": "center screenFleet boardKPI strip, runs table, and tasks table land in the fleet ticket. Shell chrome (nav, find, settings, honesty) is live."
+                  "text": "Fleet boardneeds orchestrator0items0 held · 0 asks · 0 stall · 0 freshrunning0taskscap unknownqueued / pending0 / 0no waitersruns0total0 held · 0 advancingse…"
                 },
                 "rail-right": {
                   "selector": ".pc-shell__rail--right",
@@ -10289,7 +10289,7 @@
                     "overflow": "auto",
                     "opacity": "1"
                   },
-                  "text": "attention · firehoseAttention queue and event firehose land with the fleet ticket."
+                  "text": "attention0 · rank · agecardsrowsNothing needs the orchestratorfirehosewatch — followNo events counted since this console connected"
                 },
                 "footer": {
                   "selector": ".pc-shell__footer",
@@ -10331,7 +10331,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "awaitingstalledfailedrunningqueuedpendingcompletedcancelledstate = what a task IS · quality = how good work WAS · 0 unacked events · livestate=IS · quality=W…"
+                  "text": "AWAITINGSTALLEDFAILEDRUNNINGQUEUEDPENDINGDONECANCELstate = what a task IS · quality = how good work WAS · 0 unacked events · livestate=IS · quality=WAS · 0 u…"
                 }
               }
             },
@@ -10385,7 +10385,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "Skip to navigationSkip to findSkip to main contentparleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5174v0.0.4 · pid 150…"
+                  "text": "Skip to navigationSkip to findSkip to main contentparleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall sessionsdaemon127.0.0.1:5174v0.0.4 · pid …"
                 },
                 "header": {
                   "selector": ".pc-shell__header",
@@ -10427,7 +10427,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "parleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5174v0.0.4 · pid 1509433 · up 13sv0.0.4needs orch0streamlive04:49:59Se…"
+                  "text": "parleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall sessionsdaemon127.0.0.1:5174v0.0.4 · pid 2568177 · up 16sv0.0.4needs orch0streamlive23:17:1…"
                 },
                 "brand": {
                   "selector": ".pc-shell__brand",
@@ -10477,13 +10477,13 @@
                   "box": {
                     "x": 129,
                     "y": 4.75,
-                    "width": 342.78,
+                    "width": 359.41,
                     "height": 35.5
                   },
                   "styles": {
                     "display": "flex",
                     "position": "static",
-                    "width": "342.781px",
+                    "width": "359.406px",
                     "height": "35.5px",
                     "minWidth": "0px",
                     "minHeight": "auto",
@@ -10511,7 +10511,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "Fleet1 task · 0 need actionRunno runTaskt1Metricsall hands"
+                  "text": "Fleet1 task · 0 need actionRunno runTaskt1Metricsall sessions"
                 },
                 "status": {
                   "selector": ".pc-shell__status",
@@ -10553,7 +10553,7 @@
                     "overflow": "visible",
                     "opacity": "1"
                   },
-                  "text": "daemon127.0.0.1:5174v0.0.4 · pid 1509433 · up 13sv0.0.4"
+                  "text": "daemon127.0.0.1:5174v0.0.4 · pid 2568177 · up 16sv0.0.4"
                 },
                 "needs-orch": {
                   "selector": "[data-testid=\"needs-orch\"]",
@@ -10763,7 +10763,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "Find tasks and sessions/navigatorScope, state filter, and list navigation land with each screen ticket.center screenFleet boardKPI strip, runs table, and tas…"
+                  "text": "Find tasks and sessions/scopeorchestrator sessionsessionAll sessionsverify-orch · 1state filter1 tasksall1awaiting0stalled0failed0gaterunning0queued0token bu…"
                 },
                 "rail-left": {
                   "selector": ".pc-shell__rail--left",
@@ -10805,7 +10805,7 @@
                     "overflow": "auto",
                     "opacity": "1"
                   },
-                  "text": "Find tasks and sessions/navigatorScope, state filter, and list navigation land with each screen ticket."
+                  "text": "Find tasks and sessions/scopeorchestrator sessionsessionAll sessionsverify-orch · 1state filter1 tasksall1awaiting0stalled0failed0gaterunning0queued0token bu…"
                 },
                 "center": {
                   "selector": ".pc-shell__center",
@@ -10847,7 +10847,7 @@
                     "overflow": "auto",
                     "opacity": "1"
                   },
-                  "text": "center screenFleet boardKPI strip, runs table, and tasks table land in the fleet ticket. Shell chrome (nav, find, settings, honesty) is live."
+                  "text": "Fleet boardneeds orchestrator0items0 held · 0 asks · 0 stall · 0 freshrunning0taskscap unknownqueued / pending0 / 0no waitersruns0total0 held · 0 advancingse…"
                 },
                 "rail-right": {
                   "selector": ".pc-shell__rail--right",
@@ -10889,7 +10889,7 @@
                     "overflow": "auto",
                     "opacity": "1"
                   },
-                  "text": "attention · firehoseAttention queue and event firehose land with the fleet ticket."
+                  "text": "attention0 · rank · agecardsrowsNothing needs the orchestratorfirehosewatch — followNo events counted since this console connected"
                 },
                 "footer": {
                   "selector": ".pc-shell__footer",
@@ -10931,7 +10931,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "awaitingstalledfailedrunningqueuedpendingcompletedcancelledstate = what a task IS · quality = how good work WAS · 0 unacked events · livestate=IS · quality=W…"
+                  "text": "AWAITINGSTALLEDFAILEDRUNNINGQUEUEDPENDINGDONECANCELstate = what a task IS · quality = how good work WAS · 0 unacked events · livestate=IS · quality=WAS · 0 u…"
                 }
               }
             }
@@ -10993,7 +10993,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "Skip to navigationSkip to findSkip to main contentparleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5174v0.0.4 · pid 150…"
+              "text": "Skip to navigationSkip to findSkip to main contentparleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall sessionsdaemon127.0.0.1:5174v0.0.4 · pid …"
             },
             "header": {
               "selector": ".pc-shell__header",
@@ -11035,7 +11035,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "parleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5174v0.0.4 · pid 1509433 · up 12sv0.0.4needs orch0streamlive04:49:59Se…"
+              "text": "parleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall sessionsdaemon127.0.0.1:5174v0.0.4 · pid 2568177 · up 16sv0.0.4needs orch0streamlive23:17:1…"
             },
             "brand": {
               "selector": ".pc-shell__brand",
@@ -11119,7 +11119,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "Fleet1 task · 0 need actionRunno runTaskt1Metricsall hands"
+              "text": "Fleet1 task · 0 need actionRunno runTaskt1Metricsall sessions"
             },
             "status": {
               "selector": ".pc-shell__status",
@@ -11161,7 +11161,7 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "daemon127.0.0.1:5174v0.0.4 · pid 1509433 · up 12sv0.0.4"
+              "text": "daemon127.0.0.1:5174v0.0.4 · pid 2568177 · up 16sv0.0.4"
             },
             "needs-orch": {
               "selector": "[data-testid=\"needs-orch\"]",
@@ -11371,7 +11371,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "Find tasks and sessions/navigatorScope, state filter, and list navigation land with each screen ticket.center screenFleet boardKPI strip, runs table, and tas…"
+              "text": "Find tasks and sessions/scopeorchestrator sessionsessionAll sessionsverify-orch · 1state filter1 tasksall1awaiting0stalled0failed0gaterunning0queued0token bu…"
             },
             "rail-left": {
               "selector": ".pc-shell__rail--left",
@@ -11413,7 +11413,7 @@
                 "overflow": "auto",
                 "opacity": "1"
               },
-              "text": "Find tasks and sessions/navigatorScope, state filter, and list navigation land with each screen ticket."
+              "text": "Find tasks and sessions/scopeorchestrator sessionsessionAll sessionsverify-orch · 1state filter1 tasksall1awaiting0stalled0failed0gaterunning0queued0token bu…"
             },
             "center": {
               "selector": ".pc-shell__center",
@@ -11455,7 +11455,7 @@
                 "overflow": "auto",
                 "opacity": "1"
               },
-              "text": "center screenFleet boardKPI strip, runs table, and tasks table land in the fleet ticket. Shell chrome (nav, find, settings, honesty) is live."
+              "text": "Fleet boardneeds orchestrator0items0 held · 0 asks · 0 stall · 0 freshrunning0taskscap unknownqueued / pending0 / 0no waitersruns0total0 held · 0 advancingse…"
             },
             "rail-right": {
               "selector": ".pc-shell__rail--right",
@@ -11497,7 +11497,7 @@
                 "overflow": "auto",
                 "opacity": "1"
               },
-              "text": "attention · firehoseAttention queue and event firehose land with the fleet ticket."
+              "text": "attention0 · rank · agecardsrowsNothing needs the orchestratorfirehosewatch — followNo events counted since this console connected"
             },
             "footer": {
               "selector": ".pc-shell__footer",
@@ -11539,7 +11539,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "awaitingstalledfailedrunningqueuedpendingcompletedcancelledstate = what a task IS · quality = how good work WAS · 0 unacked events · livestate=IS · quality=W…"
+              "text": "AWAITINGSTALLEDFAILEDRUNNINGQUEUEDPENDINGDONECANCELstate = what a task IS · quality = how good work WAS · 0 unacked events · livestate=IS · quality=WAS · 0 u…"
             }
           }
         },
@@ -11593,7 +11593,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "Skip to navigationSkip to findSkip to main contentparleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5174v0.0.4 · pid 150…"
+              "text": "Skip to navigationSkip to findSkip to main contentparleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall sessionsdaemon127.0.0.1:5174v0.0.4 · pid …"
             },
             "header": {
               "selector": ".pc-shell__header",
@@ -11635,7 +11635,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "parleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5174v0.0.4 · pid 1509433 · up 12sv0.0.4needs orch0streamlive04:49:59Se…"
+              "text": "parleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall sessionsdaemon127.0.0.1:5174v0.0.4 · pid 2568177 · up 16sv0.0.4needs orch0streamlive23:17:1…"
             },
             "brand": {
               "selector": ".pc-shell__brand",
@@ -11685,13 +11685,13 @@
               "box": {
                 "x": 129,
                 "y": 4.75,
-                "width": 342.78,
+                "width": 359.41,
                 "height": 35.5
               },
               "styles": {
                 "display": "flex",
                 "position": "static",
-                "width": "342.781px",
+                "width": "359.406px",
                 "height": "35.5px",
                 "minWidth": "0px",
                 "minHeight": "auto",
@@ -11719,7 +11719,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "Fleet1 task · 0 need actionRunno runTaskt1Metricsall hands"
+              "text": "Fleet1 task · 0 need actionRunno runTaskt1Metricsall sessions"
             },
             "status": {
               "selector": ".pc-shell__status",
@@ -11761,7 +11761,7 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "daemon127.0.0.1:5174v0.0.4 · pid 1509433 · up 12sv0.0.4"
+              "text": "daemon127.0.0.1:5174v0.0.4 · pid 2568177 · up 16sv0.0.4"
             },
             "needs-orch": {
               "selector": "[data-testid=\"needs-orch\"]",
@@ -11971,7 +11971,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "Find tasks and sessions/navigatorScope, state filter, and list navigation land with each screen ticket.center screenFleet boardKPI strip, runs table, and tas…"
+              "text": "Find tasks and sessions/scopeorchestrator sessionsessionAll sessionsverify-orch · 1state filter1 tasksall1awaiting0stalled0failed0gaterunning0queued0token bu…"
             },
             "rail-left": {
               "selector": ".pc-shell__rail--left",
@@ -12013,7 +12013,7 @@
                 "overflow": "auto",
                 "opacity": "1"
               },
-              "text": "Find tasks and sessions/navigatorScope, state filter, and list navigation land with each screen ticket."
+              "text": "Find tasks and sessions/scopeorchestrator sessionsessionAll sessionsverify-orch · 1state filter1 tasksall1awaiting0stalled0failed0gaterunning0queued0token bu…"
             },
             "center": {
               "selector": ".pc-shell__center",
@@ -12055,7 +12055,7 @@
                 "overflow": "auto",
                 "opacity": "1"
               },
-              "text": "center screenFleet boardKPI strip, runs table, and tasks table land in the fleet ticket. Shell chrome (nav, find, settings, honesty) is live."
+              "text": "Fleet boardneeds orchestrator0items0 held · 0 asks · 0 stall · 0 freshrunning0taskscap unknownqueued / pending0 / 0no waitersruns0total0 held · 0 advancingse…"
             },
             "rail-right": {
               "selector": ".pc-shell__rail--right",
@@ -12097,7 +12097,7 @@
                 "overflow": "auto",
                 "opacity": "1"
               },
-              "text": "attention · firehoseAttention queue and event firehose land with the fleet ticket."
+              "text": "attention0 · rank · agecardsrowsNothing needs the orchestratorfirehosewatch — followNo events counted since this console connected"
             },
             "footer": {
               "selector": ".pc-shell__footer",
@@ -12139,7 +12139,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "awaitingstalledfailedrunningqueuedpendingcompletedcancelledstate = what a task IS · quality = how good work WAS · 0 unacked events · livestate=IS · quality=W…"
+              "text": "AWAITINGSTALLEDFAILEDRUNNINGQUEUEDPENDINGDONECANCELstate = what a task IS · quality = how good work WAS · 0 unacked events · livestate=IS · quality=WAS · 0 u…"
             }
           }
         },
@@ -12193,7 +12193,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "Skip to navigationSkip to findSkip to main contentparleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5174v0.0.4 · pid 150…"
+              "text": "Skip to navigationSkip to findSkip to main contentparleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall sessionsdaemon127.0.0.1:5174v0.0.4 · pid …"
             },
             "header": {
               "selector": ".pc-shell__header",
@@ -12235,7 +12235,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "parleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5174v0.0.4 · pid 1509433 · up 13sv0.0.4needs orch0streamlive04:49:59Se…"
+              "text": "parleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall sessionsdaemon127.0.0.1:5174v0.0.4 · pid 2568177 · up 16sv0.0.4needs orch0streamlive23:17:1…"
             },
             "brand": {
               "selector": ".pc-shell__brand",
@@ -12285,13 +12285,13 @@
               "box": {
                 "x": 129,
                 "y": 4.75,
-                "width": 342.78,
+                "width": 359.41,
                 "height": 35.5
               },
               "styles": {
                 "display": "flex",
                 "position": "static",
-                "width": "342.781px",
+                "width": "359.406px",
                 "height": "35.5px",
                 "minWidth": "0px",
                 "minHeight": "auto",
@@ -12319,7 +12319,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "Fleet1 task · 0 need actionRunno runTaskt1Metricsall hands"
+              "text": "Fleet1 task · 0 need actionRunno runTaskt1Metricsall sessions"
             },
             "status": {
               "selector": ".pc-shell__status",
@@ -12361,7 +12361,7 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "daemon127.0.0.1:5174v0.0.4 · pid 1509433 · up 13sv0.0.4"
+              "text": "daemon127.0.0.1:5174v0.0.4 · pid 2568177 · up 16sv0.0.4"
             },
             "needs-orch": {
               "selector": "[data-testid=\"needs-orch\"]",
@@ -12571,7 +12571,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "Find tasks and sessions/navigatorScope, state filter, and list navigation land with each screen ticket.center screenFleet boardKPI strip, runs table, and tas…"
+              "text": "Find tasks and sessions/scopeorchestrator sessionsessionAll sessionsverify-orch · 1state filter1 tasksall1awaiting0stalled0failed0gaterunning0queued0token bu…"
             },
             "rail-left": {
               "selector": ".pc-shell__rail--left",
@@ -12613,7 +12613,7 @@
                 "overflow": "auto",
                 "opacity": "1"
               },
-              "text": "Find tasks and sessions/navigatorScope, state filter, and list navigation land with each screen ticket."
+              "text": "Find tasks and sessions/scopeorchestrator sessionsessionAll sessionsverify-orch · 1state filter1 tasksall1awaiting0stalled0failed0gaterunning0queued0token bu…"
             },
             "center": {
               "selector": ".pc-shell__center",
@@ -12655,7 +12655,7 @@
                 "overflow": "auto",
                 "opacity": "1"
               },
-              "text": "center screenFleet boardKPI strip, runs table, and tasks table land in the fleet ticket. Shell chrome (nav, find, settings, honesty) is live."
+              "text": "Fleet boardneeds orchestrator0items0 held · 0 asks · 0 stall · 0 freshrunning0taskscap unknownqueued / pending0 / 0no waitersruns0total0 held · 0 advancingse…"
             },
             "rail-right": {
               "selector": ".pc-shell__rail--right",
@@ -12697,7 +12697,7 @@
                 "overflow": "auto",
                 "opacity": "1"
               },
-              "text": "attention · firehoseAttention queue and event firehose land with the fleet ticket."
+              "text": "attention0 · rank · agecardsrowsNothing needs the orchestratorfirehosewatch — followNo events counted since this console connected"
             },
             "footer": {
               "selector": ".pc-shell__footer",
@@ -12739,7 +12739,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "awaitingstalledfailedrunningqueuedpendingcompletedcancelledstate = what a task IS · quality = how good work WAS · 0 unacked events · livestate=IS · quality=W…"
+              "text": "AWAITINGSTALLEDFAILEDRUNNINGQUEUEDPENDINGDONECANCELstate = what a task IS · quality = how good work WAS · 0 unacked events · livestate=IS · quality=WAS · 0 u…"
             }
           }
         }
@@ -12836,7 +12836,7 @@
               "overflow": "hidden",
               "opacity": "1"
             },
-            "text": "parleyconsoleFleet0 tasks · 0 need actionRunno runTaskno taskMetricsofflinedaemon127.0.0.1:5173unreachableunreachableneeds orch0streamoffline04:49:57Settings"
+            "text": "parleyconsoleFleet0 tasks · 0 need actionRunno runTaskno taskMetricsofflinedaemon127.0.0.1:5173unreachableunreachableneeds orch0streamoffline23:17:14Settings"
           },
           "brand": {
             "selector": ".pc-shell__brand",
@@ -13172,7 +13172,7 @@
               "overflow": "hidden",
               "opacity": "1"
             },
-            "text": "Find tasks and sessions/navigatorScope, state filter, and list navigation land with each screen ticket.center screenFleet boardKPI strip, runs table, and tas…"
+            "text": "Find tasks and sessions/scopeorchestrator sessionCould not load sessionsstate filter0 tasksall0awaiting0stalled0failed0gaterunning0queued0token burn · 24hlas…"
           },
           "rail-left": {
             "selector": ".pc-shell__rail--left",
@@ -13214,7 +13214,7 @@
               "overflow": "auto",
               "opacity": "1"
             },
-            "text": "Find tasks and sessions/navigatorScope, state filter, and list navigation land with each screen ticket."
+            "text": "Find tasks and sessions/scopeorchestrator sessionCould not load sessionsstate filter0 tasksall0awaiting0stalled0failed0gaterunning0queued0token burn · 24hlas…"
           },
           "center": {
             "selector": ".pc-shell__center",
@@ -13256,7 +13256,7 @@
               "overflow": "auto",
               "opacity": "1"
             },
-            "text": "center screenFleet boardKPI strip, runs table, and tasks table land in the fleet ticket. Shell chrome (nav, find, settings, honesty) is live."
+            "text": "Fleet boardDaemon offline. Last contact lost — reconnect when the daemon is back."
           },
           "rail-right": {
             "selector": ".pc-shell__rail--right",
@@ -13298,7 +13298,7 @@
               "overflow": "auto",
               "opacity": "1"
             },
-            "text": "attention · firehoseAttention queue and event firehose land with the fleet ticket."
+            "text": "attention0 · rank · agecardsrowsDaemon offline — attention items unavailablefirehosewatch — followDaemon offline — events unavailable"
           },
           "footer": {
             "selector": ".pc-shell__footer",
@@ -13340,7 +13340,7 @@
               "overflow": "hidden",
               "opacity": "1"
             },
-            "text": "awaitingstalledfailedrunningqueuedpendingcompletedcancelledstate = what a task IS · quality = how good work WAS · 0 unacked events · offlinestate=IS · qualit…"
+            "text": "AWAITINGSTALLEDFAILEDRUNNINGQUEUEDPENDINGDONECANCELstate = what a task IS · quality = how good work WAS · 0 unacked events · offlinestate=IS · quality=WAS · …"
           }
         }
       },
@@ -13394,7 +13394,7 @@
               "overflow": "hidden",
               "opacity": "1"
             },
-            "text": "Skip to navigationSkip to findSkip to main contentparleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 150…"
+            "text": "Skip to navigationSkip to findSkip to main contentparleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall sessionsdaemon127.0.0.1:5173v0.0.4 · pid …"
           },
           "header": {
             "selector": ".pc-shell__header",
@@ -13436,7 +13436,7 @@
               "overflow": "hidden",
               "opacity": "1"
             },
-            "text": "parleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 1509433 · up 10sv0.0.4needs orch0streamlive04:49:57Se…"
+            "text": "parleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall sessionsdaemon127.0.0.1:5173v0.0.4 · pid 2568177 · up 13sv0.0.4needs orch0streamlive23:17:1…"
           },
           "brand": {
             "selector": ".pc-shell__brand",
@@ -13486,13 +13486,13 @@
             "box": {
               "x": 129,
               "y": 4.75,
-              "width": 342.78,
+              "width": 359.41,
               "height": 35.5
             },
             "styles": {
               "display": "flex",
               "position": "static",
-              "width": "342.781px",
+              "width": "359.406px",
               "height": "35.5px",
               "minWidth": "0px",
               "minHeight": "auto",
@@ -13520,7 +13520,7 @@
               "overflow": "hidden",
               "opacity": "1"
             },
-            "text": "Fleet1 task · 0 need actionRunno runTaskt1Metricsall hands"
+            "text": "Fleet1 task · 0 need actionRunno runTaskt1Metricsall sessions"
           },
           "status": {
             "selector": ".pc-shell__status",
@@ -13562,7 +13562,7 @@
               "overflow": "visible",
               "opacity": "1"
             },
-            "text": "daemon127.0.0.1:5173v0.0.4 · pid 1509433 · up 10sv0.0.4"
+            "text": "daemon127.0.0.1:5173v0.0.4 · pid 2568177 · up 13sv0.0.4"
           },
           "needs-orch": {
             "selector": "[data-testid=\"needs-orch\"]",
@@ -13772,7 +13772,7 @@
               "overflow": "hidden",
               "opacity": "1"
             },
-            "text": "Find tasks and sessions/navigatorScope, state filter, and list navigation land with each screen ticket.center screenFleet boardKPI strip, runs table, and tas…"
+            "text": "Find tasks and sessions/scopeorchestrator sessionsessionAll sessionsverify-orch · 1state filter1 tasksall1awaiting0stalled0failed0gaterunning0queued0token bu…"
           },
           "rail-left": {
             "selector": ".pc-shell__rail--left",
@@ -13814,7 +13814,7 @@
               "overflow": "auto",
               "opacity": "1"
             },
-            "text": "Find tasks and sessions/navigatorScope, state filter, and list navigation land with each screen ticket."
+            "text": "Find tasks and sessions/scopeorchestrator sessionsessionAll sessionsverify-orch · 1state filter1 tasksall1awaiting0stalled0failed0gaterunning0queued0token bu…"
           },
           "center": {
             "selector": ".pc-shell__center",
@@ -13856,7 +13856,7 @@
               "overflow": "auto",
               "opacity": "1"
             },
-            "text": "center screenFleet boardKPI strip, runs table, and tasks table land in the fleet ticket. Shell chrome (nav, find, settings, honesty) is live."
+            "text": "Fleet boardneeds orchestrator0items0 held · 0 asks · 0 stall · 0 freshrunning0taskscap unknownqueued / pending0 / 0no waitersruns0total0 held · 0 advancingse…"
           },
           "rail-right": {
             "selector": ".pc-shell__rail--right",
@@ -13898,7 +13898,7 @@
               "overflow": "auto",
               "opacity": "1"
             },
-            "text": "attention · firehoseAttention queue and event firehose land with the fleet ticket."
+            "text": "attention0 · rank · agecardsrowsNothing needs the orchestratorfirehosewatch — followNo events counted since this console connected"
           },
           "footer": {
             "selector": ".pc-shell__footer",
@@ -13940,7 +13940,7 @@
               "overflow": "hidden",
               "opacity": "1"
             },
-            "text": "awaitingstalledfailedrunningqueuedpendingcompletedcancelledstate = what a task IS · quality = how good work WAS · 0 unacked events · livestate=IS · quality=W…"
+            "text": "AWAITINGSTALLEDFAILEDRUNNINGQUEUEDPENDINGDONECANCELstate = what a task IS · quality = how good work WAS · 0 unacked events · livestate=IS · quality=WAS · 0 u…"
           }
         }
       },
@@ -13948,17 +13948,17 @@
         "axe": {
           "url": "http://127.0.0.1:5174/",
           "violations": [],
-          "passes": 34,
+          "passes": 36,
           "incomplete": 1,
-          "inapplicable": 54
+          "inapplicable": 52
         },
         "aria": {
           "api": "locator.ariaSnapshot",
           "selector": "[data-testid=\"shell\"]",
-          "tree": "- link \"Skip to navigation\":\n  - /url: \"#shell-nav\"\n- link \"Skip to find\":\n  - /url: \"#find-input-target\"\n- link \"Skip to main content\":\n  - /url: \"#main-content\"\n- banner:\n  - img \"Parley\"\n  - text: parley console\n  - navigation \"Screens\":\n    - tablist \"Console screens\":\n      - tab \"Fleet 1 task · 0 need action\" [selected]\n      - tab \"Run no run\"\n      - tab \"Task t1\"\n      - tab \"Metrics all hands\"\n  - text: daemon 127.0.0.1:5174 v0.0.4 · pid 1509433 · up 13s needs orch 0 stream live\n  - time: 04:50:00\n  - button \"Settings\"\n- complementary \"Left rail\":\n  - text: Find tasks and sessions\n  - combobox \"Find tasks and sessions\"\n  - text: navigator Scope, state filter, and list navigation land with each screen ticket.\n- main:\n  - tabpanel \"Fleet 1 task · 0 need action\":\n    - text: center screen\n    - heading \"Fleet board\" [level=1]\n    - paragraph: KPI strip, runs table, and tasks table land in the fleet ticket. Shell chrome (nav, find, settings, honesty) is live.\n- complementary \"Attention rail\": attention · firehose Attention queue and event firehose land with the fleet ticket.\n- contentinfo: awaiting stalled failed running queued pending completed cancelled state = what a task IS · quality = how good work WAS · 0 unacked events · live read-only · parley never merges"
+          "tree": "- link \"Skip to navigation\":\n  - /url: \"#shell-nav\"\n- link \"Skip to find\":\n  - /url: \"#find-input-target\"\n- link \"Skip to main content\":\n  - /url: \"#main-content\"\n- banner:\n  - img \"Parley\"\n  - text: parley console\n  - navigation \"Screens\":\n    - tablist \"Console screens\":\n      - tab \"Fleet 1 task · 0 need action\" [selected]\n      - tab \"Run no run\"\n      - tab \"Task t1\"\n      - tab \"Metrics all sessions\"\n  - text: daemon 127.0.0.1:5174 v0.0.4 · pid 2568177 · up 17s needs orch 0 stream live\n  - time: 23:17:17\n  - button \"Settings\"\n- complementary \"Left rail\":\n  - text: Find tasks and sessions\n  - combobox \"Find tasks and sessions\"\n  - region \"scope\":\n    - heading \"scope\" [level=2]\n    - text: orchestrator session session\n    - combobox \"Orchestrator session scope\":\n      - option \"All sessions\" [selected]\n      - option \"verify-orch · 1\"\n  - region \"state filter\":\n    - heading \"state filter\" [level=2]\n    - text: 1 tasks\n    - group \"Filter by state\":\n      - button \"all 1\" [pressed]\n      - button \"awaiting 0\"\n      - button \"stalled 0\"\n      - button \"failed 0\"\n      - button \"gate\"\n      - button \"running 0\"\n      - button \"queued 0\"\n  - region \"token burn · 24h\":\n    - heading \"token burn · 24h\" [level=2]\n    - text: last 24h · sees tasks within retention (30d assumed)\n    - paragraph: No token activity in the last 24h (within retention).\n- main:\n  - tabpanel \"Fleet 1 task · 0 need action\":\n    - heading \"Fleet board\" [level=1]\n    - group \"Fleet KPIs\": needs orchestrator 0 items 0 held · 0 asks · 0 stall · 0 fresh running 0 tasks cap unknown queued / pending 0 / 0 no waiters runs 0 total 0 held · 0 advancing settled 24h 0 / 0 done / failed success — · last 24h token burn 0 in cache — · p95 —\n    - text: runs 0 held · track = nodes × loop\n    - paragraph: No runs\n    - text: tasks attention · age · 1\n    - grid \"Tasks\":\n      - row \"state task harness tokens dur age\":\n        - columnheader \"state\"\n        - columnheader \"task\"\n        - columnheader \"harness\"\n        - columnheader \"tokens\"\n        - columnheader \"dur\"\n        - columnheader \"age\"\n      - row \"DONE t1 t1 fake · fake-model — 180ms 0s\":\n        - gridcell \"DONE\"\n        - gridcell \"t1 t1\"\n        - gridcell \"fake · fake-model\"\n        - gridcell \"—\"\n        - gridcell \"180ms\"\n        - gridcell \"0s\"\n    - complementary:\n      - text: executors none registered\n      - paragraph: No runners\n- complementary \"Attention rail\":\n  - heading \"attention\" [level=2]\n  - text: 0 · rank · age\n  - group \"Attention density\":\n    - button \"cards\" [pressed]\n    - button \"rows\"\n  - paragraph: Nothing needs the orchestrator\n  - heading \"firehose\" [level=2]\n  - text: watch — follow\n  - paragraph: No events counted since this console connected\n- contentinfo: AWAITING STALLED FAILED RUNNING QUEUED PENDING DONE CANCEL state = what a task IS · quality = how good work WAS · 0 unacked events · live read-only · parley never merges"
         },
         "keyboardWalk": {
-          "focusableCount": 9,
+          "focusableCount": 20,
           "note": null,
           "path": [
             {
@@ -13975,15 +13975,15 @@
               "tag": "nav",
               "role": null,
               "testId": "shell-nav",
-              "text": "Fleet1 task · 0 need actionRunno runTaskt1Metricsall hands"
+              "text": "Fleet1 task · 0 need actionRunno runTaskt1Metricsall sessions"
             }
           ],
           "entered": true,
           "leftBody": true
         }
       },
-      "recordedAt": "2026-08-06T08:50:00.711Z"
+      "recordedAt": "2026-08-07T03:17:18.237Z"
     }
   },
-  "updatedAt": "2026-08-06T08:50:00.711Z"
+  "updatedAt": "2026-08-07T03:17:18.237Z"
 }

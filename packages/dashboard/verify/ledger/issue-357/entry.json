@@ -7,7 +7,7 @@
       "kind": "task-inspector",
       "description": "Task inspector (#357) fix-pass: panel error honesty, no fabricated log clocks, log well focusable + axe@1280 overflow, mixed churn — cue, follow settings, log col 1fr, deliverable states, boundary scaffold, keyboard→scaffold, 1280 two-col.",
       "daemon": {
-        "port": 37351
+        "port": 34163
       },
       "staged": {
         "completed": {
@@ -89,7 +89,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "Skip to navigationSkip to findSkip to main content2 need the orchestratorparleyconsoleFleet4 tasks · 2 need actionRunno runTaskt3Metricsall handsdaemon127.0.…"
+              "text": "Skip to navigationSkip to findSkip to main content2 need the orchestratorparleyconsoleFleet4 tasks · 2 need actionRunno runTaskt3Metricsall sessionsdaemon127…"
             },
             "center": {
               "selector": ".pc-shell__center",
@@ -131,7 +131,7 @@
                 "overflow": "auto",
                 "opacity": "1"
               },
-              "text": "t3t3 · solo task (no run)fake · fake-model · mediumCOMPLETEDt3t3copy idbriefgoalComplete with files_changed for the report panel.stateCOMPLETEDbranch— nonewo…"
+              "text": "t3t3 · solo task (no run)fake · fake-model · mediumDONEt3t3copy idbriefgoalComplete with files_changed for the report panel.stateDONEbranch— noneworktree— no…"
             },
             "screen-task": {
               "selector": "[data-testid=\"screen-task\"]",
@@ -143,7 +143,7 @@
                 "height": 828
               },
               "styles": {
-                "display": "grid",
+                "display": "flex",
                 "position": "static",
                 "width": "648px",
                 "height": "828px",
@@ -165,15 +165,15 @@
                 "borderBottomColor": "rgb(227, 232, 236)",
                 "borderLeftColor": "rgb(227, 232, 236)",
                 "borderRightColor": "rgb(227, 232, 236)",
-                "gridTemplateRows": "74.75px 753.25px",
-                "gridTemplateColumns": "648px",
+                "gridTemplateRows": "none",
+                "gridTemplateColumns": "none",
                 "gap": "normal",
                 "padding": "0px",
                 "margin": "0px",
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "t3t3 · solo task (no run)fake · fake-model · mediumCOMPLETEDt3t3copy idbriefgoalComplete with files_changed for the report panel.stateCOMPLETEDbranch— nonewo…"
+              "text": "t3t3 · solo task (no run)fake · fake-model · mediumDONEt3t3copy idbriefgoalComplete with files_changed for the report panel.stateDONEbranch— noneworktree— no…"
             },
             "task-body": {
               "selector": "[data-testid=\"task-body\"]",
@@ -215,7 +215,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "briefgoalComplete with files_changed for the report panel.stateCOMPLETEDbranch— noneworktree— noneharnessfake · fake-model · effort mediumposture--sandbox wo…"
+              "text": "briefgoalComplete with files_changed for the report panel.stateDONEbranch— noneworktree— noneharnessfake · fake-model · effort mediumposture--sandbox workspa…"
             },
             "task-header": {
               "selector": "[data-testid=\"task-header\"]",
@@ -257,7 +257,7 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "t3t3 · solo task (no run)fake · fake-model · mediumCOMPLETEDt3t3copy id"
+              "text": "t3t3 · solo task (no run)fake · fake-model · mediumDONEt3t3copy id"
             },
             "task-brief": {
               "selector": "[data-testid=\"task-brief\"]",
@@ -266,16 +266,16 @@
                 "x": 704,
                 "y": 120.75,
                 "width": 228,
-                "height": 353.06
+                "height": 357.06
               },
               "styles": {
-                "display": "block",
-                "position": "static",
+                "display": "flex",
+                "position": "relative",
                 "width": "228px",
-                "height": "353.062px",
+                "height": "357.062px",
                 "minWidth": "0px",
                 "minHeight": "0px",
-                "backgroundColor": "rgba(0, 0, 0, 0)",
+                "backgroundColor": "rgb(11, 13, 15)",
                 "color": "rgb(227, 232, 236)",
                 "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
                 "fontSize": "16px",
@@ -283,14 +283,14 @@
                 "fontFamily": "\"IBM Plex Sans\", system-ui, sans-serif",
                 "letterSpacing": "normal",
                 "textTransform": "none",
-                "borderTopWidth": "0px",
-                "borderBottomWidth": "0px",
-                "borderLeftWidth": "0px",
-                "borderRightWidth": "0px",
-                "borderTopColor": "rgb(227, 232, 236)",
-                "borderBottomColor": "rgb(227, 232, 236)",
-                "borderLeftColor": "rgb(227, 232, 236)",
-                "borderRightColor": "rgb(227, 232, 236)",
+                "borderTopWidth": "1px",
+                "borderBottomWidth": "1px",
+                "borderLeftWidth": "1px",
+                "borderRightWidth": "1px",
+                "borderTopColor": "rgb(35, 42, 48)",
+                "borderBottomColor": "rgb(35, 42, 48)",
+                "borderLeftColor": "rgb(35, 42, 48)",
+                "borderRightColor": "rgb(35, 42, 48)",
                 "gridTemplateRows": "none",
                 "gridTemplateColumns": "none",
                 "gap": "normal",
@@ -299,7 +299,7 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "briefgoalComplete with files_changed for the report panel.stateCOMPLETEDbranch— noneworktree— noneharnessfake · fake-model · effort mediumposture--sandbox wo…"
+              "text": "briefgoalComplete with files_changed for the report panel.stateDONEbranch— noneworktree— noneharnessfake · fake-model · effort mediumposture--sandbox workspa…"
             },
             "task-log": {
               "selector": "[data-testid=\"task-log\"]",
@@ -333,7 +333,7 @@
                 "borderBottomColor": "rgb(227, 232, 236)",
                 "borderLeftColor": "rgb(227, 232, 236)",
                 "borderRightColor": "rgb(227, 232, 236)",
-                "gridTemplateRows": "26px 727.25px",
+                "gridTemplateRows": "96.8125px 656.438px",
                 "gridTemplateColumns": "419px",
                 "gap": "normal",
                 "padding": "0px",
@@ -341,22 +341,22 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "log tailended · nothing left to followfollow01fallback {\"type\":\"hello\",\"model\":\"fake-model\",\"effort\":\"medium\",\"prompt\":\"# Parley protocol\\n\\nYou are an agent…"
+              "text": "log tailended · nothing left to followfollow01error {\"type\":\"hello\",\"model\":\"fake-model\",\"effort\":\"medium\",\"prompt\":\"# Parley protocol\\n\\nYou are an agent wo…"
             },
             "task-log-well": {
               "selector": "[data-testid=\"task-log-well\"]",
               "found": true,
               "box": {
                 "x": 284,
-                "y": 146.75,
+                "y": 217.56,
                 "width": 419,
-                "height": 727.25
+                "height": 656.44
               },
               "styles": {
                 "display": "block",
                 "position": "static",
                 "width": "419px",
-                "height": "727.25px",
+                "height": "656.438px",
                 "minWidth": "auto",
                 "minHeight": "0px",
                 "backgroundColor": "rgb(8, 10, 12)",
@@ -383,7 +383,7 @@
                 "overflow": "auto",
                 "opacity": "1"
               },
-              "text": "01fallback {\"type\":\"hello\",\"model\":\"fake-model\",\"effort\":\"medium\",\"prompt\":\"# Parley protocol\\n\\nYou are an agent working on a task delegated through parley.…"
+              "text": "01error {\"type\":\"hello\",\"model\":\"fake-model\",\"effort\":\"medium\",\"prompt\":\"# Parley protocol\\n\\nYou are an agent working on a task delegated through parley. Re…"
             },
             "task-qa": {
               "selector": "[data-testid=\"task-qa\"]",
@@ -392,16 +392,16 @@
                 "x": 704,
                 "y": 497.38,
                 "width": 228,
-                "height": 84.88
+                "height": 78.88
               },
               "styles": {
-                "display": "block",
-                "position": "static",
+                "display": "flex",
+                "position": "relative",
                 "width": "228px",
-                "height": "84.875px",
+                "height": "78.875px",
                 "minWidth": "0px",
                 "minHeight": "0px",
-                "backgroundColor": "rgba(0, 0, 0, 0)",
+                "backgroundColor": "rgb(11, 13, 15)",
                 "color": "rgb(227, 232, 236)",
                 "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
                 "fontSize": "16px",
@@ -409,14 +409,14 @@
                 "fontFamily": "\"IBM Plex Sans\", system-ui, sans-serif",
                 "letterSpacing": "normal",
                 "textTransform": "none",
-                "borderTopWidth": "0px",
-                "borderBottomWidth": "0px",
-                "borderLeftWidth": "0px",
-                "borderRightWidth": "0px",
-                "borderTopColor": "rgb(227, 232, 236)",
-                "borderBottomColor": "rgb(227, 232, 236)",
-                "borderLeftColor": "rgb(227, 232, 236)",
-                "borderRightColor": "rgb(227, 232, 236)",
+                "borderTopWidth": "1px",
+                "borderBottomWidth": "1px",
+                "borderLeftWidth": "1px",
+                "borderRightWidth": "1px",
+                "borderTopColor": "rgb(35, 42, 48)",
+                "borderBottomColor": "rgb(35, 42, 48)",
+                "borderLeftColor": "rgb(35, 42, 48)",
+                "borderRightColor": "rgb(35, 42, 48)",
                 "gridTemplateRows": "none",
                 "gridTemplateColumns": "none",
                 "gap": "normal",
@@ -432,18 +432,18 @@
               "found": true,
               "box": {
                 "x": 704,
-                "y": 582.25,
+                "y": 576.25,
                 "width": 228,
-                "height": 125.14
+                "height": 129.14
               },
               "styles": {
-                "display": "block",
-                "position": "static",
+                "display": "flex",
+                "position": "relative",
                 "width": "228px",
-                "height": "125.141px",
+                "height": "129.141px",
                 "minWidth": "0px",
                 "minHeight": "0px",
-                "backgroundColor": "rgba(0, 0, 0, 0)",
+                "backgroundColor": "rgb(11, 13, 15)",
                 "color": "rgb(227, 232, 236)",
                 "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
                 "fontSize": "16px",
@@ -451,14 +451,14 @@
                 "fontFamily": "\"IBM Plex Sans\", system-ui, sans-serif",
                 "letterSpacing": "normal",
                 "textTransform": "none",
-                "borderTopWidth": "0px",
-                "borderBottomWidth": "0px",
-                "borderLeftWidth": "0px",
-                "borderRightWidth": "0px",
-                "borderTopColor": "rgb(227, 232, 236)",
-                "borderBottomColor": "rgb(227, 232, 236)",
-                "borderLeftColor": "rgb(227, 232, 236)",
-                "borderRightColor": "rgb(227, 232, 236)",
+                "borderTopWidth": "1px",
+                "borderBottomWidth": "1px",
+                "borderLeftWidth": "1px",
+                "borderRightWidth": "1px",
+                "borderTopColor": "rgb(35, 42, 48)",
+                "borderBottomColor": "rgb(35, 42, 48)",
+                "borderLeftColor": "rgb(35, 42, 48)",
+                "borderRightColor": "rgb(35, 42, 48)",
                 "gridTemplateRows": "none",
                 "gridTemplateColumns": "none",
                 "gap": "normal",
@@ -467,25 +467,25 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "reportSUCCESSTouched a file and reported churn paths.src/touched.tsPath list only — no +/− churn on file (pre-churn report or unknown counts)."
+              "text": "reportSUCCESSTouched a file and reported churn paths.src/touched.ts—Path list only — no +/− churn on file (pre-churn report or unknown counts)."
             },
             "task-attempts": {
               "selector": "[data-testid=\"task-attempts\"]",
               "found": true,
               "box": {
                 "x": 704,
-                "y": 473.81,
+                "y": 477.81,
                 "width": 228,
-                "height": 48.5
+                "height": 52.5
               },
               "styles": {
-                "display": "block",
-                "position": "static",
+                "display": "flex",
+                "position": "relative",
                 "width": "228px",
-                "height": "48.5px",
+                "height": "52.5px",
                 "minWidth": "0px",
                 "minHeight": "0px",
-                "backgroundColor": "rgba(0, 0, 0, 0)",
+                "backgroundColor": "rgb(11, 13, 15)",
                 "color": "rgb(227, 232, 236)",
                 "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
                 "fontSize": "16px",
@@ -493,14 +493,14 @@
                 "fontFamily": "\"IBM Plex Sans\", system-ui, sans-serif",
                 "letterSpacing": "normal",
                 "textTransform": "none",
-                "borderTopWidth": "0px",
-                "borderBottomWidth": "0px",
-                "borderLeftWidth": "0px",
-                "borderRightWidth": "0px",
-                "borderTopColor": "rgb(227, 232, 236)",
-                "borderBottomColor": "rgb(227, 232, 236)",
-                "borderLeftColor": "rgb(227, 232, 236)",
-                "borderRightColor": "rgb(227, 232, 236)",
+                "borderTopWidth": "1px",
+                "borderBottomWidth": "1px",
+                "borderLeftWidth": "1px",
+                "borderRightWidth": "1px",
+                "borderTopColor": "rgb(35, 42, 48)",
+                "borderBottomColor": "rgb(35, 42, 48)",
+                "borderLeftColor": "rgb(35, 42, 48)",
+                "borderRightColor": "rgb(35, 42, 48)",
                 "gridTemplateRows": "none",
                 "gridTemplateColumns": "none",
                 "gap": "normal",
@@ -509,25 +509,25 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "attempt chainparley fix · 1#1COMPLETED— unscored"
+              "text": "attempt chainparley fix · 1#1DONE— unscored"
             },
             "task-eval": {
               "selector": "[data-testid=\"task-eval\"]",
               "found": true,
               "box": {
                 "x": 704,
-                "y": 522.31,
+                "y": 530.31,
                 "width": 228,
-                "height": 74.88
+                "height": 78.88
               },
               "styles": {
-                "display": "block",
-                "position": "static",
+                "display": "flex",
+                "position": "relative",
                 "width": "228px",
-                "height": "74.875px",
+                "height": "78.875px",
                 "minWidth": "0px",
                 "minHeight": "0px",
-                "backgroundColor": "rgba(0, 0, 0, 0)",
+                "backgroundColor": "rgb(11, 13, 15)",
                 "color": "rgb(227, 232, 236)",
                 "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
                 "fontSize": "16px",
@@ -535,14 +535,14 @@
                 "fontFamily": "\"IBM Plex Sans\", system-ui, sans-serif",
                 "letterSpacing": "normal",
                 "textTransform": "none",
-                "borderTopWidth": "0px",
-                "borderBottomWidth": "0px",
-                "borderLeftWidth": "0px",
-                "borderRightWidth": "0px",
-                "borderTopColor": "rgb(227, 232, 236)",
-                "borderBottomColor": "rgb(227, 232, 236)",
-                "borderLeftColor": "rgb(227, 232, 236)",
-                "borderRightColor": "rgb(227, 232, 236)",
+                "borderTopWidth": "1px",
+                "borderBottomWidth": "1px",
+                "borderLeftWidth": "1px",
+                "borderRightWidth": "1px",
+                "borderTopColor": "rgb(35, 42, 48)",
+                "borderBottomColor": "rgb(35, 42, 48)",
+                "borderLeftColor": "rgb(35, 42, 48)",
+                "borderRightColor": "rgb(35, 42, 48)",
                 "gridTemplateRows": "none",
                 "gridTemplateColumns": "none",
                 "gap": "normal",
@@ -558,18 +558,18 @@
               "found": true,
               "box": {
                 "x": 704,
-                "y": 597.19,
+                "y": 609.19,
                 "width": 228,
-                "height": 58.94
+                "height": 62.94
               },
               "styles": {
-                "display": "block",
-                "position": "static",
+                "display": "flex",
+                "position": "relative",
                 "width": "228px",
-                "height": "58.9375px",
+                "height": "62.9375px",
                 "minWidth": "0px",
                 "minHeight": "0px",
-                "backgroundColor": "rgba(0, 0, 0, 0)",
+                "backgroundColor": "rgb(11, 13, 15)",
                 "color": "rgb(227, 232, 236)",
                 "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
                 "fontSize": "16px",
@@ -577,14 +577,14 @@
                 "fontFamily": "\"IBM Plex Sans\", system-ui, sans-serif",
                 "letterSpacing": "normal",
                 "textTransform": "none",
-                "borderTopWidth": "0px",
-                "borderBottomWidth": "0px",
-                "borderLeftWidth": "0px",
-                "borderRightWidth": "0px",
-                "borderTopColor": "rgb(227, 232, 236)",
-                "borderBottomColor": "rgb(227, 232, 236)",
-                "borderLeftColor": "rgb(227, 232, 236)",
-                "borderRightColor": "rgb(227, 232, 236)",
+                "borderTopWidth": "1px",
+                "borderBottomWidth": "1px",
+                "borderLeftWidth": "1px",
+                "borderRightWidth": "1px",
+                "borderTopColor": "rgb(35, 42, 48)",
+                "borderBottomColor": "rgb(35, 42, 48)",
+                "borderLeftColor": "rgb(35, 42, 48)",
+                "borderRightColor": "rgb(35, 42, 48)",
                 "gridTemplateRows": "none",
                 "gridTemplateColumns": "none",
                 "gap": "normal",
@@ -635,7 +635,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "log tailended · nothing left to followfollow01fallback {\"type\":\"hello\",\"model\":\"fake-model\",\"effort\":\"medium\",\"prompt\":\"# Parley protocol\\n\\nYou are an agent…"
+              "text": "log tailended · nothing left to followfollow01error {\"type\":\"hello\",\"model\":\"fake-model\",\"effort\":\"medium\",\"prompt\":\"# Parley protocol\\n\\nYou are an agent wo…"
             }
           }
         },
@@ -685,7 +685,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "Skip to navigationSkip to findSkip to main content2 need the orchestratorparleyconsoleFleet4 tasks · 2 need actionRunno runTaskt3Metricsall handsdaemon127.0.…"
+              "text": "Skip to navigationSkip to findSkip to main content2 need the orchestratorparleyconsoleFleet4 tasks · 2 need actionRunno runTaskt3Metricsall sessionsdaemon127…"
             },
             "center": {
               "selector": ".pc-shell__center",
@@ -727,7 +727,7 @@
                 "overflow": "auto",
                 "opacity": "1"
               },
-              "text": "t3t3 · solo task (no run)fake · fake-model · mediumCOMPLETEDt3t3copy idbriefgoalComplete with files_changed for the report panel.stateCOMPLETEDbranch— nonewo…"
+              "text": "t3t3 · solo task (no run)fake · fake-model · mediumDONEt3t3copy idbriefgoalComplete with files_changed for the report panel.stateDONEbranch— noneworktree— no…"
             },
             "screen-task": {
               "selector": "[data-testid=\"screen-task\"]",
@@ -739,7 +739,7 @@
                 "height": 828
               },
               "styles": {
-                "display": "grid",
+                "display": "flex",
                 "position": "static",
                 "width": "828px",
                 "height": "828px",
@@ -761,15 +761,15 @@
                 "borderBottomColor": "rgb(227, 232, 236)",
                 "borderLeftColor": "rgb(227, 232, 236)",
                 "borderRightColor": "rgb(227, 232, 236)",
-                "gridTemplateRows": "74.75px 753.25px",
-                "gridTemplateColumns": "828px",
+                "gridTemplateRows": "none",
+                "gridTemplateColumns": "none",
                 "gap": "normal",
                 "padding": "0px",
                 "margin": "0px",
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "t3t3 · solo task (no run)fake · fake-model · mediumCOMPLETEDt3t3copy idbriefgoalComplete with files_changed for the report panel.stateCOMPLETEDbranch— nonewo…"
+              "text": "t3t3 · solo task (no run)fake · fake-model · mediumDONEt3t3copy idbriefgoalComplete with files_changed for the report panel.stateDONEbranch— noneworktree— no…"
             },
             "task-body": {
               "selector": "[data-testid=\"task-body\"]",
@@ -811,7 +811,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "briefgoalComplete with files_changed for the report panel.stateCOMPLETEDbranch— noneworktree— noneharnessfake · fake-model · effort mediumposture--sandbox wo…"
+              "text": "briefgoalComplete with files_changed for the report panel.stateDONEbranch— noneworktree— noneharnessfake · fake-model · effort mediumposture--sandbox workspa…"
             },
             "task-header": {
               "selector": "[data-testid=\"task-header\"]",
@@ -853,7 +853,7 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "t3t3 · solo task (no run)fake · fake-model · mediumCOMPLETEDt3t3copy id"
+              "text": "t3t3 · solo task (no run)fake · fake-model · mediumDONEt3t3copy id"
             },
             "task-brief": {
               "selector": "[data-testid=\"task-brief\"]",
@@ -862,16 +862,16 @@
                 "x": 284,
                 "y": 120.75,
                 "width": 199,
-                "height": 413.94
+                "height": 417.94
               },
               "styles": {
-                "display": "block",
-                "position": "static",
+                "display": "flex",
+                "position": "relative",
                 "width": "199px",
-                "height": "413.938px",
+                "height": "417.938px",
                 "minWidth": "0px",
                 "minHeight": "0px",
-                "backgroundColor": "rgba(0, 0, 0, 0)",
+                "backgroundColor": "rgb(11, 13, 15)",
                 "color": "rgb(227, 232, 236)",
                 "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
                 "fontSize": "16px",
@@ -879,14 +879,14 @@
                 "fontFamily": "\"IBM Plex Sans\", system-ui, sans-serif",
                 "letterSpacing": "normal",
                 "textTransform": "none",
-                "borderTopWidth": "0px",
-                "borderBottomWidth": "0px",
-                "borderLeftWidth": "0px",
-                "borderRightWidth": "0px",
-                "borderTopColor": "rgb(227, 232, 236)",
-                "borderBottomColor": "rgb(227, 232, 236)",
-                "borderLeftColor": "rgb(227, 232, 236)",
-                "borderRightColor": "rgb(227, 232, 236)",
+                "borderTopWidth": "1px",
+                "borderBottomWidth": "1px",
+                "borderLeftWidth": "1px",
+                "borderRightWidth": "1px",
+                "borderTopColor": "rgb(35, 42, 48)",
+                "borderBottomColor": "rgb(35, 42, 48)",
+                "borderLeftColor": "rgb(35, 42, 48)",
+                "borderRightColor": "rgb(35, 42, 48)",
                 "gridTemplateRows": "none",
                 "gridTemplateColumns": "none",
                 "gap": "normal",
@@ -895,7 +895,7 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "briefgoalComplete with files_changed for the report panel.stateCOMPLETEDbranch— noneworktree— noneharnessfake · fake-model · effort mediumposture--sandbox wo…"
+              "text": "briefgoalComplete with files_changed for the report panel.stateDONEbranch— noneworktree— noneharnessfake · fake-model · effort mediumposture--sandbox workspa…"
             },
             "task-log": {
               "selector": "[data-testid=\"task-log\"]",
@@ -929,7 +929,7 @@
                 "borderBottomColor": "rgb(227, 232, 236)",
                 "borderLeftColor": "rgb(227, 232, 236)",
                 "borderRightColor": "rgb(227, 232, 236)",
-                "gridTemplateRows": "26px 727.25px",
+                "gridTemplateRows": "96.8125px 656.438px",
                 "gridTemplateColumns": "419px",
                 "gap": "normal",
                 "padding": "0px",
@@ -937,22 +937,22 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "log tailended · nothing left to followfollow01fallback {\"type\":\"hello\",\"model\":\"fake-model\",\"effort\":\"medium\",\"prompt\":\"# Parley protocol\\n\\nYou are an agent…"
+              "text": "log tailended · nothing left to followfollow01error {\"type\":\"hello\",\"model\":\"fake-model\",\"effort\":\"medium\",\"prompt\":\"# Parley protocol\\n\\nYou are an agent wo…"
             },
             "task-log-well": {
               "selector": "[data-testid=\"task-log-well\"]",
               "found": true,
               "box": {
                 "x": 484,
-                "y": 146.75,
+                "y": 217.56,
                 "width": 419,
-                "height": 727.25
+                "height": 656.44
               },
               "styles": {
                 "display": "block",
                 "position": "static",
                 "width": "419px",
-                "height": "727.25px",
+                "height": "656.438px",
                 "minWidth": "auto",
                 "minHeight": "0px",
                 "backgroundColor": "rgb(8, 10, 12)",
@@ -979,7 +979,7 @@
                 "overflow": "auto",
                 "opacity": "1"
               },
-              "text": "01fallback {\"type\":\"hello\",\"model\":\"fake-model\",\"effort\":\"medium\",\"prompt\":\"# Parley protocol\\n\\nYou are an agent working on a task delegated through parley.…"
+              "text": "01error {\"type\":\"hello\",\"model\":\"fake-model\",\"effort\":\"medium\",\"prompt\":\"# Parley protocol\\n\\nYou are an agent working on a task delegated through parley. Re…"
             },
             "task-qa": {
               "selector": "[data-testid=\"task-qa\"]",
@@ -988,16 +988,16 @@
                 "x": 904,
                 "y": 120.75,
                 "width": 212,
-                "height": 84.88
+                "height": 78.88
               },
               "styles": {
-                "display": "block",
-                "position": "static",
+                "display": "flex",
+                "position": "relative",
                 "width": "212px",
-                "height": "84.875px",
+                "height": "78.875px",
                 "minWidth": "0px",
                 "minHeight": "0px",
-                "backgroundColor": "rgba(0, 0, 0, 0)",
+                "backgroundColor": "rgb(11, 13, 15)",
                 "color": "rgb(227, 232, 236)",
                 "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
                 "fontSize": "16px",
@@ -1005,14 +1005,14 @@
                 "fontFamily": "\"IBM Plex Sans\", system-ui, sans-serif",
                 "letterSpacing": "normal",
                 "textTransform": "none",
-                "borderTopWidth": "0px",
-                "borderBottomWidth": "0px",
-                "borderLeftWidth": "0px",
-                "borderRightWidth": "0px",
-                "borderTopColor": "rgb(227, 232, 236)",
-                "borderBottomColor": "rgb(227, 232, 236)",
-                "borderLeftColor": "rgb(227, 232, 236)",
-                "borderRightColor": "rgb(227, 232, 236)",
+                "borderTopWidth": "1px",
+                "borderBottomWidth": "1px",
+                "borderLeftWidth": "1px",
+                "borderRightWidth": "1px",
+                "borderTopColor": "rgb(35, 42, 48)",
+                "borderBottomColor": "rgb(35, 42, 48)",
+                "borderLeftColor": "rgb(35, 42, 48)",
+                "borderRightColor": "rgb(35, 42, 48)",
                 "gridTemplateRows": "none",
                 "gridTemplateColumns": "none",
                 "gap": "normal",
@@ -1028,18 +1028,18 @@
               "found": true,
               "box": {
                 "x": 904,
-                "y": 205.63,
+                "y": 199.63,
                 "width": 212,
-                "height": 141.64
+                "height": 145.64
               },
               "styles": {
-                "display": "block",
-                "position": "static",
+                "display": "flex",
+                "position": "relative",
                 "width": "212px",
-                "height": "141.641px",
+                "height": "145.641px",
                 "minWidth": "0px",
                 "minHeight": "0px",
-                "backgroundColor": "rgba(0, 0, 0, 0)",
+                "backgroundColor": "rgb(11, 13, 15)",
                 "color": "rgb(227, 232, 236)",
                 "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
                 "fontSize": "16px",
@@ -1047,14 +1047,14 @@
                 "fontFamily": "\"IBM Plex Sans\", system-ui, sans-serif",
                 "letterSpacing": "normal",
                 "textTransform": "none",
-                "borderTopWidth": "0px",
-                "borderBottomWidth": "0px",
-                "borderLeftWidth": "0px",
-                "borderRightWidth": "0px",
-                "borderTopColor": "rgb(227, 232, 236)",
-                "borderBottomColor": "rgb(227, 232, 236)",
-                "borderLeftColor": "rgb(227, 232, 236)",
-                "borderRightColor": "rgb(227, 232, 236)",
+                "borderTopWidth": "1px",
+                "borderBottomWidth": "1px",
+                "borderLeftWidth": "1px",
+                "borderRightWidth": "1px",
+                "borderTopColor": "rgb(35, 42, 48)",
+                "borderBottomColor": "rgb(35, 42, 48)",
+                "borderLeftColor": "rgb(35, 42, 48)",
+                "borderRightColor": "rgb(35, 42, 48)",
                 "gridTemplateRows": "none",
                 "gridTemplateColumns": "none",
                 "gap": "normal",
@@ -1063,25 +1063,25 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "reportSUCCESSTouched a file and reported churn paths.src/touched.tsPath list only — no +/− churn on file (pre-churn report or unknown counts)."
+              "text": "reportSUCCESSTouched a file and reported churn paths.src/touched.ts—Path list only — no +/− churn on file (pre-churn report or unknown counts)."
             },
             "task-attempts": {
               "selector": "[data-testid=\"task-attempts\"]",
               "found": true,
               "box": {
                 "x": 284,
-                "y": 534.69,
+                "y": 538.69,
                 "width": 199,
-                "height": 58.5
+                "height": 52.5
               },
               "styles": {
-                "display": "block",
-                "position": "static",
+                "display": "flex",
+                "position": "relative",
                 "width": "199px",
-                "height": "58.5px",
+                "height": "52.5px",
                 "minWidth": "0px",
                 "minHeight": "0px",
-                "backgroundColor": "rgba(0, 0, 0, 0)",
+                "backgroundColor": "rgb(11, 13, 15)",
                 "color": "rgb(227, 232, 236)",
                 "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
                 "fontSize": "16px",
@@ -1089,14 +1089,14 @@
                 "fontFamily": "\"IBM Plex Sans\", system-ui, sans-serif",
                 "letterSpacing": "normal",
                 "textTransform": "none",
-                "borderTopWidth": "0px",
-                "borderBottomWidth": "0px",
-                "borderLeftWidth": "0px",
-                "borderRightWidth": "0px",
-                "borderTopColor": "rgb(227, 232, 236)",
-                "borderBottomColor": "rgb(227, 232, 236)",
-                "borderLeftColor": "rgb(227, 232, 236)",
-                "borderRightColor": "rgb(227, 232, 236)",
+                "borderTopWidth": "1px",
+                "borderBottomWidth": "1px",
+                "borderLeftWidth": "1px",
+                "borderRightWidth": "1px",
+                "borderTopColor": "rgb(35, 42, 48)",
+                "borderBottomColor": "rgb(35, 42, 48)",
+                "borderLeftColor": "rgb(35, 42, 48)",
+                "borderRightColor": "rgb(35, 42, 48)",
                 "gridTemplateRows": "none",
                 "gridTemplateColumns": "none",
                 "gap": "normal",
@@ -1105,25 +1105,25 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "attempt chainparley fix · 1#1COMPLETED— unscored"
+              "text": "attempt chainparley fix · 1#1DONE— unscored"
             },
             "task-eval": {
               "selector": "[data-testid=\"task-eval\"]",
               "found": true,
               "box": {
                 "x": 284,
-                "y": 593.19,
+                "y": 591.19,
                 "width": 199,
-                "height": 74.88
+                "height": 78.88
               },
               "styles": {
-                "display": "block",
-                "position": "static",
+                "display": "flex",
+                "position": "relative",
                 "width": "199px",
-                "height": "74.875px",
+                "height": "78.875px",
                 "minWidth": "0px",
                 "minHeight": "0px",
-                "backgroundColor": "rgba(0, 0, 0, 0)",
+                "backgroundColor": "rgb(11, 13, 15)",
                 "color": "rgb(227, 232, 236)",
                 "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
                 "fontSize": "16px",
@@ -1131,14 +1131,14 @@
                 "fontFamily": "\"IBM Plex Sans\", system-ui, sans-serif",
                 "letterSpacing": "normal",
                 "textTransform": "none",
-                "borderTopWidth": "0px",
-                "borderBottomWidth": "0px",
-                "borderLeftWidth": "0px",
-                "borderRightWidth": "0px",
-                "borderTopColor": "rgb(227, 232, 236)",
-                "borderBottomColor": "rgb(227, 232, 236)",
-                "borderLeftColor": "rgb(227, 232, 236)",
-                "borderRightColor": "rgb(227, 232, 236)",
+                "borderTopWidth": "1px",
+                "borderBottomWidth": "1px",
+                "borderLeftWidth": "1px",
+                "borderRightWidth": "1px",
+                "borderTopColor": "rgb(35, 42, 48)",
+                "borderBottomColor": "rgb(35, 42, 48)",
+                "borderLeftColor": "rgb(35, 42, 48)",
+                "borderRightColor": "rgb(35, 42, 48)",
                 "gridTemplateRows": "none",
                 "gridTemplateColumns": "none",
                 "gap": "normal",
@@ -1154,18 +1154,18 @@
               "found": true,
               "box": {
                 "x": 284,
-                "y": 668.06,
+                "y": 670.06,
                 "width": 199,
-                "height": 58.94
+                "height": 62.94
               },
               "styles": {
-                "display": "block",
-                "position": "static",
+                "display": "flex",
+                "position": "relative",
                 "width": "199px",
-                "height": "58.9375px",
+                "height": "62.9375px",
                 "minWidth": "0px",
                 "minHeight": "0px",
-                "backgroundColor": "rgba(0, 0, 0, 0)",
+                "backgroundColor": "rgb(11, 13, 15)",
                 "color": "rgb(227, 232, 236)",
                 "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
                 "fontSize": "16px",
@@ -1173,14 +1173,14 @@
                 "fontFamily": "\"IBM Plex Sans\", system-ui, sans-serif",
                 "letterSpacing": "normal",
                 "textTransform": "none",
-                "borderTopWidth": "0px",
-                "borderBottomWidth": "0px",
-                "borderLeftWidth": "0px",
-                "borderRightWidth": "0px",
-                "borderTopColor": "rgb(227, 232, 236)",
-                "borderBottomColor": "rgb(227, 232, 236)",
-                "borderLeftColor": "rgb(227, 232, 236)",
-                "borderRightColor": "rgb(227, 232, 236)",
+                "borderTopWidth": "1px",
+                "borderBottomWidth": "1px",
+                "borderLeftWidth": "1px",
+                "borderRightWidth": "1px",
+                "borderTopColor": "rgb(35, 42, 48)",
+                "borderBottomColor": "rgb(35, 42, 48)",
+                "borderLeftColor": "rgb(35, 42, 48)",
+                "borderRightColor": "rgb(35, 42, 48)",
                 "gridTemplateRows": "none",
                 "gridTemplateColumns": "none",
                 "gap": "normal",
@@ -1231,7 +1231,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "log tailended · nothing left to followfollow01fallback {\"type\":\"hello\",\"model\":\"fake-model\",\"effort\":\"medium\",\"prompt\":\"# Parley protocol\\n\\nYou are an agent…"
+              "text": "log tailended · nothing left to followfollow01error {\"type\":\"hello\",\"model\":\"fake-model\",\"effort\":\"medium\",\"prompt\":\"# Parley protocol\\n\\nYou are an agent wo…"
             }
           }
         },
@@ -1281,7 +1281,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "Skip to navigationSkip to findSkip to main content2 need the orchestratorparleyconsoleFleet4 tasks · 2 need actionRunno runTaskt3Metricsall handsdaemon127.0.…"
+              "text": "Skip to navigationSkip to findSkip to main content2 need the orchestratorparleyconsoleFleet4 tasks · 2 need actionRunno runTaskt3Metricsall sessionsdaemon127…"
             },
             "center": {
               "selector": ".pc-shell__center",
@@ -1323,7 +1323,7 @@
                 "overflow": "auto",
                 "opacity": "1"
               },
-              "text": "t3t3 · solo task (no run)fake · fake-model · mediumCOMPLETEDt3t3copy idbriefgoalComplete with files_changed for the report panel.stateCOMPLETEDbranch— nonewo…"
+              "text": "t3t3 · solo task (no run)fake · fake-model · mediumDONEt3t3copy idbriefgoalComplete with files_changed for the report panel.stateDONEbranch— noneworktree— no…"
             },
             "screen-task": {
               "selector": "[data-testid=\"screen-task\"]",
@@ -1335,7 +1335,7 @@
                 "height": 828
               },
               "styles": {
-                "display": "grid",
+                "display": "flex",
                 "position": "static",
                 "width": "1288px",
                 "height": "828px",
@@ -1357,15 +1357,15 @@
                 "borderBottomColor": "rgb(227, 232, 236)",
                 "borderLeftColor": "rgb(227, 232, 236)",
                 "borderRightColor": "rgb(227, 232, 236)",
-                "gridTemplateRows": "74.75px 753.25px",
-                "gridTemplateColumns": "1288px",
+                "gridTemplateRows": "none",
+                "gridTemplateColumns": "none",
                 "gap": "normal",
                 "padding": "0px",
                 "margin": "0px",
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "t3t3 · solo task (no run)fake · fake-model · mediumCOMPLETEDt3t3copy idbriefgoalComplete with files_changed for the report panel.stateCOMPLETEDbranch— nonewo…"
+              "text": "t3t3 · solo task (no run)fake · fake-model · mediumDONEt3t3copy idbriefgoalComplete with files_changed for the report panel.stateDONEbranch— noneworktree— no…"
             },
             "task-body": {
               "selector": "[data-testid=\"task-body\"]",
@@ -1407,7 +1407,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "briefgoalComplete with files_changed for the report panel.stateCOMPLETEDbranch— noneworktree— noneharnessfake · fake-model · effort mediumposture--sandbox wo…"
+              "text": "briefgoalComplete with files_changed for the report panel.stateDONEbranch— noneworktree— noneharnessfake · fake-model · effort mediumposture--sandbox workspa…"
             },
             "task-header": {
               "selector": "[data-testid=\"task-header\"]",
@@ -1449,7 +1449,7 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "t3t3 · solo task (no run)fake · fake-model · mediumCOMPLETEDt3t3copy id"
+              "text": "t3t3 · solo task (no run)fake · fake-model · mediumDONEt3t3copy id"
             },
             "task-brief": {
               "selector": "[data-testid=\"task-brief\"]",
@@ -1458,16 +1458,16 @@
                 "x": 284,
                 "y": 120.75,
                 "width": 261,
-                "height": 337.84
+                "height": 341.84
               },
               "styles": {
-                "display": "block",
-                "position": "static",
+                "display": "flex",
+                "position": "relative",
                 "width": "261px",
-                "height": "337.844px",
+                "height": "341.844px",
                 "minWidth": "0px",
                 "minHeight": "0px",
-                "backgroundColor": "rgba(0, 0, 0, 0)",
+                "backgroundColor": "rgb(11, 13, 15)",
                 "color": "rgb(227, 232, 236)",
                 "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
                 "fontSize": "16px",
@@ -1475,14 +1475,14 @@
                 "fontFamily": "\"IBM Plex Sans\", system-ui, sans-serif",
                 "letterSpacing": "normal",
                 "textTransform": "none",
-                "borderTopWidth": "0px",
-                "borderBottomWidth": "0px",
-                "borderLeftWidth": "0px",
-                "borderRightWidth": "0px",
-                "borderTopColor": "rgb(227, 232, 236)",
-                "borderBottomColor": "rgb(227, 232, 236)",
-                "borderLeftColor": "rgb(227, 232, 236)",
-                "borderRightColor": "rgb(227, 232, 236)",
+                "borderTopWidth": "1px",
+                "borderBottomWidth": "1px",
+                "borderLeftWidth": "1px",
+                "borderRightWidth": "1px",
+                "borderTopColor": "rgb(35, 42, 48)",
+                "borderBottomColor": "rgb(35, 42, 48)",
+                "borderLeftColor": "rgb(35, 42, 48)",
+                "borderRightColor": "rgb(35, 42, 48)",
                 "gridTemplateRows": "none",
                 "gridTemplateColumns": "none",
                 "gap": "normal",
@@ -1491,7 +1491,7 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "briefgoalComplete with files_changed for the report panel.stateCOMPLETEDbranch— noneworktree— noneharnessfake · fake-model · effort mediumposture--sandbox wo…"
+              "text": "briefgoalComplete with files_changed for the report panel.stateDONEbranch— noneworktree— noneharnessfake · fake-model · effort mediumposture--sandbox workspa…"
             },
             "task-log": {
               "selector": "[data-testid=\"task-log\"]",
@@ -1525,7 +1525,7 @@
                 "borderBottomColor": "rgb(227, 232, 236)",
                 "borderLeftColor": "rgb(227, 232, 236)",
                 "borderRightColor": "rgb(227, 232, 236)",
-                "gridTemplateRows": "26px 727.25px",
+                "gridTemplateRows": "96.8125px 656.438px",
                 "gridTemplateColumns": "735px",
                 "gap": "normal",
                 "padding": "0px",
@@ -1533,22 +1533,22 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "log tailended · nothing left to followfollow01fallback {\"type\":\"hello\",\"model\":\"fake-model\",\"effort\":\"medium\",\"prompt\":\"# Parley protocol\\n\\nYou are an agent…"
+              "text": "log tailended · nothing left to followfollow01error {\"type\":\"hello\",\"model\":\"fake-model\",\"effort\":\"medium\",\"prompt\":\"# Parley protocol\\n\\nYou are an agent wo…"
             },
             "task-log-well": {
               "selector": "[data-testid=\"task-log-well\"]",
               "found": true,
               "box": {
                 "x": 546,
-                "y": 146.75,
+                "y": 217.56,
                 "width": 735,
-                "height": 727.25
+                "height": 656.44
               },
               "styles": {
                 "display": "block",
                 "position": "static",
                 "width": "735px",
-                "height": "727.25px",
+                "height": "656.438px",
                 "minWidth": "auto",
                 "minHeight": "0px",
                 "backgroundColor": "rgb(8, 10, 12)",
@@ -1575,7 +1575,7 @@
                 "overflow": "auto",
                 "opacity": "1"
               },
-              "text": "01fallback {\"type\":\"hello\",\"model\":\"fake-model\",\"effort\":\"medium\",\"prompt\":\"# Parley protocol\\n\\nYou are an agent working on a task delegated through parley.…"
+              "text": "01error {\"type\":\"hello\",\"model\":\"fake-model\",\"effort\":\"medium\",\"prompt\":\"# Parley protocol\\n\\nYou are an agent working on a task delegated through parley. Re…"
             },
             "task-qa": {
               "selector": "[data-testid=\"task-qa\"]",
@@ -1584,16 +1584,16 @@
                 "x": 1282,
                 "y": 120.75,
                 "width": 290,
-                "height": 58.94
+                "height": 62.94
               },
               "styles": {
-                "display": "block",
-                "position": "static",
+                "display": "flex",
+                "position": "relative",
                 "width": "290px",
-                "height": "58.9375px",
+                "height": "62.9375px",
                 "minWidth": "0px",
                 "minHeight": "0px",
-                "backgroundColor": "rgba(0, 0, 0, 0)",
+                "backgroundColor": "rgb(11, 13, 15)",
                 "color": "rgb(227, 232, 236)",
                 "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
                 "fontSize": "16px",
@@ -1601,14 +1601,14 @@
                 "fontFamily": "\"IBM Plex Sans\", system-ui, sans-serif",
                 "letterSpacing": "normal",
                 "textTransform": "none",
-                "borderTopWidth": "0px",
-                "borderBottomWidth": "0px",
-                "borderLeftWidth": "0px",
-                "borderRightWidth": "0px",
-                "borderTopColor": "rgb(227, 232, 236)",
-                "borderBottomColor": "rgb(227, 232, 236)",
-                "borderLeftColor": "rgb(227, 232, 236)",
-                "borderRightColor": "rgb(227, 232, 236)",
+                "borderTopWidth": "1px",
+                "borderBottomWidth": "1px",
+                "borderLeftWidth": "1px",
+                "borderRightWidth": "1px",
+                "borderTopColor": "rgb(35, 42, 48)",
+                "borderBottomColor": "rgb(35, 42, 48)",
+                "borderLeftColor": "rgb(35, 42, 48)",
+                "borderRightColor": "rgb(35, 42, 48)",
                 "gridTemplateRows": "none",
                 "gridTemplateColumns": "none",
                 "gap": "normal",
@@ -1624,18 +1624,18 @@
               "found": true,
               "box": {
                 "x": 1282,
-                "y": 179.69,
+                "y": 183.69,
                 "width": 290,
-                "height": 125.14
+                "height": 129.14
               },
               "styles": {
-                "display": "block",
-                "position": "static",
+                "display": "flex",
+                "position": "relative",
                 "width": "290px",
-                "height": "125.141px",
+                "height": "129.141px",
                 "minWidth": "0px",
                 "minHeight": "0px",
-                "backgroundColor": "rgba(0, 0, 0, 0)",
+                "backgroundColor": "rgb(11, 13, 15)",
                 "color": "rgb(227, 232, 236)",
                 "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
                 "fontSize": "16px",
@@ -1643,14 +1643,14 @@
                 "fontFamily": "\"IBM Plex Sans\", system-ui, sans-serif",
                 "letterSpacing": "normal",
                 "textTransform": "none",
-                "borderTopWidth": "0px",
-                "borderBottomWidth": "0px",
-                "borderLeftWidth": "0px",
-                "borderRightWidth": "0px",
-                "borderTopColor": "rgb(227, 232, 236)",
-                "borderBottomColor": "rgb(227, 232, 236)",
-                "borderLeftColor": "rgb(227, 232, 236)",
-                "borderRightColor": "rgb(227, 232, 236)",
+                "borderTopWidth": "1px",
+                "borderBottomWidth": "1px",
+                "borderLeftWidth": "1px",
+                "borderRightWidth": "1px",
+                "borderTopColor": "rgb(35, 42, 48)",
+                "borderBottomColor": "rgb(35, 42, 48)",
+                "borderLeftColor": "rgb(35, 42, 48)",
+                "borderRightColor": "rgb(35, 42, 48)",
                 "gridTemplateRows": "none",
                 "gridTemplateColumns": "none",
                 "gap": "normal",
@@ -1659,25 +1659,25 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "reportSUCCESSTouched a file and reported churn paths.src/touched.tsPath list only — no +/− churn on file (pre-churn report or unknown counts)."
+              "text": "reportSUCCESSTouched a file and reported churn paths.src/touched.ts—Path list only — no +/− churn on file (pre-churn report or unknown counts)."
             },
             "task-attempts": {
               "selector": "[data-testid=\"task-attempts\"]",
               "found": true,
               "box": {
                 "x": 284,
-                "y": 458.59,
+                "y": 462.59,
                 "width": 261,
-                "height": 48.5
+                "height": 52.5
               },
               "styles": {
-                "display": "block",
-                "position": "static",
+                "display": "flex",
+                "position": "relative",
                 "width": "261px",
-                "height": "48.5px",
+                "height": "52.5px",
                 "minWidth": "0px",
                 "minHeight": "0px",
-                "backgroundColor": "rgba(0, 0, 0, 0)",
+                "backgroundColor": "rgb(11, 13, 15)",
                 "color": "rgb(227, 232, 236)",
                 "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
                 "fontSize": "16px",
@@ -1685,14 +1685,14 @@
                 "fontFamily": "\"IBM Plex Sans\", system-ui, sans-serif",
                 "letterSpacing": "normal",
                 "textTransform": "none",
-                "borderTopWidth": "0px",
-                "borderBottomWidth": "0px",
-                "borderLeftWidth": "0px",
-                "borderRightWidth": "0px",
-                "borderTopColor": "rgb(227, 232, 236)",
-                "borderBottomColor": "rgb(227, 232, 236)",
-                "borderLeftColor": "rgb(227, 232, 236)",
-                "borderRightColor": "rgb(227, 232, 236)",
+                "borderTopWidth": "1px",
+                "borderBottomWidth": "1px",
+                "borderLeftWidth": "1px",
+                "borderRightWidth": "1px",
+                "borderTopColor": "rgb(35, 42, 48)",
+                "borderBottomColor": "rgb(35, 42, 48)",
+                "borderLeftColor": "rgb(35, 42, 48)",
+                "borderRightColor": "rgb(35, 42, 48)",
                 "gridTemplateRows": "none",
                 "gridTemplateColumns": "none",
                 "gap": "normal",
@@ -1701,25 +1701,25 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "attempt chainparley fix · 1#1COMPLETED— unscored"
+              "text": "attempt chainparley fix · 1#1DONE— unscored"
             },
             "task-eval": {
               "selector": "[data-testid=\"task-eval\"]",
               "found": true,
               "box": {
                 "x": 284,
-                "y": 507.09,
+                "y": 515.09,
                 "width": 261,
-                "height": 74.88
+                "height": 78.88
               },
               "styles": {
-                "display": "block",
-                "position": "static",
+                "display": "flex",
+                "position": "relative",
                 "width": "261px",
-                "height": "74.875px",
+                "height": "78.875px",
                 "minWidth": "0px",
                 "minHeight": "0px",
-                "backgroundColor": "rgba(0, 0, 0, 0)",
+                "backgroundColor": "rgb(11, 13, 15)",
                 "color": "rgb(227, 232, 236)",
                 "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
                 "fontSize": "16px",
@@ -1727,14 +1727,14 @@
                 "fontFamily": "\"IBM Plex Sans\", system-ui, sans-serif",
                 "letterSpacing": "normal",
                 "textTransform": "none",
-                "borderTopWidth": "0px",
-                "borderBottomWidth": "0px",
-                "borderLeftWidth": "0px",
-                "borderRightWidth": "0px",
-                "borderTopColor": "rgb(227, 232, 236)",
-                "borderBottomColor": "rgb(227, 232, 236)",
-                "borderLeftColor": "rgb(227, 232, 236)",
-                "borderRightColor": "rgb(227, 232, 236)",
+                "borderTopWidth": "1px",
+                "borderBottomWidth": "1px",
+                "borderLeftWidth": "1px",
+                "borderRightWidth": "1px",
+                "borderTopColor": "rgb(35, 42, 48)",
+                "borderBottomColor": "rgb(35, 42, 48)",
+                "borderLeftColor": "rgb(35, 42, 48)",
+                "borderRightColor": "rgb(35, 42, 48)",
                 "gridTemplateRows": "none",
                 "gridTemplateColumns": "none",
                 "gap": "normal",
@@ -1750,18 +1750,18 @@
               "found": true,
               "box": {
                 "x": 284,
-                "y": 581.97,
+                "y": 593.97,
                 "width": 261,
-                "height": 58.94
+                "height": 62.94
               },
               "styles": {
-                "display": "block",
-                "position": "static",
+                "display": "flex",
+                "position": "relative",
                 "width": "261px",
-                "height": "58.9375px",
+                "height": "62.9375px",
                 "minWidth": "0px",
                 "minHeight": "0px",
-                "backgroundColor": "rgba(0, 0, 0, 0)",
+                "backgroundColor": "rgb(11, 13, 15)",
                 "color": "rgb(227, 232, 236)",
                 "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
                 "fontSize": "16px",
@@ -1769,14 +1769,14 @@
                 "fontFamily": "\"IBM Plex Sans\", system-ui, sans-serif",
                 "letterSpacing": "normal",
                 "textTransform": "none",
-                "borderTopWidth": "0px",
-                "borderBottomWidth": "0px",
-                "borderLeftWidth": "0px",
-                "borderRightWidth": "0px",
-                "borderTopColor": "rgb(227, 232, 236)",
-                "borderBottomColor": "rgb(227, 232, 236)",
-                "borderLeftColor": "rgb(227, 232, 236)",
-                "borderRightColor": "rgb(227, 232, 236)",
+                "borderTopWidth": "1px",
+                "borderBottomWidth": "1px",
+                "borderLeftWidth": "1px",
+                "borderRightWidth": "1px",
+                "borderTopColor": "rgb(35, 42, 48)",
+                "borderBottomColor": "rgb(35, 42, 48)",
+                "borderLeftColor": "rgb(35, 42, 48)",
+                "borderRightColor": "rgb(35, 42, 48)",
                 "gridTemplateRows": "none",
                 "gridTemplateColumns": "none",
                 "gap": "normal",
@@ -1827,7 +1827,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "log tailended · nothing left to followfollow01fallback {\"type\":\"hello\",\"model\":\"fake-model\",\"effort\":\"medium\",\"prompt\":\"# Parley protocol\\n\\nYou are an agent…"
+              "text": "log tailended · nothing left to followfollow01error {\"type\":\"hello\",\"model\":\"fake-model\",\"effort\":\"medium\",\"prompt\":\"# Parley protocol\\n\\nYou are an agent wo…"
             }
           }
         }
@@ -1867,13 +1867,13 @@
               "x": 284,
               "y": 103.63,
               "width": 828,
-              "height": 218.38
+              "height": 27.84
             },
             "styles": {
               "display": "block",
               "position": "static",
               "width": "828px",
-              "height": "218.375px",
+              "height": "27.8438px",
               "minWidth": "auto",
               "minHeight": "auto",
               "backgroundColor": "rgb(16, 19, 22)",
@@ -1890,7 +1890,7 @@
               "borderRightWidth": "0px",
               "borderTopColor": "rgb(227, 232, 236)",
               "borderBottomColor": "rgb(35, 42, 48)",
-              "borderLeftColor": "rgb(217, 83, 74)",
+              "borderLeftColor": "rgb(228, 114, 106)",
               "borderRightColor": "rgb(227, 232, 236)",
               "gridTemplateRows": "none",
               "gridTemplateColumns": "none",
@@ -1906,20 +1906,20 @@
             "selector": "[data-testid=\"task-brief-error\"]",
             "found": true,
             "box": {
-              "x": 284,
-              "y": 345,
-              "width": 199,
+              "x": 285,
+              "y": 157.47,
+              "width": 197,
               "height": 51.88
             },
             "styles": {
               "display": "block",
               "position": "static",
-              "width": "199px",
+              "width": "197px",
               "height": "51.875px",
               "minWidth": "0px",
               "minHeight": "0px",
-              "backgroundColor": "color(srgb 0.85098 0.32549 0.290196 / 0.08)",
-              "color": "rgb(217, 83, 74)",
+              "backgroundColor": "color(srgb 0.894118 0.447059 0.415686 / 0.08)",
+              "color": "rgb(228, 114, 106)",
               "font": "11px / 15.95px \"IBM Plex Sans\", system-ui, sans-serif",
               "fontSize": "11px",
               "fontWeight": "400",
@@ -1930,10 +1930,10 @@
               "borderBottomWidth": "0px",
               "borderLeftWidth": "2px",
               "borderRightWidth": "0px",
-              "borderTopColor": "rgb(217, 83, 74)",
-              "borderBottomColor": "rgb(217, 83, 74)",
-              "borderLeftColor": "rgb(217, 83, 74)",
-              "borderRightColor": "rgb(217, 83, 74)",
+              "borderTopColor": "rgb(228, 114, 106)",
+              "borderBottomColor": "rgb(228, 114, 106)",
+              "borderLeftColor": "rgb(228, 114, 106)",
+              "borderRightColor": "rgb(228, 114, 106)",
               "gridTemplateRows": "none",
               "gridTemplateColumns": "none",
               "gap": "normal",
@@ -1986,7 +1986,7 @@
               "borderRightWidth": "0px",
               "borderTopColor": "rgb(227, 232, 236)",
               "borderBottomColor": "rgb(35, 42, 48)",
-              "borderLeftColor": "rgb(217, 83, 74)",
+              "borderLeftColor": "rgb(228, 114, 106)",
               "borderRightColor": "rgb(227, 232, 236)",
               "gridTemplateRows": "none",
               "gridTemplateColumns": "none",
@@ -2003,7 +2003,7 @@
             "found": true,
             "box": {
               "x": 294,
-              "y": -2201.41,
+              "y": -2200.59,
               "width": 399,
               "height": 51.88
             },
@@ -2014,8 +2014,8 @@
               "height": "51.875px",
               "minWidth": "0px",
               "minHeight": "0px",
-              "backgroundColor": "color(srgb 0.85098 0.32549 0.290196 / 0.08)",
-              "color": "rgb(217, 83, 74)",
+              "backgroundColor": "color(srgb 0.894118 0.447059 0.415686 / 0.08)",
+              "color": "rgb(228, 114, 106)",
               "font": "11px / 15.95px \"IBM Plex Sans\", system-ui, sans-serif",
               "fontSize": "11px",
               "fontWeight": "400",
@@ -2026,10 +2026,10 @@
               "borderBottomWidth": "0px",
               "borderLeftWidth": "2px",
               "borderRightWidth": "0px",
-              "borderTopColor": "rgb(217, 83, 74)",
-              "borderBottomColor": "rgb(217, 83, 74)",
-              "borderLeftColor": "rgb(217, 83, 74)",
-              "borderRightColor": "rgb(217, 83, 74)",
+              "borderTopColor": "rgb(228, 114, 106)",
+              "borderBottomColor": "rgb(228, 114, 106)",
+              "borderLeftColor": "rgb(228, 114, 106)",
+              "borderRightColor": "rgb(228, 114, 106)",
               "gridTemplateRows": "none",
               "gridTemplateColumns": "none",
               "gap": "normal",
@@ -2050,7 +2050,7 @@
       },
       "a11y1280": {
         "axe": {
-          "url": "http://127.0.0.1:5173/#/task",
+          "url": "http://127.0.0.1:5173/#/task/t4",
           "violations": [],
           "passes": 27,
           "incomplete": 2,
@@ -2060,7 +2060,7 @@
         "logWellFocusable": true,
         "wellOverflow": {
           "scrollHeight": 3031,
-          "clientHeight": 727,
+          "clientHeight": 656,
           "overflows": true,
           "tabIndex": "0",
           "ariaLabel": "Vendor log output",
@@ -2070,20 +2070,20 @@
       },
       "boundary": {
         "scaffold": {
-          "width": 206,
-          "height": 59,
-          "scrollWidth": 206,
-          "clientWidth": 206,
+          "width": 234,
+          "height": 28,
+          "scrollWidth": 232,
+          "clientWidth": 232,
           "overflow": "visible",
           "overflowWrap": "normal",
           "textOverflow": "clip",
           "whiteSpace": "normal",
-          "text": "parley answer t1 \"...\"copy"
+          "text": "parley answer t1 \"<answer>\"copy"
         },
         "filePath": null,
         "body": {
           "width": 648,
-          "height": 753,
+          "height": 0,
           "scrollWidth": 648,
           "clientWidth": 648,
           "overflow": "hidden",
@@ -2094,9 +2094,9 @@
         },
         "report": {
           "width": 228,
-          "height": 75,
-          "scrollWidth": 228,
-          "clientWidth": 228,
+          "height": 79,
+          "scrollWidth": 226,
+          "clientWidth": 226,
           "overflow": "visible",
           "overflowWrap": "normal",
           "textOverflow": "clip",
@@ -2164,65 +2164,30 @@
       },
       "a11y": {
         "axe": {
-          "url": "http://127.0.0.1:5173/#/task",
+          "url": "http://127.0.0.1:5173/#/task/t1",
           "violations": [],
-          "passes": 27,
+          "passes": 26,
           "incomplete": 1,
-          "inapplicable": 61
+          "inapplicable": 62
         },
         "aria": {
           "api": "locator.ariaSnapshot",
           "selector": "[data-testid=\"screen-task\"]",
-          "tree": "- heading \"t1\" [level=1]\n- text: t1 · solo task (no run) fake · fake-model · medium AWAITING\n- 'button \"Copy: t1\"': t1\n- region \"brief\":\n  - heading \"brief\" [level=2]\n  - term: goal\n  - definition:\n    - text: LONG BRIEF zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz\n    - button \"read full\"\n  - term: state\n  - definition: AWAITING\n  - term: branch\n  - definition: — none\n  - term: worktree\n  - definition: — none\n  - term: harness\n  - definition: fake · fake-model · effort medium\n  - term: posture\n  - definition: \"--sandbox workspace · network on\"\n  - term: address\n  - definition: solo task (no run)\n  - term: duration\n  - definition: —\n  - term: usage\n  - definition: —\n- region \"attempt chain\":\n  - heading \"attempt chain\" [level=2]\n  - text: parley fix · 1\n  - list:\n    - listitem: \"#1 AWAITING — unscored\"\n- region \"eval\":\n  - heading \"eval\" [level=2]\n  - text: absent\n  - status: No eval on file — this task has never been scored.\n- region \"deliverables\":\n  - heading \"deliverables\" [level=2]\n  - text: none\n  - status: Solo task — no run deliverables.\n- region \"Log tail\":\n  - heading \"log tail\" [level=2]\n  - text: tailing · follow on\n  - checkbox \"follow\" [checked]\n  - text: follow\n  - log \"Vendor log output\": \"fallback {\\\"type\\\":\\\"hello\\\",\\\"model\\\":\\\"fake-model\\\",\\\"effort\\\":\\\"medium\\\",\\\"prompt\\\":\\\"# Parley protocol\\\\n\\\\nYou are an agent working on a task delegated through parley. Read these rules before you begin.\\\\n\\\\n## Where things are\\\\nYou are working directly in `/tmp/parley-verify-task-BHM5G5` (no dedicated branch).\\\\n- Your task brief is on disk at `.parley/TASK.md` — read it first.\\\\n- Supporting context files are under `.parley/context/`:\\\\n- (none)\\\\n\\\\n## Tools available to you\\\\n- `ask_orchestrator({ question })` — ask the orchestrator a blocking question when you are genuinely stuck or need a decision only they can make. It blocks until an answer arrives; a question left unanswered for 30 minutes stalls the task (it can be resumed later). Do not use it for anything you can resolve yourself.\\\\n- `submit_report({ ... })` — you MUST finish by calling this exactly once. The task only completes when you submit a report that satisfies the schema below; exiting without one is a failure.\\\\n\\\\n## Report schema\\\\nCall `submit_report` with an object:\\\\n- `summary`: string; minLength 1 (required)\\\\n- `outcome`: one of \\\\\\\"success\\\\\\\", \\\\\\\"partial\\\\\\\", \\\\\\\"blocked\\\\\\\" (required)\\\\n- `files_changed`: array of string (required)\\\\n\\\\nThe task itself follows below (and in `.parley/TASK.md`); everything above is protocol, not the task.\\\\n\\\\n---\\\\n\\\\nBoundary brief: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb decide scaffold vs origin.\\\",\\\"cwd\\\":\\\"/tmp/parley-verify-task-BHM5G5\\\",\\\"sandbox\\\":\\\"workspace\\\",\\\"network\\\":true,\\\"pid\\\":1591174,\\\"parley_hub_url\\\":\\\"http://127.0.0.1:40567\\\",\\\"parley_task_id\\\":\\\"t1\\\",\\\"child_json\\\":{\\\"url\\\":\\\"http://127.0.0.1:40567\\\",\\\"task_id\\\":\\\"t1\\\"}} reasoning need a decision\"\n- region \"q&a — orchestrator answers\":\n  - heading \"q&a — orchestrator answers\" [level=2]\n  - text: 1 outstanding\n  - list \"Q&A transcript\":\n    - listitem:\n      - text: \"ASK Boundary question for scaffold layout: qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq OUTSTANDING waiting on the orchestrating agent — humans do not answer here asked 5s ago · event pending ·\"\n      - time: 05:53\n      - code: parley answer t1 \"...\"\n      - 'button \"Copy: parley answer t1 \\\"...\\\"\"': copy\n- region \"report\":\n  - heading \"report\" [level=2]\n  - text: none\n  - status: No report yet — the task has not submitted one."
+          "tree": "- heading \"t1\" [level=1]\n- text: t1 · solo task (no run) fake · fake-model · medium AWAITING\n- 'button \"Copy: t1\"': t1\n- region \"Outstanding question\":\n  - text: OUTSTANDING ASK needs the orchestrating agent\n  - paragraph: \"Boundary question for scaffold layout: qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq\"\n  - code: parley answer t1 \"<answer>\"\n  - 'button \"Copy: parley answer t1 \\\"<answer>\\\"\"': copy\n- text: brief\n- term: goal\n- definition:\n  - text: LONG BRIEF zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz\n  - button \"read full\"\n- term: state\n- definition: AWAITING\n- term: branch\n- definition: — none\n- term: worktree\n- definition: — none\n- term: harness\n- definition: fake · fake-model · effort medium\n- term: posture\n- definition: \"--sandbox workspace · network on\"\n- term: address\n- definition: solo task (no run)\n- term: duration\n- definition: —\n- term: usage\n- definition: —\n- text: attempt chain parley fix · 1\n- list:\n  - listitem: \"#1 AWAITING — unscored\"\n- text: eval absent\n- status: No eval on file — this task has never been scored.\n- text: deliverables none\n- status: Solo task — no run deliverables.\n- region \"Log tail\":\n  - heading \"log tail\" [level=2]\n  - text: tailing · follow on\n  - checkbox \"follow\" [checked]\n  - text: follow\n  - log \"Vendor log output\": \"error {\\\"type\\\":\\\"hello\\\",\\\"model\\\":\\\"fake-model\\\",\\\"effort\\\":\\\"medium\\\",\\\"prompt\\\":\\\"# Parley protocol\\\\n\\\\nYou are an agent working on a task delegated through parley. Read these rules before you begin.\\\\n\\\\n## Where things are\\\\nYou are working directly in `/tmp/parley-verify-task-oxt7gT` (no dedicated branch).\\\\n- Your task brief is on disk at `.parley/TASK.md` — read it first.\\\\n- Supporting context files are under `.parley/context/`:\\\\n- (none)\\\\n\\\\n## Tools available to you\\\\n- `ask_orchestrator({ question })` — ask the orchestrator a blocking question when you are genuinely stuck or need a decision only they can make. It blocks until an answer arrives; a question left unanswered for 30 minutes stalls the task (it can be resumed later). Do not use it for anything you can resolve yourself.\\\\n- `submit_report({ ... })` — you MUST finish by calling this exactly once. The task only completes when you submit a report that satisfies the schema below; exiting without one is a failure.\\\\n\\\\n## Report schema\\\\nCall `submit_report` with an object:\\\\n- `summary`: string; minLength 1 (required)\\\\n- `outcome`: one of \\\\\\\"success\\\\\\\", \\\\\\\"partial\\\\\\\", \\\\\\\"blocked\\\\\\\" (required)\\\\n- `files_changed`: array of string (required)\\\\n\\\\nThe task itself follows below (and in `.parley/TASK.md`); everything above is protocol, not the task.\\\\n\\\\n---\\\\n\\\\nBoundary brief: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb decide scaffold vs origin.\\\",\\\"cwd\\\":\\\"/tmp/parley-verify-task-oxt7gT\\\",\\\"sandbox\\\":\\\"workspace\\\",\\\"network\\\":true,\\\"pid\\\":2569731,\\\"parley_hub_url\\\":\\\"http://127.0.0.1:40237\\\",\\\"parley_task_id\\\":\\\"t1\\\",\\\"child_json\\\":{\\\"url\\\":\\\"http://127.0.0.1:40237\\\",\\\"task_id\\\":\\\"t1\\\"}} reasoning need a decision\"\n- text: q&a — orchestrator answers 1 outstanding\n- list \"Q&A transcript\":\n  - listitem:\n    - text: \"ASK Boundary question for scaffold layout: qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq OUTSTANDING see ask band above — waiting on the orchestrating agent asked 5s ago · event pending ·\"\n    - time: 23:18\n- text: report none\n- status: No report yet — the task has not submitted one."
         },
         "keyboardWalk": {
-          "focusableCount": 14,
+          "focusableCount": 25,
           "note": null,
           "path": [
             {
               "step": 1,
-              "tag": "div",
-              "testId": "task-col-left",
-              "text": "briefgoalLONG BRIEF zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz",
-              "inScaffold": false
-            },
-            {
-              "step": 2,
-              "tag": "button",
-              "testId": "task-brief",
-              "text": "read full",
-              "inScaffold": false
-            },
-            {
-              "step": 3,
-              "tag": "input",
-              "testId": "task-log-follow",
-              "text": "",
-              "inScaffold": false
-            },
-            {
-              "step": 4,
-              "tag": "div",
-              "testId": "task-log-well",
-              "text": "01fallback {\"type\":\"hello\",\"model\":\"fake-model\",\"effort\":\"medium\",\"prompt\":\"# Pa",
-              "inScaffold": false
-            },
-            {
-              "step": 5,
-              "tag": "div",
-              "testId": "task-col-right",
-              "text": "q&a — orchestrator answers1 outstandingASKBoundary question for scaffold layout:",
-              "inScaffold": false
-            },
-            {
-              "step": 6,
               "tag": "button",
               "testId": "task-answer-scaffold",
               "text": "copy",
               "inScaffold": true
             },
             {
-              "step": 6,
+              "step": 1,
               "key": "Enter",
               "activated": true
             }
@@ -2327,7 +2292,7 @@
           "ratio": 12.7,
           "largeText": false,
           "wcagAA": true,
-          "text": "05:53:18"
+          "text": "23:18:10"
         },
         "find-input": {
           "selector": ".pc-find__input",
@@ -2351,7 +2316,7 @@
           "ratio": 6.32,
           "largeText": false,
           "wcagAA": true,
-          "text": "awaiting"
+          "text": "AWAITING"
         },
         "footer-meta": {
           "selector": ".pc-shell__footer-meta",
@@ -2370,8 +2335,8 @@
           "found": false
         }
       },
-      "recordedAt": "2026-08-06T09:53:37.194Z"
+      "recordedAt": "2026-08-07T03:18:29.292Z"
     }
   },
-  "updatedAt": "2026-08-06T09:53:37.194Z"
+  "updatedAt": "2026-08-07T03:18:29.292Z"
 }

@@ -759,7 +759,7 @@
 /* Density floor 24–30px (DESIGN.md rows). Single-line option. */
 .pc-find__option {
   display: grid;
-  grid-template-columns: 44px 1fr auto;
+  grid-template-columns: 44px minmax(0, 1fr) auto;
   align-items: center;
   gap: 0 8px;
   min-height: 28px;
@@ -773,9 +773,46 @@
   background: transparent;
 }
 
+.pc-find__option-main {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.pc-find__option-id {
+  font: var(--type-meta);
+  color: var(--text-4);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
 .pc-find__option-chip.pc-chip {
   /* Compact chip in the hit meta slot — label still present for state. */
   max-width: 16ch;
+  flex: none;
+}
+
+.pc-find__option-session-dot {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font: var(--type-chip);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.pc-find__option-session-pip {
+  width: 7px;
+  height: 7px;
+  flex: none;
+  background: var(--state-pending);
+  border: 1px solid var(--border-strong);
 }
 
 .pc-find__option--active,
@@ -798,6 +835,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   min-width: 0;
+  flex: 0 1 auto;
 }
 
 .pc-find__option-meta {
@@ -811,6 +849,7 @@
   align-items: center;
   justify-content: flex-end;
   min-width: 0;
+  flex: none;
 }
 
 /* ── Screen placeholders ────────────────────────────────────────────── */

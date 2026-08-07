@@ -5,9 +5,8 @@
  */
 
 .pc-run {
-  display: grid;
-  /* header · optional block · toolbar · scroll body */
-  grid-template-rows: auto auto auto minmax(0, 1fr);
+  display: flex;
+  flex-direction: column;
   min-height: 0;
   height: 100%;
   width: 100%;
@@ -214,6 +213,7 @@
 
 .pc-run__body {
   min-height: 0;
+  flex: 1 1 auto;
   overflow: auto;
   padding: 14px;
   display: flex;
@@ -222,13 +222,31 @@
   justify-content: flex-start;
 }
 
+.pc-run[data-honesty="empty"] .pc-run__empty {
+  flex: 0 0 auto;
+  min-height: 0;
+}
+
 /* Intentional content termination at wide viewports (no dead void). */
 .pc-run__end {
-  flex: 0 0 auto;
+  flex: 1 1 auto;
+  min-height: 48px;
   margin-top: 4px;
-  border-top: 1px solid var(--hairline);
-  height: 0;
   width: 100%;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+  display: flex;
+  align-items: flex-start;
+  padding: 10px 12px;
+  box-sizing: border-box;
+}
+
+.pc-run__end::after {
+  content: "end of run";
+  font: var(--type-meta);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-4);
 }
 
 .pc-run__panel-honesty {

@@ -258,6 +258,7 @@ export function RunScreen(props: ScreenMountProps) {
             observation-only — gate verbs stay with the orchestrating agent.
           </p>
         </div>
+        <div className="pc-run__end" data-testid="run-end" aria-hidden="true" />
       </div>
     );
   }

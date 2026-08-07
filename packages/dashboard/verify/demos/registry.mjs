@@ -23,6 +23,10 @@ import { runFleetBoardDemo, fleetBoardGates } from "./fleet-board.mjs";
 import { runMetricsBoardDemo, metricsBoardGates } from "./metrics-board.mjs";
 import { runRunDetailDemo, runDetailGates } from "./run-detail.mjs";
 import { runConsoleRailsDemo, consoleRailsGates } from "./console-rails.mjs";
+import {
+  runConsoleHonestyDemo,
+  consoleHonestyGates,
+} from "./console-honesty.mjs";
 
 /**
  * @typedef {{
@@ -87,6 +91,13 @@ export const DEMO_REGISTRY = [
     id: "console-rails",
     run: runConsoleRailsDemo,
     gates: consoleRailsGates,
+  },
+  // #368 fleet/task/find/chrome honesty
+  {
+    ticket: "issue-368",
+    id: "console-honesty",
+    run: runConsoleHonestyDemo,
+    gates: consoleHonestyGates,
   },
 ];
 

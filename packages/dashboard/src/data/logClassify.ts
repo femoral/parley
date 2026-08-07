@@ -32,7 +32,6 @@ export function classifyLogLine(raw: string): { kind: LogLineKind; text: string 
   const item = asObj(obj.item);
   const type = asStr(obj.type) ?? asStr(obj.kind) ?? "";
   const itemType = item ? (asStr(item.type) ?? "") : "";
-  const haystack = `${type} ${itemType}`.toLowerCase();
 
   const errorObj = asObj(obj.error);
   const text =
@@ -46,6 +45,9 @@ export function classifyLogLine(raw: string): { kind: LogLineKind; text: string 
     (asStr(obj.tool) && `${type || "tool_result"}: ${asStr(obj.tool)}`) ||
     trimmed;
 
+  // Include message/body text so "fatal: …" inside type:"log" still classifies as error.
+  const haystack = `${type} ${itemType} ${text}`.toLowerCase();
+
   const hasError = errorObj !== undefined || typeof obj.error === "string";
   if (
     hasError ||
@@ -58,7 +60,12 @@ export function classifyLogLine(raw: string): { kind: LogLineKind; text: string 
   if (haystack.includes("question") || haystack.includes("ask")) return { kind: "question", text };
   if (haystack.includes("command") || haystack.includes("shell")) return { kind: "shell", text };
   if (haystack.includes("tool") || haystack.includes("function_call")) return { kind: "tool", text };
-  if (haystack.includes("message") || haystack.includes("reasoning")) {
+  if (
+    type.toLowerCase().includes("message") ||
+    type.toLowerCase().includes("reasoning") ||
+    itemType.toLowerCase().includes("message") ||
+    itemType.toLowerCase().includes("reasoning")
+  ) {
     return { kind: "reasoning", text };
   }
   // Session hello envelope (cwd/pid/hub boilerplate) — collapsed in the log UI.

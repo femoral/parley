@@ -3,7 +3,14 @@
  * Owns global navigation, find combobox, settings, accelerators, a11y skeleton.
  * Screen tickets mount into center (see screens/SCREENS.md).
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { ParleyClient } from "@useparley/core";
 import {
   ConsoleDataProvider,
@@ -153,7 +160,10 @@ export function Shell() {
   );
 
   // Modal settings: inert siblings so zero tab stops are reachable behind.
-  useEffect(() => {
+  // useLayoutEffect so inert is removed before SettingsSurface's useEffect
+  // cleanup restores focus to the trigger (child useEffect cleanups run after
+  // parent layout effects when open flips false).
+  useLayoutEffect(() => {
     const shell = shellRef.current;
     if (!shell) return;
     const kids = Array.from(shell.children) as HTMLElement[];

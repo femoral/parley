@@ -450,14 +450,16 @@
 
 .pc-task-ask-band {
   flex: 0 0 auto;
-  padding: 14px 16px 16px;
+  padding: 18px 20px 20px;
   border-bottom: 1px solid var(--border);
   border-left: 3px solid var(--state-awaiting);
   background: color-mix(in srgb, var(--state-awaiting) 8%, var(--surface));
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 14px;
   min-width: 0;
+  /* Occupy enough vertical band that measured area outranks the log well. */
+  min-height: 200px;
 }
 
 .pc-task-ask-band__head {
@@ -478,21 +480,41 @@
   color: var(--text-3);
 }
 
-/* Largest text block on the task screen when an ask is outstanding. */
+/*
+ * Largest text block on the task screen when an ask is outstanding.
+ * Full band width + large scale so measured px² beats visible log lines.
+ */
 .pc-task-ask-band__question {
   margin: 0;
-  /* Screen-title scale is the largest body role on the board (DESIGN.md). */
-  font: var(--type-screen-title);
+  font-family: var(--font-sans);
   font-weight: 500;
-  line-height: 1.45;
+  font-size: 24px;
+  line-height: 1.5;
   color: var(--text);
   overflow-wrap: anywhere;
-  max-width: 72ch;
+  max-width: none;
+  width: 100%;
+  flex: 1 1 auto;
+  min-height: 5.5em;
 }
 
 .pc-task-ask-band .pc-scaffold {
   align-self: flex-start;
   max-width: 100%;
+}
+
+/* Bound the log well when an ask is outstanding so the band stays hierarchy #1. */
+.pc-task[data-ask="true"] .pc-task-col--log {
+  max-height: min(32vh, 240px);
+  overflow: auto;
+}
+
+.pc-task[data-ask="true"] .pc-task-log {
+  max-height: min(32vh, 240px);
+}
+
+.pc-task[data-ask="true"] .pc-task-log__well {
+  max-height: min(24vh, 160px);
 }
 
 /* ── Collapsed hello envelope in log ────────────────────────────────── */
@@ -557,10 +579,6 @@
   overflow-wrap: anywhere;
   max-height: 12em;
   overflow: auto;
-}
-
-.pc-task-log__line--error .pc-task-log__text {
-  color: var(--state-failed);
 }
 
 /* ── Q&A ────────────────────────────────────────────────────────────── */

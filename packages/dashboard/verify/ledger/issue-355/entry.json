@@ -289,13 +289,13 @@
               "ok": true
             },
             {
-              "text": "success 0% · last 24h",
+              "text": "success — · last 24h",
               "scrollWidth": 195,
               "clientWidth": 195,
               "ok": true
             },
             {
-              "text": "cache 0% · p95 —",
+              "text": "cache — · p95 —",
               "scrollWidth": 196,
               "clientWidth": 196,
               "ok": true
@@ -491,7 +491,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "Skip to navigationSkip to findSkip to main content1 needs the orchestratorparleyconsoleFleet3 tasks · 1 needs actionRunno runTaskt3Metricsall handsdaemon127.…"
+              "text": "Skip to navigationSkip to findSkip to main content1 needs the orchestratorparleyconsoleFleet3 tasks · 1 needs actionRunno runTaskt3Metricsall sessionsdaemon1…"
             },
             "center": {
               "selector": ".pc-shell__center",
@@ -626,13 +626,13 @@
                 "x": 284,
                 "y": 46,
                 "width": 648,
-                "height": 148.25
+                "height": 156.38
               },
               "styles": {
                 "display": "grid",
                 "position": "static",
                 "width": "648px",
-                "height": "148.25px",
+                "height": "156.375px",
                 "minWidth": "auto",
                 "minHeight": "auto",
                 "backgroundColor": "rgba(0, 0, 0, 0)",
@@ -651,7 +651,7 @@
                 "borderBottomColor": "rgb(35, 42, 48)",
                 "borderLeftColor": "rgb(227, 232, 236)",
                 "borderRightColor": "rgb(227, 232, 236)",
-                "gridTemplateRows": "80.125px 67.125px",
+                "gridTemplateRows": "84.1875px 71.1875px",
                 "gridTemplateColumns": "216px 216px 216px",
                 "gap": "normal",
                 "padding": "0px",
@@ -668,13 +668,13 @@
                 "x": 500,
                 "y": 46,
                 "width": 216,
-                "height": 80.13
+                "height": 84.19
               },
               "styles": {
                 "display": "flex",
                 "position": "static",
                 "width": "216px",
-                "height": "80.125px",
+                "height": "84.1875px",
                 "minWidth": "0px",
                 "minHeight": "auto",
                 "backgroundColor": "rgba(0, 0, 0, 0)",
@@ -708,15 +708,15 @@
               "found": true,
               "box": {
                 "x": 500,
-                "y": 126.13,
+                "y": 130.19,
                 "width": 216,
-                "height": 67.13
+                "height": 71.19
               },
               "styles": {
                 "display": "flex",
                 "position": "static",
                 "width": "216px",
-                "height": "67.125px",
+                "height": "71.1875px",
                 "minWidth": "0px",
                 "minHeight": "auto",
                 "backgroundColor": "rgba(0, 0, 0, 0)",
@@ -743,22 +743,22 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "settled 24h0 / 0done / failedsuccess 0% · last 24h"
+              "text": "settled 24h0 / 0done / failedsuccess — · last 24h"
             },
             "fleet-kpi-token-burn": {
               "selector": "[data-testid=\"fleet-kpi-token-burn\"]",
               "found": true,
               "box": {
                 "x": 716,
-                "y": 126.13,
+                "y": 130.19,
                 "width": 216,
-                "height": 67.13
+                "height": 71.19
               },
               "styles": {
                 "display": "flex",
                 "position": "static",
                 "width": "216px",
-                "height": "67.125px",
+                "height": "71.1875px",
                 "minWidth": "0px",
                 "minHeight": "auto",
                 "backgroundColor": "rgba(0, 0, 0, 0)",
@@ -785,22 +785,22 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "token burn0incache 0% · p95 —"
+              "text": "token burn0incache — · p95 —"
             },
             "fleet-runs": {
               "selector": "[data-testid=\"fleet-runs\"]",
               "found": true,
               "box": {
                 "x": 284,
-                "y": 194.25,
+                "y": 202.38,
                 "width": 407,
-                "height": 187.17
+                "height": 184.94
               },
               "styles": {
                 "display": "flex",
                 "position": "relative",
                 "width": "407px",
-                "height": "187.172px",
+                "height": "184.938px",
                 "minWidth": "0px",
                 "minHeight": "0px",
                 "backgroundColor": "rgba(0, 0, 0, 0)",
@@ -834,15 +834,15 @@
               "found": true,
               "box": {
                 "x": 284,
-                "y": 381.42,
+                "y": 387.31,
                 "width": 407,
-                "height": 492.58
+                "height": 486.69
               },
               "styles": {
                 "display": "flex",
                 "position": "relative",
                 "width": "407px",
-                "height": "492.578px",
+                "height": "486.688px",
                 "minWidth": "0px",
                 "minHeight": "0px",
                 "backgroundColor": "rgba(0, 0, 0, 0)",
@@ -869,14 +869,14 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "tasksattention · age · 3statetaskharnessrun addressbranchtokensdurageFAILEDt2t2fresh failurefake · fake-model———35ms0sRUNNINGt3t3fake · fake-model————0sDONEt…"
+              "text": "tasksattention · age · 3statetaskharnessrun addressbranchtokensdurageFAILEDt2t2fresh failurefake · fake-model———34ms0sRUNNINGt3t3fake · fake-model————0sDONEt…"
             },
             "fleet-tasks-scroll": {
               "selector": "[data-testid=\"fleet-tasks-scroll\"]",
               "found": true,
               "box": {
                 "x": 284,
-                "y": 406.42,
+                "y": 412.31,
                 "width": 407,
                 "height": 103
               },
@@ -911,22 +911,22 @@
                 "overflow": "auto",
                 "opacity": "1"
               },
-              "text": "statetaskharnessrun addressbranchtokensdurageFAILEDt2t2fresh failurefake · fake-model———35ms0sRUNNINGt3t3fake · fake-model————0sDONEt1t1fake · fake-model———1…"
+              "text": "statetaskharnessrun addressbranchtokensdurageFAILEDt2t2fresh failurefake · fake-model———34ms0sRUNNINGt3t3fake · fake-model————0sDONEt1t1fake · fake-model———1…"
             },
             "fleet-runners": {
               "selector": "[data-testid=\"fleet-runners\"]",
               "found": true,
               "box": {
                 "x": 692,
-                "y": 194.25,
+                "y": 202.38,
                 "width": 240,
-                "height": 679.75
+                "height": 671.63
               },
               "styles": {
                 "display": "flex",
                 "position": "relative",
                 "width": "240px",
-                "height": "679.75px",
+                "height": "671.625px",
                 "minWidth": "0px",
                 "minHeight": "0px",
                 "backgroundColor": "rgba(0, 0, 0, 0)",
@@ -953,7 +953,7 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "executors0 runnersNo runners"
+              "text": "executorsnone registered · 1 running without runner listNo runners"
             },
             "rail-token-burn": {
               "selector": "[data-testid=\"rail-token-burn\"]",
@@ -1079,7 +1079,7 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "firehosewatch — followNo events since connect"
+              "text": "firehosewatch — followNo events counted since this console connected"
             },
             "rail-attention": {
               "selector": "[data-testid=\"rail-attention\"]",
@@ -1171,7 +1171,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "Skip to navigationSkip to findSkip to main content1 needs the orchestratorparleyconsoleFleet3 tasks · 1 needs actionRunno runTaskt3Metricsall handsdaemon127.…"
+              "text": "Skip to navigationSkip to findSkip to main content1 needs the orchestratorparleyconsoleFleet3 tasks · 1 needs actionRunno runTaskt3Metricsall sessionsdaemon1…"
             },
             "center": {
               "selector": ".pc-shell__center",
@@ -1306,13 +1306,13 @@
                 "x": 284,
                 "y": 46,
                 "width": 828,
-                "height": 135.25
+                "height": 143.38
               },
               "styles": {
                 "display": "grid",
                 "position": "static",
                 "width": "828px",
-                "height": "135.25px",
+                "height": "143.375px",
                 "minWidth": "auto",
                 "minHeight": "auto",
                 "backgroundColor": "rgba(0, 0, 0, 0)",
@@ -1331,7 +1331,7 @@
                 "borderBottomColor": "rgb(35, 42, 48)",
                 "borderLeftColor": "rgb(227, 232, 236)",
                 "borderRightColor": "rgb(227, 232, 236)",
-                "gridTemplateRows": "67.125px 67.125px",
+                "gridTemplateRows": "71.1875px 71.1875px",
                 "gridTemplateColumns": "276px 276px 276px",
                 "gap": "normal",
                 "padding": "0px",
@@ -1348,13 +1348,13 @@
                 "x": 560,
                 "y": 46,
                 "width": 276,
-                "height": 67.13
+                "height": 71.19
               },
               "styles": {
                 "display": "flex",
                 "position": "static",
                 "width": "276px",
-                "height": "67.125px",
+                "height": "71.1875px",
                 "minWidth": "0px",
                 "minHeight": "auto",
                 "backgroundColor": "rgba(0, 0, 0, 0)",
@@ -1388,15 +1388,15 @@
               "found": true,
               "box": {
                 "x": 560,
-                "y": 113.13,
+                "y": 117.19,
                 "width": 276,
-                "height": 67.13
+                "height": 71.19
               },
               "styles": {
                 "display": "flex",
                 "position": "static",
                 "width": "276px",
-                "height": "67.125px",
+                "height": "71.1875px",
                 "minWidth": "0px",
                 "minHeight": "auto",
                 "backgroundColor": "rgba(0, 0, 0, 0)",
@@ -1423,22 +1423,22 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "settled 24h0 / 0done / failedsuccess 0% · last 24h"
+              "text": "settled 24h0 / 0done / failedsuccess — · last 24h"
             },
             "fleet-kpi-token-burn": {
               "selector": "[data-testid=\"fleet-kpi-token-burn\"]",
               "found": true,
               "box": {
                 "x": 836,
-                "y": 113.13,
+                "y": 117.19,
                 "width": 276,
-                "height": 67.13
+                "height": 71.19
               },
               "styles": {
                 "display": "flex",
                 "position": "static",
                 "width": "276px",
-                "height": "67.125px",
+                "height": "71.1875px",
                 "minWidth": "0px",
                 "minHeight": "auto",
                 "backgroundColor": "rgba(0, 0, 0, 0)",
@@ -1465,22 +1465,22 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "token burn0incache 0% · p95 —"
+              "text": "token burn0incache — · p95 —"
             },
             "fleet-runs": {
               "selector": "[data-testid=\"fleet-runs\"]",
               "found": true,
               "box": {
                 "x": 284,
-                "y": 181.25,
+                "y": 189.38,
                 "width": 547,
-                "height": 190.75
+                "height": 188.52
               },
               "styles": {
                 "display": "flex",
                 "position": "relative",
                 "width": "547px",
-                "height": "190.75px",
+                "height": "188.516px",
                 "minWidth": "0px",
                 "minHeight": "0px",
                 "backgroundColor": "rgba(0, 0, 0, 0)",
@@ -1514,15 +1514,15 @@
               "found": true,
               "box": {
                 "x": 284,
-                "y": 372,
+                "y": 377.89,
                 "width": 547,
-                "height": 502
+                "height": 496.11
               },
               "styles": {
                 "display": "flex",
                 "position": "relative",
                 "width": "547px",
-                "height": "502px",
+                "height": "496.109px",
                 "minWidth": "0px",
                 "minHeight": "0px",
                 "backgroundColor": "rgba(0, 0, 0, 0)",
@@ -1549,14 +1549,14 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "tasksattention · age · 3statetaskharnessrun addressbranchtokensdurageFAILEDt2t2fresh failurefake · fake-model———35ms0sRUNNINGt3t3fake · fake-model————0sDONEt…"
+              "text": "tasksattention · age · 3statetaskharnessrun addressbranchtokensdurageFAILEDt2t2fresh failurefake · fake-model———34ms0sRUNNINGt3t3fake · fake-model————0sDONEt…"
             },
             "fleet-tasks-scroll": {
               "selector": "[data-testid=\"fleet-tasks-scroll\"]",
               "found": true,
               "box": {
                 "x": 284,
-                "y": 397,
+                "y": 402.89,
                 "width": 547,
                 "height": 103
               },
@@ -1591,22 +1591,22 @@
                 "overflow": "auto",
                 "opacity": "1"
               },
-              "text": "statetaskharnessrun addressbranchtokensdurageFAILEDt2t2fresh failurefake · fake-model———35ms0sRUNNINGt3t3fake · fake-model————0sDONEt1t1fake · fake-model———1…"
+              "text": "statetaskharnessrun addressbranchtokensdurageFAILEDt2t2fresh failurefake · fake-model———34ms0sRUNNINGt3t3fake · fake-model————0sDONEt1t1fake · fake-model———1…"
             },
             "fleet-runners": {
               "selector": "[data-testid=\"fleet-runners\"]",
               "found": true,
               "box": {
                 "x": 832,
-                "y": 181.25,
+                "y": 189.38,
                 "width": 280,
-                "height": 692.75
+                "height": 684.63
               },
               "styles": {
                 "display": "flex",
                 "position": "relative",
                 "width": "280px",
-                "height": "692.75px",
+                "height": "684.625px",
                 "minWidth": "0px",
                 "minHeight": "0px",
                 "backgroundColor": "rgba(0, 0, 0, 0)",
@@ -1633,7 +1633,7 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "executors0 runnersNo runners"
+              "text": "executorsnone registered · 1 running without runner listNo runners"
             },
             "rail-token-burn": {
               "selector": "[data-testid=\"rail-token-burn\"]",
@@ -1759,7 +1759,7 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "firehosewatch — followNo events since connect"
+              "text": "firehosewatch — followNo events counted since this console connected"
             },
             "rail-attention": {
               "selector": "[data-testid=\"rail-attention\"]",
@@ -1851,7 +1851,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "Skip to navigationSkip to findSkip to main content1 needs the orchestratorparleyconsoleFleet3 tasks · 1 needs actionRunno runTaskt3Metricsall handsdaemon127.…"
+              "text": "Skip to navigationSkip to findSkip to main content1 needs the orchestratorparleyconsoleFleet3 tasks · 1 needs actionRunno runTaskt3Metricsall sessionsdaemon1…"
             },
             "center": {
               "selector": ".pc-shell__center",
@@ -1986,13 +1986,13 @@
                 "x": 284,
                 "y": 46,
                 "width": 1288,
-                "height": 80.13
+                "height": 84.19
               },
               "styles": {
                 "display": "grid",
                 "position": "static",
                 "width": "1288px",
-                "height": "80.125px",
+                "height": "84.1875px",
                 "minWidth": "auto",
                 "minHeight": "auto",
                 "backgroundColor": "rgba(0, 0, 0, 0)",
@@ -2011,7 +2011,7 @@
                 "borderBottomColor": "rgb(35, 42, 48)",
                 "borderLeftColor": "rgb(227, 232, 236)",
                 "borderRightColor": "rgb(227, 232, 236)",
-                "gridTemplateRows": "79.125px",
+                "gridTemplateRows": "83.1875px",
                 "gridTemplateColumns": "214.656px 214.672px 214.672px 214.656px 214.672px 214.672px",
                 "gap": "normal",
                 "padding": "0px",
@@ -2028,13 +2028,13 @@
                 "x": 498.66,
                 "y": 46,
                 "width": 214.67,
-                "height": 79.13
+                "height": 83.19
               },
               "styles": {
                 "display": "flex",
                 "position": "static",
                 "width": "214.672px",
-                "height": "79.125px",
+                "height": "83.1875px",
                 "minWidth": "0px",
                 "minHeight": "auto",
                 "backgroundColor": "rgba(0, 0, 0, 0)",
@@ -2070,13 +2070,13 @@
                 "x": 1142.66,
                 "y": 46,
                 "width": 214.67,
-                "height": 79.13
+                "height": 83.19
               },
               "styles": {
                 "display": "flex",
                 "position": "static",
                 "width": "214.672px",
-                "height": "79.125px",
+                "height": "83.1875px",
                 "minWidth": "0px",
                 "minHeight": "auto",
                 "backgroundColor": "rgba(0, 0, 0, 0)",
@@ -2103,7 +2103,7 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "settled 24h0 / 0done / failedsuccess 0% · last 24h"
+              "text": "settled 24h0 / 0done / failedsuccess — · last 24h"
             },
             "fleet-kpi-token-burn": {
               "selector": "[data-testid=\"fleet-kpi-token-burn\"]",
@@ -2112,13 +2112,13 @@
                 "x": 1357.33,
                 "y": 46,
                 "width": 214.67,
-                "height": 79.13
+                "height": 83.19
               },
               "styles": {
                 "display": "flex",
                 "position": "static",
                 "width": "214.672px",
-                "height": "79.125px",
+                "height": "83.1875px",
                 "minWidth": "0px",
                 "minHeight": "auto",
                 "backgroundColor": "rgba(0, 0, 0, 0)",
@@ -2145,22 +2145,22 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "token burn0incache 0% · p95 —"
+              "text": "token burn0incache — · p95 —"
             },
             "fleet-runs": {
               "selector": "[data-testid=\"fleet-runs\"]",
               "found": true,
               "box": {
                 "x": 284,
-                "y": 126.13,
+                "y": 130.19,
                 "width": 1007,
-                "height": 205.92
+                "height": 204.81
               },
               "styles": {
                 "display": "flex",
                 "position": "relative",
                 "width": "1007px",
-                "height": "205.922px",
+                "height": "204.812px",
                 "minWidth": "0px",
                 "minHeight": "0px",
                 "backgroundColor": "rgba(0, 0, 0, 0)",
@@ -2194,15 +2194,15 @@
               "found": true,
               "box": {
                 "x": 284,
-                "y": 332.05,
+                "y": 335,
                 "width": 1007,
-                "height": 541.95
+                "height": 539
               },
               "styles": {
                 "display": "flex",
                 "position": "relative",
                 "width": "1007px",
-                "height": "541.953px",
+                "height": "539px",
                 "minWidth": "0px",
                 "minHeight": "0px",
                 "backgroundColor": "rgba(0, 0, 0, 0)",
@@ -2229,14 +2229,14 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "tasksattention · age · 3statetaskharnessrun addressbranchtokensdurageFAILEDt2t2fresh failurefake · fake-model———35ms0sRUNNINGt3t3fake · fake-model————0sDONEt…"
+              "text": "tasksattention · age · 3statetaskharnessrun addressbranchtokensdurageFAILEDt2t2fresh failurefake · fake-model———34ms0sRUNNINGt3t3fake · fake-model————0sDONEt…"
             },
             "fleet-tasks-scroll": {
               "selector": "[data-testid=\"fleet-tasks-scroll\"]",
               "found": true,
               "box": {
                 "x": 284,
-                "y": 357.05,
+                "y": 360,
                 "width": 1007,
                 "height": 103
               },
@@ -2271,22 +2271,22 @@
                 "overflow": "auto",
                 "opacity": "1"
               },
-              "text": "statetaskharnessrun addressbranchtokensdurageFAILEDt2t2fresh failurefake · fake-model———35ms0sRUNNINGt3t3fake · fake-model————0sDONEt1t1fake · fake-model———1…"
+              "text": "statetaskharnessrun addressbranchtokensdurageFAILEDt2t2fresh failurefake · fake-model———34ms0sRUNNINGt3t3fake · fake-model————0sDONEt1t1fake · fake-model———1…"
             },
             "fleet-runners": {
               "selector": "[data-testid=\"fleet-runners\"]",
               "found": true,
               "box": {
                 "x": 1292,
-                "y": 126.13,
+                "y": 130.19,
                 "width": 280,
-                "height": 747.88
+                "height": 743.81
               },
               "styles": {
                 "display": "flex",
                 "position": "relative",
                 "width": "280px",
-                "height": "747.875px",
+                "height": "743.812px",
                 "minWidth": "0px",
                 "minHeight": "0px",
                 "backgroundColor": "rgba(0, 0, 0, 0)",
@@ -2313,7 +2313,7 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "executors0 runnersNo runners"
+              "text": "executorsnone registered · 1 running without runner listNo runners"
             },
             "rail-token-burn": {
               "selector": "[data-testid=\"rail-token-burn\"]",
@@ -2439,7 +2439,7 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "firehosewatch — followNo events since connect"
+              "text": "firehosewatch — followNo events counted since this console connected"
             },
             "rail-attention": {
               "selector": "[data-testid=\"rail-attention\"]",
@@ -2488,7 +2488,7 @@
       ],
       "a11y": {
         "axe": {
-          "url": "http://127.0.0.1:5174/#/fleet",
+          "url": "http://127.0.0.1:5173/#/fleet",
           "violations": [],
           "passes": 48,
           "incomplete": 1,
@@ -2497,7 +2497,7 @@
         "aria": {
           "api": "locator.ariaSnapshot",
           "selector": "[data-testid=\"fleet-board\"]",
-          "tree": "- heading \"Fleet board\" [level=1]\n- group \"Fleet KPIs\": needs orchestrator 1 items 0 held · 0 asks · 0 stall · 1 fresh running 1 tasks cap unknown queued / pending 0 / 0 no waiters runs 0 total 0 held · 0 advancing settled 24h 0 / 0 done / failed success 0% · last 24h token burn 0 in cache 0% · p95 —\n- text: runs 0 held · track = nodes × loop\n- paragraph: No runs\n- text: tasks attention · age · 3\n- grid \"Tasks\":\n  - row \"state task harness tokens dur age\":\n    - columnheader \"state\"\n    - columnheader \"task\"\n    - columnheader \"harness\"\n    - columnheader \"tokens\"\n    - columnheader \"dur\"\n    - columnheader \"age\"\n  - row \"FAILED t2 t2 fresh failure fake · fake-model — 35ms 0s\":\n    - gridcell \"FAILED\"\n    - gridcell \"t2 t2 fresh failure\"\n    - gridcell \"fake · fake-model\"\n    - gridcell \"—\"\n    - gridcell \"35ms\"\n    - gridcell \"0s\"\n  - row \"RUNNING t3 t3 fake · fake-model — — 0s\":\n    - gridcell \"RUNNING\"\n    - gridcell \"t3 t3\"\n    - gridcell \"fake · fake-model\"\n    - gridcell \"—\"\n    - gridcell \"—\"\n    - gridcell \"0s\"\n  - row \"DONE t1 t1 fake · fake-model — 187ms 0s\":\n    - gridcell \"DONE\"\n    - gridcell \"t1 t1\"\n    - gridcell \"fake · fake-model\"\n    - gridcell \"—\"\n    - gridcell \"187ms\"\n    - gridcell \"0s\"\n- complementary:\n  - text: executors 0 runners\n  - paragraph: No runners"
+          "tree": "- heading \"Fleet board\" [level=1]\n- group \"Fleet KPIs\": needs orchestrator 1 items 0 held · 0 asks · 0 stall · 1 fresh running 1 tasks cap unknown queued / pending 0 / 0 no waiters runs 0 total 0 held · 0 advancing settled 24h 0 / 0 done / failed success — · last 24h token burn 0 in cache — · p95 —\n- text: runs 0 held · track = nodes × loop\n- paragraph: No runs\n- text: tasks attention · age · 3\n- grid \"Tasks\":\n  - row \"state task harness tokens dur age\":\n    - columnheader \"state\"\n    - columnheader \"task\"\n    - columnheader \"harness\"\n    - columnheader \"tokens\"\n    - columnheader \"dur\"\n    - columnheader \"age\"\n  - row \"FAILED t2 t2 fresh failure fake · fake-model — 34ms 0s\":\n    - gridcell \"FAILED\"\n    - gridcell \"t2 t2 fresh failure\"\n    - gridcell \"fake · fake-model\"\n    - gridcell \"—\"\n    - gridcell \"34ms\"\n    - gridcell \"0s\"\n  - row \"RUNNING t3 t3 fake · fake-model — — 0s\":\n    - gridcell \"RUNNING\"\n    - gridcell \"t3 t3\"\n    - gridcell \"fake · fake-model\"\n    - gridcell \"—\"\n    - gridcell \"—\"\n    - gridcell \"0s\"\n  - row \"DONE t1 t1 fake · fake-model — 176ms 0s\":\n    - gridcell \"DONE\"\n    - gridcell \"t1 t1\"\n    - gridcell \"fake · fake-model\"\n    - gridcell \"—\"\n    - gridcell \"176ms\"\n    - gridcell \"0s\"\n- complementary:\n  - text: executors none registered · 1 running without runner list\n  - paragraph: No runners"
         },
         "keyboardWalk": [
           "a",
@@ -2519,7 +2519,7 @@
           "ok": true,
           "board": "empty",
           "empty": true,
-          "text": "Fleet boardNo tasks or runs yet. Copy a scaffold and hand it to the orchestrating agent.parley delegateparley delegatecopy"
+          "text": "Fleet boardNo tasks or runs yet. Copy a scaffold and hand it to the orchestrating agent.parley delegate \"<task brief>\"parley delegate \"<task brief>\"copy"
         },
         "error": {
           "ok": true,
@@ -2529,8 +2529,8 @@
         },
         "loading": {
           "board": "connecting",
-          "hailing": true,
-          "text": "Fleet boardHailing the fleet…",
+          "loading": true,
+          "text": "Fleet boardLoading the fleet…",
           "ok": true
         },
         "offline": {
@@ -2540,8 +2540,8 @@
           "text": "Fleet boardneeds orchestrator1items0 held · 0 asks · 0 stall · 1 freshrunning1taskscap unknownqueued / pending0 / 0no waitersruns0total0 held · 0 advancingsettl"
         }
       },
-      "recordedAt": "2026-08-07T01:59:36.039Z"
+      "recordedAt": "2026-08-07T03:18:04.611Z"
     }
   },
-  "updatedAt": "2026-08-07T01:59:36.039Z"
+  "updatedAt": "2026-08-07T03:18:04.611Z"
 }

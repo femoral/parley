@@ -30,6 +30,9 @@ export function SettingsSurface({
   const titleId = useId();
 
   // Focus first control on open; restore trigger on close.
+  // Defer restore one frame so Shell's inert-removal layout effect has run
+  // (parent layout effects clear inert before this useEffect cleanup; rAF is
+  // belt-and-suspenders if timing ever flips).
   useEffect(() => {
     if (!open) return;
     const t = window.setTimeout(() => {
@@ -37,7 +40,11 @@ export function SettingsSurface({
     }, 0);
     return () => {
       window.clearTimeout(t);
-      returnFocusRef?.current?.focus();
+      const el = returnFocusRef?.current;
+      if (!el) return;
+      requestAnimationFrame(() => {
+        el.focus();
+      });
     };
   }, [open, returnFocusRef]);
 

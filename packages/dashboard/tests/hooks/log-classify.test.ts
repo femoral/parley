@@ -31,6 +31,14 @@ describe("classifyLogLine", () => {
     expect(line.text).toMatch(/process died/);
   });
 
+  it("classifies fatal inside message text even when type is log", () => {
+    const line = classifyLogLine(
+      JSON.stringify({ type: "log", message: "fatal: process died" }),
+    );
+    expect(line.kind).toBe("error");
+    expect(line.text).toMatch(/fatal:/);
+  });
+
   it("summarizes session hello envelopes for collapse", () => {
     const raw = JSON.stringify({
       cwd: "/tmp/work/abc",

@@ -23,7 +23,7 @@
               "finish"
             ]
           },
-          "workspace": "/tmp/parley-verify-home-egK8oj/worktrees/parley-run-repo-jH055s/r1",
+          "workspace": "/tmp/parley-verify-home-XuAyqR/worktrees/parley-run-repo-0U4JLC/r1",
           "nodeCount": 2
         },
         "fanOut": {
@@ -137,7 +137,7 @@
           "redirect",
           "finish"
         ],
-        "rendered": "verbs: redirect · finish (orchestrating agent only)"
+        "rendered": "parley run redirect r3 --to <node>parley run redirect r3 --to <node>copyparley run finish r3parley run finish r3copy"
       },
       "outputsAlways": {
         "ok": true,
@@ -256,8 +256,8 @@
         "blockFound": true,
         "chipText": "BLOCKED · GATE HELD",
         "workspaceFound": true,
-        "noticeHasVerbs": true,
-        "noticeReadOnly": true
+        "noticeHasVerbs": false,
+        "noticeReadOnly": false
       },
       "views": {
         "pipeline": {
@@ -265,7 +265,7 @@
           "found": true,
           "box": {
             "x": 298,
-            "y": 248.53,
+            "y": 334.72,
             "width": 800,
             "height": 141.38
           },
@@ -307,7 +307,7 @@
           "found": true,
           "box": {
             "x": 299,
-            "y": 249.53,
+            "y": 335.72,
             "width": 798,
             "height": 108.75
           },
@@ -349,7 +349,7 @@
           "found": true,
           "box": {
             "x": 298,
-            "y": 248.53,
+            "y": 334.72,
             "width": 800,
             "height": 78.75
           },
@@ -434,7 +434,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "Skip to navigationSkip to findSkip to main content3 need the orchestratorparleyconsoleFleet7 tasks · 3 need actionRunr1Taskt7Metricsall handsdaemon127.0.0.1:…"
+              "text": "Skip to navigationSkip to findSkip to main content3 need the orchestrator​parleyconsoleFleet7 tasks · 3 need actionRunr1Taskt7Metricsall sessionsdaemon127.0.…"
             },
             "center": {
               "selector": ".pc-shell__center",
@@ -476,7 +476,7 @@
                 "overflow": "auto",
                 "opacity": "1"
               },
-              "text": "console-gaterun r1 · v1 · repo workspace · otherapprove.1 · 1/1 tasks · 0 ▸ 0 · 1s…/tmp/parley-verify-home-egK8oj/worktrees/parley-run-repo-jH055s/r1BLOCKED …"
+              "text": "console-gaterun r1 · v1 · repo workspace · otherapprove.1 · 1/1 tasks · 0 ▸ 0 · 1s…/tmp/parley-verify-home-XuAyqR/worktrees/parley-run-repo-0U4JLC/r1BLOCKED …"
             },
             "screen-run": {
               "selector": "[data-testid=\"screen-run\"]",
@@ -488,7 +488,7 @@
                 "height": 828
               },
               "styles": {
-                "display": "grid",
+                "display": "flex",
                 "position": "static",
                 "width": "648px",
                 "height": "828px",
@@ -510,15 +510,15 @@
                 "borderBottomColor": "rgb(227, 232, 236)",
                 "borderLeftColor": "rgb(227, 232, 236)",
                 "borderRightColor": "rgb(227, 232, 236)",
-                "gridTemplateRows": "70.75px 28.6406px 58.5px 670.109px",
-                "gridTemplateColumns": "648px",
+                "gridTemplateRows": "none",
+                "gridTemplateColumns": "none",
                 "gap": "normal",
                 "padding": "0px",
                 "margin": "0px",
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "console-gaterun r1 · v1 · repo workspace · otherapprove.1 · 1/1 tasks · 0 ▸ 0 · 1s…/tmp/parley-verify-home-egK8oj/worktrees/parley-run-repo-jH055s/r1BLOCKED …"
+              "text": "console-gaterun r1 · v1 · repo workspace · otherapprove.1 · 1/1 tasks · 0 ▸ 0 · 1s…/tmp/parley-verify-home-XuAyqR/worktrees/parley-run-repo-0U4JLC/r1BLOCKED …"
             },
             "run-header": {
               "selector": "[data-testid=\"run-header\"]",
@@ -560,22 +560,22 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "console-gaterun r1 · v1 · repo workspace · otherapprove.1 · 1/1 tasks · 0 ▸ 0 · 1s…/tmp/parley-verify-home-egK8oj/worktrees/parley-run-repo-jH055s/r1BLOCKED …"
+              "text": "console-gaterun r1 · v1 · repo workspace · otherapprove.1 · 1/1 tasks · 0 ▸ 0 · 1s…/tmp/parley-verify-home-XuAyqR/worktrees/parley-run-repo-0U4JLC/r1BLOCKED …"
             },
             "run-view-switch": {
               "selector": "[data-testid=\"run-view-switch\"]",
               "found": true,
               "box": {
                 "x": 284,
-                "y": 145.39,
+                "y": 210.58,
                 "width": 648,
-                "height": 58.5
+                "height": 37.5
               },
               "styles": {
                 "display": "flex",
                 "position": "static",
                 "width": "648px",
-                "height": "58.5px",
+                "height": "37.5px",
                 "minWidth": "0px",
                 "minHeight": "auto",
                 "backgroundColor": "rgb(13, 16, 19)",
@@ -602,14 +602,14 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "viewpipelineiteration gridnode tablegate verbs (approve · reject · redirect · finish) belong to the orchestrating agent — this surface is read-onlyread-only …"
+              "text": "viewpipelineiteration gridnode table"
             },
             "run-pipeline": {
               "selector": "[data-testid=\"run-pipeline\"]",
               "found": true,
               "box": {
                 "x": 296,
-                "y": 261.53,
+                "y": 305.72,
                 "width": 624,
                 "height": 141.38
               },
@@ -651,7 +651,7 @@
               "found": true,
               "box": {
                 "x": 296,
-                "y": 213.89,
+                "y": 258.08,
                 "width": 624,
                 "height": 31.64
               },
@@ -693,7 +693,7 @@
               "found": true,
               "box": {
                 "x": 296,
-                "y": 418.91,
+                "y": 463.09,
                 "width": 624,
                 "height": 87.09
               },
@@ -735,7 +735,7 @@
               "found": true,
               "box": {
                 "x": 296,
-                "y": 518,
+                "y": 562.19,
                 "width": 624,
                 "height": 55
               },
@@ -854,7 +854,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "/tmp/parley-verify-home-egK8oj/worktrees/parley-run-repo-jH055s/r1"
+              "text": "/tmp/parley-verify-home-XuAyqR/worktrees/parley-run-repo-0U4JLC/r1"
             },
             "run-block": {
               "selector": "[data-testid=\"run-block\"]",
@@ -863,13 +863,13 @@
                 "x": 284,
                 "y": 116.75,
                 "width": 648,
-                "height": 28.64
+                "height": 93.83
               },
               "styles": {
                 "display": "flex",
                 "position": "static",
                 "width": "648px",
-                "height": "28.6406px",
+                "height": "93.8281px",
                 "minWidth": "auto",
                 "minHeight": "auto",
                 "backgroundColor": "rgb(36, 27, 8)",
@@ -890,13 +890,13 @@
                 "borderRightColor": "rgb(224, 160, 46)",
                 "gridTemplateRows": "none",
                 "gridTemplateColumns": "none",
-                "gap": "8px 14px",
-                "padding": "7px 14px",
+                "gap": "8px",
+                "padding": "8px 14px",
                 "margin": "0px",
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "blockedgate · approveverbs: approve · reject · redirect · finish (orchestrating agent only)"
+              "text": "blockedgate · approvegate verbs (approve · reject · redirect · finish) belong to the orchestrating agent — this surface is read-onlyread-only · approve · rej…"
             }
           }
         },
@@ -946,7 +946,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "Skip to navigationSkip to findSkip to main content3 need the orchestratorparleyconsoleFleet7 tasks · 3 need actionRunr1Taskt7Metricsall handsdaemon127.0.0.1:…"
+              "text": "Skip to navigationSkip to findSkip to main content3 need the orchestrator​parleyconsoleFleet7 tasks · 3 need actionRunr1Taskt7Metricsall sessionsdaemon127.0.…"
             },
             "center": {
               "selector": ".pc-shell__center",
@@ -988,7 +988,7 @@
                 "overflow": "auto",
                 "opacity": "1"
               },
-              "text": "console-gaterun r1 · v1 · repo workspace · otherapprove.1 · 1/1 tasks · 0 ▸ 0 · 1s…/tmp/parley-verify-home-egK8oj/worktrees/parley-run-repo-jH055s/r1BLOCKED …"
+              "text": "console-gaterun r1 · v1 · repo workspace · otherapprove.1 · 1/1 tasks · 0 ▸ 0 · 1s…/tmp/parley-verify-home-XuAyqR/worktrees/parley-run-repo-0U4JLC/r1BLOCKED …"
             },
             "screen-run": {
               "selector": "[data-testid=\"screen-run\"]",
@@ -1000,7 +1000,7 @@
                 "height": 828
               },
               "styles": {
-                "display": "grid",
+                "display": "flex",
                 "position": "static",
                 "width": "828px",
                 "height": "828px",
@@ -1022,15 +1022,15 @@
                 "borderBottomColor": "rgb(227, 232, 236)",
                 "borderLeftColor": "rgb(227, 232, 236)",
                 "borderRightColor": "rgb(227, 232, 236)",
-                "gridTemplateRows": "74.75px 28.6406px 37.5px 687.109px",
-                "gridTemplateColumns": "828px",
+                "gridTemplateRows": "none",
+                "gridTemplateColumns": "none",
                 "gap": "normal",
                 "padding": "0px",
                 "margin": "0px",
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "console-gaterun r1 · v1 · repo workspace · otherapprove.1 · 1/1 tasks · 0 ▸ 0 · 1s…/tmp/parley-verify-home-egK8oj/worktrees/parley-run-repo-jH055s/r1BLOCKED …"
+              "text": "console-gaterun r1 · v1 · repo workspace · otherapprove.1 · 1/1 tasks · 0 ▸ 0 · 1s…/tmp/parley-verify-home-XuAyqR/worktrees/parley-run-repo-0U4JLC/r1BLOCKED …"
             },
             "run-header": {
               "selector": "[data-testid=\"run-header\"]",
@@ -1072,14 +1072,14 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "console-gaterun r1 · v1 · repo workspace · otherapprove.1 · 1/1 tasks · 0 ▸ 0 · 1s…/tmp/parley-verify-home-egK8oj/worktrees/parley-run-repo-jH055s/r1BLOCKED …"
+              "text": "console-gaterun r1 · v1 · repo workspace · otherapprove.1 · 1/1 tasks · 0 ▸ 0 · 1s…/tmp/parley-verify-home-XuAyqR/worktrees/parley-run-repo-0U4JLC/r1BLOCKED …"
             },
             "run-view-switch": {
               "selector": "[data-testid=\"run-view-switch\"]",
               "found": true,
               "box": {
                 "x": 284,
-                "y": 149.39,
+                "y": 235.58,
                 "width": 828,
                 "height": 37.5
               },
@@ -1114,14 +1114,14 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "viewpipelineiteration gridnode tablegate verbs (approve · reject · redirect · finish) belong to the orchestrating agent — this surface is read-onlyread-only …"
+              "text": "viewpipelineiteration gridnode table"
             },
             "run-pipeline": {
               "selector": "[data-testid=\"run-pipeline\"]",
               "found": true,
               "box": {
                 "x": 298,
-                "y": 248.53,
+                "y": 334.72,
                 "width": 800,
                 "height": 141.38
               },
@@ -1163,7 +1163,7 @@
               "found": true,
               "box": {
                 "x": 298,
-                "y": 200.89,
+                "y": 287.08,
                 "width": 800,
                 "height": 31.64
               },
@@ -1205,7 +1205,7 @@
               "found": true,
               "box": {
                 "x": 298,
-                "y": 405.91,
+                "y": 492.09,
                 "width": 394,
                 "height": 87.09
               },
@@ -1247,7 +1247,7 @@
               "found": true,
               "box": {
                 "x": 704,
-                "y": 405.91,
+                "y": 492.09,
                 "width": 394,
                 "height": 87.09
               },
@@ -1366,7 +1366,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "/tmp/parley-verify-home-egK8oj/worktrees/parley-run-repo-jH055s/r1"
+              "text": "/tmp/parley-verify-home-XuAyqR/worktrees/parley-run-repo-0U4JLC/r1"
             },
             "run-block": {
               "selector": "[data-testid=\"run-block\"]",
@@ -1375,13 +1375,13 @@
                 "x": 284,
                 "y": 120.75,
                 "width": 828,
-                "height": 28.64
+                "height": 114.83
               },
               "styles": {
                 "display": "flex",
                 "position": "static",
                 "width": "828px",
-                "height": "28.6406px",
+                "height": "114.828px",
                 "minWidth": "auto",
                 "minHeight": "auto",
                 "backgroundColor": "rgb(36, 27, 8)",
@@ -1402,13 +1402,13 @@
                 "borderRightColor": "rgb(224, 160, 46)",
                 "gridTemplateRows": "none",
                 "gridTemplateColumns": "none",
-                "gap": "8px 14px",
-                "padding": "7px 14px",
+                "gap": "8px",
+                "padding": "8px 14px",
                 "margin": "0px",
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "blockedgate · approveverbs: approve · reject · redirect · finish (orchestrating agent only)"
+              "text": "blockedgate · approvegate verbs (approve · reject · redirect · finish) belong to the orchestrating agent — this surface is read-onlyread-only · approve · rej…"
             }
           }
         },
@@ -1458,7 +1458,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "Skip to navigationSkip to findSkip to main content3 need the orchestratorparleyconsoleFleet7 tasks · 3 need actionRunr1Taskt7Metricsall handsdaemon127.0.0.1:…"
+              "text": "Skip to navigationSkip to findSkip to main content3 need the orchestrator​parleyconsoleFleet7 tasks · 3 need actionRunr1Taskt7Metricsall sessionsdaemon127.0.…"
             },
             "center": {
               "selector": ".pc-shell__center",
@@ -1500,7 +1500,7 @@
                 "overflow": "auto",
                 "opacity": "1"
               },
-              "text": "console-gaterun r1 · v1 · repo workspace · otherapprove.1 · 1/1 tasks · 0 ▸ 0 · 1s…/tmp/parley-verify-home-egK8oj/worktrees/parley-run-repo-jH055s/r1BLOCKED …"
+              "text": "console-gaterun r1 · v1 · repo workspace · otherapprove.1 · 1/1 tasks · 0 ▸ 0 · 1s…/tmp/parley-verify-home-XuAyqR/worktrees/parley-run-repo-0U4JLC/r1BLOCKED …"
             },
             "screen-run": {
               "selector": "[data-testid=\"screen-run\"]",
@@ -1512,7 +1512,7 @@
                 "height": 828
               },
               "styles": {
-                "display": "grid",
+                "display": "flex",
                 "position": "static",
                 "width": "1288px",
                 "height": "828px",
@@ -1534,15 +1534,15 @@
                 "borderBottomColor": "rgb(227, 232, 236)",
                 "borderLeftColor": "rgb(227, 232, 236)",
                 "borderRightColor": "rgb(227, 232, 236)",
-                "gridTemplateRows": "74.75px 28.6406px 37.5px 687.109px",
-                "gridTemplateColumns": "1288px",
+                "gridTemplateRows": "none",
+                "gridTemplateColumns": "none",
                 "gap": "normal",
                 "padding": "0px",
                 "margin": "0px",
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "console-gaterun r1 · v1 · repo workspace · otherapprove.1 · 1/1 tasks · 0 ▸ 0 · 1s…/tmp/parley-verify-home-egK8oj/worktrees/parley-run-repo-jH055s/r1BLOCKED …"
+              "text": "console-gaterun r1 · v1 · repo workspace · otherapprove.1 · 1/1 tasks · 0 ▸ 0 · 1s…/tmp/parley-verify-home-XuAyqR/worktrees/parley-run-repo-0U4JLC/r1BLOCKED …"
             },
             "run-header": {
               "selector": "[data-testid=\"run-header\"]",
@@ -1584,14 +1584,14 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "console-gaterun r1 · v1 · repo workspace · otherapprove.1 · 1/1 tasks · 0 ▸ 0 · 1s…/tmp/parley-verify-home-egK8oj/worktrees/parley-run-repo-jH055s/r1BLOCKED …"
+              "text": "console-gaterun r1 · v1 · repo workspace · otherapprove.1 · 1/1 tasks · 0 ▸ 0 · 1s…/tmp/parley-verify-home-XuAyqR/worktrees/parley-run-repo-0U4JLC/r1BLOCKED …"
             },
             "run-view-switch": {
               "selector": "[data-testid=\"run-view-switch\"]",
               "found": true,
               "box": {
                 "x": 284,
-                "y": 149.39,
+                "y": 183.98,
                 "width": 1288,
                 "height": 37.5
               },
@@ -1626,14 +1626,14 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "viewpipelineiteration gridnode tablegate verbs (approve · reject · redirect · finish) belong to the orchestrating agent — this surface is read-onlyread-only …"
+              "text": "viewpipelineiteration gridnode table"
             },
             "run-pipeline": {
               "selector": "[data-testid=\"run-pipeline\"]",
               "found": true,
               "box": {
                 "x": 298,
-                "y": 248.53,
+                "y": 283.13,
                 "width": 1260,
                 "height": 141.38
               },
@@ -1675,7 +1675,7 @@
               "found": true,
               "box": {
                 "x": 298,
-                "y": 200.89,
+                "y": 235.48,
                 "width": 1260,
                 "height": 31.64
               },
@@ -1717,7 +1717,7 @@
               "found": true,
               "box": {
                 "x": 298,
-                "y": 405.91,
+                "y": 440.5,
                 "width": 624,
                 "height": 87.09
               },
@@ -1759,7 +1759,7 @@
               "found": true,
               "box": {
                 "x": 934,
-                "y": 405.91,
+                "y": 440.5,
                 "width": 624,
                 "height": 87.09
               },
@@ -1878,7 +1878,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "/tmp/parley-verify-home-egK8oj/worktrees/parley-run-repo-jH055s/r1"
+              "text": "/tmp/parley-verify-home-XuAyqR/worktrees/parley-run-repo-0U4JLC/r1"
             },
             "run-block": {
               "selector": "[data-testid=\"run-block\"]",
@@ -1887,13 +1887,13 @@
                 "x": 284,
                 "y": 120.75,
                 "width": 1288,
-                "height": 28.64
+                "height": 63.23
               },
               "styles": {
                 "display": "flex",
                 "position": "static",
                 "width": "1288px",
-                "height": "28.6406px",
+                "height": "63.2344px",
                 "minWidth": "auto",
                 "minHeight": "auto",
                 "backgroundColor": "rgb(36, 27, 8)",
@@ -1914,13 +1914,13 @@
                 "borderRightColor": "rgb(224, 160, 46)",
                 "gridTemplateRows": "none",
                 "gridTemplateColumns": "none",
-                "gap": "8px 14px",
-                "padding": "7px 14px",
+                "gap": "8px",
+                "padding": "8px 14px",
                 "margin": "0px",
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "blockedgate · approveverbs: approve · reject · redirect · finish (orchestrating agent only)"
+              "text": "blockedgate · approvegate verbs (approve · reject · redirect · finish) belong to the orchestrating agent — this surface is read-onlyread-only · approve · rej…"
             }
           }
         }
@@ -2013,7 +2013,7 @@
         "offline": {
           "phase": "stale-reconnecting",
           "liveStatus": "streamreconnecting",
-          "text": "console-gaterun r1 · v1 · repo workspace · otherapprove.1 · 1/1 tasks · 0 ▸ 0 · 36s…/tmp/parley-verify-home-egK8oj/worktrees/parley-run-repo-jH055s/r1BLOCKED · GATE HELDcopy r1blockedgate · approveverbs: approve · reject · redirect · finish (orchestrating agent only)viewpipelineiteration gridnode ta"
+          "text": "console-gaterun r1 · v1 · repo workspace · otherapprove.1 · 1/1 tasks · 0 ▸ 0 · 37s…/tmp/parley-verify-home-XuAyqR/worktrees/parley-run-repo-0U4JLC/r1BLOCKED · GATE HELDcopy r1blockedgate · approvegate verbs (approve · reject · redirect · finish) belong to the orchestrating agent — this surface is r"
         }
       },
       "neuter": {
@@ -2050,10 +2050,10 @@
         "aria": {
           "api": "locator.ariaSnapshot",
           "selector": "[data-testid=\"screen-run\"]",
-          "tree": "- heading \"console-gate\" [level=1]\n- text: run r1 · v1 · repo workspace · other approve.1 · 1/1 tasks · 0 ▸ 0 · 56s… /tmp/parley-verify-home-egK8oj/worktrees/parley-run-repo-jH055s/r1 BLOCKED · GATE HELD\n- button \"copy r1\"\n- text: \"blocked gate · approve verbs: approve · reject · redirect · finish (orchestrating agent only)\"\n- group \"Run views\":\n  - text: view\n  - button \"pipeline\"\n  - button \"iteration grid\"\n  - button \"node table\" [pressed]\n  - text: gate verbs (approve · reject · redirect · finish) belong to the orchestrating agent — this surface is read-only\n- text: run outputs held — awaiting advance\n- table \"Node table\":\n  - row \"state node state tasks gist duration\":\n    - columnheader \"state\"\n    - columnheader \"node\"\n    - columnheader \"state\"\n    - columnheader \"tasks\"\n    - columnheader \"gist\"\n    - columnheader \"duration\"\n  - row \"plan .1 COMPLETED 1 — 0s\" [selected]:\n    - cell\n    - cell \"plan .1\"\n    - cell \"COMPLETED\"\n    - cell \"1\"\n    - cell \"—\"\n    - cell \"0s\"\n  - row \"approve .1 HELD — \\\"Approve this plan?\\\" · on_reject → finish —\":\n    - cell\n    - cell \"approve .1\"\n    - cell \"HELD\"\n    - cell \"—\"\n    - cell \"\\\"Approve this plan?\\\" · on_reject → finish\"\n    - cell \"—\"\n- region \"Deliverables\": deliverables ready · 1 row plan.1/plan INLINE Ship the console run detail screen. inline · 35 B\n- region \"Run tasks\":\n  - text: run tasks 1 on run · 1 on plan\n  - button \"COMPLETED plan.1 · t1 fake · fake-model 0s\"\n  - text: node plan.1 1 row COMPLETED t1 - 0s"
+          "tree": "- heading \"console-gate\" [level=1]\n- text: run r1 · v1 · repo workspace · other approve.1 · 1/1 tasks · 0 ▸ 0 · 56s… /tmp/parley-verify-home-XuAyqR/worktrees/parley-run-repo-0U4JLC/r1 BLOCKED · GATE HELD\n- button \"copy r1\"\n- text: blocked gate · approve gate verbs (approve · reject · redirect · finish) belong to the orchestrating agent — this surface is read-only\n- group \"Gate verb scaffolds\":\n  - 'button \"Copy: parley run approve r1\"': parley run approve r1\n  - 'button \"Copy: parley run reject r1\"': parley run reject r1\n  - 'button \"Copy: parley run redirect r1 --to <node>\"': parley run redirect r1 --to <node>\n  - 'button \"Copy: parley run finish r1\"': parley run finish r1\n- group \"Run views\":\n  - text: view\n  - button \"pipeline\"\n  - button \"iteration grid\"\n  - button \"node table\" [pressed]\n- text: run outputs held — awaiting advance\n- table \"Node table\":\n  - row \"state node state tasks gist duration\":\n    - columnheader \"state\"\n    - columnheader \"node\"\n    - columnheader \"state\"\n    - columnheader \"tasks\"\n    - columnheader \"gist\"\n    - columnheader \"duration\"\n  - row \"plan .1 COMPLETED 1 — 0s\" [selected]:\n    - cell\n    - cell \"plan .1\"\n    - cell \"COMPLETED\"\n    - cell \"1\"\n    - cell \"—\"\n    - cell \"0s\"\n  - row \"approve .1 HELD — \\\"Approve this plan?\\\" · on_reject → finish —\":\n    - cell\n    - cell \"approve .1\"\n    - cell \"HELD\"\n    - cell \"—\"\n    - cell \"\\\"Approve this plan?\\\" · on_reject → finish\"\n    - cell \"—\"\n- region \"Deliverables\": deliverables ready · 1 row plan.1/plan INLINE Ship the console run detail screen. inline · 35 B\n- region \"Run tasks\":\n  - text: run tasks 1 on run · 0 on plan\n  - button \"COMPLETED plan.1 · t1 fake · fake-model 0s\""
         },
         "keyboardWalk": {
-          "focusableCount": 28,
+          "focusableCount": 32,
           "note": null,
           "path": [
             {
@@ -2085,8 +2085,8 @@
         "purged": "not staged — requires retention purge timing",
         "missing-worktree": "not staged — requires path deliverable + worktree removal"
       },
-      "recordedAt": "2026-08-07T02:02:16.793Z"
+      "recordedAt": "2026-08-07T03:19:40.995Z"
     }
   },
-  "updatedAt": "2026-08-07T02:02:16.793Z"
+  "updatedAt": "2026-08-07T03:19:40.995Z"
 }

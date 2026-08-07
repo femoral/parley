@@ -341,12 +341,22 @@ export function FindCombobox({
                   data-state={hit.state || undefined}
                 >
                   <span className="pc-find__option-kind">{hit.kind}</span>
-                  <span className="pc-find__option-label">{hit.label}</span>
+                  <span className="pc-find__option-main">
+                    <span className="pc-find__option-label">{hit.label}</span>
+                    {hit.meta ? (
+                      <span className="pc-find__option-id" title={hit.meta}>
+                        {hit.meta}
+                      </span>
+                    ) : null}
+                  </span>
                   <span className="pc-find__option-meta">
                     {hit.kind === "task" && hit.state ? (
                       <StateChip state={hit.state} className="pc-find__option-chip" />
                     ) : (
-                      hit.meta
+                      <span className="pc-find__option-session-dot" data-kind="session">
+                        <span className="pc-find__option-session-pip" aria-hidden="true" />
+                        <span className="pc-find__option-session-label">session</span>
+                      </span>
                     )}
                   </span>
                 </div>

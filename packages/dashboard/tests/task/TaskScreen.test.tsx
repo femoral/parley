@@ -159,6 +159,45 @@ describe("TaskScreen", () => {
     );
   });
 
+  it("no-selection → selection does not throw (hooks order regression)", () => {
+    // Mount empty first — the useMemo for outstandingTurn must already be on
+    // the empty path so selecting a task never adds hooks mid-tree.
+    mockDetail.mockReturnValue({ status: "idle", data: null, error: null });
+    mockLogs.mockReturnValue({ lines: [], status: "ended" });
+
+    const setSelectedTaskId = vi.fn();
+    const { rerender } = render(
+      <TaskScreen {...mountProps({ selectedTaskId: null, setSelectedTaskId })} />,
+    );
+    expect(screen.getByTestId("screen-task").textContent).toMatch(/No task selected/);
+
+    const task = taskEnvelope({
+      task_id: "t-later",
+      state: "running",
+    });
+    mockDetail.mockReturnValue({
+      status: "ready",
+      data: detailResponse({ task }),
+      error: null,
+    });
+    mockLogs.mockReturnValue({
+      lines: [{ kind: "stdout", text: "go", raw: "go" }],
+      status: "tailing",
+    });
+
+    expect(() => {
+      rerender(
+        <TaskScreen
+          {...mountProps({ selectedTaskId: "t-later", setSelectedTaskId })}
+        />,
+      );
+    }).not.toThrow();
+    expect(screen.getByTestId("screen-task").getAttribute("data-task-id")).toBe(
+      "t-later",
+    );
+    expect(screen.getByTestId("task-header")).toBeTruthy();
+  });
+
   it("passes follow into useLogTail and preserves hook ownership", () => {
     mockDetail.mockReturnValue({
       status: "ready",
