@@ -17,7 +17,7 @@
     "test:unit": "vitest run --project unit",
     "test:integration": "vitest run --project integration",
     "test:watch": "vitest",
-    "lint": "eslint ."
+    "lint": "eslint . && node packages/dashboard/scripts/lint-tokens.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^9.17.0",

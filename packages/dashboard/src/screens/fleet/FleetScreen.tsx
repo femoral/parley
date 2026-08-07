@@ -1,11 +1,8 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ParleyClient } from "@useparley/core";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  useHealth,
+  useConsoleData,
   useHonesty,
   useRunners,
-  useRuns,
-  useSnapshot,
 } from "../../data/index.js";
 import type { ScreenMountProps } from "../types.js";
 import {
@@ -16,24 +13,12 @@ import {
 import { FleetBoard } from "./FleetBoard.js";
 import "./fleet.css";
 
-function createClient(): ParleyClient {
-  return new ParleyClient({ baseUrl: "" });
-}
-
 /**
- * Fleet board mount — #355.
- * Fetches its own data via the data-layer hooks; shell only passes selection.
- * All panels (KPIs, runs, tasks, burn, runners, firehose) render in the
- * center region — rails are shell-owned empty slots.
+ * Fleet board mount — #355 / #367.
+ * Consumes the shell-owned client + snapshot/runs; only runners poll here.
  */
 export function FleetScreen(props: ScreenMountProps) {
-  const client = useMemo(createClient, []);
-  const snapshot = useSnapshot(client);
-  const health = useHealth(client);
-  const runs = useRuns(client, {
-    selectedRunId: props.selectedRunId,
-    enabled: true,
-  });
+  const { client, snapshot, health, runs } = useConsoleData();
   const runners = useRunners(client);
   const honesty = useHonesty({
     ready: snapshot.ready,

@@ -17,25 +17,28 @@ const mockDetail = vi.fn();
 const mockLogs = vi.fn();
 const mockSnapshot = vi.fn();
 const mockNodeTasks = vi.fn();
+const mockClient = { id: "task-test-client" };
 
 vi.mock("../../src/data/index.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../src/data/index.js")>();
   return {
     ...actual,
+    useConsoleData: () => ({
+      client: mockClient,
+      snapshot: mockSnapshot(),
+      health: {
+        status: "online",
+        online: true,
+        version: "test",
+        pid: 1,
+        startedAt: Date.now(),
+        uptimeMs: 1000,
+      },
+      runs: { summaries: [], details: new Map(), status: "online", error: null },
+    }),
     useTaskDetail: (...args: unknown[]) => mockDetail(...args),
     useLogTail: (...args: unknown[]) => mockLogs(...args),
-    useSnapshot: (...args: unknown[]) => mockSnapshot(...args),
     useNodeTasks: (...args: unknown[]) => mockNodeTasks(...args),
-  };
-});
-
-vi.mock("@useparley/core", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@useparley/core")>();
-  return {
-    ...actual,
-    ParleyClient: class {
-      constructor(_opts: { baseUrl: string }) {}
-    },
   };
 });
 

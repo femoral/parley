@@ -1,10 +1,17 @@
 /**
  * Fetch `GET /tasks/:ref` for the task screen (qa/eval/attempts companions).
- * Polls while live; stops at terminal.
+ * Polls while live; stops at terminal. Visibility-gated via usePolling.
+ *
+ * Task-id changes always restart the poll chain (resetKey) so a live→live
+ * switch does not sit on status "loading" until the previous interval elapses.
+ *
+ * In-flight fetches capture the id they requested and drop setState when the
+ * selection has moved on (stale A must not overwrite B after a switch).
  */
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { isTerminalState, type ParleyClient } from "@useparley/core";
 import type { TaskDetailView } from "./types.js";
+import { usePolling } from "./usePolling.js";
 
 const DEFAULT_POLL_MS = 3000;
 
@@ -20,41 +27,48 @@ export function useTaskDetail(
   pollMs = DEFAULT_POLL_MS,
 ): TaskDetailView {
   const [state, setState] = useState<TaskDetailView>(INITIAL);
+  const [pollEnabled, setPollEnabled] = useState(false);
+  const taskIdRef = useRef(taskId);
+  taskIdRef.current = taskId;
 
   useEffect(() => {
     if (!taskId) {
       setState(INITIAL);
+      setPollEnabled(false);
       return;
     }
-    let cancelled = false;
-    let timer: ReturnType<typeof setTimeout> | undefined;
     setState({ status: "loading", data: null, error: null });
+    setPollEnabled(true);
+  }, [taskId]);
 
-    const tick = async (): Promise<void> => {
-      try {
-        const res = await client.getTask(taskId);
-        if (cancelled) return;
-        setState({ status: "ready", data: res, error: null });
-        if (!isTerminalState(res.task.state)) {
-          timer = setTimeout(() => void tick(), pollMs);
-        }
-      } catch (err) {
-        if (cancelled) return;
-        setState((prev) => ({
-          status: "error",
-          data: prev.data,
-          error: err instanceof Error ? err.message : "task detail failed",
-        }));
-        timer = setTimeout(() => void tick(), pollMs);
+  const tick = useCallback(async (): Promise<void> => {
+    const id = taskId;
+    if (!id) return;
+    try {
+      const res = await client.getTask(id);
+      // Drop stale write: selection moved while this fetch was in flight.
+      if (taskIdRef.current !== id) return;
+      setState({ status: "ready", data: res, error: null });
+      if (isTerminalState(res.task.state)) {
+        setPollEnabled(false);
       }
-    };
+    } catch (err) {
+      if (taskIdRef.current !== id) return;
+      setState((prev) => ({
+        status: "error",
+        data: prev.data,
+        error: err instanceof Error ? err.message : "task detail failed",
+      }));
+    }
+  }, [client, taskId]);
 
-    void tick();
-    return () => {
-      cancelled = true;
-      if (timer) clearTimeout(timer);
-    };
-  }, [client, taskId, pollMs]);
+  // resetKey: taskId — restarts the chain on identity change even when
+  // enabled was already true (non-terminal → non-terminal switch).
+  usePolling(tick, {
+    intervalMs: pollMs,
+    enabled: pollEnabled && Boolean(taskId),
+    resetKey: taskId,
+  });
 
   return state;
 }

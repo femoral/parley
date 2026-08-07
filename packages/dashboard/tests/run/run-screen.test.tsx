@@ -211,30 +211,33 @@ vi.mock("../../src/data/index.js", async () => {
   );
   return {
     ...actual,
-    useSnapshot: () => ({
-      tasks: mockState.tasks,
-      seq: 1,
-      connected: mockState.connected,
-      ready: mockState.ready,
-      streamLostSince: mockState.streamLostSince,
-      totalTasks: mockState.tasks.length,
-      activeTasks: mockState.tasks.filter((t) => t.state === "running").length,
-    }),
-    useHealth: () => ({
-      status: mockState.healthOnline ? "online" : "offline",
-      online: mockState.healthOnline,
-      version: "0.0.0-test",
-      pid: 1,
-      startedAt: Date.now() - 60_000,
-      uptimeMs: 60_000,
-    }),
-    useRuns: () => ({
-      summaries: mockState.summaries,
-      details: mockState.detail
-        ? new Map([[mockState.detail.run.run_id, mockState.detail]])
-        : new Map(),
-      status: mockState.runsStatus,
-      error: mockState.runsError,
+    useConsoleData: () => ({
+      client: {},
+      snapshot: {
+        tasks: mockState.tasks,
+        seq: 1,
+        connected: mockState.connected,
+        ready: mockState.ready,
+        streamLostSince: mockState.streamLostSince,
+        totalTasks: mockState.tasks.length,
+        activeTasks: mockState.tasks.filter((t) => t.state === "running").length,
+      },
+      health: {
+        status: mockState.healthOnline ? "online" : "offline",
+        online: mockState.healthOnline,
+        version: "0.0.0-test",
+        pid: 1,
+        startedAt: Date.now() - 60_000,
+        uptimeMs: 60_000,
+      },
+      runs: {
+        summaries: mockState.summaries,
+        details: mockState.detail
+          ? new Map([[mockState.detail.run.run_id, mockState.detail]])
+          : new Map(),
+        status: mockState.runsStatus,
+        error: mockState.runsError,
+      },
     }),
     useNodeTasks: () => ({
       status: "ready" as const,

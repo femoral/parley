@@ -6,13 +6,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 export interface CopyScaffoldProps {
   text: string;
-  /** Accessible name when idle. */
+  /** Accessible / button mark when idle. */
   label?: string;
-  /** Extra class on the outer wrap. */
   className?: string;
   /** Compact single-line button (default) vs block mono line. */
   variant?: "button" | "block";
-  /** data-testid for verify / tests. */
   testId?: string;
 }
 
@@ -26,7 +24,7 @@ export function CopyScaffold({
   const [copied, setCopied] = useState(false);
   const [canCopy, setCanCopy] = useState(true);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  const textRef = useRef<HTMLSpanElement>(null);
+  const textRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     return () => {
@@ -54,7 +52,6 @@ export function CopyScaffold({
       if (timer.current) clearTimeout(timer.current);
       timer.current = setTimeout(() => setCopied(false), 1600);
     } catch {
-      // Fallback: select the scaffold text so the operator can ⌘C.
       if (textRef.current) {
         const range = document.createRange();
         range.selectNodeContents(textRef.current);
@@ -69,41 +66,41 @@ export function CopyScaffold({
   if (variant === "block") {
     return (
       <div
-        className={`pc-task-scaffold pc-task-scaffold--block ${className}`.trim()}
+        className={`pc-scaffold pc-scaffold--block ${className}`.trim()}
         data-testid={testId}
       >
-        <code ref={textRef} className="pc-task-scaffold__text" title={text}>
+        <code ref={textRef} className="pc-scaffold__text" title={text}>
           {text}
         </code>
-        {canCopy && (
+        {canCopy ? (
           <button
             type="button"
-            className="pc-task-scaffold__btn"
+            className="pc-scaffold__btn"
             onClick={() => void copy()}
             aria-label={copied ? "Copied command" : `Copy: ${text}`}
           >
             {copied ? "copied" : label}
           </button>
-        )}
+        ) : null}
       </div>
     );
   }
 
   return (
-    <div className={`pc-task-scaffold ${className}`.trim()} data-testid={testId}>
-      <span ref={textRef} className="pc-task-scaffold__hidden" aria-hidden="true">
+    <div className={`pc-scaffold ${className}`.trim()} data-testid={testId}>
+      <span ref={textRef} className="pc-scaffold__hidden" aria-hidden="true">
         {text}
       </span>
       <button
         type="button"
-        className="pc-task-scaffold__btn"
+        className="pc-scaffold__btn"
         onClick={() => void copy()}
         aria-label={copied ? "Copied command" : `Copy: ${text}`}
         title={text}
         disabled={!canCopy}
       >
-        <span className="pc-task-scaffold__cmd">{text}</span>
-        <span className="pc-task-scaffold__mark" aria-hidden="true">
+        <span className="pc-scaffold__cmd">{text}</span>
+        <span className="pc-scaffold__mark" aria-hidden="true">
           {copied ? "copied" : label}
         </span>
       </button>

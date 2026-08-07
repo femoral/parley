@@ -1,0 +1,390 @@
+/*
+ * Shared Console component layer (#367).
+ * Class prefix: pc- (Panel, chip, scaffold, field).
+ * Screens consume these; per-screen duplicates are retired.
+ */
+
+/* ── Panel ──────────────────────────────────────────────────────────── */
+
+.pc-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  border: 1px solid var(--border);
+  background: var(--ground);
+  position: relative;
+}
+
+.pc-panel__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 7px 12px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--hairline-strong);
+  flex: none;
+  min-width: 0;
+}
+
+.pc-panel__title {
+  font: var(--type-section);
+  letter-spacing: var(--ls-section);
+  text-transform: uppercase;
+  color: var(--text-strong-2);
+  white-space: nowrap;
+  margin: 0;
+}
+
+.pc-panel__meta {
+  font: var(--type-meta);
+  color: var(--text-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  text-align: right;
+}
+
+.pc-panel__body {
+  min-height: 0;
+  min-width: 0;
+  overflow: auto;
+  flex: 1 1 auto;
+}
+
+.pc-panel__honesty {
+  padding: 16px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.pc-panel__honesty-msg {
+  margin: 0;
+  font: var(--type-body-sm);
+  color: var(--text-3);
+}
+
+.pc-panel__stale {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  pointer-events: none;
+  font: var(--type-meta);
+  color: var(--state-stalled);
+  background: color-mix(in srgb, var(--state-stalled) 12%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--state-stalled) 40%, transparent);
+  padding: 3px 12px;
+  text-align: right;
+}
+
+/* ── State chip ─────────────────────────────────────────────────────── */
+
+.pc-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 6px;
+  border: 1px solid var(--border);
+  max-width: 100%;
+}
+
+.pc-chip__dot {
+  width: var(--state-dot);
+  height: var(--state-dot);
+  flex: none;
+  background: var(--text-4);
+}
+
+.pc-chip__dot--live {
+  animation: pcPulse var(--pulse-duration) ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pc-chip__dot--live {
+    animation: none;
+    opacity: 1;
+  }
+}
+
+.pc-chip__label {
+  font: var(--type-chip);
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pc-chip--pending {
+  border-color: color-mix(in srgb, var(--state-pending) 27%, transparent);
+  background: color-mix(in srgb, var(--state-pending) 8%, transparent);
+}
+.pc-chip--pending .pc-chip__dot {
+  background: var(--state-pending);
+}
+.pc-chip--pending .pc-chip__label {
+  color: var(--state-pending);
+}
+
+.pc-chip--queued {
+  border-color: color-mix(in srgb, var(--state-queued) 27%, transparent);
+  background: color-mix(in srgb, var(--state-queued) 8%, transparent);
+}
+.pc-chip--queued .pc-chip__dot {
+  background: var(--state-queued);
+}
+.pc-chip--queued .pc-chip__label {
+  color: var(--state-queued);
+}
+
+.pc-chip--running {
+  border-color: color-mix(in srgb, var(--state-running) 27%, transparent);
+  background: color-mix(in srgb, var(--state-running) 8%, transparent);
+}
+.pc-chip--running .pc-chip__dot {
+  background: var(--state-running);
+}
+.pc-chip--running .pc-chip__label {
+  color: var(--state-running);
+}
+
+.pc-chip--awaiting_answer {
+  border-color: color-mix(in srgb, var(--state-awaiting) 27%, transparent);
+  background: color-mix(in srgb, var(--state-awaiting) 8%, transparent);
+}
+.pc-chip--awaiting_answer .pc-chip__dot {
+  background: var(--state-awaiting);
+}
+.pc-chip--awaiting_answer .pc-chip__label {
+  color: var(--state-awaiting);
+}
+
+.pc-chip--stalled {
+  border-color: color-mix(in srgb, var(--state-stalled) 27%, transparent);
+  background: color-mix(in srgb, var(--state-stalled) 8%, transparent);
+}
+.pc-chip--stalled .pc-chip__dot {
+  background: var(--state-stalled);
+}
+.pc-chip--stalled .pc-chip__label {
+  color: var(--state-stalled);
+}
+
+.pc-chip--completed {
+  border-color: color-mix(in srgb, var(--state-completed) 27%, transparent);
+  background: color-mix(in srgb, var(--state-completed) 8%, transparent);
+}
+.pc-chip--completed .pc-chip__dot {
+  background: var(--state-completed);
+}
+.pc-chip--completed .pc-chip__label {
+  color: var(--state-completed);
+}
+
+.pc-chip--failed {
+  border-color: color-mix(in srgb, var(--state-failed) 27%, transparent);
+  background: color-mix(in srgb, var(--state-failed) 8%, transparent);
+}
+.pc-chip--failed .pc-chip__dot {
+  background: var(--state-failed);
+}
+.pc-chip--failed .pc-chip__label {
+  color: var(--state-failed);
+}
+
+.pc-chip--cancelled,
+.pc-chip--purged {
+  border-color: color-mix(in srgb, var(--state-cancelled) 27%, transparent);
+  background: color-mix(in srgb, var(--state-cancelled) 8%, transparent);
+}
+.pc-chip--cancelled .pc-chip__dot,
+.pc-chip--purged .pc-chip__dot {
+  background: var(--state-cancelled);
+}
+.pc-chip--cancelled .pc-chip__label,
+.pc-chip--purged .pc-chip__label {
+  color: var(--state-cancelled);
+}
+
+/* ── Copy scaffold ──────────────────────────────────────────────────── */
+
+.pc-scaffold {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.pc-scaffold__hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.pc-scaffold__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+  padding: 5px 9px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface-hover);
+  color: var(--text-strong-2);
+  font: var(--type-scaffold);
+  cursor: pointer;
+  min-height: 24px;
+}
+
+.pc-scaffold__btn:hover {
+  background: var(--surface-active);
+}
+
+.pc-scaffold__btn:focus-visible {
+  outline: var(--focus-ring) solid var(--link);
+  outline-offset: 2px;
+}
+
+.pc-scaffold__btn:disabled {
+  cursor: default;
+  opacity: 0.7;
+}
+
+.pc-scaffold__cmd {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.pc-scaffold__mark {
+  flex: none;
+  color: var(--text-4);
+  text-transform: lowercase;
+}
+
+.pc-scaffold--block {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  border: 1px solid var(--border-strong);
+  background: var(--surface-sunken);
+  max-width: 100%;
+}
+
+.pc-scaffold--block .pc-scaffold__text {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 6px 9px;
+  font: var(--type-scaffold-block);
+  color: var(--text-strong-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pc-scaffold--block .pc-scaffold__btn {
+  flex: none;
+  border: 0;
+  border-left: 1px solid var(--border-strong);
+  border-radius: 0;
+}
+
+/* ── Field / Select ─────────────────────────────────────────────────── */
+
+.pc-field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.pc-field__label {
+  font: var(--type-field-label);
+  letter-spacing: var(--ls-section);
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.pc-field__control,
+.pc-select__control {
+  display: block;
+  width: 100%;
+  min-height: 24px;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  background: var(--surface-sunken);
+  color: var(--text);
+  font: var(--type-control);
+  border-radius: 0;
+  /* Register-styled — never OS chrome */
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.pc-field__control:focus-visible,
+.pc-select__control:focus-visible {
+  outline: 2px solid var(--link);
+  outline-offset: 1px;
+}
+
+.pc-select {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.pc-select--inline {
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+}
+
+.pc-select--inline .pc-select__label {
+  flex: none;
+}
+
+.pc-select__label {
+  font: var(--type-control);
+  color: var(--text-3);
+}
+
+.pc-select__wrap {
+  position: relative;
+  display: inline-flex;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.pc-select__wrap::after {
+  content: "";
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  width: 0;
+  height: 0;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-top: 5px solid var(--text-3);
+  transform: translateY(-35%);
+  pointer-events: none;
+}
+
+.pc-select__control {
+  padding-right: 22px;
+  cursor: pointer;
+}
+
+.pc-select--inline .pc-select__control {
+  width: auto;
+  min-width: 8ch;
+}

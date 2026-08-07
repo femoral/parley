@@ -22,6 +22,13 @@ export { useMetrics, type UseMetricsOptions } from "./useMetrics.js";
 export { useRunMetrics, type UseRunMetricsOptions } from "./useRunMetrics.js";
 export { useTaskDetail } from "./useTaskDetail.js";
 export { useNodeTasks } from "./useNodeTasks.js";
+export { usePolling, isDocumentHidden, type UsePollingOptions } from "./usePolling.js";
+export {
+  ConsoleDataProvider,
+  useConsoleData,
+  useParleyClient,
+  type ConsoleData,
+} from "./consoleContext.js";
 export {
   useHonesty,
   useStaleFlag,

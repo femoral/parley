@@ -4,17 +4,16 @@
  * Data via useTaskDetail + useLogTail (+ useNodeTasks when run-owned).
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ParleyClient } from "@useparley/core";
 import {
+  useConsoleData,
   useLogTail,
   useNodeTasks,
-  useSnapshot,
   useTaskDetail,
   type PanelStatus,
 } from "../../data/index.js";
+import { CopyScaffold } from "../../components/index.js";
 import { loadSettings, saveSettings } from "../../chrome/settings.js";
 import type { ScreenMountProps } from "../types.js";
-import { CopyScaffold } from "./CopyScaffold.js";
 import {
   AttemptChain,
   BriefPanel,
@@ -33,9 +32,6 @@ import "./task.css";
 /** Same-tab settings sync (storage events only fire cross-tab). */
 export const SETTINGS_SYNC_EVENT = "parley-console-settings";
 
-function createClient(): ParleyClient {
-  return new ParleyClient({ baseUrl: "" });
-}
 
 function persistFollow(next: boolean): void {
   const cur = loadSettings();
@@ -49,7 +45,7 @@ function persistFollow(next: boolean): void {
 }
 
 export function TaskScreen(props: ScreenMountProps) {
-  const client = useMemo(createClient, []);
+  const { client, snapshot } = useConsoleData();
   const { selectedTaskId } = props;
 
   const [follow, setFollow] = useState(() => loadSettings().followLogs);
@@ -89,7 +85,6 @@ export function TaskScreen(props: ScreenMountProps) {
 
   const detail = useTaskDetail(client, selectedTaskId);
   const logs = useLogTail(client, selectedTaskId, follow);
-  const snapshot = useSnapshot(client);
 
   const task = detail.data?.task ?? null;
   const runRef = task?.run_id ?? null;
