@@ -168,7 +168,7 @@ export function LeftRail({
             testId="rail-scope-select"
             aria-label="Orchestrator session scope"
           >
-            <option value="all">All hands</option>
+            <option value="all">All sessions</option>
             {sessions.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.id.length > 18 ? `${s.id.slice(0, 18)}…` : s.id}

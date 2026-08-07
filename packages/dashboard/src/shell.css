@@ -605,7 +605,8 @@
 
 .pc-rail-hose__time {
   font: var(--type-mono-400-10p5-1p45);
-  color: var(--text-time);
+  /* One step lighter than --text-time for AA at 10.5px on panel ground (#0e1114). */
+  color: var(--text-4);
 }
 
 .pc-rail-hose__text {

@@ -62,8 +62,12 @@ export function AttentionCard({
     }
   };
 
+  // Interactive cards use <div role="button"> — <article> does not permit role=button
+  // (axe aria-allowed-role). Non-interactive cards stay semantic <article>.
+  const Tag = interactive ? "div" : "article";
+
   return (
-    <article
+    <Tag
       className={classes}
       data-testid={testId}
       data-state={key}
@@ -95,6 +99,6 @@ export function AttentionCard({
         </div>
       ) : null}
       {children}
-    </article>
+    </Tag>
   );
 }

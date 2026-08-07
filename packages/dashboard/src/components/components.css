@@ -421,7 +421,7 @@
 }
 
 .pc-attn--interactive:focus-visible {
-  outline: var(--focus-ring) solid var(--link);
+  outline: var(--focus-ring-width) solid var(--focus-ring);
   outline-offset: -2px;
 }
 
@@ -510,9 +510,17 @@
   display: contents;
 }
 
+/* Explicit grid placement keeps badge/title/age on one row (auto-placement
+ * alone advances the cursor when age is forced to column 3). */
+.pc-attn--rows .pc-attn__badge {
+  grid-column: 1;
+  grid-row: 1;
+}
+
 .pc-attn--rows .pc-attn__title {
   font: var(--type-sans-500-11p5-1);
-  order: 0;
+  grid-column: 2;
+  grid-row: 1;
 }
 
 .pc-attn--rows .pc-attn__reason,
@@ -522,5 +530,6 @@
 
 .pc-attn--rows .pc-attn__age {
   grid-column: 3;
+  grid-row: 1;
 }
 

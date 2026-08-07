@@ -177,6 +177,33 @@ describe("AttentionCard", () => {
     fireEvent.keyDown(screen.getByTestId("attn-click"), { key: "Enter" });
     expect(onSelect).toHaveBeenCalledTimes(2);
   });
+
+  it("interactive uses div role=button (not article); static uses article", () => {
+    const { rerender } = render(
+      <AttentionCard
+        state="awaiting_answer"
+        age="1m"
+        title="static"
+        testId="attn-tag"
+      />,
+    );
+    expect(screen.getByTestId("attn-tag").tagName).toBe("ARTICLE");
+    expect(screen.getByTestId("attn-tag").getAttribute("role")).toBeNull();
+
+    rerender(
+      <AttentionCard
+        state="awaiting_answer"
+        age="1m"
+        title="clickable"
+        onSelect={() => undefined}
+        testId="attn-tag"
+      />,
+    );
+    const el = screen.getByTestId("attn-tag");
+    expect(el.tagName).toBe("DIV");
+    expect(el.getAttribute("role")).toBe("button");
+    expect(el.getAttribute("tabindex")).toBe("0");
+  });
 });
 
 describe("Field / Select", () => {

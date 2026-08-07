@@ -37,7 +37,7 @@ orchestrating agent. The mock states this explicitly (run screen banner, footer)
 |---|---|---|---|
 | Task list w/ state groups, attention-rank ordering | Tasks table sorted "by attention, then age" + state filter chips | covered | Table replaces grouped list |
 | Run list as peer rows w/ pip track (`nodes × loop.max`, cap 20, severity-preserving aggregation) | Runs table with `track` pip cells | covered | Cap/aggregation rule must carry over |
-| Session scoping ("All hands" + recent sessions) | `scope · orchestrator session` sidebar panel | covered | **Built (#363):** left-rail scope select (All hands + `/sessions`); filters the attention queue |
+| Session scoping ("All sessions" + recent sessions) | `scope · orchestrator session` sidebar panel | covered | **Built (#363):** left-rail scope select (All sessions + `/sessions`); filters the attention queue |
 | Find combobox (task hits local, session hits `/sessions?q=`, debounce, a11y states) | Static `/ filter tasks, runs, branches` box | partial | No results treatment, loading/error/no-match states in mock |
 | Task row identity: harness coat, vendor emblem, faction | Coat swatch + `harness · model` text | partial | Coats yes; vendor emblems dropped — decide if coat+text suffices |
 | Run chip on task rows (`7f3a · review.2.tests`) | `run address` column | covered | |

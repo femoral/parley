@@ -6,6 +6,12 @@
     "console-rails": {
       "ticket": "issue-363",
       "demo": "console-rails",
+      "staged": {
+        "awaitingTaskId": "t1",
+        "failedTaskId": "t2",
+        "runningTaskId": "t3",
+        "hosePokeTaskId": "t4"
+      },
       "placeholders": {
         "leftNote": false,
         "rightNote": false
@@ -19,6 +25,30 @@
         "fleetFirehose": false,
         "leftContent": true,
         "rightContent": true
+      },
+      "populated": {
+        "attentionCards": 3,
+        "hoseLines": 2,
+        "interactiveCards": 3,
+        "scopeLabelAllHands": false,
+        "scopeLabelAllSessions": true
+      },
+      "rowsDensity": {
+        "found": true,
+        "heightPx": 27,
+        "titleHeight": 11.5
+      },
+      "focusRing": {
+        "found": true,
+        "ok": true,
+        "ruleOutline": "var(--focus-ring-width) solid var(--focus-ring)",
+        "ruleOffset": "-2px",
+        "ringColor": "#9aa8b5",
+        "ringWidth": "2px",
+        "computedOutline": "rgb(227, 232, 236) none 3px",
+        "computedOutlineStyle": "none",
+        "computedOutlineWidth": "3px",
+        "focusOutlineStyle": "none"
       },
       "scroll1280": {
         "shell": {
@@ -140,7 +170,7 @@
           "ratio": 5.19,
           "largeText": false,
           "wcagAA": true,
-          "text": "0",
+          "text": "4",
           "fontSizePx": 10
         },
         "rail-burn-bound": {
@@ -182,14 +212,40 @@
           "text": "1.2k",
           "fontSizePx": 10
         },
-        "rail-hose-time": {
-          "selector": "#pc-verify-contrast-samples .pc-rail-hose__time",
+        "rail-hose-time-live": {
+          "selector": "[data-testid=\"rail-firehose\"] .pc-rail-hose__time",
           "found": true,
-          "color": "rgb(109, 125, 137)",
+          "color": "rgb(124, 139, 152)",
           "background": "rgb(8, 10, 12)",
           "fontSize": "10.5px",
           "fontWeight": "400",
-          "ratio": 4.67,
+          "ratio": 5.67,
+          "largeText": false,
+          "wcagAA": true,
+          "text": "21:26:12",
+          "fontSizePx": 10.5
+        },
+        "rail-hose-text-live": {
+          "selector": "[data-testid=\"rail-firehose\"] .pc-rail-hose__text",
+          "found": true,
+          "color": "rgb(67, 185, 140)",
+          "background": "rgb(8, 10, 12)",
+          "fontSize": "10.5px",
+          "fontWeight": "400",
+          "ratio": 8.08,
+          "largeText": false,
+          "wcagAA": true,
+          "text": "task.started t4 (running)",
+          "fontSizePx": 10.5
+        },
+        "rail-hose-time": {
+          "selector": "#pc-verify-contrast-samples .pc-rail-hose__time",
+          "found": true,
+          "color": "rgb(124, 139, 152)",
+          "background": "rgb(8, 10, 12)",
+          "fontSize": "10.5px",
+          "fontWeight": "400",
+          "ratio": 5.67,
           "largeText": false,
           "wcagAA": true,
           "text": "12:00:00",
@@ -207,6 +263,45 @@
           "wcagAA": true,
           "text": "task.started sample",
           "fontSizePx": 10.5
+        },
+        "attn-age-live": {
+          "selector": "[data-testid=\"rail-attention\"] .pc-attn__age",
+          "found": true,
+          "color": "rgb(109, 125, 137)",
+          "background": "rgb(11, 13, 15)",
+          "fontSize": "10px",
+          "fontWeight": "400",
+          "ratio": 4.58,
+          "largeText": false,
+          "wcagAA": true,
+          "text": "0s",
+          "fontSizePx": 10
+        },
+        "attn-reason-live": {
+          "selector": "[data-testid=\"rail-attention\"] .pc-attn__reason",
+          "found": true,
+          "color": "rgb(147, 160, 171)",
+          "background": "rgb(11, 13, 15)",
+          "fontSize": "10px",
+          "fontWeight": "400",
+          "ratio": 7.28,
+          "largeText": false,
+          "wcagAA": true,
+          "text": "Should the console show the scaffold status or the live daemon origin?",
+          "fontSizePx": 10
+        },
+        "attn-meta-live": {
+          "selector": "[data-testid=\"rail-attention\"] .pc-attn__meta",
+          "found": true,
+          "color": "rgb(139, 152, 164)",
+          "background": "rgb(11, 13, 15)",
+          "fontSize": "10px",
+          "fontWeight": "400",
+          "ratio": 6.61,
+          "largeText": false,
+          "wcagAA": true,
+          "text": "fake · fake-model · sess verify",
+          "fontSizePx": 10
         },
         "attn-age": {
           "selector": "#pc-verify-contrast-samples .pc-attn__age",
@@ -270,17 +365,17 @@
           "ratio": 6.43,
           "largeText": false,
           "wcagAA": true,
-          "text": "0 · rank · agecardsrows",
+          "text": "3 · rank · agecardsrows",
           "fontSizePx": 10
         },
         "density-btn": {
           "selector": ".pc-rail-density__btn",
           "found": true,
-          "color": "rgb(227, 232, 236)",
-          "background": "rgb(31, 38, 44)",
+          "color": "rgb(139, 152, 164)",
+          "background": "rgb(13, 16, 19)",
           "fontSize": "10px",
           "fontWeight": "400",
-          "ratio": 12.41,
+          "ratio": 6.47,
           "largeText": false,
           "wcagAA": true,
           "text": "cards",
@@ -303,13 +398,13 @@
           "selector": ".pc-panel__honesty-msg",
           "found": true,
           "color": "rgb(139, 152, 164)",
-          "background": "rgb(14, 17, 20)",
+          "background": "rgb(11, 13, 15)",
           "fontSize": "11px",
           "fontWeight": "400",
-          "ratio": 6.43,
+          "ratio": 6.61,
           "largeText": false,
           "wcagAA": true,
-          "text": "Nothing needs the orchestrator",
+          "text": "No runs",
           "fontSizePx": 11
         }
       },
@@ -365,7 +460,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "Skip to navigationSkip to findSkip to main contentparleyconsoleFleet0 tasks · 0 need actionRunno runTaskno taskMetricsall handsdaemon127.0.0.1:5173v0.0.4 · p…"
+              "text": "Skip to navigationSkip to findSkip to main content2 need the orchestratorparleyconsoleFleet3 tasks · 2 need actionRunno runTaskt3Metricsall handsdaemon127.0.…"
             },
             "body": {
               "selector": "[data-testid=\"shell-body\"]",
@@ -407,7 +502,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "Find tasks and sessions/scopeorchestrator sessionsessionAll handsstate filter0 tasksall0awaiting0stalled0failed0gaterunning0queued0token burn · 24hlast 24h ·…"
+              "text": "Find tasks and sessions/scopeorchestrator sessionsessionAll sessionsverify-orch · 3state filter3 tasksall3awaiting1stalled0failed1gaterunning1queued0token bu…"
             },
             "rail-left": {
               "selector": "[data-testid=\"rail-left\"]",
@@ -449,7 +544,7 @@
                 "overflow": "auto",
                 "opacity": "1"
               },
-              "text": "Find tasks and sessions/scopeorchestrator sessionsessionAll handsstate filter0 tasksall0awaiting0stalled0failed0gaterunning0queued0token burn · 24hlast 24h ·…"
+              "text": "Find tasks and sessions/scopeorchestrator sessionsessionAll sessionsverify-orch · 3state filter3 tasksall3awaiting1stalled0failed1gaterunning1queued0token bu…"
             },
             "rail-right": {
               "selector": "[data-testid=\"rail-right\"]",
@@ -491,7 +586,7 @@
                 "overflow": "auto",
                 "opacity": "1"
               },
-              "text": "attention0 · rank · agecardsrowsNothing needs the orchestratorfirehosewatch — followNo events since connect"
+              "text": "attention2 · rank · agecardsrowsAWAITING0st1Should the console show the scaffold status or the live daemon origin?fake · fake-model · sess verifyFAILED0st2fr…"
             },
             "center": {
               "selector": "[data-testid=\"shell-center\"]",
@@ -533,7 +628,7 @@
                 "overflow": "auto",
                 "opacity": "1"
               },
-              "text": "Fleet boardNo tasks or runs yet. Copy a scaffold and hand it to the orchestrating agent.parley delegateparley delegatecopy"
+              "text": "Fleet boardneeds orchestrator2items0 held · 1 asks · 0 stall · 1 freshrunning1taskscap unknownqueued / pending0 / 0no waitersruns0total0 held · 0 advancingse…"
             },
             "rail-scope": {
               "selector": "[data-testid=\"rail-scope\"]",
@@ -575,7 +670,7 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "scopeorchestrator sessionsessionAll hands"
+              "text": "scopeorchestrator sessionsessionAll sessionsverify-orch · 3"
             },
             "rail-state-filter": {
               "selector": "[data-testid=\"rail-state-filter\"]",
@@ -617,7 +712,7 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "state filter0 tasksall0awaiting0stalled0failed0gaterunning0queued0"
+              "text": "state filter3 tasksall3awaiting1stalled0failed1gaterunning1queued0"
             },
             "rail-token-burn": {
               "selector": "[data-testid=\"rail-token-burn\"]",
@@ -701,7 +796,7 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "attention0 · rank · agecardsrowsNothing needs the orchestrator"
+              "text": "attention2 · rank · agecardsrowsAWAITING0st1Should the console show the scaffold status or the live daemon origin?fake · fake-model · sess verifyFAILED0st2fr…"
             },
             "rail-firehose": {
               "selector": "[data-testid=\"rail-firehose\"]",
@@ -793,7 +888,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "Skip to navigationSkip to findSkip to main contentparleyconsoleFleet0 tasks · 0 need actionRunno runTaskno taskMetricsall handsdaemon127.0.0.1:5173v0.0.4 · p…"
+              "text": "Skip to navigationSkip to findSkip to main content2 need the orchestratorparleyconsoleFleet3 tasks · 2 need actionRunno runTaskt3Metricsall handsdaemon127.0.…"
             },
             "body": {
               "selector": "[data-testid=\"shell-body\"]",
@@ -835,7 +930,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "Find tasks and sessions/scopeorchestrator sessionsessionAll handsstate filter0 tasksall0awaiting0stalled0failed0gaterunning0queued0token burn · 24hlast 24h ·…"
+              "text": "Find tasks and sessions/scopeorchestrator sessionsessionAll sessionsverify-orch · 3state filter3 tasksall3awaiting1stalled0failed1gaterunning1queued0token bu…"
             },
             "rail-left": {
               "selector": "[data-testid=\"rail-left\"]",
@@ -877,7 +972,7 @@
                 "overflow": "auto",
                 "opacity": "1"
               },
-              "text": "Find tasks and sessions/scopeorchestrator sessionsessionAll handsstate filter0 tasksall0awaiting0stalled0failed0gaterunning0queued0token burn · 24hlast 24h ·…"
+              "text": "Find tasks and sessions/scopeorchestrator sessionsessionAll sessionsverify-orch · 3state filter3 tasksall3awaiting1stalled0failed1gaterunning1queued0token bu…"
             },
             "rail-right": {
               "selector": "[data-testid=\"rail-right\"]",
@@ -919,7 +1014,7 @@
                 "overflow": "auto",
                 "opacity": "1"
               },
-              "text": "attention0 · rank · agecardsrowsNothing needs the orchestratorfirehosewatch — followNo events since connect"
+              "text": "attention2 · rank · agecardsrowsAWAITING0st1Should the console show the scaffold status or the live daemon origin?fake · fake-model · sess verifyFAILED0st2fr…"
             },
             "center": {
               "selector": "[data-testid=\"shell-center\"]",
@@ -961,7 +1056,7 @@
                 "overflow": "auto",
                 "opacity": "1"
               },
-              "text": "Fleet boardNo tasks or runs yet. Copy a scaffold and hand it to the orchestrating agent.parley delegateparley delegatecopy"
+              "text": "Fleet boardneeds orchestrator2items0 held · 1 asks · 0 stall · 1 freshrunning1taskscap unknownqueued / pending0 / 0no waitersruns0total0 held · 0 advancingse…"
             },
             "rail-scope": {
               "selector": "[data-testid=\"rail-scope\"]",
@@ -1003,7 +1098,7 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "scopeorchestrator sessionsessionAll hands"
+              "text": "scopeorchestrator sessionsessionAll sessionsverify-orch · 3"
             },
             "rail-state-filter": {
               "selector": "[data-testid=\"rail-state-filter\"]",
@@ -1045,7 +1140,7 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "state filter0 tasksall0awaiting0stalled0failed0gaterunning0queued0"
+              "text": "state filter3 tasksall3awaiting1stalled0failed1gaterunning1queued0"
             },
             "rail-token-burn": {
               "selector": "[data-testid=\"rail-token-burn\"]",
@@ -1129,7 +1224,7 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "attention0 · rank · agecardsrowsNothing needs the orchestrator"
+              "text": "attention2 · rank · agecardsrowsAWAITING0st1Should the console show the scaffold status or the live daemon origin?fake · fake-model · sess verifyFAILED0st2fr…"
             },
             "rail-firehose": {
               "selector": "[data-testid=\"rail-firehose\"]",
@@ -1221,7 +1316,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "Skip to navigationSkip to findSkip to main contentparleyconsoleFleet0 tasks · 0 need actionRunno runTaskno taskMetricsall handsdaemon127.0.0.1:5173v0.0.4 · p…"
+              "text": "Skip to navigationSkip to findSkip to main content2 need the orchestratorparleyconsoleFleet3 tasks · 2 need actionRunno runTaskt3Metricsall handsdaemon127.0.…"
             },
             "body": {
               "selector": "[data-testid=\"shell-body\"]",
@@ -1263,7 +1358,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "Find tasks and sessions/scopeorchestrator sessionsessionAll handsstate filter0 tasksall0awaiting0stalled0failed0gaterunning0queued0token burn · 24hlast 24h ·…"
+              "text": "Find tasks and sessions/scopeorchestrator sessionsessionAll sessionsverify-orch · 3state filter3 tasksall3awaiting1stalled0failed1gaterunning1queued0token bu…"
             },
             "rail-left": {
               "selector": "[data-testid=\"rail-left\"]",
@@ -1305,7 +1400,7 @@
                 "overflow": "auto",
                 "opacity": "1"
               },
-              "text": "Find tasks and sessions/scopeorchestrator sessionsessionAll handsstate filter0 tasksall0awaiting0stalled0failed0gaterunning0queued0token burn · 24hlast 24h ·…"
+              "text": "Find tasks and sessions/scopeorchestrator sessionsessionAll sessionsverify-orch · 3state filter3 tasksall3awaiting1stalled0failed1gaterunning1queued0token bu…"
             },
             "rail-right": {
               "selector": "[data-testid=\"rail-right\"]",
@@ -1347,7 +1442,7 @@
                 "overflow": "auto",
                 "opacity": "1"
               },
-              "text": "attention0 · rank · agecardsrowsNothing needs the orchestratorfirehosewatch — followNo events since connect"
+              "text": "attention2 · rank · agecardsrowsAWAITING0st1Should the console show the scaffold status or the live daemon origin?fake · fake-model · sess verifyFAILED0st2fr…"
             },
             "center": {
               "selector": "[data-testid=\"shell-center\"]",
@@ -1389,7 +1484,7 @@
                 "overflow": "auto",
                 "opacity": "1"
               },
-              "text": "Fleet boardNo tasks or runs yet. Copy a scaffold and hand it to the orchestrating agent.parley delegateparley delegatecopy"
+              "text": "Fleet boardneeds orchestrator2items0 held · 1 asks · 0 stall · 1 freshrunning1taskscap unknownqueued / pending0 / 0no waitersruns0total0 held · 0 advancingse…"
             },
             "rail-scope": {
               "selector": "[data-testid=\"rail-scope\"]",
@@ -1431,7 +1526,7 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "scopeorchestrator sessionsessionAll hands"
+              "text": "scopeorchestrator sessionsessionAll sessionsverify-orch · 3"
             },
             "rail-state-filter": {
               "selector": "[data-testid=\"rail-state-filter\"]",
@@ -1473,7 +1568,7 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "state filter0 tasksall0awaiting0stalled0failed0gaterunning0queued0"
+              "text": "state filter3 tasksall3awaiting1stalled0failed1gaterunning1queued0"
             },
             "rail-token-burn": {
               "selector": "[data-testid=\"rail-token-burn\"]",
@@ -1557,7 +1652,7 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "attention0 · rank · agecardsrowsNothing needs the orchestrator"
+              "text": "attention2 · rank · agecardsrowsAWAITING0st1Should the console show the scaffold status or the live daemon origin?fake · fake-model · sess verifyFAILED0st2fr…"
             },
             "rail-firehose": {
               "selector": "[data-testid=\"rail-firehose\"]",
@@ -1608,42 +1703,42 @@
         "axe": {
           "url": "http://127.0.0.1:5173/",
           "violations": [],
-          "passes": 35,
+          "passes": 37,
           "incomplete": 1,
-          "inapplicable": 53
+          "inapplicable": 51
         },
         "aria": {
           "api": "locator.ariaSnapshot",
           "selector": "[data-testid=\"shell\"]",
-          "tree": "- link \"Skip to navigation\":\n  - /url: \"#shell-nav\"\n- link \"Skip to find\":\n  - /url: \"#find-input-target\"\n- link \"Skip to main content\":\n  - /url: \"#main-content\"\n- banner:\n  - img \"Parley\"\n  - text: parley console\n  - navigation \"Screens\":\n    - tablist \"Console screens\":\n      - tab \"Fleet\" [selected]\n      - tab \"Run\"\n      - tab \"Task\"\n      - tab \"Metrics\"\n  - text: daemon 127.0.0.1:5173 v0.0.4 0 live · empty\n  - time: 20:49:16\n  - button \"Settings\"\n- complementary \"Left rail\":\n  - text: Find tasks and sessions\n  - combobox \"Find tasks and sessions\"\n  - region \"scope\":\n    - heading \"scope\" [level=2]\n    - text: orchestrator session session\n    - combobox \"Orchestrator session scope\":\n      - option \"All hands\" [selected]\n  - region \"state filter\":\n    - heading \"state filter\" [level=2]\n    - text: 0 tasks\n    - group \"Filter by state\":\n      - button \"all 0\" [pressed]\n      - button \"awaiting 0\"\n      - button \"stalled 0\"\n      - button \"failed 0\"\n      - button \"gate\"\n      - button \"running 0\"\n      - button \"queued 0\"\n  - region \"token burn · 24h\":\n    - heading \"token burn · 24h\" [level=2]\n    - text: last 24h · sees tasks within retention (30d assumed)\n    - paragraph: No token activity in the last 24h (within retention).\n- main:\n  - tabpanel \"Fleet\":\n    - heading \"Fleet board\" [level=1]\n    - paragraph: No tasks or runs yet. Copy a scaffold and hand it to the orchestrating agent.\n    - 'button \"Copy: parley delegate\"': parley delegate\n- complementary \"Attention rail\":\n  - heading \"attention\" [level=2]\n  - text: 0 · rank · age\n  - group \"Attention density\":\n    - button \"cards\" [pressed]\n    - button \"rows\"\n  - paragraph: Nothing needs the orchestrator\n  - heading \"firehose\" [level=2]\n  - text: watch — follow\n  - paragraph: No events since connect\n- contentinfo: awaiting stalled failed running queued pending completed cancelled state=IS · quality=WAS · 0 unacked · empty read-only · parley never merges"
+          "tree": "- link \"Skip to navigation\":\n  - /url: \"#shell-nav\"\n- link \"Skip to find\":\n  - /url: \"#find-input-target\"\n- link \"Skip to main content\":\n  - /url: \"#main-content\"\n- text: 3 need the orchestrator\n- banner:\n  - img \"Parley\"\n  - text: parley console\n  - navigation \"Screens\":\n    - tablist \"Console screens\":\n      - tab \"Fleet\" [selected]\n      - tab \"Run\"\n      - tab \"Task\"\n      - tab \"Metrics\"\n  - text: daemon 127.0.0.1:5173 v0.0.4 3 live\n  - time: 21:26:13\n  - button \"Settings\"\n- complementary \"Left rail\":\n  - text: Find tasks and sessions\n  - combobox \"Find tasks and sessions\"\n  - region \"scope\":\n    - heading \"scope\" [level=2]\n    - text: orchestrator session session\n    - combobox \"Orchestrator session scope\":\n      - option \"All sessions\" [selected]\n      - option \"verify-orch · 3\"\n  - region \"state filter\":\n    - heading \"state filter\" [level=2]\n    - text: 4 tasks\n    - group \"Filter by state\":\n      - button \"all 4\" [pressed]\n      - button \"awaiting 1\"\n      - button \"stalled 0\"\n      - button \"failed 2\"\n      - button \"gate\"\n      - button \"running 1\"\n      - button \"queued 0\"\n  - region \"token burn · 24h\":\n    - heading \"token burn · 24h\" [level=2]\n    - text: last 24h · sees tasks within retention (30d assumed)\n    - paragraph: No token activity in the last 24h (within retention).\n- main:\n  - tabpanel \"Fleet\":\n    - heading \"Fleet board\" [level=1]\n    - group \"Fleet KPIs\": needs orchestrator 3 items 0 held · 1 asks · 0 stall · 2 fresh running 1 tasks cap unknown queued / pending 0 / 0 no waiters runs 0 total 0 held · 0 advancing settled 24h 0 / 0 done / failed success 0% · last 24h token burn 0 in cache 0% · p95 —\n    - text: runs 0 held · track = nodes × loop\n    - paragraph: No runs\n    - text: tasks attention · age · 4\n    - grid \"Tasks\":\n      - row \"state task harness tokens dur age\":\n        - columnheader \"state\"\n        - columnheader \"task\"\n        - columnheader \"harness\"\n        - columnheader \"tokens\"\n        - columnheader \"dur\"\n        - columnheader \"age\"\n      - row \"AWAITING t1 t1 fake · fake-model — — 0s\":\n        - gridcell \"AWAITING\"\n        - gridcell \"t1 t1\"\n        - gridcell \"fake · fake-model\"\n        - gridcell \"—\"\n        - gridcell \"—\"\n        - gridcell \"0s\"\n      - row \"FAILED t2 t2 fresh failure fake · fake-model — 34ms 0s\":\n        - gridcell \"FAILED\"\n        - gridcell \"t2 t2 fresh failure\"\n        - gridcell \"fake · fake-model\"\n        - gridcell \"—\"\n        - gridcell \"34ms\"\n        - gridcell \"0s\"\n      - row \"FAILED t4 t4 fresh failure fake · fake-model — 30ms 0s\":\n        - gridcell \"FAILED\"\n        - gridcell \"t4 t4 fresh failure\"\n        - gridcell \"fake · fake-model\"\n        - gridcell \"—\"\n        - gridcell \"30ms\"\n        - gridcell \"0s\"\n      - row \"RUNNING t3 t3 fake · fake-model — — 0s\":\n        - gridcell \"RUNNING\"\n        - gridcell \"t3 t3\"\n        - gridcell \"fake · fake-model\"\n        - gridcell \"—\"\n        - gridcell \"—\"\n        - gridcell \"0s\"\n    - complementary:\n      - text: executors 0 runners\n      - paragraph: No runners\n- complementary \"Attention rail\":\n  - heading \"attention\" [level=2]\n  - text: 3 · rank · age\n  - group \"Attention density\":\n    - button \"cards\"\n    - button \"rows\" [pressed]\n  - list \"Attention queue\":\n    - listitem:\n      - button \"AWAITING 0s t1\"\n    - listitem:\n      - button \"FAILED 0s t2\"\n    - listitem:\n      - button \"FAILED 0s t4\"\n  - heading \"firehose\" [level=2]\n  - text: watch — follow 21:26:12 task.started t4 (running) 21:26:12 task.failed t4 (failed)\n- contentinfo: AWAITING STALLED FAILED RUNNING QUEUED PENDING DONE CANCEL state=IS · quality=WAS · 3 unacked · live read-only · parley never merges"
         },
         "keyboardWalk": {
-          "focusableCount": 20,
+          "focusableCount": 23,
           "note": null,
           "path": [
             {
               "step": 1,
               "key": "Tab",
-              "tag": "a",
-              "role": null,
-              "testId": null,
-              "text": "Skip to navigation"
+              "tag": "div",
+              "role": "button",
+              "testId": "attn-task-t2",
+              "text": "FAILED0st2fresh failure · vendor child exited (code 1) without submitting a repo"
             },
             {
               "step": 1,
               "key": "Enter",
-              "tag": "nav",
-              "role": null,
-              "testId": "shell-nav",
-              "text": "Fleet0 tasks · 0 need actionRunno runTaskno taskMetricsall hands"
+              "tag": "div",
+              "role": "button",
+              "testId": "attn-task-t2",
+              "text": "FAILED0st2fresh failure · vendor child exited (code 1) without submitting a repo"
             }
           ],
           "entered": true,
           "leftBody": true
         }
       },
-      "recordedAt": "2026-08-07T00:49:16.858Z"
+      "recordedAt": "2026-08-07T01:26:14.082Z"
     }
   },
-  "updatedAt": "2026-08-07T00:49:16.858Z"
+  "updatedAt": "2026-08-07T01:26:14.082Z"
 }
