@@ -278,7 +278,7 @@ describe("CopyScaffold", () => {
       configurable: true,
       value: { writeText },
     });
-    render(<CopyScaffold text='parley answer t1 "..."' testId="sc" />);
+    render(<CopyScaffold text='parley answer t1 "<answer>"' testId="sc" />);
     fireEvent.click(screen.getByRole("button"));
     await vi.waitFor(() => expect(writeText).toHaveBeenCalled());
   });

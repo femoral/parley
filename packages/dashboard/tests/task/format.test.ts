@@ -10,8 +10,12 @@ import {
 import {
   answerScaffold,
   delegateScaffold,
+  failedRunScaffold,
   fixScaffold,
+  gateVerbScaffold,
+  gateVerbScaffolds,
 } from "../../src/screens/task/scaffolds.js";
+import { GATE_VERBS } from "../../src/screens/run/state.js";
 import { formatChurn, projectReportFiles } from "../../src/data/index.js";
 import { churnReport, pathOnlyReport } from "./fixtures.js";
 
@@ -54,10 +58,53 @@ describe("task format helpers", () => {
 });
 
 describe("copy scaffolds", () => {
-  it("builds ready-to-paste CLI lines", () => {
-    expect(answerScaffold("abc")).toBe('parley answer abc "..."');
-    expect(fixScaffold("abc")).toBe('parley fix abc "..."');
+  it("builds self-describing ready-to-paste CLI lines", () => {
+    expect(answerScaffold("abc")).toBe('parley answer abc "<answer>"');
+    expect(fixScaffold("abc")).toBe('parley fix abc "<what to change>"');
     expect(delegateScaffold("do the thing")).toBe('parley delegate "do the thing"');
+    expect(delegateScaffold()).toBe('parley delegate "<task brief>"');
+    // Never "..." or a bare command.
+    for (const cmd of [
+      answerScaffold("t7"),
+      fixScaffold("t7"),
+      delegateScaffold(),
+    ]) {
+      expect(cmd).not.toMatch(/"\.\.\."/);
+      expect(cmd).not.toMatch(/\bparley (answer|fix|delegate)\s*$/);
+    }
+  });
+
+  it("builds one gate scaffold per wire verb with the real run address", () => {
+    const built = gateVerbScaffolds(["approve", "reject", "redirect", "finish"], "r1");
+    expect(built.map((b) => b.command)).toEqual([
+      "parley run approve r1",
+      "parley run reject r1",
+      "parley run redirect r1 --to <node>",
+      "parley run finish r1",
+    ]);
+    for (const { command } of built) {
+      expect(command).toContain("r1");
+      expect(command).not.toMatch(/"\.\.\."/);
+    }
+  });
+
+  it("builds gate scaffolds for a subset of verbs (wire verbs present)", () => {
+    const built = gateVerbScaffolds(["redirect", "finish"], "run-xyz");
+    expect(built).toHaveLength(2);
+    expect(built[0]!.command).toBe("parley run redirect run-xyz --to <node>");
+    expect(built[1]!.command).toBe("parley run finish run-xyz");
+  });
+
+  it("falls back to default GATE_VERBS when caller passes the absent/empty fallback set", () => {
+    // Callers resolve absent/empty via verbsForDisplay → GATE_VERBS.
+    const built = gateVerbScaffolds(GATE_VERBS, "r9");
+    expect(built.map((b) => b.verb)).toEqual([...GATE_VERBS]);
+    expect(gateVerbScaffold("approve", "r9")).toBe("parley run approve r9");
+  });
+
+  it("builds a failed-run recovery scaffold with the real run id", () => {
+    expect(failedRunScaffold("run-fail-01")).toBe("parley run fork run-fail-01");
+    expect(failedRunScaffold("run-fail-01")).not.toMatch(/"\.\.\."/);
   });
 });
 

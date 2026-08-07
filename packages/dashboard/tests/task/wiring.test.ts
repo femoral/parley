@@ -48,6 +48,11 @@ describe("task inspector wiring guards", () => {
     expect(scaffolds).toMatch(/parley answer/);
     expect(scaffolds).toMatch(/parley fix/);
     expect(scaffolds).toMatch(/parley delegate/);
+    expect(scaffolds).toMatch(/parley run/);
+    expect(scaffolds).toMatch(/gateVerbScaffold/);
+    expect(scaffolds).toMatch(/failedRunScaffold/);
+    // Self-describing placeholders — never "..."
+    expect(scaffolds).not.toMatch(/"\.\.\."/);
   });
 
   it("screen CSS is local with pc-task- prefix", () => {
