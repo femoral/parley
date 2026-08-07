@@ -100,7 +100,7 @@ function buildMarkerLessPackage(name: string): string {
 }
 
 /** Package whose package.json is not valid JSON. */
-function buildUnparseablePackage(name: string): string {
+function buildUnparseablePackage(_name: string): string {
   const dir = scratchDir();
   fs.writeFileSync(path.join(dir, "package.json"), "{ not valid json");
   return dir;
