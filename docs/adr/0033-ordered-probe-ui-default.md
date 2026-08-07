@@ -26,16 +26,21 @@ Replace the single default package with an ordered list. Full discovery order
 3. `@useparley/dashboard` (Console)
 4. `@useparley/ui` (Cove)
 
-First package with a usable non-empty `parley.ui` marker wins. Package
+First package with a usable non-empty `parley.ui` marker wins probe selection,
+but the install must also be built (`index.html` present) to serve — an
+unbuilt marker stops rather than falling through (see stop rule below). Package
 resolution still prefers the parley home dir, then the daemon package's own
 location (sibling install).
 
-### Marker-less stop rule (unchanged, per name)
+### Stop rule (per name)
 
-If a probed package **resolves** but has no usable marker, that is a
-configuration mistake for **that package name**: stop. Do not try other
-bases for the same name, and do not fall through to the next default. Only
-**not found** advances the default probe to the next name.
+If a probed package **resolves** but is not a usable UI install — no usable
+marker, a usable marker whose bundle dir has no `index.html` (unbuilt), or an
+unparseable `package.json` — that is a configuration mistake for **that
+package name**: stop. Do not try other bases for the same name, and do not
+fall through to the next default. Only **not found** advances the default
+probe to the next name. The daemon logs one startup line naming the package,
+the reason, and the path it inspected (#361).
 
 ### Choosing Cove deliberately
 

@@ -1,5 +1,4 @@
 import crypto from "node:crypto";
-import fs from "node:fs";
 import http from "node:http";
 import path from "node:path";
 import {
@@ -115,6 +114,7 @@ import {
   buildEvalDetail,
   buildSessionProvenance,
 } from "./task-detail.js";
+import { appendDaemonDiag } from "./diag.js";
 import { discoverUiBundle, isReservedPath, serveUiRequest } from "./ui.js";
 import { DAEMON_VERSION } from "./version.js";
 import { handleXaiProxyRequest, parseXaiProxyPath } from "./xai-proxy.js";
@@ -132,16 +132,6 @@ function gcIntervalMs(): number {
   if (raw === undefined || raw.trim() === "") return DEFAULT_GC_INTERVAL_MS;
   const parsed = Number(raw);
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : DEFAULT_GC_INTERVAL_MS;
-}
-
-/** Append a line to the daemon-home `diag.log` (best-effort). */
-function appendDaemonDiag(paths: HomePaths, line: string): void {
-  const logPath = path.join(paths.home, "diag.log");
-  try {
-    fs.appendFileSync(logPath, `${new Date().toISOString()} ${line}\n`);
-  } catch {
-    /* never let logging take down the daemon */
-  }
 }
 
 /**
