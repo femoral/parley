@@ -205,3 +205,9 @@ distribution, heatmap).
 - Add icons where a label works; the console is nearly icon-free by design.
 - Introduce a new color, size, or weight without adding it here first.
 - Let charm in. If it's fun, it's Cove's.
+- Buy hierarchy with geometry. Rank comes from position, state ink, and type
+  scale — never from min-heights, padding, or shrinking a neighboring surface
+  (ADR-0001).
+- Fill residual space. Terminal content just ends; board ground after the last
+  content row is intentional calm ground, and filler termination elements are
+  forbidden (ADR-0001).
