@@ -11,6 +11,7 @@ import {
   type HonestyPhase,
   type TransportStatus,
 } from "../../data/index.js";
+import { delegateScaffold } from "../task/scaffolds.js";
 import {
   isFreshFailure,
   sortRunsByAttention,
@@ -198,7 +199,10 @@ export function FleetBoard(props: FleetBoardProps) {
         <div className="pc-fleet__global-honesty" data-testid="fleet-empty">
           <h1 className="pc-fleet__heading">Fleet board</h1>
           <p>No tasks or runs yet. Copy a scaffold and hand it to the orchestrating agent.</p>
-          <CopyScaffold text="parley delegate" testId="fleet-delegate-scaffold" />
+          <CopyScaffold
+            text={delegateScaffold()}
+            testId="fleet-delegate-scaffold"
+          />
         </div>
       </div>
     );
@@ -362,7 +366,10 @@ export function FleetBoard(props: FleetBoardProps) {
               testId="fleet-tasks"
               className="pc-fleet-tasks"
               emptyAction={
-                <CopyScaffold text="parley delegate" testId="fleet-delegate-scaffold" />
+                <CopyScaffold
+                  text={delegateScaffold()}
+                  testId="fleet-delegate-scaffold"
+                />
               }
             >
               <div

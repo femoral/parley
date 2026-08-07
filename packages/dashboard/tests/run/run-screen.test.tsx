@@ -300,11 +300,45 @@ describe("RunScreen", () => {
     expect(screen.getByTestId("screen-run")).toBeTruthy();
     expect(screen.getByTestId("run-state-chip").textContent).toMatch(/GATE HELD|BLOCKED/);
     expect(screen.getByTestId("run-block").getAttribute("data-reason")).toBe("gate");
-    expect(screen.getByTestId("run-view-switch").textContent).toMatch(/approve/);
-    expect(screen.getByTestId("run-view-switch").textContent).toMatch(/read-only|orchestrating/);
-    // No mutating controls.
-    expect(screen.queryByRole("button", { name: /approve/i })).toBeNull();
-    expect(screen.queryByRole("button", { name: /reject/i })).toBeNull();
+    // Read-only rule once in the gate band (not repeated on the toolbar).
+    expect(screen.getByTestId("run-gate-notice").textContent).toMatch(
+      /read-only|orchestrating/,
+    );
+    expect(screen.getByTestId("run-block").textContent).toMatch(/approve/);
+    // No mutating controls — scaffolds copy only.
+    expect(screen.queryByRole("button", { name: /^approve$/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^reject$/i })).toBeNull();
+  });
+
+  it("renders one copy scaffold per block.verbs with the real run address", () => {
+    mockState.detail = gateHeldDetail();
+    mockState.summaries = [makeRun()];
+    mount();
+    const verbs = ["approve", "reject", "redirect", "finish"] as const;
+    for (const v of verbs) {
+      const el = screen.getByTestId(`run-gate-scaffold-${v}`);
+      expect(el.textContent).toContain(`parley run ${v === "redirect" ? "redirect" : v}`);
+      expect(el.textContent).toContain(runId);
+      expect(el.textContent).not.toMatch(/"\.\.\."/);
+    }
+    expect(screen.getByTestId("run-gate-scaffold-redirect").textContent).toMatch(
+      /--to <node>/,
+    );
+  });
+
+  it("falls back to default gate verbs when block.verbs is empty", () => {
+    const d = gateHeldDetail();
+    d.block = {
+      ...(d.block as RunBlock),
+      verbs: [] as unknown as RunBlock["verbs"],
+    };
+    d.run.block = d.block;
+    mockState.detail = d;
+    mockState.summaries = [d.run];
+    mount();
+    for (const v of ["approve", "reject", "redirect", "finish"]) {
+      expect(screen.getByTestId(`run-gate-scaffold-${v}`)).toBeTruthy();
+    }
   });
 
   it("renders pipeline / iteration grid / node table views", () => {
@@ -351,11 +385,14 @@ describe("RunScreen", () => {
     expect(pipe.textContent).toMatch(/×3|fan-out 3/);
   });
 
-  it("renders failed run state", () => {
+  it("renders failed run state with recovery scaffold", () => {
     mockState.detail = failedDetail();
     mockState.summaries = [failedDetail().run];
     mount();
     expect(screen.getByTestId("run-state-chip").textContent).toMatch(/FAILED/);
+    const sc = screen.getByTestId("run-failed-scaffold");
+    expect(sc.textContent).toMatch(new RegExp(`parley run fork ${runId}`));
+    expect(sc.textContent).not.toMatch(/"\.\.\."/);
   });
 
   it("renders run workspace path", () => {

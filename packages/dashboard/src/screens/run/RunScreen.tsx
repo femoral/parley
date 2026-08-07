@@ -7,13 +7,17 @@
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { DeliverableRef, NodeProjection } from "@useparley/core";
-import { Panel, StateChip } from "../../components/index.js";
+import { CopyScaffold, Panel, StateChip } from "../../components/index.js";
 import {
   useConsoleData,
   useHonesty,
   useNodeTasks,
 } from "../../data/index.js";
 import type { ScreenMountProps } from "../types.js";
+import {
+  failedRunScaffold,
+  gateVerbScaffolds,
+} from "../task/scaffolds.js";
 import { useDeliverableValues } from "./useDeliverableValues.js";
 import { formatDuration, formatUsage, shortId } from "./format.js";
 import {
@@ -287,6 +291,12 @@ export function RunScreen(props: ScreenMountProps) {
     run.worktree ?? (run.workspace === "scratch" ? `scratch · ${run.run_id}` : null);
   const wireVerbs = verbsForDisplay(block);
   const notice = gateReadonlyNotice(wireVerbs);
+  const showBlock = Boolean(block);
+  const showFailed =
+    !block && run.state === "failed" && Boolean(run.error || true);
+  // wireVerbs prefers block.verbs; falls back to GATE_VERBS when absent/empty.
+  const gateScaffolds = gateVerbScaffolds(wireVerbs, run.run_id);
+  const failedCmd = failedRunScaffold(run.run_id);
 
   // Meta line: no workspace here — dedicated row only (REQUIRED #12).
   const metaParts = [
@@ -318,10 +328,6 @@ export function RunScreen(props: ScreenMountProps) {
         : runs.status === "offline"
           ? "offline"
           : "live";
-
-  const showBlock = Boolean(block);
-  const showFailed =
-    !block && run.state === "failed" && Boolean(run.error || true);
 
   return (
     <div
@@ -378,11 +384,39 @@ export function RunScreen(props: ScreenMountProps) {
           data-testid="run-block"
           data-reason={block.reason}
         >
-          <span className="pc-run__block-label">blocked</span>
-          <span className="pc-run__block-detail">{formatBlockDetail(block)}</span>
-          <span className="pc-run__block-verbs" title={notice} data-testid="run-block-verbs">
-            verbs: {wireVerbs.join(" · ")} (orchestrating agent only)
-          </span>
+          <div className="pc-run__block-row">
+            <span className="pc-run__block-label">blocked</span>
+            <span className="pc-run__block-detail">{formatBlockDetail(block)}</span>
+            {/* Read-only rule once in the gate band (full + compact swap by viewport). */}
+            <span
+              className="pc-run__gate-notice"
+              title={notice}
+              data-testid="run-gate-notice"
+            >
+              {notice}
+            </span>
+            <span
+              className="pc-run__gate-notice pc-run__gate-notice--compact"
+              title={notice}
+              data-testid="run-gate-notice-compact"
+            >
+              read-only · {wireVerbs.join(" · ")}
+            </span>
+          </div>
+          <div
+            className="pc-run__block-scaffolds"
+            data-testid="run-block-verbs"
+            role="group"
+            aria-label="Gate verb scaffolds"
+          >
+            {gateScaffolds.map(({ verb, command }) => (
+              <CopyScaffold
+                key={verb}
+                text={command}
+                testId={`run-gate-scaffold-${verb}`}
+              />
+            ))}
+          </div>
         </div>
       ) : null}
 
@@ -392,10 +426,18 @@ export function RunScreen(props: ScreenMountProps) {
           data-testid="run-failed"
           data-reason="failed"
         >
-          <span className="pc-run__block-label">failed</span>
-          <span className="pc-run__block-detail">
-            {run.error ?? "run ended in failure"}
-          </span>
+          <div className="pc-run__block-row">
+            <span className="pc-run__block-label">failed</span>
+            <span className="pc-run__block-detail">
+              {run.error ?? "run ended in failure"}
+            </span>
+          </div>
+          <div className="pc-run__block-scaffolds" data-testid="run-failed-scaffolds">
+            <CopyScaffold
+              text={failedCmd}
+              testId="run-failed-scaffold"
+            />
+          </div>
         </div>
       ) : null}
 
@@ -410,16 +452,6 @@ export function RunScreen(props: ScreenMountProps) {
         <ViewButton id="pipeline" current={view} onSelect={setView} label="pipeline" />
         <ViewButton id="grid" current={view} onSelect={setView} label="iteration grid" />
         <ViewButton id="table" current={view} onSelect={setView} label="node table" />
-        <span className="pc-run__gate-notice" title={notice} data-testid="run-gate-notice">
-          {notice}
-        </span>
-        <span
-          className="pc-run__gate-notice pc-run__gate-notice--compact"
-          title={notice}
-          data-testid="run-gate-notice-compact"
-        >
-          read-only · {wireVerbs.join(" · ")}
-        </span>
       </div>
 
       <div className="pc-run__body">

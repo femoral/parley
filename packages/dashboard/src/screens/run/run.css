@@ -908,8 +908,8 @@
 }
 
 /* 1280 density: stack lower panels, shrink pipe cards slightly.
- * Compact gate notice shown here; base .pc-run__gate-notice--compact is
- * display:none above (REQUIRED #2 cascade order). */
+ * Compact gate notice shown here (now in the block band); base
+ * .pc-run__gate-notice--compact is display:none above (REQUIRED #2). */
 @media (max-width: 1360px) {
   .pc-run__panels {
     grid-template-columns: 1fr;
@@ -931,6 +931,10 @@
     white-space: normal;
   }
 
+  .pc-run__block .pc-run__gate-notice--compact {
+    margin-left: 0;
+  }
+
   .pc-run__header {
     gap: 10px;
     padding: 8px 12px;
@@ -941,13 +945,12 @@
   }
 }
 
-/* Block / failure banner under header */
+/* Block / failure banner under header — scaffolds reclaim the prose band (#365) */
 .pc-run__block {
   display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 8px 14px;
-  padding: 7px 14px;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 14px;
   border-bottom: 1px solid var(--attention-border);
   background: var(--attention-ground);
   font: var(--type-mono-400-10p5-1p3);
@@ -960,6 +963,14 @@
   color: var(--state-failed);
 }
 
+.pc-run__block-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px 14px;
+  min-width: 0;
+}
+
 .pc-run__block-label {
   font: var(--type-mono-600-9-1);
   letter-spacing: 0.1em;
@@ -968,14 +979,31 @@
 
 .pc-run__block-detail {
   color: var(--text-2);
+  min-width: 0;
 }
 
 .pc-run__block--failed .pc-run__block-detail {
   color: var(--text-2);
 }
 
-.pc-run__block-verbs {
-  color: var(--text-4);
+/* Gate notice lives in the block band once; compact swaps in at ≤1360. */
+.pc-run__block .pc-run__gate-notice {
+  margin-left: auto;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.pc-run__block-scaffolds {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  min-width: 0;
+}
+
+.pc-run__block-scaffolds .pc-scaffold {
+  max-width: 100%;
 }
 
 .pc-run__panel-head--sub {
