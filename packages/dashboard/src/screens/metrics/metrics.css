@@ -82,7 +82,7 @@
 .pc-metrics__clear:focus-visible,
 .pc-metrics__view-btn:focus-visible,
 .pc-metrics__filter-field:focus-within {
-  outline: 2px solid var(--link);
+  outline: var(--focus-ring-width) solid var(--focus-ring);
   outline-offset: 1px;
 }
 
@@ -416,15 +416,15 @@
 
 .pc-metrics__success-fill {
   height: 100%;
-  background: var(--state-eval-good);
+  background: var(--success-bar-good);
 }
 
 .pc-metrics__success-fill--mid {
-  background: var(--metrics-mid);
+  background: var(--success-bar-mid);
 }
 
 .pc-metrics__success-fill--poor {
-  background: var(--state-eval-poor);
+  background: var(--success-bar-poor);
 }
 
 .pc-metrics__success-fill--none {

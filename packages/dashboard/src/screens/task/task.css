@@ -106,7 +106,7 @@
 }
 
 .pc-task-copybtn:focus-visible {
-  outline: var(--focus-ring) solid var(--link);
+  outline: var(--focus-ring-width) solid var(--focus-ring);
   outline-offset: 2px;
 }
 
@@ -145,7 +145,7 @@
 }
 
 .pc-task-col:focus-visible {
-  outline: var(--focus-ring) solid var(--link);
+  outline: var(--focus-ring-width) solid var(--focus-ring);
   outline-offset: -2px;
 }
 
@@ -332,7 +332,7 @@
 
 .pc-task-attempt--current {
   background: var(--surface-soft);
-  box-shadow: inset 2px 0 0 var(--link);
+  box-shadow: inset var(--selection-rule) 0 0 var(--selection-ink);
 }
 
 .pc-task-attempt__n {
@@ -406,7 +406,7 @@
 
 .pc-task-log__follow input {
   margin: 0;
-  accent-color: var(--state-running);
+  accent-color: var(--selection-ink);
 }
 
 .pc-task-log__well {
@@ -418,7 +418,7 @@
 }
 
 .pc-task-log__well:focus-visible {
-  outline: var(--focus-ring) solid var(--link);
+  outline: var(--focus-ring-width) solid var(--focus-ring);
   outline-offset: -2px;
 }
 

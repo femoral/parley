@@ -249,7 +249,7 @@
 }
 
 .pc-scaffold__btn:focus-visible {
-  outline: var(--focus-ring) solid var(--link);
+  outline: var(--focus-ring-width) solid var(--focus-ring);
   outline-offset: 2px;
 }
 
@@ -332,7 +332,7 @@
 
 .pc-field__control:focus-visible,
 .pc-select__control:focus-visible {
-  outline: 2px solid var(--link);
+  outline: var(--focus-ring-width) solid var(--focus-ring);
   outline-offset: 1px;
 }
 

@@ -8,12 +8,15 @@ import {
   AttentionCard,
   CopyScaffold,
   Field,
+  LEGEND_ORDER,
   Panel,
   Select,
   StateChip,
   chipStateKey,
+  legendEntries,
   stateLabel,
 } from "../../src/components/index.js";
+import { FooterLegend } from "../../src/chrome/FooterLegend.js";
 
 afterEach(() => {
   cleanup();
@@ -37,6 +40,38 @@ describe("StateChip", () => {
   it("pulses running by default", () => {
     const { container } = render(<StateChip state="running" />);
     expect(container.querySelector(".pc-chip__dot--live")).toBeTruthy();
+  });
+});
+
+describe("stateLabels legend/chip agreement (#366)", () => {
+  it("legend entries match stateLabel for every legend state", () => {
+    const entries = legendEntries();
+    expect(entries.map((e) => e.state)).toEqual([...LEGEND_ORDER]);
+    for (const entry of entries) {
+      expect(entry.label).toBe(stateLabel(entry.state));
+      expect(entry.label).toBe(entry.label.toUpperCase());
+    }
+    // Chip short forms that previously diverged from the footer
+    expect(stateLabel("completed")).toBe("DONE");
+    expect(stateLabel("cancelled")).toBe("CANCEL");
+    expect(stateLabel("awaiting_answer")).toBe("AWAITING");
+  });
+
+  it("FooterLegend and StateChip render the same vocabulary", () => {
+    const { container: legendRoot } = render(<FooterLegend />);
+    const legendLabels = [
+      ...legendRoot.querySelectorAll(".pc-shell__legend-label"),
+    ].map((n) => n.textContent);
+    expect(legendLabels).toEqual(legendEntries().map((e) => e.label));
+    cleanup();
+
+    for (const entry of legendEntries()) {
+      const { container } = render(<StateChip state={entry.state} />);
+      expect(container.querySelector(".pc-chip__label")?.textContent).toBe(
+        entry.label,
+      );
+      cleanup();
+    }
   });
 });
 

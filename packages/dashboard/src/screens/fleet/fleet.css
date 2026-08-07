@@ -311,14 +311,14 @@
 }
 
 .pc-fleet-table__row:focus-visible {
-  outline: var(--focus-ring) solid var(--state-awaiting);
+  outline: var(--focus-ring-width) solid var(--focus-ring);
   outline-offset: -2px;
 }
 
 .pc-fleet-table__row--selected {
   background: var(--surface-soft);
-  /* Neutral selection — amber is reserved for attention (optional #13). */
-  border-left-color: var(--border-strong);
+  /* Neutral selection — amber is reserved for status (#366). */
+  border-left-color: var(--selection-ink);
 }
 
 .pc-fleet-table__td {

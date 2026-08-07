@@ -1,18 +1,9 @@
 /**
  * Footer state legend — square dots + labels so state is never hue alone.
- * Attention order from DESIGN.md.
+ * Labels and inks come from the shared stateLabels table (#366).
  */
 
-const LEGEND: ReadonlyArray<{ state: string; label: string; cssVar: string }> = [
-  { state: "awaiting_answer", label: "awaiting", cssVar: "var(--state-awaiting)" },
-  { state: "stalled", label: "stalled", cssVar: "var(--state-stalled)" },
-  { state: "failed", label: "failed", cssVar: "var(--state-failed)" },
-  { state: "running", label: "running", cssVar: "var(--state-running)" },
-  { state: "queued", label: "queued", cssVar: "var(--state-queued)" },
-  { state: "pending", label: "pending", cssVar: "var(--state-pending)" },
-  { state: "completed", label: "completed", cssVar: "var(--state-completed)" },
-  { state: "cancelled", label: "cancelled", cssVar: "var(--state-cancelled)" },
-];
+import { legendEntries } from "../components/stateLabels.js";
 
 export interface FooterLegendProps {
   /** Full doctrine note (≥1460). Mock: "state = what a task IS · quality = how good work WAS · …" */
@@ -22,10 +13,11 @@ export interface FooterLegendProps {
 }
 
 export function FooterLegend({ note, noteCompact }: FooterLegendProps) {
+  const legend = legendEntries();
   return (
     <footer className="pc-shell__footer" data-testid="shell-footer">
       <div className="pc-shell__legend" aria-label="Task state legend">
-        {LEGEND.map((l) => (
+        {legend.map((l) => (
           <span key={l.state} className="pc-shell__legend-item" data-state={l.state}>
             <span
               className="pc-shell__legend-dot"
