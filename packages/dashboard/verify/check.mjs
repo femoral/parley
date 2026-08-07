@@ -9,10 +9,25 @@
 import fs from "node:fs";
 import path from "node:path";
 import { DEMO_REGISTRY, ticketsFromRegistry } from "./demos/registry.mjs";
-import { readLedger } from "./lib/ledger.mjs";
+import { assertStateInkGroundContrast } from "./lib/contrast.mjs";
+import {
+  assertAllLedgerShotWidths,
+  assertLedgerShotWidths,
+  ledgerDirs,
+  readLedger,
+} from "./lib/ledger.mjs";
 import { LEDGER_ROOT, relFromRepo } from "./lib/paths.mjs";
 
 async function main() {
+  // #364 — pure token contrast gate (no browser). Fails on ramp regression.
+  // Neuter evidence: restoring --state-failed: #d9534a fails surface-soft (~4.28)
+  // and surface-active (~3.85).
+  const contrastGate = assertStateInkGroundContrast();
+  console.log(
+    `[verify:check] state-ink contrast ok — ${contrastGate.pairings} pairings; ` +
+      `worst ${contrastGate.worst.ink} on ${contrastGate.worst.ground} = ${contrastGate.worst.ratio}:1`,
+  );
+
   const skipRun = process.argv.includes("--ledger-only");
   if (!skipRun) {
     console.log("[verify:check] running acceptance demos…");
@@ -20,6 +35,18 @@ async function main() {
       console.log(`[verify:check] ${demo.ticket}/${demo.id}`);
       await demo.run();
     }
+  }
+
+  // #364 — filename viewport must match PNG IHDR width (when shots present).
+  const shotGate = assertAllLedgerShotWidths();
+  if (shotGate.files > 0) {
+    console.log(
+      `[verify:check] ledger shot widths ok — ${shotGate.files} file(s) across ${shotGate.tickets} ticket(s)`,
+    );
+  } else {
+    console.log(
+      "[verify:check] ledger shot widths skipped — no shots/ PNGs present (gitignored)",
+    );
   }
 
   const TICKETS = ticketsFromRegistry();
@@ -65,6 +92,12 @@ async function main() {
       if (typeof reg?.gates === "function") {
         reg.gates(reg, ledger);
       }
+    }
+
+    // Per-ticket shot width when demos just wrote PNGs
+    const { shotsDir } = ledgerDirs(ticket);
+    if (fs.existsSync(shotsDir)) {
+      assertLedgerShotWidths(shotsDir);
     }
 
     const entryRel = relFromRepo(path.join(LEDGER_ROOT, ticket, "entry.json"));

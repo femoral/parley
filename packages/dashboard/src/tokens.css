@@ -51,17 +51,23 @@
   --scrollbar-thumb: #242c33;
   --scrollbar-thumb-hover: #333d46;
 
-  /* State (status only — reserved inks; never focus/selection/accent) */
+  /*
+   * State (status only — reserved inks; never focus/selection/accent).
+   * #364 ramp lifts so every state-ink × surface-ladder pairing (incl. hover /
+   * selected / raised / surface-active) clears WCAG AA 4.5:1. Pre-lift failures:
+   * failed #d9534a 3.85–4.49, eval-poor #c4707f 4.35, queued/completed/cancelled
+   * ~4.21 on surface-active. Verify: assertStateInkGroundContrast.
+   */
   --state-pending: #8b96a2;
-  --state-queued: #7b8894;
+  --state-queued: #828e99;
   --state-running: #43b98c;
   --state-awaiting: #e0a02e;
   --state-stalled: #7f9bb0;
-  --state-completed: #5d8ca8;
-  --state-failed: #d9534a;
-  --state-cancelled: #7f8790;
+  --state-completed: #6592ac;
+  --state-failed: #e4726a;
+  --state-cancelled: #858d96;
   --state-eval-good: #3ea99c;
-  --state-eval-poor: #c4707f;
+  --state-eval-poor: #d08898;
 
   /*
    * Interaction neutrals (#366) — focus ring + selection rule.

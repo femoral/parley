@@ -8,7 +8,7 @@
       "description": "Shell chrome merge proofs: geometry, axe×3 states, skip-main, settings popover, footer note, 1280 density, live-region boot+kill+recover.",
       "daemon": {
         "taskId": "t1",
-        "port": 38979
+        "port": 38933
       },
       "headline": {
         "headerHeight": 46,
@@ -140,7 +140,7 @@
           "ratio": 12.7,
           "largeText": false,
           "wcagAA": true,
-          "text": "04:50:04"
+          "text": "22:00:44"
         },
         "find-input": {
           "selector": ".pc-find__input",
@@ -164,7 +164,7 @@
           "ratio": 6.32,
           "largeText": false,
           "wcagAA": true,
-          "text": "awaiting"
+          "text": "AWAITING"
         },
         "footer-meta": {
           "selector": ".pc-shell__footer-meta",
@@ -180,64 +180,56 @@
         },
         "screen-title": {
           "selector": ".pc-screen__title",
-          "found": true,
-          "color": "rgb(227, 232, 236)",
-          "background": "rgb(11, 13, 15)",
-          "fontSize": "15px",
-          "fontWeight": "600",
-          "ratio": 15.78,
-          "largeText": false,
-          "wcagAA": true,
-          "text": "Fleet board"
+          "found": false
         }
       },
       "stateEncoding": {
         "legendItems": [
           {
             "state": "awaiting_answer",
-            "label": "awaiting",
+            "label": "AWAITING",
             "dotBorderRadius": "0px",
             "hasLabel": true
           },
           {
             "state": "stalled",
-            "label": "stalled",
+            "label": "STALLED",
             "dotBorderRadius": "0px",
             "hasLabel": true
           },
           {
             "state": "failed",
-            "label": "failed",
+            "label": "FAILED",
             "dotBorderRadius": "0px",
             "hasLabel": true
           },
           {
             "state": "running",
-            "label": "running",
+            "label": "RUNNING",
             "dotBorderRadius": "0px",
             "hasLabel": true
           },
           {
             "state": "queued",
-            "label": "queued",
+            "label": "QUEUED",
             "dotBorderRadius": "0px",
             "hasLabel": true
           },
           {
             "state": "pending",
-            "label": "pending",
+            "label": "PENDING",
             "dotBorderRadius": "0px",
             "hasLabel": true
           },
           {
             "state": "completed",
-            "label": "completed",
+            "label": "DONE",
             "dotBorderRadius": "0px",
             "hasLabel": true
           },
           {
             "state": "cancelled",
-            "label": "cancelled",
+            "label": "CANCEL",
             "dotBorderRadius": "0px",
             "hasLabel": true
           }
@@ -303,7 +295,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "Skip to navigationSkip to findSkip to main contentparleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 150…"
+              "text": "Skip to navigationSkip to findSkip to main contentparleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 242…"
             },
             "header": {
               "selector": ".pc-shell__header",
@@ -345,7 +337,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "parleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 1509433 · up 16sv0.0.4needs orch0streamlive04:50:02Se…"
+              "text": "parleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 2425886 · up 3sv0.0.4needs orch0streamlive22:00:41Set…"
             },
             "brand": {
               "selector": ".pc-shell__brand",
@@ -471,7 +463,7 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "daemon127.0.0.1:5173v0.0.4 · pid 1509433 · up 16sv0.0.4"
+              "text": "daemon127.0.0.1:5173v0.0.4 · pid 2425886 · up 3sv0.0.4"
             },
             "needs-orch": {
               "selector": "[data-testid=\"needs-orch\"]",
@@ -681,7 +673,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "Find tasks and sessions/navigatorScope, state filter, and list navigation land with each screen ticket.center screenFleet boardKPI strip, runs table, and tas…"
+              "text": "Find tasks and sessions/scopeorchestrator sessionsessionAll sessionsverify-orch · 1state filter1 tasksall1awaiting0stalled0failed0gaterunning0queued0token bu…"
             },
             "rail-left": {
               "selector": ".pc-shell__rail--left",
@@ -723,7 +715,7 @@
                 "overflow": "auto",
                 "opacity": "1"
               },
-              "text": "Find tasks and sessions/navigatorScope, state filter, and list navigation land with each screen ticket."
+              "text": "Find tasks and sessions/scopeorchestrator sessionsessionAll sessionsverify-orch · 1state filter1 tasksall1awaiting0stalled0failed0gaterunning0queued0token bu…"
             },
             "center": {
               "selector": ".pc-shell__center",
@@ -765,7 +757,7 @@
                 "overflow": "auto",
                 "opacity": "1"
               },
-              "text": "center screenFleet boardKPI strip, runs table, and tasks table land in the fleet ticket. Shell chrome (nav, find, settings, honesty) is live."
+              "text": "Fleet boardneeds orchestrator0items0 held · 0 asks · 0 stall · 0 freshrunning0taskscap unknownqueued / pending0 / 0no waitersruns0total0 held · 0 advancingse…"
             },
             "rail-right": {
               "selector": ".pc-shell__rail--right",
@@ -807,7 +799,7 @@
                 "overflow": "auto",
                 "opacity": "1"
               },
-              "text": "attention · firehoseAttention queue and event firehose land with the fleet ticket."
+              "text": "attention0 · rank · agecardsrowsNothing needs the orchestratorfirehosewatch — followNo events since connect"
             },
             "footer": {
               "selector": ".pc-shell__footer",
@@ -849,7 +841,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "awaitingstalledfailedrunningqueuedpendingcompletedcancelledstate = what a task IS · quality = how good work WAS · 0 unacked events · livestate=IS · quality=W…"
+              "text": "AWAITINGSTALLEDFAILEDRUNNINGQUEUEDPENDINGDONECANCELstate = what a task IS · quality = how good work WAS · 0 unacked events · livestate=IS · quality=WAS · 0 u…"
             }
           }
         },
@@ -899,7 +891,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "Skip to navigationSkip to findSkip to main contentparleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 150…"
+              "text": "Skip to navigationSkip to findSkip to main contentparleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 242…"
             },
             "header": {
               "selector": ".pc-shell__header",
@@ -941,7 +933,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "parleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 1509433 · up 16sv0.0.4needs orch0streamlive04:50:03Se…"
+              "text": "parleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 2425886 · up 3sv0.0.4needs orch0streamlive22:00:42Set…"
             },
             "brand": {
               "selector": ".pc-shell__brand",
@@ -1031,15 +1023,15 @@
               "selector": ".pc-shell__status",
               "found": true,
               "box": {
-                "x": 668.41,
+                "x": 675,
                 "y": 17,
-                "width": 351.42,
+                "width": 344.83,
                 "height": 11
               },
               "styles": {
                 "display": "flex",
                 "position": "static",
-                "width": "351.422px",
+                "width": "344.828px",
                 "height": "11px",
                 "minWidth": "0px",
                 "minHeight": "auto",
@@ -1067,7 +1059,7 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "daemon127.0.0.1:5173v0.0.4 · pid 1509433 · up 16sv0.0.4"
+              "text": "daemon127.0.0.1:5173v0.0.4 · pid 2425886 · up 3sv0.0.4"
             },
             "needs-orch": {
               "selector": "[data-testid=\"needs-orch\"]",
@@ -1277,7 +1269,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "Find tasks and sessions/navigatorScope, state filter, and list navigation land with each screen ticket.center screenFleet boardKPI strip, runs table, and tas…"
+              "text": "Find tasks and sessions/scopeorchestrator sessionsessionAll sessionsverify-orch · 1state filter1 tasksall1awaiting0stalled0failed0gaterunning0queued0token bu…"
             },
             "rail-left": {
               "selector": ".pc-shell__rail--left",
@@ -1319,7 +1311,7 @@
                 "overflow": "auto",
                 "opacity": "1"
               },
-              "text": "Find tasks and sessions/navigatorScope, state filter, and list navigation land with each screen ticket."
+              "text": "Find tasks and sessions/scopeorchestrator sessionsessionAll sessionsverify-orch · 1state filter1 tasksall1awaiting0stalled0failed0gaterunning0queued0token bu…"
             },
             "center": {
               "selector": ".pc-shell__center",
@@ -1361,7 +1353,7 @@
                 "overflow": "auto",
                 "opacity": "1"
               },
-              "text": "center screenFleet boardKPI strip, runs table, and tasks table land in the fleet ticket. Shell chrome (nav, find, settings, honesty) is live."
+              "text": "Fleet boardneeds orchestrator0items0 held · 0 asks · 0 stall · 0 freshrunning0taskscap unknownqueued / pending0 / 0no waitersruns0total0 held · 0 advancingse…"
             },
             "rail-right": {
               "selector": ".pc-shell__rail--right",
@@ -1403,7 +1395,7 @@
                 "overflow": "auto",
                 "opacity": "1"
               },
-              "text": "attention · firehoseAttention queue and event firehose land with the fleet ticket."
+              "text": "attention0 · rank · agecardsrowsNothing needs the orchestratorfirehosewatch — followNo events since connect"
             },
             "footer": {
               "selector": ".pc-shell__footer",
@@ -1445,7 +1437,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "awaitingstalledfailedrunningqueuedpendingcompletedcancelledstate = what a task IS · quality = how good work WAS · 0 unacked events · livestate=IS · quality=W…"
+              "text": "AWAITINGSTALLEDFAILEDRUNNINGQUEUEDPENDINGDONECANCELstate = what a task IS · quality = how good work WAS · 0 unacked events · livestate=IS · quality=WAS · 0 u…"
             }
           }
         },
@@ -1495,7 +1487,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "Skip to navigationSkip to findSkip to main contentparleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 150…"
+              "text": "Skip to navigationSkip to findSkip to main contentparleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 242…"
             },
             "header": {
               "selector": ".pc-shell__header",
@@ -1537,7 +1529,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "parleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 1509433 · up 17sv0.0.4needs orch0streamlive04:50:03Se…"
+              "text": "parleyconsoleFleet1 task · 0 need actionRunno runTaskt1Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 2425886 · up 4sv0.0.4needs orch0streamlive22:00:43Set…"
             },
             "brand": {
               "selector": ".pc-shell__brand",
@@ -1627,15 +1619,15 @@
               "selector": ".pc-shell__status",
               "found": true,
               "box": {
-                "x": 1128.41,
+                "x": 1135,
                 "y": 17,
-                "width": 351.42,
+                "width": 344.83,
                 "height": 11
               },
               "styles": {
                 "display": "flex",
                 "position": "static",
-                "width": "351.422px",
+                "width": "344.828px",
                 "height": "11px",
                 "minWidth": "0px",
                 "minHeight": "auto",
@@ -1663,7 +1655,7 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "daemon127.0.0.1:5173v0.0.4 · pid 1509433 · up 17sv0.0.4"
+              "text": "daemon127.0.0.1:5173v0.0.4 · pid 2425886 · up 4sv0.0.4"
             },
             "needs-orch": {
               "selector": "[data-testid=\"needs-orch\"]",
@@ -1873,7 +1865,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "Find tasks and sessions/navigatorScope, state filter, and list navigation land with each screen ticket.center screenFleet boardKPI strip, runs table, and tas…"
+              "text": "Find tasks and sessions/scopeorchestrator sessionsessionAll sessionsverify-orch · 1state filter1 tasksall1awaiting0stalled0failed0gaterunning0queued0token bu…"
             },
             "rail-left": {
               "selector": ".pc-shell__rail--left",
@@ -1915,7 +1907,7 @@
                 "overflow": "auto",
                 "opacity": "1"
               },
-              "text": "Find tasks and sessions/navigatorScope, state filter, and list navigation land with each screen ticket."
+              "text": "Find tasks and sessions/scopeorchestrator sessionsessionAll sessionsverify-orch · 1state filter1 tasksall1awaiting0stalled0failed0gaterunning0queued0token bu…"
             },
             "center": {
               "selector": ".pc-shell__center",
@@ -1957,7 +1949,7 @@
                 "overflow": "auto",
                 "opacity": "1"
               },
-              "text": "center screenFleet boardKPI strip, runs table, and tasks table land in the fleet ticket. Shell chrome (nav, find, settings, honesty) is live."
+              "text": "Fleet boardneeds orchestrator0items0 held · 0 asks · 0 stall · 0 freshrunning0taskscap unknownqueued / pending0 / 0no waitersruns0total0 held · 0 advancingse…"
             },
             "rail-right": {
               "selector": ".pc-shell__rail--right",
@@ -1999,7 +1991,7 @@
                 "overflow": "auto",
                 "opacity": "1"
               },
-              "text": "attention · firehoseAttention queue and event firehose land with the fleet ticket."
+              "text": "attention0 · rank · agecardsrowsNothing needs the orchestratorfirehosewatch — followNo events since connect"
             },
             "footer": {
               "selector": ".pc-shell__footer",
@@ -2041,7 +2033,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "awaitingstalledfailedrunningqueuedpendingcompletedcancelledstate = what a task IS · quality = how good work WAS · 0 unacked events · livestate=IS · quality=W…"
+              "text": "AWAITINGSTALLEDFAILEDRUNNINGQUEUEDPENDINGDONECANCELstate = what a task IS · quality = how good work WAS · 0 unacked events · livestate=IS · quality=WAS · 0 u…"
             }
           }
         }
@@ -2050,17 +2042,17 @@
         "axe": {
           "url": "http://127.0.0.1:5173/",
           "violations": [],
-          "passes": 34,
+          "passes": 36,
           "incomplete": 1,
-          "inapplicable": 54
+          "inapplicable": 52
         },
         "aria": {
           "api": "locator.ariaSnapshot",
           "selector": "[data-testid=\"shell\"]",
-          "tree": "- link \"Skip to navigation\":\n  - /url: \"#shell-nav\"\n- link \"Skip to find\":\n  - /url: \"#find-input-target\"\n- link \"Skip to main content\":\n  - /url: \"#main-content\"\n- banner:\n  - img \"Parley\"\n  - text: parley console\n  - navigation \"Screens\":\n    - tablist \"Console screens\":\n      - tab \"Fleet 1 task · 0 need action\" [selected]\n      - tab \"Run no run\"\n      - tab \"Task t1\"\n      - tab \"Metrics all hands\"\n  - text: daemon 127.0.0.1:5173 v0.0.4 · pid 1509433 · up 18s needs orch 0 stream live\n  - time: 04:50:06\n  - button \"Settings\"\n- complementary \"Left rail\":\n  - text: Find tasks and sessions\n  - combobox \"Find tasks and sessions\"\n  - text: navigator Scope, state filter, and list navigation land with each screen ticket.\n- main:\n  - tabpanel \"Fleet 1 task · 0 need action\":\n    - text: center screen\n    - heading \"Fleet board\" [level=1]\n    - paragraph: KPI strip, runs table, and tasks table land in the fleet ticket. Shell chrome (nav, find, settings, honesty) is live.\n- complementary \"Attention rail\": attention · firehose Attention queue and event firehose land with the fleet ticket.\n- contentinfo: awaiting stalled failed running queued pending completed cancelled state = what a task IS · quality = how good work WAS · 0 unacked events · live read-only · parley never merges"
+          "tree": "- link \"Skip to navigation\":\n  - /url: \"#shell-nav\"\n- link \"Skip to find\":\n  - /url: \"#find-input-target\"\n- link \"Skip to main content\":\n  - /url: \"#main-content\"\n- banner:\n  - img \"Parley\"\n  - text: parley console\n  - navigation \"Screens\":\n    - tablist \"Console screens\":\n      - tab \"Fleet 1 task · 0 need action\" [selected]\n      - tab \"Run no run\"\n      - tab \"Task t1\"\n      - tab \"Metrics all hands\"\n  - text: daemon 127.0.0.1:5173 v0.0.4 · pid 2425886 · up 6s needs orch 0 stream live\n  - time: 22:00:45\n  - button \"Settings\"\n- complementary \"Left rail\":\n  - text: Find tasks and sessions\n  - combobox \"Find tasks and sessions\"\n  - region \"scope\":\n    - heading \"scope\" [level=2]\n    - text: orchestrator session session\n    - combobox \"Orchestrator session scope\":\n      - option \"All sessions\" [selected]\n      - option \"verify-orch · 1\"\n  - region \"state filter\":\n    - heading \"state filter\" [level=2]\n    - text: 1 tasks\n    - group \"Filter by state\":\n      - button \"all 1\" [pressed]\n      - button \"awaiting 0\"\n      - button \"stalled 0\"\n      - button \"failed 0\"\n      - button \"gate\"\n      - button \"running 0\"\n      - button \"queued 0\"\n  - region \"token burn · 24h\":\n    - heading \"token burn · 24h\" [level=2]\n    - text: last 24h · sees tasks within retention (30d assumed)\n    - paragraph: No token activity in the last 24h (within retention).\n- main:\n  - tabpanel \"Fleet 1 task · 0 need action\":\n    - heading \"Fleet board\" [level=1]\n    - group \"Fleet KPIs\": needs orchestrator 0 items 0 held · 0 asks · 0 stall · 0 fresh running 0 tasks cap unknown queued / pending 0 / 0 no waiters runs 0 total 0 held · 0 advancing settled 24h 0 / 0 done / failed success 0% · last 24h token burn 0 in cache 0% · p95 —\n    - text: runs 0 held · track = nodes × loop\n    - paragraph: No runs\n    - text: tasks attention · age · 1\n    - grid \"Tasks\":\n      - row \"state task harness tokens dur age\":\n        - columnheader \"state\"\n        - columnheader \"task\"\n        - columnheader \"harness\"\n        - columnheader \"tokens\"\n        - columnheader \"dur\"\n        - columnheader \"age\"\n      - row \"DONE t1 t1 fake · fake-model — 181ms 0s\":\n        - gridcell \"DONE\"\n        - gridcell \"t1 t1\"\n        - gridcell \"fake · fake-model\"\n        - gridcell \"—\"\n        - gridcell \"181ms\"\n        - gridcell \"0s\"\n    - complementary:\n      - text: executors 0 runners\n      - paragraph: No runners\n- complementary \"Attention rail\":\n  - heading \"attention\" [level=2]\n  - text: 0 · rank · age\n  - group \"Attention density\":\n    - button \"cards\" [pressed]\n    - button \"rows\"\n  - paragraph: Nothing needs the orchestrator\n  - heading \"firehose\" [level=2]\n  - text: watch — follow\n  - paragraph: No events since connect\n- contentinfo: AWAITING STALLED FAILED RUNNING QUEUED PENDING DONE CANCEL state = what a task IS · quality = how good work WAS · 0 unacked events · live read-only · parley never merges"
         },
         "keyboardWalk": {
-          "focusableCount": 9,
+          "focusableCount": 20,
           "note": null,
           "path": [
             {
@@ -2089,37 +2081,37 @@
           "axe": {
             "url": "http://127.0.0.1:5173/",
             "violations": [],
-            "passes": 34,
+            "passes": 36,
             "incomplete": 1,
-            "inapplicable": 54
+            "inapplicable": 52
           },
           "aria": {
             "api": "locator.ariaSnapshot",
             "selector": "[data-testid=\"shell\"]",
-            "tree": "- link \"Skip to navigation\":\n  - /url: \"#shell-nav\"\n- link \"Skip to find\":\n  - /url: \"#find-input-target\"\n- link \"Skip to main content\":\n  - /url: \"#main-content\"\n- banner:\n  - img \"Parley\"\n  - text: parley console\n  - navigation \"Screens\":\n    - tablist \"Console screens\":\n      - tab \"Fleet 1 task · 0 need action\" [selected]\n      - tab \"Run no run\"\n      - tab \"Task t1\"\n      - tab \"Metrics all hands\"\n  - text: daemon 127.0.0.1:5173 v0.0.4 · pid 1509433 · up 18s needs orch 0 stream live\n  - time: 04:50:06\n  - button \"Settings\"\n- complementary \"Left rail\":\n  - text: Find tasks and sessions\n  - combobox \"Find tasks and sessions\"\n  - text: navigator Scope, state filter, and list navigation land with each screen ticket.\n- main:\n  - tabpanel \"Fleet 1 task · 0 need action\":\n    - text: center screen\n    - heading \"Fleet board\" [level=1]\n    - paragraph: KPI strip, runs table, and tasks table land in the fleet ticket. Shell chrome (nav, find, settings, honesty) is live.\n- complementary \"Attention rail\": attention · firehose Attention queue and event firehose land with the fleet ticket.\n- contentinfo: awaiting stalled failed running queued pending completed cancelled state = what a task IS · quality = how good work WAS · 0 unacked events · live read-only · parley never merges"
+            "tree": "- link \"Skip to navigation\":\n  - /url: \"#shell-nav\"\n- link \"Skip to find\":\n  - /url: \"#find-input-target\"\n- link \"Skip to main content\":\n  - /url: \"#main-content\"\n- banner:\n  - img \"Parley\"\n  - text: parley console\n  - navigation \"Screens\":\n    - tablist \"Console screens\":\n      - tab \"Fleet 1 task · 0 need action\" [selected]\n      - tab \"Run no run\"\n      - tab \"Task t1\"\n      - tab \"Metrics all hands\"\n  - text: daemon 127.0.0.1:5173 v0.0.4 · pid 2425886 · up 6s needs orch 0 stream live\n  - time: 22:00:45\n  - button \"Settings\"\n- complementary \"Left rail\":\n  - text: Find tasks and sessions\n  - combobox \"Find tasks and sessions\"\n  - region \"scope\":\n    - heading \"scope\" [level=2]\n    - text: orchestrator session session\n    - combobox \"Orchestrator session scope\":\n      - option \"All sessions\" [selected]\n      - option \"verify-orch · 1\"\n  - region \"state filter\":\n    - heading \"state filter\" [level=2]\n    - text: 1 tasks\n    - group \"Filter by state\":\n      - button \"all 1\" [pressed]\n      - button \"awaiting 0\"\n      - button \"stalled 0\"\n      - button \"failed 0\"\n      - button \"gate\"\n      - button \"running 0\"\n      - button \"queued 0\"\n  - region \"token burn · 24h\":\n    - heading \"token burn · 24h\" [level=2]\n    - text: last 24h · sees tasks within retention (30d assumed)\n    - paragraph: No token activity in the last 24h (within retention).\n- main:\n  - tabpanel \"Fleet 1 task · 0 need action\":\n    - heading \"Fleet board\" [level=1]\n    - group \"Fleet KPIs\": needs orchestrator 0 items 0 held · 0 asks · 0 stall · 0 fresh running 0 tasks cap unknown queued / pending 0 / 0 no waiters runs 0 total 0 held · 0 advancing settled 24h 0 / 0 done / failed success 0% · last 24h token burn 0 in cache 0% · p95 —\n    - text: runs 0 held · track = nodes × loop\n    - paragraph: No runs\n    - text: tasks attention · age · 1\n    - grid \"Tasks\":\n      - row \"state task harness tokens dur age\":\n        - columnheader \"state\"\n        - columnheader \"task\"\n        - columnheader \"harness\"\n        - columnheader \"tokens\"\n        - columnheader \"dur\"\n        - columnheader \"age\"\n      - row \"DONE t1 t1 fake · fake-model — 181ms 0s\":\n        - gridcell \"DONE\"\n        - gridcell \"t1 t1\"\n        - gridcell \"fake · fake-model\"\n        - gridcell \"—\"\n        - gridcell \"181ms\"\n        - gridcell \"0s\"\n    - complementary:\n      - text: executors 0 runners\n      - paragraph: No runners\n- complementary \"Attention rail\":\n  - heading \"attention\" [level=2]\n  - text: 0 · rank · age\n  - group \"Attention density\":\n    - button \"cards\" [pressed]\n    - button \"rows\"\n  - paragraph: Nothing needs the orchestrator\n  - heading \"firehose\" [level=2]\n  - text: watch — follow\n  - paragraph: No events since connect\n- contentinfo: AWAITING STALLED FAILED RUNNING QUEUED PENDING DONE CANCEL state = what a task IS · quality = how good work WAS · 0 unacked events · live read-only · parley never merges"
           }
         },
         "findPopup": {
           "axe": {
             "url": "http://127.0.0.1:5173/",
             "violations": [],
-            "passes": 34,
+            "passes": 36,
             "incomplete": 3,
-            "inapplicable": 54
+            "inapplicable": 52
           },
           "aria": {
             "api": "locator.ariaSnapshot",
             "selector": "[data-testid=\"shell\"]",
-            "tree": "- link \"Skip to navigation\":\n  - /url: \"#shell-nav\"\n- link \"Skip to find\":\n  - /url: \"#find-input-target\"\n- link \"Skip to main content\":\n  - /url: \"#main-content\"\n- banner:\n  - img \"Parley\"\n  - text: parley console\n  - navigation \"Screens\":\n    - tablist \"Console screens\":\n      - tab \"Fleet 1 task · 0 need action\" [selected]\n      - tab \"Run no run\"\n      - tab \"Task t1\"\n      - tab \"Metrics all hands\"\n  - text: daemon 127.0.0.1:5173 v0.0.4 · pid 1509433 · up 18s needs orch 0 stream live\n  - time: 04:50:07\n  - button \"Settings\"\n- complementary \"Left rail\":\n  - text: Find tasks and sessions\n  - combobox \"Find tasks and sessions\" [expanded]: zzz-axe-no-match-999\n  - status: No match for “zzz-axe-no-match-999”\n  - text: navigator Scope, state filter, and list navigation land with each screen ticket.\n- main:\n  - tabpanel \"Fleet 1 task · 0 need action\":\n    - text: center screen\n    - heading \"Fleet board\" [level=1]\n    - paragraph: KPI strip, runs table, and tasks table land in the fleet ticket. Shell chrome (nav, find, settings, honesty) is live.\n- complementary \"Attention rail\": attention · firehose Attention queue and event firehose land with the fleet ticket.\n- contentinfo: awaiting stalled failed running queued pending completed cancelled state = what a task IS · quality = how good work WAS · 0 unacked events · live read-only · parley never merges"
+            "tree": "- link \"Skip to navigation\":\n  - /url: \"#shell-nav\"\n- link \"Skip to find\":\n  - /url: \"#find-input-target\"\n- link \"Skip to main content\":\n  - /url: \"#main-content\"\n- banner:\n  - img \"Parley\"\n  - text: parley console\n  - navigation \"Screens\":\n    - tablist \"Console screens\":\n      - tab \"Fleet 1 task · 0 need action\" [selected]\n      - tab \"Run no run\"\n      - tab \"Task t1\"\n      - tab \"Metrics all hands\"\n  - text: daemon 127.0.0.1:5173 v0.0.4 · pid 2425886 · up 6s needs orch 0 stream live\n  - time: 22:00:46\n  - button \"Settings\"\n- complementary \"Left rail\":\n  - text: Find tasks and sessions\n  - combobox \"Find tasks and sessions\" [expanded]: zzz-axe-no-match-999\n  - status: No match for “zzz-axe-no-match-999”\n  - region \"scope\":\n    - heading \"scope\" [level=2]\n    - text: orchestrator session session\n    - combobox \"Orchestrator session scope\":\n      - option \"All sessions\" [selected]\n      - option \"verify-orch · 1\"\n  - region \"state filter\":\n    - heading \"state filter\" [level=2]\n    - text: 1 tasks\n    - group \"Filter by state\":\n      - button \"all 1\" [pressed]\n      - button \"awaiting 0\"\n      - button \"stalled 0\"\n      - button \"failed 0\"\n      - button \"gate\"\n      - button \"running 0\"\n      - button \"queued 0\"\n  - region \"token burn · 24h\":\n    - heading \"token burn · 24h\" [level=2]\n    - text: last 24h · sees tasks within retention (30d assumed)\n    - paragraph: No token activity in the last 24h (within retention).\n- main:\n  - tabpanel \"Fleet 1 task · 0 need action\":\n    - heading \"Fleet board\" [level=1]\n    - group \"Fleet KPIs\": needs orchestrator 0 items 0 held · 0 asks · 0 stall · 0 fresh running 0 tasks cap unknown queued / pending 0 / 0 no waiters runs 0 total 0 held · 0 advancing settled 24h 0 / 0 done / failed success 0% · last 24h token burn 0 in cache 0% · p95 —\n    - text: runs 0 held · track = nodes × loop\n    - paragraph: No runs\n    - text: tasks attention · age · 1\n    - grid \"Tasks\":\n      - row \"state task harness tokens dur age\":\n        - columnheader \"state\"\n        - columnheader \"task\"\n        - columnheader \"harness\"\n        - columnheader \"tokens\"\n        - columnheader \"dur\"\n        - columnheader \"age\"\n      - row \"DONE t1 t1 fake · fake-model — 181ms 0s\":\n        - gridcell \"DONE\"\n        - gridcell \"t1 t1\"\n        - gridcell \"fake · fake-model\"\n        - gridcell \"—\"\n        - gridcell \"181ms\"\n        - gridcell \"0s\"\n    - complementary:\n      - text: executors 0 runners\n      - paragraph: No runners\n- complementary \"Attention rail\":\n  - heading \"attention\" [level=2]\n  - text: 0 · rank · age\n  - group \"Attention density\":\n    - button \"cards\" [pressed]\n    - button \"rows\"\n  - paragraph: Nothing needs the orchestrator\n  - heading \"firehose\" [level=2]\n  - text: watch — follow\n  - paragraph: No events since connect\n- contentinfo: AWAITING STALLED FAILED RUNNING QUEUED PENDING DONE CANCEL state = what a task IS · quality = how good work WAS · 0 unacked events · live read-only · parley never merges"
           }
         },
         "settingsOpen": {
           "axe": {
             "url": "http://127.0.0.1:5173/",
             "violations": [],
-            "passes": 37,
+            "passes": 39,
             "incomplete": 2,
-            "inapplicable": 51
+            "inapplicable": 49
           }
         }
       },
@@ -2207,7 +2199,7 @@
             "scrollWidth": 62,
             "clientWidth": 62,
             "ok": true,
-            "text": "04:50:04"
+            "text": "22:00:44"
           },
           ".pc-shell__footer-note": {
             "found": true,
@@ -2231,13 +2223,33 @@
         "focusedId": "main-content",
         "focusedTestId": null,
         "afterTab": {
-          "tag": "a",
+          "tag": "div",
           "id": null,
-          "testId": null,
-          "role": null,
-          "text": "Skip to navigation"
+          "testId": "fleet-task-t1",
+          "role": "row",
+          "text": "DONEt1t1fake · fake-model———181ms0s"
         }
       },
+      "skipLinkLabels": [
+        {
+          "text": "Skip to navigation",
+          "clientWidth": 122,
+          "scrollWidth": 122,
+          "fullLabel": true
+        },
+        {
+          "text": "Skip to find",
+          "clientWidth": 86,
+          "scrollWidth": 86,
+          "fullLabel": true
+        },
+        {
+          "text": "Skip to main content",
+          "clientWidth": 137,
+          "scrollWidth": 137,
+          "fullLabel": true
+        }
+      ],
       "settingsFocus": {
         "ariaModal": "false",
         "focusMovedIn": true,
@@ -2266,62 +2278,62 @@
       "liveRegionTranscript": {
         "bootSamples": [
           {
-            "t": 83,
+            "t": 94,
+            "text": "",
+            "phase": "offline"
+          },
+          {
+            "t": 176,
             "text": "",
             "phase": "live"
           },
           {
-            "t": 164,
+            "t": 259,
             "text": "",
             "phase": "live"
           },
           {
-            "t": 244,
+            "t": 341,
             "text": "",
             "phase": "live"
           },
           {
-            "t": 326,
+            "t": 423,
             "text": "",
             "phase": "live"
           },
           {
-            "t": 407,
+            "t": 505,
             "text": "",
             "phase": "live"
           },
           {
-            "t": 490,
+            "t": 586,
             "text": "",
             "phase": "live"
           },
           {
-            "t": 572,
+            "t": 667,
             "text": "",
             "phase": "live"
           },
           {
-            "t": 655,
+            "t": 749,
             "text": "",
             "phase": "live"
           },
           {
-            "t": 737,
+            "t": 831,
             "text": "",
             "phase": "live"
           },
           {
-            "t": 820,
+            "t": 912,
             "text": "",
             "phase": "live"
           },
           {
-            "t": 902,
-            "text": "",
-            "phase": "live"
-          },
-          {
-            "t": 985,
+            "t": 993,
             "text": "",
             "phase": "live"
           }
@@ -2338,177 +2350,157 @@
             "phase": "live"
           },
           {
-            "t": 611,
+            "t": 609,
             "text": "",
             "phase": "live"
           },
           {
-            "t": 814,
+            "t": 812,
             "text": "",
             "phase": "live"
           },
           {
-            "t": 1015,
+            "t": 1014,
             "text": "",
             "phase": "live"
           },
           {
-            "t": 1218,
+            "t": 1217,
             "text": "",
             "phase": "live"
           },
           {
-            "t": 1421,
+            "t": 1419,
             "text": "",
             "phase": "live"
           },
           {
-            "t": 1624,
-            "text": "",
-            "phase": "live"
-          },
-          {
-            "t": 1827,
-            "text": "",
-            "phase": "live"
-          },
-          {
-            "t": 2029,
-            "text": "",
-            "phase": "live"
-          },
-          {
-            "t": 2232,
-            "text": "",
-            "phase": "live"
-          },
-          {
-            "t": 2434,
+            "t": 1621,
             "text": "Reconnecting to daemon stream",
             "phase": "stale-reconnecting"
           },
           {
-            "t": 2638,
+            "t": 1825,
             "text": "Reconnecting to daemon stream",
             "phase": "stale-reconnecting"
           },
           {
-            "t": 2840,
+            "t": 2027,
             "text": "Reconnecting to daemon stream",
             "phase": "stale-reconnecting"
           },
           {
-            "t": 3042,
+            "t": 2229,
             "text": "Reconnecting to daemon stream",
             "phase": "stale-reconnecting"
           },
           {
-            "t": 3245,
+            "t": 2432,
             "text": "Reconnecting to daemon stream",
             "phase": "stale-reconnecting"
           },
           {
-            "t": 3448,
+            "t": 2634,
             "text": "Reconnecting to daemon stream",
             "phase": "stale-reconnecting"
           },
           {
-            "t": 3651,
+            "t": 2837,
             "text": "Reconnecting to daemon stream",
             "phase": "stale-reconnecting"
           },
           {
-            "t": 3854,
+            "t": 3039,
             "text": "Reconnecting to daemon stream",
             "phase": "stale-reconnecting"
           },
           {
-            "t": 4055,
+            "t": 3242,
             "text": "Reconnecting to daemon stream",
             "phase": "stale-reconnecting"
           },
           {
-            "t": 4257,
+            "t": 3445,
             "text": "Reconnecting to daemon stream",
             "phase": "stale-reconnecting"
           },
           {
-            "t": 4460,
+            "t": 3646,
             "text": "Reconnecting to daemon stream",
             "phase": "stale-reconnecting"
           },
           {
-            "t": 4664,
+            "t": 3849,
             "text": "Reconnecting to daemon stream",
             "phase": "stale-reconnecting"
           },
           {
-            "t": 4866,
+            "t": 4051,
             "text": "Reconnecting to daemon stream",
             "phase": "stale-reconnecting"
           },
           {
-            "t": 5069,
+            "t": 4253,
             "text": "Reconnecting to daemon stream",
             "phase": "stale-reconnecting"
           },
           {
-            "t": 5272,
+            "t": 4455,
             "text": "Reconnecting to daemon stream",
             "phase": "stale-reconnecting"
           },
           {
-            "t": 5474,
+            "t": 4658,
             "text": "Reconnecting to daemon stream",
             "phase": "stale-reconnecting"
           },
           {
-            "t": 5677,
+            "t": 4860,
             "text": "Reconnecting to daemon stream",
             "phase": "stale-reconnecting"
           },
           {
-            "t": 5880,
+            "t": 5062,
             "text": "Reconnecting to daemon stream",
             "phase": "stale-reconnecting"
           },
           {
-            "t": 6084,
+            "t": 5265,
             "text": "Reconnecting to daemon stream",
             "phase": "stale-reconnecting"
           },
           {
-            "t": 6286,
+            "t": 5467,
             "text": "Reconnecting to daemon stream",
             "phase": "stale-reconnecting"
           },
           {
-            "t": 6489,
+            "t": 5669,
             "text": "Reconnecting to daemon stream",
             "phase": "stale-reconnecting"
           },
           {
-            "t": 6692,
+            "t": 5871,
             "text": "Reconnecting to daemon stream",
             "phase": "stale-reconnecting"
           },
           {
-            "t": 6894,
+            "t": 6074,
             "text": "Reconnecting to daemon stream",
             "phase": "stale-reconnecting"
           },
           {
-            "t": 7096,
+            "t": 6275,
             "text": "Reconnecting to daemon stream",
             "phase": "stale-reconnecting"
           },
           {
-            "t": 7300,
+            "t": 6484,
             "text": "Reconnecting to daemon stream",
             "phase": "stale-reconnecting"
           },
           {
-            "t": 7503,
+            "t": 6686,
             "text": "Connection restored",
             "phase": "live"
           }
@@ -2518,7 +2510,7 @@
         "announcedOfflineAfterLive": true,
         "announcedRestore": true
       },
-      "recordedAt": "2026-08-06T08:50:15.506Z"
+      "recordedAt": "2026-08-07T02:00:55.212Z"
     },
     "find-honesty": {
       "kind": "find-honesty",
@@ -2908,5 +2900,5 @@
       "recordedAt": "2026-08-06T08:50:22.606Z"
     }
   },
-  "updatedAt": "2026-08-06T08:50:22.606Z"
+  "updatedAt": "2026-08-07T02:00:55.212Z"
 }

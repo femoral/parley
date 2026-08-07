@@ -110,6 +110,41 @@ export function fleetBoardGates(_entry, ledger) {
     );
   }
 
+  // #364 — state chips untruncated at board widths
+  const chips = demo.chipUntruncated ?? {};
+  for (const w of ["1280", "1460", "1920"]) {
+    const row = chips[w];
+    if (row?.found && row.truncated) {
+      throw new Error(
+        `fleet-board: state chip truncated at ${w}: ${JSON.stringify(row)}`,
+      );
+    }
+  }
+
+  // #364 — overflow cue: ResizeObserver sets data-h-overflow; no gradient
+  const overflow = demo.overflowCue ?? {};
+  if (!overflow.forceOverflow?.cueVisible) {
+    throw new Error(
+      `fleet-board: overflow cue not visible under forced clip: ${JSON.stringify(overflow.forceOverflow)}`,
+    );
+  }
+  if (overflow.forceOverflow?.usesGradient) {
+    throw new Error(
+      `fleet-board: overflow cue uses forbidden gradient: ${JSON.stringify(overflow.forceOverflow)}`,
+    );
+  }
+  // Columns restore at ~1520 (addr/branch visible); still dropped at 1460.
+  if (!overflow.columnRestore?.hiddenAt1460) {
+    throw new Error(
+      `fleet-board: branch/addr should stay dropped at 1460: ${JSON.stringify(overflow.columnRestore)}`,
+    );
+  }
+  if (!overflow.columnRestore?.restoredAt1520) {
+    throw new Error(
+      `fleet-board: branch/addr should restore by 1520: ${JSON.stringify(overflow.columnRestore)}`,
+    );
+  }
+
   // KPI notes not clipped at 1280
   const kpiNotes = demo.headline?.kpiNotes1280;
   if (!kpiNotes?.allOk) {
@@ -510,6 +545,128 @@ export async function runFleetBoardDemo() {
     const tasksTable1280 = await measureTasksTable1280(session.page);
     const kpiNotes1280 = await measureKpiNotes1280(session.page);
 
+    // #364 — chip untruncated + overflow cue + column restore breakpoint
+    /** @type {Record<string, object>} */
+    const chipUntruncated = {};
+    for (const w of [1280, 1460, 1920]) {
+      await session.page.setViewportSize({ width: w, height: 900 });
+      await session.page.waitForTimeout(50);
+      await session.page.evaluate(() => document.fonts.ready);
+      chipUntruncated[String(w)] = await session.page.evaluate(() => {
+        const labels = [...document.querySelectorAll(".pc-chip__label")];
+        if (labels.length === 0) return { found: false };
+        const samples = labels.slice(0, 12).map((label) => {
+          const text = (label.textContent ?? "").replace(/\s+/g, " ").trim();
+          const truncated =
+            label.scrollWidth > label.clientWidth + 1 ||
+            /\u2026|\.\.\.$/.test(text);
+          return {
+            text,
+            clientWidth: Math.round(label.clientWidth),
+            scrollWidth: Math.round(label.scrollWidth),
+            truncated,
+          };
+        });
+        return {
+          found: true,
+          samples,
+          truncated: samples.some((s) => s.truncated),
+          widest: samples.reduce(
+            (a, b) => (b.scrollWidth > (a?.scrollWidth ?? 0) ? b : a),
+            samples[0],
+          ),
+        };
+      });
+    }
+
+    // Column restore: secondary cols hidden below 1520, visible at 1520+
+    const columnRestore = {};
+    for (const w of [1460, 1520]) {
+      await session.page.setViewportSize({ width: w, height: 900 });
+      await session.page.waitForTimeout(50);
+      columnRestore[String(w)] = await session.page.evaluate(() => {
+        const branch = document.querySelector(
+          ".pc-fleet-tasks .pc-fleet-col--branch",
+        );
+        const addr = document.querySelector(".pc-fleet-tasks .pc-fleet-col--addr");
+        const disp = (el) => (el ? getComputedStyle(el).display : null);
+        return {
+          branchDisplay: disp(branch),
+          addrDisplay: disp(addr),
+          branchVisible: branch ? getComputedStyle(branch).display !== "none" : false,
+          addrVisible: addr ? getComputedStyle(addr).display !== "none" : false,
+        };
+      });
+    }
+
+    // Force horizontal overflow on tasks scroll and assert cue + data-h-overflow.
+    // ResizeObserver → React state is async; wait for data-h-overflow="true".
+    await session.page.setViewportSize({ width: 1460, height: 900 });
+    await session.page.waitForTimeout(40);
+    await session.page.evaluate(() => {
+      const table = document.querySelector(
+        '[data-testid="fleet-tasks-scroll"] .pc-fleet-table',
+      );
+      if (table) /** @type {HTMLElement} */ (table).style.minWidth = "2400px";
+    });
+    await session.page
+      .waitForFunction(
+        () => {
+          const scroll = document.querySelector(
+            '[data-testid="fleet-tasks-scroll"]',
+          );
+          return (
+            scroll &&
+            scroll.getAttribute("data-h-overflow") === "true" &&
+            scroll.scrollWidth > scroll.clientWidth + 1
+          );
+        },
+        { timeout: 3_000 },
+      )
+      .catch(() => null);
+    const forceOverflow = await session.page.evaluate(() => {
+      const scroll = document.querySelector('[data-testid="fleet-tasks-scroll"]');
+      const table = scroll?.querySelector(".pc-fleet-table");
+      if (!scroll || !table) return { found: false };
+      const cs = getComputedStyle(scroll, "::after");
+      const bg = cs.backgroundImage || "";
+      const width = parseFloat(cs.width) || 0;
+      const opacity = parseFloat(cs.opacity) || 0;
+      const attr = scroll.getAttribute("data-h-overflow");
+      const result = {
+        found: true,
+        attr,
+        cueVisible:
+          attr === "true" &&
+          (width >= 8 || opacity > 0.5 || parseFloat(cs.borderLeftWidth) > 0),
+        usesGradient: /gradient/i.test(bg),
+        afterWidth: width,
+        afterOpacity: opacity,
+        afterBg: bg.slice(0, 80),
+        borderLeftWidth: cs.borderLeftWidth,
+        scrollWidth: scroll.scrollWidth,
+        clientWidth: scroll.clientWidth,
+      };
+      /** @type {HTMLElement} */ (table).style.minWidth = "";
+      return result;
+    });
+
+    const overflowCue = {
+      forceOverflow,
+      columnRestore: {
+        at1460: columnRestore["1460"],
+        at1520: columnRestore["1520"],
+        hiddenAt1460:
+          columnRestore["1460"] &&
+          !columnRestore["1460"].branchVisible &&
+          !columnRestore["1460"].addrVisible,
+        restoredAt1520:
+          columnRestore["1520"] &&
+          columnRestore["1520"].branchVisible &&
+          columnRestore["1520"].addrVisible,
+      },
+    };
+
     // Live DOM behavioral samples (attention order of staged tasks).
     const liveAttention = await session.page.evaluate(
       ({ completedId, failedId }) => {
@@ -792,6 +949,8 @@ export async function runFleetBoardDemo() {
         tasksTable1280,
         kpiNotes1280,
       },
+      chipUntruncated,
+      overflowCue,
       viewports,
       a11y: {
         ...a11y,

@@ -90,7 +90,11 @@
   gap: 6px;
   padding: 2px 6px;
   border: 1px solid var(--border);
-  max-width: 100%;
+  /* Size to content — never truncate state labels (#364). */
+  flex: 0 0 auto;
+  width: max-content;
+  max-width: none;
+  min-width: 0;
 }
 
 .pc-chip__dot {
@@ -115,8 +119,10 @@
   font: var(--type-chip);
   letter-spacing: 0.08em;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  /* Full label always — truncation is a defect for the sole non-hue state carrier. */
+  overflow: visible;
+  text-overflow: clip;
+  flex: 0 0 auto;
 }
 
 .pc-chip--pending {

@@ -1,7 +1,14 @@
 /**
  * Presentational fleet board — pure props so unit tests need no network.
  */
-import { useCallback, useMemo, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type RefObject,
+} from "react";
 import type { RunSummary, RunnerListEntry, TaskEnvelope } from "@useparley/core";
 import { normalizeUsage } from "@useparley/core";
 import { CopyScaffold, Panel, StateChip } from "../../components/index.js";
@@ -37,6 +44,50 @@ import {
 import { runAtLine, runChipState, runStateLabel } from "./runAt.js";
 import { runnerView } from "./runners.js";
 import { useRovingTabindex } from "./useRovingTabindex.js";
+
+/**
+ * Mirror of metrics GroupTable overflow detection (#364).
+ * Sets data-h-overflow on the scroll host when content clips horizontally.
+ * `revision` re-runs the observer when row counts / panel phase change.
+ */
+function useHorizontalOverflow(
+  enabled: boolean,
+  revision: string | number,
+): {
+  ref: RefObject<HTMLDivElement | null>;
+  overflows: boolean;
+} {
+  const ref = useRef<HTMLDivElement>(null);
+  const [overflows, setOverflows] = useState(false);
+
+  useEffect(() => {
+    if (!enabled) {
+      setOverflows(false);
+      return;
+    }
+    const el = ref.current;
+    if (!el) {
+      setOverflows(false);
+      return;
+    }
+    const check = () => {
+      setOverflows(el.scrollWidth > el.clientWidth + 1);
+    };
+    check();
+    const ro =
+      typeof ResizeObserver !== "undefined" ? new ResizeObserver(check) : null;
+    ro?.observe(el);
+    const table = el.querySelector(".pc-fleet-table");
+    if (table) ro?.observe(table);
+    window.addEventListener("resize", check);
+    return () => {
+      ro?.disconnect();
+      window.removeEventListener("resize", check);
+    };
+  }, [enabled, revision]);
+
+  return { ref, overflows };
+}
 
 export interface FleetBoardProps {
   tasks: readonly TaskEnvelope[];
@@ -146,6 +197,15 @@ export function FleetBoard(props: FleetBoardProps) {
     global,
   );
 
+  const runsOverflow = useHorizontalOverflow(
+    sortedRuns.length > 0,
+    `${sortedRuns.length}:${runsPhase}`,
+  );
+  const tasksOverflow = useHorizontalOverflow(
+    sortedTasks.length > 0,
+    `${sortedTasks.length}:${tasksPhase}`,
+  );
+
   const heldCount = props.runs.filter(
     (r) => r.state === "blocked" && r.block?.reason === "gate",
   ).length;
@@ -242,8 +302,10 @@ export function FleetBoard(props: FleetBoardProps) {
               className="pc-fleet-runs"
             >
               <div
+                ref={runsOverflow.ref}
                 className="pc-fleet-table-scroll"
                 data-testid="fleet-runs-scroll"
+                data-h-overflow={runsOverflow.overflows ? "true" : "false"}
               >
                 <div
                   className="pc-fleet-table"
@@ -366,8 +428,10 @@ export function FleetBoard(props: FleetBoardProps) {
               }
             >
               <div
+                ref={tasksOverflow.ref}
                 className="pc-fleet-table-scroll"
                 data-testid="fleet-tasks-scroll"
+                data-h-overflow={tasksOverflow.overflows ? "true" : "false"}
               >
                 <div
                   className="pc-fleet-table"

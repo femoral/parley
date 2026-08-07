@@ -806,7 +806,8 @@
   padding: 6px 10px;
   border-bottom: 1px solid var(--hairline);
   display: grid;
-  grid-template-columns: 88px minmax(0, 1fr) auto auto;
+  /* STATE column from chip content — widest label "BLOCKED · GATE HELD" (#364). */
+  grid-template-columns: max-content minmax(0, 1fr) auto auto;
   align-items: center;
   gap: 10px;
   min-width: 0;

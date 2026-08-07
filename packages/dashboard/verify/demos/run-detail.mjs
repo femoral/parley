@@ -7,7 +7,12 @@
  */
 import { pathToFileURL } from "node:url";
 import { collectA11y, runAxe, ariaSnapshot, keyboardWalk } from "../lib/a11y.mjs";
-import { ledgerDirs, writeDemoProof, printRectSummary } from "../lib/ledger.mjs";
+import {
+  assertLedgerShotWidths,
+  ledgerDirs,
+  writeDemoProof,
+  printRectSummary,
+} from "../lib/ledger.mjs";
 import { measureAtViewports, measureElement } from "../lib/measure.mjs";
 import { openVerifySession } from "../lib/session.mjs";
 import { stageRequiredRuns } from "../scripts/stage-runs.mjs";
@@ -146,6 +151,24 @@ export function runDetailGates(_entry, ledger) {
   if (demo.copySweep?.truncated !== true) {
     throw new Error(
       `run-detail: copySweep truncated expected true, got ${JSON.stringify(demo.copySweep)}`,
+    );
+  }
+
+  // #364 — state chip labels untruncated at every board width
+  const chips = demo.chipUntruncated ?? {};
+  for (const w of ["1280", "1460", "1920"]) {
+    const row = chips[w];
+    if (!row?.found || !row.untruncated) {
+      throw new Error(
+        `run-detail: state chip truncated/missing at ${w}: ${JSON.stringify(row)}`,
+      );
+    }
+  }
+
+  // #364 — named -1460 shots must match PNG IHDR width
+  if (!demo.shotWidthGate?.ok) {
+    throw new Error(
+      `run-detail: shot width gate failed: ${JSON.stringify(demo.shotWidthGate)}`,
     );
   }
 
@@ -382,6 +405,39 @@ export async function runRunDetailDemo() {
       };
     });
 
+    // Chip untruncated at 1280/1460/1920 (#364) — rendered measurement.
+    /** @type {Record<string, object>} */
+    const chipUntruncated = {};
+    for (const w of [1280, 1460, 1920]) {
+      await page.setViewportSize({ width: w, height: 900 });
+      await page.waitForTimeout(40);
+      await page.evaluate(() => document.fonts.ready);
+      chipUntruncated[String(w)] = await page.evaluate(() => {
+        const chip = document.querySelector('[data-testid="run-state-chip"]');
+        const label = chip?.querySelector(".pc-chip__label");
+        if (!chip || !label) return { found: false };
+        const text = (label.textContent ?? "").replace(/\s+/g, " ").trim();
+        return {
+          found: true,
+          text,
+          chipClientWidth: Math.round(chip.clientWidth),
+          chipScrollWidth: Math.round(chip.scrollWidth),
+          labelClientWidth: Math.round(label.clientWidth),
+          labelScrollWidth: Math.round(label.scrollWidth),
+          untruncated:
+            label.scrollWidth <= label.clientWidth + 1 &&
+            chip.scrollWidth <= chip.clientWidth + 1 &&
+            !/\u2026|\.\.\.$/.test(text),
+        };
+      });
+    }
+
+    // ── Named -1460 shots MUST be captured at a true 1460 viewport (#364) ──
+    await page.setViewportSize({ width: 1460, height: 900 });
+    await page.goto(`${url}#/run`, { waitUntil: "networkidle" });
+    await page.waitForSelector('[data-testid="run-header"]', { timeout: 20_000 });
+    await page.evaluate(() => document.fonts.ready);
+
     // View switch proofs
     const views = {};
     for (const [id, testId] of [
@@ -394,7 +450,7 @@ export async function runRunDetailDemo() {
       }
       await page.waitForSelector(`[data-testid="${testId}"]`, { timeout: 5_000 });
       views[id] = await measureElement(page, `[data-testid="${testId}"]`);
-      // screenshot per view
+      // screenshot per view — viewport is 1460
       await page.screenshot({
         path: path.join(shotsDir, `${DEMO}-view-${id}-1460.png`),
         fullPage: false,
@@ -415,6 +471,8 @@ export async function runRunDetailDemo() {
     await focusRun(page, session.daemon.baseUrl, staged.fanOut.runId);
     await openRun(page, url, staged.fanOut.runId);
     await page.waitForSelector('[data-testid="run-header"]', { timeout: 20_000 });
+    await page.setViewportSize({ width: 1460, height: 900 });
+    await page.waitForTimeout(40);
     const fanText = await page.locator('[data-testid="run-pipeline"]').textContent();
     const fanRender = {
       textSample: (fanText ?? "").slice(0, 400),
@@ -426,6 +484,8 @@ export async function runRunDetailDemo() {
     await focusRun(page, session.daemon.baseUrl, staged.failed.runId);
     await openRun(page, url, staged.failed.runId);
     await page.waitForSelector('[data-testid="run-header"]', { timeout: 20_000 });
+    await page.setViewportSize({ width: 1460, height: 900 });
+    await page.waitForTimeout(40);
     const failChip = await page.locator('[data-testid="run-state-chip"]').textContent();
     const failPipe = await page.locator('[data-testid="run-pipeline"]').textContent();
     const failedRender = {
@@ -532,7 +592,28 @@ export async function runRunDetailDemo() {
         gridTextSample: gridText,
         textSample: tableText,
       };
+      await page.setViewportSize({ width: 1460, height: 900 });
+      await page.waitForTimeout(40);
       await page.screenshot({ path: path.join(shotsDir, `${DEMO}-forked-1460.png`) });
+    }
+
+    // #364 — named -1460 PNGs must be genuinely 1460px wide
+    const named1460 = [
+      "run-detail-failed-1460.png",
+      "run-detail-fanout-1460.png",
+      "run-detail-forked-1460.png",
+      "run-detail-view-grid-1460.png",
+      "run-detail-view-pipeline-1460.png",
+      "run-detail-view-table-1460.png",
+    ];
+    const shotWidthGate = assertLedgerShotWidths(shotsDir);
+    const missingNamed = named1460.filter(
+      (f) => !shotWidthGate.files.some((x) => x.file === f),
+    );
+    if (missingNamed.length > 0) {
+      throw new Error(
+        `run-detail: missing named -1460 shots after capture: ${missingNamed.join(", ")}`,
+      );
     }
 
     // ── Pipeline wrap honesty (MED N1) ────────────────────────────────
@@ -1062,6 +1143,12 @@ export async function runRunDetailDemo() {
       },
       views,
       viewports,
+      chipUntruncated,
+      shotWidthGate: {
+        ok: true,
+        checked: shotWidthGate.checked,
+        files: shotWidthGate.files.filter((f) => named1460.includes(f.file)),
+      },
       headline: {
         boardScroll,
         gateHeldState: staged.gateHeld?.state,
