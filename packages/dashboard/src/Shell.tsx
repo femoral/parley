@@ -33,7 +33,7 @@ import { MetricsScreen } from "./screens/metrics/MetricsScreen.js";
 import { RunScreen } from "./screens/run/RunScreen.js";
 import { TaskScreen } from "./screens/task/TaskScreen.js";
 import {
-  parseScreenHash,
+  parseScreenRoute,
   screenHash,
   type ScreenId,
   type ScreenMountProps,
@@ -64,13 +64,24 @@ function useLiveAnnouncer() {
   return { liveMessage, announce };
 }
 
+function initialRoute(): { screen: ScreenId; taskId: string | null; runId: string | null } {
+  if (typeof window === "undefined") {
+    return { screen: "fleet", taskId: null, runId: null };
+  }
+  const route = parseScreenRoute(window.location.hash);
+  return {
+    screen: route.screen,
+    taskId: route.screen === "task" ? route.entityId : null,
+    runId: route.screen === "run" ? route.entityId : null,
+  };
+}
+
 export function Shell() {
   const client = useMemo(createClient, []);
-  const [screen, setScreen] = useState<ScreenId>(() =>
-    typeof window !== "undefined" ? parseScreenHash(window.location.hash) : "fleet",
-  );
-  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
-  const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
+  const boot = useMemo(initialRoute, []);
+  const [screen, setScreen] = useState<ScreenId>(() => boot.screen);
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(() => boot.taskId);
+  const [selectedRunId, setSelectedRunId] = useState<string | null>(() => boot.runId);
   const [settings, setSettings] = useState<ConsoleSettings>(() => loadSettings());
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [clock, setClock] = useState(() => formatClock());
@@ -80,6 +91,7 @@ export function Shell() {
   const findRef = useRef<HTMLInputElement>(null);
   const settingsBtnRef = useRef<HTMLButtonElement>(null);
   const mainRef = useRef<HTMLDivElement>(null);
+  const shellRef = useRef<HTMLDivElement>(null);
   const prevAttention = useRef<number | null>(null);
   const prevPhase = useRef<HonestyPhase | null>(null);
   const everLive = useRef(false);
@@ -106,20 +118,54 @@ export function Shell() {
     [snapshot.tasks, runs.summaries],
   );
 
-  // Hash ↔ screen
+  // Hash ↔ screen + entity id (deep links for task/run).
   useEffect(() => {
-    const onHash = (): void => setScreen(parseScreenHash(window.location.hash));
+    const onHash = (): void => {
+      const route = parseScreenRoute(window.location.hash);
+      setScreen(route.screen);
+      if (route.screen === "task" && route.entityId) {
+        setSelectedTaskId(route.entityId);
+      } else if (route.screen === "run" && route.entityId) {
+        setSelectedRunId(route.entityId);
+      }
+      // Unknown/missing entity ids leave selection as-is when the hash has no id
+      // (degrades to prior screen-only behavior).
+    };
     window.addEventListener("hashchange", onHash);
     return () => window.removeEventListener("hashchange", onHash);
   }, []);
 
-  const navigate = useCallback((next: ScreenId) => {
-    setScreen(next);
-    const hash = screenHash(next);
-    if (window.location.hash !== hash) {
-      window.location.hash = hash;
+  const navigate = useCallback(
+    (next: ScreenId, entityId?: string | null) => {
+      setScreen(next);
+      let id: string | null | undefined = entityId;
+      if (id === undefined) {
+        if (next === "task") id = selectedTaskId;
+        else if (next === "run") id = selectedRunId;
+        else id = null;
+      }
+      const hash = screenHash(next, id);
+      if (window.location.hash !== hash) {
+        window.location.hash = hash;
+      }
+    },
+    [selectedTaskId, selectedRunId],
+  );
+
+  // Modal settings: inert siblings so zero tab stops are reachable behind.
+  useEffect(() => {
+    const shell = shellRef.current;
+    if (!shell) return;
+    const kids = Array.from(shell.children) as HTMLElement[];
+    for (const el of kids) {
+      if (el.dataset.testid === "settings-surface") continue;
+      if (settingsOpen) el.setAttribute("inert", "");
+      else el.removeAttribute("inert");
     }
-  }, []);
+    return () => {
+      for (const el of kids) el.removeAttribute("inert");
+    };
+  }, [settingsOpen]);
 
   // Clock tick — visibility-gated so hidden tabs do not keep timers hot.
   usePolling(
@@ -197,9 +243,25 @@ export function Shell() {
       if (next >= ids.length) next = 0;
       const id = ids[next]!;
       setSelectedTaskId(id);
-      navigate("task");
+      navigate("task", id);
     },
     [snapshot.tasks, selectedTaskId, navigate],
+  );
+
+  const selectTask = useCallback(
+    (id: string) => {
+      setSelectedTaskId(id);
+      navigate("task", id);
+    },
+    [navigate],
+  );
+
+  const selectRun = useCallback(
+    (id: string) => {
+      setSelectedRunId(id);
+      navigate("run", id);
+    },
+    [navigate],
   );
 
   const accelHandlers = useMemo(
@@ -268,7 +330,7 @@ export function Shell() {
 
   return (
     <ConsoleDataProvider value={consoleData}>
-      <div className="pc-shell" data-testid="shell" data-screen={screen}>
+      <div ref={shellRef} className="pc-shell" data-testid="shell" data-screen={screen}>
         <SkipLinks />
 
         <div className="pc-sr-only" aria-live="polite" aria-atomic="true" data-testid="live-region">
@@ -301,10 +363,7 @@ export function Shell() {
                 tasks={snapshot.tasks}
                 inputRef={findRef}
                 focusAfterSelect={focusMain}
-                onSelectTask={(id) => {
-                  setSelectedTaskId(id);
-                  navigate("task");
-                }}
+                onSelectTask={selectTask}
                 onSelectSession={(_id) => {
                   navigate("fleet");
                 }}
@@ -346,14 +405,8 @@ export function Shell() {
               stateFilter={stateFilter}
               selectedTaskId={selectedTaskId}
               selectedRunId={selectedRunId}
-              onSelectTask={(id) => {
-                setSelectedTaskId(id);
-                navigate("task");
-              }}
-              onSelectRun={(id) => {
-                setSelectedRunId(id);
-                navigate("run");
-              }}
+              onSelectTask={selectTask}
+              onSelectRun={selectRun}
             />
           </aside>
         </div>

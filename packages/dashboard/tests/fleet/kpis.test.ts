@@ -116,6 +116,50 @@ describe("24h window for settled + token-burn KPIs", () => {
   });
 });
 
+describe("projectFleetKpis zero-sample honesty", () => {
+  it("settled success rate is — when 24h denominator is zero (never Math.max(1,…))", () => {
+    const kpis = projectFleetKpis({
+      nowMs: NOW,
+      tasks: [
+        task({
+          task_id: "old",
+          state: "completed",
+          completed_at: "2026-06-05T12:00:00.000Z",
+        }),
+      ],
+      runs: [],
+    });
+    const settled = kpis.find((k) => k.id === "settled");
+    expect(settled?.value).toBe("0 / 0");
+    expect(settled?.note).toMatch(/success —/);
+    expect(settled?.note).toMatch(/last 24h/);
+    expect(settled?.note).not.toMatch(/success 0%/);
+    expect(settled?.label).toMatch(/24h/);
+  });
+
+  it("token-burn cache rate is — when no input tokens in window", () => {
+    const kpis = projectFleetKpis({
+      nowMs: NOW,
+      tasks: [task({ task_id: "r", state: "running" })],
+      runs: [],
+    });
+    const burn = kpis.find((k) => k.id === "token-burn");
+    expect(burn?.note).toMatch(/cache —/);
+    expect(burn?.note).not.toMatch(/cache 0%/);
+  });
+
+  it("pluralizes 1 ask singular in needs-orchestrator note", () => {
+    const kpis = projectFleetKpis({
+      nowMs: NOW,
+      tasks: [task({ task_id: "ask", state: "awaiting_answer" })],
+      runs: [],
+    });
+    const needs = kpis.find((k) => k.id === "needs-orch");
+    expect(needs?.note).toMatch(/1 ask/);
+    expect(needs?.note).not.toMatch(/1 asks/);
+  });
+});
+
 describe("projectFleetKpis", () => {
   it("shows running/cap when max_concurrent is known", () => {
     const kpis = projectFleetKpis({

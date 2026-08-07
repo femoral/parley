@@ -31,7 +31,7 @@ import {
   formatTokenPair,
   shortId,
 } from "./format.js";
-import { projectFleetKpis } from "./kpis.js";
+import { countRunning, projectFleetKpis } from "./kpis.js";
 import {
   panelPhaseFromSnapshot,
   panelPhaseFromTransport,
@@ -222,9 +222,9 @@ export function FleetBoard(props: FleetBoardProps) {
   ) {
     return (
       <div className="pc-fleet" data-testid="fleet-board" data-phase={global}>
-        <div className="pc-fleet__global-honesty" data-testid="fleet-hailing">
+        <div className="pc-fleet__global-honesty" data-testid="fleet-loading">
           <h1 className="pc-fleet__heading">Fleet board</h1>
-          <p>Hailing the fleet…</p>
+          <p>Loading the fleet…</p>
         </div>
       </div>
     );
@@ -600,7 +600,16 @@ export function FleetBoard(props: FleetBoardProps) {
           <aside className="pc-fleet__side" data-testid="fleet-side">
             <Panel
               title="executors"
-              meta={`${props.runners.length} runners`}
+              meta={(() => {
+                const nRunners = props.runners.length;
+                const nRunning = countRunning(props.tasks);
+                if (nRunners === 0 && nRunning > 0) {
+                  // Disclose: runner registry empty while tasks run (local/unregistered).
+                  return `none registered · ${nRunning} running without runner list`;
+                }
+                if (nRunners === 0) return "none registered";
+                return `${nRunners} runner${nRunners === 1 ? "" : "s"}`;
+              })()}
               phase={runnersPhase}
               honestyKind="runners"
               testId="fleet-runners"

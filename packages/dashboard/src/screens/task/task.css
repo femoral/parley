@@ -5,8 +5,8 @@
  */
 
 .pc-task {
-  display: grid;
-  grid-template-rows: auto 1fr;
+  display: flex;
+  flex-direction: column;
   min-height: 0;
   height: 100%;
   width: 100%;
@@ -119,7 +119,7 @@
 
 .pc-task-body {
   min-height: 0;
-  height: 100%;
+  flex: 1 1 auto;
   display: grid;
   grid-template-columns: minmax(200px, 262px) minmax(420px, 1.7fr) minmax(212px, 290px);
   grid-template-rows: minmax(0, 1fr);
@@ -444,6 +444,123 @@
 
 .pc-task-log__kind {
   font-weight: 500;
+}
+
+/* ── Outstanding ask band (hierarchy #1) ────────────────────────────── */
+
+.pc-task-ask-band {
+  flex: 0 0 auto;
+  padding: 14px 16px 16px;
+  border-bottom: 1px solid var(--border);
+  border-left: 3px solid var(--state-awaiting);
+  background: color-mix(in srgb, var(--state-awaiting) 8%, var(--surface));
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.pc-task-ask-band__head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.pc-task-ask-band__tag {
+  font: var(--type-mono-600-9-1);
+  letter-spacing: 0.1em;
+  color: var(--state-awaiting);
+}
+
+.pc-task-ask-band__cue {
+  font: var(--type-meta);
+  color: var(--text-3);
+}
+
+/* Largest text block on the task screen when an ask is outstanding. */
+.pc-task-ask-band__question {
+  margin: 0;
+  /* Screen-title scale is the largest body role on the board (DESIGN.md). */
+  font: var(--type-screen-title);
+  font-weight: 500;
+  line-height: 1.45;
+  color: var(--text);
+  overflow-wrap: anywhere;
+  max-width: 72ch;
+}
+
+.pc-task-ask-band .pc-scaffold {
+  align-self: flex-start;
+  max-width: 100%;
+}
+
+/* ── Collapsed hello envelope in log ────────────────────────────────── */
+
+.pc-task-log__line--hello {
+  align-items: flex-start;
+}
+
+.pc-task-log__hello {
+  min-width: 0;
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.pc-task-log__hello-toggle {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  width: 100%;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  color: var(--text-3);
+  font: var(--type-log);
+  cursor: pointer;
+  padding: 0;
+  min-width: 0;
+}
+
+.pc-task-log__hello-toggle:hover {
+  color: var(--text-2);
+}
+
+.pc-task-log__hello-toggle:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: 1px;
+}
+
+.pc-task-log__hello-summary {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.pc-task-log__hello-cue {
+  flex: none;
+  color: var(--text-4);
+}
+
+.pc-task-log__hello-body {
+  margin: 0;
+  padding: 6px 8px;
+  font: var(--type-log);
+  color: var(--text-4);
+  background: var(--well);
+  border: 1px solid var(--hairline);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 12em;
+  overflow: auto;
+}
+
+.pc-task-log__line--error .pc-task-log__text {
+  color: var(--state-failed);
 }
 
 /* ── Q&A ────────────────────────────────────────────────────────────── */

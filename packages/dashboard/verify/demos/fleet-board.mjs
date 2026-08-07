@@ -167,10 +167,10 @@ export function fleetBoardGates(_entry, ledger) {
       `fleet-board: empty honesty did not reach empty treatment: ${JSON.stringify(honesty.empty)}`,
     );
   }
-  // Loading must show fleet hailing, not just shell chip.
-  if (!honesty.loading?.hailing) {
+  // Loading must show fleet loading treatment, not just shell chip.
+  if (!honesty.loading?.loading) {
     throw new Error(
-      `fleet-board: loading honesty missing fleet hailing: ${JSON.stringify(honesty.loading)}`,
+      `fleet-board: loading honesty missing fleet loading: ${JSON.stringify(honesty.loading)}`,
     );
   }
 
@@ -843,7 +843,7 @@ export async function runFleetBoardDemo() {
     };
     await clearIntercepts(session.page, "**/runs");
 
-    // Loading: hang GET /tasks; require fleet hailing (not shell chip alone).
+    // Loading: hang GET /tasks; require fleet loading (not shell chip alone).
     await session.page.route(
       (url) => {
         const u = typeof url === "string" ? url : url.href;
@@ -866,19 +866,19 @@ export async function runFleetBoardDemo() {
     await session.page.goto(`${session.url}#/fleet`, { waitUntil: "commit" });
     await session.page.reload({ waitUntil: "commit" });
     /** @type {object} */
-    let loadingPhase = { ok: false, hailing: false };
+    let loadingPhase = { ok: false, loading: false };
     for (let i = 0; i < 30; i += 1) {
       loadingPhase = await session.page.evaluate(() => {
         const board = document.querySelector('[data-testid="fleet-board"]');
         const phase = board?.getAttribute("data-phase");
-        const hailing = !!document.querySelector('[data-testid="fleet-hailing"]');
+        const loading = !!document.querySelector('[data-testid="fleet-loading"]');
         const text = (board?.textContent ?? "").replace(/\s+/g, " ").trim().slice(0, 160);
         return {
           board: phase,
-          hailing,
+          loading,
           text,
-          // REQUIRED: fleet's own hailing treatment, not shell live-status chip.
-          ok: hailing === true,
+          // REQUIRED: fleet's own loading treatment, not shell live-status chip.
+          ok: loading === true,
         };
       });
       if (loadingPhase.ok) break;

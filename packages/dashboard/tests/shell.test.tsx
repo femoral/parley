@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { Shell } from "../src/Shell.js";
 import { countNeedsOrch, attentionTaskIds } from "../src/chrome/attention.js";
 import { envelope } from "./fixtures.js";
-import { parseScreenHash, screenHash } from "../src/screens/types.js";
+import { parseScreenHash, parseScreenRoute, screenHash } from "../src/screens/types.js";
 import { loadSettings, saveSettings, DEFAULT_SETTINGS } from "../src/chrome/settings.js";
 import { buildTabSubs } from "../src/chrome/Header.js";
 import { countNoun, countNeedVerb } from "../src/chrome/plural.js";
@@ -60,11 +60,11 @@ describe("Shell frame", () => {
     expect(screen.getByTestId("screen-fleet")).toBeTruthy();
   });
 
-  it("opens settings popover (aria-modal=false) and toggles follow logs", () => {
+  it("opens settings modal (aria-modal=true) and toggles follow logs", () => {
     render(<Shell />);
     fireEvent.click(screen.getByTestId("settings-open"));
     const panel = screen.getByTestId("settings-panel");
-    expect(panel.getAttribute("aria-modal")).toBe("false");
+    expect(panel.getAttribute("aria-modal")).toBe("true");
     const follow = within(screen.getByTestId("settings-surface")).getByTestId(
       "settings-follow-logs",
     ) as HTMLInputElement;
@@ -73,6 +73,20 @@ describe("Shell frame", () => {
     expect(follow.checked).toBe(false);
     fireEvent.click(screen.getByTestId("settings-close"));
     expect(screen.queryByTestId("settings-surface")).toBeNull();
+  });
+
+  it("arrow keys traverse the nav tablist with roving tabindex", () => {
+    render(<Shell />);
+    const fleet = screen.getByTestId("nav-fleet");
+    const run = screen.getByTestId("nav-run");
+    expect(fleet.getAttribute("tabindex")).toBe("0");
+    expect(run.getAttribute("tabindex")).toBe("-1");
+    fleet.focus();
+    fireEvent.keyDown(fleet, { key: "ArrowRight" });
+    expect(screen.getByTestId("screen-run")).toBeTruthy();
+    expect(screen.getByTestId("nav-run").getAttribute("tabindex")).toBe("0");
+    fireEvent.keyDown(screen.getByTestId("nav-run"), { key: "ArrowLeft" });
+    expect(screen.getByTestId("screen-fleet")).toBeTruthy();
   });
 
   it("find input is an ARIA combobox", () => {
@@ -125,6 +139,36 @@ describe("screen hash", () => {
     expect(parseScreenHash("#/overview")).toBe("fleet");
     expect(parseScreenHash("")).toBe("fleet");
     expect(screenHash("metrics")).toBe("#/metrics");
+  });
+
+  it("carries task/run entity ids for deep links", () => {
+    expect(parseScreenRoute("#/task/abc-123")).toEqual({
+      screen: "task",
+      entityId: "abc-123",
+    });
+    expect(parseScreenRoute("#/run/r1")).toEqual({ screen: "run", entityId: "r1" });
+    expect(screenHash("task", "t9")).toBe("#/task/t9");
+    expect(screenHash("run", "run/with/slash")).toBe(
+      `#/run/${encodeURIComponent("run/with/slash")}`,
+    );
+    // Screen-only still works (unknown/missing id degrades here).
+    expect(parseScreenRoute("#/task")).toEqual({ screen: "task", entityId: null });
+    expect(screenHash("task")).toBe("#/task");
+  });
+});
+
+describe("register copy", () => {
+  it("metrics tab sub uses all-sessions register copy when live", () => {
+    const subs = buildTabSubs({
+      totalTasks: 2,
+      attentionCount: 0,
+      selectedRunId: null,
+      selectedTaskId: null,
+      firstRunLabel: null,
+      firstTaskId: null,
+      honestyPhase: "live",
+    });
+    expect(subs.metrics).toBe("all sessions");
   });
 });
 

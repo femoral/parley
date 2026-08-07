@@ -47,7 +47,12 @@ export function classifyLogLine(raw: string): { kind: LogLineKind; text: string 
     trimmed;
 
   const hasError = errorObj !== undefined || typeof obj.error === "string";
-  if (hasError || haystack.includes("error") || haystack.includes("fail")) {
+  if (
+    hasError ||
+    haystack.includes("error") ||
+    haystack.includes("fail") ||
+    haystack.includes("fatal")
+  ) {
     return { kind: "error", text };
   }
   if (haystack.includes("question") || haystack.includes("ask")) return { kind: "question", text };
@@ -56,7 +61,50 @@ export function classifyLogLine(raw: string): { kind: LogLineKind; text: string 
   if (haystack.includes("message") || haystack.includes("reasoning")) {
     return { kind: "reasoning", text };
   }
+  // Session hello envelope (cwd/pid/hub boilerplate) — collapsed in the log UI.
+  if (isHelloEnvelope(obj, raw)) {
+    return { kind: "fallback", text: summarizeHello(obj, text) };
+  }
   return { kind: "fallback", text };
+}
+
+/** Vendor session-start JSON: cwd + pid + hub URL boilerplate. */
+function isHelloEnvelope(obj: Obj, raw: string): boolean {
+  const keys = Object.keys(obj).map((k) => k.toLowerCase());
+  const has = (n: string) => keys.some((k) => k === n || k.includes(n));
+  const score =
+    (has("cwd") || has("workdir") || has("work_dir") ? 1 : 0) +
+    (has("pid") ? 1 : 0) +
+    (has("hub") || has("url") ? 1 : 0) +
+    (has("session") ? 1 : 0);
+  if (score >= 2) return true;
+  // Long JSON dump with path-like cwd is almost always hello boilerplate.
+  return raw.length > 200 && (has("cwd") || has("pid"));
+}
+
+function summarizeHello(obj: Obj, fallback: string): string {
+  const cwd =
+    asStr(obj.cwd) ??
+    asStr(obj.workdir) ??
+    asStr(obj.work_dir) ??
+    asStr(asObj(obj.session)?.cwd);
+  const pid = obj.pid != null ? String(obj.pid) : asStr(obj.pid);
+  const bits = ["session hello"];
+  if (cwd) bits.push(cwd.length > 48 ? `…${cwd.slice(-48)}` : cwd);
+  if (pid) bits.push(`pid ${pid}`);
+  return bits.length > 1 ? bits.join(" · ") : fallback.slice(0, 80);
+}
+
+/** True when a classified line is collapsed session-hello boilerplate. */
+export function isHelloLogLine(line: Pick<LogLine, "kind" | "text" | "raw">): boolean {
+  if (line.kind !== "fallback") return false;
+  if (line.text.startsWith("session hello")) return true;
+  try {
+    const obj = asObj(JSON.parse(line.raw));
+    return obj ? isHelloEnvelope(obj, line.raw) : false;
+  } catch {
+    return false;
+  }
 }
 
 /** The log-tail window cap (last N classified lines). */

@@ -15,6 +15,7 @@ import { CopyScaffold } from "../../components/index.js";
 import { loadSettings, saveSettings } from "../../chrome/settings.js";
 import type { ScreenMountProps } from "../types.js";
 import {
+  AskBand,
   AttemptChain,
   BriefPanel,
   DeliverablesPanel,
@@ -209,6 +210,17 @@ export function TaskScreen(props: ScreenMountProps) {
 
   const showFailedWell = Boolean(task?.error);
 
+  // Outstanding ask: full-width band outranks hello envelope and all panels.
+  const outstandingTurn = useMemo(() => {
+    const qa = detail.data?.qa ?? [];
+    return qa.find((t) => t.answer == null) ?? null;
+  }, [detail.data?.qa]);
+  const askQuestion =
+    outstandingTurn?.question?.trim() ||
+    (task?.state === "awaiting_answer" ? task.question?.trim() : null) ||
+    null;
+  const showAskBand = Boolean(selectedTaskId && askQuestion);
+
   const connectionBand =
     detail.status === "error" && !detail.data ? (
       <div className="pc-task-band pc-task-band--error" data-testid="task-band-error" role="alert">
@@ -250,6 +262,9 @@ export function TaskScreen(props: ScreenMountProps) {
         </header>
       )}
       {connectionBand}
+      {showAskBand && selectedTaskId && askQuestion ? (
+        <AskBand taskId={selectedTaskId} question={askQuestion} />
+      ) : null}
       <div className="pc-task-body" data-testid="task-body">
         <div
           className="pc-task-col pc-task-col--left"
@@ -307,6 +322,7 @@ export function TaskScreen(props: ScreenMountProps) {
             taskId={selectedTaskId}
             qa={detail.data?.qa ?? []}
             status={panelStatus}
+            scaffoldInBand={showAskBand}
           />
           <ReportPanel
             report={task?.report ?? null}

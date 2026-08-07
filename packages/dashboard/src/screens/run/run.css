@@ -103,10 +103,17 @@
   white-space: nowrap;
 }
 
-.pc-run__meta-line a,
-.pc-run__workspace {
+.pc-run__meta-line a {
   color: var(--link);
   font: var(--type-data);
+}
+
+/* Worktree path is data (mono), not a navigational link. */
+.pc-run__workspace {
+  color: var(--text-2);
+  font: var(--type-data);
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .pc-run__header-actions {
@@ -212,6 +219,16 @@
   display: flex;
   flex-direction: column;
   gap: 16px;
+  justify-content: flex-start;
+}
+
+/* Intentional content termination at wide viewports (no dead void). */
+.pc-run__end {
+  flex: 0 0 auto;
+  margin-top: 4px;
+  border-top: 1px solid var(--hairline);
+  height: 0;
+  width: 100%;
 }
 
 .pc-run__panel-honesty {

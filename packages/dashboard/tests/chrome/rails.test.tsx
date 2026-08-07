@@ -178,9 +178,9 @@ describe("RightRail", () => {
     expect(screen.getByTestId("attn-task-t-fail")).toBeTruthy();
     expect(screen.getByTestId("attn-task-t-ask").textContent).toMatch(/Ship it/);
 
-    // Empty firehose: not a false "no events"
+    // Empty firehose: discloses count-since-connect semantics (not a dead board).
     expect(screen.getByTestId("rail-firehose").textContent).toMatch(
-      /No events since connect/i,
+      /No events counted since this console connected/i,
     );
 
     fireEvent.click(screen.getByTestId("attn-task-t-ask"));

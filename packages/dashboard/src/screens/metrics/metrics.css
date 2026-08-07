@@ -24,6 +24,7 @@
 }
 
 .pc-metrics__title {
+  margin: 0;
   font: var(--type-section);
   letter-spacing: var(--ls-section);
   text-transform: uppercase;
@@ -125,6 +126,16 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
+  /* Content packs to the top; termination rule closes the board (no 300px void). */
+  justify-content: flex-start;
+}
+
+.pc-metrics__end {
+  flex: 0 0 auto;
+  margin-top: 4px;
+  border-top: 1px solid var(--hairline);
+  height: 0;
+  width: 100%;
 }
 
 /* ── Filter bar ─────────────────────────────────────────────────────── */

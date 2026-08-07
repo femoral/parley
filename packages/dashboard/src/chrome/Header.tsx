@@ -2,7 +2,7 @@
  * Chrome header — brand mark, screen tablist, daemon live status, needs-orch
  * pill, stream honesty slot (reframed "tail"), clock, settings.
  */
-import { forwardRef } from "react";
+import { forwardRef, type KeyboardEvent } from "react";
 import type { HonestyState, HealthView, SnapshotView } from "../data/types.js";
 import type { ScreenId } from "../screens/types.js";
 import { SCREEN_LABELS } from "../screens/types.js";
@@ -89,7 +89,7 @@ export function buildTabSubs(input: {
     task: taskLabel,
     metrics:
       input.honestyPhase === "live" || input.honestyPhase === "empty"
-        ? "all hands"
+        ? "all sessions"
         : input.honestyPhase,
   };
 }
@@ -119,6 +119,33 @@ export const Header = forwardRef<HTMLButtonElement, HeaderProps>(function Header
     snapshot.ready
       ? `${countNoun(snapshot.totalTasks, "task")} · seq ${snapshot.seq}`
       : "awaiting first snapshot";
+
+  const focusTab = (id: ScreenId) => {
+    requestAnimationFrame(() => {
+      document.getElementById(`pc-tab-${id}`)?.focus();
+    });
+  };
+
+  const onTabKeyDown = (id: ScreenId, e: KeyboardEvent<HTMLButtonElement>) => {
+    const idx = TAB_ORDER.indexOf(id);
+    if (idx < 0) return;
+    let nextIdx = -1;
+    if (e.key === "ArrowRight" || e.key === "ArrowDown") {
+      nextIdx = (idx + 1) % TAB_ORDER.length;
+    } else if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
+      nextIdx = (idx - 1 + TAB_ORDER.length) % TAB_ORDER.length;
+    } else if (e.key === "Home") {
+      nextIdx = 0;
+    } else if (e.key === "End") {
+      nextIdx = TAB_ORDER.length - 1;
+    } else {
+      return;
+    }
+    e.preventDefault();
+    const next = TAB_ORDER[nextIdx]!;
+    onNavigate(next);
+    focusTab(next);
+  };
 
   return (
     <header className="pc-shell__header" data-testid="shell-header">
@@ -162,6 +189,7 @@ export const Header = forwardRef<HTMLButtonElement, HeaderProps>(function Header
                     selected ? "pc-shell__tab pc-shell__tab--active" : "pc-shell__tab"
                   }
                   onClick={() => onNavigate(id)}
+                  onKeyDown={(e) => onTabKeyDown(id, e)}
                   data-testid={`nav-${id}`}
                   title={tabSubs[id]}
                 >

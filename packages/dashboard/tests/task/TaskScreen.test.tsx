@@ -128,7 +128,7 @@ describe("TaskScreen", () => {
     expect(screen.getByTestId("task-fix-scaffold")).toBeTruthy();
   });
 
-  it("renders awaiting answer with answer scaffold", () => {
+  it("renders awaiting answer as full-width ask band with scaffold", () => {
     const task = taskEnvelope({
       task_id: "t-ask",
       state: "awaiting_answer",
@@ -146,6 +146,11 @@ describe("TaskScreen", () => {
     });
 
     render(<TaskScreen {...mountProps({ selectedTaskId: "t-ask" })} />);
+    const band = screen.getByTestId("task-ask-band");
+    expect(band).toBeTruthy();
+    expect(screen.getByTestId("task-ask-band-question").textContent).toMatch(
+      /Should the scaffold|Which one/,
+    );
     expect(screen.getByTestId("task-answer-scaffold").textContent).toMatch(
       /parley answer t-ask/,
     );

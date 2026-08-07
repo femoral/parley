@@ -5,7 +5,7 @@
  * - geometry 1280/1460/1920, no board H-scroll
  * - axe in resting + find-popup-open + settings-open
  * - skip-to-main focus + Tab into content
- * - settings popover focus in/out, aria-modal=false
+ * - settings modal focus trap, aria-modal=true, zero tab stops behind
  * - footer doctrine note scrollWidth + text at 3 widths
  * - 1280 chrome density (no silent clip)
  * - live-region transcript (no bootstrap offline; restore after recover)
@@ -124,15 +124,23 @@ export function shellChromeGates(_entry, ledger) {
     }
   }
 
-  // Settings popover: focus moves in, restores to trigger, no aria-modal.
-  if (chrome.settingsFocus?.ariaModal !== "false") {
-    throw new Error("shell-chrome: settings must be popover (aria-modal=false)");
+  // Settings modal: focus moves in, restores to trigger, aria-modal=true.
+  if (chrome.settingsFocus?.ariaModal !== "true") {
+    throw new Error("shell-chrome: settings must be modal (aria-modal=true)");
   }
   if (!chrome.settingsFocus?.focusMovedIn) {
     throw new Error("shell-chrome: settings did not move focus into panel");
   }
   if (!chrome.settingsFocus?.focusRestored) {
     throw new Error("shell-chrome: settings did not restore focus to trigger");
+  }
+  if (
+    typeof chrome.settingsFocus?.tabStopsBehind === "number" &&
+    chrome.settingsFocus.tabStopsBehind > 0
+  ) {
+    throw new Error(
+      `shell-chrome: tab stops reachable behind open dialog: ${chrome.settingsFocus.tabStopsBehind}`,
+    );
   }
 
   // Live region: no bootstrap offline flash; restore announced after recover.
@@ -382,6 +390,26 @@ export async function runShellChromeDemo() {
       const panel = document.querySelector('[data-testid="settings-panel"]');
       return panel?.getAttribute("aria-modal") ?? null;
     });
+    // Tab stops behind the open dialog must be zero (inert siblings / trap).
+    const tabStopsBehind = await session.page.evaluate(() => {
+      const panel = document.querySelector('[data-testid="settings-panel"]');
+      const shell = document.querySelector('[data-testid="shell"]');
+      if (!panel || !shell) return -1;
+      const sel =
+        'a[href], button, input, select, textarea, [tabindex]:not([tabindex="-1"])';
+      const all = [...shell.querySelectorAll(sel)];
+      return all.filter((el) => {
+        if (panel.contains(el)) return false;
+        if (el.closest('[data-testid="settings-surface"]')) return false;
+        // inert ancestors are not tabbable
+        let n = el;
+        while (n) {
+          if (n.hasAttribute && n.hasAttribute("inert")) return false;
+          n = n.parentElement;
+        }
+        return true;
+      }).length;
+    });
     const axeSettings = await runAxe(session.page, { include: '[data-testid="shell"]' });
     // Accelerators must not navigate while open.
     await session.page.keyboard.press("3");
@@ -538,6 +566,7 @@ export async function runShellChromeDemo() {
       skipLinkLabels,
       settingsFocus: {
         ariaModal: settingsAriaModal,
+        tabStopsBehind,
         focusMovedIn:
           focusInSettings.testId === "settings-close" ||
           focusInSettings.testId === "settings-follow-logs" ||

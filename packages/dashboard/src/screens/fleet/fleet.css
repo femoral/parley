@@ -104,9 +104,13 @@
 }
 
 .pc-fleet-kpi__value {
+  /* 21px mono numeral; line-box ≥ glyph so nothing clips at proof viewports. */
   font: var(--type-kpi);
+  line-height: 1.2;
+  min-height: 1.2em;
   color: var(--text-strong-2);
   white-space: nowrap;
+  overflow: visible;
 }
 
 .pc-fleet-kpi--awaiting .pc-fleet-kpi__value {

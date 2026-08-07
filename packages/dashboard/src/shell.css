@@ -773,6 +773,11 @@
   background: transparent;
 }
 
+.pc-find__option-chip.pc-chip {
+  /* Compact chip in the hit meta slot — label still present for state. */
+  max-width: 16ch;
+}
+
 .pc-find__option--active,
 .pc-find__option:hover {
   background: var(--surface-hover);
@@ -801,7 +806,11 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  max-width: 14ch;
+  max-width: 18ch;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 0;
 }
 
 /* ── Screen placeholders ────────────────────────────────────────────── */

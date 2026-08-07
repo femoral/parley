@@ -27,7 +27,7 @@ export function FleetScreen(props: ScreenMountProps) {
   const onSelectTask = useCallback(
     (id: string) => {
       props.setSelectedTaskId(id);
-      props.navigate("task");
+      props.navigate("task", id);
     },
     [props],
   );
@@ -35,7 +35,7 @@ export function FleetScreen(props: ScreenMountProps) {
   const onSelectRun = useCallback(
     (id: string) => {
       props.setSelectedRunId(id);
-      props.navigate("run");
+      props.navigate("run", id);
     },
     [props],
   );
