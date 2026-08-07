@@ -4,8 +4,11 @@
  *
  * Task-id changes always restart the poll chain (resetKey) so a live→live
  * switch does not sit on status "loading" until the previous interval elapses.
+ *
+ * In-flight fetches capture the id they requested and drop setState when the
+ * selection has moved on (stale A must not overwrite B after a switch).
  */
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { isTerminalState, type ParleyClient } from "@useparley/core";
 import type { TaskDetailView } from "./types.js";
 import { usePolling } from "./usePolling.js";
@@ -25,6 +28,8 @@ export function useTaskDetail(
 ): TaskDetailView {
   const [state, setState] = useState<TaskDetailView>(INITIAL);
   const [pollEnabled, setPollEnabled] = useState(false);
+  const taskIdRef = useRef(taskId);
+  taskIdRef.current = taskId;
 
   useEffect(() => {
     if (!taskId) {
@@ -37,14 +42,18 @@ export function useTaskDetail(
   }, [taskId]);
 
   const tick = useCallback(async (): Promise<void> => {
-    if (!taskId) return;
+    const id = taskId;
+    if (!id) return;
     try {
-      const res = await client.getTask(taskId);
+      const res = await client.getTask(id);
+      // Drop stale write: selection moved while this fetch was in flight.
+      if (taskIdRef.current !== id) return;
       setState({ status: "ready", data: res, error: null });
       if (isTerminalState(res.task.state)) {
         setPollEnabled(false);
       }
     } catch (err) {
+      if (taskIdRef.current !== id) return;
       setState((prev) => ({
         status: "error",
         data: prev.data,

@@ -2,6 +2,8 @@
 /**
  * Regression: live→live task switch must fetch the new task immediately
  * (not wait a full poll interval while status stays "loading").
+ *
+ * Also: a slow in-flight getTask(A) must not overwrite B after the switch.
  */
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -65,5 +67,75 @@ describe("useTaskDetail live→live switch", () => {
     // A getTask for B must have been issued well before pollMs.
     expect(calls.slice(callsBeforeB).some((c) => c === "task-b")).toBe(true);
     expect(calls.slice(callsBeforeB).findIndex((c) => c === "task-b")).toBeGreaterThanOrEqual(0);
+  });
+
+  it("drops a stale getTask(A) response after switching to task-b", async () => {
+    const pollMs = 3000;
+    const tasks: Record<string, TaskEnvelope> = {
+      "task-a": envelope({ task_id: "task-a", state: "running" }),
+      "task-b": envelope({ task_id: "task-b", state: "running" }),
+    };
+
+    // First getTask("task-a") is delayed; subsequent A polls (if any) and B are fast.
+    let aCallCount = 0;
+    let resolveSlowA: (() => void) | undefined;
+    const slowAGate = new Promise<void>((resolve) => {
+      resolveSlowA = resolve;
+    });
+
+    const client = {
+      getTask: vi.fn(async (id: string) => {
+        if (id === "task-a") {
+          aCallCount += 1;
+          if (aCallCount === 1) {
+            await slowAGate;
+          }
+        }
+        // Small yield so React can process state updates between settles.
+        await new Promise((r) => setTimeout(r, 5));
+        return detailResponse({ task: tasks[id]! });
+      }),
+    } as unknown as ParleyClient;
+
+    const { result, rerender } = renderHook(
+      ({ id }: { id: string | null }) => useTaskDetail(client, id, pollMs),
+      { initialProps: { id: "task-a" as string | null } },
+    );
+
+    // Let the slow A request start (status loading, not yet ready).
+    await waitFor(() => expect(client.getTask).toHaveBeenCalledWith("task-a"));
+    expect(result.current.status).toBe("loading");
+
+    // Switch to B while A's first fetch is still in flight.
+    await act(async () => {
+      rerender({ id: "task-b" });
+    });
+    expect(result.current.status).toBe("loading");
+
+    // B should land promptly (resetKey immediate fetch).
+    await waitFor(
+      () => {
+        expect(result.current.status).toBe("ready");
+        expect(result.current.data?.task.task_id).toBe("task-b");
+      },
+      { timeout: 900 },
+    );
+
+    // Release stale A and wait for its promise to settle.
+    await act(async () => {
+      resolveSlowA?.();
+      // Allow microtasks / setTimeout(5) inside getTask to complete.
+      await new Promise((r) => setTimeout(r, 50));
+    });
+
+    // Must never flip back to task-a; selection stays on B.
+    expect(result.current.status).toBe("ready");
+    expect(result.current.data?.task.task_id).toBe("task-b");
+
+    // Hold a beat past any residual scheduling; still B.
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 100));
+    });
+    expect(result.current.data?.task.task_id).toBe("task-b");
   });
 });
