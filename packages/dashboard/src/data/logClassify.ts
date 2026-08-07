@@ -34,7 +34,9 @@ export function classifyLogLine(raw: string): { kind: LogLineKind; text: string 
   const itemType = item ? (asStr(item.type) ?? "") : "";
 
   const errorObj = asObj(obj.error);
-  const text =
+  // Extracted display fields only — never treat the raw JSON blob as message text
+  // for keyword classification (that misclassifies hello prompts and ordinary lines).
+  const extractedMessage =
     (item && asStr(item.text)) ||
     (item && asStr(item.command)) ||
     asStr(obj.message) ||
@@ -42,29 +44,43 @@ export function classifyLogLine(raw: string): { kind: LogLineKind; text: string 
     asStr(obj.note) ||
     asStr(obj.error) ||
     (errorObj && asStr(errorObj.message)) ||
+    undefined;
+  const text =
+    extractedMessage ||
     (asStr(obj.tool) && `${type || "tool_result"}: ${asStr(obj.tool)}`) ||
     trimmed;
 
-  // Include message/body text so "fatal: …" inside type:"log" still classifies as error.
-  const haystack = `${type} ${itemType} ${text}`.toLowerCase();
+  // Kind routing uses type/itemType only (round-1 contract). Message text is not
+  // haystack-scanned — bare includes("ask") matches "task", "fail" matches
+  // "no failures detected", and hello prompts always contain ask/fail/error.
+  const typeHay = `${type} ${itemType}`.toLowerCase();
 
   const hasError = errorObj !== undefined || typeof obj.error === "string";
+  // Narrow fatal: anchored on extracted message only, never the raw JSON envelope.
+  const messageFatal =
+    extractedMessage !== undefined && /^\s*fatal[:\s]/i.test(extractedMessage);
+
   if (
     hasError ||
-    haystack.includes("error") ||
-    haystack.includes("fail") ||
-    haystack.includes("fatal")
+    messageFatal ||
+    typeHay.includes("error") ||
+    typeHay.includes("fail") ||
+    typeHay.includes("fatal")
   ) {
     return { kind: "error", text };
   }
-  if (haystack.includes("question") || haystack.includes("ask")) return { kind: "question", text };
-  if (haystack.includes("command") || haystack.includes("shell")) return { kind: "shell", text };
-  if (haystack.includes("tool") || haystack.includes("function_call")) return { kind: "tool", text };
+  if (typeHay.includes("question") || typeHay.includes("ask")) {
+    return { kind: "question", text };
+  }
+  if (typeHay.includes("command") || typeHay.includes("shell")) {
+    return { kind: "shell", text };
+  }
+  if (typeHay.includes("tool") || typeHay.includes("function_call")) {
+    return { kind: "tool", text };
+  }
   if (
-    type.toLowerCase().includes("message") ||
-    type.toLowerCase().includes("reasoning") ||
-    itemType.toLowerCase().includes("message") ||
-    itemType.toLowerCase().includes("reasoning")
+    typeHay.includes("message") ||
+    typeHay.includes("reasoning")
   ) {
     return { kind: "reasoning", text };
   }

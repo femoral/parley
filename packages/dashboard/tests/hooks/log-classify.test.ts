@@ -39,11 +39,54 @@ describe("classifyLogLine", () => {
     expect(line.text).toMatch(/fatal:/);
   });
 
+  it("does not misclassify ordinary lines via bare message-text includes", () => {
+    // "task" contains "ask" as a substring — must not become question.
+    expect(
+      classifyLogLine(
+        JSON.stringify({ type: "stdout", text: "starting task 5 of 9" }),
+      ).kind,
+    ).toBe("fallback");
+    // "toolchain" contains "tool" — must not become tool.
+    expect(
+      classifyLogLine(
+        JSON.stringify({ type: "stdout", text: "downloading toolchain" }),
+      ).kind,
+    ).toBe("fallback");
+    // "failures" contains "fail" — must not paint red as error.
+    expect(
+      classifyLogLine(
+        JSON.stringify({ type: "log", message: "no failures detected" }),
+      ).kind,
+    ).toBe("fallback");
+  });
+
+  it("classifies anchored fatal: on extracted message as error", () => {
+    const line = classifyLogLine(
+      JSON.stringify({ type: "log", message: "fatal: process died" }),
+    );
+    expect(line.kind).toBe("error");
+  });
+
   it("summarizes session hello envelopes for collapse", () => {
     const raw = JSON.stringify({
       cwd: "/tmp/work/abc",
       pid: 4242,
       hub_url: "http://127.0.0.1:7777",
+    });
+    const line = classifyLogLine(raw);
+    expect(line.kind).toBe("fallback");
+    expect(line.text).toMatch(/session hello/);
+    expect(isHelloLogLine({ kind: line.kind, text: line.text, raw })).toBe(true);
+  });
+
+  it("still collapses hello when embedded prompt mentions ask/fail/error", () => {
+    const raw = JSON.stringify({
+      type: "hello",
+      cwd: "/tmp/work/abc",
+      pid: 99,
+      hub_url: "http://127.0.0.1:7777",
+      prompt:
+        "You may ask_orchestrator when stuck; report failures; error recovery is automatic.",
     });
     const line = classifyLogLine(raw);
     expect(line.kind).toBe("fallback");

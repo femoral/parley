@@ -227,10 +227,13 @@
   min-height: 0;
 }
 
-/* Intentional content termination at wide viewports (no dead void). */
+/* Intentional content termination at wide viewports (no dead void).
+ * flex-basis 0% + min-height 0: grow into residual free space only; when the
+ * body already overflows (e.g. 1280×720 with data), do not force extra scroll
+ * from a min-height strip that extends past the board clip. */
 .pc-run__end {
-  flex: 1 1 auto;
-  min-height: 48px;
+  flex: 1 1 0%;
+  min-height: 0;
   margin-top: 4px;
   width: 100%;
   border-top: 1px solid var(--border);
@@ -239,6 +242,7 @@
   align-items: flex-start;
   padding: 10px 12px;
   box-sizing: border-box;
+  overflow: hidden;
 }
 
 .pc-run__end::after {

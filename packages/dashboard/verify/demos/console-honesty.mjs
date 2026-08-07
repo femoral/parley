@@ -49,15 +49,33 @@ export function consoleHonestyGates(_entry, ledger) {
 
   const voids = demo.voids1920;
   if (!voids) throw new Error("console-honesty: missing voids1920");
-  if (!(voids.metrics?.voidPx < 300)) {
-    throw new Error(
-      `console-honesty: metrics void at 1920 must be <300px: ${JSON.stringify(voids.metrics)}`,
-    );
-  }
-  if (!(voids.run?.voidPx < 300)) {
-    throw new Error(
-      `console-honesty: run void at 1920 must be <300px: ${JSON.stringify(voids.run)}`,
-    );
+  for (const key of ["metrics", "run"]) {
+    const v = voids[key];
+    if (!v) {
+      throw new Error(`console-honesty: missing voids1920.${key}`);
+    }
+    // Strip must be present — residual-under-content alone is not enough; without
+    // the termination strip voidPx equals residualUnderContent and fails <300.
+    if (!v.stripPresent) {
+      throw new Error(
+        `console-honesty: ${key} termination strip missing (gate must fail if strip removed)`,
+      );
+    }
+    if (!(v.voidPx < 300)) {
+      throw new Error(
+        `console-honesty: ${key} void at 1920 must be <300px: ${JSON.stringify(v)}`,
+      );
+    }
+    if (v.stripFills === false) {
+      throw new Error(
+        `console-honesty: ${key} termination strip does not fill residual: ${JSON.stringify(v)}`,
+      );
+    }
+    if (v.boardScroll === true) {
+      throw new Error(
+        `console-honesty: ${key} board scroll forced (strip overflow?): ${JSON.stringify(v)}`,
+      );
+    }
   }
 
   if (demo.settingsFocus?.ariaModal !== "true") {
@@ -170,6 +188,18 @@ async function measureAskHierarchy(page) {
 }
 
 /**
+ * Measure residual void at the bottom of a screen.
+ *
+ * Honest path (not circular on flex:1 termination strips):
+ * 1. Find the lowest REAL content bottom, excluding the termination strip and
+ *    any ancestor whose box only extends because it contains the strip.
+ * 2. voidPx = gap from (strip bottom if present, else real content) to footer.
+ *    With no strip, voidPx is the full residual under real content → fails <300
+ *    when the strip is removed. With strip present and filling, voidPx is the
+ *    small residual after the strip.
+ * 3. Also report stripPresent / stripFills / boardScroll so gates can require
+ *    the strip to occupy the residual without forcing shell scroll.
+ *
  * @param {import('playwright-core').Page} page
  * @param {string} screenTestId
  * @param {string} endTestId
@@ -184,19 +214,109 @@ async function measureVoid(page, screenTestId, endTestId) {
         return { found: false, voidPx: -1 };
       }
       const fTop = footer.getBoundingClientRect().top;
-      // Lowest content = bottom of termination block (or last non-end content).
-      const endBox = end?.getBoundingClientRect();
-      const contentBottom = endBox
-        ? endBox.bottom
-        : screen.getBoundingClientRect().bottom;
-      // Void is gap between content bottom and footer top (clamped ≥0).
-      const voidPx = Math.max(0, Math.round(fTop - contentBottom));
+
+      // Lowest real content: max bottom among elements that are neither the
+      // termination strip, inside it, nor an ancestor that contains it
+      // (ancestors' rects include the strip's flex growth).
+      let realContentBottom = 0;
+      for (const el of screen.querySelectorAll("*")) {
+        if (end && (el === end || end.contains(el) || el.contains(end))) {
+          continue;
+        }
+        const r = el.getBoundingClientRect();
+        if (r.width === 0 && r.height === 0) continue;
+        realContentBottom = Math.max(realContentBottom, r.bottom);
+      }
+      // Direct children of screen that are not the end (covers empty shells).
+      for (const child of screen.children) {
+        if (end && (child === end || end.contains(child))) continue;
+        if (end && child.contains(end)) {
+          // Walk non-end descendants only for this branch.
+          for (const el of child.querySelectorAll("*")) {
+            if (end.contains(el) || el === end || el.contains(end)) continue;
+            const r = el.getBoundingClientRect();
+            if (r.width === 0 && r.height === 0) continue;
+            realContentBottom = Math.max(realContentBottom, r.bottom);
+          }
+          // Also the child's own non-strip layout: use last non-end child.
+          for (const sub of child.children) {
+            if (end && (sub === end || end.contains(sub))) continue;
+            const r = sub.getBoundingClientRect();
+            if (r.width === 0 && r.height === 0) continue;
+            realContentBottom = Math.max(realContentBottom, r.bottom);
+          }
+          continue;
+        }
+        const r = child.getBoundingClientRect();
+        if (r.width === 0 && r.height === 0) continue;
+        realContentBottom = Math.max(realContentBottom, r.bottom);
+      }
+
+      const endBox = end?.getBoundingClientRect() ?? null;
+      const residualUnderContent = Math.max(
+        0,
+        Math.round(fTop - realContentBottom),
+      );
+      // Unfilled void after intentional termination (or full residual if missing).
+      const contentBottomForVoid = endBox ? endBox.bottom : realContentBottom;
+      const voidPx = Math.max(0, Math.round(fTop - contentBottomForVoid));
+
+      // Strip fills residual when it follows real content (allow flex gap) and
+      // reaches the footer band. voidPx < 300 already requires the unfilled
+      // gap after the strip to be small; this flags a stub strip that does not
+      // actually occupy the residual.
+      const stripPresent = !!end;
+      const stripFills =
+        stripPresent &&
+        endBox !== null &&
+        endBox.height >= 40 &&
+        endBox.top <= realContentBottom + 24 &&
+        endBox.bottom >= fTop - 24;
+
+      // Shell-level scroll only (nested table/body overflow is legitimate).
+      // Also flag when the termination strip itself is clipped past its
+      // scrollport — the 1280 defect the CSS bounds.
+      const shellEl = document.querySelector('[data-testid="shell"]');
+      const shellScroll = !!(
+        shellEl && shellEl.scrollHeight > shellEl.clientHeight + 2
+      );
+      let stripClipped = false;
+      if (end && endBox) {
+        let p = end.parentElement;
+        while (p) {
+          const st = window.getComputedStyle(p);
+          const oy = st.overflowY;
+          if (
+            oy === "auto" ||
+            oy === "scroll" ||
+            oy === "overlay" ||
+            oy === "hidden"
+          ) {
+            const pb = p.getBoundingClientRect();
+            if (endBox.bottom > pb.bottom + 1) stripClipped = true;
+            break;
+          }
+          if (p === screen) break;
+          p = p.parentElement;
+        }
+      }
+      const boardScroll = shellScroll || stripClipped;
+
       return {
         found: true,
         voidPx,
-        contentBottom: Math.round(contentBottom),
+        residualUnderContent,
+        realContentBottom: Math.round(realContentBottom),
+        contentBottom: Math.round(contentBottomForVoid),
         footerTop: Math.round(fTop),
         endHeight: endBox ? Math.round(endBox.height) : 0,
+        endTop: endBox ? Math.round(endBox.top) : null,
+        endBottom: endBox ? Math.round(endBox.bottom) : null,
+        stripPresent,
+        stripFills,
+        boardScroll,
+        shellScroll,
+        stripClipped,
         endLabel: end?.textContent?.trim() ?? null,
       };
     },
