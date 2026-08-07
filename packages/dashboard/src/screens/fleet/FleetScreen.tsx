@@ -1,21 +1,17 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback } from "react";
 import {
   useConsoleData,
   useHonesty,
   useRunners,
 } from "../../data/index.js";
 import type { ScreenMountProps } from "../types.js";
-import {
-  advanceFirehose,
-  emptyFirehoseCursor,
-  type FirehoseCursor,
-} from "./firehoseFeed.js";
 import { FleetBoard } from "./FleetBoard.js";
 import "./fleet.css";
 
 /**
- * Fleet board mount — #355 / #367.
+ * Fleet board mount — #355 / #367 / #363.
  * Consumes the shell-owned client + snapshot/runs; only runners poll here.
+ * Firehose lives on the right rail (shell); board center is tables + executors.
  */
 export function FleetScreen(props: ScreenMountProps) {
   const { client, snapshot, health, runs } = useConsoleData();
@@ -27,23 +23,6 @@ export function FleetScreen(props: ScreenMountProps) {
     streamLostSince: snapshot.streamLostSince,
     taskCount: snapshot.totalTasks,
   });
-
-  const hoseRef = useRef<FirehoseCursor>(emptyFirehoseCursor());
-  const [firehose, setFirehose] = useState(hoseRef.current.lines);
-  const seeded = useRef(false);
-
-  useEffect(() => {
-    const seed = !seeded.current;
-    const next = advanceFirehose(
-      hoseRef.current,
-      snapshot.tasks,
-      runs.summaries,
-      { seed },
-    );
-    hoseRef.current = next;
-    if (seed) seeded.current = true;
-    setFirehose(next.lines);
-  }, [snapshot.tasks, runs.summaries]);
 
   const onSelectTask = useCallback(
     (id: string) => {
@@ -71,7 +50,6 @@ export function FleetScreen(props: ScreenMountProps) {
         runsStatus={runs.status}
         runsError={runs.error}
         honestyPhase={honesty.phase}
-        firehose={firehose}
         selectedTaskId={props.selectedTaskId}
         selectedRunId={props.selectedRunId}
         onSelectTask={onSelectTask}

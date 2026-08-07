@@ -37,7 +37,7 @@ orchestrating agent. The mock states this explicitly (run screen banner, footer)
 |---|---|---|---|
 | Task list w/ state groups, attention-rank ordering | Tasks table sorted "by attention, then age" + state filter chips | covered | Table replaces grouped list |
 | Run list as peer rows w/ pip track (`nodes × loop.max`, cap 20, severity-preserving aggregation) | Runs table with `track` pip cells | covered | Cap/aggregation rule must carry over |
-| Session scoping ("All hands" + recent sessions) | `scope · orchestrator session` sidebar panel | covered | Mock hides it on the overview screen (`showScope`); Cove scopes everywhere — spec must decide |
+| Session scoping ("All sessions" + recent sessions) | `scope · orchestrator session` sidebar panel | covered | **Built (#363):** left-rail scope select (All sessions + `/sessions`); filters the attention queue |
 | Find combobox (task hits local, session hits `/sessions?q=`, debounce, a11y states) | Static `/ filter tasks, runs, branches` box | partial | No results treatment, loading/error/no-match states in mock |
 | Task row identity: harness coat, vendor emblem, faction | Coat swatch + `harness · model` text | partial | Coats yes; vendor emblems dropped — decide if coat+text suffices |
 | Run chip on task rows (`7f3a · review.2.tests`) | `run address` column | covered | |
@@ -48,18 +48,18 @@ orchestrating agent. The mock states this explicitly (run screen banner, footer)
 | Per-task tokens + duration columns in the fleet table | `tokens`, `dur` columns | invented? | **Verify wire**: `/tasks` list envelope may not carry usage/duration (Cove reads usage only from `/tasks/:ref` detail). If absent → daemon work or cut |
 | Concurrency cap in KPI note (`cap 16`) | KPI note | invented | Cap isn't exposed by any UI-consumed endpoint today |
 | Throughput segment bar + state distribution chips | Sidebar `throughput` | covered | Client-derivable from the task set |
-| Token burn 24h histogram (sidebar sparkline, in/out/cached totals) | Sidebar `token burn · 24h` | **invented** | No time-bucketed usage endpoint exists (`/metrics` is aggregate-only) — daemon work, or cut |
+| Token burn 24h histogram (sidebar sparkline, in/out/cached totals) | Sidebar `token burn · 24h` | partial | **Built (#363):** left-rail 24h histogram from list envelopes (client-bucketed); retention-bound copy honest; no dedicated time-bucketed endpoint |
 
 ### Attention queue (right rail) vs Cove inbox + edge alerts
 
 | Feature | Console mock | Verdict | Notes |
 |---|---|---|---|
-| Outstanding asks (question, age, session, copy `parley answer` scaffold) | AWAITING cards with reason/meta | partial | Cards show the ask; the copy-answer scaffold (Cove's core affordance) isn't drawn — sync notes say "copy affordances", spec must pin them |
-| Held gates surfaced as attention | GATE HELD cards | covered | Richer than Cove's inbox (Cove shows gates on roster/run only) |
-| Stalled + fresh failures as attention | STALLED / FAILED cards | covered | Console unifies what Cove splits across roster ranks + edge alerts |
-| Cards/rows density toggle | cards / rows buttons | covered | New, harmless |
-| Live region announcements, "fleet-wide" qualifier under session scope | — | missing-by-nature | Spec item |
-| Global event feed | Firehose panel (`watch --follow`) | partial/invented | `/events/stream` SSE carries task lifecycle events; mock's firehose text lines are plausible projections, but run/gate events on the stream need **verification** |
+| Outstanding asks (question, age, session, copy `parley answer` scaffold) | AWAITING cards with reason/meta | partial | **Built (#363):** `AttentionCard` in right rail with question/reason/meta + age; copy-answer scaffold still deferred to #365 |
+| Held gates surfaced as attention | GATE HELD cards | covered | **Built (#363):** held gates project as GATE HELD cards (awaiting rank), richer than Cove's inbox |
+| Stalled + fresh failures as attention | STALLED / FAILED cards | covered | **Built (#363):** queue unifies asks / stalls / failures / gates; rank-then-age order shared with fleet table |
+| Cards/rows density toggle | cards / rows buttons | covered | **Built (#363):** cards / rows toggle on the attention panel head |
+| Live region announcements, "fleet-wide" qualifier under session scope | — | partial | Header live region announces attention-count changes; per-scope "fleet-wide" qualifier still unspecified |
+| Global event feed | Firehose panel (`watch --follow`) | partial | **Built (#363):** firehose relocated to right rail (not fleet center); client-side projection from snapshot/runs diffs; honest empty = "No events since connect"; rich gate-verb lines still deferred (#360) |
 
 ### Run screen vs RunView + RunChart
 

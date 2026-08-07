@@ -365,27 +365,275 @@
   flex: none;
 }
 
-.pc-shell__rail-slot {
+/* ── Left rail content (#363): scope · state filter · burn ──────────── */
+
+.pc-rail-left {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: auto;
+}
+
+.pc-rail-section {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  padding: 14px 12px;
-  min-height: 0;
-  flex: 1;
+  padding: 10px 12px 12px;
+  border-bottom: 1px solid var(--hairline-strong);
+  flex: none;
+  min-width: 0;
 }
 
-.pc-shell__rail-slot-label {
+.pc-rail-section__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.pc-rail-section__title {
+  margin: 0;
   font: var(--type-section);
   letter-spacing: var(--ls-section);
   text-transform: uppercase;
   color: var(--text-3);
 }
 
-.pc-shell__rail-slot-note {
-  /* English prose → Sans (DESIGN.md: Sans names things, Mono states data). */
-  font: var(--type-body-sm);
+.pc-rail-section__meta {
+  font: var(--type-meta);
   color: var(--text-4);
-  max-width: 32ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  text-align: right;
+}
+
+.pc-rail-honesty {
+  margin: 0;
+  font: var(--type-body-sm);
+  color: var(--text-3);
+}
+
+.pc-rail-honesty--quiet {
+  font: var(--type-meta);
+  color: var(--text-4);
+}
+
+.pc-rail-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.pc-rail-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 7px;
+  border: 1px solid var(--border);
+  background: var(--surface-sunken);
+  color: var(--text-2);
+  cursor: pointer;
+  min-height: 24px;
+}
+
+.pc-rail-chip:hover {
+  background: var(--surface-hover);
+}
+
+.pc-rail-chip--on {
+  background: var(--surface-active);
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+
+.pc-rail-chip__label {
+  font: var(--type-mono-500-10-1);
+  letter-spacing: var(--ls-micro);
+  text-transform: uppercase;
+}
+
+.pc-rail-chip__count {
+  font: var(--type-meta);
+  color: var(--text-4);
+}
+
+.pc-rail-chip--on .pc-rail-chip__count {
+  color: var(--text-3);
+}
+
+.pc-rail-burn {
+  flex: 1 1 auto;
+  min-height: 0;
+  border-bottom: 0;
+}
+
+.pc-rail-burn__bound {
+  font: var(--type-mono-400-10-1p3);
+  color: var(--text-4);
+}
+
+.pc-rail-burn__chart {
+  display: grid;
+  grid-template-columns: 36px 1fr;
+  gap: 4px 6px;
+  align-items: stretch;
+  min-height: 48px;
+}
+
+.pc-rail-burn__axis {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  font: var(--type-meta);
+  color: var(--text-4);
+  text-align: right;
+  padding: 1px 0;
+}
+
+.pc-rail-burn__bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 44px;
+  border-left: 1px solid var(--hairline-strong);
+  border-bottom: 1px solid var(--hairline-strong);
+  padding-left: 2px;
+  min-width: 0;
+}
+
+.pc-rail-burn__bar {
+  flex: 1 1 0;
+  min-width: 2px;
+  background: var(--text-4);
+}
+
+.pc-rail-burn__bar--hot {
+  background: var(--text-2);
+}
+
+.pc-rail-burn__totals {
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
+  font: var(--type-meta);
+  color: var(--text-3);
+}
+
+.pc-rail-burn__totals span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── Right rail content (#363): attention queue + firehose ───────────── */
+
+.pc-rail-right {
+  display: grid;
+  grid-template-rows: minmax(160px, 1.1fr) minmax(120px, 0.9fr);
+  min-height: 0;
+  flex: 1 1 auto;
+  height: 100%;
+  overflow: hidden;
+}
+
+.pc-rail-attention.pc-panel,
+.pc-rail-firehose.pc-panel {
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  min-height: 0;
+}
+
+.pc-rail-firehose.pc-panel {
+  border-bottom: 0;
+}
+
+.pc-rail-attention-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.pc-rail-density {
+  display: inline-flex;
+  gap: 2px;
+}
+
+.pc-rail-density__btn {
+  padding: 2px 6px;
+  border: 1px solid var(--border);
+  background: var(--surface-sunken);
+  color: var(--text-3);
+  font: var(--type-meta);
+  cursor: pointer;
+  text-transform: lowercase;
+}
+
+.pc-rail-density__btn--on {
+  background: var(--surface-active);
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+
+.pc-rail-queue {
+  min-height: 0;
+}
+
+.pc-rail-hose {
+  background: var(--well);
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 1px;
+  padding: 6px 10px;
+  overflow: auto;
+  height: 100%;
+}
+
+.pc-rail-hose__line {
+  display: grid;
+  grid-template-columns: 62px 1fr;
+  gap: 8px;
+  min-width: 0;
+}
+
+.pc-rail-hose__time {
+  font: var(--type-mono-400-10p5-1p45);
+  /* One step lighter than --text-time for AA at 10.5px on panel ground (#0e1114). */
+  color: var(--text-4);
+}
+
+.pc-rail-hose__text {
+  font: var(--type-mono-400-10p5-1p45);
+  color: var(--text-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pc-rail-hose__text--failed {
+  color: var(--state-failed);
+}
+.pc-rail-hose__text--awaiting {
+  color: var(--state-awaiting);
+}
+.pc-rail-hose__text--stalled {
+  color: var(--state-stalled);
+}
+.pc-rail-hose__text--running {
+  color: var(--state-running);
+}
+.pc-rail-hose__text--completed {
+  color: var(--state-completed);
+}
+.pc-rail-hose__text--cancelled {
+  color: var(--state-cancelled);
 }
 
 .pc-shell__center {

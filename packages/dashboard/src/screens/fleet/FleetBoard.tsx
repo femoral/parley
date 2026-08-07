@@ -7,11 +7,8 @@ import { normalizeUsage } from "@useparley/core";
 import { CopyScaffold, Panel, StateChip } from "../../components/index.js";
 import {
   projectQueueContext,
-  projectTokenBurn,
   usePolling,
-  type FirehoseLine,
   type HonestyPhase,
-  type TokenBurnView,
   type TransportStatus,
 } from "../../data/index.js";
 import {
@@ -23,17 +20,13 @@ import { coatVar, harnessModelLine } from "./coats.js";
 import {
   formatAge,
   formatDur,
-  formatTimeOfDay,
   formatTokenPair,
-  formatTokens,
   shortId,
 } from "./format.js";
-import { firehoseTone } from "./firehoseFeed.js";
 import { projectFleetKpis } from "./kpis.js";
 import {
   panelPhaseFromSnapshot,
   panelPhaseFromTransport,
-  type PanelPhase,
 } from "./panelHonesty.js";
 import {
   describePipTrack,
@@ -53,17 +46,14 @@ export interface FleetBoardProps {
   runsStatus: TransportStatus;
   runsError: string | null;
   honestyPhase: HonestyPhase;
-  firehose: readonly FirehoseLine[];
   selectedTaskId: string | null;
   selectedRunId: string | null;
   onSelectTask: (id: string) => void;
   onSelectRun: (id: string) => void;
   nowMs?: number;
-  /** Optional precomputed burn (tests); otherwise projected from tasks. */
-  tokenBurn?: TokenBurnView;
 }
 
-/** Quantize wall-clock to the minute so KPI/burn memos are stable across polls. */
+/** Quantize wall-clock to the minute so KPI memos are stable across polls. */
 export function quantizeNowMs(ms: number, quantumMs = 60_000): number {
   return Math.floor(ms / quantumMs) * quantumMs;
 }
@@ -142,20 +132,6 @@ export function FleetBoard(props: FleetBoardProps) {
     [props.runs],
   );
 
-  const burn = useMemo(
-    () => props.tokenBurn ?? projectTokenBurn(props.tasks, { nowMs }),
-    [props.tokenBurn, props.tasks, nowMs],
-  );
-
-  const maxBurn = useMemo(() => {
-    let m = 0;
-    for (const b of burn.buckets) {
-      const t = b.input + b.output;
-      if (t > m) m = t;
-    }
-    return m;
-  }, [burn.buckets]);
-
   const tasksPhase = panelPhaseFromSnapshot(global, props.tasks.length);
   const runsPhase = panelPhaseFromTransport(
     props.runsStatus,
@@ -169,26 +145,6 @@ export function FleetBoard(props: FleetBoardProps) {
     null,
     global,
   );
-  const burnPhase: PanelPhase =
-    global === "loading" || global === "connecting"
-      ? "loading"
-      : global === "offline"
-        ? "offline"
-        : global === "stale-reconnecting"
-          ? "stale-reconnecting"
-          : burn.totals.tasks === 0
-            ? "empty"
-            : "live";
-  const hosePhase: PanelPhase =
-    global === "loading" || global === "connecting"
-      ? "loading"
-      : global === "offline"
-        ? "offline"
-        : global === "stale-reconnecting"
-          ? "stale-reconnecting"
-          : props.firehose.length === 0
-            ? "empty"
-            : "live";
 
   const heldCount = props.runs.filter(
     (r) => r.state === "blocked" && r.block?.reason === "gate",
@@ -196,11 +152,6 @@ export function FleetBoard(props: FleetBoardProps) {
 
   const taskRoving = useRovingTabindex(sortedTasks.length, "tasks");
   const runRoving = useRovingTabindex(sortedRuns.length, "runs");
-
-  const retentionNote =
-    burn.retentionSource === "default-assumed"
-      ? `last 24h · sees tasks within retention (${burn.retentionDays}d assumed)`
-      : `last 24h · sees tasks within retention (${burn.retentionDays}d)`;
 
   // Full-board loading / offline with no data yet.
   if (
@@ -576,68 +527,6 @@ export function FleetBoard(props: FleetBoardProps) {
           </div>
 
           <aside className="pc-fleet__side" data-testid="fleet-side">
-            <div
-              className="pc-fleet-burn"
-              data-testid="fleet-token-burn"
-              data-phase={burnPhase}
-            >
-              <div className="pc-fleet-burn__head">
-                <span className="pc-fleet-burn__title">token burn · 24h</span>
-              </div>
-              <span className="pc-fleet-burn__bound" data-testid="fleet-burn-bound">
-                {retentionNote}
-              </span>
-              {burnPhase === "live" || burnPhase === "stale-reconnecting" ? (
-                <>
-                  <div className="pc-fleet-burn__chart">
-                    {maxBurn > 0 ? (
-                      <div className="pc-fleet-burn__axis" aria-hidden="true">
-                        <span>{formatTokens(maxBurn)}</span>
-                        <span>0</span>
-                      </div>
-                    ) : (
-                      <div className="pc-fleet-burn__axis" aria-hidden="true" />
-                    )}
-                    <div
-                      className="pc-fleet-burn__bars"
-                      role="img"
-                      aria-label={`Token burn histogram, max ${formatTokens(maxBurn)} tokens per hour`}
-                    >
-                      {burn.buckets.map((b, i) => {
-                        const total = b.input + b.output;
-                        const pct =
-                          maxBurn > 0
-                            ? Math.max(total > 0 ? 4 : 0, (total / maxBurn) * 100)
-                            : 0;
-                        const recent = i >= burn.buckets.length - 3;
-                        return (
-                          <div
-                            key={b.hourStartMs}
-                            className={`pc-fleet-burn__bar${recent && total > 0 ? " pc-fleet-burn__bar--hot" : ""}`}
-                            style={{ height: `${pct}%` }}
-                            title={`${new Date(b.hourStartMs).toISOString().slice(11, 16)} · in ${b.input} out ${b.output}`}
-                          />
-                        );
-                      })}
-                    </div>
-                  </div>
-                  <div className="pc-fleet-burn__totals">
-                    <span>in {formatTokens(burn.totals.input)}</span>
-                    <span>out {formatTokens(burn.totals.output)}</span>
-                    <span>cached {formatTokens(burn.totals.cached)}</span>
-                  </div>
-                </>
-              ) : (
-                <p className="pc-panel__honesty-msg">
-                  {burnPhase === "empty"
-                    ? "No token activity in the last 24h (within retention)."
-                    : burnPhase === "loading"
-                      ? "Hailing token burn…"
-                      : "Token burn unavailable"}
-                </p>
-              )}
-            </div>
-
             <Panel
               title="executors"
               meta={`${props.runners.length} runners`}
@@ -674,38 +563,6 @@ export function FleetBoard(props: FleetBoardProps) {
                       >
                         {(r.vendors.length ? r.vendors.join(" · ") : "no vendors")} ·{" "}
                         {formatAge(r.last_seen, nowMs)}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            </Panel>
-
-            <Panel
-              title="firehose"
-              meta="watch — follow"
-              phase={hosePhase}
-              honestyKind="events"
-              testId="fleet-firehose"
-              className="pc-fleet-firehose-panel"
-            >
-              <div className="pc-fleet-hose" data-testid="fleet-hose-lines">
-                {props.firehose.map((line) => {
-                  const tone = firehoseTone(line);
-                  return (
-                    <div
-                      key={`${line.seq}-${line.event}-${line.taskId ?? line.runId ?? ""}`}
-                      className="pc-fleet-hose__line"
-                      data-testid="fleet-hose-line"
-                    >
-                      <span className="pc-fleet-hose__time">
-                        {formatTimeOfDay(line.at)}
-                      </span>
-                      <span
-                        className={`pc-fleet-hose__text pc-fleet-hose__text--${tone}`}
-                        title={line.text}
-                      >
-                        {line.text}
                       </span>
                     </div>
                   );

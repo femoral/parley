@@ -14,8 +14,9 @@ The four center screens share one client and one component kit.
 | `src/Shell.tsx` | #354 / #367 | Frame composition; **sole** `new ParleyClient` site. |
 | `src/App.tsx`, `src/main.tsx` | #354 | Root + client bootstrap. |
 | `src/chrome/**` | #354 | Header, nav, find, settings, footer, accelerators. |
-| `src/components/**` | #367 | Shared Panel, StateChip, CopyScaffold, Field/Select. |
-| `src/data/**` | #352 / #367 | Data hooks + `ConsoleDataProvider` + `usePolling`. Extend via **new files only** if a projection is missing. |
+| `src/components/**` | #367 / #363 | Shared Panel, StateChip, CopyScaffold, Field/Select, AttentionCard. |
+| `src/data/**` | #352 / #367 / #363 | Data hooks + `ConsoleDataProvider` + `usePolling` + attention rank + firehose feed. Extend via **new files only** if a projection is missing. |
+| `src/chrome/LeftRail.tsx`, `RightRail.tsx`, `attentionItems.ts` | #363 | Shell rails: scope/state/burn · attention queue + firehose. |
 | `index.html` | #354 | SPA shell. |
 | `verify/lib/measure.mjs` `DEFAULT_SELECTORS` | #354 | Shell-owned. Screens **must not** edit it. |
 | `verify/lib/contrast.mjs` | #354 | Shared contrast helper; screens may import. |
@@ -34,6 +35,7 @@ Registered owned territory under `src/components/`:
 | `StateChip` | 7px square dot + uppercase mono label; one visual for a given state on every screen |
 | `CopyScaffold` | Bordered mono copy control (the console's only "verb") |
 | `Field` / `Select` | Register-styled controls (≥24px height; no `appearance: auto`) |
+| `AttentionCard` | 2px state-color left rule, badge + age, title, reason, meta; rows variant (#363) |
 
 ### Extension path
 
@@ -45,8 +47,7 @@ Registered owned territory under `src/components/`:
    into `src/screens/<name>/`.
 5. Unit tests live under `packages/dashboard/tests/components/`.
 
-`AttentionCard` and rail content are **not** in this layer yet — they land with
-#363 on top of these primitives.
+`AttentionCard` and shell rail content landed with #363.
 
 ### Token / type lint
 

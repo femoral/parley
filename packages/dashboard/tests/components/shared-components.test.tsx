@@ -5,6 +5,7 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  AttentionCard,
   CopyScaffold,
   Field,
   LEGEND_ORDER,
@@ -118,6 +119,90 @@ describe("CopyScaffold", () => {
     await vi.waitFor(() => {
       expect(screen.getByTestId("sc").textContent).toMatch(/copied/i);
     });
+  });
+});
+
+describe("AttentionCard", () => {
+  it("renders card shape: badge, age, title, reason, meta, state left rule", () => {
+    const { container } = render(
+      <AttentionCard
+        state="awaiting_answer"
+        age="12m"
+        title="needs-answer"
+        reason="Ship it?"
+        meta="feat/x · fake"
+        testId="attn-1"
+      />,
+    );
+    const card = screen.getByTestId("attn-1");
+    expect(card.className).toContain("pc-attn--card");
+    expect(card.className).toContain("pc-attn--awaiting_answer");
+    expect(card.getAttribute("data-state")).toBe("awaiting_answer");
+    expect(card.textContent).toMatch(/AWAITING/);
+    expect(card.textContent).toMatch(/12m/);
+    expect(card.textContent).toMatch(/needs-answer/);
+    expect(card.textContent).toMatch(/Ship it\?/);
+    expect(card.textContent).toMatch(/feat\/x/);
+    expect(container.querySelector(".pc-attn__title")).toBeTruthy();
+  });
+
+  it("rows variant is a single-line class", () => {
+    render(
+      <AttentionCard
+        state="failed"
+        age="3m"
+        title="blew-up"
+        reason="boom"
+        variant="rows"
+        testId="attn-row"
+      />,
+    );
+    expect(screen.getByTestId("attn-row").getAttribute("data-variant")).toBe("rows");
+    expect(screen.getByTestId("attn-row").className).toContain("pc-attn--rows");
+  });
+
+  it("invokes onSelect from click and keyboard", () => {
+    const onSelect = vi.fn();
+    render(
+      <AttentionCard
+        state="stalled"
+        age="1h"
+        title="stuck"
+        onSelect={onSelect}
+        testId="attn-click"
+      />,
+    );
+    fireEvent.click(screen.getByTestId("attn-click"));
+    expect(onSelect).toHaveBeenCalledTimes(1);
+    fireEvent.keyDown(screen.getByTestId("attn-click"), { key: "Enter" });
+    expect(onSelect).toHaveBeenCalledTimes(2);
+  });
+
+  it("interactive uses div role=button (not article); static uses article", () => {
+    const { rerender } = render(
+      <AttentionCard
+        state="awaiting_answer"
+        age="1m"
+        title="static"
+        testId="attn-tag"
+      />,
+    );
+    expect(screen.getByTestId("attn-tag").tagName).toBe("ARTICLE");
+    expect(screen.getByTestId("attn-tag").getAttribute("role")).toBeNull();
+
+    rerender(
+      <AttentionCard
+        state="awaiting_answer"
+        age="1m"
+        title="clickable"
+        onSelect={() => undefined}
+        testId="attn-tag"
+      />,
+    );
+    const el = screen.getByTestId("attn-tag");
+    expect(el.tagName).toBe("DIV");
+    expect(el.getAttribute("role")).toBe("button");
+    expect(el.getAttribute("tabindex")).toBe("0");
   });
 });
 

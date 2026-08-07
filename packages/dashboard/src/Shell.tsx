@@ -18,6 +18,11 @@ import { FindCombobox } from "./chrome/FindCombobox.js";
 import { FooterLegend } from "./chrome/FooterLegend.js";
 import { formatClock } from "./chrome/format.js";
 import { buildTabSubs, Header } from "./chrome/Header.js";
+import {
+  LeftRail,
+  type StateFilterKey,
+} from "./chrome/LeftRail.js";
+import { RightRail } from "./chrome/RightRail.js";
 import { SettingsSurface } from "./chrome/SettingsSurface.js";
 import { SkipLinks } from "./chrome/SkipLinks.js";
 import { loadSettings, saveSettings, type ConsoleSettings } from "./chrome/settings.js";
@@ -69,6 +74,8 @@ export function Shell() {
   const [settings, setSettings] = useState<ConsoleSettings>(() => loadSettings());
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [clock, setClock] = useState(() => formatClock());
+  const [sessionId, setSessionId] = useState("all");
+  const [stateFilter, setStateFilter] = useState<StateFilterKey>("all");
   const { liveMessage, announce } = useLiveAnnouncer();
   const findRef = useRef<HTMLInputElement>(null);
   const settingsBtnRef = useRef<HTMLButtonElement>(null);
@@ -303,12 +310,12 @@ export function Shell() {
                 }}
               />
             </div>
-            <div className="pc-shell__rail-slot" data-testid="rail-left-slot">
-              <span className="pc-shell__rail-slot-label">navigator</span>
-              <span className="pc-shell__rail-slot-note">
-                Scope, state filter, and list navigation land with each screen ticket.
-              </span>
-            </div>
+            <LeftRail
+              sessionId={sessionId}
+              onSessionChange={setSessionId}
+              stateFilter={stateFilter}
+              onStateFilterChange={setStateFilter}
+            />
           </aside>
 
           {/*
@@ -334,12 +341,20 @@ export function Shell() {
             aria-label="Attention rail"
             data-testid="rail-right"
           >
-            <div className="pc-shell__rail-slot" data-testid="rail-right-slot">
-              <span className="pc-shell__rail-slot-label">attention · firehose</span>
-              <span className="pc-shell__rail-slot-note">
-                Attention and the event firehose live on the fleet board screen.
-              </span>
-            </div>
+            <RightRail
+              sessionId={sessionId}
+              stateFilter={stateFilter}
+              selectedTaskId={selectedTaskId}
+              selectedRunId={selectedRunId}
+              onSelectTask={(id) => {
+                setSelectedTaskId(id);
+                navigate("task");
+              }}
+              onSelectRun={(id) => {
+                setSelectedRunId(id);
+                navigate("run");
+              }}
+            />
           </aside>
         </div>
 

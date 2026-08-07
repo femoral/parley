@@ -44,6 +44,7 @@
     "verify:fleet": "node --import tsx verify/demos/fleet-board.mjs",
     "verify:metrics": "node --import tsx verify/demos/metrics-board.mjs",
     "verify:run": "node --import tsx verify/demos/run-detail.mjs",
+    "verify:rails": "node --import tsx verify/demos/console-rails.mjs",
     "verify:packed": "node --import tsx verify/scripts/packed-install.mjs",
     "verify:acceptance": "node --import tsx verify/demos/acceptance-359.mjs"
   },

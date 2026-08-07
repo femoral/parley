@@ -4,8 +4,12 @@
  * State is never by hue alone — the pill pairs amber ink with the label.
  */
 import type { RunSummary, TaskEnvelope } from "@useparley/core";
-
-const ATTENTION_TASK_STATES = new Set(["awaiting_answer", "stalled", "failed"]);
+import {
+  ATTENTION_TASK_STATES,
+  attentionRank,
+  isHeldGate,
+  sortTasksByAttention,
+} from "../data/attentionRank.js";
 
 export function countAttentionTasks(tasks: readonly TaskEnvelope[]): number {
   let n = 0;
@@ -19,7 +23,7 @@ export function countAttentionTasks(tasks: readonly TaskEnvelope[]): number {
 export function countHeldGates(runs: readonly RunSummary[]): number {
   let n = 0;
   for (const r of runs) {
-    if (r.state === "blocked" && r.block?.reason === "gate") n += 1;
+    if (isHeldGate(r)) n += 1;
   }
   return n;
 }
@@ -32,28 +36,10 @@ export function countNeedsOrch(
 }
 
 /** Cycle order for n / ⇧N accelerators — attention-rank first, then age. */
-const RANK: Record<string, number> = {
-  awaiting_answer: 0,
-  stalled: 1,
-  failed: 2,
-  running: 3,
-  queued: 4,
-  pending: 5,
-  completed: 6,
-  cancelled: 7,
-};
-
 export function attentionTaskIds(tasks: readonly TaskEnvelope[]): string[] {
-  return tasks
+  return sortTasksByAttention(tasks)
     .filter((t) => ATTENTION_TASK_STATES.has(t.state))
-    .slice()
-    .sort((a, b) => {
-      const ra = RANK[a.state] ?? 99;
-      const rb = RANK[b.state] ?? 99;
-      if (ra !== rb) return ra - rb;
-      const aa = a.updated_at ?? "";
-      const bb = b.updated_at ?? "";
-      return aa < bb ? -1 : aa > bb ? 1 : 0;
-    })
     .map((t) => t.task_id);
 }
+
+export { attentionRank, ATTENTION_TASK_STATES };

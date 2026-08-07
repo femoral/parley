@@ -87,19 +87,6 @@ describe("FleetBoard", () => {
         runsStatus="online"
         runsError={null}
         honestyPhase="live"
-        firehose={[
-          {
-            seq: 1,
-            event: "task.failed",
-            subject: "task",
-            text: "task.failed blew-up (failed)",
-            taskId: "t-fail",
-            runId: null,
-            workflow: null,
-            state: "failed",
-            at: "2026-06-15T11:58:00.000Z",
-          },
-        ]}
         selectedTaskId={null}
         selectedRunId={null}
         onSelectTask={onSelectTask}
@@ -142,10 +129,9 @@ describe("FleetBoard", () => {
     expect(screen.getByTestId("fleet-run-run-held").textContent).toMatch(/GATE HELD/);
     expect(screen.getByTestId("fleet-run-run-held").textContent).toMatch(/gate waiting/);
 
-    // Token burn retention bound visible
-    expect(screen.getByTestId("fleet-burn-bound").textContent).toMatch(
-      /last 24h · sees tasks within retention \(30d assumed\)/,
-    );
+    // Firehose / burn no longer on the fleet center (right/left rails own them)
+    expect(screen.queryByTestId("fleet-firehose")).toBeNull();
+    expect(screen.queryByTestId("fleet-token-burn")).toBeNull();
 
     // Runners — class AND label per status (not frozen --online)
     const onlineEl = screen.getByTestId("fleet-runner-local-1");
@@ -159,9 +145,6 @@ describe("FleetBoard", () => {
     expect(offEl.textContent).toMatch(/offline/);
     // Neuter: stale must not carry --online
     expect(staleEl.querySelector(".pc-fleet-runner__status--online")).toBeNull();
-
-    // Firehose
-    expect(screen.getByTestId("fleet-hose-lines").textContent).toMatch(/task\.failed/);
 
     // Roving tabindex: only one tab stop among task rows
     const tabStops = taskRows.filter((r) => r.getAttribute("tabindex") === "0");
@@ -183,7 +166,6 @@ describe("FleetBoard", () => {
         runsStatus="online"
         runsError={null}
         honestyPhase="empty"
-        firehose={[]}
         selectedTaskId={null}
         selectedRunId={null}
         onSelectTask={() => undefined}
@@ -207,7 +189,6 @@ describe("FleetBoard", () => {
         runsStatus="connecting"
         runsError={null}
         honestyPhase="loading"
-        firehose={[]}
         selectedTaskId={null}
         selectedRunId={null}
         onSelectTask={() => undefined}
@@ -216,38 +197,6 @@ describe("FleetBoard", () => {
       />,
     );
     expect(screen.getByTestId("fleet-hailing").textContent).toMatch(/Hailing the fleet/);
-  });
-
-  it("empty firehose says no events since connect (not false 'no events')", () => {
-    render(
-      <FleetBoard
-        tasks={[
-          task({
-            task_id: "r1",
-            state: "running",
-            started_at: "2026-06-15T11:00:00.000Z",
-          }),
-        ]}
-        runs={[]}
-        runners={[]}
-        runnersStatus="online"
-        runsStatus="online"
-        runsError={null}
-        honestyPhase="live"
-        firehose={[]}
-        selectedTaskId={null}
-        selectedRunId={null}
-        onSelectTask={() => undefined}
-        onSelectRun={() => undefined}
-        nowMs={NOW}
-      />,
-    );
-    expect(screen.getByTestId("fleet-firehose").textContent).toMatch(
-      /No events since connect/i,
-    );
-    expect(screen.getByTestId("fleet-firehose").textContent).not.toMatch(
-      /^No events$/,
-    );
   });
 
   it("stale-reconnecting with zero tasks still shows empty fleet phase", () => {
@@ -260,7 +209,6 @@ describe("FleetBoard", () => {
         runsStatus="online"
         runsError={null}
         honestyPhase="stale-reconnecting"
-        firehose={[]}
         selectedTaskId={null}
         selectedRunId={null}
         onSelectTask={() => undefined}
@@ -291,7 +239,6 @@ describe("FleetBoard", () => {
         runsStatus="online"
         runsError={null}
         honestyPhase="live"
-        firehose={[]}
         selectedTaskId={null}
         selectedRunId={null}
         onSelectTask={() => undefined}

@@ -160,8 +160,8 @@
 }
 
 .pc-fleet__side {
-  display: grid;
-  grid-template-rows: auto auto minmax(120px, 1fr);
+  display: flex;
+  flex-direction: column;
   min-height: 0;
   min-width: 0;
   overflow: hidden;
@@ -183,15 +183,15 @@
 /* Fleet stacks panels with bottom hairlines only */
 .pc-fleet-runs.pc-panel,
 .pc-fleet-tasks.pc-panel,
-.pc-fleet-runners-panel.pc-panel,
-.pc-fleet-firehose-panel.pc-panel {
+.pc-fleet-runners-panel.pc-panel {
   border: 0;
   border-bottom: 1px solid var(--border);
   background: transparent;
 }
 
-.pc-fleet-runners-panel.pc-panel:last-child,
-.pc-fleet-firehose-panel.pc-panel:last-child {
+.pc-fleet-runners-panel.pc-panel {
+  flex: 1 1 auto;
+  min-height: 0;
   border-bottom: 0;
 }
 
@@ -504,97 +504,12 @@
   min-width: 0;
 }
 
-/* ── Token burn ─────────────────────────────────────────────────────── */
-
-.pc-fleet-burn {
-  padding: 8px 10px 10px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  border-bottom: 1px solid var(--hairline-strong);
-}
-
-.pc-fleet-burn__head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.pc-fleet-burn__title {
-  font: var(--type-section);
-  letter-spacing: var(--ls-section);
-  text-transform: uppercase;
-  color: var(--text-3);
-}
-
-.pc-fleet-burn__bound {
-  font: var(--type-mono-400-10-1p3);
-  color: var(--text-4);
-  text-align: right;
-}
-
-.pc-fleet-burn__chart {
-  display: grid;
-  grid-template-columns: 36px 1fr;
-  gap: 4px 6px;
-  align-items: stretch;
-  min-height: 48px;
-}
-
-.pc-fleet-burn__axis {
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  font: var(--type-meta);
-  color: var(--text-4);
-  text-align: right;
-  padding: 1px 0;
-}
-
-.pc-fleet-burn__bars {
-  display: flex;
-  align-items: flex-end;
-  gap: 2px;
-  height: 44px;
-  border-left: 1px solid var(--hairline-strong);
-  border-bottom: 1px solid var(--hairline-strong);
-  padding-left: 2px;
-  min-width: 0;
-}
-
-.pc-fleet-burn__bar {
-  flex: 1 1 0;
-  min-width: 2px;
-  /* Non-status ink ≥3:1 on ground (WCAG 1.4.11); not border-strong (~1.5:1). */
-  background: var(--text-4);
-  transition: none;
-}
-
-.pc-fleet-burn__bar--hot {
-  /* Emphasis without status ink (DESIGN.md: status reserved for state only). */
-  background: var(--text-2);
-}
-
-.pc-fleet-burn__totals {
-  display: flex;
-  justify-content: space-between;
-  gap: 6px;
-  font: var(--type-meta);
-  color: var(--text-3);
-}
-
-.pc-fleet-burn__totals span {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
 /* ── Runners ────────────────────────────────────────────────────────── */
 
 .pc-fleet-runners {
-  max-height: 140px;
+  min-height: 0;
   overflow: auto;
+  flex: 1 1 auto;
 }
 
 .pc-fleet-runner {
@@ -637,58 +552,6 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-/* ── Firehose ───────────────────────────────────────────────────────── */
-
-.pc-fleet-hose {
-  background: var(--well);
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
-  gap: 1px;
-  padding: 6px 10px;
-  overflow: hidden;
-}
-
-.pc-fleet-hose__line {
-  display: grid;
-  grid-template-columns: 62px 1fr;
-  gap: 8px;
-  min-width: 0;
-}
-
-.pc-fleet-hose__time {
-  font: var(--type-mono-400-10p5-1p45);
-  color: var(--text-time);
-}
-
-.pc-fleet-hose__text {
-  font: var(--type-mono-400-10p5-1p45);
-  color: var(--text-2);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.pc-fleet-hose__text--failed {
-  color: var(--state-failed);
-}
-.pc-fleet-hose__text--awaiting {
-  color: var(--state-awaiting);
-}
-.pc-fleet-hose__text--stalled {
-  color: var(--state-stalled);
-}
-.pc-fleet-hose__text--running {
-  color: var(--state-running);
-}
-.pc-fleet-hose__text--completed {
-  color: var(--state-completed);
-}
-.pc-fleet-hose__text--cancelled {
-  color: var(--state-cancelled);
 }
 
 /* ── Copy scaffold ──────────────────────────────────────────────────── */
