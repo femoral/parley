@@ -212,6 +212,54 @@ export function assertStateInkGroundContrast(opts = {}) {
 }
 
 /**
+ * Contrast of an ink color (css rgb()/rgba() or #hex) against a named token ground.
+ * Used when the composited ancestor ground is not the worst case the ink must
+ * still clear (e.g. hose-time on panel `--surface` even when the firehose well
+ * is darker and would let a weak ink pass).
+ *
+ * @param {string} inkCss computed or token color
+ * @param {string} groundToken e.g. "--surface"
+ * @param {Record<string, string>} [tokenMap]
+ * @returns {{ found: boolean, ink?: string, groundToken?: string, groundHex?: string, ratio?: number, wcagAA?: boolean, reason?: string }}
+ */
+export function measureInkVsTokenGround(inkCss, groundToken, tokenMap) {
+  const tokens = tokenMap ?? readTokenHexMap();
+  const groundHex = tokens[groundToken];
+  if (!groundHex) {
+    return { found: false, reason: `missing token ${groundToken}` };
+  }
+  const bg = parseHex(groundHex);
+  if (!bg) {
+    return { found: false, reason: `unparsed ground ${groundHex}` };
+  }
+  if (!inkCss || typeof inkCss !== "string") {
+    return { found: false, reason: "missing ink" };
+  }
+  /** @type {[number, number, number] | null} */
+  let fg = null;
+  const trimmed = inkCss.trim();
+  if (trimmed.startsWith("#")) {
+    fg = parseHex(trimmed);
+  } else {
+    const rgba = parseCssColor(trimmed);
+    if (rgba) fg = [rgba[0], rgba[1], rgba[2]];
+  }
+  if (!fg) {
+    return { found: false, reason: `unparsed ink ${inkCss}` };
+  }
+  const ratio = contrastRatio(fg, bg);
+  const rounded = Math.round(ratio * 100) / 100;
+  return {
+    found: true,
+    ink: trimmed,
+    groundToken,
+    groundHex,
+    ratio: rounded,
+    wcagAA: ratio >= 4.5,
+  };
+}
+
+/**
  * Composite opaque background by walking ancestors.
  * @param {import('playwright-core').Page} page
  * @param {string} selector

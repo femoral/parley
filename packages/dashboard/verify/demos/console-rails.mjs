@@ -12,8 +12,17 @@
  */
 import { pathToFileURL } from "node:url";
 import { collectA11y } from "../lib/a11y.mjs";
-import { measureContrast } from "../lib/contrast.mjs";
-import { ledgerDirs, writeDemoProof, printRectSummary } from "../lib/ledger.mjs";
+import {
+  measureContrast,
+  measureInkVsTokenGround,
+  readTokenHexMap,
+} from "../lib/contrast.mjs";
+import {
+  ledgerDirs,
+  writeDemoProof,
+  printRectSummary,
+  readLedger,
+} from "../lib/ledger.mjs";
 import { measureAtViewports } from "../lib/measure.mjs";
 import { openVerifySession } from "../lib/session.mjs";
 
@@ -97,11 +106,26 @@ export function consoleRailsGates(_entry, ledger) {
     );
   }
 
-  // Focus affordance: invalid outline (color-as-width) drops to none.
+  // Focus affordance: rule-text tokens + rendered outline under real Tab.
+  // :focus-visible does not fire under programmatic .focus() alone (#369).
   const focus = demo.focusRing;
   if (!focus?.ok) {
     throw new Error(
       `console-rails: interactive attention focus ring missing/invalid: ${JSON.stringify(focus)}`,
+    );
+  }
+  if (!focus?.viaTab) {
+    throw new Error(
+      `console-rails: focus ring not measured via Tab traversal: ${JSON.stringify(focus)}`,
+    );
+  }
+  if (
+    !focus.computedOutlineStyle ||
+    focus.computedOutlineStyle === "none" ||
+    !(parseFloat(focus.computedOutlineWidth) > 0)
+  ) {
+    throw new Error(
+      `console-rails: rendered focus outline missing/none on interactive card: ${JSON.stringify(focus)}`,
     );
   }
 
@@ -128,6 +152,22 @@ export function consoleRailsGates(_entry, ledger) {
   if (hoseTime.wcagAA === false || (hoseTime.ratio != null && hoseTime.ratio < 4.5)) {
     throw new Error(
       `console-rails: hose time AA fail ratio=${hoseTime.ratio} size=${hoseTime.fontSizePx}`,
+    );
+  }
+  // Worst-case ground (#369): ink must clear 4.5:1 against panel --surface,
+  // not only the firehose's own dark well (where weak --text-time still passes).
+  const hoseVsSurface = contrast["rail-hose-time-vs-surface"];
+  if (!hoseVsSurface?.found) {
+    throw new Error(
+      "console-rails: hose time vs --surface contrast sample missing",
+    );
+  }
+  if (
+    hoseVsSurface.wcagAA === false ||
+    (hoseVsSurface.ratio != null && hoseVsSurface.ratio < 4.5)
+  ) {
+    throw new Error(
+      `console-rails: hose time AA fail vs --surface ratio=${hoseVsSurface.ratio} ink=${hoseVsSurface.ink}`,
     );
   }
 
@@ -287,29 +327,21 @@ async function measureRowsDensity(page) {
 /**
  * Interactive attention card must paint a visible focus outline (post-#366:
  * --focus-ring is a color; width is --focus-ring-width).
+ *
+ * Rule-text checks stay (CSSOM). Rendered outline is authoritative under a real
+ * Tab traversal — `:focus-visible` does not fire under programmatic `.focus()`
+ * (#369).
+ *
  * @param {import('playwright-core').Page} page
  */
 async function measureFocusRing(page) {
-  return page.evaluate(() => {
+  // CSSOM + token shape (independent of focus modality).
+  const rulePart = await page.evaluate(() => {
     const el = document.querySelector(
       '[data-testid="rail-attention"] .pc-attn--interactive',
     );
     if (!el) return { found: false, ok: false, reason: "no interactive card" };
-    el.focus();
-    // :focus-visible may require keyboard modality; force the class path via
-    // computed style of the focus-visible rule by matching :focus and reading
-    // the declared outline from the stylesheet when :focus-visible doesn't fire
-    // under Playwright focus(). Fall back to temporary class probe.
-    el.classList.add("pc-attn--interactive");
-    const cs = getComputedStyle(el);
-    // Trigger focus-visible where supported.
-    el.dispatchEvent(
-      new KeyboardEvent("keydown", { key: "Tab", bubbles: true }),
-    );
-    el.focus();
-    const after = getComputedStyle(el);
-    // Read the rule directly from CSSOM so we don't depend on :focus-visible
-    // matching under automation.
+
     let ruleOutline = null;
     let ruleOffset = null;
     for (const sheet of document.styleSheets) {
@@ -324,24 +356,22 @@ async function measureFocusRing(page) {
           rule instanceof CSSStyleRule &&
           rule.selectorText?.includes(".pc-attn--interactive:focus-visible")
         ) {
-          ruleOutline = rule.style.outline || rule.style.getPropertyValue("outline");
+          ruleOutline =
+            rule.style.outline || rule.style.getPropertyValue("outline");
           ruleOffset =
             rule.style.outlineOffset ||
             rule.style.getPropertyValue("outline-offset");
         }
       }
     }
-    // Also apply the expected outline inline-check: parse tokens.
     const root = getComputedStyle(document.documentElement);
     const ringColor = root.getPropertyValue("--focus-ring").trim();
     const ringWidth = root.getPropertyValue("--focus-ring-width").trim();
-    // Valid rule uses width token + color token (not color-as-width).
     const outlineOk =
       ruleOutline != null &&
       /var\(--focus-ring-width\)/.test(ruleOutline) &&
       /var\(--focus-ring\)/.test(ruleOutline) &&
       !/var\(--link\)/.test(ruleOutline);
-    // Color token must actually be a color, not a length.
     const colorIsColor =
       ringColor.startsWith("#") ||
       ringColor.startsWith("rgb") ||
@@ -350,17 +380,99 @@ async function measureFocusRing(page) {
 
     return {
       found: true,
-      ok: outlineOk && colorIsColor && widthIsLength,
       ruleOutline,
       ruleOffset,
       ringColor,
       ringWidth,
-      computedOutline: after.outline,
-      computedOutlineStyle: after.outlineStyle,
-      computedOutlineWidth: after.outlineWidth,
-      focusOutlineStyle: cs.outlineStyle,
+      ruleOk: outlineOk && colorIsColor && widthIsLength,
     };
   });
+
+  if (!rulePart.found) {
+    return { found: false, ok: false, viaTab: false, reason: rulePart.reason };
+  }
+
+  // Real Tab into the first interactive attention card so :focus-visible matches.
+  // Probe button sits immediately before the card in tab order — one Tab lands
+  // on the card without depending on full-shell focus order.
+  await page.evaluate(() => {
+    document.getElementById("pc-verify-focus-probe")?.remove();
+    const target = document.querySelector(
+      '[data-testid="rail-attention"] .pc-attn--interactive',
+    );
+    if (!target?.parentElement) return;
+    const probe = document.createElement("button");
+    probe.id = "pc-verify-focus-probe";
+    probe.type = "button";
+    probe.setAttribute("aria-hidden", "true");
+    probe.tabIndex = 0;
+    probe.style.cssText =
+      "position:fixed;left:0;top:0;width:1px;height:1px;opacity:0;pointer-events:none;";
+    target.parentElement.insertBefore(probe, target);
+    probe.focus();
+  });
+  await page.keyboard.press("Tab");
+
+  const rendered = await page.evaluate(() => {
+    const el = document.activeElement;
+    const isAttn =
+      el instanceof HTMLElement &&
+      el.classList.contains("pc-attn--interactive") &&
+      el.closest('[data-testid="rail-attention"]');
+    if (!isAttn) {
+      return {
+        viaTab: false,
+        focusedInteractive: false,
+        activeTag: el?.tagName?.toLowerCase() ?? null,
+        activeClass: el instanceof HTMLElement ? el.className : null,
+        computedOutline: null,
+        computedOutlineStyle: null,
+        computedOutlineWidth: null,
+        matchesFocusVisible: false,
+      };
+    }
+    const cs = getComputedStyle(el);
+    return {
+      viaTab: true,
+      focusedInteractive: true,
+      activeTag: el.tagName.toLowerCase(),
+      activeClass: el.className,
+      computedOutline: cs.outline,
+      computedOutlineStyle: cs.outlineStyle,
+      computedOutlineWidth: cs.outlineWidth,
+      computedOutlineColor: cs.outlineColor,
+      matchesFocusVisible: el.matches(":focus-visible"),
+    };
+  });
+
+  await page.evaluate(() => {
+    document.getElementById("pc-verify-focus-probe")?.remove();
+  });
+
+  const renderedOk =
+    rendered.viaTab &&
+    rendered.focusedInteractive &&
+    rendered.computedOutlineStyle != null &&
+    rendered.computedOutlineStyle !== "none" &&
+    parseFloat(rendered.computedOutlineWidth) > 0;
+
+  return {
+    found: true,
+    ok: Boolean(rulePart.ruleOk && renderedOk),
+    viaTab: Boolean(rendered.viaTab && rendered.focusedInteractive),
+    ruleOutline: rulePart.ruleOutline,
+    ruleOffset: rulePart.ruleOffset,
+    ringColor: rulePart.ringColor,
+    ringWidth: rulePart.ringWidth,
+    ruleOk: rulePart.ruleOk,
+    renderedOk,
+    matchesFocusVisible: rendered.matchesFocusVisible,
+    computedOutline: rendered.computedOutline,
+    computedOutlineStyle: rendered.computedOutlineStyle,
+    computedOutlineWidth: rendered.computedOutlineWidth,
+    computedOutlineColor: rendered.computedOutlineColor,
+    activeTag: rendered.activeTag,
+  };
 }
 
 /**
@@ -474,6 +586,27 @@ async function measureRailContrast(page) {
     }
     out[t.id] = m;
   }
+
+  // Worst-case ground for hose-time ink: panel --surface (not the hose well).
+  // Live sample preferred; inject sample is the fallback when rail is empty.
+  const hoseLive = /** @type {{ found?: boolean, color?: string }} */ (
+    out["rail-hose-time-live"]
+  );
+  const hoseSample = /** @type {{ found?: boolean, color?: string }} */ (
+    out["rail-hose-time"]
+  );
+  const hoseInk =
+    (hoseLive?.found && hoseLive.color) ||
+    (hoseSample?.found && hoseSample.color) ||
+    null;
+  const tokens = readTokenHexMap();
+  out["rail-hose-time-vs-surface"] = hoseInk
+    ? {
+        ...measureInkVsTokenGround(hoseInk, "--surface", tokens),
+        source: hoseLive?.found && hoseLive.color ? "live" : "sample",
+      }
+    : { found: false, reason: "no hose-time ink sample" };
+
   await page.evaluate(() => {
     document.getElementById("pc-verify-contrast-samples")?.remove();
   });
@@ -654,6 +787,13 @@ export async function runConsoleRailsDemo() {
         2,
       ),
     );
+
+    // Self-gate so `verify:rails` fails on proof regressions without needing
+    // the full verify:check suite (neuter evidence for #369).
+    const ledger = readLedger(TICKET);
+    if (!ledger) throw new Error("console-rails: ledger missing after write");
+    consoleRailsGates({}, ledger);
+
     return proof;
   } finally {
     await session.close();
