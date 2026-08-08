@@ -5,7 +5,6 @@
 
 .pc-metrics {
   display: grid;
-  /* toolbar · body (body must be 1fr so the termination block can fill residual) */
   grid-template-rows: auto 1fr;
   min-height: 0;
   height: 100%;
@@ -128,33 +127,8 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
-  /* Stretch last region so wide viewports do not leave a 300px+ dead void. */
+  /* Terminal content just ends; residual board ground is intentional (ADR-0001). */
   justify-content: flex-start;
-}
-
-/*
- * Intentional termination block — fills remaining board height with a
- * surface summary strip so the content column ends without a ground void.
- */
-.pc-metrics__end {
-  flex: 1 1 auto;
-  min-height: 120px;
-  margin-top: 4px;
-  width: 100%;
-  border-top: 1px solid var(--border);
-  background: var(--surface);
-  display: flex;
-  align-items: flex-start;
-  padding: 10px 12px;
-  box-sizing: border-box;
-}
-
-.pc-metrics__end::after {
-  content: "end of metrics";
-  font: var(--type-meta);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--text-4);
 }
 
 /* ── Filter bar ─────────────────────────────────────────────────────── */

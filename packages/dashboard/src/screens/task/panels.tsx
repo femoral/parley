@@ -699,11 +699,11 @@ export function LogTailPanel({
   );
 }
 
-// ── Outstanding ask band (full-width, hierarchy #1) ──────────────────
+// ── Outstanding ask band (full-width; hierarchy by content — ADR-0001) ─
 
 /**
- * Full-width outstanding-question band — largest text block on the task
- * screen when a question is pending. Answer scaffold rides here.
+ * Full-width outstanding-question band. Hierarchy comes from position,
+ * awaiting ink, and largest type scale — not geometric minimums.
  */
 export function AskBand({
   taskId,

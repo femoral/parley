@@ -258,7 +258,6 @@ export function RunScreen(props: ScreenMountProps) {
             observation-only — gate verbs stay with the orchestrating agent.
           </p>
         </div>
-        <div className="pc-run__end" data-testid="run-end" aria-hidden="true" />
       </div>
     );
   }
@@ -652,8 +651,6 @@ export function RunScreen(props: ScreenMountProps) {
             ) : null}
           </Panel>
         </div>
-        {/* Intentional content termination — no dead void at wide viewports. */}
-        <div className="pc-run__end" data-testid="run-end" aria-hidden="true" />
       </div>
     </div>
   );
