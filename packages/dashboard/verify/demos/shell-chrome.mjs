@@ -16,7 +16,12 @@
 import { pathToFileURL } from "node:url";
 import { collectA11y, runAxe, ariaSnapshot } from "../lib/a11y.mjs";
 import { measureChromeContrast } from "../lib/contrast.mjs";
-import { ledgerDirs, writeDemoProof, printRectSummary } from "../lib/ledger.mjs";
+import {
+  ledgerDirs,
+  readLedger,
+  writeDemoProof,
+  printRectSummary,
+} from "../lib/ledger.mjs";
 import { measureAtViewports, DEFAULT_SELECTORS } from "../lib/measure.mjs";
 import { openVerifySession } from "../lib/session.mjs";
 
@@ -63,9 +68,16 @@ export function shellChromeGates(_entry, ledger) {
     }
   }
 
+  // #374 — every contrast probe must be found; missing class renames fail closed
+  // (same pattern as #370 fleet chip / screen-title). Do not skip found:false.
   const contrast = chrome.contrast ?? {};
   for (const [cid, m] of Object.entries(contrast)) {
-    if (m && m.found && m.wcagAA === false) {
+    if (!m?.found) {
+      throw new Error(
+        `shell-chrome: contrast probe missing ${cid}: ${JSON.stringify(m)}`,
+      );
+    }
+    if (m.wcagAA === false) {
       throw new Error(`shell-chrome: contrast fail ${cid} ratio=${m.ratio}`);
     }
   }
@@ -616,6 +628,13 @@ export async function runShellChromeDemo() {
         2,
       ),
     );
+
+    // Self-gate so `verify:shell` fails on proof regressions without needing
+    // the full verify:check suite (neuter evidence for #374).
+    const ledger = readLedger(TICKET);
+    if (!ledger) throw new Error("shell-chrome: ledger missing after write");
+    shellChromeGates({}, ledger);
+
     return proof;
   } finally {
     await session.close();
