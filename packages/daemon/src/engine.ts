@@ -638,8 +638,8 @@ export interface FixRequest {
    */
   fresh?: boolean;
   /**
-   * Explicit session override for this fix spawn (#162). Null/omitted ⇒ bind
-   * fresh via ancestry (does not inherit the parent's session id).
+   * Explicit session override for this fix spawn (#162 / #372). Null/omitted ⇒
+   * bind via ancestry, then parent registered session, then workspace fallback.
    */
   orchestratorSessionId?: string | null;
   /** Caller's process-ancestry chain for fresh binding (#162). */
@@ -686,13 +686,18 @@ export interface RegisterSessionRequest {
   clearPanic?: boolean;
 }
 
-/** Inputs shared by delegate/fix/eval for session binding (#162). */
+/** Inputs shared by delegate/fix/eval for session binding (#162 / #372). */
 export interface SessionBindInput {
   explicitSessionId: string | null;
   ancestryChain: ProcessAnchor[];
   workspaceRoot: string | null;
   /** Repo (or cwd) used to read `eval.enabled`. */
   evalProjectRoot: string | null;
+  /**
+   * Parent task's orchestrator session id (fix path only, #372). Passed to
+   * the resolver so inheritance is a full binding when still registered.
+   */
+  parentSessionId?: string | null;
 }
 
 /** Sidecar written for runner-affine tasks (contexts survive until lease). */
@@ -1131,13 +1136,14 @@ export class TaskEngine {
   }
 
   /**
-   * Resolve orchestrator binding for a call (#162 / #280). Returns a provenance
-   * snapshot when a registered session binds, a free-form id when the caller
-   * overrode with an unregistered id, or null when unbound. Throws
+   * Resolve orchestrator binding for a call (#162 / #280 / #372). Returns a
+   * provenance snapshot when a registered session binds, a free-form id when
+   * the caller overrode with an unregistered id, or null when unbound. Throws
    * `session_required` when evals are on and nothing resolves.
    *
    * Multi-live workspace fallback binds the most-recently-updated live session
-   * and records a warning (no hard ambiguous error).
+   * and records a warning (no hard ambiguous error). Fix passes the parent's
+   * session id so inheritance ranks after explicit/ancestry (#372).
    */
   private bindOrchestrator(
     input: SessionBindInput,
@@ -1151,6 +1157,7 @@ export class TaskEngine {
       workspaceRoot,
       sessions: listAllSessions(this.db),
       isSessionLive: (session) => isSessionCandidateLive(session, machineId),
+      parentSessionId: input.parentSessionId ?? null,
     });
 
     let snapshot: ProvenanceSnapshot | null = null;
@@ -2023,8 +2030,9 @@ export class TaskEngine {
       throw new DelegateError(`failed to materialize task context: ${errorMessage(err)}`);
     }
 
-    // Fix resolves its orchestrator session fresh at its own spawn (#162) —
-    // not inherited from the parent. Attempt lineage is independent.
+    // Fix binds its orchestrator session at spawn (#162 / #372): explicit →
+    // ancestry → parent registered session → workspace fallback. Parent
+    // inheritance only when the parent's session is still registered.
     const workspaceRoot =
       request.workspaceRoot ?? parent.repo ?? path.resolve(workingDir);
     const { snapshot, freeformId } = this.bindOrchestrator({
@@ -2032,6 +2040,7 @@ export class TaskEngine {
       ancestryChain: request.ancestryChain ?? [],
       workspaceRoot,
       evalProjectRoot: parent.repo ?? workingDir,
+      parentSessionId: parent.orchestrator_session_id,
     });
     const orchSessionId = snapshot?.session_id ?? freeformId;
 

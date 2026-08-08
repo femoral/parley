@@ -1,16 +1,23 @@
 /**
- * #162 / #280 — daemon-side ancestry matching, liveness, multi-live fallback.
+ * #162 / #280 / #372 — daemon-side ancestry matching, liveness, multi-live
+ * fallback, and fix-time parent session inheritance.
  */
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { homePaths } from "@useparley/core";
+import { createAdapterRegistrySync } from "../src/adapters/index.js";
 import {
   deleteSession,
   getSession,
+  getTask,
   insertSession,
+  insertTask,
+  nextTaskId,
   openDatabase,
+  writeTaskState,
   type DatabaseHandle,
   type SessionRow,
 } from "../src/db.js";
@@ -23,6 +30,11 @@ import {
   sessionFallbackWarning,
   sessionRequiredMessage,
 } from "../src/session-binding.js";
+import { withFakeAllowlist } from "./helpers.js";
+
+const FAKE_VENDOR_BIN = fileURLToPath(
+  new URL("../../cli/tests/fake-vendor.mjs", import.meta.url),
+);
 
 function session(
   overrides: Partial<SessionRow> & Pick<SessionRow, "id">,
@@ -301,6 +313,116 @@ describe("resolveSessionBinding (#162 / #280)", () => {
   });
 });
 
+describe("resolveSessionBinding parent inheritance (#372)", () => {
+  const parent = session({
+    id: "parent-sess",
+    workspace_root: "/parent-repo",
+    harness: "claude",
+    model: "opus",
+    effort: "high",
+    anchor_pid: 42,
+    anchor_start: "p1",
+    updated_at: "2026-01-01T00:00:00.000Z",
+  });
+  const otherWs = session({
+    id: "other-ws",
+    workspace_root: "/fix-caller-ws",
+    anchor_pid: 99,
+    anchor_start: "o1",
+    updated_at: "2026-01-05T00:00:00.000Z",
+  });
+  const ancestrySess = session({
+    id: "ancestry-sess",
+    workspace_root: "/anywhere",
+    harness: "codex",
+    model: "gpt",
+    effort: "low",
+    anchor_pid: 77,
+    anchor_start: "a1",
+  });
+
+  it("inherits parent session when explicit and ancestry miss (neuter: fails if parent branch deleted)", () => {
+    // Caller is in a different workspace with no matching session — without
+    // parent inheritance this is unresolved / wrong-workspace bind.
+    const r = resolveSessionBinding({
+      explicitSessionId: null,
+      ancestryChain: [],
+      workspaceRoot: "/fix-caller-ws",
+      sessions: [parent],
+      parentSessionId: "parent-sess",
+    });
+    expect(r).toEqual({ kind: "bound", session: parent });
+  });
+
+  it("parent inheritance outranks workspace fallback (neuter: fails if parent branch deleted)", () => {
+    // Multi/single live at caller's workspace would otherwise win; parent
+    // still registered must rank above workspace fallback.
+    const r = resolveSessionBinding({
+      explicitSessionId: null,
+      ancestryChain: [],
+      workspaceRoot: "/fix-caller-ws",
+      sessions: [parent, otherWs],
+      parentSessionId: "parent-sess",
+    });
+    expect(r).toEqual({ kind: "bound", session: parent });
+  });
+
+  it("explicit id still wins over parent session", () => {
+    const r = resolveSessionBinding({
+      explicitSessionId: "other-ws",
+      ancestryChain: [],
+      workspaceRoot: "/fix-caller-ws",
+      sessions: [parent, otherWs],
+      parentSessionId: "parent-sess",
+    });
+    expect(r).toEqual({ kind: "bound", session: otherWs });
+  });
+
+  it("ancestry-resolved session still wins over parent session", () => {
+    const r = resolveSessionBinding({
+      explicitSessionId: null,
+      ancestryChain: [{ machine_id: "m1", pid: 77, start_time: "a1" }],
+      workspaceRoot: "/fix-caller-ws",
+      sessions: [parent, ancestrySess],
+      parentSessionId: "parent-sess",
+    });
+    expect(r).toEqual({ kind: "bound", session: ancestrySess });
+  });
+
+  it("unregistered/reaped parent id falls through to workspace fallback", () => {
+    const r = resolveSessionBinding({
+      explicitSessionId: null,
+      ancestryChain: [],
+      workspaceRoot: "/fix-caller-ws",
+      sessions: [otherWs], // parent-sess not registered
+      parentSessionId: "parent-sess",
+    });
+    expect(r).toEqual({ kind: "bound", session: otherWs });
+  });
+
+  it("unregistered parent id with no workspace match is unresolved (never freeform-stamps)", () => {
+    const r = resolveSessionBinding({
+      explicitSessionId: null,
+      ancestryChain: [],
+      workspaceRoot: "/empty",
+      sessions: [],
+      parentSessionId: "ghost-parent-sess",
+    });
+    expect(r).toEqual({ kind: "unresolved" });
+  });
+
+  it("empty parentSessionId is ignored", () => {
+    const r = resolveSessionBinding({
+      explicitSessionId: null,
+      ancestryChain: [],
+      workspaceRoot: "/empty",
+      sessions: [parent],
+      parentSessionId: "",
+    });
+    expect(r).toEqual({ kind: "unresolved" });
+  });
+});
+
 describe("reapDeadSessions (#280)", () => {
   let home: string;
   let db: DatabaseHandle;
@@ -423,5 +545,238 @@ describe("reapDeadSessions (#280)", () => {
     engine.gc({ dryRun: true });
     expect(getSession(db, "s-keep")).toBeDefined();
     deleteSession(db, "s-keep");
+  });
+});
+
+describe("fix inherits parent orchestrator session (#372)", () => {
+  let home: string;
+  let cwd: string;
+  let db: DatabaseHandle;
+
+  beforeEach(() => {
+    home = fs.mkdtempSync(path.join(os.tmpdir(), "parley-fix-orch-"));
+    cwd = fs.mkdtempSync(path.join(os.tmpdir(), "parley-fix-orch-cwd-"));
+    const paths = homePaths(home);
+    db = openDatabase(paths);
+    fs.writeFileSync(
+      path.join(home, "parley.json"),
+      JSON.stringify(withFakeAllowlist({})),
+    );
+    process.env.PARLEY_HOME = home;
+    process.env.PARLEY_FAKE_VENDOR_BIN = FAKE_VENDOR_BIN;
+  });
+
+  afterEach(() => {
+    try {
+      db.close();
+    } catch {
+      /* already closed */
+    }
+    fs.rmSync(home, { recursive: true, force: true });
+    fs.rmSync(cwd, { recursive: true, force: true });
+    delete process.env.PARLEY_FAKE_VENDOR_BIN;
+    delete process.env.PARLEY_HOME;
+  });
+
+  function eng(): TaskEngine {
+    return new TaskEngine(
+      db,
+      homePaths(home),
+      createAdapterRegistrySync(process.env),
+    );
+  }
+
+  function seedRegisteredParent(opts: {
+    sessionId: string;
+    harness?: string | null;
+    model?: string | null;
+    effort?: string | null;
+    /** Workspace root on the registered session (may differ from fix caller). */
+    sessionWorkspace?: string;
+  }): string {
+    insertSession(db, {
+      id: opts.sessionId,
+      harness: opts.harness ?? "claude",
+      model: opts.model ?? "opus",
+      effort: opts.effort ?? "high",
+      workspace_root: opts.sessionWorkspace ?? "/parent-orch-ws",
+      anchor: { machine_id: "m1", pid: 1001, start_time: "t-parent" },
+    });
+    const id = nextTaskId(db);
+    insertTask(db, {
+      id,
+      name: null,
+      vendor: "fake",
+      model: null,
+      effort: null,
+      profile: null,
+      repo: null,
+      cwd,
+      prompt: "original",
+      orchestrator_session_id: opts.sessionId,
+      orch_harness: opts.harness ?? "claude",
+      orch_model: opts.model ?? "opus",
+      orch_effort: opts.effort ?? "high",
+      worktree: null,
+      branch: null,
+      base_sha: null,
+      sandbox: "workspace",
+      network: true,
+      answer_timeout_ms: null,
+      report_schema: null,
+      size: null,
+      difficulty: null,
+      type: "other",
+    });
+    writeTaskState(db, id, "completed", {
+      completed_at: new Date().toISOString(),
+      report: JSON.stringify({
+        summary: "done",
+        outcome: "success",
+        files_changed: [],
+      }),
+    });
+    return id;
+  }
+
+  it("inherits parent session when fix caller binding does not resolve (neuter: fails if parent branch deleted)", () => {
+    const parentId = seedRegisteredParent({ sessionId: "orch-parent" });
+    // Caller workspace differs from the registered session; no explicit id,
+    // empty ancestry → only parent inheritance can bind.
+    const fixed = eng().fix({
+      parentRef: parentId,
+      prompt: "please fix",
+      fresh: true,
+      orchestratorSessionId: null,
+      ancestryChain: [],
+      workspaceRoot: "/unrelated-fix-caller-ws",
+    });
+    expect(fixed.orchestrator_session_id).toBe("orch-parent");
+    expect(fixed.orch_harness).toBe("claude");
+    expect(fixed.orch_model).toBe("opus");
+    expect(fixed.orch_effort).toBe("high");
+    eng().cancel(fixed.id);
+  });
+
+  it("fix --fresh inherits parent session identically", () => {
+    const parentId = seedRegisteredParent({
+      sessionId: "orch-fresh",
+      harness: "codex",
+      model: "gpt-5",
+      effort: "medium",
+    });
+    const fixed = eng().fix({
+      parentRef: parentId,
+      prompt: "fresh fix",
+      fresh: true,
+      orchestratorSessionId: null,
+      ancestryChain: [],
+      workspaceRoot: "/no-match-ws",
+    });
+    expect(fixed.orchestrator_session_id).toBe("orch-fresh");
+    expect(fixed.orch_harness).toBe("codex");
+    expect(fixed.orch_model).toBe("gpt-5");
+    expect(fixed.orch_effort).toBe("medium");
+    eng().cancel(fixed.id);
+  });
+
+  it("explicit session on fix call wins over parent", () => {
+    const parentId = seedRegisteredParent({ sessionId: "orch-parent" });
+    insertSession(db, {
+      id: "orch-explicit",
+      harness: "grok",
+      model: "grok-4",
+      effort: "high",
+      workspace_root: "/other",
+      anchor: { machine_id: "m1", pid: 2002, start_time: "t-ex" },
+    });
+    const fixed = eng().fix({
+      parentRef: parentId,
+      prompt: "explicit wins",
+      fresh: true,
+      orchestratorSessionId: "orch-explicit",
+      ancestryChain: [],
+      workspaceRoot: "/no-match-ws",
+    });
+    expect(fixed.orchestrator_session_id).toBe("orch-explicit");
+    expect(fixed.orch_harness).toBe("grok");
+    expect(fixed.orch_model).toBe("grok-4");
+    eng().cancel(fixed.id);
+  });
+
+  it("ancestry-resolved session on fix call wins over parent", () => {
+    const parentId = seedRegisteredParent({ sessionId: "orch-parent" });
+    insertSession(db, {
+      id: "orch-ancestry",
+      harness: "pi",
+      model: "pi-m",
+      effort: "low",
+      workspace_root: "/other",
+      anchor: { machine_id: "m1", pid: 3003, start_time: "t-anc" },
+    });
+    const fixed = eng().fix({
+      parentRef: parentId,
+      prompt: "ancestry wins",
+      fresh: true,
+      orchestratorSessionId: null,
+      ancestryChain: [
+        { machine_id: "m1", pid: 9999, start_time: "self" },
+        { machine_id: "m1", pid: 3003, start_time: "t-anc" },
+      ],
+      workspaceRoot: "/no-match-ws",
+    });
+    expect(fixed.orchestrator_session_id).toBe("orch-ancestry");
+    expect(fixed.orch_harness).toBe("pi");
+    eng().cancel(fixed.id);
+  });
+
+  it("deregistered parent session falls through without stamping dangling id", () => {
+    const parentId = seedRegisteredParent({ sessionId: "orch-gone" });
+    deleteSession(db, "orch-gone");
+    expect(getSession(db, "orch-gone")).toBeUndefined();
+    // Parent row still carries the stale id — fix must not re-stamp it.
+    expect(getTask(db, parentId)!.orchestrator_session_id).toBe("orch-gone");
+
+    const fixed = eng().fix({
+      parentRef: parentId,
+      prompt: "no dangling",
+      fresh: true,
+      orchestratorSessionId: null,
+      ancestryChain: [],
+      workspaceRoot: "/no-match-ws",
+    });
+    expect(fixed.orchestrator_session_id).toBeNull();
+    expect(fixed.orch_harness).toBeNull();
+    expect(fixed.orch_model).toBeNull();
+    expect(fixed.orch_effort).toBeNull();
+    eng().cancel(fixed.id);
+  });
+
+  it("provenance on inherited binding matches registered session snapshot", () => {
+    const parentId = seedRegisteredParent({
+      sessionId: "orch-prov",
+      harness: "hermes",
+      model: "h-model",
+      effort: "max",
+    });
+    // Binding reads the registered session row (full bind), not freeform stamp.
+    const sess = getSession(db, "orch-prov")!;
+    expect(sess.harness).toBe("hermes");
+    expect(sess.model).toBe("h-model");
+    expect(sess.effort).toBe("max");
+
+    const fixed = eng().fix({
+      parentRef: parentId,
+      prompt: "prov",
+      fresh: true,
+      orchestratorSessionId: null,
+      ancestryChain: [],
+      workspaceRoot: "/no-match",
+    });
+    expect(fixed.orchestrator_session_id).toBe("orch-prov");
+    expect(fixed.orch_harness).toBe(sess.harness);
+    expect(fixed.orch_model).toBe(sess.model);
+    expect(fixed.orch_effort).toBe(sess.effort);
+    eng().cancel(fixed.id);
   });
 });
