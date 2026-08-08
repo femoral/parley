@@ -185,6 +185,25 @@
   --run-ground-failed: #170f0e;
   --run-ground-gate: #1b160b;
 
+  /*
+   * Run inherited-card dim inks (#370) — pre-computed replacements for the old
+   * ancestor `opacity: 0.72` dim so rendered ink = declared tokens (token gate
+   * and axe both see the same solid colors). Card grounds stay solid
+   * (--run-ground-pending head/body / --surface-sunken). Measured ratios vs
+   * those grounds all clear WCAG AA 4.5:1 (worst ≈ 4.70 on surface-raised):
+   *   dim-text     #7d8184  4.74–4.96
+   *   dim-2        #77818b  4.70–4.91
+   *   dim-3        #76828c  4.74–4.95
+   *   dim-4        #73828e  4.71–4.93
+   *   dim-pending  #77818b  4.70–4.91
+   * Verify: assertRunDimInkContrast (verify/lib/contrast.mjs).
+   */
+  --run-ink-dim: #7d8184;
+  --run-ink-dim-2: #77818b;
+  --run-ink-dim-3: #76828c;
+  --run-ink-dim-4: #73828e;
+  --run-ink-dim-pending: #77818b;
+
   /* Motion — animation only means live */
   --pulse-duration: 2.4s;
 }

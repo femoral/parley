@@ -9,7 +9,10 @@
 import fs from "node:fs";
 import path from "node:path";
 import { DEMO_REGISTRY, ticketsFromRegistry } from "./demos/registry.mjs";
-import { assertStateInkGroundContrast } from "./lib/contrast.mjs";
+import {
+  assertRunDimInkContrast,
+  assertStateInkGroundContrast,
+} from "./lib/contrast.mjs";
 import {
   assertAllLedgerShotWidths,
   assertLedgerShotWidths,
@@ -26,6 +29,13 @@ async function main() {
   console.log(
     `[verify:check] state-ink contrast ok — ${contrastGate.pairings} pairings; ` +
       `worst ${contrastGate.worst.ink} on ${contrastGate.worst.ground} = ${contrastGate.worst.ratio}:1`,
+  );
+
+  // #370 — inherited-card dim inks must clear AA on their actual grounds.
+  const dimGate = assertRunDimInkContrast();
+  console.log(
+    `[verify:check] run-dim-ink contrast ok — ${dimGate.pairings} pairings; ` +
+      `worst ${dimGate.worst.ink} on ${dimGate.worst.ground} = ${dimGate.worst.ratio}:1`,
   );
 
   const skipRun = process.argv.includes("--ledger-only");

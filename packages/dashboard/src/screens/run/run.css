@@ -356,8 +356,18 @@
   background: var(--run-ground-pending);
 }
 
+/*
+ * Inherited card dim (#370): rebind ink tokens to pre-computed dim values so
+ * rendered = declared (no ancestor opacity — that composites descendants
+ * below AA while the token gate stays blind). Keep the quiet look via dim
+ * inks + existing struck/quiet name treatment.
+ */
 .pc-run__node-card--inherited {
-  opacity: 0.72;
+  --text: var(--run-ink-dim);
+  --text-2: var(--run-ink-dim-2);
+  --text-3: var(--run-ink-dim-3);
+  --text-4: var(--run-ink-dim-4);
+  --state-pending: var(--run-ink-dim-pending);
 }
 
 .pc-run__node-card-head {
