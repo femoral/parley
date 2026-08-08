@@ -876,12 +876,6 @@
   color: var(--text-3);
 }
 
-.pc-screen__title {
-  font: var(--type-screen-title);
-  color: var(--text);
-  margin: 0;
-}
-
 .pc-screen__note {
   /* English prose → Sans */
   font: var(--type-sans-400-12-1p45);

@@ -47,6 +47,25 @@ system's job is to make density legible and attention unmissable.
 | text-time | `#6d7d89` | timestamps in wells |
 | link | `#7fb2d9` (hover `#a8cde9`) | branches, references |
 
+### Run inherited-card dim inks (#370)
+
+Pre-computed solid replacements for the old ancestor `opacity: 0.72` dim on
+inherited pipeline cards. Rendered ink must equal declared tokens so axe and
+the token contrast gate see the same colors. Measured ≥4.5:1 on
+`--run-ground-pending`, `--surface-sunken`, `--surface-raised`, `--ground`,
+and `--surface` (worst ≈ 4.70).
+
+| Token | Hex | Rebinds |
+| --- | --- | --- |
+| run-ink-dim | `#7d8184` | `--text` on inherited cards |
+| run-ink-dim-2 | `#77818b` | `--text-2` |
+| run-ink-dim-3 | `#76828c` | `--text-3` (addresses, meta) |
+| run-ink-dim-4 | `#73828e` | `--text-4` (struck names, fork badges) |
+| run-ink-dim-pending | `#77818b` | `--state-pending` (kind / pending ink) |
+
+Do not reintroduce ancestor opacity for this dim — it composites descendants
+below AA while pure token checks stay green.
+
 ### State colors (reserved — status only)
 
 | State | Hex | | State | Hex |

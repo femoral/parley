@@ -76,6 +76,51 @@ describe("state-ink ground contrast gate (#364)", () => {
   });
 });
 
+describe("run dim-ink contrast gate (#370)", () => {
+  it("passes on live tokens.css", () => {
+    const out = runNode(`
+      import { assertRunDimInkContrast } from ${JSON.stringify(contrastLib)};
+      const r = assertRunDimInkContrast({ tokensPath: ${JSON.stringify(tokensPath)} });
+      console.log(JSON.stringify(r));
+    `);
+    const r = JSON.parse(out) as {
+      ok: boolean;
+      pairings: number;
+      worst: { ratio: number; ink: string; ground: string };
+    };
+    expect(r.ok).toBe(true);
+    expect(r.pairings).toBeGreaterThan(10);
+    expect(r.worst.ratio).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it("fails when a dim ink is neutered below AA", () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "pc-dim-contrast-"));
+    temps.push(tmp);
+    const neutered = path.join(tmp, "tokens.css");
+    const src = fs.readFileSync(tokensPath, "utf8");
+    const outSrc = src.replace(
+      /--run-ink-dim-4:\s*#[0-9a-fA-F]{3,8}/,
+      "--run-ink-dim-4: #3a4248",
+    );
+    expect(outSrc).not.toBe(src);
+    fs.writeFileSync(neutered, outSrc);
+
+    let threw = false;
+    let message = "";
+    try {
+      runNode(`
+        import { assertRunDimInkContrast } from ${JSON.stringify(contrastLib)};
+        assertRunDimInkContrast({ tokensPath: ${JSON.stringify(neutered)} });
+      `);
+    } catch (err) {
+      threw = true;
+      message = err instanceof Error ? err.message : String(err);
+    }
+    expect(threw).toBe(true);
+    expect(message).toMatch(/run-dim-ink contrast gate/);
+  });
+});
+
 describe("ledger shot width gate (#364)", () => {
   it("detects a mislabeled PNG via IHDR", () => {
     // Minimal 1×1 PNG

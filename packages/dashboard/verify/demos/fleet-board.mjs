@@ -1,10 +1,11 @@
 /**
  * Issue #355 — fleet board screen proofs.
  *
- * Stages real daemon tasks (success + failure), measures the board at
- * 1280/1460/1920, proves no board H-scroll, honesty treatments, axe, ARIA,
- * pip fail state, attention order, cap-absent, runner statuses, table density,
- * retention-bound copy, and font floors on chart labels.
+ * Stages real daemon tasks (success + failure + awaiting + gate-held), measures
+ * the board at 1280/1460/1920, proves no board H-scroll, honesty treatments,
+ * axe, ARIA, pip fail state, attention order, cap-absent, runner statuses,
+ * table density, retention-bound copy, font floors, chip untruncation for
+ * AWAITING / GATE HELD (#370), and honest 1520 column restore (#370).
  */
 import { pathToFileURL } from "node:url";
 import { collectA11y, runAxe, ariaSnapshot } from "../lib/a11y.mjs";
@@ -15,7 +16,15 @@ import {
 } from "../lib/honesty.mjs";
 import { ledgerDirs, writeDemoProof, printRectSummary } from "../lib/ledger.mjs";
 import { measureAtViewports } from "../lib/measure.mjs";
+import { withFakeAllowlist } from "../lib/daemon.mjs";
 import { openVerifySession } from "../lib/session.mjs";
+import {
+  gateWorkflow,
+  installGlobalWorkflow,
+  makeRepo,
+  startRun,
+  waitRun,
+} from "../scripts/stage-runs.mjs";
 import { buildListPipTrack } from "../../src/screens/fleet/pips.ts";
 import { sortTasksByAttention } from "../../src/screens/fleet/attentionSort.ts";
 import { projectFleetKpis } from "../../src/screens/fleet/kpis.ts";
@@ -26,6 +35,9 @@ import {
 
 const TICKET = "issue-355";
 const DEMO = "fleet-board";
+
+/** Chip labels that #364/#370 must sample live (not just DONE/FAILED/RUNNING). */
+const REQUIRED_CHIP_LABELS = ["AWAITING", "GATE HELD"];
 
 /** Fleet-owned selectors — never edit measure.mjs DEFAULT_SELECTORS. */
 export const FLEET_SELECTORS = [
@@ -110,14 +122,34 @@ export function fleetBoardGates(_entry, ledger) {
     );
   }
 
-  // #364 — state chips untruncated at board widths
+  // #364 / #370 — state chips untruncated at board widths; required labels must
+  // be found (missing AWAITING / GATE HELD is a fail, not a silent pass).
   const chips = demo.chipUntruncated ?? {};
   for (const w of ["1280", "1460", "1920"]) {
     const row = chips[w];
-    if (row?.found && row.truncated) {
+    if (!row?.found) {
+      throw new Error(
+        `fleet-board: state chips missing at ${w}: ${JSON.stringify(row)}`,
+      );
+    }
+    if (row.truncated) {
       throw new Error(
         `fleet-board: state chip truncated at ${w}: ${JSON.stringify(row)}`,
       );
+    }
+    const required = row.required ?? {};
+    for (const label of REQUIRED_CHIP_LABELS) {
+      const req = required[label];
+      if (!req?.found) {
+        throw new Error(
+          `fleet-board: required chip "${label}" not found at ${w}: ${JSON.stringify(req)}`,
+        );
+      }
+      if (req.truncated) {
+        throw new Error(
+          `fleet-board: required chip "${label}" truncated at ${w}: ${JSON.stringify(req)}`,
+        );
+      }
     }
   }
 
@@ -142,6 +174,13 @@ export function fleetBoardGates(_entry, ledger) {
   if (!overflow.columnRestore?.restoredAt1520) {
     throw new Error(
       `fleet-board: branch/addr should restore by 1520: ${JSON.stringify(overflow.columnRestore)}`,
+    );
+  }
+  // #370 — restore must be honest: columns fit, or the overflow cue is visible.
+  // Fails when restored + clipped + no cue (silent dishonest restore).
+  if (!overflow.columnRestore?.restoreHonestAt1520) {
+    throw new Error(
+      `fleet-board: 1520 column restore dishonest (clipped without overflow cue): ${JSON.stringify(overflow.columnRestore)}`,
     );
   }
 
@@ -188,6 +227,13 @@ export function fleetBoardGates(_entry, ledger) {
   }
   if (!demo.staged?.completedTaskId) {
     throw new Error("fleet-board: completed task fixture not staged");
+  }
+  // #370 — AWAITING + GATE HELD fixtures required for chip coverage.
+  if (!demo.staged?.awaitingTaskId) {
+    throw new Error("fleet-board: awaiting task fixture not staged");
+  }
+  if (!demo.staged?.gateHeldRunId) {
+    throw new Error("fleet-board: gate-held run fixture not staged");
   }
 
   // Behavioral gates (not just presence)
@@ -475,8 +521,60 @@ function pureBehavioralProofs() {
   };
 }
 
+/**
+ * Stage a gate-held run so the fleet runs table paints GATE HELD (#370).
+ * @param {{ baseUrl: string, home: string }} daemon
+ */
+async function stageGateHeldRun(daemon) {
+  installGlobalWorkflow(daemon.home, "console-gate", gateWorkflow());
+  const script = JSON.stringify(
+    [
+      { emit: { type: "message", text: "planning for fleet gate" } },
+      {
+        submit_report: {
+          plan: "Fleet board gate-held chip fixture.",
+        },
+      },
+    ],
+    null,
+    2,
+  );
+  const repo = makeRepo({
+    "README.md": "fleet gate fixture\n",
+    ".fake-vendor.json": script,
+  });
+  const ack = await startRun(daemon.baseUrl, {
+    workflow: "console-gate",
+    cwd: repo,
+    brief: "fleet gate-held verify",
+  });
+  const detail = await waitRun(
+    daemon.baseUrl,
+    ack.run_id,
+    (d) => d.run?.state === "blocked" && d.run?.block?.reason === "gate",
+    45_000,
+  );
+  return {
+    runId: ack.run_id,
+    state: detail.run.state,
+    block: detail.run.block,
+  };
+}
+
 export async function runFleetBoardDemo() {
-  const session = await openVerifySession();
+  // Profiles required for workflow stage (gate-held) — same shape as run-detail.
+  const config = withFakeAllowlist({
+    profiles: {
+      deep: {
+        vendor: "fake",
+        model: "fake-model",
+        effort: "medium",
+        sandbox: "workspace",
+      },
+    },
+    defaults: { profile: "deep" },
+  });
+  const session = await openVerifySession({ config });
   try {
     const completed = await session.daemon.stageScript("report-success");
     await session.daemon.waitTask(completed.taskId);
@@ -485,6 +583,12 @@ export async function runFleetBoardDemo() {
     await session.daemon.waitTask(failed.taskId);
 
     const running = await session.daemon.stageScript("long-running");
+
+    // #370 — stage AWAITING task + GATE HELD run so chip proof samples those labels.
+    const awaiting = await session.daemon.stageScript("awaiting-answer");
+    await session.daemon.waitTask(awaiting.taskId);
+
+    const gateHeld = await stageGateHeldRun(session.daemon);
 
     const { shotsDir } = ledgerDirs(TICKET);
 
@@ -545,56 +649,135 @@ export async function runFleetBoardDemo() {
     const tasksTable1280 = await measureTasksTable1280(session.page);
     const kpiNotes1280 = await measureKpiNotes1280(session.page);
 
-    // #364 — chip untruncated + overflow cue + column restore breakpoint
+    // #364 / #370 — chip untruncated + required AWAITING / GATE HELD rows.
+    // Wait until staged fixtures paint so required-label rows are not false misses.
+    await session.page
+      .waitForFunction(
+        () => {
+          const texts = [
+            ...document.querySelectorAll(".pc-chip__label"),
+          ].map((el) => (el.textContent ?? "").replace(/\s+/g, " ").trim());
+          return texts.includes("AWAITING") && texts.includes("GATE HELD");
+        },
+        { timeout: 20_000 },
+      )
+      .catch(() => null);
+
     /** @type {Record<string, object>} */
     const chipUntruncated = {};
     for (const w of [1280, 1460, 1920]) {
       await session.page.setViewportSize({ width: w, height: 900 });
       await session.page.waitForTimeout(50);
       await session.page.evaluate(() => document.fonts.ready);
-      chipUntruncated[String(w)] = await session.page.evaluate(() => {
-        const labels = [...document.querySelectorAll(".pc-chip__label")];
-        if (labels.length === 0) return { found: false };
-        const samples = labels.slice(0, 12).map((label) => {
-          const text = (label.textContent ?? "").replace(/\s+/g, " ").trim();
-          const truncated =
-            label.scrollWidth > label.clientWidth + 1 ||
-            /\u2026|\.\.\.$/.test(text);
-          return {
-            text,
-            clientWidth: Math.round(label.clientWidth),
-            scrollWidth: Math.round(label.scrollWidth),
-            truncated,
+      chipUntruncated[String(w)] = await session.page.evaluate(
+        (requiredLabels) => {
+          const labels = [...document.querySelectorAll(".pc-chip__label")];
+          if (labels.length === 0) {
+            return {
+              found: false,
+              samples: [],
+              truncated: false,
+              required: Object.fromEntries(
+                requiredLabels.map((t) => [t, { found: false, truncated: false }]),
+              ),
+            };
+          }
+          const sampleOne = (label) => {
+            const text = (label.textContent ?? "").replace(/\s+/g, " ").trim();
+            const truncated =
+              label.scrollWidth > label.clientWidth + 1 ||
+              /\u2026|\.\.\.$/.test(text);
+            return {
+              text,
+              clientWidth: Math.round(label.clientWidth),
+              scrollWidth: Math.round(label.scrollWidth),
+              truncated,
+            };
           };
-        });
-        return {
-          found: true,
-          samples,
-          truncated: samples.some((s) => s.truncated),
-          widest: samples.reduce(
-            (a, b) => (b.scrollWidth > (a?.scrollWidth ?? 0) ? b : a),
-            samples[0],
-          ),
-        };
-      });
+          const samples = labels.slice(0, 16).map(sampleOne);
+          /** @type {Record<string, object>} */
+          const required = {};
+          for (const want of requiredLabels) {
+            const match = labels.find(
+              (el) =>
+                (el.textContent ?? "").replace(/\s+/g, " ").trim() === want,
+            );
+            if (!match) {
+              required[want] = { found: false, truncated: false, text: want };
+            } else {
+              required[want] = { found: true, ...sampleOne(match) };
+            }
+          }
+          return {
+            found: true,
+            samples,
+            truncated:
+              samples.some((s) => s.truncated) ||
+              Object.values(required).some((r) => r.found && r.truncated),
+            required,
+            widest: samples.reduce(
+              (a, b) => (b.scrollWidth > (a?.scrollWidth ?? 0) ? b : a),
+              samples[0],
+            ),
+          };
+        },
+        REQUIRED_CHIP_LABELS,
+      );
     }
 
-    // Column restore: secondary cols hidden below 1520, visible at 1520+
+    // Column restore: secondary cols hidden below 1520, visible at 1520+.
+    // #370 also measures clipping + overflow-cue so restore cannot be dishonest.
     const columnRestore = {};
     for (const w of [1460, 1520]) {
       await session.page.setViewportSize({ width: w, height: 900 });
-      await session.page.waitForTimeout(50);
+      await session.page.waitForTimeout(80);
+      await session.page.evaluate(() => document.fonts.ready);
+      // Wait for ResizeObserver to settle data-h-overflow after width change.
+      await session.page.waitForTimeout(120);
       columnRestore[String(w)] = await session.page.evaluate(() => {
+        const scroll = document.querySelector(
+          '[data-testid="fleet-tasks-scroll"]',
+        );
         const branch = document.querySelector(
           ".pc-fleet-tasks .pc-fleet-col--branch",
         );
         const addr = document.querySelector(".pc-fleet-tasks .pc-fleet-col--addr");
         const disp = (el) => (el ? getComputedStyle(el).display : null);
+        const branchVisible = branch
+          ? getComputedStyle(branch).display !== "none"
+          : false;
+        const addrVisible = addr
+          ? getComputedStyle(addr).display !== "none"
+          : false;
+        const scrollWidth = scroll?.scrollWidth ?? 0;
+        const clientWidth = scroll?.clientWidth ?? 0;
+        const clipped = scroll ? scrollWidth > clientWidth + 1 : false;
+        const overflowAttr = scroll?.getAttribute("data-h-overflow");
+        const overflowCue = overflowAttr === "true";
+        // Cell-level clip sample when restored (honest data may still ellipsis).
+        const cellClip = (el) => {
+          if (!el || getComputedStyle(el).display === "none") {
+            return { found: false, clipped: false };
+          }
+          return {
+            found: true,
+            clipped: el.scrollWidth > el.clientWidth + 1,
+            scrollWidth: Math.round(el.scrollWidth),
+            clientWidth: Math.round(el.clientWidth),
+          };
+        };
         return {
           branchDisplay: disp(branch),
           addrDisplay: disp(addr),
-          branchVisible: branch ? getComputedStyle(branch).display !== "none" : false,
-          addrVisible: addr ? getComputedStyle(addr).display !== "none" : false,
+          branchVisible,
+          addrVisible,
+          scrollWidth,
+          clientWidth,
+          clipped,
+          overflowAttr,
+          overflowCue,
+          branchCell: cellClip(branch),
+          addrCell: cellClip(addr),
         };
       });
     }
@@ -651,19 +834,28 @@ export async function runFleetBoardDemo() {
       return result;
     });
 
+    const at1460 = columnRestore["1460"];
+    const at1520 = columnRestore["1520"];
+    const restoredAt1520 = Boolean(
+      at1520 && at1520.branchVisible && at1520.addrVisible,
+    );
+    // Honest: columns fit (no table H-clip), OR the overflow cue is painted.
+    // Dishonest: columns restored, table clipped, cue hidden → silent loss.
+    const restoreHonestAt1520 = Boolean(
+      restoredAt1520 && (!at1520.clipped || at1520.overflowCue),
+    );
     const overflowCue = {
       forceOverflow,
       columnRestore: {
-        at1460: columnRestore["1460"],
-        at1520: columnRestore["1520"],
-        hiddenAt1460:
-          columnRestore["1460"] &&
-          !columnRestore["1460"].branchVisible &&
-          !columnRestore["1460"].addrVisible,
-        restoredAt1520:
-          columnRestore["1520"] &&
-          columnRestore["1520"].branchVisible &&
-          columnRestore["1520"].addrVisible,
+        at1460,
+        at1520,
+        hiddenAt1460: Boolean(
+          at1460 && !at1460.branchVisible && !at1460.addrVisible,
+        ),
+        restoredAt1520,
+        restoreHonestAt1520,
+        clippedAt1520: Boolean(at1520?.clipped),
+        overflowCueAt1520: Boolean(at1520?.overflowCue),
       },
     };
 
@@ -843,26 +1035,42 @@ export async function runFleetBoardDemo() {
     };
     await clearIntercepts(session.page, "**/runs");
 
-    // Loading: hang GET /tasks; require fleet loading (not shell chip alone).
-    await session.page.route(
-      (url) => {
-        const u = typeof url === "string" ? url : url.href;
-        try {
-          const parsed = new URL(u);
-          return parsed.pathname === "/tasks" || parsed.pathname.endsWith("/tasks");
-        } catch {
-          return /\/tasks$/.test(u);
-        }
-      },
-      async (route) => {
-        await new Promise((r) => setTimeout(r, 8000));
+    // Loading: hang GET /tasks + /runs so the full-board loading shell can
+    // paint (it requires both lists empty). #370 stages a gate-held run, so
+    // hanging only /tasks left runs populated and skipped the loading shell.
+    const hangList = async (route) => {
+      await new Promise((r) => setTimeout(r, 8000));
+      const u = route.request().url();
+      const pathName = new URL(u).pathname;
+      if (pathName === "/runs" || pathName.endsWith("/runs")) {
         await route.fulfill({
           status: 200,
           contentType: "application/json",
-          body: JSON.stringify({ tasks: [], seq: 0 }),
+          body: JSON.stringify({ runs: [] }),
         });
-      },
-    );
+        return;
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ tasks: [], seq: 0 }),
+      });
+    };
+    const isListPath = (url) => {
+      const u = typeof url === "string" ? url : url.href;
+      try {
+        const parsed = new URL(u);
+        return (
+          parsed.pathname === "/tasks" ||
+          parsed.pathname.endsWith("/tasks") ||
+          parsed.pathname === "/runs" ||
+          parsed.pathname.endsWith("/runs")
+        );
+      } catch {
+        return /\/(tasks|runs)$/.test(u);
+      }
+    };
+    await session.page.route(isListPath, hangList);
     await session.page.goto(`${session.url}#/fleet`, { waitUntil: "commit" });
     await session.page.reload({ waitUntil: "commit" });
     /** @type {object} */
@@ -885,17 +1093,7 @@ export async function runFleetBoardDemo() {
       await session.page.waitForTimeout(80);
     }
     honesty.loading = loadingPhase;
-    await session.page.unroute(
-      (url) => {
-        const u = typeof url === "string" ? url : url.href;
-        try {
-          const parsed = new URL(u);
-          return parsed.pathname === "/tasks" || parsed.pathname.endsWith("/tasks");
-        } catch {
-          return /\/tasks$/.test(u);
-        }
-      },
-    );
+    await session.page.unroute(isListPath);
     await session.page.goto(`${session.url}#/fleet`, { waitUntil: "domcontentloaded" });
     await session.page.waitForTimeout(400);
 
@@ -938,6 +1136,8 @@ export async function runFleetBoardDemo() {
         completedTaskId: completed.taskId,
         failedTaskId: failed.taskId,
         runningTaskId: running.taskId,
+        awaitingTaskId: awaiting.taskId,
+        gateHeldRunId: gateHeld.runId,
       },
       taskPresence,
       behavioral,

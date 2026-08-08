@@ -348,6 +348,8 @@ export async function measureContrast(page, selector) {
  * @param {import('playwright-core').Page} page
  */
 export async function measureChromeContrast(page) {
+  // #370: dropped dead `.pc-screen__title` probe (class never rendered; gate
+  // skipped not-found so it was a silent no-op).
   const targets = [
     { id: "brand-name", selector: ".pc-shell__brand-name" },
     { id: "brand-sub", selector: ".pc-shell__brand-sub" },
@@ -360,7 +362,6 @@ export async function measureChromeContrast(page) {
     { id: "find-input", selector: ".pc-find__input" },
     { id: "legend-label", selector: ".pc-shell__legend-label" },
     { id: "footer-meta", selector: ".pc-shell__footer-meta" },
-    { id: "screen-title", selector: ".pc-screen__title" },
   ];
   /** @type {Record<string, unknown>} */
   const out = {};
@@ -368,4 +369,94 @@ export async function measureChromeContrast(page) {
     out[t.id] = await measureContrast(page, t.selector);
   }
   return out;
+}
+
+/**
+ * Grounds the inherited run-card actually paints on (#370).
+ * Dim inks must clear AA here — not the full surface ladder.
+ */
+export const RUN_DIM_GROUNDS = {
+  "run-ground-pending": "--run-ground-pending",
+  "surface-sunken": "--surface-sunken",
+  "surface-raised": "--surface-raised",
+  ground: "--ground",
+  surface: "--surface",
+};
+
+/** Pre-computed dim inks that replace ancestor opacity on inherited cards. */
+export const RUN_DIM_INKS = {
+  "run-ink-dim": "--run-ink-dim",
+  "run-ink-dim-2": "--run-ink-dim-2",
+  "run-ink-dim-3": "--run-ink-dim-3",
+  "run-ink-dim-4": "--run-ink-dim-4",
+  "run-ink-dim-pending": "--run-ink-dim-pending",
+};
+
+/**
+ * Compute every run-dim-ink × run-card-ground pairing ratio.
+ * @param {Record<string, string>} [tokenMap]
+ */
+export function measureRunDimInkPairings(tokenMap) {
+  const tokens = tokenMap ?? readTokenHexMap();
+  /** @type {Array<{ ink: string, ground: string, inkHex: string, groundHex: string, ratio: number, ok: boolean }>} */
+  const rows = [];
+  for (const [inkName, inkVar] of Object.entries(RUN_DIM_INKS)) {
+    const inkHex = tokens[inkVar];
+    const fg = inkHex ? parseHex(inkHex) : null;
+    for (const [groundName, groundVar] of Object.entries(RUN_DIM_GROUNDS)) {
+      const groundHex = tokens[groundVar];
+      const bg = groundHex ? parseHex(groundHex) : null;
+      if (!fg || !bg || !inkHex || !groundHex) {
+        rows.push({
+          ink: inkName,
+          ground: groundName,
+          inkHex: inkHex ?? "",
+          groundHex: groundHex ?? "",
+          ratio: 0,
+          ok: false,
+        });
+        continue;
+      }
+      const ratio = contrastRatio(fg, bg);
+      rows.push({
+        ink: inkName,
+        ground: groundName,
+        inkHex,
+        groundHex,
+        ratio: Math.round(ratio * 100) / 100,
+        ok: ratio >= 4.5,
+      });
+    }
+  }
+  return rows;
+}
+
+/**
+ * Gate: every run dim-ink/card-ground pairing ≥ 4.5:1 (#370).
+ * Neuter: restore ancestor `opacity: 0.72` on `.pc-run__node-card--inherited`
+ * and drop dim rebinds — axe on the populated run screen fails; or set a
+ * dim token too dark (e.g. `--run-ink-dim-4: #3a4248`) and this pure gate fails.
+ * @param {object} [opts]
+ * @param {string} [opts.tokensPath]
+ * @param {number} [opts.minRatio]
+ */
+export function assertRunDimInkContrast(opts = {}) {
+  const minRatio = opts.minRatio ?? 4.5;
+  const rows = measureRunDimInkPairings(
+    opts.tokensPath ? readTokenHexMap(opts.tokensPath) : undefined,
+  );
+  const fails = rows.filter((r) => !r.ok || r.ratio < minRatio);
+  if (fails.length > 0) {
+    const detail = fails
+      .map(
+        (f) =>
+          `${f.ink}(${f.inkHex}) on ${f.ground}(${f.groundHex}) = ${f.ratio}:1`,
+      )
+      .join("; ");
+    throw new Error(
+      `run-dim-ink contrast gate: ${fails.length} pairing(s) below ${minRatio}:1 — ${detail}`,
+    );
+  }
+  const worst = rows.reduce((a, b) => (a.ratio <= b.ratio ? a : b), rows[0]);
+  return { ok: true, pairings: rows.length, worst };
 }

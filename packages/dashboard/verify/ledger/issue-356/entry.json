@@ -23,7 +23,7 @@
               "finish"
             ]
           },
-          "workspace": "/tmp/parley-verify-home-XuAyqR/worktrees/parley-run-repo-0U4JLC/r1",
+          "workspace": "/tmp/parley-verify-home-mpnj2O/worktrees/parley-run-repo-9fly2V/r1",
           "nodeCount": 2
         },
         "fanOut": {
@@ -117,7 +117,57 @@
           }
         ],
         "gridTextSample": "nodefork · 0iteration 1planstepINHERITED—approvegateSKIPPED ⊘ fork—donestep—FAILED !—",
-        "textSample": "statenodestatetasksgistdurationplan inheritedINHERITED———approve skipped ⊘SKIPPED ⊘ fork—on_reject → finish—done .1FAILED !1—0s"
+        "textSample": "statenodestatetasksgistdurationplan inheritedINHERITED———approve skipped ⊘SKIPPED ⊘ fork—on_reject → finish—done .1FAILED !1—0s",
+        "inheritedDim": {
+          "found": true,
+          "opacities": [
+            "1"
+          ],
+          "maxOpacity": 1,
+          "minOpacity": 1,
+          "noAncestorOpacity": true,
+          "samples": [
+            {
+              "sel": ".pc-run__node-addr",
+              "opacity": "1",
+              "ratio": 4.85,
+              "wcagAA": true,
+              "text": "plan"
+            },
+            {
+              "sel": ".pc-run__node-name--struck",
+              "opacity": "1",
+              "ratio": 4.86,
+              "wcagAA": true,
+              "text": "plan"
+            },
+            {
+              "sel": ".pc-run__fork-badge--inherited",
+              "opacity": "1",
+              "ratio": 4.86,
+              "wcagAA": true,
+              "text": "inherited"
+            },
+            {
+              "sel": ".pc-run__ink--pending",
+              "opacity": "1",
+              "ratio": 4.81,
+              "wcagAA": true,
+              "text": "step"
+            },
+            {
+              "sel": ".pc-run__node-kind",
+              "opacity": "1",
+              "ratio": 4.81,
+              "wcagAA": true,
+              "text": "step"
+            }
+          ],
+          "allAA": true
+        },
+        "forkAxe": {
+          "violations": []
+        }
       },
       "forkNotes": [
         "step failure observed as run.state=blocked block.reason=unknown verbs=[\"redirect\",\"finish\"] with node STATE=failed (run.state=failed only on phase-2 start errors / definition unparseable)"
@@ -434,7 +484,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "Skip to navigationSkip to findSkip to main content3 need the orchestrator​parleyconsoleFleet7 tasks · 3 need actionRunr1Taskt7Metricsall sessionsdaemon127.0.…"
+              "text": "Skip to navigationSkip to findSkip to main content3 need the orchestratorparleyconsoleFleet7 tasks · 3 need actionRunr1Taskt7Metricsall sessionsdaemon127.0.0…"
             },
             "center": {
               "selector": ".pc-shell__center",
@@ -476,7 +526,7 @@
                 "overflow": "auto",
                 "opacity": "1"
               },
-              "text": "console-gaterun r1 · v1 · repo workspace · otherapprove.1 · 1/1 tasks · 0 ▸ 0 · 1s…/tmp/parley-verify-home-XuAyqR/worktrees/parley-run-repo-0U4JLC/r1BLOCKED …"
+              "text": "console-gaterun r1 · v1 · repo workspace · otherapprove.1 · 1/1 tasks · 0 ▸ 0 · 2s…/tmp/parley-verify-home-mpnj2O/worktrees/parley-run-repo-9fly2V/r1BLOCKED …"
             },
             "screen-run": {
               "selector": "[data-testid=\"screen-run\"]",
@@ -518,7 +568,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "console-gaterun r1 · v1 · repo workspace · otherapprove.1 · 1/1 tasks · 0 ▸ 0 · 1s…/tmp/parley-verify-home-XuAyqR/worktrees/parley-run-repo-0U4JLC/r1BLOCKED …"
+              "text": "console-gaterun r1 · v1 · repo workspace · otherapprove.1 · 1/1 tasks · 0 ▸ 0 · 2s…/tmp/parley-verify-home-mpnj2O/worktrees/parley-run-repo-9fly2V/r1BLOCKED …"
             },
             "run-header": {
               "selector": "[data-testid=\"run-header\"]",
@@ -560,7 +610,7 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "console-gaterun r1 · v1 · repo workspace · otherapprove.1 · 1/1 tasks · 0 ▸ 0 · 1s…/tmp/parley-verify-home-XuAyqR/worktrees/parley-run-repo-0U4JLC/r1BLOCKED …"
+              "text": "console-gaterun r1 · v1 · repo workspace · otherapprove.1 · 1/1 tasks · 0 ▸ 0 · 2s…/tmp/parley-verify-home-mpnj2O/worktrees/parley-run-repo-9fly2V/r1BLOCKED …"
             },
             "run-view-switch": {
               "selector": "[data-testid=\"run-view-switch\"]",
@@ -854,7 +904,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "/tmp/parley-verify-home-XuAyqR/worktrees/parley-run-repo-0U4JLC/r1"
+              "text": "/tmp/parley-verify-home-mpnj2O/worktrees/parley-run-repo-9fly2V/r1"
             },
             "run-block": {
               "selector": "[data-testid=\"run-block\"]",
@@ -946,7 +996,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "Skip to navigationSkip to findSkip to main content3 need the orchestrator​parleyconsoleFleet7 tasks · 3 need actionRunr1Taskt7Metricsall sessionsdaemon127.0.…"
+              "text": "Skip to navigationSkip to findSkip to main content3 need the orchestratorparleyconsoleFleet7 tasks · 3 need actionRunr1Taskt7Metricsall sessionsdaemon127.0.0…"
             },
             "center": {
               "selector": ".pc-shell__center",
@@ -988,7 +1038,7 @@
                 "overflow": "auto",
                 "opacity": "1"
               },
-              "text": "console-gaterun r1 · v1 · repo workspace · otherapprove.1 · 1/1 tasks · 0 ▸ 0 · 1s…/tmp/parley-verify-home-XuAyqR/worktrees/parley-run-repo-0U4JLC/r1BLOCKED …"
+              "text": "console-gaterun r1 · v1 · repo workspace · otherapprove.1 · 1/1 tasks · 0 ▸ 0 · 2s…/tmp/parley-verify-home-mpnj2O/worktrees/parley-run-repo-9fly2V/r1BLOCKED …"
             },
             "screen-run": {
               "selector": "[data-testid=\"screen-run\"]",
@@ -1030,7 +1080,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "console-gaterun r1 · v1 · repo workspace · otherapprove.1 · 1/1 tasks · 0 ▸ 0 · 1s…/tmp/parley-verify-home-XuAyqR/worktrees/parley-run-repo-0U4JLC/r1BLOCKED …"
+              "text": "console-gaterun r1 · v1 · repo workspace · otherapprove.1 · 1/1 tasks · 0 ▸ 0 · 2s…/tmp/parley-verify-home-mpnj2O/worktrees/parley-run-repo-9fly2V/r1BLOCKED …"
             },
             "run-header": {
               "selector": "[data-testid=\"run-header\"]",
@@ -1072,7 +1122,7 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "console-gaterun r1 · v1 · repo workspace · otherapprove.1 · 1/1 tasks · 0 ▸ 0 · 1s…/tmp/parley-verify-home-XuAyqR/worktrees/parley-run-repo-0U4JLC/r1BLOCKED …"
+              "text": "console-gaterun r1 · v1 · repo workspace · otherapprove.1 · 1/1 tasks · 0 ▸ 0 · 2s…/tmp/parley-verify-home-mpnj2O/worktrees/parley-run-repo-9fly2V/r1BLOCKED …"
             },
             "run-view-switch": {
               "selector": "[data-testid=\"run-view-switch\"]",
@@ -1366,7 +1416,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "/tmp/parley-verify-home-XuAyqR/worktrees/parley-run-repo-0U4JLC/r1"
+              "text": "/tmp/parley-verify-home-mpnj2O/worktrees/parley-run-repo-9fly2V/r1"
             },
             "run-block": {
               "selector": "[data-testid=\"run-block\"]",
@@ -1458,7 +1508,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "Skip to navigationSkip to findSkip to main content3 need the orchestrator​parleyconsoleFleet7 tasks · 3 need actionRunr1Taskt7Metricsall sessionsdaemon127.0.…"
+              "text": "Skip to navigationSkip to findSkip to main content3 need the orchestratorparleyconsoleFleet7 tasks · 3 need actionRunr1Taskt7Metricsall sessionsdaemon127.0.0…"
             },
             "center": {
               "selector": ".pc-shell__center",
@@ -1500,7 +1550,7 @@
                 "overflow": "auto",
                 "opacity": "1"
               },
-              "text": "console-gaterun r1 · v1 · repo workspace · otherapprove.1 · 1/1 tasks · 0 ▸ 0 · 1s…/tmp/parley-verify-home-XuAyqR/worktrees/parley-run-repo-0U4JLC/r1BLOCKED …"
+              "text": "console-gaterun r1 · v1 · repo workspace · otherapprove.1 · 1/1 tasks · 0 ▸ 0 · 2s…/tmp/parley-verify-home-mpnj2O/worktrees/parley-run-repo-9fly2V/r1BLOCKED …"
             },
             "screen-run": {
               "selector": "[data-testid=\"screen-run\"]",
@@ -1542,7 +1592,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "console-gaterun r1 · v1 · repo workspace · otherapprove.1 · 1/1 tasks · 0 ▸ 0 · 1s…/tmp/parley-verify-home-XuAyqR/worktrees/parley-run-repo-0U4JLC/r1BLOCKED …"
+              "text": "console-gaterun r1 · v1 · repo workspace · otherapprove.1 · 1/1 tasks · 0 ▸ 0 · 2s…/tmp/parley-verify-home-mpnj2O/worktrees/parley-run-repo-9fly2V/r1BLOCKED …"
             },
             "run-header": {
               "selector": "[data-testid=\"run-header\"]",
@@ -1584,7 +1634,7 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "console-gaterun r1 · v1 · repo workspace · otherapprove.1 · 1/1 tasks · 0 ▸ 0 · 1s…/tmp/parley-verify-home-XuAyqR/worktrees/parley-run-repo-0U4JLC/r1BLOCKED …"
+              "text": "console-gaterun r1 · v1 · repo workspace · otherapprove.1 · 1/1 tasks · 0 ▸ 0 · 2s…/tmp/parley-verify-home-mpnj2O/worktrees/parley-run-repo-9fly2V/r1BLOCKED …"
             },
             "run-view-switch": {
               "selector": "[data-testid=\"run-view-switch\"]",
@@ -1878,7 +1928,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "/tmp/parley-verify-home-XuAyqR/worktrees/parley-run-repo-0U4JLC/r1"
+              "text": "/tmp/parley-verify-home-mpnj2O/worktrees/parley-run-repo-9fly2V/r1"
             },
             "run-block": {
               "selector": "[data-testid=\"run-block\"]",
@@ -1956,7 +2006,7 @@
       },
       "shotWidthGate": {
         "ok": true,
-        "checked": 9,
+        "checked": 11,
         "files": [
           {
             "file": "run-detail-failed-1460.png",
@@ -2013,7 +2063,7 @@
         "offline": {
           "phase": "stale-reconnecting",
           "liveStatus": "streamreconnecting",
-          "text": "console-gaterun r1 · v1 · repo workspace · otherapprove.1 · 1/1 tasks · 0 ▸ 0 · 37s…/tmp/parley-verify-home-XuAyqR/worktrees/parley-run-repo-0U4JLC/r1BLOCKED · GATE HELDcopy r1blockedgate · approvegate verbs (approve · reject · redirect · finish) belong to the orchestrating agent — this surface is r"
+          "text": "console-gaterun r1 · v1 · repo workspace · otherapprove.1 · 1/1 tasks · 0 ▸ 0 · 37s…/tmp/parley-verify-home-mpnj2O/worktrees/parley-run-repo-9fly2V/r1BLOCKED · GATE HELDcopy r1blockedgate · approvegate verbs (approve · reject · redirect · finish) belong to the orchestrating agent — this surface is r"
         }
       },
       "neuter": {
@@ -2050,7 +2100,7 @@
         "aria": {
           "api": "locator.ariaSnapshot",
           "selector": "[data-testid=\"screen-run\"]",
-          "tree": "- heading \"console-gate\" [level=1]\n- text: run r1 · v1 · repo workspace · other approve.1 · 1/1 tasks · 0 ▸ 0 · 56s… /tmp/parley-verify-home-XuAyqR/worktrees/parley-run-repo-0U4JLC/r1 BLOCKED · GATE HELD\n- button \"copy r1\"\n- text: blocked gate · approve gate verbs (approve · reject · redirect · finish) belong to the orchestrating agent — this surface is read-only\n- group \"Gate verb scaffolds\":\n  - 'button \"Copy: parley run approve r1\"': parley run approve r1\n  - 'button \"Copy: parley run reject r1\"': parley run reject r1\n  - 'button \"Copy: parley run redirect r1 --to <node>\"': parley run redirect r1 --to <node>\n  - 'button \"Copy: parley run finish r1\"': parley run finish r1\n- group \"Run views\":\n  - text: view\n  - button \"pipeline\"\n  - button \"iteration grid\"\n  - button \"node table\" [pressed]\n- text: run outputs held — awaiting advance\n- table \"Node table\":\n  - row \"state node state tasks gist duration\":\n    - columnheader \"state\"\n    - columnheader \"node\"\n    - columnheader \"state\"\n    - columnheader \"tasks\"\n    - columnheader \"gist\"\n    - columnheader \"duration\"\n  - row \"plan .1 COMPLETED 1 — 0s\" [selected]:\n    - cell\n    - cell \"plan .1\"\n    - cell \"COMPLETED\"\n    - cell \"1\"\n    - cell \"—\"\n    - cell \"0s\"\n  - row \"approve .1 HELD — \\\"Approve this plan?\\\" · on_reject → finish —\":\n    - cell\n    - cell \"approve .1\"\n    - cell \"HELD\"\n    - cell \"—\"\n    - cell \"\\\"Approve this plan?\\\" · on_reject → finish\"\n    - cell \"—\"\n- region \"Deliverables\": deliverables ready · 1 row plan.1/plan INLINE Ship the console run detail screen. inline · 35 B\n- region \"Run tasks\":\n  - text: run tasks 1 on run · 0 on plan\n  - button \"COMPLETED plan.1 · t1 fake · fake-model 0s\""
+          "tree": "- heading \"console-gate\" [level=1]\n- text: run r1 · v1 · repo workspace · other approve.1 · 1/1 tasks · 0 ▸ 0 · 57s… /tmp/parley-verify-home-mpnj2O/worktrees/parley-run-repo-9fly2V/r1 BLOCKED · GATE HELD\n- button \"copy r1\"\n- text: blocked gate · approve gate verbs (approve · reject · redirect · finish) belong to the orchestrating agent — this surface is read-only\n- group \"Gate verb scaffolds\":\n  - 'button \"Copy: parley run approve r1\"': parley run approve r1\n  - 'button \"Copy: parley run reject r1\"': parley run reject r1\n  - 'button \"Copy: parley run redirect r1 --to <node>\"': parley run redirect r1 --to <node>\n  - 'button \"Copy: parley run finish r1\"': parley run finish r1\n- group \"Run views\":\n  - text: view\n  - button \"pipeline\"\n  - button \"iteration grid\"\n  - button \"node table\" [pressed]\n- text: run outputs held — awaiting advance\n- table \"Node table\":\n  - row \"state node state tasks gist duration\":\n    - columnheader \"state\"\n    - columnheader \"node\"\n    - columnheader \"state\"\n    - columnheader \"tasks\"\n    - columnheader \"gist\"\n    - columnheader \"duration\"\n  - row \"plan .1 COMPLETED 1 — 0s\" [selected]:\n    - cell\n    - cell \"plan .1\"\n    - cell \"COMPLETED\"\n    - cell \"1\"\n    - cell \"—\"\n    - cell \"0s\"\n  - row \"approve .1 HELD — \\\"Approve this plan?\\\" · on_reject → finish —\":\n    - cell\n    - cell \"approve .1\"\n    - cell \"HELD\"\n    - cell \"—\"\n    - cell \"\\\"Approve this plan?\\\" · on_reject → finish\"\n    - cell \"—\"\n- region \"Deliverables\": deliverables ready · 1 row plan.1/plan INLINE Ship the console run detail screen. inline · 35 B\n- region \"Run tasks\":\n  - text: run tasks 1 on run · 0 on plan\n  - button \"COMPLETED plan.1 · t1 fake · fake-model 0s\""
         },
         "keyboardWalk": {
           "focusableCount": 32,
@@ -2085,8 +2135,8 @@
         "purged": "not staged — requires retention purge timing",
         "missing-worktree": "not staged — requires path deliverable + worktree removal"
       },
-      "recordedAt": "2026-08-07T03:19:40.995Z"
+      "recordedAt": "2026-08-08T00:36:42.985Z"
     }
   },
-  "updatedAt": "2026-08-07T03:19:40.995Z"
+  "updatedAt": "2026-08-08T00:36:42.985Z"
 }

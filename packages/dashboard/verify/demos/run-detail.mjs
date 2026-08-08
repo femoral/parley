@@ -195,6 +195,33 @@ export function runDetailGates(_entry, ledger) {
     );
   }
 
+  // #370 — inherited dim honesty: no ancestor opacity; sampled inks AA
+  const dim = forkUi.inheritedDim ?? {};
+  if (!dim.found) {
+    throw new Error(
+      `run-detail: inherited card dim probe missing (no .pc-run__node-card--inherited): ${JSON.stringify(dim)}`,
+    );
+  }
+  if (!dim.noAncestorOpacity) {
+    throw new Error(
+      `run-detail: inherited card uses ancestor opacity (must use solid dim tokens): ${JSON.stringify(dim)}`,
+    );
+  }
+  if (!dim.allAA) {
+    throw new Error(
+      `run-detail: inherited card ink below AA after dim: ${JSON.stringify(dim.samples)}`,
+    );
+  }
+  const forkAxeViol = forkUi.forkAxe?.violations ?? [];
+  const forkContrast = forkAxeViol.filter(
+    (v) => v.id === "color-contrast" && (v.impact === "serious" || v.impact === "critical"),
+  );
+  if (forkContrast.length > 0) {
+    throw new Error(
+      `run-detail: forked pipeline axe color-contrast: ${JSON.stringify(forkContrast)}`,
+    );
+  }
+
   // Fork STATE column names INHERITED/SKIPPED (MED N2)
   if (!forkUi.stateNamed) {
     throw new Error(
@@ -558,6 +585,107 @@ export async function runRunDetailDemo() {
       const pipeInh = await pipe.locator('[data-fork="inherited"]').count();
       const pipeSkip = await pipe.locator('[data-fork="skipped"]').count();
 
+      // #370 — inherited cards must not use ancestor opacity; sample composited
+      // ink contrast so reintroducing opacity:0.72 fails the suite.
+      const inheritedDim = await page.evaluate(() => {
+        /** Relative luminance + contrast (same formula as verify/lib/contrast.mjs). */
+        function parseRgb(c) {
+          const m = c?.match(/rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)(?:\s*,\s*([\d.]+))?\s*\)/);
+          if (!m) return null;
+          return [Number(m[1]), Number(m[2]), Number(m[3]), m[4] !== undefined ? Number(m[4]) : 1];
+        }
+        function relLum([r, g, b]) {
+          const lin = [r, g, b].map((ch) => {
+            const s = ch / 255;
+            return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+          });
+          return 0.2126 * lin[0] + 0.7152 * lin[1] + 0.0722 * lin[2];
+        }
+        function ratio(fg, bg) {
+          const L1 = relLum(fg);
+          const L2 = relLum(bg);
+          return (Math.max(L1, L2) + 0.05) / (Math.min(L1, L2) + 0.05);
+        }
+        function opaqueBg(el) {
+          let n = el;
+          while (n && n !== document.documentElement) {
+            const bg = parseRgb(getComputedStyle(n).backgroundColor);
+            if (bg && bg[3] >= 0.99) return bg.slice(0, 3);
+            n = n.parentElement;
+          }
+          return [11, 13, 15];
+        }
+        const cards = [
+          ...document.querySelectorAll(
+            '[data-testid="run-pipeline"] .pc-run__node-card--inherited',
+          ),
+        ];
+        if (cards.length === 0) return { found: false, samples: [] };
+        const opacities = cards.map((c) => getComputedStyle(c).opacity);
+        const selectors = [
+          ".pc-run__node-addr",
+          ".pc-run__node-name--struck",
+          ".pc-run__fork-badge--inherited",
+          ".pc-run__ink--pending",
+          ".pc-run__node-kind",
+        ];
+        /** @type {object[]} */
+        const samples = [];
+        for (const card of cards.slice(0, 2)) {
+          for (const sel of selectors) {
+            const el = card.querySelector(sel);
+            if (!el) continue;
+            const cs = getComputedStyle(el);
+            const fg = parseRgb(cs.color);
+            if (!fg) continue;
+            // Walk composite through ancestor opacities onto ground.
+            let effective = fg.slice(0, 3);
+            let n = /** @type {Element | null} */ (el);
+            while (n && n !== document.documentElement) {
+              const op = parseFloat(getComputedStyle(n).opacity);
+              if (op < 0.999) {
+                const bg = opaqueBg(n.parentElement ?? document.body);
+                effective = effective.map((c, i) =>
+                  Math.round(c * op + bg[i] * (1 - op)),
+                );
+              }
+              n = n.parentElement;
+            }
+            const bg = opaqueBg(el);
+            // Also composite final ink if card itself has opacity.
+            const cardOp = parseFloat(getComputedStyle(card).opacity);
+            let ink = effective;
+            let ground = bg;
+            if (cardOp < 0.999) {
+              const page = [11, 13, 15];
+              ink = ink.map((c, i) => Math.round(c * cardOp + page[i] * (1 - cardOp)));
+              ground = ground.map((c, i) =>
+                Math.round(c * cardOp + page[i] * (1 - cardOp)),
+              );
+            }
+            const r = ratio(ink, ground);
+            samples.push({
+              sel,
+              opacity: getComputedStyle(card).opacity,
+              ratio: Math.round(r * 100) / 100,
+              wcagAA: r >= 4.5,
+              text: (el.textContent ?? "").replace(/\s+/g, " ").trim().slice(0, 40),
+            });
+          }
+        }
+        return {
+          found: true,
+          opacities,
+          maxOpacity: Math.max(...opacities.map((o) => parseFloat(o) || 0)),
+          minOpacity: Math.min(...opacities.map((o) => parseFloat(o) || 1)),
+          noAncestorOpacity: opacities.every((o) => parseFloat(o) >= 0.999),
+          samples,
+          allAA: samples.length > 0 && samples.every((s) => s.wcagAA),
+        };
+      });
+      // Axe on forked pipeline — inherits the opacity-dim failure class (#370).
+      const forkAxe = await runAxe(page, { include: '[data-testid="screen-run"]' });
+
       // Grid — REQUIRED #3 (must include iter 0) + STATE names (MED N2)
       await page.click('[data-testid="run-view-grid"]');
       await page.waitForSelector('[data-testid="run-iteration-grid"]', { timeout: 5_000 });
@@ -591,6 +719,14 @@ export async function runRunDetailDemo() {
         gridStateLabels,
         gridTextSample: gridText,
         textSample: tableText,
+        inheritedDim,
+        forkAxe: {
+          violations: (forkAxe.violations ?? []).map((v) => ({
+            id: v.id,
+            impact: v.impact,
+            nodes: v.nodes?.length ?? 0,
+          })),
+        },
       };
       await page.setViewportSize({ width: 1460, height: 900 });
       await page.waitForTimeout(40);
