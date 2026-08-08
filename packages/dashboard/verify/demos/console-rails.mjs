@@ -7,14 +7,17 @@
  * - Rails scroll internally; no board H-scroll at 1280
  * - Populated rails: staged tasks so axe + AA see real cards/hose lines
  * - New ≤11px text passes AA against actual grounds
- * - Focus ring on interactive attention cards is a real outline (post-#366 tokens)
+ * - Focus ring on interactive attention cards is a real, visible outline
+ *   (post-#366 tokens; #373 gates outline-color alpha + contrast ≥ 3:1)
  * - Rows density is single-line (~≤32px)
  */
 import { pathToFileURL } from "node:url";
 import { collectA11y } from "../lib/a11y.mjs";
 import {
+  contrastRatio,
   measureContrast,
   measureInkVsTokenGround,
+  parseCssColor,
   readTokenHexMap,
 } from "../lib/contrast.mjs";
 import {
@@ -108,24 +111,27 @@ export function consoleRailsGates(_entry, ledger) {
 
   // Focus affordance: rule-text tokens + rendered outline under real Tab.
   // :focus-visible does not fire under programmatic .focus() alone (#369).
+  // Single reachable failure path; message distinguishes Tab vs shape vs color
+  // visibility (#373) — do not pre-gate on focus.ok then re-check sub-fields
+  // (those branches were unreachable when ok already ANDed them).
   const focus = demo.focusRing;
   if (!focus?.ok) {
+    let detail = "missing/invalid";
+    if (focus?.found && focus.ruleOk) {
+      if (!focus.viaTab) {
+        detail = "not measured via Tab traversal";
+      } else if (
+        !focus.computedOutlineStyle ||
+        focus.computedOutlineStyle === "none" ||
+        !(parseFloat(focus.computedOutlineWidth) > 0)
+      ) {
+        detail = "rendered focus outline missing/none";
+      } else if (focus.outlineVisible !== true) {
+        detail = "rendered focus outline not visible";
+      }
+    }
     throw new Error(
-      `console-rails: interactive attention focus ring missing/invalid: ${JSON.stringify(focus)}`,
-    );
-  }
-  if (!focus?.viaTab) {
-    throw new Error(
-      `console-rails: focus ring not measured via Tab traversal: ${JSON.stringify(focus)}`,
-    );
-  }
-  if (
-    !focus.computedOutlineStyle ||
-    focus.computedOutlineStyle === "none" ||
-    !(parseFloat(focus.computedOutlineWidth) > 0)
-  ) {
-    throw new Error(
-      `console-rails: rendered focus outline missing/none on interactive card: ${JSON.stringify(focus)}`,
+      `console-rails: interactive attention focus ring ${detail}: ${JSON.stringify(focus)}`,
     );
   }
 
@@ -330,7 +336,9 @@ async function measureRowsDensity(page) {
  *
  * Rule-text checks stay (CSSOM). Rendered outline is authoritative under a real
  * Tab traversal — `:focus-visible` does not fire under programmatic `.focus()`
- * (#369).
+ * (#369). #373 also gates outline-color: composite the outline over the card
+ * ground at its alpha, then require ≥ 3:1 contrast of the painted color
+ * (WCAG non-text indicator). Full-strength RGB alone false-passes low alpha.
  *
  * @param {import('playwright-core').Page} page
  */
@@ -428,10 +436,59 @@ async function measureFocusRing(page) {
         computedOutline: null,
         computedOutlineStyle: null,
         computedOutlineWidth: null,
+        computedOutlineColor: null,
+        outlineGround: null,
         matchesFocusVisible: false,
       };
     }
+
+    // Composite opaque ground under the outline. outline-offset is -2px so the
+    // ring paints over the card's own surface (not the page behind it).
+    function parse(color) {
+      if (!color || color === "transparent") return [0, 0, 0, 0];
+      const m = color.match(
+        /rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)(?:\s*,\s*([\d.]+))?\s*\)/,
+      );
+      if (!m) return null;
+      return [
+        Number(m[1]),
+        Number(m[2]),
+        Number(m[3]),
+        m[4] !== undefined ? Number(m[4]) : 1,
+      ];
+    }
+    function compositeBg(node) {
+      let r = 11,
+        g = 13,
+        b = 15; // --ground fallback (byte-identical to real card ground)
+      const stack = [];
+      let cur = node;
+      while (cur && cur !== document.documentElement) {
+        const bgCs = getComputedStyle(cur);
+        const bg = parse(bgCs.backgroundColor);
+        if (bg && bg[3] > 0.99) {
+          stack.push(bg);
+          break;
+        }
+        if (bg && bg[3] > 0) stack.push(bg);
+        cur = cur.parentElement;
+      }
+      // true when no ancestor contributed a background — seed alone.
+      const fallback = stack.length === 0;
+      for (let i = stack.length - 1; i >= 0; i--) {
+        const [cr, cg, cb, a] = stack[i];
+        r = cr * a + r * (1 - a);
+        g = cg * a + g * (1 - a);
+        b = cb * a + b * (1 - a);
+      }
+      return {
+        rgb: [Math.round(r), Math.round(g), Math.round(b)],
+        fallback,
+      };
+    }
+
     const cs = getComputedStyle(el);
+    const ground = compositeBg(el);
     return {
       viaTab: true,
       focusedInteractive: true,
@@ -441,6 +498,9 @@ async function measureFocusRing(page) {
       computedOutlineStyle: cs.outlineStyle,
       computedOutlineWidth: cs.outlineWidth,
       computedOutlineColor: cs.outlineColor,
+      outlineGround: `rgb(${ground.rgb[0]}, ${ground.rgb[1]}, ${ground.rgb[2]})`,
+      outlineGroundRgb: ground.rgb,
+      outlineGroundFallback: ground.fallback,
       matchesFocusVisible: el.matches(":focus-visible"),
     };
   });
@@ -449,12 +509,40 @@ async function measureFocusRing(page) {
     document.getElementById("pc-verify-focus-probe")?.remove();
   });
 
-  const renderedOk =
+  // Shape: style present + non-zero width (pre-#373 renderedOk).
+  const shapeOk =
     rendered.viaTab &&
     rendered.focusedInteractive &&
     rendered.computedOutlineStyle != null &&
     rendered.computedOutlineStyle !== "none" &&
     parseFloat(rendered.computedOutlineWidth) > 0;
+
+  // Visibility (#373): ≥ 3:1 contrast of the outline *as painted* (composited
+  // over ground at its alpha) — not the full-strength RGB. Full-strength-only
+  // contrast false-passes low-alpha rings (e.g. rgba(..., 0.05) still scored
+  // 8.01:1). Alpha > 0 stays as a cheap pre-check but is no longer load-bearing.
+  const outlineRgba = parseCssColor(rendered.computedOutlineColor);
+  const outlineAlpha = outlineRgba ? outlineRgba[3] : null;
+  const outlineAlphaOk = outlineAlpha != null && outlineAlpha > 0;
+  /** @type {number | null} */
+  let outlineContrastRatio = null;
+  let outlineContrastOk = false;
+  if (outlineRgba && Array.isArray(rendered.outlineGroundRgb)) {
+    const a = outlineRgba[3];
+    const bg = rendered.outlineGroundRgb;
+    // Composite outline over ground at alpha — the color actually painted.
+    const painted = [
+      Math.round(outlineRgba[0] * a + bg[0] * (1 - a)),
+      Math.round(outlineRgba[1] * a + bg[1] * (1 - a)),
+      Math.round(outlineRgba[2] * a + bg[2] * (1 - a)),
+    ];
+    outlineContrastRatio =
+      Math.round(contrastRatio(painted, bg) * 100) / 100;
+    outlineContrastOk = outlineContrastRatio >= 3;
+  }
+  const outlineVisible = Boolean(outlineContrastOk);
+
+  const renderedOk = Boolean(shapeOk && outlineVisible);
 
   return {
     found: true,
@@ -471,6 +559,13 @@ async function measureFocusRing(page) {
     computedOutlineStyle: rendered.computedOutlineStyle,
     computedOutlineWidth: rendered.computedOutlineWidth,
     computedOutlineColor: rendered.computedOutlineColor,
+    outlineGround: rendered.outlineGround,
+    outlineGroundFallback: rendered.outlineGroundFallback ?? null,
+    outlineAlpha,
+    outlineAlphaOk,
+    outlineContrastRatio,
+    outlineContrastOk,
+    outlineVisible,
     activeTag: rendered.activeTag,
   };
 }
