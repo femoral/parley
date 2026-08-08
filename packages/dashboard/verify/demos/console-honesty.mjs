@@ -102,7 +102,7 @@ export function consoleHonestyGates(_entry, ledger) {
     }
   }
 
-  // 1280×720 run body: no scroll contribution from termination styling.
+  // 1280×720 run body: no scroll / residual filler from termination styling.
   const run1280 = demo.runBody1280;
   if (!run1280) {
     throw new Error("console-honesty: missing runBody1280");
@@ -110,6 +110,11 @@ export function consoleHonestyGates(_entry, ledger) {
   if (run1280.stripPresent) {
     throw new Error(
       `console-honesty: run termination strip present at 1280×720: ${JSON.stringify(run1280)}`,
+    );
+  }
+  if (run1280.decorativeInResidual) {
+    throw new Error(
+      `console-honesty: run decorative residual at 1280×720: ${JSON.stringify(run1280)}`,
     );
   }
   if (run1280.boardScroll === true) {
@@ -329,16 +334,13 @@ async function measureAskHierarchy(page) {
     const gapsH = Math.max(0, kids.length - 1) * gap;
     const stackH = padTop + padBottom + kidsH + gapsH;
     // Band must not sit on a geometric floor far above its content stack.
-    // Slack covers subpixel + borders.
+    // Slack covers subpixel + borders. Content-derived only — no hardcoded
+    // geometric ceiling (old 200px min would fail bandContentBound / minsUnset).
     const bandContentBound =
       bandBox.height > 0 && bandBox.height <= stackH + 4;
 
-    // Absolute ceiling: with a short (one-line-ish) question, band must stay
-    // below the old 200px geometric minimum so re-adding it fails.
-    const shortQuestionCeiling = bandBox.height < 200;
-
     const contentSizedBand =
-      minsUnset && questionContentBound && bandContentBound && shortQuestionCeiling;
+      minsUnset && questionContentBound && bandContentBound;
 
     // 6. Ask-open state applies no max-height to log surfaces.
     const maxUnset = (v) => !v || v === "none" || v === "0px";
@@ -386,7 +388,6 @@ async function measureAskHierarchy(page) {
       minsUnset,
       questionContentBound,
       bandContentBound,
-      shortQuestionCeiling,
       bandTop: Math.round(bandBox.top),
       bandBottom: Math.round(bandBox.bottom),
       logTop: Math.round(logBox.top),
@@ -404,6 +405,10 @@ async function measureAskHierarchy(page) {
  * Fail if a termination strip renders, if decorative content occupies the
  * residual under the last real row, or if board scroll is forced.
  *
+ * realContentBottom is derived from leaf / text-bearing nodes only — not from
+ * flex/grid layout shells that stretch to the footer (those made residual
+ * structurally ~0 and dead-coded the decorative scan).
+ *
  * @param {import('playwright-core').Page} page
  * @param {string} screenTestId
  * @param {string[]} forbiddenTestIds
@@ -418,7 +423,7 @@ async function measureVoid(page, screenTestId, forbiddenTestIds) {
       }
       const fTop = footer.getBoundingClientRect().top;
 
-      // Forbidden termination markers (elements, legacy test ids).
+      // Forbidden termination markers (elements, legacy test ids) — fast path.
       const foundStrips = [];
       for (const id of fids) {
         const el = document.querySelector(`[data-testid="${id}"]`);
@@ -451,8 +456,6 @@ async function measureVoid(page, screenTestId, forbiddenTestIds) {
       }
       const stripPresent = foundStrips.length > 0;
 
-      // Lowest real content bottom (exclude known strip nodes if any remain).
-      let realContentBottom = 0;
       const isStripNode = (el) => {
         if (!el) return false;
         const tid = el.getAttribute?.("data-testid") ?? "";
@@ -465,27 +468,58 @@ async function measureVoid(page, screenTestId, forbiddenTestIds) {
         }
         return false;
       };
-      for (const el of screen.querySelectorAll("*")) {
-        if (isStripNode(el)) continue;
-        // Skip nodes inside a strip.
-        let skip = false;
+
+      const underStrip = (el) => {
         let p = el.parentElement;
         while (p && p !== screen) {
-          if (isStripNode(p)) {
-            skip = true;
-            break;
-          }
+          if (isStripNode(p)) return true;
           p = p.parentElement;
         }
-        if (skip) continue;
+        return false;
+      };
+
+      /** Own direct text (not descendant text). */
+      const ownText = (el) =>
+        [...el.childNodes]
+          .filter((n) => n.nodeType === Node.TEXT_NODE)
+          .map((n) => (n.textContent ?? "").replace(/\s+/g, " ").trim())
+          .filter(Boolean)
+          .join(" ");
+
+      /**
+       * Real content node: leaf or text-bearing ink — not a layout shell that
+       * merely stretches. Empty leaves (pseudo-only fillers) are excluded so
+       * they do not inflate realContentBottom into the residual.
+       */
+      const isRealContentNode = (el) => {
+        if (isStripNode(el) || underStrip(el)) return false;
         const r = el.getBoundingClientRect();
-        if (r.width === 0 && r.height === 0) continue;
-        realContentBottom = Math.max(realContentBottom, r.bottom);
-      }
-      for (const child of screen.children) {
-        if (isStripNode(child)) continue;
-        const r = child.getBoundingClientRect();
-        if (r.width === 0 && r.height === 0) continue;
+        if (r.width < 1 && r.height < 1) return false;
+        const text = ownText(el);
+        if (text.length > 0) return true;
+        const tag = el.tagName;
+        if (tag === "IMG" || tag === "SVG" || tag === "CANVAS" || tag === "VIDEO") {
+          return r.width > 0 && r.height > 0;
+        }
+        if (
+          tag === "INPUT" ||
+          tag === "TEXTAREA" ||
+          tag === "SELECT" ||
+          tag === "BUTTON"
+        ) {
+          return r.width > 0 && r.height > 0;
+        }
+        // Leaf with no own text and no form/media role: empty box / pseudo filler.
+        if (el.children.length === 0) return false;
+        // Non-leaf without own text: layout container — use descendants only.
+        return false;
+      };
+
+      // Lowest real content bottom from content nodes only.
+      let realContentBottom = 0;
+      for (const el of screen.querySelectorAll("*")) {
+        if (!isRealContentNode(el)) continue;
+        const r = el.getBoundingClientRect();
         realContentBottom = Math.max(realContentBottom, r.bottom);
       }
 
@@ -494,11 +528,47 @@ async function measureVoid(page, screenTestId, forbiddenTestIds) {
         Math.round(fTop - realContentBottom),
       );
 
-      // Decorative residual: any non-strip element that starts at/after the
-      // last content row and grows to fill a large residual with no real text.
+      /** Non-empty ::before / ::after content string. */
+      const pseudoContent = (el, which) => {
+        const c = window.getComputedStyle(el, which).content;
+        if (!c || c === "none" || c === "normal" || c === '""' || c === "''") {
+          return "";
+        }
+        return c.replace(/^["']|["']$/g, "");
+      };
+
+      /** Visible painted decoration (bg / border / shadow / pseudo). */
+      const hasVisibleDecoration = (el, st) => {
+        const bg = st.backgroundColor || "";
+        // Transparent / fully-alpha backgrounds are not decorative paint.
+        const bgPainted =
+          bg &&
+          bg !== "transparent" &&
+          bg !== "rgba(0, 0, 0, 0)" &&
+          !/^rgba?\(\s*0\s*,\s*0\s*,\s*0\s*,\s*0\s*\)$/i.test(bg) &&
+          // color(srgb … / 0) fully transparent
+          !/\/\s*0\)\s*$/.test(bg);
+        const borderW =
+          (parseFloat(st.borderTopWidth) || 0) +
+          (parseFloat(st.borderBottomWidth) || 0) +
+          (parseFloat(st.borderLeftWidth) || 0) +
+          (parseFloat(st.borderRightWidth) || 0);
+        const shadow = st.boxShadow && st.boxShadow !== "none";
+        const before = pseudoContent(el, "::before");
+        const after = pseudoContent(el, "::after");
+        return bgPainted || borderW > 0 || shadow || before.length > 0 || after.length > 0;
+      };
+
+      // Decorative residual: ANY rendered decorative occupant of the residual
+      // (visible box with bg/border/pseudo that is not real content), not only
+      // legacy marker names. Marker check remains a fast path below.
       let decorativeInResidual = false;
       const decorativeHits = [];
-      if (residualUnderContent >= 40) {
+
+      // Always scan when residual exists; also scan for elements that begin in
+      // or primarily occupy the residual even when residual is small (overflow).
+      const scanResidual = residualUnderContent >= 24 || realContentBottom > 0;
+      if (scanResidual) {
         for (const el of screen.querySelectorAll("*")) {
           if (isStripNode(el)) {
             decorativeInResidual = true;
@@ -508,53 +578,126 @@ async function measureVoid(page, screenTestId, forbiddenTestIds) {
             });
             continue;
           }
+          if (underStrip(el)) continue;
+
           const r = el.getBoundingClientRect();
-          if (r.height < 40 || r.width < 40) continue;
-          // Element occupies residual zone below last content.
-          if (r.top < realContentBottom - 8) continue;
-          if (r.top > fTop - 8) continue;
-          const fillsResidual =
-            r.height >= Math.min(80, residualUnderContent * 0.4) &&
-            r.bottom >= Math.min(fTop - 24, realContentBottom + residualUnderContent * 0.5);
-          if (!fillsResidual) continue;
-          const text = (el.textContent ?? "").replace(/\s+/g, " ").trim();
+          if (r.height < 24 || r.width < 24) continue;
+
+          // Occupies residual zone: top at/after last real content, above footer.
+          // Allow a few px slack; also catch elements that straddle the boundary
+          // with most of their box in the residual.
+          const startsInResidual = r.top >= realContentBottom - 8;
+          const mostlyInResidual =
+            r.top < realContentBottom - 8 &&
+            r.bottom > realContentBottom + 24 &&
+            r.bottom - Math.max(r.top, realContentBottom) >=
+              Math.min(r.height * 0.5, 40);
+          if (!startsInResidual && !mostlyInResidual) continue;
+          if (r.top > fTop - 4) continue;
+
+          // Layout shells that wrap real content start above realContentBottom
+          // and are filtered by startsInResidual. A renamed filler (.pc-run__coda)
+          // sits after content and is scored here.
+
+          // Skip if this node *is* real content (text-bearing leaf continuing).
+          if (isRealContentNode(el) && startsInResidual) {
+            // Real content past the prior max is still content, not decoration.
+            continue;
+          }
+
           const st = window.getComputedStyle(el);
           const flexGrow = parseFloat(st.flexGrow) || 0;
-          const isEmptyOrLabelOnly =
-            text.length === 0 ||
-            /^end of /i.test(text) ||
-            text.length < 24;
-          // flex-grow fillers or empty residual-filling blocks are decorative.
-          if (flexGrow >= 1 || isEmptyOrLabelOnly) {
-            // Exclude legitimate scroll/panel shells that merely extend layout
-            // as flex parents of real content (they start above realContentBottom).
-            // We already require r.top >= realContentBottom - 8.
-            decorativeInResidual = true;
-            decorativeHits.push({
-              reason: flexGrow >= 1 ? "flex-grow-fill" : "empty-residual-block",
-              testId: el.getAttribute("data-testid"),
-              className: typeof el.className === "string" ? el.className.slice(0, 60) : "",
-              height: Math.round(r.height),
-              flexGrow,
-              text: text.slice(0, 40),
-            });
+          const minH = parseFloat(st.minHeight) || 0;
+          const text = (el.textContent ?? "").replace(/\s+/g, " ").trim();
+          const before = pseudoContent(el, "::before");
+          const after = pseudoContent(el, "::after");
+          const decorated = hasVisibleDecoration(el, st);
+
+          // Substantive text in the residual that is not a short terminal label
+          // is content (not decorative). Short labels / empty / pseudo-only fail.
+          const substantiveText =
+            text.length >= 24 &&
+            !/^end of /i.test(text) &&
+            before.length === 0 &&
+            after.length === 0;
+
+          if (substantiveText && flexGrow < 1 && minH < 40) continue;
+
+          const fillsOrSits =
+            r.height >= 40 ||
+            flexGrow >= 1 ||
+            minH >= 40 ||
+            (decorated && r.height >= 24);
+
+          if (!fillsOrSits) continue;
+          if (!decorated && flexGrow < 1 && minH < 40 && text.length === 0) {
+            // Transparent empty non-grower: not a visual occupant.
+            continue;
           }
+
+          // Layout containers that stretch from top of body (already excluded
+          // by startsInResidual for typical shells). Extra guard: if the node
+          // has many real-content descendants and starts well above residual,
+          // it is a shell — mostlyInResidual path only.
+          if (mostlyInResidual && !startsInResidual) {
+            let contentDesc = 0;
+            for (const d of el.querySelectorAll("*")) {
+              if (isRealContentNode(d)) contentDesc += 1;
+              if (contentDesc > 3) break;
+            }
+            // A body/shell full of real content is not a residual occupant.
+            if (contentDesc > 3 && flexGrow < 1) continue;
+            // flex-grow stretch shell with content descendants but also
+            // decorative residual paint below content: only flag if the
+            // residual portion itself has decoration without being a content host.
+            if (contentDesc > 0 && !decorated) continue;
+          }
+
+          decorativeInResidual = true;
+          decorativeHits.push({
+            reason:
+              flexGrow >= 1
+                ? "flex-grow-fill"
+                : after.length || before.length
+                  ? "pseudo-residual"
+                  : decorated
+                    ? "decorated-residual"
+                    : "empty-residual-block",
+            testId: el.getAttribute("data-testid"),
+            className:
+              typeof el.className === "string" ? el.className.slice(0, 60) : "",
+            height: Math.round(r.height),
+            top: Math.round(r.top),
+            flexGrow,
+            minHeight: minH,
+            text: text.slice(0, 40),
+            after: after.slice(0, 40),
+          });
         }
       }
-      // A present strip is also decorative residual.
+      // Marker fast path: a present strip is decorative residual.
       if (stripPresent) decorativeInResidual = true;
 
-      // Shell-level scroll only (nested table/body overflow is legitimate).
+      // Shell-level scroll (nested table/body overflow is legitimate).
       const shellEl = document.querySelector('[data-testid="shell"]');
       const shellScroll = !!(
         shellEl && shellEl.scrollHeight > shellEl.clientHeight + 2
       );
-      // Screen itself should not be forced into overflow by a filler.
-      const screenScroll = !!(
-        screen.scrollHeight > screen.clientHeight + 2 &&
-        stripPresent
-      );
-      const boardScroll = shellScroll || screenScroll;
+      // Screen overflow from termination styling — no marker guard: renamed
+      // fillers that force overflow must fail regardless of class/test id.
+      const screenScroll = !!(screen.scrollHeight > screen.clientHeight + 2);
+
+      // Content (or filler) rect past the footer — catches 1280×720 cases where
+      // overflow:hidden hides scrollHeight growth but a filler still protrudes.
+      let farthestBottom = 0;
+      for (const el of screen.querySelectorAll("*")) {
+        const r = el.getBoundingClientRect();
+        if (r.width < 1 && r.height < 1) continue;
+        farthestBottom = Math.max(farthestBottom, r.bottom);
+      }
+      const contentPastFooter = farthestBottom > fTop + 4;
+
+      const boardScroll = shellScroll || screenScroll || contentPastFooter;
 
       return {
         found: true,
@@ -565,6 +708,8 @@ async function measureVoid(page, screenTestId, forbiddenTestIds) {
         residualUnderContent,
         realContentBottom: Math.round(realContentBottom),
         footerTop: Math.round(fTop),
+        farthestBottom: Math.round(farthestBottom),
+        contentPastFooter,
         boardScroll,
         shellScroll,
         screenScroll,
