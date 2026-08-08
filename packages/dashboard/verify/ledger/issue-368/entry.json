@@ -7,54 +7,110 @@
       "ticket": "issue-368",
       "demo": "console-honesty",
       "askHierarchy": {
-        "questionArea": 103620,
-        "bandArea": 196378,
-        "logArea": 100560,
-        "wellArea": 59996,
-        "linesArea": 14962,
-        "maxOtherArea": 83011,
-        "lineCount": 2,
         "ok": true,
+        "bandFirstInColumn": true,
+        "questionLargestType": true,
+        "awaitingInk": true,
+        "questionVisible": true,
+        "contentSizedBand": true,
+        "noLogCap": true,
+        "questionFontPx": 24,
+        "maxOtherFontPx": 16,
+        "maxOtherSample": {
+          "sel": ".pc-task-brief",
+          "fs": 16,
+          "text": "goalShort ask band content-height check."
+        },
+        "bandHeight": 141,
+        "questionHeight": 36,
+        "textInkHeight": 32,
+        "stackHeight": 140,
+        "bandMinHeight": "auto",
+        "questionMinHeight": "auto",
+        "minsUnset": true,
+        "questionContentBound": true,
+        "bandContentBound": true,
+        "shortQuestionCeiling": true,
+        "bandTop": 121,
+        "bandBottom": 262,
+        "logTop": 262,
+        "borderLeftWidth": 3,
+        "borderLeftColor": "rgb(224, 160, 46)",
+        "backgroundColor": "color(srgb 0.120784 0.111529 0.0865882)",
+        "dataAsk": "true",
+        "logMaxHeights": [
+          {
+            "testId": "task-col-log",
+            "maxHeight": "none"
+          },
+          {
+            "testId": "task-log",
+            "maxHeight": "none"
+          },
+          {
+            "testId": "task-log-well",
+            "maxHeight": "none"
+          },
+          {
+            "testId": "task-col-log",
+            "maxHeight": "none"
+          },
+          {
+            "testId": "task-log",
+            "maxHeight": "none"
+          },
+          {
+            "testId": "task-log-well",
+            "maxHeight": "none"
+          }
+        ],
         "viewport": "1460x900",
         "screenshot": "shots/ask-band-1460.png"
       },
       "voids1920": {
         "metrics": {
           "found": true,
-          "voidPx": 12,
-          "residualUnderContent": 633,
-          "realContentBottom": 421,
-          "contentBottom": 1042,
+          "stripPresent": false,
+          "foundStrips": [],
+          "decorativeInResidual": false,
+          "decorativeHits": [],
+          "residualUnderContent": 0,
+          "realContentBottom": 1054,
           "footerTop": 1054,
-          "endHeight": 605,
-          "endTop": 437,
-          "endBottom": 1042,
-          "stripPresent": true,
-          "stripFills": true,
           "boardScroll": false,
           "shellScroll": false,
-          "stripClipped": false,
-          "endLabel": "",
+          "screenScroll": false,
           "screenshot": "shots/metrics-void-1920.png"
         },
         "run": {
           "found": true,
-          "voidPx": 14,
-          "residualUnderContent": 526,
-          "realContentBottom": 528,
-          "contentBottom": 1040,
+          "stripPresent": false,
+          "foundStrips": [],
+          "decorativeInResidual": false,
+          "decorativeHits": [],
+          "residualUnderContent": 0,
+          "realContentBottom": 1054,
           "footerTop": 1054,
-          "endHeight": 492,
-          "endTop": 548,
-          "endBottom": 1040,
-          "stripPresent": true,
-          "stripFills": true,
           "boardScroll": false,
           "shellScroll": false,
-          "stripClipped": false,
-          "endLabel": "",
+          "screenScroll": false,
           "screenshot": "shots/run-void-1920.png"
         }
+      },
+      "runBody1280": {
+        "found": true,
+        "stripPresent": false,
+        "foundStrips": [],
+        "decorativeInResidual": false,
+        "decorativeHits": [],
+        "residualUnderContent": 0,
+        "realContentBottom": 694,
+        "footerTop": 694,
+        "boardScroll": false,
+        "shellScroll": false,
+        "screenScroll": false,
+        "viewport": "1280x720",
+        "screenshot": "shots/run-body-1280x720.png"
       },
       "settingsFocus": {
         "ariaModal": "true",
@@ -67,7 +123,7 @@
       },
       "register": {
         "hasNautical": false,
-        "sample": "Skip to navigation\nSkip to find\nSkip to main content\n4 need the orchestrator\nPARLEY\nconsole\nFLEET\n8 tasks · 4 need action\nRUN\nconsole-gate · r5\nTASK\nt8\nMETRICS\nall sessions\ndaemon\n127.0.0.1:5173\nv0.0."
+        "sample": "Skip to navigation\nSkip to find\nSkip to main content\n4 need the orchestrator​\nPARLEY\nconsole\nFLEET\n8 tasks · 4 need action\nRUN\nconsole-gate · r5\nTASK\nt8\nMETRICS\nall sessions\ndaemon\n127.0.0.1:5173\nv0.0"
       },
       "a11y": {
         "axe": {
@@ -86,14 +142,14 @@
               ]
             }
           ],
-          "passes": 42,
+          "passes": 41,
           "incomplete": 2,
-          "inapplicable": 46
+          "inapplicable": 47
         },
         "aria": {
           "api": "locator.ariaSnapshot",
           "selector": "[data-testid=\"shell\"]",
-          "tree": "- link \"Skip to navigation\":\n  - /url: \"#shell-nav\"\n- link \"Skip to find\":\n  - /url: \"#find-input-target\"\n- link \"Skip to main content\":\n  - /url: \"#main-content\"\n- text: 4 need the orchestrator\n- banner:\n  - img \"Parley\"\n  - text: parley console\n  - navigation \"Screens\":\n    - tablist \"Console screens\":\n      - tab \"Fleet 8 tasks · 4 need action\"\n      - tab \"Run console-gate · r5\"\n      - tab \"Task t1\" [selected]\n      - tab \"Metrics all sessions\"\n  - text: daemon 127.0.0.1:5173 v0.0.4 · pid 2592765 · up 5s needs orch 4 stream live\n  - time: 23:39:09\n  - button \"Settings\"\n- complementary \"Left rail\":\n  - text: Find tasks and sessions\n  - combobox \"Find tasks and sessions\"\n  - region \"scope\":\n    - heading \"scope\" [level=2]\n    - text: orchestrator session session\n    - combobox \"Orchestrator session scope\":\n      - option \"All sessions\" [selected]\n      - option \"verify-orch · 8\"\n  - region \"state filter\":\n    - heading \"state filter\" [level=2]\n    - text: 8 tasks\n    - group \"Filter by state\":\n      - button \"all 8\" [pressed]\n      - button \"awaiting 1\"\n      - button \"stalled 0\"\n      - button \"failed 2\"\n      - button \"gate\"\n      - button \"running 3\"\n      - button \"queued 0\"\n  - region \"token burn · 24h\":\n    - heading \"token burn · 24h\" [level=2]\n    - text: last 24h · sees tasks within retention (30d assumed)\n    - paragraph: No token activity in the last 24h (within retention).\n- main:\n  - tabpanel \"Task t1\":\n    - heading \"t1\" [level=1]\n    - text: t1 · solo task (no run) fake · fake-model · medium AWAITING\n    - 'button \"Copy: t1\"': t1\n    - region \"Outstanding question\":\n      - text: OUTSTANDING ASK needs the orchestrating agent\n      - paragraph: Should the console show the scaffold status or the live daemon origin?\n      - code: parley answer t1 \"<answer>\"\n      - 'button \"Copy: parley answer t1 \\\"<answer>\\\"\"': copy\n    - text: brief\n    - term: goal\n    - definition: \"Honesty ask: should the band outrank the log well for the orchestrator?\"\n    - term: state\n    - definition: AWAITING\n    - term: branch\n    - definition: — none\n    - term: worktree\n    - definition: — none\n    - term: harness\n    - definition: fake · fake-model · effort medium\n    - term: posture\n    - definition: \"--sandbox workspace · network on\"\n    - term: address\n    - definition: solo task (no run)\n    - term: duration\n    - definition: —\n    - term: usage\n    - definition: —\n    - text: attempt chain parley fix · 1\n    - list:\n      - listitem: \"#1 AWAITING — unscored\"\n    - text: eval absent\n    - status: No eval on file — this task has never been scored.\n    - text: deliverables none\n    - status: Solo task — no run deliverables.\n    - region \"Log tail\":\n      - heading \"log tail\" [level=2]\n      - text: tailing · follow on\n      - checkbox \"follow\" [checked]\n      - text: follow\n      - log \"Vendor log output\":\n        - button \"hello session hello · /tmp/parley-verify-task-heYIFU · pid 2592948\"\n        - text: reasoning need a decision\n    - text: q&a — orchestrator answers 1 outstanding\n    - list \"Q&A transcript\":\n      - listitem:\n        - text: ASK Should the console show the scaffold status or the live daemon origin? OUTSTANDING see ask band above — waiting on the orchestrating agent asked 6s ago · event pending ·\n        - time: 23:39\n    - text: report none\n    - status: No report yet — the task has not submitted one.\n- complementary \"Attention rail\":\n  - heading \"attention\" [level=2]\n  - text: 4 · rank · age\n  - group \"Attention density\":\n    - button \"cards\" [pressed]\n    - button \"rows\"\n  - list \"Attention queue\":\n    - listitem:\n      - button \"AWAITING 0s t1 Should the console show the scaffold status or the live daemon origin? fake · fake-model · sess verify\" [pressed]\n    - listitem:\n      - button \"GATE HELD 0s console-gate Gate held at approve · pass 1 · approve · reject · redirect · finish run r1 · parley/r1-console-gate · sess verify\"\n    - listitem:\n      - 'button \"FAILED 0s t6 fresh failure · vendor child exited (code 1) without submitting a report: synthetic run failure (verify) fake · fake-model · sess verify\"'\n    - listitem:\n      - button \"FAILED 0s t8 fresh failure · vendor child exited (code 0) without submitting a report fake · fake-model · sess verify\"\n  - heading \"firehose\" [level=2]\n  - text: watch — follow\n  - paragraph: No events counted since this console connected\n- contentinfo: AWAITING STALLED FAILED RUNNING QUEUED PENDING DONE CANCEL state = what a task IS · quality = how good work WAS · 4 unacked events · live read-only · parley never merges"
+          "tree": "- link \"Skip to navigation\":\n  - /url: \"#shell-nav\"\n- link \"Skip to find\":\n  - /url: \"#find-input-target\"\n- link \"Skip to main content\":\n  - /url: \"#main-content\"\n- text: 4 need the orchestrator\n- banner:\n  - img \"Parley\"\n  - text: parley console\n  - navigation \"Screens\":\n    - tablist \"Console screens\":\n      - tab \"Fleet 8 tasks · 4 need action\"\n      - tab \"Run console-gate · r5\"\n      - tab \"Task t1\" [selected]\n      - tab \"Metrics all sessions\"\n  - text: daemon 127.0.0.1:5173 v0.0.4 · pid 3444576 · up 6s needs orch 4 stream live\n  - time: 21:28:13\n  - button \"Settings\"\n- complementary \"Left rail\":\n  - text: Find tasks and sessions\n  - combobox \"Find tasks and sessions\"\n  - region \"scope\":\n    - heading \"scope\" [level=2]\n    - text: orchestrator session session\n    - combobox \"Orchestrator session scope\":\n      - option \"All sessions\" [selected]\n      - option \"verify-orch · 8\"\n  - region \"state filter\":\n    - heading \"state filter\" [level=2]\n    - text: 8 tasks\n    - group \"Filter by state\":\n      - button \"all 8\" [pressed]\n      - button \"awaiting 1\"\n      - button \"stalled 0\"\n      - button \"failed 2\"\n      - button \"gate\"\n      - button \"running 3\"\n      - button \"queued 0\"\n  - region \"token burn · 24h\":\n    - heading \"token burn · 24h\" [level=2]\n    - text: last 24h · sees tasks within retention (30d assumed)\n    - paragraph: No token activity in the last 24h (within retention).\n- main:\n  - tabpanel \"Task t1\":\n    - heading \"t1\" [level=1]\n    - text: t1 · solo task (no run) fake · fake-model · medium AWAITING\n    - 'button \"Copy: t1\"': t1\n    - region \"Outstanding question\":\n      - text: OUTSTANDING ASK needs the orchestrating agent\n      - paragraph: Should the console show the scaffold status or the live daemon origin?\n      - code: parley answer t1 \"<answer>\"\n      - 'button \"Copy: parley answer t1 \\\"<answer>\\\"\"': copy\n    - text: brief\n    - term: goal\n    - definition: Short ask band content-height check.\n    - term: state\n    - definition: AWAITING\n    - term: branch\n    - definition: — none\n    - term: worktree\n    - definition: — none\n    - term: harness\n    - definition: fake · fake-model · effort medium\n    - term: posture\n    - definition: \"--sandbox workspace · network on\"\n    - term: address\n    - definition: solo task (no run)\n    - term: duration\n    - definition: —\n    - term: usage\n    - definition: —\n    - text: attempt chain parley fix · 1\n    - list:\n      - listitem: \"#1 AWAITING — unscored\"\n    - text: eval absent\n    - status: No eval on file — this task has never been scored.\n    - text: deliverables none\n    - status: Solo task — no run deliverables.\n    - region \"Log tail\":\n      - heading \"log tail\" [level=2]\n      - text: tailing · follow on\n      - checkbox \"follow\" [checked]\n      - text: follow\n      - log \"Vendor log output\":\n        - button \"hello session hello · /tmp/parley-verify-task-j7cOGs · pid 3444799\"\n        - text: reasoning need a decision\n    - text: q&a — orchestrator answers 1 outstanding\n    - list \"Q&A transcript\":\n      - listitem:\n        - text: ASK Should the console show the scaffold status or the live daemon origin? OUTSTANDING see ask band above — waiting on the orchestrating agent asked 7s ago · event pending ·\n        - time: 21:28\n    - text: report none\n    - status: No report yet — the task has not submitted one.\n- complementary \"Attention rail\":\n  - heading \"attention\" [level=2]\n  - text: 4 · rank · age\n  - group \"Attention density\":\n    - button \"cards\" [pressed]\n    - button \"rows\"\n  - list \"Attention queue\":\n    - listitem:\n      - button \"AWAITING 0s t1 Should the console show the scaffold status or the live daemon origin? fake · fake-model · sess verify\" [pressed]\n    - listitem:\n      - button \"GATE HELD 0s console-gate Gate held at approve · pass 1 · approve · reject · redirect · finish run r1 · parley/r1-console-gate · sess verify\"\n    - listitem:\n      - 'button \"FAILED 0s t6 fresh failure · vendor child exited (code 1) without submitting a report: synthetic run failure (verify) fake · fake-model · sess verify\"'\n    - listitem:\n      - button \"FAILED 0s t8 fresh failure · vendor child exited (code 0) without submitting a report fake · fake-model · sess verify\"\n  - heading \"firehose\" [level=2]\n  - text: watch — follow\n  - paragraph: No events counted since this console connected\n- contentinfo: AWAITING STALLED FAILED RUNNING QUEUED PENDING DONE CANCEL state = what a task IS · quality = how good work WAS · 4 unacked events · live read-only · parley never merges"
         }
       },
       "a11ySettings": {
@@ -152,7 +208,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "Skip to navigationSkip to findSkip to main content4 need the orchestratorparleyconsoleFleet8 tasks · 4 need actionRunconsole-gate · r5Taskt1Metricsall sessio…"
+              "text": "Skip to navigationSkip to findSkip to main content4 need the orchestrator​parleyconsoleFleet8 tasks · 4 need actionRunconsole-gate · r5Taskt1Metricsall sessi…"
             },
             "screen-task": {
               "selector": "[data-testid=\"screen-task\"]",
@@ -203,15 +259,15 @@
                 "x": 284,
                 "y": 120.75,
                 "width": 648,
-                "height": 237.17
+                "height": 177.17
               },
               "styles": {
                 "display": "flex",
                 "position": "static",
                 "width": "648px",
-                "height": "237.172px",
+                "height": "177.172px",
                 "minWidth": "0px",
-                "minHeight": "200px",
+                "minHeight": "auto",
                 "backgroundColor": "color(srgb 0.120784 0.111529 0.0865882)",
                 "color": "rgb(227, 232, 236)",
                 "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
@@ -243,15 +299,15 @@
               "found": true,
               "box": {
                 "x": 284,
-                "y": 357.92,
+                "y": 297.92,
                 "width": 419,
-                "height": 240
+                "height": 576.08
               },
               "styles": {
                 "display": "grid",
                 "position": "static",
                 "width": "419px",
-                "height": "240px",
+                "height": "576.078px",
                 "minWidth": "auto",
                 "minHeight": "0px",
                 "backgroundColor": "rgba(0, 0, 0, 0)",
@@ -270,7 +326,7 @@
                 "borderBottomColor": "rgb(227, 232, 236)",
                 "borderLeftColor": "rgb(227, 232, 236)",
                 "borderRightColor": "rgb(227, 232, 236)",
-                "gridTemplateRows": "96.8125px 143.188px",
+                "gridTemplateRows": "96.8125px 479.266px",
                 "gridTemplateColumns": "419px",
                 "gap": "normal",
                 "padding": "0px",
@@ -278,7 +334,7 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "log tailtailing · follow onfollow01hello session hello · /tmp/parley-verify-task-heYIFU · pid 2592948▸02reasoning need a decision"
+              "text": "log tailtailing · follow onfollow01hello session hello · /tmp/parley-verify-task-j7cOGs · pid 3444799▸02reasoning need a decision"
             }
           }
         },
@@ -328,7 +384,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "Skip to navigationSkip to findSkip to main content4 need the orchestratorparleyconsoleFleet8 tasks · 4 need actionRunconsole-gate · r5Taskt1Metricsall sessio…"
+              "text": "Skip to navigationSkip to findSkip to main content4 need the orchestrator​parleyconsoleFleet8 tasks · 4 need actionRunconsole-gate · r5Taskt1Metricsall sessi…"
             },
             "screen-task": {
               "selector": "[data-testid=\"screen-task\"]",
@@ -379,15 +435,15 @@
                 "x": 284,
                 "y": 120.75,
                 "width": 828,
-                "height": 237.17
+                "height": 141.17
               },
               "styles": {
                 "display": "flex",
                 "position": "static",
                 "width": "828px",
-                "height": "237.172px",
+                "height": "141.172px",
                 "minWidth": "0px",
-                "minHeight": "200px",
+                "minHeight": "auto",
                 "backgroundColor": "color(srgb 0.120784 0.111529 0.0865882)",
                 "color": "rgb(227, 232, 236)",
                 "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
@@ -419,15 +475,15 @@
               "found": true,
               "box": {
                 "x": 484,
-                "y": 357.92,
+                "y": 261.92,
                 "width": 419,
-                "height": 240
+                "height": 612.08
               },
               "styles": {
                 "display": "grid",
                 "position": "static",
                 "width": "419px",
-                "height": "240px",
+                "height": "612.078px",
                 "minWidth": "auto",
                 "minHeight": "0px",
                 "backgroundColor": "rgba(0, 0, 0, 0)",
@@ -446,7 +502,7 @@
                 "borderBottomColor": "rgb(227, 232, 236)",
                 "borderLeftColor": "rgb(227, 232, 236)",
                 "borderRightColor": "rgb(227, 232, 236)",
-                "gridTemplateRows": "96.8125px 143.188px",
+                "gridTemplateRows": "96.8125px 515.266px",
                 "gridTemplateColumns": "419px",
                 "gap": "normal",
                 "padding": "0px",
@@ -454,7 +510,7 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "log tailtailing · follow onfollow01hello session hello · /tmp/parley-verify-task-heYIFU · pid 2592948▸02reasoning need a decision"
+              "text": "log tailtailing · follow onfollow01hello session hello · /tmp/parley-verify-task-j7cOGs · pid 3444799▸02reasoning need a decision"
             }
           }
         },
@@ -504,7 +560,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "Skip to navigationSkip to findSkip to main content4 need the orchestratorparleyconsoleFleet8 tasks · 4 need actionRunconsole-gate · r5Taskt1Metricsall sessio…"
+              "text": "Skip to navigationSkip to findSkip to main content4 need the orchestrator​parleyconsoleFleet8 tasks · 4 need actionRunconsole-gate · r5Taskt1Metricsall sessi…"
             },
             "screen-task": {
               "selector": "[data-testid=\"screen-task\"]",
@@ -555,15 +611,15 @@
                 "x": 284,
                 "y": 120.75,
                 "width": 1288,
-                "height": 237.17
+                "height": 141.17
               },
               "styles": {
                 "display": "flex",
                 "position": "static",
                 "width": "1288px",
-                "height": "237.172px",
+                "height": "141.172px",
                 "minWidth": "0px",
-                "minHeight": "200px",
+                "minHeight": "auto",
                 "backgroundColor": "color(srgb 0.120784 0.111529 0.0865882)",
                 "color": "rgb(227, 232, 236)",
                 "font": "16px \"IBM Plex Sans\", system-ui, sans-serif",
@@ -595,15 +651,15 @@
               "found": true,
               "box": {
                 "x": 546,
-                "y": 357.92,
+                "y": 261.92,
                 "width": 735,
-                "height": 240
+                "height": 612.08
               },
               "styles": {
                 "display": "grid",
                 "position": "static",
                 "width": "735px",
-                "height": "240px",
+                "height": "612.078px",
                 "minWidth": "auto",
                 "minHeight": "0px",
                 "backgroundColor": "rgba(0, 0, 0, 0)",
@@ -622,7 +678,7 @@
                 "borderBottomColor": "rgb(227, 232, 236)",
                 "borderLeftColor": "rgb(227, 232, 236)",
                 "borderRightColor": "rgb(227, 232, 236)",
-                "gridTemplateRows": "96.8125px 143.188px",
+                "gridTemplateRows": "96.8125px 515.266px",
                 "gridTemplateColumns": "735px",
                 "gap": "normal",
                 "padding": "0px",
@@ -630,7 +686,7 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "log tailtailing · follow onfollow01hello session hello · /tmp/parley-verify-task-heYIFU · pid 2592948▸02reasoning need a decision"
+              "text": "log tailtailing · follow onfollow01hello session hello · /tmp/parley-verify-task-j7cOGs · pid 3444799▸02reasoning need a decision"
             }
           }
         }
@@ -639,8 +695,8 @@
         "awaitingTaskId": "t1",
         "runId": "r1"
       },
-      "recordedAt": "2026-08-07T03:39:10.023Z"
+      "recordedAt": "2026-08-08T01:28:13.843Z"
     }
   },
-  "updatedAt": "2026-08-07T03:39:10.023Z"
+  "updatedAt": "2026-08-08T01:28:13.843Z"
 }

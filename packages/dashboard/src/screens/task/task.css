@@ -446,7 +446,9 @@
   font-weight: 500;
 }
 
-/* ── Outstanding ask band (hierarchy #1) ────────────────────────────── */
+/* ── Outstanding ask band (hierarchy #1 by content — ADR-0001) ─────── */
+/* Rank: first in the task column, awaiting ink, largest type scale.
+ * Sizes to content — no geometric minimums; no log cap while open. */
 
 .pc-task-ask-band {
   flex: 0 0 auto;
@@ -458,8 +460,6 @@
   flex-direction: column;
   gap: 14px;
   min-width: 0;
-  /* Occupy enough vertical band that measured area outranks the log well. */
-  min-height: 200px;
 }
 
 .pc-task-ask-band__head {
@@ -480,10 +480,7 @@
   color: var(--text-3);
 }
 
-/*
- * Largest text block on the task screen when an ask is outstanding.
- * Full band width + large scale so measured px² beats visible log lines.
- */
+/* Largest rendered type scale on the screen when an ask is outstanding. */
 .pc-task-ask-band__question {
   margin: 0;
   font-family: var(--font-sans);
@@ -494,27 +491,12 @@
   overflow-wrap: anywhere;
   max-width: none;
   width: 100%;
-  flex: 1 1 auto;
-  min-height: 5.5em;
+  flex: 0 0 auto;
 }
 
 .pc-task-ask-band .pc-scaffold {
   align-self: flex-start;
   max-width: 100%;
-}
-
-/* Bound the log well when an ask is outstanding so the band stays hierarchy #1. */
-.pc-task[data-ask="true"] .pc-task-col--log {
-  max-height: min(32vh, 240px);
-  overflow: auto;
-}
-
-.pc-task[data-ask="true"] .pc-task-log {
-  max-height: min(32vh, 240px);
-}
-
-.pc-task[data-ask="true"] .pc-task-log__well {
-  max-height: min(24vh, 160px);
 }
 
 /* ── Collapsed hello envelope in log ────────────────────────────────── */

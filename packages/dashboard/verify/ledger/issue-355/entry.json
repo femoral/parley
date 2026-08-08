@@ -1096,7 +1096,7 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "tasksattention · age · 5statetaskharnessrun addressbranchtokensdurageAWAITINGt4t4fake · fake-model————0sFAILEDt2t2fresh failurefake · fake-model———33ms0sRUNN…"
+              "text": "tasksattention · age · 5statetaskharnessrun addressbranchtokensdurageAWAITINGt4t4fake · fake-model————0sFAILEDt2t2fresh failurefake · fake-model———30ms0sRUNN…"
             },
             "fleet-tasks-scroll": {
               "selector": "[data-testid=\"fleet-tasks-scroll\"]",
@@ -1138,7 +1138,7 @@
                 "overflow": "auto",
                 "opacity": "1"
               },
-              "text": "statetaskharnessrun addressbranchtokensdurageAWAITINGt4t4fake · fake-model————0sFAILEDt2t2fresh failurefake · fake-model———33ms0sRUNNINGt3t3fake · fake-model…"
+              "text": "statetaskharnessrun addressbranchtokensdurageAWAITINGt4t4fake · fake-model————0sFAILEDt2t2fresh failurefake · fake-model———30ms0sRUNNINGt3t3fake · fake-model…"
             },
             "fleet-runners": {
               "selector": "[data-testid=\"fleet-runners\"]",
@@ -1776,7 +1776,7 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "tasksattention · age · 5statetaskharnessrun addressbranchtokensdurageAWAITINGt4t4fake · fake-model————0sFAILEDt2t2fresh failurefake · fake-model———33ms0sRUNN…"
+              "text": "tasksattention · age · 5statetaskharnessrun addressbranchtokensdurageAWAITINGt4t4fake · fake-model————0sFAILEDt2t2fresh failurefake · fake-model———30ms0sRUNN…"
             },
             "fleet-tasks-scroll": {
               "selector": "[data-testid=\"fleet-tasks-scroll\"]",
@@ -1818,7 +1818,7 @@
                 "overflow": "auto",
                 "opacity": "1"
               },
-              "text": "statetaskharnessrun addressbranchtokensdurageAWAITINGt4t4fake · fake-model————0sFAILEDt2t2fresh failurefake · fake-model———33ms0sRUNNINGt3t3fake · fake-model…"
+              "text": "statetaskharnessrun addressbranchtokensdurageAWAITINGt4t4fake · fake-model————0sFAILEDt2t2fresh failurefake · fake-model———30ms0sRUNNINGt3t3fake · fake-model…"
             },
             "fleet-runners": {
               "selector": "[data-testid=\"fleet-runners\"]",
@@ -2456,7 +2456,7 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "tasksattention · age · 5statetaskharnessrun addressbranchtokensdurageAWAITINGt4t4fake · fake-model————0sFAILEDt2t2fresh failurefake · fake-model———33ms0sRUNN…"
+              "text": "tasksattention · age · 5statetaskharnessrun addressbranchtokensdurageAWAITINGt4t4fake · fake-model————0sFAILEDt2t2fresh failurefake · fake-model———30ms0sRUNN…"
             },
             "fleet-tasks-scroll": {
               "selector": "[data-testid=\"fleet-tasks-scroll\"]",
@@ -2498,7 +2498,7 @@
                 "overflow": "auto",
                 "opacity": "1"
               },
-              "text": "statetaskharnessrun addressbranchtokensdurageAWAITINGt4t4fake · fake-model————0sFAILEDt2t2fresh failurefake · fake-model———33ms0sRUNNINGt3t3fake · fake-model…"
+              "text": "statetaskharnessrun addressbranchtokensdurageAWAITINGt4t4fake · fake-model————0sFAILEDt2t2fresh failurefake · fake-model———30ms0sRUNNINGt3t3fake · fake-model…"
             },
             "fleet-runners": {
               "selector": "[data-testid=\"fleet-runners\"]",
@@ -2724,7 +2724,7 @@
         "aria": {
           "api": "locator.ariaSnapshot",
           "selector": "[data-testid=\"fleet-board\"]",
-          "tree": "- heading \"Fleet board\" [level=1]\n- group \"Fleet KPIs\": needs orchestrator 3 items 1 held · 1 ask · 0 stall · 1 fresh running 1 tasks cap unknown queued / pending 0 / 0 no waiters runs 1 total 1 held · 0 advancing settled 24h 0 / 0 done / failed success — · last 24h token burn 0 in cache — · p95 —\n- text: runs 1 held · track = nodes × loop\n- grid \"Runs\":\n  - row \"state run track at tasks age\":\n    - columnheader \"state\"\n    - columnheader \"run\"\n    - columnheader \"track\"\n    - columnheader \"at\"\n    - columnheader \"tasks\"\n    - columnheader \"age\"\n  - 'row \"GATE HELD console-gate run r1 · v1 Progress of 3: 1 done, 1 gate, 1 pending approve.1 — gate waiting 1/1 0s\"':\n    - gridcell \"GATE HELD\"\n    - gridcell \"console-gate run r1 · v1\"\n    - 'gridcell \"Progress of 3: 1 done, 1 gate, 1 pending\"'\n    - gridcell \"approve.1 — gate waiting\"\n    - gridcell \"1/1\"\n    - gridcell \"0s\"\n- text: tasks attention · age · 5\n- grid \"Tasks\":\n  - row \"state task harness tokens dur age\":\n    - columnheader \"state\"\n    - columnheader \"task\"\n    - columnheader \"harness\"\n    - columnheader \"tokens\"\n    - columnheader \"dur\"\n    - columnheader \"age\"\n  - row \"AWAITING t4 t4 fake · fake-model — — 0s\":\n    - gridcell \"AWAITING\"\n    - gridcell \"t4 t4\"\n    - gridcell \"fake · fake-model\"\n    - gridcell \"—\"\n    - gridcell \"—\"\n    - gridcell \"0s\"\n  - row \"FAILED t2 t2 fresh failure fake · fake-model — 33ms 0s\":\n    - gridcell \"FAILED\"\n    - gridcell \"t2 t2 fresh failure\"\n    - gridcell \"fake · fake-model\"\n    - gridcell \"—\"\n    - gridcell \"33ms\"\n    - gridcell \"0s\"\n  - row \"RUNNING t3 t3 fake · fake-model — — 0s\":\n    - gridcell \"RUNNING\"\n    - gridcell \"t3 t3\"\n    - gridcell \"fake · fake-model\"\n    - gridcell \"—\"\n    - gridcell \"—\"\n    - gridcell \"0s\"\n  - row \"DONE t1 t1 fake · fake-model — 182ms 0s\":\n    - gridcell \"DONE\"\n    - gridcell \"t1 t1\"\n    - gridcell \"fake · fake-model\"\n    - gridcell \"—\"\n    - gridcell \"182ms\"\n    - gridcell \"0s\"\n  - row \"DONE t5 t5 fake · fake-model — 118ms 0s\":\n    - gridcell \"DONE\"\n    - gridcell \"t5 t5\"\n    - gridcell \"fake · fake-model\"\n    - gridcell \"—\"\n    - gridcell \"118ms\"\n    - gridcell \"0s\"\n- complementary:\n  - text: executors none registered · 1 running without runner list\n  - paragraph: No runners"
+          "tree": "- heading \"Fleet board\" [level=1]\n- group \"Fleet KPIs\": needs orchestrator 3 items 1 held · 1 ask · 0 stall · 1 fresh running 1 tasks cap unknown queued / pending 0 / 0 no waiters runs 1 total 1 held · 0 advancing settled 24h 0 / 0 done / failed success — · last 24h token burn 0 in cache — · p95 —\n- text: runs 1 held · track = nodes × loop\n- grid \"Runs\":\n  - row \"state run track at tasks age\":\n    - columnheader \"state\"\n    - columnheader \"run\"\n    - columnheader \"track\"\n    - columnheader \"at\"\n    - columnheader \"tasks\"\n    - columnheader \"age\"\n  - 'row \"GATE HELD console-gate run r1 · v1 Progress of 3: 1 done, 1 gate, 1 pending approve.1 — gate waiting 1/1 0s\"':\n    - gridcell \"GATE HELD\"\n    - gridcell \"console-gate run r1 · v1\"\n    - 'gridcell \"Progress of 3: 1 done, 1 gate, 1 pending\"'\n    - gridcell \"approve.1 — gate waiting\"\n    - gridcell \"1/1\"\n    - gridcell \"0s\"\n- text: tasks attention · age · 5\n- grid \"Tasks\":\n  - row \"state task harness tokens dur age\":\n    - columnheader \"state\"\n    - columnheader \"task\"\n    - columnheader \"harness\"\n    - columnheader \"tokens\"\n    - columnheader \"dur\"\n    - columnheader \"age\"\n  - row \"AWAITING t4 t4 fake · fake-model — — 0s\":\n    - gridcell \"AWAITING\"\n    - gridcell \"t4 t4\"\n    - gridcell \"fake · fake-model\"\n    - gridcell \"—\"\n    - gridcell \"—\"\n    - gridcell \"0s\"\n  - row \"FAILED t2 t2 fresh failure fake · fake-model — 30ms 0s\":\n    - gridcell \"FAILED\"\n    - gridcell \"t2 t2 fresh failure\"\n    - gridcell \"fake · fake-model\"\n    - gridcell \"—\"\n    - gridcell \"30ms\"\n    - gridcell \"0s\"\n  - row \"RUNNING t3 t3 fake · fake-model — — 0s\":\n    - gridcell \"RUNNING\"\n    - gridcell \"t3 t3\"\n    - gridcell \"fake · fake-model\"\n    - gridcell \"—\"\n    - gridcell \"—\"\n    - gridcell \"0s\"\n  - row \"DONE t1 t1 fake · fake-model — 169ms 0s\":\n    - gridcell \"DONE\"\n    - gridcell \"t1 t1\"\n    - gridcell \"fake · fake-model\"\n    - gridcell \"—\"\n    - gridcell \"169ms\"\n    - gridcell \"0s\"\n  - row \"DONE t5 t5 fake · fake-model — 117ms 0s\":\n    - gridcell \"DONE\"\n    - gridcell \"t5 t5\"\n    - gridcell \"fake · fake-model\"\n    - gridcell \"—\"\n    - gridcell \"117ms\"\n    - gridcell \"0s\"\n- complementary:\n  - text: executors none registered · 1 running without runner list\n  - paragraph: No runners"
         },
         "keyboardWalk": [
           "a",
@@ -2767,8 +2767,8 @@
           "text": "Fleet boardneeds orchestrator3items1 held · 1 ask · 0 stall · 1 freshrunning1taskscap unknownqueued / pending0 / 0no waitersruns1total1 held · 0 advancingsettle"
         }
       },
-      "recordedAt": "2026-08-08T00:29:32.939Z"
+      "recordedAt": "2026-08-08T01:23:17.586Z"
     }
   },
-  "updatedAt": "2026-08-08T00:29:32.939Z"
+  "updatedAt": "2026-08-08T01:23:17.586Z"
 }

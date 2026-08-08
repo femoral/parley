@@ -315,8 +315,6 @@ export function MetricsScreen(_props: ScreenMountProps) {
             filterActive={filterOn}
           />
         )}
-        {/* Intentional content termination — no dead void at wide viewports. */}
-        <div className="pc-metrics__end" data-testid="metrics-end" aria-hidden="true" />
       </div>
     </div>
   );
