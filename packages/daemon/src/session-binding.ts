@@ -199,13 +199,15 @@ export function isSessionCandidateLive(
 }
 
 /**
- * Resolve which session binds a call (#162 / #190 / #280).
+ * Resolve which session binds a call (#162 / #190 / #280 / #372).
  *
  * Precedence (CLI resolves env > flag into `explicitSessionId` before call):
  * 1. Explicit session id (`PARLEY_SESSION_ID` > `--session`) — always overrides.
  *    Known registered id → that row (even if dead); unknown id → free-form.
  * 2. Deepest ancestry match against all registered sessions.
- * 3. Workspace fallback over non-dead sessions only:
+ * 3. Parent-task orchestrator session (#372, fix path) — only when that id is
+ *    still registered with the daemon. Never stamps a reaped/unknown id.
+ * 4. Workspace fallback over non-dead sessions only:
  *    - exactly one → bind;
  *    - several → bind most-recently-updated, with a warning;
  *    - none → unresolved.
@@ -232,6 +234,13 @@ export function resolveSessionBinding(opts: {
    * do not exercise liveness).
    */
   isSessionLive?: (session: SessionRow) => boolean;
+  /**
+   * Parent task's orchestrator session id (fix path, #372). Considered only
+   * after explicit + ancestry fail; binds only when the id is still present
+   * in {@link sessions} (still registered). Unregistered/reaped ids fall
+   * through to workspace fallback.
+   */
+  parentSessionId?: string | null;
 }): SessionResolveResult {
   const { explicitSessionId, ancestryChain, workspaceRoot, sessions } = opts;
 
@@ -243,6 +252,13 @@ export function resolveSessionBinding(opts: {
 
   const byAncestry = matchSessionByAncestry(ancestryChain, sessions);
   if (byAncestry) return { kind: "bound", session: byAncestry };
+
+  // Parent inheritance (#372): only still-registered sessions.
+  const parentId = opts.parentSessionId;
+  if (parentId !== null && parentId !== undefined && parentId !== "") {
+    const parentSession = sessions.find((s) => s.id === parentId);
+    if (parentSession) return { kind: "bound", session: parentSession };
+  }
 
   const isLive = opts.isSessionLive ?? (() => true);
   const candidates = sessions
