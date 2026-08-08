@@ -336,8 +336,9 @@ async function measureRowsDensity(page) {
  *
  * Rule-text checks stay (CSSOM). Rendered outline is authoritative under a real
  * Tab traversal — `:focus-visible` does not fire under programmatic `.focus()`
- * (#369). #373 also gates outline-color: alpha > 0 and ≥ 3:1 contrast against
- * the card ground the inset outline paints over (WCAG non-text indicator).
+ * (#369). #373 also gates outline-color: composite the outline over the card
+ * ground at its alpha, then require ≥ 3:1 contrast of the painted color
+ * (WCAG non-text indicator). Full-strength RGB alone false-passes low alpha.
  *
  * @param {import('playwright-core').Page} page
  */
@@ -459,7 +460,7 @@ async function measureFocusRing(page) {
     function compositeBg(node) {
       let r = 11,
         g = 13,
-        b = 15; // --ground fallback
+        b = 15; // --ground fallback (byte-identical to real card ground)
       const stack = [];
       let cur = node;
       while (cur && cur !== document.documentElement) {
@@ -472,13 +473,18 @@ async function measureFocusRing(page) {
         if (bg && bg[3] > 0) stack.push(bg);
         cur = cur.parentElement;
       }
+      // true when no ancestor contributed a background — seed alone.
+      const fallback = stack.length === 0;
       for (let i = stack.length - 1; i >= 0; i--) {
         const [cr, cg, cb, a] = stack[i];
         r = cr * a + r * (1 - a);
         g = cg * a + g * (1 - a);
         b = cb * a + b * (1 - a);
       }
-      return [Math.round(r), Math.round(g), Math.round(b)];
+      return {
+        rgb: [Math.round(r), Math.round(g), Math.round(b)],
+        fallback,
+      };
     }
 
     const cs = getComputedStyle(el);
@@ -492,8 +498,9 @@ async function measureFocusRing(page) {
       computedOutlineStyle: cs.outlineStyle,
       computedOutlineWidth: cs.outlineWidth,
       computedOutlineColor: cs.outlineColor,
-      outlineGround: `rgb(${ground[0]}, ${ground[1]}, ${ground[2]})`,
-      outlineGroundRgb: ground,
+      outlineGround: `rgb(${ground.rgb[0]}, ${ground.rgb[1]}, ${ground.rgb[2]})`,
+      outlineGroundRgb: ground.rgb,
+      outlineGroundFallback: ground.fallback,
       matchesFocusVisible: el.matches(":focus-visible"),
     };
   });
@@ -510,25 +517,30 @@ async function measureFocusRing(page) {
     rendered.computedOutlineStyle !== "none" &&
     parseFloat(rendered.computedOutlineWidth) > 0;
 
-  // Visibility (#373): alpha > 0 and ≥ 3:1 contrast vs the ground the outline
-  // paints over (WCAG non-text indicator). Reuse Node-side contrast helpers.
+  // Visibility (#373): ≥ 3:1 contrast of the outline *as painted* (composited
+  // over ground at its alpha) — not the full-strength RGB. Full-strength-only
+  // contrast false-passes low-alpha rings (e.g. rgba(..., 0.05) still scored
+  // 8.01:1). Alpha > 0 stays as a cheap pre-check but is no longer load-bearing.
   const outlineRgba = parseCssColor(rendered.computedOutlineColor);
   const outlineAlpha = outlineRgba ? outlineRgba[3] : null;
   const outlineAlphaOk = outlineAlpha != null && outlineAlpha > 0;
   /** @type {number | null} */
   let outlineContrastRatio = null;
   let outlineContrastOk = false;
-  if (outlineAlphaOk && outlineRgba && Array.isArray(rendered.outlineGroundRgb)) {
+  if (outlineRgba && Array.isArray(rendered.outlineGroundRgb)) {
+    const a = outlineRgba[3];
+    const bg = rendered.outlineGroundRgb;
+    // Composite outline over ground at alpha — the color actually painted.
+    const painted = [
+      Math.round(outlineRgba[0] * a + bg[0] * (1 - a)),
+      Math.round(outlineRgba[1] * a + bg[1] * (1 - a)),
+      Math.round(outlineRgba[2] * a + bg[2] * (1 - a)),
+    ];
     outlineContrastRatio =
-      Math.round(
-        contrastRatio(
-          [outlineRgba[0], outlineRgba[1], outlineRgba[2]],
-          rendered.outlineGroundRgb,
-        ) * 100,
-      ) / 100;
+      Math.round(contrastRatio(painted, bg) * 100) / 100;
     outlineContrastOk = outlineContrastRatio >= 3;
   }
-  const outlineVisible = Boolean(outlineAlphaOk && outlineContrastOk);
+  const outlineVisible = Boolean(outlineContrastOk);
 
   const renderedOk = Boolean(shapeOk && outlineVisible);
 
@@ -548,6 +560,7 @@ async function measureFocusRing(page) {
     computedOutlineWidth: rendered.computedOutlineWidth,
     computedOutlineColor: rendered.computedOutlineColor,
     outlineGround: rendered.outlineGround,
+    outlineGroundFallback: rendered.outlineGroundFallback ?? null,
     outlineAlpha,
     outlineAlphaOk,
     outlineContrastRatio,
