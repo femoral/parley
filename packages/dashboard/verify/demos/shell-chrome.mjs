@@ -29,6 +29,33 @@ const TICKET = "issue-354";
 const DEMO = "shell-chrome";
 
 /**
+ * #375 — contrast probe ids the gate requires to be present in the ledger.
+ *
+ * Deliberately a *second* declaration, not an import of measureChromeContrast's
+ * target list: if the gate read the same array the measurement iterates, then
+ * deleting a target would shrink both sides and the gate would still pass —
+ * which is the defect this closes. Same shape as REQUIRED_CHIP_LABELS in the
+ * fleet-board demo. Keeping the two in sync is a reviewable diff; letting the
+ * measurement silently shrink is not.
+ *
+ * Membership only. Extra ids beyond this set are allowed, so adding a probe
+ * does not need a lockstep gate edit.
+ */
+const REQUIRED_CHROME_CONTRAST_IDS = [
+  "brand-name",
+  "brand-sub",
+  "tab-label",
+  "status-label",
+  "status-value",
+  "attention-label",
+  "attention-count",
+  "clock",
+  "find-input",
+  "legend-label",
+  "footer-meta",
+];
+
+/**
  * Issue-354 merge gates for shell-chrome ledger proofs.
  * Registered on the DEMO_REGISTRY entry so screen tickets can add gates
  * without editing check.mjs.
@@ -68,9 +95,22 @@ export function shellChromeGates(_entry, ledger) {
     }
   }
 
+  // #375 — the probe *list* is pinned, not just each recorded probe. Without
+  // this, deleting a target from measureChromeContrast leaves a smaller ledger
+  // and a green gate: a removed probe is indistinguishable from one that never
+  // existed. Presence only here; found/AA stay with the per-probe loop below so
+  // the two failure modes report distinctly.
+  const contrast = chrome.contrast ?? {};
+  const absent = REQUIRED_CHROME_CONTRAST_IDS.filter((id) => !(id in contrast));
+  if (absent.length > 0) {
+    throw new Error(
+      `shell-chrome: contrast probes absent from ledger: ${absent.join(", ")} ` +
+        `(measured: ${Object.keys(contrast).join(", ") || "none"})`,
+    );
+  }
+
   // #374 — every contrast probe must be found; missing class renames fail closed
   // (same pattern as #370 fleet chip / screen-title). Do not skip found:false.
-  const contrast = chrome.contrast ?? {};
   for (const [cid, m] of Object.entries(contrast)) {
     if (!m?.found) {
       throw new Error(
