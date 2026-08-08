@@ -14,7 +14,12 @@ import {
   interceptEmpty,
   interceptError,
 } from "../lib/honesty.mjs";
-import { ledgerDirs, writeDemoProof, printRectSummary } from "../lib/ledger.mjs";
+import {
+  ledgerDirs,
+  readLedger,
+  writeDemoProof,
+  printRectSummary,
+} from "../lib/ledger.mjs";
 import { measureAtViewports } from "../lib/measure.mjs";
 import { withFakeAllowlist } from "../lib/daemon.mjs";
 import { openVerifySession } from "../lib/session.mjs";
@@ -166,6 +171,17 @@ export function fleetBoardGates(_entry, ledger) {
     );
   }
   // Columns restore at ~1520 (addr/branch visible); still dropped at 1460.
+  // #374 — fail closed if fleet-tasks-scroll is missing (not only via FLEET_SELECTORS).
+  if (!overflow.columnRestore?.at1460?.found) {
+    throw new Error(
+      `fleet-board: fleet-tasks-scroll missing at 1460 (columnRestore): ${JSON.stringify(overflow.columnRestore?.at1460)}`,
+    );
+  }
+  if (!overflow.columnRestore?.at1520?.found) {
+    throw new Error(
+      `fleet-board: fleet-tasks-scroll missing at 1520 (columnRestore): ${JSON.stringify(overflow.columnRestore?.at1520)}`,
+    );
+  }
   if (!overflow.columnRestore?.hiddenAt1460) {
     throw new Error(
       `fleet-board: branch/addr should stay dropped at 1460: ${JSON.stringify(overflow.columnRestore)}`,
@@ -749,10 +765,28 @@ export async function runFleetBoardDemo() {
         const addrVisible = addr
           ? getComputedStyle(addr).display !== "none"
           : false;
-        const scrollWidth = scroll?.scrollWidth ?? 0;
-        const clientWidth = scroll?.clientWidth ?? 0;
-        const clipped = scroll ? scrollWidth > clientWidth + 1 : false;
-        const overflowAttr = scroll?.getAttribute("data-h-overflow");
+        // #374 — carry found so missing scroll cannot pass restore honesty vacuously
+        // (scrollWidth/clientWidth defaulting to 0 made clipped=false).
+        if (!scroll) {
+          return {
+            found: false,
+            branchDisplay: disp(branch),
+            addrDisplay: disp(addr),
+            branchVisible,
+            addrVisible,
+            scrollWidth: 0,
+            clientWidth: 0,
+            clipped: false,
+            overflowAttr: null,
+            overflowCue: false,
+            branchCell: { found: false, clipped: false },
+            addrCell: { found: false, clipped: false },
+          };
+        }
+        const scrollWidth = scroll.scrollWidth;
+        const clientWidth = scroll.clientWidth;
+        const clipped = scrollWidth > clientWidth + 1;
+        const overflowAttr = scroll.getAttribute("data-h-overflow");
         const overflowCue = overflowAttr === "true";
         // Cell-level clip sample when restored (honest data may still ellipsis).
         const cellClip = (el) => {
@@ -767,6 +801,7 @@ export async function runFleetBoardDemo() {
           };
         };
         return {
+          found: true,
           branchDisplay: disp(branch),
           addrDisplay: disp(addr),
           branchVisible,
@@ -837,12 +872,15 @@ export async function runFleetBoardDemo() {
     const at1460 = columnRestore["1460"];
     const at1520 = columnRestore["1520"];
     const restoredAt1520 = Boolean(
-      at1520 && at1520.branchVisible && at1520.addrVisible,
+      at1520?.found && at1520.branchVisible && at1520.addrVisible,
     );
-    // Honest: columns fit (no table H-clip), OR the overflow cue is painted.
+    // Honest: scroll found + columns fit (no table H-clip), OR overflow cue painted.
     // Dishonest: columns restored, table clipped, cue hidden → silent loss.
+    // #374 — missing scroll must not pass (clipped defaults false without element).
     const restoreHonestAt1520 = Boolean(
-      restoredAt1520 && (!at1520.clipped || at1520.overflowCue),
+      at1520?.found &&
+        restoredAt1520 &&
+        (!at1520.clipped || at1520.overflowCue),
     );
     const overflowCue = {
       forceOverflow,
@@ -850,12 +888,12 @@ export async function runFleetBoardDemo() {
         at1460,
         at1520,
         hiddenAt1460: Boolean(
-          at1460 && !at1460.branchVisible && !at1460.addrVisible,
+          at1460?.found && !at1460.branchVisible && !at1460.addrVisible,
         ),
         restoredAt1520,
         restoreHonestAt1520,
-        clippedAt1520: Boolean(at1520?.clipped),
-        overflowCueAt1520: Boolean(at1520?.overflowCue),
+        clippedAt1520: Boolean(at1520?.found && at1520.clipped),
+        overflowCueAt1520: Boolean(at1520?.found && at1520.overflowCue),
       },
     };
 
@@ -1191,6 +1229,13 @@ export async function runFleetBoardDemo() {
       ),
     );
     console.log(`ledger entry: ${entryPath}`);
+
+    // Self-gate so `verify:fleet` fails on proof regressions without needing
+    // the full verify:check suite (neuter evidence for #374).
+    const ledger = readLedger(TICKET);
+    if (!ledger) throw new Error("fleet-board: ledger missing after write");
+    fleetBoardGates({}, ledger);
+
     return proof;
   } finally {
     await session.close();

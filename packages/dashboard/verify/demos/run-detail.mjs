@@ -10,6 +10,7 @@ import { collectA11y, runAxe, ariaSnapshot, keyboardWalk } from "../lib/a11y.mjs
 import {
   assertLedgerShotWidths,
   ledgerDirs,
+  readLedger,
   writeDemoProof,
   printRectSummary,
 } from "../lib/ledger.mjs";
@@ -638,7 +639,9 @@ export async function runRunDetailDemo() {
             const cs = getComputedStyle(el);
             const fg = parseRgb(cs.color);
             if (!fg) continue;
-            // Walk composite through ancestor opacities onto ground.
+            // #374 — composite each ancestor opacity exactly once. The walk
+            // already includes the card; a second explicit cardOp block was
+            // double-compositing and under-reporting ratios (~2.1 vs ~3.4–4.3).
             let effective = fg.slice(0, 3);
             let n = /** @type {Element | null} */ (el);
             while (n && n !== document.documentElement) {
@@ -652,18 +655,7 @@ export async function runRunDetailDemo() {
               n = n.parentElement;
             }
             const bg = opaqueBg(el);
-            // Also composite final ink if card itself has opacity.
-            const cardOp = parseFloat(getComputedStyle(card).opacity);
-            let ink = effective;
-            let ground = bg;
-            if (cardOp < 0.999) {
-              const page = [11, 13, 15];
-              ink = ink.map((c, i) => Math.round(c * cardOp + page[i] * (1 - cardOp)));
-              ground = ground.map((c, i) =>
-                Math.round(c * cardOp + page[i] * (1 - cardOp)),
-              );
-            }
-            const r = ratio(ink, ground);
+            const r = ratio(effective, bg);
             samples.push({
               sel,
               opacity: getComputedStyle(card).opacity,
@@ -1334,6 +1326,13 @@ export async function runRunDetailDemo() {
         2,
       ),
     );
+
+    // Self-gate so `verify:run` fails on proof regressions without needing
+    // the full verify:check suite.
+    const ledger = readLedger(TICKET);
+    if (!ledger) throw new Error("run-detail: ledger missing after write");
+    runDetailGates({}, ledger);
+
     return proof;
   } finally {
     await session.close();
