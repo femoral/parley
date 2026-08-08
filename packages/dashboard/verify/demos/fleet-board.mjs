@@ -41,7 +41,18 @@ import {
 const TICKET = "issue-355";
 const DEMO = "fleet-board";
 
-/** Chip labels that #364/#370 must sample live (not just DONE/FAILED/RUNNING). */
+/**
+ * Chip labels the measurement samples live (not just DONE/FAILED/RUNNING).
+ *
+ * #377 — this used to be a single const that both fed the measurement and
+ * drove the gate's assertion, so deleting a label removed it from the ledger
+ * *and* from the check: the chip stopped being verified and verify:fleet
+ * stayed green. The gate now asserts REQUIRED_CHIP_LABELS below, declared
+ * independently, so shrinking this list fails instead of silently agreeing.
+ */
+const SAMPLED_CHIP_LABELS = ["AWAITING", "GATE HELD"];
+
+/** Chip labels the gate requires in the ledger (#364/#370). See above (#377). */
 const REQUIRED_CHIP_LABELS = ["AWAITING", "GATE HELD"];
 
 /** Fleet-owned selectors — never edit measure.mjs DEFAULT_SELECTORS. */
@@ -737,7 +748,7 @@ export async function runFleetBoardDemo() {
             ),
           };
         },
-        REQUIRED_CHIP_LABELS,
+        SAMPLED_CHIP_LABELS,
       );
     }
 
