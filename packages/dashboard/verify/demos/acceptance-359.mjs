@@ -9,9 +9,11 @@
  *     (consolidates their a11y + honesty into this ticket's ledger)
  *   - Record measured rects + screenshots under verify/ledger/issue-359/
  *
- * Not registered in DEMO_REGISTRY (those stay per-screen tickets). Run via:
+ * Registered in DEMO_REGISTRY since #376. It was deliberately unregistered
+ * while it was a human acceptance record, but that left its ledger ungated:
+ * the sweep recorded per-screen contrast that nothing ever asserted. Run via:
  *   pnpm --filter @useparley/dashboard verify:acceptance
- * or as part of the acceptance record workflow for #359.
+ * or as part of verify:check.
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -65,6 +67,123 @@ const SCREENS = [
     ],
   },
 ];
+
+/**
+ * #376 — screens this gate requires in the ledger, declared separately from
+ * SCREENS (the sweep's input) so dropping a screen from the sweep fails the
+ * gate instead of quietly narrowing it.
+ */
+const REQUIRED_SCREENS = ["fleet", "run", "task", "metrics"];
+
+/**
+ * #376 — chrome contrast probe ids required on *every* swept screen.
+ *
+ * Declared here rather than imported from the measurement, for the usual
+ * reason (a list shared with the measurement shrinks on both sides and
+ * silently disables its own check). shell-chrome pins the same ids, but only
+ * against its own ledger — the sweep covers four screens, so without this the
+ * chrome could stop being verified on three of them.
+ *
+ * An exact set rather than a count: a count admits substitution, where a probe
+ * is dropped and another added and the total still reads healthy.
+ */
+const REQUIRED_CHROME_CONTRAST_IDS = [
+  "brand-name",
+  "brand-sub",
+  "tab-label",
+  "status-label",
+  "status-value",
+  "attention-label",
+  "attention-count",
+  "clock",
+  "find-input",
+  "legend-label",
+  "footer-meta",
+];
+
+/**
+ * Compact per-screen contrast record (#376).
+ *
+ * Replaces a bare `contrastAaFails` count, which was lossy in the wrong
+ * direction: deleting probes drove it toward zero, so a shrinking measurement
+ * read as a healthier screen. Ids are kept so the gate can check coverage and
+ * so a failure names the probe.
+ *
+ * @param {Record<string, {found?: boolean, wcagAA?: boolean}> | null} contrast
+ */
+function contrastSummary(contrast) {
+  if (!contrast) return null;
+  const ids = Object.keys(contrast);
+  return {
+    ids,
+    notFound: ids.filter((id) => !contrast[id]?.found),
+    aaFails: ids.filter((id) => contrast[id]?.wcagAA === false),
+  };
+}
+
+/**
+ * Issue-359 acceptance gates. Registered on the DEMO_REGISTRY entry so
+ * verify:check validates this ledger like every other ticket's — until #376
+ * the sweep recorded contrast that nothing ever read.
+ *
+ * @param {object} _entry registry entry
+ * @param {object} ledger full ledger entry.json for the ticket
+ */
+export function acceptanceSweepGates(_entry, ledger) {
+  const demo = ledger.demos?.[DEMO];
+  if (!demo) throw new Error("acceptance-359: missing demo in ledger");
+
+  const screens = demo.screens ?? {};
+  for (const id of REQUIRED_SCREENS) {
+    const screen = screens[id];
+    if (!screen) {
+      throw new Error(
+        `acceptance-359: missing screen ${id} (swept: ${Object.keys(screens).join(", ") || "none"})`,
+      );
+    }
+
+    const contrast = screen.contrast;
+    if (!contrast || !Array.isArray(contrast.ids)) {
+      throw new Error(`acceptance-359: screen ${id} has no contrast record`);
+    }
+    const measured = new Set(contrast.ids);
+    const absent = REQUIRED_CHROME_CONTRAST_IDS.filter((cid) => !measured.has(cid));
+    if (absent.length > 0) {
+      throw new Error(
+        `acceptance-359: screen ${id} contrast probes absent from ledger: ` +
+          `${absent.join(", ")} (measured: ${contrast.ids.join(", ") || "none"})`,
+      );
+    }
+    const notFound = contrast.notFound ?? [];
+    if (notFound.length > 0) {
+      throw new Error(
+        `acceptance-359: screen ${id} contrast probes matched nothing: ${notFound.join(", ")}`,
+      );
+    }
+    const aaFails = contrast.aaFails ?? [];
+    if (aaFails.length > 0) {
+      throw new Error(
+        `acceptance-359: screen ${id} contrast below AA: ${aaFails.join(", ")}`,
+      );
+    }
+
+    if (screen.keyboardLeftBody !== true) {
+      throw new Error(`acceptance-359: keyboard walk did not leave body on ${id}`);
+    }
+  }
+
+  const totalAxe = demo.headline?.totalAxeViolations;
+  if (typeof totalAxe !== "number") {
+    throw new Error("acceptance-359: missing totalAxeViolations headline");
+  }
+  if (totalAxe > 0) {
+    throw new Error(`acceptance-359: ${totalAxe} axe violation(s) across screens`);
+  }
+  const scroll = demo.headline?.boardScroll1280;
+  if (scroll?.found && !scroll.noHorizontalScroll) {
+    throw new Error("acceptance-359: horizontal scroll at 1280 on fleet board");
+  }
+}
 
 /**
  * Compact axe summary for the consolidated a11y table.
@@ -380,11 +499,7 @@ export async function runAcceptance359Demo() {
         viewports,
         a11y: compactA11y,
         keyboardLeftBody: walk?.leftBody === true,
-        contrastAaFails: contrast
-          ? Object.entries(contrast).filter(
-              ([, m]) => m && m.found && m.wcagAA === false,
-            ).length
-          : null,
+        contrast: contrastSummary(contrast),
         phase: await session.page
           .locator(screen.ready)
           .first()
@@ -453,7 +568,12 @@ export async function runAcceptance359Demo() {
         "+ chrome measured at 1280/1460/1920, consolidated a11y sweep.",
       daemon: daemonState,
       screens,
-      chromeViewports,
+      // Recorded as `viewports` since #376: check.mjs's structural contract
+      // (≥3 named viewports with a measured shell) reads that key, and the
+      // chrome sweep already satisfies it. Was `chromeViewports`, which nothing
+      // else read — renamed rather than aliased so the entry isn't serialised
+      // twice.
+      viewports: chromeViewports,
       ariaByScreen: Object.fromEntries(
         Object.entries(ariaByScreen).map(([k, v]) => [
           k,
@@ -509,17 +629,11 @@ export async function runAcceptance359Demo() {
       ),
     );
 
-    if (totalAxeViolations > 0) {
-      throw new Error(
-        `acceptance-359: ${totalAxeViolations} axe violation(s) across screens — fix one-liners or report structural`,
-      );
-    }
-    if (!proof.headline.keyboardAllLeftBody) {
-      throw new Error("acceptance-359: keyboard walk failed to leave body on a screen");
-    }
-    if (scroll.found && !scroll.noHorizontalScroll) {
-      throw new Error("acceptance-359: horizontal scroll at 1280 on fleet board");
-    }
+    // Self-gate so `verify:acceptance` fails on proof regressions without
+    // needing the full verify:check suite (#376; same shape as shell-chrome).
+    const written = readLedger(TICKET);
+    if (!written) throw new Error("acceptance-359: ledger missing after write");
+    acceptanceSweepGates({}, written);
 
     return proof;
   } finally {

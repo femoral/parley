@@ -23,6 +23,7 @@ import { runFleetBoardDemo, fleetBoardGates } from "./fleet-board.mjs";
 import { runMetricsBoardDemo, metricsBoardGates } from "./metrics-board.mjs";
 import { runRunDetailDemo, runDetailGates } from "./run-detail.mjs";
 import { runConsoleRailsDemo, consoleRailsGates } from "./console-rails.mjs";
+import { runAcceptance359Demo, acceptanceSweepGates } from "./acceptance-359.mjs";
 import {
   runConsoleHonestyDemo,
   consoleHonestyGates,
@@ -98,6 +99,14 @@ export const DEMO_REGISTRY = [
     id: "console-honesty",
     run: runConsoleHonestyDemo,
     gates: consoleHonestyGates,
+  },
+  // #359 acceptance sweep — registered in #376 so its ledger is gated like
+  // every other ticket's. Runs last: it drives all four screens.
+  {
+    ticket: "issue-359",
+    id: "acceptance-sweep",
+    run: runAcceptance359Demo,
+    gates: acceptanceSweepGates,
   },
 ];
 

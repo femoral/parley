@@ -4,33 +4,16 @@
  * #374 fail-closed a *renamed* probe class (found:false throws). This covers
  * the level above: a probe id deleted from the measurement list must fail the
  * gate too, instead of vanishing from the ledger unnoticed.
- *
- * Runs the real gate in a subprocess (same pattern as the state-ink contrast
- * gate test) so the demo module's playwright imports stay out of the vitest
- * process.
  */
-import { execFileSync } from "node:child_process";
-import fs from "node:fs";
-import os from "node:os";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-import { afterEach, describe, expect, it } from "vitest";
-
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
-const shellDemo = path.join(root, "verify/demos/shell-chrome.mjs");
-const ledgerPath = path.join(root, "verify/ledger/issue-354/entry.json");
-
-const temps: string[] = [];
-
-afterEach(() => {
-  for (const d of temps.splice(0)) {
-    fs.rmSync(d, { recursive: true, force: true });
-  }
-});
+import { describe, expect, it } from "vitest";
+import { readLedgerFixture, runVerifyGate } from "../helpers/verify-gate";
 
 type Probe = { found?: boolean; ratio?: number; wcagAA?: boolean };
 type ChromeDemo = { contrast?: Record<string, Probe> };
 type Ledger = { demos: Record<string, ChromeDemo | undefined> };
+
+const demo = "shell-chrome.mjs";
+const gate = "shellChromeGates";
 
 /**
  * Fresh copy of the committed ledger, with the shell-chrome demo and its
@@ -45,7 +28,7 @@ function loadLedgerFixture(): {
   chrome: ChromeDemo;
   contrast: Record<string, Probe>;
 } {
-  const ledger = JSON.parse(fs.readFileSync(ledgerPath, "utf8")) as Ledger;
+  const ledger = readLedgerFixture<Ledger>("issue-354");
   const chrome = ledger.demos["shell-chrome"];
   if (!chrome) throw new Error("fixture: committed ledger has no shell-chrome demo");
   const contrast = chrome.contrast;
@@ -53,33 +36,8 @@ function loadLedgerFixture(): {
   return { ledger, chrome, contrast };
 }
 
-/** Write a ledger to a temp file and run shellChromeGates against it. */
-function runGate(ledger: Ledger): { threw: boolean; message: string } {
-  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "pc-shell-gate-"));
-  temps.push(tmp);
-  const file = path.join(tmp, "entry.json");
-  fs.writeFileSync(file, JSON.stringify(ledger));
-
-  try {
-    execFileSync(
-      process.execPath,
-      [
-        "--input-type=module",
-        "-e",
-        `
-        import fs from "node:fs";
-        import { shellChromeGates } from ${JSON.stringify(shellDemo)};
-        const ledger = JSON.parse(fs.readFileSync(${JSON.stringify(file)}, "utf8"));
-        shellChromeGates({}, ledger);
-        `,
-      ],
-      { encoding: "utf8", cwd: root, stdio: ["ignore", "pipe", "pipe"] },
-    );
-    return { threw: false, message: "" };
-  } catch (err) {
-    const e = err as { stderr?: string; message?: string };
-    return { threw: true, message: e.stderr || e.message || String(err) };
-  }
+function runGate(ledger: Ledger) {
+  return runVerifyGate({ demo, gate, ledger });
 }
 
 /**

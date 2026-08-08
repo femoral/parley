@@ -7,7 +7,7 @@
       "kind": "acceptance-sweep",
       "description": "Console v1 acceptance: multi-task fake-vendor daemon, all four screens + chrome measured at 1280/1460/1920, consolidated a11y sweep.",
       "daemon": {
-        "port": 44715,
+        "port": 38367,
         "taskCount": 4,
         "states": {
           "t4": "running",
@@ -72,7 +72,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "Skip to navigationSkip to findSkip to main content2 need the orchestratorparleyconsoleFleet4 tasks · 2 need actionRunno runTaskt4Metricsall handsdaemon127.0.…"
+                  "text": "Skip to navigationSkip to findSkip to main content2 need the orchestratorparleyconsoleFleet4 tasks · 2 need actionRunno runTaskt4Metricsall sessionsdaemon127…"
                 },
                 "header": {
                   "selector": ".pc-shell__header",
@@ -114,7 +114,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "parleyconsoleFleet4 tasks · 2 need actionRunno runTaskt4Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 1701941 · up 2sv0.0.4needs orch2streamlive07:39:46Se…"
+                  "text": "parleyconsoleFleet4 tasks · 2 need actionRunno runTaskt4Metricsall sessionsdaemon127.0.0.1:5173v0.0.4 · pid 322993 · up 2sv0.0.4needs orch2streamlive16:06:53…"
                 },
                 "brand": {
                   "selector": ".pc-shell__brand",
@@ -198,7 +198,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "Fleet4 tasks · 2 need actionRunno runTaskt4Metricsall hands"
+                  "text": "Fleet4 tasks · 2 need actionRunno runTaskt4Metricsall sessions"
                 },
                 "status": {
                   "selector": ".pc-shell__status",
@@ -240,7 +240,7 @@
                     "overflow": "visible",
                     "opacity": "1"
                   },
-                  "text": "daemon127.0.0.1:5173v0.0.4 · pid 1701941 · up 2sv0.0.4"
+                  "text": "daemon127.0.0.1:5173v0.0.4 · pid 322993 · up 2sv0.0.4"
                 },
                 "needs-orch": {
                   "selector": "[data-testid=\"needs-orch\"]",
@@ -450,7 +450,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "Find tasks and sessions/navigatorScope, state filter, and list navigation land with each screen ticket.Fleet boardneeds orchestrator2items0 held · 1 asks · 0…"
+                  "text": "Find tasks and sessions/scopeorchestrator sessionsessionAll sessionsverify-orch · 4state filter4 tasksall4awaiting1stalled0failed1gaterunning1queued0token bu…"
                 },
                 "rail-left": {
                   "selector": ".pc-shell__rail--left",
@@ -492,7 +492,7 @@
                     "overflow": "auto",
                     "opacity": "1"
                   },
-                  "text": "Find tasks and sessions/navigatorScope, state filter, and list navigation land with each screen ticket."
+                  "text": "Find tasks and sessions/scopeorchestrator sessionsessionAll sessionsverify-orch · 4state filter4 tasksall4awaiting1stalled0failed1gaterunning1queued0token bu…"
                 },
                 "center": {
                   "selector": ".pc-shell__center",
@@ -534,7 +534,7 @@
                     "overflow": "auto",
                     "opacity": "1"
                   },
-                  "text": "Fleet boardneeds orchestrator2items0 held · 1 asks · 0 stall · 1 freshrunning1taskscap unknownqueued / pending0 / 0no waitersruns0total0 held · 0 advancingse…"
+                  "text": "Fleet boardneeds orchestrator2items0 held · 1 ask · 0 stall · 1 freshrunning1taskscap unknownqueued / pending0 / 0no waitersruns0total0 held · 0 advancingset…"
                 },
                 "rail-right": {
                   "selector": ".pc-shell__rail--right",
@@ -576,7 +576,7 @@
                     "overflow": "auto",
                     "opacity": "1"
                   },
-                  "text": "attention · firehoseAttention and the event firehose live on the fleet board screen."
+                  "text": "attention2 · rank · agecardsrowsAWAITING0st3Should the console show the scaffold status or the live daemon origin?fake · fake-model · sess verifyFAILED0st2fr…"
                 },
                 "footer": {
                   "selector": ".pc-shell__footer",
@@ -618,7 +618,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "awaitingstalledfailedrunningqueuedpendingcompletedcancelledstate = what a task IS · quality = how good work WAS · 2 unacked events · livestate=IS · quality=W…"
+                  "text": "AWAITINGSTALLEDFAILEDRUNNINGQUEUEDPENDINGDONECANCELstate = what a task IS · quality = how good work WAS · 2 unacked events · livestate=IS · quality=WAS · 2 u…"
                 },
                 "fleet-board": {
                   "selector": "[data-testid=\"fleet-board\"]",
@@ -660,7 +660,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "Fleet boardneeds orchestrator2items0 held · 1 asks · 0 stall · 1 freshrunning1taskscap unknownqueued / pending0 / 0no waitersruns0total0 held · 0 advancingse…"
+                  "text": "Fleet boardneeds orchestrator2items0 held · 1 ask · 0 stall · 1 freshrunning1taskscap unknownqueued / pending0 / 0no waitersruns0total0 held · 0 advancingset…"
                 },
                 "fleet-kpis": {
                   "selector": "[data-testid=\"fleet-kpis\"]",
@@ -669,13 +669,13 @@
                     "x": 284,
                     "y": 46,
                     "width": 648,
-                    "height": 148.25
+                    "height": 156.38
                   },
                   "styles": {
                     "display": "grid",
                     "position": "static",
                     "width": "648px",
-                    "height": "148.25px",
+                    "height": "156.375px",
                     "minWidth": "auto",
                     "minHeight": "auto",
                     "backgroundColor": "rgba(0, 0, 0, 0)",
@@ -694,7 +694,7 @@
                     "borderBottomColor": "rgb(35, 42, 48)",
                     "borderLeftColor": "rgb(227, 232, 236)",
                     "borderRightColor": "rgb(227, 232, 236)",
-                    "gridTemplateRows": "80.125px 67.125px",
+                    "gridTemplateRows": "84.1875px 71.1875px",
                     "gridTemplateColumns": "216px 216px 216px",
                     "gap": "normal",
                     "padding": "0px",
@@ -702,7 +702,7 @@
                     "overflow": "visible",
                     "opacity": "1"
                   },
-                  "text": "needs orchestrator2items0 held · 1 asks · 0 stall · 1 freshrunning1taskscap unknownqueued / pending0 / 0no waitersruns0total0 held · 0 advancingsettled 24h0 …"
+                  "text": "needs orchestrator2items0 held · 1 ask · 0 stall · 1 freshrunning1taskscap unknownqueued / pending0 / 0no waitersruns0total0 held · 0 advancingsettled 24h0 /…"
                 }
               }
             },
@@ -752,7 +752,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "Skip to navigationSkip to findSkip to main content2 need the orchestratorparleyconsoleFleet4 tasks · 2 need actionRunno runTaskt4Metricsall handsdaemon127.0.…"
+                  "text": "Skip to navigationSkip to findSkip to main content2 need the orchestratorparleyconsoleFleet4 tasks · 2 need actionRunno runTaskt4Metricsall sessionsdaemon127…"
                 },
                 "header": {
                   "selector": ".pc-shell__header",
@@ -794,7 +794,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "parleyconsoleFleet4 tasks · 2 need actionRunno runTaskt4Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 1701941 · up 2sv0.0.4needs orch2streamlive07:39:47Se…"
+                  "text": "parleyconsoleFleet4 tasks · 2 need actionRunno runTaskt4Metricsall sessionsdaemon127.0.0.1:5173v0.0.4 · pid 322993 · up 2sv0.0.4needs orch2streamlive16:06:53…"
                 },
                 "brand": {
                   "selector": ".pc-shell__brand",
@@ -844,13 +844,13 @@
                   "box": {
                     "x": 129,
                     "y": 4.75,
-                    "width": 348.48,
+                    "width": 365.11,
                     "height": 35.5
                   },
                   "styles": {
                     "display": "flex",
                     "position": "static",
-                    "width": "348.484px",
+                    "width": "365.109px",
                     "height": "35.5px",
                     "minWidth": "0px",
                     "minHeight": "auto",
@@ -878,21 +878,21 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "Fleet4 tasks · 2 need actionRunno runTaskt4Metricsall hands"
+                  "text": "Fleet4 tasks · 2 need actionRunno runTaskt4Metricsall sessions"
                 },
                 "status": {
                   "selector": ".pc-shell__status",
                   "found": true,
                   "box": {
-                    "x": 675,
+                    "x": 681.61,
                     "y": 17,
-                    "width": 344.83,
+                    "width": 338.22,
                     "height": 11
                   },
                   "styles": {
                     "display": "flex",
                     "position": "static",
-                    "width": "344.828px",
+                    "width": "338.219px",
                     "height": "11px",
                     "minWidth": "0px",
                     "minHeight": "auto",
@@ -920,7 +920,7 @@
                     "overflow": "visible",
                     "opacity": "1"
                   },
-                  "text": "daemon127.0.0.1:5173v0.0.4 · pid 1701941 · up 2sv0.0.4"
+                  "text": "daemon127.0.0.1:5173v0.0.4 · pid 322993 · up 2sv0.0.4"
                 },
                 "needs-orch": {
                   "selector": "[data-testid=\"needs-orch\"]",
@@ -1130,7 +1130,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "Find tasks and sessions/navigatorScope, state filter, and list navigation land with each screen ticket.Fleet boardneeds orchestrator2items0 held · 1 asks · 0…"
+                  "text": "Find tasks and sessions/scopeorchestrator sessionsessionAll sessionsverify-orch · 4state filter4 tasksall4awaiting1stalled0failed1gaterunning1queued0token bu…"
                 },
                 "rail-left": {
                   "selector": ".pc-shell__rail--left",
@@ -1172,7 +1172,7 @@
                     "overflow": "auto",
                     "opacity": "1"
                   },
-                  "text": "Find tasks and sessions/navigatorScope, state filter, and list navigation land with each screen ticket."
+                  "text": "Find tasks and sessions/scopeorchestrator sessionsessionAll sessionsverify-orch · 4state filter4 tasksall4awaiting1stalled0failed1gaterunning1queued0token bu…"
                 },
                 "center": {
                   "selector": ".pc-shell__center",
@@ -1214,7 +1214,7 @@
                     "overflow": "auto",
                     "opacity": "1"
                   },
-                  "text": "Fleet boardneeds orchestrator2items0 held · 1 asks · 0 stall · 1 freshrunning1taskscap unknownqueued / pending0 / 0no waitersruns0total0 held · 0 advancingse…"
+                  "text": "Fleet boardneeds orchestrator2items0 held · 1 ask · 0 stall · 1 freshrunning1taskscap unknownqueued / pending0 / 0no waitersruns0total0 held · 0 advancingset…"
                 },
                 "rail-right": {
                   "selector": ".pc-shell__rail--right",
@@ -1256,7 +1256,7 @@
                     "overflow": "auto",
                     "opacity": "1"
                   },
-                  "text": "attention · firehoseAttention and the event firehose live on the fleet board screen."
+                  "text": "attention2 · rank · agecardsrowsAWAITING0st3Should the console show the scaffold status or the live daemon origin?fake · fake-model · sess verifyFAILED0st2fr…"
                 },
                 "footer": {
                   "selector": ".pc-shell__footer",
@@ -1298,7 +1298,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "awaitingstalledfailedrunningqueuedpendingcompletedcancelledstate = what a task IS · quality = how good work WAS · 2 unacked events · livestate=IS · quality=W…"
+                  "text": "AWAITINGSTALLEDFAILEDRUNNINGQUEUEDPENDINGDONECANCELstate = what a task IS · quality = how good work WAS · 2 unacked events · livestate=IS · quality=WAS · 2 u…"
                 },
                 "fleet-board": {
                   "selector": "[data-testid=\"fleet-board\"]",
@@ -1340,7 +1340,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "Fleet boardneeds orchestrator2items0 held · 1 asks · 0 stall · 1 freshrunning1taskscap unknownqueued / pending0 / 0no waitersruns0total0 held · 0 advancingse…"
+                  "text": "Fleet boardneeds orchestrator2items0 held · 1 ask · 0 stall · 1 freshrunning1taskscap unknownqueued / pending0 / 0no waitersruns0total0 held · 0 advancingset…"
                 },
                 "fleet-kpis": {
                   "selector": "[data-testid=\"fleet-kpis\"]",
@@ -1349,13 +1349,13 @@
                     "x": 284,
                     "y": 46,
                     "width": 828,
-                    "height": 135.25
+                    "height": 143.38
                   },
                   "styles": {
                     "display": "grid",
                     "position": "static",
                     "width": "828px",
-                    "height": "135.25px",
+                    "height": "143.375px",
                     "minWidth": "auto",
                     "minHeight": "auto",
                     "backgroundColor": "rgba(0, 0, 0, 0)",
@@ -1374,7 +1374,7 @@
                     "borderBottomColor": "rgb(35, 42, 48)",
                     "borderLeftColor": "rgb(227, 232, 236)",
                     "borderRightColor": "rgb(227, 232, 236)",
-                    "gridTemplateRows": "67.125px 67.125px",
+                    "gridTemplateRows": "71.1875px 71.1875px",
                     "gridTemplateColumns": "276px 276px 276px",
                     "gap": "normal",
                     "padding": "0px",
@@ -1382,7 +1382,7 @@
                     "overflow": "visible",
                     "opacity": "1"
                   },
-                  "text": "needs orchestrator2items0 held · 1 asks · 0 stall · 1 freshrunning1taskscap unknownqueued / pending0 / 0no waitersruns0total0 held · 0 advancingsettled 24h0 …"
+                  "text": "needs orchestrator2items0 held · 1 ask · 0 stall · 1 freshrunning1taskscap unknownqueued / pending0 / 0no waitersruns0total0 held · 0 advancingsettled 24h0 /…"
                 }
               }
             },
@@ -1432,7 +1432,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "Skip to navigationSkip to findSkip to main content2 need the orchestratorparleyconsoleFleet4 tasks · 2 need actionRunno runTaskt4Metricsall handsdaemon127.0.…"
+                  "text": "Skip to navigationSkip to findSkip to main content2 need the orchestratorparleyconsoleFleet4 tasks · 2 need actionRunno runTaskt4Metricsall sessionsdaemon127…"
                 },
                 "header": {
                   "selector": ".pc-shell__header",
@@ -1474,7 +1474,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "parleyconsoleFleet4 tasks · 2 need actionRunno runTaskt4Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 1701941 · up 2sv0.0.4needs orch2streamlive07:39:48Se…"
+                  "text": "parleyconsoleFleet4 tasks · 2 need actionRunno runTaskt4Metricsall sessionsdaemon127.0.0.1:5173v0.0.4 · pid 322993 · up 2sv0.0.4needs orch2streamlive16:06:54…"
                 },
                 "brand": {
                   "selector": ".pc-shell__brand",
@@ -1524,13 +1524,13 @@
                   "box": {
                     "x": 129,
                     "y": 4.75,
-                    "width": 348.48,
+                    "width": 365.11,
                     "height": 35.5
                   },
                   "styles": {
                     "display": "flex",
                     "position": "static",
-                    "width": "348.484px",
+                    "width": "365.109px",
                     "height": "35.5px",
                     "minWidth": "0px",
                     "minHeight": "auto",
@@ -1558,21 +1558,21 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "Fleet4 tasks · 2 need actionRunno runTaskt4Metricsall hands"
+                  "text": "Fleet4 tasks · 2 need actionRunno runTaskt4Metricsall sessions"
                 },
                 "status": {
                   "selector": ".pc-shell__status",
                   "found": true,
                   "box": {
-                    "x": 1135,
+                    "x": 1141.61,
                     "y": 17,
-                    "width": 344.83,
+                    "width": 338.22,
                     "height": 11
                   },
                   "styles": {
                     "display": "flex",
                     "position": "static",
-                    "width": "344.828px",
+                    "width": "338.219px",
                     "height": "11px",
                     "minWidth": "0px",
                     "minHeight": "auto",
@@ -1600,7 +1600,7 @@
                     "overflow": "visible",
                     "opacity": "1"
                   },
-                  "text": "daemon127.0.0.1:5173v0.0.4 · pid 1701941 · up 2sv0.0.4"
+                  "text": "daemon127.0.0.1:5173v0.0.4 · pid 322993 · up 2sv0.0.4"
                 },
                 "needs-orch": {
                   "selector": "[data-testid=\"needs-orch\"]",
@@ -1810,7 +1810,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "Find tasks and sessions/navigatorScope, state filter, and list navigation land with each screen ticket.Fleet boardneeds orchestrator2items0 held · 1 asks · 0…"
+                  "text": "Find tasks and sessions/scopeorchestrator sessionsessionAll sessionsverify-orch · 4state filter4 tasksall4awaiting1stalled0failed1gaterunning1queued0token bu…"
                 },
                 "rail-left": {
                   "selector": ".pc-shell__rail--left",
@@ -1852,7 +1852,7 @@
                     "overflow": "auto",
                     "opacity": "1"
                   },
-                  "text": "Find tasks and sessions/navigatorScope, state filter, and list navigation land with each screen ticket."
+                  "text": "Find tasks and sessions/scopeorchestrator sessionsessionAll sessionsverify-orch · 4state filter4 tasksall4awaiting1stalled0failed1gaterunning1queued0token bu…"
                 },
                 "center": {
                   "selector": ".pc-shell__center",
@@ -1894,7 +1894,7 @@
                     "overflow": "auto",
                     "opacity": "1"
                   },
-                  "text": "Fleet boardneeds orchestrator2items0 held · 1 asks · 0 stall · 1 freshrunning1taskscap unknownqueued / pending0 / 0no waitersruns0total0 held · 0 advancingse…"
+                  "text": "Fleet boardneeds orchestrator2items0 held · 1 ask · 0 stall · 1 freshrunning1taskscap unknownqueued / pending0 / 0no waitersruns0total0 held · 0 advancingset…"
                 },
                 "rail-right": {
                   "selector": ".pc-shell__rail--right",
@@ -1936,7 +1936,7 @@
                     "overflow": "auto",
                     "opacity": "1"
                   },
-                  "text": "attention · firehoseAttention and the event firehose live on the fleet board screen."
+                  "text": "attention2 · rank · agecardsrowsAWAITING0st3Should the console show the scaffold status or the live daemon origin?fake · fake-model · sess verifyFAILED0st2fr…"
                 },
                 "footer": {
                   "selector": ".pc-shell__footer",
@@ -1978,7 +1978,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "awaitingstalledfailedrunningqueuedpendingcompletedcancelledstate = what a task IS · quality = how good work WAS · 2 unacked events · livestate=IS · quality=W…"
+                  "text": "AWAITINGSTALLEDFAILEDRUNNINGQUEUEDPENDINGDONECANCELstate = what a task IS · quality = how good work WAS · 2 unacked events · livestate=IS · quality=WAS · 2 u…"
                 },
                 "fleet-board": {
                   "selector": "[data-testid=\"fleet-board\"]",
@@ -2020,7 +2020,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "Fleet boardneeds orchestrator2items0 held · 1 asks · 0 stall · 1 freshrunning1taskscap unknownqueued / pending0 / 0no waitersruns0total0 held · 0 advancingse…"
+                  "text": "Fleet boardneeds orchestrator2items0 held · 1 ask · 0 stall · 1 freshrunning1taskscap unknownqueued / pending0 / 0no waitersruns0total0 held · 0 advancingset…"
                 },
                 "fleet-kpis": {
                   "selector": "[data-testid=\"fleet-kpis\"]",
@@ -2029,13 +2029,13 @@
                     "x": 284,
                     "y": 46,
                     "width": 1288,
-                    "height": 80.13
+                    "height": 84.19
                   },
                   "styles": {
                     "display": "grid",
                     "position": "static",
                     "width": "1288px",
-                    "height": "80.125px",
+                    "height": "84.1875px",
                     "minWidth": "auto",
                     "minHeight": "auto",
                     "backgroundColor": "rgba(0, 0, 0, 0)",
@@ -2054,7 +2054,7 @@
                     "borderBottomColor": "rgb(35, 42, 48)",
                     "borderLeftColor": "rgb(227, 232, 236)",
                     "borderRightColor": "rgb(227, 232, 236)",
-                    "gridTemplateRows": "79.125px",
+                    "gridTemplateRows": "83.1875px",
                     "gridTemplateColumns": "214.656px 214.672px 214.672px 214.656px 214.672px 214.672px",
                     "gap": "normal",
                     "padding": "0px",
@@ -2062,7 +2062,7 @@
                     "overflow": "visible",
                     "opacity": "1"
                   },
-                  "text": "needs orchestrator2items0 held · 1 asks · 0 stall · 1 freshrunning1taskscap unknownqueued / pending0 / 0no waitersruns0total0 held · 0 advancingsettled 24h0 …"
+                  "text": "needs orchestrator2items0 held · 1 ask · 0 stall · 1 freshrunning1taskscap unknownqueued / pending0 / 0no waitersruns0total0 held · 0 advancingsettled 24h0 /…"
                 }
               }
             }
@@ -2072,16 +2072,16 @@
               "present": true,
               "violations": 0,
               "ids": [],
-              "passes": 37,
-              "incomplete": 2
+              "passes": 38,
+              "incomplete": 1
             },
             "aria": {
               "api": "locator.ariaSnapshot",
               "selector": "[data-testid=\"shell\"]",
-              "treeBytes": 3322
+              "treeBytes": 4012
             },
             "keyboardWalk": {
-              "focusableCount": 10,
+              "focusableCount": 22,
               "leftBody": true,
               "entered": true,
               "pathSteps": 2
@@ -2090,12 +2090,28 @@
               "present": true,
               "violations": 0,
               "ids": [],
-              "passes": 21,
-              "incomplete": 1
+              "passes": 19,
+              "incomplete": 0
             }
           },
           "keyboardLeftBody": true,
-          "contrastAaFails": 0,
+          "contrast": {
+            "ids": [
+              "brand-name",
+              "brand-sub",
+              "tab-label",
+              "status-label",
+              "status-value",
+              "attention-label",
+              "attention-count",
+              "clock",
+              "find-input",
+              "legend-label",
+              "footer-meta"
+            ],
+            "notFound": [],
+            "aaFails": []
+          },
           "phase": "live"
         },
         "run": {
@@ -2147,7 +2163,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "Skip to navigationSkip to findSkip to main content2 need the orchestratorparleyconsoleFleet4 tasks · 2 need actionRunno runTaskt4Metricsall handsdaemon127.0.…"
+                  "text": "Skip to navigationSkip to findSkip to main content2 need the orchestratorparleyconsoleFleet4 tasks · 2 need actionRunno runTaskt4Metricsall sessionsdaemon127…"
                 },
                 "header": {
                   "selector": ".pc-shell__header",
@@ -2189,7 +2205,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "parleyconsoleFleet4 tasks · 2 need actionRunno runTaskt4Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 1701941 · up 2sv0.0.4needs orch2streamlive07:39:50Se…"
+                  "text": "parleyconsoleFleet4 tasks · 2 need actionRunno runTaskt4Metricsall sessionsdaemon127.0.0.1:5173v0.0.4 · pid 322993 · up 2sv0.0.4needs orch2streamlive16:06:56…"
                 },
                 "brand": {
                   "selector": ".pc-shell__brand",
@@ -2273,7 +2289,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "Fleet4 tasks · 2 need actionRunno runTaskt4Metricsall hands"
+                  "text": "Fleet4 tasks · 2 need actionRunno runTaskt4Metricsall sessions"
                 },
                 "status": {
                   "selector": ".pc-shell__status",
@@ -2315,7 +2331,7 @@
                     "overflow": "visible",
                     "opacity": "1"
                   },
-                  "text": "daemon127.0.0.1:5173v0.0.4 · pid 1701941 · up 2sv0.0.4"
+                  "text": "daemon127.0.0.1:5173v0.0.4 · pid 322993 · up 2sv0.0.4"
                 },
                 "needs-orch": {
                   "selector": "[data-testid=\"needs-orch\"]",
@@ -2525,7 +2541,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "Find tasks and sessions/navigatorScope, state filter, and list navigation land with each screen ticket.No runsStart a workflow with parley run start. This su…"
+                  "text": "Find tasks and sessions/scopeorchestrator sessionsessionAll sessionsverify-orch · 4state filter4 tasksall4awaiting1stalled0failed1gaterunning1queued0token bu…"
                 },
                 "rail-left": {
                   "selector": ".pc-shell__rail--left",
@@ -2567,7 +2583,7 @@
                     "overflow": "auto",
                     "opacity": "1"
                   },
-                  "text": "Find tasks and sessions/navigatorScope, state filter, and list navigation land with each screen ticket."
+                  "text": "Find tasks and sessions/scopeorchestrator sessionsessionAll sessionsverify-orch · 4state filter4 tasksall4awaiting1stalled0failed1gaterunning1queued0token bu…"
                 },
                 "center": {
                   "selector": ".pc-shell__center",
@@ -2651,7 +2667,7 @@
                     "overflow": "auto",
                     "opacity": "1"
                   },
-                  "text": "attention · firehoseAttention and the event firehose live on the fleet board screen."
+                  "text": "attention2 · rank · agecardsrowsAWAITING0st3Should the console show the scaffold status or the live daemon origin?fake · fake-model · sess verifyFAILED0st2fr…"
                 },
                 "footer": {
                   "selector": ".pc-shell__footer",
@@ -2693,7 +2709,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "awaitingstalledfailedrunningqueuedpendingcompletedcancelledstate = what a task IS · quality = how good work WAS · 2 unacked events · livestate=IS · quality=W…"
+                  "text": "AWAITINGSTALLEDFAILEDRUNNINGQUEUEDPENDINGDONECANCELstate = what a task IS · quality = how good work WAS · 2 unacked events · livestate=IS · quality=WAS · 2 u…"
                 },
                 "screen-run": {
                   "selector": "[data-testid=\"screen-run\"]",
@@ -2705,7 +2721,7 @@
                     "height": 828
                   },
                   "styles": {
-                    "display": "grid",
+                    "display": "flex",
                     "position": "static",
                     "width": "648px",
                     "height": "828px",
@@ -2727,8 +2743,8 @@
                     "borderBottomColor": "rgb(227, 232, 236)",
                     "borderLeftColor": "rgb(227, 232, 236)",
                     "borderRightColor": "rgb(227, 232, 236)",
-                    "gridTemplateRows": "119.281px 0px 0px 708.719px",
-                    "gridTemplateColumns": "648px",
+                    "gridTemplateRows": "none",
+                    "gridTemplateColumns": "none",
                     "gap": "normal",
                     "padding": "0px",
                     "margin": "0px",
@@ -2785,7 +2801,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "Skip to navigationSkip to findSkip to main content2 need the orchestratorparleyconsoleFleet4 tasks · 2 need actionRunno runTaskt4Metricsall handsdaemon127.0.…"
+                  "text": "Skip to navigationSkip to findSkip to main content2 need the orchestratorparleyconsoleFleet4 tasks · 2 need actionRunno runTaskt4Metricsall sessionsdaemon127…"
                 },
                 "header": {
                   "selector": ".pc-shell__header",
@@ -2827,7 +2843,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "parleyconsoleFleet4 tasks · 2 need actionRunno runTaskt4Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 1701941 · up 2sv0.0.4needs orch2streamlive07:39:50Se…"
+                  "text": "parleyconsoleFleet4 tasks · 2 need actionRunno runTaskt4Metricsall sessionsdaemon127.0.0.1:5173v0.0.4 · pid 322993 · up 7sv0.0.4needs orch2streamlive16:06:56…"
                 },
                 "brand": {
                   "selector": ".pc-shell__brand",
@@ -2877,13 +2893,13 @@
                   "box": {
                     "x": 129,
                     "y": 4.75,
-                    "width": 348.48,
+                    "width": 365.11,
                     "height": 35.5
                   },
                   "styles": {
                     "display": "flex",
                     "position": "static",
-                    "width": "348.484px",
+                    "width": "365.109px",
                     "height": "35.5px",
                     "minWidth": "0px",
                     "minHeight": "auto",
@@ -2911,21 +2927,21 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "Fleet4 tasks · 2 need actionRunno runTaskt4Metricsall hands"
+                  "text": "Fleet4 tasks · 2 need actionRunno runTaskt4Metricsall sessions"
                 },
                 "status": {
                   "selector": ".pc-shell__status",
                   "found": true,
                   "box": {
-                    "x": 675,
+                    "x": 681.61,
                     "y": 17,
-                    "width": 344.83,
+                    "width": 338.22,
                     "height": 11
                   },
                   "styles": {
                     "display": "flex",
                     "position": "static",
-                    "width": "344.828px",
+                    "width": "338.219px",
                     "height": "11px",
                     "minWidth": "0px",
                     "minHeight": "auto",
@@ -2953,7 +2969,7 @@
                     "overflow": "visible",
                     "opacity": "1"
                   },
-                  "text": "daemon127.0.0.1:5173v0.0.4 · pid 1701941 · up 2sv0.0.4"
+                  "text": "daemon127.0.0.1:5173v0.0.4 · pid 322993 · up 7sv0.0.4"
                 },
                 "needs-orch": {
                   "selector": "[data-testid=\"needs-orch\"]",
@@ -3163,7 +3179,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "Find tasks and sessions/navigatorScope, state filter, and list navigation land with each screen ticket.No runsStart a workflow with parley run start. This su…"
+                  "text": "Find tasks and sessions/scopeorchestrator sessionsessionAll sessionsverify-orch · 4state filter4 tasksall4awaiting1stalled0failed1gaterunning1queued0token bu…"
                 },
                 "rail-left": {
                   "selector": ".pc-shell__rail--left",
@@ -3205,7 +3221,7 @@
                     "overflow": "auto",
                     "opacity": "1"
                   },
-                  "text": "Find tasks and sessions/navigatorScope, state filter, and list navigation land with each screen ticket."
+                  "text": "Find tasks and sessions/scopeorchestrator sessionsessionAll sessionsverify-orch · 4state filter4 tasksall4awaiting1stalled0failed1gaterunning1queued0token bu…"
                 },
                 "center": {
                   "selector": ".pc-shell__center",
@@ -3289,7 +3305,7 @@
                     "overflow": "auto",
                     "opacity": "1"
                   },
-                  "text": "attention · firehoseAttention and the event firehose live on the fleet board screen."
+                  "text": "attention2 · rank · agecardsrowsAWAITING0st3Should the console show the scaffold status or the live daemon origin?fake · fake-model · sess verifyFAILED0st2fr…"
                 },
                 "footer": {
                   "selector": ".pc-shell__footer",
@@ -3331,7 +3347,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "awaitingstalledfailedrunningqueuedpendingcompletedcancelledstate = what a task IS · quality = how good work WAS · 2 unacked events · livestate=IS · quality=W…"
+                  "text": "AWAITINGSTALLEDFAILEDRUNNINGQUEUEDPENDINGDONECANCELstate = what a task IS · quality = how good work WAS · 2 unacked events · livestate=IS · quality=WAS · 2 u…"
                 },
                 "screen-run": {
                   "selector": "[data-testid=\"screen-run\"]",
@@ -3343,7 +3359,7 @@
                     "height": 828
                   },
                   "styles": {
-                    "display": "grid",
+                    "display": "flex",
                     "position": "static",
                     "width": "828px",
                     "height": "828px",
@@ -3365,8 +3381,8 @@
                     "borderBottomColor": "rgb(227, 232, 236)",
                     "borderLeftColor": "rgb(227, 232, 236)",
                     "borderRightColor": "rgb(227, 232, 236)",
-                    "gridTemplateRows": "119.281px 0px 0px 708.719px",
-                    "gridTemplateColumns": "828px",
+                    "gridTemplateRows": "none",
+                    "gridTemplateColumns": "none",
                     "gap": "normal",
                     "padding": "0px",
                     "margin": "0px",
@@ -3423,7 +3439,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "Skip to navigationSkip to findSkip to main content2 need the orchestratorparleyconsoleFleet4 tasks · 2 need actionRunno runTaskt4Metricsall handsdaemon127.0.…"
+                  "text": "Skip to navigationSkip to findSkip to main content2 need the orchestratorparleyconsoleFleet4 tasks · 2 need actionRunno runTaskt4Metricsall sessionsdaemon127…"
                 },
                 "header": {
                   "selector": ".pc-shell__header",
@@ -3465,7 +3481,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "parleyconsoleFleet4 tasks · 2 need actionRunno runTaskt4Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 1701941 · up 7sv0.0.4needs orch2streamlive07:39:51Se…"
+                  "text": "parleyconsoleFleet4 tasks · 2 need actionRunno runTaskt4Metricsall sessionsdaemon127.0.0.1:5173v0.0.4 · pid 322993 · up 7sv0.0.4needs orch2streamlive16:06:57…"
                 },
                 "brand": {
                   "selector": ".pc-shell__brand",
@@ -3515,13 +3531,13 @@
                   "box": {
                     "x": 129,
                     "y": 4.75,
-                    "width": 348.48,
+                    "width": 365.11,
                     "height": 35.5
                   },
                   "styles": {
                     "display": "flex",
                     "position": "static",
-                    "width": "348.484px",
+                    "width": "365.109px",
                     "height": "35.5px",
                     "minWidth": "0px",
                     "minHeight": "auto",
@@ -3549,21 +3565,21 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "Fleet4 tasks · 2 need actionRunno runTaskt4Metricsall hands"
+                  "text": "Fleet4 tasks · 2 need actionRunno runTaskt4Metricsall sessions"
                 },
                 "status": {
                   "selector": ".pc-shell__status",
                   "found": true,
                   "box": {
-                    "x": 1135,
+                    "x": 1141.61,
                     "y": 17,
-                    "width": 344.83,
+                    "width": 338.22,
                     "height": 11
                   },
                   "styles": {
                     "display": "flex",
                     "position": "static",
-                    "width": "344.828px",
+                    "width": "338.219px",
                     "height": "11px",
                     "minWidth": "0px",
                     "minHeight": "auto",
@@ -3591,7 +3607,7 @@
                     "overflow": "visible",
                     "opacity": "1"
                   },
-                  "text": "daemon127.0.0.1:5173v0.0.4 · pid 1701941 · up 7sv0.0.4"
+                  "text": "daemon127.0.0.1:5173v0.0.4 · pid 322993 · up 7sv0.0.4"
                 },
                 "needs-orch": {
                   "selector": "[data-testid=\"needs-orch\"]",
@@ -3801,7 +3817,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "Find tasks and sessions/navigatorScope, state filter, and list navigation land with each screen ticket.No runsStart a workflow with parley run start. This su…"
+                  "text": "Find tasks and sessions/scopeorchestrator sessionsessionAll sessionsverify-orch · 4state filter4 tasksall4awaiting1stalled0failed1gaterunning1queued0token bu…"
                 },
                 "rail-left": {
                   "selector": ".pc-shell__rail--left",
@@ -3843,7 +3859,7 @@
                     "overflow": "auto",
                     "opacity": "1"
                   },
-                  "text": "Find tasks and sessions/navigatorScope, state filter, and list navigation land with each screen ticket."
+                  "text": "Find tasks and sessions/scopeorchestrator sessionsessionAll sessionsverify-orch · 4state filter4 tasksall4awaiting1stalled0failed1gaterunning1queued0token bu…"
                 },
                 "center": {
                   "selector": ".pc-shell__center",
@@ -3927,7 +3943,7 @@
                     "overflow": "auto",
                     "opacity": "1"
                   },
-                  "text": "attention · firehoseAttention and the event firehose live on the fleet board screen."
+                  "text": "attention2 · rank · agecardsrowsAWAITING0st3Should the console show the scaffold status or the live daemon origin?fake · fake-model · sess verifyFAILED0st2fr…"
                 },
                 "footer": {
                   "selector": ".pc-shell__footer",
@@ -3969,7 +3985,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "awaitingstalledfailedrunningqueuedpendingcompletedcancelledstate = what a task IS · quality = how good work WAS · 2 unacked events · livestate=IS · quality=W…"
+                  "text": "AWAITINGSTALLEDFAILEDRUNNINGQUEUEDPENDINGDONECANCELstate = what a task IS · quality = how good work WAS · 2 unacked events · livestate=IS · quality=WAS · 2 u…"
                 },
                 "screen-run": {
                   "selector": "[data-testid=\"screen-run\"]",
@@ -3981,7 +3997,7 @@
                     "height": 828
                   },
                   "styles": {
-                    "display": "grid",
+                    "display": "flex",
                     "position": "static",
                     "width": "1288px",
                     "height": "828px",
@@ -4003,8 +4019,8 @@
                     "borderBottomColor": "rgb(227, 232, 236)",
                     "borderLeftColor": "rgb(227, 232, 236)",
                     "borderRightColor": "rgb(227, 232, 236)",
-                    "gridTemplateRows": "119.281px 0px 0px 708.719px",
-                    "gridTemplateColumns": "1288px",
+                    "gridTemplateRows": "none",
+                    "gridTemplateColumns": "none",
                     "gap": "normal",
                     "padding": "0px",
                     "margin": "0px",
@@ -4021,16 +4037,16 @@
               "present": true,
               "violations": 0,
               "ids": [],
-              "passes": 35,
+              "passes": 37,
               "incomplete": 1
             },
             "aria": {
               "api": "locator.ariaSnapshot",
               "selector": "[data-testid=\"shell\"]",
-              "treeBytes": 1322
+              "treeBytes": 2503
             },
             "keyboardWalk": {
-              "focusableCount": 9,
+              "focusableCount": 21,
               "leftBody": true,
               "entered": true,
               "pathSteps": 2
@@ -4044,7 +4060,23 @@
             }
           },
           "keyboardLeftBody": true,
-          "contrastAaFails": 0,
+          "contrast": {
+            "ids": [
+              "brand-name",
+              "brand-sub",
+              "tab-label",
+              "status-label",
+              "status-value",
+              "attention-label",
+              "attention-count",
+              "clock",
+              "find-input",
+              "legend-label",
+              "footer-meta"
+            ],
+            "notFound": [],
+            "aaFails": []
+          },
           "phase": null
         },
         "task": {
@@ -4096,7 +4128,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "Skip to navigationSkip to findSkip to main content2 need the orchestratorparleyconsoleFleet4 tasks · 2 need actionRunno runTaskt4Metricsall handsdaemon127.0.…"
+                  "text": "Skip to navigationSkip to findSkip to main content2 need the orchestratorparleyconsoleFleet4 tasks · 2 need actionRunno runTaskt4Metricsall sessionsdaemon127…"
                 },
                 "header": {
                   "selector": ".pc-shell__header",
@@ -4138,7 +4170,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "parleyconsoleFleet4 tasks · 2 need actionRunno runTaskt4Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 1701941 · up 7sv0.0.4needs orch2streamlive07:39:52Se…"
+                  "text": "parleyconsoleFleet4 tasks · 2 need actionRunno runTaskt4Metricsall sessionsdaemon127.0.0.1:5173v0.0.4 · pid 322993 · up 7sv0.0.4needs orch2streamlive16:06:59…"
                 },
                 "brand": {
                   "selector": ".pc-shell__brand",
@@ -4222,7 +4254,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "Fleet4 tasks · 2 need actionRunno runTaskt4Metricsall hands"
+                  "text": "Fleet4 tasks · 2 need actionRunno runTaskt4Metricsall sessions"
                 },
                 "status": {
                   "selector": ".pc-shell__status",
@@ -4264,7 +4296,7 @@
                     "overflow": "visible",
                     "opacity": "1"
                   },
-                  "text": "daemon127.0.0.1:5173v0.0.4 · pid 1701941 · up 7sv0.0.4"
+                  "text": "daemon127.0.0.1:5173v0.0.4 · pid 322993 · up 7sv0.0.4"
                 },
                 "needs-orch": {
                   "selector": "[data-testid=\"needs-orch\"]",
@@ -4474,7 +4506,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "Find tasks and sessions/navigatorScope, state filter, and list navigation land with each screen ticket.task inspectorNo task selectedPick a task from find or…"
+                  "text": "Find tasks and sessions/scopeorchestrator sessionsessionAll sessionsverify-orch · 4state filter4 tasksall4awaiting1stalled0failed1gaterunning1queued0token bu…"
                 },
                 "rail-left": {
                   "selector": ".pc-shell__rail--left",
@@ -4516,7 +4548,7 @@
                     "overflow": "auto",
                     "opacity": "1"
                   },
-                  "text": "Find tasks and sessions/navigatorScope, state filter, and list navigation land with each screen ticket."
+                  "text": "Find tasks and sessions/scopeorchestrator sessionsessionAll sessionsverify-orch · 4state filter4 tasksall4awaiting1stalled0failed1gaterunning1queued0token bu…"
                 },
                 "center": {
                   "selector": ".pc-shell__center",
@@ -4600,7 +4632,7 @@
                     "overflow": "auto",
                     "opacity": "1"
                   },
-                  "text": "attention · firehoseAttention and the event firehose live on the fleet board screen."
+                  "text": "attention2 · rank · agecardsrowsAWAITING0st3Should the console show the scaffold status or the live daemon origin?fake · fake-model · sess verifyFAILED0st2fr…"
                 },
                 "footer": {
                   "selector": ".pc-shell__footer",
@@ -4642,7 +4674,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "awaitingstalledfailedrunningqueuedpendingcompletedcancelledstate = what a task IS · quality = how good work WAS · 2 unacked events · livestate=IS · quality=W…"
+                  "text": "AWAITINGSTALLEDFAILEDRUNNINGQUEUEDPENDINGDONECANCELstate = what a task IS · quality = how good work WAS · 2 unacked events · livestate=IS · quality=WAS · 2 u…"
                 },
                 "screen-task": {
                   "selector": "[data-testid=\"screen-task\"]",
@@ -4676,7 +4708,7 @@
                     "borderBottomColor": "rgb(227, 232, 236)",
                     "borderLeftColor": "rgb(227, 232, 236)",
                     "borderRightColor": "rgb(227, 232, 236)",
-                    "gridTemplateRows": "auto 1fr",
+                    "gridTemplateRows": "none",
                     "gridTemplateColumns": "none",
                     "gap": "14px",
                     "padding": "28px 32px",
@@ -4734,7 +4766,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "Skip to navigationSkip to findSkip to main content2 need the orchestratorparleyconsoleFleet4 tasks · 2 need actionRunno runTaskt4Metricsall handsdaemon127.0.…"
+                  "text": "Skip to navigationSkip to findSkip to main content2 need the orchestratorparleyconsoleFleet4 tasks · 2 need actionRunno runTaskt4Metricsall sessionsdaemon127…"
                 },
                 "header": {
                   "selector": ".pc-shell__header",
@@ -4776,7 +4808,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "parleyconsoleFleet4 tasks · 2 need actionRunno runTaskt4Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 1701941 · up 7sv0.0.4needs orch2streamlive07:39:53Se…"
+                  "text": "parleyconsoleFleet4 tasks · 2 need actionRunno runTaskt4Metricsall sessionsdaemon127.0.0.1:5173v0.0.4 · pid 322993 · up 7sv0.0.4needs orch2streamlive16:06:59…"
                 },
                 "brand": {
                   "selector": ".pc-shell__brand",
@@ -4826,13 +4858,13 @@
                   "box": {
                     "x": 129,
                     "y": 4.75,
-                    "width": 348.48,
+                    "width": 365.11,
                     "height": 35.5
                   },
                   "styles": {
                     "display": "flex",
                     "position": "static",
-                    "width": "348.484px",
+                    "width": "365.109px",
                     "height": "35.5px",
                     "minWidth": "0px",
                     "minHeight": "auto",
@@ -4860,21 +4892,21 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "Fleet4 tasks · 2 need actionRunno runTaskt4Metricsall hands"
+                  "text": "Fleet4 tasks · 2 need actionRunno runTaskt4Metricsall sessions"
                 },
                 "status": {
                   "selector": ".pc-shell__status",
                   "found": true,
                   "box": {
-                    "x": 675,
+                    "x": 681.61,
                     "y": 17,
-                    "width": 344.83,
+                    "width": 338.22,
                     "height": 11
                   },
                   "styles": {
                     "display": "flex",
                     "position": "static",
-                    "width": "344.828px",
+                    "width": "338.219px",
                     "height": "11px",
                     "minWidth": "0px",
                     "minHeight": "auto",
@@ -4902,7 +4934,7 @@
                     "overflow": "visible",
                     "opacity": "1"
                   },
-                  "text": "daemon127.0.0.1:5173v0.0.4 · pid 1701941 · up 7sv0.0.4"
+                  "text": "daemon127.0.0.1:5173v0.0.4 · pid 322993 · up 7sv0.0.4"
                 },
                 "needs-orch": {
                   "selector": "[data-testid=\"needs-orch\"]",
@@ -5112,7 +5144,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "Find tasks and sessions/navigatorScope, state filter, and list navigation land with each screen ticket.task inspectorNo task selectedPick a task from find or…"
+                  "text": "Find tasks and sessions/scopeorchestrator sessionsessionAll sessionsverify-orch · 4state filter4 tasksall4awaiting1stalled0failed1gaterunning1queued0token bu…"
                 },
                 "rail-left": {
                   "selector": ".pc-shell__rail--left",
@@ -5154,7 +5186,7 @@
                     "overflow": "auto",
                     "opacity": "1"
                   },
-                  "text": "Find tasks and sessions/navigatorScope, state filter, and list navigation land with each screen ticket."
+                  "text": "Find tasks and sessions/scopeorchestrator sessionsessionAll sessionsverify-orch · 4state filter4 tasksall4awaiting1stalled0failed1gaterunning1queued0token bu…"
                 },
                 "center": {
                   "selector": ".pc-shell__center",
@@ -5238,7 +5270,7 @@
                     "overflow": "auto",
                     "opacity": "1"
                   },
-                  "text": "attention · firehoseAttention and the event firehose live on the fleet board screen."
+                  "text": "attention2 · rank · agecardsrowsAWAITING0st3Should the console show the scaffold status or the live daemon origin?fake · fake-model · sess verifyFAILED0st2fr…"
                 },
                 "footer": {
                   "selector": ".pc-shell__footer",
@@ -5280,7 +5312,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "awaitingstalledfailedrunningqueuedpendingcompletedcancelledstate = what a task IS · quality = how good work WAS · 2 unacked events · livestate=IS · quality=W…"
+                  "text": "AWAITINGSTALLEDFAILEDRUNNINGQUEUEDPENDINGDONECANCELstate = what a task IS · quality = how good work WAS · 2 unacked events · livestate=IS · quality=WAS · 2 u…"
                 },
                 "screen-task": {
                   "selector": "[data-testid=\"screen-task\"]",
@@ -5314,7 +5346,7 @@
                     "borderBottomColor": "rgb(227, 232, 236)",
                     "borderLeftColor": "rgb(227, 232, 236)",
                     "borderRightColor": "rgb(227, 232, 236)",
-                    "gridTemplateRows": "auto 1fr",
+                    "gridTemplateRows": "none",
                     "gridTemplateColumns": "none",
                     "gap": "14px",
                     "padding": "28px 32px",
@@ -5372,7 +5404,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "Skip to navigationSkip to findSkip to main content2 need the orchestratorparleyconsoleFleet4 tasks · 2 need actionRunno runTaskt4Metricsall handsdaemon127.0.…"
+                  "text": "Skip to navigationSkip to findSkip to main content2 need the orchestratorparleyconsoleFleet4 tasks · 2 need actionRunno runTaskt4Metricsall sessionsdaemon127…"
                 },
                 "header": {
                   "selector": ".pc-shell__header",
@@ -5414,7 +5446,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "parleyconsoleFleet4 tasks · 2 need actionRunno runTaskt4Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 1701941 · up 7sv0.0.4needs orch2streamlive07:39:53Se…"
+                  "text": "parleyconsoleFleet4 tasks · 2 need actionRunno runTaskt4Metricsall sessionsdaemon127.0.0.1:5173v0.0.4 · pid 322993 · up 7sv0.0.4needs orch2streamlive16:07:00…"
                 },
                 "brand": {
                   "selector": ".pc-shell__brand",
@@ -5464,13 +5496,13 @@
                   "box": {
                     "x": 129,
                     "y": 4.75,
-                    "width": 348.48,
+                    "width": 365.11,
                     "height": 35.5
                   },
                   "styles": {
                     "display": "flex",
                     "position": "static",
-                    "width": "348.484px",
+                    "width": "365.109px",
                     "height": "35.5px",
                     "minWidth": "0px",
                     "minHeight": "auto",
@@ -5498,21 +5530,21 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "Fleet4 tasks · 2 need actionRunno runTaskt4Metricsall hands"
+                  "text": "Fleet4 tasks · 2 need actionRunno runTaskt4Metricsall sessions"
                 },
                 "status": {
                   "selector": ".pc-shell__status",
                   "found": true,
                   "box": {
-                    "x": 1135,
+                    "x": 1141.61,
                     "y": 17,
-                    "width": 344.83,
+                    "width": 338.22,
                     "height": 11
                   },
                   "styles": {
                     "display": "flex",
                     "position": "static",
-                    "width": "344.828px",
+                    "width": "338.219px",
                     "height": "11px",
                     "minWidth": "0px",
                     "minHeight": "auto",
@@ -5540,7 +5572,7 @@
                     "overflow": "visible",
                     "opacity": "1"
                   },
-                  "text": "daemon127.0.0.1:5173v0.0.4 · pid 1701941 · up 7sv0.0.4"
+                  "text": "daemon127.0.0.1:5173v0.0.4 · pid 322993 · up 7sv0.0.4"
                 },
                 "needs-orch": {
                   "selector": "[data-testid=\"needs-orch\"]",
@@ -5750,7 +5782,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "Find tasks and sessions/navigatorScope, state filter, and list navigation land with each screen ticket.task inspectorNo task selectedPick a task from find or…"
+                  "text": "Find tasks and sessions/scopeorchestrator sessionsessionAll sessionsverify-orch · 4state filter4 tasksall4awaiting1stalled0failed1gaterunning1queued0token bu…"
                 },
                 "rail-left": {
                   "selector": ".pc-shell__rail--left",
@@ -5792,7 +5824,7 @@
                     "overflow": "auto",
                     "opacity": "1"
                   },
-                  "text": "Find tasks and sessions/navigatorScope, state filter, and list navigation land with each screen ticket."
+                  "text": "Find tasks and sessions/scopeorchestrator sessionsessionAll sessionsverify-orch · 4state filter4 tasksall4awaiting1stalled0failed1gaterunning1queued0token bu…"
                 },
                 "center": {
                   "selector": ".pc-shell__center",
@@ -5876,7 +5908,7 @@
                     "overflow": "auto",
                     "opacity": "1"
                   },
-                  "text": "attention · firehoseAttention and the event firehose live on the fleet board screen."
+                  "text": "attention2 · rank · agecardsrowsAWAITING0st3Should the console show the scaffold status or the live daemon origin?fake · fake-model · sess verifyFAILED0st2fr…"
                 },
                 "footer": {
                   "selector": ".pc-shell__footer",
@@ -5918,7 +5950,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "awaitingstalledfailedrunningqueuedpendingcompletedcancelledstate = what a task IS · quality = how good work WAS · 2 unacked events · livestate=IS · quality=W…"
+                  "text": "AWAITINGSTALLEDFAILEDRUNNINGQUEUEDPENDINGDONECANCELstate = what a task IS · quality = how good work WAS · 2 unacked events · livestate=IS · quality=WAS · 2 u…"
                 },
                 "screen-task": {
                   "selector": "[data-testid=\"screen-task\"]",
@@ -5952,7 +5984,7 @@
                     "borderBottomColor": "rgb(227, 232, 236)",
                     "borderLeftColor": "rgb(227, 232, 236)",
                     "borderRightColor": "rgb(227, 232, 236)",
-                    "gridTemplateRows": "auto 1fr",
+                    "gridTemplateRows": "none",
                     "gridTemplateColumns": "none",
                     "gap": "14px",
                     "padding": "28px 32px",
@@ -5970,16 +6002,16 @@
               "present": true,
               "violations": 0,
               "ids": [],
-              "passes": 35,
+              "passes": 37,
               "incomplete": 1
             },
             "aria": {
               "api": "locator.ariaSnapshot",
               "selector": "[data-testid=\"shell\"]",
-              "treeBytes": 1420
+              "treeBytes": 2623
             },
             "keyboardWalk": {
-              "focusableCount": 10,
+              "focusableCount": 22,
               "leftBody": true,
               "entered": true,
               "pathSteps": 2
@@ -5993,7 +6025,23 @@
             }
           },
           "keyboardLeftBody": true,
-          "contrastAaFails": 0,
+          "contrast": {
+            "ids": [
+              "brand-name",
+              "brand-sub",
+              "tab-label",
+              "status-label",
+              "status-value",
+              "attention-label",
+              "attention-count",
+              "clock",
+              "find-input",
+              "legend-label",
+              "footer-meta"
+            ],
+            "notFound": [],
+            "aaFails": []
+          },
           "phase": null
         },
         "metrics": {
@@ -6045,7 +6093,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "Skip to navigationSkip to findSkip to main content2 need the orchestratorparleyconsoleFleet4 tasks · 2 need actionRunno runTaskt4Metricsall handsdaemon127.0.…"
+                  "text": "Skip to navigationSkip to findSkip to main content2 need the orchestratorparleyconsoleFleet4 tasks · 2 need actionRunno runTaskt4Metricsall sessionsdaemon127…"
                 },
                 "header": {
                   "selector": ".pc-shell__header",
@@ -6087,7 +6135,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "parleyconsoleFleet4 tasks · 2 need actionRunno runTaskt4Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 1701941 · up 7sv0.0.4needs orch2streamlive07:39:55Se…"
+                  "text": "parleyconsoleFleet4 tasks · 2 need actionRunno runTaskt4Metricsall sessionsdaemon127.0.0.1:5173v0.0.4 · pid 322993 · up 12sv0.0.4needs orch2streamlive16:07:0…"
                 },
                 "brand": {
                   "selector": ".pc-shell__brand",
@@ -6171,7 +6219,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "Fleet4 tasks · 2 need actionRunno runTaskt4Metricsall hands"
+                  "text": "Fleet4 tasks · 2 need actionRunno runTaskt4Metricsall sessions"
                 },
                 "status": {
                   "selector": ".pc-shell__status",
@@ -6213,7 +6261,7 @@
                     "overflow": "visible",
                     "opacity": "1"
                   },
-                  "text": "daemon127.0.0.1:5173v0.0.4 · pid 1701941 · up 7sv0.0.4"
+                  "text": "daemon127.0.0.1:5173v0.0.4 · pid 322993 · up 12sv0.0.4"
                 },
                 "needs-orch": {
                   "selector": "[data-testid=\"needs-orch\"]",
@@ -6423,7 +6471,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "Find tasks and sessions/navigatorScope, state filter, and list navigation land with each screen ticket.metricsgroup byvendormodeltypesizedifficultyworkflowmo…"
+                  "text": "Find tasks and sessions/scopeorchestrator sessionsessionAll sessionsverify-orch · 4state filter4 tasksall4awaiting1stalled0failed1gaterunning1queued0token bu…"
                 },
                 "rail-left": {
                   "selector": ".pc-shell__rail--left",
@@ -6465,7 +6513,7 @@
                     "overflow": "auto",
                     "opacity": "1"
                   },
-                  "text": "Find tasks and sessions/navigatorScope, state filter, and list navigation land with each screen ticket."
+                  "text": "Find tasks and sessions/scopeorchestrator sessionsessionAll sessionsverify-orch · 4state filter4 tasksall4awaiting1stalled0failed1gaterunning1queued0token bu…"
                 },
                 "center": {
                   "selector": ".pc-shell__center",
@@ -6549,7 +6597,7 @@
                     "overflow": "auto",
                     "opacity": "1"
                   },
-                  "text": "attention · firehoseAttention and the event firehose live on the fleet board screen."
+                  "text": "attention2 · rank · agecardsrowsAWAITING0st3Should the console show the scaffold status or the live daemon origin?fake · fake-model · sess verifyFAILED0st2fr…"
                 },
                 "footer": {
                   "selector": ".pc-shell__footer",
@@ -6591,7 +6639,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "awaitingstalledfailedrunningqueuedpendingcompletedcancelledstate = what a task IS · quality = how good work WAS · 2 unacked events · livestate=IS · quality=W…"
+                  "text": "AWAITINGSTALLEDFAILEDRUNNINGQUEUEDPENDINGDONECANCELstate = what a task IS · quality = how good work WAS · 2 unacked events · livestate=IS · quality=WAS · 2 u…"
                 },
                 "screen-metrics": {
                   "selector": "[data-testid=\"screen-metrics\"]",
@@ -6625,7 +6673,7 @@
                     "borderBottomColor": "rgb(227, 232, 236)",
                     "borderLeftColor": "rgb(227, 232, 236)",
                     "borderRightColor": "rgb(227, 232, 236)",
-                    "gridTemplateRows": "95px 543.906px 189.094px",
+                    "gridTemplateRows": "93px 735px",
                     "gridTemplateColumns": "648px",
                     "gap": "normal",
                     "padding": "0px",
@@ -6683,7 +6731,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "Skip to navigationSkip to findSkip to main content2 need the orchestratorparleyconsoleFleet4 tasks · 2 need actionRunno runTaskt4Metricsall handsdaemon127.0.…"
+                  "text": "Skip to navigationSkip to findSkip to main content2 need the orchestratorparleyconsoleFleet4 tasks · 2 need actionRunno runTaskt4Metricsall sessionsdaemon127…"
                 },
                 "header": {
                   "selector": ".pc-shell__header",
@@ -6725,7 +6773,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "parleyconsoleFleet4 tasks · 2 need actionRunno runTaskt4Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 1701941 · up 7sv0.0.4needs orch2streamlive07:39:55Se…"
+                  "text": "parleyconsoleFleet4 tasks · 2 need actionRunno runTaskt4Metricsall sessionsdaemon127.0.0.1:5173v0.0.4 · pid 322993 · up 12sv0.0.4needs orch2streamlive16:07:0…"
                 },
                 "brand": {
                   "selector": ".pc-shell__brand",
@@ -6775,13 +6823,13 @@
                   "box": {
                     "x": 129,
                     "y": 4.75,
-                    "width": 348.48,
+                    "width": 365.11,
                     "height": 35.5
                   },
                   "styles": {
                     "display": "flex",
                     "position": "static",
-                    "width": "348.484px",
+                    "width": "365.109px",
                     "height": "35.5px",
                     "minWidth": "0px",
                     "minHeight": "auto",
@@ -6809,7 +6857,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "Fleet4 tasks · 2 need actionRunno runTaskt4Metricsall hands"
+                  "text": "Fleet4 tasks · 2 need actionRunno runTaskt4Metricsall sessions"
                 },
                 "status": {
                   "selector": ".pc-shell__status",
@@ -6851,7 +6899,7 @@
                     "overflow": "visible",
                     "opacity": "1"
                   },
-                  "text": "daemon127.0.0.1:5173v0.0.4 · pid 1701941 · up 7sv0.0.4"
+                  "text": "daemon127.0.0.1:5173v0.0.4 · pid 322993 · up 12sv0.0.4"
                 },
                 "needs-orch": {
                   "selector": "[data-testid=\"needs-orch\"]",
@@ -7061,7 +7109,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "Find tasks and sessions/navigatorScope, state filter, and list navigation land with each screen ticket.metricsgroup byvendormodeltypesizedifficultyworkflowmo…"
+                  "text": "Find tasks and sessions/scopeorchestrator sessionsessionAll sessionsverify-orch · 4state filter4 tasksall4awaiting1stalled0failed1gaterunning1queued0token bu…"
                 },
                 "rail-left": {
                   "selector": ".pc-shell__rail--left",
@@ -7103,7 +7151,7 @@
                     "overflow": "auto",
                     "opacity": "1"
                   },
-                  "text": "Find tasks and sessions/navigatorScope, state filter, and list navigation land with each screen ticket."
+                  "text": "Find tasks and sessions/scopeorchestrator sessionsessionAll sessionsverify-orch · 4state filter4 tasksall4awaiting1stalled0failed1gaterunning1queued0token bu…"
                 },
                 "center": {
                   "selector": ".pc-shell__center",
@@ -7187,7 +7235,7 @@
                     "overflow": "auto",
                     "opacity": "1"
                   },
-                  "text": "attention · firehoseAttention and the event firehose live on the fleet board screen."
+                  "text": "attention2 · rank · agecardsrowsAWAITING0st3Should the console show the scaffold status or the live daemon origin?fake · fake-model · sess verifyFAILED0st2fr…"
                 },
                 "footer": {
                   "selector": ".pc-shell__footer",
@@ -7229,7 +7277,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "awaitingstalledfailedrunningqueuedpendingcompletedcancelledstate = what a task IS · quality = how good work WAS · 2 unacked events · livestate=IS · quality=W…"
+                  "text": "AWAITINGSTALLEDFAILEDRUNNINGQUEUEDPENDINGDONECANCELstate = what a task IS · quality = how good work WAS · 2 unacked events · livestate=IS · quality=WAS · 2 u…"
                 },
                 "screen-metrics": {
                   "selector": "[data-testid=\"screen-metrics\"]",
@@ -7263,7 +7311,7 @@
                     "borderBottomColor": "rgb(227, 232, 236)",
                     "borderLeftColor": "rgb(227, 232, 236)",
                     "borderRightColor": "rgb(227, 232, 236)",
-                    "gridTemplateRows": "79px 367.938px 381.062px",
+                    "gridTemplateRows": "75px 753px",
                     "gridTemplateColumns": "828px",
                     "gap": "normal",
                     "padding": "0px",
@@ -7321,7 +7369,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "Skip to navigationSkip to findSkip to main content2 need the orchestratorparleyconsoleFleet4 tasks · 2 need actionRunno runTaskt4Metricsall handsdaemon127.0.…"
+                  "text": "Skip to navigationSkip to findSkip to main content2 need the orchestratorparleyconsoleFleet4 tasks · 2 need actionRunno runTaskt4Metricsall sessionsdaemon127…"
                 },
                 "header": {
                   "selector": ".pc-shell__header",
@@ -7363,7 +7411,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "parleyconsoleFleet4 tasks · 2 need actionRunno runTaskt4Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 1701941 · up 12sv0.0.4needs orch2streamlive07:39:56S…"
+                  "text": "parleyconsoleFleet4 tasks · 2 need actionRunno runTaskt4Metricsall sessionsdaemon127.0.0.1:5173v0.0.4 · pid 322993 · up 12sv0.0.4needs orch2streamlive16:07:0…"
                 },
                 "brand": {
                   "selector": ".pc-shell__brand",
@@ -7413,13 +7461,13 @@
                   "box": {
                     "x": 129,
                     "y": 4.75,
-                    "width": 348.48,
+                    "width": 365.11,
                     "height": 35.5
                   },
                   "styles": {
                     "display": "flex",
                     "position": "static",
-                    "width": "348.484px",
+                    "width": "365.109px",
                     "height": "35.5px",
                     "minWidth": "0px",
                     "minHeight": "auto",
@@ -7447,21 +7495,21 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "Fleet4 tasks · 2 need actionRunno runTaskt4Metricsall hands"
+                  "text": "Fleet4 tasks · 2 need actionRunno runTaskt4Metricsall sessions"
                 },
                 "status": {
                   "selector": ".pc-shell__status",
                   "found": true,
                   "box": {
-                    "x": 1128.41,
+                    "x": 1135,
                     "y": 17,
-                    "width": 351.42,
+                    "width": 344.83,
                     "height": 11
                   },
                   "styles": {
                     "display": "flex",
                     "position": "static",
-                    "width": "351.422px",
+                    "width": "344.828px",
                     "height": "11px",
                     "minWidth": "0px",
                     "minHeight": "auto",
@@ -7489,7 +7537,7 @@
                     "overflow": "visible",
                     "opacity": "1"
                   },
-                  "text": "daemon127.0.0.1:5173v0.0.4 · pid 1701941 · up 12sv0.0.4"
+                  "text": "daemon127.0.0.1:5173v0.0.4 · pid 322993 · up 12sv0.0.4"
                 },
                 "needs-orch": {
                   "selector": "[data-testid=\"needs-orch\"]",
@@ -7699,7 +7747,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "Find tasks and sessions/navigatorScope, state filter, and list navigation land with each screen ticket.metricsgroup byvendormodeltypesizedifficultyworkflowmo…"
+                  "text": "Find tasks and sessions/scopeorchestrator sessionsessionAll sessionsverify-orch · 4state filter4 tasksall4awaiting1stalled0failed1gaterunning1queued0token bu…"
                 },
                 "rail-left": {
                   "selector": ".pc-shell__rail--left",
@@ -7741,7 +7789,7 @@
                     "overflow": "auto",
                     "opacity": "1"
                   },
-                  "text": "Find tasks and sessions/navigatorScope, state filter, and list navigation land with each screen ticket."
+                  "text": "Find tasks and sessions/scopeorchestrator sessionsessionAll sessionsverify-orch · 4state filter4 tasksall4awaiting1stalled0failed1gaterunning1queued0token bu…"
                 },
                 "center": {
                   "selector": ".pc-shell__center",
@@ -7825,7 +7873,7 @@
                     "overflow": "auto",
                     "opacity": "1"
                   },
-                  "text": "attention · firehoseAttention and the event firehose live on the fleet board screen."
+                  "text": "attention2 · rank · agecardsrowsAWAITING0st3Should the console show the scaffold status or the live daemon origin?fake · fake-model · sess verifyFAILED0st2fr…"
                 },
                 "footer": {
                   "selector": ".pc-shell__footer",
@@ -7867,7 +7915,7 @@
                     "overflow": "hidden",
                     "opacity": "1"
                   },
-                  "text": "awaitingstalledfailedrunningqueuedpendingcompletedcancelledstate = what a task IS · quality = how good work WAS · 2 unacked events · livestate=IS · quality=W…"
+                  "text": "AWAITINGSTALLEDFAILEDRUNNINGQUEUEDPENDINGDONECANCELstate = what a task IS · quality = how good work WAS · 2 unacked events · livestate=IS · quality=WAS · 2 u…"
                 },
                 "screen-metrics": {
                   "selector": "[data-testid=\"screen-metrics\"]",
@@ -7901,7 +7949,7 @@
                     "borderBottomColor": "rgb(227, 232, 236)",
                     "borderLeftColor": "rgb(227, 232, 236)",
                     "borderRightColor": "rgb(227, 232, 236)",
-                    "gridTemplateRows": "64px 353.75px 410.25px",
+                    "gridTemplateRows": "62px 766px",
                     "gridTemplateColumns": "1288px",
                     "gap": "normal",
                     "padding": "0px",
@@ -7919,16 +7967,16 @@
               "present": true,
               "violations": 0,
               "ids": [],
-              "passes": 41,
+              "passes": 42,
               "incomplete": 2
             },
             "aria": {
               "api": "locator.ariaSnapshot",
               "selector": "[data-testid=\"shell\"]",
-              "treeBytes": 4059
+              "treeBytes": 5269
             },
             "keyboardWalk": {
-              "focusableCount": 34,
+              "focusableCount": 46,
               "leftBody": true,
               "entered": true,
               "pathSteps": 2
@@ -7937,16 +7985,32 @@
               "present": true,
               "violations": 0,
               "ids": [],
-              "passes": 30,
+              "passes": 31,
               "incomplete": 1
             }
           },
           "keyboardLeftBody": true,
-          "contrastAaFails": 0,
+          "contrast": {
+            "ids": [
+              "brand-name",
+              "brand-sub",
+              "tab-label",
+              "status-label",
+              "status-value",
+              "attention-label",
+              "attention-count",
+              "clock",
+              "find-input",
+              "legend-label",
+              "footer-meta"
+            ],
+            "notFound": [],
+            "aaFails": []
+          },
           "phase": null
         }
       },
-      "chromeViewports": [
+      "viewports": [
         {
           "name": "1280",
           "width": 1280,
@@ -7993,7 +8057,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "Skip to navigationSkip to findSkip to main content2 need the orchestratorparleyconsoleFleet4 tasks · 2 need actionRunno runTaskt4Metricsall handsdaemon127.0.…"
+              "text": "Skip to navigationSkip to findSkip to main content2 need the orchestratorparleyconsoleFleet4 tasks · 2 need actionRunno runTaskt4Metricsall sessionsdaemon127…"
             },
             "header": {
               "selector": ".pc-shell__header",
@@ -8035,7 +8099,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "parleyconsoleFleet4 tasks · 2 need actionRunno runTaskt4Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 1701941 · up 12sv0.0.4needs orch2streamlive07:39:58S…"
+              "text": "parleyconsoleFleet4 tasks · 2 need actionRunno runTaskt4Metricsall sessionsdaemon127.0.0.1:5173v0.0.4 · pid 322993 · up 12sv0.0.4needs orch2streamlive16:07:0…"
             },
             "brand": {
               "selector": ".pc-shell__brand",
@@ -8119,7 +8183,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "Fleet4 tasks · 2 need actionRunno runTaskt4Metricsall hands"
+              "text": "Fleet4 tasks · 2 need actionRunno runTaskt4Metricsall sessions"
             },
             "status": {
               "selector": ".pc-shell__status",
@@ -8161,7 +8225,7 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "daemon127.0.0.1:5173v0.0.4 · pid 1701941 · up 12sv0.0.4"
+              "text": "daemon127.0.0.1:5173v0.0.4 · pid 322993 · up 12sv0.0.4"
             },
             "needs-orch": {
               "selector": "[data-testid=\"needs-orch\"]",
@@ -8371,7 +8435,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "Find tasks and sessions/navigatorScope, state filter, and list navigation land with each screen ticket.Fleet boardneeds orchestrator2items0 held · 1 asks · 0…"
+              "text": "Find tasks and sessions/scopeorchestrator sessionsessionAll sessionsverify-orch · 4state filter4 tasksall4awaiting1stalled0failed1gaterunning1queued0token bu…"
             },
             "rail-left": {
               "selector": ".pc-shell__rail--left",
@@ -8413,7 +8477,7 @@
                 "overflow": "auto",
                 "opacity": "1"
               },
-              "text": "Find tasks and sessions/navigatorScope, state filter, and list navigation land with each screen ticket."
+              "text": "Find tasks and sessions/scopeorchestrator sessionsessionAll sessionsverify-orch · 4state filter4 tasksall4awaiting1stalled0failed1gaterunning1queued0token bu…"
             },
             "center": {
               "selector": ".pc-shell__center",
@@ -8455,7 +8519,7 @@
                 "overflow": "auto",
                 "opacity": "1"
               },
-              "text": "Fleet boardneeds orchestrator2items0 held · 1 asks · 0 stall · 1 freshrunning1taskscap unknownqueued / pending0 / 0no waitersruns0total0 held · 0 advancingse…"
+              "text": "Fleet boardneeds orchestrator2items0 held · 1 ask · 0 stall · 1 freshrunning1taskscap unknownqueued / pending0 / 0no waitersruns0total0 held · 0 advancingset…"
             },
             "rail-right": {
               "selector": ".pc-shell__rail--right",
@@ -8497,7 +8561,7 @@
                 "overflow": "auto",
                 "opacity": "1"
               },
-              "text": "attention · firehoseAttention and the event firehose live on the fleet board screen."
+              "text": "attention2 · rank · agecardsrowsAWAITING0st3Should the console show the scaffold status or the live daemon origin?fake · fake-model · sess verifyFAILED0st2fr…"
             },
             "footer": {
               "selector": ".pc-shell__footer",
@@ -8539,7 +8603,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "awaitingstalledfailedrunningqueuedpendingcompletedcancelledstate = what a task IS · quality = how good work WAS · 2 unacked events · livestate=IS · quality=W…"
+              "text": "AWAITINGSTALLEDFAILEDRUNNINGQUEUEDPENDINGDONECANCELstate = what a task IS · quality = how good work WAS · 2 unacked events · livestate=IS · quality=WAS · 2 u…"
             }
           }
         },
@@ -8589,7 +8653,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "Skip to navigationSkip to findSkip to main content2 need the orchestratorparleyconsoleFleet4 tasks · 2 need actionRunno runTaskt4Metricsall handsdaemon127.0.…"
+              "text": "Skip to navigationSkip to findSkip to main content2 need the orchestratorparleyconsoleFleet4 tasks · 2 need actionRunno runTaskt4Metricsall sessionsdaemon127…"
             },
             "header": {
               "selector": ".pc-shell__header",
@@ -8631,7 +8695,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "parleyconsoleFleet4 tasks · 2 need actionRunno runTaskt4Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 1701941 · up 12sv0.0.4needs orch2streamlive07:39:59S…"
+              "text": "parleyconsoleFleet4 tasks · 2 need actionRunno runTaskt4Metricsall sessionsdaemon127.0.0.1:5173v0.0.4 · pid 322993 · up 12sv0.0.4needs orch2streamlive16:07:0…"
             },
             "brand": {
               "selector": ".pc-shell__brand",
@@ -8681,13 +8745,13 @@
               "box": {
                 "x": 129,
                 "y": 4.75,
-                "width": 348.48,
+                "width": 365.11,
                 "height": 35.5
               },
               "styles": {
                 "display": "flex",
                 "position": "static",
-                "width": "348.484px",
+                "width": "365.109px",
                 "height": "35.5px",
                 "minWidth": "0px",
                 "minHeight": "auto",
@@ -8715,21 +8779,21 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "Fleet4 tasks · 2 need actionRunno runTaskt4Metricsall hands"
+              "text": "Fleet4 tasks · 2 need actionRunno runTaskt4Metricsall sessions"
             },
             "status": {
               "selector": ".pc-shell__status",
               "found": true,
               "box": {
-                "x": 668.41,
+                "x": 675,
                 "y": 17,
-                "width": 351.42,
+                "width": 344.83,
                 "height": 11
               },
               "styles": {
                 "display": "flex",
                 "position": "static",
-                "width": "351.422px",
+                "width": "344.828px",
                 "height": "11px",
                 "minWidth": "0px",
                 "minHeight": "auto",
@@ -8757,7 +8821,7 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "daemon127.0.0.1:5173v0.0.4 · pid 1701941 · up 12sv0.0.4"
+              "text": "daemon127.0.0.1:5173v0.0.4 · pid 322993 · up 12sv0.0.4"
             },
             "needs-orch": {
               "selector": "[data-testid=\"needs-orch\"]",
@@ -8967,7 +9031,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "Find tasks and sessions/navigatorScope, state filter, and list navigation land with each screen ticket.Fleet boardneeds orchestrator2items0 held · 1 asks · 0…"
+              "text": "Find tasks and sessions/scopeorchestrator sessionsessionAll sessionsverify-orch · 4state filter4 tasksall4awaiting1stalled0failed1gaterunning1queued0token bu…"
             },
             "rail-left": {
               "selector": ".pc-shell__rail--left",
@@ -9009,7 +9073,7 @@
                 "overflow": "auto",
                 "opacity": "1"
               },
-              "text": "Find tasks and sessions/navigatorScope, state filter, and list navigation land with each screen ticket."
+              "text": "Find tasks and sessions/scopeorchestrator sessionsessionAll sessionsverify-orch · 4state filter4 tasksall4awaiting1stalled0failed1gaterunning1queued0token bu…"
             },
             "center": {
               "selector": ".pc-shell__center",
@@ -9051,7 +9115,7 @@
                 "overflow": "auto",
                 "opacity": "1"
               },
-              "text": "Fleet boardneeds orchestrator2items0 held · 1 asks · 0 stall · 1 freshrunning1taskscap unknownqueued / pending0 / 0no waitersruns0total0 held · 0 advancingse…"
+              "text": "Fleet boardneeds orchestrator2items0 held · 1 ask · 0 stall · 1 freshrunning1taskscap unknownqueued / pending0 / 0no waitersruns0total0 held · 0 advancingset…"
             },
             "rail-right": {
               "selector": ".pc-shell__rail--right",
@@ -9093,7 +9157,7 @@
                 "overflow": "auto",
                 "opacity": "1"
               },
-              "text": "attention · firehoseAttention and the event firehose live on the fleet board screen."
+              "text": "attention2 · rank · agecardsrowsAWAITING0st3Should the console show the scaffold status or the live daemon origin?fake · fake-model · sess verifyFAILED0st2fr…"
             },
             "footer": {
               "selector": ".pc-shell__footer",
@@ -9135,7 +9199,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "awaitingstalledfailedrunningqueuedpendingcompletedcancelledstate = what a task IS · quality = how good work WAS · 2 unacked events · livestate=IS · quality=W…"
+              "text": "AWAITINGSTALLEDFAILEDRUNNINGQUEUEDPENDINGDONECANCELstate = what a task IS · quality = how good work WAS · 2 unacked events · livestate=IS · quality=WAS · 2 u…"
             }
           }
         },
@@ -9185,7 +9249,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "Skip to navigationSkip to findSkip to main content2 need the orchestratorparleyconsoleFleet4 tasks · 2 need actionRunno runTaskt4Metricsall handsdaemon127.0.…"
+              "text": "Skip to navigationSkip to findSkip to main content2 need the orchestratorparleyconsoleFleet4 tasks · 2 need actionRunno runTaskt4Metricsall sessionsdaemon127…"
             },
             "header": {
               "selector": ".pc-shell__header",
@@ -9227,7 +9291,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "parleyconsoleFleet4 tasks · 2 need actionRunno runTaskt4Metricsall handsdaemon127.0.0.1:5173v0.0.4 · pid 1701941 · up 12sv0.0.4needs orch2streamlive07:39:59S…"
+              "text": "parleyconsoleFleet4 tasks · 2 need actionRunno runTaskt4Metricsall sessionsdaemon127.0.0.1:5173v0.0.4 · pid 322993 · up 12sv0.0.4needs orch2streamlive16:07:0…"
             },
             "brand": {
               "selector": ".pc-shell__brand",
@@ -9277,13 +9341,13 @@
               "box": {
                 "x": 129,
                 "y": 4.75,
-                "width": 348.48,
+                "width": 365.11,
                 "height": 35.5
               },
               "styles": {
                 "display": "flex",
                 "position": "static",
-                "width": "348.484px",
+                "width": "365.109px",
                 "height": "35.5px",
                 "minWidth": "0px",
                 "minHeight": "auto",
@@ -9311,21 +9375,21 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "Fleet4 tasks · 2 need actionRunno runTaskt4Metricsall hands"
+              "text": "Fleet4 tasks · 2 need actionRunno runTaskt4Metricsall sessions"
             },
             "status": {
               "selector": ".pc-shell__status",
               "found": true,
               "box": {
-                "x": 1128.41,
+                "x": 1135,
                 "y": 17,
-                "width": 351.42,
+                "width": 344.83,
                 "height": 11
               },
               "styles": {
                 "display": "flex",
                 "position": "static",
-                "width": "351.422px",
+                "width": "344.828px",
                 "height": "11px",
                 "minWidth": "0px",
                 "minHeight": "auto",
@@ -9353,7 +9417,7 @@
                 "overflow": "visible",
                 "opacity": "1"
               },
-              "text": "daemon127.0.0.1:5173v0.0.4 · pid 1701941 · up 12sv0.0.4"
+              "text": "daemon127.0.0.1:5173v0.0.4 · pid 322993 · up 12sv0.0.4"
             },
             "needs-orch": {
               "selector": "[data-testid=\"needs-orch\"]",
@@ -9563,7 +9627,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "Find tasks and sessions/navigatorScope, state filter, and list navigation land with each screen ticket.Fleet boardneeds orchestrator2items0 held · 1 asks · 0…"
+              "text": "Find tasks and sessions/scopeorchestrator sessionsessionAll sessionsverify-orch · 4state filter4 tasksall4awaiting1stalled0failed1gaterunning1queued0token bu…"
             },
             "rail-left": {
               "selector": ".pc-shell__rail--left",
@@ -9605,7 +9669,7 @@
                 "overflow": "auto",
                 "opacity": "1"
               },
-              "text": "Find tasks and sessions/navigatorScope, state filter, and list navigation land with each screen ticket."
+              "text": "Find tasks and sessions/scopeorchestrator sessionsessionAll sessionsverify-orch · 4state filter4 tasksall4awaiting1stalled0failed1gaterunning1queued0token bu…"
             },
             "center": {
               "selector": ".pc-shell__center",
@@ -9647,7 +9711,7 @@
                 "overflow": "auto",
                 "opacity": "1"
               },
-              "text": "Fleet boardneeds orchestrator2items0 held · 1 asks · 0 stall · 1 freshrunning1taskscap unknownqueued / pending0 / 0no waitersruns0total0 held · 0 advancingse…"
+              "text": "Fleet boardneeds orchestrator2items0 held · 1 ask · 0 stall · 1 freshrunning1taskscap unknownqueued / pending0 / 0no waitersruns0total0 held · 0 advancingset…"
             },
             "rail-right": {
               "selector": ".pc-shell__rail--right",
@@ -9689,7 +9753,7 @@
                 "overflow": "auto",
                 "opacity": "1"
               },
-              "text": "attention · firehoseAttention and the event firehose live on the fleet board screen."
+              "text": "attention2 · rank · agecardsrowsAWAITING0st3Should the console show the scaffold status or the live daemon origin?fake · fake-model · sess verifyFAILED0st2fr…"
             },
             "footer": {
               "selector": ".pc-shell__footer",
@@ -9731,7 +9795,7 @@
                 "overflow": "hidden",
                 "opacity": "1"
               },
-              "text": "awaitingstalledfailedrunningqueuedpendingcompletedcancelledstate = what a task IS · quality = how good work WAS · 2 unacked events · livestate=IS · quality=W…"
+              "text": "AWAITINGSTALLEDFAILEDRUNNINGQUEUEDPENDINGDONECANCELstate = what a task IS · quality = how good work WAS · 2 unacked events · livestate=IS · quality=WAS · 2 u…"
             }
           }
         }
@@ -9740,22 +9804,22 @@
         "fleet": {
           "selector": "[data-testid=\"shell\"]",
           "api": "locator.ariaSnapshot",
-          "treeBytes": 2889
+          "treeBytes": 3871
         },
         "run": {
           "selector": "[data-testid=\"shell\"]",
           "api": "locator.ariaSnapshot",
-          "treeBytes": 1194
+          "treeBytes": 2373
         },
         "task": {
           "selector": "[data-testid=\"shell\"]",
           "api": "locator.ariaSnapshot",
-          "treeBytes": 1296
+          "treeBytes": 2497
         },
         "metrics": {
           "selector": "[data-testid=\"shell\"]",
           "api": "locator.ariaSnapshot",
-          "treeBytes": 3697
+          "treeBytes": 4902
         }
       },
       "headline": {
@@ -9791,7 +9855,7 @@
                   "present": true,
                   "violations": 0,
                   "ids": [],
-                  "passes": 34,
+                  "passes": 36,
                   "incomplete": 1
                 },
                 "keyboardLeftBody": true,
@@ -9811,7 +9875,7 @@
                   "present": true,
                   "violations": 0,
                   "ids": [],
-                  "passes": 34,
+                  "passes": 35,
                   "incomplete": 1
                 },
                 "keyboardLeftBody": true,
@@ -9831,7 +9895,7 @@
                   "present": true,
                   "violations": 0,
                   "ids": [],
-                  "passes": 34,
+                  "passes": 36,
                   "incomplete": 1
                 },
                 "keyboardLeftBody": true,
@@ -9856,7 +9920,7 @@
                   "present": true,
                   "violations": 0,
                   "ids": [],
-                  "passes": 34,
+                  "passes": 36,
                   "incomplete": 1
                 },
                 "keyboardLeftBody": true,
@@ -9865,22 +9929,22 @@
                     "present": true,
                     "violations": 0,
                     "ids": [],
-                    "passes": 34,
+                    "passes": 36,
                     "incomplete": 1
                   },
                   "findPopup": {
                     "present": true,
                     "violations": 0,
                     "ids": [],
-                    "passes": 34,
+                    "passes": 36,
                     "incomplete": 3
                   },
                   "settingsOpen": {
                     "present": true,
                     "violations": 0,
                     "ids": [],
-                    "passes": 37,
-                    "incomplete": 2
+                    "passes": 23,
+                    "incomplete": 1
                   }
                 },
                 "honestyKeys": [],
@@ -9920,8 +9984,8 @@
                   "present": true,
                   "violations": 0,
                   "ids": [],
-                  "passes": 47,
-                  "incomplete": 2
+                  "passes": 48,
+                  "incomplete": 1
                 },
                 "keyboardLeftBody": true,
                 "a11yByState": null,
@@ -9978,7 +10042,7 @@
                   "present": true,
                   "violations": 0,
                   "ids": [],
-                  "passes": 27,
+                  "passes": 26,
                   "incomplete": 1
                 },
                 "keyboardLeftBody": true,
@@ -10006,7 +10070,7 @@
                   "present": true,
                   "violations": 0,
                   "ids": [],
-                  "passes": 30,
+                  "passes": 31,
                   "incomplete": 1
                 },
                 "keyboardLeftBody": true,
@@ -10094,8 +10158,8 @@
           }
         ]
       },
-      "recordedAt": "2026-08-06T11:40:02.732Z"
+      "recordedAt": "2026-08-08T20:07:09.469Z"
     }
   },
-  "updatedAt": "2026-08-06T11:40:02.732Z"
+  "updatedAt": "2026-08-08T20:07:09.469Z"
 }

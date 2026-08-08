@@ -10,7 +10,13 @@
 import { pathToFileURL } from "node:url";
 import { collectA11y, runAxe, ariaSnapshot } from "../lib/a11y.mjs";
 import { measureContrast } from "../lib/contrast.mjs";
-import { ledgerDirs, writeDemoProof, printRectSummary } from "../lib/ledger.mjs";
+import { assertProbeMembership } from "../lib/gates.mjs";
+import {
+  ledgerDirs,
+  writeDemoProof,
+  printRectSummary,
+  readLedger,
+} from "../lib/ledger.mjs";
 import { measureAtViewports } from "../lib/measure.mjs";
 import { openVerifySession } from "../lib/session.mjs";
 
@@ -354,6 +360,20 @@ async function goMetrics(page, url) {
 }
 
 /**
+ * Chart-label selectors sampled for the type-size floor. Hoisted out of the
+ * page closure (#376) so the measurement input is one named thing the gate can
+ * be checked against — see REQUIRED_CHART_LABEL_SELECTORS.
+ */
+const CHART_LABEL_SELECTORS = [
+  ".pc-metrics__dist-label",
+  ".pc-metrics__dist-delta",
+  ".pc-metrics__dist-tick-label",
+  ".pc-metrics__heat-col",
+  ".pc-metrics__heat-row-label",
+  ".pc-metrics__heat-cell-label",
+];
+
+/**
  * Measure chart labels with *rendered* px, not just getComputedStyle.
  * For HTML text, renderedPx === computed. For any SVG leftover:
  * renderedPx = declared * (rect.width / viewBoxWidth).
@@ -361,7 +381,7 @@ async function goMetrics(page, url) {
  * @param {import('playwright-core').Page} page
  */
 async function measureChartLabels(page) {
-  return page.evaluate(() => {
+  return page.evaluate((selectors) => {
     /**
      * @typedef {{
      *   sel: string,
@@ -407,16 +427,12 @@ async function measureChartLabels(page) {
       });
     }
 
-    const selectors = [
-      ".pc-metrics__dist-label",
-      ".pc-metrics__dist-delta",
-      ".pc-metrics__dist-tick-label",
-      ".pc-metrics__heat-col",
-      ".pc-metrics__heat-row-label",
-      ".pc-metrics__heat-cell-label",
-    ];
+    /** @type {Record<string, number>} */
+    const selectorCoverage = {};
     for (const sel of selectors) {
-      for (const el of document.querySelectorAll(sel)) push(el, sel);
+      const els = document.querySelectorAll(sel);
+      selectorCoverage[sel] = els.length;
+      for (const el of els) push(el, sel);
     }
 
     const minDeclared = out.reduce((m, r) => Math.min(m, r.declaredPx), Infinity);
@@ -429,6 +445,9 @@ async function measureChartLabels(page) {
 
     return {
       samples: out.slice(0, 50),
+      // Counted over every match, not the capped samples above, so the gate's
+      // coverage check cannot be fooled by truncation.
+      selectorCoverage,
       minDeclaredPx: Number.isFinite(minDeclared) ? minDeclared : null,
       minRenderedPx: Number.isFinite(minRendered) ? minRendered : null,
       count: out.length,
@@ -440,7 +459,7 @@ async function measureChartLabels(page) {
       distRowHeights: rowHeights,
       distRowsInBand: rowHeights.every((h) => h >= 24 && h <= 30),
     };
-  });
+  }, CHART_LABEL_SELECTORS);
 }
 
 /**
@@ -700,6 +719,45 @@ async function measureRenderedPxTable(page, baseUrl) {
 }
 
 /**
+ * #376 — contrast probe ids this gate requires in the ledger.
+ *
+ * Declared separately from the measurement's probe object on purpose: a gate
+ * built from the same source the measurement iterates shrinks along with it,
+ * so deleting a probe would silently disable its own check. Same pattern as
+ * shell-chrome (#375). Extra ids are tolerated.
+ */
+const REQUIRED_METRICS_CONTRAST_IDS = [
+  "distLabel",
+  "distDelta",
+  "distTick",
+  "heatCol",
+  "heatRow",
+  "heatCell",
+  "heatLow",
+  "panelTitle",
+  "tableName",
+];
+
+/**
+ * #376 — chart-label selectors that must each contribute at least one measured
+ * row to the ≥11px type-size floor. A selector that stops matching contributes
+ * no rows, which silently narrows what the floor covers rather than failing.
+ *
+ * Declared separately from CHART_LABEL_SELECTORS (the measurement input) on
+ * purpose: if the gate read the same array the measurement iterates, deleting
+ * a selector would shrink both sides and this check would agree with the
+ * deletion instead of catching it.
+ */
+const REQUIRED_CHART_LABEL_SELECTORS = [
+  ".pc-metrics__dist-label",
+  ".pc-metrics__dist-delta",
+  ".pc-metrics__dist-tick-label",
+  ".pc-metrics__heat-col",
+  ".pc-metrics__heat-row-label",
+  ".pc-metrics__heat-cell-label",
+];
+
+/**
  * Issue-358 merge gates — uses rendered-px math, not declared user-space alone.
  * @param {object} _entry
  * @param {object} ledger
@@ -819,10 +877,34 @@ export function metricsBoardGates(_entry, ledger) {
     throw new Error(`metrics-board: axe violations: ${axe.map((v) => v.id).join(", ")}`);
   }
   const contrast = demo.contrast ?? {};
+
+  // #376 — pin the probe list, then fail closed on probes that matched nothing.
+  // The old gate required `m.found` before it would fail anything, so a renamed
+  // class read as a pass (#374's fix never reached this demo) and a deleted
+  // probe left no trace at all.
+  assertProbeMembership(DEMO, contrast, REQUIRED_METRICS_CONTRAST_IDS);
+
   for (const [id, m] of Object.entries(contrast)) {
     if (m && m.found && m.wcagAA === false) {
       throw new Error(`metrics-board: contrast fail ${id} ratio=${m.ratio}`);
     }
+  }
+
+  // #376 — every chart-label selector must still be contributing rows to the
+  // ≥11px floor above; a selector that matches nothing would otherwise just
+  // shrink the sample set and leave the minimum looking healthy.
+  const coverage = demo.chartLabels?.selectorCoverage;
+  if (!coverage || typeof coverage !== "object") {
+    throw new Error("metrics-board: chartLabels missing selectorCoverage proof");
+  }
+  const uncovered = REQUIRED_CHART_LABEL_SELECTORS.filter(
+    (sel) => !(Number(coverage[sel]) > 0),
+  );
+  if (uncovered.length > 0) {
+    throw new Error(
+      `metrics-board: type-size floor selectors matched nothing: ` +
+        `${uncovered.join(", ")} (coverage: ${JSON.stringify(coverage)})`,
+    );
   }
 }
 
@@ -965,7 +1047,7 @@ export async function runMetricsBoardDemo() {
         session.page,
         ".pc-metrics__heat-cell--low .pc-metrics__heat-cell-label, .pc-metrics__heat-cell--low-suspect .pc-metrics__heat-cell-label",
       ),
-      panelTitle: await measureContrast(session.page, ".pc-metrics__panel-title"),
+      panelTitle: await measureContrast(session.page, ".pc-metrics .pc-panel__title"),
       tableName: await measureContrast(session.page, ".pc-metrics__cell-name"),
     };
 
@@ -1215,6 +1297,15 @@ export async function runMetricsBoardDemo() {
       ),
     );
     console.log(`ledger entry: ${entryPath}`);
+
+    // Self-gate so `verify:metrics` fails on proof regressions instead of only
+    // failing later under verify:check (#376). Every other demo already does
+    // this; metrics-board was writing its ledger and never reading it back,
+    // which is why probe neuters here used to exit 0.
+    const written = readLedger(TICKET);
+    if (!written) throw new Error("metrics-board: ledger missing after write");
+    metricsBoardGates({}, written);
+
     return proof;
   } finally {
     await session.close();

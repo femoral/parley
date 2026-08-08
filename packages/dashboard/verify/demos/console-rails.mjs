@@ -20,6 +20,7 @@ import {
   parseCssColor,
   readTokenHexMap,
 } from "../lib/contrast.mjs";
+import { assertProbeMembership } from "../lib/gates.mjs";
 import {
   ledgerDirs,
   writeDemoProof,
@@ -43,6 +44,43 @@ export const RAIL_SELECTORS = [
   { id: "rail-token-burn", selector: '[data-testid="rail-token-burn"]' },
   { id: "rail-attention", selector: '[data-testid="rail-attention"]' },
   { id: "rail-firehose", selector: '[data-testid="rail-firehose"]' },
+];
+
+/**
+ * #376 — contrast probe ids this gate requires in the ledger.
+ *
+ * Deliberately a *second* declaration, not an import of measureRailContrast's
+ * target list: a gate that read the same array the measurement iterates would
+ * shrink with it, so deleting a target would silently disable its own check.
+ * Same pattern as shell-chrome (#375). Membership only — extra ids are fine,
+ * so adding a probe needs no lockstep gate edit.
+ */
+const REQUIRED_RAIL_CONTRAST_IDS = [
+  "rail-section-title",
+  "rail-section-meta",
+  "rail-chip-label",
+  "rail-chip-count",
+  "rail-burn-bound",
+  "rail-burn-totals",
+  "rail-burn-axis",
+  "rail-hose-time-live",
+  "rail-hose-text-live",
+  "rail-hose-time",
+  "rail-hose-text",
+  "attn-age-live",
+  "attn-reason-live",
+  "attn-meta-live",
+  "attn-age",
+  "attn-reason",
+  "attn-meta",
+  "panel-title",
+  "panel-meta",
+  "density-btn",
+  "rail-honesty",
+  "panel-honesty",
+  // Derived probe: hose-time ink against panel --surface, appended after the
+  // target loop. Pinned here too so it cannot quietly stop being computed.
+  "rail-hose-time-vs-surface",
 ];
 
 /**
@@ -137,6 +175,13 @@ export function consoleRailsGates(_entry, ledger) {
 
   // AA on ≤11px text (includes 10.5px hose time that ≤10 filter missed).
   const contrast = demo.contrast ?? {};
+
+  // #376 — pin the probe *list*, not just each recorded probe. Without this,
+  // deleting a target from measureRailContrast leaves a smaller ledger and a
+  // green gate, so a removed probe is indistinguishable from one that never
+  // existed.
+  assertProbeMembership(DEMO, contrast, REQUIRED_RAIL_CONTRAST_IDS);
+
   for (const [id, m] of Object.entries(contrast)) {
     if (
       m &&

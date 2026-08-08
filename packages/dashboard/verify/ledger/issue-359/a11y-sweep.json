@@ -1,21 +1,21 @@
 {
   "ticket": "issue-359",
-  "recordedAt": "2026-08-06T11:40:02.736Z",
+  "recordedAt": "2026-08-08T20:07:09.473Z",
   "populated": {
     "fleet": {
       "axe": {
         "present": true,
         "violations": 0,
         "ids": [],
-        "passes": 37,
-        "incomplete": 2
+        "passes": 38,
+        "incomplete": 1
       },
       "screenAxe": {
         "present": true,
         "violations": 0,
         "ids": [],
-        "passes": 21,
-        "incomplete": 1
+        "passes": 19,
+        "incomplete": 0
       },
       "keyboardLeftBody": true,
       "phase": "live"
@@ -25,7 +25,7 @@
         "present": true,
         "violations": 0,
         "ids": [],
-        "passes": 35,
+        "passes": 37,
         "incomplete": 1
       },
       "screenAxe": {
@@ -43,7 +43,7 @@
         "present": true,
         "violations": 0,
         "ids": [],
-        "passes": 35,
+        "passes": 37,
         "incomplete": 1
       },
       "screenAxe": {
@@ -61,14 +61,14 @@
         "present": true,
         "violations": 0,
         "ids": [],
-        "passes": 41,
+        "passes": 42,
         "incomplete": 2
       },
       "screenAxe": {
         "present": true,
         "violations": 0,
         "ids": [],
-        "passes": 30,
+        "passes": 31,
         "incomplete": 1
       },
       "keyboardLeftBody": true,
