@@ -31,6 +31,7 @@
     "dev": "vite",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
+    "test:integration": "pnpm -w exec vitest run packages/dashboard/tests/integration",
     "lint:tokens": "node scripts/lint-tokens.mjs",
     "prepublishOnly": "npm run build",
     "verify": "node --import tsx verify/demos/run-all.mjs",

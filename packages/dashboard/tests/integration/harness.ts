@@ -14,11 +14,37 @@ import { homePaths, type EventSourceLike } from "@useparley/core";
 import { startServer, type DaemonServer } from "../../../daemon/src/server.js";
 import { withFakeAllowlist, makeGitRepo } from "../../../daemon/tests/helpers.js";
 
-// Resolve from repo root (vitest cwd).
-export const FAKE_VENDOR_BIN = path.resolve(
-  process.cwd(),
-  "packages/cli/tests/fake-vendor.mjs",
-);
+const FAKE_VENDOR_REL = "packages/cli/tests/fake-vendor.mjs";
+
+/**
+ * Resolve the fake-vendor bin against a repo root — these suites anchor their
+ * fixtures on the repo root (vitest's cwd), and that is deliberate.
+ *
+ * Refuse loudly on a miss (#379). A missing bin used to be silent: the daemon
+ * skips a `fake` vendor whose configured path does not exist, so the first
+ * error was `no capable executor for vendor "fake"`, which reads like a build
+ * or vendor-config problem and costs a misdiagnosis. Fail here instead, before
+ * any daemon boots, naming the path we looked for.
+ *
+ * The cwd is the discriminator, not `--project integration` — the workspace
+ * routes these files to the integration project by include pattern, so a bare
+ * `vitest run <path>` from the repo root is equally fine. Do not tell the
+ * reader to add the flag.
+ */
+export function resolveFakeVendorBin(baseDir: string): string {
+  const candidate = path.resolve(baseDir, FAKE_VENDOR_REL);
+  if (!fs.existsSync(candidate)) {
+    throw new Error(
+      `fake-vendor bin not found at\n  ${candidate}\n` +
+        "These tests resolve fixtures against the repo root.\n" +
+        "Run from the repo root, e.g.\n" +
+        "  npx vitest run packages/dashboard/tests/integration",
+    );
+  }
+  return candidate;
+}
+
+export const FAKE_VENDOR_BIN = resolveFakeVendorBin(process.cwd());
 
 export interface DaemonFixture {
   home: string;
