@@ -55,7 +55,10 @@ import {
   type WorkflowStepNode,
 } from "@useparley/core";
 import { resolveRepoIdentity } from "./repo-identity.js";
-import { detectHarnesses } from "./fingerprint.js";
+import {
+  detectHarnessesDetailed,
+  type VendorBinProblem,
+} from "./fingerprint.js";
 import {
   ClaimGitError,
   deleteRemoteBranchBestEffort,
@@ -866,6 +869,12 @@ export class TaskEngine {
    * dispatchClaim / timeout ticks do not re-sweep PATH every call (#315 F10).
    */
   private fleetCache: { atMs: number; fleet: ExecutorCapability[] } | null = null;
+  /**
+   * Configured-but-unresolvable vendor bins from the last fleet computation
+   * (#379). Recomputed with the fleet cache; surfaced in routing diagnoses so
+   * a bad bin path is reported as itself rather than as a missing vendor.
+   */
+  private binProblems: readonly VendorBinProblem[] = [];
   private static readonly FLEET_CACHE_TTL_MS = 3_000;
   /**
    * Set once the daemon is going down: child exits stop being lifecycle events
@@ -1638,6 +1647,7 @@ export class TaskEngine {
       resolved.vendor,
       affinity,
       excluded,
+      this.binProblems,
     );
     if (
       decision.kind === "fail" &&
@@ -4348,7 +4358,14 @@ export class TaskEngine {
     const fleet = this.listExecutorCapabilities();
     const { eligible, excluded } = partitionFleetForRepo(fleet, task.repo_key);
     const match = matchExecutors(eligible, vendor, affinity);
-    const decision = decideDispatch(match, fleet, vendor, affinity, excluded);
+    const decision = decideDispatch(
+      match,
+      fleet,
+      vendor,
+      affinity,
+      excluded,
+      this.binProblems,
+    );
 
     if (decision.kind === "fail") {
       // Launch-template free-form vendors (#195) are always local-capable when
@@ -4404,7 +4421,14 @@ export class TaskEngine {
       ? eligible
       : eligible.filter((e) => !e.isLocal);
     const match = matchExecutors(remoteOnly, vendor, affinity);
-    const decision = decideDispatch(match, fleet, vendor, affinity, excluded);
+    const decision = decideDispatch(
+      match,
+      fleet,
+      vendor,
+      affinity,
+      excluded,
+      this.binProblems,
+    );
 
     if (decision.kind === "runner") {
       this.beginRemoteRoutingWait(task, {
@@ -4558,6 +4582,7 @@ export class TaskEngine {
       affinity: task.runner,
       reason: "timeout",
       exclusions: excluded,
+      binProblems: this.binProblems,
     });
     this.fail(task.id, diagnosis);
   }
@@ -4628,7 +4653,9 @@ export class TaskEngine {
    * adapters, plus non-builtin plugin adapters present in the registry.
    */
   private localAdvertisedVendors(config: ParleyConfig): string[] {
-    const detected = new Set(detectHarnesses(config, process.env));
+    const { found, problems } = detectHarnessesDetailed(config, process.env);
+    this.binProblems = problems;
+    const detected = new Set(found);
     for (const id of this.adapters.keys()) {
       // Plugin / free-form adapters are a capability signal even without a bin.
       if (!detected.has(id)) {

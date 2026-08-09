@@ -9,6 +9,10 @@ import {
   formatGitAuthCode,
   LOCAL_EXECUTOR_ID,
 } from "@useparley/core";
+import {
+  describeVendorBinProblem,
+  type VendorBinProblem,
+} from "./fingerprint.js";
 
 /** One known executor and the vendor ids it advertises. */
 export interface ExecutorCapability {
@@ -169,11 +173,25 @@ export function formatCapabilityDiagnosis(opts: {
   reason?: "no_capable" | "pin_incapable" | "timeout";
   /** Runners skipped because of recorded repo unreachability (#317). */
   exclusions?: readonly RepoReachabilityExclusion[];
+  /** Locally configured vendor bins that did not resolve (#379). */
+  binProblems?: readonly VendorBinProblem[];
 }): string {
   const known =
     opts.fleet.length > 0
       ? opts.fleet.map(formatExecutorVendors).join("; ")
       : "(no executors registered)";
+
+  // A configured-but-unresolvable bin for *this* vendor is the actual cause;
+  // "no capable executor" is only its downstream symptom and sends the reader
+  // hunting for missing vendor support (#379). Lead with the cause so an
+  // orchestrator agent relaying this to a human names the bad path.
+  const binProblem = opts.binProblems?.find((p) => p.vendor === opts.vendor);
+  if (binProblem !== undefined) {
+    return (
+      `${describeVendorBinProblem(binProblem)}, so it was not registered; ` +
+      `known executors: ${known}`
+    );
+  }
   const affinity = opts.affinity !== null && opts.affinity !== undefined && opts.affinity !== ""
     ? opts.affinity
     : null;
@@ -287,7 +305,8 @@ export type DispatchDecision =
  * `fleet` is the full inventory for diagnosis "known executors" lines;
  * `match` should already be computed against the **eligible** pool after
  * repo-reachability filtering (#317). Pass `exclusions` so no-match
- * diagnoses name skipped runners and why.
+ * diagnoses name skipped runners and why, and `binProblems` so a vendor that
+ * went unregistered because of a bad local bin path says so (#379).
  */
 export function decideDispatch(
   match: RoutingMatch,
@@ -295,6 +314,7 @@ export function decideDispatch(
   vendor: string,
   affinity: string | null,
   exclusions: readonly RepoReachabilityExclusion[] = [],
+  binProblems: readonly VendorBinProblem[] = [],
 ): DispatchDecision {
   if (affinity !== null && affinity !== "") {
     if (match.capable.length === 0) {
@@ -306,6 +326,7 @@ export function decideDispatch(
           affinity,
           reason: "pin_incapable",
           exclusions,
+          binProblems,
         }),
       };
     }
@@ -330,6 +351,7 @@ export function decideDispatch(
         fleet,
         reason: "no_capable",
         exclusions,
+        binProblems,
       }),
     };
   }

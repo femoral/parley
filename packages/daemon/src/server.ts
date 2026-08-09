@@ -115,6 +115,10 @@ import {
   buildSessionProvenance,
 } from "./task-detail.js";
 import { appendDaemonDiag } from "./diag.js";
+import {
+  detectHarnessesDetailed,
+  describeVendorBinProblem,
+} from "./fingerprint.js";
 import { discoverUiBundle, isReservedPath, serveUiRequest } from "./ui.js";
 import { DAEMON_VERSION } from "./version.js";
 import { handleXaiProxyRequest, parseXaiProxyPath } from "./xai-proxy.js";
@@ -4203,6 +4207,20 @@ export async function startServer(
     if (!Number.isFinite(last)) return false;
     return Date.now() - last <= runnerPresenceGraceMs();
   });
+  // Configured-but-unresolvable vendor bins (#379). Non-fatal by design: a
+  // stale entry for a vendor you never use must not take the daemon down. But
+  // it must be visible — silently skipping the vendor is what made a bad path
+  // surface later as "no capable executor", pointing away from the cause.
+  try {
+    const { problems } = detectHarnessesDetailed(startupConfig, process.env);
+    for (const p of problems) {
+      const line = `vendor-bin: ${describeVendorBinProblem(p)}`;
+      appendDaemonDiag(paths, line);
+      process.stderr.write(`parley daemon: ${line}\n`);
+    }
+  } catch (err) {
+    appendDaemonDiag(paths, `vendor-bin: detection error: ${String(err)}`);
+  }
   // Dead-orchestrator session reap on start (#280) — do not wait for the
   // scheduled retention sweep (may be delayed by last_gc_at).
   try {

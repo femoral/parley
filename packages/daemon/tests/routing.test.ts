@@ -26,7 +26,10 @@ import {
   type TaskRow,
 } from "../src/db.js";
 import { TaskEngine } from "../src/engine.js";
-import { detectHarnesses } from "../src/fingerprint.js";
+import {
+  detectHarnesses,
+  detectHarnessesDetailed,
+} from "../src/fingerprint.js";
 import {
   decideDispatch,
   formatCapabilityDiagnosis,
@@ -1092,6 +1095,83 @@ describe("detectHarnesses env bin overrides (F9)", () => {
       },
     );
     expect(found).toContain("openhands");
+  });
+});
+
+describe("configured-but-unresolvable vendor bin (#379)", () => {
+  const noFake = { ...process.env, PARLEY_FAKE_VENDOR_BIN: undefined };
+
+  it("reports an explicitly configured bin whose path does not exist", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "parley-badbin-"));
+    homes.push(dir);
+    const missing = path.join(dir, "nope", "fake-vendor.mjs");
+
+    const { found, problems } = detectHarnessesDetailed(
+      {},
+      { ...noFake, PARLEY_FAKE_VENDOR_BIN: missing },
+    );
+
+    expect(found).not.toContain("fake");
+    expect(problems).toEqual([
+      { vendor: "fake", bin: missing, source: "env", envKey: "PARLEY_FAKE_VENDOR_BIN" },
+    ]);
+  });
+
+  it("attributes a config-supplied bin to config, not env", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "parley-badbin-cfg-"));
+    homes.push(dir);
+    const missing = path.join(dir, "nope", "grok");
+
+    const { problems } = detectHarnessesDetailed(
+      { vendors: { grok: { bin: missing } } },
+      noFake,
+    );
+
+    expect(problems).toEqual([{ vendor: "grok", bin: missing, source: "config" }]);
+  });
+
+  it("does not treat an uninstalled built-in as a misconfiguration", () => {
+    const { found, problems } = detectHarnessesDetailed({}, { ...noFake, PATH: "" });
+
+    expect(found).toEqual([]);
+    expect(problems).toEqual([]);
+  });
+
+  it("leads the routing diagnosis with the bad path, not the generic message", () => {
+    const msg = formatCapabilityDiagnosis({
+      vendor: "fake",
+      fleet: [cpuCodexOnline],
+      reason: "no_capable",
+      binProblems: [
+        {
+          vendor: "fake",
+          bin: "/nope/fake-vendor.mjs",
+          source: "env",
+          envKey: "PARLEY_FAKE_VENDOR_BIN",
+        },
+      ],
+    });
+
+    expect(msg).toContain("/nope/fake-vendor.mjs");
+    expect(msg).toContain("PARLEY_FAKE_VENDOR_BIN");
+    expect(msg).toContain("path does not exist");
+    expect(msg).not.toContain("no capable executor");
+    // Fleet inventory still present so the reader keeps the wider picture.
+    expect(msg).toContain("known executors:");
+  });
+
+  it("leaves the generic diagnosis alone for an unrelated vendor's bad bin", () => {
+    const msg = formatCapabilityDiagnosis({
+      vendor: "claude",
+      fleet: [cpuCodexOnline],
+      reason: "no_capable",
+      binProblems: [
+        { vendor: "grok", bin: "/nope/grok", source: "config" },
+      ],
+    });
+
+    expect(msg).toContain('no capable executor for vendor "claude"');
+    expect(msg).not.toContain("/nope/grok");
   });
 });
 

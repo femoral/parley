@@ -92,16 +92,63 @@ export function isExecutableOnPath(bin: string, env: NodeJS.ProcessEnv = process
 }
 
 /**
- * Detect which built-in vendor CLIs are available.
+ * A vendor whose bin was *explicitly* configured but does not resolve (#379).
+ *
+ * Only explicit configuration counts. A built-in vendor simply missing from
+ * PATH is ordinary absence — "codex is not installed" is not a misconfiguration
+ * and must never be reported as one.
+ */
+export interface VendorBinProblem {
+  vendor: string;
+  /** The bin as configured — a path that does not exist, or a name not on PATH. */
+  bin: string;
+  /** Where the value came from, so the reader knows what to edit. */
+  source: "config" | "env";
+  /** Env var that supplied it, when `source` is `env`. */
+  envKey?: string;
+}
+
+export interface HarnessDetection {
+  /** Vendor ids that resolved and can be registered. */
+  found: string[];
+  /** Explicitly configured vendors that did not resolve. */
+  problems: VendorBinProblem[];
+}
+
+/** Human-readable one-liner for a single unresolved vendor bin. */
+export function describeVendorBinProblem(p: VendorBinProblem): string {
+  const via =
+    p.source === "env" && p.envKey !== undefined
+      ? ` (via ${p.envKey})`
+      : ` (via config vendors.${p.vendor}.bin)`;
+  const kind =
+    path.isAbsolute(p.bin) || p.bin.includes(path.sep)
+      ? "path does not exist"
+      : "not found on PATH";
+  return `vendor "${p.vendor}" is configured with bin "${p.bin}"${via} but that ${kind}`;
+}
+
+/**
+ * Detect which built-in vendor CLIs are available, and which were configured
+ * but could not be resolved.
+ *
  * Precedence: `vendors.<id>.bin` config → `PARLEY_<VENDOR>_BIN` env (same as
  * adapters, #315 F9) → default binary on PATH. `fake` only when explicitly
  * configured (config or `PARLEY_FAKE_VENDOR_BIN`).
+ *
+ * An unresolved *configured* bin used to be skipped silently, so the vendor
+ * merely went missing and the first symptom was the router's generic "no
+ * capable executor for vendor X" — a message that points at vendor support
+ * rather than at the bad path (#379). Collect those cases so callers can say
+ * what actually went wrong. Detection stays non-fatal: a stale entry for a
+ * vendor you never use must not take the daemon down.
  */
-export function detectHarnesses(
+export function detectHarnessesDetailed(
   config: ParleyConfig,
   env: NodeJS.ProcessEnv = process.env,
-): string[] {
+): HarnessDetection {
   const found: string[] = [];
+  const problems: VendorBinProblem[] = [];
   for (const id of BUILTIN_VENDOR_IDS) {
     const configBin = config.vendors?.[id]?.bin;
     const envKey = BUILTIN_VENDOR_ENV_BINS[id];
@@ -109,6 +156,15 @@ export function detectHarnesses(
       envKey !== undefined && env[envKey] !== undefined && env[envKey] !== ""
         ? env[envKey]
         : undefined;
+    const source: "config" | "env" = configBin !== undefined ? "config" : "env";
+    const note = (bin: string): void => {
+      problems.push({
+        vendor: id,
+        bin,
+        source,
+        ...(source === "env" && envKey !== undefined ? { envKey } : {}),
+      });
+    };
     if (id === "fake") {
       // Test double: only when explicitly configured. Accept an existing path
       // (script may not be +x; spawn uses node on the script) or a PATH hit.
@@ -116,8 +172,11 @@ export function detectHarnesses(
       if (fakeBin === undefined || fakeBin === "") continue;
       if (path.isAbsolute(fakeBin) || fakeBin.includes(path.sep)) {
         if (fs.existsSync(fakeBin)) found.push(id);
+        else note(fakeBin);
       } else if (isExecutableOnPath(fakeBin, env)) {
         found.push(id);
+      } else {
+        note(fakeBin);
       }
       continue;
     }
@@ -132,15 +191,27 @@ export function detectHarnesses(
         } catch {
           // Not executable; still accept if the file exists (scripts).
           if (fs.existsSync(bin)) found.push(id);
+          else note(bin);
         }
       } else if (isExecutableOnPath(bin, env)) {
         found.push(id);
+      } else {
+        note(bin);
       }
       continue;
     }
+    // Default bin, no explicit config: absence is ordinary, not a problem.
     if (isExecutableOnPath(bin, env)) found.push(id);
   }
-  return found;
+  return { found, problems };
+}
+
+/** Vendor ids this host can run. See {@link detectHarnessesDetailed}. */
+export function detectHarnesses(
+  config: ParleyConfig,
+  env: NodeJS.ProcessEnv = process.env,
+): string[] {
+  return detectHarnessesDetailed(config, env).found;
 }
 
 /** Per-vendor probe budget so a hung CLI never blocks registration. */
