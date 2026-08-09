@@ -84,6 +84,26 @@ const REQUIRED_RAIL_CONTRAST_IDS = [
 ];
 
 /**
+ * Contrast probes with no element behind them — derived numbers, so there is no
+ * rendered font size for the type-size floor below to check.
+ */
+const DERIVED_CONTRAST_IDS = ["rail-hose-time-vs-surface"];
+
+/**
+ * Type-size floor, in px. DESIGN.md's Named Rules: "No type below 9px".
+ *
+ * #378 dropped the four burn/hose selectors from fleet-board's font floor —
+ * both rails render their honesty/empty state on that screen, so nothing there
+ * could ever sample them. This demo stages those elements deliberately, which
+ * makes it the place their *size* gets gated; before this, the rails were
+ * contrast-checked at ≤11px but had no size floor anywhere in the harness.
+ *
+ * Every required contrast probe already records a rendered `fontSizePx`, so the
+ * floor reuses those measurements rather than re-sampling the DOM.
+ */
+const TYPE_FLOOR_PX = 9;
+
+/**
  * @param {object} _entry
  * @param {object} ledger
  */
@@ -181,6 +201,26 @@ export function consoleRailsGates(_entry, ledger) {
   // green gate, so a removed probe is indistinguishable from one that never
   // existed.
   assertProbeMembership(DEMO, contrast, REQUIRED_RAIL_CONTRAST_IDS);
+
+  // #378 follow-up — type-size floor for rail text. Membership is already
+  // pinned above, so this walks the same required set: every probe backed by a
+  // real element must report a rendered size, and clear the DESIGN.md floor. A
+  // probe that stops recording `fontSizePx` fails rather than skipping.
+  for (const id of REQUIRED_RAIL_CONTRAST_IDS) {
+    if (DERIVED_CONTRAST_IDS.includes(id)) continue;
+    const px = contrast[id]?.fontSizePx;
+    if (typeof px !== "number" || !Number.isFinite(px)) {
+      throw new Error(
+        `${DEMO}: type-size floor probe ${id} recorded no fontSizePx: ` +
+          `${JSON.stringify(contrast[id])}`,
+      );
+    }
+    if (px < TYPE_FLOOR_PX) {
+      throw new Error(
+        `${DEMO}: rail text below the ${TYPE_FLOOR_PX}px floor: ${id} = ${px}px`,
+      );
+    }
+  }
 
   for (const [id, m] of Object.entries(contrast)) {
     if (

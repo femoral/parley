@@ -281,6 +281,76 @@ describe("acceptance-359 contrast is gated, not merely recorded (#376)", () => {
   });
 });
 
+describe("console-rails type-size floor (#378 follow-up)", () => {
+  const demoModule = "console-rails.mjs";
+  const gate = "consoleRailsGates";
+  const load = () => demoBlock<{ contrast?: Contrast }>("issue-363", "console-rails");
+
+  /** The one derived probe: a computed ratio with no element behind it. */
+  const DERIVED = "rail-hose-time-vs-surface";
+
+  it("floors every element probe at 9px on the committed ledger", () => {
+    const { block } = load();
+    const contrast = contrastOf(block);
+    const sized = Object.entries(contrast).filter(([id]) => id !== DERIVED);
+    expect(sized.length).toBeGreaterThan(0);
+    for (const [id, probe] of sized) {
+      expect(probe.fontSizePx, `probe ${id} recorded no font size`).toBeGreaterThanOrEqual(9);
+    }
+  });
+
+  it("fails when rail text drops below the 9px floor", () => {
+    const { ledger, block } = load();
+    const contrast = contrastOf(block);
+    const probe = contrast["rail-hose-time-live"];
+    if (!probe) throw new Error("fixture: no rail-hose-time-live probe");
+    contrast["rail-hose-time-live"] = { ...probe, fontSizePx: 8.5 };
+
+    const r = runVerifyGate({ demo: demoModule, gate, ledger });
+    expect(r.threw).toBe(true);
+    expect(r.message).toMatch(/9px|type-size/i);
+    expect(r.message).toMatch(/rail-hose-time-live/);
+  });
+
+  it("fails closed when a required probe records no font size", () => {
+    const { ledger, block } = load();
+    const contrast = contrastOf(block);
+    const probe = contrast["rail-burn-axis"];
+    if (!probe) throw new Error("fixture: no rail-burn-axis probe");
+    // found, but the size silently stopped being recorded
+    delete probe.fontSizePx;
+
+    const r = runVerifyGate({ demo: demoModule, gate, ledger });
+    expect(r.threw).toBe(true);
+    expect(r.message).toMatch(/rail-burn-axis/);
+  });
+
+  it("does not demand a font size from the derived contrast probe", () => {
+    const { block } = load();
+    // Regression guard: this probe is a computed ink-vs-ground ratio with no
+    // element, so a floor that required a size from every probe would fail it.
+    expect(contrastOf(block)[DERIVED]?.fontSizePx).toBeUndefined();
+    const { ledger } = load();
+    expect(runVerifyGate({ demo: demoModule, gate, ledger })).toMatchObject({ threw: false });
+  });
+
+  it("covers the burn and hose rail text the fleet floor cannot reach", () => {
+    const { block } = load();
+    const contrast = contrastOf(block);
+    // The four selectors dropped from fleet-board in #378 — they render their
+    // honesty state there, so this demo is where their size gets gated.
+    for (const id of [
+      "rail-burn-axis",
+      "rail-burn-totals",
+      "rail-hose-time-live",
+      "rail-hose-text-live",
+    ]) {
+      expect(contrast[id]?.found, `probe ${id} missing`).toBe(true);
+      expect(contrast[id]?.fontSizePx).toBeGreaterThanOrEqual(9);
+    }
+  });
+});
+
 describe("fleet-board type-size floor selector coverage (#378)", () => {
   const demoModule = "fleet-board.mjs";
   const gate = "fleetBoardGates";
