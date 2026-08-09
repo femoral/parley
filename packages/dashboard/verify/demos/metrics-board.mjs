@@ -10,7 +10,7 @@
 import { pathToFileURL } from "node:url";
 import { collectA11y, runAxe, ariaSnapshot } from "../lib/a11y.mjs";
 import { measureContrast } from "../lib/contrast.mjs";
-import { assertProbeMembership } from "../lib/gates.mjs";
+import { assertProbeMembership, assertSelectorCoverage } from "../lib/gates.mjs";
 import {
   ledgerDirs,
   writeDemoProof,
@@ -893,19 +893,12 @@ export function metricsBoardGates(_entry, ledger) {
   // #376 — every chart-label selector must still be contributing rows to the
   // ≥11px floor above; a selector that matches nothing would otherwise just
   // shrink the sample set and leave the minimum looking healthy.
-  const coverage = demo.chartLabels?.selectorCoverage;
-  if (!coverage || typeof coverage !== "object") {
-    throw new Error("metrics-board: chartLabels missing selectorCoverage proof");
-  }
-  const uncovered = REQUIRED_CHART_LABEL_SELECTORS.filter(
-    (sel) => !(Number(coverage[sel]) > 0),
+  assertSelectorCoverage(
+    "metrics-board",
+    "chartLabels",
+    demo.chartLabels?.selectorCoverage,
+    REQUIRED_CHART_LABEL_SELECTORS,
   );
-  if (uncovered.length > 0) {
-    throw new Error(
-      `metrics-board: type-size floor selectors matched nothing: ` +
-        `${uncovered.join(", ")} (coverage: ${JSON.stringify(coverage)})`,
-    );
-  }
 }
 
 /**

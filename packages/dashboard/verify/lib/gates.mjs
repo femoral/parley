@@ -41,3 +41,38 @@ export function assertProbeMembership(demoName, contrast, requiredIds) {
     );
   }
 }
+
+/**
+ * Assert a type-size floor still measured every selector it claims to cover.
+ *
+ * The membership problem above, in its type-size form: a floor that reports the
+ * minimum over whatever it happened to sample stays green when a selector stops
+ * matching, because the violating rows simply stop existing (#376, #378).
+ *
+ * `coverage` must be tallied over every match at measurement time, not derived
+ * from a stored sample array — those are usually capped, so a selector can be
+ * fully covered yet absent from the samples that were kept.
+ *
+ * @param {string} demoName prefix for error messages (the demo's ledger id)
+ * @param {string} blockName ledger block holding the proof, for the absent case
+ * @param {Record<string, number> | undefined} coverage selector -> rows measured
+ * @param {readonly string[]} requiredSelectors selectors the gate demands
+ */
+export function assertSelectorCoverage(
+  demoName,
+  blockName,
+  coverage,
+  requiredSelectors,
+) {
+  if (!coverage || typeof coverage !== "object") {
+    throw new Error(`${demoName}: ${blockName} missing selectorCoverage proof`);
+  }
+
+  const uncovered = requiredSelectors.filter((sel) => !(Number(coverage[sel]) > 0));
+  if (uncovered.length > 0) {
+    throw new Error(
+      `${demoName}: type-size floor selectors matched nothing: ` +
+        `${uncovered.join(", ")} (coverage: ${JSON.stringify(coverage)})`,
+    );
+  }
+}

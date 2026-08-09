@@ -281,6 +281,158 @@ describe("acceptance-359 contrast is gated, not merely recorded (#376)", () => {
   });
 });
 
+describe("fleet-board type-size floor selector coverage (#378)", () => {
+  const demoModule = "fleet-board.mjs";
+  const gate = "fleetBoardGates";
+  type FontFloor = {
+    selectorCoverage?: Record<string, number>;
+    violations?: Array<{ selector: string; fontSize: number; text?: string }>;
+    samples?: Array<{ selector: string; fontSize: number }>;
+    minOk?: number;
+  };
+  type Block = { headline?: { fontFloor?: FontFloor } };
+  const load = () => demoBlock<Block>("issue-355", "fleet-board");
+
+  /** The fontFloor block, asserted present in the fixture. */
+  function floorOf(block: Block): FontFloor {
+    const ff = block.headline?.fontFloor;
+    if (!ff) throw new Error("fixture: fleet-board headline has no fontFloor");
+    return ff;
+  }
+
+  /** First covered selector in the fixture, asserted present. */
+  function firstSelector(cov: Record<string, number> | undefined): {
+    cov: Record<string, number>;
+    sel: string;
+  } {
+    if (!cov) throw new Error("fixture: fontFloor has no selectorCoverage");
+    const sel = Object.keys(cov)[0];
+    if (!sel) throw new Error("fixture: selectorCoverage is empty");
+    return { cov, sel };
+  }
+
+  /** Regex matching `s` as a literal, for asserting it names the failure. */
+  const literalRx = (s: string) => new RegExp(s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+
+  it("passes on the committed ledger", () => {
+    const { ledger } = load();
+    expect(runVerifyGate({ demo: demoModule, gate, ledger })).toMatchObject({ threw: false });
+  });
+
+  it("records coverage for every measured selector", () => {
+    const { block } = load();
+    const cov = floorOf(block).selectorCoverage;
+    expect(cov).toBeTruthy();
+    expect(Object.keys(cov ?? {}).length).toBeGreaterThan(0);
+    for (const [sel, n] of Object.entries(cov ?? {})) {
+      expect(n, `selector ${sel} measured nothing`).toBeGreaterThan(0);
+    }
+  });
+
+  it("covers fleet chip labels and panel titles", () => {
+    const { block } = load();
+    const cov = floorOf(block).selectorCoverage ?? {};
+    // The two selectors that were dead in source and silently sampled nothing.
+    expect(cov[".pc-chip__label"]).toBeGreaterThan(0);
+    expect(cov[".pc-panel__title"]).toBeGreaterThan(0);
+  });
+
+  it("does not carry the rail selectors that cannot sample on this surface", () => {
+    const { block } = load();
+    const cov = floorOf(block).selectorCoverage ?? {};
+    // Both rails render their honesty/empty state on the fleet capture, so
+    // these containers are never in the DOM here. Keeping them would restore
+    // the silent-skip hole this issue closed.
+    for (const sel of [
+      ".pc-rail-burn__axis span",
+      ".pc-rail-burn__totals span",
+      ".pc-rail-hose__time",
+      ".pc-rail-hose__text",
+    ]) {
+      expect(cov).not.toHaveProperty(sel);
+    }
+  });
+
+  it("counts coverage over all matches, not the truncated sample array", () => {
+    const { block } = load();
+    const ff = floorOf(block);
+    const cov = ff.selectorCoverage ?? {};
+    const samples = ff.samples ?? [];
+    const total = Object.values(cov).reduce((a, b) => a + b, 0);
+
+    // Only meaningful while the capture actually overflows the sample cap; if
+    // the fleet fixture ever shrinks below it, say so rather than pass vacuously.
+    expect(total, "fixture no longer exceeds the sample cap").toBeGreaterThan(
+      samples.length,
+    );
+
+    // The real point: selectors fully covered by the tally are missing from the
+    // kept samples, so deriving coverage from `samples` would report them as
+    // matching nothing and fail the gate on a healthy run.
+    const sampled = new Set(samples.map((s) => s.selector));
+    const lost = Object.keys(cov).filter((sel) => !sampled.has(sel));
+    expect(lost.length).toBeGreaterThan(0);
+    for (const sel of lost) expect(cov[sel]).toBeGreaterThan(0);
+  });
+
+  it("fails when a selector stops contributing rows to the floor", () => {
+    const { ledger, block } = load();
+    const { cov, sel } = firstSelector(floorOf(block).selectorCoverage);
+    cov[sel] = 0;
+
+    const r = runVerifyGate({ demo: demoModule, gate, ledger });
+    expect(r.threw).toBe(true);
+    expect(r.message).toMatch(/type-size|selector/i);
+    expect(r.message).toMatch(literalRx(sel));
+  });
+
+  it("fails when a selector is missing from coverage entirely", () => {
+    const { ledger, block } = load();
+    const { cov, sel } = firstSelector(floorOf(block).selectorCoverage);
+    delete cov[sel];
+
+    const r = runVerifyGate({ demo: demoModule, gate, ledger });
+    expect(r.threw).toBe(true);
+    expect(r.message).toMatch(literalRx(sel));
+  });
+
+  it("fails closed when the fontFloor block is absent (#374 shape)", () => {
+    const { ledger, block } = load();
+    if (!block.headline) throw new Error("fixture: fleet-board has no headline");
+    delete block.headline.fontFloor;
+
+    const r = runVerifyGate({ demo: demoModule, gate, ledger });
+    expect(r.threw).toBe(true);
+    expect(r.message).toMatch(/fontFloor/);
+  });
+
+  it("fails closed when selectorCoverage is absent", () => {
+    const { ledger, block } = load();
+    delete floorOf(block).selectorCoverage;
+
+    const r = runVerifyGate({ demo: demoModule, gate, ledger });
+    expect(r.threw).toBe(true);
+    expect(r.message).toMatch(/selectorCoverage/);
+  });
+
+  it("still fails a real sub-floor violation", () => {
+    const { ledger, block } = load();
+    floorOf(block).violations = [
+      { selector: ".pc-chip__label", fontSize: 8, text: "TOO SMALL" },
+    ];
+
+    const r = runVerifyGate({ demo: demoModule, gate, ledger });
+    expect(r.threw).toBe(true);
+    expect(r.message).toMatch(/9px/);
+    expect(r.message).toMatch(/TOO SMALL/);
+  });
+
+  it("measures against the 9px floor DESIGN.md states", () => {
+    const { block } = load();
+    expect(floorOf(block).minOk).toBe(9);
+  });
+});
+
 describe("fleet-board required chip labels (#377)", () => {
   const demoModule = "fleet-board.mjs";
   const gate = "fleetBoardGates";

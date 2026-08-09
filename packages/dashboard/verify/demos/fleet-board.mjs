@@ -9,6 +9,7 @@
  */
 import { pathToFileURL } from "node:url";
 import { collectA11y, runAxe, ariaSnapshot } from "../lib/a11y.mjs";
+import { assertSelectorCoverage } from "../lib/gates.mjs";
 import {
   clearIntercepts,
   interceptEmpty,
@@ -54,6 +55,58 @@ const SAMPLED_CHIP_LABELS = ["AWAITING", "GATE HELD"];
 
 /** Chip labels the gate requires in the ledger (#364/#370). See above (#377). */
 const REQUIRED_CHIP_LABELS = ["AWAITING", "GATE HELD"];
+
+/**
+ * Type-size floor, in px. DESIGN.md's Named Rules state "No type below 9px";
+ * this constant, the gate's error message, and that rule must agree.
+ *
+ * #378 — the measurement used to test `< 9.5` while the error said "sub-10px"
+ * and the design contract said 9. Three numbers, no two the same.
+ */
+const TYPE_FLOOR_PX = 9;
+
+/**
+ * Selectors the type-size floor measures. Hoisted out of the page closure so
+ * the measurement input is one named thing the gate can be checked against.
+ *
+ * The burn/hose rail selectors are deliberately absent (#378). They are live
+ * classes, but both rails render their honesty/empty state on this demo's
+ * captured surface — the staged fake-vendor tasks burn no tokens and emit no
+ * firehose lines, so `.pc-rail-burn__axis`/`__totals` and the hose line
+ * container are never in the DOM here. Sampling them on the fleet screen is not
+ * possible; console-rails.mjs stages those elements explicitly instead.
+ */
+const FONT_FLOOR_SELECTORS = [
+  '[data-testid="rail-burn-bound"]',
+  ".pc-fleet-kpi__label",
+  ".pc-fleet-kpi__note",
+  ".pc-fleet-table__th",
+  ".pc-chip__label",
+  ".pc-panel__title",
+  ".pc-attn__age",
+  ".pc-attn__meta",
+  ".pc-attn__reason",
+];
+
+/**
+ * Selectors the gate requires to have contributed at least one measured row.
+ *
+ * Declared separately from FONT_FLOOR_SELECTORS above on purpose, for the same
+ * reason as SAMPLED_/REQUIRED_CHIP_LABELS: if the gate read the array the
+ * measurement iterates, deleting a selector would shrink both sides and this
+ * check would agree with the deletion instead of catching it (#378).
+ */
+const REQUIRED_FONT_FLOOR_SELECTORS = [
+  '[data-testid="rail-burn-bound"]',
+  ".pc-fleet-kpi__label",
+  ".pc-fleet-kpi__note",
+  ".pc-fleet-table__th",
+  ".pc-chip__label",
+  ".pc-panel__title",
+  ".pc-attn__age",
+  ".pc-attn__meta",
+  ".pc-attn__reason",
+];
 
 /** Fleet-owned selectors — never edit measure.mjs DEFAULT_SELECTORS. */
 export const FLEET_SELECTORS = [
@@ -117,12 +170,36 @@ export function fleetBoardGates(_entry, ledger) {
     throw new Error("fleet-board: runners not proven present");
   }
 
+  // #378 — type-size floor. Fails closed on a missing block (the #374 shape),
+  // and pins selector coverage so a selector that matches nothing is a failure
+  // rather than a silent shrink of the sample set.
   const fontFloor = demo.headline?.fontFloor;
-  if (fontFloor && fontFloor.violations?.length > 0) {
+  if (!fontFloor || typeof fontFloor !== "object") {
+    throw new Error("fleet-board: headline missing fontFloor proof");
+  }
+  // Pinned as an array rather than `violations?.length > 0`: a renamed or
+  // dropped key would otherwise sail through the very gate meant to fail closed.
+  if (!Array.isArray(fontFloor.violations)) {
+    throw new Error("fleet-board: fontFloor missing violations array");
+  }
+  if (fontFloor.violations.length > 0) {
     throw new Error(
-      `fleet-board: sub-10px labels: ${JSON.stringify(fontFloor.violations)}`,
+      `fleet-board: labels below the ${TYPE_FLOOR_PX}px floor: ` +
+        `${JSON.stringify(fontFloor.violations)}`,
     );
   }
+  if (fontFloor.minOk !== TYPE_FLOOR_PX) {
+    throw new Error(
+      `fleet-board: fontFloor measured against ${fontFloor.minOk}px, ` +
+        `expected the ${TYPE_FLOOR_PX}px DESIGN.md floor`,
+    );
+  }
+  assertSelectorCoverage(
+    "fleet-board",
+    "fontFloor",
+    fontFloor.selectorCoverage,
+    REQUIRED_FONT_FLOOR_SELECTORS,
+  );
 
   // Tasks table density: at 1280, no silent H-scroll on the table scroll region
   // (columns dropped so tokens/dur stay visible).
@@ -307,36 +384,28 @@ async function scrollOk(page, selector) {
 }
 
 /**
+ * Sample the type-size floor, recording per-selector coverage so a selector
+ * that stops matching fails the gate instead of vanishing from the samples.
  * @param {import('playwright-core').Page} page
+ * @param {number} minOk Floor in px; anything below it is a violation.
  */
-async function measureFontFloor(page) {
-  return page.evaluate(() => {
-    const sels = [
-      '[data-testid="rail-burn-bound"]',
-      ".pc-rail-burn__axis span",
-      ".pc-rail-burn__totals span",
-      ".pc-fleet-kpi__label",
-      ".pc-fleet-kpi__note",
-      ".pc-fleet-table__th",
-      ".pc-fleet-chip__label",
-      ".pc-fleet-panel__title",
-      ".pc-rail-hose__time",
-      ".pc-rail-hose__text",
-      ".pc-attn__age",
-      ".pc-attn__meta",
-      ".pc-attn__reason",
-    ];
+async function measureFontFloor(page, minOk) {
+  return page.evaluate(({ floor, sels }) => {
     /** @type {Array<{selector:string,fontSize:number,text:string}>} */
     const violations = [];
     /** @type {Array<{selector:string,fontSize:number}>} */
     const samples = [];
+    /** @type {Record<string, number>} */
+    const selectorCoverage = {};
     for (const sel of sels) {
+      let measured = 0;
       for (const el of document.querySelectorAll(sel)) {
         const cs = getComputedStyle(el);
         if (cs.display === "none" || cs.visibility === "hidden") continue;
         const px = parseFloat(cs.fontSize);
+        measured += 1;
         samples.push({ selector: sel, fontSize: px });
-        if (Number.isFinite(px) && px < 9.5) {
+        if (Number.isFinite(px) && px < floor) {
           violations.push({
             selector: sel,
             fontSize: px,
@@ -344,9 +413,15 @@ async function measureFontFloor(page) {
           });
         }
       }
+      // Counted over every *measured* match, before `samples` is capped below,
+      // so the gate's coverage check cannot be fooled by truncation. Unlike
+      // metrics-board this tallies visible matches rather than raw
+      // querySelectorAll length: this sampler skips hidden elements, so a raw
+      // count would report coverage for a selector contributing no rows.
+      selectorCoverage[sel] = measured;
     }
-    return { violations, samples: samples.slice(0, 40), minOk: 9.5 };
-  });
+    return { violations, samples: samples.slice(0, 40), selectorCoverage, minOk: floor };
+  }, { floor: minOk, sels: FONT_FLOOR_SELECTORS });
 }
 
 /**
@@ -672,7 +747,7 @@ export async function runFleetBoardDemo() {
       .locator('[data-testid="rail-burn-bound"]')
       .textContent()
       .catch(() => null);
-    const fontFloor = await measureFontFloor(session.page);
+    const fontFloor = await measureFontFloor(session.page, TYPE_FLOOR_PX);
     const tasksTable1280 = await measureTasksTable1280(session.page);
     const kpiNotes1280 = await measureKpiNotes1280(session.page);
 
