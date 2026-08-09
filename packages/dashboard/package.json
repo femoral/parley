@@ -1,6 +1,6 @@
 {
   "name": "@useparley/dashboard",
-  "version": "0.0.1",
+  "version": "0.0.4",
   "description": "Parley Console — the parley web dashboard (React + Vite). An optional install: the daemon discovers and serves it (parley.ui marker) when it's present alongside @useparley/cli/@useparley/daemon.",
   "repository": {
     "type": "git",
