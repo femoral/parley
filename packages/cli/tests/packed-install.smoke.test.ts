@@ -194,12 +194,20 @@ describe("packed-install smoke (#60, ui install #70)", () => {
       ]),
     );
 
-    const env = {
+    const env: NodeJS.ProcessEnv = {
       ...process.env,
       PARLEY_HOME: home,
       PARLEY_FAKE_VENDOR_BIN: FAKE_VENDOR_BIN,
       PARLEY_SESSION_ID: "packed-orch",
     };
+    // Hermeticity: vitest injects NODE_PATH, and its last entry is pnpm's flat
+    // virtual store (<repo>/node_modules/.pnpm/node_modules), which holds every
+    // workspace package. Node consults NODE_PATH for bare specifiers, so
+    // inheriting it lets the spawned daemon resolve `@useparley/*` out of this
+    // throwaway prefix and back into the working tree — precisely what this
+    // test exists to rule out. Strip it so resolution is confined to the
+    // install prefix and the discovery tiers below are the real ones.
+    delete env.NODE_PATH;
     const stdout = execFileSync(
       installed.binPath,
       [
@@ -255,10 +263,31 @@ describe("packed-install smoke (#60, ui install #70)", () => {
     // location resolving `@useparley/ui` as a hoisted sibling in this prefix
     // — the "install cli + ui, zero config" acceptance criterion (#70),
     // exercised against a real packed tarball rather than a symlinked fixture.
+    //
+    // Provenance is stamped rather than inferred: both the packed bundle and
+    // the workspace one are built from the same source, so "Parley Cove" alone
+    // cannot tell them apart — a resolution leak would serve the workspace copy
+    // and still read green, proving nothing. Mark the *packed* index so only it
+    // can satisfy the assertion. The daemon reads bundle files per request, so
+    // stamping after it booted is fine.
+    const packedIndex = path.join(
+      installed.prefix,
+      "node_modules",
+      "@useparley",
+      "ui",
+      "www",
+      "index.html",
+    );
+    const sentinel = `<!-- packed-install-smoke-${process.pid} -->`;
+    fs.appendFileSync(packedIndex, `\n${sentinel}\n`);
+
     const discovery = JSON.parse(fs.readFileSync(path.join(home, "daemon.json"), "utf8")) as { port: number };
     const root = await fetch(`http://127.0.0.1:${discovery.port}/`);
     expect(root.status).toBe(200);
     expect(root.headers.get("content-type")).toMatch(/text\/html/);
-    expect(await root.text()).toContain("Parley Cove");
+    const html = await root.text();
+    expect(html).toContain("Parley Cove");
+    // Served from the install prefix, not the working tree.
+    expect(html).toContain(sentinel);
   });
 });
