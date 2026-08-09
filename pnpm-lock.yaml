@@ -70,16 +70,6 @@ importers:
         version: 4.4.3
 
   packages/dashboard:
-    dependencies:
-      '@useparley/core':
-        specifier: workspace:*
-        version: link:../core
-      react:
-        specifier: ^19.2.7
-        version: 19.2.7
-      react-dom:
-        specifier: ^19.2.7
-        version: 19.2.7(react@19.2.7)
     devDependencies:
       '@axe-core/playwright':
         specifier: ^4.11.2
@@ -93,6 +83,9 @@ importers:
       '@types/react-dom':
         specifier: ^19.2.3
         version: 19.2.3(@types/react@19.2.17)
+      '@useparley/core':
+        specifier: workspace:*
+        version: link:../core
       '@vitejs/plugin-react':
         specifier: ^6.0.3
         version: 6.0.3(vite@8.1.4(@types/node@22.20.1)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.0)(yaml@2.9.0))
@@ -105,6 +98,12 @@ importers:
       playwright-core:
         specifier: ^1.62.0
         version: 1.62.0
+      react:
+        specifier: ^19.2.7
+        version: 19.2.7
+      react-dom:
+        specifier: ^19.2.7
+        version: 19.2.7(react@19.2.7)
       vite:
         specifier: ^8.1.4
         version: 8.1.4(@types/node@22.20.1)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.0)(yaml@2.9.0)
