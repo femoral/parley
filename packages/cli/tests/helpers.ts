@@ -34,6 +34,20 @@ export interface CliOptions {
  * Env for a CLI subprocess. Drops the NO_COLOR/FORCE_COLOR pair when both are
  * set — Node emits a process warning on stderr for that conflict, which fails
  * tests that assert quiet stderr.
+ *
+ * Hermetic by default: `NODE_PATH` is stripped. Vitest's fork pool sets it to
+ * its own dependency chain, whose tail is pnpm's workspace virtual store, and
+ * Node consults `NODE_PATH` for every bare specifier — so an inherited value
+ * lets a spawned daemon resolve `@useparley/*` out of whatever the test set up
+ * and back into the working tree. That silently invalidates anything asserting
+ * on resolution (UI discovery, plugin adapters): the packed-install smoke read
+ * green for months while resolving the workspace copy rather than the packed
+ * one. No real deployment points `NODE_PATH` at a monorepo store, so this
+ * strips a test-harness artifact, never a real resolution path.
+ *
+ * Stripped here rather than per-call so a new spawning test cannot inherit the
+ * leak by forgetting; `extraEnv` can still set it explicitly if a test needs to
+ * exercise `NODE_PATH` behaviour itself.
  */
 function cliEnv(home: string, extraEnv?: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = {
@@ -47,8 +61,9 @@ function cliEnv(home: string, extraEnv?: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
     // no test CLI can ever attach to (or stop) the developer's real hub, and no
     // real CLI adopts a leftover test daemon. Overridable via extraEnv.
     PARLEY_DAEMON_ID: `test-${path.basename(home)}`,
-    ...extraEnv,
   };
+  delete env.NODE_PATH;
+  Object.assign(env, extraEnv);
   if (env.NO_COLOR !== undefined && env.FORCE_COLOR !== undefined) {
     delete env.NO_COLOR;
   }
