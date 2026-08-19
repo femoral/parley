@@ -14,17 +14,16 @@ const temporaryHomes: string[] = [];
 const fixtures = path.join(import.meta.dirname, "fixtures");
 
 /**
- * A pid that is not running, so `readPidStartTime` returns null and no
- * `start_time` lands in the state file. A hardcoded guess is not enough: on a
- * busy host (a CI runner, say) that pid can be live, and the exact-shape
- * assertions below then see an extra `start_time`.
+ * A pid the kernel can never assign, so `readPidStartTime` finds no
+ * `/proc/<pid>/stat` and the hook records no `start_time`. Linux caps
+ * `pid_max` at 2^22, and platforms without /proc report nothing either way.
+ *
+ * Guessing a plausible-looking pid does not work: on a busy host it can be
+ * live, and the exact-shape assertions below then see an extra `start_time`.
+ * Nor does scanning for a currently-free pid — the suite's own worker
+ * processes can claim it between the scan and the assertion.
  */
-function deadPid(from = 4242): number {
-  for (let pid = from; pid < from + 10_000; pid++) {
-    if (readPidStartTime(pid) === null) return pid;
-  }
-  throw new Error("no dead pid available for the fixture");
-}
+const UNASSIGNABLE_PID = 0x7fff_ffff;
 
 function temporaryHome(): string {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), "parley-codex-test-"));
@@ -44,12 +43,11 @@ describe("Codex SessionStart provenance", () => {
     const input = JSON.parse(
       fs.readFileSync(path.join(fixtures, "session-start.json"), "utf8"),
     ) as Record<string, unknown>;
-    const pid = deadPid();
     const state = recordCodexSession(
       input,
       {
         parleyHome: home,
-        harnessPid: pid,
+        harnessPid: UNASSIGNABLE_PID,
         now: () => new Date("2026-07-20T10:00:00.000Z"),
       },
     );
@@ -59,7 +57,7 @@ describe("Codex SessionStart provenance", () => {
       harness_session_id: "codex-session-123",
       model: "gpt-5.5-codex",
       effort: null,
-      pid,
+      pid: UNASSIGNABLE_PID,
       started_at: "2026-07-20T10:00:00.000Z",
       updated_at: "2026-07-20T10:00:00.000Z",
     });

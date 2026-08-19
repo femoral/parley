@@ -23,17 +23,16 @@ const FIXED_NOW = new Date("2026-07-20T12:00:00.000Z");
 const LATER_NOW = new Date("2026-07-20T12:05:00.000Z");
 
 /**
- * A pid that is not running, so `readPidStartTime` returns null and no
- * `start_time` lands in the state file. A hardcoded guess is not enough: on a
- * busy host (a CI runner, say) that pid can be live, and the exact-shape
- * assertions below then see an extra `start_time`.
+ * A pid the kernel can never assign, so `readPidStartTime` finds no
+ * `/proc/<pid>/stat` and the hook records no `start_time`. Linux caps
+ * `pid_max` at 2^22, and platforms without /proc report nothing either way.
+ *
+ * Guessing a plausible-looking pid does not work: on a busy host it can be
+ * live, and the exact-shape assertions below then see an extra `start_time`.
+ * Nor does scanning for a currently-free pid — the suite's own worker
+ * processes can claim it between the scan and the assertion.
  */
-function deadPid(from = 4242): number {
-  for (let pid = from; pid < from + 10_000; pid++) {
-    if (readPidStartTime(pid) === null) return pid;
-  }
-  throw new Error("no dead pid available for the fixture");
-}
+const UNASSIGNABLE_PID = 0x7fff_ffff;
 
 let tmpRoot: string;
 let parleyHome: string;
@@ -191,7 +190,7 @@ describe("findSessionSummaryPath / readSummaryProvenance", () => {
 
 describe("runHook", () => {
   const sessionId = "sess-abc-123";
-  const harnessPid = deadPid();
+  const harnessPid = UNASSIGNABLE_PID;
 
   function readState(): SessionState | null {
     return readSessionState(sessionStatePath(parleyHome, HARNESS, sessionId));
