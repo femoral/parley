@@ -13,6 +13,19 @@ import {
 const temporaryHomes: string[] = [];
 const fixtures = path.join(import.meta.dirname, "fixtures");
 
+/**
+ * A pid that is not running, so `readPidStartTime` returns null and no
+ * `start_time` lands in the state file. A hardcoded guess is not enough: on a
+ * busy host (a CI runner, say) that pid can be live, and the exact-shape
+ * assertions below then see an extra `start_time`.
+ */
+function deadPid(from = 4242): number {
+  for (let pid = from; pid < from + 10_000; pid++) {
+    if (readPidStartTime(pid) === null) return pid;
+  }
+  throw new Error("no dead pid available for the fixture");
+}
+
 function temporaryHome(): string {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), "parley-codex-test-"));
   temporaryHomes.push(home);
@@ -31,11 +44,12 @@ describe("Codex SessionStart provenance", () => {
     const input = JSON.parse(
       fs.readFileSync(path.join(fixtures, "session-start.json"), "utf8"),
     ) as Record<string, unknown>;
+    const pid = deadPid();
     const state = recordCodexSession(
       input,
       {
         parleyHome: home,
-        harnessPid: 4242,
+        harnessPid: pid,
         now: () => new Date("2026-07-20T10:00:00.000Z"),
       },
     );
@@ -45,7 +59,7 @@ describe("Codex SessionStart provenance", () => {
       harness_session_id: "codex-session-123",
       model: "gpt-5.5-codex",
       effort: null,
-      pid: 4242,
+      pid,
       started_at: "2026-07-20T10:00:00.000Z",
       updated_at: "2026-07-20T10:00:00.000Z",
     });
