@@ -162,7 +162,8 @@ human/agent driving parley is the **orchestrator**.
 - **Address** — the structural coordinates of a deliverable
   (**node/port/iteration/slot**) and, as `<node>.<iteration>[.<slot>][-r<n>]`,
   of a run's branches, scratch directories and tmp dirs. One string, read
-  alike everywhere (ADR-0018).
+  alike everywhere (ADR-0018). A **run output** is the one exception: addressed
+  `run.<name>` by declared name, taking no iteration or slot (ADR-0035).
 - **Iteration** — one pass of a node. Backwards data reach resolves to a node's
   **most recent completed** iteration; iteration 0 additionally marks a node
   *inherited* by a fork.
@@ -173,12 +174,18 @@ human/agent driving parley is the **orchestrator**.
 - **Run inputs** — the values filling the workflow's declared **input** ports,
   bound once at run start and **frozen** for the run's life (written to
   `.parley/inputs.json` in the workspace; a fork inherits the parent's set).
-  Read by `run.<name>` refs. Bound from a JSON file and/or repeated flags, the
-  flags carrying scalar atoms only; validated against the compiled port schema
-  *before* the run exists, so a binding error leaves nothing behind.
+  Read by `run.<name>` **refs** (distinct from the identically-spelled run
+  *output* address — a ref reads what went in, an address what came out). Bound
+  from a JSON file and/or repeated flags, the flags carrying scalar atoms only;
+  validated against the compiled port schema *before* the run exists, so a
+  binding error leaves nothing behind.
 - **Run outputs** — the run's declared product, a top-level block naming
   earlier node ports. What `parley run eval` judges and what gc retains; a
-  run's product is not always on its last node.
+  run's product is not always on its last node. A **view**, never a stored row:
+  read at the **address** `run.<name>` at any run state, resolved by following
+  the output's `from` to that node's **most recent completed iteration**. Exact
+  vocabulary for one output's state: `produced`, `pending`, `purged`. `run` is
+  not a legal node id (ADR-0035).
 - **Accumulator port** — an input port declared `accumulate`, filled from *all*
   completed iterations instead of the most recent, on `from`-wired ports and
   loop-filled (`from`-less) ports alike. A fill rule that never changes a type,

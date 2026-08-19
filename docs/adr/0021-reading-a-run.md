@@ -1,6 +1,6 @@
 # ADR-0021: Reading a run — resolutions, not a dump; and a chart, not a scene
 
-**Status**: accepted · **Date**: 2026-07-26 · **Decided**: [#222](https://github.com/femoral/parley/issues/222), [#224](https://github.com/femoral/parley/issues/224)
+**Status**: accepted · **Date**: 2026-07-26 · **Decided**: [#222](https://github.com/femoral/parley/issues/222), [#224](https://github.com/femoral/parley/issues/224) (amended by [#388](https://github.com/femoral/parley/issues/388))
 
 ## Context
 

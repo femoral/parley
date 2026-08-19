@@ -1,6 +1,6 @@
 # ADR-0016: Workflows — definition, ports, and deliverables
 
-**Status**: accepted · **Date**: 2026-07-26 · **Decided**: [#214](https://github.com/femoral/parley/issues/214), [#215](https://github.com/femoral/parley/issues/215), [#216](https://github.com/femoral/parley/issues/216), [#228](https://github.com/femoral/parley/issues/228), [#229](https://github.com/femoral/parley/issues/229), [#223](https://github.com/femoral/parley/issues/223) (amended by [#226](https://github.com/femoral/parley/issues/226))
+**Status**: accepted · **Date**: 2026-07-26 · **Decided**: [#214](https://github.com/femoral/parley/issues/214), [#215](https://github.com/femoral/parley/issues/215), [#216](https://github.com/femoral/parley/issues/216), [#228](https://github.com/femoral/parley/issues/228), [#229](https://github.com/femoral/parley/issues/229), [#223](https://github.com/femoral/parley/issues/223) (amended by [#226](https://github.com/femoral/parley/issues/226), [#388](https://github.com/femoral/parley/issues/388))
 
 ## Context
 
