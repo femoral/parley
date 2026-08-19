@@ -54,7 +54,10 @@ export interface Discovery {
  * daemon/cli. See docs/spec/monorepo-layout.md.
  */
 export interface DaemonLauncher {
-  /** The advertised daemon, but only if its pid is alive; else `null`. */
+  /**
+   * The advertised daemon, but only if its pid is alive and could be this
+   * record's daemon; else `null`.
+   */
   liveDiscovery(): Discovery | null;
   /** Read the raw discovery record (may point at a dead pid), or `null`. */
   readDiscovery(): Discovery | null;
@@ -232,6 +235,18 @@ export class DaemonRequestError extends Error {
   }
 }
 
+/** Local-advertisement transport failure: name the daemon, not a bare fetch. */
+export function unreachableAdvertisedDaemon(
+  discovery: Discovery,
+  err: unknown,
+): string {
+  const cause = err instanceof Error ? err.message : String(err);
+  return (
+    `could not reach the advertised parley daemon at ${discoveryBaseUrl(discovery)} ` +
+    `(pid ${discovery.pid}, started_at ${discovery.started_at}): ${cause}`
+  );
+}
+
 async function daemonFetch<T>(
   discovery: Discovery,
   pathname: string,
@@ -241,10 +256,17 @@ async function daemonFetch<T>(
   for (const [key, value] of Object.entries(authHeaders(discovery))) {
     if (!headers.has(key)) headers.set(key, value);
   }
-  const res = await fetch(`${discoveryBaseUrl(discovery)}${pathname}`, {
-    ...init,
-    headers,
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${discoveryBaseUrl(discovery)}${pathname}`, {
+      ...init,
+      headers,
+    });
+  } catch (err) {
+    // Remote URL-configured daemons keep their own error text (ADR-0010).
+    if (discovery.url !== undefined && discovery.url !== "") throw err;
+    throw new Error(unreachableAdvertisedDaemon(discovery, err));
+  }
   const raw = await res.text();
   if (!res.ok) {
     let detail = `daemon request ${pathname} failed with status ${res.status}`;

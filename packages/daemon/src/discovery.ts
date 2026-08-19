@@ -1,6 +1,11 @@
 import fs from "node:fs";
 import path from "node:path";
-import { type Discovery, type HomePaths } from "@useparley/core";
+import {
+  pidStartedAfter,
+  readPidStartTime,
+  type Discovery,
+  type HomePaths,
+} from "@useparley/core";
 
 /** Re-export the discovery contract, which now lives in `@useparley/core`. */
 export type { Discovery };
@@ -69,13 +74,24 @@ export function isProcessAlive(pid: number): boolean {
 }
 
 /**
- * The advertised daemon, but only if its pid is actually alive. A discovery
- * file that points at a dead pid is stale and reported as `null`.
+ * The advertised daemon, but only if its pid is alive *and* could be the
+ * process that wrote the record. A live pid whose start time is later than
+ * `started_at` is a recycle after a container restart — treat as stale so
+ * `ensureDaemon` takes the existing clear-and-spawn path (#384).
+ *
+ * When start time is unreadable, pid-liveness alone is the degradation.
  */
-export function liveDiscovery(paths: HomePaths): Discovery | null {
+export function liveDiscovery(
+  paths: HomePaths,
+  opts: { readStartTime?: (pid: number) => string | null } = {},
+): Discovery | null {
   const discovery = readDiscovery(paths);
-  if (discovery && isProcessAlive(discovery.pid)) return discovery;
-  return null;
+  if (!discovery || !isProcessAlive(discovery.pid)) return null;
+  const token = (opts.readStartTime ?? readPidStartTime)(discovery.pid);
+  if (token !== null && pidStartedAfter(token, discovery.started_at) === true) {
+    return null;
+  }
+  return discovery;
 }
 
 /** Resolve the per-task log directory (created lazily by future tickets). */

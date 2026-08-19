@@ -133,6 +133,90 @@ describe("ensureDaemon with options.url", () => {
   });
 });
 
+describe("ensureDaemon local advertisement (#384)", () => {
+  it("returns a live advertisement with no network round-trip", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const existing: Discovery = { port: 1, pid: 2, started_at: "t" };
+    const d = await ensureDaemon({
+      liveDiscovery: () => existing,
+      readDiscovery: () => existing,
+      clearDiscovery: () => {
+        throw new Error("should not clear");
+      },
+      isProcessAlive: () => true,
+      spawnDaemon: () => {
+        throw new Error("should not spawn");
+      },
+      withLock: async () => {
+        throw new Error("should not lock");
+      },
+    });
+    expect(d).toBe(existing);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("clears and respawns when the advertisement is stale", async () => {
+    let cleared = false;
+    let spawned = false;
+    const fresh: Discovery = { port: 9, pid: 99, started_at: "now" };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(JSON.stringify({ status: "ok" }), { status: 200 })),
+    );
+    const d = await ensureDaemon({
+      liveDiscovery: () => (spawned ? fresh : null),
+      readDiscovery: () => (spawned ? fresh : null),
+      clearDiscovery: () => {
+        cleared = true;
+      },
+      isProcessAlive: (pid) => pid === 99,
+      spawnDaemon: () => {
+        spawned = true;
+        return 99;
+      },
+      withLock: async (fn) => fn(),
+    });
+    expect(cleared).toBe(true);
+    expect(spawned).toBe(true);
+    expect(d).toEqual(fresh);
+  });
+});
+
+describe("daemonGet transport errors (#384)", () => {
+  it("names the advertised daemon when fetch fails against a local discovery", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new TypeError("fetch failed");
+      }),
+    );
+    await expect(
+      daemonGet(
+        { port: 59999, pid: 42, started_at: "2026-01-01T00:00:00.000Z" },
+        "/health",
+      ),
+    ).rejects.toThrow(
+      /advertised parley daemon.*pid 42.*2026-01-01T00:00:00\.000Z/,
+    );
+  });
+
+  it("does not rewrite fetch errors for a remote url discovery", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new TypeError("fetch failed");
+      }),
+    );
+    await expect(
+      daemonGet(
+        { port: 0, pid: 1, started_at: "t", url: "http://remote:9" },
+        "/health",
+      ),
+    ).rejects.toThrow("fetch failed");
+  });
+});
+
 describe("daemonGet with Discovery.token (#323)", () => {
   it("sends Authorization bearer on subsequent RPC", async () => {
     const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => {

@@ -129,6 +129,27 @@ describe("auto-spawn", () => {
     expect(discovery!.pid).not.toBe(deadPid);
     expect(isAlive(discovery!.pid)).toBe(true);
   });
+
+  it("respawns over a recycled-pid advertisement without a warm-up (#384)", async () => {
+    // Pid is live (this test process) but is not the daemon that wrote the
+    // record: started_at is far in the past, port is dead.
+    fs.writeFileSync(
+      path.join(home, "daemon.json"),
+      JSON.stringify({
+        port: 59999,
+        pid: process.pid,
+        started_at: "2000-01-01T00:00:00.000Z",
+      }),
+    );
+
+    const result = await runCli(["status"], home);
+    expect(result.code, result.stderr).toBe(0);
+
+    const discovery = readDiscovery(home);
+    expect(discovery).not.toBeNull();
+    expect(discovery!.pid).not.toBe(process.pid);
+    expect(isAlive(discovery!.pid)).toBe(true);
+  });
 });
 
 describe("status / list", () => {
