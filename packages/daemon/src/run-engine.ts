@@ -12,7 +12,6 @@
 import path from "node:path";
 import {
   isSettledState,
-  parseFromRef,
   stepFanOutContainer,
   type WorkflowDefinition,
   type WorkflowGateNode,
@@ -20,6 +19,7 @@ import {
   type WorkflowNode,
   type WorkflowStepNode,
 } from "@useparley/core";
+import { resolveFromRefValue } from "./run-port-fill.js";
 import {
   getRun,
   insertDeliverable,
@@ -293,14 +293,21 @@ export function loopWhileSatisfied(
   return value === loop.while.is;
 }
 
+/**
+ * Resolve `loop.with` against the **target** node's input ports. The author's
+ * `accumulate` flag on that port decides most-recent vs merge-all (#382).
+ */
 function resolveLoopWith(
   loop: WorkflowLoop,
   ctx: AdvanceContext,
 ): Record<string, unknown> {
   const fills: Record<string, unknown> = {};
   if (loop.with === undefined) return fills;
+  const target = findNode(ctx.definition, loop.to);
+  const targetIn = target !== undefined && target.kind === "step" ? target.in : {};
   for (const [port, from] of Object.entries(loop.with)) {
-    const value = resolveFromRefValue(from, ctx, /*accumulate*/ false);
+    const accumulate = targetIn[port]?.accumulate === true;
+    const value = resolveFromRefValue(from, ctx, accumulate);
     if (value !== undefined) fills[port] = value;
   }
   return fills;
@@ -423,79 +430,7 @@ export function resolveInputPortValue(
   return resolveFromRefValue(from, ctx, accumulate);
 }
 
-function resolveFromRefValue(
-  from: string,
-  ctx: AdvanceContext,
-  accumulate: boolean,
-): unknown | undefined {
-  const parsed = parseFromRef(from);
-  if (parsed === null) return undefined;
-  const { left, right } = parsed;
-  if (left === "run") {
-    if (!Object.prototype.hasOwnProperty.call(ctx.runInputs, right)) {
-      return undefined;
-    }
-    return ctx.runInputs[right];
-  }
-  if (accumulate) {
-    return accumulatePort(left, right, ctx);
-  }
-  return mostRecentOutput(left, right, ctx);
-}
-
-/**
- * Backwards reach without accumulate: a node's **most recent completed**
- * iteration. Nothing sees further back.
- */
-export function mostRecentOutput(
-  nodeId: string,
-  port: string,
-  ctx: AdvanceContext,
-): unknown | undefined {
-  const iters = ctx.completedIterations(nodeId, port);
-  if (iters.length === 0) return undefined;
-  const latest = iters[iters.length - 1]!;
-  return ctx.outputAt(nodeId, port, latest);
-}
-
-/**
- * Accumulator fill: all completed iterations, containers only by construction
- * (lint refuses scalars). Dict: later iteration wins on key collision.
- * Array: concatenate in ascending iteration order.
- */
-export function accumulatePort(
-  nodeId: string,
-  port: string,
-  ctx: AdvanceContext,
-): unknown | undefined {
-  const iters = ctx.completedIterations(nodeId, port);
-  if (iters.length === 0) return undefined;
-
-  let acc: unknown = undefined;
-  for (const iter of iters) {
-    const piece = ctx.outputAt(nodeId, port, iter);
-    if (piece === undefined) continue;
-    acc = mergeAccumulated(acc, piece);
-  }
-  return acc;
-}
-
-/**
- * Merge one iteration's value into an accumulator. Dict keys: later wins.
- * Arrays: concat. First piece seeds the accumulator as-is.
- */
-export function mergeAccumulated(acc: unknown, piece: unknown): unknown {
-  if (acc === undefined) return piece;
-  if (Array.isArray(acc) && Array.isArray(piece)) {
-    return acc.concat(piece);
-  }
-  if (isPlainObject(acc) && isPlainObject(piece)) {
-    // Later iteration overwrites colliding keys.
-    return { ...acc, ...piece };
-  }
-  // Type-incoherent pieces (should not happen post-lint): later wins wholesale.
-  return piece;
-}
+export { accumulatePort, mergeAccumulated, mostRecentOutput } from "./run-port-fill.js";
 
 /**
  * Fill every input port of a step that has a value (from wiring, accumulate,
@@ -1702,10 +1637,6 @@ export function nextNode(
   const idx = definition.nodes.findIndex((n) => n.id === afterId);
   if (idx < 0 || idx + 1 >= definition.nodes.length) return undefined;
   return definition.nodes[idx + 1];
-}
-
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 /** Type guard: decision blocks the run. */

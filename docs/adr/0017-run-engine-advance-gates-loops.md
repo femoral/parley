@@ -1,6 +1,6 @@
 # ADR-0017: The run engine — advance, gates, bounded loops, failure, re-entry
 
-**Status**: accepted · **Date**: 2026-07-26 · **Decided**: [#217](https://github.com/femoral/parley/issues/217), [#218](https://github.com/femoral/parley/issues/218), [#221](https://github.com/femoral/parley/issues/221) (amended by [#226](https://github.com/femoral/parley/issues/226), [#381](https://github.com/femoral/parley/issues/381))
+**Status**: accepted · **Date**: 2026-07-26 · **Decided**: [#217](https://github.com/femoral/parley/issues/217), [#218](https://github.com/femoral/parley/issues/218), [#221](https://github.com/femoral/parley/issues/221) (amended by [#226](https://github.com/femoral/parley/issues/226), [#381](https://github.com/femoral/parley/issues/381), [#382](https://github.com/femoral/parley/issues/382))
 
 ## Context
 
@@ -57,7 +57,10 @@ lineage `parley fix` already owns.
   of the most recent. It is a fill rule that **never changes a type**, so it is
   legal on containers only — a scalar accumulator would have to become `T[]`, and
   is refused. Colliding dict keys resolve to the later iteration: the same key
-  means the same query re-issued, so the fresher value supersedes.
+  means the same query re-issued, so the fresher value supersedes. Loop fills
+  honour the **target** port's `accumulate` flag; the loop-payload resolver does
+  not override it. A `from`-less accumulating port stays exempt from the
+  ports-filled gate on first entry.
 - **A run never auto-fails.** Every way work goes wrong lands on `blocked`,
   including a spawn-time `DelegateError`, since every one of those is fixable
   outside the run. That gives the terminal state its definition: **`blocked` = the
@@ -105,6 +108,9 @@ lineage `parley fix` already owns.
 - Editing a workflow or its prompts mid-run no longer affects the running run.
   Hot-editing a prompt to steer a later node is deliberately gone; the
   `## Orchestrator note` layer is the supported steer.
+- Lint flags an `accumulate` declaration that cannot collect more than one
+  iteration — a run-input wiring, or a source node outside every loop body —
+  instead of letting it pass as a silent no-op (#382).
 - **A loop blocked on budget is resumed by a verb, never by editing `loop.max`**
   (#381). A verb does not re-resolve the definition, so raising the budget on
   disk and approving no longer continues the run under the new maximum. This

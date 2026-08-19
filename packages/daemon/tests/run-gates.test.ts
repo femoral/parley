@@ -69,6 +69,51 @@ function def(): WorkflowDefinition {
   ).definition;
 }
 
+function accLoopGateDef(): WorkflowDefinition {
+  return parseWorkflowDefinition(
+    {
+      id: "g-acc",
+      version: 1,
+      type: "other",
+      workspace: "scratch",
+      inputs: { brief: { type: "text" } },
+      outputs: { out: { type: "text", from: "implement.report" } },
+      nodes: [
+        {
+          id: "implement",
+          kind: "step",
+          prompt: "i.md",
+          in: {
+            brief: { type: "text", from: "run.brief" },
+            notes: { type: "dict<string, text>", accumulate: true },
+          },
+          out: { report: { type: "text" } },
+        },
+        {
+          id: "review",
+          kind: "step",
+          prompt: "r.md",
+          in: { report: { type: "text", from: "implement.report" } },
+          out: { notes: { type: "dict<string, text>" } },
+        },
+        {
+          id: "rework-or-finish",
+          kind: "gate",
+          question: "Rework?",
+          shows: {},
+          on_reject: "finish",
+          loop: {
+            to: "implement",
+            max: 4,
+            with: { notes: "review.notes" },
+          },
+        },
+      ],
+    },
+    { dir: "/tmp/g-acc", expectedId: "g-acc", typeCheck: true },
+  ).definition;
+}
+
 function emptyCtx(extra?: Partial<GateVerbContext>): GateVerbContext {
   return {
     runInputs: { brief: "b" },
@@ -305,6 +350,43 @@ describe("actionGateVerb", () => {
     });
     if (r.kind === "enter") {
       expect(r.loopFills.rework).toBe("the plan");
+    }
+  });
+
+  it("approve on a gated loop merges accumulated history when the target port says so", () => {
+    const d = accLoopGateDef();
+    const notes: Record<number, Record<string, string>> = {
+      1: { adversarial: "round 1", shared: "old" },
+      2: { house: "round 2", shared: "new" },
+    };
+    const r = actionGateVerb(
+      {
+        state: "blocked",
+        current_node: "rework-or-finish",
+        iteration: 2,
+        error: "blocked (gate rework-or-finish)",
+      },
+      d,
+      { verb: "approve" },
+      emptyCtx({
+        outputAt: (node, port, iteration) =>
+          node === "review" && port === "notes" ? notes[iteration] : undefined,
+        completedIterations: (node, port) =>
+          node === "review" && port === "notes" ? [1, 2] : [],
+      }),
+    );
+    expect(r).toMatchObject({
+      kind: "enter",
+      node: "implement",
+      iteration: 3,
+      via: "approve",
+    });
+    if (r.kind === "enter") {
+      expect(r.loopFills.notes).toEqual({
+        adversarial: "round 1",
+        house: "round 2",
+        shared: "new",
+      });
     }
   });
 

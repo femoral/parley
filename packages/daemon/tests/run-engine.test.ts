@@ -198,6 +198,68 @@ function linearWithGate(): WorkflowDefinition {
   }).definition;
 }
 
+/**
+ * Review loop that carries notes back to implement. `notes` is from-less
+ * (ports-filled exempt on first entry). When `accumulate` is set, later
+ * passes should see every completed review iteration, not only the latest.
+ */
+function reviewLoopDefinition(
+  accumulateNotes: boolean,
+): WorkflowDefinition {
+  const raw = {
+    id: "acc-loop",
+    version: 1,
+    type: "other",
+    workspace: "scratch",
+    inputs: { brief: { type: "text" } },
+    outputs: { out: { type: "text", from: "review.report" } },
+    types: {
+      verdict: { enum: ["approve", "changes_requested"] },
+    },
+    nodes: [
+      {
+        id: "implement",
+        kind: "step",
+        prompt: "i.md",
+        in: {
+          brief: { type: "text", from: "run.brief" },
+          notes: {
+            type: "dict<string, text>",
+            ...(accumulateNotes ? { accumulate: true } : {}),
+          },
+        },
+        out: {
+          branch: { type: "text" },
+        },
+      },
+      {
+        id: "review",
+        kind: "step",
+        prompt: "r.md",
+        in: {
+          branch: { type: "text", from: "implement.branch" },
+        },
+        out: {
+          notes: { type: "dict<string, text>" },
+          verdict: { type: "verdict" },
+          report: { type: "text" },
+        },
+        loop: {
+          to: "implement",
+          while: { port: "verdict", is: "changes_requested" },
+          max: 4,
+          with: { notes: "review.notes" },
+        },
+      },
+    ],
+  };
+  return parseWorkflowDefinition(raw, {
+    dir: "/tmp/acc-loop-workflow",
+    expectedId: "acc-loop",
+    typeCheck: true,
+  }).definition;
+}
+
 function makeCtx(opts: {
   definition: WorkflowDefinition;
   run?: Partial<AdvanceContext["run"]>;
@@ -581,6 +643,136 @@ describe("accumulate / most-recent", () => {
     const filled = fillStepInputs(funnel, ctx);
     expect(filled.harvest).toEqual({ q1: ["s1"], q2: ["s2"] });
     expect(filled.brief).toBe("find the answer");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Loop-carried accumulate (#382)
+// ---------------------------------------------------------------------------
+
+describe("advance — loop-carried accumulate", () => {
+  it("merges every completed iteration onto an accumulating loop-filled port", () => {
+    const def = reviewLoopDefinition(true);
+    const ctx = makeCtx({
+      definition: def,
+      run: { current_node: "review", iteration: 2 },
+      currentTasks: [completed()],
+      outputs: {
+        "review.verdict@1": "changes_requested",
+        "review.verdict@2": "changes_requested",
+        "review.notes@1": { adversarial: "round 1 notes", shared: "old" },
+        "review.notes@2": { house: "round 2 notes", shared: "new" },
+        "review.report@1": "r1",
+        "review.report@2": "r2",
+      },
+      iterations: {
+        "review.verdict": [1, 2],
+        "review.notes": [1, 2],
+        "review.report": [1, 2],
+      },
+    });
+    const d = advance(ctx);
+    expect(d).toEqual({
+      kind: "enter",
+      node: "implement",
+      iteration: 3,
+      loopFills: {
+        notes: {
+          adversarial: "round 1 notes",
+          house: "round 2 notes",
+          shared: "new",
+        },
+      },
+    });
+
+    const implement = def.nodes.find((n) => n.id === "implement")!;
+    expect(implement.kind).toBe("step");
+    if (implement.kind !== "step") return;
+    expect(fillStepInputs(implement, ctx, d.kind === "enter" ? d.loopFills : {})).toEqual({
+      brief: "find the answer",
+      notes: {
+        adversarial: "round 1 notes",
+        house: "round 2 notes",
+        shared: "new",
+      },
+    });
+  });
+
+  it("keeps most-recent-wins when the loop-carried port has no accumulate", () => {
+    const def = reviewLoopDefinition(false);
+    const ctx = makeCtx({
+      definition: def,
+      run: { current_node: "review", iteration: 2 },
+      currentTasks: [completed()],
+      outputs: {
+        "review.verdict@1": "changes_requested",
+        "review.verdict@2": "changes_requested",
+        "review.notes@1": { adversarial: "round 1 notes", shared: "old" },
+        "review.notes@2": { house: "round 2 notes", shared: "new" },
+        "review.report@1": "r1",
+        "review.report@2": "r2",
+      },
+      iterations: {
+        "review.verdict": [1, 2],
+        "review.notes": [1, 2],
+        "review.report": [1, 2],
+      },
+    });
+    expect(advance(ctx)).toEqual({
+      kind: "enter",
+      node: "implement",
+      iteration: 3,
+      loopFills: {
+        notes: { house: "round 2 notes", shared: "new" },
+      },
+    });
+  });
+
+  it("does not block first entry of an accumulating from-less port", () => {
+    const def = reviewLoopDefinition(true);
+    const implement = def.nodes.find((n) => n.id === "implement")!;
+    expect(implement.kind).toBe("step");
+    if (implement.kind !== "step") return;
+
+    const ctx = makeCtx({
+      definition: def,
+      run: { current_node: "implement", iteration: 1 },
+    });
+    expect(missingInputPorts(implement, ctx, 1, {})).toEqual([]);
+    expect(fillStepInputs(implement, ctx, {})).toEqual({
+      brief: "find the answer",
+    });
+  });
+
+  it("matches from-wired accumulate semantics including colliding keys", () => {
+    const def = reviewLoopDefinition(true);
+    const iterOutputs = {
+      "review.notes@1": { a: "old-a", shared: "v1" },
+      "review.notes@2": { b: "new-b", shared: "v2" },
+    } as const;
+    const ctx = makeCtx({
+      definition: def,
+      run: { current_node: "review", iteration: 2 },
+      currentTasks: [completed()],
+      outputs: {
+        ...iterOutputs,
+        "review.verdict@1": "changes_requested",
+        "review.verdict@2": "changes_requested",
+        "review.report@1": "r1",
+        "review.report@2": "r2",
+      },
+      iterations: {
+        "review.notes": [1, 2],
+        "review.verdict": [1, 2],
+        "review.report": [1, 2],
+      },
+    });
+    const fromWired = accumulatePort("review", "notes", ctx);
+    const d = advance(ctx);
+    expect(d.kind).toBe("enter");
+    if (d.kind !== "enter") return;
+    expect(d.loopFills.notes).toEqual(fromWired);
+    expect(fromWired).toEqual({ a: "old-a", b: "new-b", shared: "v2" });
   });
 });
 

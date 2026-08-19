@@ -18,6 +18,7 @@ import type {
   WorkflowNode,
 } from "@useparley/core";
 import type { RunRow, RunState } from "./db.js";
+import { resolveFromRefValue } from "./run-port-fill.js";
 
 // ---------------------------------------------------------------------------
 // Local graph helpers (avoid a circular import with run-engine.ts)
@@ -271,7 +272,6 @@ function approveBlocked(
         // after the gate (same as no loop).
         return enterNextAfter(definition, node.id, iteration, {}, "approve");
       }
-      const loopFills = resolveLoopWithFromCtx(node.loop.with, ctx);
       const target = findNode(definition, node.loop.to);
       if (target === undefined) {
         return {
@@ -279,6 +279,7 @@ function approveBlocked(
           message: `gate loop target "${node.loop.to}" not found`,
         };
       }
+      const loopFills = resolveLoopWithFromCtx(node.loop.with, ctx, target);
       return {
         kind: "enter",
         node: node.loop.to,
@@ -327,24 +328,15 @@ function enterNextAfter(
 function resolveLoopWithFromCtx(
   withMap: Record<string, string> | undefined,
   ctx: GateVerbContext,
+  target: WorkflowNode,
 ): Record<string, unknown> {
   if (withMap === undefined) return {};
   const fills: Record<string, unknown> = {};
+  const targetIn = target.kind === "step" ? target.in : {};
   for (const [port, from] of Object.entries(withMap)) {
-    const parsed = from.split(".");
-    if (parsed.length !== 2) continue;
-    const [left, right] = parsed as [string, string];
-    if (left === "run") {
-      if (Object.prototype.hasOwnProperty.call(ctx.runInputs, right)) {
-        fills[port] = ctx.runInputs[right];
-      }
-      continue;
-    }
-    const iters = ctx.completedIterations(left, right);
-    if (iters.length === 0) continue;
-    const latest = iters[iters.length - 1]!;
-    const v = ctx.outputAt(left, right, latest);
-    if (v !== undefined) fills[port] = v;
+    const accumulate = targetIn[port]?.accumulate === true;
+    const value = resolveFromRefValue(from, ctx, accumulate);
+    if (value !== undefined) fills[port] = value;
   }
   return fills;
 }

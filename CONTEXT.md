@@ -180,9 +180,9 @@ human/agent driving parley is the **orchestrator**.
   earlier node ports. What `parley run eval` judges and what gc retains; a
   run's product is not always on its last node.
 - **Accumulator port** — an input port declared `accumulate`, filled from *all*
-  completed iterations instead of the most recent. A fill rule that never
-  changes a type, so containers only; colliding dict keys resolve to the later
-  iteration.
+  completed iterations instead of the most recent, on `from`-wired ports and
+  loop-filled (`from`-less) ports alike. A fill rule that never changes a type,
+  so containers only; colliding dict keys resolve to the later iteration.
 - **Workspace mode** — `repo` (run checkout + branch + checkpoints) or
   `scratch` (a parley-owned plain directory, no git). Declared on the
   definition, not overridable at run start.
