@@ -22,6 +22,19 @@ import {
 const FIXED_NOW = new Date("2026-07-20T12:00:00.000Z");
 const LATER_NOW = new Date("2026-07-20T12:05:00.000Z");
 
+/**
+ * A pid that is not running, so `readPidStartTime` returns null and no
+ * `start_time` lands in the state file. A hardcoded guess is not enough: on a
+ * busy host (a CI runner, say) that pid can be live, and the exact-shape
+ * assertions below then see an extra `start_time`.
+ */
+function deadPid(from = 4242): number {
+  for (let pid = from; pid < from + 10_000; pid++) {
+    if (readPidStartTime(pid) === null) return pid;
+  }
+  throw new Error("no dead pid available for the fixture");
+}
+
 let tmpRoot: string;
 let parleyHome: string;
 let grokHome: string;
@@ -178,7 +191,7 @@ describe("findSessionSummaryPath / readSummaryProvenance", () => {
 
 describe("runHook", () => {
   const sessionId = "sess-abc-123";
-  const harnessPid = 4242;
+  const harnessPid = deadPid();
 
   function readState(): SessionState | null {
     return readSessionState(sessionStatePath(parleyHome, HARNESS, sessionId));

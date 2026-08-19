@@ -9,6 +9,19 @@ import { runHook } from "../src/hook.js";
 
 const roots: string[] = [];
 
+/**
+ * A pid that is not running, so `readPidStartTime` returns null and no
+ * `start_time` lands in the state file. A hardcoded guess is not enough: on a
+ * busy host (a CI runner, say) that pid can be live, and the exact-shape
+ * assertions below then see an extra `start_time`.
+ */
+function deadPid(from = 4321): number {
+  for (let pid = from; pid < from + 10_000; pid++) {
+    if (readPidStartTime(pid) === null) return pid;
+  }
+  throw new Error("no dead pid available for the fixture");
+}
+
 function fixtureRoot(): string {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "parley-claude-hook-"));
   roots.push(root);
@@ -23,6 +36,7 @@ describe("Claude Code session provenance hook", () => {
   it("writes startup state and shell-safe environment exports", () => {
     const root = fixtureRoot();
     const envFile = path.join(root, "claude-env");
+    const pid = deadPid();
 
     runHook(
       JSON.stringify({
@@ -31,7 +45,7 @@ describe("Claude Code session provenance hook", () => {
         model: "claude-sonnet-5",
         transcript_path: path.join(root, "transcript.jsonl"),
       }),
-      { parleyHome: root, envFile, harnessPid: 4321, now: () => "2026-07-20T10:00:00.000Z" },
+      { parleyHome: root, envFile, harnessPid: pid, now: () => "2026-07-20T10:00:00.000Z" },
     );
 
     expect(readSessionState(sessionStatePath(root, "claude", "claude-session-123"))).toEqual({
@@ -39,7 +53,7 @@ describe("Claude Code session provenance hook", () => {
       harness_session_id: "claude-session-123",
       model: "claude-sonnet-5",
       effort: null,
-      pid: 4321,
+      pid,
       started_at: "2026-07-20T10:00:00.000Z",
       updated_at: "2026-07-20T10:00:00.000Z",
     });
