@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import {
   nonEmptyString,
   provenanceEnvVars,
+  readPidStartTime,
   readSessionState,
   recordSessionState,
   resolveHome,
@@ -50,6 +51,7 @@ export function runHook(rawInput: string, options: HookOptions = {}): void {
           // Omit effort when unknown so fill keeps any prior lazy value.
           effort: undefined,
           pid,
+          start_time: readPidStartTime(pid),
           modelPolicy: "fill",
           effortPolicy: "fill",
         },
@@ -78,6 +80,7 @@ export function runHook(rawInput: string, options: HookOptions = {}): void {
         model: transcript.model,
         effort: transcript.effort,
         pid,
+        start_time: readPidStartTime(pid),
         modelPolicy: "fill",
         effortPolicy: "fill",
       },

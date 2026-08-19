@@ -5,7 +5,12 @@ import { afterEach, describe, expect, it } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { sessionStatePath, writeSessionState, type SessionState } from "@useparley/core";
+import {
+  readPidStartTime,
+  sessionStatePath,
+  writeSessionState,
+  type SessionState,
+} from "@useparley/core";
 import {
   matchSessionState,
   resolveExplicitSessionId,
@@ -63,6 +68,7 @@ describe("matchSessionState", () => {
     write(home, "claude", state({ pid: 50, harness_session_id: "hs-50" }));
     const matched = matchSessionState(home, chain([100, 50, 1]), {
       isAlive: (pid) => pid === 50 || pid === 100 || pid === 1,
+      readStartTime: () => null,
     });
     expect(matched?.harness_session_id).toBe("hs-50");
     expect(matched?.harness).toBe("claude");
@@ -74,6 +80,7 @@ describe("matchSessionState", () => {
     write(home, "b", state({ pid: 50, harness_session_id: "inner", harness: "b" }));
     const matched = matchSessionState(home, chain([100, 50, 1]), {
       isAlive: () => true,
+      readStartTime: () => null,
     });
     expect(matched?.harness_session_id).toBe("inner");
   });
@@ -98,7 +105,10 @@ describe("matchSessionState", () => {
         updated_at: "2026-07-20T12:00:00.000Z",
       }),
     );
-    const matched = matchSessionState(home, chain([50]), { isAlive: () => true });
+    const matched = matchSessionState(home, chain([50]), {
+      isAlive: () => true,
+      readStartTime: () => null,
+    });
     expect(matched?.harness_session_id).toBe("new");
   });
 
@@ -118,21 +128,100 @@ describe("matchSessionState", () => {
     const home = tmpHome();
     write(home, "v", state({ pid: 42, harness_session_id: "other" }));
     expect(
-      matchSessionState(home, chain([1, 2]), { isAlive: () => true }),
+      matchSessionState(home, chain([1, 2]), {
+        isAlive: () => true,
+        readStartTime: () => null,
+      }),
     ).toBeNull();
   });
 
-  it("skips on start_time mismatch when a reader is provided", () => {
+  it("skips on recorded-vs-live start_time mismatch", () => {
     const home = tmpHome();
-    write(home, "v", state({ pid: 50, harness_session_id: "recycled" }));
+    write(
+      home,
+      "v",
+      state({ pid: 50, harness_session_id: "recycled", start_time: "recorded-token" }),
+    );
     const notes: string[] = [];
     const matched = matchSessionState(home, chain([50]), {
       isAlive: () => true,
-      readStartTime: () => "different-start",
+      readStartTime: () => "different-live-token",
       note: (m) => notes.push(m),
     });
     expect(matched).toBeNull();
     expect(notes.join(" ")).toMatch(/start_time/i);
+  });
+
+  it("does not match a live pid recycled by an unrelated process (#383)", () => {
+    const home = tmpHome();
+    const livePid = process.pid;
+    // State file claims pid X (a real live process) but records a fabricated
+    // start-time token that cannot belong to that process. A test that read
+    // the live token and wrote it back would reproduce the current tautology
+    // and pass against the broken matcher.
+    writeSessionState(sessionStatePath(home, "v", "recycled"), {
+      ...state({ pid: livePid, harness_session_id: "recycled" }),
+      start_time: "fabricated-not-this-process",
+    } as SessionState);
+    const notes: string[] = [];
+    const matched = matchSessionState(home, chain([livePid]), {
+      note: (m) => notes.push(m),
+    });
+    expect(matched).toBeNull();
+    expect(notes.join(" ")).toMatch(/start_time/i);
+  });
+
+  it("matches a state file written by the live harness process (#383)", () => {
+    const home = tmpHome();
+    const livePid = process.pid;
+    const token = readPidStartTime(livePid);
+    expect(token).toBeTruthy();
+    write(
+      home,
+      "v",
+      state({
+        pid: livePid,
+        harness_session_id: "live-harness",
+        start_time: token!,
+      }),
+    );
+    const matched = matchSessionState(home, chain([livePid]));
+    expect(matched?.harness_session_id).toBe("live-harness");
+  });
+
+  it("rejects a tokenless file when started_at precedes the live process (#383)", () => {
+    const home = tmpHome();
+    const livePid = process.pid;
+    const notes: string[] = [];
+    write(
+      home,
+      "v",
+      state({
+        pid: livePid,
+        harness_session_id: "pre-token",
+        started_at: "2000-01-01T00:00:00.000Z",
+      }),
+    );
+    const matched = matchSessionState(home, chain([livePid]), {
+      note: (m) => notes.push(m),
+    });
+    expect(matched).toBeNull();
+    expect(notes.join(" ")).toMatch(/started after/i);
+  });
+
+  it("skips the recycle check when start time is unreadable", () => {
+    const home = tmpHome();
+    write(
+      home,
+      "v",
+      state({ pid: 50, harness_session_id: "no-proc", start_time: "whatever" }),
+    );
+    expect(
+      matchSessionState(home, chain([50]), {
+        isAlive: () => true,
+        readStartTime: () => null,
+      })?.harness_session_id,
+    ).toBe("no-proc");
   });
 
   it("returns null when home has no vendors", () => {

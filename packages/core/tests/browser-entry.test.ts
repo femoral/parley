@@ -131,6 +131,7 @@ describe("browser barrel (#330)", () => {
       "models.ts",
       "vendor-home.ts",
       "session-state.ts",
+      "pid-start-time.ts",
       "project-lint.ts",
       "address.ts",
       "discovery.ts",

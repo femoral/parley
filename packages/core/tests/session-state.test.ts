@@ -89,6 +89,16 @@ describe("parseSessionState", () => {
     expect(parseSessionState("nope")).toBeNull();
   });
 
+  it("preserves an opaque start_time token and omits it when absent (#383)", () => {
+    expect(parseSessionState(sample({ start_time: "12345" }))).toEqual(
+      sample({ start_time: "12345" }),
+    );
+    const without = parseSessionState(sample());
+    expect(without).not.toBeNull();
+    expect(without!.start_time).toBeUndefined();
+    expect(parseSessionState({ ...sample(), start_time: "  " })!.start_time).toBeUndefined();
+  });
+
   it("treats non-string model as null rather than rejecting the file", () => {
     const s = parseSessionState({
       harness: "g",

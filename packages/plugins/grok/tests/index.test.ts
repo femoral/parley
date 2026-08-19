@@ -4,6 +4,7 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import {
+  readPidStartTime,
   readSessionState,
   sessionStatePath,
   type SessionState,
@@ -201,6 +202,17 @@ describe("runHook", () => {
       updated_at: FIXED_NOW.toISOString(),
     });
     expect(readState()).toEqual(state);
+  });
+
+  it("records the live harness process start-time token (#383)", () => {
+    const state = runHook({
+      env: envFor(sessionId),
+      stdin: { hookEventName: "session_start", sessionId },
+      harnessPid: process.pid,
+      now: () => FIXED_NOW,
+    });
+    expect(state?.start_time).toBe(readPidStartTime(process.pid));
+    expect(state?.start_time).toMatch(/^\d+$/);
   });
 
   it("uses stdin.sessionId when env is absent", () => {

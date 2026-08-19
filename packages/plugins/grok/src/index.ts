@@ -16,6 +16,7 @@ import path from "node:path";
 
 import {
   nonEmptyString,
+  readPidStartTime,
   recordSessionState,
   type SessionState,
 } from "@useparley/core";
@@ -180,6 +181,7 @@ export function runHook(options: RunHookOptions = {}): SessionState | null {
       model: summary.model,
       effort: summary.effort,
       pid,
+      start_time: readPidStartTime(pid),
       modelPolicy: "replace",
       effortPolicy: "replace",
       observed: { model: summary.found, effort: summary.found },

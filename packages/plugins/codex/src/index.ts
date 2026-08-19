@@ -2,6 +2,7 @@ import fs from "node:fs";
 
 import {
   nonEmptyString,
+  readPidStartTime,
   recordSessionState,
   type SessionState,
 } from "@useparley/core";
@@ -80,6 +81,7 @@ export function recordCodexSession(
       model,
       effort,
       pid,
+      start_time: readPidStartTime(pid),
       modelPolicy: "fill",
       effortPolicy: "fill",
     },

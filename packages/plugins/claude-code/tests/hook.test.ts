@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { readSessionState, sessionStatePath } from "@useparley/core";
+import { readPidStartTime, readSessionState, sessionStatePath } from "@useparley/core";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { runHook } from "../src/hook.js";
@@ -47,6 +47,24 @@ describe("Claude Code session provenance hook", () => {
       "export PARLEY_SESSION_ID='claude-session-123'\n" +
         "export PARLEY_HARNESS='claude'\n" +
         "export PARLEY_MODEL='claude-sonnet-5'\n",
+    );
+  });
+
+  it("records the live harness process start-time token without touching env-var provenance (#383)", () => {
+    const root = fixtureRoot();
+    const envFile = path.join(root, "claude-env");
+    runHook(
+      JSON.stringify({
+        hook_event_name: "SessionStart",
+        session_id: "live-pid",
+      }),
+      { parleyHome: root, envFile, harnessPid: process.pid, now: () => "2026-07-20T10:00:00.000Z" },
+    );
+    expect(readSessionState(sessionStatePath(root, "claude", "live-pid"))?.start_time).toBe(
+      readPidStartTime(process.pid),
+    );
+    expect(fs.readFileSync(envFile, "utf8")).toBe(
+      "export PARLEY_SESSION_ID='live-pid'\n" + "export PARLEY_HARNESS='claude'\n",
     );
   });
 

@@ -6,7 +6,12 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
-import { sessionStatePath, writeSessionState, type SessionState } from "@useparley/core";
+import {
+  readPidStartTime,
+  sessionStatePath,
+  writeSessionState,
+  type SessionState,
+} from "@useparley/core";
 import {
   cleanupHome,
   makeHome,
@@ -222,6 +227,10 @@ function writeState(
     updated_at: "2026-07-20T12:00:00.000Z",
     ...over,
   };
+  if (state.start_time === undefined) {
+    const token = readPidStartTime(state.pid);
+    if (token !== null) state.start_time = token;
+  }
   writeSessionState(sessionStatePath(homeDir, vendor, state.harness_session_id), state);
 }
 

@@ -13,6 +13,9 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { parseProcStatLine } from "@useparley/core";
+
+export { parseProcStatLine };
 
 /** One process in the ancestry chain (self first, then parents toward root). */
 export interface ProcessAnchor {
@@ -76,29 +79,6 @@ export function readMachineId(): string {
     /* ignore */
   }
   return "unknown";
-}
-
-/**
- * Parse one `/proc/<pid>/stat` line into `{ pid, ppid, start_time }`.
- * Field layout: pid (1) comm (2, parenthesized) state (3) ppid (4) … starttime (22).
- * Returns null when the line is truncated or unparseable.
- */
-export function parseProcStatLine(line: string): ProcessTableEntry | null {
-  // comm may contain spaces and parentheses; find the closing `)`.
-  const close = line.lastIndexOf(")");
-  if (close < 0) return null;
-  const before = line.slice(0, close);
-  const after = line.slice(close + 1).trimStart();
-  const pidStr = before.split(/\s+/)[0];
-  const rest = after.split(/\s+/);
-  // rest[0]=state, rest[1]=ppid, … rest[19]=starttime (field 22 overall).
-  const ppidStr = rest[1];
-  const startStr = rest[19];
-  if (pidStr === undefined || ppidStr === undefined || startStr === undefined) return null;
-  const pid = Number(pidStr);
-  const ppid = Number(ppidStr);
-  if (!Number.isFinite(pid) || !Number.isFinite(ppid)) return null;
-  return { pid, ppid, start_time: startStr };
 }
 
 /**

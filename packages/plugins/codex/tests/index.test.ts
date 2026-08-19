@@ -4,7 +4,7 @@ import path from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { readSessionState, sessionStatePath } from "@useparley/core";
+import { readPidStartTime, readSessionState, sessionStatePath } from "@useparley/core";
 import {
   effortFromTranscript,
   recordCodexSession,
@@ -54,6 +54,16 @@ describe("Codex SessionStart provenance", () => {
         sessionStatePath(home, "codex", "codex-session-123"),
       ),
     ).toEqual(state);
+  });
+
+  it("records the live harness process start-time token (#383)", () => {
+    const home = temporaryHome();
+    const state = recordCodexSession(
+      { session_id: "live-pid" },
+      { parleyHome: home, harnessPid: process.pid },
+    );
+    expect(state?.start_time).toBe(readPidStartTime(process.pid));
+    expect(state?.start_time).toMatch(/^\d+$/);
   });
 
   it("fills effective effort from a later Codex turn_context artifact", () => {

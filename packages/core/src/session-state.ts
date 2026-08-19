@@ -17,6 +17,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 import { resolveHome } from "./home.js";
+import { readPidStartTime } from "./pid-start-time.js";
 
 /**
  * Parley-owned session-state schema written by harness plugins.
@@ -33,6 +34,12 @@ export interface SessionState {
   effort: string | null;
   /** Harness process id — ancestry matching keys off this. */
   pid: number;
+  /**
+   * Opaque harness-process start-time token (Linux /proc starttime).
+   * Compared by equality against the live process to defeat pid recycle.
+   * Absent on files written before the field existed (#383).
+   */
+  start_time?: string;
   /** ISO-8601 when the plugin first wrote this file for the session. */
   started_at: string;
   /** ISO-8601 of the most recent write (lazy completion / model switch). */
@@ -94,6 +101,7 @@ export function parseSessionState(value: unknown): SessionState | null {
   const effort = nullableString(o.effort);
   const started_at = nonEmptyString(o.started_at) ?? "";
   const updated_at = nonEmptyString(o.updated_at) ?? started_at;
+  const start_time = nonEmptyString(o.start_time);
 
   return {
     harness,
@@ -101,6 +109,7 @@ export function parseSessionState(value: unknown): SessionState | null {
     model,
     effort,
     pid,
+    ...(start_time !== null ? { start_time } : {}),
     started_at,
     updated_at,
   };
@@ -251,6 +260,11 @@ export interface ProvenanceObservation {
   model?: string | null;
   effort?: string | null;
   pid: number;
+  /**
+   * Opaque harness-process start-time token. When omitted, the recorder
+   * reads the live pid (same reader as ancestry / #384).
+   */
+  start_time?: string | null;
   modelPolicy?: FieldMergePolicy; // default "fill"
   effortPolicy?: FieldMergePolicy; // default "fill"
   /**
@@ -267,6 +281,8 @@ export interface RecordSessionOptions {
   now?: () => Date;
   /** Default true. First write always lands. */
   skipIfUnchanged?: boolean;
+  /** Override the live start-time reader (tests). */
+  readStartTime?: (pid: number) => string | null;
 }
 
 export interface RecordSessionResult {
@@ -319,12 +335,21 @@ export function recordSessionState(
     observation.observed?.effort === true,
   );
 
+  const observedStart =
+    observation.start_time !== undefined
+      ? nonEmptyString(observation.start_time)
+      : (options.readStartTime ?? readPidStartTime)(pid);
+  const start_time =
+    observedStart ??
+    (previous?.pid === pid ? previous.start_time : undefined);
+
   const state: SessionState = {
     harness,
     harness_session_id: sessionId,
     model,
     effort,
     pid,
+    ...(start_time !== undefined && start_time !== "" ? { start_time } : {}),
     started_at:
       previous?.started_at && previous.started_at !== ""
         ? previous.started_at
@@ -340,7 +365,8 @@ export function recordSessionState(
     previous.harness_session_id === state.harness_session_id &&
     previous.model === state.model &&
     previous.effort === state.effort &&
-    previous.pid === state.pid
+    previous.pid === state.pid &&
+    previous.start_time === state.start_time
   ) {
     return { state: previous, previous, written: false };
   }

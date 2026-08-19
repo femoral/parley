@@ -3,12 +3,15 @@
  *
  * Reuses the client-side ancestry chain (self → parent → …) from
  * {@link readLiveAncestryChain}. A state file is eligible when its `pid`
- * appears in that chain and still passes a live-process (and optional
- * start-time) sanity check. Deepest match wins; same-depth ties prefer
- * most-recent `updated_at`; remaining ties / garbage are skipped with a
- * diag note — never a crash.
+ * appears in that chain, the process is live, and the recorded start-time
+ * token matches the live process (pid-recycle defence, #383). Files written
+ * before the token existed fall back to `started_at`. Deepest match wins;
+ * same-depth ties prefer most-recent `updated_at`; remaining ties / garbage
+ * are skipped with a diag note — never a crash.
  */
 import {
+  pidStartedAfter,
+  readPidStartTime,
   scanSessionStates,
   type SessionState,
   type SessionStateNote,
@@ -20,9 +23,8 @@ import { UsageError } from "./errors.js";
 export type PidAliveFn = (pid: number) => boolean;
 
 /**
- * Optional start-time re-check: when provided and returns a string, it must
- * equal the ancestry chain's `start_time` for that pid (defeats pid recycle).
- * When it returns null (unreadable /proc), the check is skipped.
+ * Live start-time reader (defaults to {@link readPidStartTime}).
+ * Returns the opaque /proc token, or null when unreadable (check skipped).
  */
 export type PidStartTimeFn = (pid: number) => string | null;
 
@@ -53,15 +55,14 @@ export function matchSessionState(
   if (ancestryChain.length === 0) return null;
 
   const isAlive = opts.isAlive ?? isPidAlive;
+  const readStartTime = opts.readStartTime ?? readPidStartTime;
   const note = opts.note;
   const depthByPid = new Map<number, number>();
-  const startByPid = new Map<number, string>();
   for (let i = 0; i < ancestryChain.length; i++) {
     const link = ancestryChain[i]!;
     // First occurrence wins (self is deepest / closest).
     if (!depthByPid.has(link.pid)) {
       depthByPid.set(link.pid, i);
-      startByPid.set(link.pid, link.start_time);
     }
   }
 
@@ -77,18 +78,26 @@ export function matchSessionState(
       continue;
     }
 
-    if (opts.readStartTime !== undefined) {
-      const liveStart = opts.readStartTime(state.pid);
-      const chainStart = startByPid.get(state.pid);
-      if (
-        liveStart !== null &&
-        chainStart !== undefined &&
-        liveStart !== chainStart
-      ) {
-        note?.(
-          `session-state: start_time mismatch for pid ${state.pid} at ${filePath}`,
-        );
-        continue;
+    const liveStart = readStartTime(state.pid);
+    if (liveStart !== null) {
+      const recorded = state.start_time;
+      if (typeof recorded === "string" && recorded !== "") {
+        // Recorded token vs live token — never live vs live.
+        if (liveStart !== recorded) {
+          note?.(
+            `session-state: start_time mismatch for pid ${state.pid} at ${filePath}`,
+          );
+          continue;
+        }
+      } else if (state.started_at !== "") {
+        // Pre-token files: a process that started after the file was written
+        // cannot have written it.
+        if (pidStartedAfter(liveStart, state.started_at) === true) {
+          note?.(
+            `session-state: pid ${state.pid} started after ${filePath} was written`,
+          );
+          continue;
+        }
       }
     }
 

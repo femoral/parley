@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { readPidStartTime } from "../src/pid-start-time.js";
 import {
   applyProvenanceEnv,
   nonEmptyString,
@@ -355,5 +356,37 @@ describe("recordSessionState identity fields", () => {
       pid: 999,
       started_at: "2026-07-20T09:00:00.000Z",
     });
+  });
+
+  it("records an opaque start_time token for the harness pid (#383)", () => {
+    const home = tmpHome();
+    const livePid = process.pid;
+    const result = recordSessionState(baseObs({ pid: livePid, model: "m" }), {
+      parleyHome: home,
+      now: () => new Date("2026-07-20T10:00:00.000Z"),
+    });
+    expect(result?.written).toBe(true);
+    expect(result?.state.start_time).toBe(readPidStartTime(livePid));
+    expect(result?.state.start_time).toMatch(/^\d+$/);
+  });
+
+  it("rewrites when a prior file gains a start_time token", () => {
+    const home = tmpHome();
+    writeSessionState(sessionStatePath(home, "codex", "sess-1"), {
+      harness: "codex",
+      harness_session_id: "sess-1",
+      model: "m",
+      effort: null,
+      pid: 100,
+      started_at: "2026-07-20T10:00:00.000Z",
+      updated_at: "2026-07-20T10:00:00.000Z",
+    });
+    const next = record(
+      home,
+      baseObs({ model: "m", start_time: "tok-1" }),
+      "2026-07-20T11:00:00.000Z",
+    );
+    expect(next?.written).toBe(true);
+    expect(next?.state.start_time).toBe("tok-1");
   });
 });
