@@ -163,6 +163,57 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 /**
+ * Nodes that sit inside at least one loop body (`loop.to` through the
+ * looping node, inclusive). A source outside every body can only ever
+ * complete one iteration, so `accumulate` would be a silent no-op.
+ */
+function nodesCoveredByLoops(
+  definition: WorkflowDefinition,
+  nodeIndex: Map<string, number>,
+): Set<string> {
+  const covered = new Set<string>();
+  for (const node of definition.nodes) {
+    if (node.loop === undefined) continue;
+    const toIdx = nodeIndex.get(node.loop.to);
+    const fromIdx = nodeIndex.get(node.id);
+    if (toIdx === undefined || fromIdx === undefined || toIdx > fromIdx) {
+      continue;
+    }
+    for (let i = toIdx; i <= fromIdx; i++) {
+      covered.add(definition.nodes[i]!.id);
+    }
+  }
+  return covered;
+}
+
+/**
+ * Why `accumulate` cannot collect more than one iteration, or `null` when
+ * it can (or when another rule already covers the hole).
+ */
+function accumulateIneffectiveReason(
+  from: string | undefined,
+  loopFroms: readonly string[] | undefined,
+  loopCovered: ReadonlySet<string>,
+): string | null {
+  const sources = from !== undefined ? [from] : (loopFroms ?? []);
+  if (sources.length === 0) {
+    // from-less with no loop.with — existing "no from and no loop.with" rule.
+    return null;
+  }
+  for (const src of sources) {
+    const parsed = parseFromRef(src);
+    if (parsed === null) continue;
+    if (parsed.left === "run") {
+      return "run inputs are frozen and have no iterations";
+    }
+    if (!loopCovered.has(parsed.left)) {
+      return `source node "${parsed.left}" is not covered by any loop`;
+    }
+  }
+  return null;
+}
+
+/**
  * Parse a `"run.<input>"` or `"<node>.<port>"` wiring string.
  * Returns null when the shape is not two non-empty segments.
  */
@@ -292,6 +343,8 @@ export function lintWorkflowDefinition(
 
   // Loop-fill map: targetNodeId → set of input ports filled by some loop.with
   const loopFilled = new Map<string, Set<string>>();
+  // `${targetId}.${port}` → from-refs that fill it (usually one).
+  const loopFillFrom = new Map<string, string[]>();
   for (const node of nodes) {
     const loop = node.loop;
     if (loop === undefined || loop.with === undefined) continue;
@@ -300,10 +353,16 @@ export function lintWorkflowDefinition(
       set = new Set();
       loopFilled.set(loop.to, set);
     }
-    for (const port of Object.keys(loop.with)) {
+    for (const [port, fromRef] of Object.entries(loop.with)) {
       set.add(port);
+      const key = `${loop.to}.${port}`;
+      const refs = loopFillFrom.get(key);
+      if (refs === undefined) loopFillFrom.set(key, [fromRef]);
+      else refs.push(fromRef);
     }
   }
+
+  const loopCovered = nodesCoveredByLoops(definition, nodeIndex);
 
   // ── per-node checks ──────────────────────────────────────────────────────
   for (let i = 0; i < nodes.length; i++) {
@@ -314,7 +373,17 @@ export function lintWorkflowDefinition(
       continue;
     }
 
-    lintStepNode(node, i, definition, nodeIndex, loopFilled, file, findings);
+    lintStepNode(
+      node,
+      i,
+      definition,
+      nodeIndex,
+      loopFilled,
+      loopFillFrom,
+      loopCovered,
+      file,
+      findings,
+    );
 
     // Slot allowlist (ADR-0014)
     if (node.slots !== undefined && vendors !== undefined && vendors !== null) {
@@ -471,6 +540,8 @@ function lintStepNode(
   definition: WorkflowDefinition,
   nodeIndex: Map<string, number>,
   loopFilled: Map<string, Set<string>>,
+  loopFillFrom: Map<string, string[]>,
+  loopCovered: ReadonlySet<string>,
   file: string,
   findings: LintFinding[],
 ): void {
@@ -573,6 +644,22 @@ function lintStepNode(
             `accumulate is only legal on container ports (got ${formatPortType(port.type)})`,
           ),
         );
+      } else {
+        const reason = accumulateIneffectiveReason(
+          port.from,
+          loopFillFrom.get(`${node.id}.${portName}`),
+          loopCovered,
+        );
+        if (reason !== null) {
+          findings.push(
+            finding(
+              "error",
+              file,
+              `nodes[${index}].in.${portName}.accumulate`,
+              `accumulate cannot take effect: ${reason}`,
+            ),
+          );
+        }
       }
     }
 

@@ -368,6 +368,98 @@ describe("lintWorkflow — errors", () => {
     ).toBe(true);
   });
 
+  it("flags accumulate on a run-input wiring that cannot take effect", () => {
+    const result = lintWorkflow(
+      {
+        id: "mini",
+        version: 1,
+        type: "coding",
+        inputs: { items: { type: "text[]" } },
+        nodes: [
+          step("a", {
+            in: {
+              items: { type: "text[]", from: "run.items", accumulate: true },
+            },
+            out: { x: { type: "text" } },
+          }),
+        ],
+      },
+      { dir: "/tmp/mini", expectedId: "mini" },
+    );
+    expect(result.ok).toBe(false);
+    expect(
+      result.findings.some((f) =>
+        /accumulate cannot take effect: run inputs are frozen/.test(f.message),
+      ),
+    ).toBe(true);
+  });
+
+  it("flags accumulate on a from-wired port whose source is not in a loop", () => {
+    const result = lintWorkflow(
+      mini([
+        step("a", {
+          in: { b: { type: "text", from: "run.brief" } },
+          out: { items: { type: "text[]", max_items: 3 } },
+        }),
+        step("b", {
+          in: {
+            items: { type: "text[]", from: "a.items", accumulate: true },
+          },
+          out: { x: { type: "text" } },
+        }),
+      ]),
+      { dir: "/tmp/mini", expectedId: "mini" },
+    );
+    expect(result.ok).toBe(false);
+    expect(
+      result.findings.some((f) =>
+        /accumulate cannot take effect: source node "a" is not covered by any loop/.test(
+          f.message,
+        ),
+      ),
+    ).toBe(true);
+  });
+
+  it("accepts accumulate on a from-less loop-filled container", () => {
+    const result = lintWorkflow(
+      {
+        id: "mini",
+        version: 1,
+        type: "coding",
+        inputs: { brief: { type: "text" } },
+        types: { verdict: { enum: ["ok", "retry"] } },
+        nodes: [
+          step("implement", {
+            in: {
+              brief: { type: "text", from: "run.brief" },
+              notes: { type: "dict<string, text>", accumulate: true },
+            },
+            out: { branch: { type: "text" } },
+          }),
+          step("review", {
+            in: { branch: { type: "text", from: "implement.branch" } },
+            out: {
+              notes: { type: "dict<string, text>" },
+              verdict: { type: "verdict" },
+            },
+            loop: {
+              to: "implement",
+              max: 3,
+              while: { port: "verdict", is: "retry" },
+              with: { notes: "review.notes" },
+            },
+          }),
+        ],
+      },
+      { dir: "/tmp/mini", expectedId: "mini" },
+    );
+    expect(
+      result.findings.filter((f) => /accumulate/.test(f.message)),
+    ).toEqual([]);
+    expect(result.findings.filter((f) => f.severity === "error")).toEqual([]);
+    expect(result.ok).toBe(true);
+  });
+
   it("rejects loop on a fanned-out step", () => {
     const result = lintWorkflow(
       {
