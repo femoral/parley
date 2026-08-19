@@ -255,18 +255,21 @@ export function formatOrchestratorNote(note: string | null | undefined): string 
 }
 
 export interface ComposeStepBodyOptions {
-  /** Absolute path of the workflow directory (for resolving prompt paths). */
-  workflowDir: string;
   /**
-   * Node prompt path relative to {@link workflowDir} (`step.prompt`). Required
-   * for a step; missing/empty file throws so a bad definition fails loud.
+   * Opt-in workflow-level prompt body. Null/empty/omit ⇒ the layer is skipped.
+   * Callers pass the snapshotted body; this function does not read the disk.
    */
-  nodePromptPath: string;
+  workflowPrompt?: string | null;
   /**
-   * Slot `prompt_append` path relative to {@link workflowDir}, when the
-   * sibling declares one. Missing file throws when a path is given.
+   * Node prompt body (`step.prompt` contents). Required; empty after trim
+   * throws so a bad snapshot fails loud.
    */
-  slotAppendPath?: string | null;
+  nodePrompt: string;
+  /**
+   * Slot `prompt_append` body, when the sibling declares one. Empty/omit skips
+   * the layer.
+   */
+  slotAppend?: string | null;
   /**
    * Optional orchestrator note (redirect / fork). Untyped free text; omitted
    * entirely when null/empty.
@@ -277,15 +280,11 @@ export interface ComposeStepBodyOptions {
    * (`deliverables.ts`). Pass `""` / null / undefined to omit.
    */
   inputsSection?: string | null;
-  /**
-   * Override the workflow-level prompt body. When `undefined`, reads opt-in
-   * `PROMPT.md` from {@link workflowDir}. Pass `null` to force omit.
-   */
-  workflowPrompt?: string | null;
 }
 
 /**
- * Error when a declared node/slot prompt path cannot be read.
+ * Error when a declared node/slot prompt path cannot be read, or when a
+ * snapshotted node prompt body is empty.
  */
 export class PromptPathError extends Error {
   constructor(message: string) {
@@ -294,59 +293,41 @@ export class PromptPathError extends Error {
   }
 }
 
-function requireWorkflowRelativePrompt(
-  workflowDir: string,
-  relativePath: string,
-  label: string,
-): string {
-  const body = readWorkflowRelativePrompt(workflowDir, relativePath);
-  if (body === null) {
-    throw new PromptPathError(
-      `${label} prompt not found or empty: ${relativePath} (under ${workflowDir})`,
-    );
+function requirePromptBody(body: string | null | undefined, label: string): string {
+  const trimmed = body === null || body === undefined ? "" : body.trim();
+  if (trimmed === "") {
+    throw new PromptPathError(`${label} prompt is empty`);
   }
-  return body;
+  return trimmed;
 }
 
 /**
- * Compose the task **body** for a run step (ADR-0016):
+ * Compose the task **body** for a run step (ADR-0016 / #381):
  *
  *   workflow prompt (opt-in) → node prompt → slot append
  *   → `## Orchestrator note` → `## Inputs`
  *
+ * Accepts already-resolved prompt bodies (the run's definition snapshot).
  * Does **not** include the protocol preamble or Operator instructions — those
  * stay on {@link assembleChildPrompt}. Does **not** invent a node-position
  * banner or a `## Deliverables` section.
  *
- * @throws {PromptPathError} when a declared node/slot prompt path is missing
+ * @throws {PromptPathError} when the node prompt body is empty
  */
 export function composeStepBody(options: ComposeStepBodyOptions): string {
-  const {
-    workflowDir,
-    nodePromptPath,
-    slotAppendPath,
-    orchestratorNote,
-    inputsSection,
-  } = options;
+  const { slotAppend, orchestratorNote, inputsSection } = options;
 
+  const workflowRaw = options.workflowPrompt;
   const workflowBody =
-    options.workflowPrompt !== undefined
-      ? options.workflowPrompt === null || options.workflowPrompt === ""
-        ? null
-        : options.workflowPrompt.trim() === ""
-          ? null
-          : options.workflowPrompt.trim()
-      : readWorkflowPrompt(workflowDir);
+    workflowRaw === null || workflowRaw === undefined || workflowRaw.trim() === ""
+      ? null
+      : workflowRaw.trim();
 
-  const nodeBody = requireWorkflowRelativePrompt(
-    workflowDir,
-    nodePromptPath,
-    "node",
-  );
+  const nodeBody = requirePromptBody(options.nodePrompt, "node");
 
   let slotBody: string | null = null;
-  if (slotAppendPath !== null && slotAppendPath !== undefined && slotAppendPath !== "") {
-    slotBody = requireWorkflowRelativePrompt(workflowDir, slotAppendPath, "slot");
+  if (slotAppend !== null && slotAppend !== undefined && slotAppend.trim() !== "") {
+    slotBody = slotAppend.trim();
   }
 
   const noteSection = formatOrchestratorNote(orchestratorNote);

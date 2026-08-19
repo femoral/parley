@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { homePaths } from "@useparley/core";
+import { homePaths, loadWorkflowDefinition } from "@useparley/core";
 import { createAdapterRegistrySync } from "../src/adapters/index.js";
 import {
   getRun,
@@ -25,6 +25,10 @@ import {
 } from "../src/db.js";
 import { generateReportSchema } from "../src/deliverables.js";
 import { TaskEngine } from "../src/engine.js";
+import {
+  captureRunDefinitionSnapshot,
+  saveRunDefinition,
+} from "../src/run-definition.js";
 import { withFakeAllowlist } from "./helpers.js";
 
 let home: string;
@@ -140,6 +144,12 @@ function ensureScratchWorkspace(runId: string): string {
   return root;
 }
 
+function snapshotWorkflowForRun(runId: string, workflowId: string): void {
+  const dir = path.join(home, "workflows", workflowId);
+  const { definition } = loadWorkflowDefinition(dir);
+  saveRunDefinition(db, runId, captureRunDefinitionSnapshot(definition));
+}
+
 function seedRunningTask(opts: {
   runId: string;
   workflow: string;
@@ -160,6 +170,7 @@ function seedRunningTask(opts: {
     iteration: opts.iteration ?? 1,
     state: "running",
   });
+  snapshotWorkflowForRun(run.id, opts.workflow);
   ensureScratchWorkspace(run.id);
   const taskId = nextTaskId(db);
   insertTask(db, {
@@ -321,6 +332,7 @@ describe("deliverables before drain (#264)", () => {
       iteration: 1,
       state: "running",
     });
+    snapshotWorkflowForRun(run.id, "fan");
     ensureScratchWorkspace(run.id);
 
     const seedSlot = (slot: string): string => {

@@ -604,6 +604,12 @@ describe("ADR-0019 — runs as inbox subjects", () => {
         current_node: "investigate",
         wantTier: "blocked",
       },
+      {
+        reason: "unloadable_definition",
+        error: "blocked (unloadable definition snapshot)",
+        current_node: "investigate",
+        wantTier: "blocked",
+      },
     ];
 
     for (const c of cases) {

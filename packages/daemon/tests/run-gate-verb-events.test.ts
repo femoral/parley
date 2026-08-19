@@ -12,6 +12,7 @@ import os from "node:os";
 import path from "node:path";
 import {
   homePaths,
+  loadWorkflowDefinition,
   RUN_GATE_VERB_EVENT,
   type RunBlockVerb,
   type RunGateVerbEvent,
@@ -24,6 +25,10 @@ import {
   type DatabaseHandle,
 } from "../src/db.js";
 import { DelegateError, TaskEngine } from "../src/engine.js";
+import {
+  captureRunDefinitionSnapshot,
+  saveRunDefinition,
+} from "../src/run-definition.js";
 import type { Transition } from "../src/transition.js";
 import { withFakeAllowlist } from "./helpers.js";
 
@@ -81,6 +86,7 @@ function writeWorkflow(): void {
   fs.writeFileSync(path.join(dir, "workflow.json"), JSON.stringify(WORKFLOW_BODY, null, 2));
   for (const name of ["p.md", "i.md", "e.md"]) {
     fs.writeFileSync(path.join(dir, "prompts", name), `${name}\n`);
+    fs.writeFileSync(path.join(dir, name), `${name}\n`);
   }
 }
 
@@ -103,6 +109,10 @@ function seedBlockedGate(): string {
     error: `blocked (gate ${GATE_NODE})`,
     orchestrator_session_id: ORCH_SESSION,
   });
+  const { definition } = loadWorkflowDefinition(
+    path.join(home, "workflows", WORKFLOW_ID),
+  );
+  saveRunDefinition(db, id, captureRunDefinitionSnapshot(definition));
   return id;
 }
 

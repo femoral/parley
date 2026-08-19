@@ -190,6 +190,8 @@ export function toWireBlockReason(reason: BlockReason): RunBlockReason {
       return "spawn_error";
     case "unfilled_inputs":
       return "unfilled_inputs";
+    case "unloadable_definition":
+      return "unloadable_definition";
     default:
       return "unknown";
   }
@@ -235,6 +237,9 @@ function inferBlockReasonFromError(error: string | null): BlockReason {
   if (err.includes("unfilled input") || err.includes("unfilled_inputs")) {
     return "unfilled_inputs";
   }
+  if (err.includes("unloadable definition") || err.includes("definition snapshot")) {
+    return "unloadable_definition";
+  }
   if (err.includes("gate")) return "gate";
   return "unknown";
 }
@@ -260,6 +265,8 @@ export function formatBlockParenthetical(block: RunBlock): string {
       return "spawn";
     case "unfilled_inputs":
       return "inputs";
+    case "unloadable_definition":
+      return "definition";
     default:
       return "blocked";
   }

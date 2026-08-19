@@ -238,14 +238,10 @@ describe("composeStepBody — ADR-0016 / #239", () => {
   }
 
   it("orders workflow → node → slot → orchestrator note → inputs", () => {
-    writeWf("PROMPT.md", "WORKFLOW-PROMPT");
-    writeWf("prompts/node.md", "NODE-PROMPT");
-    writeWf("prompts/slot.md", "SLOT-APPEND");
-
     const body = composeStepBody({
-      workflowDir: wfDir,
-      nodePromptPath: "prompts/node.md",
-      slotAppendPath: "prompts/slot.md",
+      workflowPrompt: "WORKFLOW-PROMPT",
+      nodePrompt: "NODE-PROMPT",
+      slotAppend: "SLOT-APPEND",
       orchestratorNote: "please re-check auth",
       inputsSection: "## Inputs\n\n- `brief` (text): do the thing",
     });
@@ -269,11 +265,9 @@ describe("composeStepBody — ADR-0016 / #239", () => {
     );
   });
 
-  it("omits opt-in workflow prompt when PROMPT.md is missing", () => {
-    writeWf("prompts/node.md", "NODE-ONLY");
+  it("omits opt-in workflow prompt when the body is omitted", () => {
     const body = composeStepBody({
-      workflowDir: wfDir,
-      nodePromptPath: "prompts/node.md",
+      nodePrompt: "NODE-ONLY",
     });
     expect(body).toBe("NODE-ONLY");
     expect(body).not.toContain("## Orchestrator note");
@@ -283,12 +277,10 @@ describe("composeStepBody — ADR-0016 / #239", () => {
   });
 
   it("omits slot append, note, and empty inputs", () => {
-    writeWf("prompts/node.md", "NODE");
     expect(
       composeStepBody({
-        workflowDir: wfDir,
-        nodePromptPath: "prompts/node.md",
-        slotAppendPath: null,
+        nodePrompt: "NODE",
+        slotAppend: null,
         orchestratorNote: "  \n",
         inputsSection: "",
       }),
@@ -296,10 +288,8 @@ describe("composeStepBody — ADR-0016 / #239", () => {
   });
 
   it("never invents a Deliverables section or node-position banner", () => {
-    writeWf("prompts/node.md", "do work");
     const body = composeStepBody({
-      workflowDir: wfDir,
-      nodePromptPath: "prompts/node.md",
+      nodePrompt: "do work",
       orchestratorNote: "note",
       inputsSection: "## Inputs\n\n- `x` (text): y",
     });
@@ -308,33 +298,27 @@ describe("composeStepBody — ADR-0016 / #239", () => {
     expect(body).not.toMatch(/node \d+ of \d+/);
   });
 
-  it("throws when a declared node prompt path is missing", () => {
+  it("throws when the node prompt body is empty", () => {
     expect(() =>
       composeStepBody({
-        workflowDir: wfDir,
-        nodePromptPath: "prompts/missing.md",
+        nodePrompt: "  \n",
       }),
     ).toThrow(PromptPathError);
   });
 
-  it("throws when a declared slot append path is missing", () => {
-    writeWf("prompts/node.md", "NODE");
-    expect(() =>
-      composeStepBody({
-        workflowDir: wfDir,
-        nodePromptPath: "prompts/node.md",
-        slotAppendPath: "prompts/no-slot.md",
-      }),
-    ).toThrow(/slot prompt not found/);
-  });
-
-  it("workflowPrompt override null forces omit even when PROMPT.md exists", () => {
-    writeWf("PROMPT.md", "SHOULD-SKIP");
-    writeWf("prompts/node.md", "NODE");
+  it("omits an empty slot append without throwing", () => {
     expect(
       composeStepBody({
-        workflowDir: wfDir,
-        nodePromptPath: "prompts/node.md",
+        nodePrompt: "NODE",
+        slotAppend: "  ",
+      }),
+    ).toBe("NODE");
+  });
+
+  it("workflowPrompt null omits the workflow layer", () => {
+    expect(
+      composeStepBody({
+        nodePrompt: "NODE",
         workflowPrompt: null,
       }),
     ).toBe("NODE");
@@ -359,10 +343,8 @@ describe("composeStepBody — ADR-0016 / #239", () => {
   });
 
   it("assembleChildPrompt still wraps the composed body", () => {
-    writeWf("prompts/node.md", "BODY");
     const body = composeStepBody({
-      workflowDir: wfDir,
-      nodePromptPath: "prompts/node.md",
+      nodePrompt: "BODY",
     });
     const full = assembleChildPrompt("PREAMBLE", null, body);
     expect(full).toBe("PREAMBLE\n\n---\n\nBODY");

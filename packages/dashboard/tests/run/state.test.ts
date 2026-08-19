@@ -66,6 +66,9 @@ describe("block reason vocabulary", () => {
     ).toBe("loop 2/2");
     expect(formatBlockParenthetical(block({ reason: "unknown" }))).toBe("held");
     expect(formatBlockParenthetical(block({ reason: "spawn_error" }))).toBe("spawn");
+    expect(formatBlockParenthetical(block({ reason: "unloadable_definition" }))).toBe(
+      "definition",
+    );
   });
 
   it("strips blocked() wrapper from detail", () => {

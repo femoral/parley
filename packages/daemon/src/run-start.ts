@@ -49,6 +49,10 @@ import {
   missingInputPorts,
   type RunDrainHost,
 } from "./run-engine.js";
+import {
+  captureRunDefinitionSnapshot,
+  saveRunDefinition,
+} from "./run-definition.js";
 import { preflightRunStart } from "./run-preflight.js";
 import {
   createRunCheckout,
@@ -560,6 +564,9 @@ function runStartPhase2(
       base_commit: baseCommit,
     });
     inserted = true;
+
+    // Snapshot definition + prompt bodies before enter — spawn reads them.
+    saveRunDefinition(db, runId, captureRunDefinitionSnapshot(definition));
 
     // Enter node 1 — same machinery as fork / gate verbs.
     const entry = findNode(definition, entryNode);

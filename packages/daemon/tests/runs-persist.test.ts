@@ -89,9 +89,9 @@ describe("migration (#233)", () => {
     // Pre-#233 schema: every migration before the runs/deliverables entry.
     // Migrations after #233 — #244, #240, #243, #249, #314, #313, #315 routing
     // durability + placement, #317 git-auth, #329 capabilities_updated_at —
-    // so the pre-runs snapshot is SCHEMA_VERSION - 12. Keep this in step when
+    // so the pre-runs snapshot is SCHEMA_VERSION - 13. Keep this in step when
     // appending further entries.
-    const prev = openDatabaseUpTo(homePaths(home), SCHEMA_VERSION - 12);
+    const prev = openDatabaseUpTo(homePaths(home), SCHEMA_VERSION - 13);
     const tablesBefore = prev
       .prepare(`SELECT name FROM sqlite_master WHERE type = 'table'`)
       .all()

@@ -13,10 +13,12 @@ import {
 } from "@useparley/core";
 import {
   getRun,
+  getRunDefinitionRaw,
   listRuns,
   openDatabase,
   type DatabaseHandle,
 } from "../src/db.js";
+import { loadRunDefinition } from "../src/run-definition.js";
 import {
   bindRunInputs,
   isScalarInputPort,
@@ -460,6 +462,12 @@ describe("run start phase 2", () => {
       fs.readFileSync(path.join(ws, ".parley", "inputs.json"), "utf8"),
     );
     expect(frozen).toEqual({ brief: "hello" });
+
+    const snap = loadRunDefinition(db, result.run.id);
+    expect(snap).not.toBeNull();
+    expect(snap!.definition.id).toBe(id);
+    expect(snap!.prompts.nodes.scope).toMatch(/scope/);
+    expect(getRunDefinitionRaw(db, result.run.id)).toBeTruthy();
   });
 
   it("repo workflow creates checkout + branch and records base_ref/base_commit", () => {

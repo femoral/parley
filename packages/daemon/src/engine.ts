@@ -31,7 +31,7 @@ import {
   readConfig,
   resolveAllowedCombo,
   resolveRoutingQueueTimeoutMs,
-  resolveWorkflow,
+
   retentionDays,
   RUNNER_TASK_PHASE_RANK,
   scoreRubric,
@@ -251,7 +251,12 @@ import {
   type OutputPortSpec,
   type RenderInputEntry,
 } from "./deliverables.js";
-import { composeStepBody } from "./prompt-layers.js";
+import {
+  loadRunDefinition,
+  snapshotNodePrompt,
+  snapshotSlotAppend,
+} from "./run-definition.js";
+import { composeStepBody, PromptPathError } from "./prompt-layers.js";
 import {
   resolveStepExecution,
   StepConfigError,
@@ -2335,10 +2340,7 @@ export class TaskEngine {
       // Deliverable decay on the producing task's clock: retain declared
       // run outputs; purge every other payload (#244 / ADR-0016).
       if (task.run_id !== null && gate.run !== undefined) {
-        const declared = resolveDeclaredOutputKeysForRun(
-          gate.run,
-          this.paths.home,
-        );
+        const declared = resolveDeclaredOutputKeysForRun(this.db, gate.run);
         decayTaskDeliverables(this.db, task.id, declared);
       }
 
@@ -2768,25 +2770,8 @@ export class TaskEngine {
     const run = getRun(this.db, task.run_id);
     if (run === undefined) return null;
 
-    let definition: WorkflowDefinition | null;
-    try {
-      // Prefer the run's bound repo as cwd so the local workflow layer wins
-      // (same posture as buildRunDrainHost).
-      const cwd =
-        run.repo !== null && run.repo !== "" ? run.repo : process.cwd();
-      const resolved = resolveWorkflow(run.workflow, {
-        cwd,
-        home: this.paths.home,
-      });
-      definition = resolved?.definition ?? null;
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      console.error(
-        `[parley] resolveStepOutputPorts: failed to load workflow ` +
-          `"${run.workflow}": ${message}`,
-      );
-      return null;
-    }
+    const snapshot = loadRunDefinition(this.db, run.id);
+    const definition = snapshot?.definition ?? null;
     if (definition === null) return null;
 
     const node = definition.nodes.find((n) => n.id === task.node);
@@ -5430,10 +5415,7 @@ export class TaskEngine {
   private ensureRunBlockReason(run: RunRow): void {
     if (getRunBlockReason(this.db, run.id) !== null) return;
     try {
-      const def = this.buildRunDrainHost().loadDefinition(
-        run.workflow,
-        run.version,
-      );
+      const def = this.buildRunDrainHost().loadDefinition(run);
       if (def === null) return;
       const reason = inferBlockReason(run, def);
       // Store even "unknown" so we do not re-infer every peek; inbox treats
@@ -5450,16 +5432,8 @@ export class TaskEngine {
    */
   private buildRunDrainHost(): RunDrainHost {
     return {
-      loadDefinition: (workflowId, _version) => {
-        // Prefer the run's repo (local layer), fall back to daemon home.
-        // Version is recorded at start; we load the nearest definition and
-        // trust the id. A parse throw becomes markRunFailed in advanceRun.
-        const cwd = process.cwd();
-        const resolved = resolveWorkflow(workflowId, {
-          cwd,
-          home: this.paths.home,
-        });
-        return resolved?.definition ?? null;
+      loadDefinition: (run) => {
+        return loadRunDefinition(this.db, run.id)?.definition ?? null;
       },
       runInputs: (run) => {
         const root = this.resolveRunWorkspaceRoot(run);
@@ -5822,10 +5796,26 @@ export class TaskEngine {
         });
       }
       const inputsSection = renderInputsSection(renderEntries);
+      const snapshot = loadRunDefinition(this.db, run.id);
+      if (snapshot === null) {
+        throw new DelegateError(
+          `run ${run.id} has no definition snapshot; cannot compose step ${step.id}`,
+        );
+      }
+      const nodePrompt = snapshotNodePrompt(snapshot, step);
+      if (nodePrompt === null) {
+        throw new PromptPathError(
+          `node prompt missing from snapshot: ${step.id}`,
+        );
+      }
+      const slotAppend =
+        sib.slotId !== null
+          ? snapshotSlotAppend(snapshot, step.id, sib.slotId)
+          : null;
       const body = composeStepBody({
-        workflowDir: definition.dir,
-        nodePromptPath: step.prompt,
-        slotAppendPath: resolved.promptAppend,
+        workflowPrompt: snapshot.prompts.workflow,
+        nodePrompt,
+        slotAppend,
         orchestratorNote: note ?? null,
         inputsSection,
       });

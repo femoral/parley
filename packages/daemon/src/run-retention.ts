@@ -21,9 +21,9 @@ import fs from "node:fs";
 import path from "node:path";
 import {
   parseFromRef,
-  resolveWorkflow,
   type WorkflowRunOutput,
 } from "@useparley/core";
+import { loadRunDefinition } from "./run-definition.js";
 import {
   getRun,
   isRunTerminalState,
@@ -149,42 +149,17 @@ export function isRunEligibleForPurge(
 // Definition resolution (best-effort; null ⇒ over-retain)
 // ---------------------------------------------------------------------------
 
-export interface ResolveDeclaredOptions {
-  /** Parley home (global workflow layer). */
-  home: string;
-  /**
-   * cwd for the local workflow layer. Prefer the run's bound `repo`; fall
-   * back to process.cwd() for scratch (same posture as recordRunDeliverables).
-   */
-  cwd: string;
-}
-
 /**
- * Load declared output keys for a run's workflow. Returns `null` when the
- * definition cannot be resolved or parsed — callers over-retain.
+ * Load declared output keys from a run's definition snapshot (#381).
+ * Returns `null` when the snapshot is missing or unloadable — callers over-retain.
  */
-export function resolveDeclaredOutputKeys(
-  workflowId: string,
-  opts: ResolveDeclaredOptions,
-): Set<DeclaredOutputKey> | null {
-  try {
-    const resolved = resolveWorkflow(workflowId, {
-      cwd: opts.cwd,
-      home: opts.home,
-    });
-    if (resolved === null) return null;
-    return declaredOutputKeys(resolved.definition.outputs);
-  } catch {
-    return null;
-  }
-}
-
 export function resolveDeclaredOutputKeysForRun(
-  run: Pick<RunRow, "workflow" | "repo">,
-  home: string,
+  db: DatabaseHandle,
+  run: Pick<RunRow, "id">,
 ): Set<DeclaredOutputKey> | null {
-  const cwd = run.repo !== null && run.repo !== "" ? run.repo : process.cwd();
-  return resolveDeclaredOutputKeys(run.workflow, { home, cwd });
+  const snapshot = loadRunDefinition(db, run.id);
+  if (snapshot === null) return null;
+  return declaredOutputKeys(snapshot.definition.outputs);
 }
 
 // ---------------------------------------------------------------------------
@@ -287,14 +262,14 @@ export function tasklessDeliverablesForRunDecay(
  */
 export function decayTasklessRunDeliverables(
   db: DatabaseHandle,
-  run: Pick<RunRow, "id" | "workflow" | "repo">,
-  home: string,
+  run: Pick<RunRow, "id">,
+  _home: string,
   opts: { dryRun: boolean; purgedAt: string },
 ): DeliverableDecayPlan {
   const candidates = tasklessDeliverablesForRunDecay(
     listDeliverablesForRun(db, run.id),
   );
-  const declared = resolveDeclaredOutputKeysForRun(run, home);
+  const declared = resolveDeclaredOutputKeysForRun(db, run);
   const plan = planDeliverableDecay(candidates, declared);
   if (!opts.dryRun) {
     for (const id of plan.toPurge) {

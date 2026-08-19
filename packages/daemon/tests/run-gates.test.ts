@@ -138,6 +138,10 @@ describe("verbsForBlockReason", () => {
     ]);
     expect(verbsForBlockReason("success_policy")).not.toContain("reject");
     expect(verbsForBlockReason("spawn")).not.toContain("reject");
+    expect(verbsForBlockReason("unloadable_definition")).toEqual([
+      "redirect",
+      "finish",
+    ]);
   });
 });
 
@@ -154,6 +158,20 @@ describe("inferBlockReason", () => {
         d,
       ),
     ).toBe("gate");
+  });
+
+  it("reads unloadable_definition from error text", () => {
+    const d = def();
+    expect(
+      inferBlockReason(
+        {
+          state: "blocked",
+          error: "blocked (unloadable definition snapshot)",
+          current_node: "implement",
+        },
+        d,
+      ),
+    ).toBe("unloadable_definition");
   });
 
   it("reads loop_budget from error text", () => {

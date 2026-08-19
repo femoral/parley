@@ -32,6 +32,7 @@ import {
   listTasksForRunNode,
   nextDeliverableId,
   nextRunId,
+  copyRunDefinition,
   setRunBlockReason,
   updateRun,
   type DatabaseHandle,
@@ -73,7 +74,8 @@ export type AdvanceBlockReason =
   | "loop_budget"
   | "success_policy"
   | "spawn"
-  | "unfilled_inputs";
+  | "unfilled_inputs"
+  | "unloadable_definition";
 
 /**
  * Pure outcome of one advance evaluation for a run at its current cursor.
@@ -717,6 +719,9 @@ function blockErrorMessage(
   if (decision.reason === "unfilled_inputs") {
     return `blocked (unfilled inputs on ${decision.node})`;
   }
+  if (decision.reason === "unloadable_definition") {
+    return "blocked (unloadable definition snapshot)";
+  }
   const max = decision.loopMax ?? decision.iteration;
   return `blocked (loop ${decision.iteration}/${max})`;
 }
@@ -726,8 +731,11 @@ function blockErrorMessage(
  * wires preflight + workspace + delegate). Tests inject fakes.
  */
 export interface RunDrainHost {
-  /** Resolve a workflow definition by id (and optional version). */
-  loadDefinition(workflowId: string, version: number): WorkflowDefinition | null;
+  /**
+   * Load the snapshotted definition for this run (#381). Per-run — the
+   * unused version parameter is gone; the snapshot is the authority.
+   */
+  loadDefinition(run: RunRow): WorkflowDefinition | null;
   /**
    * Called when the definition cannot be parsed (structural failure).
    * Ordinary "not found" returns null from loadDefinition without this.
@@ -862,7 +870,7 @@ export function advanceRun(
 
   let definition: WorkflowDefinition | null;
   try {
-    definition = host.loadDefinition(run.workflow, run.version);
+    definition = host.loadDefinition(run);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     host.onDefinitionUnparseable?.(run, message);
@@ -874,13 +882,14 @@ export function advanceRun(
     };
   }
   if (definition === null) {
-    // Not found — do not auto-fail (cwd may lack the workflow until the
-    // orchestrator fixes discovery). Stay put.
-    return {
-      decision: { kind: "noop", reason: "definition not loaded" },
-      run,
-      changed: false,
-    };
+    // Missing or unloadable snapshot — block with a distinct reason so the
+    // run is visible in the inbox (not a silent stay-put on a settled node).
+    return applyAdvanceDecision(db, run, {
+      kind: "block",
+      reason: "unloadable_definition",
+      node: run.current_node ?? "",
+      iteration: run.iteration,
+    });
   }
 
   const ctx = buildAdvanceContext({
@@ -994,7 +1003,7 @@ export function actionRunVerb(
 
   let definition: WorkflowDefinition | null;
   try {
-    definition = host.loadDefinition(run.workflow, run.version);
+    definition = host.loadDefinition(run);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return {
@@ -1004,8 +1013,27 @@ export function actionRunVerb(
     };
   }
   if (definition === null) {
+    // Finish does not need the graph — let the orchestrator close a wedged
+    // pre-#381 run whose snapshot was never persisted.
+    if (request.verb === "finish" && run.state === "blocked") {
+      updateRun(db, run.id, {
+        state: "completed",
+        current_node: null,
+        completed_at: new Date().toISOString(),
+        error: null,
+      });
+      setRunBlockReason(db, run.id, null);
+      return {
+        decision: { kind: "complete", via: "finish" },
+        run: getRun(db, run.id) ?? run,
+        changed: true,
+      };
+    }
     return {
-      decision: { kind: "error", message: `workflow "${run.workflow}" not found` },
+      decision: {
+        kind: "error",
+        message: `definition snapshot missing for run ${run.id}`,
+      },
       run,
       changed: false,
     };
@@ -1389,6 +1417,10 @@ export function applyFork(
     orchestrator_session_id: sessionId,
   });
 
+  // Inherit the parent's definition snapshot by copy — never re-resolve
+  // from the forking client's cwd (#381).
+  copyRunDefinition(db, parent.id, child.id);
+
   // Copy inherited deliverables at iteration 0 (by value, not by reference).
   for (const src of plan.inherit) {
     let value = src.value;
@@ -1524,7 +1556,7 @@ export function forkRun(
     if (parent === undefined) {
       return { kind: "error", message: `no such run: ${request.parentRunId}` };
     }
-    definition = host.loadDefinition(parent.workflow, parent.version);
+    definition = host.loadDefinition(parent);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return { kind: "error", message: `definition unparseable: ${message}` };

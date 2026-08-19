@@ -19,6 +19,7 @@ export const BLOCK_REASON_LABELS: Record<RunBlockReason, string> = {
   success_policy: "slots",
   spawn_error: "spawn",
   unfilled_inputs: "inputs",
+  unloadable_definition: "definition",
   unknown: "held",
 };
 
@@ -241,6 +242,8 @@ export function formatBlockParenthetical(block: RunBlock): string {
       return "spawn";
     case "unfilled_inputs":
       return "inputs";
+    case "unloadable_definition":
+      return "definition";
     case "unknown":
       return "held";
     default:

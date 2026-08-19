@@ -904,6 +904,16 @@ const MIGRATIONS: string[] = [
   // last_seen (presence: lease polls / heartbeats / task traffic). Nullable
   // so pre-migration rows render as unknown rather than epoch-age.
   `ALTER TABLE runners ADD COLUMN capabilities_updated_at TEXT;`,
+  // #381 / ADR-0017: run-scoped definition snapshot. Deliberately a side
+  // table, not a column on `runs` — the drain loop re-lists every run on
+  // every progress iteration and a multi-KB blob does not belong there.
+  // Pre-#381 rows have no snapshot; first advance under the new build
+  // surfaces them as blocked (authoring cwd was never persisted).
+  `CREATE TABLE run_definitions (
+     run_id   TEXT PRIMARY KEY,
+     snapshot TEXT NOT NULL,
+     FOREIGN KEY (run_id) REFERENCES runs(id) ON DELETE CASCADE
+   );`,
 ];
 
 /** How many schema migrations have been applied — equals `PRAGMA user_version` after open. */
@@ -2232,6 +2242,56 @@ export function insertRun(db: DatabaseHandle, run: NewRun): RunRow {
   return getRun(db, run.id)!;
 }
 
+/**
+ * Persist a run's definition snapshot (#381). `snapshot` is the JSON envelope
+ * from {@link serializeRunDefinitionSnapshot} (definition + prompt bodies).
+ */
+export function insertRunDefinition(
+  db: DatabaseHandle,
+  runId: string,
+  snapshot: string,
+): void {
+  db.prepare(
+    `INSERT INTO run_definitions (run_id, snapshot) VALUES (?, ?)
+     ON CONFLICT(run_id) DO UPDATE SET snapshot = excluded.snapshot`,
+  ).run(runId, snapshot);
+}
+
+/** Raw snapshot JSON for a run, or undefined when the row is missing. */
+export function getRunDefinitionRaw(
+  db: DatabaseHandle,
+  runId: string,
+): string | undefined {
+  const row = db
+    .prepare(`SELECT snapshot FROM run_definitions WHERE run_id = ?`)
+    .get(runId);
+  if (row === undefined) return undefined;
+  return asRow<{ snapshot: string }>(row).snapshot;
+}
+
+/**
+ * Copy the parent's snapshot onto a child run (fork inherit-by-copy).
+ * Returns false when the parent has no row — caller treats that as missing.
+ */
+export function copyRunDefinition(
+  db: DatabaseHandle,
+  fromRunId: string,
+  toRunId: string,
+): boolean {
+  const result = db
+    .prepare(
+      `INSERT INTO run_definitions (run_id, snapshot)
+       SELECT ?, snapshot FROM run_definitions WHERE run_id = ?`,
+    )
+    .run(toRunId, fromRunId);
+  return Number(result.changes) > 0;
+}
+
+/** Delete a run's snapshot row (retention / tests). No-op when missing. */
+export function deleteRunDefinition(db: DatabaseHandle, runId: string): void {
+  db.prepare(`DELETE FROM run_definitions WHERE run_id = ?`).run(runId);
+}
+
 /** Mutable run fields the engine / retention / eval may patch. */
 export type RunDataPatch = Partial<
   Pick<
@@ -2285,6 +2345,7 @@ export function updateRun(db: DatabaseHandle, id: string, patch: RunDataPatch): 
 export function deleteRun(db: DatabaseHandle, runId: string): void {
   withTransaction(db, () => {
     db.prepare(`DELETE FROM deliverables WHERE run_id = ?`).run(runId);
+    db.prepare(`DELETE FROM run_definitions WHERE run_id = ?`).run(runId);
     db.prepare(`DELETE FROM runs WHERE id = ?`).run(runId);
   });
 }

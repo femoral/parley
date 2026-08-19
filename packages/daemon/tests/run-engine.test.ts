@@ -1065,12 +1065,14 @@ describe("applyAdvanceDecision + advanceRun", () => {
     expect(enters).toEqual(["search"]);
   });
 
-  it("null definition loader is a no-op (does not fail the run)", () => {
+  it("null definition loader blocks with unloadable_definition", () => {
     const run = seedRun({ current_node: "scope", iteration: 1 });
     seedTask(run, "scope", "completed");
     const result = advanceRun(db, run.id, { loadDefinition: () => null });
-    expect(result?.changed).toBe(false);
-    expect(getRun(db, run.id)!.state).toBe("running");
+    expect(result?.changed).toBe(true);
+    expect(getRun(db, run.id)!.state).toBe("blocked");
+    expect(getRun(db, run.id)!.error).toMatch(/unloadable definition snapshot/);
+    expect(getRunBlockReason(db, run.id)).toBe("unloadable_definition");
   });
 });
 

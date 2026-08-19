@@ -12,6 +12,7 @@ export type RunBlockReason =
   | "success_policy"
   | "spawn_error"
   | "unfilled_inputs"
+  | "unloadable_definition"
   | "unknown";
 
 /** Orchestrator verbs offered for a block (ADR-0017). */

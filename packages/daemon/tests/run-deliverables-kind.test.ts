@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { homePaths } from "@useparley/core";
+import { homePaths, loadWorkflowDefinition } from "@useparley/core";
 import { createAdapterRegistrySync } from "../src/adapters/index.js";
 import {
   getTask,
@@ -21,6 +21,10 @@ import {
 } from "../src/db.js";
 import { generateReportSchema } from "../src/deliverables.js";
 import { TaskEngine } from "../src/engine.js";
+import {
+  captureRunDefinitionSnapshot,
+  saveRunDefinition,
+} from "../src/run-definition.js";
 import { withFakeAllowlist } from "./helpers.js";
 
 let home: string;
@@ -116,6 +120,10 @@ describe("recordRunDeliverables — kind fidelity (#238)", () => {
       iteration: 1,
       state: "running",
     });
+    {
+      const { definition } = loadWorkflowDefinition(path.join(home, "workflows", "filey"));
+      saveRunDefinition(db, run.id, captureRunDefinitionSnapshot(definition));
+    }
 
     const reportSchema = generateReportSchema({
       artifact: { type: { kind: "file" } },
@@ -216,6 +224,10 @@ describe("recordRunDeliverables — kind fidelity (#238)", () => {
       iteration: 1,
       state: "running",
     });
+    {
+      const { definition } = loadWorkflowDefinition(path.join(home, "workflows", "diry"));
+      saveRunDefinition(db, run.id, captureRunDefinitionSnapshot(definition));
+    }
 
     const reportSchema = generateReportSchema({
       bundle: { type: { kind: "dir" } },

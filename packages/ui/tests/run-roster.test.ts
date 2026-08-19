@@ -401,6 +401,16 @@ describe("projectInspectorRun (#254)", () => {
       },
       {
         block: {
+          reason: "unloadable_definition",
+          node: "r",
+          iteration: 1,
+          detail: "blocked (unloadable definition snapshot)",
+          verbs: ["redirect", "finish"],
+        },
+        presented: "definition",
+      },
+      {
+        block: {
           reason: "unknown",
           node: null,
           iteration: null,
@@ -415,7 +425,9 @@ describe("projectInspectorRun (#254)", () => {
       const label = formatRunStateLabel("blocked", block);
       expect(label).toBe(`blocked · ${presented}`);
       // Wire enum must not appear verbatim in presented text.
-      expect(label).not.toMatch(/loop_exhausted|success_policy|spawn_error|unfilled_inputs/i);
+      expect(label).not.toMatch(
+        /loop_exhausted|success_policy|spawn_error|unfilled_inputs|unloadable_definition/i,
+      );
     }
     // Unclassified block must not read BLOCKED · BLOCKED after CSS uppercase.
     expect(formatRunStateLabel("blocked", {

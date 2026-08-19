@@ -14,7 +14,7 @@ import {
   METRICS_GROUP_BY,
   parseRunMetricsFilters,
   parseTaskMetricsFilters,
-  resolveWorkflow,
+
   RUN_GATE_VERB_EVENT,
   RUN_METRICS_GROUP_BY,
   isRunnerWirePhase,
@@ -90,6 +90,7 @@ import {
   resolveDeliverableValue,
   taskRowToQuery,
 } from "./run-query.js";
+import { loadRunDefinition } from "./run-definition.js";
 import { runBranchName, runCheckoutPath, runScratchPath } from "./run-workspace.js";
 import type { DaemonIdentity } from "./identity.js";
 import { isSandboxMode, type SandboxMode } from "./adapters/types.js";
@@ -3798,19 +3799,10 @@ function createHandler(
 // ── #241 run query handlers ─────────────────────────────────────────────────
 
 function loadDefinitionForRun(
-  paths: HomePaths,
+  db: DatabaseHandle,
   run: RunRow,
 ): WorkflowDefinition | null {
-  try {
-    const cwd = run.repo ?? process.cwd();
-    const resolved = resolveWorkflow(run.workflow, {
-      cwd,
-      home: paths.home,
-    });
-    return resolved?.definition ?? null;
-  } catch {
-    return null;
-  }
+  return loadRunDefinition(db, run.id)?.definition ?? null;
 }
 
 function workspaceForRun(paths: HomePaths, run: RunRow): {
@@ -3851,7 +3843,7 @@ function handleRunsList(
   const rows = listRunsFiltered(db, filters);
   const runs = rows.map((run) => {
     const tasks = listTasksForRun(db, run.id).map(taskRowToQuery);
-    const definition = loadDefinitionForRun(paths, run);
+    const definition = loadDefinitionForRun(db, run);
     const ws = workspaceForRun(paths, run);
     return projectRunSummary({
       run,
@@ -3879,7 +3871,7 @@ function handleRunDetail(
   }
   const tasks = listTasksForRun(db, run.id).map(taskRowToQuery);
   const deliverables = listDeliverablesForRun(db, run.id).map(deliverableRowToQuery);
-  const definition = loadDefinitionForRun(paths, run);
+  const definition = loadDefinitionForRun(db, run);
   const ws = workspaceForRun(paths, run);
   const detail = projectRunDetail({
     run,
@@ -3907,7 +3899,7 @@ function handleRunNodeDetail(
     sendJson(res, 404, { error: `no such run: ${ref}` });
     return;
   }
-  const definition = loadDefinitionForRun(paths, run);
+  const definition = loadDefinitionForRun(db, run);
   const iterRaw = params.get("iteration");
   let iteration: number;
   if (iterRaw !== null && iterRaw !== "") {
@@ -3972,7 +3964,7 @@ function handleDeliverableGet(
       return;
     }
     const run = getRun(db, row.run_id);
-    const definition = run ? loadDefinitionForRun(paths, run) : null;
+    const definition = run ? loadDefinitionForRun(db, run) : null;
     const portType = lookupPortType(definition, row.node, row.port);
     const ws = run ? workspaceForRun(paths, run) : { worktree: null, branch: null };
     const value = resolveDeliverableValue({
@@ -4052,7 +4044,7 @@ function respondDeliverableAddress(
   if (iteration === null || !Number.isFinite(iteration)) {
     iteration = latestNodeIteration(db, runId, node) ?? run.iteration;
   }
-  const definition = loadDefinitionForRun(paths, run);
+  const definition = loadDefinitionForRun(db, run);
   const portType = lookupPortType(definition, node, port);
   const step = definition?.nodes.find((n) => n.id === node);
   const isFanOut =

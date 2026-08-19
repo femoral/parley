@@ -346,6 +346,8 @@ export function formatBlockReasonLabel(block: RunBlock): string {
       return "spawn";
     case "unfilled_inputs":
       return "inputs";
+    case "unloadable_definition":
+      return "definition";
     case "unknown":
     default:
       // Ordinary English — not a second "blocked" (which reads as a failed

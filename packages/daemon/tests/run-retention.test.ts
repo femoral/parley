@@ -43,10 +43,11 @@ import {
   isRunEligibleForPurge,
   isRetainedDeliverable,
   planDeliverableDecay,
-  resolveDeclaredOutputKeys,
+  resolveDeclaredOutputKeysForRun,
   shouldSkipRunOwnedTaskExpiry,
   sweepRunRetention,
 } from "../src/run-retention.js";
+import { saveRunDefinition } from "../src/run-definition.js";
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -118,6 +119,9 @@ function seedTerminalRun(opts: {
   db.prepare(
     `UPDATE tasks SET state = 'completed', completed_at = ?, updated_at = ? WHERE id = ?`,
   ).run(opts.completedAt, opts.completedAt, taskId);
+  if (opts.workflow !== "missing-wf") {
+    saveResearchSnapshot(runId);
+  }
 
   return { runId, taskId };
 }
@@ -128,6 +132,38 @@ function writeWorkflow(
 ): void {
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, "workflow.json"), JSON.stringify(body, null, 2));
+}
+
+/** Minimal snapshot whose `outputs.from` drives declared-output retention. */
+function saveResearchSnapshot(runId: string): void {
+  saveRunDefinition(db, runId, {
+    definition: {
+      id: "research",
+      version: 1,
+      type: "research",
+      workspace: "scratch",
+      inputs: {},
+      outputs: {
+        report: {
+          type: { kind: "text" },
+          bounds: {},
+          from: "write.report",
+        },
+      },
+      types: {},
+      nodes: [
+        {
+          kind: "step",
+          id: "write",
+          prompt: "prompts/write.md",
+          in: {},
+          out: { report: { type: { kind: "text" }, bounds: {} } },
+        },
+      ],
+      dir: "/tmp/research",
+    },
+    prompts: { workflow: null, nodes: { write: "write" }, slots: {} },
+  });
 }
 
 function makeGitRepo(): string {
@@ -566,48 +602,38 @@ describe("listExpiredRuns", () => {
   });
 });
 
-describe("resolveDeclaredOutputKeys", () => {
-  it("loads keys from the global workflow layer", () => {
-    writeWorkflow(path.join(home, "workflows", "research"), {
-      id: "research",
+describe("resolveDeclaredOutputKeysForRun", () => {
+  it("loads keys from the run's definition snapshot", () => {
+    const runId = nextRunId(db);
+    insertRun(db, {
+      id: runId,
+      workflow: "research",
       version: 1,
       type: "research",
       workspace: "scratch",
-      inputs: { brief: { type: "text" } },
-      outputs: {
-        report: { type: "text", from: "write.report" },
-      },
-      nodes: [
-        {
-          id: "write",
-          kind: "step",
-          prompt: "prompts/write.md",
-          in: {},
-          out: { report: { type: "text" } },
-        },
-      ],
+      repo: null,
+      current_node: null,
+      state: "completed",
     });
-    // Minimal prompt file so load does not care (prompt is a path string).
-    fs.mkdirSync(path.join(home, "workflows", "research", "prompts"), {
-      recursive: true,
-    });
-    fs.writeFileSync(
-      path.join(home, "workflows", "research", "prompts", "write.md"),
-      "write\n",
-    );
-
-    const keys = resolveDeclaredOutputKeys("research", {
-      home,
-      cwd: home,
-    });
+    saveResearchSnapshot(runId);
+    const keys = resolveDeclaredOutputKeysForRun(db, { id: runId });
     expect(keys).not.toBeNull();
     expect([...keys!]).toEqual(["write.report"]);
   });
 
-  it("returns null when the workflow is missing (over-retain)", () => {
-    expect(
-      resolveDeclaredOutputKeys("no-such-workflow", { home, cwd: home }),
-    ).toBeNull();
+  it("returns null when the snapshot is missing (over-retain)", () => {
+    const runId = nextRunId(db);
+    insertRun(db, {
+      id: runId,
+      workflow: "no-such-workflow",
+      version: 1,
+      type: "research",
+      workspace: "scratch",
+      repo: null,
+      current_node: null,
+      state: "completed",
+    });
+    expect(resolveDeclaredOutputKeysForRun(db, { id: runId })).toBeNull();
   });
 });
 
@@ -672,6 +698,9 @@ function seedForkedRunPastCutoff(opts: {
   db.prepare(
     `UPDATE runs SET completed_at = ?, updated_at = ?, state = 'completed' WHERE id = ?`,
   ).run(OLD, OLD, runId);
+  if (workflow !== "missing-wf") {
+    saveResearchSnapshot(runId);
+  }
 
   let inheritedScaffoldId: string | null = null;
   let inheritedProductId: string | null = null;
@@ -1035,8 +1064,8 @@ describe("migration #244", () => {
     // Pre-#244 schema: every migration before the deliverables rebuild.
     // Migrations after #244 (#240 inbox, #243 run eval, #249 base, #314
     // runners, #313 repo identity, #315 routing + placement, #317 git-auth,
-    // #329 capabilities_updated_at) → SCHEMA_VERSION - 11.
-    const prev = openDatabaseUpTo(homePaths(home), SCHEMA_VERSION - 11);
+    // #329 capabilities_updated_at, #381 run_definitions) → SCHEMA_VERSION - 12.
+    const prev = openDatabaseUpTo(homePaths(home), SCHEMA_VERSION - 12);
     const now = new Date().toISOString();
     prev
       .prepare(

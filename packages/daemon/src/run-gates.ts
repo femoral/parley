@@ -57,6 +57,7 @@ export type BlockReason =
   | "success_policy"
   | "spawn"
   | "unfilled_inputs"
+  | "unloadable_definition"
   | "unknown";
 
 /** Options for {@link actionGateVerb}. */
@@ -108,6 +109,9 @@ export function inferBlockReason(
   if (err.includes("unfilled input") || err.includes("unfilled_inputs")) {
     return "unfilled_inputs";
   }
+  if (err.includes("unloadable definition") || err.includes("definition snapshot")) {
+    return "unloadable_definition";
+  }
   if (run.current_node) {
     const node = findNode(definition, run.current_node);
     if (node?.kind === "gate") return "gate";
@@ -129,6 +133,8 @@ export function verbsForBlockReason(reason: BlockReason): readonly GateVerb[] {
     case "spawn":
     case "unfilled_inputs":
       return ["approve", "redirect", "finish"];
+    case "unloadable_definition":
+      return ["redirect", "finish"];
     default:
       return ["redirect", "finish"];
   }
