@@ -1,6 +1,6 @@
 # ADR-0017: The run engine — advance, gates, bounded loops, failure, re-entry
 
-**Status**: accepted · **Date**: 2026-07-26 · **Decided**: [#217](https://github.com/femoral/parley/issues/217), [#218](https://github.com/femoral/parley/issues/218), [#221](https://github.com/femoral/parley/issues/221) (amended by [#226](https://github.com/femoral/parley/issues/226))
+**Status**: accepted · **Date**: 2026-07-26 · **Decided**: [#217](https://github.com/femoral/parley/issues/217), [#218](https://github.com/femoral/parley/issues/218), [#221](https://github.com/femoral/parley/issues/221) (amended by [#226](https://github.com/femoral/parley/issues/226), [#381](https://github.com/femoral/parley/issues/381))
 
 ## Context
 
@@ -29,6 +29,23 @@ lineage `parley fix` already owns.
   deliverables have not been recorded — `onSlotFreed` is synchronous inside
   the transition, so run-owned deliverables are materialized from the accepted
   report *before* the task is marked `completed` (#264).
+- **A run's definition is snapshotted at start, never re-resolved** (#381). The
+  parsed definition and every prompt body it references — workflow-level, node,
+  and authored slot `prompt_append` — are captured once by `run start` from the
+  *client's* cwd and persisted in a run-scoped side table. Advance, status
+  queries, output-port resolution and retention all read that snapshot; nothing
+  on the run path touches the authoring filesystem after start. Re-resolution
+  ran against the **daemon's** `process.cwd()`, which is not the caller's
+  directory, and `run.repo` cannot stand in for it — it is null by construction
+  for `workspace: scratch`. The snapshot makes the recorded `version`
+  authoritative for the first time (a workflow edited mid-run no longer swaps
+  the definition under a live run), and a **fork inherits the parent's snapshot
+  by copy**, for the same reason skipped nodes are inherited by copy.
+- **An unloadable definition blocks the run**, with its own `block_reason`
+  (#381). It is orchestrator-fixable, so `blocked` is right and `failed` is not
+  — but the previous stay-put emitted no event, no `error` and no block reason,
+  which made a run wedged on a settled node indistinguishable from one still
+  working.
 - **A gate is a node**, not a flag on a step — a flag cannot say whether it means
   "before" or "after", and a gate's position in the sequence is its meaning. It
   spawns nothing and waits for the orchestrator. Its author declares a mandatory
@@ -82,6 +99,20 @@ lineage `parley fix` already owns.
   gated run whose tasks are all terminal. Widened in ADR-0019.
 - `#215`'s declared-but-unused `reentry` field earns its meaning: the default
   `--to` for `parley run fork`.
+- Runs wedged by pre-#381 daemons cannot be recovered in place — their
+  authoring cwd was never persisted. They surface as `blocked` on first advance
+  under the new build; `fork` or `cancel` is the repair.
+- Editing a workflow or its prompts mid-run no longer affects the running run.
+  Hot-editing a prompt to steer a later node is deliberately gone; the
+  `## Orchestrator note` layer is the supported steer.
+- **A loop blocked on budget is resumed by a verb, never by editing `loop.max`**
+  (#381). A verb does not re-resolve the definition, so raising the budget on
+  disk and approving no longer continues the run under the new maximum. This
+  takes nothing away that the ADR offered: loop-budget exhaustion is already an
+  implicit gate where the orchestrator decides, and `redirect` already moves a
+  live run. Re-resolving on a verb would be the worse option — it would hand a
+  run a *different* definition than it started with at the exact moment an
+  operator is trying to unblock it.
 - Interactive starvation stays a **configuration** question. The concurrency queue
   already skips inadmissible tasks rather than stopping at them, so thirty-eight
   queued siblings never head-of-line block a later delegate; caps are per-vendor

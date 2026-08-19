@@ -131,10 +131,18 @@ human/agent driving parley is the **orchestrator**.
   single execution of one; that is a *run* (ADR-0016).
 - **Run** — one execution of a workflow. Holds **nodes**, stores a small status
   (`current_node`, `iteration`) and, unlike a step, a state of its own.
+- **Definition snapshot** — the parsed workflow plus every prompt body it
+  references (workflow-level, node, authored slot `prompt_append`), captured
+  once at `run start` from the *client's* cwd and owned by the run. It is the
+  only definition a run ever reads: advance, status, output-port resolution and
+  retention all read it, so nothing on the run path touches the authoring
+  filesystem after start, and editing a workflow mid-run cannot swap the
+  definition under a live run. A **fork inherits it by copy** (ADR-0017).
 - **Run state** — exact vocabulary: `running`, `blocked`, `completed`,
   `failed`, `cancelled`. **`blocked` = the daemon cannot advance it** (a gate,
-  loop-budget exhaustion, a spawn error); **`failed` = nobody can** (workspace
-  gone, definition unparseable). A run never auto-fails (ADR-0017).
+  loop-budget exhaustion, a spawn error, an unloadable definition snapshot);
+  **`failed` = nobody can** (workspace gone, definition unparseable). A run
+  never auto-fails (ADR-0017).
 - **Node** — one declaration in a workflow, alive for the run's whole life.
   Either a **step** or a **gate**; nothing else.
 - **Step** — a node owning 1..n **tasks**. Stores no status — a step's state is
