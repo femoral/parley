@@ -17,6 +17,7 @@ export {
   VENDOR_DIAG_PREFIX,
   formatEnforcementCell,
   formatPostureGapDiagnostics,
+  gitMetadataFields,
   isChildChannel,
   isSandboxMode,
   isWeakEnforcement,

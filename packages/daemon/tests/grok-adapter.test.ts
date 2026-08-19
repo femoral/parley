@@ -146,6 +146,7 @@ describe("grok adapter — prepare argv (golden)", () => {
     expect(a.enforcement.full.level).toBe("enforced");
     expect(a.enforcement["network:false"].level).toBe("enforced");
     expect(a.enforcement.workspace.via).toMatch(/gitdir/);
+    expect(a.writableGitMetadata).toBe(true);
   });
 });
 

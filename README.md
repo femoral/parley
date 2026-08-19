@@ -151,6 +151,14 @@ the full story.
 | `pi` | approximate (--tools read-only allowlist) | none (default tools; no write sandbox) | enforced (default tools; unrestricted as requested) | refused (prepare refuses (#107)) |
 <!-- enforcement-matrix:end -->
 
+Adapters that declare a need for writable worktree git metadata (private
+gitdir + common gitdir on the spawn spec; `parley info` prints this per
+vendor):
+
+<!-- writable-git-metadata:start -->
+`codex`, `grok`
+<!-- writable-git-metadata:end -->
+
 </details>
 
 > Adapter support exists for all vendors listed, but only `codex` and `grok`

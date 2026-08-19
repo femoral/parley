@@ -4,6 +4,7 @@ import {
   createLeaseHttpTransport,
   DEFAULT_RUNNER_REFINGERPRINT_MS,
   gitAuthOperationForCode,
+  gitMetadataFields,
   homePathsFromEnv,
   readConfig,
   RUNNER_PROTOCOL_VERSION,
@@ -36,8 +37,10 @@ import {
   composeOperatorInstructions,
 } from "@useparley/daemon/prompt-layers.js";
 import {
+  commonGitDir,
   createWorktree,
   excludeMaterializedFiles,
+  gitDir,
   removeWorktree,
   writeMaterializedFiles,
 } from "@useparley/daemon/worktree.js";
@@ -73,6 +76,23 @@ function refingerprintIntervalMs(): number {
   return Number.isFinite(parsed) && parsed > 0
     ? parsed
     : DEFAULT_RUNNER_REFINGERPRINT_MS;
+}
+
+/** Degrade a missing/unreadable gitdir to absent rather than failing the spawn. */
+function tryGitDir(wt: string): string | undefined {
+  try {
+    return gitDir(wt);
+  } catch {
+    return undefined;
+  }
+}
+
+function tryCommonGitDir(wt: string): string | undefined {
+  try {
+    return commonGitDir(wt);
+  } catch {
+    return undefined;
+  }
 }
 
 /**
@@ -483,6 +503,10 @@ export class RunnerLoop {
         network: lease.network,
         answerTimeoutMs: lease.answer_timeout_ms,
         extraArgs: lease.extra_args,
+        ...gitMetadataFields(adapter, worktreePath, {
+          gitDir: tryGitDir,
+          gitCommonDir: tryCommonGitDir,
+        }),
       };
 
       let plan = await adapter.prepare(spec, hub);

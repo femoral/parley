@@ -356,6 +356,7 @@ export function createOpencodeAdapter(env: NodeJS.ProcessEnv = process.env): Ven
   return withPostureDiagnostics({
     id: "opencode",
     childChannel: "mcp",
+    writableGitMetadata: false,
     enforcement: OPENCODE_ENFORCEMENT,
 
     prepare(task, hub): Promise<SpawnPlan> {

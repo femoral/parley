@@ -75,15 +75,16 @@ import {
 
 /** Compat re-exports for deep imports (`@useparley/daemon/engine.js`) during #209 migration. */
 export { DEFAULT_RUNNER_HEARTBEAT_TIMEOUT_MS, TASK_HEADER, type RunnerLeaseSpec };
-import type {
-  HubInfo,
-  SandboxMode,
-  SpawnPlan,
-  TaskSpec,
-  VendorAdapter,
-  VendorEvent,
+import {
+  gitMetadataFields,
+  VENDOR_DIAG_PREFIX,
+  type HubInfo,
+  type SandboxMode,
+  type SpawnPlan,
+  type TaskSpec,
+  type VendorAdapter,
+  type VendorEvent,
 } from "./adapters/types.js";
-import { VENDOR_DIAG_PREFIX } from "./adapters/types.js";
 import {
   answerQaTurn,
   currentSeq,
@@ -443,6 +444,7 @@ function createGenericTemplateAdapter(vendorId: string): VendorAdapter {
   return {
     id: vendorId,
     childChannel: "http",
+    writableGitMetadata: false,
     // Template profiles have no real vendor isolation (#279).
     // full is always enforced: unrestricted access is what full asks for.
     enforcement: {
@@ -4133,21 +4135,23 @@ export class TaskEngine {
       // vendors.<id>.args then profiles.<name>.args — adapters splice into flags.
       extraArgs: this.extraArgsFor(task),
       ...(task.session_id !== null ? { sessionId: task.session_id } : {}),
-      // Only codex needs the worktree's gitdirs (#25, #31) and only
-      // parley-managed worktrees have any to grant — skip the git shell-out
-      // otherwise so every other vendor's prepare/resume stays git-free. Both
-      // the private gitdir (HEAD, index.lock) and the common gitdir
-      // (objects/, refs/) are required for `git commit` to succeed inside the
-      // sandbox (#31) — granting only the former still left the object
-      // database read-only. Each resolution can throw independently (worktree
-      // gone from disk out-of-band); degrade that one to "no extra writable
-      // root" rather than fail the whole task over it.
-      ...(task.worktree !== null && task.vendor === "codex"
-        ? {
-            gitDir: this.tryGitDir(task.worktree),
-            gitCommonDir: this.tryCommonGitDir(task.worktree),
-          }
-        : {}),
+      // Git metadata follows the adapter declaration (#385), not a vendor id.
+      // Only parley-managed worktrees have any to grant — skip the git
+      // shell-out otherwise so adapters that do not declare the need stay
+      // git-free. Both the private gitdir (HEAD, index.lock) and the common
+      // gitdir (objects/, refs/) are required for `git commit` to succeed
+      // inside the sandbox (#31) — granting only the former still left the
+      // object database read-only. Each resolution can throw independently
+      // (worktree gone from disk out-of-band); degrade that one to "no extra
+      // writable root" rather than fail the whole task over it.
+      ...gitMetadataFields(
+        this.adapterForTask(task) ?? { writableGitMetadata: false },
+        task.worktree,
+        {
+          gitDir: (wt) => this.tryGitDir(wt),
+          gitCommonDir: (wt) => this.tryCommonGitDir(wt),
+        },
+      ),
     };
   }
 

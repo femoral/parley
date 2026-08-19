@@ -275,6 +275,14 @@ export interface VendorAdapter {
    * Sourced by `parley info`, the README matrix, and prepare-time diagnostics.
    */
   enforcement: AdapterEnforcement;
+  /**
+   * Whether the engine should attach the worktree's git metadata paths
+   * (`TaskSpec.gitDir` / `gitCommonDir`) so the child can write them (#385).
+   * Required: every adapter must state the need rather than being special-cased
+   * by vendor id. Populated only when this is true and the task has a
+   * parley-managed worktree (absent for `--cwd` tasks).
+   */
+  writableGitMetadata: boolean;
   /** Build the spawn plan for a fresh run. */
   prepare(task: TaskSpec, hub: HubInfo): Promise<SpawnPlan>;
   /** Build the spawn plan for resuming a stalled task (vendor session resume). */
@@ -388,5 +396,33 @@ export function withPostureDiagnostics(adapter: VendorAdapter): VendorAdapter {
         mergePostureDiagnostics(adapter.id, adapter.enforcement, task, plan),
       );
     },
+  };
+}
+
+/**
+ * Spawn-spec git metadata fields for a task (#385).
+ *
+ * The engine (and runner) attach `gitDir` / `gitCommonDir` when — and only
+ * when — the adapter declares {@link VendorAdapter.writableGitMetadata} and
+ * the task has a parley-managed worktree. Resolution is injected so this
+ * stays free of git I/O. A resolver that returns `undefined` (worktree gone
+ * from disk, git error) omits that field rather than failing the spawn.
+ *
+ * Does not take a vendor id: the grant follows the declaration.
+ */
+export function gitMetadataFields(
+  adapter: Pick<VendorAdapter, "writableGitMetadata">,
+  worktree: string | null,
+  resolve: {
+    gitDir: (wt: string) => string | undefined;
+    gitCommonDir: (wt: string) => string | undefined;
+  },
+): Pick<TaskSpec, "gitDir" | "gitCommonDir"> {
+  if (!adapter.writableGitMetadata || worktree === null) return {};
+  const gitDir = resolve.gitDir(worktree);
+  const gitCommonDir = resolve.gitCommonDir(worktree);
+  return {
+    ...(gitDir !== undefined ? { gitDir } : {}),
+    ...(gitCommonDir !== undefined ? { gitCommonDir } : {}),
   };
 }

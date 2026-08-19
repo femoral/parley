@@ -66,4 +66,6 @@ spawn rather than under-isolate.
 Adapters are a public contract in `@useparley/core`. Point
 `vendors.<id>.plugin` at your module and the daemon loads it at startup.
 Declare `enforcement` for every posture dimension so `parley info` and the
-matrix stay honest. See [Writing an adapter](/reference/adapter-authoring).
+matrix stay honest, and declare `writableGitMetadata` so the engine knows
+whether to attach worktree gitdirs. See
+[Writing an adapter](/reference/adapter-authoring).

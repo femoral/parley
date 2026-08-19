@@ -218,6 +218,7 @@ describe("parley info — sections from live config (#163 / #169 / #321)", () =>
     // Vendors & profiles from daemon config only (not full catalog).
     expect(out).toContain("`fake`");
     expect(out).toMatch(/child channel: cli/);
+    expect(out).toMatch(/writable git metadata: no/);
     expect(out).toMatch(/retry window: 45 minutes/);
     expect(out).toContain("`fake-model`");
     expect(out).toMatch(/default@medium/);

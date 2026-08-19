@@ -249,11 +249,34 @@ describe("buildInfo / renderInfoProse (#163 / #169)", () => {
     expect(config.vendors.map((v) => v.id)).toContain("kimi");
     const kimiVendor = config.vendors.find((v) => v.id === "kimi");
     expect(kimiVendor?.enforcement?.workspace.level).toBe("none");
+    expect(kimiVendor?.writableGitMetadata).toBe(false);
     const prose = renderInfoProse(config);
     expect(prose).toContain("## Sandbox enforcement");
     expect(prose).toContain("`kimi`");
     expect(prose).toContain("network:false");
+    expect(prose).toContain("writable git metadata: no");
     expect(prose).not.toMatch(/\| `fake` \|/);
+  });
+
+  it("surfaces writableGitMetadata from the adapter declaration (#385)", () => {
+    write(
+      home,
+      "parley.json",
+      JSON.stringify({
+        vendors: {
+          grok: { models: { "grok-4": { efforts: ["high"], default: "high" } } },
+          kimi: { models: { "kimi-for-coding": { efforts: ["low"], default: "low" } } },
+        },
+      }),
+    );
+    const paths = homePathsFromEnv({ PARLEY_HOME: home });
+    const adapters = createAdapterRegistrySync({});
+    const config = buildInfoConfig({ projectDir: project, paths, adapters });
+    expect(config.vendors.find((v) => v.id === "grok")?.writableGitMetadata).toBe(true);
+    expect(config.vendors.find((v) => v.id === "kimi")?.writableGitMetadata).toBe(false);
+    const prose = renderInfoProse(config);
+    expect(prose).toMatch(/`grok` \(.*writable git metadata: yes/);
+    expect(prose).toMatch(/`kimi` \(.*writable git metadata: no/);
   });
 });
 

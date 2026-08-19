@@ -16,6 +16,9 @@ export function createAdapter(env: NodeJS.ProcessEnv): VendorAdapter {
   return {
     id: "acme", // MUST equal the config key vendors.acme
     childChannel: "mcp", // mcp | cli | http: what the preamble teaches
+    // Required: whether the engine should attach worktree gitdirs
+    // (gitDir + gitCommonDir) so `git commit` can write outside cwd.
+    writableGitMetadata: false,
     // Required: what each posture request actually gets.
     // Levels: enforced | approximate | none | refused.
     enforcement: {
@@ -36,11 +39,12 @@ export function createAdapter(env: NodeJS.ProcessEnv): VendorAdapter {
 ```
 
 The daemon validates on load: `id` must equal the config key, `childChannel`
-must be one of the three channels, `enforcement` must declare all four
-dimensions with a valid level, and the four methods must be functions. A
-failed plugin never crashes the daemon; delegating to that vendor just fails
-with the usual unknown-vendor error, and the daemon log has a line starting
-with `parley daemon: failed to load plugin adapter`.
+must be one of the three channels, `writableGitMetadata` must be a boolean,
+`enforcement` must declare all four dimensions with a valid level, and the
+four methods must be functions. A failed plugin never crashes the daemon;
+delegating to that vendor just fails with the usual unknown-vendor error, and
+the daemon log has a line starting with `parley daemon: failed to load plugin
+adapter`.
 
 ### Honest enforcement
 

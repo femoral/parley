@@ -47,6 +47,7 @@ function stubAdapter(id = "fake"): VendorAdapter {
   return {
     id,
     childChannel: "mcp",
+    writableGitMetadata: false,
     enforcement: {
       "read-only": { level: "enforced", via: "test" },
       workspace: { level: "enforced", via: "test" },

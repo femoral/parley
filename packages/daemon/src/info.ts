@@ -190,6 +190,11 @@ export interface InfoVendorModel {
 export interface InfoVendor {
   id: string;
   childChannel: ChildChannel;
+  /**
+   * Declared need for writable worktree git metadata (#385), when the
+   * adapter is loaded. Absent when the vendor key has no registered adapter.
+   */
+  writableGitMetadata?: boolean;
   /** Per-vendor `retry.window` override (ms), or null when using project/default. */
   retryWindowMs: number | null;
   /** Human form of {@link retryWindowMs}, or null. */
@@ -556,6 +561,9 @@ export function buildInfoConfig(options: BuildInfoOptions): InfoConfig {
       retryWindow: windowMs !== null ? formatDuration(windowMs) : null,
       models: infoVendorModels(vendorCfg),
     };
+    if (adapter !== undefined) {
+      entry.writableGitMetadata = adapter.writableGitMetadata;
+    }
     if (adapter?.enforcement !== undefined) {
       entry.enforcement = adapter.enforcement;
     }
@@ -771,6 +779,9 @@ export function renderInfoProse(config: InfoConfig): string {
   } else {
     for (const v of config.vendors) {
       const extras: string[] = [`child channel: ${v.childChannel}`];
+      if (v.writableGitMetadata !== undefined) {
+        extras.push(`writable git metadata: ${v.writableGitMetadata ? "yes" : "no"}`);
+      }
       if (v.retryWindow !== null) {
         extras.push(`retry window: ${v.retryWindow}`);
       }

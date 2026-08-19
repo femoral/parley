@@ -59,6 +59,7 @@ export function createFakeAdapter(env: NodeJS.ProcessEnv = process.env): VendorA
   return withPostureDiagnostics({
     id: "fake",
     childChannel: "mcp",
+    writableGitMetadata: false,
     enforcement: FAKE_ENFORCEMENT,
 
     prepare(task, hub) {

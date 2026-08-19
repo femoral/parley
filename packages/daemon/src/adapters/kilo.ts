@@ -335,6 +335,7 @@ export function createKiloAdapter(env: NodeJS.ProcessEnv = process.env): VendorA
   return withPostureDiagnostics({
     id: "kilo",
     childChannel: "mcp",
+    writableGitMetadata: false,
     enforcement: KILO_ENFORCEMENT,
 
     prepare(task, hub): Promise<SpawnPlan> {

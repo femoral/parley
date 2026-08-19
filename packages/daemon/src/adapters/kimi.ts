@@ -423,6 +423,7 @@ export function createKimiAdapter(env: NodeJS.ProcessEnv = process.env): VendorA
   return withPostureDiagnostics({
     id: "kimi",
     childChannel: "mcp",
+    writableGitMetadata: false,
     enforcement: KIMI_ENFORCEMENT,
 
     prepare(task, hub): Promise<SpawnPlan> {

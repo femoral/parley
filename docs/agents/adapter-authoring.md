@@ -15,6 +15,9 @@ export function createAdapter(env: NodeJS.ProcessEnv): VendorAdapter {
   return {
     id: "acme", // MUST equal the config key vendors.acme
     childChannel: "mcp", // mcp | cli | http — what the preamble teaches (#155)
+    // Required (#385): whether the engine should attach worktree gitdirs
+    // (gitDir + gitCommonDir) so `git commit` can write outside cwd.
+    writableGitMetadata: false,
     // Required (#279): what each posture request actually gets.
     // Levels: enforced | approximate | none | refused (refuse rather than under-isolate).
     // `full` is almost always enforced — unrestricted access is what full asks for.
@@ -41,6 +44,7 @@ The daemon validates:
 | --- | --- |
 | `id` equals config key | loud per-plugin error; plugin skipped |
 | `childChannel` is `mcp` \| `cli` \| `http` | same |
+| `writableGitMetadata` is a boolean | same |
 | `enforcement` declares `read-only` / `workspace` / `full` / `network:false` with level `enforced`\|`approximate`\|`none`\|`refused` | same |
 | `prepare` / `resume` / `parseEvent` / `sessionId` are functions | same |
 
@@ -79,6 +83,7 @@ export function createAdapter(_env) {
   const adapter = {
     id: "acme",
     childChannel: "mcp",
+    writableGitMetadata: false,
     enforcement: {
       "read-only": { level: "none" },
       workspace: { level: "none" },

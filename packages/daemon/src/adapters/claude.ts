@@ -335,6 +335,7 @@ export function createClaudeAdapter(env: NodeJS.ProcessEnv = process.env): Vendo
   return withPostureDiagnostics({
     id: "claude",
     childChannel: "mcp",
+    writableGitMetadata: false,
     enforcement: CLAUDE_ENFORCEMENT,
 
     prepare(task, hub): Promise<SpawnPlan> {

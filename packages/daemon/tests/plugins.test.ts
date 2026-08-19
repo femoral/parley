@@ -38,6 +38,7 @@ export function createAdapter(env) {
   return {
     id: "acme",
     childChannel: "mcp",
+    writableGitMetadata: false,
     enforcement: ${GOOD_ENFORCEMENT},
     prepare: async () => ({ argv: ["acme"], env: {}, files: [], cwd: "/tmp" }),
     resume: async () => ({ argv: ["acme"], env: {}, files: [], cwd: "/tmp" }),
@@ -61,6 +62,7 @@ function validAdapter(overrides: Record<string, unknown> = {}) {
   return {
     id: "acme",
     childChannel: "mcp",
+    writableGitMetadata: false,
     enforcement: validEnforcement(),
     prepare: async () => ({ argv: [], env: {}, files: [], cwd: "/" }),
     resume: async () => ({ argv: [], env: {}, files: [], cwd: "/" }),
@@ -90,11 +92,21 @@ describe("assertVendorAdapter", () => {
     );
   });
 
+  it("rejects missing or invalid writableGitMetadata (#385)", () => {
+    expect(() =>
+      assertVendorAdapter("acme", validAdapter({ writableGitMetadata: undefined })),
+    ).toThrow(/writableGitMetadata must be a boolean/);
+    expect(() =>
+      assertVendorAdapter("acme", validAdapter({ writableGitMetadata: "yes" })),
+    ).toThrow(/writableGitMetadata must be a boolean/);
+  });
+
   it("rejects missing prepare", () => {
     expect(() =>
       assertVendorAdapter("acme", {
         id: "acme",
         childChannel: "mcp",
+        writableGitMetadata: false,
         enforcement: validEnforcement(),
         resume: () => {},
         parseEvent: () => {},
@@ -108,6 +120,7 @@ describe("assertVendorAdapter", () => {
       assertVendorAdapter("acme", {
         id: "acme",
         childChannel: "mcp",
+        writableGitMetadata: false,
         enforcement: validEnforcement(),
         prepare: () => {},
         parseEvent: () => {},
@@ -121,6 +134,7 @@ describe("assertVendorAdapter", () => {
       assertVendorAdapter("acme", {
         id: "acme",
         childChannel: "mcp",
+        writableGitMetadata: false,
         enforcement: validEnforcement(),
         prepare: () => {},
         resume: () => {},
@@ -134,6 +148,7 @@ describe("assertVendorAdapter", () => {
       assertVendorAdapter("acme", {
         id: "acme",
         childChannel: "mcp",
+        writableGitMetadata: false,
         enforcement: validEnforcement(),
         prepare: () => {},
         resume: () => {},
@@ -211,6 +226,7 @@ describe("loadPluginAdapter — happy path", () => {
         return {
           id: "acme",
           childChannel: "cli",
+          writableGitMetadata: false,
           enforcement: ${GOOD_ENFORCEMENT},
           prepare: async () => ({ argv: [], env: {}, files: [], cwd: "/" }),
           resume: async () => ({ argv: [], env: {}, files: [], cwd: "/" }),
@@ -256,6 +272,7 @@ describe("loadPluginAdapter — validation failures", () => {
         return {
           id: "wrong",
           childChannel: "mcp",
+          writableGitMetadata: false,
           enforcement: ${GOOD_ENFORCEMENT},
           prepare: async () => ({ argv: [], env: {}, files: [], cwd: "/" }),
           resume: async () => ({ argv: [], env: {}, files: [], cwd: "/" }),
@@ -275,6 +292,7 @@ describe("loadPluginAdapter — validation failures", () => {
         return {
           id: "acme",
           childChannel: "mcp",
+          writableGitMetadata: false,
           enforcement: ${GOOD_ENFORCEMENT},
           prepare: "nope",
           resume: async () => ({ argv: [], env: {}, files: [], cwd: "/" }),
@@ -319,6 +337,7 @@ describe("createAdapterRegistry — plugin wiring", () => {
         return {
           id: "fake",
           childChannel: "mcp",
+          writableGitMetadata: false,
           enforcement: ${GOOD_ENFORCEMENT},
           prepare: async () => ({ argv: ["shadow"], env: {}, files: [], cwd: "/" }),
           resume: async () => ({ argv: ["shadow"], env: {}, files: [], cwd: "/" }),

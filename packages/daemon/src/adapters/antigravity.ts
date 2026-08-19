@@ -297,6 +297,7 @@ export function createAntigravityAdapter(
     id: "antigravity",
     // Engine preamble teaches curl → POST /child/report|ask (ADR-0011 / #298).
     childChannel: "http",
+    writableGitMetadata: false,
     enforcement: ANTIGRAVITY_ENFORCEMENT,
 
     prepare(task, _hub): Promise<SpawnPlan> {

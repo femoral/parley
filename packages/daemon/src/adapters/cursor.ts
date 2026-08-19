@@ -380,6 +380,7 @@ export function createCursorAdapter(env: NodeJS.ProcessEnv = process.env): Vendo
   return withPostureDiagnostics({
     id: "cursor",
     childChannel: "mcp",
+    writableGitMetadata: false,
     enforcement: CURSOR_ENFORCEMENT,
 
     prepare(task, hub): Promise<SpawnPlan> {

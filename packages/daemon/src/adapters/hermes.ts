@@ -657,6 +657,7 @@ export function createHermesAdapter(env: NodeJS.ProcessEnv = process.env): Vendo
   return withPostureDiagnostics({
     id: "hermes",
     childChannel: "mcp",
+    writableGitMetadata: false,
     enforcement: HERMES_ENFORCEMENT,
 
     prepare(task, hub): Promise<SpawnPlan> {

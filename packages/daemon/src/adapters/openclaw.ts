@@ -676,6 +676,7 @@ export function createOpenclawAdapter(env: NodeJS.ProcessEnv = process.env): Ven
   return withPostureDiagnostics({
     id: "openclaw",
     childChannel: "mcp",
+    writableGitMetadata: false,
     enforcement: OPENCLAW_ENFORCEMENT,
 
     prepare(task, hub): Promise<SpawnPlan> {

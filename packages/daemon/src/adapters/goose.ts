@@ -316,6 +316,7 @@ export function createGooseAdapter(env: NodeJS.ProcessEnv = process.env): Vendor
   return withPostureDiagnostics({
     id: "goose",
     childChannel: "mcp",
+    writableGitMetadata: false,
     enforcement: GOOSE_ENFORCEMENT,
 
     prepare(task, hub): Promise<SpawnPlan> {

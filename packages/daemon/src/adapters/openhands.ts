@@ -283,6 +283,7 @@ export function createOpenhandsAdapter(env: NodeJS.ProcessEnv = process.env): Ve
   return withPostureDiagnostics({
     id: "openhands",
     childChannel: "mcp",
+    writableGitMetadata: false,
     enforcement: OPENHANDS_ENFORCEMENT,
 
     prepare(task, hub): Promise<SpawnPlan> {

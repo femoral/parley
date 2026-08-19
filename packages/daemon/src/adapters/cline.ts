@@ -533,6 +533,7 @@ export function createClineAdapter(env: NodeJS.ProcessEnv = process.env): Vendor
   return withPostureDiagnostics({
     id: "cline",
     childChannel: "mcp",
+    writableGitMetadata: false,
     enforcement: CLINE_ENFORCEMENT,
 
     prepare(task, hub): Promise<SpawnPlan> {

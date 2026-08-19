@@ -331,6 +331,7 @@ export function createCodexAdapter(env: NodeJS.ProcessEnv = process.env): Vendor
   return withPostureDiagnostics({
     id: "codex",
     childChannel: "mcp",
+    writableGitMetadata: true,
     enforcement: CODEX_ENFORCEMENT,
 
     prepare(task, hub) {

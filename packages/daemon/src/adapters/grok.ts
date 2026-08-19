@@ -969,6 +969,7 @@ export function createGrokAdapter(env: NodeJS.ProcessEnv = process.env): VendorA
   return withPostureDiagnostics({
     id: "grok",
     childChannel: "mcp",
+    writableGitMetadata: true,
     enforcement: GROK_ENFORCEMENT,
 
     async prepare(task, hub): Promise<SpawnPlan> {

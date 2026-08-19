@@ -662,6 +662,7 @@ export function createPiAdapter(env: NodeJS.ProcessEnv = process.env): VendorAda
   return withPostureDiagnostics({
     id: "pi",
     childChannel: "mcp",
+    writableGitMetadata: false,
     enforcement: PI_ENFORCEMENT,
 
     prepare(task, hub): Promise<SpawnPlan> {

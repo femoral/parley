@@ -20,8 +20,8 @@ import {
  * Named export preferred; default export accepted (either the factory function
  * itself, or an object with a `createAdapter` property). The returned adapter's
  * `id` must equal the config key (`vendors.<id>`); `childChannel` must be one
- * of `mcp`|`cli`|`http`; `prepare`, `resume`, `parseEvent`, and `sessionId`
- * must be functions.
+ * of `mcp`|`cli`|`http`; `writableGitMetadata` must be a boolean; `prepare`,
+ * `resume`, `parseEvent`, and `sessionId` must be functions.
  *
  * Specifiers:
  * - absolute filesystem path
@@ -98,6 +98,11 @@ export function assertVendorAdapter(id: string, value: unknown): asserts value i
   if (typeof adapter.childChannel !== "string" || !isChildChannel(adapter.childChannel)) {
     throw new Error(
       `plugin adapter "${id}": childChannel must be one of mcp|cli|http`,
+    );
+  }
+  if (typeof adapter.writableGitMetadata !== "boolean") {
+    throw new Error(
+      `plugin adapter "${id}": writableGitMetadata must be a boolean`,
     );
   }
   assertAdapterEnforcement(id, adapter.enforcement);
