@@ -74,8 +74,12 @@ Usage:
                             Zoom to one node's tasks / deliverables
   parley run get <id|address> [--json] [--run <id>] [--iteration <n>] [--slot <name>]
                             Fetch one deliverable (or a collected fan-out).
+                            run.<name> fetches a declared run output — the
+                            workflow's public product; it takes no coordinates.
                             Exit: 0 printed · 2 usage · 9 purged (address
-                            resolves but retention cleared the value)
+                            resolves but retention cleared the value) ·
+                            10 not produced (declared run output, no completed
+                            iteration yet)
   parley run approve <run>      Action a blocked run past its gate / block
   parley run reject <run>       Follow the gate's author-declared on_reject
   parley run redirect <run> --to <node> [--note <text>]

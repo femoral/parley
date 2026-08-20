@@ -543,6 +543,7 @@ describe("deliverable address parsing", () => {
       port: "sources",
       iteration: 1,
       slot: "hybrid-search",
+      runOutput: false,
     });
   });
 
@@ -553,6 +554,7 @@ describe("deliverable address parsing", () => {
       port: "sources",
       iteration: 1,
       slot: null,
+      runOutput: false,
     });
   });
 
@@ -563,6 +565,7 @@ describe("deliverable address parsing", () => {
       port: "sources",
       iteration: null,
       slot: null,
+      runOutput: false,
     });
   });
 

@@ -37,7 +37,9 @@ import {
 } from "@useparley/core";
 import { CODE_SESSION_REQUIRED } from "@useparley/daemon/session-binding.js";
 import {
+  CODE_RUN_OUTPUT_NOT_PRODUCED,
   EXIT_DELIVERABLE_PURGED,
+  EXIT_RUN_OUTPUT_NOT_PRODUCED,
   formatRunListState,
   renderDeliverableBare,
   renderNodeDetail,
@@ -52,11 +54,13 @@ import { UsageError } from "../errors.js";
 import { resolveExplicitSessionId } from "../session-state-match.js";
 
 /**
- * `parley run get` exit when the address resolves but retention purged the
- * value. Re-export for CLI callers/tests; defined next to the render contract.
- * @see EXIT_DELIVERABLE_PURGED in `@useparley/daemon/run-query`
+ * `parley run get` exits beyond 0/2. Re-exported for CLI callers/tests; both
+ * are defined next to the render contract.
+ *
+ * @see EXIT_DELIVERABLE_PURGED — address resolves, retention cleared the value
+ * @see EXIT_RUN_OUTPUT_NOT_PRODUCED — `run.<name>` is declared but unproduced
  */
-export { EXIT_DELIVERABLE_PURGED };
+export { EXIT_DELIVERABLE_PURGED, EXIT_RUN_OUTPUT_NOT_PRODUCED };
 
 const GATE_VERBS = ["approve", "reject", "redirect", "finish"] as const;
 type GateVerb = (typeof GATE_VERBS)[number];
@@ -572,6 +576,7 @@ async function runGet(
   //   get r7/search/sources/1
   //   get r7 search.sources
   //   get search.sources --run r7
+  //   get run.report --run r7   (run-level product, ADR-0035)
   let path: string;
   if (positionals.length === 2) {
     // runId + address
@@ -596,8 +601,16 @@ async function runGet(
   try {
     value = await daemonGet<DeliverableValue>(discovery, path);
   } catch (err) {
-    if (err instanceof DaemonRequestError && (err.status === 400 || err.status === 404)) {
-      throw new UsageError(`run get: ${err.message}`);
+    if (err instanceof DaemonRequestError) {
+      // Declared but unproduced is its own tier: a poller branches on 10
+      // without parsing prose, and never mistakes it for a typo'd name (2).
+      if (err.code === CODE_RUN_OUTPUT_NOT_PRODUCED) {
+        ctx.stderr(`error: run get: ${err.message}\n`);
+        return EXIT_RUN_OUTPUT_NOT_PRODUCED;
+      }
+      if (err.status === 400 || err.status === 404) {
+        throw new UsageError(`run get: ${err.message}`);
+      }
     }
     throw err;
   }

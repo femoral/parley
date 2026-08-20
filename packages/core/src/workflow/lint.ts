@@ -45,6 +45,15 @@ import {
 /** Relative path used when the caller does not supply one. */
 export const WORKFLOW_JSON_BASENAME = "workflow.json";
 
+/**
+ * Node ids the ref and address grammars have already spoken for (ADR-0035).
+ * `run` is the left-hand side of both `run.<input>` refs and `run.<name>`
+ * addresses: a node with that id is unreachable by any `from` ref — ref
+ * resolution short-circuits `run.*` to the run's inputs — and would make the
+ * run-output address ambiguous.
+ */
+export const RESERVED_NODE_IDS: readonly string[] = ["run"];
+
 /** Options for pure workflow lint. */
 export interface WorkflowLintOptions {
   /**
@@ -368,6 +377,19 @@ export function lintWorkflowDefinition(
   for (let i = 0; i < nodes.length; i++) {
     const node = nodes[i]!;
 
+    if (RESERVED_NODE_IDS.includes(node.id)) {
+      findings.push(
+        finding(
+          "error",
+          file,
+          `nodes[${i}].id`,
+          `"${node.id}" is a reserved node id: "${node.id}.<name>" already ` +
+            `names a run input (in a from ref) and a run output (in an ` +
+            `address), so this node is unreachable — rename it`,
+        ),
+      );
+    }
+
     if (node.kind === "gate") {
       lintGateNode(node, i, definition, nodeIndex, file, findings);
       continue;
@@ -440,6 +462,7 @@ export function lintWorkflowDefinition(
       fromField: `outputs.${name}.from`,
       consumerIndex: nodes.length, // after every node
       allowFanOut: false,
+      allowRunInput: false,
       definition,
       nodeIndex,
       file,
@@ -853,6 +876,12 @@ function checkFromEdge(args: {
   allowFanOut: boolean;
   /** When true, same-node outs are legal (loop.with payloads). */
   allowSameNode?: boolean;
+  /**
+   * When false, `run.<input>` is rejected on this edge. Run *outputs* resolve
+   * as a view over a node deliverable (ADR-0035) and run inputs have no
+   * deliverable row, so such a declaration would lint clean and never produce.
+   */
+  allowRunInput?: boolean;
   definition: WorkflowDefinition;
   nodeIndex: Map<string, number>;
   file: string;
@@ -868,6 +897,7 @@ function checkFromEdge(args: {
     consumerIndex,
     allowFanOut,
     allowSameNode = false,
+    allowRunInput = true,
     definition,
     nodeIndex,
     file,
@@ -892,6 +922,19 @@ function checkFromEdge(args: {
   const { left, right } = parsed;
 
   if (left === "run") {
+    if (!allowRunInput) {
+      findings.push(
+        finding(
+          "error",
+          file,
+          fromField,
+          `"${from}" names a run input, which cannot be a run output: an ` +
+            `output resolves as a view over the producing node's deliverable, ` +
+            `and a run input has none — wire it to "<node>.<port>" instead`,
+        ),
+      );
+      return;
+    }
     if (definition.inputs[right] === undefined) {
       findings.push(
         finding(

@@ -48,14 +48,18 @@ function slotColors(n: NodeProjection, disp: ReturnType<typeof projectNodeDispla
   });
 }
 
-/** Shared run-outputs summary text. */
+/**
+ * Shared run-outputs summary text: the workflow's declared product, one
+ * `<name> <state>` pair per declared output, in declaration order (ADR-0035).
+ *
+ * The card projects the outputs index, not the run's state word — a run output
+ * is readable at any run state, so a state word said nothing about whether the
+ * product exists. No values: the index carries none by contract.
+ */
 export function projectRunOutputs(detail: RunDetailResponse): string {
-  if (detail.run.state === "completed") return "sealed";
-  if (detail.run.state === "failed") {
-    return detail.run.error ? `failed — ${detail.run.error}` : "failed — incomplete";
-  }
-  if (detail.block ?? detail.run.block) return "held — awaiting advance";
-  return "in progress";
+  const entries = Object.entries(detail.outputs ?? {});
+  if (entries.length === 0) return "none declared";
+  return entries.map(([name, out]) => `${name} ${out.state}`).join(" · ");
 }
 
 export function RunOutputsCard({ detail }: { detail: RunDetailResponse }) {

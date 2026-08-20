@@ -73,6 +73,7 @@ parley run status                        # every run in the session
 parley run status <run>                  # one run: a node table, one line per node and iteration
 parley run status <run> --node review    # one node: its tasks and deliverables
 parley run get <id-or-address>           # one deliverable, or a collected fan-out
+parley run get run.<name>                # one declared run output
 ```
 
 The node table stays one line per node and iteration even when a step fanned
@@ -80,6 +81,27 @@ out 40 wide; the width is written, not drawn. `parley run get` accepts an
 address (like `node.iteration.slot`) because a collected fan-out has no
 single deliverable id. Exit code 9 means the address resolves but retention
 already purged the value.
+
+### Run outputs
+
+The workflow's top-level `outputs` block is its public interface: a consumer
+fetches the run's product by declared name, without knowing which node
+produced it. `parley run get run.<name>` follows the output's `from` to that
+node's most recent completed iteration. It works at any run state, so a
+blocked or cancelled run still hands over whatever it managed to produce, and
+it takes no `--iteration` or `--slot` (a run output is definitionally the
+latest completed one). Exit code 10 means the name is declared but nothing has
+produced it yet, which is distinct from exit 2 for a name the workflow never
+declared.
+
+`parley run status <run>` lists the declared outputs with their type, their
+`from`, and a state of `produced`, `pending`, or `purged`. It carries no
+values; fetch those one at a time with `run get`.
+
+Because `run.<name>` already names run inputs in a `from` ref and run outputs
+in an address, `run` is not a legal node id. `parley lint` reports it as an
+error, and likewise rejects an output wired `from` a run input: an output is a
+view over a node's deliverable, and a run input has none.
 
 The Console's run detail screen renders the same projection graphically.
 

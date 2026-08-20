@@ -14,6 +14,7 @@ import {
   applyFanOutCollection,
   formatPortType,
   isSettledState,
+  parseFromRef,
   type DeliverableRef,
   type DeliverableSize,
   type DeliverableValue,
@@ -27,12 +28,15 @@ import {
   type RunBlockReason,
   type RunBlockVerb,
   type RunDetailResponse,
+  type RunOutputProjection,
+  type RunOutputState,
   type RunSummary,
   type RunTrackNode,
   type RunUsage,
   type WorkflowDefinition,
   type WorkflowGateNode,
   type WorkflowNode,
+  type WorkflowRunOutput,
   type WorkflowStepNode,
 } from "@useparley/core";
 import {
@@ -1129,6 +1133,137 @@ export function collectFanOutDeliverable(opts: {
 }
 
 // ---------------------------------------------------------------------------
+// Run outputs — a view over the producing node (ADR-0035)
+// ---------------------------------------------------------------------------
+
+/**
+ * The reserved left-hand side of a run-level address (`run.<name>`) and of a
+ * run-input ref (`run.<input>`). Illegal as a node id — lint errors on it, and
+ * ref resolution would silently shadow such a node anyway.
+ */
+export const RUN_ADDRESS_PREFIX = "run";
+
+/** One declared run output resolved against the run's deliverable rows. */
+export interface ResolvedRunOutput {
+  name: string;
+  /** The declaration's `from`, verbatim. */
+  from: string;
+  /** Producing node id, or null when `from` is unparsable. */
+  node: string | null;
+  /** Producing out-port, or null when `from` is unparsable. */
+  port: string | null;
+  /** Most recent completed iteration, or null when nothing was produced. */
+  iteration: number | null;
+  /**
+   * The row that carries the product at that iteration — the first unpurged
+   * sibling, else the first purged one. Null when pending.
+   */
+  deliverable: QueryDeliverable | null;
+  state: RunOutputState;
+}
+
+/**
+ * Resolve one declared run output (ADR-0035).
+ *
+ * Selects the producing node's **most recent completed iteration** — the
+ * `from`-fill rule, not the node-address resolver's max-iteration-in-any-state
+ * rule. The two differ on a node mid-loop, and this side wants the last good
+ * value. Iteration 0 counts (a fork's inherited contribution), so inherited
+ * outputs need no special case.
+ *
+ * Purged rows are included in the *selection* and only then reported as decay:
+ * filtering them first would silently serve a stale iteration as the run's
+ * product.
+ */
+export function resolveRunOutput(
+  name: string,
+  output: WorkflowRunOutput,
+  deliverables: readonly QueryDeliverable[],
+): ResolvedRunOutput {
+  // The same splitter lint validated the declaration with — the two must not
+  // drift, since lint's acceptance is what this resolver is handed.
+  const parsed = parseFromRef(output.from ?? "");
+  // A run input (`run.<name>`) has no deliverable row to view; lint rejects
+  // such a declaration outright (ADR-0035), so treat it as unresolvable here.
+  const ref =
+    parsed === null || parsed.left === RUN_ADDRESS_PREFIX
+      ? null
+      : { node: parsed.left, port: parsed.right };
+  if (ref === null) {
+    return {
+      name,
+      from: output.from,
+      node: null,
+      port: null,
+      iteration: null,
+      deliverable: null,
+      state: "pending",
+    };
+  }
+  const rows = deliverables.filter(
+    (d) => d.node === ref.node && d.port === ref.port,
+  );
+  if (rows.length === 0) {
+    return {
+      name,
+      from: output.from,
+      node: ref.node,
+      port: ref.port,
+      iteration: null,
+      deliverable: null,
+      state: "pending",
+    };
+  }
+  const iteration = Math.max(...rows.map((d) => d.iteration));
+  const siblings = rows.filter((d) => d.iteration === iteration);
+  const live = siblings.find((d) => !isPurgedRow(d));
+  return {
+    name,
+    from: output.from,
+    node: ref.node,
+    port: ref.port,
+    iteration,
+    deliverable: live ?? siblings[0]!,
+    state: live ? "produced" : "purged",
+  };
+}
+
+/** A row whose value retention cleared (or that never carried one). */
+function isPurgedRow(d: QueryDeliverable): boolean {
+  return d.purged_at !== null || d.value === null;
+}
+
+/**
+ * Project every declared run output for the run **detail** response —
+ * values-free by contract (ADR-0035): status is polled, and inlining bodies
+ * would break ADR-0021's budget. Empty when the definition snapshot is
+ * unavailable; the run *summary* is untouched.
+ */
+export function projectRunOutputs(
+  definition: WorkflowDefinition | null,
+  deliverables: readonly QueryDeliverable[],
+): Record<string, RunOutputProjection> {
+  const out: Record<string, RunOutputProjection> = {};
+  if (definition === null) return out;
+  for (const [name, declared] of Object.entries(definition.outputs)) {
+    const resolved = resolveRunOutput(name, declared, deliverables);
+    out[name] = {
+      type: formatPortType(declared.type),
+      from: declared.from,
+      deliverable_id: resolved.deliverable?.id ?? null,
+      address:
+        resolved.node !== null &&
+        resolved.port !== null &&
+        resolved.iteration !== null
+          ? `${resolved.node}.${resolved.port}.${resolved.iteration}`
+          : null,
+      state: resolved.state,
+    };
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------------------
 // Address parsing for `parley run get`
 // ---------------------------------------------------------------------------
 
@@ -1138,6 +1273,13 @@ export interface ParsedDeliverableAddress {
   port: string;
   iteration: number | null;
   slot: string | null;
+  /**
+   * True when the address is run-level (`run.<name>`): `node` is the reserved
+   * literal `run` and `port` carries a **declared run-output name**, not a
+   * node port (ADR-0035). Any parsed iteration/slot is a caller error on this
+   * form — a run output takes no coordinates.
+   */
+  runOutput: boolean;
 }
 
 /**
@@ -1148,6 +1290,8 @@ export interface ParsedDeliverableAddress {
  * - `node.port` or `node.port.iteration` or `node.port.iteration.slot`
  * - `runId/node/port[/iteration[/slot]]` when first segment looks like a run id
  * - `runId node.port…` is handled by the CLI via two positionals
+ * - `run.<name>` (and its slash / run-id-prefixed spellings) — a run-level
+ *   product rather than a node id (ADR-0035)
  */
 export function parseDeliverableAddress(raw: string): ParsedDeliverableAddress | null {
   const s = raw.trim();
@@ -1177,7 +1321,14 @@ export function parseDeliverableAddress(raw: string): ParsedDeliverableAddress |
     if (parts.length - i >= 4) {
       slot = parts[i + 3]!;
     }
-    return { runId, node, port, iteration, slot };
+    return {
+      runId,
+      node,
+      port,
+      iteration,
+      slot,
+      runOutput: node === RUN_ADDRESS_PREFIX,
+    };
   }
 
   // Dot form: node.port[.iteration[.slot]]
@@ -1194,7 +1345,14 @@ export function parseDeliverableAddress(raw: string): ParsedDeliverableAddress |
     // node.port.slot (no iteration)
     slot = dots.slice(2).join(".");
   }
-  return { runId: null, node, port, iteration, slot };
+  return {
+    runId: null,
+    node,
+    port,
+    iteration,
+    slot,
+    runOutput: node === RUN_ADDRESS_PREFIX,
+  };
 }
 
 /** True when `ref` looks like an opaque deliverable id (`d1`, `d104`, …). */
@@ -1325,6 +1483,7 @@ export function projectRunDetail(opts: {
     run: runEnv,
     nodes,
     block: runEnv.block,
+    outputs: projectRunOutputs(opts.definition, opts.deliverables),
   };
 }
 
@@ -1447,6 +1606,23 @@ export function renderRunSummary(detail: RunDetailResponse): string {
   lines.push(pad(header, widths));
   for (const row of rows) lines.push(pad(row, widths));
 
+  // The run's declared product (ADR-0035) — names and states, never values.
+  const outputs = Object.entries(detail.outputs ?? {});
+  if (outputs.length > 0) {
+    lines.push("");
+    const outHeader = ["OUTPUT", "TYPE", "STATE", "FROM", "AT"];
+    const outRows = outputs.map(([name, o]) => [
+      name,
+      o.type,
+      o.state,
+      o.from,
+      o.address ?? "-",
+    ]);
+    const outWidths = widthsOf(outHeader, outRows);
+    lines.push(pad(outHeader, outWidths));
+    for (const row of outRows) lines.push(pad(row, outWidths));
+  }
+
   if (detail.block) {
     lines.push("");
     const b = detail.block;
@@ -1457,6 +1633,12 @@ export function renderRunSummary(detail: RunDetailResponse): string {
         `verbs    ${b.verbs.map((v) => `parley run ${v} ${r.run_id}`).join(" · ")}`,
       );
     }
+  }
+
+  // Fetch hint sits with zoom: both are next-command marginalia, not data.
+  if (outputs.length > 0) {
+    lines.push("");
+    lines.push(`fetch    parley run get run.${outputs[0]![0]} --run ${r.run_id}`);
   }
 
   // Zoom hint: last non-completed node or last node.
@@ -1554,6 +1736,42 @@ function formatSizeCell(d: DeliverableRef): string {
  * it as a missing id (404 → usage) or a generic failure.
  */
 export const EXIT_DELIVERABLE_PURGED = 9;
+
+/**
+ * `parley run get run.<name>` exit when the output is **declared** but its
+ * producing node has no completed iteration yet (ADR-0035). Distinct from 2
+ * (you typo'd the name) and 9 (it existed and decayed) so a poller can branch
+ * on "not ready" without parsing prose.
+ */
+export const EXIT_RUN_OUTPUT_NOT_PRODUCED = 10;
+
+/** Wire `code` the daemon sends with the 404 that maps to exit 10. */
+export const CODE_RUN_OUTPUT_NOT_PRODUCED = "not_produced";
+
+/**
+ * Usage message for `--iteration` / `--slot` against `run.<name>`. A run
+ * output *is* the most recent completed iteration and lint forbids it from
+ * fanning out, so neither flag has a meaning to carry (ADR-0035).
+ */
+export function runOutputCoordinateError(name: string): string {
+  return (
+    `run.${name} is a run output, which takes no iteration or slot ` +
+    `(it is definitionally the most recent completed iteration); ` +
+    `address a coordinate as <node>.<port>.<n>`
+  );
+}
+
+/** Usage message for a name the workflow does not declare as an output. */
+export function unknownRunOutputError(
+  name: string,
+  declared: readonly string[],
+): string {
+  const list =
+    declared.length === 0
+      ? "this workflow declares no run outputs"
+      : `declared outputs: ${[...declared].sort().join(", ")}`;
+  return `no run output named ${JSON.stringify(name)} (${list})`;
+}
 
 /**
  * Bare-mode stdout for `parley run get` (no envelope).

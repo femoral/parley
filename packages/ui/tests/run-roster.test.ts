@@ -233,6 +233,7 @@ describe("projectRoster merges run peers (#254)", () => {
 describe("projectInspectorRun (#254)", () => {
   it("renders one row per (node, iteration), never per task", () => {
     const detail: RunDetailResponse = {
+      outputs: {},
       run: summary({ run_id: "r7", state: "blocked", track_bound: 10 }),
       block: {
         reason: "loop_exhausted",
@@ -453,6 +454,7 @@ describe("projectInspectorRun (#254)", () => {
     expect(formatNodeDuration(null)).toBeNull();
     // Projection fills age from duration_ms only — no elapsed-since branch.
     const view = projectInspectorRun({
+      outputs: {},
       run: summary({ run_id: "r-dur", state: "running" }),
       block: null,
       nodes: [
@@ -470,6 +472,7 @@ describe("projectInspectorRun (#254)", () => {
     // End-to-end: inspector projection feeds pre-capped stateMetaFor labels
     // into projectChart; chart must not shout COMPLETED/RUNNING/etc.
     const view = projectInspectorRun({
+      outputs: {},
       run: summary({ run_id: "r-chart-calm", state: "running" }),
       block: null,
       nodes: [
@@ -532,6 +535,7 @@ describe("projectInspectorRun (#254)", () => {
     expect(stateMetaFor(view.attentionState).colorVar).toBe("var(--ink-tan)");
 
     const detail = projectInspectorRun({
+      outputs: {},
       run: summary({ run_id: "r-x", state: "mutinied" }),
       block: null,
       nodes: [],

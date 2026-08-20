@@ -77,6 +77,7 @@ function gateHeldDetail(): RunDetailResponse {
   return {
     run: makeRun(),
     block: makeRun().block as RunBlock,
+    outputs: {},
     nodes: [
       makeNode({
         node: "plan",
@@ -115,6 +116,7 @@ function forkedDetail(): RunDetailResponse {
       current_node: "done",
     }),
     block: null,
+    outputs: {},
     nodes: [
       makeNode({
         node: "plan",
@@ -152,6 +154,7 @@ function fanOutDetail(): RunDetailResponse {
       workflow: "fan-out-demo",
     }),
     block: null,
+    outputs: {},
     nodes: [
       makeNode({ node: "plan", state: "completed", gist: "scoped" }),
       makeNode({
@@ -182,6 +185,7 @@ function failedDetail(): RunDetailResponse {
       worktree: null,
     }),
     block: null,
+    outputs: {},
     nodes: [
       makeNode({
         node: "plan",
@@ -491,6 +495,7 @@ describe("RunScreen", () => {
     mockState.detail = {
       run: makeRun({ state: "running", block: null }),
       block: null,
+      outputs: {},
       nodes,
     };
     mockState.summaries = [mockState.detail.run];
@@ -521,6 +526,40 @@ describe("RunScreen", () => {
     expect(screen.getByTestId("run-outputs")).toBeTruthy();
     fireEvent.click(screen.getByTestId("run-view-table"));
     expect(screen.getByTestId("run-outputs")).toBeTruthy();
+  });
+
+  it("run outputs card shows declared names and states, not a run-state word (#388)", () => {
+    const detail = gateHeldDetail();
+    detail.outputs = {
+      report: {
+        type: "text",
+        from: "plan.report",
+        deliverable_id: "d-plan",
+        address: "plan.report.1",
+        state: "produced",
+      },
+      digest: {
+        type: "text",
+        from: "done.digest",
+        deliverable_id: null,
+        address: null,
+        state: "pending",
+      },
+    };
+    mockState.detail = detail;
+    mockState.summaries = [makeRun()];
+    mount();
+    const card = screen.getByTestId("run-outputs");
+    expect(card.textContent).toMatch(/report produced/);
+    expect(card.textContent).toMatch(/digest pending/);
+    expect(card.textContent).not.toMatch(/sealed/);
+  });
+
+  it("run outputs card says so when the workflow declares none (#388)", () => {
+    mockState.detail = gateHeldDetail();
+    mockState.summaries = [makeRun()];
+    mount();
+    expect(screen.getByTestId("run-outputs").textContent).toMatch(/none declared/);
   });
 
   it("workspace path appears once (REQUIRED #12)", () => {

@@ -131,6 +131,78 @@ describe("lintWorkflow — errors", () => {
     expect(result.findings.some((f) => /duplicate/i.test(f.message))).toBe(true);
   });
 
+  it("rejects `run` as a node id (#388 / ADR-0035)", () => {
+    const result = lintWorkflow(
+      mini([
+        step("run", {
+          in: { b: { type: "text", from: "run.brief" } },
+          out: { x: { type: "text" } },
+        }),
+      ]),
+      { dir: "/tmp/mini", expectedId: "mini" },
+    );
+    expect(result.ok).toBe(false);
+    const reserved = result.findings.filter(
+      (f) => f.field === "nodes[0].id" && f.severity === "error",
+    );
+    expect(reserved).toHaveLength(1);
+    expect(reserved[0]!.message).toMatch(/reserved node id/);
+  });
+
+  it("leaves node ids that merely start with `run` alone", () => {
+    const result = lintWorkflow(
+      mini([
+        step("runner", {
+          in: { b: { type: "text", from: "run.brief" } },
+          out: { x: { type: "text" } },
+        }),
+      ]),
+      { dir: "/tmp/mini", expectedId: "mini" },
+    );
+    expect(
+      result.findings.filter((f) => /reserved node id/.test(f.message)),
+    ).toEqual([]);
+  });
+
+  it("rejects a run output wired from a run input (#388)", () => {
+    // Lints clean before #388, and could never resolve: a run input has no
+    // deliverable row for the output view to read.
+    const result = lintWorkflow(
+      mini(
+        [
+          step("a", {
+            in: { b: { type: "text", from: "run.brief" } },
+            out: { x: { type: "text" } },
+          }),
+        ],
+        { outputs: { echo: { type: "text", from: "run.brief" } } },
+      ),
+      { dir: "/tmp/mini", expectedId: "mini" },
+    );
+    expect(result.ok).toBe(false);
+    const echo = result.findings.filter(
+      (f) => f.field === "outputs.echo.from" && f.severity === "error",
+    );
+    expect(echo).toHaveLength(1);
+    expect(echo[0]!.message).toMatch(/names a run input/);
+  });
+
+  it("still accepts a run output wired from a node port", () => {
+    const result = lintWorkflow(
+      mini(
+        [
+          step("a", {
+            in: { b: { type: "text", from: "run.brief" } },
+            out: { x: { type: "text" } },
+          }),
+        ],
+        { outputs: { product: { type: "text", from: "a.x" } } },
+      ),
+      { dir: "/tmp/mini", expectedId: "mini" },
+    );
+    expect(result.findings.filter((f) => f.severity === "error")).toEqual([]);
+  });
+
   it("rejects from naming an unknown or later node", () => {
     const result = lintWorkflow(
       mini([

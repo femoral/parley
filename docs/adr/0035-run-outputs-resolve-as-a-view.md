@@ -32,7 +32,12 @@ so this never worked rather than regressed.
   two read in opposite directions — `run.x` in a ref is what went *in*, `run.x`
   in an address is what came *out*. **`run` becomes an illegal node id** (lint
   error), a change the shadowing bug it fixes justified independently: such a
-  node was already unreachable by any `from` ref, silently.
+  node was already unreachable by any `from` ref, silently. For the same reason
+  **an output may not be wired `from` a run input**: lint accepted
+  `outputs.<name>.from = "run.<input>"` and it could never resolve, because a
+  run input has no deliverable row for a view to read (gc already skipped such
+  a declaration when pinning declared outputs). Echoing an input into the
+  product is a distinct feature, not a silently dead declaration.
 - **`--iteration` and `--slot` are rejected on a run-level address**, not
   forwarded. A run output *is* the most recent completed iteration, and lint
   forbids it from fanning out, so neither flag has a meaning to carry.

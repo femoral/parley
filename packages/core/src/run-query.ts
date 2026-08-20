@@ -234,11 +234,41 @@ export interface RunsResponse {
   seq: number;
 }
 
+/**
+ * State of one declared run output (ADR-0035). Mirrors `run get`'s exit
+ * taxonomy: `produced` → 0, `pending` → 10, `purged` → 9.
+ */
+export type RunOutputState = "produced" | "pending" | "purged";
+
+/**
+ * One declared run output as resolved on the run detail response — a **view**
+ * over the producing node's most recent completed iteration, never a stored
+ * row (ADR-0035). Carries no value: status is polled, and inlining bodies
+ * would break ADR-0021's budget. Fetch the value with
+ * `parley run get run.<name>`.
+ */
+export interface RunOutputProjection {
+  /** Declared port type, formatted (`text`, `text[]`, …). */
+  type: string;
+  /** The declaration's wiring: `"<node>.<port>"`. */
+  from: string;
+  /** Resolved deliverable id, or null when pending. */
+  deliverable_id: string | null;
+  /** Resolved node address `<node>.<port>.<iteration>`, or null when pending. */
+  address: string | null;
+  state: RunOutputState;
+}
+
 /** `GET /runs/:ref` body. */
 export interface RunDetailResponse {
   run: RunSummary;
   nodes: NodeProjection[];
   block: RunBlock | null;
+  /**
+   * Declared run outputs, keyed by name — values-free (ADR-0035). Empty when
+   * the workflow declares none or the definition snapshot is unavailable.
+   */
+  outputs: Record<string, RunOutputProjection>;
 }
 
 /** `GET /runs/:ref/nodes/:node` body. */

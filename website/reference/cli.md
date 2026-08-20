@@ -115,6 +115,7 @@ See [Workflow runs](/guide/workflows) for the concepts.
 | `parley run status <run>` | one run's node table, one line per node and iteration |
 | `parley run status <run> --node <id> [--iteration <n>] [--slot <name>]` | zoom to one node's tasks and deliverables |
 | `parley run get <id\|address>` | fetch one deliverable or a collected fan-out (exit 9: purged by retention) |
+| `parley run get run.<name>` | fetch a declared run output, the workflow's product, resolved through its `from` (exit 10: declared but not produced yet) |
 | `parley run approve <run>` | action a blocked run past its gate |
 | `parley run reject <run>` | follow the gate's declared on-reject path |
 | `parley run redirect <run> --to <node> [--note <text>]` | move a live blocked run to another node |
@@ -188,6 +189,6 @@ Used by child agents, not orchestrators. See
 | `delegate`, `answer` | 0 accepted · 2 usage |
 | `fix` | 0 accepted · 2 usage · 7 retry limit · 8 window expired |
 | `watch` | 0 all-done · 2 usage · 3 awaiting answer · 4 stalled · 5 failed · 6 completed |
-| `run get` | 0 printed · 2 usage · 9 purged |
+| `run get` | 0 printed · 2 usage · 9 purged · 10 not produced |
 | `child report` | 0 accepted · 5 rejected · 2 usage |
 | `child ask` | 0 answered · 4 stalled · 2 usage |

@@ -80,6 +80,7 @@ import {
   type RunRow,
 } from "./db.js";
 import {
+  CODE_RUN_OUTPUT_NOT_PRODUCED,
   collectFanOutDeliverable,
   deliverableRowToQuery,
   looksLikeDeliverableId,
@@ -88,7 +89,10 @@ import {
   projectRunDetail,
   projectRunSummary,
   resolveDeliverableValue,
+  resolveRunOutput,
+  runOutputCoordinateError,
   taskRowToQuery,
+  unknownRunOutputError,
 } from "./run-query.js";
 import { loadRunDefinition } from "./run-definition.js";
 import { runBranchName, runCheckoutPath, runScratchPath } from "./run-workspace.js";
@@ -3993,10 +3997,16 @@ function handleDeliverableGet(
     });
     return;
   }
-  respondDeliverableAddress(db, paths, res, runId, parsed.node, parsed.port, {
-    iteration: parsed.iteration ?? (params.get("iteration") ? Number(params.get("iteration")) : null),
+  const coords = {
+    iteration:
+      parsed.iteration ?? (params.get("iteration") ? Number(params.get("iteration")) : null),
     slot: parsed.slot ?? params.get("slot"),
-  });
+  };
+  if (parsed.runOutput) {
+    respondRunOutput(db, paths, res, runId, parsed.port, coords);
+    return;
+  }
+  respondDeliverableAddress(db, paths, res, runId, parsed.node, parsed.port, coords);
 }
 
 function handleDeliverableByQuery(
@@ -4018,11 +4028,90 @@ function handleDeliverableByQuery(
     sendJson(res, 400, { error: `unrecognised address: ${address}` });
     return;
   }
-  respondDeliverableAddress(db, paths, res, runId, parsed.node, parsed.port, {
+  const coords = {
     iteration:
       parsed.iteration ??
       (params.get("iteration") ? Number(params.get("iteration")) : null),
     slot: parsed.slot ?? params.get("slot"),
+  };
+  if (parsed.runOutput) {
+    respondRunOutput(db, paths, res, runId, parsed.port, coords);
+    return;
+  }
+  respondDeliverableAddress(db, paths, res, runId, parsed.node, parsed.port, coords);
+}
+
+/**
+ * `run.<name>` — a run-level product, resolved as a **view** over the node the
+ * declared output's `from` names (ADR-0035). Nothing is materialized; this
+ * picks the producing node's most recent completed iteration and hands the
+ * rest to the node-address responder, so purge decay and file/dir rendering
+ * behave exactly as they do at `<node>.<port>`.
+ *
+ * Four separated failures: unknown name → 400 usage · unproduced → 404 with
+ * `not_produced` (CLI exit 10) · unloadable snapshot → 500 generic. Purged is
+ * not a failure here — the row is returned and `run get` renders the decay.
+ */
+function respondRunOutput(
+  db: DatabaseHandle,
+  paths: HomePaths,
+  res: http.ServerResponse,
+  runId: string,
+  name: string,
+  opts: { iteration: number | null; slot: string | null },
+): void {
+  const run = getRun(db, runId);
+  if (!run) {
+    sendJson(res, 404, { error: `no such run: ${runId}` });
+    return;
+  }
+  const definition = loadDefinitionForRun(db, run);
+  if (definition === null) {
+    sendJson(res, 500, {
+      error:
+        `run ${runId} has no loadable definition snapshot, so run.${name} ` +
+        `cannot be resolved`,
+    });
+    return;
+  }
+  // hasOwnProperty, not `!== undefined`: `run.toString` would otherwise walk
+  // the prototype chain and be treated as a declared output.
+  if (!Object.prototype.hasOwnProperty.call(definition.outputs, name)) {
+    sendJson(res, 400, {
+      error: unknownRunOutputError(name, Object.keys(definition.outputs)),
+    });
+    return;
+  }
+  const declared = definition.outputs[name]!;
+  // Coordinates are rejected *after* the name is known, so a typo'd name still
+  // gets the message that lists the declared outputs rather than an assertion
+  // that the name is one of them.
+  if (opts.iteration !== null || (opts.slot !== null && opts.slot !== "")) {
+    sendJson(res, 400, { error: runOutputCoordinateError(name) });
+    return;
+  }
+  const deliverables = listDeliverablesForRun(db, runId).map(deliverableRowToQuery);
+  const resolved = resolveRunOutput(name, declared, deliverables);
+  if (resolved.node === null || resolved.port === null) {
+    sendJson(res, 500, {
+      error:
+        `run output ${name} declares an unparsable from ` +
+        `${JSON.stringify(resolved.from)}`,
+    });
+    return;
+  }
+  if (resolved.iteration === null) {
+    sendJson(res, 404, {
+      error:
+        `run output ${name} has not been produced yet ` +
+        `(${resolved.from} has no completed iteration)`,
+      code: CODE_RUN_OUTPUT_NOT_PRODUCED,
+    });
+    return;
+  }
+  respondDeliverableAddress(db, paths, res, runId, resolved.node, resolved.port, {
+    iteration: resolved.iteration,
+    slot: null,
   });
 }
 
