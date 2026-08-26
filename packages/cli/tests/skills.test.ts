@@ -96,16 +96,21 @@ describe("parley skills install", () => {
   });
 
   it("rewrites repo-relative links to GitHub URLs but keeps sibling links", async () => {
+    // Exercised against the fixture bundle, not the shipped skill: whether a
+    // given production doc *should* be a sibling or a repo link is an editorial
+    // call that changes over time, and pinning one here made this mechanism
+    // test fail whenever that call was revisited.
     const target = mkTemp("parley-links-");
-    await runCli(["skills", "install", "--layout", target], home);
-    const skillMd = fs.readFileSync(path.join(target, SKILL, "SKILL.md"), "utf8");
-    // `../../docs/agents/troubleshooting.md` → absolute GitHub blob URL.
-    expect(skillMd).toContain(
-      "https://github.com/femoral/parley/blob/main/docs/agents/troubleshooting.md",
-    );
-    expect(skillMd).not.toContain("../../docs/agents/troubleshooting.md");
+    await runCli(["skills", "install", "--layout", target], home, {
+      extraEnv: { PARLEY_SKILLS_SOURCE: FIXTURE_BUNDLE },
+    });
+    const skillMd = fs.readFileSync(path.join(target, "fixture-alpha", "SKILL.md"), "utf8");
+    // A link escaping the skill folder cannot travel with it → GitHub blob URL.
+    expect(skillMd).toContain("](https://github.com/femoral/parley/blob/main/docs/out.md)");
+    // The link *target* is rewritten; label text is left alone.
+    expect(skillMd).not.toContain("](../../docs/out.md)");
     // Sibling link travels with the folder — stays relative.
-    expect(skillMd).toContain("(bug-report.md)");
+    expect(skillMd).toContain("(note.md)");
     // Already-absolute links are untouched.
     expect(skillMd).toContain("(https://github.com/femoral/parley)");
   });
