@@ -235,16 +235,36 @@ export class DaemonRequestError extends Error {
   }
 }
 
+/**
+ * A client-side `AbortSignal.timeout` expiry, as opposed to a connection
+ * failure. `fetch` surfaces it as a `TimeoutError` DOMException; a refused or
+ * unroutable connection arrives as a `TypeError`.
+ */
+function isRequestTimeout(err: unknown): boolean {
+  return typeof err === "object" && err !== null && (err as { name?: unknown }).name === "TimeoutError";
+}
+
 /** Local-advertisement transport failure: name the daemon, not a bare fetch. */
 export function unreachableAdvertisedDaemon(
   discovery: Discovery,
   err: unknown,
 ): string {
   const cause = err instanceof Error ? err.message : String(err);
-  return (
-    `could not reach the advertised parley daemon at ${discoveryBaseUrl(discovery)} ` +
-    `(pid ${discovery.pid}, started_at ${discovery.started_at}): ${cause}`
-  );
+  const at =
+    `${discoveryBaseUrl(discovery)} (pid ${discovery.pid}, ` +
+    `started_at ${discovery.started_at})`;
+  // A timed-out request is not an unreachable daemon, and conflating the two
+  // sends debugging in the wrong direction — you go hunting for a dead process
+  // while a live one is merely slow. Say which one it is (#389).
+  if (isRequestTimeout(err)) {
+    return (
+      `the parley daemon at ${at} did not respond in time: ${cause}. ` +
+      `It is running but too slow to answer — usually a large task store under ` +
+      `concurrent load. Try 'parley gc', lower 'retention.days', or reduce the ` +
+      `number of parley commands running at once.`
+    );
+  }
+  return `could not reach the advertised parley daemon at ${at}: ${cause}`;
 }
 
 async function daemonFetch<T>(
