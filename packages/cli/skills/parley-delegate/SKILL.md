@@ -83,6 +83,7 @@ Rules that leave no room for interpretation:
 - **Un-acked events redeliver.** If you crash or forget between delivery and ack, the next `watch` hands you the same event again. That is the safety net — lean on it; never ack defensively "to clear the queue".
 - **Exit 6 is not "done".** A completed task is *work for you* (review, merge, verify, clean). The loop is finished only at exit 0.
 - **Level-triggered, race-free.** An event already pending when `watch` starts returns immediately. There is no startup race and no sequence bookkeeping on your side; the only seq you ever touch is the one you pass back to `--ack`.
+- **Always watch a named session.** `watch` reads `PARLEY_SESSION_ID` or `--session <id>`, and exits 2 with neither — it never adopts the daemon's newest session, which on a shared daemon is another agent's work you would be acking.
 - Positional task refs (`parley watch t1 t2`) narrow the inbox to those tasks; the default is every task in the session.
 
 4. **Review and integrate.** On exit 6 the envelope carries the worktree path, branch (`parley/<id>-<name>`), and the report body. Review the diff on the branch, merge if it holds up, then `parley clean <task>` (removes the worktree, keeps the branch). Ack only after that review. Done when the branch is merged-or-rejected and the worktree cleaned.
@@ -124,10 +125,6 @@ parley delegate -v <vendor> -n task-b --session <id> --type <id> "<brief B>"
 
 Do not poll `status` on an interval and do not sleep-and-check. One mechanism for n=1 and n=N.
 
-## Session ID
-
-The session ID identifies the current orchestration session. Resolution is env-first: `PARLEY_SESSION_ID` > `--session <id>` > session-state file > ancestry binding to a registered session. Install the harness plugin so provenance (session id + harness/model/effort) is set for you — via env vars or the INTERIM state-file channel; see [sessions.md](sessions.md).
-
 ## Context files
 
 `--context <file>` is repeatable; each file lands in the worktree under `.parley/context/`, materialized by **basename**.
@@ -149,10 +146,11 @@ One-liner pointers — read the linked file only when its condition fires:
 
 - **Non-default task shapes** — structured `--report-schema` results, no git worktree `--cwd`, sandbox postures: read [task-shaping.md](task-shaping.md).
 - **Harness plugins and session provenance** (`PARLEY_SESSION_ID` / `HARNESS` / `MODEL` / `EFFORT`): read [sessions.md](sessions.md).
+- **`watch` erroring instead of delivering events** — daemon unreachable vs. alive-but-slow: read [troubleshooting.md](troubleshooting.md).
 
 ## When a task fails
 
-Check the task's `error` field first (`parley status <task> --json | jq '.error'`), then `diag.log` in its `logs_dir`, before touching the raw vendor stream — full order and what each layer means: [docs/agents/troubleshooting.md](../../docs/agents/troubleshooting.md). `parley logs <task>` is the last resort; it burns a lot of context on long tasks.
+Check the task's `error` field first (`parley status <task> --json | jq '.error'`), then `diag.log` in its `logs_dir`, before touching the raw vendor stream — full order and what each layer means: [troubleshooting.md](troubleshooting.md). `parley logs <task>` is the last resort; it burns a lot of context on long tasks.
 
 After triage, if the failure is fixable with a clearer brief, use the fix loop above (`parley fix` / `parley fix --fresh`) rather than starting an unrelated new delegate when you want a linked attempt chain.
 

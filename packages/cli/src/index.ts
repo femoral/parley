@@ -94,7 +94,9 @@ Usage:
                             next pending attention-inbox event
                             (awaiting_answer / stalled / failed / completed)
                             for the orchestrator session (--session, else
-                            PARLEY_SESSION_ID, else latest). Level-triggered:
+                            PARLEY_SESSION_ID; required, no fallback — pass
+                            --session latest for the most recent one).
+                            Level-triggered:
                             an already-pending event returns immediately.
                             --ack records handling of a prior event id (seq),
                             then returns the next. Positional task refs filter

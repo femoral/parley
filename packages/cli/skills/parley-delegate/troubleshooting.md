@@ -1,4 +1,4 @@
-# Troubleshooting a failed task
+# Troubleshooting
 
 When a task fails and the reason isn't obvious from `parley status`, check things
 in this order — cheapest and least context-hungry first.
@@ -40,3 +40,26 @@ The untouched raw vendor stream, same `logs_dir`. Only read this when 1 and 2
 don't explain the failure — it's the full JSONL event log (`parley logs <id>`
 renders it, `--json` for byte-for-byte) and will burn a lot of context on a
 long-running task.
+
+## When `watch` keeps erroring
+
+`watch` exits 1 on a transport problem. Two failures look alike; the wording
+separates them:
+
+- **`could not reach the advertised parley daemon …`** — nothing is listening.
+  Run `parley daemon status`; the next command respawns it.
+- **`… did not respond in time`** — the daemon is alive but slow. Retries and
+  restarts both leave it slow; shrink the load instead.
+
+The slow case is a large task store under concurrent load — the daemon builds
+its task list single-threaded, so concurrent `parley` processes queue behind
+each other:
+
+- `parley gc --dry-run`, then `parley gc`. If it reclaims little, your retention
+  window outruns your task history — lower `retention.days` in
+  `~/.parley/parley.json` first.
+- Run fewer `parley` commands at once. One `watch` loop for a whole fan-out
+  costs one poll; a loop per task multiplies it.
+
+Retry only exit 1. Exit 2 is a usage error — a bad flag, or no session — and
+never succeeds on retry.

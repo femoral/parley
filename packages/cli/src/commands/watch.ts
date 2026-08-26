@@ -20,6 +20,16 @@ import type { Discovery } from "@useparley/daemon/discovery.js";
 const LONG_POLL_TIMEOUT_MS = 60_000;
 
 /**
+ * Timeout for the one-shot task-list fetch that seeds a watch. Deliberately
+ * larger than the 5s client default (#389): the daemon builds this list on a
+ * single event loop, so concurrent callers queue behind each other and the wait
+ * lands on the client's budget. Session scoping below is the real fix; this is
+ * headroom so a burst of sibling watchers degrades into latency instead of a
+ * spurious "could not reach the daemon" abort.
+ */
+const TASK_LIST_TIMEOUT_MS = 30_000;
+
+/**
  * Inbox exit codes (ADR-0007 / ADR-0008 / ADR-0019): one code per tier so the
  * orchestrator branches on `$?` without parsing. Exit 0 is reserved for
  * session-finished; the payload picks the verb (task question vs run gate).
@@ -41,23 +51,42 @@ function resolveRef(tasks: TaskEnvelope[], ref: string): TaskEnvelope | undefine
 }
 
 /**
- * Resolve the orchestrator session the inbox narrows to — same rules as
- * `status` (listing filter stays flag-first): `--session <id>`, else
- * `PARLEY_SESSION_ID`, else the newest session. Binding (delegate/fix/eval)
- * is env-first per #190. `undefined` means no session filter.
+ * The session `watch` scopes to, resolved before any task list is fetched —
+ * `--session <id>` first, then `PARLEY_SESSION_ID` (listing filter is
+ * flag-first; binding stays env-first per #190). `latest` defers to the task
+ * list because only the store knows which session is newest.
+ *
+ * A session is mandatory (#389). The old fallback, when neither flag nor env
+ * was set, watched the newest session in the *store* — on a shared daemon that
+ * is whichever agent delegated most recently, so a fan-out orchestrator could
+ * silently attach to a sibling's tasks and exit on their events. There is no
+ * safe default here, and a loud error costs less than a wrong guess.
  */
-function resolveSessionFilter(
+function requireSession(
   sessionFlag: string | undefined,
   env: NodeJS.ProcessEnv,
-  tasks: TaskEnvelope[],
-): string | undefined {
-  const latest = (): string | undefined =>
-    tasks.find((t) => t.orchestrator_session_id !== null)?.orchestrator_session_id ?? undefined;
-  if (sessionFlag !== undefined) {
-    return sessionFlag === "latest" ? latest() : sessionFlag;
+): string | "latest" {
+  const requested = sessionFlag ?? env.PARLEY_SESSION_ID;
+  if (requested === undefined || requested === "") {
+    throw new UsageError(
+      "watch: no orchestrator session to watch. Pass --session <id>, or set " +
+        "PARLEY_SESSION_ID. Use --session latest for the daemon's most recent " +
+        "session (only safe when nothing else is delegating).",
+    );
   }
-  const envSession = env.PARLEY_SESSION_ID;
-  return envSession ? envSession : latest();
+  return requested === "latest" ? "latest" : requested;
+}
+
+/** The newest session represented in a task snapshot (`--session latest`). */
+function latestSession(tasks: TaskEnvelope[]): string {
+  // `tasks` is newest-first, so the first stamped row is the most recent.
+  const found = tasks.find((t) => t.orchestrator_session_id !== null);
+  if (!found?.orchestrator_session_id) {
+    throw new UsageError(
+      "watch: --session latest found no session; no task carries one yet",
+    );
+  }
+  return found.orchestrator_session_id;
 }
 
 /**
@@ -96,21 +125,40 @@ export async function runWatch(ctx: CliContext, args: string[]): Promise<number>
     throw new UsageError("watch: --ack cannot be combined with --follow");
   }
 
+  // Resolved before the fetch so a concrete session can narrow it (#389).
+  const requested = requireSession(sessionFlag, ctx.env);
+
   const discovery = await ensureDaemon(ctx.paths, ctx.env);
-  const { tasks, seq: nowSeq } = await daemonGet<TasksResponse>(discovery, "/tasks");
+
+  // Fetch scope (#389): a concrete session needs only its own tasks. The global
+  // list grows without bound — thousands of tasks serializing to tens of MB on
+  // the daemon's single event loop — and under concurrency that blew the
+  // request budget, surfacing as a bogus "daemon unreachable" abort. `latest`
+  // and positional refs still resolve against the whole store: the first needs
+  // to know which session is newest, the second may name a task outside it.
+  // `--follow` is excluded: with no positionals it watches every non-terminal
+  // task in the store, so narrowing the seed list would change which subjects
+  // it waits on (and its exit). Left alone deliberately — see runFollow.
+  const narrowTo =
+    !follow && requested !== "latest" && positionals.length === 0 ? requested : undefined;
+  const listPath =
+    narrowTo === undefined ? "/tasks" : `/tasks?session=${encodeURIComponent(narrowTo)}`;
+  const { tasks, seq: nowSeq } = await daemonGet<TasksResponse>(
+    discovery,
+    listPath,
+    TASK_LIST_TIMEOUT_MS,
+  );
+
+  const session = requested === "latest" ? latestSession(tasks) : requested;
 
   if (follow) {
-    return runFollow(ctx, discovery, tasks, positionals, sessionFlag, ctx.env, nowSeq);
+    return runFollow(ctx, discovery, tasks, positionals, sessionFlag, session, nowSeq);
   }
 
   // Inbox scope: session filter (like status), then optional task-ref filter
   // that narrows the session set. Explicit refs must exist; a ref outside the
   // resolved session is still accepted (the orchestrator named it).
-  const session = resolveSessionFilter(sessionFlag, ctx.env, tasks);
-  let scoped =
-    session === undefined
-      ? tasks
-      : tasks.filter((t) => t.orchestrator_session_id === session);
+  let scoped = tasks.filter((t) => t.orchestrator_session_id === session);
 
   if (positionals.length > 0) {
     scoped = positionals.map((ref) => {
@@ -126,7 +174,7 @@ export async function runWatch(ctx: CliContext, args: string[]): Promise<number>
     const params = new URLSearchParams();
     if (ids.length > 0) params.set("ids", ids.join(","));
     // Session lets the daemon expand runs (gate-first workflows with no tasks).
-    if (session !== undefined) params.set("session", session);
+    params.set("session", session);
     params.set("wait", "true");
     if (ack !== null) params.set("ack", String(ack));
     return `/tasks/inbox?${params.toString()}`;
@@ -159,11 +207,7 @@ export async function runWatch(ctx: CliContext, args: string[]): Promise<number>
       if (ev.task === null && (ev.run === null || ev.run === undefined)) {
         // Known-but-idle session (registered, zero subjects): diagnose rather
         // than mute so an accidental wait is visible (#256).
-        if (
-          !notedIdleSession &&
-          session !== undefined &&
-          ids.length === 0
-        ) {
+        if (!notedIdleSession && ids.length === 0) {
           notedIdleSession = true;
           ctx.stderr(
             `note: session ${session} has no tasks or runs yet; waiting\n`,
@@ -198,7 +242,7 @@ async function runFollow(
   tasks: TaskEnvelope[],
   positionals: string[],
   sessionFlag: string | undefined,
-  env: NodeJS.ProcessEnv,
+  session: string,
   baseline: number,
 ): Promise<number> {
   let watched: TaskEnvelope[];
@@ -213,14 +257,12 @@ async function runFollow(
   }
 
   const ids = [...new Set(watched.map((t) => t.task_id))];
-  const session = resolveSessionFilter(sessionFlag, env, tasks);
   // Only treat follow as run-awaiting when the user explicitly scoped a session
   // (or has no tasks yet — gate-first). Env PARLEY_SESSION_ID alone must not
   // change the classic task-terminal exit (watch.test.ts --follow).
-  const awaitRuns =
-    sessionFlag !== undefined || (ids.length === 0 && session !== undefined);
-  // Empty ids is OK when a session still has runs (gate-first).
-  if (ids.length === 0 && session === undefined) return 0;
+  // `session` is always resolved now (#389), so empty ids always means
+  // gate-first rather than nothing-to-watch — there is no bare `return 0`.
+  const awaitRuns = sessionFlag !== undefined || ids.length === 0;
 
   const remainingTasks = new Set(
     watched.filter((t) => !isTerminalState(t.state)).map((t) => t.task_id),
@@ -233,9 +275,9 @@ async function runFollow(
   for (;;) {
     const params = new URLSearchParams();
     if (ids.length > 0) params.set("ids", ids.join(","));
-    // Always pass session when known so run.* edges for this orch appear; exit
-    // logic still uses awaitRuns so task-only loops stay unchanged.
-    if (session !== undefined) params.set("session", session);
+    // Always pass session so run.* edges for this orch appear; exit logic
+    // still uses awaitRuns so task-only loops stay unchanged.
+    params.set("session", session);
     params.set("since", String(cursor));
     params.set("wait", "true");
     const q = `/tasks/events?${params.toString()}`;

@@ -33,6 +33,8 @@ Every `delegate` / `watch` / `answer` / `fix` call needs a session id. Resolutio
 
 `PARLEY_SESSION_ID` > `--session <id>` > session-state file > process-ancestry binding to a registered session
 
+`watch` inverts the first two: it reads a session rather than binding one, so `--session <id>` wins over `PARLEY_SESSION_ID` and you can watch a session other than the one you delegate under. It requires one of them.
+
 Harness / model / effort resolution:
 
 `PARLEY_HARNESS` / `PARLEY_MODEL` / `PARLEY_EFFORT` > session-state file > unknown (null)

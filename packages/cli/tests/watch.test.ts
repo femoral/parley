@@ -398,3 +398,93 @@ describe("watch session empty-set / unknown-session (#256)", () => {
     expect(res.stderr).toMatch(sessionId);
   });
 });
+
+describe("watch requires a session (#389)", () => {
+  it("exits 2 when neither --session nor PARLEY_SESSION_ID is set", async () => {
+    // A task exists under some session — the old code would have silently
+    // adopted it as "the newest session" and watched a stranger's work.
+    await delegate(taskDir(quick()), "someone-elses");
+    await waitForState(home, "t1", "completed");
+
+    const res = await runCli(["watch", "--json"], home, {
+      extraEnv: { PARLEY_SESSION_ID: undefined },
+    });
+    expect(res.code).toBe(2);
+    expect(res.stderr).toMatch(/no orchestrator session/i);
+    // Above all: it must not have delivered the other session's event.
+    expect(res.code).not.toBe(6);
+    expect(res.stdout).toBe("");
+  });
+
+  it("exits 2 when PARLEY_SESSION_ID is set but empty", async () => {
+    const res = await runCli(["watch", "--json"], home, {
+      extraEnv: { PARLEY_SESSION_ID: "" },
+    });
+    expect(res.code).toBe(2);
+    expect(res.stderr).toMatch(/no orchestrator session/i);
+  });
+
+  it("still refuses before contacting the daemon, so the error is the session one", async () => {
+    // No daemon has ever run for this home; a session-less watch must fail with
+    // the usage error rather than a spawn/connect diagnostic.
+    const res = await runCli(["watch"], home, {
+      extraEnv: { PARLEY_SESSION_ID: undefined },
+    });
+    expect(res.code).toBe(2);
+    expect(res.stderr).toMatch(/no orchestrator session/i);
+    // Not a connect/spawn diagnostic — the guard runs before any daemon call.
+    expect(res.stderr).not.toMatch(/could not reach|did not respond|unreachable/i);
+  });
+
+  it("PARLEY_SESSION_ID alone is enough (no flag needed)", async () => {
+    const cwd = taskDir(quick());
+    await runCli(["delegate", "-v", "fake", "--cwd", cwd, "-n", "env-bound", "run"], home, {
+      extraEnv: { PARLEY_SESSION_ID: "sess-env" },
+    });
+    await waitForState(home, "t1", "completed");
+
+    const res = await runCli(["watch", "--json"], home, {
+      extraEnv: { PARLEY_SESSION_ID: "sess-env" },
+    });
+    expect(res.code).toBe(6);
+    const ev = JSON.parse(res.stdout) as { task: { task_id: string } };
+    expect(ev.task.task_id).toBe("t1");
+  });
+
+  it("--session latest still resolves the newest session explicitly", async () => {
+    const cwd = taskDir(quick());
+    await runCli(["delegate", "-v", "fake", "--cwd", cwd, "-n", "newest", "run"], home, {
+      extraEnv: { PARLEY_SESSION_ID: "sess-latest" },
+    });
+    await waitForState(home, "t1", "completed");
+
+    const res = await runCli(["watch", "--json", "--session", "latest"], home, {
+      extraEnv: { PARLEY_SESSION_ID: undefined },
+    });
+    expect(res.code).toBe(6);
+    const ev = JSON.parse(res.stdout) as { task: { task_id: string } };
+    expect(ev.task.task_id).toBe("t1");
+  });
+
+  it("a session-scoped watch still delivers when another session dominates the store", async () => {
+    // The #389 shape: most of the store belongs to other sessions, so the
+    // scoped fetch must return the watched session's task, not drop it.
+    for (const n of ["a", "b", "c"]) {
+      await runCli(["delegate", "-v", "fake", "--cwd", taskDir(quick()), "-n", `noise-${n}`, "run"], home, {
+        extraEnv: { PARLEY_SESSION_ID: `noise-sess-${n}` },
+      });
+    }
+    const cwd = taskDir(quick());
+    await runCli(["delegate", "-v", "fake", "--cwd", cwd, "-n", "mine", "run"], home, {
+      extraEnv: { PARLEY_SESSION_ID: "sess-mine" },
+    });
+    await waitForState(home, "t4", "completed");
+
+    const res = await runCli(["watch", "--json", "--session", "sess-mine"], home, {
+      extraEnv: { PARLEY_SESSION_ID: undefined },
+    });
+    expect(res.code).toBe(6);
+    const ev = JSON.parse(res.stdout) as { task: { task_id: string; name: string } };
+    expect(ev.task.name).toBe("mine");
+  });
+});
