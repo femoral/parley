@@ -1061,11 +1061,10 @@ describe("migration #244", () => {
     fs.rmSync(home, { recursive: true, force: true });
     home = fs.mkdtempSync(path.join(os.tmpdir(), "parley-ret-mig-"));
 
-    // Pre-#244 schema: every migration before the deliverables rebuild.
-    // Migrations after #244 (#240 inbox, #243 run eval, #249 base, #314
-    // runners, #313 repo identity, #315 routing + placement, #317 git-auth,
-    // #329 capabilities_updated_at, #381 run_definitions) → SCHEMA_VERSION - 12.
-    const prev = openDatabaseUpTo(homePaths(home), SCHEMA_VERSION - 12);
+    // Pre-#244 schema: the last version before the deliverables rebuild, which
+    // lands at v26. Pinned absolutely — a relative offset silently retargets
+    // this boundary every time a migration is appended (#389).
+    const prev = openDatabaseUpTo(homePaths(home), 25);
     const now = new Date().toISOString();
     prev
       .prepare(

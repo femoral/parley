@@ -17,7 +17,6 @@ import {
   nextRunId,
   openDatabase,
   openDatabaseUpTo,
-  SCHEMA_VERSION,
   updateRun,
   type DatabaseHandle,
 } from "../src/db.js";
@@ -268,7 +267,7 @@ describe("migration #381", () => {
     db.close();
     fs.rmSync(home, { recursive: true, force: true });
     home = fs.mkdtempSync(path.join(os.tmpdir(), "parley-def-mig-"));
-    const prevDb = openDatabaseUpTo(homePaths(home), SCHEMA_VERSION - 1);
+    const prevDb = openDatabaseUpTo(homePaths(home), 36);
     const now = new Date().toISOString();
     prevDb
       .prepare(

@@ -3666,7 +3666,20 @@ function createHandler(
           const filters = parseTaskMetricsFilters(url.searchParams);
           // List default: no session filter (return everything) — only apply
           // when the client explicitly passes session=.
-          const all = engine.list();
+          // #389: a concrete session= narrows in SQL (index `tasks_session`)
+          // instead of materializing every row first. `all` is the documented
+          // "no filter" spelling, so it still takes the full-list path. The
+          // remaining filters run over the narrowed rows either way, so the
+          // response is identical — only the work to build it changes.
+          const scopedSession =
+            filters.session !== undefined &&
+            filters.session !== null &&
+            filters.session !== "" &&
+            filters.session !== "all"
+              ? filters.session
+              : undefined;
+          const all =
+            scopedSession === undefined ? engine.list() : engine.listForSession(scopedSession);
           const rows =
             Object.keys(filters).length === 0
               ? all

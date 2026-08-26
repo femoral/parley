@@ -146,8 +146,9 @@ describe("migration #243", () => {
     // Pre-#243 schema: migrations after #243 are #249 (base_ref/base_commit),
     // #314 (runners table), #313 (repo identity), #315 routing columns
     // (queue_reason, deadline, placement), #317 git-auth memory, and #329
-    // capabilities_updated_at, #381 run_definitions — so the snapshot is SCHEMA_VERSION - 10.
-    const prev = openDatabaseUpTo(homePaths(home), SCHEMA_VERSION - 10);
+    // capabilities_updated_at, #381 run_definitions — so the snapshot is v27.
+    // Pinned absolutely: a relative offset silently retargets it (#389).
+    const prev = openDatabaseUpTo(homePaths(home), 27);
     const colsBefore = prev
       .prepare("PRAGMA table_info(runs)")
       .all()

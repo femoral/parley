@@ -115,6 +115,7 @@ import {
   listSessions,
   listQueuedTasks,
   listTasks,
+  listTasksForSession,
   markRunnerCompleted,
   markRunnerUnreachable,
   nextDeliverableId,
@@ -1048,6 +1049,15 @@ export class TaskEngine {
 
   list(): TaskRow[] {
     return listTasks(this.db).map((t) => this.withQueueInfo(t));
+  }
+
+  /**
+   * {@link list} narrowed to one orchestrator session (#389). Filtering in SQL
+   * rather than over the full list keeps a session-scoped `GET /tasks` cheap on
+   * a store with thousands of tasks.
+   */
+  listForSession(sessionId: string): TaskRow[] {
+    return listTasksForSession(this.db, sessionId).map((t) => this.withQueueInfo(t));
   }
 
   /**

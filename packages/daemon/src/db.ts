@@ -914,6 +914,12 @@ const MIGRATIONS: string[] = [
      snapshot TEXT NOT NULL,
      FOREIGN KEY (run_id) REFERENCES runs(id) ON DELETE CASCADE
    );`,
+  // #389: session-scoped task lookup. `runs` has had `runs_session` since
+  // #233; `tasks` never got the matching index, so every session-scoped list
+  // fell back to a full scan of a table that grows without bound. `GET
+  // /tasks?session=` serializes the whole store on a single event loop, so on
+  // a busy daemon the scan cost lands directly on the client's request budget.
+  `CREATE INDEX tasks_session ON tasks(orchestrator_session_id);`,
 ];
 
 /** How many schema migrations have been applied — equals `PRAGMA user_version` after open. */
@@ -1021,6 +1027,23 @@ export function listTasks(db: DatabaseHandle): TaskRow[] {
   return db
     .prepare(`SELECT ${TASK_COLUMNS} FROM tasks ORDER BY created_at DESC, id DESC`)
     .all()
+    .map((row) => asRow<TaskRow>(row));
+}
+
+/**
+ * Tasks stamped with one orchestrator session (#389). Same newest-first order
+ * as {@link listTasks} — callers rely on it for most-recent-name precedence —
+ * but pushes the session predicate into SQL (index `tasks_session`) instead of
+ * materializing every row and filtering after the fact.
+ */
+export function listTasksForSession(db: DatabaseHandle, sessionId: string): TaskRow[] {
+  return db
+    .prepare(
+      `SELECT ${TASK_COLUMNS} FROM tasks
+       WHERE orchestrator_session_id = ?
+       ORDER BY created_at DESC, id DESC`,
+    )
+    .all(sessionId)
     .map((row) => asRow<TaskRow>(row));
 }
 
