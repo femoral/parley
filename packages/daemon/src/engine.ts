@@ -2044,7 +2044,10 @@ export class TaskEngine {
       branch = resolved.branch;
       baseSha = resolved.baseSha;
       recreatedWorktree = resolved.recreated;
-      materializeContext(workingDir, request.prompt, []);
+      const brief = canResume
+        ? request.prompt
+        : composeFreshFixBody(collectAttemptChain(listTasks(this.db), parent.id), request.prompt);
+      materializeContext(workingDir, brief, []);
     } catch (err) {
       if (recreatedWorktree && worktreePath !== null && parent.repo !== null) {
         try {
@@ -6070,6 +6073,11 @@ export class TaskEngine {
    * fix brief as the conversation's continuation.
    */
   private fixResumePrompt(task: TaskRow, adapter: VendorAdapter, fixBrief: string): string {
+    // Large continuations have the same per-argument OS ceiling as fresh fixes.
+    // The full fix request is already the task brief; re-materialize at spawn
+    // so a queued attempt reads its own continuation in a shared workspace.
+    const large = Buffer.byteLength(fixBrief) > 32 * 1024;
+    if (large) materializeContext(task.cwd ?? process.cwd(), fixBrief, []);
     return [
       this.buildPreamble(task, adapter),
       "",
@@ -6077,14 +6085,14 @@ export class TaskEngine {
       "",
       "The orchestrator is requesting a fix on the previous attempt:",
       "",
-      fixBrief,
+      large ? "Read the full fix request in `.parley/TASK.md`." : fixBrief,
       "",
       "Continue from the prior session context and finish by calling `submit_report`.",
     ].join("\n");
   }
 
   /**
-   * Fresh-fix prompt (#158): channel-matched preamble, then the three-section
+   * Fresh-fix prompt (#397): channel-matched preamble pointing at the on-disk
    * composed body (original brief → attempt history → fix request). The new
    * row is already inserted, so exclude it from history (its report is empty).
    */
@@ -6095,7 +6103,8 @@ export class TaskEngine {
         ? collectAttemptChain(listTasks(this.db), parentId).filter((t) => t.id !== task.id)
         : [];
     const body = composeFreshFixBody(chain, fixBrief);
-    return `${this.buildPreamble(task, adapter)}\n\n---\n\n${body}`;
+    materializeContext(task.cwd ?? process.cwd(), body, []);
+    return this.buildPreamble(task, adapter);
   }
 
   /** Spawn a planned vendor child and pump its stream until exit. */

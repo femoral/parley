@@ -112,6 +112,8 @@ Rules that leave no room for interpretation:
    parley fix --fresh <task> "<what to fix>"
    ```
 
+   Fresh fixes read the original brief, full attempt history, and fix request from `.parley/TASK.md`; the vendor prompt points there so deep chains cannot exceed the OS argument-size limit. Large resumed fix requests also use the on-disk brief; smaller requests remain conversation continuations. No extra flags are required.
+
    `--fresh` starts a blank session, is uncapped by resume retry limits, and stays in the attempt chain. Exact limits and window live in `parley info` — re-read them when unsure.
 
 ## Fan-out: several tasks in parallel

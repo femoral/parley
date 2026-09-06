@@ -558,13 +558,15 @@ describe("parley fix — retry limits and --fresh (#158)", () => {
     expect(log).not.toContain('"type":"resumed"');
     expect(log).toContain("fake-sess-fresh");
 
-    // Hello event carries the full prompt — assert three-section composition
-    // behind the channel-matched preamble.
+    // The prompt points at the complete composed brief on disk.
     const helloLine = log.split("\n").find((l) => l.includes('"hello"'));
     expect(helloLine).toBeTruthy();
-    const prompt = (JSON.parse(helloLine!) as { prompt: string }).prompt;
-    expect(prompt).toContain("Parley protocol");
-    expect(prompt).toMatch(/ask_orchestrator|submit_report/);
+    const argvPrompt = (JSON.parse(helloLine!) as { prompt: string }).prompt;
+    expect(argvPrompt).toContain("Parley protocol");
+    expect(argvPrompt).toContain(".parley/TASK.md");
+    expect(argvPrompt).not.toContain("## Attempt history");
+    expect(Buffer.byteLength(argvPrompt)).toBeLessThan(64 * 1024);
+    const prompt = fs.readFileSync(path.join(cwd, ".parley/TASK.md"), "utf8");
     expect(prompt).toContain("## Original brief");
     expect(prompt).toContain("do the original thing");
     expect(prompt).toContain("## Attempt history");
@@ -576,6 +578,34 @@ describe("parley fix — retry limits and --fresh (#158)", () => {
     expect(prompt).toMatch(/Report: fixed it \(outcome: success\)/);
     expect(prompt).toContain("## Fix request");
     expect(prompt).toContain("start over with full context");
+  });
+
+  it("spawns deep fresh chains and large resumed fixes with bounded argv", async () => {
+    const cwd = taskDir(firstAttemptActions(), fixResumeActions());
+    let id = await completeDelegate(["delegate", "-v", "fake", "--cwd", cwd, "original " + "x".repeat(45_000)]);
+    const resumed = await runCli(["fix", id, "resume " + "r".repeat(100_000)], home);
+    expect(resumed.code, resumed.stderr).toBe(0);
+    id = JSON.parse(resumed.stdout).task_id;
+    await waitForState(home, id, "completed");
+    const resumedLog = fs.readFileSync(path.join(home, "tasks", id, "vendor.jsonl"), "utf8");
+    const resumedHello = JSON.parse(resumedLog.split("\n").find((line) => line.includes('"hello"'))!);
+    expect(Buffer.byteLength(resumedHello.prompt)).toBeLessThan(64 * 1024);
+    expect(resumedHello.prompt).toContain(".parley/TASK.md");
+    expect(fs.readFileSync(path.join(cwd, ".parley/TASK.md"), "utf8")).toContain("r".repeat(100_000));
+    for (let i = 0; i < 3; i++) {
+      const result = await runCli(["fix", "--fresh", id, `fix-${i} ` + "f".repeat(45_000)], home);
+      expect(result.code, result.stderr).toBe(0);
+      id = JSON.parse(result.stdout).task_id;
+      await waitForState(home, id, "completed");
+      const log = fs.readFileSync(path.join(home, "tasks", id, "vendor.jsonl"), "utf8");
+      const hello = JSON.parse(log.split("\n").find((line) => line.includes('"hello"'))!);
+      expect(Buffer.byteLength(hello.prompt)).toBeLessThan(64 * 1024);
+    }
+    const brief = fs.readFileSync(path.join(cwd, ".parley/TASK.md"), "utf8");
+    expect(Buffer.byteLength(brief)).toBeGreaterThan(128 * 1024);
+    expect(brief).toContain("original ");
+    expect(brief).toContain("resume ");
+    expect(brief).toContain("fix-2 ");
   });
 
   it("stable error codes appear in the daemon HTTP body", async () => {
@@ -607,4 +637,3 @@ describe("parley fix — retry limits and --fresh (#158)", () => {
     expect(body.error).toMatch(/parley fix --fresh/);
   });
 });
-
