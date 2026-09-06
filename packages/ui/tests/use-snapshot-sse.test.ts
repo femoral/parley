@@ -9,7 +9,7 @@ import { envelope, FakeEventSource } from "./fixtures.js";
 function fakeDaemon(snapshot: TasksResponse): typeof fetch {
   return (async (input: string | URL | Request) => {
     const path = String(input);
-    if (path === "/tasks") return new Response(JSON.stringify(snapshot), { status: 200 });
+    if (new URL(path, "http://localhost").pathname === "/tasks") return new Response(JSON.stringify(snapshot), { status: 200 });
     return new Response(JSON.stringify({ error: "not found" }), { status: 404 });
   }) as typeof fetch;
 }

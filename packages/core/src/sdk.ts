@@ -110,6 +110,8 @@ export class ParleyClient {
    */
   listTasks(filters?: TaskMetricsFilters): Promise<TasksResponse> {
     const params = filtersToSearchParams(filters);
+    // Legacy complete-snapshot API. Paged consumers use a separate method.
+    params.set("all", "true");
     const qs = params.toString();
     return this.request<TasksResponse>(qs === "" ? "/tasks" : `/tasks?${qs}`);
   }

@@ -100,7 +100,7 @@ import { loadRunDefinition } from "./run-definition.js";
 import { runBranchName, runCheckoutPath, runScratchPath } from "./run-workspace.js";
 import type { DaemonIdentity } from "./identity.js";
 import { isSandboxMode, type SandboxMode } from "./adapters/types.js";
-import { readGlobalConfigLayer, type ContextFile } from "./context.js";
+import { readEvalExpected, readGlobalConfigLayer, type ContextFile } from "./context.js";
 import { DelegateError, TaskEngine } from "./engine.js";
 import {
   CODE_UNKNOWN_SESSION,
@@ -2125,13 +2125,14 @@ function handleLogs(
 function envelopeFor(
   engine: TaskEngine,
   row: import("./db.js").TaskRow,
+  evalExpected?: boolean,
 ): TaskEnvelope {
   const enriched = engine.withQueueInfo(row);
   const env = buildEnvelope(enriched, engine.logDir(row.id), {
     position: enriched.queue_position,
     blockingCap: enriched.blocking_cap,
     maxConcurrent: enriched.max_concurrent,
-  });
+  }, evalExpected);
   // ADR-0019 / #240: run address on every task.* (and list) envelope.
   env.run_id = row.run_id;
   env.node = row.node;
@@ -3682,6 +3683,27 @@ function createHandler(
       }
 
       if (segments[0] === "tasks") {
+        if (method === "GET" && segments.length === 2 && segments[1] === "scope") {
+          let session = url.searchParams.get("session") ?? "";
+          if (session === "latest") {
+            const latest = db.prepare("SELECT orchestrator_session_id AS session FROM tasks WHERE orchestrator_session_id IS NOT NULL AND orchestrator_session_id != '' ORDER BY created_at DESC, id DESC LIMIT 1").get() as { session: string } | undefined;
+            session = latest?.session ?? "";
+          }
+          if (!session) throw new HttpError(400, "watch: no session; no task carries one yet");
+          const refs = resolveWatchIds(engine, url.searchParams);
+          if (!Array.isArray(refs)) throw new HttpError(refs.status, refs.error);
+          if (refs.length === 0 && !engine.isKnownSession(session)) throw new HttpError(400, unknownSessionMessage(session));
+          const follow = url.searchParams.get("follow") === "true";
+          const where = refs.length > 0
+            ? `id IN (${refs.map(() => "?").join(",")})`
+            : follow ? "state NOT IN ('completed','failed','cancelled')" : "orchestrator_session_id = ?";
+          const values = refs.length > 0 ? refs : follow ? [] : [session];
+          const tasks = db.prepare(`SELECT id AS task_id, name, state, orchestrator_session_id FROM tasks WHERE ${where} ORDER BY created_at DESC, id DESC`).all(...values);
+          const runCounts = db.prepare("SELECT COUNT(*) AS count, COALESCE(SUM(state IN ('completed','failed','cancelled')), 0) AS terminal FROM runs WHERE orchestrator_session_id = ?").get(session) as { count: number; terminal: number };
+          const unowned = db.prepare("SELECT COUNT(*) AS count FROM tasks WHERE orchestrator_session_id IS NULL").get() as { count: number };
+          sendJson(res, 200, { tasks, seq: engine.currentSeq(), session, task_count: tasks.length, run_count: runCounts.count, terminal_count: tasks.filter((t) => isTerminalState(String(t.state))).length + runCounts.terminal, excluded_unowned_tasks: unowned.count });
+          return;
+        }
         if (method === "GET" && segments.length === 1) {
           // The current global seq rides along so `parley watch` can capture a
           // "start from now" baseline atomically with the task snapshot (#34).
@@ -3702,14 +3724,25 @@ function createHandler(
             filters.session !== "all"
               ? filters.session
               : undefined;
-          const all =
-            scopedSession === undefined ? engine.list() : engine.listForSession(scopedSession);
+          const unlimited = url.searchParams.get("all") === "true";
+          const limitRaw = url.searchParams.get("limit");
+          const limit = limitRaw === null ? 100 : Number(limitRaw);
+          if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new HttpError(400, "limit must be an integer from 1 to 100");
+          const sqlLimit = !unlimited && Object.keys(filters).every((key) => key === "session") ? limit + 1 : undefined;
+          const all = scopedSession === undefined ? engine.list(sqlLimit) : engine.listForSession(scopedSession, sqlLimit);
           const rows =
             Object.keys(filters).length === 0
               ? all
               : all.filter((t) => taskMatchesFilters(t, filters));
-          const tasks = rows.map((row) => envelopeFor(engine, row));
-          sendJson(res, 200, { tasks, seq: engine.currentSeq() });
+          // Request-local cache: settings stay hot across requests, with one
+          // layered read per distinct repo rather than one per envelope.
+          const evalByRepo = new Map<string | null, boolean>();
+          const selected = unlimited ? rows : rows.slice(0, limit);
+          const tasks = selected.map((row) => {
+            if (!evalByRepo.has(row.repo)) evalByRepo.set(row.repo, readEvalExpected(row.repo, paths));
+            return envelopeFor(engine, row, evalByRepo.get(row.repo)!);
+          });
+          sendJson(res, 200, { tasks, seq: engine.currentSeq(), has_more: !unlimited && rows.length > limit });
           return;
         }
         if (method === "POST" && segments.length === 1) {

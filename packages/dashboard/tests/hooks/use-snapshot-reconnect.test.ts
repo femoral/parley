@@ -20,7 +20,7 @@ afterEach(() => {
 function fakeDaemon(snapshot: TasksResponse, onList?: () => void): typeof fetch {
   return (async (input: string | URL | Request) => {
     const path = String(input);
-    if (path === "/tasks" || path.endsWith("/tasks")) {
+    if (new URL(path, "http://localhost").pathname === "/tasks") {
       onList?.();
       return new Response(JSON.stringify(snapshot), { status: 200 });
     }

@@ -1,5 +1,7 @@
 # Troubleshooting
 
+Watch startup reads lightweight scope metadata, not the task history's reports and schemas. A large retained history should not require a longer watch timeout. Direct HTTP `GET /tasks` defaults to at most 100 newest rows (`has_more` indicates truncation); `limit=1..100` narrows it. The explicit `all=true` compatibility/admin form is unbounded and can be expensive. Existing CLI task listings and the SDK complete-snapshot method opt into that form; prefer bounded queries for interactive clients. Listing settings are resolved once per repository per request, and edits take effect on the next request.
+
 Each watch long-poll has one 25-second deadline, including wakes from unrelated tasks or runs. An empty poll is retried normally by the CLI; it is not completion. The 60-second client request timeout remains longer than the daemon window. Busy neighboring sessions must not extend that window.
 
 When a task fails and the reason isn't obvious from `parley status`, check things

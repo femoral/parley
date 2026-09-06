@@ -1047,8 +1047,8 @@ export class TaskEngine {
     this.wakeRunnerLeaseWaiters();
   }
 
-  list(): TaskRow[] {
-    return listTasks(this.db).map((t) => this.withQueueInfo(t));
+  list(limit?: number): TaskRow[] {
+    return listTasks(this.db, limit).map((t) => this.withQueueInfo(t));
   }
 
   /**
@@ -1056,8 +1056,8 @@ export class TaskEngine {
    * rather than over the full list keeps a session-scoped `GET /tasks` cheap on
    * a store with thousands of tasks.
    */
-  listForSession(sessionId: string): TaskRow[] {
-    return listTasksForSession(this.db, sessionId).map((t) => this.withQueueInfo(t));
+  listForSession(sessionId: string, limit?: number): TaskRow[] {
+    return listTasksForSession(this.db, sessionId, limit).map((t) => this.withQueueInfo(t));
   }
 
   /**

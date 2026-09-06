@@ -259,7 +259,7 @@ export async function runMetrics(ctx: CliContext, args: string[]): Promise<numbe
 
   const discovery = await ensureDaemon(ctx.paths, ctx.env);
   // Task list only needed to resolve `latest`; cheap enough to always fetch.
-  const { tasks } = await daemonGet<TasksResponse>(discovery, "/tasks");
+  const { tasks } = await daemonGet<TasksResponse>(discovery, "/tasks?all=true");
   const session = resolveSession(sessionFlag, tasks);
 
   const params = filtersToSearchParams({ ...filters, session });

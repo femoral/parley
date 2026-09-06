@@ -413,6 +413,20 @@ export interface HealthResponse {
 export interface TasksResponse {
   tasks: TaskEnvelope[];
   seq: number;
+  /** True when the bounded listing has more matching rows. */
+  has_more?: boolean;
+}
+
+/** Lightweight watch bootstrap: no reports, schemas, usage, or envelopes. */
+export type WatchTask = Pick<TaskEnvelope, "task_id" | "name" | "state" | "orchestrator_session_id">;
+export interface WatchScopeResponse {
+  tasks: WatchTask[];
+  seq: number;
+  session: string;
+  task_count: number;
+  run_count: number;
+  terminal_count: number;
+  excluded_unowned_tasks: number;
 }
 
 /**

@@ -920,6 +920,8 @@ const MIGRATIONS: string[] = [
   // /tasks?session=` serializes the whole store on a single event loop, so on
   // a busy daemon the scan cost lands directly on the client's request budget.
   `CREATE INDEX tasks_session ON tasks(orchestrator_session_id);`,
+  `CREATE INDEX tasks_created ON tasks(created_at DESC, id DESC);
+   CREATE INDEX tasks_session_created ON tasks(orchestrator_session_id, created_at DESC, id DESC);`,
 ];
 
 /** How many schema migrations have been applied — equals `PRAGMA user_version` after open. */
@@ -1023,9 +1025,9 @@ function asRow<T>(row: unknown): T {
 }
 
 /** List all tasks, newest first. */
-export function listTasks(db: DatabaseHandle): TaskRow[] {
+export function listTasks(db: DatabaseHandle, limit?: number): TaskRow[] {
   return db
-    .prepare(`SELECT ${TASK_COLUMNS} FROM tasks ORDER BY created_at DESC, id DESC`)
+    .prepare(`SELECT ${TASK_COLUMNS} FROM tasks ORDER BY created_at DESC, id DESC${limit === undefined ? "" : ` LIMIT ${Math.max(0, Math.floor(limit))}`}`)
     .all()
     .map((row) => asRow<TaskRow>(row));
 }
@@ -1036,12 +1038,12 @@ export function listTasks(db: DatabaseHandle): TaskRow[] {
  * but pushes the session predicate into SQL (index `tasks_session`) instead of
  * materializing every row and filtering after the fact.
  */
-export function listTasksForSession(db: DatabaseHandle, sessionId: string): TaskRow[] {
+export function listTasksForSession(db: DatabaseHandle, sessionId: string, limit?: number): TaskRow[] {
   return db
     .prepare(
       `SELECT ${TASK_COLUMNS} FROM tasks
        WHERE orchestrator_session_id = ?
-       ORDER BY created_at DESC, id DESC`,
+       ORDER BY created_at DESC, id DESC${limit === undefined ? "" : ` LIMIT ${Math.max(0, Math.floor(limit))}`}`,
     )
     .all(sessionId)
     .map((row) => asRow<TaskRow>(row));

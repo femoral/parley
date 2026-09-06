@@ -5,8 +5,8 @@ import {
   isTerminalState,
   type FollowEventResponse,
   type InboxEventResponse,
-  type TaskEnvelope,
-  type TasksResponse,
+  type WatchTask,
+  type WatchScopeResponse,
 } from "@useparley/core";
 import { parseArgs } from "../args.js";
 import { DaemonRequestError, daemonGet, ensureDaemon } from "../client.js";
@@ -39,7 +39,7 @@ function exitFor(state: string): number {
 }
 
 /** Resolve a task ref (id first, then most-recent name) against a snapshot. */
-function resolveRef(tasks: TaskEnvelope[], ref: string): TaskEnvelope | undefined {
+function resolveRef(tasks: WatchTask[], ref: string): WatchTask | undefined {
   // `tasks` is newest-first, so the first name match is the most recent — the
   // same precedence as the daemon's `resolveTask`.
   return tasks.find((t) => t.task_id === ref) ?? tasks.find((t) => t.name === ref);
@@ -70,18 +70,6 @@ function requireSession(
     );
   }
   return requested === "latest" ? "latest" : requested;
-}
-
-/** The newest session represented in a task snapshot (`--session latest`). */
-function latestSession(tasks: TaskEnvelope[]): string {
-  // `tasks` is newest-first, so the first stamped row is the most recent.
-  const found = tasks.find((t) => t.orchestrator_session_id !== null);
-  if (!found?.orchestrator_session_id) {
-    throw new UsageError(
-      "watch: --session latest found no session; no task carries one yet",
-    );
-  }
-  return found.orchestrator_session_id;
 }
 
 /**
@@ -125,26 +113,21 @@ export async function runWatch(ctx: CliContext, args: string[]): Promise<number>
 
   const discovery = await ensureDaemon(ctx.paths, ctx.env);
 
-  // Fetch scope (#389): a concrete session needs only its own tasks. The global
-  // list grows without bound — thousands of tasks serializing to tens of MB on
-  // the daemon's single event loop — and under concurrency that blew the
-  // request budget, surfacing as a bogus "daemon unreachable" abort. `latest`
-  // and positional refs still resolve against the whole store: the first needs
-  // to know which session is newest, the second may name a task outside it.
-  // `--follow` is excluded: with no positionals it watches every non-terminal
-  // task in the store, so narrowing the seed list would change which subjects
-  // it waits on (and its exit). Left alone deliberately — see runFollow.
-  const narrowTo =
-    !follow && requested !== "latest" && positionals.length === 0 ? requested : undefined;
-  const listPath =
-    narrowTo === undefined ? "/tasks" : `/tasks?session=${encodeURIComponent(narrowTo)}`;
-  const { tasks, seq: nowSeq } = await daemonGet<TasksResponse>(
+  // Resolve refs and latest on the daemon; bootstrap only identity/state
+  // metadata, never full reports or project-config reads (#392).
+  const scopeParams = new URLSearchParams({ session: requested });
+  if (positionals.length > 0) scopeParams.set("ids", positionals.join(","));
+  if (follow) scopeParams.set("follow", "true");
+  const { tasks, seq: nowSeq, session } = await daemonGet<WatchScopeResponse>(
     discovery,
-    listPath,
+    `/tasks/scope?${scopeParams}`,
     TASK_LIST_TIMEOUT_MS,
-  );
-
-  const session = requested === "latest" ? latestSession(tasks) : requested;
+  ).catch((err: unknown) => {
+    if (err instanceof DaemonRequestError && (err.status === 400 || err.status === 404)) {
+      throw new UsageError(`watch: ${err.message}`);
+    }
+    throw err;
+  });
 
   if (follow) {
     return runFollow(ctx, discovery, tasks, positionals, sessionFlag, session, nowSeq);
@@ -234,13 +217,13 @@ export async function runWatch(ctx: CliContext, args: string[]): Promise<number>
 async function runFollow(
   ctx: CliContext,
   discovery: Discovery,
-  tasks: TaskEnvelope[],
+  tasks: WatchTask[],
   positionals: string[],
   sessionFlag: string | undefined,
   session: string,
   baseline: number,
 ): Promise<number> {
-  let watched: TaskEnvelope[];
+  let watched: WatchTask[];
   if (positionals.length > 0) {
     watched = positionals.map((ref) => {
       const row = resolveRef(tasks, ref);

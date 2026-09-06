@@ -408,6 +408,7 @@ export async function runStatus(ctx: CliContext, args: string[]): Promise<number
   if (ref) {
     // Still need the list for name-based resolution when ref is a --name label.
     const listParams = filtersToSearchParams(filters);
+    listParams.set("all", "true");
     const listQs = listParams.toString();
     const { tasks } = await daemonGet<TasksResponse>(
       discovery,
@@ -442,6 +443,7 @@ export async function runStatus(ctx: CliContext, args: string[]): Promise<number
 
   // List path: server-side dimension filters + local session scoping.
   const listParams = filtersToSearchParams(filters);
+  listParams.set("all", "true");
   const listQs = listParams.toString();
   const { tasks } = await daemonGet<TasksResponse>(
     discovery,

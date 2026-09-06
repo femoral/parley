@@ -118,6 +118,8 @@ Rules that leave no room for interpretation:
 
 ## Fan-out: several tasks in parallel
 
+`watch` resolves its scope on the daemon using lightweight task identities and states; startup no longer downloads every task report. No additional watch flags are needed.
+
 Each task gets its own worktree, so parallel tasks never collide. Batch them however it makes sense, then drive the **entire** set with the same watch loop above:
 
 ```

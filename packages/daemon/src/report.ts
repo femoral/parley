@@ -543,6 +543,7 @@ export function buildEnvelope(
     blockingCap: string | null;
     maxConcurrent?: number | null;
   } | null = null,
+  evalExpected?: boolean,
 ): TaskEnvelope {
   const start = task.started_at ?? task.created_at;
   const end = task.completed_at;
@@ -582,7 +583,7 @@ export function buildEnvelope(
     question_id: task.question_id,
     question: task.question,
     seq: task.seq,
-    eval_expected: readEvalExpected(task.repo),
+    eval_expected: evalExpected ?? readEvalExpected(task.repo),
     size: task.size,
     difficulty: task.difficulty,
     type: task.type,
