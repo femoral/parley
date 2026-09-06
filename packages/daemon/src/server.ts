@@ -97,7 +97,7 @@ import {
   unknownRunOutputError,
 } from "./run-query.js";
 import { loadRunDefinition } from "./run-definition.js";
-import { runBranchName, runCheckoutPath, runScratchPath } from "./run-workspace.js";
+import { readRunInputsValue, runBranchName, runCheckoutPath, runScratchPath } from "./run-workspace.js";
 import type { DaemonIdentity } from "./identity.js";
 import { isSandboxMode, type SandboxMode } from "./adapters/types.js";
 import { readEvalExpected, readGlobalConfigLayer, type ContextFile } from "./context.js";
@@ -3956,6 +3956,7 @@ function handleRunDetail(
     branch: ws.branch,
     worktree: ws.worktree,
     seq: engine.currentSeq(),
+    inputs: definition && Object.keys(definition.inputs).length === 0 ? {} : readRunInputsValue(ws.worktree),
   });
   sendJson(res, 200, detail);
 }

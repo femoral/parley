@@ -78,6 +78,7 @@ function gateHeldDetail(): RunDetailResponse {
     run: makeRun(),
     block: makeRun().block as RunBlock,
     outputs: {},
+    inputs: {},
     nodes: [
       makeNode({
         node: "plan",
@@ -117,6 +118,7 @@ function forkedDetail(): RunDetailResponse {
     }),
     block: null,
     outputs: {},
+    inputs: {},
     nodes: [
       makeNode({
         node: "plan",
@@ -155,6 +157,7 @@ function fanOutDetail(): RunDetailResponse {
     }),
     block: null,
     outputs: {},
+    inputs: {},
     nodes: [
       makeNode({ node: "plan", state: "completed", gist: "scoped" }),
       makeNode({
@@ -186,6 +189,7 @@ function failedDetail(): RunDetailResponse {
     }),
     block: null,
     outputs: {},
+    inputs: {},
     nodes: [
       makeNode({
         node: "plan",
@@ -496,6 +500,7 @@ describe("RunScreen", () => {
       run: makeRun({ state: "running", block: null }),
       block: null,
       outputs: {},
+      inputs: {},
       nodes,
     };
     mockState.summaries = [mockState.detail.run];

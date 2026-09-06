@@ -671,6 +671,7 @@ describe("projectInspectorRun deliverable honesty (#255)", () => {
   function emptyDetail(): RunDetailResponse {
     return {
       outputs: {},
+      inputs: {},
       run: {
         run_id: "r1",
         workflow: "w",
@@ -745,6 +746,7 @@ describe("useRuns → useInspectorRun deliverable wire (#255 F1)", () => {
     const dlvId = "d-shortlist";
     const detail: RunDetailResponse = {
       outputs: {},
+      inputs: {},
       run: {
         run_id: runId,
         workflow: "research",
@@ -861,6 +863,7 @@ describe("useRuns → useInspectorRun deliverable wire (#255 F1)", () => {
     const dlvId = "d-missing";
     const detail: RunDetailResponse = {
       outputs: {},
+      inputs: {},
       run: {
         run_id: runId,
         workflow: "research",
@@ -961,6 +964,7 @@ describe("useRuns → useInspectorRun deliverable wire (#255 F1)", () => {
     const badId = "d-bad";
     const detail: RunDetailResponse = {
       outputs: {},
+      inputs: {},
       run: {
         run_id: runId,
         workflow: "research",
@@ -1070,6 +1074,7 @@ describe("useRuns → useInspectorRun deliverable wire (#255 F1)", () => {
     const runId = "r-wire-none";
     const detail: RunDetailResponse = {
       outputs: {},
+      inputs: {},
       run: {
         run_id: runId,
         workflow: "research",

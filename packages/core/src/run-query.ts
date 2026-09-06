@@ -269,6 +269,8 @@ export interface RunDetailResponse {
    * the workflow declares none or the definition snapshot is unavailable.
    */
   outputs: Record<string, RunOutputProjection>;
+  /** Frozen raw input values; null if the workspace copy is unavailable. */
+  inputs: Record<string, unknown> | null;
 }
 
 /** `GET /runs/:ref/nodes/:node` body. */

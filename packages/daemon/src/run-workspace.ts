@@ -243,18 +243,25 @@ export function runInputsFilePath(workspaceRoot: string): string {
 export function readRunInputs(
   workspaceRoot: string | null | undefined,
 ): Record<string, unknown> {
-  if (workspaceRoot == null || workspaceRoot === "") return {};
+  return readRunInputsValue(workspaceRoot) ?? {};
+}
+
+/** Read raw frozen values for display, preserving unavailable vs empty. */
+export function readRunInputsValue(
+  workspaceRoot: string | null | undefined,
+): Record<string, unknown> | null {
+  if (workspaceRoot == null || workspaceRoot === "") return null;
   const file = runInputsFilePath(workspaceRoot);
-  if (!fs.existsSync(file)) return {};
+  if (!fs.existsSync(file)) return null;
   try {
     const raw = fs.readFileSync(file, "utf8");
     const parsed: unknown = JSON.parse(raw);
     if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
-      return {};
+      return null;
     }
     return parsed as Record<string, unknown>;
   } catch {
-    return {};
+    return null;
   }
 }
 

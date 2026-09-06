@@ -158,6 +158,7 @@ interface RunDetail {
   run: Record<string, unknown>;
   nodes: Array<{ node: string; state: string }>;
   outputs: Record<string, RunOutputEntry>;
+  inputs: Record<string, unknown> | null;
 }
 
 async function runStatusJson(parleyHome: string, runId: string): Promise<RunDetail> {
@@ -467,6 +468,7 @@ describe("run outputs resolve at run.<name> (#388)", () => {
       expect(forked.code, `${forked.stderr}\n${forked.stdout}`).toBe(0);
       const childId = (JSON.parse(forked.stdout) as { run_id: string }).run_id;
       const child = await waitForRunState(parleyHome, childId, "completed");
+      expect(child.inputs).toEqual({ brief: "hello" });
 
       // `first` was inherited at iteration 0; its output resolves with no
       // special case, and the child's own `second` run resolves too.

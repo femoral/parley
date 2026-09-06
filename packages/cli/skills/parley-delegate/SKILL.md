@@ -121,6 +121,8 @@ Rules that leave no room for interpretation:
 
 ## Fan-out: several tasks in parallel
 
+`parley run status <run> --json` includes `inputs`, the frozen effective input values keyed by declared name, alongside the existing outputs index. Forks expose their effective values without provenance labels. Values are returned verbatim with no redaction: inputs are already stored in the workspace and are not a place for credentials. No-input workflows return `{}`; an unavailable workspace input copy returns `null`. This read surface works at any run state and adds no verb or flag.
+
 `watch` resolves its scope on the daemon using lightweight task identities and states; startup no longer downloads every task report. No additional watch flags are needed.
 
 Every non-follow watch prints its resolved session, flag/environment source, task/run counts, terminal count, and excluded unowned-task count to stderr before polling. JSON stdout remains event-only. Session-wide watches pick up newly created tasks and runs while waiting; explicit task/run references keep their named scope. There is no inferred session: provide `--session` or `PARLEY_SESSION_ID`; `--session latest` remains an explicit opt-in.

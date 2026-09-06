@@ -79,7 +79,8 @@ function liveSummary(
 
 function detailFor(summary: RunSummary): RunDetailResponse {
   return {
-    outputs: {},
+      outputs: {},
+      inputs: {},
     run: summary,
     block: summary.block,
     nodes: (summary.track ?? []).map((t, i) => ({

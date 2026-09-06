@@ -234,6 +234,7 @@ describe("projectInspectorRun (#254)", () => {
   it("renders one row per (node, iteration), never per task", () => {
     const detail: RunDetailResponse = {
       outputs: {},
+      inputs: {},
       run: summary({ run_id: "r7", state: "blocked", track_bound: 10 }),
       block: {
         reason: "loop_exhausted",
@@ -455,6 +456,7 @@ describe("projectInspectorRun (#254)", () => {
     // Projection fills age from duration_ms only — no elapsed-since branch.
     const view = projectInspectorRun({
       outputs: {},
+      inputs: {},
       run: summary({ run_id: "r-dur", state: "running" }),
       block: null,
       nodes: [
@@ -473,6 +475,7 @@ describe("projectInspectorRun (#254)", () => {
     // into projectChart; chart must not shout COMPLETED/RUNNING/etc.
     const view = projectInspectorRun({
       outputs: {},
+      inputs: {},
       run: summary({ run_id: "r-chart-calm", state: "running" }),
       block: null,
       nodes: [
@@ -536,6 +539,7 @@ describe("projectInspectorRun (#254)", () => {
 
     const detail = projectInspectorRun({
       outputs: {},
+      inputs: {},
       run: summary({ run_id: "r-x", state: "mutinied" }),
       block: null,
       nodes: [],

@@ -1461,6 +1461,7 @@ export function projectRunDetail(opts: {
   worktree?: string | null;
   seq?: number;
   nowMs?: number;
+  inputs?: Record<string, unknown> | null;
 }): RunDetailResponse {
   const runEnv = projectRunSummary({
     run: opts.run,
@@ -1484,6 +1485,7 @@ export function projectRunDetail(opts: {
     nodes,
     block: runEnv.block,
     outputs: projectRunOutputs(opts.definition, opts.deliverables),
+    inputs: opts.inputs === undefined ? {} : opts.inputs,
   };
 }
 
