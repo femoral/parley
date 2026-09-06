@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { gzipSync, gunzipSync } from "node:zlib";
+import { createHash } from "node:crypto";
 import {
   cleanupHome,
   git,
@@ -42,7 +44,7 @@ function taskDir(actions: FakeVendorAction[], resumeActions?: FakeVendorAction[]
 }
 
 /** Write a temp context file and return its absolute path. */
-function contextFile(name: string, contents: string): string {
+function contextFile(name: string, contents: string | Buffer): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "parley-ctx-"));
   scratch.push(dir);
   const file = path.join(dir, name);
@@ -65,6 +67,36 @@ function hellos(home: string, taskId: string): Record<string, unknown>[] {
 }
 
 describe("context materialization (spec §7)", () => {
+  it("carries mixed binary and text context byte-for-byte", async () => {
+    const cwd = taskDir([{ submit_report: REPORT }]);
+    const archive = gzipSync(Buffer.from("archive contents\n"));
+    const inputs = [archive, Buffer.from([0xff]), Buffer.from("\ufeffhello\n")];
+    const files = inputs.map((bytes, i) => contextFile(`context-${i}`, bytes));
+    const result = await runCli([
+      "delegate", "-v", "fake", "--cwd", cwd,
+      ...files.flatMap((file) => ["--context", file]), "read context",
+    ], home);
+    expect(result.code).toBe(0);
+    await waitForState(home, "t1", "completed");
+    for (const [i, file] of files.entries()) {
+      const actual = fs.readFileSync(path.join(cwd, ".parley/context", path.basename(file)));
+      expect(createHash("sha256").update(actual).digest("hex"))
+        .toBe(createHash("sha256").update(inputs[i]!).digest("hex"));
+      if (i === 0) expect(gunzipSync(actual).toString()).toBe("archive contents\n");
+    }
+  });
+
+  it("rejects context over 25 MiB before creating a task", async () => {
+    const cwd = taskDir([{ submit_report: REPORT }]);
+    const file = contextFile("too-large.bin", "");
+    fs.truncateSync(file, 25 * 1024 * 1024 + 1);
+    const result = await runCli(["delegate", "-v", "fake", "--cwd", cwd, "--context", file, "read"], home);
+    expect(result.code).toBe(2);
+    expect(result.stderr).toContain(file);
+    expect(result.stderr).toContain("26214401");
+    expect(JSON.parse((await runCli(["--json"], home)).stdout)).toEqual([]);
+  });
+
   it("writes TASK.md and copies --context files, all git-excluded", async () => {
     // The child writes a file so the worktree is retained for inspection.
     const src = repo([{ write_file: { path: "keep.txt", contents: "x" } }, { submit_report: REPORT }]);

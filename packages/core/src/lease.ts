@@ -62,6 +62,7 @@ export const DEFAULT_RUNNER_STALE_MS = 14 * 24 * 60 * 60 * 1000;
 export interface LeaseContextFile {
   name: string;
   contents: string;
+  encoding?: "base64";
 }
 
 /**

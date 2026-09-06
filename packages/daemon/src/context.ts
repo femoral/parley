@@ -20,6 +20,8 @@ export interface ContextFile {
   /** Filename it is written under in `.parley/context/` (basename only). */
   name: string;
   contents: string;
+  /** Omitted for legacy UTF-8 callers. */
+  encoding?: "base64";
 }
 
 /** Directory name parley materializes task context under, inside the workspace. */
@@ -68,7 +70,7 @@ export function materializeContext(
     // context name escape the context dir.
     const name = path.basename(file.name);
     if (name === "" || name === "." || name === "..") continue;
-    fs.writeFileSync(path.join(contextDir, name), file.contents);
+    fs.writeFileSync(path.join(contextDir, name), file.encoding === "base64" ? Buffer.from(file.contents, "base64") : file.contents);
   }
 }
 

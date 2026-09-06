@@ -536,8 +536,22 @@ class HttpError extends Error {
 }
 
 async function readBody(req: http.IncomingMessage): Promise<unknown> {
+  const maxBytes = 128 * 1024 * 1024;
+  if (Number(req.headers["content-length"]) > maxBytes) {
+    req.resume();
+    throw new HttpError(413, "request body exceeds 128 MiB");
+  }
   const chunks: Buffer[] = [];
-  for await (const chunk of req) chunks.push(chunk as Buffer);
+  let bytes = 0;
+  // Keep the socket alive long enough to send the 413 on a chunked upload.
+  for await (const chunk of req.iterator({ destroyOnReturn: false })) {
+    bytes += (chunk as Buffer).length;
+    if (bytes > maxBytes) {
+      req.resume();
+      throw new HttpError(413, "request body exceeds 128 MiB");
+    }
+    chunks.push(chunk as Buffer);
+  }
   const raw = Buffer.concat(chunks).toString("utf8");
   if (raw.trim() === "") return undefined;
   try {
@@ -720,7 +734,15 @@ function handleDelegate(engine: TaskEngine, res: http.ServerResponse, body: unkn
         sendJson(res, 400, { error: "each context must be { name, contents }" });
         return;
       }
-      contexts.push({ name: entry.name, contents: entry.contents });
+      if (entry.encoding !== undefined && entry.encoding !== "base64") {
+        sendJson(res, 400, { error: "context encoding must be base64 or omitted for UTF-8" });
+        return;
+      }
+      if (entry.encoding === "base64" && Buffer.from(entry.contents, "base64").toString("base64") !== entry.contents) {
+        sendJson(res, 400, { error: "context contents must be valid base64" });
+        return;
+      }
+      contexts.push({ name: entry.name, contents: entry.contents, ...(entry.encoding === "base64" ? { encoding: "base64" as const } : {}) });
     }
   }
   // Classification (#118 / #161): optional size/difficulty strings; project-set
@@ -3805,6 +3827,7 @@ function createHandler(
       if (!res.headersSent) {
         const status = err instanceof HttpError ? err.status : 500;
         const message = err instanceof HttpError ? err.message : String(err);
+        if (status === 413) res.setHeader("Connection", "close");
         sendJson(res, status, { error: message });
       } else {
         res.end();

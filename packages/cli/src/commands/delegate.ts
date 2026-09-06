@@ -156,9 +156,17 @@ export async function runDelegate(ctx: CliContext, args: string[]): Promise<numb
       ? [contextFlag]
       : [];
   const contexts = contextPaths.map((file) => {
-    let contents: string;
+    let contents: Buffer;
     try {
-      contents = fs.readFileSync(file, "utf8");
+      const maxBytes = 25 * 1024 * 1024;
+      const size = fs.statSync(file).size;
+      if (size > maxBytes) {
+        throw new UsageError(`delegate: context file ${file} is ${size} bytes; limit is ${maxBytes} bytes (25 MiB)`);
+      }
+      contents = fs.readFileSync(file);
+      if (contents.length > maxBytes) {
+        throw new UsageError(`delegate: context file ${file} is ${contents.length} bytes; limit is ${maxBytes} bytes (25 MiB)`);
+      }
     } catch (err) {
       throw new UsageError(
         `delegate: cannot read context file ${file}: ${
@@ -166,7 +174,7 @@ export async function runDelegate(ctx: CliContext, args: string[]): Promise<numb
         }`,
       );
     }
-    return { name: path.basename(file), contents };
+    return { name: path.basename(file), contents: contents.toString("base64"), encoding: "base64" as const };
   });
   // Files are materialized under `.parley/context/<basename>`, so two inputs
   // that share a basename would silently clobber. Reject that up front (exit 2)

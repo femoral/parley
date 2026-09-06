@@ -129,6 +129,8 @@ Do not poll `status` on an interval and do not sleep-and-check. One mechanism fo
 
 `--context <file>` is repeatable; each file lands in the worktree under `.parley/context/`, materialized by **basename**.
 
+Any file type, including binary archives, is carried verbatim by value to local or remote workspaces. Each file is limited to 25 MiB of raw bytes; an oversized file is a usage error (exit 2) naming its path and byte size, before task creation. The daemon independently limits the encoded request body to 128 MiB (HTTP 413); base64 context uses roughly 4/3 of its raw size. Split large supporting material across tasks when necessary. No new flags are needed.
+
 ```
 parley delegate -v <vendor> -n task-a --session <id> \
   --context /path/to/config.json \

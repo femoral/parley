@@ -507,7 +507,7 @@ export function materializeStepContext(
     for (const file of contexts) {
       const name = path.basename(file.name);
       if (name === "" || name === "." || name === "..") continue;
-      fs.writeFileSync(path.join(contextDir, name), file.contents);
+      fs.writeFileSync(path.join(contextDir, name), file.encoding === "base64" ? Buffer.from(file.contents, "base64") : file.contents);
     }
   }
   return paths;
@@ -1293,4 +1293,3 @@ export function cleanRunScratch(opts: {
   fs.rmSync(root, { recursive: true, force: true });
   return { removed: [root] };
 }
-
