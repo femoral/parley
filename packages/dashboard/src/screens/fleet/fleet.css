@@ -172,6 +172,10 @@
   background: var(--surface);
 }
 
+.pc-fleet__main:has(> .pc-page-controls) {
+  grid-template-rows: minmax(120px, 0.38fr) auto minmax(0, 1fr) auto;
+}
+
 @media (max-width: 1360px) {
   .pc-fleet__body {
     grid-template-columns: minmax(0, 1fr) minmax(200px, 240px);

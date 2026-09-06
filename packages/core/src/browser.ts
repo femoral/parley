@@ -27,6 +27,7 @@ export * from "./repo-key.js";
 export * from "./rubric.js";
 export * from "./run-query.js";
 export * from "./sdk.js";
+export * from "./fleet.js";
 export * from "./shipped-model-catalog.js";
 export * from "./states.js";
 export * from "./template-expand.js";

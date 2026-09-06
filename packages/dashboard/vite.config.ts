@@ -53,6 +53,7 @@ function daemonProxy(): Record<string, ProxyOptions> | undefined {
   }
   console.info(`[parley-console] proxying API to daemon at ${target}`);
   const routes = [
+    "/fleet",
     "/tasks",
     "/events",
     "/metrics",

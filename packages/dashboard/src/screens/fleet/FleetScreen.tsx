@@ -6,6 +6,8 @@ import {
 } from "../../data/index.js";
 import type { ScreenMountProps } from "../types.js";
 import { FleetBoard } from "./FleetBoard.js";
+import { useFleetPage } from "../../data/useFleetPage.js";
+import { PageControls } from "../../components/PageControls.js";
 import "./fleet.css";
 
 /**
@@ -14,7 +16,10 @@ import "./fleet.css";
  * Firehose lives on the right rail (shell); board center is tables + executors.
  */
 export function FleetScreen(props: ScreenMountProps) {
-  const { client, snapshot, health, runs } = useConsoleData();
+  const { client, snapshot, health, fleet } = useConsoleData();
+  const options = { session: fleet?.session ?? "all", state: fleet?.state ?? "all" };
+  const tasks = useFleetPage(client, "tasks", options);
+  const runs = useFleetPage(client, "runs", options);
   const runners = useRunners(client);
   const honesty = useHonesty({
     ready: snapshot.ready,
@@ -43,11 +48,17 @@ export function FleetScreen(props: ScreenMountProps) {
   return (
     <div data-testid="screen-fleet" data-screen="fleet" className="pc-fleet-root">
       <FleetBoard
-        tasks={snapshot.tasks}
-        runs={runs.summaries}
+        tasks={tasks.items}
+        runs={runs.items}
+        paginated
+        summary={fleet?.summary}
+        taskControls={<PageControls label="tasks" page={tasks} />}
+        runControls={<PageControls label="runs" page={runs} />}
+        tasksLoading={tasks.loading && tasks.total === null}
+        tasksError={tasks.error}
         runners={runners.runners}
         runnersStatus={runners.status}
-        runsStatus={runs.status}
+        runsStatus={runs.loading && runs.total === null ? "connecting" : "online"}
         runsError={runs.error}
         honestyPhase={honesty.phase}
         selectedTaskId={props.selectedTaskId}

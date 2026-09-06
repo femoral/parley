@@ -569,6 +569,10 @@
   min-height: 0;
 }
 
+.pc-rail-right:has(> .pc-page-controls) {
+  grid-template-rows: minmax(160px, 1.1fr) auto auto minmax(120px, 0.9fr);
+}
+
 .pc-rail-firehose.pc-panel {
   border-bottom: 0;
 }

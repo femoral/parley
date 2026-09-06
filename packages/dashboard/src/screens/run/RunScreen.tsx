@@ -6,6 +6,8 @@
  * Observation-only: no mutating run/gate routes.
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useFleetPage } from "../../data/useFleetPage.js";
+import { PageControls } from "../../components/PageControls.js";
 import type { DeliverableRef, NodeProjection } from "@useparley/core";
 import { CopyScaffold, Panel, StateChip } from "../../components/index.js";
 import {
@@ -65,7 +67,8 @@ function collectDeliverableRefs(nodes: readonly NodeProjection[]): DeliverableRe
 }
 
 export function RunScreen(props: ScreenMountProps) {
-  const { client, snapshot, health, runs } = useConsoleData();
+  const { client, snapshot, health, runs, fleet } = useConsoleData();
+  const runTaskPage = useFleetPage(client, "tasks", { run: props.selectedRunId ?? "" }, !!props.selectedRunId && !!fleet);
   const honesty = useHonesty({
     ready: snapshot.ready,
     streamConnected: snapshot.connected,
@@ -85,10 +88,7 @@ export function RunScreen(props: ScreenMountProps) {
   useEffect(() => {
     const first = runs.summaries[0];
     if (!first) return;
-    if (
-      props.selectedRunId &&
-      runs.summaries.some((r) => r.run_id === props.selectedRunId)
-    ) {
+    if (props.selectedRunId) {
       return;
     }
     // No selected (or missing) run: pick first and put its id in the hash.
@@ -137,6 +137,7 @@ export function RunScreen(props: ScreenMountProps) {
     snapshotTasks: snapshot.tasks,
     enabled: Boolean(props.selectedRunId && selectedNode),
   });
+  const runTasks = fleet ? runTaskPage.items : nodeTasks.runTasks;
 
   const deliverableRefs: DeliverableRef[] = useMemo(() => {
     if (nodeTasks.data?.deliverables && nodeTasks.data.deliverables.length > 0) {
@@ -550,7 +551,7 @@ export function RunScreen(props: ScreenMountProps) {
                 ? `node error · ${nodeTasks.error}`
                 : nodeTasks.status === "loading"
                   ? "loading node…"
-                  : `${nodeTasks.runTasks.length} on run${
+                  : `${fleet ? runTaskPage.total ?? "—" : runTasks.length} on run${
                       nodeTasks.data
                         ? ` · ${nodeTasks.data.tasks.length} on ${selectedNode?.node ?? "node"}`
                         : ""
@@ -565,10 +566,10 @@ export function RunScreen(props: ScreenMountProps) {
                 Node tasks failed: {nodeTasks.error}
               </div>
             ) : null}
-            {nodeTasks.runTasks.length === 0 && nodeTasks.status !== "loading" ? (
-              <div className="pc-run__panel-empty">No tasks on this run yet.</div>
+            {runTasks.length === 0 && nodeTasks.status !== "loading" ? (
+              <div className="pc-run__panel-empty">{fleet && runTaskPage.loading ? "Loading run tasks…" : fleet && runTaskPage.error ? "Run tasks could not load." : "No tasks on this run yet."}</div>
             ) : (
-              nodeTasks.runTasks.map((t) => {
+              runTasks.map((t) => {
                 const chip = projectTaskStateChip(t.state);
                 const addr = [
                   t.node ?? "node",
@@ -612,6 +613,7 @@ export function RunScreen(props: ScreenMountProps) {
                 );
               })
             )}
+            {fleet ? <PageControls label="run tasks" page={runTaskPage} /> : null}
             {nodeTasks.data && nodeTasks.data.tasks.length > 0 ? (
               <>
                 <div className="pc-panel__head pc-run__panel-head--sub">

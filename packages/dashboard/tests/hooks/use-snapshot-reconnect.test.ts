@@ -20,9 +20,9 @@ afterEach(() => {
 function fakeDaemon(snapshot: TasksResponse, onList?: () => void): typeof fetch {
   return (async (input: string | URL | Request) => {
     const path = String(input);
-    if (new URL(path, "http://localhost").pathname === "/tasks") {
+    if (new URL(path, "http://localhost").pathname === "/fleet/tasks") {
       onList?.();
-      return new Response(JSON.stringify(snapshot), { status: 200 });
+      return new Response(JSON.stringify({ items: snapshot.tasks, seq: snapshot.seq, total: snapshot.tasks.length, next_cursor: null }), { status: 200 });
     }
     return new Response(JSON.stringify({ error: "not found" }), { status: 404 });
   }) as typeof fetch;

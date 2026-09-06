@@ -21,6 +21,8 @@ import {
 import { projectAttentionItems } from "./attentionItems.js";
 import { formatAge, formatTimeOfDay } from "./format.js";
 import type { StateFilterKey } from "./LeftRail.js";
+import { useFleetPage } from "../data/useFleetPage.js";
+import { PageControls } from "../components/PageControls.js";
 
 export interface RightRailProps {
   sessionId: string;
@@ -65,7 +67,12 @@ export function RightRail({
   onSelectRun,
   nowMs: nowMsProp,
 }: RightRailProps) {
-  const { snapshot, health, runs } = useConsoleData();
+  const { client, snapshot, health, runs, fleet } = useConsoleData();
+  const attentionOptions = { session: sessionId, state: stateFilter, limit: 10, attention: true };
+  const attentionTasks = useFleetPage(client, "tasks", attentionOptions);
+  const attentionRuns = useFleetPage(client, "runs", { ...attentionOptions, state: stateFilter === "all" || stateFilter === "gate" ? "gate" : stateFilter });
+  const queueTasks = fleet ? attentionTasks.items : snapshot.tasks;
+  const queueRuns = fleet ? attentionRuns.items : runs.summaries;
   const honesty = useHonesty({
     ready: snapshot.ready,
     streamConnected: snapshot.connected,
@@ -106,15 +113,15 @@ export function RightRail({
 
   const items = useMemo(
     () =>
-      projectAttentionItems(snapshot.tasks, runs.summaries, {
+      projectAttentionItems(queueTasks, queueRuns, {
         nowMs,
         sessionId,
         stateFilter,
       }),
-    [snapshot.tasks, runs.summaries, nowMs, sessionId, stateFilter],
+    [queueTasks, queueRuns, nowMs, sessionId, stateFilter],
   );
 
-  const queuePhase = queuePhaseFrom(honesty.phase, items.length);
+  const queuePhase = fleet && (attentionTasks.error || attentionRuns.error) ? "error" : fleet && (attentionTasks.loading && attentionTasks.total === null || attentionRuns.loading && attentionRuns.total === null) ? "loading" : queuePhaseFrom(honesty.phase, items.length);
   const hosePhase = hosePhaseFrom(honesty.phase, firehose.length);
 
   const queueHonesty =
@@ -200,10 +207,14 @@ export function RightRail({
           })}
         </div>
       </Panel>
+      {fleet ? <>
+        <PageControls label="attention tasks" page={attentionTasks} />
+        <PageControls label="attention runs" page={attentionRuns} />
+      </> : null}
 
       <Panel
         title="firehose"
-        meta="watch — follow"
+        meta="task stream · newest 50 runs"
         phase={hosePhase}
         honestyKind="events"
         testId="rail-firehose"

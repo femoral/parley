@@ -24,6 +24,7 @@ export * from "./vendor-home.js";
 export * from "./project-lint.js";
 export * from "./rubric.js";
 export * from "./sdk.js";
+export * from "./fleet.js";
 export * from "./pid-start-time.js";
 export * from "./session-state.js";
 export * from "./states.js";

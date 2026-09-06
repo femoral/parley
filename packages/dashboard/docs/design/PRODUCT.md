@@ -29,6 +29,12 @@ stale, and error state designed, never defaulted.
 
 ## Product Purpose
 
+Fleet history is chronological, newest-created first, and server-paginated (#400).
+The right rail remains the attention-first triage surface. Session/state controls
+filter both main tables; incompatible populations explicitly show no matches.
+Scope totals are independent of pages. Find searches only recently loaded tasks
+(as its placeholder states); direct task/run links fetch detail on demand.
+
 Parley Console is the operator's instrument panel for parley. Headless agent work
 is invisible; workflow runs make it also *structured* — nodes, gates, fan-outs,
 iterations, deliverables. The console renders that structure and the live fleet

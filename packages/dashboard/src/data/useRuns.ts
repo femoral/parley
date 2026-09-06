@@ -33,17 +33,20 @@ export function useRuns(
   const tick = useCallback(async (): Promise<void> => {
     const selected = selectedRef.current;
     try {
-      const list = await client.listRuns();
-      setSummaries(list.runs);
+      const list = await client.fleetPage("runs");
+      setSummaries(list.items);
       setStatus("online");
       setError(null);
+      if (selectedRef.current !== selected) return;
 
       if (selected) {
         const prior = detailsRef.current;
         try {
           const detail = await client.getRun(selected);
+          if (selectedRef.current !== selected) return;
           setDetails(new Map([[selected, detail]]));
         } catch (err) {
+          if (selectedRef.current !== selected) return;
           const kept = prior.get(selected);
           setDetails(kept ? new Map([[selected, kept]]) : new Map());
           setError(err instanceof Error ? err.message : "run detail failed");

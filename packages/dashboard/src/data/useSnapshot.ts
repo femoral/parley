@@ -158,6 +158,12 @@ export function useSnapshot(client: ParleyClient): SnapshotView {
 
     const emit = (opts?: { immediate?: boolean }): void => {
       evictTerminalOverflow(taskMap);
+      // This is a recent discovery cache, not the fleet roster. Bound active
+      // entries too; attention and detail have independent server reads.
+      if (taskMap.size > 500) {
+        const oldest = [...taskMap.values()].sort((a, b) => a.created_at.localeCompare(b.created_at) || a.task_id.localeCompare(b.task_id));
+        for (const task of oldest.slice(0, taskMap.size - 500)) taskMap.delete(task.task_id);
+      }
       if (opts?.immediate) {
         cancelScheduledFlush();
         flush();
@@ -200,6 +206,10 @@ export function useSnapshot(client: ParleyClient): SnapshotView {
       try {
         const { snapshot, stream: live } = await bootstrapTaskStream({
           client,
+          loadSnapshot: async () => {
+            const page = await client.fleetPage("tasks", { limit: 100 });
+            return { tasks: page.items, seq: page.seq };
+          },
           onEvent: (event) => {
             markConnected();
             const merged = mergeEnvelope(taskMap.get(event.task.task_id), event);
@@ -217,9 +227,10 @@ export function useSnapshot(client: ParleyClient): SnapshotView {
           live.close();
           return;
         }
-        for (const task of snapshot.tasks) {
-          if (!taskMap.has(task.task_id)) taskMap.set(task.task_id, task);
-        }
+        const buffered = [...taskMap.values()].filter((task) => task.seq > snapshot.seq);
+        taskMap.clear();
+        for (const task of snapshot.tasks) taskMap.set(task.task_id, task);
+        for (const task of buffered) taskMap.set(task.task_id, task);
         stream = live;
         setSeq(snapshot.seq);
         // Drop any pending reconnect scheduled by a prior stream error.

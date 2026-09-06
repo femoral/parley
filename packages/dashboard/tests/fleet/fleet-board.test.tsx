@@ -11,7 +11,7 @@ afterEach(() => {
 const NOW = Date.parse("2026-06-15T12:00:00.000Z");
 
 describe("FleetBoard", () => {
-  it("renders KPI strip, attention-sorted tasks with tokens/duration, and failed run pips", () => {
+  it("renders KPI strip, newest-created tasks with ID tie breaks, and failed run pips", () => {
     const onSelectTask = vi.fn();
     const onSelectRun = vi.fn();
     render(
@@ -102,15 +102,15 @@ describe("FleetBoard", () => {
     const runningKpi = screen.getByTestId("fleet-kpi-running");
     expect(runningKpi.textContent).toMatch(/1\/2/);
 
-    // Tasks attention order: ask, fail, running, completed
+    // Equal creation timestamps break ties by descending unique ID, not state.
     const taskPanel = screen.getByTestId("fleet-tasks");
     const taskRows = within(taskPanel).getAllByRole("row").slice(1); // skip header
     const names = taskRows.map((r) => r.getAttribute("data-testid"));
     expect(names).toEqual([
-      "fleet-task-t-ask",
-      "fleet-task-t-fail",
       "fleet-task-t-run",
+      "fleet-task-t-fail",
       "fleet-task-t-done",
+      "fleet-task-t-ask",
     ]);
 
     // Tokens + duration present for completed task

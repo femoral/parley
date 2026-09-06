@@ -6,6 +6,7 @@
  * `http://127.0.0.1:<port>` base.
  */
 import { DaemonRequestError } from "./client.js";
+import type { FleetPage, FleetPageOptions, FleetSummary } from "./fleet.js";
 import type {
   CleanResponse,
   HealthResponse,
@@ -26,6 +27,7 @@ import type {
   DeliverableValue,
   RunDetailResponse,
   RunsResponse,
+  RunSummary,
 } from "./run-query.js";
 import { TASK_EVENT_NAMES } from "./states.js";
 
@@ -114,6 +116,19 @@ export class ParleyClient {
     params.set("all", "true");
     const qs = params.toString();
     return this.request<TasksResponse>(qs === "" ? "/tasks" : `/tasks?${qs}`);
+  }
+
+  fleetPage<T extends "tasks" | "runs">(
+    kind: T,
+    options: FleetPageOptions = {},
+  ): Promise<FleetPage<T extends "tasks" ? TaskEnvelope : RunSummary>> {
+    const params = new URLSearchParams();
+    for (const [key, value] of Object.entries(options)) if (value !== undefined) params.set(key, String(value));
+    return this.request(`/fleet/${kind}?${params}`);
+  }
+
+  fleetSummary(session = "all"): Promise<FleetSummary> {
+    return this.request(`/fleet/summary?session=${encodeURIComponent(session)}`);
   }
 
   /**
@@ -306,6 +321,7 @@ export interface BootstrapTaskStreamOptions
   extends Omit<StreamTaskEventsOptions, "since" | "baseUrl"> {
   /** The client whose base URL and fetch the snapshot uses. */
   client: ParleyClient;
+  loadSnapshot?: () => Promise<TasksResponse>;
 }
 
 /**
@@ -317,8 +333,8 @@ export interface BootstrapTaskStreamOptions
 export async function bootstrapTaskStream(
   options: BootstrapTaskStreamOptions,
 ): Promise<BootstrappedStream> {
-  const { client, ...streamOptions } = options;
-  const snapshot = await client.listTasks();
+  const { client, loadSnapshot, ...streamOptions } = options;
+  const snapshot = await (loadSnapshot ? loadSnapshot() : client.listTasks());
   const stream = streamTaskEvents({
     ...streamOptions,
     baseUrl: client.url(""),

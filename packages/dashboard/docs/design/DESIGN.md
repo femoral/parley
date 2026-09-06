@@ -77,8 +77,16 @@ below AA while pure token checks stay green.
 | eval-good | `#3ea99c` | | eval-poor | `#d08898` |
 
 State chip pattern: square 7px dot + uppercase mono label, border `<state>44`,
-ground `<state>14`. Attention order (sorting, legend): awaiting_answer, stalled,
+ground `<state>14`. Attention order (right rail and legend): awaiting_answer, stalled,
 failed, running, queued, pending, completed, cancelled.
+
+Fleet task/run tables deliberately use **newest-created-first**, with descending
+unique ID ties (#400), replacing their original attention-first ordering. Each
+table has independent 50-record server pages and Previous / Next / Newest controls
+outside its scrolling body. Session and state changes reset both tables. The
+attention rail retains rank/oldest-first ordering and independent pagination, so
+historical asks, stalls, failures and held gates are never hidden by roster pages.
+Counts, burn and KPIs cover the retained session, not the page or state chip.
 
 Chip and footer legend share **one label table** (`stateLabels.ts`): the same
 uppercase vocabulary (e.g. DONE, CANCEL, AWAITING) renders in both places.

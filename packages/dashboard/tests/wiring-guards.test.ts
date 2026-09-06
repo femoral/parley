@@ -36,7 +36,7 @@ describe("wiring guards (console data layer)", () => {
 
   it("useRuns hits listRuns and getRun", () => {
     const src = read("useRuns.ts");
-    expect(src).toMatch(/client\.listRuns\(/);
+    expect(src).toMatch(/client\.fleetPage\("runs"/);
     expect(src).toMatch(/client\.getRun\(/);
   });
 

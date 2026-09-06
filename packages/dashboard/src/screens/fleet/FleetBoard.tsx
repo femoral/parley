@@ -8,8 +8,9 @@ import {
   useRef,
   useState,
   type RefObject,
+  type ReactNode,
 } from "react";
-import type { RunSummary, RunnerListEntry, TaskEnvelope } from "@useparley/core";
+import type { RunSummary, RunnerListEntry, TaskEnvelope, FleetSummary } from "@useparley/core";
 import { normalizeUsage } from "@useparley/core";
 import { CopyScaffold, Panel, StateChip } from "../../components/index.js";
 import {
@@ -21,8 +22,6 @@ import {
 import { delegateScaffold } from "../task/scaffolds.js";
 import {
   isFreshFailure,
-  sortRunsByAttention,
-  sortTasksByAttention,
 } from "./attentionSort.js";
 import { coatVar, harnessModelLine } from "./coats.js";
 import {
@@ -103,6 +102,12 @@ export interface FleetBoardProps {
   onSelectTask: (id: string) => void;
   onSelectRun: (id: string) => void;
   nowMs?: number;
+  paginated?: boolean;
+  summary?: FleetSummary | null;
+  taskControls?: ReactNode;
+  runControls?: ReactNode;
+  tasksLoading?: boolean;
+  tasksError?: string | null;
 }
 
 /** Quantize wall-clock to the minute so KPI memos are stable across polls. */
@@ -171,20 +176,21 @@ export function FleetBoard(props: FleetBoardProps) {
         tasks: props.tasks,
         runs: props.runs,
         nowMs,
+        summary: props.summary,
       }),
-    [props.tasks, props.runs, nowMs],
+    [props.tasks, props.runs, nowMs, props.summary],
   );
 
   const sortedTasks = useMemo(
-    () => sortTasksByAttention(props.tasks),
+    () => [...props.tasks].sort((a, b) => b.created_at.localeCompare(a.created_at) || b.task_id.localeCompare(a.task_id)),
     [props.tasks],
   );
   const sortedRuns = useMemo(
-    () => sortRunsByAttention(props.runs),
+    () => [...props.runs].sort((a, b) => b.created_at.localeCompare(a.created_at) || b.run_id.localeCompare(a.run_id)),
     [props.runs],
   );
 
-  const tasksPhase = panelPhaseFromSnapshot(global, props.tasks.length);
+  const tasksPhase = props.tasksError ? "error" : props.tasksLoading ? "loading" : panelPhaseFromSnapshot(global, props.tasks.length);
   const runsPhase = panelPhaseFromTransport(
     props.runsStatus,
     props.runs.length,
@@ -216,7 +222,7 @@ export function FleetBoard(props: FleetBoardProps) {
 
   // Full-board loading / offline with no data yet.
   if (
-    (global === "loading" || global === "connecting") &&
+    !props.paginated && (global === "loading" || global === "connecting") &&
     props.tasks.length === 0 &&
     props.runs.length === 0
   ) {
@@ -230,7 +236,7 @@ export function FleetBoard(props: FleetBoardProps) {
     );
   }
 
-  if (global === "offline" && props.tasks.length === 0) {
+  if (!props.paginated && global === "offline" && props.tasks.length === 0) {
     return (
       <div className="pc-fleet" data-testid="fleet-board" data-phase="offline">
         <div className="pc-fleet__global-honesty" data-testid="fleet-offline">
@@ -253,7 +259,7 @@ export function FleetBoard(props: FleetBoardProps) {
         global === "panel-error" ||
         (tasksPhase === "empty" && runsPhase === "empty")));
 
-  if (emptyPhase && nothingToShow) {
+  if (!props.paginated && emptyPhase && nothingToShow) {
     return (
       <div className="pc-fleet" data-testid="fleet-board" data-phase="empty">
         <div className="pc-fleet__global-honesty" data-testid="fleet-empty">
@@ -277,7 +283,9 @@ export function FleetBoard(props: FleetBoardProps) {
       <h1 className="pc-visually-hidden">Fleet board</h1>
       <div className="pc-fleet__board" data-testid="fleet-board-scroll">
         <div className="pc-fleet-kpis" data-testid="fleet-kpis" role="group" aria-label="Fleet KPIs">
-          {kpis.map((k) => (
+          {kpis.map((raw) => {
+            const k = props.paginated && !props.summary ? { ...raw, value: "—", note: "Waiting for scope totals" } : raw;
+            return (
             <div
               key={k.id}
               className={`pc-fleet-kpi pc-fleet-kpi--${k.tone}`}
@@ -292,16 +300,17 @@ export function FleetBoard(props: FleetBoardProps) {
                 {k.note}
               </span>
             </div>
-          ))}
+          ); })}
         </div>
 
         <div className="pc-fleet__body">
           <div className="pc-fleet__main">
             <Panel
               title="runs"
-              meta={`${heldCount} held · track = nodes × loop`}
+              meta={`newest created first · ${heldCount} held on page`}
               phase={runsPhase}
               honestyKind="runs"
+              honestyMessage={props.paginated && runsPhase === "empty" ? "No runs match this scope." : undefined}
               testId="fleet-runs"
               className="pc-fleet-runs"
             >
@@ -420,15 +429,17 @@ export function FleetBoard(props: FleetBoardProps) {
               </div>
             </Panel>
 
+            {props.runControls}
+
             <Panel
               title="tasks"
-              meta={`attention · age · ${sortedTasks.length}`}
+              meta={`newest created first · ${sortedTasks.length} on page`}
               phase={tasksPhase}
               honestyKind="tasks"
               testId="fleet-tasks"
               className="pc-fleet-tasks"
               emptyAction={
-                <CopyScaffold
+                props.paginated ? <span>No tasks match this scope.</span> : <CopyScaffold
                   text={delegateScaffold()}
                   testId="fleet-delegate-scaffold"
                 />
@@ -595,6 +606,7 @@ export function FleetBoard(props: FleetBoardProps) {
                 </div>
               </div>
             </Panel>
+            {props.taskControls}
           </div>
 
           <aside className="pc-fleet__side" data-testid="fleet-side">

@@ -20,7 +20,8 @@ import {
   useRuns,
   useSnapshot,
 } from "./data/index.js";
-import { attentionTaskIds, countNeedsOrch } from "./chrome/attention.js";
+import { attentionTaskIds } from "./chrome/attention.js";
+import { useFleetSummary } from "./data/useFleetPage.js";
 import { FindCombobox } from "./chrome/FindCombobox.js";
 import { FooterLegend } from "./chrome/FooterLegend.js";
 import { formatClock } from "./chrome/format.js";
@@ -104,7 +105,9 @@ export function Shell() {
   const everLive = useRef(false);
 
   // One snapshot, one /runs poll cadence, one SSE stream — screens consume via context.
-  const snapshot = useSnapshot(client);
+  const rawSnapshot = useSnapshot(client);
+  const { summary, summaryError } = useFleetSummary(client, sessionId);
+  const snapshot = useMemo(() => ({ ...rawSnapshot, totalTasks: summary?.task_total ?? 0, activeTasks: summary ? Object.entries(summary.tasks).filter(([s]) => !["completed", "failed", "cancelled"].includes(s)).reduce((n, [, count]) => n + count, 0) : 0 }), [rawSnapshot, summary]);
   const health = useHealth(client);
   const runs = useRuns(client, { enabled: true, selectedRunId });
   const honesty = useHonesty({
@@ -116,13 +119,13 @@ export function Shell() {
   });
 
   const consoleData = useMemo(
-    () => ({ client, snapshot, health, runs }),
-    [client, snapshot, health, runs],
+    () => ({ client, snapshot, health, runs, fleet: { session: sessionId, state: stateFilter, summary, summaryError } }),
+    [client, snapshot, health, runs, sessionId, stateFilter, summary, summaryError],
   );
 
   const attentionCount = useMemo(
-    () => countNeedsOrch(snapshot.tasks, runs.summaries),
-    [snapshot.tasks, runs.summaries],
+    () => summary?.attention ?? 0,
+    [summary],
   );
 
   // Hash ↔ screen + entity id (deep links for task/run).

@@ -539,3 +539,26 @@
   grid-row: 1;
 }
 
+/* Page controls stay outside table scroll/empty states. */
+.pc-page-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 10px;
+  font: var(--type-sans-500-11p5-1);
+  color: var(--text-strong-2);
+}
+.pc-page-controls > div { display: flex; flex-wrap: wrap; gap: 6px; }
+.pc-page-controls button {
+  font: var(--type-sans-500-11p5-1);
+  color: inherit;
+  background: transparent;
+  border: 1px solid var(--border);
+  padding: 6px 8px;
+  cursor: pointer;
+}
+.pc-page-controls button:hover:not(:disabled) { background: var(--border); }
+.pc-page-controls button:disabled { opacity: .45; cursor: default; }
+.pc-page-controls button:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }

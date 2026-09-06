@@ -75,7 +75,7 @@ export function LeftRail({
   tokenBurn,
   nowMs: nowMsProp,
 }: LeftRailProps) {
-  const { client, snapshot, health } = useConsoleData();
+  const { client, snapshot, health, fleet } = useConsoleData();
   const honesty = useHonesty({
     ready: snapshot.ready,
     streamConnected: snapshot.connected,
@@ -119,8 +119,8 @@ export function LeftRail({
   }, [client, snapshot.seq]);
 
   const burn = useMemo(
-    () => tokenBurn ?? projectTokenBurn(snapshot.tasks, { nowMs }),
-    [tokenBurn, snapshot.tasks, nowMs],
+    () => tokenBurn ?? fleet?.summary?.burn ?? projectTokenBurn(fleet ? [] : snapshot.tasks, { nowMs }),
+    [tokenBurn, snapshot.tasks, nowMs, fleet],
   );
 
   const maxBurn = useMemo(() => {
@@ -134,8 +134,8 @@ export function LeftRail({
 
   const phase = burnPhaseFrom(honesty.phase, burn.totals.tasks);
   const stateCounts = useMemo(
-    () => countByState(snapshot.tasks),
-    [snapshot.tasks],
+    () => fleet?.summary?.tasks ?? countByState(fleet ? [] : snapshot.tasks),
+    [snapshot.tasks, fleet],
   );
 
   const retentionNote =
@@ -145,6 +145,7 @@ export function LeftRail({
 
   return (
     <div className="pc-rail-left" data-testid="rail-left-content">
+      {fleet?.summaryError ? <p className="pc-rail-honesty" role="status">{fleet.summaryError}. Showing last known counts when available.</p> : null}
       <section
         className="pc-rail-section"
         data-testid="rail-scope"
@@ -207,7 +208,7 @@ export function LeftRail({
               key === "all"
                 ? snapshot.totalTasks
                 : key === "gate"
-                  ? undefined
+                  ? fleet?.summary?.held
                   : (stateCounts[key] ?? 0);
             const pressed = stateFilter === key;
             return (

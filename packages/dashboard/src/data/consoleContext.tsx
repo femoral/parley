@@ -5,12 +5,15 @@
 import { createContext, useContext, type ReactNode } from "react";
 import type { ParleyClient } from "@useparley/core";
 import type { HealthView, RunsView, SnapshotView } from "./types.js";
+import type { FleetSummary } from "@useparley/core";
+import type { StateFilterKey } from "../chrome/LeftRail.js";
 
 export interface ConsoleData {
   client: ParleyClient;
   snapshot: SnapshotView;
   health: HealthView;
   runs: RunsView;
+  fleet?: { session: string; state: StateFilterKey; summary: FleetSummary | null; summaryError?: string | null };
 }
 
 const ConsoleDataContext = createContext<ConsoleData | null>(null);

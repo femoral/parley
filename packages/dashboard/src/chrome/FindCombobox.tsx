@@ -259,7 +259,7 @@ export function FindCombobox({
           aria-activedescendant={activeDescendant}
           aria-haspopup="listbox"
           aria-describedby={showStatus ? statusId : undefined}
-          placeholder="filter tasks and sessions"
+          placeholder="find loaded tasks or sessions"
           value={query}
           onChange={(e) => {
             setQuery(e.target.value);

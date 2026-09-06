@@ -922,6 +922,17 @@ const MIGRATIONS: string[] = [
   `CREATE INDEX tasks_session ON tasks(orchestrator_session_id);`,
   `CREATE INDEX tasks_created ON tasks(created_at DESC, id DESC);
    CREATE INDEX tasks_session_created ON tasks(orchestrator_session_id, created_at DESC, id DESC);`,
+  `CREATE INDEX tasks_state_created ON tasks(state, created_at DESC, id DESC);
+   CREATE INDEX tasks_session_state_created ON tasks(orchestrator_session_id, state, created_at DESC, id DESC);
+   CREATE INDEX tasks_run_created ON tasks(run_id, created_at DESC, id DESC);
+   CREATE INDEX tasks_burn_time ON tasks(COALESCE(completed_at, started_at, created_at));
+   CREATE INDEX tasks_session_burn_time ON tasks(orchestrator_session_id, COALESCE(completed_at, started_at, created_at));
+   CREATE INDEX runs_created ON runs(created_at DESC, id DESC);
+   CREATE INDEX runs_session_created ON runs(orchestrator_session_id, created_at DESC, id DESC);
+   CREATE INDEX runs_state_created ON runs(state, created_at DESC, id DESC);
+   CREATE INDEX runs_session_state_created ON runs(orchestrator_session_id, state, created_at DESC, id DESC);
+   CREATE INDEX tasks_attention ON tasks((CASE state WHEN 'awaiting_answer' THEN '0' WHEN 'stalled' THEN '1' ELSE '2' END || ':' || updated_at), id) WHERE state IN ('awaiting_answer','stalled','failed');
+   CREATE INDEX tasks_session_attention ON tasks(orchestrator_session_id, (CASE state WHEN 'awaiting_answer' THEN '0' WHEN 'stalled' THEN '1' ELSE '2' END || ':' || updated_at), id) WHERE state IN ('awaiting_answer','stalled','failed');`,
 ];
 
 /** How many schema migrations have been applied — equals `PRAGMA user_version` after open. */

@@ -35,9 +35,9 @@ orchestrating agent. The mock states this explicitly (run screen banner, footer)
 
 | Feature | Console mock | Verdict | Notes |
 |---|---|---|---|
-| Task list w/ state groups, attention-rank ordering | Tasks table sorted "by attention, then age" + state filter chips | covered | Table replaces grouped list |
+| Task list w/ state groups, attention-rank ordering | Newest-created-first paginated tasks table + server-side state filter chips | covered | #400 deliberately replaces attention-first table order; the right rail retains ranked attention |
 | Run list as peer rows w/ pip track (`nodes × loop.max`, cap 20, severity-preserving aggregation) | Runs table with `track` pip cells | covered | Cap/aggregation rule must carry over |
-| Session scoping ("All sessions" + recent sessions) | `scope · orchestrator session` sidebar panel | covered | **Built (#363):** left-rail scope select (All sessions + `/sessions`); filters the attention queue |
+| Session scoping ("All sessions" + recent sessions) | `scope · orchestrator session` sidebar panel | covered | **Built (#363/#400):** left-rail scope select filters both fleet tables, attention and aggregate counts; state changes preserve session scope |
 | Find combobox (task hits local, session hits `/sessions?q=`, debounce, a11y states) | Static `/ filter tasks, runs, branches` box | partial | No results treatment, loading/error/no-match states in mock |
 | Task row identity: harness coat, vendor emblem, faction | Coat swatch + `harness · model` text | partial | Coats yes; vendor emblems dropped — decide if coat+text suffices |
 | Run chip on task rows (`7f3a · review.2.tests`) | `run address` column | covered | |
@@ -56,7 +56,7 @@ orchestrating agent. The mock states this explicitly (run screen banner, footer)
 |---|---|---|---|
 | Outstanding asks (question, age, session, copy `parley answer` scaffold) | AWAITING cards with reason/meta | partial | **Built (#363):** `AttentionCard` in right rail with question/reason/meta + age; copy-answer scaffold still deferred to #365 |
 | Held gates surfaced as attention | GATE HELD cards | covered | **Built (#363):** held gates project as GATE HELD cards (awaiting rank), richer than Cove's inbox |
-| Stalled + fresh failures as attention | STALLED / FAILED cards | covered | **Built (#363):** queue unifies asks / stalls / failures / gates; rank-then-age order shared with fleet table |
+| Stalled + fresh failures as attention | STALLED / FAILED cards | covered | **Built (#363/#400):** queue unifies asks / stalls / failures / gates; independent rank-then-age pages, separate from chronological fleet tables |
 | Cards/rows density toggle | cards / rows buttons | covered | **Built (#363):** cards / rows toggle on the attention panel head |
 | Live region announcements, "fleet-wide" qualifier under session scope | — | partial | Header live region announces attention-count changes; per-scope "fleet-wide" qualifier still unspecified |
 | Global event feed | Firehose panel (`watch --follow`) | partial | **Built (#363):** firehose relocated to right rail (not fleet center); client-side projection from snapshot/runs diffs; honest empty = "No events since connect"; rich gate-verb lines still deferred (#360) |

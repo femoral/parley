@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { fleetPageIds, fleetSummary, FleetQueryError } from "./fleet-query.js";
 import http from "node:http";
 import path from "node:path";
 import {
@@ -62,6 +63,7 @@ import {
   getMeta,
   getRun,
   getRunner,
+  getTask,
   latestNodeIteration,
   listDeliverablesForRun,
   listDeliverablesForRunNode,
@@ -3680,6 +3682,35 @@ function createHandler(
         }
         handleRunVerb(engine, res, runId, verb, body);
         return;
+      }
+
+      if (method === "GET" && segments[0] === "fleet" && segments.length === 2) {
+        try {
+          if (segments[1] === "summary") {
+            sendJson(res, 200, fleetSummary(db, url.searchParams.get("session") || "all"));
+            return;
+          }
+          if (segments[1] === "tasks" || segments[1] === "runs") {
+            const kind = segments[1];
+            const page = fleetPageIds(db, kind, url.searchParams);
+            const evalByRepo = new Map<string | null, boolean>();
+            const items = page.ids.map((id) => {
+              if (kind === "tasks") {
+                const row = getTask(db, id)!;
+                if (!evalByRepo.has(row.repo)) evalByRepo.set(row.repo, readEvalExpected(row.repo, paths));
+                return envelopeFor(engine, row, evalByRepo.get(row.repo)!);
+              }
+              const run = getRun(db, id)!;
+              const ws = workspaceForRun(paths, run);
+              return projectRunSummary({ run, tasks: listTasksForRun(db, id).map(taskRowToQuery), definition: loadDefinitionForRun(db, run), branch: ws.branch, worktree: ws.worktree, seq: engine.currentSeq() });
+            });
+            sendJson(res, 200, { items, total: page.total, next_cursor: page.next_cursor, seq: engine.currentSeq() });
+            return;
+          }
+        } catch (error) {
+          if (error instanceof FleetQueryError) throw new HttpError(400, error.message);
+          throw error;
+        }
       }
 
       if (segments[0] === "tasks") {

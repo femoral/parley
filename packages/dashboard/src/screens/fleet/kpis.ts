@@ -2,7 +2,7 @@
  * Fleet KPI strip derivation — honest denominators, no invented caps.
  * "settled 24h" and token-burn KPI share TOKEN_BURN_WINDOW_MS with the chart.
  */
-import type { RunSummary, TaskEnvelope } from "@useparley/core";
+import type { RunSummary, TaskEnvelope, FleetSummary } from "@useparley/core";
 import { normalizeUsage } from "@useparley/core";
 import {
   taskBucketTimeMs,
@@ -27,6 +27,7 @@ export interface FleetKpiInput {
   tasks: readonly TaskEnvelope[];
   runs: readonly RunSummary[];
   nowMs?: number;
+  summary?: FleetSummary | null;
 }
 
 function countByState(tasks: readonly TaskEnvelope[]): Record<string, number> {
@@ -106,19 +107,20 @@ export function countSettled24h(
 
 export function projectFleetKpis(input: FleetKpiInput): FleetKpi[] {
   const nowMs = input.nowMs ?? Date.now();
-  const counts = countByState(input.tasks);
-  const heldGates = input.runs.filter(
+  const summary = input.summary;
+  const counts = summary?.tasks ?? countByState(input.tasks);
+  const heldGates = summary?.held ?? input.runs.filter(
     (r) => r.state === "blocked" && isHeldGate(r.block),
   ).length;
   const asks = counts.awaiting_answer ?? 0;
   const stalled = counts.stalled ?? 0;
-  const freshFailed = input.tasks.filter((t) => isFreshFailure(t, nowMs)).length;
+  const freshFailed = summary?.fresh_failed ?? input.tasks.filter((t) => isFreshFailure(t, nowMs)).length;
   const needsOrch = heldGates + asks + stalled + (counts.failed ?? 0);
 
   const running = counts.running ?? 0;
   const queued = counts.queued ?? 0;
   const pending = counts.pending ?? 0;
-  const cap = deriveConcurrencyCap(input.tasks);
+  const cap = summary ? null : deriveConcurrencyCap(input.tasks);
   const runningValue =
     cap !== null ? `${running}/${cap}` : String(running);
   const runningNote =
@@ -128,9 +130,9 @@ export function projectFleetKpis(input: FleetKpiInput): FleetKpi[] {
         ? `${queued} queued · cap unknown`
         : "cap unknown";
 
-  const advancing = input.runs.filter((r) => r.state === "running").length;
+  const advancing = summary ? summary.runs.running ?? 0 : input.runs.filter((r) => r.state === "running").length;
   // Settled + token burn: same 24h wall-clock window as the burn chart.
-  const settled = countSettled24h(input.tasks, nowMs);
+  const settled = summary?.settled ?? countSettled24h(input.tasks, nowMs);
   const settledTotal = settled.completed + settled.failed;
   // Zero samples → "—", never invent a percent from Math.max(1, …).
   const successNote =
@@ -155,7 +157,8 @@ export function projectFleetKpis(input: FleetKpiInput): FleetKpi[] {
     }
   }
   durs.sort((a, b) => a - b);
-  const p95 = durs.length ? durs[Math.floor(durs.length * 0.95)] ?? durs[durs.length - 1] : null;
+  if (summary) { sumIn = summary.burn.totals.input; sumCached = summary.burn.totals.cached; }
+  const p95 = summary ? summary.p95_ms : durs.length ? durs[Math.floor(durs.length * 0.95)] ?? durs[durs.length - 1] : null;
   const cacheNote =
     sumIn > 0 ? `cache ${Math.round((sumCached / sumIn) * 100)}%` : "cache —";
 
@@ -187,7 +190,7 @@ export function projectFleetKpis(input: FleetKpiInput): FleetKpi[] {
     {
       id: "runs",
       label: "runs",
-      value: String(input.runs.length),
+      value: String(summary?.run_total ?? input.runs.length),
       unit: "total",
       note: `${heldGates} held · ${advancing} advancing`,
       tone: "neutral",
