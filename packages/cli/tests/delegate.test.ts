@@ -299,7 +299,7 @@ describe("deferred completed + usage atomicity (#72)", () => {
     expect(envelope.usage).toEqual({ input_tokens: 11, output_tokens: 3 });
   });
 
-  it("second submit_report after acceptance is rejected", async () => {
+  it("a valid second report supersedes the first while running", async () => {
     const second = {
       summary: "should bounce",
       outcome: "partial" as const,
@@ -315,8 +315,7 @@ describe("deferred completed + usage atomicity (#72)", () => {
     );
 
     expect(envelope.state).toBe("completed");
-    // First report wins.
-    expect(envelope.report).toEqual(REPORT);
+    expect(envelope.report).toEqual(second);
 
     const log = fs.readFileSync(path.join(home, "tasks", "t1", "vendor.jsonl"), "utf8");
     const toolResults = log
@@ -325,8 +324,10 @@ describe("deferred completed + usage atomicity (#72)", () => {
       .map((l) => JSON.parse(l) as { is_error: boolean; text: string });
     expect(toolResults).toHaveLength(2);
     expect(toolResults[0]!.is_error).toBe(false);
-    expect(toolResults[1]!.is_error).toBe(true);
-    expect(toolResults[1]!.text).toMatch(/already has an accepted report/);
+    expect(toolResults[1]!.is_error).toBe(false);
+    const diag = fs.readFileSync(path.join(home, "tasks", "t1", "diag.log"), "utf8");
+    expect(diag).toContain("report superseded");
+    expect(diag).toContain(REPORT.summary);
   });
 
   it("nonzero exit after an accepted report still yields completed with the report", async () => {

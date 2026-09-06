@@ -63,3 +63,6 @@ each other:
 
 Retry only exit 1. Exit 2 is a usage error — a bad flag, or no session — and
 never succeeds on retry.
+# Report corrections
+
+While a task is live, each valid report replaces the previous report. Once settled, further submissions are rejected. Invalid submissions never replace a valid report. The task's `diag.log` records timestamped `report superseded` and `report rejected` lines with the discarded summary; check these when the report differs from the work on the branch. Replacements do not extend the post-report completion fallback.

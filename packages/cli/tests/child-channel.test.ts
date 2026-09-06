@@ -134,6 +134,29 @@ describe("child-channel preamble variant selection (#155)", () => {
 });
 
 describe("cli/http-channel child end-to-end report + Q&A (#155)", () => {
+  it.each(["mcp", "http", "cli"] as const)("keeps the last valid report and logs discarded reports over %s", async (channel) => {
+    writeVendorConfig(channel);
+    const action = (payload: unknown): FakeVendorAction => channel === "mcp"
+      ? { submit_report: payload } : channel === "http"
+        ? { submit_report_http: payload } : { submit_report_cli: payload };
+    const cwd = taskDir([
+      action({ ...REPORT, summary: "probe" }),
+      action(REPORT),
+      action({ summary: "invalid second payload" }),
+    ]);
+    expect((await runCli(["delegate", "-v", "fake", "--cwd", cwd, "report twice"], home)).code).toBe(0);
+    await waitForState(home, "t1", "completed");
+    const row = JSON.parse((await runCli(["status", "t1", "--json"], home)).stdout);
+    expect(row.report.summary).toBe(REPORT.summary);
+    const late = await runCli(["child", "report", "--summary", "late report", "--outcome", "success"], home, { cwd });
+    expect(late.code).not.toBe(0);
+    const diag = fs.readFileSync(path.join(home, "tasks/t1/diag.log"), "utf8");
+    expect(diag).toMatch(/\d{4}-\d{2}-\d{2}T[^\n]+report superseded[^\n]+probe/);
+    expect(diag).toContain("invalid second payload");
+    expect(diag).toMatch(/report rejected[^\n]+late report/);
+    expect(JSON.parse((await runCli(["status", "t1", "--json"], home)).stdout).report.summary).toBe(REPORT.summary);
+  });
+
   it("completes report and Q&A over the HTTP channel", async () => {
     writeVendorConfig("http");
     const cwd = taskDir([

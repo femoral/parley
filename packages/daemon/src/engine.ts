@@ -2562,17 +2562,17 @@ export class TaskEngine {
   submitReport(taskId: string, payload: unknown): string[] | null {
     const task = getTask(this.db, taskId);
     if (!task) return [`unknown task: ${taskId}`];
-    // Settled tasks, or a prior accepted report while still `running` — a
-    // second/straggling report must not re-accept or move the task.
+    // Settling makes a report final; while live, a validated correction wins.
     if (isSettledState(task.state)) {
+      this.logDiscardedReport(taskId, "rejected", payload, `task is ${task.state}`);
       return [`task ${taskId} is already ${task.state}`];
-    }
-    if (task.report !== null) {
-      return [`task ${taskId} already has an accepted report`];
     }
     const schema = resolveReportSchema(task.report_schema);
     const errors = validateReport(payload, schema);
-    if (errors.length > 0) return errors;
+    if (errors.length > 0) {
+      this.logDiscardedReport(taskId, "rejected", payload, errors.join("; "));
+      return errors;
+    }
 
     // A misbehaving child may report over its own outstanding question —
     // settle the parked call so its timer cannot stall the eventual completion.
@@ -2592,6 +2592,9 @@ export class TaskEngine {
       question_id: null,
       question: null,
     };
+    if (task.report !== null) {
+      this.logDiscardedReport(taskId, "superseded", parseJsonColumn<unknown>(task.report));
+    }
     if (wasAwaiting) {
       this.taskTransitions.apply(taskId, "running", {
         cause: "submit_report_unawait",
@@ -2600,8 +2603,20 @@ export class TaskEngine {
     } else {
       updateTask(this.db, taskId, reportFields);
     }
-    this.scheduleReportFallback(taskId);
+    if (task.report === null) this.scheduleReportFallback(taskId);
     return null;
+  }
+
+  private logDiscardedReport(taskId: string, disposition: "rejected" | "superseded", payload: unknown, reason?: string): void {
+    const summary = payload !== null && typeof payload === "object" && "summary" in payload
+      ? payload.summary : null;
+    try {
+      const dir = path.join(this.paths.tasks, taskId);
+      fs.mkdirSync(dir, { recursive: true });
+      fs.appendFileSync(path.join(dir, "diag.log"), `${new Date().toISOString()} report ${disposition}: ${JSON.stringify({ summary, reason })}\n`);
+    } catch {
+      // Diagnostic I/O must not change whether the child's report is accepted.
+    }
   }
 
   /**
