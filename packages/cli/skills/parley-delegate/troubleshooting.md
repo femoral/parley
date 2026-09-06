@@ -47,7 +47,10 @@ long-running task.
 
 ## When `watch` keeps erroring
 
-`watch` exits 1 on a transport problem. Two failures look alike; the wording
+`watch` automatically retries transport failures three times with 250ms, 500ms,
+and 1s backoff, logging each retry to stderr. If those retries are exhausted it
+exits 1 and says re-running is safe. This applies to inbox and `--follow`, without
+changing acknowledgement semantics or JSON stdout. Two failures look alike; the wording
 separates them:
 
 - **`could not reach the advertised parley daemon …`** — nothing is listening.
@@ -65,8 +68,9 @@ each other:
 - Run fewer `parley` commands at once. One `watch` loop for a whole fan-out
   costs one poll; a loop per task multiplies it.
 
-Retry only exit 1. Exit 2 is a usage error — a bad flag, or no session — and
-never succeeds on retry.
+After exit 1, inspect the failure and re-run when the daemon is reachable; this
+does not lose unacknowledged events. HTTP errors are not retried automatically.
+Exit 2 is a usage error — a bad flag, or no session — and never succeeds on retry.
 # Report corrections
 
 While a task is live, each valid report replaces the previous report. Once settled, further submissions are rejected. Invalid submissions never replace a valid report. The task's `diag.log` records timestamped `report superseded` and `report rejected` lines with the discarded summary; check these when the report differs from the work on the branch. Replacements do not extend the post-report completion fallback.

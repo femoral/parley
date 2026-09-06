@@ -235,6 +235,14 @@ export class DaemonRequestError extends Error {
   }
 }
 
+/** No HTTP response (or interrupted response body); safe to retry a read. */
+export class DaemonTransportError extends Error {
+  constructor(message: string, cause: unknown) {
+    super(message, { cause });
+    this.name = "DaemonTransportError";
+  }
+}
+
 /**
  * A client-side `AbortSignal.timeout` expiry, as opposed to a connection
  * failure. `fetch` surfaces it as a `TimeoutError` DOMException; a refused or
@@ -284,10 +292,14 @@ async function daemonFetch<T>(
     });
   } catch (err) {
     // Remote URL-configured daemons keep their own error text (ADR-0010).
-    if (discovery.url !== undefined && discovery.url !== "") throw err;
-    throw new Error(unreachableAdvertisedDaemon(discovery, err));
+    throw new DaemonTransportError(
+      discovery.url ? (err instanceof Error ? err.message : String(err)) : unreachableAdvertisedDaemon(discovery, err),
+      err,
+    );
   }
-  const raw = await res.text();
+  let raw: string;
+  try { raw = await res.text(); }
+  catch (err) { throw new DaemonTransportError(`daemon response interrupted for ${pathname}`, err); }
   if (!res.ok) {
     let detail = `daemon request ${pathname} failed with status ${res.status}`;
     let code: string | undefined;

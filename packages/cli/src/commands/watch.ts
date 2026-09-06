@@ -12,6 +12,7 @@ import { parseArgs } from "../args.js";
 import { DaemonRequestError, daemonGet, ensureDaemon } from "../client.js";
 import { type CliContext, printJson } from "../context.js";
 import { UsageError } from "../errors.js";
+import { watchRead } from "../watch-retry.js";
 import type { Discovery } from "@useparley/daemon/discovery.js";
 
 /**
@@ -118,11 +119,11 @@ export async function runWatch(ctx: CliContext, args: string[]): Promise<number>
   const scopeParams = new URLSearchParams({ session: requested });
   if (positionals.length > 0) scopeParams.set("ids", positionals.join(","));
   if (follow) scopeParams.set("follow", "true");
-  const scope = await daemonGet<WatchScopeResponse>(
+  const scope = await watchRead(() => daemonGet<WatchScopeResponse>(
     discovery,
     `/tasks/scope?${scopeParams}`,
     TASK_LIST_TIMEOUT_MS,
-  ).catch((err: unknown) => {
+  ), ctx.stderr).catch((err: unknown) => {
     if (err instanceof DaemonRequestError && (err.status === 400 || err.status === 404)) {
       throw new UsageError(`watch: ${err.message}`);
     }
@@ -156,7 +157,7 @@ export async function runWatch(ctx: CliContext, args: string[]): Promise<number>
   for (;;) {
     let ev: InboxEventResponse;
     try {
-      ev = await daemonGet<InboxEventResponse>(discovery, query(), LONG_POLL_TIMEOUT_MS);
+      ev = await watchRead(() => daemonGet<InboxEventResponse>(discovery, query(), LONG_POLL_TIMEOUT_MS), ctx.stderr);
     } catch (err) {
       // Unknown session (and other 400s) → usage (exit 2), never tier codes
       // or vacuous success (#256).
@@ -253,7 +254,10 @@ async function runFollow(
     params.set("since", String(cursor));
     params.set("wait", "true");
     const q = `/tasks/events?${params.toString()}`;
-    const ev = await daemonGet<FollowEventResponse>(discovery, q, LONG_POLL_TIMEOUT_MS);
+    const ev = await watchRead(() => daemonGet<FollowEventResponse>(discovery, q, LONG_POLL_TIMEOUT_MS), ctx.stderr).catch((err: unknown) => {
+      if (err instanceof DaemonRequestError && (err.status === 400 || err.status === 404)) throw new UsageError(`watch: ${err.message}`);
+      throw err;
+    });
     if (ev.event === null) {
       cursor = ev.seq;
       if (remainingTasks.size === 0) {

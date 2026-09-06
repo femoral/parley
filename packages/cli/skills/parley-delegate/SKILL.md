@@ -76,8 +76,11 @@ What each exit code means and what you must do before acking:
 | 6 | `task.completed` | review the branch, merge-or-reject, typecheck, `parley clean` (step 4) | **explicit**: next `watch --ack <seq>` — only after the review is done |
 | 0 | — (all-done) | stop looping; nothing is pending and nothing is running | — |
 | 2 | usage error | fix your invocation | — |
+| 1 | watch itself failed (not a task state) | inspect stderr; re-running is safe after transport retries are exhausted | no new ack |
 
 Rules that leave no room for interpretation:
+
+- Watch retries transient transport failures up to three times (250ms, 500ms, 1s), reporting each retry on stderr. This applies to inbox and `--follow`; JSON stdout stays clean. HTTP/usage errors are not retried. After transport retries are exhausted, exit 1 means watch itself failed and re-running is safe.
 
 - **Ack means "I handled this", never "I saw this".** Ack a `completed` event only after its branch is reviewed and merged-or-rejected; ack a `failed` event only after triage. Acking early deletes your only reminder — the task drops out of the inbox and nothing will resurface it.
 - **Un-acked events redeliver.** If you crash or forget between delivery and ack, the next `watch` hands you the same event again. That is the safety net — lean on it; never ack defensively "to clear the queue".
