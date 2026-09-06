@@ -120,6 +120,8 @@ Rules that leave no room for interpretation:
 
 `watch` resolves its scope on the daemon using lightweight task identities and states; startup no longer downloads every task report. No additional watch flags are needed.
 
+Every non-follow watch prints its resolved session, flag/environment source, task/run counts, terminal count, and excluded unowned-task count to stderr before polling. JSON stdout remains event-only. Session-wide watches pick up newly created tasks and runs while waiting; explicit task/run references keep their named scope. There is no inferred session: provide `--session` or `PARLEY_SESSION_ID`; `--session latest` remains an explicit opt-in.
+
 Each task gets its own worktree, so parallel tasks never collide. Batch them however it makes sense, then drive the **entire** set with the same watch loop above:
 
 ```

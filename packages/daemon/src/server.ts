@@ -2225,7 +2225,7 @@ async function handleInbox(
 
   const wait = params.get("wait") === "true";
   const result = wait
-    ? await engine.waitForInbox(watch, longPollWindowMs())
+    ? await engine.waitForInbox(() => engine.resolveWatchSet(resolved, session), longPollWindowMs())
     : (() => {
         const pending = engine.peekInboxDelivering(watch);
         if (pending) return { event: pending } as const;

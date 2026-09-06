@@ -317,6 +317,36 @@ describe("parley watch attention inbox (ADR-0007 / #91)", () => {
 });
 
 describe("watch session empty-set / unknown-session (#256)", () => {
+  it("reports scope and excluded unowned tasks without adopting a running foreign session", async () => {
+    await delegate(taskDir(quick()));
+    await waitForState(home, "t1", "completed");
+    await runCli(["delegate", "-v", "fake", "--cwd", taskDir(slow(20_000)), "foreign"], home, { extraEnv: { PARLEY_SESSION_ID: "foreign" } });
+    await waitForState(home, "t2", "running");
+    await runCli(["delegate", "-v", "fake", "--cwd", taskDir(quick()), "unowned"], home, { extraEnv: { PARLEY_SESSION_ID: undefined, PARLEY_ANCESTRY_CHAIN: "[]" } });
+    await waitForState(home, "t3", "completed");
+    const result = await runCli(["watch", "--json"], home);
+    expect(result.code).toBe(6);
+    expect(JSON.parse(result.stdout).task.task_id).toBe("t1");
+    expect(result.stderr).toContain("session=test-orch-session source=PARLEY_SESSION_ID tasks=1 runs=0 terminal=1 excluded_unowned_tasks=1");
+    expect(result.stdout.trim().split("\n")).toHaveLength(1);
+  });
+
+  it("a nonempty session watch sees tasks created while its first poll is parked", async () => {
+    await delegate(taskDir(slow(20_000)));
+    await waitForState(home, "t1", "running");
+    const watch = startCli(["watch", "--json"], home);
+    try {
+      await new Promise<void>((resolve) => {
+        watch.child.stderr?.on("data", (chunk) => { if (String(chunk).includes("watch scope:")) resolve(); });
+      });
+      await delegate(taskDir([{ ask: "new task question" }]));
+      const result = await watch.result;
+      expect(result.code).toBe(3);
+      expect(JSON.parse(result.stdout).task.task_id).toBe("t2");
+      expect(result.stderr).toContain("tasks=1");
+    } finally { watch.child.kill("SIGTERM"); }
+  });
+
   it("watch --session unknown exits 2 naming the id while tasks run under another session", async () => {
     // Exact reproduction from the issue body: task running under A, watch B.
     await delegate(taskDir(slow(5000)), "live");

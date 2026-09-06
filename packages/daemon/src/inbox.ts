@@ -133,7 +133,7 @@ export interface Inbox {
    * Requires a WakeSource; pure peeks do not.
    */
   waitFor(
-    watch: WatchSet,
+    watch: WatchSet | (() => WatchSet),
     timeoutMs: number,
     wake: WakeSource,
   ): Promise<{ event: InboxEvent } | { allDone: true } | null>;
@@ -298,12 +298,13 @@ export function createInbox(
   }
 
   async function waitFor(
-    watch: WatchSet,
+    watchSource: WatchSet | (() => WatchSet),
     timeoutMs: number,
     wake: WakeSource,
   ): Promise<{ event: InboxEvent } | { allDone: true } | null> {
     const deadline = performance.now() + timeoutMs;
     for (;;) {
+      const watch = typeof watchSource === "function" ? watchSource() : watchSource;
       const pending = peek(watch);
       if (pending) return { event: pending };
       if (allDone(watch)) return { allDone: true };
@@ -311,9 +312,10 @@ export function createInbox(
       if (remaining <= 0) return null;
       const woke = await wake.park(remaining);
       if (!woke) {
-        const late = peek(watch);
+        const current = typeof watchSource === "function" ? watchSource() : watchSource;
+        const late = peek(current);
         if (late) return { event: late };
-        if (allDone(watch)) return { allDone: true };
+        if (allDone(current)) return { allDone: true };
         return null;
       }
     }

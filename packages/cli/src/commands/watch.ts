@@ -118,7 +118,7 @@ export async function runWatch(ctx: CliContext, args: string[]): Promise<number>
   const scopeParams = new URLSearchParams({ session: requested });
   if (positionals.length > 0) scopeParams.set("ids", positionals.join(","));
   if (follow) scopeParams.set("follow", "true");
-  const { tasks, seq: nowSeq, session } = await daemonGet<WatchScopeResponse>(
+  const scope = await daemonGet<WatchScopeResponse>(
     discovery,
     `/tasks/scope?${scopeParams}`,
     TASK_LIST_TIMEOUT_MS,
@@ -128,25 +128,17 @@ export async function runWatch(ctx: CliContext, args: string[]): Promise<number>
     }
     throw err;
   });
+  const { tasks, seq: nowSeq, session } = scope;
 
   if (follow) {
     return runFollow(ctx, discovery, tasks, positionals, sessionFlag, session, nowSeq);
   }
 
-  // Inbox scope: session filter (like status), then optional task-ref filter
-  // that narrows the session set. Explicit refs must exist; a ref outside the
-  // resolved session is still accepted (the orchestrator named it).
-  let scoped = tasks.filter((t) => t.orchestrator_session_id === session);
-
-  if (positionals.length > 0) {
-    scoped = positionals.map((ref) => {
-      const row = resolveRef(tasks, ref);
-      if (!row) throw new UsageError(`watch: no such task: ${ref}`);
-      return row;
-    });
-  }
-
-  const ids = [...new Set(scoped.map((t) => t.task_id))];
+  // Only explicitly named references freeze an id set. Session membership is
+  // re-expanded by the daemon on every wake, including during this first poll.
+  const ids = positionals;
+  const source = sessionFlag !== undefined ? "--session" : "PARLEY_SESSION_ID";
+  ctx.stderr(`watch scope: session=${session} source=${source}${requested === "latest" ? " latest" : ""} tasks=${scope.task_count} runs=${scope.run_count} terminal=${scope.terminal_count} excluded_unowned_tasks=${scope.excluded_unowned_tasks}\n`);
 
   const query = (): string => {
     const params = new URLSearchParams();
@@ -185,10 +177,12 @@ export async function runWatch(ctx: CliContext, args: string[]): Promise<number>
       if (ev.task === null && (ev.run === null || ev.run === undefined)) {
         // Known-but-idle session (registered, zero subjects): diagnose rather
         // than mute so an accidental wait is visible (#256).
-        if (!notedIdleSession && ids.length === 0) {
+        if (!notedIdleSession) {
           notedIdleSession = true;
           ctx.stderr(
-            `note: session ${session} has no tasks or runs yet; waiting\n`,
+            scope.task_count + scope.run_count === 0
+              ? `note: session ${session} has no tasks or runs yet; waiting\n`
+              : `note: session ${session} has no pending events; waiting for live work\n`,
           );
         }
         continue;

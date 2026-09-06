@@ -3426,8 +3426,8 @@ export class TaskEngine {
       // Session-scoped task expansion when the caller passed session without
       // enumerating every task id (gate-first workflows with zero tasks yet).
       if (taskOrRunIds.length === 0 && sessionId) {
-        for (const task of listTasks(this.db)) {
-          if (task.orchestrator_session_id === sid) taskIds.add(task.id);
+        for (const task of listTasksForSession(this.db, sid)) {
+          taskIds.add(task.id);
         }
       }
     }
@@ -3472,7 +3472,7 @@ export class TaskEngine {
    * Records a delivery for the breaker when an event is returned.
    */
   async waitForInbox(
-    watch: WatchSet,
+    watch: WatchSet | (() => WatchSet),
     timeoutMs: number,
   ): Promise<{ event: InboxEvent } | { allDone: true } | null> {
     const result = await this.inbox.waitFor(watch, timeoutMs, {
