@@ -38,3 +38,6 @@ export function formatDuration(ms: number): string {
   if (ms >= 1_000 && ms % 1_000 === 0) return plural(ms / 1_000, "second");
   return `${ms} ms`;
 }
+/** Shared watch budgets: the client must outlive one server long poll. */
+export const DEFAULT_LONG_POLL_MS = 25_000;
+export const LONG_POLL_TIMEOUT_MS = 60_000;

@@ -1,5 +1,7 @@
 # Troubleshooting
 
+Each watch long-poll has one 25-second deadline, including wakes from unrelated tasks or runs. An empty poll is retried normally by the CLI; it is not completion. The 60-second client request timeout remains longer than the daemon window. Busy neighboring sessions must not extend that window.
+
 When a task fails and the reason isn't obvious from `parley status`, check things
 in this order — cheapest and least context-hungry first.
 

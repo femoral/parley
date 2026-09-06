@@ -1,4 +1,5 @@
 import {
+  LONG_POLL_TIMEOUT_MS,
   formatErrorCategoryLabel,
   isActionableState,
   isTerminalState,
@@ -12,12 +13,6 @@ import { DaemonRequestError, daemonGet, ensureDaemon } from "../client.js";
 import { type CliContext, printJson } from "../context.js";
 import { UsageError } from "../errors.js";
 import type { Discovery } from "@useparley/daemon/discovery.js";
-
-/**
- * How long each long-poll request may take; must exceed the daemon's window so
- * the CLI, not the request, controls re-polling.
- */
-const LONG_POLL_TIMEOUT_MS = 60_000;
 
 /**
  * Timeout for the one-shot task-list fetch that seeds a watch. Deliberately

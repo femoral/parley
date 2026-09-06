@@ -3,6 +3,8 @@ import http from "node:http";
 import path from "node:path";
 import {
   collectUnknownConfigKeys,
+  DEFAULT_LONG_POLL_MS,
+  LONG_POLL_TIMEOUT_MS,
   DEFAULT_RUNNER_PRESENCE_GRACE_MS,
   DEFAULT_RUNNER_STALE_MS,
   deriveRunnerStatus,
@@ -222,9 +224,9 @@ function longPollWindowMs(): number {
   const raw = process.env.PARLEY_LONG_POLL_MS;
   if (raw !== undefined && raw !== "") {
     const parsed = Number(raw);
-    if (Number.isFinite(parsed) && parsed > 0) return parsed;
+    if (Number.isFinite(parsed) && parsed > 0 && parsed < LONG_POLL_TIMEOUT_MS) return parsed;
   }
-  return 25_000;
+  return DEFAULT_LONG_POLL_MS;
 }
 
 /**

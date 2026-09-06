@@ -302,11 +302,14 @@ export function createInbox(
     timeoutMs: number,
     wake: WakeSource,
   ): Promise<{ event: InboxEvent } | { allDone: true } | null> {
+    const deadline = performance.now() + timeoutMs;
     for (;;) {
       const pending = peek(watch);
       if (pending) return { event: pending };
       if (allDone(watch)) return { allDone: true };
-      const woke = await wake.park(timeoutMs);
+      const remaining = deadline - performance.now();
+      if (remaining <= 0) return null;
+      const woke = await wake.park(remaining);
       if (!woke) {
         const late = peek(watch);
         if (late) return { event: late };

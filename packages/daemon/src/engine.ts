@@ -3338,11 +3338,14 @@ export class TaskEngine {
     peek: () => Transition | null,
     timeoutMs: number,
   ): Promise<Transition | null> {
+    const deadline = performance.now() + timeoutMs;
     for (;;) {
       const found = peek();
       if (found) return found;
-      const woke = await this.parkEventWaiter(timeoutMs);
-      if (!woke) return null; // poll window elapsed, no matching transition yet
+      const remaining = deadline - performance.now();
+      if (remaining <= 0) return null;
+      const woke = await this.parkEventWaiter(remaining);
+      if (!woke) return peek(); // include any transition observed at the deadline
     }
   }
 

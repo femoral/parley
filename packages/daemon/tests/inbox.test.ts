@@ -267,6 +267,23 @@ describe("inbox.allDone", () => {
 });
 
 describe("inbox.waitFor", () => {
+  it("uses a decreasing total deadline even if every park wakes", async () => {
+    const { box } = inbox([task("a", "running", 1)]);
+    const now = vi.spyOn(performance, "now");
+    let elapsed = 0;
+    now.mockImplementation(() => elapsed);
+    const budgets: number[] = [];
+    try {
+      expect(await box.waitFor(watch(["a"]), 100, { park: async (budget) => {
+        budgets.push(budget);
+        elapsed += 25;
+        if (budgets.length > 10) throw new Error("poll deadline was rearmed");
+        return true;
+      } })).toBeNull();
+      expect(budgets).toEqual([100, 75, 50, 25]);
+    } finally { now.mockRestore(); }
+  });
+
   it("returns immediately when an event is already pending (level-triggered)", async () => {
     const { box } = inbox([task("a", "failed", 9)]);
     const park = vi.fn(async () => false);
