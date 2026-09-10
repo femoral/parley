@@ -589,6 +589,66 @@ describe("nothing auto-removes at task settle; clean + terminal retention", () =
     );
   });
 
+  it("keeps a checkout whose gitignored handoff dir still holds files (#401)", () => {
+    // The cross-step handoff lives under parley's own `.parley/`, but its
+    // contents are the child's. No exemption: a run whose handoff channel
+    // still holds files is a run worth inspecting — `parley clean <run>` is
+    // the explicit exit.
+    const repo = makeGitRepo({ "README.md": "hi\n" });
+    scratch.push(repo);
+    const { worktrees } = makeHome();
+    const run = createRunCheckout({
+      repoRoot: repo,
+      worktreesDir: worktrees,
+      runId: "r13",
+      workflow: "coding-1",
+    });
+    const address = formatStepAddress({ node: "review", iteration: 1 });
+    const handoff = ensureTmpHandoff(run.path, address);
+    fs.writeFileSync(path.join(handoff.out, "result.json"), '{"verdict":"ok"}\n');
+
+    const result = retainRunCheckoutsAtTerminal({
+      repoRoot: repo,
+      worktreesDir: worktrees,
+      runId: "r13",
+      checkoutBases: { [run.path]: run.baseSha },
+      branchBases: { [run.branch]: run.baseSha },
+    });
+
+    expect(result.retained).toEqual([run.path]);
+    expect(result.removed).toEqual([]);
+    expect(fs.existsSync(path.join(handoff.out, "result.json"))).toBe(true);
+  });
+
+  it("still reclaims a checkout whose handoff holds only parley's own writes", () => {
+    // `in/` and the step brief under the same tmp dir are materialized by the
+    // daemon, not written by the child — they must not pin every checkout.
+    const repo = makeGitRepo({ "README.md": "hi\n" });
+    scratch.push(repo);
+    const { worktrees } = makeHome();
+    const run = createRunCheckout({
+      repoRoot: repo,
+      worktreesDir: worktrees,
+      runId: "r14",
+      workflow: "coding-1",
+    });
+    const address = formatStepAddress({ node: "implement", iteration: 1 });
+    const handoff = ensureTmpHandoff(run.path, address);
+    fs.writeFileSync(path.join(handoff.in, "spec"), "input\n");
+    materializeStepContext(run.path, address, "step brief\n", []);
+
+    const result = retainRunCheckoutsAtTerminal({
+      repoRoot: repo,
+      worktreesDir: worktrees,
+      runId: "r14",
+      checkoutBases: { [run.path]: run.baseSha },
+      branchBases: { [run.branch]: run.baseSha },
+    });
+
+    expect(result.removed).toEqual([run.path]);
+    expect(result.retained).toEqual([]);
+  });
+
   it("prune only deletes tip==base branches; never invents a base", () => {
     const repo = makeGitRepo({ "README.md": "hi\n" });
     scratch.push(repo);

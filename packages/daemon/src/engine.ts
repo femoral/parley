@@ -296,16 +296,17 @@ import {
 } from "./trace.js";
 import {
   attachWorktree,
+  childAuthoredIgnoredPaths,
   commonGitDir,
   createWorktree,
   excludeMaterializedFiles,
   excludeMaterializedFilesInCwdRepo,
   gitDir,
   isValidGitCheckout,
-  isWorktreeModified,
-  isWorktreePorcelainDirty,
   removeWorktree,
   repoRoot,
+  worktreeDirt,
+  worktreeModification,
   writeMaterializedFiles,
 } from "./worktree.js";
 
@@ -404,6 +405,16 @@ export function retiredVendorMessage(vendor: string): string | null {
 /** Best-effort message from a thrown value (git errors arrive as `Error`). */
 function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
+}
+
+/** How many artifact paths a retention reason/diagnostic names before eliding. */
+const ARTIFACT_LIST_LIMIT = 5;
+
+/** Comma-joined artifact paths, capped so a reason line stays readable (#401). */
+function formatArtifactList(paths: readonly string[]): string {
+  const head = paths.slice(0, ARTIFACT_LIST_LIMIT).join(", ");
+  const rest = paths.length - ARTIFACT_LIST_LIMIT;
+  return rest > 0 ? `${head}, +${rest} more` : head;
 }
 
 /**
@@ -2259,10 +2270,12 @@ export class TaskEngine {
   /**
    * Why cleaning `task`'s worktree should be refused/skipped without `--force`
    * (#336). Null when the worktree is safe to remove: no other non-terminal
-   * task shares the path, and the tree has no uncommitted/untracked files.
-   * HEAD divergence from `base_sha` is not a block — commits live on the kept
-   * branch. Live-sharer check runs first so the refusal names the blocking
-   * task id. Auto-remove still uses the broader {@link isWorktreeModified}.
+   * task shares the path, and the tree has neither uncommitted/untracked files
+   * nor child-authored ignored artifacts (#401 — a review-only draft under a
+   * gitignored `out/` is the child's work, not an empty tree). HEAD divergence
+   * from `base_sha` is not a block — commits live on the kept branch.
+   * Live-sharer check runs first so the refusal names the blocking task id.
+   * Auto-remove still uses the broader {@link worktreeModification}.
    */
   private worktreeCleanBlockReason(task: TaskRow): string | null {
     if (task.worktree === null) return null;
@@ -2273,13 +2286,20 @@ export class TaskEngine {
         `refusing to clean (pass --force to override)`
       );
     }
-    if (fs.existsSync(task.worktree) && isWorktreePorcelainDirty(task.worktree)) {
+    if (!fs.existsSync(task.worktree)) return null;
+    const dirt = worktreeDirt(task.worktree);
+    if (!dirt.dirty) return null;
+    if (dirt.reason === "ignored-artifacts") {
       return (
-        `worktree has uncommitted or untracked changes; ` +
+        `worktree holds gitignored files the child wrote ` +
+        `(${formatArtifactList(dirt.ignoredPaths)}); ` +
         `refusing to clean (pass --force to override)`
       );
     }
-    return null;
+    return (
+      `worktree has uncommitted or untracked changes; ` +
+      `refusing to clean (pass --force to override)`
+    );
   }
 
   /**
@@ -2360,12 +2380,32 @@ export class TaskEngine {
       // Worktree first: if removal fails, keep the row so the next sweep retries
       // and the branch association is not orphaned mid-flight.
       if (task.worktree !== null) {
+        // Expiry purges whatever the worktree holds — a configured deadline is
+        // not an accident (#401). Naming the artifacts that go with it is the
+        // only trace left once the row and logs are deleted, so ask for them
+        // directly: a worktree that is *also* uncommitted-dirty still had
+        // gitignored drafts in it.
+        let artifacts: string[] = [];
+        try {
+          if (fs.existsSync(task.worktree)) {
+            artifacts = childAuthoredIgnoredPaths(task.worktree);
+          }
+        } catch {
+          /* the purge proceeds either way; the trace is best-effort */
+        }
         try {
           this.removeTaskWorktree(task);
         } catch (err) {
           failed.push({ task_id: task.id, error: errorMessage(err) });
           continue;
         }
+        this.appendHomeDiag(
+          `gc: purged worktree ${task.worktree} (task ${task.id}, ` +
+            `completed ${task.completed_at ?? "unknown"})` +
+            (artifacts.length > 0
+              ? ` holding ignored artifacts (${formatArtifactList(artifacts)})`
+              : ""),
+        );
       }
 
       try {
@@ -2610,13 +2650,9 @@ export class TaskEngine {
   private logDiscardedReport(taskId: string, disposition: "rejected" | "superseded", payload: unknown, reason?: string): void {
     const summary = payload !== null && typeof payload === "object" && "summary" in payload
       ? payload.summary : null;
-    try {
-      const dir = path.join(this.paths.tasks, taskId);
-      fs.mkdirSync(dir, { recursive: true });
-      fs.appendFileSync(path.join(dir, "diag.log"), `${new Date().toISOString()} report ${disposition}: ${JSON.stringify({ summary, reason })}\n`);
-    } catch {
-      // Diagnostic I/O must not change whether the child's report is accepted.
-    }
+    // Diagnostic I/O must not change whether the child's report is accepted —
+    // appendTaskDiag swallows its own failures.
+    this.appendTaskDiag(taskId, `report ${disposition}: ${JSON.stringify({ summary, reason })}`);
   }
 
   /**
@@ -3522,8 +3558,13 @@ export class TaskEngine {
 
   /**
    * Auto-remove the task's worktree once its child has exited, but only when it
-   * is untouched (no new commits, clean tree). Modified worktrees are kept so
-   * the orchestrator can review and merge; `--cwd` tasks have no worktree.
+   * is untouched (no new commits, clean tree, no child-authored ignored
+   * artifacts). Modified worktrees are kept so the orchestrator can review and
+   * merge; `--cwd` tasks have no worktree.
+   *
+   * A worktree kept because the child's only product is gitignored (#401) says
+   * so in the task's `diag.log`: that retention is invisible in the diff and in
+   * `git status`, so without the line the orchestrator has nothing to read.
    */
   private maybeAutoRemoveWorktree(taskId: string): void {
     const task = getTask(this.db, taskId);
@@ -3531,11 +3572,34 @@ export class TaskEngine {
     // task retains its worktree and logs so the orchestrator can diagnose it.
     if (!task || task.state !== "completed") return;
     if (task.worktree === null || task.base_sha === null) return;
-    if (isWorktreeModified(task.worktree, task.base_sha)) return;
+    const modification = worktreeModification(task.worktree, task.base_sha);
+    if (modification.reason === "ignored-artifacts") {
+      this.appendTaskDiag(
+        taskId,
+        `worktree retained: child-authored ignored artifacts ` +
+          `(${formatArtifactList(modification.ignoredPaths)})`,
+      );
+      return;
+    }
+    if (modification.modified) return;
     try {
       this.removeTaskWorktree(task);
     } catch {
       // leave it in place if git refuses; `parley clean` can retry
+    }
+  }
+
+  /** Best-effort append to a task's own `diag.log` (see docs/agents/troubleshooting.md). */
+  private appendTaskDiag(taskId: string, line: string): void {
+    try {
+      const dir = taskLogDir(this.paths, taskId);
+      fs.mkdirSync(dir, { recursive: true });
+      fs.appendFileSync(
+        path.join(dir, "diag.log"),
+        `${new Date().toISOString()} ${line}\n`,
+      );
+    } catch {
+      /* never let logging change lifecycle behaviour */
     }
   }
 

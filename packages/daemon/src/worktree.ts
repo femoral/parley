@@ -1,4 +1,4 @@
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import type { MaterializedFile } from "@useparley/core";
@@ -398,33 +398,307 @@ export function attachWorktree(opts: AttachWorktreeOptions): WorktreeInfo {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Child-authored ignored artifacts (#401)
+// ---------------------------------------------------------------------------
+
 /**
- * Whether the worktree has uncommitted or untracked files (parley plumbing is
- * excluded via worktree-scoped excludes, so it never counts). Used by `parley
- * clean` (#336): commits on the task branch are kept and are not loss risk.
- * On any git error we report dirty, erring toward refusing clean.
+ * The run's cross-step handoff subtree (`.parley/tmp/<address>/{in,out}`). It
+ * sits under parley's own `.parley/`, which parley excludes wholesale — but
+ * the `out/` leg is the *child's* output surface (ADR-0018), so it is carved
+ * out of the plumbing rule below: a run whose handoff channel still holds
+ * output is worth inspecting, and `parley clean <run>` is the explicit exit.
  */
-export function isWorktreePorcelainDirty(wtPath: string): boolean {
+const HANDOFF_ROOT = `${PARLEY_DIR}/tmp`;
+
+/**
+ * The child's leg of the handoff: `.parley/tmp/<address>/out/…`. The step
+ * brief and `in/` under the same address are written by the daemon
+ * (`materializeStepContext` / `materializeInputs`), so they stay plumbing.
+ */
+const HANDOFF_OUT = new RegExp(`^${HANDOFF_ROOT.replace(/\./g, "\\.")}/[^/]+/out/`);
+
+/** Upper bound on artifact paths collected by a directory walk. */
+const MAX_ARTIFACTS = 50;
+
+/** One `git status --porcelain` record: the two status chars plus its path. */
+interface StatusEntry {
+  /** Porcelain code, e.g. `??` (untracked), `!!` (ignored), ` M`, `R `. */
+  code: string;
+  /** Worktree-relative path; directories keep git's trailing slash. */
+  path: string;
+}
+
+/** Where parley registers this worktree's excluded plumbing (see appendExclude). */
+function parleyExcludePath(wt: string): string {
+  return path.join(gitDir(wt), "parley-exclude");
+}
+
+/**
+ * The paths parley itself excluded in this worktree, read back from the
+ * worktree-scoped exclude file — the single source of truth for "plumbing"
+ * (translated config, `.parley/`, adapter-materialized files). Normalized to
+ * worktree-relative with no leading or trailing slash; an absent file means
+ * nothing was registered.
+ */
+export function parleyExcludedPaths(wtPath: string): string[] {
+  let text: string;
   try {
-    return git(["-C", wtPath, "status", "--porcelain"]) !== "";
+    text = fs.readFileSync(parleyExcludePath(wtPath), "utf8");
   } catch {
-    return true;
+    return [];
+  }
+  return text
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line !== "" && !line.startsWith("#"))
+    .map((line) => line.replace(/^\/+/, "").replace(/\/+$/, ""))
+    .filter((line) => line !== "");
+}
+
+/** `git status --porcelain -z` records (ignored entries included). */
+function statusEntries(wtPath: string): StatusEntry[] {
+  const raw = execFileSync(
+    "git",
+    ["-C", wtPath, "status", "--porcelain", "-z", "--ignored"],
+    { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] },
+  );
+  const records = raw.split("\0");
+  const entries: StatusEntry[] = [];
+  for (let i = 0; i < records.length; i += 1) {
+    const record = records[i];
+    if (record === undefined || record === "") continue;
+    const code = record.slice(0, 2);
+    // A rename/copy record carries its original path in the next NUL field.
+    if (code.startsWith("R") || code.startsWith("C")) i += 1;
+    entries.push({ code, path: record.slice(3) });
+  }
+  return entries;
+}
+
+/** Worktree-relative files under `rel` (a file yields itself), capped. */
+function filesUnder(wtPath: string, rel: string): string[] {
+  const found: string[] = [];
+  const walk = (relDir: string): void => {
+    if (found.length >= MAX_ARTIFACTS) return;
+    let dirents: fs.Dirent[];
+    try {
+      dirents = fs.readdirSync(path.join(wtPath, relDir), { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const dirent of dirents) {
+      if (found.length >= MAX_ARTIFACTS) return;
+      const child = `${relDir}/${dirent.name}`;
+      if (dirent.isDirectory()) walk(child);
+      else found.push(child);
+    }
+  };
+  let stat: fs.Stats;
+  try {
+    stat = fs.statSync(path.join(wtPath, rel));
+  } catch {
+    return [];
+  }
+  if (!stat.isDirectory()) return [rel];
+  walk(rel);
+  return found;
+}
+
+/**
+ * Child output the ignored entry `rel` hides inside the run handoff subtree —
+ * empty unless the entry covers (or sits inside) `.parley/tmp`, and limited to
+ * the `out/` leg the child writes.
+ */
+function handoffArtifacts(wtPath: string, rel: string): string[] {
+  const inside = rel === HANDOFF_ROOT || rel.startsWith(`${HANDOFF_ROOT}/`);
+  if (!inside && !HANDOFF_ROOT.startsWith(`${rel}/`)) return [];
+  const start = rel.startsWith(`${HANDOFF_ROOT}/`) ? rel : HANDOFF_ROOT;
+  return filesUnder(wtPath, start).filter((file) => HANDOFF_OUT.test(file));
+}
+
+/**
+ * Leg 1 of the plumbing rule — how much of `rel` parley itself registered:
+ *
+ * - `owned`: `rel` *is* a registered path, or sits under one — all plumbing.
+ * - `partial`: registered paths sit *under* `rel`. `git status --ignored`
+ *   collapses to directory granularity (`!! .grok/`), so such an entry holds
+ *   parley's config *and* whatever the child wrote beside it; the caller must
+ *   look inside rather than write the whole directory off.
+ * - `unknown`: leg 1 has nothing to say; exclude-source attribution decides.
+ */
+function parleyOwnership(rel: string, owned: readonly string[]): "owned" | "partial" | "unknown" {
+  let partial = false;
+  for (const registered of owned) {
+    if (registered === rel || rel.startsWith(`${registered}/`)) return "owned";
+    if (registered.startsWith(`${rel}/`)) partial = true;
+  }
+  return partial ? "partial" : "unknown";
+}
+
+/**
+ * Leg 2 of the plumbing rule: the exclude file that made each path ignored,
+ * per `git check-ignore -v`. Paths matched by nothing are absent from the map.
+ * Throws when git itself fails (exit 1 just means "no path matched").
+ */
+function excludeSources(wtPath: string, rels: readonly string[]): Map<string, string> {
+  const result = spawnSync(
+    "git",
+    ["-C", wtPath, "check-ignore", "-v", "-z", "--stdin"],
+    { input: `${rels.join("\0")}\0`, encoding: "utf8" },
+  );
+  if (result.error) throw result.error;
+  if (result.status !== 0 && result.status !== 1) {
+    throw new Error(`git check-ignore failed: ${result.stderr?.trim() ?? result.status}`);
+  }
+  const fields = result.stdout.split("\0");
+  const sources = new Map<string, string>();
+  // Records are `<source>\0<linenum>\0<pattern>\0<pathname>`.
+  for (let i = 0; i + 3 < fields.length; i += 4) {
+    const source = fields[i];
+    const pathname = fields[i + 3];
+    if (source === undefined || pathname === undefined || pathname === "") continue;
+    sources.set(pathname, source);
+  }
+  return sources;
+}
+
+/**
+ * Gitignored paths in `wtPath` that the *child* authored — the artifacts a
+ * report-only task's own report points at (#401). `git status --porcelain`
+ * never lists ignored files, so a worktree whose entire product is a
+ * gitignored draft used to read as untouched and got reclaimed under the
+ * report that referenced it.
+ *
+ * Plumbing is subtracted on two legs, both required:
+ *
+ * 1. Paths parley registered in the worktree-scoped exclude file
+ *    ({@link parleyExcludedPaths}).
+ * 2. For whatever survives, the exclude file git attributes the match to:
+ *    parley's own exclude file means plumbing, the repo's `.gitignore` means
+ *    the child's.
+ *
+ * Leg 1 is not redundant: when a path is ignored by both the repo `.gitignore`
+ * and parley's `core.excludesFile`, git attributes it to `.gitignore` — so in
+ * any repo whose `.gitignore` covers a vendor dir (`.grok/`, `.claude/`,
+ * `.codex/` are common), attribution alone would read parley's own
+ * materialized config as the child's work and retain every worktree forever.
+ *
+ * Returns worktree-relative paths as git reports them (directories keep their
+ * trailing slash). Throws on git failure; callers err toward retention.
+ */
+export function childAuthoredIgnoredPaths(wtPath: string): string[] {
+  return childAuthoredFrom(wtPath, statusEntries(wtPath));
+}
+
+/** {@link childAuthoredIgnoredPaths} over already-collected status entries. */
+function childAuthoredFrom(wtPath: string, entries: readonly StatusEntry[]): string[] {
+  const ignored = entries.filter((entry) => entry.code === "!!").map((entry) => entry.path);
+  if (ignored.length === 0) return [];
+
+  const owned = parleyExcludedPaths(wtPath);
+  const found: string[] = [];
+  const unattributed: string[] = [];
+  for (const entry of ignored) {
+    const rel = entry.replace(/\/+$/, "");
+    found.push(...handoffArtifacts(wtPath, rel));
+    const ownership = parleyOwnership(rel, owned);
+    if (ownership === "owned") continue;
+    if (ownership === "partial") {
+      // A collapsed directory holding parley's own config: whatever else the
+      // child dropped in there is still the child's, so name those files
+      // instead of writing the whole directory off as plumbing.
+      found.push(
+        ...filesUnder(wtPath, rel).filter(
+          (file) => parleyOwnership(file, owned) === "unknown" && !HANDOFF_OUT.test(file),
+        ),
+      );
+      continue;
+    }
+    unattributed.push(entry);
+  }
+  if (unattributed.length > 0) {
+    const excludeFile = path.resolve(parleyExcludePath(wtPath));
+    const sources = excludeSources(wtPath, unattributed);
+    for (const entry of unattributed) {
+      const source = sources.get(entry);
+      if (source !== undefined && path.resolve(wtPath, source) === excludeFile) continue;
+      found.push(entry);
+    }
+  }
+  return found;
+}
+
+/** Why a worktree counts as dirt — the reason `parley clean` refuses. */
+export interface WorktreeDirt {
+  dirty: boolean;
+  /** Null when clean; `error` when git itself failed (treated as dirty). */
+  reason: "uncommitted" | "ignored-artifacts" | "error" | null;
+  /** Child-authored ignored artifacts found, when that is the reason. */
+  ignoredPaths: string[];
+}
+
+/**
+ * Whether the worktree holds uncommitted/untracked files or child-authored
+ * ignored artifacts, and which of the two — so `parley clean` can name the
+ * reason it refused (#336, #401). Parley plumbing never counts (see
+ * {@link childAuthoredIgnoredPaths}); commits on the task branch are kept and
+ * are not loss risk, so they are not dirt. One `git status` answers both
+ * questions. On any git error we report dirty, erring toward refusing clean.
+ */
+export function worktreeDirt(wtPath: string): WorktreeDirt {
+  try {
+    const entries = statusEntries(wtPath);
+    if (entries.some((entry) => entry.code !== "!!")) {
+      return { dirty: true, reason: "uncommitted", ignoredPaths: [] };
+    }
+    const ignoredPaths = childAuthoredFrom(wtPath, entries);
+    if (ignoredPaths.length > 0) {
+      return { dirty: true, reason: "ignored-artifacts", ignoredPaths };
+    }
+    return { dirty: false, reason: null, ignoredPaths: [] };
+  } catch {
+    return { dirty: true, reason: "error", ignoredPaths: [] };
   }
 }
 
 /**
- * Whether the worktree has diverged from its baseline — any new commit or any
- * dirty/untracked file (parley plumbing is excluded, so it never counts).
- * Modified worktrees are retained; untouched ones are auto-removed. On any git
- * error we report modified, erring toward keeping the child's work.
+ * Whether the worktree has diverged from its baseline — any new commit, any
+ * dirty/untracked file, or any child-authored ignored artifact (parley
+ * plumbing is excluded, so it never counts). Modified worktrees are retained;
+ * untouched ones are auto-removed. On any git error we report modified,
+ * erring toward keeping the child's work.
  */
 export function isWorktreeModified(wtPath: string, baseSha: string): boolean {
-  try {
-    if (isWorktreePorcelainDirty(wtPath)) return true;
-    return git(["-C", wtPath, "rev-parse", "HEAD"]) !== baseSha;
-  } catch {
-    return true;
+  return worktreeModification(wtPath, baseSha).modified;
+}
+
+/** Why a worktree is retained rather than auto-removed. */
+export interface WorktreeModification {
+  modified: boolean;
+  /** Null when untouched; `error` when git itself failed (treated as modified). */
+  reason: "uncommitted" | "ignored-artifacts" | "commits" | "error" | null;
+  /** Child-authored ignored artifacts found, when that is the reason. */
+  ignoredPaths: string[];
+}
+
+/**
+ * {@link isWorktreeModified} with the reason attached, so the retain branch
+ * can say what it kept and why instead of being silent (#401).
+ */
+export function worktreeModification(wtPath: string, baseSha: string): WorktreeModification {
+  const dirt = worktreeDirt(wtPath);
+  if (dirt.dirty) {
+    return { modified: true, reason: dirt.reason, ignoredPaths: dirt.ignoredPaths };
   }
+  try {
+    if (git(["-C", wtPath, "rev-parse", "HEAD"]) !== baseSha) {
+      return { modified: true, reason: "commits", ignoredPaths: [] };
+    }
+  } catch {
+    return { modified: true, reason: "error", ignoredPaths: [] };
+  }
+  return { modified: false, reason: null, ignoredPaths: [] };
 }
 
 /**

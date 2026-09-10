@@ -50,6 +50,24 @@ human/agent driving parley is the **orchestrator**.
   (the only wait primitive; ADR-0008).
 - **Report envelope** — the schema-validated result object a completed task
   hands back (worktree path, branch, report body).
+- **Untouched worktree** — the auto-remove predicate: no commit past
+  `base_sha`, nothing uncommitted or untracked, **and no child-authored
+  ignored artifact**. Anything else is *touched* and is retained for the
+  orchestrator (ADR-0005 as amended, #401). Same predicate gates the `parley
+  clean` refusal and run-terminal checkout retention; retention/gc expiry is
+  unaffected and purges whatever the worktree holds.
+- **Child-authored ignored artifact** — a gitignored file in a worktree that
+  the *child* wrote, not parley: an entry from `git status --ignored` that is
+  neither registered in the worktree-scoped exclude file (translated config,
+  `.parley/`, adapter-materialized files) nor attributed by
+  `git check-ignore` to that file. Both legs are required — git attributes a
+  path ignored by *both* the repo `.gitignore` and parley's exclude file to
+  `.gitignore`, so attribution alone would read parley's own vendor config as
+  the child's work. The `out/` leg of a run's cross-step handoff
+  (`.parley/tmp/<address>/out`) is the child's output surface, not plumbing
+  (ADR-0018); the step brief and `in/` beside it are parley's own writes.
+  Build output counts as the child's too, so a task that installs or builds
+  keeps its worktree until `clean --force` or expiry — accepted, not a bug.
 - **Session provenance** — the identity of the orchestrator run parley records
   for eval/traceability: session id, harness, model, effort. Injected
   deterministically by a **harness plugin** as `PARLEY_SESSION_ID` /

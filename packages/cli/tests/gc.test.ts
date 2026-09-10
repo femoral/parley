@@ -202,6 +202,65 @@ describe("parley gc (#153)", () => {
     expect(text.stdout).toMatch(/Would remove 1 task/);
   });
 
+  it("purges an expired worktree kept for gitignored drafts, and says so (#401)", async () => {
+    // Retention for ignored artifacts holds a worktree until review — but a
+    // configured deadline is not an accident, so expiry still purges it. The
+    // diag line is the only trace left once the row and logs are gone.
+    writeRetention(home, 30);
+    const src = makeGitRepo(
+      [
+        { write_file: { path: "out/DRAFT.md", contents: "draft\n" } },
+        ...happyActions(),
+      ],
+      { ".gitignore": "out/\n" },
+    );
+    scratch.push(src);
+
+    await runCli(["delegate", "-v", "fake", "-n", "draft", "x"], home, { cwd: src });
+    await waitForState(home, "t1", "completed");
+    const wt = worktreePath(home, "t1", src);
+    await new Promise((r) => setTimeout(r, 300));
+    expect(fs.existsSync(wt)).toBe(true); // retained for the ignored draft
+
+    backdateCompleted(home, "t1", new Date(Date.now() - 31 * 24 * 60 * 60 * 1000).toISOString());
+    const gc = await runCli(["gc", "--json"], home);
+    expect(gc.code).toBe(0);
+    expect((JSON.parse(gc.stdout) as { removed: number }).removed).toBe(1);
+    expect(fs.existsSync(wt)).toBe(false);
+
+    const diag = fs.readFileSync(path.join(home, "diag.log"), "utf8");
+    const purgeLines = diag.split("\n").filter((l) => l.includes("gc: purged worktree"));
+    expect(purgeLines).toHaveLength(1);
+    expect(purgeLines[0]).toContain("t1");
+    expect(purgeLines[0]).toContain("out/");
+  });
+
+  it("names ignored artifacts in the purge diag even when the tree is also dirty (#401)", async () => {
+    // worktreeDirt stops at the first uncommitted entry, so the purge line has
+    // to ask for the artifacts directly or the trace names nothing.
+    writeRetention(home, 30);
+    const src = makeGitRepo(
+      [
+        { write_file: { path: "out/DRAFT.md", contents: "draft\n" } },
+        { write_file: { path: "tracked-change.txt", contents: "x\n" } },
+        ...happyActions(),
+      ],
+      { ".gitignore": "out/\n" },
+    );
+    scratch.push(src);
+
+    await runCli(["delegate", "-v", "fake", "-n", "mixed", "x"], home, { cwd: src });
+    await waitForState(home, "t1", "completed");
+    backdateCompleted(home, "t1", new Date(Date.now() - 31 * 24 * 60 * 60 * 1000).toISOString());
+
+    expect((await runCli(["gc", "--json"], home)).code).toBe(0);
+    const purgeLine = fs
+      .readFileSync(path.join(home, "diag.log"), "utf8")
+      .split("\n")
+      .find((l) => l.includes("gc: purged worktree"));
+    expect(purgeLine).toContain("out/");
+  });
+
   it("respects retention boundary: recent terminal tasks are kept", async () => {
     writeRetention(home, 30);
     const src = makeGitRepo(happyActions());

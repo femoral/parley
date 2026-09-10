@@ -119,6 +119,7 @@ Usage:
                             (--json: raw per-event JSONL, untouched)
   parley clean <task> [--force] Remove a finished task's worktree (keeps branch);
                             refuses live-shared or dirty trees unless --force
+                            (dirty includes gitignored files the child wrote)
   parley clean --all-terminal [--force]
                             Sweep worktrees of all terminal-state tasks;
                             skips protected trees unless --force
